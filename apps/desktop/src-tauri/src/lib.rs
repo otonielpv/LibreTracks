@@ -349,6 +349,7 @@ pub fn run() {
             commands::project::start_open_project_from_path,
             commands::project::list_default_sessions,
             commands::demo::open_demo_session,
+            commands::demo::is_demo_session,
             commands::project::delete_session_at,
             commands::project::list_session_templates,
             commands::project::start_save_session_as_template,

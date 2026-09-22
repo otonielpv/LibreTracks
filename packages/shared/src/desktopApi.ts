@@ -867,6 +867,31 @@ export async function openDemoSession(): Promise<string> {
   return invokeCommand<string>("open_demo_session");
 }
 
+/**
+ * Is this `.ltsession` the bundled demo?
+ *
+ * Se usa para NO apuntarla en «Recientes»: es material de ejemplo, no una
+ * sesión del usuario. El backend la reconoce por una marca dentro de su
+ * carpeta, así que la respuesta aguanta que el usuario la renombre.
+ *
+ * Fuera de Tauri (tests de jsdom, previsualización web) responde `false`: sin
+ * backend no hay demo que esconder, y el fallo seguro es apuntar de más.
+ */
+export async function isDemoSession(
+  sessionFilePath: string,
+): Promise<boolean> {
+  if (!isTauriApp || !sessionFilePath) {
+    return false;
+  }
+  try {
+    return await invokeCommand<boolean>("is_demo_session", {
+      sessionFilePath,
+    });
+  } catch {
+    return false;
+  }
+}
+
 /** Open a session whose `.ltsession` path is already known (Android landing). */
 export async function openProjectFromPath(
   songFile: string,

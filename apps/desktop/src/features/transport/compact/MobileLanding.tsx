@@ -36,10 +36,7 @@ type MobileLandingProps = {
    * (which remembers the app's last folder) — the desktop "Open" flow. */
   onOpenSessionFromPicker?: () => void;
   /** Reopen a session whose real filesystem path was persisted in the MRU. */
-  onOpenSessionFromPath?: (
-    path: string,
-    options?: { remember?: boolean },
-  ) => void;
+  onOpenSessionFromPath?: (path: string) => void;
   /** Import a whole `.ltset` as a new session via the system file picker.
    * Optional so the embedded "Sesiones…" modal can omit it. */
   onImportSession?: () => void;
@@ -120,9 +117,10 @@ export function MobileLanding({
     setSessionError(null);
     setCreatingDemo(true);
     try {
-      // Sin apuntarla en recientes: se abre desde su propio boton, siempre es
-      // la misma, y en la lista solo hace ruido.
-      onOpenSessionFromPath?.(await openDemoSession(), { remember: false });
+      // Se abre por el mismo camino que cualquier otra sesion. Que no acabe
+      // en "recientes" no lo decide este boton: lo decide
+      // `rememberRecentSession`, que reconoce la demo venga de donde venga.
+      onOpenSessionFromPath?.(await openDemoSession());
     } catch (error: unknown) {
       setSessionError(
         typeof error === "string"

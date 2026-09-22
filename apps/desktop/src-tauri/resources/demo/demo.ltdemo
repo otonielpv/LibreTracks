@@ -1,0 +1,9 @@
+LibreTracks: marca de la sesion de demostracion.
+
+La copia de la demo que vive en la carpeta de canciones del usuario lleva este
+fichero. Sirve para reconocerla sin mirar su nombre: el nombre se puede
+traducir y la carpeta se puede renombrar, este fichero no se mueve.
+
+Lo unico que cambia es que la sesion no se apunta en "Recientes" (es material
+de ejemplo, no una sesion del usuario). Borrar este fichero no rompe nada: la
+sesion sigue abriendose igual y pasa a comportarse como cualquier otra.

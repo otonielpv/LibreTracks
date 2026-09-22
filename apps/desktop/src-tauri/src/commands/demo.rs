@@ -23,6 +23,18 @@ use tauri::{AppHandle, Manager};
 
 const DEMO_SESSION_NAME: &str = "Cancion de demostracion";
 
+/// Marca que distingue la copia de la demo de una sesión del usuario.
+///
+/// Va **dentro** de la carpeta de la sesión, así que sobrevive a renombrar la
+/// carpeta y a renombrar el `.ltsession`, que es justo lo que no aguanta
+/// mirar el nombre. El fichero viaja en `resources/demo/`, de modo que
+/// `copy_demo_tree` lo copia sin saber que existe.
+///
+/// Nombre sin punto inicial **a propósito**: aapt se salta los ficheros que
+/// empiezan por `.` al empaquetar los assets de Android, y la demo llega al
+/// teléfono precisamente por ahí (`assets.srcDir("../../../resources")`).
+const DEMO_MARKER_FILE: &str = "demo.ltdemo";
+
 /// Resolve the bundled demo folder.
 ///
 /// Mirrors `voice_guide_voices_dir` in [`crate::commands::settings`]: Android
@@ -84,6 +96,55 @@ fn existing_demo_session(parent: &Path) -> Option<PathBuf> {
                 .and_then(|extension| extension.to_str())
                 .is_some_and(|extension| extension.eq_ignore_ascii_case("ltsession"))
         })
+}
+
+/// Is this `.ltsession` the bundled demo?
+///
+/// Dos criterios, en este orden:
+///
+/// 1. **La marca** `demo.ltdemo` en la carpeta de la sesión. Es el criterio
+///    bueno: aguanta que el usuario renombre la carpeta o el documento.
+/// 2. **El nombre de la carpeta**, sólo como red para las instalaciones que
+///    copiaron la demo antes de que existiera la marca. Ahí la carpeta se
+///    llama `DEMO_SESSION_NAME` (o `DEMO_SESSION_NAME 2`, si la primera estaba
+///    a medias), porque es el nombre que le puso `available_session_name`.
+///
+/// Devuelve `false` para cualquier cosa que no sea una sesión reconocible, que
+/// es la respuesta segura: equivocarse hacia «no es la demo» sólo deja una
+/// entrada de más en recientes; equivocarse al revés esconde una sesión del
+/// usuario.
+pub fn is_demo_session_file(session_file: &Path) -> bool {
+    let Some(dir) = session_file.parent() else {
+        return false;
+    };
+    if dir.join(DEMO_MARKER_FILE).is_file() {
+        return true;
+    }
+    dir.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            name == DEMO_SESSION_NAME
+                || name
+                    .strip_prefix(DEMO_SESSION_NAME)
+                    .and_then(|rest| rest.strip_prefix(' '))
+                    .is_some_and(|suffix| suffix.chars().all(|c| c.is_ascii_digit()))
+        })
+}
+
+/// Escribe la marca si falta.
+///
+/// Migración perezosa para quien ya tenía la demo copiada: la próxima vez que
+/// pulse su botón, su copia queda marcada y deja de depender del nombre.
+/// Best-effort a propósito — si no se puede escribir, el criterio del nombre
+/// sigue funcionando y la demo se abre igual.
+fn ensure_demo_marker(session_file: &Path) {
+    if let Some(dir) = session_file.parent() {
+        let marker = dir.join(DEMO_MARKER_FILE);
+        if !marker.exists() {
+            let _ = fs::write(&marker, "LibreTracks: marca de la sesion de demostracion.
+");
+        }
+    }
 }
 
 /// A folder name inside `parent` that is not taken yet.
@@ -160,6 +221,7 @@ pub fn open_demo_session(app: AppHandle) -> Result<String, String> {
     // Ya esta: se abre la de siempre. Copiarla en cada pulsacion dejaba un
     // rastro de "Demo 2", "Demo 3"... y una entrada nueva en recientes.
     if let Some(existing) = existing_demo_session(&parent) {
+        ensure_demo_marker(&existing);
         return Ok(existing.to_string_lossy().into_owned());
     }
 
@@ -175,13 +237,96 @@ pub fn open_demo_session(app: AppHandle) -> Result<String, String> {
     Ok(session_file.to_string_lossy().into_owned())
 }
 
+/// ¿Es esta sesión la demostración? Lo pregunta el frontend justo antes de
+/// apuntarla en «Recientes».
+///
+/// Se decide **al registrar**, no al pintar: filtrar sólo al pintar la deja
+/// ocupando un hueco de la lista y la deja reaparecer por cualquier otro
+/// camino que lea los recientes.
+#[tauri::command(async)]
+pub fn is_demo_session(session_file_path: String) -> bool {
+    if session_file_path.is_empty() {
+        return false;
+    }
+    is_demo_session_file(Path::new(&session_file_path))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use libretracks_core::{validate_song, Song, TrackKind};
+    use tempfile::tempdir;
 
     fn shipped_demo_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/demo")
+    }
+
+    /// La marca tiene que viajar en el paquete, o el criterio bueno no llega
+    /// nunca al teléfono y todo cuelga del nombre de la carpeta.
+    #[test]
+    fn the_shipped_demo_carries_its_marker() {
+        assert!(shipped_demo_dir().join(DEMO_MARKER_FILE).is_file());
+        assert!(
+            !DEMO_MARKER_FILE.starts_with('.'),
+            "aapt se salta los ficheros ocultos al empaquetar los assets de Android"
+        );
+    }
+
+    #[test]
+    fn the_marker_identifies_the_demo_even_after_a_rename() {
+        let root = tempdir().expect("temp dir");
+        let dir = root.path().join("Mi repertorio del domingo");
+        fs::create_dir_all(&dir).expect("mkdir");
+        let session = dir.join("Mi repertorio del domingo.ltsession");
+        fs::write(&session, "{}").expect("write session");
+
+        // Sin marca y con nombre de usuario: es una sesión suya.
+        assert!(!is_demo_session_file(&session));
+
+        fs::write(dir.join(DEMO_MARKER_FILE), "x").expect("write marker");
+        // Con marca sigue siendo la demo aunque la carpeta se llame otra cosa.
+        assert!(is_demo_session_file(&session));
+    }
+
+    #[test]
+    fn the_folder_name_still_catches_copies_made_before_the_marker_existed() {
+        let root = tempdir().expect("temp dir");
+        for name in [DEMO_SESSION_NAME, &format!("{DEMO_SESSION_NAME} 2")] {
+            let dir = root.path().join(name);
+            fs::create_dir_all(&dir).expect("mkdir");
+            let session = dir.join("song.ltsession");
+            fs::write(&session, "{}").expect("write session");
+            assert!(
+                is_demo_session_file(&session),
+                "{name} deberia reconocerse por el nombre"
+            );
+        }
+
+        // Y una sesión que sólo empieza parecido no cuela.
+        let dir = root.path().join(format!("{DEMO_SESSION_NAME} de Juan"));
+        fs::create_dir_all(&dir).expect("mkdir");
+        let session = dir.join("song.ltsession");
+        fs::write(&session, "{}").expect("write session");
+        assert!(!is_demo_session_file(&session));
+    }
+
+    #[test]
+    fn ensure_demo_marker_is_the_lazy_migration_and_never_overwrites() {
+        let root = tempdir().expect("temp dir");
+        let dir = root.path().join(DEMO_SESSION_NAME);
+        fs::create_dir_all(&dir).expect("mkdir");
+        let session = dir.join("song.ltsession");
+        fs::write(&session, "{}").expect("write session");
+
+        ensure_demo_marker(&session);
+        assert!(dir.join(DEMO_MARKER_FILE).is_file());
+
+        fs::write(dir.join(DEMO_MARKER_FILE), "contenido del usuario").expect("write");
+        ensure_demo_marker(&session);
+        assert_eq!(
+            fs::read_to_string(dir.join(DEMO_MARKER_FILE)).expect("read"),
+            "contenido del usuario"
+        );
     }
 
     /// The shipped document has to deserialize into the *current* model. It is

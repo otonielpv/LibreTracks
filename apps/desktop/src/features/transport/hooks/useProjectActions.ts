@@ -31,7 +31,7 @@ import {
   pickFilesViaWebView,
   stageFileForImport,
 } from "../library/mobileFilePicker";
-import { pushRecentSession } from "../recentSessions";
+import { rememberRecentSession } from "../recentSessions";
 import type { SidebarTab } from "../types";
 import {
   recordProductEvent,
@@ -144,7 +144,7 @@ export function useProjectActions({
         }
 
         if (nextSnapshot.songFilePath) {
-          pushRecentSession(nextSnapshot.songFilePath);
+          await rememberRecentSession(nextSnapshot.songFilePath);
         }
         applyPlaybackSnapshot(nextSnapshot);
         recordProductEvent("project_created");
@@ -170,12 +170,6 @@ export function useProjectActions({
     loader: () => Promise<TransportSnapshot | null>,
     loadingMessage: string,
     successEvent: Extract<ProductEventName, "project_created" | "project_opened">,
-    /**
-     * Apuntar la sesion en "recientes". La demostracion no: es una sesion
-     * normal, pero se abre desde su propio boton y aparecer en la lista de
-     * recientes solo la llena de ruido.
-     */
-    { remember = true }: { remember?: boolean } = {},
   ) {
     void runAction(
       async () => {
@@ -199,8 +193,8 @@ export function useProjectActions({
             setBusyFeedback(null);
             return;
           }
-          if (remember && nextSnapshot.songFilePath) {
-            pushRecentSession(nextSnapshot.songFilePath);
+          if (nextSnapshot.songFilePath) {
+            await rememberRecentSession(nextSnapshot.songFilePath);
           }
           const nextSong = await refreshSongView({ sync: true });
           applyPlaybackSnapshot(nextSnapshot);
@@ -256,7 +250,7 @@ export function useProjectActions({
         }
 
         if (nextSnapshot.songFilePath) {
-          pushRecentSession(nextSnapshot.songFilePath);
+          await rememberRecentSession(nextSnapshot.songFilePath);
         }
         applyPlaybackSnapshot(nextSnapshot);
         recordProductEvent("project_created");
@@ -273,17 +267,13 @@ export function useProjectActions({
     );
   }
 
-  function handleOpenProjectFromPath(
-    songFile: string,
-    options?: { remember?: boolean },
-  ) {
+  function handleOpenProjectFromPath(songFile: string) {
     runProjectLoadFlow(
       () => openProjectFromPath(songFile),
       t("transport.shell.loadingProject", {
         defaultValue: "Opening project...",
       }),
       "project_opened",
-      options,
     );
   }
 
@@ -483,7 +473,7 @@ export function useProjectActions({
 
           const nextSong = await refreshSongView({ sync: true });
           if (result.snapshot.songFilePath) {
-            pushRecentSession(result.snapshot.songFilePath);
+            await rememberRecentSession(result.snapshot.songFilePath);
           }
           applyPlaybackSnapshot(result.snapshot);
           await refreshLibraryState({ preserveAssets: result.libraryAssets ?? undefined });
@@ -588,7 +578,7 @@ export function useProjectActions({
         }
 
         if (nextSnapshot.songFilePath) {
-          pushRecentSession(nextSnapshot.songFilePath);
+          await rememberRecentSession(nextSnapshot.songFilePath);
         }
         recordProductEvent("project_saved");
         applyPlaybackSnapshot(nextSnapshot);

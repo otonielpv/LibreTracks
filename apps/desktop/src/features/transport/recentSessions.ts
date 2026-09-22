@@ -10,6 +10,8 @@
  * surfaces the backend error.
  */
 
+import { isDemoSession } from "./desktopApi";
+
 export type RecentSessionEntry = {
   /** Absolute path to the `.ltsession` file. */
   path: string;
@@ -112,6 +114,33 @@ export function pushRecentSession(sessionFilePath: string) {
     ),
   ].slice(0, STORED_RECENT_SESSIONS_LIMIT);
   persist(next);
+}
+
+/**
+ * Apuntar una sesión recién abierta, saltándose la de demostración.
+ *
+ * **Toda** anotación de un reciente debería pasar por aquí, no por
+ * `pushRecentSession` directamente: la demo se puede abrir por más de un
+ * camino (su botón, la lista de sesiones del móvil, «Abrir» en escritorio) y
+ * un filtro en un solo llamante se escapa por los demás. Filtrar al pintar no
+ * sirve: la entrada seguiría ocupando un hueco de la lista y reaparecería por
+ * cualquier otro sitio que lea los recientes.
+ *
+ * Además de no apuntarla, **borra** la entrada que dejaron las versiones
+ * anteriores, así que la demo desaparece de la lista de quien ya la tenía en
+ * cuanto la vuelva a abrir.
+ */
+export async function rememberRecentSession(
+  sessionFilePath: string,
+): Promise<void> {
+  if (!sessionFilePath) {
+    return;
+  }
+  if (await isDemoSession(sessionFilePath)) {
+    removeRecentSession(sessionFilePath);
+    return;
+  }
+  pushRecentSession(sessionFilePath);
 }
 
 /**

@@ -25,10 +25,11 @@ beforeEach(async () => {
 afterEach(cleanup);
 
 describe("la cancion de demostracion", () => {
-  // Se abre desde su propio boton y siempre es la misma sesion, asi que
-  // apuntarla en "recientes" solo llena la lista de ruido. Antes, ademas,
-  // dejaba una entrada NUEVA en cada pulsacion, porque se copiaba.
-  it("se abre sin apuntarse en recientes", async () => {
+  // Se abre por el MISMO camino que cualquier otra sesion listada: el boton no
+  // lleva ninguna excepcion. Que no acabe en "recientes" lo decide
+  // `rememberRecentSession` reconociendo la demo, venga del boton, de la lista
+  // de sesiones o de "Abrir" — ver recentSessions.demo.test.ts.
+  it("se abre por el mismo camino que las demas sesiones", async () => {
     const onOpenSessionFromPath = vi.fn();
     render(
       <MobileLanding
@@ -43,7 +44,6 @@ describe("la cancion de demostracion", () => {
     await waitFor(() => {
       expect(onOpenSessionFromPath).toHaveBeenCalledWith(
         "/songs/Demo/Demo.ltsession",
-        { remember: false },
       );
     });
   });
