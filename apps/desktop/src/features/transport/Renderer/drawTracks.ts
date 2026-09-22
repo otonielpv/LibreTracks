@@ -305,6 +305,58 @@ function drawWaveformPlaceholder(
 }
 
 /**
+ * Un clip cuyo audio no está: rayado rojo sobre el cuerpo del clip.
+ *
+ * El criterio del paso 08: **una pista cuyo audio falta tiene que notarse en la
+ * propia sesión**, no sólo en una pantalla que nadie abre. Reproducir y
+ * encontrarse un silencio sin explicación es lo peor que puede pasar cinco
+ * minutos antes de tocar.
+ *
+ * Rayas y no un relleno plano a propósito: un color liso se confunde con el
+ * color de pista que el usuario haya elegido (y desde el paso 02 los colores
+ * son automáticos, así que hay rojos por ahí). Un rayado diagonal no lo pone
+ * nadie a mano.
+ */
+function drawMissingAudioOverlay(
+  context: CanvasRenderingContext2D,
+  left: number,
+  width: number,
+  top: number,
+  height: number,
+) {
+  context.save();
+  context.beginPath();
+  context.roundRect(left, top, width, height, 2);
+  context.clip();
+
+  context.fillStyle = "rgba(226, 88, 88, 0.22)";
+  context.fillRect(left, top, width, height);
+
+  context.strokeStyle = "rgba(226, 88, 88, 0.85)";
+  context.lineWidth = 1;
+  const step = 8;
+  context.beginPath();
+  for (let x = left - height; x < left + width; x += step) {
+    context.moveTo(x, top + height);
+    context.lineTo(x + height, top);
+  }
+  context.stroke();
+
+  if (width >= PLACEHOLDER_LABEL_MIN_WIDTH_PX) {
+    const label = i18n.t("transport.missingMedia.clipBadge", {
+      defaultValue: "Falta el audio",
+    });
+    context.fillStyle = "rgba(20, 20, 20, 0.9)";
+    context.font = '700 11px "Space Grotesk", sans-serif';
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(label.toUpperCase(), left + width / 2, top + height / 2);
+  }
+
+  context.restore();
+}
+
+/**
  * How much of a clip already has real peaks, as a 0..1 fraction of its drawn
  * width, for a summary that is still being analysed.
  *
@@ -1018,6 +1070,18 @@ export function drawTrackClipsLayer(
         }
       } else {
         drawWaveformPlaceholder(context, clippedLeft, visibleWidth, clipTop, clipHeight);
+      }
+
+      // Encima de la onda (o de su hueco) y debajo del nombre: se lee "este
+      // clip es X y le falta el audio", en ese orden.
+      if (clip.isMissing) {
+        drawMissingAudioOverlay(
+          context,
+          clippedLeft,
+          visibleWidth,
+          clipTop,
+          clipHeight,
+        );
       }
 
       if (visibleWidth >= 52) {

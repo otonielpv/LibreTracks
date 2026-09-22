@@ -286,6 +286,7 @@ beforeEach(async () => {
     markerPositionEditorId: null,
     expandedTrackId: null,
     selectionMixOpen: false,
+    missingMediaOpen: false,
     trackMultiSelect: false,
     clipMultiSelect: false,
     viewMode: DEFAULT_VIEW_MODE,

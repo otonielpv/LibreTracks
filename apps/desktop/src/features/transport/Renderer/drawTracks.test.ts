@@ -241,6 +241,44 @@ describe("drawTrackClipsLayer", () => {
     ).not.toHaveBeenCalled();
   });
 
+  // Paso 08 del plan de feedback de testers: una pista cuyo audio falta tiene
+  // que notarse EN LA SESION, no solo en una pantalla que nadie abre.
+  // Reproducir y encontrarse un silencio sin explicacion es lo peor que puede
+  // pasar cinco minutos antes de tocar.
+  it("marca en el propio clip que le falta el audio", () => {
+    const context = createContextSpy();
+    const snapshot = createSnapshot(true);
+    snapshot.clipsByTrack["track-1"] = [
+      { ...snapshot.clipsByTrack["track-1"][0], isMissing: true },
+    ];
+
+    drawTrackClipsLayer(context, snapshot, viewport);
+
+    const expectedLabel = i18n
+      .t("transport.missingMedia.clipBadge")
+      .toUpperCase();
+    expect(
+      (context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([text]) => text === expectedLabel,
+      ),
+    ).toBe(true);
+  });
+
+  it("no marca nada cuando el audio esta donde tiene que estar", () => {
+    const context = createContextSpy();
+
+    drawTrackClipsLayer(context, createSnapshot(true), viewport);
+
+    const missingLabel = i18n
+      .t("transport.missingMedia.clipBadge")
+      .toUpperCase();
+    expect(
+      (context.fillText as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([text]) => text === missingLabel,
+      ),
+    ).toBe(false);
+  });
+
   it("renders the pending import label for optimistic clips", () => {
     const context = createContextSpy();
     const snapshot = createSnapshot(false);

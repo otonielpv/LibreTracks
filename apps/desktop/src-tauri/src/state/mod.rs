@@ -68,6 +68,8 @@ mod regions;
 mod session;
 mod song_edit;
 mod timeline_math;
+mod missing_media;
+pub(crate) use missing_media::MissingMediaEntry;
 mod track_colors;
 mod track_tree;
 

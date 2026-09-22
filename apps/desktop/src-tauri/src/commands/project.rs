@@ -1107,6 +1107,25 @@ pub fn save_project(state: State<'_, DesktopState>) -> Result<TransportSnapshot,
         .map_err(|error| crate::infra::error_log::log_command_err("save_project", error))
 }
 
+/// Qué audio de la sesión no está, quién lo usa y dónde podría estar.
+///
+/// Lo pide la pantalla de ficheros que faltan, y también el aviso del
+/// escenario para saber si hay que enseñarlo. Barato: recorre los clips y mira
+/// el disco, sin abrir un solo fichero de audio.
+#[tauri::command(async)]
+pub fn get_missing_media(
+    state: State<'_, DesktopState>,
+) -> Result<Vec<crate::state::MissingMediaEntry>, String> {
+    let session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .missing_media()
+        .map_err(|error| crate::infra::error_log::log_command_err("get_missing_media", error))
+}
+
 #[tauri::command(async)]
 pub fn resolve_missing_file(
     old_path: String,

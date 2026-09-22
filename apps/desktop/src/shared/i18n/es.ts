@@ -179,6 +179,17 @@ const es = {
       contextTimelineTitle: "Timeline {{time}}",
       horizontalScroll: "Desplazamiento horizontal del timeline",
     },
+    missingMedia: {
+      indicator: "Faltan archivos multimedia",
+      title: "Archivos que faltan",
+      description:
+        "La sesión apunta a estos audios y no están donde se esperaba. Las pistas que los usan suenan mudas hasta que los vuelvas a enlazar.",
+      allPresent: "No falta ningún archivo. Todo en su sitio.",
+      usedBy: "Lo usan: {{tracks}}",
+      useCandidate: "Usar el de {{folder}}",
+      locate: "Buscar…",
+      clipBadge: "Falta el audio",
+    },
     backGuard: {
       pressAgainToExit:
         "Se está reproduciendo. Pulsa atrás otra vez para salir.",

@@ -1208,6 +1208,34 @@ export async function importSongPackage(
   });
 }
 
+/** Un audio que la sesión referencia y que no está en disco. */
+export type MissingMediaEntry = {
+  /** La ruta tal y como la guarda la sesión. Es la clave para volver a
+   * enlazar con {@link resolveMissingFile}. */
+  filePath: string;
+  /** Dónde se esperaba encontrarlo, ya resuelto. */
+  expectedPath: string;
+  fileName: string;
+  /** Las pistas que lo usan: sin esto, "falta bateria.wav" no dice qué se
+   * queda mudo. */
+  trackNames: string[];
+  /** Cuántos clips lo usan. */
+  clipCount: number;
+  /** Ficheros con el mismo nombre encontrados en carpetas conocidas.
+   * **Propuestas**: nada se enlaza sin que el usuario lo confirme. */
+  candidates: string[];
+};
+
+/**
+ * Qué audio falta, quién lo usa y dónde podría estar.
+ *
+ * Barato: recorre los clips y mira el disco, sin abrir un fichero de audio.
+ * Lista vacía cuando no falta nada, que es el caso normal.
+ */
+export async function getMissingMedia(): Promise<MissingMediaEntry[]> {
+  return invokeCommand<MissingMediaEntry[]>("get_missing_media");
+}
+
 export async function resolveMissingFile(
   oldPath: string,
   newPath: string,

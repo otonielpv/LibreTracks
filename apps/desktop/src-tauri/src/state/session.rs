@@ -21,6 +21,7 @@ use crate::infra::error::DesktopError;
 use crate::platform::file_dialog::FileDialog;
 use crate::models::TransportSnapshot;
 
+use super::missing_media::{collect_missing_media, MissingMediaEntry};
 use super::{
     build_empty_song, build_template_song, copy_project_audio_files, default_project_file_name,
     emit_project_load_progress, library_manifest_path, list_library_assets, project_root,
@@ -240,6 +241,20 @@ impl DesktopSession {
         if let Err(error) = self.save_project() {
             eprintln!("[libretracks-session] autosave before close failed: {error}");
         }
+    }
+
+    /// Inventario de audio que la sesión referencia y no está en disco.
+    ///
+    /// Lista vacía cuando no falta nada, que es el caso normal. **No bloquea la
+    /// apertura ni falla**: la sesión se abre igual y suena lo que pueda sonar.
+    pub fn missing_media(&self) -> Result<Vec<MissingMediaEntry>, DesktopError> {
+        let Some(song_dir) = self.song_dir.as_ref() else {
+            return Ok(Vec::new());
+        };
+        let Some(song) = self.engine.song() else {
+            return Ok(Vec::new());
+        };
+        Ok(collect_missing_media(song_dir, song))
     }
 
     pub fn resolve_missing_file(

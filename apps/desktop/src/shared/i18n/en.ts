@@ -178,6 +178,17 @@ const en = {
       contextTimelineTitle: "Timeline {{time}}",
       horizontalScroll: "Timeline horizontal scroll",
     },
+    missingMedia: {
+      indicator: "Missing media files",
+      title: "Missing files",
+      description:
+        "The session points at this audio and it is not where it was expected. The tracks that use it play silent until you relink them.",
+      allPresent: "Nothing is missing. Everything is where it should be.",
+      usedBy: "Used by: {{tracks}}",
+      useCandidate: "Use the one in {{folder}}",
+      locate: "Browse…",
+      clipBadge: "Audio missing",
+    },
     backGuard: {
       pressAgainToExit: "Playing. Press back again to exit.",
     },

@@ -113,6 +113,15 @@ type TimelineUIState = {
   toggleTrackSelection: (trackId: string) => void;
   setExpandedTrackId: (trackId: string | null) => void;
   setSelectionMixOpen: (open: boolean) => void;
+  /**
+   * La pantalla de "archivos que faltan" está abierta.
+   *
+   * Vive en el store y no en `TransportPanelContent` para no añadirle estado
+   * (regla 8 del plan de feedback de testers): el monolito sólo lee el
+   * selector y pinta el componente.
+   */
+  missingMediaOpen: boolean;
+  setMissingMediaOpen: (open: boolean) => void;
 };
 
 export const useTimelineUIStore = create<TimelineUIState>()(
@@ -133,6 +142,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     markerPositionEditorId: null,
     expandedTrackId: null,
     selectionMixOpen: false,
+    missingMediaOpen: false,
     trackMultiSelect: false,
     clipMultiSelect: false,
     viewMode: DEFAULT_VIEW_MODE,
@@ -327,6 +337,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
         selectionMixOpen: expandedTrackId ? false : state.selectionMixOpen,
       }));
     },
+    setMissingMediaOpen: (missingMediaOpen) => set({ missingMediaOpen }),
     setSelectionMixOpen: (selectionMixOpen) => {
       set((state) => ({
         selectionMixOpen,

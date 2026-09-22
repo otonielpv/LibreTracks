@@ -459,6 +459,8 @@ import { useSongStore } from "./songStore";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
 import { createTapTempoHandler } from "./tempo/tapTempoHandler";
 import { AndroidBackGuard } from "./mobile/AndroidBackGuard";
+import { MissingMediaModal } from "./panels/MissingMediaModal";
+import { createMissingMediaHandlers } from "./library/missingMediaHandlers";
 import { DismissOnBack } from "./mobile/DismissOnBack";
 import { getEffectiveTempoMarkerAt } from "./tempo/tempoMarkers";
 
@@ -1200,6 +1202,12 @@ export function TransportPanelContent() {
     (state) => state.followPlayheadEnabled,
   );
   const midiLearnMode = useTimelineUIStore((state) => state.midiLearnMode);
+  // La pantalla de archivos que faltan: el flag vive en el store de UI para no
+  // anadirle estado al monolito (regla 8 del plan de feedback de testers).
+  const missingMediaOpen = useTimelineUIStore((state) => state.missingMediaOpen);
+  const setMissingMediaOpen = useTimelineUIStore(
+    (state) => state.setMissingMediaOpen,
+  );
   const viewMode = useTimelineUIStore((state) => state.viewMode);
   const setViewMode = useTimelineUIStore((state) => state.setViewMode);
   const toggleViewMode = useTimelineUIStore((state) => state.toggleViewMode);
@@ -2334,73 +2342,28 @@ export function TransportPanelContent() {
     return [...paths].sort((left, right) => left.localeCompare(right));
   }, [libraryAssets, song?.clips]);
 
-  const handleLocateMissingFile = useCallback(
-    async (missingPath: string) => {
-      // Android: the native dialog hands back a `content://` URI, not a path,
-      // and the engine cannot open one — pointing at the right file "did
-      // nothing" because the clip was repointed to an unreadable URI. Pick
-      // through the WebView chooser instead and bring the FILE into the
-      // session's audio/ folder (same staged pipeline as a library import),
-      // then repoint the clip at that copy. The chooser only opens inside the
-      // tap's user-gesture window, so it must come before any await.
-      if (isMobileApp) {
-        const files = await pickFilesViaWebView();
-        const picked = files[0];
-        if (!picked) {
-          return;
-        }
-
-        await runAction(
-          async () => {
-            const stagedPayload = {
-              fileName: picked.name,
-              sourcePath: await stageFileForImport(picked, true),
-            };
-            const importedAssets = await importStagedAudioFiles([
-              stagedPayload,
-            ]);
-            const relocated = importedAssets.assets[0];
-            if (!relocated) {
-              return;
-            }
-
-            const nextSnapshot = await resolveMissingFile(
-              missingPath,
-              relocated.filePath,
-            );
-            applyPlaybackSnapshot(nextSnapshot);
-            await Promise.all([refreshSongView(), refreshLibraryState()]);
-            setStatus(t("transport.status.projectSaved"));
-          },
-          { busy: true },
-        );
-        return;
-      }
-
-      await runAction(
-        async () => {
-          const selectedPath = await open({
-            multiple: false,
-            directory: false,
-            title: "Locate missing audio file",
-          });
-          if (typeof selectedPath !== "string") {
-            return;
-          }
-
-          const nextSnapshot = await resolveMissingFile(
-            missingPath,
-            selectedPath,
-          );
-          applyPlaybackSnapshot(nextSnapshot);
-          await Promise.all([refreshSongView(), refreshLibraryState()]);
-          setStatus(t("transport.status.projectSaved"));
-        },
-        { busy: true },
-      );
-    },
-    [applyPlaybackSnapshot, refreshLibraryState, refreshSongView, runAction, t],
-  );
+  // Los dos manejadores de "falta el audio" viven en su propia factory: el
+  // paso 08 anadia el segundo y el fichero rebasaba su presupuesto de tamano.
+  const { locateMissingFile: handleLocateMissingFile, relinkMissingFile: handleRelinkMissingFile } =
+    useMemo(
+      () =>
+        createMissingMediaHandlers({
+          runAction,
+          applyPlaybackSnapshot,
+          refreshSongView,
+          refreshLibraryState,
+          setStatus,
+          savedMessage: () => t("transport.status.projectSaved"),
+        }),
+      [
+        applyPlaybackSnapshot,
+        refreshLibraryState,
+        refreshSongView,
+        runAction,
+        setStatus,
+        t,
+      ],
+    );
 
   const getTrackOptimisticMix = useCallback((trackId: string) => {
     return useTransportStore.getState().optimisticMix[trackId] ?? {};
@@ -8370,13 +8333,24 @@ export function TransportPanelContent() {
               <button
                 type="button"
                 className="lt-missing-files-indicator"
-                onClick={() => setActiveSidebarTab("library")}
+                onClick={() => setMissingMediaOpen(true)}
               >
                 <span className="material-symbols-outlined" aria-hidden="true">
                   warning
                 </span>
-                Faltan archivos multimedia
+                {t("transport.missingMedia.indicator", {
+                  defaultValue: "Faltan archivos multimedia",
+                  count: missingFilePaths.length,
+                })}
               </button>
+            ) : null}
+
+            {missingMediaOpen ? (
+              <MissingMediaModal
+                onClose={() => setMissingMediaOpen(false)}
+                onLocate={handleLocateMissingFile}
+                onRelink={handleRelinkMissingFile}
+              />
             ) : null}
 
             {packageUnpackUiState.active ? (
