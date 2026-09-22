@@ -69,9 +69,17 @@ If `cargo check` later reports that bindgen cannot find `libclang`, install LLVM
 
 ### Bungee pitch backend (SDK download)
 
-[Bungee](https://github.com/bungee-audio-stretch/bungee) (MPL-2.0) is the pitch/warp backend used for tempo and key changes. It is **not vendored in the repo** — you download the prebuilt SDK once and unpack it into `vendor/bungee/`. The native launcher requests it by default (`LIBRETRACKS_ENGINE_V2_BUNGEE=1`), and on macOS the Tauri bundle references `bungee.framework` explicitly, so **a fresh clone will not build on macOS until the SDK is in place**.
+[Bungee](https://github.com/bungee-audio-stretch/bungee) (MPL-2.0) is the pitch/warp backend used for tempo and key changes. It is **not vendored in the repo** — the release is ~54 MB of platform binaries, so the native launcher downloads it for you on the first build and unpacks it into `vendor/bungee/` (gitignored). Nothing to do on a fresh clone: `npm run dev:desktop:native` (Windows, macOS and Linux alike) fetches the pinned release, extracts only the slice your platform needs, and passes `-DLT_BUNGEE_DIR` to CMake.
 
-Download release `v2.4.24` and unpack it so that `vendor/bungee/include/bungee/Bungee.h` and your platform's binary folder exist:
+The version is pinned in `scripts/fetch-bungee.mjs` and must match `BUNGEE_VERSION` in the CI workflows, so a contributor builds against exactly what we ship.
+
+You can skip the download by supplying the SDK yourself. The launcher takes the first of these that contains `include/bungee/Bungee.h`:
+
+1. `$LT_BUNGEE_DIR` — an SDK unpacked anywhere
+2. `vendor/bungee/` — where the automatic download lands
+3. `~/Downloads/bungee-v2.4.24` — legacy hand-unpacked location
+
+To unpack it by hand, or to seed an offline machine:
 
 ```bash
 mkdir -p vendor/bungee
@@ -80,7 +88,11 @@ curl -fSL -o /tmp/bungee.tgz \
 tar -xzf /tmp/bungee.tgz -C vendor/bungee
 ```
 
-The archive ships every platform (`apple-mac/bungee.framework`, `linux-x86_64/libbungee.so`, `linux-aarch64/libbungee.so`, `windows-x86_64/bungee.dll`, etc.); the launcher picks the right one. The macOS framework is a universal binary (x86_64 + arm64). Alternatively, point `LT_BUNGEE_DIR` at an SDK unpacked elsewhere, or place it in `~/Downloads/bungee-v2.4.24`.
+Behind a proxy or a mirror, point `LT_BUNGEE_ARCHIVE` at your own copy of the `.tgz` and the launcher downloads from there instead.
+
+The archive ships every platform (`apple-mac/bungee.framework`, `linux-x86_64/libbungee.so`, `linux-aarch64/libbungee.so`, `windows-x86_64/bungee.dll`, etc.); the launcher picks the right one. The macOS framework is a universal binary (x86_64 + arm64).
+
+If the SDK cannot be obtained, the build **stops** rather than continuing with `USE_BUNGEE=OFF` — that combination compiles cleanly and then plays warp and pitch as silence, which is hard to diagnose later.
 
 To build **without** Bungee (pitch/warp voices compile to no-op stubs), set `LIBRETRACKS_ENGINE_V2_BUNGEE=0`. Note that on macOS you must also remove the `bungee.framework` entry from `apps/desktop/src-tauri/tauri.conf.json` (`bundle.macOS.frameworks`), since it is referenced unconditionally there.
 

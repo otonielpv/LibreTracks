@@ -40,7 +40,7 @@ so JUCE does not affect the UI architecture.
 
 | Decision    | Value |
 |-------------|-------|
-| Integration | Prebuilt upstream release, `-DLT_BUNGEE_DIR=<path>` |
+| Integration | Prebuilt upstream release, `-DLT_BUNGEE_DIR=<path>`; fetched into `vendor/bungee/` by `scripts/fetch-bungee.mjs` (version pinned there and in the CI workflows) |
 | License     | MPL-2.0 |
 
 **Why Bungee?**

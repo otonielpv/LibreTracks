@@ -61,12 +61,31 @@ function Test-CandidateChildPath {
   }
 }
 
+# Bungee SDK. Not vendored in the repo (~54 MB of platform binaries): a fresh
+# clone downloads the pinned release into vendor/bungee/ on first build. The
+# candidate list and the version live in scripts/fetch-bungee.mjs, shared with
+# the Node launcher. A missing SDK used to configure the engine with
+# USE_BUNGEE=OFF, which builds fine and then plays warp/pitch as silence, so a
+# failed fetch is fatal here instead.
 $bungeeCandidates = @(
   $env:LT_BUNGEE_DIR,
-  (Join-Path $env:USERPROFILE "Downloads\bungee-v2.4.24"),
-  (Join-Path $repoRoot "vendor\bungee")
+  (Join-Path $repoRoot "vendor\bungee"),
+  (Join-Path $env:USERPROFILE "Downloads\bungee-v2.4.24")
 ) | Where-Object { $_ }
 $bungeeDir = $bungeeCandidates | Where-Object { Test-CandidateChildPath $_ "include\bungee\Bungee.h" } | Select-Object -First 1
+if ($useBungeeRequested -eq "ON" -and -not $bungeeDir) {
+  if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    throw "Bungee SDK not found and node is unavailable to fetch it. Unpack it into vendor/bungee/, set LT_BUNGEE_DIR, or build with LIBRETRACKS_ENGINE_V2_BUNGEE=0."
+  }
+  $fetched = & node (Join-Path $PSScriptRoot "fetch-bungee.mjs")
+  if ($LASTEXITCODE -ne 0) {
+    throw "Could not obtain the Bungee SDK - warp and pitch would compile to silent stubs. See the error above."
+  }
+  $bungeeDir = ($fetched | Select-Object -Last 1).Trim()
+  if (-not (Test-CandidateChildPath $bungeeDir "include\bungee\Bungee.h")) {
+    throw "fetch-bungee.mjs reported '$bungeeDir' but include\bungee\Bungee.h is not there."
+  }
+}
 $useBungee = if ($useBungeeRequested -eq "ON" -and $bungeeDir) { "ON" } else { "OFF" }
 
 # ASIO SDK auto-detect - same pattern as Bungee. JUCE's ASIO module needs

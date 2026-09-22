@@ -3,6 +3,8 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync } from
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { BUNGEE_VERSION, ensureBungee, findBungeeDir } from "./fetch-bungee.mjs";
+
 const allowedModes = new Set(["dev", "check", "build", "profile", "test"]);
 const mode = process.argv[2] ?? "dev";
 
@@ -33,15 +35,10 @@ const detectToolchainFile = (rawEnv) => {
   return candidates.find((candidate) => existsSync(candidate)) ?? "";
 };
 
-const detectBungeeDir = (rawEnv) => {
-  const candidates = [
-    rawEnv.LT_BUNGEE_DIR,
-    rawEnv.USERPROFILE ? path.join(rawEnv.USERPROFILE, "Downloads", "bungee-v2.4.24") : "",
-    path.join(repoRoot, "vendor", "bungee"),
-  ].filter(Boolean);
-
-  return candidates.find((candidate) => existsSync(path.join(candidate, "include", "bungee", "Bungee.h"))) ?? "";
-};
+// Resolution (and, on a fresh clone, the one-time download) lives in
+// fetch-bungee.mjs so the PowerShell launcher can reuse the same pinned
+// version and the same candidate list.
+const detectBungeeDir = (rawEnv) => findBungeeDir(rawEnv);
 
 const detectAsioSdkDir = (rawEnv) => {
   // JUCE's ASIO device type needs iasiodrv.h from the Steinberg SDK at build
@@ -292,6 +289,30 @@ const ensureEngineV2 = (normalizedEnv) => {
 };
 
 ensureRemoteDist();
+
+// A missing SDK used to configure the engine with USE_BUNGEE=OFF, which builds
+// fine and then plays warp/pitch as silence. Download it once instead, and
+// stop if we cannot.
+if (isTruthyEnvValue(nativeEnv.LIBRETRACKS_ENGINE_V2_BUNGEE) && !findBungeeDir(nativeEnv)) {
+  try {
+    nativeEnv.LT_BUNGEE_DIR = await ensureBungee(nativeEnv);
+  } catch (error) {
+    console.error(
+      [
+        "",
+        `Could not obtain the Bungee SDK (${BUNGEE_VERSION}).`,
+        `  ${error.message}`,
+        "",
+        "Without it warp and pitch shifting compile to silent no-op stubs.",
+        "Unpack the SDK into vendor/bungee/, point LT_BUNGEE_DIR at one you",
+        "already have, or build without it: LIBRETRACKS_ENGINE_V2_BUNGEE=0",
+        "",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+}
+
 const runEnv = ensureEngineV2(nativeEnv);
 
 switch (mode) {
