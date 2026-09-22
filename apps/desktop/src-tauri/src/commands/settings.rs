@@ -228,6 +228,110 @@ pub fn set_voice_guide_config_realtime(
 }
 
 // ---------------------------------------------------------------------------
+// Storage volumes (Android: internal storage vs. the microSD card)
+// ---------------------------------------------------------------------------
+
+/// One app-specific external volume the user can send new sessions to.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageVolume {
+    /// Absolute path of the app's directory on that volume. It is also the
+    /// value stored in `session_storage_volume`.
+    pub path: String,
+    /// Android's own order: 0 is the built-in storage, the rest are removable
+    /// (that is the documented contract of `getExternalFilesDirs`). The UI
+    /// turns this into "Memoria interna" / "Tarjeta SD".
+    pub index: usize,
+    /// Free and total bytes, or `None` when the platform cannot answer.
+    pub free_bytes: Option<u64>,
+    pub total_bytes: Option<u64>,
+}
+
+/// What the Settings panel needs to draw the "dónde guardar las sesiones"
+/// control — and to decide whether to draw it at all.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageVolumesInfo {
+    /// Empty on every platform but Android, and on an Android device with no
+    /// removable storage it holds a single entry. The UI hides the control
+    /// unless there is a real choice to make.
+    pub volumes: Vec<StorageVolume>,
+    /// The volume the user picked, whether or not it is plugged in right now.
+    pub selected: Option<String>,
+    /// Where sessions are ACTUALLY being written. Differs from `selected` when
+    /// the card has been pulled out — that is the case the UI has to explain
+    /// instead of quietly writing somewhere else.
+    pub effective: Option<String>,
+    /// False when `selected` names a volume that is not available now.
+    pub selected_available: bool,
+}
+
+#[tauri::command(async)]
+#[allow(unused_variables)]
+pub fn get_storage_volumes(
+    app: AppHandle,
+    settings_store: State<'_, AppSettingsStore>,
+) -> Result<StorageVolumesInfo, String> {
+    let settings = settings_store.current().map_err(|e| e.to_string())?;
+    let selected = settings.session_storage_volume.clone();
+
+    #[cfg(target_os = "android")]
+    {
+        use crate::platform::android_storage;
+
+        let volumes = android_storage::external_files_dirs()
+            .iter()
+            .enumerate()
+            .map(|(index, dir)| {
+                let space = android_storage::volume_space(dir);
+                StorageVolume {
+                    path: dir.to_string_lossy().into_owned(),
+                    index,
+                    free_bytes: space.map(|(free, _)| free),
+                    total_bytes: space.map(|(_, total)| total),
+                }
+            })
+            .collect();
+        return Ok(StorageVolumesInfo {
+            volumes,
+            selected_available: android_storage::selected_volume_is_available(
+                selected.as_deref(),
+            ),
+            effective: android_storage::selected_external_files_dir(selected.as_deref())
+                .map(|dir| dir.to_string_lossy().into_owned()),
+            selected,
+        });
+    }
+
+    // Desktop and iOS have one place for their data and a real file dialog for
+    // everything else; there is no choice to offer.
+    #[cfg(not(target_os = "android"))]
+    Ok(StorageVolumesInfo {
+        volumes: Vec::new(),
+        selected,
+        effective: None,
+        selected_available: true,
+    })
+}
+
+/// Choose the volume NEW sessions are created on (`None` = primary).
+///
+/// Deliberately does not move anything: a session is gigabytes of audio, and
+/// copying those between volumes behind the user's back on a modest phone is
+/// not a setting change. The sessions already made keep opening because
+/// `state::legacy_project_roots` lists every volume.
+#[tauri::command(async)]
+pub fn set_session_storage_volume(
+    app: AppHandle,
+    volume: Option<String>,
+    settings_store: State<'_, AppSettingsStore>,
+) -> Result<AppSettings, String> {
+    let mut next = settings_store.current().map_err(|e| e.to_string())?;
+    next.session_storage_volume = volume.filter(|value| !value.is_empty());
+    persist_settings(&app, &settings_store, next)
+}
+
+// ---------------------------------------------------------------------------
 // Decoding cache (Ableton-style "Decoding Cache" preferences)
 // ---------------------------------------------------------------------------
 

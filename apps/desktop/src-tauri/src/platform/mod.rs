@@ -26,6 +26,12 @@ pub mod linux_webkit;
 pub mod macos_bookmarks;
 pub mod resource_monitor;
 
+// Compilado en todos los sistemas por el mismo motivo que `windows_firewall`:
+// es la logica de "que volumen toca" del paso 05, la unica parte que puede
+// equivocarse, y detras de un `cfg(target_os = "android")` no la mira ningun
+// `cargo check` ni ningun test de escritorio.
+pub mod storage_volumes;
+
 // Compilado en todos los sistemas a proposito: solo el lanzamiento del proceso
 // es de Windows, y dejar el modulo entero tras un `cfg` significaria que ningun
 // `cargo check` de macOS/Linux mira su logica. Ver la cabecera del modulo.

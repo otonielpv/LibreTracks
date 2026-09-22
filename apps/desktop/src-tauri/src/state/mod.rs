@@ -3442,15 +3442,34 @@ pub(super) fn emit_project_load_progress(
     }
 }
 
+/// Absolute path of the external volume the user chose for new sessions, or
+/// `None` for "whatever Android calls primary". Android only.
+#[cfg(target_os = "android")]
+pub(crate) fn selected_session_volume(app: &AppHandle) -> Option<String> {
+    app.try_state::<crate::infra::settings::AppSettingsStore>()
+        .and_then(|store| store.current().ok())
+        .and_then(|settings| settings.session_storage_volume)
+}
+
 pub(super) fn project_root(app: &AppHandle) -> PathBuf {
     // Android keeps session data in the app-specific EXTERNAL files dir. It is
     // still the app's own sandbox, so it costs no permission — which matters,
     // because Play will not grant a DAW all-files access. Falls through to the
-    // internal dir when the external location is unavailable, and sessions
-    // already written there stay reachable via [`legacy_project_roots`].
+    // internal dir when no external location is available, and sessions already
+    // written elsewhere stay reachable via [`legacy_project_roots`].
+    //
+    // Which external volume is a user setting on devices with more than one
+    // (a microSD slot). `selected_external_files_dir` re-checks availability on
+    // every call, so a card pulled out degrades to the primary volume instead
+    // of leaving the app pointing at a path that is no longer there.
     #[cfg(target_os = "android")]
-    if let Some(external) = crate::platform::android_storage::external_files_dir() {
-        return external;
+    {
+        let selected = selected_session_volume(app);
+        if let Some(external) =
+            crate::platform::android_storage::selected_external_files_dir(selected.as_deref())
+        {
+            return external;
+        }
     }
     app.path()
         .app_data_dir()
@@ -3824,24 +3843,37 @@ pub(crate) fn create_song_default_directory(app: &AppHandle) -> PathBuf {
     project_root(app).join("songs")
 }
 
-/// Directories that held sessions before the current [`project_root`] did.
+/// Directories that hold sessions this device wrote somewhere other than the
+/// current [`project_root`].
 ///
-/// Only Android has any: it used to keep them under the internal
-/// `app_data_dir()`, and moving the root would otherwise make a tester's
-/// existing sessions vanish from the landing screen while the files sat
-/// untouched on disk. Listing both is free; copying gigabytes between volumes
-/// on the very phones this change is meant to help is not.
+/// Only Android has any, for two reasons that stack:
+///
+/// - it used to keep sessions under the internal `app_data_dir()`, and
+/// - since the storage volume became a setting, the sessions the user made
+///   before switching are sitting on the *other* volume.
+///
+/// Either way the files are fine; what would break is the landing screen,
+/// where they would simply vanish. Listing every root is free; copying
+/// gigabytes between volumes on the very phones this is meant to help is not.
 fn legacy_project_roots(app: &AppHandle) -> Vec<PathBuf> {
     #[cfg(target_os = "android")]
     {
+        let current = project_root(app);
+        let mut roots: Vec<PathBuf> = Vec::new();
+
         let internal = app
             .path()
             .app_data_dir()
             .unwrap_or_else(|_| std::env::temp_dir().join("LibreTracks"));
-        if internal != project_root(app) {
-            return vec![internal];
+        if internal != current {
+            roots.push(internal);
         }
-        Vec::new()
+        for volume in crate::platform::android_storage::external_files_dirs() {
+            if *volume != current && !roots.contains(volume) {
+                roots.push(volume.clone());
+            }
+        }
+        roots
     }
     #[cfg(not(target_os = "android"))]
     {

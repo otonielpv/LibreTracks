@@ -1010,6 +1010,12 @@ export type AppSettings = {
    */
   autoColorNewTracks: boolean;
   /**
+   * Android only: absolute path of the app-specific external directory new
+   * sessions are created in, as `getExternalFilesDirs` reports it. `null` = the
+   * primary volume, which is what every install had before this existed.
+   */
+  sessionStorageVolume: string | null;
+  /**
    * When true (default) the loaded session is saved on its own every
    * `autoSaveIntervalMinutes`, so an unexpected crash or power cut loses at most
    * one interval of work. The timer only fires when the project actually changed
@@ -1097,6 +1103,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   timelinePlayheadFollowMode: "ahead",
   importMergeMatchingTracks: true,
   autoColorNewTracks: true,
+  sessionStorageVolume: null,
   autoSaveEnabled: true,
   autoSaveIntervalMinutes: 5,
   midiMappings: {},
@@ -1331,6 +1338,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     // Absent in settings files written before automatic track colours shipped:
     // default to on, matching DEFAULT_APP_SETTINGS and the Rust side.
     autoColorNewTracks: settings.autoColorNewTracks ?? true,
+    sessionStorageVolume: settings.sessionStorageVolume ?? null,
     // Absent in settings files written before autosave shipped: default to on,
     // matching DEFAULT_APP_SETTINGS.
     autoSaveEnabled: settings.autoSaveEnabled ?? true,

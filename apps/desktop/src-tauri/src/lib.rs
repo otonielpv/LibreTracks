@@ -312,6 +312,8 @@ pub fn run() {
             commands::pads::rename_user_pad,
             commands::pads::assign_pad_key,
             commands::pads::clear_pad_key,
+            commands::settings::get_storage_volumes,
+            commands::settings::set_session_storage_volume,
             commands::settings::get_decoding_cache_info,
             commands::settings::set_decoding_cache_dir,
             commands::settings::set_decoding_cache_max_gb,

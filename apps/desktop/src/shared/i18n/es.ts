@@ -280,6 +280,14 @@ const es = {
         "Guarda la sesión abierta cada cierto tiempo para que un fallo inesperado no se lleve tu trabajo. Solo guarda si has cambiado algo, y nunca durante la reproducción.",
       autoSaveInterval: "Guardar cada",
       autoSaveIntervalMinutes: "{{count}} min",
+      storageVolumeTitle: "Dónde guardar las sesiones",
+      storageVolumeInternal: "Memoria interna",
+      storageVolumeCard: "Tarjeta SD",
+      storageVolumeWithSpace: "{{name}} — {{free}} libres de {{total}}",
+      storageVolumeHelp:
+        "Sólo afecta a las sesiones nuevas: las que ya tienes se siguen abriendo desde donde están. La caché de audio, que es lo que más ocupa, sigue al volumen elegido.",
+      storageVolumeUnavailable:
+        "El volumen elegido no está disponible ahora mismo (¿has sacado la tarjeta?). Las sesiones nuevas se están guardando en la memoria interna.",
       autoColorNewTracks: "Colorear las pistas nuevas automáticamente",
       autoColorNewTracksHint:
         "Cada pista nueva toma un color de la paleta, recorriéndola en orden, para distinguirlas de un vistazo. Desactívalo si prefieres colorearlas a mano. No repinta las pistas que ya tienes.",

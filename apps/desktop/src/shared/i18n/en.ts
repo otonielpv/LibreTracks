@@ -277,6 +277,14 @@ const en = {
         "Saves the open session every so often so an unexpected failure doesn't take your work with it. It only saves when something changed, and never during playback.",
       autoSaveInterval: "Save every",
       autoSaveIntervalMinutes: "{{count}} min",
+      storageVolumeTitle: "Where to keep sessions",
+      storageVolumeInternal: "Internal storage",
+      storageVolumeCard: "SD card",
+      storageVolumeWithSpace: "{{name}} — {{free}} free of {{total}}",
+      storageVolumeHelp:
+        "Only affects new sessions: the ones you already have keep opening from where they are. The audio cache, which is the bulk of it, follows the chosen volume.",
+      storageVolumeUnavailable:
+        "The chosen volume is not available right now (card removed?). New sessions are being saved to internal storage.",
       autoColorNewTracks: "Colour new tracks automatically",
       autoColorNewTracksHint:
         "Each new track takes a colour from the palette, cycling through it in order, so you can tell them apart at a glance. Turn it off if you prefer colouring by hand. It never repaints tracks you already have.",

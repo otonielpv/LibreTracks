@@ -564,6 +564,54 @@ export async function saveDiagnosticsLog(
   return invokeCommand<boolean>("save_diagnostics_log", { kind });
 }
 
+/** One app-specific external volume new sessions can be sent to (Android). */
+export type StorageVolume = {
+  /** Absolute path of the app's folder on that volume; also the stored value. */
+  path: string;
+  /**
+   * Android's own order: 0 is the built-in storage and the rest are removable
+   * (the documented contract of `getExternalFilesDirs`). The label the user
+   * reads is derived from this, not from the path.
+   */
+  index: number;
+  /** Free / total bytes, or `null` when the platform cannot answer. */
+  freeBytes: number | null;
+  totalBytes: number | null;
+};
+
+export type StorageVolumesInfo = {
+  /**
+   * Empty everywhere but Android, and a single entry on an Android phone with
+   * no card. The Settings panel hides the control unless there is a real
+   * choice to make.
+   */
+  volumes: StorageVolume[];
+  /** What the user picked, whether or not it is plugged in right now. */
+  selected: string | null;
+  /**
+   * Where sessions are ACTUALLY written. Differs from `selected` when the card
+   * has been pulled out — the case the UI has to explain instead of quietly
+   * writing somewhere else.
+   */
+  effective: string | null;
+  /** False when `selected` names a volume that is not available now. */
+  selectedAvailable: boolean;
+};
+
+export async function getStorageVolumes(): Promise<StorageVolumesInfo> {
+  return invokeCommand<StorageVolumesInfo>("get_storage_volumes");
+}
+
+/**
+ * Choose the volume NEW sessions are created on (`null` = the primary one).
+ * Moves nothing: the sessions already made keep opening from where they are.
+ */
+export async function setSessionStorageVolume(
+  volume: string | null,
+): Promise<AppSettings> {
+  return invokeCommand<AppSettings>("set_session_storage_volume", { volume });
+}
+
 export type DecodingCacheInfo = {
   /** Effective directory the engine writes decoded `.rf64` cache files into. */
   dir: string;

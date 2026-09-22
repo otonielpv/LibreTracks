@@ -309,6 +309,18 @@ pub struct AppSettings {
     /// uses 10% of free disk, min 4 GiB). Maps to `LIBRETRACKS_SOURCE_DISK_CACHE_MB`.
     #[serde(default)]
     pub decoding_cache_max_gb: Option<u32>,
+    /// Android only: absolute path of the app-specific external directory the
+    /// user picked for new sessions, as `getExternalFilesDirs` reports it.
+    /// `None` = the primary volume, which is what every install had before this
+    /// existed.
+    ///
+    /// Only NEW sessions land there: moving one between volumes is copying
+    /// gigabytes, and doing that implicitly on a phone is not something the
+    /// user asked for. The ones already on the other volume keep opening —
+    /// `state::legacy_project_roots` lists every volume, not just the current
+    /// one.
+    #[serde(default)]
+    pub session_storage_volume: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -372,6 +384,7 @@ impl Default for AppSettings {
             midi_mappings: HashMap::new(),
             decoding_cache_dir: None,
             decoding_cache_max_gb: None,
+            session_storage_volume: None,
         }
     }
 }
@@ -401,9 +414,21 @@ pub fn default_decoding_cache_dir(app: &AppHandle) -> PathBuf {
     // the heaviest thing we write. Sessions on one volume and their decoded
     // audio on another was never deliberate. Falls through when the external
     // volume is unavailable, exactly like the session root does.
+    //
+    // **The cache follows the chosen volume.** It is the heaviest thing the app
+    // writes, so sending the sessions to the card and leaving the cache filling
+    // up the internal storage would miss the point of choosing.
     #[cfg(target_os = "android")]
-    if let Some(external) = crate::platform::android_storage::external_files_dir() {
-        return external.join("cache");
+    {
+        let selected = app
+            .try_state::<AppSettingsStore>()
+            .and_then(|store| store.current().ok())
+            .and_then(|settings| settings.session_storage_volume);
+        if let Some(external) =
+            crate::platform::android_storage::selected_external_files_dir(selected.as_deref())
+        {
+            return external.join("cache");
+        }
     }
 
     app.path()

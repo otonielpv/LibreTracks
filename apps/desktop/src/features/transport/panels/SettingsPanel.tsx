@@ -25,6 +25,7 @@ import { UI_ZOOM_STEPS, setUiZoom, useUiZoom } from "../../../shared/uiZoom";
 import { TelemetrySettingsField } from "../../telemetry/TelemetryController";
 import { DiagnosticsSettingsTab } from "./DiagnosticsSettingsTab";
 import { MulticoreAudioField } from "./MulticoreAudioField";
+import { SessionStorageVolumeField } from "./SessionStorageVolumeField";
 import { UpdateCheckField } from "./UpdateCheckField";
 import { ShortcutsSettingsTab } from "./ShortcutsSettingsTab";
 import {
@@ -852,6 +853,8 @@ export function SettingsPanel({
                     </label>
 
                     <InterfaceZoomField />
+
+                    <SessionStorageVolumeField />
 
                     <DecodingCacheField />
 

@@ -449,6 +449,7 @@ function buildInitialState(): DesktopApiMockState {
       timelinePlayheadFollowMode: "ahead",
       importMergeMatchingTracks: true,
       autoColorNewTracks: true,
+      sessionStorageVolume: null,
       // Off in the mock: tests drive saving explicitly and must not race a
       // background autosave timer.
       autoSaveEnabled: false,
