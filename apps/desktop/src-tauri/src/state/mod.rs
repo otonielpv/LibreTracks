@@ -3901,8 +3901,8 @@ fn legacy_project_roots(app: &AppHandle) -> Vec<PathBuf> {
             roots.push(internal);
         }
         for volume in crate::platform::android_storage::external_files_dirs() {
-            if *volume != current && !roots.contains(volume) {
-                roots.push(volume.clone());
+            if volume != current && !roots.contains(&volume) {
+                roots.push(volume);
             }
         }
         roots

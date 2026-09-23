@@ -285,7 +285,9 @@ pub fn get_storage_volumes(
     {
         use crate::platform::android_storage;
 
-        let volumes = android_storage::external_files_dirs()
+        // Fresca, no la del arranque: un pendrive por OTG se enchufa y se quita
+        // con la app abierta, y este es el momento en que el usuario mira.
+        let volumes = android_storage::refresh_external_files_dirs()
             .iter()
             .enumerate()
             .map(|(index, dir)| {

@@ -19,28 +19,54 @@
 #![cfg(target_os = "android")]
 
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::Mutex;
 
 use jni::objects::{JObject, JObjectArray, JString, JValue};
 use jni::{JNIEnv, JavaVM};
 
 /// Every app-specific external directory Android gives us, primary first.
 ///
-/// Cached for the process: which volumes exist is decided when the device
-/// mounts them, and the lookup costs a JNI attach. What is NOT cached is
-/// whether the chosen one is still *usable* — see
-/// [`selected_external_files_dir`], which re-checks that on every call, so
-/// pulling the card degrades instead of crashing.
-static EXTERNAL_FILES_DIRS: OnceLock<Vec<PathBuf>> = OnceLock::new();
+/// Cached, because the lookup costs a JNI attach and the session paths ask for
+/// it often. But **not for the whole process**: a USB stick on OTG comes and
+/// goes while the app is open, and a list read once at startup neither showed
+/// a stick plugged in later nor dropped one pulled out. The Settings panel
+/// calls [`refresh_external_files_dirs`] every time it asks, which is the
+/// moment the user is looking. Whether the chosen volume is *usable* is never
+/// cached — see [`selected_external_files_dir`].
+static EXTERNAL_FILES_DIRS: Mutex<Option<Vec<PathBuf>>> = Mutex::new(None);
 
 /// All the volumes, in Android's order: index 0 is the primary (built-in)
 /// storage and the rest are removable — that is the documented contract of
-/// `getExternalFilesDirs`, and it is how the UI labels them.
+/// `getExternalFilesDirs`. Removable covers both a microSD card and a USB
+/// stick; [`volume_description`] is what tells them apart.
 ///
 /// Empty when Android gives us nothing at all (every volume unmounted, or the
 /// JNI lookup failed); callers then keep internal storage.
-pub fn external_files_dirs() -> &'static [PathBuf] {
-    EXTERNAL_FILES_DIRS.get_or_init(|| match query_external_files_dirs() {
+pub fn external_files_dirs() -> Vec<PathBuf> {
+    let Ok(mut cached) = EXTERNAL_FILES_DIRS.lock() else {
+        return Vec::new();
+    };
+    if cached.is_none() {
+        *cached = Some(query_and_log_external_files_dirs().unwrap_or_default());
+    }
+    cached.clone().unwrap_or_default()
+}
+
+/// Ask Android again which volumes are mounted, and return the fresh list.
+///
+/// On a failed lookup the previous list stays: forgetting the primary volume
+/// because one JNI call hiccuped would send new sessions to internal storage.
+pub fn refresh_external_files_dirs() -> Vec<PathBuf> {
+    if let Some(fresh) = query_and_log_external_files_dirs() {
+        if let Ok(mut cached) = EXTERNAL_FILES_DIRS.lock() {
+            *cached = Some(fresh);
+        }
+    }
+    external_files_dirs()
+}
+
+fn query_and_log_external_files_dirs() -> Option<Vec<PathBuf>> {
+    match query_external_files_dirs() {
         Ok(dirs) => {
             for (index, dir) in dirs.iter().enumerate() {
                 eprintln!(
@@ -48,14 +74,14 @@ pub fn external_files_dirs() -> &'static [PathBuf] {
                     dir.display()
                 );
             }
-            dirs
+            Some(dirs)
         }
         Err(error) => {
             // Not fatal: the caller falls back to internal storage.
             eprintln!("[LT_STORAGE] no external files dirs ({error}); using internal");
-            Vec::new()
+            None
         }
-    })
+    }
 }
 
 /// The app's PRIMARY external files directory, or `None` if Android would not
@@ -86,7 +112,7 @@ fn volume_is_usable(dir: &Path) -> bool {
 ///    this became configurable.
 pub fn selected_external_files_dir(selected: Option<&str>) -> Option<PathBuf> {
     let volumes = external_files_dirs();
-    let picked = super::storage_volumes::pick_volume(volumes, selected, volume_is_usable);
+    let picked = super::storage_volumes::pick_volume(&volumes, selected, volume_is_usable);
     if picked.is_some() && !selected_volume_is_available(selected) {
         eprintln!(
             "[LT_STORAGE] chosen volume is unavailable, falling back to: {}",
@@ -102,7 +128,7 @@ pub fn selected_external_files_dir(selected: Option<&str>) -> Option<PathBuf> {
 /// interna" instead of silently lying about where the sessions land.
 pub fn selected_volume_is_available(selected: Option<&str>) -> bool {
     super::storage_volumes::selected_is_available(
-        external_files_dirs(),
+        &external_files_dirs(),
         selected,
         volume_is_usable,
     )
