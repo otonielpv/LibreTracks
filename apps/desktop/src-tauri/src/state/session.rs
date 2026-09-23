@@ -241,6 +241,12 @@ impl DesktopSession {
         if let Err(error) = self.save_project() {
             eprintln!("[libretracks-session] autosave before close failed: {error}");
         }
+        // Android: soltar los descriptores de los `content://` que esta sesión
+        // tenía abiertos. Mantienen vivo el fichero para el sistema, y
+        // acumularlos de sesión en sesión es una fuga lenta. La siguiente los
+        // vuelve a abrir cuando los necesite.
+        #[cfg(target_os = "android")]
+        crate::platform::android_content_uri::release_all();
     }
 
     /// Inventario de audio que la sesión referencia y no está en disco.
