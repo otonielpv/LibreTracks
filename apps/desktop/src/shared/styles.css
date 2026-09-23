@@ -3862,7 +3862,19 @@ html.lt-ios body {
   gap: 0.25rem;
 }
 
-.lt-track-header.is-compact .lt-track-meta,
+.lt-track-header.is-compact /* Pista sumada a mono: una ETIQUETA junto al nombre, no un control.
+   Sin caja y en el gris del texto secundario, para que se lea como un dato de
+   la pista y no compita con los toggles. `flex-shrink: 0` para que lo que se
+   recorte al estrechar la cabecera sea el nombre, no el dato. */
+.lt-track-mono-tag {
+  flex-shrink: 0;
+  color: rgb(186 202 197 / 0.75);
+  font: 600 9px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lt-track-meta,
 .lt-track-header.is-compact .lt-track-drop-hint,
 .lt-track-header.is-condensed .lt-track-meta,
 .lt-track-header.is-condensed .lt-track-drop-hint,
@@ -4459,24 +4471,6 @@ html.lt-ios body {
 
 .lt-track-toggle-group button.lt-track-toggle-transpose {
   grid-column: 1 / span 2;
-}
-
-/* Pista sumada a mono. Una marca, no un boton: quitarlo se hace desde el menu
-   de la pista, igual que ponerlo. Lo que tiene que resolver es que una pista
-   sumada suena distinto y el usuario pueda saber por que sin abrir nada. */
-.lt-track-mono-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  grid-column: 1 / span 2;
-  min-width: 1.2rem;
-  height: 1.1rem;
-  padding: 0 0.25rem;
-  border-radius: 2px;
-  background: rgb(87 241 219 / 0.18);
-  color: #57f1db;
-  font: 700 9px/1 "Space Grotesk", sans-serif;
-  letter-spacing: 0.04em;
 }
 
 .lt-track-volume,

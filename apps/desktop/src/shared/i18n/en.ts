@@ -1283,6 +1283,7 @@ const en = {
     laneFolderEmpty: "Empty folder",
     laneFolderChildCount_one: "{{count}} track",
     laneFolderChildCount_other: "{{count}} tracks",
+    monoDownmixTag: "mono",
     monoDownmix: "Summed to mono",
     resetRowHeight: "Reset track height",
     resizeRow: "Resize track height",

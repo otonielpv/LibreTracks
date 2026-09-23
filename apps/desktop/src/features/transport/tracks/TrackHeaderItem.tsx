@@ -294,16 +294,6 @@ function TrackHeaderItemComponent({
               >
                 T
               </button>
-              {trackMonoDownmix ? (
-                <span
-                  className="lt-track-mono-badge"
-                  title={t("trackHeader.monoDownmix", {
-                    defaultValue: "Sumada a mono",
-                  })}
-                >
-                  M
-                </span>
-              ) : null}
             </div>
             <TrackMixControls
               trackId={trackId}
@@ -376,6 +366,23 @@ function TrackHeaderItemComponent({
                   </button>
                 ) : null}
                 <strong>{trackName}</strong>
+                {/* Va en la fila del NOMBRE, y no en el grupo de toggles, por
+                    tres razones: ahi ocupaba una fila entera de la rejilla y
+                    empujaba el resto; `lt-track-meta` (la otra fila candidata)
+                    se oculta en las alturas compact/condensed/micro, que es
+                    justo donde se cortaba; y una "M" al lado de la "M" de
+                    silenciar es confusa. Aqui es una etiqueta, no un control:
+                    sin caja, sin color de acento y sin poder pulsarse. */}
+                {trackMonoDownmix ? (
+                  <span
+                    className="lt-track-mono-tag"
+                    title={t("trackHeader.monoDownmix", {
+                      defaultValue: "Sumada a mono",
+                    })}
+                  >
+                    {t("trackHeader.monoDownmixTag", { defaultValue: "mono" })}
+                  </span>
+                ) : null}
                 {/* En la MISMA linea que el nombre: colgando debajo estiraban
                     la fila, y con la fila al minimo la cabecera -que recorta lo
                     que sobresale- se llevaba por delante tambien el nombre. */}

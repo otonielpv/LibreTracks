@@ -1316,6 +1316,7 @@ const es = {
     laneFolderEmpty: "Carpeta vacia",
     laneFolderChildCount_one: "{{count}} track",
     laneFolderChildCount_other: "{{count}} tracks",
+    monoDownmixTag: "mono",
     monoDownmix: "Sumada a mono",
     resetRowHeight: "Restablecer alto de la pista",
     resizeRow: "Ajustar alto de la pista",
