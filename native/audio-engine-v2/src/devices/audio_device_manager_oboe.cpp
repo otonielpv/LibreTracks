@@ -38,21 +38,16 @@ namespace {
 
 constexpr int kOutputChannels = 2;
 
-// Soft clip at the device boundary. Windows' shared-mode audio engine runs a
-// limiter after the app, so hot master sums (two full-scale tracks at 100%)
-// never reach the DAC above full scale on desktop — but AAudio has no such
-// stage and hard-clips anything past ±1.0, which is exactly the harsh
-// crackle reported on peaks. Transparent below the knee (-3 dBFS); above it,
-// a tanh bend that never exceeds ±1. Audio-thread safe (pure math).
-inline float soft_clip(float sample) noexcept {
-    constexpr float kKnee = 0.7f;
-    const float magnitude = std::fabs(sample);
-    if (magnitude <= kKnee)
-        return sample;
-    const float bent =
-        kKnee + (1.0f - kKnee) * std::tanh((magnitude - kKnee) / (1.0f - kKnee));
-    return sample < 0.0f ? -bent : bent;
+// Hard guard at the device boundary, NOT a limiter. The Mixer already runs
+// soft_limit_output() (knee 0.98, ceiling 0.999) on the final sum, so nothing
+// above ±1 should ever get here. There used to be a tanh soft clip here with
+// its knee at -3 dBFS: Android-only, it squashed every peak of a hot
+// multitrack and took the punch out of it. The crackle it was added for was
+// really the int16 decode cache wrapping, fixed at the source in 820dcb42.
+inline float clamp_unit(float sample) noexcept {
+    return std::clamp(sample, -1.0f, 1.0f);
 }
+
 // Planar scratch capacity per channel. AAudio bursts are typically 96-1920
 // frames; anything larger is handled by chunking the render loop.
 constexpr int kMaxRenderChunkFrames = 8192;
@@ -111,9 +106,9 @@ public:
             for (int frame = 0; frame < chunk; ++frame) {
                 const size_t base =
                     static_cast<size_t>(offset + frame) * channels;
-                out[base] = soft_clip(planar_[0][frame]);
+                out[base] = clamp_unit(planar_[0][frame]);
                 if (channels > 1)
-                    out[base + 1] = soft_clip(planar_[1][frame]);
+                    out[base + 1] = clamp_unit(planar_[1][frame]);
             }
             offset += chunk;
         }
@@ -254,15 +249,27 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
         }
     }
 
-    // PerformanceMode::None (deep buffer) is the safe default: LowLatency
-    // streams get small internal buffer capacities that stuttered on a low-end
-    // phone (Oppo A5) the moment anything else breathed, and the app is a
-    // playback tool where jumps still feel instant next to Bungee's ~100 ms
-    // pitch latency. The user opts into LowLatency (Settings → "Baja latencia")
-    // when they have hardware that can take it — e.g. a USB interface.
+    // PowerSaving (the deep-buffer output) is the default, and it is not about
+    // battery. It is the only mode that asks AudioFlinger for
+    // AUDIO_OUTPUT_FLAG_DEEP_BUFFER — the output music players land on, and
+    // the one OEMs hang their post-processing on. Measured on the Oppo A5
+    // (CPH1931) with dumpsys media.audio_flinger:
+    //   - PerformanceMode::None → primary/FastMixer thread, 0 effect chains
+    //     (int16 instead of Float made no difference: same thread);
+    //   - PowerSaving → deep-buffer thread, with ColorOS's Dolby "DAP FULL"
+    //     on session 0 — the same path Audio Evolution plays through.
+    // Without it LibreTracks sounded "thin and narrow" next to any other
+    // player: the bass and stereo width the user hears are that Dolby stage.
+    // The system's sound settings now apply to us like to everyone else (Dolby
+    // off in Ajustes → off here too). Cost: ~+30 ms track latency (212 → 241
+    // ms measured), still well under Audio Evolution's ~420 ms, and the big
+    // HAL period (1920 frames) is kinder to busy low-end CPUs.
+    //
+    // The user opts into LowLatency (Settings → "Baja latencia") when they
+    // want the raw, effect-free path — e.g. a USB interface into a desk.
     const oboe::PerformanceMode performance_mode = request.low_latency
         ? oboe::PerformanceMode::LowLatency
-        : oboe::PerformanceMode::None;
+        : oboe::PerformanceMode::PowerSaving;
 
     builder.setDirection(oboe::Direction::Output)
         ->setDeviceId(requested_device_id)
@@ -355,7 +362,7 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
                  impl_->stream->getDeviceId(),
                  request.low_latency ? 1 : 0,
                      impl_->stream->getPerformanceMode() == oboe::PerformanceMode::LowLatency
-                         ? "LowLatency" : "None");
+                         ? "LowLatency" : "PowerSaving");
     }
     return Result<void>::ok();
 }
