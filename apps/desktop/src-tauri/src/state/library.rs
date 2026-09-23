@@ -1356,11 +1356,15 @@ pub(crate) fn list_library_assets(
     let mut assets = Vec::new();
     for file_path in collect_library_file_paths(song_dir, song)? {
         let path = resolve_audio_file_path(song_dir, &file_path);
-        let file_name = path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or(&file_path)
-            .to_string();
+        // El nombre NO sale de `path` cuando es un `content://`: en Android esa
+        // ruta es `/proc/self/fd/7`, y la pista se llamaría «7».
+        let file_name = crate::platform::content_uri::display_name_for_content_uri(&file_path)
+            .unwrap_or_else(|| {
+                path.file_name()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or(&file_path)
+                    .to_string()
+            });
         let is_missing = !path.exists();
         let duration_seconds = if path.is_file() {
             read_audio_metadata(&path)?.duration_seconds

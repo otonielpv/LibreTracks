@@ -361,6 +361,10 @@ pub(super) fn prune_empty_regions(song: &mut Song) {
 /// reasonable initial track name. "audio/kick.wav" → "kick". Falls back to
 /// the raw path if nothing sensible remains.
 pub(super) fn file_stem_for_auto_track(file_path: &str) -> String {
+    // Un `content://` de Android no se nombra por su ruta: su último segmento
+    // es el id codificado del documento. Ver `display_name_for_content_uri`.
+    let display_name = crate::platform::content_uri::display_name_for_content_uri(file_path);
+    let file_path = display_name.as_deref().unwrap_or(file_path);
     let normalised = file_path.replace('\\', "/");
     let basename = normalised.rsplit('/').next().unwrap_or(&normalised);
     let stem = match basename.rfind('.') {

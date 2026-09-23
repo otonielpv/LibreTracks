@@ -4138,6 +4138,14 @@ pub(super) fn copy_project_audio_files(
 
     let mut copied_relative_paths = std::collections::HashSet::new();
     for clip in &song.clips {
+        // El audio de FUERA de la sesión no se copia: la sesión nueva lo sigue
+        // referenciando igual que la vieja. Con una ruta absoluta esto ya
+        // pasaba de chiripa (`join` con una absoluta la sustituye, y origen y
+        // destino salían iguales); con un `content://` no, `fs::copy` fallaba
+        // y el `?` tumbaba el «Guardar como» entero.
+        if crate::platform::content_uri::is_external_audio_path(&clip.file_path) {
+            continue;
+        }
         let relative_path = Path::new(&clip.file_path);
         if !copied_relative_paths.insert(relative_path.to_path_buf()) {
             continue;
@@ -4158,6 +4166,9 @@ pub(super) fn copy_project_audio_files(
     }
 
     for file_path in library_file_paths {
+        if crate::platform::content_uri::is_external_audio_path(file_path) {
+            continue;
+        }
         let relative_path = Path::new(file_path);
         if !copied_relative_paths.insert(relative_path.to_path_buf()) {
             continue;

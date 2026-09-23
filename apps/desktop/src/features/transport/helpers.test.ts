@@ -326,6 +326,37 @@ describe("file name helpers", () => {
     expect(libraryAssetFileName("bare.flac")).toBe("bare.flac");
   });
 
+  // Paso 07, visto en el telefono: con el import por referencia la ruta es un
+  // `content://`, y cortarla por "/" daba el id codificado del documento. Las
+  // pistas salian como `Reyes%20-%20Mar...` y los clips como
+  // `Primary 3adownload 2frey...`.
+  describe("un content:// de Android", () => {
+    const uri =
+      "content://com.android.externalstorage.documents/document/" +
+      "primary%3ADownload%2FRey%20de%20Reyes%20-%20Marco%20Barrientos%2F" +
+      "MultiTracks%2FAlto.wav";
+
+    it("se nombra por el fichero, no por el id del documento", () => {
+      expect(libraryAssetFileName(uri)).toBe("Alto.wav");
+    });
+
+    it("da una pista y un clip con nombre legible", () => {
+      expect(humanizeLibraryTrackName(uri)).toBe("Alto");
+      expect(clipDisplayName({ filePath: uri, trackName: "x" })).toBe("Alto");
+    });
+
+    it("no se cae con un % suelto en el id", () => {
+      expect(
+        libraryAssetFileName(
+          "content://x/document/primary%3AMusic%2F100%25-real.wav",
+        ),
+      ).toBe("100%-real.wav");
+      expect(libraryAssetFileName("content://x/document/roto%ZZ.wav")).toBe(
+        "roto%ZZ.wav",
+      );
+    });
+  });
+
   it("humanizes a file path into a title-cased name", () => {
     expect(humanizeLibraryTrackName("C:/loops/my_cool-LOOP.wav")).toBe(
       "My Cool Loop",

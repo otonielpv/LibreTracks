@@ -33,6 +33,28 @@ pub fn is_content_uri(path: &str) -> bool {
         && path[..CONTENT_SCHEME.len()].eq_ignore_ascii_case(CONTENT_SCHEME)
 }
 
+/// Nombre visible del fichero al que apunta una ruta de asset.
+///
+/// **Nunca saques el nombre de la ruta local de un `content://`.** Esa ruta es
+/// `/proc/self/fd/7`, así que el «nombre» sería `7`. Y tampoco del URI tal
+/// cual: su último segmento es el id del documento, codificado
+/// (`primary%3ADownload%2FRey%20de%20Reyes%2FAlto.wav`), que es lo que acabó
+/// como nombre de pista en el teléfono.
+///
+/// Lo único legible es el último componente del id ya decodificado, que es lo
+/// que `document_display_name` sabe sacar.
+///
+/// `None` para las rutas de siempre: ahí el nombre sale de la propia ruta y
+/// quien llama ya sabe hacerlo.
+pub fn display_name_for_content_uri(path: &str) -> Option<String> {
+    if !is_content_uri(path) {
+        return None;
+    }
+    let segment = path.rsplit('/').next().unwrap_or(path);
+    let name = super::document_name::document_display_name(segment);
+    (!name.is_empty()).then_some(name)
+}
+
 /// ¿Esta ruta apunta a algo de FUERA de la sesión?
 ///
 /// Las dos formas que lo son: una ruta absoluta de siempre (lo que registra
@@ -109,6 +131,23 @@ mod tests {
         // Lo de dentro: una copia que la sesion posee, y por tanto suya.
         assert!(!is_external_audio_path("audio/voz.wav"));
         assert!(!is_external_audio_path("audio\\voz.wav"));
+    }
+
+    /// El fallo visto en el telefono: las pistas se llamaban
+    /// `Reyes%20-%20Mar...` y los clips `Primary 3adownload 2frey...` porque el
+    /// nombre salia del id codificado del documento, no del fichero.
+    #[test]
+    fn a_content_uri_is_named_after_the_file_not_the_document_id() {
+        let uri = concat!(
+            "content://com.android.externalstorage.documents/document/",
+            "primary%3ADownload%2FRey%20de%20Reyes%20-%20Marco%20Barrientos%2F",
+            "MultiTracks%2FAlto.wav",
+        );
+        assert_eq!(display_name_for_content_uri(uri).as_deref(), Some("Alto.wav"));
+
+        // Las rutas de siempre no son asunto de esta funcion.
+        assert_eq!(display_name_for_content_uri("audio/Alto.wav"), None);
+        assert_eq!(display_name_for_content_uri("/storage/emulated/0/Alto.wav"), None);
     }
 
     /// La razon de no usar `Path::is_absolute`: una sesion que viaja.

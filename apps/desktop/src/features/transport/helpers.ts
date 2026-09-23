@@ -240,10 +240,38 @@ export function findMidiMappingKeyForMessage(
   );
 }
 
+/**
+ * El nombre del fichero al que apunta una ruta de asset.
+ *
+ * Un `content://` de Android (el import por referencia) NO se puede cortar por
+ * `/` como una ruta: su último segmento es el id del documento, codificado
+ * (`primary%3ADownload%2FRey%20de%20Reyes%2FAlto.wav`). Cortarlo así es lo que
+ * dejó en el teléfono pistas llamadas `Reyes%20-%20Mar…` y clips
+ * `Primary 3adownload 2frey…`. Hay que decodificar el id y quedarse con su
+ * último componente, que es lo mismo que hace `document_display_name` en Rust.
+ */
 export function libraryAssetFileName(filePath: string) {
+  if (/^content:\/\//i.test(filePath)) {
+    return contentUriDisplayName(filePath);
+  }
   return filePath.split(/[\\/]/).at(-1) ?? filePath;
 }
 
+function contentUriDisplayName(uri: string) {
+  const segment = uri.split("/").at(-1) ?? uri;
+  let documentId = segment;
+  try {
+    documentId = decodeURIComponent(segment);
+  } catch {
+    // Un `%` suelto no puede tumbar el nombre de una pista: se usa tal cual.
+  }
+  // Los ids son `<raíz>:<ruta>`. Se parte por los primeros dos puntos para que
+  // un nombre que los lleve de verdad los conserve (ext4 los admite).
+  const colon = documentId.indexOf(":");
+  const path = colon >= 0 ? documentId.slice(colon + 1) : documentId;
+  const name = path.split(/[\\/]/).at(-1)?.trim();
+  return name || documentId;
+}
 export function resolveNativeAudioImportPayloads(files: File[]) {
   const payloads = files
     .map((file) => {

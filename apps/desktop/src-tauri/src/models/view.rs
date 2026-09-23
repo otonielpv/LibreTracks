@@ -878,13 +878,12 @@ pub(crate) fn clip_to_summary(
         track_name,
         file_path: clip.file_path.clone(),
         waveform_key,
+        // Por `resolve_audio_file_path` y no con un `join` propio: es la única
+        // función que sabe abrir un `content://` de Android. Con la copia que
+        // había aquí, todo clip importado por referencia salía rayado como
+        // «falta el audio» aunque sonara.
         is_missing: if let Some(dir) = song_dir {
-            let path = std::path::Path::new(&clip.file_path);
-            if path.is_absolute() {
-                !path.exists()
-            } else {
-                !dir.join(path).exists()
-            }
+            !crate::state::resolve_audio_file_path(dir, &clip.file_path).exists()
         } else {
             !std::path::Path::new(&clip.file_path).exists()
         },

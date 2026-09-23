@@ -2715,14 +2715,8 @@ impl AudioController {
         }
 
         let mut state = self.state.lock().ok()?;
-        let source_path = {
-            let path = Path::new(waveform_key);
-            if path.is_absolute() {
-                path.to_path_buf()
-            } else {
-                state.song_dir.as_ref()?.join(path)
-            }
-        };
+        let source_path =
+            crate::state::resolve_audio_file_path(state.song_dir.as_ref()?, waveform_key);
         let source_id = normalize_engine_audio_path(&source_path.to_string_lossy());
         let engine = state.engine.as_mut()?;
         let sample_rate = engine.get_snapshot().ok()?.device.sample_rate;
@@ -2973,6 +2967,16 @@ fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song 
     };
     let mut resolved = song.clone();
     for clip in &mut resolved.clips {
+        // Un `content://` de Android se traduce ANTES de normalizar nada: es la
+        // ruta que el motor va a abrir, y si llega el URI tal cual (o pegado a
+        // la carpeta de la sesión, que es lo que hacía el `join` de abajo) el
+        // motor no la abre y la pista suena en silencio.
+        if crate::platform::content_uri::is_content_uri(&clip.file_path) {
+            clip.file_path = crate::state::resolve_audio_file_path(song_dir, &clip.file_path)
+                .to_string_lossy()
+                .into_owned();
+            continue;
+        }
         let normalized_clip_path = normalize_engine_audio_path(&clip.file_path);
         let raw_path = normalized_clip_path.trim();
         if raw_path.is_empty() {
