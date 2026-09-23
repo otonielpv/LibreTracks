@@ -55,6 +55,41 @@ pub fn resolve_asset(song_dir: &Path, stored_path: &str) -> (PathBuf, String) {
     (path, display_name)
 }
 
+/// El camino inverso: de una ruta YA resuelta a lo que la identifica de forma
+/// estable, y su nombre visible sin extensión.
+///
+/// Existe por las cachés que se indexan por ruta. La ruta local de un
+/// `content://` es `/proc/self/fd/206`, y **ese número cambia en cada
+/// arranque**: una caché con esa clave falla siempre, y en el teléfono eso era
+/// volver a analizar todas las ondas cada vez que se abría la sesión.
+///
+/// `None` si la ruta no es de las del gancho: entonces la propia ruta ya es
+/// estable.
+pub type AssetIdentityResolver = fn(&Path) -> Option<(String, String)>;
+
+static IDENTITY_RESOLVER: OnceLock<AssetIdentityResolver> = OnceLock::new();
+
+/// Instala el gancho inverso. Una sola vez, al arrancar.
+pub fn set_asset_identity_resolver(resolver: AssetIdentityResolver) {
+    let _ = IDENTITY_RESOLVER.set(resolver);
+}
+
+/// Identidad estable de `resolved_path` (clave) y su nombre sin extensión
+/// (para nombres de fichero legibles en la caché).
+pub fn stable_asset_identity(resolved_path: &Path) -> (String, String) {
+    if let Some(resolver) = IDENTITY_RESOLVER.get() {
+        if let Some(identity) = resolver(resolved_path) {
+            return identity;
+        }
+    }
+    let stem = resolved_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("waveform")
+        .to_string();
+    (resolved_path.to_string_lossy().into_owned(), stem)
+}
+
 /// Sólo la ruta. Para quien no necesita el nombre visible.
 pub fn resolve_asset_path(song_dir: &Path, stored_path: &str) -> PathBuf {
     if let Some(resolver) = RESOLVER.get() {

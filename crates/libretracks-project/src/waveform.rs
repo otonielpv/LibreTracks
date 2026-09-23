@@ -238,13 +238,13 @@ fn resolve_audio_source_path(song_dir: &Path, audio_path: &Path) -> PathBuf {
 /// top of the freshness signature embedded inside the file.
 pub fn global_waveform_file_path(cache_root: &Path, source_abs_path: &Path) -> PathBuf {
     let (size, modified_millis) = source_freshness(source_abs_path);
-    let stem = source_abs_path
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or("waveform");
+    // La identidad, no la ruta tal cual: la de un `content://` es
+    // `/proc/self/fd/N`, que cambia en cada arranque y hacía re-analizar todas
+    // las ondas al reabrir la sesión en Android.
+    let (identity, stem) = crate::asset_path::stable_asset_identity(source_abs_path);
 
     let mut hasher = DefaultHasher::new();
-    source_abs_path.to_string_lossy().hash(&mut hasher);
+    identity.hash(&mut hasher);
     size.hash(&mut hasher);
     modified_millis.hash(&mut hasher);
 
@@ -1527,6 +1527,34 @@ mod tests {
         // A different source yields a different file.
         let other = global_waveform_file_path(cache_root, Path::new("/music/snare.wav"));
         assert_ne!(a, other);
+    }
+
+    /// Visto en el telefono: al reabrir una sesion con audio referenciado se
+    /// re-analizaban TODAS las ondas. La ruta local de un `content://` es
+    /// `/proc/self/fd/N`, N cambia en cada arranque, y la clave de la cache
+    /// salia de ahi. Con el gancho de identidad, dos descriptores del mismo
+    /// documento caen en la misma entrada, y con su nombre legible.
+    #[test]
+    fn two_descriptors_of_the_same_document_share_one_cache_entry() {
+        crate::asset_path::set_asset_identity_resolver(|resolved| {
+            resolved
+                .to_str()?
+                .strip_prefix("/fake-fd/")
+                .map(|_| ("content://docs/document/Alto.wav".to_string(), "Alto".to_string()))
+        });
+        let cache_root = Path::new("/cache/root");
+
+        let first_run = global_waveform_file_path(cache_root, Path::new("/fake-fd/206"));
+        let second_run = global_waveform_file_path(cache_root, Path::new("/fake-fd/7"));
+        assert_eq!(first_run, second_run);
+        let name = first_run.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(name.starts_with("Alto-"), "{name}");
+
+        // Lo que no es del gancho sigue igual.
+        assert_ne!(
+            global_waveform_file_path(cache_root, Path::new("/music/a.wav")),
+            global_waveform_file_path(cache_root, Path::new("/music/b.wav"))
+        );
     }
 
     #[test]

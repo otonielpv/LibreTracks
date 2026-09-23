@@ -76,6 +76,16 @@ pub fn local_path_for(uri: &str) -> Option<PathBuf> {
     }
 }
 
+/// El `content://` al que corresponde una ruta `/proc/self/fd/N` que entregó
+/// [`local_path_for`]. El camino inverso, para las cachés que se indexan por
+/// ruta: el número de descriptor cambia en cada arranque, el URI no.
+pub fn uri_for_local_path(path: &std::path::Path) -> Option<String> {
+    let fds = open_fds().lock().ok()?;
+    fds.iter()
+        .find(|(_, file)| proc_path(raw_fd(file)) == path)
+        .map(|(uri, _)| uri.clone())
+}
+
 /// Suelta el descriptor de `uri`, si lo había.
 ///
 /// Se llama al cerrar la sesión y al borrar un asset: un descriptor abierto

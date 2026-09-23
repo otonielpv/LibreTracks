@@ -10,7 +10,10 @@ mod session_sample_rate;
 mod song_store;
 mod waveform;
 
-pub use asset_path::{set_asset_path_resolver, AssetPathResolver};
+pub use asset_path::{
+    set_asset_identity_resolver, set_asset_path_resolver, AssetIdentityResolver,
+    AssetPathResolver,
+};
 pub use importer::{
     append_wav_files_to_song, import_wav_files_to_library, import_wav_song, read_audio_metadata,
     read_wav_metadata, AppendWavFilesResult, AudioMetadata, ImportLibraryAssetsResult,

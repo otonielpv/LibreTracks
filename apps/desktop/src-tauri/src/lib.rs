@@ -101,6 +101,20 @@ pub fn run() {
         );
         Some((local, display_name))
     });
+    // Y el camino inverso, para las cachés indexadas por ruta (las ondas): la
+    // ruta local es `/proc/self/fd/N` y N cambia en cada arranque, así que la
+    // clave tiene que ser el URI o se re-analiza todo al reabrir la sesión.
+    #[cfg(target_os = "android")]
+    libretracks_project::set_asset_identity_resolver(|resolved| {
+        let uri = platform::android_content_uri::uri_for_local_path(resolved)?;
+        let name = platform::content_uri::display_name_for_content_uri(&uri)?;
+        let stem = std::path::Path::new(&name)
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or(&name)
+            .to_string();
+        Some((uri, stem))
+    });
 
     // Select the Linux WebKitGTK renderer policy before the webview is created:
     // keep accelerated DMABUF on AMD/Intel and use the compatibility path for
