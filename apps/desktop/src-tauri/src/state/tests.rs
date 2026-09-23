@@ -5094,6 +5094,27 @@ fn scan_sessions_in_lists_only_folders_holding_a_session_file() {
     assert_eq!(names, ["Concierto"]);
 }
 
+/// "Tus sesiones" en Android es este escaneo, no los recientes: la demo no
+/// debe salir (tiene su propio boton encima de la lista).
+#[test]
+fn scan_sessions_in_leaves_out_the_demo() {
+    let root = tempdir().unwrap();
+    let songs = root.path().join("songs");
+    fs::create_dir_all(songs.join("Concierto")).unwrap();
+    fs::write(songs.join("Concierto").join("Concierto.ltsession"), "{}").unwrap();
+    // Renombrada a proposito: el criterio es la marca, no el nombre.
+    let demo = songs.join("Mi demo");
+    fs::create_dir_all(&demo).unwrap();
+    fs::write(demo.join("Mi demo.ltsession"), "{}").unwrap();
+    fs::write(demo.join("demo.ltdemo"), "x").unwrap();
+
+    let names: Vec<String> = super::scan_sessions_in(&songs)
+        .into_iter()
+        .map(|session| session.name)
+        .collect();
+    assert_eq!(names, ["Concierto"]);
+}
+
 /// The landing screen's delete button hands back the `.ltsession` path it was
 /// listing; what gets removed is the folder around it.
 #[test]

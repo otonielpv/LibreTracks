@@ -3973,6 +3973,13 @@ fn scan_sessions_in(dir: &Path) -> Vec<SessionSummary> {
                             .and_then(|ext| ext.to_str())
                             .is_some_and(|ext| ext.eq_ignore_ascii_case("ltsession"))
                     })?;
+                // La demo tiene su propio boton en la pantalla de inicio. En
+                // Android esta lista es un escaneo de la carpeta, no los
+                // recientes, asi que el filtro de `rememberRecentSession` no
+                // llega aqui: sin esto sale dos veces, y con papelera.
+                if crate::commands::demo::is_demo_session_file(&song_file) {
+                    return None;
+                }
                 let name = folder.file_name()?.to_str()?.to_string();
                 let modified_ms = song_file
                     .metadata()
