@@ -82,7 +82,8 @@ use track_tree::*;
 // `library` submodule.
 pub(crate) use library::{
     import_audio_files_from_bytes_to_library, import_audio_files_from_paths_to_library,
-    import_staged_audio_files_to_library, list_library_assets,
+    import_referenced_audio_uris_to_library, import_staged_audio_files_to_library,
+    list_library_assets,
 };
 
 pub(super) const LIBRARY_MANIFEST_FILE_NAME: &str = "library.json";
@@ -3779,7 +3780,36 @@ fn build_waveform_cache_token(
     })
 }
 
+/// De la ruta que guarda la sesión a una ruta que se puede abrir.
+///
+/// Tres formas de entrada, y ésta es la ÚNICA función que las conoce:
+///
+/// - **relativa** (`audio/voz.wav`) — una copia que la sesión posee; se
+///   resuelve contra su carpeta.
+/// - **absoluta** — el original del usuario, referenciado; se devuelve tal cual.
+///   Es lo que hace escritorio desde siempre, y iOS.
+/// - **`content://`** — el original del usuario en Android, referenciado. No es
+///   una ruta: se abre por el `ContentResolver` y se devuelve
+///   `/proc/self/fd/<n>`, que sí lo es.
+///
+/// Que la tercera se traduzca AQUÍ es lo que evita tener que enseñar URIs a los
+/// 26 llamantes de esta función, a Symphonia y al motor en C++. Para todos
+/// ellos sigue siendo una ruta que `open()` acepta. Ver
+/// `platform/android_content_uri`.
+///
+/// Si el `content://` ya no se puede abrir (el usuario revocó el acceso, o
+/// borró el fichero) se devuelve el URI como ruta: no existirá, que es
+/// exactamente lo que es —un fichero que falta— y lo que el gestor del paso 08
+/// sabe tratar.
 pub(crate) fn resolve_audio_file_path(song_dir: &Path, file_path: &str) -> PathBuf {
+    #[cfg(target_os = "android")]
+    if crate::platform::content_uri::is_content_uri(file_path) {
+        if let Some(local) = crate::platform::android_content_uri::local_path_for(file_path) {
+            return local;
+        }
+        return PathBuf::from(file_path);
+    }
+
     let path = Path::new(file_path);
     if path.is_absolute() {
         path.to_path_buf()

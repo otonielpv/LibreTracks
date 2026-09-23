@@ -32,6 +32,11 @@ pub mod resource_monitor;
 // `cargo check` ni ningun test de escritorio.
 pub mod storage_volumes;
 
+// Misma razon que el anterior: reconocer la FORMA de una ruta de asset (un
+// `content://` de Android frente a una ruta de fichero) decide si borrar un
+// asset le borra bytes al usuario, y detras de un `cfg` no lo mira ningun test.
+pub mod content_uri;
+
 // Compilado en todos los sistemas a proposito: solo el lanzamiento del proceso
 // es de Windows, y dejar el modulo entero tras un `cfg` significaria que ningun
 // `cargo check` de macOS/Linux mira su logica. Ver la cabecera del modulo.
@@ -45,7 +50,11 @@ pub mod ios_webview;
 #[cfg(target_os = "android")]
 pub mod android_audio_devices;
 #[cfg(target_os = "android")]
+pub mod android_content_uri;
+#[cfg(target_os = "android")]
 pub mod android_memory;
+#[cfg(target_os = "android")]
+pub mod android_persistable_pick;
 #[cfg(target_os = "android")]
 pub mod android_storage;
 #[cfg(target_os = "android")]

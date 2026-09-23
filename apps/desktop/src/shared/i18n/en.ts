@@ -296,6 +296,9 @@ const en = {
         "Only affects new sessions: the ones you already have keep opening from where they are. The audio cache, which is the bulk of it, follows the chosen volume.",
       storageVolumeUnavailable:
         "The chosen volume is not available right now (card removed?). New sessions are being saved to internal storage.",
+      referenceImportedAudio: "Import without copying audio into the session",
+      referenceImportedAudioHint:
+        "The session points at your original files instead of duplicating them, the way desktop does. Takes far less space. If you move or delete an original, that track goes silent and shows up under Missing files.",
       autoColorNewTracks: "Colour new tracks automatically",
       autoColorNewTracksHint:
         "Each new track takes a colour from the palette, cycling through it in order, so you can tell them apart at a glance. Turn it off if you prefer colouring by hand. It never repaints tracks you already have.",
@@ -791,6 +794,7 @@ const en = {
       timelineNavigationSchemeUpdated: "Timeline navigation scheme updated.",
       timelinePlayheadFollowModeUpdated: "Playhead follow mode updated.",
       importMergeMatchingTracksUpdated: "Import track behaviour updated.",
+      referenceImportedAudioUpdated: "Audio import behaviour updated.",
       autoColorNewTracksUpdated: "Automatic track colours updated.",
       autoSaveUpdated: "Autosave updated.",
       projectAutoSaved: "Project autosaved.",

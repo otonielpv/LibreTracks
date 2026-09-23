@@ -96,6 +96,7 @@ type SettingsPanelProps = {
     value: AppSettings["timelinePlayheadFollowMode"],
   ) => void;
   onImportMergeMatchingTracksChange: (value: boolean) => void;
+  onReferenceImportedAudioChange: (value: boolean) => void;
   onAutoColorNewTracksChange: (value: boolean) => void;
   onAutoSaveEnabledChange: (value: boolean) => void;
   onAutoSaveIntervalMinutesChange: (value: number) => void;
@@ -162,6 +163,7 @@ export function SettingsPanel({
   onTimelineNavigationSchemeChange,
   onTimelinePlayheadFollowModeChange,
   onImportMergeMatchingTracksChange,
+  onReferenceImportedAudioChange,
   onAutoColorNewTracksChange,
   onAutoSaveEnabledChange,
   onAutoSaveIntervalMinutesChange,
@@ -761,6 +763,35 @@ export function SettingsPanel({
                         </small>
                       </span>
                     </label>
+
+                    {/* Solo Android: escritorio e iOS referencian desde
+                        siempre y no tienen nada que elegir aqui. */}
+                    {isAndroidApp ? (
+                      <label className="lt-settings-toggle">
+                        <input
+                          type="checkbox"
+                          checked={appSettings.referenceImportedAudio}
+                          disabled={isLoading || isSaving}
+                          onChange={(event) =>
+                            onReferenceImportedAudioChange(event.target.checked)
+                          }
+                        />
+                        <span className="lt-settings-toggle-copy">
+                          <span>
+                            {t("transport.settingsModal.referenceImportedAudio", {
+                              defaultValue:
+                                "Importar sin copiar el audio a la sesión",
+                            })}
+                          </span>
+                          <small>
+                            {t("transport.settingsModal.referenceImportedAudioHint", {
+                              defaultValue:
+                                "La sesión apunta a tus archivos originales en vez de duplicarlos, como en escritorio. Ocupa mucho menos. Si mueves o borras un original, la pista deja de sonar y aparece en «Archivos que faltan».",
+                            })}
+                          </small>
+                        </span>
+                      </label>
+                    ) : null}
 
                     <label className="lt-settings-toggle">
                       <input

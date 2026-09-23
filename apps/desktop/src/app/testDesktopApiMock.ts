@@ -450,6 +450,7 @@ function buildInitialState(): DesktopApiMockState {
       importMergeMatchingTracks: true,
       autoColorNewTracks: true,
       sessionStorageVolume: null,
+      referenceImportedAudio: true,
       // Off in the mock: tests drive saving explicitly and must not race a
       // background autosave timer.
       autoSaveEnabled: false,

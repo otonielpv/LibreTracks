@@ -115,6 +115,19 @@ impl PickedAudioDocument {
     pub fn file_name(&self) -> &str {
         &self.file_name
     }
+
+    /// El `content://` tal cual, cuando lo es.
+    ///
+    /// Lo necesita el import por referencia: la ruta que guarda la sesión es
+    /// **esta cadena exacta**, porque es la clave del permiso persistible que
+    /// `MainActivity` tomó al elegirla. Reescribirla (canonicalizar, cambiar
+    /// separadores) la invalida.
+    pub fn content_uri(&self) -> Option<String> {
+        match &self.picked {
+            FilePath::Url(url) => Some(url.to_string()),
+            FilePath::Path(_) => None,
+        }
+    }
 }
 
 /// Documents picked but not yet imported.

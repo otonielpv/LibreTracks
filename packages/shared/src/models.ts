@@ -1023,6 +1023,14 @@ export type AppSettings = {
    */
   sessionStorageVolume: string | null;
   /**
+   * Android only: reference the user's original audio instead of copying it
+   * into the session. On by default — desktop and iOS have always referenced,
+   * and a copy per import is what filled the tester's phone. Off goes back to
+   * copying, which suits someone who deletes the originals afterwards.
+   * Existing sessions are untouched either way.
+   */
+  referenceImportedAudio: boolean;
+  /**
    * When true (default) the loaded session is saved on its own every
    * `autoSaveIntervalMinutes`, so an unexpected crash or power cut loses at most
    * one interval of work. The timer only fires when the project actually changed
@@ -1111,6 +1119,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   importMergeMatchingTracks: true,
   autoColorNewTracks: true,
   sessionStorageVolume: null,
+  referenceImportedAudio: true,
   autoSaveEnabled: true,
   autoSaveIntervalMinutes: 5,
   midiMappings: {},
@@ -1346,6 +1355,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     // default to on, matching DEFAULT_APP_SETTINGS and the Rust side.
     autoColorNewTracks: settings.autoColorNewTracks ?? true,
     sessionStorageVolume: settings.sessionStorageVolume ?? null,
+    referenceImportedAudio: settings.referenceImportedAudio ?? true,
     // Absent in settings files written before autosave shipped: default to on,
     // matching DEFAULT_APP_SETTINGS.
     autoSaveEnabled: settings.autoSaveEnabled ?? true,

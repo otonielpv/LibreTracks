@@ -299,6 +299,15 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       );
     },
 
+    handleReferenceImportedAudioChange(nextValue: boolean) {
+      persistAudioPatch(
+        { referenceImportedAudio: nextValue },
+        t("transport.status.referenceImportedAudioUpdated", {
+          defaultValue: "Comportamiento al importar audio actualizado.",
+        }),
+      );
+    },
+
     handleAutoSaveEnabledChange(nextValue: boolean) {
       persistAudioPatch(
         { autoSaveEnabled: nextValue },

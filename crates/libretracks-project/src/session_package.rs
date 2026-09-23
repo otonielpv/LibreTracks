@@ -366,14 +366,15 @@ fn plan_audio_sources(
             .get(&stored_path_key(&stored_path))
             .cloned()
             .or(region_folder);
-        let source_abs = if Path::new(&stored_path).is_absolute() {
-            PathBuf::from(&stored_path)
-        } else {
-            song_dir.join(&stored_path)
-        };
-        let Some(file_name) = source_abs.file_name().and_then(|value| value.to_str()) else {
+        // El nombre visible viene aparte del resolvedor: la ruta local de un
+        // `content://` es `/proc/self/fd/7`, y usar su `file_name()` metería un
+        // fichero llamado `7` dentro del paquete exportado.
+        let (source_abs, resolved_name) =
+            crate::asset_path::resolve_asset(song_dir, &stored_path);
+        if resolved_name.is_empty() {
             continue;
-        };
+        }
+        let file_name = resolved_name.as_str();
         // In a Prepared package the payload is PCM, so the entry must end in
         // .wav — and the rename has to happen BEFORE the collision resolver
         // reserves the name, not after. A session holding both `Bass.mp3` and
@@ -507,11 +508,9 @@ fn rewrite_library_for_package(
     let obj = value.as_object_mut()?;
 
     let remap = |file_path: &str| -> Option<String> {
-        let source_abs = if Path::new(file_path).is_absolute() {
-            PathBuf::from(file_path)
-        } else {
-            song_dir.join(file_path)
-        };
+        // Misma resolucion que uso el planificador, o la clave no coincide y el
+        // clip se queda apuntando a un fichero que ya no esta donde dice.
+        let source_abs = crate::asset_path::resolve_asset_path(song_dir, file_path);
         bundled_by_source_abs
             .get(&normalize_source_key(&source_abs))
             .cloned()

@@ -299,6 +299,9 @@ const es = {
         "Sólo afecta a las sesiones nuevas: las que ya tienes se siguen abriendo desde donde están. La caché de audio, que es lo que más ocupa, sigue al volumen elegido.",
       storageVolumeUnavailable:
         "El volumen elegido no está disponible ahora mismo (¿has sacado la tarjeta?). Las sesiones nuevas se están guardando en la memoria interna.",
+      referenceImportedAudio: "Importar sin copiar el audio a la sesión",
+      referenceImportedAudioHint:
+        "La sesión apunta a tus archivos originales en vez de duplicarlos, como en escritorio. Ocupa mucho menos. Si mueves o borras un original, la pista deja de sonar y aparece en «Archivos que faltan».",
       autoColorNewTracks: "Colorear las pistas nuevas automáticamente",
       autoColorNewTracksHint:
         "Cada pista nueva toma un color de la paleta, recorriéndola en orden, para distinguirlas de un vistazo. Desactívalo si prefieres colorearlas a mano. No repinta las pistas que ya tienes.",
@@ -819,6 +822,8 @@ const es = {
         "Modo de seguimiento del cursor actualizado.",
       importMergeMatchingTracksUpdated:
         "Comportamiento de pistas al importar actualizado.",
+      referenceImportedAudioUpdated:
+        "Comportamiento al importar audio actualizado.",
       autoColorNewTracksUpdated: "Colores automáticos de pista actualizados.",
       autoSaveUpdated: "Autoguardado actualizado.",
       projectAutoSaved: "Proyecto guardado automáticamente.",

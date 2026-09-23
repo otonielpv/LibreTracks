@@ -134,7 +134,15 @@ impl DesktopSession {
         let still_claimed_by_another_asset = library_assets
             .iter()
             .any(|asset| library_file_identity(&song_dir, &asset.file_path) == doomed_key);
-        let deleted_local_audio = !Path::new(&normalized_file_path).is_absolute()
+        // `is_external_audio_path` y no `Path::is_absolute`: hay DOS formas de
+        // audio que no es de la sesión —una ruta absoluta y un `content://` de
+        // Android— y la respuesta no puede depender del sistema que pregunte
+        // (una sesión de Android abierta en Windows lleva rutas `/storage/...`
+        // que `Path::is_absolute` no reconoce ahí). Equivocarse aquí borra un
+        // fichero del usuario.
+        let deleted_local_audio = !crate::platform::content_uri::is_external_audio_path(
+            &normalized_file_path,
+        )
             && audio_file_path.exists()
             && !still_claimed_by_another_asset;
         // The global waveform entry is keyed by the audio's path+size+mtime, so
@@ -916,6 +924,85 @@ pub fn import_audio_files_from_paths_to_library(
         }
     }
 
+    library_assets.sort_by(|left, right| {
+        left.folder_path
+            .cmp(&right.folder_path)
+            .then_with(|| left.file_name.cmp(&right.file_name))
+    });
+    write_library_manifest_assets(song_dir, &library_assets)?;
+    finish_library_import(imported_assets, skipped)
+}
+
+/// Android: registrar audio **por referencia**, guardando el `content://` tal
+/// cual como ruta del asset. Ni un byte copiado.
+///
+/// Hermana de [`import_audio_files_from_paths_to_library`], que es la de
+/// escritorio e iOS, y hace lo mismo con dos diferencias que vienen de que un
+/// URI no es una ruta:
+///
+/// - **No se canonicaliza ni se toca la cadena.** `canonicalize` sobre un URI
+///   falla, y `normalize_library_file_path` cambia `\` por `/`, que en un URI
+///   sería corromperlo. Se guarda exactamente lo que devolvió el selector,
+///   porque es la clave del permiso persistible.
+/// - **El nombre visible viene del selector**, no de la ruta: un id de
+///   documento SAF es opaco (`msf:28`) y no hay nombre que sacar de ahí.
+///
+/// Los metadatos sí se leen del fichero, a través de `resolve_audio_file_path`,
+/// que traduce el URI a algo abrible. Si eso falla, el fichero se salta como
+/// cualquier otro ilegible: el usuario pierde uno, no los veinticinco.
+pub fn import_referenced_audio_uris_to_library(
+    song_dir: &Path,
+    song: Option<&Song>,
+    files: &[AudioFilePathImportPayload],
+) -> Result<LibraryImportResult, DesktopError> {
+    if files.is_empty() {
+        return Err(DesktopError::AudioCommand(
+            "at least one audio file is required".into(),
+        ));
+    }
+
+    let mut imported_assets = Vec::with_capacity(files.len());
+    let mut skipped = Vec::new();
+    let mut seen_uris = HashSet::new();
+
+    for file in files {
+        let uri = file.source_path.trim();
+        if uri.is_empty() {
+            continue;
+        }
+        if !seen_uris.insert(uri.to_string()) {
+            continue;
+        }
+
+        let readable = resolve_audio_file_path(song_dir, uri);
+        let metadata = match read_audio_metadata(&readable) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                skipped.push(skipped_import(uri, &file.file_name, &error));
+                continue;
+            }
+        };
+
+        imported_assets.push(LibraryAssetSummary {
+            file_name: file.file_name.clone(),
+            file_path: uri.to_string(),
+            duration_seconds: metadata.duration_seconds,
+            is_missing: false,
+            folder_path: None,
+        });
+    }
+
+    let mut library_assets = list_library_assets(song_dir, song)?;
+    for asset in &imported_assets {
+        if let Some(existing) = library_assets
+            .iter_mut()
+            .find(|existing| existing.file_path == asset.file_path)
+        {
+            *existing = asset.clone();
+        } else {
+            library_assets.push(asset.clone());
+        }
+    }
     library_assets.sort_by(|left, right| {
         left.folder_path
             .cmp(&right.folder_path)

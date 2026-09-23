@@ -2071,6 +2071,53 @@ fn delete_library_asset_removes_unused_files_from_the_song_library() {
     assert!(!audio_path.exists());
 }
 
+/// Paso 07: importar por referencia significa que el asset apunta al fichero
+/// DEL USUARIO. Quitarlo de la biblioteca tiene que olvidar la entrada y **no
+/// tocar los bytes**. Es el criterio del paso con nombre propio, y el fallo que
+/// evita es borrarle a alguien una grabación.
+#[test]
+fn deleting_a_referenced_asset_never_deletes_the_users_own_file() {
+    let mut session = session_with_song_dir(
+        "library-delete-referenced",
+        build_empty_song("song_1".into(), "Nueva".into()),
+    );
+    let song_dir = session.song_dir.clone().expect("song dir should exist");
+
+    // El original vive FUERA de la sesión, como cuando se referencia.
+    let outside = song_dir
+        .parent()
+        .expect("parent")
+        .join("mis-multitracks-del-usuario");
+    std::fs::create_dir_all(&outside).expect("mkdir");
+    let original = outside.join("voz-del-usuario.wav");
+    write_silent_test_wav(&original, 5);
+    let referenced = original.to_string_lossy().replace('\\', "/");
+
+    write_library_manifest(&song_dir, &[referenced.clone()]).expect("manifest should save");
+
+    let assets = session
+        .delete_library_asset(&referenced)
+        .expect("delete should succeed");
+
+    assert!(assets.is_empty(), "la entrada de biblioteca si se olvida");
+    assert!(
+        original.is_file(),
+        "borrar el asset NO puede borrar el fichero del usuario"
+    );
+}
+
+/// Y el `content://` de Android cuenta como de fuera igual que una ruta
+/// absoluta. Aquí no se puede montar un proveedor de contenido, así que lo que
+/// se afirma es la regla que lo decide — la misma que consulta el borrado.
+#[test]
+fn an_android_content_uri_counts_as_the_users_own_file() {
+    use crate::platform::content_uri::is_external_audio_path;
+    assert!(is_external_audio_path(
+        "content://com.android.externalstorage.documents/document/primary%3AMusic%2Fvoz.wav"
+    ));
+    assert!(!is_external_audio_path("audio/voz.wav"));
+}
+
 #[test]
 fn delete_library_asset_rejects_files_used_by_existing_clips() {
     let mut session = session_with_song_dir("library-delete-used-demo", demo_song());

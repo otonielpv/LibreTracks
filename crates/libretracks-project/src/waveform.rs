@@ -226,11 +226,9 @@ fn effective_channel_count(probed: u16, decoded: usize) -> u16 {
 }
 
 fn resolve_audio_source_path(song_dir: &Path, audio_path: &Path) -> PathBuf {
-    if audio_path.is_absolute() {
-        audio_path.to_path_buf()
-    } else {
-        song_dir.join(audio_path)
-    }
+    // Pasa por el gancho para que un `content://` de Android se resuelva al
+    // descriptor que sí se puede abrir. Sin gancho hace lo de siempre.
+    crate::asset_path::resolve_asset_path(song_dir, audio_path.to_string_lossy().as_ref())
 }
 
 /// Per-file global waveform cache path: `<cache_root>/waveform-cache/<stem>-<hash>.waveform.ltpeaks`.

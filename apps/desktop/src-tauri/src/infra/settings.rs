@@ -120,6 +120,10 @@ fn default_auto_color_new_tracks() -> bool {
     true
 }
 
+fn default_reference_imported_audio() -> bool {
+    true
+}
+
 fn default_auto_save_enabled() -> bool {
     true
 }
@@ -321,6 +325,20 @@ pub struct AppSettings {
     /// one.
     #[serde(default)]
     pub session_storage_volume: Option<String>,
+    /// Android only: reference the user's original audio instead of copying it
+    /// into the session.
+    ///
+    /// Desktop and iOS have always referenced. Android copied — not by design,
+    /// but because its picker returns a `content://` and the staged temp files
+    /// were ephemeral. On by default: the missing-files manager that makes
+    /// referencing safe is in place, and a copy per import is what filled the
+    /// tester's phone.
+    ///
+    /// Turning it off goes back to copying, which is the right answer for
+    /// someone who plans to delete the originals afterwards. Existing sessions
+    /// are untouched either way: this only affects what a NEW import does.
+    #[serde(default = "default_reference_imported_audio")]
+    pub reference_imported_audio: bool,
 }
 
 impl Default for AppSettings {
@@ -385,6 +403,7 @@ impl Default for AppSettings {
             decoding_cache_dir: None,
             decoding_cache_max_gb: None,
             session_storage_volume: None,
+            reference_imported_audio: default_reference_imported_audio(),
         }
     }
 }
@@ -670,6 +689,7 @@ mod tests {
         assert_eq!(settings.timeline_navigation_scheme, "ableton");
         assert!(settings.import_merge_matching_tracks);
         assert!(settings.auto_color_new_tracks);
+        assert!(settings.reference_imported_audio);
         assert!(settings.midi_mappings.is_empty());
     }
 
@@ -697,6 +717,19 @@ mod tests {
         let settings: AppSettings =
             serde_json::from_str(r#"{ "autoColorNewTracks": false }"#).expect("explicit");
         assert!(!settings.auto_color_new_tracks);
+    }
+
+    #[test]
+    fn referencing_imported_audio_defaults_to_on_for_older_settings_files() {
+        // Llega después de las instalaciones existentes. Por defecto, referenciar:
+        // el gestor de ficheros que faltan (paso 08) ya está, que es lo que hace
+        // que referenciar sea seguro, y copiar es lo que llenaba el teléfono.
+        let settings: AppSettings = serde_json::from_str("{}").expect("defaults");
+        assert!(settings.reference_imported_audio);
+
+        let settings: AppSettings =
+            serde_json::from_str(r#"{ "referenceImportedAudio": false }"#).expect("explicit");
+        assert!(!settings.reference_imported_audio);
     }
 
     #[test]

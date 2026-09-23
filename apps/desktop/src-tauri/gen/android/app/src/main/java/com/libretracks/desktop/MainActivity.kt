@@ -1,6 +1,7 @@
 package com.libretracks.desktop
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
@@ -124,6 +125,84 @@ class MainActivity : TauriActivity() {
     }
   }
 
+  // ── Selector de audio con permiso PERSISTIBLE ────────────────────────────
+  //
+  // Por que no vale el de tauri-plugin-dialog: abre con ACTION_GET_CONTENT
+  // (lo dice su propio fuente, con un "TODO: ACTION_OPEN_DOCUMENT ??" al
+  // lado). Un URI de GET_CONTENT lleva un permiso TEMPORAL atado a la tarea:
+  // `takePersistableUriPermission` sobre el lanza SecurityException, y al
+  // reiniciar el proceso la app deja de poder leer el fichero.
+  //
+  // Para importar POR REFERENCIA hace falta lo contrario: un permiso que
+  // sobreviva al reinicio del telefono. Eso es ACTION_OPEN_DOCUMENT con
+  // FLAG_GRANT_PERSISTABLE_URI_PERMISSION, y despues tomarlo de verdad. Es el
+  // equivalente exacto de los marcadores de seguridad que ya hace iOS en
+  // IosFolderPickerPlugin.swift (`retainAccess` / `restoreBookmarks`).
+  //
+  // Vive en MainActivity y no en un plugin de Tauri porque el resultado llega
+  // por onActivityResult, que es de la Activity, y porque el repo ya tiene el
+  // camino Kotlin -> Rust montado (ver nativeOnTrimMemory).
+  fun pickPersistableAudioDocuments() {
+    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+      addCategory(Intent.CATEGORY_OPENABLE)
+      // SAF filtra por MIME y los proveedores publican audio con tipos que una
+      // lista nuestra no acertaria; se acepta todo y valida el importador.
+      type = "*/*"
+      putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+      addFlags(
+        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+          Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+      )
+    }
+    try {
+      startActivityForResult(intent, REQUEST_PICK_PERSISTABLE_AUDIO)
+    } catch (error: Exception) {
+      Log.e("LTPick", "no se pudo abrir el selector", error)
+      deliverPickedDocuments(emptyArray())
+    }
+  }
+
+  override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    if (requestCode != REQUEST_PICK_PERSISTABLE_AUDIO) {
+      super.onActivityResult(requestCode, resultCode, data)
+      return
+    }
+    val uris = mutableListOf<Uri>()
+    data?.clipData?.let { clip ->
+      for (index in 0 until clip.itemCount) uris.add(clip.getItemAt(index).uri)
+    }
+    if (uris.isEmpty()) data?.data?.let { uris.add(it) }
+
+    val taken = mutableListOf<String>()
+    for (uri in uris) {
+      // ESTA es la linea que hace que la referencia sobreviva al reinicio. Si
+      // falla, el URI no sirve para referenciar y es mejor no devolverlo: el
+      // llamante cae al camino de copia de siempre en vez de crear una sesion
+      // que dejara de sonar manana.
+      try {
+        contentResolver.takePersistableUriPermission(
+          uri,
+          Intent.FLAG_GRANT_READ_URI_PERMISSION
+        )
+        taken.add(uri.toString())
+      } catch (error: SecurityException) {
+        Log.w("LTPick", "sin permiso persistible para $uri: ${error.message}")
+      }
+    }
+    deliverPickedDocuments(taken.toTypedArray())
+  }
+
+  /** Devuelve el resultado al lado Rust, que espera en un canal. */
+  private fun deliverPickedDocuments(uris: Array<String>) {
+    try {
+      nativeOnAudioDocumentsPicked(uris)
+    } catch (error: UnsatisfiedLinkError) {
+      Log.e("LTPick", "libreria nativa no cargada", error)
+    }
+  }
+
+  private external fun nativeOnAudioDocumentsPicked(uris: Array<String>)
+
   override fun onDestroy() {
     stopService(Intent(this, AudioPlaybackService::class.java))
     super.onDestroy()
@@ -151,5 +230,9 @@ class MainActivity : TauriActivity() {
     controller.systemBarsBehavior =
       WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     controller.hide(WindowInsetsCompat.Type.systemBars())
+  }
+
+  companion object {
+    private const val REQUEST_PICK_PERSISTABLE_AUDIO = 0x4C54
   }
 }

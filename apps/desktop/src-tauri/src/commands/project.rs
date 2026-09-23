@@ -1554,7 +1554,7 @@ pub struct PickedAudioBatch {
 #[cfg(target_os = "android")]
 #[tauri::command]
 pub fn pick_library_audio_documents(app: AppHandle) -> PickedAudioBatch {
-    let picked = crate::platform::mobile_files::pick_files(&app, "Importar audio a la libreria");
+    let picked = pick_audio_documents_for_import(&app);
     if picked.is_empty() {
         return PickedAudioBatch::default();
     }
@@ -1571,6 +1571,54 @@ pub fn pick_library_audio_documents(app: AppHandle) -> PickedAudioBatch {
         batch_id,
         file_names,
     }
+}
+
+/// ¿Referenciar el original al importar, o copiarlo dentro de la sesión?
+#[cfg(target_os = "android")]
+fn reference_imported_audio(app: &AppHandle) -> bool {
+    use tauri::Manager;
+    app.try_state::<crate::infra::settings::AppSettingsStore>()
+        .and_then(|store| store.current().ok())
+        .map(|settings| settings.reference_imported_audio)
+        .unwrap_or(true)
+}
+
+/// Abre el selector que corresponde al modo de import.
+///
+/// **Referenciando**, el selector tiene que ser el nuestro: el de
+/// `tauri-plugin-dialog` abre con `ACTION_GET_CONTENT`, cuyo permiso es
+/// temporal, así que la sesión dejaría de sonar al reiniciar el proceso. Ver
+/// `platform/android_persistable_pick`.
+///
+/// **Copiando**, sirve el de siempre: los bytes se traen en el acto y el
+/// permiso no tiene que durar.
+///
+/// Si el nuestro falla por lo que sea, se cae al de siempre: mejor importar
+/// copiando que no poder importar.
+#[cfg(target_os = "android")]
+fn pick_audio_documents_for_import(
+    app: &AppHandle,
+) -> Vec<tauri_plugin_fs::FilePath> {
+    if reference_imported_audio(app) {
+        match crate::platform::android_persistable_pick::pick_persistable_audio_documents() {
+            Ok(uris) if !uris.is_empty() => {
+                return uris
+                    .into_iter()
+                    // `FromStr` de FilePath entiende el `content://` y lo deja
+                    // como Url; parsearlo a mano ataria este fichero al crate
+                    // `url`, que aqui es una dependencia transitiva.
+                    .filter_map(|uri| uri.parse::<tauri_plugin_fs::FilePath>().ok())
+                    .collect();
+            }
+            Ok(_) => return Vec::new(), // canceló
+            Err(error) => {
+                crate::infra::error_log::write_error(&format!(
+                    "selector persistible no disponible ({error}); importando por copia"
+                ));
+            }
+        }
+    }
+    crate::platform::mobile_files::pick_files(app, "Importar audio a la libreria")
 }
 
 /// Android: import a batch parked by [`pick_library_audio_documents`].
@@ -1602,6 +1650,55 @@ pub fn import_picked_library_audio(
         (song_dir, session.engine.song().cloned())
     };
 
+    // Import POR REFERENCIA: ni un byte copiado.
+    //
+    // Se decide documento a documento, no para todo el lote, y con una sonda
+    // real (`probe_referenceable`) en vez de con una suposición: un proveedor
+    // virtualizado —Drive, «Recientes», «Descargas»— entrega una tubería, y el
+    // motor lee bloques sueltos. Los que pasan la sonda se referencian; los que
+    // no, caen al camino de copia de abajo junto con el resto. Un aparato donde
+    // esto no funcione se comporta como hoy, no como una sesión rota.
+    let mut referenced: Vec<crate::state::AudioFilePathImportPayload> = Vec::new();
+    let mut to_copy: Vec<crate::platform::mobile_files::PickedAudioDocument> = Vec::new();
+    if reference_imported_audio(&app) {
+        for document in documents {
+            match document.content_uri() {
+                Some(uri)
+                    if crate::platform::android_content_uri::probe_referenceable(&uri) =>
+                {
+                    referenced.push(crate::state::AudioFilePathImportPayload {
+                        file_name: document.file_name().to_string(),
+                        source_path: uri,
+                    });
+                }
+                _ => to_copy.push(document),
+            }
+        }
+    } else {
+        to_copy = documents;
+    }
+
+    let mut outcome = if referenced.is_empty() {
+        None
+    } else {
+        Some(
+            crate::state::import_referenced_audio_uris_to_library(
+                &song_dir,
+                current_song.as_ref(),
+                &referenced,
+            )
+            .map_err(|error| error.to_string())?,
+        )
+    };
+
+    if to_copy.is_empty() {
+        let outcome = outcome.expect("referenciados o copiados, uno de los dos");
+        crate::state::emit_library_import_progress(&app, 100, "Importacion completada.".into());
+        prepare_library_assets(&state, &song_dir, &outcome.assets);
+        return Ok(outcome);
+    }
+    let documents = to_copy;
+
     // Copy each content:// document into a staging folder inside the session
     // (same filesystem as its audio/, so the move that follows is a rename),
     // then reuse the staged-import core, which owns naming and collisions.
@@ -1624,7 +1721,7 @@ pub fn import_picked_library_audio(
         },
     )?;
 
-    let outcome = crate::state::import_staged_audio_files_to_library(
+    let copied = crate::state::import_staged_audio_files_to_library(
         &song_dir,
         current_song.as_ref(),
         &payloads,
@@ -1632,6 +1729,18 @@ pub fn import_picked_library_audio(
     .map_err(|error| error.to_string())?;
     // Whatever the staged import did not move is ours to remove.
     let _ = std::fs::remove_dir_all(&staging_root);
+
+    // Un lote puede repartirse entre los dos caminos (unos ficheros del
+    // almacenamiento del aparato, otros de Drive). El frontend espera UN
+    // resultado con todo.
+    let outcome = match outcome.take() {
+        Some(mut referenced_outcome) => {
+            referenced_outcome.assets.extend(copied.assets);
+            referenced_outcome.skipped.extend(copied.skipped);
+            referenced_outcome
+        }
+        None => copied,
+    };
 
     crate::state::emit_library_import_progress(&app, 100, "Importacion completada.".into());
     prepare_library_assets(&state, &song_dir, &outcome.assets);

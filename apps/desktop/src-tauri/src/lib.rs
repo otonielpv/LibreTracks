@@ -80,6 +80,28 @@ pub fn run() {
     // hook's stderr output.
     infra::error_log::install_panic_hook();
 
+    // Android: enseñarle a `libretracks-project` a abrir un `content://`.
+    //
+    // Ese crate resuelve la ruta del audio para analizar ondas y para exportar
+    // `.ltpkg` / `.ltset`, y un `content://` no es una ruta: hay que pedirle el
+    // descriptor al `ContentResolver`, que necesita la JVM y por tanto sólo lo
+    // sabe hacer este crate. De ahí el gancho. Sin él —escritorio, iOS— el
+    // crate se comporta exactamente como antes.
+    #[cfg(target_os = "android")]
+    libretracks_project::set_asset_path_resolver(|stored_path| {
+        if !platform::content_uri::is_content_uri(stored_path) {
+            return None;
+        }
+        let local = platform::android_content_uri::local_path_for(stored_path)?;
+        // El nombre visible NO puede salir de la ruta local (`/proc/self/fd/7`
+        // daría un fichero llamado «7» dentro del paquete exportado): sale del
+        // id del documento SAF, que es de donde lo saca el selector.
+        let display_name = platform::document_name::document_display_name(
+            stored_path.rsplit('/').next().unwrap_or(stored_path),
+        );
+        Some((local, display_name))
+    });
+
     // Select the Linux WebKitGTK renderer policy before the webview is created:
     // keep accelerated DMABUF on AMD/Intel and use the compatibility path for
     // affected NVIDIA drivers or an explicit user override. No-op elsewhere.

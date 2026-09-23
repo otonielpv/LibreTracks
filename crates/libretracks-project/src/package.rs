@@ -358,11 +358,11 @@ pub fn export_region_as_package_with_audio(
         if !added_files.insert(clip.file_path.clone()) {
             continue;
         }
-        let source_abs = if Path::new(&clip.file_path).is_absolute() {
-            PathBuf::from(&clip.file_path)
-        } else {
-            song_dir.join(&clip.file_path)
-        };
+        // Por el gancho, para que un `content://` de Android llegue al fichero
+        // de verdad. `resolved_name` es el nombre visible, que para un URI no
+        // se puede sacar de la ruta local.
+        let (source_abs, resolved_name) =
+            crate::asset_path::resolve_asset(song_dir, &clip.file_path);
 
         // Full packages bundle the source audio so they open on another machine
         // without the original file. Stored under `audio/<file_name>`; the import
@@ -370,7 +370,7 @@ pub fn export_region_as_package_with_audio(
         // the clip. Independent of the waveform below — a source we can't analyse
         // for peaks should still ship its audio.
         if include_audio {
-            if let Some(file_name) = source_abs.file_name().and_then(|value| value.to_str()) {
+            if let Some(file_name) = Some(resolved_name.as_str()).filter(|name| !name.is_empty()) {
                 match audio_mode {
                     crate::SessionPackageAudio::Referenced => {}
                     crate::SessionPackageAudio::Original => {
