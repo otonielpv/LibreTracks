@@ -1,6 +1,7 @@
 //! Persistencia y operaciones de proyecto.
 
 mod asset_path;
+mod atomic_write;
 mod disk_space;
 mod importer;
 mod package;
@@ -10,6 +11,7 @@ mod session_sample_rate;
 mod song_store;
 mod waveform;
 
+pub use atomic_write::write_file_atomically;
 pub use asset_path::{
     set_asset_identity_resolver, set_asset_path_resolver, AssetIdentityResolver,
     AssetPathResolver,

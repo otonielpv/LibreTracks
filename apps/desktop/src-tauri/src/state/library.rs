@@ -1239,7 +1239,11 @@ pub(super) fn write_library_manifest_state(
     };
     let manifest_json = serde_json::to_vec_pretty(&manifest)
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
-    fs::write(library_manifest_path(song_dir), manifest_json)?;
+    // Todo o nada: ver `libretracks_project::write_file_atomically`.
+    libretracks_project::write_file_atomically(
+        &library_manifest_path(song_dir),
+        &manifest_json,
+    )?;
     Ok(())
 }
 

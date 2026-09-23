@@ -312,7 +312,9 @@ pub fn save_automation(
         fs::create_dir_all(parent)?;
     }
     let json = serde_json::to_string_pretty(automation)?;
-    fs::write(&path, json)?;
+    // Todo o nada, como el `.ltsession`: con `fs::write` un pendrive quitado
+    // justo despues de guardar dejo este fichero en 0 bytes.
+    libretracks_project::write_file_atomically(&path, json.as_bytes())?;
     Ok(path)
 }
 

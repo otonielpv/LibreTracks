@@ -150,7 +150,9 @@ pub fn save_song_to_file(
     fs::create_dir_all(song_dir)?;
 
     let json = serialize_song_document(song)?;
-    fs::write(song_file, json)?;
+    // Todo o nada: `fs::write` vacia el fichero antes de escribir, y un
+    // pendrive quitado justo despues de guardar dejo una sesion de 0 bytes.
+    crate::atomic_write::write_file_atomically(song_file, json.as_bytes())?;
 
     Ok(song_file.to_path_buf())
 }
