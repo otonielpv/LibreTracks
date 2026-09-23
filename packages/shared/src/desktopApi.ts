@@ -574,6 +574,13 @@ export type StorageVolume = {
    * reads is derived from this, not from the path.
    */
   index: number;
+  /**
+   * Android's own, already localised name for the volume ("Tarjeta SD
+   * SanDisk", "Unidad USB…"). The index cannot tell a microSD card from a USB
+   * stick on OTG, so this is what names removable volumes. `null` when
+   * Android does not say.
+   */
+  label: string | null;
   /** Free / total bytes, or `null` when the platform cannot answer. */
   freeBytes: number | null;
   totalBytes: number | null;

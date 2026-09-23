@@ -293,12 +293,12 @@ const es = {
       autoSaveIntervalMinutes: "{{count}} min",
       storageVolumeTitle: "Dónde guardar las sesiones",
       storageVolumeInternal: "Memoria interna",
-      storageVolumeCard: "Tarjeta SD",
+      storageVolumeExternal: "Almacenamiento externo",
       storageVolumeWithSpace: "{{name}} — {{free}} libres de {{total}}",
       storageVolumeHelp:
         "Sólo afecta a las sesiones nuevas: las que ya tienes se siguen abriendo desde donde están. La caché de audio, que es lo que más ocupa, sigue al volumen elegido.",
       storageVolumeUnavailable:
-        "El volumen elegido no está disponible ahora mismo (¿has sacado la tarjeta?). Las sesiones nuevas se están guardando en la memoria interna.",
+        "El volumen elegido no está disponible ahora mismo (¿has quitado la tarjeta o el pendrive?). Las sesiones nuevas se están guardando en la memoria interna.",
       referenceImportedAudio: "Importar sin copiar el audio a la sesión",
       referenceImportedAudioHint:
         "La sesión apunta a tus archivos originales en vez de duplicarlos, como en escritorio. Ocupa mucho menos. Si mueves o borras un original, la pista deja de sonar y aparece en «Archivos que faltan».",

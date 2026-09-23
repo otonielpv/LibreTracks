@@ -240,8 +240,14 @@ pub struct StorageVolume {
     pub path: String,
     /// Android's own order: 0 is the built-in storage, the rest are removable
     /// (that is the documented contract of `getExternalFilesDirs`). The UI
-    /// turns this into "Memoria interna" / "Tarjeta SD".
+    /// calls index 0 "Memoria interna".
     pub index: usize,
+    /// Android's own name for the volume ("Tarjeta SD SanDisk", "Unidad
+    /// USB…"), already localised. The index alone cannot tell a microSD card
+    /// from a USB stick on OTG — both are just "removable" — so a fixed
+    /// "Tarjeta SD" label mislabelled pen drives. `None` when Android does not
+    /// say; the UI then uses a generic name.
+    pub label: Option<String>,
     /// Free and total bytes, or `None` when the platform cannot answer.
     pub free_bytes: Option<u64>,
     pub total_bytes: Option<u64>,
@@ -287,6 +293,7 @@ pub fn get_storage_volumes(
                 StorageVolume {
                     path: dir.to_string_lossy().into_owned(),
                     index,
+                    label: android_storage::volume_description(dir),
                     free_bytes: space.map(|(free, _)| free),
                     total_bytes: space.map(|(_, total)| total),
                 }

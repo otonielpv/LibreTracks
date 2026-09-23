@@ -53,12 +53,14 @@ function info(overrides: Partial<StorageVolumesInfo> = {}): StorageVolumesInfo {
       {
         path: INTERNAL,
         index: 0,
+        label: "Almacenamiento interno compartido",
         freeBytes: 3 * 1024 ** 3,
         totalBytes: 64 * 1024 ** 3,
       },
       {
         path: CARD,
         index: 1,
+        label: "Tarjeta SD SanDisk",
         freeBytes: 100 * 1024 ** 3,
         totalBytes: 128 * 1024 ** 3,
       },
@@ -110,7 +112,34 @@ describe("dónde guardar las sesiones", () => {
     );
     expect(options).toEqual([
       "Memoria interna — 3.0 GB libres de 64.0 GB",
-      "Tarjeta SD — 100 GB libres de 128 GB",
+      "Tarjeta SD SanDisk — 100 GB libres de 128 GB",
+    ]);
+  });
+
+  // Visto en el telefono: un pendrive por OTG salia como "Tarjeta SD". El
+  // indice solo distingue interno/extraible; el nombre de un extraible lo da
+  // Android, y sin el se usa uno generico que no mienta.
+  it("nombra cada extraible como lo llama Android, no siempre tarjeta SD", async () => {
+    const USB = "/storage/5E1F-0A9B/Android/data/com.libretracks.app/files";
+    getStorageVolumes.mockResolvedValue(
+      info({
+        volumes: [
+          ...info().volumes,
+          { path: USB, index: 2, label: "Unidad USB Kingston", freeBytes: null, totalBytes: null },
+          { path: USB + "2", index: 3, label: null, freeBytes: null, totalBytes: null },
+        ],
+      }),
+    );
+
+    render(<SessionStorageVolumeField />);
+    const select = await screen.findByRole("combobox");
+
+    const options = [...select.querySelectorAll("option")].map(
+      (option) => option.textContent,
+    );
+    expect(options.slice(2)).toEqual([
+      "Unidad USB Kingston",
+      "Almacenamiento externo",
     ]);
   });
 

@@ -124,6 +124,108 @@ pub fn volume_space(dir: &Path) -> Option<(u64, u64)> {
         .filter(|(_, total)| *total > 0)
 }
 
+/// El nombre que Android le da al volumen que contiene `dir`: «Tarjeta SD
+/// SanDisk», «Unidad USB Kingston»… el mismo que enseña su gestor de
+/// archivos, y ya traducido.
+///
+/// Existe porque el orden de `getExternalFilesDirs` sólo dice «el 0 es el
+/// interno»; lo demás es «extraíble», y un pendrive por OTG también lo es. Con
+/// la etiqueta fija «Tarjeta SD», un pendrive salía como tarjeta.
+///
+/// `None` si Android no sabe decirlo; la UI cae a un nombre genérico.
+pub fn volume_description(dir: &Path) -> Option<String> {
+    query_volume_description(dir)
+        .map_err(|error| {
+            eprintln!(
+                "[LT_STORAGE] volume_description({}) failed: {error}",
+                dir.display()
+            )
+        })
+        .ok()
+        .flatten()
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+}
+
+fn query_volume_description(dir: &Path) -> Result<Option<String>, String> {
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { JavaVM::from_raw(ctx.vm().cast()) }
+        .map_err(|e| format!("JavaVM::from_raw: {e}"))?;
+    let context = unsafe { JObject::from_raw(ctx.context().cast()) };
+    let mut env = vm
+        .attach_current_thread()
+        .map_err(|e| format!("attach_current_thread: {e}"))?;
+    let result = query_volume_description_with(&mut env, &context, dir);
+    if result.is_err() {
+        super::android_content_uri::clear_pending_exception(&mut env);
+    }
+    result
+}
+
+fn query_volume_description_with(
+    env: &mut JNIEnv,
+    context: &JObject,
+    dir: &Path,
+) -> Result<Option<String>, String> {
+    // context.getSystemService("storage") -> StorageManager
+    let service_name = env
+        .new_string("storage")
+        .map_err(|e| format!("new_string: {e}"))?;
+    let manager = env
+        .call_method(
+            context,
+            "getSystemService",
+            "(Ljava/lang/String;)Ljava/lang/Object;",
+            &[JValue::Object(&service_name)],
+        )
+        .and_then(|value| value.l())
+        .map_err(|e| format!("getSystemService: {e}"))?;
+    if manager.is_null() {
+        return Ok(None);
+    }
+
+    let path = env
+        .new_string(dir.to_string_lossy().as_ref())
+        .map_err(|e| format!("new_string: {e}"))?;
+    let file = env
+        .new_object("java/io/File", "(Ljava/lang/String;)V", &[JValue::Object(&path)])
+        .map_err(|e| format!("new File: {e}"))?;
+
+    // StorageManager.getStorageVolume(File) — API 24, nuestro minSdk.
+    let volume = env
+        .call_method(
+            &manager,
+            "getStorageVolume",
+            "(Ljava/io/File;)Landroid/os/storage/StorageVolume;",
+            &[JValue::Object(&file)],
+        )
+        .and_then(|value| value.l())
+        .map_err(|e| format!("getStorageVolume: {e}"))?;
+    if volume.is_null() {
+        return Ok(None);
+    }
+
+    let description = env
+        .call_method(
+            &volume,
+            "getDescription",
+            "(Landroid/content/Context;)Ljava/lang/String;",
+            &[JValue::Object(context)],
+        )
+        .and_then(|value| value.l())
+        .map_err(|e| format!("getDescription: {e}"))?;
+    if description.is_null() {
+        return Ok(None);
+    }
+    let description: JString = description.into();
+    let value = env
+        .get_string(&description)
+        .map_err(|e| format!("get_string: {e}"))?
+        .to_string_lossy()
+        .into_owned();
+    Ok(Some(value))
+}
+
 fn query_volume_space(dir: &Path) -> Result<(u64, u64), String> {
     let ctx = ndk_context::android_context();
     let vm = unsafe { JavaVM::from_raw(ctx.vm().cast()) }

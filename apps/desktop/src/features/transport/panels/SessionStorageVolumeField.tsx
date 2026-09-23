@@ -60,15 +60,20 @@ export function SessionStorageVolumeField() {
     return null;
   }
 
+  // El índice sólo dice «el 0 es el interno». Lo demás es «extraíble», y eso
+  // es tanto una microSD como un pendrive por OTG: el nombre de un extraíble
+  // lo pone Android («Tarjeta SD SanDisk», «Unidad USB…»), nunca una etiqueta
+  // fija, que es lo que hacía salir los pendrives como «Tarjeta SD».
   const volumeLabel = (volume: StorageVolume) => {
     const name =
       volume.index === 0
         ? t("transport.settingsModal.storageVolumeInternal", {
             defaultValue: "Memoria interna",
           })
-        : t("transport.settingsModal.storageVolumeCard", {
-            defaultValue: "Tarjeta SD",
-          });
+        : (volume.label ??
+          t("transport.settingsModal.storageVolumeExternal", {
+            defaultValue: "Almacenamiento externo",
+          }));
     if (volume.freeBytes == null || volume.totalBytes == null) {
       return name;
     }
@@ -117,7 +122,7 @@ export function SessionStorageVolumeField() {
         >
           {t("transport.settingsModal.storageVolumeUnavailable", {
             defaultValue:
-              "El volumen elegido no está disponible ahora mismo (¿has sacado la tarjeta?). Las sesiones nuevas se están guardando en la memoria interna.",
+              "El volumen elegido no está disponible ahora mismo (¿has quitado la tarjeta o el pendrive?). Las sesiones nuevas se están guardando en la memoria interna.",
           })}
         </small>
       ) : null}

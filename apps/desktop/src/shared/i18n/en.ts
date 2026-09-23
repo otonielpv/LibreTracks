@@ -290,12 +290,12 @@ const en = {
       autoSaveIntervalMinutes: "{{count}} min",
       storageVolumeTitle: "Where to keep sessions",
       storageVolumeInternal: "Internal storage",
-      storageVolumeCard: "SD card",
+      storageVolumeExternal: "External storage",
       storageVolumeWithSpace: "{{name}} — {{free}} free of {{total}}",
       storageVolumeHelp:
         "Only affects new sessions: the ones you already have keep opening from where they are. The audio cache, which is the bulk of it, follows the chosen volume.",
       storageVolumeUnavailable:
-        "The chosen volume is not available right now (card removed?). New sessions are being saved to internal storage.",
+        "The chosen volume is not available right now (card or USB drive removed?). New sessions are being saved to internal storage.",
       referenceImportedAudio: "Import without copying audio into the session",
       referenceImportedAudioHint:
         "The session points at your original files instead of duplicating them, the way desktop does. Takes far less space. If you move or delete an original, that track goes silent and shows up under Missing files.",
