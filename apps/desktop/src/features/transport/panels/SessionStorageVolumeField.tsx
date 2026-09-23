@@ -7,6 +7,7 @@ import type {
 } from "@libretracks/shared/desktopApi";
 import {
   getStorageVolumes,
+  listenToStorageVolumesChanged,
   setSessionStorageVolume,
 } from "@libretracks/shared/desktopApi";
 
@@ -40,6 +41,29 @@ export function SessionStorageVolumeField() {
   useEffect(() => {
     void refresh().catch((err) => setError(formatUserFacingError(err, t)));
   }, [refresh, t]);
+
+  // Una microSD o un pendrive que entra o sale con Ajustes abierto: la lista
+  // se pone al día sola. El backend ya ha refrescado la suya cuando llega.
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenToStorageVolumesChanged(() => {
+      void refresh().catch(() => undefined);
+    }).then((dispose) => {
+      if (disposed) {
+        dispose();
+      } else {
+        unlisten = dispose;
+      }
+    }, () => {
+      // Sin eventos (fuera de Tauri): la lista se queda como estaba, que es
+      // lo que habia antes de este aviso.
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [refresh]);
 
   const handleChange = (path: string) =>
     void (async () => {

@@ -139,6 +139,22 @@ export async function listenToTransportLifecycle(
   });
 }
 
+/**
+ * Android: a volume was mounted or unmounted (microSD inserted, USB stick
+ * plugged in over OTG, either removed). The backend has already refreshed its
+ * volume list when this fires, so a listener just asks again — the storage
+ * setting for its choices, the landing screen for the sessions on the volume.
+ * Never fires on other platforms.
+ */
+export async function listenToStorageVolumesChanged(
+  handler: () => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen("storage:volumes-changed", () => {
+    handler();
+  });
+}
+
 export async function listenToAudioMeters(
   handler: (levels: AudioMeterLevel[]) => void,
 ): Promise<() => void> {

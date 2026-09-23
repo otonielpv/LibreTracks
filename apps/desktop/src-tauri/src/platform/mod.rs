@@ -58,6 +58,8 @@ pub mod android_persistable_pick;
 #[cfg(target_os = "android")]
 pub mod android_storage;
 #[cfg(target_os = "android")]
+pub mod android_storage_events;
+#[cfg(target_os = "android")]
 pub mod android_token_store;
 #[cfg(target_os = "android")]
 pub mod mobile_files;

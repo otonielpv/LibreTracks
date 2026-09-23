@@ -1,6 +1,9 @@
 package com.libretracks.desktop
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -32,7 +35,47 @@ class MainActivity : TauriActivity() {
     )
 
     installBundledAssets()
+    registerStorageVolumeReceiver()
   }
+
+  // ── Volumenes que aparecen y desaparecen ─────────────────────────────────
+  //
+  // Una microSD que se inserta o un pendrive por OTG que se enchufa (o se
+  // quitan) con la app abierta. Sin esto, Ajustes y "Tus sesiones" seguian
+  // con la lista del arranque hasta que el usuario volvia a entrar. Son
+  // broadcasts del sistema que cualquier app recibe sin pedir permiso.
+  //
+  // Registrado en la Activity y no en el manifiesto: desde Android 8 los
+  // broadcasts implicitos no despiertan receptores del manifiesto, y solo
+  // interesa mientras la app esta abierta.
+  private var storageVolumeReceiver: BroadcastReceiver? = null
+
+  private fun registerStorageVolumeReceiver() {
+    val receiver = object : BroadcastReceiver() {
+      override fun onReceive(context: Context, intent: Intent) {
+        Log.i("LTStorage", "volumen: ${intent.action} ${intent.data}")
+        try {
+          nativeOnStorageVolumesChanged()
+        } catch (error: UnsatisfiedLinkError) {
+          Log.w("LTStorage", "libreria nativa no cargada: ${error.message}")
+        }
+      }
+    }
+    val filter = IntentFilter().apply {
+      addAction(Intent.ACTION_MEDIA_MOUNTED)
+      addAction(Intent.ACTION_MEDIA_UNMOUNTED)
+      addAction(Intent.ACTION_MEDIA_REMOVED)
+      addAction(Intent.ACTION_MEDIA_BAD_REMOVAL)
+      addAction(Intent.ACTION_MEDIA_EJECT)
+      // Estos broadcasts llevan la ruta del volumen como dato `file://`: sin
+      // declarar el esquema, el filtro no los deja pasar.
+      addDataScheme("file")
+    }
+    registerReceiver(receiver, filter)
+    storageVolumeReceiver = receiver
+  }
+
+  private external fun nativeOnStorageVolumesChanged()
 
   // Android warns before it kills. Ignoring that warning is how importing a
   // 2 GB .ltset ended with the system killing ~40 other processes and
@@ -204,6 +247,14 @@ class MainActivity : TauriActivity() {
   private external fun nativeOnAudioDocumentsPicked(uris: Array<String>)
 
   override fun onDestroy() {
+    storageVolumeReceiver?.let { receiver ->
+      try {
+        unregisterReceiver(receiver)
+      } catch (error: IllegalArgumentException) {
+        // Ya no estaba registrado; nada que soltar.
+      }
+    }
+    storageVolumeReceiver = null
     stopService(Intent(this, AudioPlaybackService::class.java))
     super.onDestroy()
   }

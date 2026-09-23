@@ -16,17 +16,21 @@ import type { StorageVolumesInfo } from "@libretracks/shared/desktopApi";
  */
 const getStorageVolumes = vi.fn<() => Promise<StorageVolumesInfo>>();
 const setSessionStorageVolume = vi.fn();
+let emitVolumesChanged: (() => void) | null = null;
+
+// `t` estable entre renders, como el de i18next: uno nuevo en cada render
+// re-dispara los efectos que dependen de el, y eso pediria los volumenes otra
+// vez por su cuenta, tapando si el aviso de montaje funciona o no.
+const stableT = (key: string, options?: Record<string, unknown>) =>
+  typeof options?.defaultValue === "string"
+    ? (options.defaultValue as string).replace(
+        /\{\{(\w+)\}\}/g,
+        (_match, name: string) => String(options[name] ?? ""),
+      )
+    : key;
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string, options?: Record<string, unknown>) =>
-      typeof options?.defaultValue === "string"
-        ? (options.defaultValue as string).replace(
-            /\{\{(\w+)\}\}/g,
-            (_match, name: string) => String(options[name] ?? ""),
-          )
-        : key,
-  }),
+  useTranslation: () => ({ t: stableT }),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
@@ -36,6 +40,12 @@ vi.mock("@libretracks/shared/desktopApi", async (importOriginal) => ({
   isMobileApp: true,
   isAndroidApp: true,
   getStorageVolumes: () => getStorageVolumes(),
+  listenToStorageVolumesChanged: (handler: () => void) => {
+    emitVolumesChanged = handler;
+    return Promise.resolve(() => {
+      emitVolumesChanged = null;
+    });
+  },
   setSessionStorageVolume: (volume: string | null) =>
     setSessionStorageVolume(volume),
 }));
@@ -141,6 +151,23 @@ describe("dónde guardar las sesiones", () => {
       "Unidad USB Kingston",
       "Almacenamiento externo",
     ]);
+  });
+
+  // Pendrive enchufado con Ajustes abierto: Android avisa, y la lista se
+  // pone al dia sin salir y volver a entrar.
+  it("vuelve a pedir los volumenes cuando se monta o desmonta uno", async () => {
+    getStorageVolumes.mockResolvedValue(info({ volumes: [info().volumes[0]] }));
+
+    const { container } = render(<SessionStorageVolumeField />);
+    await waitFor(() => expect(getStorageVolumes).toHaveBeenCalledTimes(1));
+    expect(container.querySelector("select")).toBeNull();
+
+    getStorageVolumes.mockResolvedValue(info());
+    await waitFor(() => expect(emitVolumesChanged).not.toBeNull());
+    emitVolumesChanged?.();
+
+    expect(await screen.findByRole("combobox")).toBeTruthy();
+    expect(getStorageVolumes).toHaveBeenCalledTimes(2);
   });
 
   it("guarda la tarjeta cuando se elige, y el primario como null", async () => {

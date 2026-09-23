@@ -168,6 +168,12 @@ pub fn run() {
             #[cfg(any(target_os = "android", target_os = "ios"))]
             commands::cloud::register_deep_link_handler(app.handle());
 
+            // Montar/desmontar una microSD o un pendrive por OTG: la Activity
+            // recibe el broadcast y avisa aqui, y aqui hace falta con quien
+            // hablar para mandarselo a la interfaz.
+            #[cfg(target_os = "android")]
+            platform::android_storage_events::install(app.handle());
+
             // Doble click en un .ltsession / .ltset / .ltpkg / .lttemplate:
             // Windows y Linux lo pasan como argumento de arranque. Aqui solo se
             // aparca — la interfaz lo reclama cuando existe. (macOS no usa

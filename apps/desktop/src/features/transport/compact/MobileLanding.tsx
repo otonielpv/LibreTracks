@@ -8,6 +8,7 @@ import {
   isMobileApp,
   listDefaultSessions,
   listSessionTemplates,
+  listenToStorageVolumesChanged,
   pickSessionFolder,
   type DefaultSessionSummary,
   type SessionTemplateSummary,
@@ -93,19 +94,35 @@ export function MobileLanding({
       return;
     }
     let cancelled = false;
-    void listDefaultSessions()
-      .then((sessions) => {
-        if (!cancelled) {
-          setDeviceSessions(sessions);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDeviceSessions([]);
-        }
-      });
+    const reload = () =>
+      void listDefaultSessions()
+        .then((sessions) => {
+          if (!cancelled) {
+            setDeviceSessions(sessions);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setDeviceSessions([]);
+          }
+        });
+    reload();
+    // Una microSD o un pendrive que entra o sale con esta pantalla abierta:
+    // sus sesiones aparecen o se van sin tener que salir y volver.
+    let unlisten: (() => void) | null = null;
+    void listenToStorageVolumesChanged(reload).then((dispose) => {
+      if (cancelled) {
+        dispose();
+      } else {
+        unlisten = dispose;
+      }
+    }, () => {
+      // Sin eventos (fuera de Tauri): la lista se queda como estaba, que es
+      // lo que habia antes de este aviso.
+    });
     return () => {
       cancelled = true;
+      unlisten?.();
     };
   }, []);
 
