@@ -89,9 +89,18 @@ fn start_picker() -> Result<(), String> {
         .attach_current_thread()
         .map_err(|e| format!("attach_current_thread: {e}"))?;
 
-    env.call_method(&activity, "pickPersistableAudioDocuments", "()V", &[])
+    let result = env
+        .call_method(&activity, "pickPersistableAudioDocuments", "()V", &[])
         .map(|_| ())
-        .map_err(|e| format!("pickPersistableAudioDocuments: {e}"))
+        .map_err(|e| format!("pickPersistableAudioDocuments: {e}"));
+    // Si Java lanzó (un `NoSuchMethodError` porque R8 borró el método, por
+    // ejemplo), la excepción se queda PENDIENTE en este hilo: jni-rs devuelve
+    // el error pero no la limpia. Cualquier llamada JNI posterior en el mismo
+    // hilo —la del selector de respaldo, sin ir más lejos— falla entonces en
+    // silencio, y el import se quedaba sin hacer nada. Limpiarla es lo que
+    // convierte un fallo aquí en «usa el selector de siempre».
+    super::android_content_uri::clear_pending_exception(&mut env);
+    result
 }
 
 /// Punto de entrada JNI. Lo llama `MainActivity.onActivityResult` en el hilo de

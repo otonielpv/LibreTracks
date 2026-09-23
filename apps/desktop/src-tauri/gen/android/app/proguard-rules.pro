@@ -29,3 +29,16 @@
 # minify, so this never showed up in local testing. Nothing here may be
 # renamed or removed.
 -keep class com.libretracks.desktop.SecureTokenStore { *; }
+
+# Lo mismo, en MainActivity: `pickPersistableAudioDocuments` (el selector de
+# audio con permiso persistible del import por referencia) sólo se llama desde
+# Rust por JNI (src/platform/android_persistable_pick.rs), buscándolo por nombre
+# y firma. R8 no ve ningún llamante en Java/Kotlin y lo borraba de la build de
+# release: en el teléfono salía `NoSuchMethodError` y el import de audio no
+# hacía nada. Los métodos `native` (nativeOnTrimMemory,
+# nativeOnAudioDocumentsPicked) ya sobreviven por las reglas por defecto; los
+# que Rust invoca, no. Cualquier método nuevo que Rust llame por nombre en esta
+# Activity tiene que añadirse aquí.
+-keepclassmembers class com.libretracks.desktop.MainActivity {
+    public void pickPersistableAudioDocuments();
+}

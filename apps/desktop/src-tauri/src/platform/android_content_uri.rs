@@ -130,6 +130,21 @@ pub fn probe_referenceable(uri: &str) -> bool {
     true
 }
 
+/// Limpia una excepción Java que haya quedado pendiente en este hilo.
+///
+/// jni-rs devuelve `Err` cuando el método llamado lanza, pero **no** limpia la
+/// excepción: se queda pendiente, y con ella pendiente cualquier otra llamada
+/// JNI del mismo hilo falla o aborta. Aquí eso importa más que en ningún sitio:
+/// `openFileDescriptor` lanza `FileNotFoundException` o `SecurityException` en
+/// el caso NORMAL de un fichero que el usuario movió o cuyo acceso revocó, y
+/// este hilo puede ser el de preparación de audio.
+pub(crate) fn clear_pending_exception(env: &mut jni::JNIEnv) {
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_describe();
+        let _ = env.exception_clear();
+    }
+}
+
 fn raw_fd(file: &File) -> RawFd {
     use std::os::fd::AsRawFd;
     file.as_raw_fd()
@@ -153,10 +168,25 @@ fn open_content_fd(uri: &str) -> Result<File, String> {
     let mut env = vm
         .attach_current_thread()
         .map_err(|e| format!("attach_current_thread: {e}"))?;
+    let result = open_content_fd_with(&mut env, &activity, uri);
+    // Un fichero movido o un acceso revocado hacen lanzar a
+    // `openFileDescriptor`: es el caso normal, no un accidente. Sin limpiar,
+    // la excepción envenena el resto de llamadas JNI de este hilo.
+    if result.is_err() {
+        clear_pending_exception(&mut env);
+    }
+    result
+}
+
+fn open_content_fd_with(
+    env: &mut jni::JNIEnv,
+    activity: &JObject,
+    uri: &str,
+) -> Result<File, String> {
 
     let resolver = env
         .call_method(
-            &activity,
+            activity,
             "getContentResolver",
             "()Landroid/content/ContentResolver;",
             &[],
