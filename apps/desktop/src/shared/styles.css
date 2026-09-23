@@ -3862,19 +3862,7 @@ html.lt-ios body {
   gap: 0.25rem;
 }
 
-.lt-track-header.is-compact /* Pista sumada a mono: una ETIQUETA junto al nombre, no un control.
-   Sin caja y en el gris del texto secundario, para que se lea como un dato de
-   la pista y no compita con los toggles. `flex-shrink: 0` para que lo que se
-   recorte al estrechar la cabecera sea el nombre, no el dato. */
-.lt-track-mono-tag {
-  flex-shrink: 0;
-  color: rgb(186 202 197 / 0.75);
-  font: 600 9px/1 "Space Grotesk", sans-serif;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.lt-track-meta,
+.lt-track-header.is-compact .lt-track-meta,
 .lt-track-header.is-compact .lt-track-drop-hint,
 .lt-track-header.is-condensed .lt-track-meta,
 .lt-track-header.is-condensed .lt-track-drop-hint,
@@ -4306,6 +4294,34 @@ html.lt-ios body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Pista sumada a mono: un rotulo, no un control.
+ *
+ * Va en la fila del NOMBRE porque es la unica que existe a TODAS las alturas
+ * (compact/condensed/micro solo le bajan la fuente); `lt-track-meta`, la otra
+ * candidata, se oculta justo en esas tres, que es donde se cortaba.
+ *
+ * En gris neutro y NO en turquesa a proposito: el turquesa es el color de un
+ * toggle encendido en esta cabecera, y esto no se pulsa -- sumar a mono se hace
+ * desde el menu contextual de la pista.
+ *
+ * Tamano fijo, sin heredar nada de las reglas de altura, para que no vuelva a
+ * cambiar de cuerpo segun lo alta que sea la pista.
+ */
+.lt-track-mono-tag {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  height: 12px;
+  padding: 0 0.25rem;
+  border: 1px solid rgb(186 202 197 / 0.28);
+  border-radius: 2px;
+  background: rgb(186 202 197 / 0.1);
+  color: rgb(229 226 225 / 0.78);
+  font: 700 8px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .lt-track-meta,
