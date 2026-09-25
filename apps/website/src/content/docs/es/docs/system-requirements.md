@@ -24,6 +24,9 @@ antiguas y mejora la compatibilidad con Bazzite, Arch y Fedora bajo Wayland.
 El soporte de Android es más reciente que las versiones de escritorio, y es en
 los móviles donde primero se notan los límites — casi siempre en almacenamiento
 y en paciencia, más que en memoria.
+Lo que funciona distinto en el teléfono (guardar las sesiones en una tarjeta SD
+o un pendrive, los gestos táctiles, la salida de audio) está en
+[LibreTracks en el móvil](/es/docs/mobile/).
 
 | | Mínimo | Cómodo | Notas |
 | --- | --- | --- | --- |

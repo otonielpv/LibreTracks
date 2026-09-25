@@ -23,6 +23,9 @@ bundled libraries and improves Wayland compatibility on Bazzite, Arch and Fedora
 
 Android support is newer than the desktop builds, and phones are where the
 limits bite first — usually on storage and patience rather than on memory.
+For what works differently on a phone (saving sessions to an SD card or USB
+drive, touch gestures, audio output), see
+[LibreTracks on Mobile](/docs/mobile/).
 
 | | Minimum | Comfortable | Notes |
 | --- | --- | --- | --- |
