@@ -529,6 +529,35 @@ bool cache_eviction_may_delete(const std::string& path) {
     return is_path_separator(path[root.size()]);
 }
 
+// See the header: `/proc/self/fd/N` changes every launch, its target does not.
+std::string cache_identity_path(
+    const std::string& path,
+    const std::function<std::string(const std::string&)>& read_link) {
+    static const std::string kProcFd = "/proc/self/fd/";
+    if (path.compare(0, kProcFd.size(), kProcFd) != 0 || !read_link)
+        return path;
+    const std::string target = read_link(path);
+    // Un destino vacío o relativo no identifica nada: mejor la ruta tal cual
+    // (a lo sumo se vuelve a convertir) que una clave compartida por error.
+    if (target.empty() || target[0] != '/')
+        return path;
+    return target;
+}
+
+std::string cache_identity_path(const std::string& path) {
+#if defined(_WIN32)
+    return path;
+#else
+    return cache_identity_path(path, [](const std::string& link) {
+        char buf[4096];
+        const ssize_t n = ::readlink(link.c_str(), buf, sizeof(buf) - 1);
+        if (n <= 0)
+            return std::string();
+        return std::string(buf, static_cast<std::size_t>(n));
+    });
+#endif
+}
+
 // Total size in bytes of every .rf64 PCM cache file currently on disk.
 unsigned long long source_cache_dir_size_bytes() {
     const std::string dir = source_cache_dir();
@@ -2318,7 +2347,11 @@ std::string SourceManager::cache_file_for(const Id& source_id,
     const int fmt = 0;
     const char* ext = ".rf64";
 #endif
-    const std::string key = source_id + "|" + file_path + "|" +
+    // La identidad, no la ruta tal cual: con audio importado sin copiar en
+    // Android, `source_id` y `file_path` son `/proc/self/fd/N`, que cambia en
+    // cada arranque y hacía reconvertir todas las pistas al reabrir la sesión.
+    const std::string key = cache_identity_path(source_id) + "|" +
+        cache_identity_path(file_path) + "|" +
         std::to_string(sample_rate) + "|" +
         std::to_string(st.size_bytes) + "|" +
         std::to_string(st.mtime) + "|fmt" + std::to_string(fmt);

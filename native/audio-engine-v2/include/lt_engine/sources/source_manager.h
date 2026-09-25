@@ -87,6 +87,25 @@ unsigned long long source_cache_dir_size_bytes();
 // guarantee, the kind that breaks the day someone passes a different one.
 bool cache_eviction_may_delete(const std::string& path);
 
+// La ruta que identifica a una fuente en la clave de la caché de PCM.
+//
+// Android importa audio sin copiarlo entregando `/proc/self/fd/N`: un
+// descriptor abierto sobre el `content://`. **N cambia en cada arranque**, así
+// que una clave con esa ruta no acierta nunca: en una tablet a 48 kHz con
+// audio a 44,1 kHz, cada vez que se reabría la sesión se volvían a convertir
+// todas las pistas («Preparando audio» cada vez, y 50 MB huérfanos por pista).
+//
+// Para esas rutas se usa el destino del enlace (el fichero real, estable entre
+// arranques). Cualquier otra ruta se devuelve tal cual, y si el enlace no se
+// puede leer también: en el peor caso se vuelve a convertir, como antes.
+//
+// `read_link` se inyecta para poder probar la regla en cualquier sistema; la
+// versión sin él usa `readlink` en POSIX y no hace nada en Windows.
+std::string cache_identity_path(
+    const std::string& path,
+    const std::function<std::string(const std::string&)>& read_link);
+std::string cache_identity_path(const std::string& path);
+
 // Delete all .rf64 PCM cache files; returns bytes freed. Best-effort.
 // `out_failed` (optional) receives the number of files that could NOT be
 // deleted — on Windows that is what happens to every cache file of a loaded

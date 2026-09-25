@@ -997,6 +997,36 @@ TEST_CASE("el desalojo no puede borrar nada fuera del directorio de cache") {
     CHECK_FALSE(cache_eviction_may_delete(cache_dir + "-del-usuario" + sep + "voz.wav"));
 }
 
+// ---------------------------------------------------------------------------
+// Entrada 20 de la prueba cerrada (Galaxy Tab A7): con audio importado sin
+// copiar, Android entrega `/proc/self/fd/N`, y N cambia en cada arranque. La
+// clave de la cache se hacia con esa ruta, asi que en una tablet a 48 kHz cada
+// vez que se reabria la sesion se volvian a convertir todas las pistas.
+// ---------------------------------------------------------------------------
+TEST_CASE("dos descriptores del mismo fichero comparten identidad en la cache") {
+    const auto read_link = [](const std::string& link) -> std::string {
+        if (link == "/proc/self/fd/206" || link == "/proc/self/fd/7")
+            return "/storage/emulated/0/Download/MultiTracks/Alto.wav";
+        return {};
+    };
+
+    // Dos arranques, dos descriptores: la misma identidad.
+    CHECK(cache_identity_path("/proc/self/fd/206", read_link) ==
+          "/storage/emulated/0/Download/MultiTracks/Alto.wav");
+    CHECK(cache_identity_path("/proc/self/fd/206", read_link) ==
+          cache_identity_path("/proc/self/fd/7", read_link));
+
+    // Una ruta de siempre no se toca.
+    CHECK(cache_identity_path("/sdcard/Music/voz.wav", read_link) ==
+          "/sdcard/Music/voz.wav");
+    CHECK(cache_identity_path("C:\\Users\\yo\\voz.wav", read_link) ==
+          "C:\\Users\\yo\\voz.wav");
+
+    // Si el enlace no se puede leer, la ruta tal cual: como mucho se vuelve
+    // a convertir, nunca una clave compartida con otro fichero.
+    CHECK(cache_identity_path("/proc/self/fd/99", read_link) == "/proc/self/fd/99");
+}
+
 TEST_CASE("con el presupuesto rebasado, el audio del usuario sobrevive") {
     ScopedCacheDir scope("eviction_user_audio");
     // 1 MiB: cualquier fuente que se escriba ya rebasa el presupuesto.
