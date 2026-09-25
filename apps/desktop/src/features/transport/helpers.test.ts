@@ -13,6 +13,7 @@ import type {
   OptimisticClipOperation,
 } from "./types";
 import {
+  compactClipName,
   buildAudioRoutingOptions,
   buildMemoizedClipsByTrack,
   buildVisibleTracks,
@@ -343,6 +344,14 @@ describe("file name helpers", () => {
     it("da una pista y un clip con nombre legible", () => {
       expect(humanizeLibraryTrackName(uri)).toBe("Alto");
       expect(clipDisplayName({ filePath: uri, trackName: "x" })).toBe("Alto");
+    });
+
+    // Entrada 19 de la prueba cerrada (Galaxy Tab A7): la vista compacta
+    // partia la ruta por su cuenta y los clips salian `primary%3ADownload%2...`.
+    it("da un nombre legible en la vista compacta", () => {
+      expect(compactClipName(uri, "clip_1")).toBe("Alto");
+      expect(compactClipName("audio/Bajo.wav", "clip_1")).toBe("Bajo");
+      expect(compactClipName(undefined, "clip_1")).toBe("clip_1");
     });
 
     it("no se cae con un % suelto en el id", () => {

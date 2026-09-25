@@ -402,6 +402,7 @@ import {
   isTrackDescendant,
   isTrackInfoScrollTarget,
   lanePointerToClip,
+  compactClipName,
   libraryAssetFileName,
   mergeOptimisticClipsByTrack,
   nativeClientPointCandidates,
@@ -3638,9 +3639,7 @@ export function TransportPanelContent() {
           clip.timelineStartSeconds < r.endSeconds,
       );
       if (!region) continue;
-      const fileName =
-        clip.filePath?.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") ??
-        clip.id;
+      const fileName = compactClipName(clip.filePath, clip.id);
       byRegion[region.id].push({
         id: clip.id,
         clipName: fileName,

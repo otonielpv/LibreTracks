@@ -272,6 +272,19 @@ function contentUriDisplayName(uri: string) {
   const name = path.split(/[\\/]/).at(-1)?.trim();
   return name || documentId;
 }
+/**
+ * Nombre de un clip en la vista compacta: el fichero sin extensión.
+ *
+ * Pasa por `libraryAssetFileName` y no parte la ruta por su cuenta: un audio
+ * importado sin copiar en Android guarda un `content://`, y su último trozo es
+ * el id codificado del documento. La vista compacta lo partía a mano y los
+ * clips salían como `primary%3ADownload%2…` (reportado desde una Galaxy Tab A7).
+ */
+export function compactClipName(filePath: string | undefined, fallback: string) {
+  if (!filePath) return fallback;
+  return libraryAssetFileName(filePath).replace(/\.[^.]+$/, "") || fallback;
+}
+
 export function resolveNativeAudioImportPayloads(files: File[]) {
   const payloads = files
     .map((file) => {
