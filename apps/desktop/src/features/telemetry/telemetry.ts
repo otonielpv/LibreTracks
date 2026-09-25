@@ -70,6 +70,34 @@ export function localWeekday(now = new Date()): string {
   return String(now.getDay());
 }
 
+/**
+ * ¿Esta build le va a preguntar al usuario por las estadísticas?
+ *
+ * Sólo mira lo que se sabe al arrancar, **no la versión**: la versión llega de
+ * forma asíncrona, y mientras tanto el aviso aún no se pinta. El tutorial de
+ * primer arranque usaba ese hueco para abrirse, y el aviso le caía encima
+ * (visto en la primera instalación desde la App Store). Quien tenga que esperar
+ * al aviso pregunta aquí, que ya sabe la respuesta desde el primer render.
+ */
+export function canAskTelemetryConsent(options: {
+  isTauriApp: boolean;
+  isDev: boolean;
+  isWebDriver: boolean;
+}): boolean {
+  return options.isTauriApp && !options.isDev && !options.isWebDriver;
+}
+
+/**
+ * ¿Hay una pregunta de estadísticas sin contestar que el usuario va a ver?
+ * Mientras sea así, nada más debe abrirse encima (el tutorial).
+ */
+export function isTelemetryConsentPending(options: {
+  canAsk: boolean;
+  preference: TelemetryPreference;
+}): boolean {
+  return options.canAsk && options.preference === "undecided";
+}
+
 export const useTelemetryStore = create<TelemetryState>()(
   persist(
     (set) => ({

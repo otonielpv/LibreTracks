@@ -9,6 +9,12 @@ import {
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
+import {
+  canAskTelemetryConsent,
+  isTelemetryConsentPending,
+  useTelemetryStore,
+} from "../telemetry/telemetry";
+import { isTauriApp } from "../transport/desktopApi";
 import { useShortcutHint } from "../transport/keyboard/shortcutHint";
 import { useTimelineUIStore, type ViewMode } from "../transport/uiStore";
 import { placeTourCard, type CardPosition } from "./tourCardPlacement";
@@ -129,17 +135,39 @@ export function TourOverlay() {
   // No es siempre el de primeros pasos: quien lleva meses con la app y se
   // encuentra una función nueva tiene un recorrido sin ver, y no va a abrir la
   // guía por su cuenta a ver si hay novedades.
+  //
+  // Espera al aviso de estadísticas: si está por contestar, el recorrido no
+  // arranca hasta que el usuario responda, y entonces arranca solo. Antes se
+  // abría en el primer render, el aviso llegaba un momento después (espera a la
+  // versión, que es asíncrona) y lo tapaba.
+  const consentPending = useTelemetryStore((state) =>
+    isTelemetryConsentPending({
+      canAsk: canAskTelemetryConsent({
+        isTauriApp,
+        isDev: import.meta.env.DEV,
+        isWebDriver: isWebDriverSession(),
+      }),
+      preference: state.preference,
+    }),
+  );
+  const autoStartDoneRef = useRef(false);
   useEffect(() => {
+    if (autoStartDoneRef.current) return;
     const store = useTourStore.getState();
     const tourId = autoStartTourOnLanding({
       progress: store.progress,
       isWebDriver: isWebDriverSession(),
       isTestRun: import.meta.env.MODE === "test",
+      consentPending,
     });
+    // Mientras el aviso esté pendiente no se decide nada: al contestarlo, este
+    // efecto vuelve a correr. Una vez decidido (arranque o no), no se repite.
+    if (consentPending) return;
+    autoStartDoneRef.current = true;
     if (tourId) {
       store.startTour(tourId);
     }
-  }, []);
+  }, [consentPending]);
 
   // Al cargar una sesión se despliega el menú con los recorridos que quedan,
   // para no tener que acordarse del botón. La lógica vive en el store para que

@@ -4,6 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { isTauriApp } from "../transport/desktopApi";
 import {
+  canAskTelemetryConsent,
   recordProductEvent,
   startEngagementTracking,
   submitAppSession,
@@ -23,7 +24,11 @@ export function TelemetryController({ version }: Props) {
   const isWebDriver =
     typeof navigator !== "undefined" && navigator.webdriver === true;
   const activeInThisBuild =
-    isTauriApp && Boolean(version) && !import.meta.env.DEV && !isWebDriver;
+    canAskTelemetryConsent({
+      isTauriApp,
+      isDev: import.meta.env.DEV,
+      isWebDriver,
+    }) && Boolean(version);
 
   useEffect(() => {
     if (!activeInThisBuild || preference !== "enabled") return;

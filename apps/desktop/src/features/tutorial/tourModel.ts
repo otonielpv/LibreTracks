@@ -241,6 +241,7 @@ export function shouldAutoStartLandingTour(options: {
   progress: TourProgress;
   isWebDriver: boolean;
   isTestRun: boolean;
+  consentPending?: boolean;
 }): boolean {
   return autoStartTourOnLanding(options) !== null;
 }
@@ -262,8 +263,16 @@ export function autoStartTourOnLanding(options: {
   progress: TourProgress;
   isWebDriver: boolean;
   isTestRun: boolean;
+  /**
+   * Hay un aviso de estadisticas sin contestar a punto de salir. Mientras sea
+   * asi el recorrido espera: en la primera instalacion desde la App Store el
+   * aviso caia ENCIMA del tutorial ya abierto y lo tapaba. Primero se contesta
+   * el aviso, despues arranca el recorrido.
+   */
+  consentPending?: boolean;
 }): TourId | null {
   if (options.isWebDriver || options.isTestRun) return null;
+  if (options.consentPending) return null;
   const next = nextUnseenTour(false, options.progress);
   if (next === null) return null;
   // Una novedad se anuncia aunque en su dia se saltara el tutorial; los

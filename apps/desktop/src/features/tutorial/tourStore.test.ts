@@ -504,6 +504,18 @@ describe("oferta de recorridos al abrir una sesión", () => {
     ).toBe("cloud");
   });
 
+  /// Primera instalacion desde la App Store: el aviso de estadisticas caia
+  /// ENCIMA del tutorial ya abierto. Mientras el aviso este por contestar, el
+  /// recorrido espera; al contestarlo, arranca el de siempre.
+  it("espera a que se conteste el aviso de estadisticas", () => {
+    const firstRun = { progress: {}, isWebDriver: false, isTestRun: false };
+
+    expect(autoStartTourOnLanding({ ...firstRun, consentPending: true })).toBeNull();
+    expect(autoStartTourOnLanding({ ...firstRun, consentPending: false })).toBe(
+      "landing",
+    );
+  });
+
   /// Pero una vez vista, no vuelve. Ni terminada ni saltada.
   it("una novedad ya vista no se repite", () => {
     for (const outcome of ["completed", "dismissed"] as const) {
