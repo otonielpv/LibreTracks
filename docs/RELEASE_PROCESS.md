@@ -173,6 +173,28 @@ this file against the upstream template for that version
 `tauri-apps/tauri` repo at the matching tag) and re-apply the two `LibreTracks:`
 edits, so we don't drift from upstream installer fixes.
 
+### libmpv (video output, Windows)
+
+The Windows installer ships `libmpv-2.dll`, a prebuilt mpv from
+[mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake) pinned by
+tag, asset name and SHA-256 in `scripts/libmpv-fetch.mjs`. The release job runs
+that script and `scripts/verify-libmpv.ps1`, which fails if the DLL is missing
+from the installer or exports any FFmpeg symbol (its FFmpeg must stay static and
+hidden, or it could collide with the engine's `avcodec-*.dll`).
+
+Nothing to do on a normal release. To **bump mpv**: pick a newer
+`mpv-dev-x86_64-*.7z` release, update `LIBMPV_WINDOWS` (tag, asset, sha256,
+mpvCommit) in the fetch script, run it locally and
+`scripts/verify-libmpv.ps1 vendor/bin/libmpv/windows/libmpv-2.dll`, then update
+the mpv entry and the source offer in `THIRD-PARTY-NOTICES.md` (mpv commit,
+FFmpeg version; `LIBRETRACKS_LIBMPV=... cargo run -p libretracks-video --example
+spike -- info` prints both). Upstream deletes old releases: if the pinned asset
+is gone and the CI cache is cold, upload the same `.7z` to a release of ours and
+point `LT_LIBMPV_ARCHIVE` at it — the SHA-256 still has to match.
+
+Linux uses the distro's libmpv (`recommends` in the .deb/.rpm) and macOS ships
+without video for now, so neither needs anything here.
+
 ## 5. Update web docs (only if user-visible behavior changed)
 
 Files: `apps/website/src/content/docs/docs/index.md` and

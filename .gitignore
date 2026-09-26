@@ -17,6 +17,8 @@ vendor/ffmpeg-universal/
 # Same, for the Linux build (scripts/build-ffmpeg-linux.sh)
 vendor/.ffmpeg-build-linux/
 vendor/ffmpeg-linux/
+# libmpv descargada por scripts/libmpv-fetch.mjs (plan de vídeo), no se versiona
+vendor/bin/libmpv/
 
 *.log
 .DS_Store

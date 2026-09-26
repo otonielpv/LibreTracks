@@ -132,7 +132,8 @@
           "xdg-utils"
         ],
         "recommends": [
-          "libjack-jackd2-0 | libjack-0.125 | pipewire-jack"
+          "libjack-jackd2-0 | libjack-0.125 | pipewire-jack",
+          "libmpv2 | libmpv1"
         ]
       },
       "rpm": {
@@ -144,7 +145,8 @@
           "alsa-lib"
         ],
         "recommends": [
-          "jack-audio-connection-kit"
+          "jack-audio-connection-kit",
+          "mpv-libs"
         ]
       }
     },

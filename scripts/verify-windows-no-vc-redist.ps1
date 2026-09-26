@@ -100,7 +100,20 @@ function Test-SystemDll {
         "WININET.DLL",
         "WINMM.DLL",
         "WS2_32.DLL",
-        "WSOCK32.DLL"
+        "WSOCK32.DLL",
+        # In-box Windows DLLs imported by libmpv-2.dll (video output).
+        "AVICAP32.DLL",
+        "BCRYPTPRIMITIVES.DLL",
+        "D2D1.DLL",
+        "DWRITE.DLL",
+        "IPHLPAPI.DLL",
+        "NORMALIZ.DLL",
+        "OPENGL32.DLL",
+        "SHCORE.DLL",
+        "WLDAP32.DLL",
+        # Not in-box but installed by every GPU driver. libmpv is loaded at run
+        # time, so a machine without it only loses video, never audio.
+        "VULKAN-1.DLL"
     )
 
     return $systemDlls -contains $Name

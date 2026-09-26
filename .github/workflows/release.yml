@@ -537,6 +537,21 @@ jobs:
             bash -c 'mkdir -p vendor/bin/macos-frameworks && mv vendor/bin/native/*.dylib vendor/bin/native/bungee.framework vendor/bin/macos-frameworks/'
           }
 
+      # Video output (docs/plans/video-output, step 02). libmpv is loaded at
+      # run time, so it only has to sit next to the exe: copying it into
+      # vendor/bin/native lets the existing resources glob bundle it.
+      - name: Cache libmpv (Windows)
+        if: matrix.platform == 'windows'
+        uses: actions/cache@v4
+        with:
+          path: vendor/bin/libmpv
+          key: libmpv-windows-${{ hashFiles('scripts/libmpv-fetch.mjs') }}
+
+      - name: Fetch libmpv (Windows)
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: node scripts/libmpv-fetch.mjs --into vendor/bin/native
+
       - name: Verify ASIO compiled into release engine (Windows)
         if: matrix.platform == 'windows'
         shell: pwsh
@@ -707,6 +722,18 @@ jobs:
             exit 1
           }
           .\scripts\verify-windows-no-vc-redist.ps1 $installer.FullName
+
+      - name: Validate bundled libmpv (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          # Fails when libmpv is missing from the installer, is not libmpv, or
+          # exports FFmpeg symbols (its FFmpeg must be static and hidden so it
+          # can never be mixed with the engine's avcodec-*.dll).
+          $installer = Get-ChildItem target-desktop-native\release\bundle\nsis -Filter "*.exe" |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          .\scripts\verify-libmpv.ps1 vendor\bin\native\libmpv-2.dll -Installer $installer.FullName
 
       - name: Validate Linux .deb runtime linkage
         if: matrix.platform == 'linux'

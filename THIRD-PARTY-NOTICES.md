@@ -74,6 +74,31 @@ These ship inside the desktop application (`.app` / `.exe` / `.deb` / `.rpm` /
 - **Copyright:** © Niels Lohmann.
 - **Source:** https://github.com/nlohmann/json
 
+### mpv / libmpv (video output, Windows desktop build)
+- **License:** GNU GPL-2.0-or-later as built (the build enables mpv's GPL
+  features), distributed here under **GPL-3.0-or-later**, which combines with
+  LibreTracks' AGPL-3.0-or-later under section 13 of both licenses — see
+  [`licenses/GPL-3.0.txt`](./licenses/GPL-3.0.txt) and
+  [`licenses/GPL-2.0.txt`](./licenses/GPL-2.0.txt).
+- **Copyright:** © the mpv developers and the authors of the libraries it is
+  built with.
+- **Binary:** `libmpv-2.dll` from the prebuilt
+  [mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake)
+  release `20260926` (`mpv-dev-x86_64-20260926-git-35af06172b.7z`, mpv commit
+  `35af06172b`), pinned by SHA-256 in
+  [`scripts/libmpv-fetch.mjs`](./scripts/libmpv-fetch.mjs).
+- **What it contains:** mpv plus a static FFmpeg (`N-126870-g243dfa399`) and the
+  libraries listed in that release's build recipe (libplacebo, libass, FreeType,
+  HarfBuzz, FriBidi, Rubber Band, libbluray, libdvdnav, LuaJIT, MuJS, uchardet,
+  lcms2, zimg, libarchive, libcurl, shaderc, SPIRV-Cross, Vulkan headers, among
+  others), each under its own license (GPL, LGPL, BSD, MIT, zlib, ISC or
+  Apache-2.0). Its FFmpeg is linked statically and exports no symbols, so it is
+  fully separate from the LGPL FFmpeg the audio engine uses.
+- **Loaded at run time.** LibreTracks does not link libmpv: it loads it with
+  `LoadLibrary` when video output is used, and works without it.
+- **Other platforms:** Linux uses the system's libmpv (a recommended package,
+  not bundled). macOS and mobile builds do not include mpv.
+
 ---
 
 ## Application shell & frontend
@@ -117,7 +142,7 @@ npx license-checker --production --summary
 
 ---
 
-## Written offer for source (LGPL components)
+## Written offer for source (LGPL and GPL components)
 
 The complete corresponding source code for the LGPL-licensed libraries
 distributed with LibreTracks — **FFmpeg** and **libsndfile** — is available from
@@ -138,6 +163,18 @@ anyone can rebuild the application against their own copy of either library. The
 build script for the iOS FFmpeg is in this repository
 ([`scripts/build-ffmpeg-ios.sh`](./scripts/build-ffmpeg-ios.sh)), alongside the
 engine's CMake configuration.
+
+### mpv (GPL)
+
+The Windows build distributes `libmpv-2.dll` in object-code form. Its
+Corresponding Source is the mpv source at commit `35af06172b` together with the
+sources of every library it statically contains, at the exact revisions pinned
+by the build recipe of the mpv-winbuild-cmake release `20260926`
+(https://github.com/shinchiro/mpv-winbuild-cmake, tag `20260926`). For at least
+three years from the last release of LibreTracks that ships this binary, the
+LibreTracks maintainers will provide that complete Corresponding Source to
+anyone who requests it through the project's public repository, at no charge
+beyond the cost of physically performing the distribution.
 
 The complete corresponding source for LibreTracks itself (an AGPL-3.0 work) is
 published at the project's public repository.
