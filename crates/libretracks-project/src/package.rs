@@ -1049,6 +1049,7 @@ mod tests {
             tracks: vec![track("t1", "Drums")],
             clips: vec![clip("c1", "t1", 4.0, 8.0)],
             midi_clips: vec![],
+            video_clips: vec![],
             section_markers: vec![libretracks_core::Marker {
                 id: "m1".into(),
                 name: "Drop".into(),

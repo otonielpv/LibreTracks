@@ -282,6 +282,11 @@ impl DesktopSession {
                 clip.file_path = new_path.to_string();
             }
         }
+        for clip in song.video_clips.iter_mut() {
+            if clip.file_path == old_path {
+                clip.file_path = new_path.to_string();
+            }
+        }
 
         if let Some(mut manifest) = read_library_manifest(&song_dir)? {
             for file_path in manifest.file_paths.iter_mut() {

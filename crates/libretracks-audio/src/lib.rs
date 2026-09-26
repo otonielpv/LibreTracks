@@ -1201,6 +1201,7 @@ mod tests {
                 },
             ],
             midi_clips: vec![],
+            video_clips: vec![],
             section_markers: vec![
                 Marker {
                     id: "section_intro".into(),
@@ -1358,6 +1359,7 @@ mod tests {
                 },
             ],
             midi_clips: vec![],
+            video_clips: vec![],
             section_markers: vec![
                 Marker {
                     id: "section_intro".into(),

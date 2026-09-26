@@ -227,6 +227,7 @@ mod tests {
             tracks,
             clips,
             midi_clips: vec![],
+            video_clips: vec![],
             section_markers: vec![],
         }
     }

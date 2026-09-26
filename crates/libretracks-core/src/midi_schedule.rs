@@ -330,6 +330,7 @@ mod tests {
             tracks: vec![midi_track("midi1", muted)],
             clips: vec![],
             midi_clips: clips,
+            video_clips: vec![],
             section_markers: vec![],
         }
     }

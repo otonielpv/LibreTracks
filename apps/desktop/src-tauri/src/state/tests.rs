@@ -115,6 +115,7 @@ fn demo_song() -> Song {
             color: None,
         }],
         midi_clips: vec![],
+        video_clips: vec![],
         section_markers: vec![],
     }
 }
@@ -334,7 +335,7 @@ fn demo_song_with_folder_track() -> Song {
     song
 }
 
-fn write_silent_test_wav(path: &Path, duration_seconds: u32) {
+pub(super) fn write_silent_test_wav(path: &Path, duration_seconds: u32) {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).expect("wav parent dir should exist");
     }
@@ -477,6 +478,7 @@ fn hierarchy_song() -> Song {
         ],
         clips: vec![],
         midi_clips: vec![],
+        video_clips: vec![],
         section_markers: vec![],
     }
 }
@@ -988,6 +990,7 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
         ],
         clips: vec![],
         midi_clips: vec![],
+        video_clips: vec![],
         section_markers: vec![],
     };
 

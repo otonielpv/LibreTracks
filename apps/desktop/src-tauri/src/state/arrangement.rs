@@ -918,7 +918,17 @@ impl DesktopSession {
         self.redo_stack.clear();
 
         self.update_loaded_track(track_id, name, volume, pan, muted, solo, audio_to)?;
-        if volume.is_some()
+        // A video track's mute/solo decide which picture is shown; the audio
+        // engine does not know the track, and a solo sent there would mute
+        // every audio track.
+        let is_video_track = self.engine.song().is_some_and(|song| {
+            song.tracks
+                .iter()
+                .any(|track| track.id == track_id && track.kind == TrackKind::Video)
+        });
+        if is_video_track {
+            audio.record_commit_model_only();
+        } else if volume.is_some()
             || pan.is_some()
             || muted.is_some()
             || solo.is_some()
@@ -972,12 +982,21 @@ impl DesktopSession {
             // descendants). Treat a now-missing id as a no-op so the whole batch
             // doesn't fail because of selection overlap.
             match delete_track_and_repair_hierarchy(&mut song.tracks, track_id) {
-                Ok(deleted_track) => {
-                    if deleted_track.kind == TrackKind::Audio {
+                Ok(deleted_track) => match deleted_track.kind {
+                    TrackKind::Audio => {
                         song.clips.retain(|clip| &clip.track_id != track_id);
                         any_audio_deleted = true;
                     }
-                }
+                    TrackKind::Video => {
+                        song.video_clips.retain(|clip| &clip.track_id != track_id);
+                        any_audio_deleted = true;
+                    }
+                    // Its clips would otherwise dangle and fail validation.
+                    TrackKind::Midi => {
+                        song.midi_clips.retain(|clip| &clip.track_id != track_id);
+                    }
+                    TrackKind::Folder => {}
+                },
                 Err(DesktopError::TrackNotFound(_)) => continue,
                 Err(error) => return Err(error),
             }

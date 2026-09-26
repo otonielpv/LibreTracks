@@ -2020,7 +2020,9 @@ fn align_engine_rate_for_imported_audio(state: &DesktopState, paths: &[std::path
     let has_timeline_content = session
         .engine
         .song()
-        .map(|song| !song.clips.is_empty() || !song.midi_clips.is_empty())
+        .map(|song| {
+            !song.clips.is_empty() || !song.midi_clips.is_empty() || !song.video_clips.is_empty()
+        })
         .unwrap_or(true);
     drop(session);
     if has_timeline_content {

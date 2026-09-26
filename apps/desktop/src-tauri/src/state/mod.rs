@@ -64,12 +64,14 @@ mod history;
 mod library;
 mod midi_edit;
 mod midi_runtime;
+mod video_edit;
 mod regions;
 mod session;
 mod song_edit;
 mod timeline_math;
 mod missing_media;
 pub(crate) use missing_media::MissingMediaEntry;
+pub(crate) use video_edit::VideoClipProps;
 mod track_colors;
 mod track_tree;
 
@@ -3344,6 +3346,7 @@ pub(super) fn build_empty_song(song_id: String, title: String) -> Song {
         tracks: vec![],
         clips: vec![],
         midi_clips: vec![],
+        video_clips: vec![],
         section_markers: vec![],
     }
 }
@@ -3367,6 +3370,8 @@ pub(super) fn strip_song_to_template(mut song: Song) -> Song {
     // MIDI clips are song content, not structure: the MIDI track survives (so
     // its name/routing is part of the template) but its messages do not.
     song.midi_clips.clear();
+    // Same for video: the video track is structure, the clips are content.
+    song.video_clips.clear();
     song.section_markers.clear();
 
     for track in song.tracks.iter_mut() {
@@ -4144,16 +4149,24 @@ pub(super) fn copy_project_audio_files(
     fs::create_dir_all(target_song_dir.join("cache").join("waveforms"))?;
 
     let mut copied_relative_paths = std::collections::HashSet::new();
-    for clip in &song.clips {
+    // Los vídeos van casi siempre por ruta absoluta (se referencian en su
+    // sitio); sólo los que vinieron dentro de un paquete son relativos y
+    // tienen que viajar con la sesión igual que el audio.
+    let clip_file_paths = song
+        .clips
+        .iter()
+        .map(|clip| clip.file_path.as_str())
+        .chain(song.video_clips.iter().map(|clip| clip.file_path.as_str()));
+    for clip_file_path in clip_file_paths {
         // El audio de FUERA de la sesión no se copia: la sesión nueva lo sigue
         // referenciando igual que la vieja. Con una ruta absoluta esto ya
         // pasaba de chiripa (`join` con una absoluta la sustituye, y origen y
         // destino salían iguales); con un `content://` no, `fs::copy` fallaba
         // y el `?` tumbaba el «Guardar como» entero.
-        if crate::platform::content_uri::is_external_audio_path(&clip.file_path) {
+        if crate::platform::content_uri::is_external_audio_path(clip_file_path) {
             continue;
         }
-        let relative_path = Path::new(&clip.file_path);
+        let relative_path = Path::new(clip_file_path);
         if !copied_relative_paths.insert(relative_path.to_path_buf()) {
             continue;
         }
@@ -4203,3 +4216,5 @@ pub(super) fn copy_project_audio_files(
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod video_tests;

@@ -1134,13 +1134,7 @@ impl AudioController {
                     });
             }
 
-            let tracks = resolved_song
-                .tracks
-                .iter()
-                // MIDI tracks produce no audio and the engine has no concept of
-                // them, so they never cross the FFI. Their messages are sent
-                // from the Rust transport tick instead.
-                .filter(|track| track.kind != TrackKind::Midi)
+            let tracks = upsert_engine_tracks(&resolved_song)
                 .map(|track| TrackUpsert {
                     id: track.id.clone(),
                     name: track.name.clone(),
@@ -1160,7 +1154,10 @@ impl AudioController {
                     role: String::new(),
                     kind: match track.kind {
                         TrackKind::Folder => "folder".to_string(),
-                        TrackKind::Audio | TrackKind::Midi => "audio".to_string(),
+                        // Midi/Video never get here (filtered above).
+                        TrackKind::Audio | TrackKind::Midi | TrackKind::Video => {
+                            "audio".to_string()
+                        }
                     },
                     parent_track_id: track.parent_track_id.clone().unwrap_or_default(),
                     clips: clips_by_track.remove(&track.id).unwrap_or_default(),
@@ -3026,9 +3023,29 @@ fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song 
     resolved
 }
 
+/// Tracks a `CmdUpsertSongTracks` carries. MIDI and video tracks produce no
+/// audio and the engine has no concept of them, so they never cross the FFI:
+/// MIDI is sent from the Rust transport tick and video by the video runtime.
+fn upsert_engine_tracks(song: &Song) -> impl Iterator<Item = &libretracks_core::Track> {
+    song.tracks
+        .iter()
+        .filter(|track| track.kind.reaches_audio_engine())
+}
+
+/// Drop what the audio engine must never see: video tracks and their clips.
+/// A video track reaching `LoadSession` would become an empty audio track, and
+/// its `solo` (which on a video track means "only this picture") would mute
+/// every audio track. Kept separate from MIDI, which has always travelled as an
+/// empty audio track in the `LoadSession` payload.
+fn strip_video_for_engine(song: &mut Song) {
+    song.tracks.retain(|track| track.kind != TrackKind::Video);
+    song.video_clips.clear();
+}
+
 fn song_with_warped_timeline(song: &Song) -> Song {
     let source_song = song.clone();
     let mut runtime = song.clone();
+    strip_video_for_engine(&mut runtime);
     let track_transpose_enabled: HashMap<&str, bool> = source_song
         .tracks
         .iter()
@@ -3185,9 +3202,16 @@ fn session_signature(song: &Song) -> String {
     song.time_signature_markers.len().hash(&mut hasher);
     song.regions.len().hash(&mut hasher);
     song.section_markers.len().hash(&mut hasher);
-    song.tracks.len().hash(&mut hasher);
+    // Video tracks never reach the engine: editing them must not force a
+    // `LoadSession` (which rebuilds every warp voice).
+    let engine_tracks = || {
+        song.tracks
+            .iter()
+            .filter(|track| track.kind != TrackKind::Video)
+    };
+    engine_tracks().count().hash(&mut hasher);
     song.clips.len().hash(&mut hasher);
-    for track in &song.tracks {
+    for track in engine_tracks() {
         track.id.hash(&mut hasher);
         track.name.hash(&mut hasher);
         format!("{:?}", track.kind).hash(&mut hasher);
@@ -3307,6 +3331,7 @@ mod tests {
                 color: None,
             }],
             midi_clips: vec![],
+            video_clips: vec![],
             section_markers: vec![],
         }
     }
@@ -3391,6 +3416,50 @@ mod tests {
     fn sources_ready_is_false_while_any_pending() {
         assert!(!sources_ready(&snapshot_with(&["ready", "loading"])));
         assert!(!sources_ready(&snapshot_with(&["unloaded"])));
+    }
+
+    /// C4 del paso 03 del plan de vídeo: lo que recibe el motor (payload de
+    /// `LoadSession`, pistas del upsert y firma de sesión) es idéntico con y
+    /// sin pistas de vídeo, incluso con una pista de vídeo en solo.
+    #[test]
+    fn engine_payload_is_identical_with_and_without_video_tracks() {
+        let without_video = song_for_signature();
+        let mut with_video = without_video.clone();
+        let mut video_track = with_video.tracks[0].clone();
+        video_track.id = "video".into();
+        video_track.name = "Letras".into();
+        video_track.kind = TrackKind::Video;
+        video_track.solo = true;
+        with_video.tracks.push(video_track);
+        with_video.video_clips.push(libretracks_core::VideoClip {
+            id: "vc".into(),
+            track_id: "video".into(),
+            file_path: "D:/v.mp4".into(),
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 5.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            fit: None,
+            color: None,
+        });
+
+        let load_session_json =
+            |song: &Song| serde_json::to_string(&song_with_warped_timeline(song)).expect("json");
+        assert_eq!(
+            load_session_json(&with_video),
+            load_session_json(&without_video)
+        );
+        assert_eq!(
+            session_signature(&with_video),
+            session_signature(&without_video)
+        );
+        let upsert_ids = |song: &Song| {
+            upsert_engine_tracks(song)
+                .map(|track| track.id.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(upsert_ids(&with_video), upsert_ids(&without_video));
     }
 }
 

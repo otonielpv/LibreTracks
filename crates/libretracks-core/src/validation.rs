@@ -131,6 +131,18 @@ pub enum DomainError {
     InvalidMidiEventTiming { event_id: String },
     #[error("midi track {track_id} has invalid channel {channel}")]
     InvalidMidiTrackChannel { track_id: String, channel: u8 },
+    #[error("audio clip {clip_id} cannot target video track {track_id}")]
+    ClipTargetsVideoTrack { clip_id: String, track_id: String },
+    #[error("duplicate video clip id: {0}")]
+    DuplicateVideoClipId(String),
+    #[error("video clip {clip_id} references unknown track {track_id}")]
+    UnknownVideoClipTrack { clip_id: String, track_id: String },
+    #[error("video clip {clip_id} must target a video track, got {track_id}")]
+    VideoClipTargetsNonVideoTrack { clip_id: String, track_id: String },
+    #[error("video clip {clip_id} has invalid position, trim or duration")]
+    InvalidVideoClipGeometry { clip_id: String },
+    #[error("video clip {clip_id} has fades longer than the clip")]
+    InvalidVideoClipFades { clip_id: String },
 }
 
 pub fn validate_song(song: &Song) -> Result<(), DomainError> {
@@ -245,6 +257,13 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
             });
         }
 
+        if track.kind == TrackKind::Video {
+            return Err(DomainError::ClipTargetsVideoTrack {
+                clip_id: clip.id.clone(),
+                track_id: clip.track_id.clone(),
+            });
+        }
+
         // Invariant: every clip lives inside exactly one region.
         // - The start of the clip (clip.timeline_start_seconds) must fall in
         //   [region.start, region.end) of some region.
@@ -323,6 +342,8 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
             validate_midi_event(event)?;
         }
     }
+
+    validate_video_clips(song)?;
 
     for track in &song.tracks {
         if let Some(parent_track_id) = &track.parent_track_id {
@@ -463,6 +484,61 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
 /// Check one MIDI event's channel, data bytes and timing. Values are validated
 /// here rather than clamped at send time so a malformed file is rejected on
 /// load instead of silently firing a different message than the user wrote.
+/// Video clips are validated against their own list. Like MIDI they are NOT
+/// held to the "clip lives inside exactly one region" invariant: the audio
+/// engine never sees them, so a picture that runs past its song's end harms
+/// nothing. Arrangement edits still move them with the song holding their
+/// start.
+fn validate_video_clips(song: &Song) -> Result<(), DomainError> {
+    let mut video_clip_ids = HashSet::new();
+    for clip in &song.video_clips {
+        if !video_clip_ids.insert(clip.id.as_str()) {
+            return Err(DomainError::DuplicateVideoClipId(clip.id.clone()));
+        }
+
+        let geometry_ok = clip.timeline_start_seconds.is_finite()
+            && clip.timeline_start_seconds >= 0.0
+            && clip.source_start_seconds.is_finite()
+            && clip.source_start_seconds >= 0.0
+            && clip.duration_seconds.is_finite()
+            && clip.duration_seconds > 0.0;
+        if !geometry_ok {
+            return Err(DomainError::InvalidVideoClipGeometry {
+                clip_id: clip.id.clone(),
+            });
+        }
+
+        let fade_in = clip.fade_in_seconds.unwrap_or(0.0);
+        let fade_out = clip.fade_out_seconds.unwrap_or(0.0);
+        let fades_ok = fade_in.is_finite()
+            && fade_out.is_finite()
+            && fade_in >= 0.0
+            && fade_out >= 0.0
+            && fade_in + fade_out <= clip.duration_seconds + CLIP_REGION_BOUNDARY_EPSILON_SECONDS;
+        if !fades_ok {
+            return Err(DomainError::InvalidVideoClipFades {
+                clip_id: clip.id.clone(),
+            });
+        }
+
+        let track = song
+            .tracks
+            .iter()
+            .find(|track| track.id == clip.track_id)
+            .ok_or_else(|| DomainError::UnknownVideoClipTrack {
+                clip_id: clip.id.clone(),
+                track_id: clip.track_id.clone(),
+            })?;
+        if track.kind != TrackKind::Video {
+            return Err(DomainError::VideoClipTargetsNonVideoTrack {
+                clip_id: clip.id.clone(),
+                track_id: clip.track_id.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
 fn validate_midi_event(event: &MidiEvent) -> Result<(), DomainError> {
     // Only an explicit override is checked here; `None` inherits the track's
     // channel, which is validated separately with the track.
@@ -548,6 +624,7 @@ mod tests {
     use super::*;
     use crate::model::{
         Clip, Marker, MarkerKind, MidiClip, SongMaster, SongRegion, TimeSignatureMarker, Track,
+        VideoClip, VideoFit,
     };
 
     fn region(id: &str, start: f64, end: f64) -> SongRegion {
@@ -608,6 +685,7 @@ mod tests {
             tracks: vec![track("t1", TrackKind::Audio, None)],
             clips: vec![],
             midi_clips: vec![],
+            video_clips: vec![],
             section_markers: vec![],
         }
     }
@@ -1303,5 +1381,144 @@ mod tests {
             color: None,
         };
         assert_eq!(clip.duration_seconds(), 0.0);
+    }
+
+    /// Song with one video track holding one 20 s clip with fades.
+    fn song_with_video() -> Song {
+        let mut song = valid_song();
+        song.tracks.push(track("video1", TrackKind::Video, None));
+        song.video_clips.push(VideoClip {
+            id: "vc1".into(),
+            track_id: "video1".into(),
+            file_path: "C:/videos/letras.mp4".into(),
+            timeline_start_seconds: 10.0,
+            source_start_seconds: 2.0,
+            duration_seconds: 20.0,
+            fade_in_seconds: Some(1.0),
+            fade_out_seconds: Some(2.0),
+            fit: Some(VideoFit::Cover),
+            color: None,
+        });
+        song
+    }
+
+    #[test]
+    fn accepts_a_well_formed_video_clip() {
+        assert_eq!(validate_song(&song_with_video()), Ok(()));
+    }
+
+    #[test]
+    fn video_clips_may_run_past_their_region() {
+        // The engine never sees video, so the region invariant does not apply.
+        let mut song = song_with_video();
+        song.video_clips[0].timeline_start_seconds = 95.0;
+        assert_eq!(validate_song(&song), Ok(()));
+    }
+
+    #[test]
+    fn rejects_video_clip_on_a_non_video_track() {
+        let mut song = song_with_video();
+        song.video_clips[0].track_id = "t1".into();
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::VideoClipTargetsNonVideoTrack { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_video_clip_on_an_unknown_track() {
+        let mut song = song_with_video();
+        song.video_clips[0].track_id = "ghost".into();
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::UnknownVideoClipTrack { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_video_clip_with_non_positive_duration() {
+        for duration in [0.0, -1.0, f64::NAN] {
+            let mut song = song_with_video();
+            song.video_clips[0].duration_seconds = duration;
+            song.video_clips[0].fade_in_seconds = None;
+            song.video_clips[0].fade_out_seconds = None;
+            assert!(
+                matches!(
+                    validate_song(&song),
+                    Err(DomainError::InvalidVideoClipGeometry { .. })
+                ),
+                "duration {duration} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_video_clip_with_negative_trim_or_start() {
+        let mut song = song_with_video();
+        song.video_clips[0].source_start_seconds = -0.5;
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidVideoClipGeometry { .. })
+        ));
+        let mut song = song_with_video();
+        song.video_clips[0].timeline_start_seconds = -0.5;
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidVideoClipGeometry { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_video_fades_longer_than_the_clip() {
+        let mut song = song_with_video();
+        song.video_clips[0].fade_in_seconds = Some(15.0);
+        song.video_clips[0].fade_out_seconds = Some(6.0);
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::InvalidVideoClipFades { .. })
+        ));
+        // Exactly filling the clip is fine.
+        song.video_clips[0].fade_out_seconds = Some(5.0);
+        assert_eq!(validate_song(&song), Ok(()));
+    }
+
+    #[test]
+    fn rejects_duplicate_video_clip_ids() {
+        let mut song = song_with_video();
+        let duplicate = song.video_clips[0].clone();
+        song.video_clips.push(duplicate);
+        assert_eq!(
+            validate_song(&song),
+            Err(DomainError::DuplicateVideoClipId("vc1".into()))
+        );
+    }
+
+    #[test]
+    fn rejects_audio_clip_on_a_video_track() {
+        let mut song = song_with_video();
+        song.clips.push(Clip {
+            id: "c1".into(),
+            track_id: "video1".into(),
+            file_path: "audio/a.wav".into(),
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 4.0,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        });
+        assert!(matches!(
+            validate_song(&song),
+            Err(DomainError::ClipTargetsVideoTrack { .. })
+        ));
+    }
+
+    #[test]
+    fn only_audio_and_folder_tracks_reach_the_engine() {
+        assert!(TrackKind::Audio.reaches_audio_engine());
+        assert!(TrackKind::Folder.reaches_audio_engine());
+        assert!(!TrackKind::Midi.reaches_audio_engine());
+        assert!(!TrackKind::Video.reaches_audio_engine());
     }
 }

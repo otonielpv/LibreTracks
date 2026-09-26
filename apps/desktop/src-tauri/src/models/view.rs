@@ -3,6 +3,7 @@ use libretracks_audio::{ActiveVamp, JumpTrigger, PendingMarkerJump, TransitionTy
 use libretracks_core::{
     audible_clip_duration_seconds, warp_timeline_seconds_at, Clip, Marker, MarkerCategory,
     MarkerKind, MidiClip, MidiEvent, Song, SongRegion, TempoMarker, TimeSignatureMarker, TrackKind,
+    VideoClip,
 };
 use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
@@ -125,6 +126,7 @@ pub struct SongView {
     pub section_markers: Vec<MarkerSummary>,
     pub clips: Vec<ClipSummary>,
     pub midi_clips: Vec<MidiClipSummary>,
+    pub video_clips: Vec<VideoClipSummary>,
     pub tracks: Vec<TrackSummary>,
     pub automation_cues: Vec<AutomationCueSummary>,
     pub mix_scenes: Vec<MixSceneSummary>,
@@ -151,6 +153,29 @@ pub struct MidiClipSummary {
     pub timeline_start_seconds: f64,
     pub name: String,
     pub events: Vec<MidiEvent>,
+    pub color: Option<String>,
+}
+
+/// A video clip in view space. `timeline_start_seconds` and
+/// `duration_seconds` are warped like an audio clip's so the box lines up with
+/// the audio it plays against; `source_start_seconds` and
+/// `source_duration_seconds` are the media window in the file's own clock,
+/// which is what the thumbnail strip indexes.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoClipSummary {
+    pub id: String,
+    pub track_id: String,
+    pub file_path: String,
+    pub is_missing: bool,
+    pub timeline_start_seconds: f64,
+    pub duration_seconds: f64,
+    pub source_start_seconds: f64,
+    pub source_duration_seconds: f64,
+    pub fade_in_seconds: Option<f64>,
+    pub fade_out_seconds: Option<f64>,
+    /// `"contain" | "cover" | "stretch"`, or `None` to inherit the output's.
+    pub fit: Option<String>,
     pub color: Option<String>,
 }
 
@@ -664,6 +689,11 @@ pub(crate) fn song_to_view(
             .iter()
             .map(|clip| midi_clip_to_summary(song, clip))
             .collect(),
+        video_clips: song
+            .video_clips
+            .iter()
+            .map(|clip| video_clip_to_summary(song, clip, song_dir))
+            .collect(),
         tracks: song
             .tracks
             .iter()
@@ -902,6 +932,34 @@ pub(crate) fn clip_to_summary(
             track_transpose_enabled,
         ),
         gain: clip.gain,
+        color: clip.color.clone(),
+    }
+}
+
+pub(crate) fn video_clip_to_summary(
+    song: &Song,
+    clip: &VideoClip,
+    song_dir: Option<&std::path::Path>,
+) -> VideoClipSummary {
+    let view_start = warp_timeline_seconds_at(song, clip.timeline_start_seconds);
+    let view_end = warp_timeline_seconds_at(song, clip.end_seconds());
+    let path = std::path::Path::new(&clip.file_path);
+    let is_missing = match song_dir {
+        Some(dir) if path.is_relative() => !dir.join(path).exists(),
+        _ => !path.exists(),
+    };
+    VideoClipSummary {
+        id: clip.id.clone(),
+        track_id: clip.track_id.clone(),
+        file_path: clip.file_path.clone(),
+        is_missing,
+        timeline_start_seconds: view_start,
+        duration_seconds: (view_end - view_start).max(0.0),
+        source_start_seconds: clip.source_start_seconds,
+        source_duration_seconds: clip.duration_seconds,
+        fade_in_seconds: clip.fade_in_seconds,
+        fade_out_seconds: clip.fade_out_seconds,
+        fit: clip.fit.map(|fit| fit.as_token().to_string()),
         color: clip.color.clone(),
     }
 }
@@ -1235,6 +1293,7 @@ fn track_kind_label(kind: TrackKind) -> &'static str {
         TrackKind::Audio => "audio",
         TrackKind::Folder => "folder",
         TrackKind::Midi => "midi",
+        TrackKind::Video => "video",
     }
 }
 
@@ -1385,6 +1444,7 @@ mod tests {
             tracks: vec![track("t1", TrackKind::Audio, None)],
             clips: vec![clip("c1", "t1", 1.0, 4.0, "audio/a.wav")],
             midi_clips: vec![],
+            video_clips: vec![],
             section_markers: vec![Marker {
                 id: "m1".into(),
                 name: "Intro".into(),

@@ -124,6 +124,7 @@ mod tests {
                 color: None,
             }],
             midi_clips: vec![],
+            video_clips: vec![],
             section_markers: vec![Marker {
                 id: "section_intro".into(),
                 name: "Intro".into(),
@@ -171,7 +172,7 @@ mod tests {
         save_song(&song_dir, &demo_song()).expect("song should save");
 
         let json = fs::read_to_string(song_file_path(&song_dir)).expect("song file should exist");
-        assert!(json.contains("\"version\": 7"));
+        assert!(json.contains("\"version\": 8"));
         assert!(json.contains("\"timeSignature\""));
         assert!(json.contains("\"regions\""));
         assert!(json.contains("\"timelineStartSeconds\""));

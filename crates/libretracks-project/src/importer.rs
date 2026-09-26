@@ -300,6 +300,7 @@ pub fn import_wav_song(
             })
             .collect(),
         midi_clips: vec![],
+        video_clips: vec![],
         section_markers: vec![],
     };
 

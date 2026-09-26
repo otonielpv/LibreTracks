@@ -47,6 +47,13 @@ pub struct Song {
     /// before MIDI tracks existed deserialize to an empty list.
     #[serde(default)]
     pub midi_clips: Vec<MidiClip>,
+    /// Video clips, in a list of their own for the same reason as
+    /// `midi_clips`: they carry pictures, not audio, and every consumer of
+    /// `clips` (mixer, waveforms, warp, render) would have to learn to skip
+    /// them. Songs saved before video tracks existed deserialize to an empty
+    /// list.
+    #[serde(default)]
+    pub video_clips: Vec<VideoClip>,
     pub section_markers: Vec<Marker>,
 }
 
@@ -117,6 +124,20 @@ pub enum TrackKind {
     /// the native engine — unlike [`TrackKind::Folder`], which the engine does
     /// know about for gain/mute folding.
     Midi,
+    /// Holds [`VideoClip`]s projected to an external display. Produces no
+    /// audio, so like [`TrackKind::Midi`] it never reaches the native engine.
+    /// Reuses `muted` (hidden) and `solo` (the only visible video track);
+    /// volume, pan and routing do not apply.
+    Video,
+}
+
+impl TrackKind {
+    /// Whether tracks of this kind are handed to the native audio engine.
+    /// MIDI and video tracks produce no audio and the engine has no concept of
+    /// them; they are played from Rust-side runtimes instead.
+    pub fn reaches_audio_engine(self) -> bool {
+        matches!(self, TrackKind::Audio | TrackKind::Folder)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -209,6 +230,67 @@ pub struct Clip {
     pub fade_out_seconds: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+}
+
+/// How a video frame is fitted into the output display when their aspect
+/// ratios differ.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum VideoFit {
+    /// Whole frame visible, black bars where the ratios differ.
+    #[default]
+    Contain,
+    /// Fill the display, cropping what overflows.
+    Cover,
+    /// Fill the display, distorting the picture.
+    Stretch,
+}
+
+impl VideoFit {
+    pub fn as_token(self) -> &'static str {
+        match self {
+            VideoFit::Contain => "contain",
+            VideoFit::Cover => "cover",
+            VideoFit::Stretch => "stretch",
+        }
+    }
+}
+
+/// A window of a video file placed on a [`TrackKind::Video`] track.
+///
+/// Same geometry as an audio [`Clip`] — start, trim and length — so moving
+/// it with its song, duplicating the song or exporting it needs no
+/// conversion. The picture is played by the desktop video output, never by the
+/// audio engine; the file's own soundtrack is extracted to a regular audio
+/// clip if the user wants it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoClip {
+    pub id: String,
+    pub track_id: String,
+    pub file_path: String,
+    /// Position on the timeline, in the song's source seconds (the same space
+    /// as [`Clip::timeline_start_seconds`], i.e. pre-warp).
+    pub timeline_start_seconds: f64,
+    /// Offset into the file where the visible window starts (the trim).
+    pub source_start_seconds: f64,
+    pub duration_seconds: f64,
+    #[serde(default)]
+    pub fade_in_seconds: Option<f64>,
+    #[serde(default)]
+    pub fade_out_seconds: Option<f64>,
+    /// `None` = use the video output's global fit setting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fit: Option<VideoFit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
+impl VideoClip {
+    /// Timeline position of the clip's end.
+    pub fn end_seconds(&self) -> f64 {
+        self.timeline_start_seconds + self.duration_seconds
+    }
 }
 
 /// Lowest/highest valid value for a MIDI channel as the user sees it (1-16).
@@ -743,6 +825,7 @@ mod tests {
             tracks: vec![],
             clips: vec![],
             midi_clips: vec![],
+            video_clips: vec![],
             section_markers: markers,
         }
     }

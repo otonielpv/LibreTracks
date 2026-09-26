@@ -1060,6 +1060,7 @@ mod tests {
                 clip("c2", "t1", "audio/two.wav", 30.0, 10.0),
             ],
             midi_clips: vec![],
+            video_clips: vec![],
             section_markers: vec![],
         }
     }

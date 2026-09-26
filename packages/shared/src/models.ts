@@ -8,7 +8,7 @@ import {
 const AUX_MAX_GAIN = positionToGain(1, AUX_FADER_SCALE);
 
 export type PlaybackState = "empty" | "stopped" | "playing" | "paused";
-export type TrackKind = "audio" | "folder" | "midi";
+export type TrackKind = "audio" | "folder" | "midi" | "video";
 export type JumpTriggerLabel =
   | "immediate"
   | "next_marker"
@@ -513,6 +513,31 @@ export type MidiClipSummary = {
   color?: string | null;
 };
 
+/** How a video frame fits the output display. */
+export type VideoFit = "contain" | "cover" | "stretch";
+
+/**
+ * A window of a video file on a video track. `timelineStartSeconds` and
+ * `durationSeconds` are in view time (warp applied), like an audio clip;
+ * `sourceStartSeconds`/`sourceDurationSeconds` are the media window in the
+ * file's own clock, which is what the thumbnail strip indexes.
+ */
+export type VideoClipSummary = {
+  id: string;
+  trackId: string;
+  filePath: string;
+  isMissing: boolean;
+  timelineStartSeconds: number;
+  durationSeconds: number;
+  sourceStartSeconds: number;
+  sourceDurationSeconds: number;
+  fadeInSeconds?: number | null;
+  fadeOutSeconds?: number | null;
+  /** `null` = inherit the video output's fit. */
+  fit?: VideoFit | null;
+  color?: string | null;
+};
+
 export type SongView = {
   id: string;
   title: string;
@@ -528,6 +553,8 @@ export type SongView = {
   clips: ClipSummary[];
   /** Absent on snapshots from before MIDI tracks existed. */
   midiClips?: MidiClipSummary[];
+  /** Absent on snapshots from before video tracks existed. */
+  videoClips?: VideoClipSummary[];
   tracks: TrackSummary[];
   automationCues?: AutomationCueSummary[];
   mixScenes?: MixSceneSummary[];

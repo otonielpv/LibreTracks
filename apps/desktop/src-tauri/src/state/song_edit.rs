@@ -340,11 +340,18 @@ pub(super) fn apply_clip_moves_with_region_reshape(
 /// moved leave the size as-is, the user can adjust"). Only completely empty
 /// regions are removed.
 pub(super) fn prune_empty_regions(song: &mut Song) {
+    let starts_inside = |region: &libretracks_core::SongRegion, start: f64| {
+        start >= region.start_seconds && start < region.end_seconds
+    };
+    // A song that only holds a video is still a song.
     song.regions.retain(|region| {
-        song.clips.iter().any(|clip| {
-            clip.timeline_start_seconds >= region.start_seconds
-                && clip.timeline_start_seconds < region.end_seconds
-        })
+        song.clips
+            .iter()
+            .any(|clip| starts_inside(region, clip.timeline_start_seconds))
+            || song
+                .video_clips
+                .iter()
+                .any(|clip| starts_inside(region, clip.timeline_start_seconds))
     });
 }
 
@@ -383,6 +390,7 @@ pub(super) fn prune_auto_created_empty_tracks(song: &mut Song) {
         .clips
         .iter()
         .map(|clip| clip.track_id.as_str())
+        .chain(song.video_clips.iter().map(|clip| clip.track_id.as_str()))
         .collect();
     // Folder tracks are kept around even when "empty" — a folder with no
     // children is still a structural choice. We only prune leaf audio
@@ -428,6 +436,7 @@ mod region_message_tests {
             tracks: vec![],
             clips: vec![],
             midi_clips: vec![],
+            video_clips: vec![],
             section_markers: vec![],
         }
     }

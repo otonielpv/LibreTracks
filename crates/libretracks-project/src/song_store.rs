@@ -12,7 +12,11 @@ use serde_json::Value;
 use thiserror::Error;
 
 pub const SONG_FILE_NAME: &str = "song.ltsession";
-const SONG_FORMAT_VERSION: u32 = 7;
+/// v8 added `videoClips`. The bump is not needed to read old documents (the
+/// field defaults to empty) but to make an older app REFUSE a v8 document:
+/// otherwise it would open a session with video and save it back without
+/// the clips.
+const SONG_FORMAT_VERSION: u32 = 8;
 
 #[derive(Debug, Error)]
 pub enum ProjectError {
@@ -176,37 +180,54 @@ pub fn load_song(song_dir: impl AsRef<Path>) -> Result<Song, ProjectError> {
 
 pub fn load_song_from_file(song_file: impl AsRef<Path>) -> Result<Song, ProjectError> {
     let json = fs::read_to_string(song_file)?;
-    let raw_document: Value = serde_json::from_str(&json)?;
+    parse_song_document(&json, SONG_FORMAT_VERSION)
+}
+
+/// Parse a song document written by a version of the app whose newest format
+/// was `newest_known_version`. Anything newer is rejected, never read with its
+/// unknown fields dropped. Taking the version as an argument lets the tests
+/// play an older reader against a newer document.
+fn parse_song_document(json: &str, newest_known_version: u32) -> Result<Song, ProjectError> {
+    let raw_document: Value = serde_json::from_str(json)?;
     reject_legacy_group_format(&raw_document)?;
     match document_version(&raw_document)? {
+        version if version > newest_known_version => {
+            Err(ProjectError::UnsupportedVersion(version))
+        }
         SONG_FORMAT_VERSION => {
-            let document: SongDocument = serde_json::from_str(&json)?;
+            let document: SongDocument = serde_json::from_str(json)?;
+            load_current_song(document.song)
+        }
+        7 => {
+            // v7 is v8 without `videoClips`; `#[serde(default)]` fills the
+            // empty list and the next save writes v8.
+            let document: SongDocument = serde_json::from_str(json)?;
             load_current_song(document.song)
         }
         6 => {
             // v6 is v7 without `midiClips`; `#[serde(default)]` on the field
             // fills the empty list, so the document parses as-is and only the
             // stored version number changes on the next save.
-            let document: SongDocument = serde_json::from_str(&json)?;
+            let document: SongDocument = serde_json::from_str(json)?;
             load_current_song(document.song)
         }
         5 => {
             // v5 had the same on-disk shape as v6 but predates the
             // "clip lives inside one region" invariant. Deserialize as
             // `Song`, run the tolerant region-fitting pass, and validate.
-            let document: SongDocument = serde_json::from_str(&json)?;
+            let document: SongDocument = serde_json::from_str(json)?;
             migrate_v5_song(document.song)
         }
         4 => {
-            let legacy_document: LegacySongDocumentV4 = serde_json::from_str(&json)?;
+            let legacy_document: LegacySongDocumentV4 = serde_json::from_str(json)?;
             migrate_v4_song(legacy_document)
         }
         3 => {
-            let legacy_document: LegacySongDocumentV3 = serde_json::from_str(&json)?;
+            let legacy_document: LegacySongDocumentV3 = serde_json::from_str(json)?;
             migrate_v3_song(legacy_document)
         }
         2 => {
-            let legacy_document: LegacySongDocumentV2 = serde_json::from_str(&json)?;
+            let legacy_document: LegacySongDocumentV2 = serde_json::from_str(json)?;
             migrate_v2_song(legacy_document)
         }
         version => Err(ProjectError::UnsupportedVersion(version)),
@@ -271,6 +292,7 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
         tracks: document.tracks,
         clips: document.clips,
         midi_clips: vec![],
+        video_clips: vec![],
         section_markers,
     };
 
@@ -305,6 +327,7 @@ fn migrate_v3_song(document: LegacySongDocumentV3) -> Result<Song, ProjectError>
         tracks: document.tracks,
         clips: document.clips,
         midi_clips: vec![],
+        video_clips: vec![],
         section_markers: document.section_markers,
     };
 
@@ -328,6 +351,7 @@ fn migrate_v4_song(document: LegacySongDocumentV4) -> Result<Song, ProjectError>
         tracks: document.tracks,
         clips: document.clips,
         midi_clips: vec![],
+        video_clips: vec![],
         section_markers: document.section_markers,
     };
 
@@ -571,6 +595,7 @@ mod tests {
             }],
             clips: vec![],
             midi_clips: vec![],
+            video_clips: vec![],
             section_markers: vec![],
         }
     }
@@ -1033,5 +1058,123 @@ mod tests {
                 .map(|track| track.kind),
             Some(TrackKind::Midi)
         );
+    }
+
+    fn video_track(id: &str, name: &str) -> libretracks_core::Track {
+        libretracks_core::Track {
+            id: id.into(),
+            name: name.into(),
+            kind: TrackKind::Video,
+            parent_track_id: None,
+            volume: 1.0,
+            pan: 0.0,
+            muted: false,
+            solo: false,
+            transpose_enabled: true,
+            audio_to: "master".into(),
+            mono_downmix: false,
+            color: None,
+            auto_created: false,
+            midi_port: None,
+            midi_channel: 1,
+            midi_enabled: true,
+            collapsed: false,
+            height_offset: None,
+        }
+    }
+
+    fn video_clip(
+        id: &str,
+        track_id: &str,
+        start: f64,
+        fit: Option<libretracks_core::VideoFit>,
+    ) -> libretracks_core::VideoClip {
+        libretracks_core::VideoClip {
+            id: id.into(),
+            track_id: track_id.into(),
+            file_path: format!("D:/Visuales/{id}.mp4"),
+            timeline_start_seconds: start,
+            source_start_seconds: 1.5,
+            duration_seconds: 6.0,
+            fade_in_seconds: Some(0.5),
+            fade_out_seconds: Some(1.0),
+            fit,
+            color: Some("#ff8800".into()),
+        }
+    }
+
+    fn song_with_video() -> Song {
+        use libretracks_core::VideoFit;
+        let mut song = base_song();
+        song.tracks.push(video_track("v1", "Letras"));
+        song.tracks.push(video_track("v2", "Fondos"));
+        song.video_clips = vec![
+            video_clip("vc1", "v1", 0.0, Some(VideoFit::Contain)),
+            video_clip("vc2", "v1", 8.0, None),
+            video_clip("vc3", "v2", 2.0, Some(VideoFit::Stretch)),
+        ];
+        song
+    }
+
+    /// C1 del paso 03 del plan de vídeo.
+    #[test]
+    fn video_clips_round_trip_through_save_and_load() {
+        let song = song_with_video();
+        let dir = tempfile::tempdir().expect("temp dir");
+        save_song(dir.path(), &song).expect("save song with video clips");
+        let loaded = load_song(dir.path()).expect("reload song with video clips");
+
+        assert_eq!(loaded, song);
+        let raw: Value = serde_json::from_str(
+            &std::fs::read_to_string(song_file_path(dir.path())).expect("read saved file"),
+        )
+        .expect("saved file is json");
+        assert_eq!(raw["version"], 8);
+        assert_eq!(raw["videoClips"][0]["fit"], "contain");
+        // `None` = inherit the output's fit, and must stay absent on disk.
+        assert!(raw["videoClips"][1].get("fit").is_none());
+        assert_eq!(raw["tracks"][1]["kind"], "video");
+    }
+
+    /// C2: a real v7 document shipped in the repo opens with no video clips
+    /// and is saved back as v8 without any other change.
+    #[test]
+    fn real_v7_document_opens_and_saves_as_v8_unchanged() {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/desktop/src-tauri/resources/demo/song.ltsession");
+        let v7_json = std::fs::read_to_string(&fixture).expect("demo fixture");
+        let v7_raw: Value = serde_json::from_str(&v7_json).expect("fixture is json");
+        assert_eq!(v7_raw["version"], 7, "the fixture must stay a v7 document");
+
+        let song = load_song_from_file(&fixture).expect("v7 document loads");
+        assert!(song.video_clips.is_empty());
+
+        let saved = serialize_song_document(&song).expect("serialize as v8");
+        let mut saved_raw: Value = serde_json::from_str(&saved).expect("saved is json");
+        assert_eq!(saved_raw["version"], 8);
+        assert_eq!(saved_raw["videoClips"], serde_json::json!([]));
+
+        // Nothing else changed: the v8 document minus the new field and the
+        // version is the same song as the v7 one read back.
+        let object = saved_raw.as_object_mut().expect("object");
+        object.remove("videoClips");
+        object.insert("version".into(), Value::from(7));
+        let reread = parse_song_document(&saved_raw.to_string(), SONG_FORMAT_VERSION)
+            .expect("stripped document is a valid v7");
+        assert_eq!(reread, song);
+    }
+
+    /// C3: a reader that only knows v7 must refuse a v8 document with video
+    /// instead of reading it without the clips (and later saving it so).
+    #[test]
+    fn a_v7_reader_rejects_a_v8_document_with_video() {
+        let json = serialize_song_document(&song_with_video()).expect("serialize");
+        match parse_song_document(&json, 7) {
+            Err(ProjectError::UnsupportedVersion(8)) => {}
+            other => panic!("a v7 reader must reject v8, got {other:?}"),
+        }
+        // The current reader, of course, accepts it.
+        let song = parse_song_document(&json, SONG_FORMAT_VERSION).expect("v8 reader");
+        assert_eq!(song.video_clips.len(), 3);
     }
 }

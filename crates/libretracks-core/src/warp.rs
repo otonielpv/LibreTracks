@@ -301,6 +301,7 @@ mod tests {
                 color: None,
             }],
             midi_clips: vec![],
+            video_clips: vec![],
             section_markers: vec![],
         }
     }
