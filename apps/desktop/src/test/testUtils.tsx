@@ -25,6 +25,8 @@ import { App as AppComponent } from "../app/App";
 import { useTourStore } from "../features/tutorial/tourStore";
 import { useCloudStore } from "../features/transport/cloud/cloudStore";
 import { useRenderStore } from "../features/transport/render/renderStore";
+import { INITIAL_VIDEO_STATE, useVideoStore } from "../features/transport/video/videoStore";
+import { resetVideoCanvasState } from "../features/transport/video/videoCanvasState";
 import { emitWaveformReadyForTest, resetTestDesktopApiMock, testDesktopApiMock } from "../app/testDesktopApiMock";
 
 export type MockWebviewDragDropEvent =
@@ -86,6 +88,15 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     listenToWaveformProgress: vi.fn(testDesktopApiMock.listenToWaveformProgress),
     listenToSettingsUpdated: vi.fn(testDesktopApiMock.listenToSettingsUpdated),
     listenToMidiRawMessage: vi.fn(testDesktopApiMock.listenToMidiRawMessage),
+    // Video: libmpv is never there in tests; the feature must cope.
+    getVideoMediaStatus: vi.fn(async () => ({
+      supportedPlatform: true,
+      available: false,
+      reason: "libmpv not loaded in tests",
+    })),
+    listVideoAssets: vi.fn(async () => []),
+    getVideoThumbnails: vi.fn(async () => null),
+    listenToVideoThumbnailsReady: vi.fn(async () => () => {}),
     getTransportSnapshot: vi.fn(testDesktopApiMock.getTransportSnapshot),
     getSongView: vi.fn(testDesktopApiMock.getSongView),
     getWaveformSummaries: vi.fn(testDesktopApiMock.getWaveformSummaries),
@@ -315,6 +326,9 @@ beforeEach(async () => {
   // El modal de renderizar se abre desde un store; sin cerrarlo, una prueba
   // que lo abra lo dejaria abierto encima de la siguiente.
   useRenderStore.setState({ target: null });
+  // Video selection and library, and the canvas thumbnail/preview registry.
+  useVideoStore.setState(INITIAL_VIDEO_STATE);
+  resetVideoCanvasState();
   vi.clearAllMocks();
   vi.restoreAllMocks();
   await i18n.changeLanguage("en");

@@ -1,3 +1,4 @@
+import { VideoLibrarySection } from "../video/VideoLibrarySection";
 import {
   useCallback,
   useEffect,
@@ -828,6 +829,8 @@ export function LibrarySidebarPanel({
             ))}
           </div>
         ) : null}
+
+        {isMobileApp ? null : <VideoLibrarySection />}
 
         {contextMenu ? (
           <div

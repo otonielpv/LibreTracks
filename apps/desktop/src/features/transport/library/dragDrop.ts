@@ -10,6 +10,24 @@ export const LIBRARY_ASSET_DRAG_MIME = "application/libretracks-library-assets";
 
 const SUPPORTED_AUDIO_EXTENSIONS = new Set(["wav", "mp3", "flac", "ogg", "aiff", "aif", "m4a"]);
 
+// Video files go to the video feature (features/transport/video), never to the
+// audio importer: a video dropped on an audio track must not become an audio
+// clip. Keep in step with VIDEO_FILE_EXTENSIONS in libretracks-core.
+export const SUPPORTED_VIDEO_EXTENSIONS = new Set([
+  "mp4",
+  "m4v",
+  "mov",
+  "mkv",
+  "webm",
+  "avi",
+  "mpg",
+  "mpeg",
+]);
+
+export function isVideoFilePath(path: string): boolean {
+  return SUPPORTED_VIDEO_EXTENSIONS.has(fileExtension(pathFileName(path)));
+}
+
 // Reaper / Ableton project files: dropping one imports it as a song, like a
 // .ltpkg. Single-file only (mixing with audio/other files is rejected).
 const EXTERNAL_PROJECT_EXTENSIONS = new Set(["rpp", "als"]);
@@ -26,6 +44,7 @@ export function isAcceptedDroppedFileName(name: string): boolean {
   return (
     ext === "ltpkg" ||
     SUPPORTED_AUDIO_EXTENSIONS.has(ext) ||
+    SUPPORTED_VIDEO_EXTENSIONS.has(ext) ||
     EXTERNAL_PROJECT_EXTENSIONS.has(ext)
   );
 }
@@ -85,6 +104,7 @@ export type ExternalDropKind =
   | "package"
   | "external"
   | "audio"
+  | "video"
   | "mixed"
   | "unsupported"
   | "unknown";
@@ -209,6 +229,12 @@ export type NativeDroppedPathClassification =
   | {
       kind: "audio";
       audioPaths: string[];
+      /** Videos dropped together with the audio: imported as video clips. */
+      videoPaths?: string[];
+    }
+  | {
+      kind: "video";
+      videoPaths: string[];
     }
   | {
       kind: "mixed";
@@ -364,12 +390,18 @@ export function classifyDroppedPaths(paths: string[]): NativeDroppedPathClassifi
   const packagePaths: string[] = [];
   const externalPaths: string[] = [];
   const audioPaths: string[] = [];
+  const videoPaths: string[] = [];
   const unsupportedPaths: string[] = [];
 
   for (const path of paths) {
     const extension = fileExtension(pathFileName(path));
     if (extension === "ltpkg") {
       packagePaths.push(path);
+      continue;
+    }
+
+    if (SUPPORTED_VIDEO_EXTENSIONS.has(extension)) {
+      videoPaths.push(path);
       continue;
     }
 
@@ -417,6 +449,15 @@ export function classifyDroppedPaths(paths: string[]): NativeDroppedPathClassifi
       kind: "mixed",
       paths,
     };
+  }
+
+  if (packagePaths.length === 0 && externalPaths.length === 0 && videoPaths.length > 0) {
+    if (unsupportedPaths.length > 0) {
+      return { kind: "unsupported", paths };
+    }
+    return audioPaths.length > 0
+      ? { kind: "audio", audioPaths, videoPaths }
+      : { kind: "video", videoPaths };
   }
 
   if (audioPaths.length > 0 && unsupportedPaths.length === 0) {

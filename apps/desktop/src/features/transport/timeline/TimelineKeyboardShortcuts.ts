@@ -86,6 +86,14 @@ type TimelineKeyboardShortcutsProps = {
   t: (key: string, options?: Record<string, unknown>) => string;
   toggleViewMode: () => void;
   toggleViewModeBackward: () => void;
+  /** Split/delete/duplicate for selected VIDEO clips (video/videoClipHandlers).
+   * Each returns whether a video selection handled the key; the audio action
+   * still runs for any selected audio clips. */
+  videoEdits?: {
+    splitSelected: () => Promise<boolean>;
+    deleteSelected: () => boolean;
+    duplicateSelected: () => boolean;
+  };
 };
 
 /**
@@ -127,7 +135,10 @@ export function useTimelineKeyboardShortcuts({
   t,
   toggleViewMode,
   toggleViewModeBackward,
+  videoEdits,
 }: TimelineKeyboardShortcutsProps) {
+  const videoEditsRef = useRef(videoEdits);
+  videoEditsRef.current = videoEdits;
   // Kept in a ref, not the effect's dep array: it closes over per-render
   // values in the panel, so listing it would re-register the key listener on
   // every render.
@@ -219,7 +230,12 @@ export function useTimelineKeyboardShortcuts({
         if (event.repeat) {
           return;
         }
-        void splitSelectedClipsUnderCursor();
+        void (async () => {
+          const videoHandled = (await videoEditsRef.current?.splitSelected()) ?? false;
+          if (!videoHandled || selectedClipIds.length > 0) {
+            await splitSelectedClipsUnderCursor();
+          }
+        })();
       },
       "edit.copy": (event) => {
         event.preventDefault();
@@ -244,6 +260,9 @@ export function useTimelineKeyboardShortcuts({
       "edit.duplicate": (event) => {
         event.preventDefault();
         if (event.repeat) {
+          return;
+        }
+        if (videoEditsRef.current?.duplicateSelected() && selectedClipIds.length === 0) {
           return;
         }
         void runAction(async () => {
@@ -299,6 +318,11 @@ export function useTimelineKeyboardShortcuts({
       },
       "edit.delete": (event) => {
         event.preventDefault();
+        // Selected video clips go first. With no audio clip also selected,
+        // stop there: the fallbacks below would delete tracks or the song.
+        if (videoEditsRef.current?.deleteSelected() && !selectedClipId && selectedClipIds.length === 0) {
+          return;
+        }
         if (selectedClipIds.length > 1) {
           // Multi-clip deletion via the batched backend command — a single
           // engine sync + one snapshot reload + one history entry, instead of

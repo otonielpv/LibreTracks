@@ -12128,3 +12128,185 @@ html.lt-ios body {
     0 0 0 1px rgba(87, 241, 219, 0.18),
     0 0 18px rgba(87, 241, 219, 0.16);
 }
+
+/* ---- Video (docs/plans/video-output). The canvas paints the clips; these
+   are the header of a video track and the invisible hit targets over each
+   clip. Teal (#3fb8af) is the video accent, apart from audio, MIDI (violet)
+   and automation (pink). */
+.lt-video-track-header .lt-video-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding-right: 8px;
+  min-width: 0;
+}
+
+.lt-video-track-header .lt-video-header-icon {
+  flex: 0 0 auto;
+  font-size: 18px;
+  color: #3fb8af;
+}
+
+.lt-video-track-header .lt-video-header-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-video-track-header.is-video-hidden .lt-video-header-name,
+.lt-video-track-header.is-video-hidden .lt-video-header-icon {
+  opacity: 0.45;
+}
+
+.lt-video-track-header.is-read-only {
+  opacity: 0.6;
+}
+
+.lt-video-eye,
+.lt-video-solo {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(186, 202, 197, 0.28);
+  background: rgba(20, 20, 20, 0.85);
+  color: rgba(186, 202, 197, 0.6);
+  cursor: pointer;
+  padding: 0;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.lt-video-eye .material-symbols-outlined {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.lt-video-eye.is-active {
+  border-color: rgba(63, 184, 175, 0.85);
+  background: rgba(63, 184, 175, 0.18);
+  color: #7fe0d8;
+}
+
+.lt-video-solo.is-active {
+  border-color: rgba(255, 196, 0, 0.85);
+  background: rgba(255, 196, 0, 0.18);
+  color: #ffd766;
+}
+
+.lt-video-clip-hotspot {
+  position: absolute;
+  /* left/width come from the rAF loop in useVideoClipHotspots. */
+  left: 0;
+  width: 0;
+  z-index: 5;
+  cursor: grab;
+  touch-action: none;
+}
+
+.lt-video-clip-hotspot.is-read-only {
+  cursor: default;
+}
+
+.lt-video-clip-hotspot .lt-video-trim {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: ew-resize;
+}
+
+.lt-video-clip-hotspot .lt-video-trim.is-start {
+  left: 0;
+}
+
+.lt-video-clip-hotspot .lt-video-trim.is-end {
+  right: 0;
+}
+
+/* Fade handles: small squares on the top edge at the end of each fade. */
+.lt-video-clip-hotspot .lt-video-fade {
+  position: absolute;
+  top: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: #3fb8af;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  cursor: col-resize;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.lt-video-clip-hotspot:hover .lt-video-fade {
+  opacity: 1;
+}
+
+.lt-video-clip-hotspot .lt-video-fade.is-in {
+  left: calc(var(--lt-video-fade-in, 0px) + 6px);
+}
+
+.lt-video-clip-hotspot .lt-video-fade.is-out {
+  right: calc(var(--lt-video-fade-out, 0px) + 6px);
+}
+
+.lt-library-video-section {
+  margin-top: 10px;
+}
+
+.lt-library-video-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #7fe0d8;
+}
+
+.lt-library-video-heading .material-symbols-outlined {
+  font-size: 15px;
+}
+
+.lt-library-video-asset .lt-library-asset-icon {
+  color: #3fb8af;
+}
+
+.lt-library-video-warning {
+  flex: 0 0 auto;
+  font-size: 15px;
+  color: #ffc400;
+}
+
+.lt-library-video-add {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #7fe0d8;
+  cursor: pointer;
+}
+
+.lt-library-video-add:hover {
+  background: rgba(63, 184, 175, 0.18);
+}
+
+.lt-library-video-add .material-symbols-outlined {
+  font-size: 16px;
+}

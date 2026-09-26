@@ -89,6 +89,7 @@ import { clipContextMenuActions } from "./clipMenu";
 import type { ExportSongTarget } from "../panels/ExportSongModal";
 import { openRenderSong } from "../render/renderStore";
 import type { ShortcutActionId } from "../keyboard/actions";
+import { createVideoMenus } from "./videoMenus";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -209,6 +210,12 @@ export type TimelineMenuDeps = {
   toggleMidiTrackEnabled: (trackId: string) => void;
   deleteMidiClip: (clipId: string) => Promise<unknown>;
   moveMidiClip: (clipId: string, timelineStartSeconds: number) => void;
+  /** Video clip edits (absent on mobile, where video is read-only). */
+  videoHandlers?: import("../video/videoClipHandlers").VideoClipHandlers;
+  /** Extra clip-menu entries other video steps add (e.g. extract audio). */
+  videoExtraClipActions?: (
+    clip: import("@libretracks/shared/models").VideoClipSummary,
+  ) => ContextMenuAction[];
   setIsMixSceneModalOpen: (next: boolean) => void;
   clearSelection: () => void;
   selectTrack: (trackIds: string[]) => void;
@@ -1021,6 +1028,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     clipCallbacks: midiClipCallbacks,
     midiTrackContextMenu,
   } = createMidiMenus(getDeps, openColorMenu);
+  const { openVideoClipMenu, videoTrackContextMenu } = createVideoMenus(getDeps, openColorMenu);
 
   function trackContextMenu(
     track: TrackSummary,
@@ -1037,6 +1045,9 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       return laneSeconds === undefined
         ? midiTrackContextMenu(track)
         : midiLaneContextMenu(track.id, laneSeconds);
+    }
+    if (track.kind === "video") {
+      return videoTrackContextMenu(track);
     }
 
     const previousFolder = findPreviousFolderTrack(currentSong, track.id);
@@ -1274,6 +1285,9 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         label: t("transport.midi.addTrack"),
         onSelect: () => d.handleCreateTrack("midi", null, null),
       },
+      ...(d.videoHandlers
+        ? [{ label: t("transport.video.addTrack"), onSelect: () => d.handleCreateTrack("video", null, null) }]
+        : []),
     ];
 
     // Offer the automation lane only when it isn't already present. From the
@@ -1355,6 +1369,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     midiLaneContextMenu,
     openMidiClipMenu,
     midiClipCallbacks,
+    openVideoClipMenu,
     rulerContextMenu,
     songRegionContextMenu,
     tempoMarkerContextMenu,

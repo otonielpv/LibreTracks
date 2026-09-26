@@ -52,6 +52,7 @@ import {
   skippedImportsMessage,
 } from "./importPipeline";
 import { placeLibraryFolderOnTimeline } from "./libraryFolderDrop";
+import { divertVideoPaths, routeDroppedVideos, type VideoPathSink } from "./videoDropRouting";
 import {
   buildTimelineDropPreviewGeometry,
   classifyDroppedPaths,
@@ -223,6 +224,8 @@ export type LibraryDragDropDeps = {
     songName: string,
     assets: LibraryAssetSummary[],
   ) => Promise<unknown>;
+  /** Video files go to the video feature; see library/videoDropRouting.ts. */
+  importVideoPaths?: VideoPathSink["importVideoPaths"];
 };
 
 export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
@@ -1741,6 +1744,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       return;
     }
 
+    paths = divertVideoPaths(deps(), paths, null);
     if (!paths.length) {
       return;
     }
@@ -1896,6 +1900,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
   function handleNativeExternalTimelineDrop(
     classification: NativeDroppedPathClassification,
     dropSeconds: number,
+    targetTrackId: string | null = null,
   ) {
     deps().setExternalDropPreview(null);
     deps().setCompactDragPreview(null);
@@ -1938,6 +1943,10 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       return;
     }
 
+    const placement = { seconds: dropSeconds, trackId: targetTrackId };
+    if (routeDroppedVideos(deps(), classification, placement) || classification.kind === "video") {
+      return;
+    }
     handleDroppedAudioPaths(classification.audioPaths, dropSeconds);
   }
 
@@ -2210,6 +2219,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     handleNativeExternalTimelineDrop(
       classifyDroppedPaths(args.paths),
       dropSeconds,
+      hit.targetTrackId,
     );
   }
 

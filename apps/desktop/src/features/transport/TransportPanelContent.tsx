@@ -269,6 +269,7 @@ import { MidiModals } from "./midi/MidiModals";
 import { useMidiDrafts } from "./midi/useMidiDrafts";
 import { buildMidiOutputSettings } from "./midi/midiOutputSettings";
 import { createMidiClipHandlers } from "./midi/midiClipHandlers";
+import { useVideoFeature } from "./video/useVideoFeature";
 import { MixSceneModal } from "./panels/MixSceneModal";
 import { RemotePanel } from "./panels/RemotePanel";
 import { MobileLanding } from "./compact/MobileLanding";
@@ -4824,7 +4825,15 @@ export function TransportPanelContent() {
     t,
   ]);
 
+  // Video lives in video/; this panel only passes it on (CLAUDE.md rule).
+  const video = useVideoFeature({
+    song, runAction, applyPlaybackSnapshot, setStatus, t,
+    getPlayheadSeconds: () => displayPositionSecondsRef.current,
+    openClipMenu: (event, clip) => timelineMenus.openVideoClipMenu(event, clip),
+  });
+
   const { runShortcutAction } = useTimelineKeyboardShortcuts({
+    videoEdits: video.keyboardEdits,
     runAction,
     applyPlaybackSnapshot,
     forcePlaybackVisualAnchor: applyTransportVisualAnchor,
@@ -5402,6 +5411,7 @@ export function TransportPanelContent() {
   // purpose: its deps include values declared lower in the body.
   useEffect(() => {
     timelineMenuDepsRef.current = {
+      videoHandlers: video.handlers,
       t,
       shortcutHint,
       song,
@@ -6598,6 +6608,7 @@ export function TransportPanelContent() {
   // ref null on that first pass. See ./library/libraryDragDrop.
   const libraryDragDropDepsRef = useRef<LibraryDragDropDeps | null>(null);
   libraryDragDropDepsRef.current = {
+      importVideoPaths: video.importVideoPaths,
       t,
       song,
       songBaseBpm,
@@ -7973,6 +7984,7 @@ export function TransportPanelContent() {
                           }}
                           onTrackListContextMenu={handleEmptyAreaContextMenu}
                           midiClips={timelineMenus.midiClipCallbacks}
+                          videoLanes={video.lanes}
                           onTrackLaneMouseDown={handleTrackLaneMouseDown}
                           onTimelineBackgroundMouseDown={(event) => {
                             if (

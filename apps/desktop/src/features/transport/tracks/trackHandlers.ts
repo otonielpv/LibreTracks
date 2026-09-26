@@ -240,7 +240,9 @@ export function createTrackHandlers(deps: TrackHandlerDeps) {
       const defaultName =
         kind === "folder"
           ? t("transport.defaults.folderTrackName")
-          : t("transport.defaults.audioTrackName");
+          : kind === "video"
+            ? t("transport.video.trackDefaultName")
+            : t("transport.defaults.audioTrackName");
       const name = (await prompt(t("transport.prompt.trackName"), defaultName))?.trim();
       if (!name) {
         return;

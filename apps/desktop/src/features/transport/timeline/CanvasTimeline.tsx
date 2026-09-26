@@ -62,6 +62,7 @@ import {
 import { intersectVisibleBounds } from "../Renderer/gestureBounds";
 import { createTimelineVerticalScroller } from "./timelineVerticalScroll";
 import { isMobileApp } from "../desktopApi";
+import { consumeVideoRepaint } from "../video/videoCanvasState";
 import { useTimelineUIStore } from "../uiStore";
 
 type RulerCanvasProps = {
@@ -1033,7 +1034,13 @@ export function TimelineTrackCanvas({
         renderTracks: (context, snapshot, viewport) => {
           drawTrackClipsLayer(context, snapshot, viewport);
         },
-        drainTileWork: () => drainWaveformTileWork(),
+        drainTileWork: () => {
+          // Both run every frame: a video repaint request must not wait
+          // behind a busy waveform tile queue.
+          const drainedTiles = drainWaveformTileWork();
+          const videoChanged = consumeVideoRepaint();
+          return drainedTiles || videoChanged;
+        },
       },
     );
     rendererRef.current = renderer;

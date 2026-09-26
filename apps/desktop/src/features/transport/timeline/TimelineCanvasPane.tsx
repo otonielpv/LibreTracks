@@ -51,6 +51,7 @@ import { useFollowerX } from "./useFollowerX";
 import { regionHotspotBounds } from "./regionHotspotBounds";
 import { useRegionDrag } from "./useRegionDrag";
 import { MidiClipHotspots, MidiDropGuide } from "../midi/MidiClipHotspots";
+import { VideoClipHotspots } from "../video/VideoClipHotspots";
 import { useMidiLane } from "../midi/useMidiLane";
 import { useMarkerMoveDrag } from "./useMarkerMoveDrag";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
@@ -283,6 +284,7 @@ type TimelineCanvasPaneProps = {
   onPlayheadEdgeAutoScroll: (deltaPx: number) => number;
   onTrackListContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   /** MIDI clip callbacks (edit, context menu, drag commit), grouped. */
+  videoLanes?: import("../video/VideoClipHotspots").VideoLaneBindings;
   midiClips?: {
     onEdit?: (clip: MidiClipSummary) => void;
     onContextMenu?: (
@@ -395,6 +397,7 @@ export function TimelineCanvasPane({
   onPlayheadEdgeAutoScroll,
   onTrackListContextMenu,
   midiClips,
+  videoLanes,
   onTrackLaneMouseDown,
   onTimelineBackgroundMouseDown,
   onTrackLaneContextMenu,
@@ -1567,6 +1570,7 @@ export function TimelineCanvasPane({
                   style={{ height: rowHeight }}
                 >
                   <div
+                    data-video-lane-track-id={track.kind === "video" ? track.id : undefined}
                     className={`lt-track-lane ${track.kind === "folder" ? "is-folder" : ""} ${track.kind === "midi" ? "is-midi" : ""} ${isPendingTrack ? "is-pending" : ""}`}
                     style={{ height: rowHeight }}
                     aria-label={`Lane ${track.name}`}
@@ -1589,6 +1593,8 @@ export function TimelineCanvasPane({
                   >
                     {track.kind === "midi" ? (
                       <MidiClipHotspots {...midiLane.lane(track.id, rowHeight)} />
+                    ) : track.kind === "video" && videoLanes ? (
+                      <VideoClipHotspots trackId={track.id} song={song} rowHeight={rowHeight} camera={{ cameraXRef, livePixelsPerSecondRef, pixelsPerSecond }} snapEnabled={snapEnabled} lane={videoLanes} />
                     ) : null}
                     {libraryClipPreview
                       .filter((preview) => preview.trackId === track.id)

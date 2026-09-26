@@ -8,6 +8,9 @@ import i18n from "../../../shared/i18n";
 import { recordTileDrain, reportWaveformTileCache } from "../perf/perfMetrics";
 import type { TrackSceneSnapshot, TimelineViewportMetrics } from "./TimelineRenderer";
 import { clamp, secondsToScreenX } from "../timeline/timelineMath";
+import { isMobileApp } from "../desktopApi";
+import { useVideoStore } from "../video/videoStore";
+import { drawVideoLane } from "./drawVideoLane";
 import type { TrackRowLayout } from "../tracks/trackLayout";
 import {
   drawWaveformSketch,
@@ -730,6 +733,17 @@ export function drawTrackClipsLayer(
 
     if (track.kind === "midi") {
       drawMidiLane(context, snapshot, trackTop, track.id, rowHeight);
+      continue;
+    }
+
+    if (track.kind === "video") {
+      drawVideoLane(context, snapshot, trackTop, track.id, rowHeight, {
+        trackColor: track.color,
+        muted: track.muted,
+        readOnly: isMobileApp,
+        selectedClipIds: new Set(useVideoStore.getState().selectedVideoClipIds),
+        missingLabel: i18n.t("transport.video.missing"),
+      });
       continue;
     }
 

@@ -15,6 +15,7 @@ import type { TimelineTrackSummary } from "../library/pendingAudioImports";
 import { useSongStore } from "../songStore";
 import { TrackHeaderItem } from "./TrackHeaderItem";
 import { MidiTrackHeader } from "../midi/MidiTrackHeader";
+import { VideoTrackHeader } from "../video/VideoTrackHeader";
 import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
 import { useTimelineUIStore } from "../uiStore";
 
@@ -319,6 +320,24 @@ export function TrackHeadersPane({
                   onStartTrackDrag={onStartTrackDrag}
                   onToggleEnabled={midiLanes?.onToggleMidiEnabled ?? (() => {})}
                   onEditRoute={midiLanes?.onEditRoute ?? (() => {})}
+                />
+              ) : track.kind === "video" ? (
+                <VideoTrackHeader
+                  trackId={track.id}
+                  trackName={track.name}
+                  trackColor={track.color}
+                  trackHeight={rowHeight}
+                  trackDepth={track.depth}
+                  muted={track.muted}
+                  solo={track.solo}
+                  isSelected={isTrackSelected}
+                  densityClass={trackDensityClass}
+                  readOnly={isMobileApp}
+                  onSelectTrack={onSelectTrack}
+                  onOpenContextMenu={onOpenContextMenu}
+                  onStartTrackDrag={onStartTrackDrag}
+                  onToggleMute={onToggleMute}
+                  onToggleSolo={onToggleSolo}
                 />
               ) : (
               <TrackHeaderItem
