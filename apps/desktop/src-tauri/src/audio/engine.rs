@@ -1241,6 +1241,9 @@ impl AudioController {
             if state.loaded_session_signature.is_some() {
                 state.loaded_session_signature = Some(session_signature(&resolved_song));
             }
+            // Imports take this path, not a full load: without this the new
+            // sources decode unseen and "Preparing audio…" never shows.
+            state.current_song_source_ids = current_song_source_ids(&resolved_song);
             state.last_sync = Some(AudioOperationSummary {
                 reason: Some("upsert_song_tracks".into()),
                 elapsed_ms: 0.0,
@@ -2906,12 +2909,6 @@ fn force_load_song(
     song: &Song,
 ) -> Result<(), DesktopError> {
     let resolved = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
-    state.current_song_source_ids = resolved
-        .clips
-        .iter()
-        .map(|clip| normalize_source_id(&clip.file_path))
-        .filter(|path| !path.is_empty())
-        .collect();
     let signature = session_signature(&resolved);
     load_resolved_song(engine, state, &resolved, signature)
 }
@@ -2922,12 +2919,26 @@ fn normalize_source_id(path: &str) -> String {
     path.trim().replace('\\', "/")
 }
 
+/// Sources the "Preparing audio…" readiness summary counts. Expects a song whose
+/// clip paths are already resolved (same ids the engine registers).
+fn current_song_source_ids(resolved: &Song) -> HashSet<String> {
+    resolved
+        .clips
+        .iter()
+        .map(|clip| normalize_source_id(&clip.file_path))
+        .filter(|path| !path.is_empty())
+        .collect()
+}
+
 fn load_resolved_song(
     engine: &Engine,
     state: &mut ControllerState,
     song: &Song,
     signature: String,
 ) -> Result<(), DesktopError> {
+    // Every load path (full or forced) must refresh the set the "Preparing
+    // audio…" summary filters by, or new sources are invisible to it.
+    state.current_song_source_ids = current_song_source_ids(song);
     let runtime_song = song_with_warped_timeline(song);
     let project_json = serde_json::to_string(&runtime_song)
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
