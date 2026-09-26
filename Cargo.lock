@@ -2599,6 +2599,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "libretracks-video"
+version = "0.0.1"
+dependencies = [
+ "libloading 0.8.9",
+ "libretracks-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,0 +1,16 @@
+[package]
+name = "libretracks-video"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Salida de vídeo de LibreTracks: libmpv cargada en ejecución, monitores, miniaturas y reproductor."
+
+[dependencies]
+libretracks-core = { path = "../libretracks-core" }
+libloading = "0.8"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
