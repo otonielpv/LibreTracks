@@ -343,12 +343,28 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          log="$RUNNER_TEMP/altool-upload.log"
           xcrun altool --upload-app \
             --type ios \
             --file "$IPA_PATH" \
             --apiKey "$APPLE_API_KEY" \
-            --apiIssuer "$APPLE_API_ISSUER"
+            --apiIssuer "$APPLE_API_ISSUER" 2>&1 | tee "$log"
+          status=${PIPESTATUS[0]}
+
+          # altool has been seen to EXIT 0 while printing "UPLOAD FAILED with 2
+          # errors": it happened on 2026-09-26 with build 15, the job went green
+          # and nothing ever reached TestFlight. --validate-app does not catch
+          # it either, because the release train state is only checked at
+          # ingestion. So the exit code alone is not trusted; the log is read.
+          if [ "$status" -ne 0 ] || grep -qE "UPLOAD FAILED|Failed to upload package" "$log"; then
+            echo "::error::altool did not upload the IPA. See the log above."
+            if grep -q "Invalid Pre-Release Train" "$log"; then
+              echo "::error::This version is closed for new builds: once a version is approved, App Store Connect takes no more builds for it. Bump the marketing version (for example 1.12.0 to 1.12.1) and build again."
+            fi
+            exit 1
+          fi
+
           echo "Uploaded. App Store Connect still has to finish processing the"
           echo "build before it appears in TestFlight; that takes a few minutes"
           echo "and can still fail by email (export compliance, missing icons)."
