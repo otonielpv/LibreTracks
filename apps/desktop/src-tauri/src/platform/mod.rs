@@ -52,6 +52,8 @@ pub mod android_audio_devices;
 #[cfg(target_os = "android")]
 pub mod android_content_uri;
 #[cfg(target_os = "android")]
+pub mod android_create_document;
+#[cfg(target_os = "android")]
 pub mod android_memory;
 #[cfg(target_os = "android")]
 pub mod android_persistable_pick;

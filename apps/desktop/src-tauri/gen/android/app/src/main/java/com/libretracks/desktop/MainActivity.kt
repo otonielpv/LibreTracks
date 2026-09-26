@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
+import android.webkit.MimeTypeMap
 import androidx.activity.enableEdgeToEdge
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -205,7 +206,54 @@ class MainActivity : TauriActivity() {
     }
   }
 
+  // "Guardar como" del sistema con el tipo MIME del fichero.
+  //
+  // tauri-plugin-dialog crea el documento siempre como "*/*". Con eso el
+  // proveedor no reconoce la extension como tal: al chocar con un fichero del
+  // mismo nombre anade el sufijo detras de todo ("mezcla.wav (1)"), y el
+  // fichero deja de ser audio para la galeria y los reproductores. Con el MIME
+  // real ("audio/x-wav") el proveedor separa nombre y extension y queda
+  // "mezcla (1).wav". Solo para extensiones que Android conoce: para el resto
+  // (.ltpkg, .ltset) no hay MIME mejor que el generico y Rust usa el dialogo
+  // de siempre.
+  fun createDocument(fileName: String) {
+    val extension = fileName.substringAfterLast('.', "").lowercase()
+    val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+    if (mime == null) {
+      deliverCreatedDocument(UNKNOWN_MIME)
+      return
+    }
+    val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+      addCategory(Intent.CATEGORY_OPENABLE)
+      type = mime
+      putExtra(Intent.EXTRA_TITLE, fileName)
+    }
+    try {
+      startActivityForResult(intent, REQUEST_CREATE_DOCUMENT)
+    } catch (error: Exception) {
+      Log.e("LTSave", "no se pudo abrir el dialogo de guardar", error)
+      deliverCreatedDocument("")
+    }
+  }
+
+  /** Devuelve el URI creado al lado Rust, que espera en un canal: "" es
+   *  "cancelado" y UNKNOWN_MIME "extension sin MIME, usa el dialogo generico". */
+  private fun deliverCreatedDocument(uri: String) {
+    try {
+      nativeOnDocumentCreated(uri)
+    } catch (error: UnsatisfiedLinkError) {
+      Log.e("LTSave", "libreria nativa no cargada", error)
+    }
+  }
+
+  private external fun nativeOnDocumentCreated(uri: String)
+
   override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    if (requestCode == REQUEST_CREATE_DOCUMENT) {
+      val uri = if (resultCode == RESULT_OK) data?.data?.toString() ?: "" else ""
+      deliverCreatedDocument(uri)
+      return
+    }
     if (requestCode != REQUEST_PICK_PERSISTABLE_AUDIO) {
       super.onActivityResult(requestCode, resultCode, data)
       return
@@ -285,5 +333,8 @@ class MainActivity : TauriActivity() {
 
   companion object {
     private const val REQUEST_PICK_PERSISTABLE_AUDIO = 0x4C54
+    private const val REQUEST_CREATE_DOCUMENT = 0x4C55
+    // Tiene que coincidir con UNKNOWN_MIME en android_create_document.rs.
+    private const val UNKNOWN_MIME = "!unknown-mime"
   }
 }

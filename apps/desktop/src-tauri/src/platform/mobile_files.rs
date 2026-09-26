@@ -55,7 +55,26 @@ pub fn pick_files(app: &AppHandle, title: &str) -> Vec<FilePath> {
 
 /// SAF "create document" dialog (the system save-as UI: Downloads, Drive,
 /// SD…). Blocks until the user picks a destination or cancels.
+///
+/// On Android the document is created with the MIME type of its extension
+/// when Android knows it (`.wav`, `.zip`), through our own dialog in
+/// MainActivity: the plugin always says `*/*`, and then a name clash comes out
+/// as `mix.wav (1)`, a file that is no longer audio for anyone. Extensions
+/// Android does not know (`.ltpkg`, `.ltset`) go through the plugin as before.
 pub fn save_file(app: &AppHandle, title: &str, suggested_name: &str) -> Option<FilePath> {
+    {
+        use crate::platform::android_create_document::{create_document, CreatedDocument};
+        match create_document(suggested_name) {
+            Ok(CreatedDocument::Created(uri)) => match tauri::Url::parse(&uri) {
+                Ok(url) => return Some(FilePath::Url(url)),
+                Err(error) => eprintln!("[LT_SAVE] URI no valido {uri}: {error}"),
+            },
+            Ok(CreatedDocument::Cancelled) => return None,
+            Ok(CreatedDocument::UnknownMime) => {}
+            // The dialog could not even open: fall back to the plugin's.
+            Err(error) => eprintln!("[LT_SAVE] {error}"),
+        }
+    }
     let (tx, rx) = mpsc::channel();
     app.dialog()
         .file()
