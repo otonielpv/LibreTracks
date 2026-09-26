@@ -106,6 +106,19 @@ std::string cache_identity_path(
     const std::function<std::string(const std::string&)>& read_link);
 std::string cache_identity_path(const std::string& path);
 
+// The PCM cache file the engine uses (or would use) for `source_id` at
+// `sample_rate`. Deterministic: it is keyed by the source's identity, its size
+// and mtime and the cache sample format, so anyone can find a conversion the
+// engine already made. The offline render reads it instead of decoding the
+// original again — on Android that decode goes through MediaCodec at ~8x
+// realtime, which made a five-track render take three minutes.
+std::string pcm_cache_file_for(const Id& source_id, const std::string& file_path,
+                               int sample_rate);
+
+// True while this process is writing `path` into the PCM cache. A reader
+// outside SourceManager must not take a conversion that is still growing.
+bool pcm_cache_write_in_progress(const std::string& path);
+
 // Delete all .rf64 PCM cache files; returns bytes freed. Best-effort.
 // `out_failed` (optional) receives the number of files that could NOT be
 // deleted — on Windows that is what happens to every cache file of a loaded

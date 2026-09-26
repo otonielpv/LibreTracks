@@ -190,6 +190,24 @@ Puedes exportar una canción en caso de aberla creado con las regiones, esto exp
 
 ![Exportar Canción](../screenshots/Export-Song.png)
 
+### Renderizar audio de una canción
+
+Para mandar a cada músico su pista de ensayo (al batería todo menos la batería, al guitarrista todo menos las guitarras):
+
+1. Haz click derecho sobre la canción (en el móvil, mantén pulsada la canción y abre el menú de la barra de selección; en la vista compacta, el menú de la columna).
+2. Elige `Renderizar audio…`.
+3. Marca las pistas que quieres dentro. Las carpetas tienen su propia casilla para marcar o quitar todas sus pistas de golpe.
+4. Elige la salida:
+   - `Mezcla (un archivo)`: todas las pistas marcadas en un solo WAV.
+   - `Pistas por separado (.zip)`: un WAV por pista, todos alineados desde el inicio de la canción, dentro de un `.zip`.
+5. Ajusta formato (WAV 16/24/32 bits), frecuencia de muestreo, estéreo o mono, y si quieres:
+   - `Aplicar la mezcla`: volumen y paneo de cada pista y carpeta y el volumen de la canción, como suenan al reproducir. Desmarcado, todas salen a 0 dB y centradas.
+   - `Normalizar`: deja el pico de cada archivo en -0,3 dB.
+   - `Incluir el metrónomo` / `Incluir la voz guía`: con tu configuración actual. En pistas por separado salen como archivos propios.
+6. Pulsa `Renderizar` y elige dónde guardarlo.
+
+El render respeta el cambio de tono y el warp de la canción, y no depende de mute ni solo: sale lo que marques. Puedes seguir reproduciendo mientras se renderiza.
+
 ### Importar canciones y paquetes
 
 Usa `Importar cancion` desde la sección `Archivo` en la parte superior cuando quieras traer otra cancion o paquete de sesion de LibreTracks a la sesion actual. Es util para construir un show a partir de canciones preparadas sin rehacer pistas y marcas a mano.

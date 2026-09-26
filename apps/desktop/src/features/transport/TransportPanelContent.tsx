@@ -258,6 +258,7 @@ import {
   ExportSongModal,
   type ExportSongTarget,
 } from "./panels/ExportSongModal";
+import { RenderSongModal } from "./render/RenderSongModal";
 import { ExportSessionModal } from "./panels/ExportSessionModal";
 import { beginExportWithChoice, cancelExportChoice, CloudLandingButton, CloudMenuItem, CloudSurfaces, confirmSessionExport, confirmSongExport, importSessionWithChoice, importSongWithChoice, useCloudStore } from "./cloud";
 import {
@@ -8274,6 +8275,8 @@ export function TransportPanelContent() {
               onCancel={() => { setExportSongTarget(null); cancelExportChoice(); }}
               onConfirm={confirmSongExport(song, handleConfirmExportSong)}
             />
+
+            <RenderSongModal />
 
             <ExportSessionModal
               isOpen={isExportSessionModalOpen}

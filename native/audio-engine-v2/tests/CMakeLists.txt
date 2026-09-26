@@ -45,12 +45,14 @@ add_executable(lt_engine_tests
     test_mixer_buses_step07.cpp
     test_render_pool_step08.cpp
     test_render_threads_step09.cpp
+    test_offline_renderer.cpp
 )
 
 target_link_libraries(lt_engine_tests
     PRIVATE
         lt_audio_engine_v2
         lt_deps_decoder
+        lt_deps_json
         doctest::doctest
 )
 

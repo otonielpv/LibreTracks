@@ -1188,6 +1188,17 @@ export const testDesktopApiMock = {
     return clone({ assets: importedAssets, skipped: [] });
   },
   exportRegionAsPackage: async (_regionId: string) => {},
+  renderSongAudio: async (request: { fileName: string; mode: "mix" | "stems" }) => ({
+    saved: true,
+    cancelled: false,
+    fileName: `${request.fileName}.${request.mode === "mix" ? "wav" : "zip"}`,
+    fileCount: 1,
+    missingFiles: [] as string[],
+  }),
+  cancelRenderSongAudio: async () => {},
+  listenToRenderAudioProgress: async (
+    _handler: (event: { fraction: number; stage: string }) => void,
+  ) => () => {},
   importSongPackage: async (_packagePath: string, _insertAtSeconds: number) => {
     addImportedPackageAsset();
     replaceSong({

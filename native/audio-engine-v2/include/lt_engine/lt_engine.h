@@ -182,6 +182,21 @@ LT_API const char* lt_audio_engine_analyze_file_peaks_progressive(
     LtPeakProgressCallback on_progress,
     void* progress_ctx);
 
+/** Progress of `lt_audio_engine_render_offline`, `fraction` in [0,1]. Return
+ *  non-zero to keep going, 0 to cancel. Called on the rendering thread. */
+typedef int32_t (*LtRenderProgressCallback)(void* ctx, double fraction);
+
+/** Render a timeline range to WAV files ("Render audio"), faster than realtime
+ *  and without touching any engine instance: it builds its own session from
+ *  the request's `project_json` (the LoadSession payload). Blocks the calling
+ *  thread for the whole render. `request_json` schema: see
+ *  lt::offline_render_request_from_json. Returns a JSON report
+ *  {ok, error?, cancelled?, files:[{path,frames,peak}], missing_clips,
+ *  missing_files}, valid until the next call on this thread. */
+LT_API const char* lt_audio_engine_render_offline(const char* request_json,
+                                                  LtRenderProgressCallback on_progress,
+                                                  void* progress_ctx);
+
 /** Decode a pad key (`<pads_dir>/<pad_id>/<key>.<ext>`) and swap it into the
  *  ambient-pad renderer immediately, on the calling thread. Intended to be
  *  called WITHOUT holding the host's engine lock, so the multi-second MP3

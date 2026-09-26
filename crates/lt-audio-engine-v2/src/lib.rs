@@ -7,6 +7,7 @@ mod commands;
 mod error;
 mod events;
 mod ffi;
+mod render;
 mod snapshot;
 
 #[cfg(test)]
@@ -15,6 +16,7 @@ mod tests;
 pub use commands::*;
 pub use error::EngineError;
 pub use events::*;
+pub use render::*;
 pub use snapshot::*;
 
 use ffi::*;

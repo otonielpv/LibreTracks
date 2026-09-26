@@ -434,6 +434,15 @@ private:
     std::string path_;
 };
 
+} // namespace
+
+bool pcm_cache_write_in_progress(const std::string& path) {
+    std::lock_guard lock(g_cache_eviction_mtx);
+    return g_cache_writes_in_progress.count(path) > 0;
+}
+
+namespace {
+
 void evict_cache_lru(const std::string& dir,
                       size_t projected_new_bytes,
                       const std::unordered_set<std::string>& protected_paths) {
@@ -2329,9 +2338,9 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
         reader.close();
 }
 
-std::string SourceManager::cache_file_for(const Id& source_id,
-                                          const std::string& file_path,
-                                          int sample_rate) const {
+std::string pcm_cache_file_for(const Id& source_id,
+                               const std::string& file_path,
+                               int sample_rate) {
     // Cache key includes the source file's size + mtime so editing or
     // replacing the original (even with the same path) invalidates the
     // cached PCM automatically. The orphaned old .rf64 stays on disk until
@@ -2358,6 +2367,12 @@ std::string SourceManager::cache_file_for(const Id& source_id,
     const auto h = std::hash<std::string>{}(key);
     return source_cache_dir() + native_path_separator() +
            std::to_string(h) + ext;
+}
+
+std::string SourceManager::cache_file_for(const Id& source_id,
+                                          const std::string& file_path,
+                                          int sample_rate) const {
+    return pcm_cache_file_for(source_id, file_path, sample_rate);
 }
 
 bool SourceManager::try_install_native_file(const Id& source_id,

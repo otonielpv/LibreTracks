@@ -24,6 +24,7 @@ import {
 import { App as AppComponent } from "../app/App";
 import { useTourStore } from "../features/tutorial/tourStore";
 import { useCloudStore } from "../features/transport/cloud/cloudStore";
+import { useRenderStore } from "../features/transport/render/renderStore";
 import { emitWaveformReadyForTest, resetTestDesktopApiMock, testDesktopApiMock } from "../app/testDesktopApiMock";
 
 export type MockWebviewDragDropEvent =
@@ -311,6 +312,9 @@ beforeEach(async () => {
   // Un store sobrevive al desmontaje, asi que sin esto una prueba que conecte
   // la nube dejaria a la siguiente creyendose ya conectada.
   useCloudStore.getState().reset();
+  // El modal de renderizar se abre desde un store; sin cerrarlo, una prueba
+  // que lo abra lo dejaria abierto encima de la siguiente.
+  useRenderStore.setState({ target: null });
   vi.clearAllMocks();
   vi.restoreAllMocks();
   await i18n.changeLanguage("en");

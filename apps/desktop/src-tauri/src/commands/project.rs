@@ -12,10 +12,9 @@
 //!
 //! The commands kept inline all open a native modal dialog (rfd) and then
 //! hand the heavy work to `spawn_project_work`, so the threadpool would buy
-//! them nothing. The two whose tail was NOT offloaded
-//! (`pick_and_import_external_project_from_dialog`,
-//! `export_region_rendered_audio`) are `(async)`; the note on each says why
-//! opening rfd off the main thread is safe here.
+//! them nothing. The one whose tail was NOT offloaded
+//! (`pick_and_import_external_project_from_dialog`) is `(async)`; its note
+//! says why opening rfd off the main thread is safe here.
 
 use std::thread;
 
@@ -47,7 +46,7 @@ use crate::platform::file_dialog::FileDialog;
 /// Android's SAF returns a `content://` URI which `std::fs` can't open, so the
 /// export writes to a private temp file and `finish()` copies it into the URI
 /// through the content resolver (then deletes the temp).
-enum ExportTarget {
+pub(crate) enum ExportTarget {
     Path(std::path::PathBuf),
     #[cfg(target_os = "android")]
     Saf {
@@ -58,7 +57,7 @@ enum ExportTarget {
 
 impl ExportTarget {
     /// The path the export routine should write to.
-    fn write_path(&self) -> &std::path::Path {
+    pub(crate) fn write_path(&self) -> &std::path::Path {
         match self {
             ExportTarget::Path(path) => path,
             #[cfg(target_os = "android")]
@@ -66,8 +65,24 @@ impl ExportTarget {
         }
     }
 
+    /// The name the file actually got, when the destination says. On Android
+    /// the provider may have renamed it to avoid a clash ("mix (1).wav"); a
+    /// document id that is not a name ("msf:42") answers None.
+    pub(crate) fn display_name(&self) -> Option<String> {
+        let name = match self {
+            ExportTarget::Path(path) => path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())?,
+            #[cfg(target_os = "android")]
+            ExportTarget::Saf { target, .. } => {
+                crate::platform::mobile_files::picked_file_name(target)
+            }
+        };
+        (name.contains('.') && !name.contains(':')).then_some(name)
+    }
+
     /// Deliver the finished file to its real destination (no-op on desktop).
-    fn finish(&self, app: &AppHandle) -> Result<(), String> {
+    pub(crate) fn finish(&self, app: &AppHandle) -> Result<(), String> {
         let _ = app;
         match self {
             ExportTarget::Path(_) => Ok(()),
@@ -82,7 +97,7 @@ impl ExportTarget {
 }
 
 /// Platform "save as" dialog for exports. Returns None if the user cancels.
-fn pick_export_target(
+pub(crate) fn pick_export_target(
     app: &AppHandle,
     title: &str,
     filter_name: &str,
@@ -2291,58 +2306,6 @@ pub async fn export_region_as_package_at(
     })
     .await
     .map_err(|error| error.to_string())??;
-
-    Ok(true)
-}
-
-// `(async)`: the render after the save dialog writes a whole region to WAV
-// on the calling thread, which was the main thread. Same rfd-off-main-thread
-// note as pick_and_import_external_project_from_dialog.
-#[tauri::command(async)]
-pub fn export_region_rendered_audio(
-    app: AppHandle,
-    region_id: String,
-    state: State<'_, DesktopState>,
-) -> Result<bool, String> {
-    let (song_dir, song, region_name) = {
-        let session = state
-            .session
-            .lock()
-            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-        let song_dir = session
-            .song_dir
-            .clone()
-            .ok_or_else(|| "No song loaded".to_string())?;
-        let song = session
-            .engine
-            .song()
-            .cloned()
-            .ok_or_else(|| "No song loaded".to_string())?;
-        let region_name = song
-            .regions
-            .iter()
-            .find(|region| region.id == region_id)
-            .map(|region| region.name.clone())
-            .ok_or_else(|| "Region not found".to_string())?;
-        (song_dir, song, region_name)
-    };
-
-    let Some(target) = pick_export_target(
-        &app,
-        "Exportar Audio Renderizado",
-        "Wave Audio",
-        &["wav"],
-        &format!("{}.wav", crate::state::slugify(&region_name)),
-    )?
-    else {
-        return Ok(false);
-    };
-
-    state
-        .audio
-        .export_region_rendered_audio(song_dir, song, &region_id, target.write_path())
-        .map_err(|error| error.to_string())?;
-    target.finish(&app)?;
 
     Ok(true)
 }

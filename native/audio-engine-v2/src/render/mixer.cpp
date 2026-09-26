@@ -1,4 +1,5 @@
 #include <lt_engine/render/mixer.h>
+#include <lt_engine/render/mix_math.h>
 #include <lt_engine/devices/device_channel_layout.h>
 #include <lt_engine/debug/logging.h>
 #include <lt_engine/diagnostics/rt_guard.h>
@@ -114,22 +115,6 @@ PreparedVoiceDebugSummary summarize_prepared_voice_map(
     if (out.voices == 0)
         out.queued_min = 0;
     return out;
-}
-
-float clamp_pan(float pan) noexcept {
-    return std::max(-1.0f, std::min(1.0f, pan));
-}
-
-float soft_limit_output(float x) noexcept {
-    constexpr float threshold = 0.98f;
-    constexpr float ceiling = 0.999f;
-    const float ax = std::abs(x);
-    if (ax <= threshold)
-        return x;
-    const float over = ax - threshold;
-    const float shaped = threshold
-        + (ceiling - threshold) * (over / (over + (ceiling - threshold)));
-    return std::copysign(std::min(shaped, ceiling), x);
 }
 
 std::string_view normalize_audio_route(std::string_view route) noexcept {
@@ -895,8 +880,8 @@ void Mixer::render_timeline_span(float** output_channels,
                 const float sample_solo_gain = start_solo_gain + (end_solo_gain - start_solo_gain) * t;
                 const float effective_gain = sample_gain * sample_mute_gain * sample_solo_gain;
                 const float pan = clamp_pan(start_pan + (end_pan - start_pan) * t);
-                const float left_gain = pan > 0.0f ? 1.0f - pan : 1.0f;
-                const float right_gain = pan < 0.0f ? 1.0f + pan : 1.0f;
+                const float left_gain = pan_left_gain(pan);
+                const float right_gain = pan_right_gain(pan);
                 float source_l = mix_l[f];
                 float source_r = mix_r[f];
                 if (mono_downmix) {
@@ -1335,8 +1320,8 @@ void Mixer::render(float** output_channels,
                     const float sample_solo_gain = start_solo_gain + (end_solo_gain - start_solo_gain) * t;
                     const float effective_gain = sample_gain * sample_mute_gain * sample_solo_gain;
                     const float pan = clamp_pan(start_pan + (end_pan - start_pan) * t);
-                    const float left_gain = pan > 0.0f ? 1.0f - pan : 1.0f;
-                    const float right_gain = pan < 0.0f ? 1.0f + pan : 1.0f;
+                    const float left_gain = pan_left_gain(pan);
+                    const float right_gain = pan_right_gain(pan);
                     float source_l = mix_l[f];
                     float source_r = mix_r[f];
                     if (mono_downmix) {

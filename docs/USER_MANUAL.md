@@ -190,6 +190,24 @@ You can export a song after creating it as a region. The export includes the son
 
 ![Export song](../screenshots/Export-Song.png)
 
+### Render a song's audio
+
+To send each musician their rehearsal track (the drummer gets everything but the drums, the guitarist everything but the guitars):
+
+1. Right-click the song (on a phone, long-press the song and open the selection bar's menu; in the compact view, the column menu).
+2. Choose `Render audio…`.
+3. Tick the tracks that go in. Folders have their own checkbox to tick or clear all their tracks at once.
+4. Choose the output:
+   - `Mix (one file)`: every ticked track in a single WAV.
+   - `Separate tracks (.zip)`: one WAV per track, all aligned from the start of the song, inside a `.zip`.
+5. Set the format (16/24/32-bit WAV), sample rate, stereo or mono, and optionally:
+   - `Apply the mix`: each track and folder's volume and pan and the song volume, as heard in playback. Unchecked, every track comes out at 0 dB, centred.
+   - `Normalize`: puts each file's peak at -0.3 dB.
+   - `Include the metronome` / `Include the voice guide`: with your current settings. With separate tracks they come out as their own files.
+6. Press `Render` and choose where to save it.
+
+The render follows the song's transposition and warp, and ignores mute and solo: what you tick is what you get. Playback can keep running while it renders.
+
 ### Import songs and packages
 
 Use `Import song` from the top `File` section when you want to bring another LibreTracks song or session package into the current session. This is useful for building a show from prepared songs without recreating tracks and markers by hand.

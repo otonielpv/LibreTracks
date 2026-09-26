@@ -24,6 +24,8 @@
 
 #include <lt_engine/core/types.h>
 
+#include <functional>
+
 namespace lt {
 
 class BungeePitchVoice;
@@ -75,6 +77,25 @@ struct Alignment {
 // not warm enough to report a latency).
 Alignment align_on_source(BungeePitchVoice& voice,
                           const DecodedSource& source,
+                          Frame target_source_frame,
+                          int channel_count,
+                          int max_in_frames,
+                          double pitch_scale,
+                          double time_ratio = 1.0);
+
+// Same as above over any source the caller can read, not only a DecodedSource.
+// The offline renderer uses it: it decodes only the window a clip needs, so it
+// has no DecodedSource, and priming must stay ONE implementation (see the top
+// of this file for what two copies cost).
+//
+// `read(start, frames, into)` fills into[0]/into[1] with `frames` frames from
+// absolute source frame `start` — always inside [0, source_end) — duplicating
+// a mono source into both planes, and returns how many it wrote.
+using SourceSpanReader = std::function<int(Frame start, int frames, float* const* into)>;
+
+Alignment align_on_source(BungeePitchVoice& voice,
+                          Frame source_end,
+                          const SourceSpanReader& read,
                           Frame target_source_frame,
                           int channel_count,
                           int max_in_frames,

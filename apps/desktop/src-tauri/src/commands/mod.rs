@@ -6,6 +6,7 @@ pub mod library;
 pub mod open_with;
 pub mod pads;
 pub mod project;
+pub mod render;
 pub mod settings;
 pub mod system;
 pub mod timeline;

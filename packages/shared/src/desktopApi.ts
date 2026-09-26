@@ -1140,9 +1140,63 @@ export async function exportRegionAsPackageAt(
   });
 }
 
-// Returns false if the user cancelled the save dialog (nothing was written).
-export async function exportRegionRenderedAudio(regionId: string): Promise<boolean> {
-  return invokeCommand<boolean>("export_region_rendered_audio", { regionId });
+export type RenderSampleFormat = "pcm16" | "pcm24" | "float32";
+
+/** "Render audio" of one song (region). See commands/render.rs. */
+export type RenderSongAudioRequest = {
+  regionId: string;
+  trackIds: string[];
+  /** "mix" = one .wav; "stems" = one .wav per track, delivered as a .zip. */
+  mode: "mix" | "stems";
+  format: RenderSampleFormat;
+  /** null = the rate the engine is running at. */
+  sampleRate: number | null;
+  channels: 1 | 2;
+  normalize: boolean;
+  /** Apply track/folder volume and pan and the song master, as in playback. */
+  applyMixer: boolean;
+  includeMetronome: boolean;
+  includeVoiceGuide: boolean;
+  /** File name without extension. */
+  fileName: string;
+  metronomeLabel: string;
+  voiceGuideLabel: string;
+};
+
+export type RenderSongAudioResult = {
+  /** false when the save dialog or the render was cancelled. */
+  saved: boolean;
+  cancelled: boolean;
+  fileName: string | null;
+  fileCount: number;
+  /** Audio files that could not be read and were rendered as silence. */
+  missingFiles: string[];
+};
+
+export type RenderAudioProgressEvent = {
+  fraction: number;
+  stage: "rendering" | "packing" | "done";
+};
+
+// Asks where to save, then renders. Resolves when the file is written (or
+// with saved=false if the user cancelled). Progress arrives as events.
+export async function renderSongAudio(
+  request: RenderSongAudioRequest,
+): Promise<RenderSongAudioResult> {
+  return invokeCommand<RenderSongAudioResult>("render_song_audio", { request });
+}
+
+export async function cancelRenderSongAudio(): Promise<void> {
+  await invokeCommand<void>("cancel_render_song_audio");
+}
+
+export async function listenToRenderAudioProgress(
+  handler: (event: RenderAudioProgressEvent) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<RenderAudioProgressEvent>("render-audio-progress", (event) => {
+    handler(event.payload);
+  });
 }
 
 // Export the WHOLE session as a single portable .ltset (every region + library

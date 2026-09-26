@@ -84,6 +84,27 @@ Alignment align_on_source(BungeePitchVoice& voice,
                           int max_in_frames,
                           double pitch_scale,
                           double time_ratio) {
+    const SourceSpanReader read = [&source](Frame start, int frames, float* const* into) {
+        float* planes[2] = {into[0], into[1]};
+        const int got = source.read(start, frames, planes,
+                                    std::min(2, source.channel_count()));
+        if (got > 0 && source.channel_count() == 1)
+            std::copy_n(into[0], got, into[1]);
+        return got;
+    };
+    return align_on_source(voice, source.duration_frames(), read,
+                           target_source_frame, channel_count, max_in_frames,
+                           pitch_scale, time_ratio);
+}
+
+Alignment align_on_source(BungeePitchVoice& voice,
+                          Frame source_end,
+                          const SourceSpanReader& read,
+                          Frame target_source_frame,
+                          int channel_count,
+                          int max_in_frames,
+                          double pitch_scale,
+                          double time_ratio) {
     const Alignment nothing_to_do{target_source_frame, target_source_frame};
     if (!voice.is_ready() || max_in_frames <= 0) return nothing_to_do;
     const int latency_frames = static_cast<int>(voice.latency_frames());
@@ -91,7 +112,7 @@ Alignment align_on_source(BungeePitchVoice& voice,
 
     Planes planes(channel_count, max_in_frames);
 
-    const Frame src_end = source.duration_frames();
+    const Frame src_end = source_end;
     Frame read_cursor = target_source_frame;
 
     // Read `frames` of source at read_cursor into the input planes, zero-padding
@@ -113,11 +134,7 @@ Alignment align_on_source(BungeePitchVoice& voice,
         if (available > 0) {
             float* into[2] = {planes.in_l.data() + dst_offset,
                               planes.in_r.data() + dst_offset};
-            const int got = source.read(read_start, available, into,
-                                        std::min(2, source.channel_count()));
-            if (got > 0 && source.channel_count() == 1)
-                std::copy_n(planes.in_l.begin() + dst_offset, got,
-                            planes.in_r.begin() + dst_offset);
+            (void)read(read_start, available, into);
         }
         read_cursor += frames;
     };

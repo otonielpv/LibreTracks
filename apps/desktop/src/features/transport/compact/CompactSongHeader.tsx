@@ -19,6 +19,7 @@ import {
 
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { openRenderSong } from "../render/renderStore";
 import {
   regionEffectiveKey,
   SONG_KEY_OPTIONS,
@@ -325,6 +326,16 @@ export function CompactSongHeaderComponent({
                 }}
               >
                 Exportar canción
+              </button>
+              <button
+                type="button"
+                className="lt-compact-clip-menu-item"
+                onClick={() => {
+                  setContextMenu(null);
+                  openRenderSong({ regionId: region.id, regionName: region.name });
+                }}
+              >
+                {t("transport.menu.renderSong")}
               </button>
               <div className="lt-compact-clip-menu-divider" aria-hidden="true" />
               <button

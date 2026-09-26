@@ -81,6 +81,7 @@ fn upsert_song_tracks_json_shape_matches_cpp_parser() {
             gain: 0.8,
             pan: -0.2,
             audio_to: "master".into(),
+            mono_downmix: false,
             mute: false,
             solo: false,
             transpose_behavior: "never_transpose".into(),

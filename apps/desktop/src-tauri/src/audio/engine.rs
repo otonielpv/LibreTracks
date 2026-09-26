@@ -2749,18 +2749,6 @@ impl AudioController {
         }
     }
 
-    pub fn export_region_rendered_audio(
-        &self,
-        _song_dir: PathBuf,
-        _song: Song,
-        _region_id: &str,
-        _output_path: &Path,
-    ) -> Result<(), DesktopError> {
-        Err(DesktopError::AudioCommand(
-            "rendered audio export has not been reconnected to C++ engine v2 yet".into(),
-        ))
-    }
-
     fn with_engine_state(
         &self,
         kind: &str,
@@ -2970,6 +2958,41 @@ fn load_resolved_song(
         })?;
     state.loaded_session_signature = Some(signature);
     Ok(())
+}
+
+/// The session as the engine plays it: audio paths resolved against the song
+/// folder and the timeline remapped for warp/varispeed. This is exactly what
+/// `load_resolved_song` serialises for `LoadSession`, and the offline render
+/// takes the same payload so an export sounds like playback. Returns the JSON
+/// and the runtime song it was made from (its region bounds are the ones the
+/// engine uses, which a varispeed transpose moves).
+pub(crate) fn runtime_session_json(
+    song_dir: &Path,
+    song: &Song,
+) -> Result<(String, Song), DesktopError> {
+    let resolved = song_with_resolved_audio_paths(Some(song_dir), song);
+    let runtime_song = song_with_warped_timeline(&resolved);
+    let json = serde_json::to_string(&runtime_song)
+        .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+    Ok((json, runtime_song))
+}
+
+/// The click as configured in Settings, for the offline render.
+pub(crate) fn metronome_render_config(
+    settings: &AppSettings,
+) -> lt_audio_engine_v2::RenderMetronome {
+    lt_audio_engine_v2::RenderMetronome {
+        volume: metronome_engine_volume(settings.metronome_volume),
+        accent_enabled: settings.metronome_accent_enabled,
+        accent_preset: settings.metronome_accent_preset,
+        beat_preset: settings.metronome_beat_preset,
+        accent_pitch: settings.metronome_accent_pitch,
+        beat_pitch: settings.metronome_beat_pitch,
+        subdivision: settings.metronome_subdivision,
+        subdivision_preset: settings.metronome_subdivision_preset,
+        subdivision_pitch: settings.metronome_subdivision_pitch,
+        subdivision_gain: settings.metronome_subdivision_gain,
+    }
 }
 
 fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song {

@@ -87,6 +87,7 @@ import { createTrackFolderMenus } from "./trackFolderMenus";
 import { colorPickerActions } from "./colorPickerMenu";
 import { clipContextMenuActions } from "./clipMenu";
 import type { ExportSongTarget } from "../panels/ExportSongModal";
+import { openRenderSong } from "../render/renderStore";
 import type { ShortcutActionId } from "../keyboard/actions";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
@@ -674,6 +675,12 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
             regionId: region.id,
             regionName: region.name,
           });
+        },
+      },
+      {
+        label: t("transport.menu.renderSong"),
+        onSelect: () => {
+          openRenderSong({ regionId: region.id, regionName: region.name });
         },
       },
       {

@@ -163,7 +163,7 @@ pub fn set_metronome_sound_realtime(
 /// Resolve the bundled voice-guide assets directory. In release the `voices`
 /// folder ships under the Tauri resource dir; in dev it lives in the crate's
 /// `resources/voices` source tree.
-fn voice_guide_voices_dir(app: &AppHandle) -> Option<String> {
+pub(crate) fn voice_guide_voices_dir(app: &AppHandle) -> Option<String> {
     use tauri::Manager;
     // Android: the WAV bank ships as Android assets and MainActivity copies it
     // to filesDir/voices on first run (Tauri's resource bundler doesn't ship

@@ -9,6 +9,7 @@
 #include <lt_engine/engine_impl.h>
 #include <lt_engine/sources/source_manager.h>
 #include <lt_engine/core/thread_policy.h>
+#include <lt_engine/render/offline_renderer.h>
 #include <nlohmann/json.hpp>
 #include <cstring>
 #include <vector>
@@ -264,6 +265,38 @@ LT_API const char* lt_audio_engine_analyze_file_peaks_progressive(
             &bridge));
     } catch (...) {
         buf = "{\"ok\":false,\"error\":\"native waveform analysis failed\"}";
+    }
+    return buf.c_str();
+}
+
+LT_API const char* lt_audio_engine_render_offline(const char* request_json,
+                                                  LtRenderProgressCallback on_progress,
+                                                  void* progress_ctx) {
+    thread_local std::string buf;
+    if (!request_json) {
+        buf = "{\"ok\":false,\"error\":\"invalid request\"}";
+        return buf.c_str();
+    }
+    try {
+        auto request = lt::offline_render_request_from_json(request_json);
+        if (request.is_err()) {
+            buf = lt::offline_render_result_to_json(
+                lt::Result<lt::OfflineRenderReport>::err(request.error()));
+            return buf.c_str();
+        }
+        lt::OfflineRenderProgress progress;
+        if (on_progress) {
+            progress = [on_progress, progress_ctx](double fraction) {
+                return on_progress(progress_ctx, fraction) != 0;
+            };
+        }
+        buf = lt::offline_render_result_to_json(
+            lt::render_offline(request.unwrap(), progress));
+    } catch (const std::exception& e) {
+        buf = lt::offline_render_result_to_json(
+            lt::Result<lt::OfflineRenderReport>::err(std::string("render failed: ") + e.what()));
+    } catch (...) {
+        buf = "{\"ok\":false,\"error\":\"render failed\"}";
     }
     return buf.c_str();
 }
