@@ -371,6 +371,12 @@ pub(super) struct LibraryManifest {
     pub(super) assets: Vec<LibraryManifestAssetEntry>,
     #[serde(default)]
     pub(super) folders: Vec<String>,
+    /// Video files, kept apart from the audio lists above: the audio library
+    /// reads audio metadata from every path it knows, and a video there would
+    /// fail the whole listing. Written by `state/video_library.rs`; every
+    /// audio write carries it over untouched.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(super) video_assets: Vec<super::video_library::VideoLibraryEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1236,6 +1242,11 @@ pub(super) fn write_library_manifest_state(
         file_paths: normalized_paths,
         assets: normalized_assets,
         folders: normalized_folders,
+        video_assets: read_library_manifest(song_dir)
+            .ok()
+            .flatten()
+            .map(|manifest| manifest.video_assets)
+            .unwrap_or_default(),
     };
     let manifest_json = serde_json::to_vec_pretty(&manifest)
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;

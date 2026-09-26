@@ -287,6 +287,7 @@ impl DesktopSession {
                 clip.file_path = new_path.to_string();
             }
         }
+        super::video_library::relink_video_entries(&song_dir, old_path, new_path)?;
 
         if let Some(mut manifest) = read_library_manifest(&song_dir)? {
             for file_path in manifest.file_paths.iter_mut() {

@@ -47,6 +47,63 @@ fn require_video_track(song: &Song, track_id: &str) -> Result<(), DesktopError> 
     }
 }
 
+fn new_video_track(song: &Song, name: &str, auto_color: bool) -> libretracks_core::Track {
+    libretracks_core::Track {
+        id: format!("track_{}", timestamp_suffix()),
+        name: name.to_string(),
+        kind: TrackKind::Video,
+        parent_track_id: None,
+        volume: 1.0,
+        pan: 0.0,
+        muted: false,
+        solo: false,
+        transpose_enabled: true,
+        audio_to: "master".to_string(),
+        mono_downmix: false,
+        color: super::track_colors::auto_color_for_new_track(
+            &song.tracks,
+            TrackKind::Video,
+            auto_color,
+        ),
+        auto_created: false,
+        midi_port: None,
+        midi_channel: 1,
+        midi_enabled: true,
+        collapsed: false,
+        height_offset: None,
+    }
+}
+
+/// The top-level track containing `track_id` (itself if it has no parent).
+fn top_level_ancestor(song: &Song, track_id: &str) -> Option<String> {
+    let mut current = song.tracks.iter().find(|track| track.id == track_id)?;
+    while let Some(parent_id) = current.parent_track_id.as_deref() {
+        match song.tracks.iter().find(|track| track.id == parent_id) {
+            Some(parent) => current = parent,
+            None => break,
+        }
+    }
+    // The last descendant of that top-level track, so the new track lands
+    // after the whole folder and not inside it.
+    let top_id = current.id.clone();
+    let mut last = top_id.clone();
+    for track in &song.tracks {
+        let mut ancestor = track.parent_track_id.clone();
+        while let Some(id) = ancestor {
+            if id == top_id {
+                last = track.id.clone();
+                break;
+            }
+            ancestor = song
+                .tracks
+                .iter()
+                .find(|candidate| candidate.id == id)
+                .and_then(|candidate| candidate.parent_track_id.clone());
+        }
+    }
+    Some(last)
+}
+
 fn sort_video_clips(song: &mut Song) {
     song.video_clips.sort_by(|left, right| {
         left.timeline_start_seconds
@@ -179,6 +236,73 @@ impl DesktopSession {
             color: None,
         };
         song.video_clips.push(clip);
+        sort_video_clips(&mut song);
+        self.commit_video_clips(song, audio)
+    }
+
+    /// Place videos from the library on the timeline, one after another from
+    /// `timeline_start_seconds` (view time). They go on `target_track_id` when
+    /// that is a video track; otherwise a new video track is created right
+    /// after it (or at the end), named after the first file. One undo step.
+    /// `items` are (file path, media duration in seconds).
+    pub fn place_video_clips(
+        &mut self,
+        items: &[(String, f64)],
+        timeline_start_seconds: f64,
+        target_track_id: Option<&str>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self.loaded_song_for_video_edit(audio)?;
+        let items: Vec<&(String, f64)> = items
+            .iter()
+            .filter(|(path, duration)| {
+                !path.trim().is_empty()
+                    && duration.is_finite()
+                    && *duration >= MIN_VIDEO_CLIP_SECONDS
+            })
+            .collect();
+        if items.is_empty() {
+            return Err(DesktopError::AudioCommand(
+                "no hay vídeos que colocar".into(),
+            ));
+        }
+
+        let target_is_video = target_track_id.is_some_and(|id| {
+            song.tracks
+                .iter()
+                .any(|track| track.id == id && track.kind == TrackKind::Video)
+        });
+        let track_id = if target_is_video {
+            target_track_id.unwrap_or_default().to_string()
+        } else {
+            let name = super::song_edit::file_stem_for_auto_track(&items[0].0);
+            let track =
+                new_video_track(&song, &name, super::arrangement::auto_color_enabled(audio));
+            let id = track.id.clone();
+            // Next to the track it was dropped on, at top level: a video
+            // track inside an audio folder would read as part of its mix.
+            let after = target_track_id.and_then(|target| top_level_ancestor(&song, target));
+            super::track_tree::insert_track(&mut song.tracks, track, after.as_deref(), None)?;
+            id
+        };
+
+        let suffix = timestamp_suffix();
+        let mut cursor = source_seconds_at_view(&song, timeline_start_seconds.max(0.0));
+        for (index, (file_path, duration)) in items.into_iter().enumerate() {
+            song.video_clips.push(VideoClip {
+                id: format!("vclip_{suffix}_{index}"),
+                track_id: track_id.clone(),
+                file_path: file_path.clone(),
+                timeline_start_seconds: cursor,
+                source_start_seconds: 0.0,
+                duration_seconds: *duration,
+                fade_in_seconds: None,
+                fade_out_seconds: None,
+                fit: None,
+                color: None,
+            });
+            cursor += duration;
+        }
         sort_video_clips(&mut song);
         self.commit_video_clips(song, audio)
     }

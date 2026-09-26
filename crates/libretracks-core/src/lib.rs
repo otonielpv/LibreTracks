@@ -6,8 +6,9 @@ pub mod warp;
 pub use model::{
     default_audio_to, parse_audio_output_route, Clip, Marker, MarkerCategory, MarkerKind, MidiClip,
     MidiEvent, MidiEventKind, Project, Song, SongMaster, SongRegion, TempoMarker, TempoMetadata,
-    TempoSource, TimeSignatureMarker, Track, TrackKind, VideoClip, VideoFit, MAX_MIDI_CHANNEL,
-    MAX_MIDI_DATA_VALUE, MIN_MIDI_CHANNEL,
+    is_video_file_path, TempoSource, TimeSignatureMarker, Track, TrackKind, VideoAssetInfo, VideoClip,
+    VideoFit, MAX_MIDI_CHANNEL, MAX_MIDI_DATA_VALUE, MIN_MIDI_CHANNEL,
+    SLOW_SEEK_KEYFRAME_INTERVAL_SECONDS, VIDEO_FILE_EXTENSIONS,
 };
 pub use validation::{
     validate_song, DomainError, MAX_COMPACT_COLUMN_WIDTH_REM, MAX_TRANSPOSE_SEMITONES,

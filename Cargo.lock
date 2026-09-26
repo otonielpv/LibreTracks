@@ -2531,6 +2531,7 @@ dependencies = [
  "libretracks-ios-folder-picker",
  "libretracks-project",
  "libretracks-remote",
+ "libretracks-video",
  "lt-audio-engine-v2",
  "midir",
  "ndk-context",

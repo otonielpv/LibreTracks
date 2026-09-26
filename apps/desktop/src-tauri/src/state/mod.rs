@@ -65,6 +65,7 @@ mod library;
 mod midi_edit;
 mod midi_runtime;
 mod video_edit;
+mod video_library;
 mod regions;
 mod session;
 mod song_edit;
@@ -72,6 +73,7 @@ mod timeline_math;
 mod missing_media;
 pub(crate) use missing_media::MissingMediaEntry;
 pub(crate) use video_edit::VideoClipProps;
+pub(crate) use video_library::VideoAssetSummary;
 mod track_colors;
 mod track_tree;
 
@@ -244,6 +246,9 @@ pub struct DesktopState {
     /// of the session lock so sampling can never be blocked by heavy session
     /// work.
     pub resource_monitor: crate::platform::resource_monitor::ResourceMonitor,
+    /// libmpv, thumbnails and (later) the video output. Tolerates libmpv
+    /// being absent: video then reports itself unavailable.
+    pub video: Arc<crate::video::VideoSystem>,
 }
 
 impl Default for DesktopState {
@@ -270,6 +275,7 @@ impl Default for DesktopState {
             midi_runtime_thread: Mutex::new(None),
             project_load_progress: Mutex::new(None),
             resource_monitor: crate::platform::resource_monitor::ResourceMonitor::default(),
+            video: Arc::new(crate::video::VideoSystem::default()),
         }
     }
 }
@@ -344,6 +350,7 @@ impl DesktopState {
 
 impl Drop for DesktopState {
     fn drop(&mut self) {
+        self.video.thumbnails.stop();
         self.midi_runtime_stop.store(true, Ordering::Relaxed);
         self.notify_midi_runtime();
         if let Ok(mut slot) = self.midi_runtime_thread.lock() {

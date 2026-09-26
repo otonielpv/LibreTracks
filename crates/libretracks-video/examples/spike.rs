@@ -98,9 +98,12 @@ fn new_player(extra: &[(&str, &str)]) -> Result<Mpv, String> {
 fn wait_for(mpv: &Mpv, timeout: Duration, want: impl Fn(&MpvEvent) -> bool) -> Option<MpvEvent> {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        let left = deadline.saturating_duration_since(Instant::now()).as_secs_f64();
+        let left = deadline
+            .saturating_duration_since(Instant::now())
+            .as_secs_f64();
         if let Some(event) = mpv.wait_event(left.min(0.1)) {
-            if let MpvEvent::EndFile(libretracks_video::mpv::EndFileReason::Error(reason)) = &event {
+            if let MpvEvent::EndFile(libretracks_video::mpv::EndFileReason::Error(reason)) = &event
+            {
                 eprintln!("  fin por error: {reason}");
             }
             if want(&event) {
@@ -123,7 +126,12 @@ fn load_and_wait(mpv: &Mpv, file: &str) -> Result<(), String> {
 
 fn info() -> Result<(), String> {
     let mpv = new_player(&[("geometry", "320x180+40+40")])?;
-    for property in ["mpv-version", "ffmpeg-version", "libass-version", "mpv-configuration"] {
+    for property in [
+        "mpv-version",
+        "ffmpeg-version",
+        "libass-version",
+        "mpv-configuration",
+    ] {
         println!(
             "{property}: {}",
             mpv.get_property_string(property).unwrap_or_default()
@@ -173,7 +181,8 @@ fn screen(name: &str, file: &str) -> Result<(), String> {
         mpv.get_property_string("fullscreen").unwrap_or_default(),
         mpv.get_property_string("current-window-scale")
             .unwrap_or_default(),
-        mpv.get_property_string("osd-dimensions").unwrap_or_default()
+        mpv.get_property_string("osd-dimensions")
+            .unwrap_or_default()
     );
     std::thread::sleep(Duration::from_secs(2));
     let robbed = before != after_open || before != os::foreground();
@@ -212,7 +221,8 @@ fn embed(x: i32, y: i32, width: i32, height: i32, file: &str) -> Result<(), Stri
     mpv.set_property_f64("brightness", 0.0).ok();
     println!(
         "osd-dimensions={}",
-        mpv.get_property_string("osd-dimensions").unwrap_or_default()
+        mpv.get_property_string("osd-dimensions")
+            .unwrap_or_default()
     );
     std::thread::sleep(Duration::from_secs(2));
     let robbed = before != after_open || before != os::foreground();
@@ -252,7 +262,9 @@ fn seek(file: &str, hwdec: &str, count: usize) -> Result<(), String> {
         ("pause", "yes"),
     ])?;
     load_and_wait(&mpv, file)?;
-    let duration = mpv.get_property_f64("duration").map_err(|e| e.to_string())?;
+    let duration = mpv
+        .get_property_f64("duration")
+        .map_err(|e| e.to_string())?;
     let fps = mpv.get_property_f64("container-fps").unwrap_or(30.0);
     std::thread::sleep(Duration::from_millis(300));
     let hw = mpv.get_property_string("hwdec-current").unwrap_or_default();
@@ -392,8 +404,9 @@ fn coexist(engine_ffmpeg_dir: &str, file: &str) -> Result<(), String> {
     let avcodec = os::load_with_dependencies(&dir.join("avcodec-62.dll"))?;
     let avformat = os::load_with_dependencies(&dir.join("avformat-62.dll"))?;
     unsafe {
-        let version: libloading::Symbol<unsafe extern "C" fn() -> u32> =
-            avcodec.get(b"avcodec_version\0").map_err(|e| e.to_string())?;
+        let version: libloading::Symbol<unsafe extern "C" fn() -> u32> = avcodec
+            .get(b"avcodec_version\0")
+            .map_err(|e| e.to_string())?;
         let find: libloading::Symbol<
             unsafe extern "C" fn(*const std::ffi::c_char) -> *const std::ffi::c_void,
         > = avcodec
@@ -408,7 +421,10 @@ fn coexist(engine_ffmpeg_dir: &str, file: &str) -> Result<(), String> {
         );
         for decoder in ["mp3float", "flac", "aac"] {
             let name = std::ffi::CString::new(decoder).unwrap();
-            println!("  decodificador {decoder}: {}", !find(name.as_ptr()).is_null());
+            println!(
+                "  decodificador {decoder}: {}",
+                !find(name.as_ptr()).is_null()
+            );
         }
         let _ = &avformat;
     }
@@ -438,11 +454,24 @@ fn coexist(engine_ffmpeg_dir: &str, file: &str) -> Result<(), String> {
     println!("Módulos FFmpeg/mpv cargados en el proceso:");
     for module in os::modules() {
         let lower = module.to_lowercase();
-        let file_name = lower.rsplit(['\\', '/']).next().unwrap_or(&lower).to_string();
-        if ["avcodec", "avformat", "avutil", "swresample", "swscale", "avfilter", "mpv"]
-            .iter()
-            .any(|prefix| file_name.starts_with(prefix) || file_name.starts_with(&format!("lib{prefix}")))
-        {
+        let file_name = lower
+            .rsplit(['\\', '/'])
+            .next()
+            .unwrap_or(&lower)
+            .to_string();
+        if [
+            "avcodec",
+            "avformat",
+            "avutil",
+            "swresample",
+            "swscale",
+            "avfilter",
+            "mpv",
+        ]
+        .iter()
+        .any(|prefix| {
+            file_name.starts_with(prefix) || file_name.starts_with(&format!("lib{prefix}"))
+        }) {
             println!("  {module}");
         }
     }
@@ -477,7 +506,12 @@ mod os {
 
     #[link(name = "user32")]
     extern "system" {
-        fn EnumDisplayMonitors(hdc: Handle, clip: *const Rect, proc_: MonitorEnumProc, data: isize) -> i32;
+        fn EnumDisplayMonitors(
+            hdc: Handle,
+            clip: *const Rect,
+            proc_: MonitorEnumProc,
+            data: isize,
+        ) -> i32;
         fn GetMonitorInfoW(monitor: Handle, info: *mut MonitorInfoExW) -> i32;
         fn GetForegroundWindow() -> Handle;
         fn GetWindowTextW(hwnd: Handle, text: *mut u16, max: i32) -> i32;
@@ -486,11 +520,26 @@ mod os {
     #[link(name = "kernel32")]
     extern "system" {
         fn GetCurrentProcess() -> Handle;
-        fn K32EnumProcessModules(process: Handle, modules: *mut Handle, cb: u32, needed: *mut u32) -> i32;
-        fn K32GetModuleFileNameExW(process: Handle, module: Handle, name: *mut u16, size: u32) -> u32;
+        fn K32EnumProcessModules(
+            process: Handle,
+            modules: *mut Handle,
+            cb: u32,
+            needed: *mut u32,
+        ) -> i32;
+        fn K32GetModuleFileNameExW(
+            process: Handle,
+            module: Handle,
+            name: *mut u16,
+            size: u32,
+        ) -> u32;
     }
 
-    unsafe extern "system" fn collect(monitor: Handle, _: Handle, _: *mut Rect, data: isize) -> i32 {
+    unsafe extern "system" fn collect(
+        monitor: Handle,
+        _: Handle,
+        _: *mut Rect,
+        data: isize,
+    ) -> i32 {
         let out = &mut *(data as *mut Vec<String>);
         let mut info: MonitorInfoExW = std::mem::zeroed();
         info.size = std::mem::size_of::<MonitorInfoExW>() as u32;
@@ -547,7 +596,8 @@ mod os {
                 .iter()
                 .map(|module| {
                     let mut name = [0u16; 520];
-                    let len = K32GetModuleFileNameExW(process, *module, name.as_mut_ptr(), 520) as usize;
+                    let len =
+                        K32GetModuleFileNameExW(process, *module, name.as_mut_ptr(), 520) as usize;
                     String::from_utf16_lossy(&name[..len])
                 })
                 .collect()
@@ -616,7 +666,12 @@ mod os {
     const WM_MOUSEACTIVATE: u32 = 0x0021;
     const MA_NOACTIVATE: isize = 3;
 
-    unsafe extern "system" fn surface_proc(hwnd: Handle, msg: u32, wparam: usize, lparam: isize) -> isize {
+    unsafe extern "system" fn surface_proc(
+        hwnd: Handle,
+        msg: u32,
+        wparam: usize,
+        lparam: isize,
+    ) -> isize {
         if msg == WM_MOUSEACTIVATE {
             return MA_NOACTIVATE;
         }

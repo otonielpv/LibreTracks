@@ -35,6 +35,11 @@ import type {
   TrackKind,
   TransportLifecycleEvent,
   TransportSnapshot,
+  VideoClipProps,
+  VideoAssetSummary,
+  VideoImportResult,
+  VideoLibraryStatus,
+  VideoThumbnailStrip,
   WaveformProgressEvent,
   WaveformReadyEvent,
   WaveformSummaryDto,
@@ -2259,4 +2264,126 @@ export async function getCloudStagingDir(): Promise<string> {
  */
 export async function discardStagedPackage(path: string): Promise<void> {
   return invokeCommand<void>("cloud_discard_staged", { path });
+}
+
+// ---------------------------------------------------------------------------
+// Video (docs/plans/video-output). Positions are view seconds, like every
+// other timeline command; the backend stores them in source time.
+// ---------------------------------------------------------------------------
+
+export async function createVideoClip(args: {
+  trackId: string;
+  filePath: string;
+  timelineStartSeconds: number;
+  sourceStartSeconds: number;
+  durationSeconds: number;
+}): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("create_video_clip", args);
+}
+
+export async function updateVideoClip(
+  clipId: string,
+  props: VideoClipProps,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_video_clip", { clipId, props });
+}
+
+export async function moveVideoClip(
+  clipId: string,
+  timelineStartSeconds: number,
+  targetTrackId: string | null = null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("move_video_clip", {
+    clipId,
+    timelineStartSeconds,
+    targetTrackId,
+  });
+}
+
+export async function trimVideoClip(
+  clipId: string,
+  startSeconds: number,
+  endSeconds: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("trim_video_clip", {
+    clipId,
+    startSeconds,
+    endSeconds,
+  });
+}
+
+export async function splitVideoClips(
+  clipIds: string[],
+  splitSeconds: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("split_video_clips", {
+    clipIds,
+    splitSeconds,
+  });
+}
+
+export async function duplicateVideoClips(clipIds: string[]): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("duplicate_video_clips", { clipIds });
+}
+
+export async function deleteVideoClips(clipIds: string[]): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("delete_video_clips", { clipIds });
+}
+
+export async function getVideoMediaStatus(): Promise<VideoLibraryStatus> {
+  return invokeCommand<VideoLibraryStatus>("video_media_status");
+}
+
+export async function importVideoFiles(
+  filePaths: string[],
+  folderPath: string | null = null,
+): Promise<VideoImportResult> {
+  return invokeCommand<VideoImportResult>("import_video_files", {
+    filePaths,
+    folderPath,
+  });
+}
+
+export async function listVideoAssets(): Promise<VideoAssetSummary[]> {
+  return invokeCommand<VideoAssetSummary[]>("list_video_assets");
+}
+
+export async function requestVideoThumbnails(
+  filePaths: string[],
+  urgent: boolean,
+): Promise<void> {
+  return invokeCommand<void>("request_video_thumbnails", { filePaths, urgent });
+}
+
+/** The cached strip, or null when it is still being made (it is queued and
+ * `video:thumbnails-ready` fires when done). */
+export async function getVideoThumbnails(
+  filePath: string,
+): Promise<VideoThumbnailStrip | null> {
+  return invokeCommand<VideoThumbnailStrip | null>("get_video_thumbnails", {
+    filePath,
+  });
+}
+
+export async function listenToVideoThumbnailsReady(
+  handler: (event: { filePath: string }) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<{ filePath: string }>("video:thumbnails-ready", (event) => {
+    handler(event.payload);
+  });
+}
+
+/** Put library videos on the timeline back to back, on `targetTrackId` when
+ * it is a video track or on a new video track otherwise. One undo step. */
+export async function placeVideoClips(
+  items: { filePath: string; durationSeconds: number }[],
+  timelineStartSeconds: number,
+  targetTrackId: string | null,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("place_video_clips", {
+    items,
+    timelineStartSeconds,
+    targetTrackId,
+  });
 }

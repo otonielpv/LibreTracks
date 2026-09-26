@@ -538,6 +538,61 @@ export type VideoClipSummary = {
   color?: string | null;
 };
 
+/** What the analysis of a video file found (stored in the library). */
+export type VideoAssetInfo = {
+  durationSeconds: number;
+  width: number;
+  height: number;
+  fps: number;
+  rotationDegrees?: number;
+  codec: string;
+  hardwareDecode?: boolean;
+  hasAudio: boolean;
+  keyframeIntervalSeconds?: number | null;
+};
+
+/** A video in the session library. */
+export type VideoAssetSummary = {
+  fileName: string;
+  filePath: string;
+  isMissing: boolean;
+  folderPath?: string | null;
+  info: VideoAssetInfo;
+  /** Keyframes further apart than 2 s: jumps into it can lag. */
+  hasSlowSeeks: boolean;
+};
+
+export type VideoImportResult = {
+  assets: VideoAssetSummary[];
+  skipped: SkippedImport[];
+};
+
+/** Whether video works on this machine (libmpv loaded), and why not. */
+export type VideoLibraryStatus = {
+  supportedPlatform: boolean;
+  available: boolean;
+  reason?: string | null;
+  libraryPath?: string | null;
+  clientApiVersion?: string | null;
+};
+
+/** A cached thumbnail strip: base64 JPEGs, one every `intervalSeconds`. */
+export type VideoThumbnailStrip = {
+  filePath: string;
+  intervalSeconds: number;
+  width: number;
+  height: number;
+  frames: string[];
+};
+
+/** The whole-clip properties the context menu and fade handles edit. */
+export type VideoClipProps = {
+  fadeInSeconds: number | null;
+  fadeOutSeconds: number | null;
+  fit: VideoFit | null;
+  color: string | null;
+};
+
 export type SongView = {
   id: string;
   title: string;

@@ -44,6 +44,23 @@ pub struct MissingMediaEntry {
     pub candidates: Vec<String>,
 }
 
+/// Cada fichero que la sesión usa, con la pista que lo usa: los clips de audio
+/// y, en escritorio, los de vídeo. En móvil el vídeo no se reproduce, así que
+/// un vídeo que falta allí no es un problema que reportar (plan de vídeo, paso
+/// 12): se conserva en el documento y se reubica al volver a escritorio.
+fn media_references(song: &Song) -> impl Iterator<Item = (&str, &str)> {
+    let videos_play_here = !cfg!(any(target_os = "android", target_os = "ios"));
+    song.clips
+        .iter()
+        .map(|clip| (clip.file_path.as_str(), clip.track_id.as_str()))
+        .chain(
+            song.video_clips
+                .iter()
+                .filter(move |_| videos_play_here)
+                .map(|clip| (clip.file_path.as_str(), clip.track_id.as_str())),
+        )
+}
+
 /// Carpetas donde tiene sentido buscar un fichero que falta.
 ///
 /// Dos fuentes, y ninguna necesita estado nuevo que persistir:
@@ -56,8 +73,8 @@ pub struct MissingMediaEntry {
 ///    tener que recordarla en ningún sitio, y sobrevive a reinstalar.
 pub fn known_search_dirs(song_dir: &Path, song: &Song) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = vec![song_dir.join("audio")];
-    for clip in &song.clips {
-        let resolved = resolve_audio_file_path(song_dir, &clip.file_path);
+    for (file_path, _) in media_references(song) {
+        let resolved = resolve_audio_file_path(song_dir, file_path);
         // Sólo los que están: la carpeta de uno que falta no nos dice nada.
         if !resolved.is_file() {
             continue;
@@ -118,18 +135,18 @@ pub fn collect_missing_media(song_dir: &Path, song: &Song) -> Vec<MissingMediaEn
     // Agrupado por ruta: un mismo fichero usado por seis clips es UNA entrada
     // que hay que reparar una vez, no seis filas idénticas.
     let mut by_path: BTreeMap<String, (usize, BTreeSet<String>)> = BTreeMap::new();
-    for clip in &song.clips {
-        if resolve_audio_file_path(song_dir, &clip.file_path).is_file() {
+    for (file_path, track_id) in media_references(song) {
+        if resolve_audio_file_path(song_dir, file_path).is_file() {
             continue;
         }
         let track_name = song
             .tracks
             .iter()
-            .find(|track| track.id == clip.track_id)
+            .find(|track| track.id == track_id)
             .map(|track| track.name.clone())
             .unwrap_or_default();
         let entry = by_path
-            .entry(clip.file_path.clone())
+            .entry(file_path.to_string())
             .or_insert_with(|| (0, BTreeSet::new()));
         entry.0 += 1;
         if !track_name.is_empty() {
@@ -383,5 +400,48 @@ mod tests {
     fn a_directory_that_does_not_exist_is_skipped_not_an_error() {
         let dir = tempdir().expect("tempdir");
         assert!(find_candidates("voz.wav", &[dir.path().join("no-existe")]).is_empty());
+    }
+
+    #[test]
+    fn a_missing_video_is_reported_with_its_track_on_desktop() {
+        let dir = tempdir().expect("temp dir");
+        let present = dir.path().join("visuales").join("fondo.mp4");
+        touch(&present);
+        let mut video_track = track("v1", "Letras");
+        video_track.kind = TrackKind::Video;
+        let mut song = song_with(vec![video_track], vec![]);
+        let video = |id: &str, file_path: String| libretracks_core::VideoClip {
+            id: id.to_string(),
+            track_id: "v1".to_string(),
+            file_path,
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 4.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            fit: None,
+            color: None,
+        };
+        // Expected in a folder that no longer exists; the user moved it next
+        // to its sibling.
+        let gone = dir.path().join("antiguos").join("letras.mp4");
+        song.video_clips = vec![
+            video("a", present.to_string_lossy().into_owned()),
+            video("b", gone.to_string_lossy().into_owned()),
+        ];
+
+        let missing = collect_missing_media(dir.path(), &song);
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].file_name, "letras.mp4");
+        assert_eq!(missing[0].track_names, vec!["Letras".to_string()]);
+        assert!(missing[0].candidates.is_empty());
+
+        let moved = dir.path().join("visuales").join("letras.mp4");
+        touch(&moved);
+        let missing = collect_missing_media(dir.path(), &song);
+        assert_eq!(
+            missing[0].candidates,
+            vec![moved.to_string_lossy().into_owned()]
+        );
     }
 }

@@ -331,3 +331,73 @@ fn duplicating_and_restyling_a_video_clip_are_undoable() {
             .expect("update");
     });
 }
+
+#[test]
+fn placing_videos_on_an_audio_track_creates_a_video_track_next_to_it() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    session
+        .place_video_clips(
+            &[
+                ("D:/Visuales/intro.mp4".into(), 5.0),
+                ("D:/Visuales/coro.mp4".into(), 3.0),
+            ],
+            1.0,
+            Some("a1"),
+            &audio,
+        )
+        .expect("place");
+    let after = song(&session);
+    let new_track = &after.tracks[1];
+    assert_eq!(new_track.kind, TrackKind::Video);
+    assert_eq!(new_track.name, "intro");
+    let placed: Vec<_> = after
+        .video_clips
+        .iter()
+        .filter(|clip| clip.track_id == new_track.id)
+        .map(|clip| (clip.timeline_start_seconds, clip.duration_seconds))
+        .collect();
+    assert_eq!(placed, vec![(1.0, 5.0), (6.0, 3.0)]);
+    // One undo step removes the clips and the track together.
+    session.undo_action(&audio).expect("undo");
+    assert_eq!(song(&session).tracks.len(), 3);
+}
+
+#[test]
+fn placing_videos_on_a_video_track_uses_it() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    session
+        .place_video_clips(&[("D:/x.mp4".into(), 2.0)], 8.0, Some("v2"), &audio)
+        .expect("place");
+    let after = song(&session);
+    assert_eq!(after.tracks.len(), 3);
+    assert!(after
+        .video_clips
+        .iter()
+        .any(|clip| clip.track_id == "v2" && clip.timeline_start_seconds == 8.0));
+}
+
+/// Paso 05, C6: editing and saving a session that holds video — which is what
+/// a phone does, where video is read-only — keeps every video clip intact.
+#[test]
+fn editing_and_saving_keeps_video_clips_intact() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    let before = song(&session).video_clips;
+
+    session
+        .move_clip("c1", 2.0, &audio)
+        .expect("an audio edit, as on mobile");
+    session.save_project().expect("save");
+
+    let saved = libretracks_project::load_song_from_file(
+        session.song_file_path.as_ref().expect("song file"),
+    )
+    .expect("reload");
+    assert_eq!(saved.video_clips, before);
+    assert!(saved
+        .tracks
+        .iter()
+        .any(|track| track.kind == TrackKind::Video));
+}

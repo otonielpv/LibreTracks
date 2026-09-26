@@ -12,6 +12,7 @@ mod infra;
 mod models;
 mod platform;
 mod state;
+mod video;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod midi;
@@ -234,6 +235,8 @@ pub fn run() {
 
             let state = app.state::<DesktopState>();
             state.audio.attach_app_handle(app.handle().clone());
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            video_setup::start(app.handle(), &state);
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             state.start_midi_runtime();
             let initial_device = runtime_settings.selected_output_device_id.clone();
@@ -485,6 +488,12 @@ pub fn run() {
             commands::video::split_video_clips,
             commands::video::duplicate_video_clips,
             commands::video::delete_video_clips,
+            commands::video::video_media_status,
+            commands::video::import_video_files,
+            commands::video::list_video_assets,
+            commands::video::request_video_thumbnails,
+            commands::video::get_video_thumbnails,
+            commands::video::place_video_clips,
             commands::timeline::set_midi_track_routing,
             commands::timeline::set_midi_track_enabled,
             commands::timeline::set_automation_track_enabled,
@@ -575,5 +584,43 @@ fn save_session_on_exit(app: &tauri::AppHandle) {
         Err(_) => {
             eprintln!("[libretracks-session] session busy at exit; skipping the autosave");
         }
+    }
+}
+
+/// Wiring of the desktop video services to the Tauri app: where the bundled
+/// libmpv lives and the thumbnail worker's events.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod video_setup {
+    use std::sync::Arc;
+
+    use tauri::{AppHandle, Emitter, Manager};
+
+    use crate::state::DesktopState;
+    use crate::video::thumbnail_queue::ThumbnailWorkerDeps;
+
+    #[derive(Clone, serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ThumbnailsReady {
+        file_path: String,
+    }
+
+    pub fn start(app: &AppHandle, state: &DesktopState) {
+        if let Ok(resource_dir) = app.path().resource_dir() {
+            state.video.set_resource_dir(resource_dir);
+        }
+        let video = Arc::clone(&state.video);
+        let emitter = app.clone();
+        state.video.thumbnails.start(ThumbnailWorkerDeps {
+            libmpv: Box::new(move || video.libmpv()),
+            cache_root: Box::new(crate::state::decoding_cache_root),
+            on_ready: Box::new(move |job| {
+                let _ = emitter.emit(
+                    "video:thumbnails-ready",
+                    ThumbnailsReady {
+                        file_path: job.key.clone(),
+                    },
+                );
+            }),
+        });
     }
 }

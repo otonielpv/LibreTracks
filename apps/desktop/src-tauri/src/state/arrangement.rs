@@ -32,7 +32,7 @@ const TRACK_HEIGHT_OFFSET_LIMIT: i32 = 400;
 /// Si el almacén de ajustes no está disponible (arranque muy temprano) cae al
 /// valor por defecto, que es el mismo que el del propio ajuste: colorear. Un
 /// fallo de lectura no debe cambiar en silencio el aspecto de lo que se crea.
-fn auto_color_enabled(audio: &AudioController) -> bool {
+pub(super) fn auto_color_enabled(audio: &AudioController) -> bool {
     audio
         .current_settings()
         .map(|settings| settings.auto_color_new_tracks)

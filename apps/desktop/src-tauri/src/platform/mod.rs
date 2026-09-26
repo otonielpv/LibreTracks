@@ -25,6 +25,7 @@ pub mod file_dialog;
 pub mod linux_webkit;
 pub mod macos_bookmarks;
 pub mod resource_monitor;
+pub mod thread_priority;
 
 // Compilado en todos los sistemas por el mismo motivo que `windows_firewall`:
 // es la logica de "que volumen toca" del paso 05, la unica parte que puede

@@ -293,6 +293,56 @@ impl VideoClip {
     }
 }
 
+/// What the analysis of a video file found. Stored in the session library
+/// (`library.json`), not in the song document: it describes the file, not how
+/// the song uses it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoAssetInfo {
+    pub duration_seconds: f64,
+    pub width: u32,
+    pub height: u32,
+    /// Frames per second of the container; 0 when unknown (still images).
+    pub fps: f64,
+    /// Clockwise rotation from the container metadata (0, 90, 180, 270).
+    #[serde(default)]
+    pub rotation_degrees: u32,
+    pub codec: String,
+    /// Whether hardware decoding engaged for this codec on this machine.
+    #[serde(default)]
+    pub hardware_decode: bool,
+    pub has_audio: bool,
+    /// Longest gap between keyframes found by sampling, in seconds. Long gaps
+    /// make seeks and jumps slow; the library warns above two seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyframe_interval_seconds: Option<f64>,
+}
+
+/// Keyframe spacing above which jumps into the video can visibly lag.
+pub const SLOW_SEEK_KEYFRAME_INTERVAL_SECONDS: f64 = 2.0;
+
+impl VideoAssetInfo {
+    pub fn has_slow_seeks(&self) -> bool {
+        self.keyframe_interval_seconds
+            .is_some_and(|interval| interval > SLOW_SEEK_KEYFRAME_INTERVAL_SECONDS)
+    }
+}
+
+/// File extensions imported as video.
+pub const VIDEO_FILE_EXTENSIONS: &[&str] =
+    &["mp4", "m4v", "mov", "mkv", "webm", "avi", "mpg", "mpeg"];
+
+/// Whether `path` names a video file by its extension (case-insensitive).
+pub fn is_video_file_path(path: &str) -> bool {
+    path.rsplit_once('.')
+        .map(|(_, extension)| {
+            VIDEO_FILE_EXTENSIONS
+                .iter()
+                .any(|known| known.eq_ignore_ascii_case(extension))
+        })
+        .unwrap_or(false)
+}
+
 /// Lowest/highest valid value for a MIDI channel as the user sees it (1-16).
 /// Stored 1-based to match every hardware label; the wire format's 0-based
 /// nibble is produced at send time.
@@ -1020,5 +1070,40 @@ mod tests {
         assert!(json.contains("\"categoryOverride\":\"cue\""), "got: {json}");
         let back: Marker = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back, marker);
+    }
+}
+
+#[cfg(test)]
+mod video_media_tests {
+    use super::*;
+
+    #[test]
+    fn video_extensions_are_recognised_case_insensitively() {
+        for path in ["a.mp4", "C:/x/B.MOV", "clip.WebM", "old.mpeg", "x.m4v"] {
+            assert!(is_video_file_path(path), "{path}");
+        }
+        for path in ["a.wav", "a.mp3", "mp4", "folder.mp4/file", "a.flac"] {
+            assert!(!is_video_file_path(path), "{path}");
+        }
+    }
+
+    #[test]
+    fn long_keyframe_gaps_are_flagged() {
+        let mut info = VideoAssetInfo {
+            duration_seconds: 60.0,
+            width: 1920,
+            height: 1080,
+            fps: 30.0,
+            rotation_degrees: 0,
+            codec: "h264".into(),
+            hardware_decode: true,
+            has_audio: false,
+            keyframe_interval_seconds: Some(10.0),
+        };
+        assert!(info.has_slow_seeks());
+        info.keyframe_interval_seconds = Some(1.0);
+        assert!(!info.has_slow_seeks());
+        info.keyframe_interval_seconds = None;
+        assert!(!info.has_slow_seeks());
     }
 }

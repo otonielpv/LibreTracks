@@ -167,7 +167,12 @@ mod tests {
 
     #[test]
     fn an_empty_override_is_ignored() {
-        let paths = candidate_paths(Platform::Windows, Some("  "), Some(Path::new("C:/App")), None);
+        let paths = candidate_paths(
+            Platform::Windows,
+            Some("  "),
+            Some(Path::new("C:/App")),
+            None,
+        );
         assert_eq!(paths, vec![PathBuf::from("C:/App/libmpv-2.dll")]);
     }
 

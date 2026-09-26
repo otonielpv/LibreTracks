@@ -288,7 +288,9 @@ impl Mpv {
     /// Run a command synchronously (e.g. `["loadfile", path]`).
     pub fn command(&self, args: &[&str]) -> Result<(), VideoError> {
         // SAFETY: NULL-terminated array of valid strings, alive for the call.
-        let code = self.with_args(args, |argv| unsafe { (self.api.command)(self.handle, argv) })?;
+        let code = self.with_args(args, |argv| unsafe {
+            (self.api.command)(self.handle, argv)
+        })?;
         self.check(code, &args.join(" "))
     }
 
@@ -397,7 +399,9 @@ impl Mpv {
             return Err(VideoError::Command(format!("{name}: no disponible")));
         }
         // SAFETY: non-null, NUL-terminated; freed with mpv_free right after.
-        let value = unsafe { CStr::from_ptr(raw) }.to_string_lossy().into_owned();
+        let value = unsafe { CStr::from_ptr(raw) }
+            .to_string_lossy()
+            .into_owned();
         unsafe { (self.api.free)(raw.cast()) };
         Ok(value)
     }
@@ -413,8 +417,7 @@ impl Mpv {
             ObserveAs::Notify => FORMAT_NONE,
         };
         // SAFETY: valid handle and string.
-        let code =
-            unsafe { (self.api.observe_property)(self.handle, id, name_c.as_ptr(), format) };
+        let code = unsafe { (self.api.observe_property)(self.handle, id, name_c.as_ptr(), format) };
         self.check(code, &format!("observar {name}"))
     }
 

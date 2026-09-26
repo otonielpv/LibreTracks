@@ -1536,9 +1536,18 @@ pub fn create_audio_tracks_with_clips(
 /// feedback as drag-and-drop. Returns an empty vec if the user cancels.
 #[tauri::command]
 pub fn pick_library_files() -> Vec<String> {
+    const AUDIO: &[&str] = &["wav", "mp3", "flac", "m4a", "aac", "ogg"];
+    // Videos go to the video library (the frontend splits them off).
+    let media: Vec<&str> = AUDIO
+        .iter()
+        .chain(libretracks_core::VIDEO_FILE_EXTENSIONS)
+        .copied()
+        .collect();
     FileDialog::new()
-        .add_filter("Audio", &["wav", "mp3", "flac", "m4a", "aac", "ogg"])
-        .set_title("Importar audio a la libreria")
+        .add_filter("Audio y vídeo", &media)
+        .add_filter("Audio", AUDIO)
+        .add_filter("Vídeo", libretracks_core::VIDEO_FILE_EXTENSIONS)
+        .set_title("Importar a la biblioteca")
         .pick_files()
         .unwrap_or_default()
         .into_iter()

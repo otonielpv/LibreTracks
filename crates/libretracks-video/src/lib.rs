@@ -9,8 +9,13 @@
 //! En Android e iOS el vídeo no se reproduce: [`library::load_libmpv`]
 //! devuelve [`VideoError::Unsupported`] sin buscar nada.
 
+pub mod extract;
 pub mod library;
 pub mod mpv;
+pub mod thumbs;
+
+#[cfg(test)]
+pub(crate) mod test_support;
 
 pub use library::{load_libmpv, LoadedLibmpv, LIBMPV_ENV_VAR};
 pub use mpv::{Mpv, MpvEvent, MpvLibrary, ObserveAs, PropertyValue};
