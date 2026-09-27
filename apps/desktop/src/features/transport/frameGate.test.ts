@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cancelGatedFrame,
   markFrameActivity,
+  nudgeFrameGate,
   requestGatedFrame,
   resetFrameGateForTests,
 } from "./frameGate";
@@ -78,14 +79,31 @@ describe("frameGate", () => {
     loop.stop();
   });
 
-  it("wakes on any transport store change", () => {
+  it("gives parked loops one frame on a store change, without reopening", () => {
+    // Polls re-render the panel and touch the store every ~second while
+    // idle; if that reopened the gate for 500 ms it would never close.
     const loop = startLoop();
     vi.advanceTimersByTime(2_000);
     const parkedAt = loop.frames();
 
     useTransportStore.setState({ meters: {} });
-    vi.advanceTimersByTime(100);
-    expect(loop.frames()).toBeGreaterThan(parkedAt);
+    vi.advanceTimersByTime(1_000);
+    expect(loop.frames()).toBe(parkedAt + 1);
+    loop.stop();
+  });
+
+  it("a nudged loop that paints something reopens the gate", () => {
+    let paint = false;
+    const loop = startLoop(() => {
+      if (paint) markFrameActivity();
+    });
+    vi.advanceTimersByTime(2_000);
+    const parkedAt = loop.frames();
+
+    paint = true;
+    nudgeFrameGate();
+    vi.advanceTimersByTime(1_000);
+    expect(loop.frames()).toBeGreaterThan(parkedAt + 30);
     loop.stop();
   });
 

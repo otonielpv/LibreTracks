@@ -5,6 +5,7 @@ import type { TimelineClipSummary, TimelineTrackSummary } from "../library/pendi
 import {
   cancelGatedFrame,
   markFrameActivity,
+  nudgeFrameGate,
   requestGatedFrame,
 } from "../frameGate";
 import { recordCanvasRender } from "../perf/perfMetrics";
@@ -151,8 +152,9 @@ export class TimelineRenderer {
   }
 
   updateState(nextSnapshot: TrackSceneSnapshot) {
-    // New scene or camera from outside: the render loop may be parked.
-    markFrameActivity();
+    // New scene or camera from outside: give a parked loop one frame. If it
+    // paints, render() opens the gate itself.
+    nudgeFrameGate();
     const previousSnapshot = this.snapshot;
     const cameraChanged = !previousSnapshot || previousSnapshot.cameraX !== nextSnapshot.cameraX;
     const zoomChanged = !previousSnapshot || previousSnapshot.zoomLevel !== nextSnapshot.zoomLevel;

@@ -10,17 +10,23 @@
 // y en una pantalla de 120 Hz el doble.
 //
 // La puerta deja correr los bucles mientras haya actividad y los aparca
-// cuando lleva IDLE_AFTER_MS sin haberla. Es actividad:
+// cuando lleva IDLE_AFTER_MS sin haberla. Abren la puerta:
 //   - reproducir (nunca se aparca con el transporte en marcha);
 //   - cualquier entrada del usuario (puntero, rueda, teclado, scroll, resize);
-//   - cualquier cambio del store de transporte;
-//   - un render de React de quien usa la puerta (useFrameGateWake), porque
-//     las props llegan a los bucles por refs espejo;
 //   - que un bucle haya escrito algo en este fotograma (markFrameActivity):
 //     mientras algo se mueve —una animación, una caída, teselas que llegan—
 //     la puerta sigue abierta.
+// Y dan un solo fotograma a los aparcados (nudgeFrameGate), por si traen
+// algo que pintar:
+//   - cualquier cambio del store de transporte;
+//   - un render de React de quien usa la puerta (useFrameGateWake), porque
+//     las props llegan a los bucles por refs espejo.
+// Esas dos no abren la puerta porque llegan solas en reposo: los sondeos de
+// transporte, recursos y ondas re-renderizan el panel cada ~1 s y la
+// tenían abierta casi siempre. Si ese fotograma pinta algo, el bucle llama a
+// markFrameActivity y la puerta se abre; si no, se vuelven a aparcar.
 // Así sólo se aparca cuando NINGÚN bucle ha tenido nada que hacer durante
-// medio segundo, y cualquiera de esas señales los despierta a todos.
+// medio segundo.
 
 import { useLayoutEffect } from "react";
 import { useTransportStore } from "./store";
@@ -65,12 +71,21 @@ function install() {
   for (const type of WAKE_EVENTS) {
     window.addEventListener(type, wake, { capture: true, passive: true });
   }
-  useTransportStore.subscribe(wake);
+  useTransportStore.subscribe(() => nudgeFrameGate());
 }
 
 /** Algo ha cambiado: mantener (o volver a poner) los bucles en marcha. */
 export function markFrameActivity() {
   lastActivityMs = performance.now();
+  releaseParked();
+}
+
+/** Da un fotograma a los bucles aparcados sin abrir la puerta. */
+export function nudgeFrameGate() {
+  releaseParked();
+}
+
+function releaseParked() {
   if (parked.size === 0) return;
   const waking = [...parked];
   parked.clear();
@@ -109,10 +124,10 @@ export function cancelGatedFrame(id: number) {
   }
 }
 
-/** Despierta la puerta en cada render: las props llegan a los bucles por refs. */
+/** Un fotograma en cada render: las props llegan a los bucles por refs. */
 export function useFrameGateWake() {
   useLayoutEffect(() => {
-    markFrameActivity();
+    nudgeFrameGate();
   });
 }
 
