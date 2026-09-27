@@ -30,6 +30,9 @@ struct LoadedLibrary {
 pub struct VideoSystem {
     resource_dir: OnceLock<PathBuf>,
     library: OnceLock<Result<LoadedLibrary, String>>,
+    /// macOS: how the output reaches the AppKit main thread (Tauri's).
+    #[cfg(target_os = "macos")]
+    main_thread: OnceLock<libretracks_video::surface_macos::MainThread>,
     pub thumbnails: ThumbnailQueue,
     output: OnceLock<VideoOutput>,
     /// Output settings in force (the runtime reads the latency offset and
@@ -87,11 +90,29 @@ impl VideoSystem {
     /// Idempotent.
     pub fn start_output(&self) -> &VideoOutput {
         self.output.get_or_init(|| match self.libmpv() {
-            Ok(library) => VideoOutput::spawn(
-                libretracks_video::mpv_backend::MpvOutputBackend::new(library),
-            ),
+            Ok(library) => VideoOutput::spawn(self.backend(library)),
             Err(reason) => VideoOutput::spawn(UnavailableBackend(reason)),
         })
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn backend(&self, library: Arc<MpvLibrary>) -> libretracks_video::mpv_backend::MpvOutputBackend {
+        libretracks_video::mpv_backend::MpvOutputBackend::new(library)
+    }
+
+    /// macOS draws in a panel of ours, created on the main thread (paso 15).
+    #[cfg(target_os = "macos")]
+    fn backend(&self, library: Arc<MpvLibrary>) -> libretracks_video::mpv_backend::MpvOutputBackend {
+        match self.main_thread.get() {
+            Some(main) => libretracks_video::mpv_backend::MpvOutputBackend::new_macos(library, Arc::clone(main)),
+            None => libretracks_video::mpv_backend::MpvOutputBackend::new(library),
+        }
+    }
+
+    /// macOS: set before [`VideoSystem::start_output`], from the app's setup.
+    #[cfg(target_os = "macos")]
+    pub fn set_main_thread(&self, main: libretracks_video::surface_macos::MainThread) {
+        let _ = self.main_thread.set(main);
     }
 
     pub fn set_settings(&self, settings: libretracks_video::settings::VideoOutputSettings) {

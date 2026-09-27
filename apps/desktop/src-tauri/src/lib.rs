@@ -641,6 +641,15 @@ mod video_setup {
     /// connected monitors every 2 s (a projector unplugged and plugged back is
     /// found again by itself) and tells the UI when its state changes.
     fn start_output(app: &AppHandle, state: &DesktopState) {
+        // macOS: the output panel is AppKit, so it is built on the main
+        // thread, which Tauri owns (paso 15).
+        #[cfg(target_os = "macos")]
+        {
+            let handle = app.clone();
+            state.video.set_main_thread(Arc::new(move |job| {
+                let _ = handle.run_on_main_thread(job);
+            }));
+        }
         state.video.start_output();
         let settings = app
             .try_state::<crate::infra::settings::AppSettingsStore>()
