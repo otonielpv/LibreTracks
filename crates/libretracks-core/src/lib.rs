@@ -1,6 +1,7 @@
 pub mod midi_schedule;
 pub mod model;
 pub mod validation;
+pub mod video_schedule;
 pub mod warp;
 
 pub use model::{

@@ -74,6 +74,7 @@ mod missing_media;
 pub(crate) use missing_media::MissingMediaEntry;
 pub(crate) use video_edit::VideoClipProps;
 pub(crate) use video_library::VideoAssetSummary;
+pub(crate) use self::TransportClockMirror as VideoTransportClock;
 mod track_colors;
 mod track_tree;
 
@@ -340,6 +341,8 @@ impl DesktopState {
     }
 
     pub(crate) fn notify_midi_runtime(&self) {
+        // Every transport/edit notification concerns the video sync too.
+        self.video.runtime.notify();
         let (wake_requested, condition) = &*self.midi_runtime_wake;
         if let Ok(mut requested) = wake_requested.lock() {
             *requested = true;
@@ -351,6 +354,7 @@ impl DesktopState {
 impl Drop for DesktopState {
     fn drop(&mut self) {
         self.video.thumbnails.stop();
+        self.video.runtime.stop();
         self.midi_runtime_stop.store(true, Ordering::Relaxed);
         self.notify_midi_runtime();
         if let Ok(mut slot) = self.midi_runtime_thread.lock() {
@@ -490,6 +494,33 @@ pub(super) struct TransportClock {
     last_seek_position_seconds: Option<f64>,
     last_start_position_seconds: Option<f64>,
     last_jump_position_seconds: Option<f64>,
+    /// Copy of the anchor published outside the session lock, for the video
+    /// runtime (it ticks at 100 Hz and must not compete for that lock).
+    mirror: Arc<Mutex<TransportClockMirror>>,
+}
+
+/// The transport clock as the video runtime reads it: where it was anchored,
+/// since when it runs, and a generation bumped on every discontinuity (start,
+/// seek, jump, pause, stop) — but not on the small drift re-anchors.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub(crate) struct TransportClockMirror {
+    pub anchor_position_seconds: f64,
+    pub anchor_started_at: Option<Instant>,
+    pub generation: u64,
+}
+
+impl TransportClockMirror {
+    pub fn running(&self) -> bool {
+        self.anchor_started_at.is_some()
+    }
+
+    pub fn position_at(&self, now: Instant) -> f64 {
+        let elapsed = self
+            .anchor_started_at
+            .map(|started| now.saturating_duration_since(started).as_secs_f64())
+            .unwrap_or(0.0);
+        (self.anchor_position_seconds + elapsed).max(0.0)
+    }
 }
 
 impl Default for DesktopSession {
@@ -1228,42 +1259,64 @@ impl TransportClock {
             .unwrap_or(0.0)
     }
 
+    /// Publish the anchor to the mirror; `discontinuity` bumps its generation.
+    fn publish(&self, discontinuity: bool) {
+        if let Ok(mut mirror) = self.mirror.lock() {
+            mirror.anchor_position_seconds = self.anchor_position_seconds;
+            mirror.anchor_started_at = self.anchor_started_at;
+            if discontinuity {
+                mirror.generation = mirror.generation.wrapping_add(1);
+            }
+        }
+    }
+
+    pub(super) fn mirror(&self) -> Arc<Mutex<TransportClockMirror>> {
+        Arc::clone(&self.mirror)
+    }
+
     fn start_from(&mut self, position_seconds: f64) {
         self.anchor_position_seconds = position_seconds.max(0.0);
         self.anchor_started_at = Some(Instant::now());
         self.last_start_position_seconds = Some(self.anchor_position_seconds);
+        self.publish(true);
     }
 
     fn reanchor_playing(&mut self, position_seconds: f64) {
         self.anchor_position_seconds = position_seconds.max(0.0);
         self.anchor_started_at = Some(Instant::now());
+        self.publish(false);
     }
 
     fn note_jump_while_playing(&mut self, position_seconds: f64) {
         self.last_jump_position_seconds = Some(position_seconds.max(0.0));
         self.reanchor_playing(position_seconds);
+        self.publish(true);
     }
 
     fn pause_at(&mut self, position_seconds: f64) {
         self.anchor_position_seconds = position_seconds.max(0.0);
         self.anchor_started_at = None;
+        self.publish(true);
     }
 
     fn seek_to(&mut self, position_seconds: f64) {
         self.anchor_position_seconds = position_seconds.max(0.0);
         self.anchor_started_at = None;
         self.last_seek_position_seconds = Some(self.anchor_position_seconds);
+        self.publish(true);
     }
 
     fn seek_while_playing(&mut self, position_seconds: f64) {
         self.anchor_position_seconds = position_seconds.max(0.0);
         self.anchor_started_at = Some(Instant::now());
         self.last_seek_position_seconds = Some(self.anchor_position_seconds);
+        self.publish(true);
     }
 
     fn stop(&mut self) {
         self.anchor_position_seconds = 0.0;
         self.anchor_started_at = None;
+        self.publish(true);
     }
 
     fn summary(&self) -> TransportClockSummary {

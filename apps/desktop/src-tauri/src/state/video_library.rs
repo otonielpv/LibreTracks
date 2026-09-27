@@ -272,3 +272,31 @@ mod tests {
         );
     }
 }
+
+impl DesktopSession {
+    /// The transport clock as published outside the session lock.
+    pub(crate) fn transport_clock_mirror(
+        &self,
+    ) -> std::sync::Arc<std::sync::Mutex<super::TransportClockMirror>> {
+        self.transport_clock.mirror()
+    }
+
+    /// The visible video clips in view time, with their files resolved against
+    /// the session folder, and the project revision it was built from.
+    pub(crate) fn video_timeline(&self) -> (libretracks_core::video_schedule::VideoTimeline, u64) {
+        let timeline = match (self.engine.song(), self.song_dir.as_deref()) {
+            (Some(song), Some(song_dir)) => {
+                libretracks_core::video_schedule::VideoTimeline::from_song(song, |path| {
+                    resolve_audio_file_path(song_dir, path)
+                        .to_string_lossy()
+                        .into_owned()
+                })
+            }
+            (Some(song), None) => {
+                libretracks_core::video_schedule::VideoTimeline::from_song(song, str::to_string)
+            }
+            _ => Default::default(),
+        };
+        (timeline, self.project_revision)
+    }
+}

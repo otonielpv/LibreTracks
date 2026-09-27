@@ -646,7 +646,22 @@ mod video_setup {
             monitors,
             app_monitor,
         });
-        state.video.send(OutputCommand::ApplySettings(settings));
+        state.video.set_settings(settings);
+
+        // The sync runtime: reads the published transport clock, try_locks the
+        // session for the timeline, and drives the output.
+        if let Ok(session) = state.session.lock() {
+            let clock = session.transport_clock_mirror();
+            drop(session);
+            state.video.runtime.start(
+                Box::new(crate::video::runtime::SessionInputs::new(
+                    clock,
+                    Arc::clone(&state.session),
+                    Arc::clone(&state.audio),
+                )),
+                Box::new(crate::video::runtime::SystemOutput(Arc::clone(&state.video))),
+            );
+        }
 
         let video = Arc::clone(&state.video);
         let app = app.clone();
@@ -675,6 +690,8 @@ mod video_setup {
                     if last_state.as_ref() != Some(&key) {
                         last_state = Some(key);
                         let _ = app.emit("video:output-status", status);
+                        // Ready again (or gone): the runtime reloads at once.
+                        video.runtime.notify();
                     }
                 }
             });

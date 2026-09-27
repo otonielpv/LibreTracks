@@ -6,6 +6,7 @@
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod displays;
+pub mod runtime;
 pub mod thumbnail_queue;
 
 use std::path::PathBuf;
@@ -30,6 +31,12 @@ pub struct VideoSystem {
     library: OnceLock<Result<LoadedLibrary, String>>,
     pub thumbnails: ThumbnailQueue,
     output: OnceLock<VideoOutput>,
+    /// Output settings in force (the runtime reads the latency offset and
+    /// the stopped-screen choice from here).
+    settings: std::sync::Mutex<libretracks_video::settings::VideoOutputSettings>,
+    /// Emergency black (paso 13). Volatile by design.
+    pub forced_black: std::sync::atomic::AtomicBool,
+    pub runtime: runtime::VideoRuntimeHandle,
 }
 
 /// Whether video works on this machine, and why not if it does not. Shown by
@@ -82,6 +89,21 @@ impl VideoSystem {
             ),
             Err(reason) => VideoOutput::spawn(UnavailableBackend(reason)),
         })
+    }
+
+    pub fn set_settings(&self, settings: libretracks_video::settings::VideoOutputSettings) {
+        if let Ok(mut current) = self.settings.lock() {
+            *current = settings.clone();
+        }
+        self.send(OutputCommand::ApplySettings(settings));
+        self.runtime.notify();
+    }
+
+    pub fn settings(&self) -> libretracks_video::settings::VideoOutputSettings {
+        self.settings
+            .lock()
+            .map(|settings| settings.clone())
+            .unwrap_or_default()
     }
 
     /// Queue a command for the output, if it was started. Never blocks.

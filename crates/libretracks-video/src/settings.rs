@@ -86,8 +86,9 @@ pub struct VideoOutputSettings {
     pub idle: IdleScreen,
     #[serde(default)]
     pub when_stopped: StoppedScreen,
-    /// Added to the picture's target time. Positive shows later; negative
-    /// earlier (to make up for a projector that lags). Paso 09 calibrates it.
+    /// Added to the picture's target time. Positive shows the picture
+    /// earlier (makes up for a projector or TV that lags), negative later.
+    /// Paso 09 calibrates it.
     #[serde(default)]
     pub latency_offset_ms: i32,
     #[serde(default)]

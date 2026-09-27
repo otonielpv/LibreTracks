@@ -19,7 +19,11 @@ fn with_session<T>(
         .session
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-    edit(&mut session, &state.audio).map_err(|error| error.to_string())
+    let result = edit(&mut session, &state.audio).map_err(|error| error.to_string());
+    drop(session);
+    // Video edits and library changes: the sync runtime refreshes its timeline.
+    state.video.runtime.notify();
+    result
 }
 
 #[tauri::command(async)]
@@ -374,9 +378,7 @@ pub fn video_apply_settings(
         save_app_settings(&app, &app_settings).map_err(|error| error.to_string())?;
         let _ = app.emit("settings:updated", app_settings);
     }
-    state
-        .video
-        .send(OutputCommand::ApplySettings(settings.clone()));
+    state.video.set_settings(settings.clone());
     Ok(settings)
 }
 
