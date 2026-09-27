@@ -4,7 +4,7 @@
 //! | --- | --- |
 //! | Windows | our own non-activating window with one child per slot, mpv embedded with `wid` (paso 01, C3/C8) |
 //! | Linux | mpv's own window, fullscreen on the monitor by `fs-screen-name`; one player serves both slots. Not tested on Linux yet |
-//! | macOS | not available yet: needs mpv's render API in an `NSWindow` |
+//! | macOS | our own non-activating `NSPanel` with one OpenGL view per slot; mpv draws through its render API on a thread per slot (`surface_macos.rs`, paso 15). Persistent: closing hides it |
 //!
 //! Every player runs with `ao=null` and no audio decoding: the audio of a
 //! video is extracted to a normal audio clip (paso 11), so there are never two
@@ -36,6 +36,11 @@ pub struct MpvOutputBackend {
     api: Arc<MpvLibrary>,
     #[cfg(windows)]
     surface: Option<crate::surface_win32::Win32Surface>,
+    /// macOS: the panel outlives open/close (see `surface_macos.rs`).
+    #[cfg(target_os = "macos")]
+    surface: Option<crate::surface_macos::MacSurface>,
+    #[cfg(target_os = "macos")]
+    main_thread: Option<crate::surface_macos::MainThread>,
     players: [Option<Mpv>; 2],
     /// Linux: one player (mpv's own window) serves both slots.
     single_player: bool,
@@ -48,10 +53,59 @@ impl MpvOutputBackend {
             api,
             #[cfg(windows)]
             surface: None,
+            #[cfg(target_os = "macos")]
+            surface: None,
+            #[cfg(target_os = "macos")]
+            main_thread: None,
             players: [None, None],
-            single_player: !cfg!(windows),
+            single_player: !cfg!(any(windows, target_os = "macos")),
             open: false,
         }
+    }
+
+    /// macOS: AppKit calls go through `main_thread` (the app's main thread;
+    /// Tauri owns it). Without it the output reports itself unavailable.
+    #[cfg(target_os = "macos")]
+    pub fn new_macos(api: Arc<MpvLibrary>, main_thread: crate::surface_macos::MainThread) -> Self {
+        let mut backend = Self::new(api);
+        backend.main_thread = Some(main_thread);
+        backend
+    }
+
+    #[cfg(target_os = "macos")]
+    fn open_macos(&mut self, plan: &SurfacePlan, settings: &VideoOutputSettings) -> Result<(), BackendError> {
+        use crate::surface_macos::MacSurface;
+        let main = self.main_thread.clone().ok_or_else(|| {
+            BackendError::Unavailable("la salida de vídeo de macOS necesita el hilo principal de la app".into())
+        })?;
+        let render_api = crate::render::RenderApi::load(&self.api)
+            .map(Arc::new)
+            .ok_or_else(|| BackendError::Unavailable("esta libmpv no tiene la API de render".into()))?;
+
+        // Reuse the panel unless the mode changed (fullscreen and window are
+        // different panel styles).
+        match self.surface.as_mut() {
+            Some(surface) if surface.fullscreen() == plan.fullscreen => {
+                surface.reposition(plan);
+                surface.show();
+            }
+            _ => {
+                self.surface = None;
+                self.surface = Some(MacSurface::create(plan, main, "LibreTracks — Vídeo").map_err(BackendError::Failed)?);
+            }
+        }
+        for index in 0..2 {
+            let player = self.new_player(settings, &[("vo", "libmpv".into()), ("force-window", "no".into())])?;
+            let surface = self.surface.as_mut().expect("created above");
+            surface
+                .attach(index, &player, Arc::clone(&render_api))
+                .map_err(BackendError::Failed)?;
+            self.players[index] = Some(player);
+        }
+        if let Some(surface) = self.surface.as_mut() {
+            surface.show_slot(0);
+        }
+        Ok(())
     }
 
     fn slot_index(&self, slot: Slot) -> usize {
@@ -73,7 +127,7 @@ impl MpvOutputBackend {
 
     fn new_player(&self, settings: &VideoOutputSettings, surface_options: &[(&str, String)]) -> Result<Mpv, BackendError> {
         let mpv = Mpv::create(&self.api).map_err(failed)?;
-        let base: [(&str, &str); 22] = [
+        let base: [(&str, &str); 19] = [
             ("config", "no"),
             ("load-scripts", "no"),
             ("ytdl", "no"),
@@ -90,15 +144,22 @@ impl MpvOutputBackend {
             ("idle", "yes"),
             ("keep-open", "always"),
             ("force-window", "yes"),
-            ("focus-on", "never"),
-            ("background", "color"),
-            ("background-color", "#000000"),
             ("image-display-duration", "inf"),
             ("hr-seek", "yes"),
             ("hwdec", settings.hwdec.mpv_value()),
         ];
         for (name, value) in base {
             mpv.set_option(name, value).map_err(failed)?;
+        }
+        // Newer mpv only (0.38+): an older libmpv (the system one on Linux,
+        // IINA's) does without. Our own surfaces never take the focus, and
+        // mpv's background is black by default.
+        for (name, value) in [
+            ("focus-on", "never"),
+            ("background", "color"),
+            ("background-color", "#000000"),
+        ] {
+            let _ = mpv.set_option(name, value);
         }
         for (name, value) in fit_mpv_options(settings.fit) {
             mpv.set_option(name, value).map_err(failed)?;
@@ -148,10 +209,11 @@ impl MpvOutputBackend {
 impl OutputBackend for MpvOutputBackend {
     fn open(&mut self, plan: &SurfacePlan, settings: &VideoOutputSettings) -> Result<(), BackendError> {
         self.close();
-        if cfg!(target_os = "macos") {
-            return Err(BackendError::Unavailable(
-                "la salida de vídeo aún no está disponible en macOS".into(),
-            ));
+
+        #[cfg(target_os = "macos")]
+        if let Err(error) = self.open_macos(plan, settings) {
+            self.close();
+            return Err(error);
         }
 
         #[cfg(windows)]
@@ -169,7 +231,7 @@ impl OutputBackend for MpvOutputBackend {
             self.surface = Some(surface);
         }
 
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, target_os = "macos")))]
         {
             let options: Vec<(&str, String)> = if plan.fullscreen {
                 vec![
@@ -201,7 +263,12 @@ impl OutputBackend for MpvOutputBackend {
             surface.reposition(plan.rect);
             return Ok(());
         }
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        if let Some(surface) = self.surface.as_mut() {
+            surface.reposition(plan);
+            return Ok(());
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
         if let Some(player) = &self.players[0] {
             if plan.fullscreen {
                 player
@@ -214,11 +281,22 @@ impl OutputBackend for MpvOutputBackend {
     }
 
     fn close(&mut self) {
+        // macOS: stop drawing first — each render context must be freed
+        // before its player is destroyed (render.h) — and keep the panel.
+        #[cfg(target_os = "macos")]
+        if let Some(surface) = self.surface.as_mut() {
+            surface.detach(0);
+            surface.detach(1);
+        }
         // Players first: mpv must let go of its child windows before they die.
         self.players = [None, None];
         #[cfg(windows)]
         {
             self.surface = None;
+        }
+        #[cfg(target_os = "macos")]
+        if let Some(surface) = self.surface.as_mut() {
+            surface.hide();
         }
         self.open = false;
     }
@@ -265,6 +343,13 @@ impl OutputBackend for MpvOutputBackend {
         #[cfg(windows)]
         if let Some(surface) = &self.surface {
             surface.show_slot(self.slot_index(slot));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let index = self.slot_index(slot);
+            if let Some(surface) = self.surface.as_mut() {
+                surface.show_slot(index);
+            }
         }
         let _ = slot;
         Ok(())
