@@ -11,6 +11,7 @@
 
 pub mod audio;
 pub mod extract;
+pub mod mac_geometry;
 pub mod monitors;
 pub mod mpv_backend;
 pub mod output;
@@ -20,6 +21,8 @@ pub mod mpv;
 pub mod render;
 #[cfg(windows)]
 pub mod surface_win32;
+#[cfg(target_os = "macos")]
+pub mod surface_macos;
 pub mod thumbs;
 
 #[cfg(test)]

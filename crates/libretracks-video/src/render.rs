@@ -139,6 +139,30 @@ pub(crate) fn opengl_render_params(
     ]
 }
 
+/// A player as the render thread sees it: the library and the `mpv_handle*`.
+///
+/// Created from an [`Mpv`] with [`RenderTarget::of`]; the `Mpv` must outlive
+/// every [`RenderContext`] made from it (render.h: free the render context
+/// before `mpv_terminate_destroy`). The surface guarantees it by detaching
+/// the render thread before the backend drops its players.
+pub struct RenderTarget {
+    library: Arc<MpvLibrary>,
+    handle: *mut c_void,
+}
+
+// SAFETY: mpv handles may be used from any thread; the render API is created
+// and used on the one render thread this value is moved to.
+unsafe impl Send for RenderTarget {}
+
+impl RenderTarget {
+    pub fn of(mpv: &Mpv) -> Self {
+        Self {
+            library: Arc::clone(mpv.library()),
+            handle: mpv.raw_handle(),
+        }
+    }
+}
+
 /// One `mpv_render_context` drawing through OpenGL.
 ///
 /// Not `Send` on purpose: it lives on the thread whose GL context it was
@@ -159,7 +183,7 @@ impl RenderContext {
     /// current whenever this value is used or dropped. `get_proc_address_ctx`
     /// must stay valid for the context's life.
     pub unsafe fn create_opengl(
-        mpv: &Mpv,
+        target: &RenderTarget,
         api: Arc<RenderApi>,
         get_proc_address: GetProcAddress,
         get_proc_address_ctx: *mut c_void,
@@ -170,15 +194,15 @@ impl RenderContext {
         };
         let mut params = opengl_create_params(&mut init);
         let mut handle: *mut RenderContextHandle = std::ptr::null_mut();
-        let code = (api.create)(&mut handle, mpv.raw_handle(), params.as_mut_ptr());
+        let code = (api.create)(&mut handle, target.handle, params.as_mut_ptr());
         if code < 0 || handle.is_null() {
             return Err(VideoError::Command(format!(
                 "mpv_render_context_create: {}",
-                mpv.library().describe_error(code)
+                target.library.describe_error(code)
             )));
         }
         Ok(Self {
-            _library: Arc::clone(mpv.library()),
+            _library: Arc::clone(&target.library),
             api,
             handle,
         })
