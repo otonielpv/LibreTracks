@@ -221,6 +221,57 @@ Usa `Importar cancion` desde la sección `Archivo` en la parte superior cuando q
 
 Si armas la sección equivocada, pulsa `Esc` inmediatamente. Si no existe una marca para ese hueco, LibreTracks avisará de que no hay una marca disponible para ese dígito.
 
+## Vídeo
+
+LibreTracks puede proyectar vídeos (letras, fondos, clips) sincronizados con el audio en una segunda pantalla: un proyector o una TV. El audio manda: el vídeo sigue al transporte, a los saltos, a los vamps y al warp, nunca al revés.
+
+> Solo en escritorio. En Windows funciona tal cual (el instalador trae lo necesario). En Linux hace falta tener instalado `libmpv` (paquete `libmpv2` o `mpv-libs` según la distribución). En macOS la salida de vídeo aún no está disponible. En Android e iOS las sesiones con vídeo se abren y suenan, pero el vídeo no se reproduce ni se puede editar.
+
+### Añadir vídeo
+
+1. Arrastra un vídeo (`.mp4`, `.mov`, `.mkv`, `.webm`…) desde el explorador al timeline o a la biblioteca. Si lo sueltas sobre una pista de audio, se crea una pista de vídeo al lado.
+2. El clip de vídeo se mueve, recorta, divide, duplica y borra como uno de audio, y tiene fundidos de entrada y salida y su propio encaje (clic derecho).
+3. Si el vídeo trae sonido, LibreTracks pregunta si quieres **extraerlo como pista de audio**: queda en una pista nueva justo debajo, alineada con el vídeo. Puedes marcar "Recordar mi elección", y hacerlo más tarde con clic derecho → `Extraer audio`.
+
+### Configurar la pantalla
+
+La primera vez que añades un vídeo se abre el **asistente**: eliges la pantalla (cada una muestra su número para que la reconozcas), compruebas que la carta de ajuste se ve en el proyector, eliges encaje y pantalla de reposo y, si quieres, calibras. Nada se guarda hasta pulsar `Listo`.
+
+Todo se puede cambiar después en `Ajustes → Vídeo`: pantalla, pantalla completa o ventana, encaje (ajustar, rellenar, estirar), pantalla de reposo (negro o una imagen), qué mostrar al parar y decodificación por hardware. Si solo tienes un monitor, puedes usar el modo ventana mientras tanto.
+
+El indicador de la barra superior dice en qué pantalla sale el vídeo y avisa si se desconecta. Al volver a conectarla, la imagen vuelve sola.
+
+### Calibrar el retardo
+
+Proyectores y TVs muestran la imagen con algo de retraso. En `Ajustes → Vídeo → Calibrar…`, con el metrónomo activo y en reproducción, la salida destella en cada pulso: mueve la compensación hasta que destello y clic coincidan. También puedes tocar 10 veces al ver el destello y 10 al oír el clic, y aplicar la compensación que te sugiere.
+
+### Control en directo
+
+| Acción | Atajo | También por |
+| --- | --- | --- |
+| Vídeo: negro (y vuelta) | `B` | MIDI learn, botón `Negro` del remote |
+| Vídeo: fundido a negro | sin asignar | MIDI learn |
+| Vídeo: mostrar reposo | sin asignar | MIDI learn |
+| Vídeo: activar/desactivar salida | sin asignar | MIDI learn |
+
+El negro no para nada: el vídeo sigue sincronizado por debajo y, al quitarlo, vuelve ya en su sitio. Mientras está activo el indicador muestra **VÍDEO EN NEGRO**. No se guarda: al reiniciar la app la salida arranca normal. Los atajos se cambian en `Ajustes → Atajos`.
+
+### Formatos recomendados
+
+- **H.264 en `.mp4`** con un fotograma clave por segundo (GOP de 1 s). Los saltos y vamps son inmediatos.
+- Con fotogramas clave muy separados (más de 2 s), LibreTracks lo marca en la biblioteca: los saltos a mitad de un vídeo así pueden tardar un instante. Para reexportarlo con ffmpeg: `ffmpeg -i entrada.mp4 -c:v libx264 -g 30 -keyint_min 30 -c:a copy salida.mp4` (para 30 fps).
+- HEVC, ProRes y VP9 funcionan; 4K necesita un equipo con decodificación por hardware.
+
+### Paquetes con vídeo
+
+Al exportar una canción (`.ltpkg`) o la sesión (`.ltset`) con vídeos, el diálogo avisa de cuántos hay y cuánto ocupan, con la casilla `Incluir los vídeos en el paquete`:
+
+- Marcada: los vídeos viajan dentro del paquete (incluidos los de la biblioteca que no estén en el timeline) y se abren en otro equipo sin buscar nada.
+- Desmarcada, o en modo Ligero: los vídeos no viajan; en otro equipo aparecen como archivos que faltan y se reubican.
+- Si subes la sesión a la nube y los vídeos pasan de 500 MB, la casilla empieza desmarcada.
+
+Al importar en Android o iOS los vídeos no se extraen (no se pueden reproducir allí), pero los clips se conservan: si la sesión vuelve a escritorio, se reubican los vídeos.
+
 ## 6. Control Remote Movil
 
 LibreTracks desktop puede publicar una superficie web remota para controlar transporte y mixer.

@@ -221,6 +221,57 @@ Use `Import song` from the top `File` section when you want to bring another Lib
 
 If you arm the wrong section, press `Esc` immediately. If there is no marker for that slot, LibreTracks reports that no marker is available for that digit.
 
+## Video
+
+LibreTracks can project videos (lyrics, backgrounds, clips) in sync with the audio on a second display: a projector or a TV. Audio is the master: the video follows the transport, jumps, vamps and warp, never the other way round.
+
+> Desktop only. On Windows it works out of the box (the installer brings what it needs). On Linux you need `libmpv` installed (package `libmpv2` or `mpv-libs` depending on the distribution). On macOS video output is not available yet. On Android and iOS sessions with video open and play their audio, but video is neither played nor editable.
+
+### Adding video
+
+1. Drag a video (`.mp4`, `.mov`, `.mkv`, `.webm`…) from your file browser onto the timeline or the library. Dropped on an audio track, a video track is created next to it.
+2. A video clip moves, trims, splits, duplicates and deletes like an audio clip, and has fade in/out and its own fit (right click).
+3. If the video has sound, LibreTracks asks whether to **extract it as an audio track**: it goes on a new track right below, lined up with the video. You can tick "Remember my choice", and do it later with right click → `Extract audio`.
+
+### Setting up the display
+
+The first time you add a video the **wizard** opens: pick the display (each one shows its number so you can tell them apart), check the test pattern shows on the projector, choose fit and idle screen and, optionally, calibrate. Nothing is saved until you press `Done`.
+
+Everything can be changed later in `Settings → Video`: display, fullscreen or window, fit (contain, cover, stretch), idle screen (black or an image), what to show when stopped, and hardware decoding. With a single monitor you can use window mode meanwhile.
+
+The badge in the top bar tells which display the video is on and warns when it is disconnected. Plug it back and the picture returns by itself.
+
+### Calibrating the delay
+
+Projectors and TVs show the picture a little late. In `Settings → Video → Calibrate…`, with the metronome on and playing, the output flashes on every beat: move the compensation until flash and click line up. You can also tap 10 times when you see the flash and 10 when you hear the click, and apply the suggested compensation.
+
+### Live control
+
+| Action | Shortcut | Also via |
+| --- | --- | --- |
+| Video: black (and back) | `B` | MIDI learn, remote `Black` button |
+| Video: fade to black | unassigned | MIDI learn |
+| Video: show idle screen | unassigned | MIDI learn |
+| Video: output on/off | unassigned | MIDI learn |
+
+Black stops nothing: the video keeps in sync underneath and comes back already in place. While it is on, the badge shows **VIDEO BLACKED OUT**. It is not saved: restarting the app starts with the picture. Shortcuts are changed in `Settings → Shortcuts`.
+
+### Recommended formats
+
+- **H.264 in `.mp4`** with one keyframe per second (1 s GOP). Jumps and vamps are instant.
+- With keyframes far apart (more than 2 s) LibreTracks flags the video in the library: jumps into the middle of such a video can take a moment. To re-export it with ffmpeg: `ffmpeg -i input.mp4 -c:v libx264 -g 30 -keyint_min 30 -c:a copy output.mp4` (for 30 fps).
+- HEVC, ProRes and VP9 work; 4K needs a machine with hardware decoding.
+
+### Packages with video
+
+When exporting a song (`.ltpkg`) or the session (`.ltset`) with videos, the dialog says how many there are and their size, with the `Include the videos in the package` box:
+
+- Ticked: the videos travel inside the package (including library videos not on the timeline) and open on another machine without relinking.
+- Unticked, or in Light mode: the videos do not travel; on another machine they show as missing files to relink.
+- When uploading the session to the cloud and the videos exceed 500 MB, the box starts unticked.
+
+Importing on Android or iOS does not extract the videos (they cannot play there), but the clips are kept: if the session goes back to desktop, relink the videos.
+
 ## 7. Mobile Remote Control
 
 LibreTracks desktop can publish a web remote surface for transport and mixer control.
