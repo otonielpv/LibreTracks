@@ -21,12 +21,12 @@ use crate::VideoError;
 /// input or audio output.
 pub(crate) fn headless(api: &Arc<MpvLibrary>, extra: &[(&str, &str)]) -> Result<Mpv, VideoError> {
     let mpv = Mpv::create(api)?;
+    for (name, value) in crate::mpv::SCRIPT_OPTIONS {
+        mpv.set_option_if_known(name, value)?;
+    }
     for (name, value) in [
         ("config", "no"),
-        ("load-scripts", "no"),
-        ("ytdl", "no"),
         ("terminal", "no"),
-        ("osc", "no"),
         ("input-default-bindings", "no"),
         ("ao", "null"),
         ("audio", "no"),

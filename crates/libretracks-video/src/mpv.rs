@@ -38,6 +38,13 @@ struct RawEventEndFile {
     error: c_int,
 }
 
+/// client.h: `MPV_ERROR_OPTION_NOT_FOUND`.
+const ERROR_OPTION_NOT_FOUND: c_int = -5;
+
+/// Options that switch off mpv's scripting. They only exist when mpv was
+/// built with Lua/JavaScript; set with [`Mpv::set_option_if_known`].
+pub const SCRIPT_OPTIONS: [(&str, &str); 3] = [("load-scripts", "no"), ("ytdl", "no"), ("osc", "no")];
+
 const FORMAT_NONE: c_int = 0;
 const FORMAT_STRING: c_int = 1;
 const FORMAT_FLAG: c_int = 3;
@@ -277,6 +284,22 @@ impl Mpv {
         // SAFETY: valid handle and NUL-terminated strings that outlive the call.
         let code =
             unsafe { (self.api.set_option_string)(self.handle, name_c.as_ptr(), value_c.as_ptr()) };
+        self.check(code, &format!("opción {name}={value}"))
+    }
+
+    /// Like [`Mpv::set_option`], but an option this libmpv does not have is
+    /// fine (`MPV_ERROR_OPTION_NOT_FOUND`). For options that depend on how
+    /// mpv was built or its version: the script switches do not exist in a
+    /// build without Lua/JavaScript (ours on macOS), where scripts are off
+    /// anyway. Any other error still fails.
+    pub fn set_option_if_known(&self, name: &str, value: &str) -> Result<(), VideoError> {
+        let (name_c, value_c) = (c_string(name)?, c_string(value)?);
+        // SAFETY: valid handle and NUL-terminated strings that outlive the call.
+        let code =
+            unsafe { (self.api.set_option_string)(self.handle, name_c.as_ptr(), value_c.as_ptr()) };
+        if code == ERROR_OPTION_NOT_FOUND {
+            return Ok(());
+        }
         self.check(code, &format!("opción {name}={value}"))
     }
 

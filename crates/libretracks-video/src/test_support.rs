@@ -16,7 +16,13 @@ use crate::mpv::MpvLibrary;
 pub fn libmpv_for_tests() -> Option<Arc<MpvLibrary>> {
     let vendored = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../vendor/bin/libmpv")
-        .join(if cfg!(windows) { "windows" } else { "unix" })
+        .join(if cfg!(windows) {
+            "windows"
+        } else if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "unix"
+        })
         .join(crate::library::bundled_file_name());
     let candidates: Vec<PathBuf> = std::env::var(crate::LIBMPV_ENV_VAR)
         .ok()

@@ -13,10 +13,14 @@
 //                mpv_*: no choca con los avcodec-*.dll del motor.
 //   Linux        no se empaqueta: se usa la libmpv del sistema (libmpv.so.2 o
 //                .so.1), declarada como "recommends" en el .deb/.rpm.
-//   macOS        todavía no: la salida de vídeo en macOS necesita la API de
-//                render de mpv, pendiente de implementar y probar en un Mac.
-// En Linux y macOS el script termina con éxito sin hacer nada: sin libmpv la
-// app arranca igual y el vídeo aparece desactivado con el motivo.
+//   macOS        build PROPIA universal (x86_64 + arm64), LGPL, macOS 12.0,
+//                dependencias estáticas y solo mpv_* exportados:
+//                scripts/libmpv-macos.sh (paso 15a). Se construye una vez (la
+//                caché de la CI guarda el resultado) y se verifica siempre con
+//                scripts/verify-libmpv-macos.sh. LT_LIBMPV_ARCH=x86_64|arm64
+//                construye solo una arquitectura (pruebas locales).
+// En Linux el script termina con éxito sin hacer nada: sin libmpv la app
+// arranca igual y el vídeo aparece desactivado con el motivo.
 //
 // El nombre no empieza por "build": el `build*` del .gitignore raíz se lo
 // tragaría (ver docs/plans/video-output/00-DISENO.md, sección 7).
@@ -96,13 +100,34 @@ function fetchWindows() {
   }
 }
 
+function fetchMac() {
+  const outDir = path.join(repoRoot, "vendor", "bin", "libmpv", "macos");
+  const dylib = path.join(outDir, "libmpv.2.dylib");
+  const arch = process.env.LT_LIBMPV_ARCH || "universal";
+  if (existsSync(dylib)) {
+    console.log(`libmpv ya está en ${outDir}`);
+  } else if (!run("bash", [path.join(repoRoot, "scripts", "libmpv-macos.sh"), "--arch", arch, "--out", outDir])) {
+    throw new Error("no se pudo construir libmpv (scripts/libmpv-macos.sh)");
+  }
+  const verifyArgs = [path.join(repoRoot, "scripts", "verify-libmpv-macos.sh"), dylib];
+  if (arch !== "universal") verifyArgs.push("--single-arch");
+  if (!run("bash", verifyArgs)) {
+    throw new Error("la libmpv de macOS no pasa la verificación");
+  }
+  if (intoDir) {
+    mkdirSync(intoDir, { recursive: true });
+    copyFileSync(dylib, path.join(intoDir, "libmpv.2.dylib"));
+    console.log(`Copiada a ${intoDir}`);
+  }
+}
+
 try {
   if (process.platform === "win32") {
     fetchWindows();
   } else if (process.platform === "linux") {
     console.log("Linux: se usa la libmpv del sistema (libmpv.so.2 / libmpv.so.1); nada que descargar.");
   } else if (process.platform === "darwin") {
-    console.log("macOS: la salida de vídeo aún no está disponible; no se empaqueta libmpv.");
+    fetchMac();
   } else {
     console.log(`${process.platform}: sin salida de vídeo.`);
   }

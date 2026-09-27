@@ -127,12 +127,9 @@ impl MpvOutputBackend {
 
     fn new_player(&self, settings: &VideoOutputSettings, surface_options: &[(&str, String)]) -> Result<Mpv, BackendError> {
         let mpv = Mpv::create(&self.api).map_err(failed)?;
-        let base: [(&str, &str); 19] = [
+        let base: [(&str, &str); 16] = [
             ("config", "no"),
-            ("load-scripts", "no"),
-            ("ytdl", "no"),
             ("terminal", "no"),
-            ("osc", "no"),
             ("osd-level", "0"),
             ("input-default-bindings", "no"),
             ("input-vo-keyboard", "no"),
@@ -151,9 +148,15 @@ impl MpvOutputBackend {
         for (name, value) in base {
             mpv.set_option(name, value).map_err(failed)?;
         }
-        // Newer mpv only (0.38+): an older libmpv (the system one on Linux,
-        // IINA's) does without. Our own surfaces never take the focus, and
-        // mpv's background is black by default.
+        // The script switches do not exist without Lua/JavaScript (our macOS
+        // build), where scripts are off anyway.
+        for (name, value) in crate::mpv::SCRIPT_OPTIONS {
+            mpv.set_option_if_known(name, value).map_err(failed)?;
+        }
+        // Newer mpv (0.38+): an older libmpv (the system one on Linux) lacks
+        // them or reads `background` as a colour and rejects "color". Our
+        // surfaces never take the focus, and mpv's background is black by
+        // default, so any failure here is harmless.
         for (name, value) in [
             ("focus-on", "never"),
             ("background", "color"),
