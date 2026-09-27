@@ -440,6 +440,15 @@ if ($useFFmpeg -eq "ON") {
   }
 }
 
+# Video output (docs/plans/video-output): the loop above just cleared
+# vendor\bin\native, so put libmpv back where the resources glob bundles it
+# (and where the debug exe finds it below), like the release workflow does.
+# Not fatal: offline, the app builds and runs with video unavailable.
+node (Join-Path $repoRoot "scripts\libmpv-fetch.mjs") --into $nativeVendorDir
+if ($LASTEXITCODE -ne 0) {
+  Write-Warning "libmpv no disponible: la app se construye sin salida de video."
+}
+
 $env:LIBRETRACKS_AUDIO_ENGINE = "cpp-v2"
 $env:LT_ENGINE_V2_LIB_DIR = $engineV2LibDir
 $env:PATH = "$engineV2LibDir;" + $env:PATH
