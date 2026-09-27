@@ -18,6 +18,7 @@ import { requestVideoRepaint } from "./videoCanvasState";
 import { useVideoStore } from "./videoStore";
 import type { VideoLaneBindings } from "./VideoClipHotspots";
 import { useVideoThumbnails } from "./useVideoThumbnails";
+import { runFirstVideoClipTrigger, runSessionOpenTrigger } from "./videoSetupTriggers";
 
 /**
  * The whole video feature as the transport panel sees it: one call, a few
@@ -34,7 +35,8 @@ export type VideoFeatureDeps = {
   /** Opens the clip context menu (timelineMenus.openVideoClipMenu). Read at
    * event time, so it may be defined after this hook runs. */
   openClipMenu: (event: ReactMouseEvent<HTMLElement>, clip: VideoClipSummary) => void;
-  /** Hook for paso 10: first video clip of the session. */
+  /** First video clip of the session. Defaults to the setup wizard's
+   * trigger (paso 10); tests override it. */
   onFirstVideoClip?: () => void;
 };
 
@@ -64,7 +66,8 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
           depsRef.current.setStatus(message);
           void alertDialog(message);
         },
-        onFirstVideoClip: () => depsRef.current.onFirstVideoClip?.(),
+        onFirstVideoClip: () =>
+          (depsRef.current.onFirstVideoClip ?? (() => void runFirstVideoClipTrigger()))(),
       }),
     [],
   );
@@ -86,6 +89,20 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
       .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desktop, sessionKey]);
+
+  // Opening a session with video on a machine without the output set up (or
+  // with its display unplugged) shows a non-blocking notice.
+  // Once per session, as soon as libmpv's status is known: a first clip
+  // added later is the wizard's business, not the notice's.
+  const libmpvAvailable = useVideoStore((state) => state.status?.available ?? false);
+  const noticeCheckedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!desktop || !deps.song || !libmpvAvailable) return;
+    if (noticeCheckedForRef.current === sessionKey) return;
+    noticeCheckedForRef.current = sessionKey;
+    void runSessionOpenTrigger(sessionKey, (deps.song.videoClips?.length ?? 0) > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktop, sessionKey, libmpvAvailable]);
 
   useVideoThumbnails(deps.song, desktop);
 

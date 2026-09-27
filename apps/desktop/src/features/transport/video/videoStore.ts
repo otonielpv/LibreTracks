@@ -30,6 +30,12 @@ export type VideoStoreState = {
   wizardStep: number;
   openWizard: (step?: number) => void;
   closeWizard: () => void;
+  /** Non-blocking notice on opening a session with video (paso 10). */
+  setupNotice: VideoSetupNotice | null;
+  /** Sessions where the user said "not now": asked once per session. */
+  dismissedSetupSessions: string[];
+  setSetupNotice: (notice: VideoSetupNotice | null) => void;
+  dismissSetupNotice: () => void;
   setPlaceAtPlayhead: (place: ((asset: VideoAssetSummary) => void) | null) => void;
   setMediaStatus: (status: VideoLibraryStatus | null) => void;
   setAssets: (assets: VideoAssetSummary[]) => void;
@@ -38,6 +44,10 @@ export type VideoStoreState = {
   setSelectedVideoClipIds: (clipIds: string[]) => void;
   clearVideoSelection: () => void;
 };
+
+export type VideoSetupNotice =
+  | { kind: "configure"; sessionKey: string }
+  | { kind: "displayMissing"; sessionKey: string; displayName: string };
 
 export const INITIAL_VIDEO_STATE = {
   status: null,
@@ -48,6 +58,8 @@ export const INITIAL_VIDEO_STATE = {
   forcedBlack: false,
   wizardOpen: false,
   wizardStep: 0,
+  setupNotice: null,
+  dismissedSetupSessions: [],
 } satisfies Pick<
   VideoStoreState,
   | "status"
@@ -58,6 +70,8 @@ export const INITIAL_VIDEO_STATE = {
   | "forcedBlack"
   | "wizardOpen"
   | "wizardStep"
+  | "setupNotice"
+  | "dismissedSetupSessions"
 >;
 
 export const useVideoStore = create<VideoStoreState>()((set) => ({
@@ -69,6 +83,14 @@ export const useVideoStore = create<VideoStoreState>()((set) => ({
   setForcedBlack: (forcedBlack) => set({ forcedBlack }),
   openWizard: (step = 0) => set({ wizardOpen: true, wizardStep: step }),
   closeWizard: () => set({ wizardOpen: false, wizardStep: 0 }),
+  setSetupNotice: (setupNotice) => set({ setupNotice }),
+  dismissSetupNotice: () =>
+    set((state) => ({
+      setupNotice: null,
+      dismissedSetupSessions: state.setupNotice
+        ? [...state.dismissedSetupSessions, state.setupNotice.sessionKey]
+        : state.dismissedSetupSessions,
+    })),
   selectVideoClip: (clipId, additive) =>
     set((state) => {
       if (!additive) {

@@ -992,6 +992,51 @@ const en = {
         statsHwdec: "Active decoding",
         statsCorrections: "Seeks / swaps / dropped frames",
       },
+      wizard: {
+        progress: "Step {{step}} of {{total}}",
+        cancel: "Cancel",
+        back: "Back",
+        next: "Next",
+        finish: "Done",
+        welcome: {
+          title: "Set up the video display",
+          body: "We'll pick the projector or TV the videos show on, check you can see it and adjust the picture. Nothing is saved until you press Done.",
+        },
+        display: {
+          title: "Choose the display",
+          body: "Each display now shows its number: pick the card with the number you see on the projector.",
+          oneMonitor:
+            "I only see one display. Plug in the projector or TV and it will show up here by itself. Meanwhile you can watch the video in a window.",
+          useWindow: "Use a window for now",
+        },
+        check: {
+          title: "Check the picture",
+          body: "A test pattern is showing on the chosen display. Can you see it on the projector?",
+          yes: "Yes, I see it",
+          no: "No, try another",
+        },
+        fit: {
+          title: "Fit and idle screen",
+        },
+        sync: {
+          title: "Sync (optional)",
+          body: "If the projector or TV shows the picture late, calibrate it now. You can also do it later in Settings → Video.",
+          skip: "Skip, I'll do it later",
+        },
+        done: {
+          title: "Done",
+          summary: "Video will play on {{display}} ({{mode}}).",
+          where: "You can change all this any time in Settings → Video.",
+        },
+      },
+      notice: {
+        configure: "This session has video. Set up the display?",
+        setUp: "Set up",
+        notNow: "Not now",
+        displayMissing: "I can't find the display {{name}}.",
+        chooseOther: "Choose another",
+        continueWithout: "Continue without video",
+      },
       badge: {
         ready: "Video: {{monitor}} · OK",
         black: "VIDEO BLACKED OUT",

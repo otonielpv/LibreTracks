@@ -1023,6 +1023,51 @@ const es = {
         statsHwdec: "Decodificación activa",
         statsCorrections: "Seeks / intercambios / fotogramas perdidos",
       },
+      wizard: {
+        progress: "Paso {{step}} de {{total}}",
+        cancel: "Cancelar",
+        back: "Atrás",
+        next: "Siguiente",
+        finish: "Listo",
+        welcome: {
+          title: "Configurar la pantalla de vídeo",
+          body: "Vamos a elegir el proyector o la TV donde se verán los vídeos, comprobar que se ve y ajustar la imagen. Nada se guarda hasta que pulses Listo.",
+        },
+        display: {
+          title: "Elige la pantalla",
+          body: "Cada pantalla muestra ahora su número: elige la tarjeta con el número que ves en el proyector.",
+          oneMonitor:
+            "Sólo veo una pantalla. Conecta el proyector o la TV y aparecerá aquí sola. Mientras, puedes ver el vídeo en una ventana.",
+          useWindow: "Usar una ventana por ahora",
+        },
+        check: {
+          title: "Comprueba la imagen",
+          body: "Estamos proyectando una carta de ajuste en la pantalla elegida. ¿La ves en el proyector?",
+          yes: "Sí, la veo",
+          no: "No, probar otra",
+        },
+        fit: {
+          title: "Encaje y pantalla de reposo",
+        },
+        sync: {
+          title: "Sincronía (opcional)",
+          body: "Si el proyector o la TV muestran la imagen con retraso, calíbralo ahora. Puedes hacerlo más tarde en Ajustes → Vídeo.",
+          skip: "Omitir, lo haré luego",
+        },
+        done: {
+          title: "Listo",
+          summary: "El vídeo saldrá por {{display}} ({{mode}}).",
+          where: "Puedes cambiar todo esto cuando quieras en Ajustes → Vídeo.",
+        },
+      },
+      notice: {
+        configure: "Esta sesión tiene vídeo. ¿Configurar la pantalla?",
+        setUp: "Configurar",
+        notNow: "Ahora no",
+        displayMissing: "No encuentro la pantalla {{name}}.",
+        chooseOther: "Elegir otra",
+        continueWithout: "Seguir sin vídeo",
+      },
       badge: {
         ready: "Vídeo: {{monitor}} · OK",
         black: "VÍDEO EN NEGRO",

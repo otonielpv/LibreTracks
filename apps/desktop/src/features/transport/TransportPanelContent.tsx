@@ -270,6 +270,7 @@ import { useMidiDrafts } from "./midi/useMidiDrafts";
 import { buildMidiOutputSettings } from "./midi/midiOutputSettings";
 import { createMidiClipHandlers } from "./midi/midiClipHandlers";
 import { useVideoFeature } from "./video/useVideoFeature";
+import { VideoSetupLayer } from "./video/VideoSetupLayer";
 import { MixSceneModal } from "./panels/MixSceneModal";
 import { RemotePanel } from "./panels/RemotePanel";
 import { MobileLanding } from "./compact/MobileLanding";
@@ -8363,6 +8364,7 @@ export function TransportPanelContent() {
               </button>
             ) : null}
 
+            <VideoSetupLayer />
             {missingMediaOpen ? (
               <MissingMediaModal
                 onClose={() => setMissingMediaOpen(false)}

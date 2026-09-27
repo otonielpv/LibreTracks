@@ -137,6 +137,23 @@ describe("video clip handlers", () => {
     expect(deps.onFirstVideoClip).toHaveBeenCalledTimes(1);
   });
 
+  it("does not announce a first clip when the song already has video", async () => {
+    const asset = {
+      fileName: "v.mp4",
+      filePath: "D:/v.mp4",
+      isMissing: false,
+      info: { durationSeconds: 6, width: 1, height: 1, fps: 30, codec: "h264", hasAudio: false },
+      hasSlowSeeks: false,
+    };
+    api.importVideoFiles.mockResolvedValueOnce({ assets: [asset], skipped: [] });
+    const { handlers, deps } = setup();
+    handlers.importVideoPaths(["D:/v.mp4"], { seconds: 30, trackId: "a1" });
+    await flush();
+    await flush();
+    expect(api.placeVideoClips).toHaveBeenCalled();
+    expect(deps.onFirstVideoClip).not.toHaveBeenCalled();
+  });
+
   it("imports into the library only when there is no placement", async () => {
     api.importVideoFiles.mockResolvedValueOnce({
       assets: [],

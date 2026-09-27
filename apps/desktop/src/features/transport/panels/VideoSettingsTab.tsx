@@ -10,17 +10,14 @@ import {
   getVideoSyncStats,
   identifyVideoDisplays,
   listVideoDisplays,
-  setVideoCalibration,
   showVideoTestPattern,
   type VideoDisplayOption,
   type VideoOutputSettings,
   type VideoSyncStats,
 } from "../desktopApi";
-import { useSongStore } from "../songStore";
-import { estimateFromTaps, MAX_OFFSET_MS, MIN_OFFSET_MS, type TapCalibration } from "../video/videoCalibration";
+import { VideoCalibrationPanel } from "../video/VideoCalibrationPanel";
+import { MAX_OFFSET_MS, MIN_OFFSET_MS } from "../video/videoCalibration";
 import { useVideoStore } from "../video/videoStore";
-
-const TAPS_NEEDED = 10;
 
 /** "\\.\DISPLAY2" → "DISPLAY2". */
 function displayName(name: string) {
@@ -38,14 +35,9 @@ export function VideoSettingsTab() {
   const [displays, setDisplays] = useState<VideoDisplayOption[]>([]);
   const [stats, setStats] = useState<VideoSyncStats | null>(null);
   const [testPattern, setTestPattern] = useState(false);
-  const [calibrating, setCalibrating] = useState(false);
-  const [flashTaps, setFlashTaps] = useState<number[]>([]);
-  const [clickTaps, setClickTaps] = useState<number[]>([]);
-  const [tapResult, setTapResult] = useState<TapCalibration | null>(null);
   const mediaStatus = useVideoStore((state) => state.status);
   const outputStatus = useVideoStore((state) => state.outputStatus);
   const openWizard = useVideoStore((state) => state.openWizard);
-  const song = useSongStore((state) => state.song);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
@@ -70,8 +62,8 @@ export function VideoSettingsTab() {
     }, 1000);
     return () => {
       window.clearInterval(timer);
-      // Leaving the tab ends a calibration or test pattern in progress.
-      void setVideoCalibration(null).catch(() => undefined);
+      // Leaving the tab ends the test pattern (the calibration panel ends
+      // its own calibration).
       void showVideoTestPattern(false).catch(() => undefined);
     };
   }, [refreshDisplays]);
@@ -96,40 +88,6 @@ export function VideoSettingsTab() {
     });
     if (typeof picked === "string") {
       apply({ idle: { kind: "image", path: picked } });
-    }
-  };
-
-  const beatGrid = () => {
-    const bpm = song?.bpm && song.bpm > 0 ? song.bpm : 120;
-    return { interval: 60 / bpm, firstBeat: song?.regions?.[0]?.startSeconds ?? 0 };
-  };
-
-  const toggleCalibration = () => {
-    const next = !calibrating;
-    setCalibrating(next);
-    setFlashTaps([]);
-    setClickTaps([]);
-    setTapResult(null);
-    void setVideoCalibration(next ? beatGrid() : null).catch(() => undefined);
-  };
-
-  const recordTap = (kind: "flash" | "click") => {
-    const now = performance.now() / 1000;
-    const flash = kind === "flash" ? [...flashTaps, now].slice(-TAPS_NEEDED) : flashTaps;
-    const click = kind === "click" ? [...clickTaps, now].slice(-TAPS_NEEDED) : clickTaps;
-    setFlashTaps(flash);
-    setClickTaps(click);
-    if (flash.length >= TAPS_NEEDED && click.length >= TAPS_NEEDED) {
-      setTapResult(
-        estimateFromTaps({
-          flashTaps: flash,
-          clickTaps: click,
-          interval: beatGrid().interval,
-          // Taps are in wall time: centre the grid on the first click tap.
-          phase: click[0],
-          currentOffsetMs: settingsRef.current.latencyOffsetMs,
-        }),
-      );
     }
   };
 
@@ -309,40 +267,14 @@ export function VideoSettingsTab() {
             }
           />
           <span>ms</span>
-          <button type="button" disabled={disabled || !settings.enabled} onClick={toggleCalibration}>
-            {calibrating ? t("transport.video.settings.calibrationStop") : t("transport.video.settings.calibrate")}
-          </button>
         </div>
         <small>{t("transport.video.settings.latencyHint")}</small>
+        <VideoCalibrationPanel
+          canCalibrate={!disabled && settings.enabled}
+          latencyOffsetMs={settings.latencyOffsetMs}
+          onApplyOffset={(offsetMs) => apply({ latencyOffsetMs: offsetMs })}
+        />
       </div>
-
-      {calibrating ? (
-        <div className="lt-video-calibration" role="group" aria-label={t("transport.video.settings.calibrate")}>
-          <p>{t("transport.video.settings.calibrationSteps")}</p>
-          <p>{t("transport.video.settings.tapHint")}</p>
-          <div className="lt-video-settings-row">
-            <button type="button" onPointerDown={() => recordTap("flash")}>
-              {t("transport.video.settings.tapFlash", { count: flashTaps.length, total: TAPS_NEEDED })}
-            </button>
-            <button type="button" onPointerDown={() => recordTap("click")}>
-              {t("transport.video.settings.tapClick", { count: clickTaps.length, total: TAPS_NEEDED })}
-            </button>
-          </div>
-          {tapResult ? (
-            <div className="lt-video-settings-row">
-              <span>
-                {t("transport.video.settings.tapResult", {
-                  lag: tapResult.pictureLagMs,
-                  offset: tapResult.suggestedOffsetMs,
-                })}
-              </span>
-              <button type="button" onClick={() => apply({ latencyOffsetMs: tapResult.suggestedOffsetMs })}>
-                {t("transport.video.settings.tapApply")}
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
 
       <div className="lt-video-settings-row">
         <button
