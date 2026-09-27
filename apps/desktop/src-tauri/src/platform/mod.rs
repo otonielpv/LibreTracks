@@ -59,6 +59,8 @@ pub mod android_memory;
 #[cfg(target_os = "android")]
 pub mod android_persistable_pick;
 #[cfg(target_os = "android")]
+pub mod android_visibility;
+#[cfg(target_os = "android")]
 pub mod android_storage;
 #[cfg(target_os = "android")]
 pub mod android_storage_events;

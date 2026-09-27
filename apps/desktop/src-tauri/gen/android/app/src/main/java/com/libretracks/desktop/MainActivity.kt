@@ -112,6 +112,33 @@ class MainActivity : TauriActivity() {
   // sync for no benefit.
   private external fun nativeOnTrimMemory(level: Int): Long
 
+  // On screen or not. The engine uses it to suspend the output stream when
+  // the app sits idle in the background: a running AAudio stream holds the
+  // system's wakelock, so the phone could never sleep while we lived (see
+  // audio/idle_suspend.rs). Straight to native, not through the WebView, for
+  // the same reason as onTrimMemory.
+  override fun onStart() {
+    super.onStart()
+    notifyNativeVisibility(true)
+  }
+
+  override fun onStop() {
+    notifyNativeVisibility(false)
+    super.onStop()
+  }
+
+  private fun notifyNativeVisibility(visible: Boolean) {
+    try {
+      nativeOnAppVisibilityChanged(visible)
+    } catch (error: UnsatisfiedLinkError) {
+      // Very early in startup: nothing is running yet, and onStart fires
+      // again once it is.
+      Log.w("LTVisibility", "visibility before the native library: ${error.message}")
+    }
+  }
+
+  private external fun nativeOnAppVisibilityChanged(visible: Boolean)
+
   // Bundled asset folders ship inside the APK (assets/<name>/), but the native
   // decoder needs fopen-able paths and Tauri's resource bundler doesn't ship
   // `resources` on Android. Copy each one to filesDir/<name> when the install

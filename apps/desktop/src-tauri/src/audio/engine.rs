@@ -25,6 +25,7 @@ use lt_audio_engine_v2::{
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::audio::idle_suspend::{IdleSuspendPolicy, SuspendAction};
 use crate::models::{PitchPrepareSummary, SourceReadinessSummary};
 
 use crate::{infra::error::DesktopError, infra::settings::AppSettings};
@@ -182,6 +183,8 @@ struct MeterFrame {
     regions: Vec<RegionMeterLevel>,
     /// Playing, or any meter still above zero: poll at the fast rate.
     active: bool,
+    /// The output stream is suspended while idle: poll at the slowest rate.
+    suspended: bool,
 }
 
 #[derive(Default)]
@@ -571,7 +574,12 @@ impl AudioController {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             const REMOTE_REFRESH_INTERVAL: Duration = Duration::from_millis(500);
 
+            // With the stream suspended nothing can change until a command
+            // arrives, and the engine restarts the stream on its own for Play.
+            const SUSPENDED_INTERVAL: Duration = Duration::from_millis(1000);
+
             let mut watchdog_fallback_state: Option<bool> = None;
+            let mut idle_policy = IdleSuspendPolicy::default();
             let mut last_watchdog_at = Instant::now();
             let mut last_track_levels: Option<Vec<AudioMeterLevel>> = None;
             let mut last_region_levels: Option<Vec<RegionMeterLevel>> = None;
@@ -583,12 +591,22 @@ impl AudioController {
                 if watchdog_due {
                     last_watchdog_at = Instant::now();
                 }
+                #[cfg(target_os = "android")]
+                let backgrounded = crate::platform::android_visibility::app_in_background();
+                #[cfg(not(target_os = "android"))]
+                let backgrounded = false;
                 let tick = controller.meter_tick(
                     watchdog_due.then_some(&mut watchdog_fallback_state),
+                    &mut idle_policy,
+                    backgrounded,
                 );
-                let mut active = false;
+                let mut interval = IDLE_INTERVAL;
                 if let Some(frame) = tick.frame {
-                    active = frame.active;
+                    if frame.suspended {
+                        interval = SUSPENDED_INTERVAL;
+                    } else if frame.active {
+                        interval = ACTIVE_INTERVAL;
+                    }
                     let tracks_changed = last_track_levels.as_ref() != Some(&frame.tracks);
                     if tracks_changed && !frame.tracks.is_empty() {
                         let _ = app_handle.emit("audio:meters", &frame.tracks);
@@ -620,7 +638,7 @@ impl AudioController {
                 if let Some(event) = tick.device_status {
                     let _ = app_handle.emit("audio:device_status", &event);
                 }
-                thread::sleep(if active { ACTIVE_INTERVAL } else { IDLE_INTERVAL });
+                thread::sleep(interval);
             }
         });
         if let Ok(mut thread_slot) = self.meter_thread.lock() {
@@ -2469,9 +2487,15 @@ impl AudioController {
     }
 
     /// One pass of the meter thread: a single engine snapshot read under the
-    /// state lock, turned into the meter levels and, when `watchdog` is
-    /// given, into the device watchdog's verdict.
-    fn meter_tick(&self, watchdog: Option<&mut Option<bool>>) -> MeterTick {
+    /// state lock, turned into the meter levels, the idle-suspension decision
+    /// (only ever acts in the background, i.e. on Android) and, when
+    /// `watchdog` is given, the device watchdog's verdict.
+    fn meter_tick(
+        &self,
+        watchdog: Option<&mut Option<bool>>,
+        idle_policy: &mut IdleSuspendPolicy,
+        backgrounded: bool,
+    ) -> MeterTick {
         // try_lock so the meter thread never blocks command dispatch: if a
         // command holds the lock this tick is simply skipped.
         let Ok(mut state) = self.state.try_lock() else {
@@ -2494,6 +2518,20 @@ impl AudioController {
                 );
             }
             let playing = matches!(snapshot.playback_state, PlaybackState::Playing);
+            let suspended = snapshot.device.output_suspended;
+            let idle = !playing && !snapshot.transport_pending_start && !snapshot.pad.enabled;
+            let request = match idle_policy.step(Instant::now(), backgrounded, idle, suspended) {
+                SuspendAction::None => None,
+                SuspendAction::Suspend => Some(true),
+                SuspendAction::Resume => Some(false),
+            };
+            if let Some(suspend) = request {
+                if let Err(error) =
+                    engine.send_command(&EngineCommand::SetOutputSuspended { suspended: suspend })
+                {
+                    eprintln!("[libretracks-audio] output suspend={suspend} failed: {error}");
+                }
+            }
             let tracks: Vec<AudioMeterLevel> = snapshot
                 .track_meters
                 .into_iter()
@@ -2519,6 +2557,7 @@ impl AudioController {
                 tracks,
                 regions,
                 active: playing || sounding,
+                suspended,
             });
         }
         state.engine = Some(engine);
