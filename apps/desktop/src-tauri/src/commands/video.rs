@@ -459,3 +459,27 @@ pub fn video_test_pattern(
     state.video.send(OutputCommand::Overlay(image));
     Ok(())
 }
+
+/// Sync diagnostics for the settings tab (error p50/p95, seeks, swaps…).
+#[tauri::command(async)]
+pub fn video_sync_stats(state: State<'_, DesktopState>) -> crate::video::runtime::VideoSyncStats {
+    state.video.runtime.stats()
+}
+
+/// Start (with a beat grid) or stop (`None`) the latency calibration: the
+/// output flashes white on every beat while the metronome clicks.
+#[tauri::command(async)]
+pub fn video_calibration(
+    app: AppHandle,
+    grid: Option<crate::video::runtime::CalibrationGrid>,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    let flash = match grid {
+        Some(_) => Some(
+            bundled_video_image(&app, "flash-white.png").ok_or("falta la imagen del destello")?,
+        ),
+        None => None,
+    };
+    state.video.set_calibration(grid, flash);
+    Ok(())
+}

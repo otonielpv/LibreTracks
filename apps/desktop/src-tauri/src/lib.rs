@@ -499,6 +499,8 @@ pub fn run() {
             commands::video::video_apply_settings,
             commands::video::video_identify_displays,
             commands::video::video_test_pattern,
+            commands::video::video_sync_stats,
+            commands::video::video_calibration,
             commands::timeline::set_midi_track_routing,
             commands::timeline::set_midi_track_enabled,
             commands::timeline::set_automation_track_enabled,

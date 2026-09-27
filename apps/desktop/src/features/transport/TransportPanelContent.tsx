@@ -6898,6 +6898,7 @@ export function TransportPanelContent() {
   // keyboard by default, and midir has no Android backend (the MIDI tabs
   // would only ever show an empty device list).
   const androidHiddenSettingsTabs: SettingsTab[] = [
+    "video",
     "shortcuts",
     "midi",
     "midiLearn",
@@ -6913,6 +6914,7 @@ export function TransportPanelContent() {
         defaultValue: "General",
       }),
     },
+    { id: "video", label: t("transport.video.settings.tab") },
     {
       id: "shortcuts",
       label: t("transport.settingsModal.tabShortcuts", {

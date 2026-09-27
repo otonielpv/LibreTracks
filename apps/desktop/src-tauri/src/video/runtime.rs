@@ -50,6 +50,32 @@ pub trait RuntimeOutput: Send {
     fn send(&self, command: OutputCommand);
     fn settings(&self) -> VideoOutputSettings;
     fn forced_black(&self) -> bool;
+    /// Latency calibration running (paso 09): the beat grid to flash on.
+    fn calibration(&self) -> Option<CalibrationGrid> {
+        None
+    }
+}
+
+/// Beats the calibration flash follows: every `interval` seconds from
+/// `first_beat`, in view seconds of the transport.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalibrationGrid {
+    pub interval: f64,
+    pub first_beat: f64,
+}
+
+/// How long each calibration flash stays white.
+const CALIBRATION_FLASH_SECONDS: f64 = 0.08;
+
+/// Whether the flash is on at `position`: during the first 80 ms after each
+/// beat. Pure, so the flash lands exactly where the sync puts the picture.
+pub fn calibration_flash_on(grid: &CalibrationGrid, position: f64) -> bool {
+    if grid.interval <= 0.0 {
+        return false;
+    }
+    let since_beat = (position - grid.first_beat).rem_euclid(grid.interval);
+    since_beat < CALIBRATION_FLASH_SECONDS
 }
 
 /// How soon the next tick should come.
@@ -170,7 +196,10 @@ impl RuntimeCore {
     }
 
     fn send_brightness(&mut self, output: &dyn RuntimeOutput, value: f64) {
-        if self.brightness.is_none_or(|current| (current - value).abs() >= 0.5) {
+        if self
+            .brightness
+            .is_none_or(|current| (current - value).abs() >= 0.5)
+        {
             self.brightness = Some(value);
             output.send(OutputCommand::SetBrightness(value));
         }
@@ -217,7 +246,9 @@ impl RuntimeCore {
         // A new clock generation is an announced jump; the position going
         // back, or ahead by more than a tick allows, is an unannounced one.
         let jumped = running
-            && self.last_position.is_some_and(|last| position < last - 0.1 || position > last + 0.5);
+            && self
+                .last_position
+                .is_some_and(|last| position < last - 0.1 || position > last + 0.5);
         let discontinuity = jumped
             || self
                 .last_generation
@@ -228,10 +259,31 @@ impl RuntimeCore {
         // A swap was sent: until the output shows the new slot, its status
         // still describes the old one. Give it a few ticks.
         if let Some((expected, since)) = self.expected_visible {
-            if status.visible_slot != expected && now.duration_since(since) < Duration::from_millis(200) {
-                return if running { TickRate::Fast } else { TickRate::Slow };
+            if status.visible_slot != expected
+                && now.duration_since(since) < Duration::from_millis(200)
+            {
+                return if running {
+                    TickRate::Fast
+                } else {
+                    TickRate::Slow
+                };
             }
             self.expected_visible = None;
+        }
+
+        // Calibration: the output shows a white image and only the brightness
+        // moves, on the same target clock the picture uses (latency and the
+        // user's offset included). Nothing else is synced meanwhile.
+        if let Some(grid) = output.calibration() {
+            let on = running && calibration_flash_on(&grid, position);
+            self.send_brightness(output, if on { 0.0 } else { -100.0 });
+            self.state = SyncState::default();
+            self.preload = PreloadState::default();
+            return if running {
+                TickRate::Fast
+            } else {
+                TickRate::Slow
+            };
         }
 
         let slot = status.visible_slot;
@@ -239,12 +291,17 @@ impl RuntimeCore {
         if status.dual_players {
             if running {
                 // Paso 08: serve jumps and clip changes from the hidden player.
-                let changing_clip = active_clip_at(&self.timeline, position)
-                    .is_some_and(|active| self.state.clip_id.as_deref() != Some(active.clip_id.as_str()));
+                let changing_clip =
+                    active_clip_at(&self.timeline, position).is_some_and(|active| {
+                        self.state.clip_id.as_deref() != Some(active.clip_id.as_str())
+                    });
                 if discontinuity || changing_clip {
-                    if let Some(preloaded) =
-                        take_swap(&mut self.preload, &self.preload_params, &self.timeline, position)
-                    {
+                    if let Some(preloaded) = take_swap(
+                        &mut self.preload,
+                        &self.preload_params,
+                        &self.timeline,
+                        position,
+                    ) {
                         output.send(OutputCommand::Player {
                             slot: hidden,
                             command: PlayerCommand::SetSpeed(preloaded.rate),
@@ -274,8 +331,10 @@ impl RuntimeCore {
                     .map(|(at, target)| UpcomingJump { at, target })
                     .or_else(|| {
                         clock.vamp.and_then(|(start, end)| {
-                            (position >= start - 0.05 && position < end)
-                                .then_some(UpcomingJump { at: end, target: start })
+                            (position >= start - 0.05 && position < end).then_some(UpcomingJump {
+                                at: end,
+                                target: start,
+                            })
                         })
                     });
                 for action in plan_preload(
@@ -294,7 +353,10 @@ impl RuntimeCore {
                         },
                         PreloadAction::Discard => PlayerCommand::Stop,
                     };
-                    output.send(OutputCommand::Player { slot: hidden, command });
+                    output.send(OutputCommand::Player {
+                        slot: hidden,
+                        command,
+                    });
                 }
             } else if self.preload.loaded.is_some() {
                 self.preload = PreloadState::default();
@@ -352,7 +414,13 @@ impl RuntimeCore {
             running,
             discontinuity,
         };
-        let out = step(&mut self.state, &self.params, &self.timeline, transport, &input);
+        let out = step(
+            &mut self.state,
+            &self.params,
+            &self.timeline,
+            transport,
+            &input,
+        );
 
         for action in out.actions {
             let command = match action {
@@ -509,6 +577,9 @@ impl RuntimeOutput for SystemOutput {
     fn forced_black(&self) -> bool {
         self.0.forced_black.load(Ordering::Relaxed)
     }
+    fn calibration(&self) -> Option<CalibrationGrid> {
+        self.0.calibration()
+    }
 }
 
 /// Owned by `VideoSystem`: wakes, starts and stops the runtime thread and
@@ -573,12 +644,11 @@ impl VideoRuntimeHandle {
                     };
                     let (requested, condition) = &*wake;
                     let Ok(guard) = requested.lock() else { break };
-                    let (mut guard, _) = match condition.wait_timeout_while(guard, wait, |requested| {
-                        !*requested
-                    }) {
-                        Ok(result) => result,
-                        Err(_) => break,
-                    };
+                    let (mut guard, _) =
+                        match condition.wait_timeout_while(guard, wait, |requested| !*requested) {
+                            Ok(result) => result,
+                            Err(_) => break,
+                        };
                     if *guard {
                         *guard = false;
                         core.mark_dirty();
@@ -634,7 +704,12 @@ mod tests {
             // Mirror loads into the status like the real output does.
             if let OutputCommand::Player {
                 slot,
-                command: PlayerCommand::Load { path, start_seconds, paused },
+                command:
+                    PlayerCommand::Load {
+                        path,
+                        start_seconds,
+                        paused,
+                    },
             } = &command
             {
                 let mut status = self.status.borrow_mut();
@@ -715,7 +790,10 @@ mod tests {
         };
         let output = ready_output();
         for _ in 0..100 {
-            assert_eq!(core.tick(&mut inputs, &output, Instant::now()), TickRate::Park);
+            assert_eq!(
+                core.tick(&mut inputs, &output, Instant::now()),
+                TickRate::Park
+            );
         }
         // C6: not a single sync tick in a second's worth of iterations.
         assert_eq!(core.stats.sync_ticks, 0);
@@ -730,7 +808,10 @@ mod tests {
             fetches: 0,
         };
         let output = FakeOutput::default();
-        assert_eq!(core.tick(&mut inputs, &output, Instant::now()), TickRate::Park);
+        assert_eq!(
+            core.tick(&mut inputs, &output, Instant::now()),
+            TickRate::Park
+        );
         assert!(output.sent.borrow().is_empty());
     }
 
@@ -743,7 +824,10 @@ mod tests {
             fetches: 0,
         };
         let output = ready_output();
-        assert_eq!(core.tick(&mut inputs, &output, Instant::now()), TickRate::Fast);
+        assert_eq!(
+            core.tick(&mut inputs, &output, Instant::now()),
+            TickRate::Fast
+        );
         assert!(output.sent.borrow().iter().any(|command| matches!(
             command,
             OutputCommand::Player { command: PlayerCommand::Load { path, .. }, .. } if path == "D:/a.mp4"
@@ -895,11 +979,41 @@ mod tests {
             .sent
             .borrow()
             .iter()
-            .filter(|command| matches!(command, OutputCommand::Player { command: PlayerCommand::Load { paused: true, .. }, .. }))
+            .filter(|command| {
+                matches!(
+                    command,
+                    OutputCommand::Player {
+                        command: PlayerCommand::Load { paused: true, .. },
+                        ..
+                    }
+                )
+            })
             .count();
         assert_eq!(laps, 20);
         assert!(core.stats.swaps >= 19, "swaps {}", core.stats.swaps);
-        assert!(hidden_loads as u64 <= core.stats.swaps + 2, "loads {hidden_loads}");
-        assert!(core.stats.forced_seeks <= 1, "seeks {}", core.stats.forced_seeks);
+        assert!(
+            hidden_loads as u64 <= core.stats.swaps + 2,
+            "loads {hidden_loads}"
+        );
+        assert!(
+            core.stats.forced_seeks <= 1,
+            "seeks {}",
+            core.stats.forced_seeks
+        );
+    }
+
+    #[test]
+    fn the_calibration_flash_is_on_for_80_ms_after_each_beat() {
+        let grid = CalibrationGrid {
+            interval: 0.5,
+            first_beat: 0.25,
+        };
+        assert!(calibration_flash_on(&grid, 0.25));
+        assert!(calibration_flash_on(&grid, 0.30));
+        assert!(!calibration_flash_on(&grid, 0.34));
+        assert!(calibration_flash_on(&grid, 10.75));
+        assert!(!calibration_flash_on(&grid, 10.70));
+        // Before the first beat the grid extends backwards.
+        assert!(calibration_flash_on(&grid, -0.25));
     }
 }

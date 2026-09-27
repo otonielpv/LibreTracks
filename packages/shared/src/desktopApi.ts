@@ -36,6 +36,8 @@ import type {
   TransportLifecycleEvent,
   TransportSnapshot,
   VideoClipProps,
+  VideoCalibrationGrid,
+  VideoSyncStats,
   VideoDisplayOption,
   VideoOutputSettings,
   VideoOutputStatus,
@@ -2420,4 +2422,13 @@ export async function listenToVideoOutputStatus(
   return listen<VideoOutputStatus>("video:output-status", (event) => {
     handler(event.payload);
   });
+}
+
+export async function getVideoSyncStats(): Promise<VideoSyncStats> {
+  return invokeCommand<VideoSyncStats>("video_sync_stats");
+}
+
+/** Start the latency calibration flash on a beat grid, or stop it (null). */
+export async function setVideoCalibration(grid: VideoCalibrationGrid | null): Promise<void> {
+  return invokeCommand<void>("video_calibration", { grid });
 }

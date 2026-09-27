@@ -28,6 +28,7 @@ import { MulticoreAudioField } from "./MulticoreAudioField";
 import { SessionStorageVolumeField } from "./SessionStorageVolumeField";
 import { UpdateCheckField } from "./UpdateCheckField";
 import { ShortcutsSettingsTab } from "./ShortcutsSettingsTab";
+import { VideoSettingsTab } from "./VideoSettingsTab";
 import {
   MidiSettingsTab,
   type MidiOutputSettings,
@@ -897,6 +898,7 @@ export function SettingsPanel({
               ) : null}
 
               {activeTab === "shortcuts" ? <ShortcutsSettingsTab /> : null}
+              {activeTab === "video" ? <VideoSettingsTab /> : null}
 
               {activeTab === "diagnostics" ? (
                 <section

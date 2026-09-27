@@ -1082,6 +1082,20 @@ export type VideoOutputStatus = {
   opens: number;
 };
 
+/** Sync diagnostics of the video runtime (paso 07). */
+export type VideoSyncStats = {
+  errorP50Ms: number | null;
+  errorP95Ms: number | null;
+  forcedSeeks: number;
+  swaps: number;
+  frameDrops: number;
+  hwdec: string | null;
+  syncTicks: number;
+};
+
+/** Beat grid the calibration flash follows (view seconds). */
+export type VideoCalibrationGrid = { interval: number; firstBeat: number };
+
 export type AppSettings = {
   /** Video output (display, fit, idle, latency). Absent in old settings. */
   videoOutput?: VideoOutputSettings;

@@ -25,6 +25,11 @@ export type VideoStoreState = {
   /** Emergency black (paso 13). Volatile: never saved, a restart clears it. */
   forcedBlack: boolean;
   setForcedBlack: (forcedBlack: boolean) => void;
+  /** Display setup wizard (paso 10): open, and on which step. */
+  wizardOpen: boolean;
+  wizardStep: number;
+  openWizard: (step?: number) => void;
+  closeWizard: () => void;
   setPlaceAtPlayhead: (place: ((asset: VideoAssetSummary) => void) | null) => void;
   setMediaStatus: (status: VideoLibraryStatus | null) => void;
   setAssets: (assets: VideoAssetSummary[]) => void;
@@ -41,9 +46,18 @@ export const INITIAL_VIDEO_STATE = {
   placeAtPlayhead: null,
   outputStatus: null,
   forcedBlack: false,
+  wizardOpen: false,
+  wizardStep: 0,
 } satisfies Pick<
   VideoStoreState,
-  "status" | "assets" | "selectedVideoClipIds" | "placeAtPlayhead" | "outputStatus" | "forcedBlack"
+  | "status"
+  | "assets"
+  | "selectedVideoClipIds"
+  | "placeAtPlayhead"
+  | "outputStatus"
+  | "forcedBlack"
+  | "wizardOpen"
+  | "wizardStep"
 >;
 
 export const useVideoStore = create<VideoStoreState>()((set) => ({
@@ -53,6 +67,8 @@ export const useVideoStore = create<VideoStoreState>()((set) => ({
   setPlaceAtPlayhead: (placeAtPlayhead) => set({ placeAtPlayhead }),
   setOutputStatus: (outputStatus) => set({ outputStatus }),
   setForcedBlack: (forcedBlack) => set({ forcedBlack }),
+  openWizard: (step = 0) => set({ wizardOpen: true, wizardStep: step }),
+  closeWizard: () => set({ wizardOpen: false, wizardStep: 0 }),
   selectVideoClip: (clipId, additive) =>
     set((state) => {
       if (!additive) {

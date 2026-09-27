@@ -163,7 +163,8 @@ export type SettingsTab =
   | "general"
   | "shortcuts"
   | "midiLearn"
-  | "diagnostics";
+  | "diagnostics"
+  | "video";
 
 export type TrackDropState = {
   targetTrackId: string;

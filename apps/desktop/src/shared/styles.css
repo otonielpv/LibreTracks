@@ -12349,3 +12349,44 @@ html.lt-ios body {
   font-weight: 800;
   letter-spacing: 0.04em;
 }
+
+/* Settings → Video (paso 09). */
+.lt-video-settings .lt-video-settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.lt-video-settings .is-error {
+  color: var(--lt-danger, #e5484d);
+}
+
+.lt-video-settings .is-warning {
+  color: var(--lt-warning, #f5a524);
+}
+
+.lt-video-settings-path {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-video-calibration {
+  border: 1px solid var(--lt-border, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.lt-video-settings-stats {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-video-settings-stats dd {
+  margin: 0;
+}

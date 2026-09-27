@@ -37,6 +37,7 @@ pub struct VideoSystem {
     /// Emergency black (paso 13). Volatile by design.
     pub forced_black: std::sync::atomic::AtomicBool,
     pub runtime: runtime::VideoRuntimeHandle,
+    calibration: std::sync::Mutex<Option<runtime::CalibrationGrid>>,
 }
 
 /// Whether video works on this machine, and why not if it does not. Shown by
@@ -97,6 +98,27 @@ impl VideoSystem {
         }
         self.send(OutputCommand::ApplySettings(settings));
         self.runtime.notify();
+    }
+
+    /// Start (`Some`) or end (`None`) the latency calibration. `flash_image`
+    /// is the white picture the output shows meanwhile.
+    pub fn set_calibration(
+        &self,
+        grid: Option<runtime::CalibrationGrid>,
+        flash_image: Option<String>,
+    ) {
+        if let Ok(mut current) = self.calibration.lock() {
+            *current = grid;
+        }
+        self.send(OutputCommand::Overlay(grid.and(flash_image)));
+        if grid.is_none() {
+            self.send(OutputCommand::SetBrightness(0.0));
+        }
+        self.runtime.notify();
+    }
+
+    pub fn calibration(&self) -> Option<runtime::CalibrationGrid> {
+        self.calibration.lock().ok().and_then(|grid| *grid)
     }
 
     pub fn settings(&self) -> libretracks_video::settings::VideoOutputSettings {
