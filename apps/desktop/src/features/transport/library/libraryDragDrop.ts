@@ -52,7 +52,13 @@ import {
   skippedImportsMessage,
 } from "./importPipeline";
 import { placeLibraryFolderOnTimeline } from "./libraryFolderDrop";
-import { divertVideoPaths, routeDroppedVideos, type VideoPathSink } from "./videoDropRouting";
+import {
+  divertVideoPaths,
+  routeCompactDroppedVideos,
+  routeDomDroppedVideos,
+  routeDroppedVideos,
+  type VideoPathSink,
+} from "./videoDropRouting";
 import {
   buildTimelineDropPreviewGeometry,
   classifyDroppedPaths,
@@ -1846,6 +1852,10 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     classification: DroppedFileClassification,
     dropSeconds: number,
   ) {
+    // Returning before the refs below are cleared leaves the drop to the
+    // native event (see routeDomDroppedVideos).
+    if (!routeDomDroppedVideos(deps(), classification.videoFiles, dropSeconds)) return;
+
     deps().setExternalDropPreview(null);
     deps().nativeDropKindRef.current = null;
     deps().domExternalDropPreviewUntilRef.current = 0;
@@ -1894,7 +1904,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       return;
     }
 
-    handleDroppedAudioFiles(classification.audioFiles, dropSeconds);
+    if (classification.audioFiles.length) handleDroppedAudioFiles(classification.audioFiles, dropSeconds);
   }
 
   function handleNativeExternalTimelineDrop(
@@ -2170,6 +2180,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
         });
         return;
       }
+      if (routeCompactDroppedVideos(deps(), classification, deps().song, compactHit.regionId)) return;
       if (classification.kind === "external") {
         // A Reaper/Ableton project dropped on the compact strip imports as a
         // song appended to the setlist (the drop position has no meaning on the

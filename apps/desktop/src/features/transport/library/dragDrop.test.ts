@@ -4,6 +4,7 @@ import {
   LIBRARY_ASSET_DRAG_MIME,
   classifyDroppedFiles,
   classifyDroppedPaths,
+  droppedFilePaths,
   getDroppedFiles,
   isAcceptedDroppedFileName,
   findOverlappingSongs,
@@ -59,6 +60,30 @@ describe("dragDrop helpers", () => {
       new File([new Uint8Array([2])], "guide.wav"),
     ];
     expect(classifyDroppedFiles(files).kind).toBe("mixed");
+  });
+
+  // The DOM drop is the one the timeline acts on; it used to know nothing
+  // about video, so dropping an .mp4 said "unsupported".
+  it("classifies dropped DOM video files as video, alone or with audio", () => {
+    const video = new File([new Uint8Array([1])], "Letras.MP4");
+    const alone = classifyDroppedFiles([video]);
+    expect(alone.kind).toBe("video");
+    expect(alone.videoFiles).toEqual([video]);
+
+    const withAudio = classifyDroppedFiles([video, new File([new Uint8Array([2])], "click.wav")]);
+    expect(withAudio.kind).toBe("audio");
+    expect(withAudio.videoFiles).toHaveLength(1);
+    expect(withAudio.audioFiles).toHaveLength(1);
+
+    const withJunk = classifyDroppedFiles([video, new File([new Uint8Array([3])], "notes.txt")]);
+    expect(withJunk.kind).toBe("unsupported");
+  });
+
+  it("only hands out DOM file paths when every file has one", () => {
+    const withPath = Object.assign(new File([new Uint8Array([1])], "a.mp4"), { path: "D:/a.mp4" });
+    const withoutPath = new File([new Uint8Array([1])], "b.mp4");
+    expect(droppedFilePaths([withPath])).toEqual(["D:/a.mp4"]);
+    expect(droppedFilePaths([withPath, withoutPath])).toBeNull();
   });
 
   it("classifies unsupported files", () => {

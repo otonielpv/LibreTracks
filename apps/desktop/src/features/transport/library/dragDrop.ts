@@ -214,6 +214,8 @@ export type DroppedFileClassification = {
   packageFile: File | null;
   externalFile: File | null;
   audioFiles: File[];
+  /** Videos in the drop (kind "video", or "audio" with videos alongside). */
+  videoFiles: File[];
   unsupportedFiles: File[];
 };
 
@@ -298,12 +300,18 @@ export function classifyDroppedFiles(files: File[]): DroppedFileClassification {
   const packageFiles: File[] = [];
   const externalFiles: File[] = [];
   const audioFiles: File[] = [];
+  const videoFiles: File[] = [];
   const unsupportedFiles: File[] = [];
 
   for (const file of files) {
     const extension = fileExtension(file.name);
     if (extension === "ltpkg") {
       packageFiles.push(file);
+      continue;
+    }
+
+    if (SUPPORTED_VIDEO_EXTENSIONS.has(extension)) {
+      videoFiles.push(file);
       continue;
     }
 
@@ -333,6 +341,7 @@ export function classifyDroppedFiles(files: File[]): DroppedFileClassification {
       packageFile: packageFiles[0],
       externalFile: null,
       audioFiles: [],
+      videoFiles: [],
       unsupportedFiles: [],
     };
   }
@@ -350,6 +359,7 @@ export function classifyDroppedFiles(files: File[]): DroppedFileClassification {
       packageFile: null,
       externalFile: externalFiles[0],
       audioFiles: [],
+      videoFiles: [],
       unsupportedFiles: [],
     };
   }
@@ -361,17 +371,19 @@ export function classifyDroppedFiles(files: File[]): DroppedFileClassification {
       packageFile: packageFiles[0] ?? null,
       externalFile: externalFiles[0] ?? null,
       audioFiles,
+      videoFiles,
       unsupportedFiles,
     };
   }
 
-  if (audioFiles.length > 0 && unsupportedFiles.length === 0) {
+  if ((audioFiles.length > 0 || videoFiles.length > 0) && unsupportedFiles.length === 0) {
     return {
-      kind: "audio",
+      kind: audioFiles.length > 0 ? "audio" : "video",
       files,
       packageFile: null,
       externalFile: null,
       audioFiles,
+      videoFiles,
       unsupportedFiles: [],
     };
   }
@@ -382,8 +394,19 @@ export function classifyDroppedFiles(files: File[]): DroppedFileClassification {
     packageFile: null,
     externalFile: null,
     audioFiles,
+    videoFiles,
     unsupportedFiles,
   };
+}
+
+/**
+ * Real paths of dropped DOM files, or null if any of them lacks one. WebView2
+ * usually hands DOM drops without paths; the native Tauri drop event carries
+ * them.
+ */
+export function droppedFilePaths(files: File[]): string[] | null {
+  const paths = files.map((file) => (file as File & { path?: string }).path?.trim() ?? "");
+  return paths.every(Boolean) ? paths : null;
 }
 
 export function classifyDroppedPaths(paths: string[]): NativeDroppedPathClassification {
