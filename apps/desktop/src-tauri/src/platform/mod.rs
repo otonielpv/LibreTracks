@@ -123,6 +123,7 @@ mod tests {
             supported_sample_rates: Vec::new(),
             last_error: String::new(),
             fallback_active: false,
+            output_suspended: false,
         }
     }
 

@@ -1067,6 +1067,7 @@ std::string EngineImpl::get_snapshot() const {
     }
 
     snap.device = device_manager_->device_info();
+    snap.device.output_suspended = output_suspended_.load(std::memory_order_relaxed);
 
     // Surface the last command error through device.last_error so the
     // Rust layer (which already reads that field after every command)
@@ -1743,6 +1744,29 @@ std::string EngineImpl::capture_output_samples() const {
 Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
     if (state_ != State::Initialized)
         return Result<void>::err("Engine not initialized");
+
+    // A suspended output stream (CmdSetOutputSuspended) comes back by itself
+    // for anything that has to be heard, whoever sends it: the UI, a MIDI
+    // pedal with the screen off, an automation cue. The commands that reopen
+    // the device start a fresh stream, so they just clear the flag.
+    if (output_suspended_.load(std::memory_order_relaxed)) {
+        const bool needs_audio =
+            std::holds_alternative<CmdPlay>(cmd)
+            || (std::holds_alternative<CmdSetPadConfig>(cmd)
+                && std::get<CmdSetPadConfig>(cmd).enabled);
+        const bool reopens_device =
+            std::holds_alternative<CmdSetOutputDevice>(cmd)
+            || std::holds_alternative<CmdSetSampleRate>(cmd)
+            || std::holds_alternative<CmdSetBufferSize>(cmd)
+            || std::holds_alternative<CmdSetLowLatency>(cmd);
+        if (needs_audio) {
+            device_manager_->start();
+            output_suspended_.store(false, std::memory_order_relaxed);
+            fprintf(stderr, "[LT_AUDIO] output stream resumed for playback\n");
+        } else if (reopens_device) {
+            output_suspended_.store(false, std::memory_order_relaxed);
+        }
+    }
 
     return std::visit([this](auto&& c) -> Result<void> {
         using T = std::decay_t<decltype(c)>;
@@ -3739,6 +3763,24 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     prearmed_jumps_->prepare(sr, /*channels=*/2, bs * 4);
                     prearm_revision_.fetch_add(1, std::memory_order_relaxed);
                 }
+            }
+            return r;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetOutputSuspended>) {
+            if (c.suspended == output_suspended_.load(std::memory_order_relaxed))
+                return Result<void>::ok();
+            // Never pause under the transport or a sounding pad: the host
+            // decides when it is idle, but a Play may have landed since.
+            if (c.suspended
+                && (clock_->position().state == TransportState::Playing
+                    || pad_config_.enabled)) {
+                return Result<void>::ok();
+            }
+            auto r = c.suspended ? device_manager_->stop() : device_manager_->start();
+            if (r.is_ok()) {
+                output_suspended_.store(c.suspended, std::memory_order_relaxed);
+                fprintf(stderr, "[LT_AUDIO] output stream %s\n",
+                        c.suspended ? "suspended while idle" : "resumed");
             }
             return r;
         }

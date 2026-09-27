@@ -283,6 +283,15 @@ pub enum EngineCommand {
     /// `device.fallback_active == true`). No-op while a hardware stream is
     /// healthy. Sent periodically by the device watchdog until audio returns.
     RecoverOutputDevice,
+    /// Pause (`true`) or restart (`false`) the open output stream without
+    /// closing it, to let a phone sleep while the app sits idle: a running
+    /// AAudio stream holds the system's 'AudioMix' wakelock. The engine
+    /// restarts the stream by itself on `Play` and on enabling the pad.
+    /// Android host only — desktop backends take a paused stream for a dead
+    /// device and switch to the fallback clock.
+    SetOutputSuspended {
+        suspended: bool,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

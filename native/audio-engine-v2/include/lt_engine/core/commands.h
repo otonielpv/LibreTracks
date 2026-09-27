@@ -350,6 +350,14 @@ struct CmdSetBufferSize   { int buffer_size; };
 struct CmdRecoverOutputDevice {};
 // Android only: toggle AAudio low-latency PerformanceMode. Reopens the device.
 struct CmdSetLowLatency   { bool enabled; };
+// Pause (true) or restart (false) the open output stream without closing it.
+// For idle power saving on mobile: a running AAudio stream keeps the system's
+// 'AudioMix' wakelock held, so the phone never sleeps while the app lives.
+// The engine restarts the stream by itself on Play and on enabling the pad,
+// so a MIDI pedal or any other play path works while suspended. Only the
+// Android host sends it: desktop backends read a paused stream as a dead
+// device and would switch to the fallback clock.
+struct CmdSetOutputSuspended { bool suspended; };
 
 // ---------------------------------------------------------------------------
 // Union type
@@ -374,7 +382,7 @@ using EngineCommand = std::variant<
     CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,
     CmdUpsertSongTracks, CmdPrepareSources,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize, CmdSetLowLatency,
-    CmdRecoverOutputDevice
+    CmdRecoverOutputDevice, CmdSetOutputSuspended
 >;
 
 // ---------------------------------------------------------------------------

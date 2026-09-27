@@ -80,6 +80,7 @@ fn device_info_round_trips() {
         supported_sample_rates: vec![44100, 48000, 96000],
         last_error: String::new(),
         fallback_active: true,
+        output_suspended: true,
     };
     let rt = round_trip(&snap);
     assert_eq!(rt.device.backend, "WASAPI");
@@ -88,6 +89,7 @@ fn device_info_round_trips() {
     assert_eq!(rt.device.output_channel_count, 2);
     assert_eq!(rt.device.supported_sample_rates, vec![44100, 48000, 96000]);
     assert!(rt.device.fallback_active);
+    assert!(rt.device.output_suspended);
 }
 
 #[test]

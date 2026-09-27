@@ -80,6 +80,9 @@ private:
 
     // ── Sub-systems ──────────────────────────────────────────────────────
     std::unique_ptr<AudioDeviceManager> device_manager_;
+    // The open output stream is paused on purpose (CmdSetOutputSuspended).
+    // Written on the command thread, read by get_snapshot().
+    std::atomic<bool> output_suspended_{false};
     std::unique_ptr<TransportClock>     clock_;
     std::unique_ptr<JumpScheduler>      scheduler_;
     std::unique_ptr<SourceManager>      source_manager_;
