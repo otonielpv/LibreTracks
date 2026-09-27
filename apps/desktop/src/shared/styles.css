@@ -12350,64 +12350,178 @@ html.lt-ios body {
   letter-spacing: 0.04em;
 }
 
-/* Settings → Video (paso 09). */
+/* Video UI (pasos 09–11): Settings → Video, the display wizard, the setup
+   notice, the "extract audio?" prompt. Buttons here are not inside
+   .lt-inline-actions, so they get the same look explicitly: flat, 2px corners,
+   Space Grotesk, teal on hover, teal-tinted when primary or pressed. */
+.lt-video-settings button,
+.lt-video-wizard-body button:not(.lt-video-wizard-card):not(.lt-video-wizard-fit),
+.lt-video-wizard-footer button,
+.lt-video-setup-notice button,
+.lt-video-calibration-panel button {
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.05);
+  color: #f3f0ef;
+  padding: 0.7rem 1rem;
+  font: 700 0.82rem/1 "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.lt-video-settings button:hover:not(:disabled),
+.lt-video-wizard-body button:not(.lt-video-wizard-card):not(.lt-video-wizard-fit):hover:not(:disabled),
+.lt-video-wizard-footer button:hover:not(:disabled),
+.lt-video-setup-notice button:hover,
+.lt-video-calibration-panel button:hover:not(:disabled) {
+  border-color: rgb(87 241 219 / 0.28);
+  color: #57f1db;
+}
+
+.lt-video-wizard-footer button.is-primary,
+.lt-video-setup-notice button.is-primary,
+.lt-video-settings button[aria-pressed="true"],
+.lt-video-wizard-body button[aria-pressed="true"] {
+  border-color: rgb(87 241 219 / 0.24);
+  background: rgb(87 241 219 / 0.14);
+}
+
+.lt-video-settings button:disabled,
+.lt-video-wizard-body button:disabled,
+.lt-video-wizard-footer button:disabled,
+.lt-video-calibration-panel button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.lt-video-settings .is-error,
+.lt-video-wizard .is-error {
+  color: #ff9a8a;
+}
+
+.lt-video-settings .is-warning {
+  color: #f5c16c;
+}
+
+/* Settings → Video --------------------------------------------------------- */
 .lt-video-settings .lt-video-settings-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 0.6rem;
 }
 
-.lt-video-settings .is-error {
-  color: var(--lt-danger, #e5484d);
+.lt-video-settings .lt-settings-field > span:first-child {
+  color: #f3f0ef;
+  font: 700 0.92rem/1.2 "Space Grotesk", sans-serif;
 }
 
-.lt-video-settings .is-warning {
-  color: var(--lt-warning, #f5a524);
+.lt-video-settings .lt-video-settings-row select {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.lt-video-settings input[type="number"] {
+  width: 5.5rem;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.65rem 0.7rem;
+  font: 600 0.92rem/1.2 "Space Grotesk", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-video-settings input[type="range"] {
+  flex: 1;
+  min-width: 10rem;
+  accent-color: #57f1db;
+}
+
+.lt-video-settings-status {
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.06);
+  background: rgb(15 18 19 / 0.92);
+  padding: 0.75rem 0.95rem;
+  color: rgb(229 226 225 / 0.8);
+  font: 600 0.84rem/1.4 "Space Grotesk", sans-serif;
 }
 
 .lt-video-settings-path {
-  max-width: 220px;
+  max-width: 16rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.lt-video-calibration {
-  border: 1px solid var(--lt-border, rgba(255, 255, 255, 0.12));
-  border-radius: 6px;
-  padding: 8px 12px;
-}
-
 .lt-video-settings-stats {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 4px 12px;
+  gap: 0.35rem 1rem;
   margin: 0;
-  font-variant-numeric: tabular-nums;
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.06);
+  background: rgb(15 18 19 / 0.92);
+  padding: 0.75rem 0.95rem;
+  color: rgb(229 226 225 / 0.66);
+  font: 500 0.84rem/1.4 "Space Grotesk", sans-serif;
 }
 
 .lt-video-settings-stats dd {
   margin: 0;
+  color: #f3f0ef;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Video display setup wizard and notice (paso 10). */
+.lt-video-calibration-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.lt-video-calibration {
+  align-self: stretch;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(87 241 219 / 0.04);
+  padding: 0.75rem 0.95rem;
+  color: rgb(229 226 225 / 0.8);
+  font: 500 0.84rem/1.55 "Space Grotesk", sans-serif;
+}
+
+.lt-video-calibration p {
+  margin: 0 0 0.5rem;
+}
+
+/* Display wizard ----------------------------------------------------------- */
 .lt-video-wizard {
-  width: min(640px, calc(100vw - 32px));
+  width: min(40rem, calc(100vw - 2rem));
 }
 
 .lt-video-wizard-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px 20px;
+  gap: 1rem;
+  color: rgb(229 226 225 / 0.8);
+  font: 500 0.92rem/1.55 "Space Grotesk", sans-serif;
+}
+
+.lt-video-wizard-body p {
+  margin: 0;
+}
+
+.lt-video-wizard-body .lt-video-settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 .lt-video-wizard-cards,
 .lt-video-wizard-fits {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .lt-video-wizard-card,
@@ -12415,24 +12529,37 @@ html.lt-ios body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 10px 14px;
-  border: 1px solid var(--lt-border, rgba(255, 255, 255, 0.12));
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
+  gap: 0.35rem;
+  min-width: 8.5rem;
+  padding: 0.85rem 1rem;
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  background: rgb(15 18 19 / 0.92);
+  color: #f3f0ef;
+  font: 600 0.84rem/1.3 "Space Grotesk", sans-serif;
   cursor: pointer;
+}
+
+.lt-video-wizard-card small,
+.lt-video-wizard-fit small {
+  color: rgb(229 226 225 / 0.66);
+  font-weight: 500;
+}
+
+.lt-video-wizard-card:hover,
+.lt-video-wizard-fit:hover {
+  border-color: rgb(87 241 219 / 0.28);
 }
 
 .lt-video-wizard-card[aria-checked="true"],
 .lt-video-wizard-fit[aria-checked="true"] {
-  border-color: var(--lt-accent, #4f8cff);
-  box-shadow: 0 0 0 1px var(--lt-accent, #4f8cff);
+  border-color: rgb(87 241 219 / 0.6);
+  background: rgb(87 241 219 / 0.1);
+  color: #57f1db;
 }
 
 .lt-video-wizard-card-number {
-  font-size: 28px;
-  line-height: 1;
+  font: 700 1.9rem/1 "Space Grotesk", sans-serif;
 }
 
 .lt-video-wizard-frame {
@@ -12441,50 +12568,75 @@ html.lt-ios body {
   justify-content: center;
   overflow: hidden;
   background: #000;
+  border: 1px solid rgb(255 255 255 / 0.12);
   border-radius: 2px;
 }
 
 .lt-video-wizard-picture {
   flex: none;
-  background: linear-gradient(135deg, #4f8cff, #b04fff);
+  background: linear-gradient(135deg, rgb(87 241 219 / 0.85), rgb(87 241 219 / 0.25));
+}
+
+.lt-video-wizard-note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.06);
+  background: rgb(15 18 19 / 0.92);
+  padding: 0.85rem 0.95rem;
 }
 
 .lt-video-wizard-footer {
   display: flex;
-  gap: 8px;
-  padding: 12px 20px 16px;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
 }
 
 .lt-video-wizard-spacer {
   flex: 1;
 }
 
-.lt-video-wizard .is-error {
-  color: var(--lt-danger, #e5484d);
+.lt-video-audio-prompt {
+  width: min(32rem, calc(100vw - 2rem));
 }
 
+.lt-video-audio-prompt label {
+  color: #f3f0ef;
+}
+
+.lt-video-audio-prompt input[type="checkbox"] {
+  accent-color: #57f1db;
+}
+
+/* Setup notice and audio-extraction progress ------------------------------ */
 .lt-video-setup-notice {
   position: fixed;
   left: 50%;
-  bottom: 24px;
+  bottom: 1.5rem;
   transform: translateX(-50%);
   z-index: 60;
   display: flex;
   align-items: center;
-  gap: 10px;
-  max-width: calc(100vw - 32px);
-  padding: 8px 12px;
-  border: 1px solid var(--lt-border, rgba(255, 255, 255, 0.12));
-  border-radius: 8px;
-  background: var(--lt-surface-raised, #1f2126);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  gap: 0.75rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.65rem 0.75rem 0.65rem 1rem;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.24);
+  background: rgb(15 18 19 / 0.97);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  color: #f3f0ef;
+  font: 600 0.86rem/1.3 "Space Grotesk", sans-serif;
 }
 
-.lt-video-calibration-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+.lt-video-setup-notice .material-symbols-outlined {
+  color: #57f1db;
+}
+
+.lt-video-setup-notice button {
+  padding: 0.55rem 0.8rem;
 }
 
 /* Export dialogs: the videos block (paso 12). */

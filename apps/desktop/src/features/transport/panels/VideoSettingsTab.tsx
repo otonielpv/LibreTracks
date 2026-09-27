@@ -114,14 +114,16 @@ export function VideoSettingsTab() {
         )}
       </div>
 
-      <label className="lt-settings-field lt-video-settings-row">
+      <label className="lt-settings-toggle">
         <input
           type="checkbox"
           checked={settings.enabled}
           disabled={disabled}
           onChange={(event) => apply({ enabled: event.target.checked })}
         />
-        <span>{t("transport.video.settings.enabled")}</span>
+        <span className="lt-settings-toggle-copy">
+          <strong>{t("transport.video.settings.enabled")}</strong>
+        </span>
       </label>
 
       <div className="lt-settings-field">

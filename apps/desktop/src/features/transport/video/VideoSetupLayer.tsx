@@ -41,7 +41,11 @@ export function VideoSetupNotice() {
           ? t("transport.video.notice.displayMissing", { name: notice.displayName })
           : t("transport.video.notice.configure")}
       </span>
-      <button type="button" onClick={() => store.openWizard(missing ? WIZARD_STEP_DISPLAY : 0)}>
+      <button
+        type="button"
+        className="is-primary"
+        onClick={() => store.openWizard(missing ? WIZARD_STEP_DISPLAY : 0)}
+      >
         {missing ? t("transport.video.notice.chooseOther") : t("transport.video.notice.setUp")}
       </button>
       <button type="button" onClick={() => store.dismissSetupNotice()}>
