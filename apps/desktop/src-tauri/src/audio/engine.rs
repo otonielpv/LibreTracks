@@ -18,6 +18,7 @@ use libretracks_core::{
 use libretracks_remote::RemoteServerHandle;
 use lt_audio_engine_v2::{
     ClipUpdate, DeviceInfo, Engine, EngineCommand, EngineError, EngineSnapshot, JumpTarget,
+    PlaybackState,
     JumpTargetKind, JumpTrigger, MarkerUpdate, RegionUpdate, SourceRef, TempoMarkerUpdate,
     TimeSignatureMarkerUpdate, TrackClipUpdate, TrackUpsert,
 };
@@ -131,7 +132,7 @@ pub struct AudioOutputDevicesResponse {
     pub device_descriptors: Vec<AudioDeviceDescriptor>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioMeterLevel {
     pub track_id: String,
@@ -168,11 +169,26 @@ pub struct AudioDeviceStatusEvent {
     pub last_error: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegionMeterLevel {
     pub region_id: String,
     pub peak: f32,
+}
+
+/// What the meter thread reads from one engine snapshot.
+struct MeterFrame {
+    tracks: Vec<AudioMeterLevel>,
+    regions: Vec<RegionMeterLevel>,
+    /// Playing, or any meter still above zero: poll at the fast rate.
+    active: bool,
+}
+
+#[derive(Default)]
+struct MeterTick {
+    /// `None` when the state lock was busy or the snapshot failed.
+    frame: Option<MeterFrame>,
+    device_status: Option<AudioDeviceStatusEvent>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -538,38 +554,73 @@ impl AudioController {
         let stop = Arc::clone(&self.meter_thread_stop);
         let controller_addr = self as *const AudioController as usize;
         let handle = thread::spawn(move || {
-            // Device watchdog bookkeeping (~1 check per 500ms, piggybacked on
-            // this thread so no extra thread + no extra snapshot polling).
-            let mut watchdog_tick: u32 = 0;
+            // One engine snapshot per tick feeds the track meters, the region
+            // meters and (every WATCHDOG_INTERVAL) the device watchdog. The
+            // snapshot crosses the FFI as JSON, so it is not free: this loop
+            // used to take three of them and emit both meter events on every
+            // tick, which on a low-end phone kept ~a whole core busy with the
+            // transport stopped (docs/internal/PLAY_CLOSED_TESTING_LOG.md, 22).
+            //
+            // Events go out only when the levels change; the UI animates the
+            // falloff on its own. With nothing playing and every meter at
+            // zero the loop drops to IDLE_INTERVAL, and it is back at the
+            // active rate one tick after audio starts.
+            const ACTIVE_INTERVAL: Duration = Duration::from_millis(33);
+            const IDLE_INTERVAL: Duration = Duration::from_millis(200);
+            const WATCHDOG_INTERVAL: Duration = Duration::from_millis(500);
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            const REMOTE_REFRESH_INTERVAL: Duration = Duration::from_millis(500);
+
             let mut watchdog_fallback_state: Option<bool> = None;
+            let mut last_watchdog_at = Instant::now();
+            let mut last_track_levels: Option<Vec<AudioMeterLevel>> = None;
+            let mut last_region_levels: Option<Vec<RegionMeterLevel>> = None;
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            let mut last_remote_publish_at: Option<Instant> = None;
             while !stop.load(Ordering::Relaxed) {
                 let controller = unsafe { &*(controller_addr as *const AudioController) };
-                if let Ok(levels) = controller.current_meter_levels() {
-                    if !levels.is_empty() {
-                        let _ = app_handle.emit("audio:meters", &levels);
-                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                let watchdog_due = last_watchdog_at.elapsed() >= WATCHDOG_INTERVAL;
+                if watchdog_due {
+                    last_watchdog_at = Instant::now();
+                }
+                let tick = controller.meter_tick(
+                    watchdog_due.then_some(&mut watchdog_fallback_state),
+                );
+                let mut active = false;
+                if let Some(frame) = tick.frame {
+                    active = frame.active;
+                    let tracks_changed = last_track_levels.as_ref() != Some(&frame.tracks);
+                    if tracks_changed && !frame.tracks.is_empty() {
+                        let _ = app_handle.emit("audio:meters", &frame.tracks);
+                    }
+                    // The remote throttles its own sends and would drop the
+                    // last frame of a decay, freezing its meters above zero,
+                    // so it also gets a slow refresh while nothing changes.
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if !frame.tracks.is_empty()
+                        && (tracks_changed
+                            || last_remote_publish_at
+                                .map_or(true, |at| at.elapsed() >= REMOTE_REFRESH_INTERVAL))
+                    {
                         if let Ok(remote_handle) = controller.remote_handle.lock() {
                             if let Some(remote_handle) = remote_handle.as_ref() {
-                                remote_handle.publish_meters(&levels);
+                                remote_handle.publish_meters(&frame.tracks);
+                                last_remote_publish_at = Some(Instant::now());
                             }
                         }
                     }
-                }
-                if let Ok(region_levels) = controller.current_region_meter_levels() {
-                    if !region_levels.is_empty() {
-                        let _ = app_handle.emit("audio:region_meters", &region_levels);
-                    }
-                }
-                watchdog_tick += 1;
-                if watchdog_tick >= 15 {
-                    watchdog_tick = 0;
-                    if let Some(event) =
-                        controller.device_watchdog_tick(&mut watchdog_fallback_state)
+                    if last_region_levels.as_ref() != Some(&frame.regions)
+                        && !frame.regions.is_empty()
                     {
-                        let _ = app_handle.emit("audio:device_status", &event);
+                        let _ = app_handle.emit("audio:region_meters", &frame.regions);
                     }
+                    last_track_levels = Some(frame.tracks);
+                    last_region_levels = Some(frame.regions);
                 }
-                thread::sleep(std::time::Duration::from_millis(33));
+                if let Some(event) = tick.device_status {
+                    let _ = app_handle.emit("audio:device_status", &event);
+                }
+                thread::sleep(if active { ACTIVE_INTERVAL } else { IDLE_INTERVAL });
             }
         });
         if let Ok(mut thread_slot) = self.meter_thread.lock() {
@@ -2417,30 +2468,61 @@ impl AudioController {
         })
     }
 
-    fn current_meter_levels(&self) -> Result<Vec<AudioMeterLevel>, DesktopError> {
-        // Use try_lock so the meter thread never blocks command dispatch. If a
-        // command holds the lock, we simply return empty levels for this 33ms poll cycle.
-        let mut state = match self.state.try_lock() {
-            Ok(guard) => guard,
-            Err(std::sync::TryLockError::WouldBlock) => return Ok(vec![]),
-            Err(std::sync::TryLockError::Poisoned(_)) => {
-                return Err(DesktopError::AudioCommand(
-                    "audio v2 state lock poisoned".into(),
-                ))
-            }
+    /// One pass of the meter thread: a single engine snapshot read under the
+    /// state lock, turned into the meter levels and, when `watchdog` is
+    /// given, into the device watchdog's verdict.
+    fn meter_tick(&self, watchdog: Option<&mut Option<bool>>) -> MeterTick {
+        // try_lock so the meter thread never blocks command dispatch: if a
+        // command holds the lock this tick is simply skipped.
+        let Ok(mut state) = self.state.try_lock() else {
+            return MeterTick::default();
         };
-        let snapshot = ensure_engine(&mut state)?
-            .get_snapshot()
-            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
-        Ok(snapshot
-            .track_meters
-            .into_iter()
-            .map(|meter| AudioMeterLevel {
-                track_id: meter.track_id,
-                left_peak: meter.left_peak,
-                right_peak: meter.right_peak,
-            })
-            .collect())
+        if ensure_engine(&mut state).is_err() {
+            return MeterTick::default();
+        }
+        let Some(engine) = state.engine.take() else {
+            return MeterTick::default();
+        };
+        let mut tick = MeterTick::default();
+        if let Ok(snapshot) = engine.get_snapshot() {
+            if let Some(previously_fallback) = watchdog {
+                tick.device_status = self.device_watchdog_apply(
+                    &mut state,
+                    &engine,
+                    &snapshot.device,
+                    previously_fallback,
+                );
+            }
+            let playing = matches!(snapshot.playback_state, PlaybackState::Playing);
+            let tracks: Vec<AudioMeterLevel> = snapshot
+                .track_meters
+                .into_iter()
+                .map(|meter| AudioMeterLevel {
+                    track_id: meter.track_id,
+                    left_peak: meter.left_peak,
+                    right_peak: meter.right_peak,
+                })
+                .collect();
+            let regions: Vec<RegionMeterLevel> = snapshot
+                .region_meters
+                .into_iter()
+                .map(|meter| RegionMeterLevel {
+                    region_id: meter.region_id,
+                    peak: meter.peak,
+                })
+                .collect();
+            let sounding = tracks
+                .iter()
+                .any(|level| level.left_peak > 0.0 || level.right_peak > 0.0)
+                || regions.iter().any(|level| level.peak > 0.0);
+            tick.frame = Some(MeterFrame {
+                tracks,
+                regions,
+                active: playing || sounding,
+            });
+        }
+        state.engine = Some(engine);
+        tick
     }
 
     pub fn current_output_meter_level(
@@ -2504,91 +2586,55 @@ impl AudioController {
     /// the snapshot and (a) retries the configured device every couple of
     /// seconds, (b) reports status flips so the UI can show/hide the
     /// "no audio output" badge. The user never has to touch "Refresh devices".
-    fn device_watchdog_tick(
+    fn device_watchdog_apply(
         &self,
+        state: &mut ControllerState,
+        engine: &Engine,
+        device: &DeviceInfo,
         previously_fallback: &mut Option<bool>,
     ) -> Option<AudioDeviceStatusEvent> {
         const RECOVERY_RETRY_INTERVAL: Duration = Duration::from_secs(2);
-        let mut state = match self.state.try_lock() {
-            Ok(guard) => guard,
-            // A command is in flight; check again next tick.
-            Err(_) => return None,
-        };
-        // Never create the engine from the watchdog — before first use there
-        // is nothing to watch.
-        let engine = state.engine.take()?;
-        let snapshot = engine.get_snapshot();
         let mut event = None;
-        if let Ok(snapshot) = snapshot {
-            let fallback = snapshot.device.fallback_active;
-            if *previously_fallback != Some(fallback) {
-                *previously_fallback = Some(fallback);
-                if fallback {
-                    eprintln!(
-                        "[libretracks-audio] output device lost ({}); engine running on \
-                         internal fallback clock, retrying every {}s",
-                        snapshot.device.last_error,
-                        RECOVERY_RETRY_INTERVAL.as_secs(),
-                    );
-                } else {
-                    eprintln!(
-                        "[libretracks-audio] output device active: \"{}\" ({})",
-                        snapshot.device.device_name, snapshot.device.backend,
-                    );
-                }
-                event = Some(AudioDeviceStatusEvent {
-                    fallback_active: fallback,
-                    device_name: snapshot.device.device_name.clone(),
-                    last_error: snapshot.device.last_error.clone(),
-                });
-            }
+        let fallback = device.fallback_active;
+        if *previously_fallback != Some(fallback) {
+            *previously_fallback = Some(fallback);
             if fallback {
-                let due = state
-                    .last_device_recovery_attempt
-                    .map_or(true, |last| last.elapsed() >= RECOVERY_RETRY_INTERVAL);
-                if due {
-                    if let Err(error) = engine.send_command(&EngineCommand::RecoverOutputDevice)
-                    {
-                        if audio_debug_logging_enabled() {
-                            eprintln!(
-                                "[libretracks-audio] device recovery attempt failed: {error}"
-                            );
-                        }
-                    }
-                    // Stamp AFTER the attempt: a slow failing open (seconds on
-                    // DirectSound) must not make the next tick immediately due
-                    // and starve the state lock.
-                    state.last_device_recovery_attempt = Some(Instant::now());
-                }
+                eprintln!(
+                    "[libretracks-audio] output device lost ({}); engine running on                      internal fallback clock, retrying every {}s",
+                    device.last_error,
+                    RECOVERY_RETRY_INTERVAL.as_secs(),
+                );
             } else {
-                state.last_device_recovery_attempt = None;
+                eprintln!(
+                    "[libretracks-audio] output device active: \"{}\" ({})",
+                    device.device_name, device.backend,
+                );
             }
+            event = Some(AudioDeviceStatusEvent {
+                fallback_active: fallback,
+                device_name: device.device_name.clone(),
+                last_error: device.last_error.clone(),
+            });
         }
-        state.engine = Some(engine);
-        event
-    }
-
-    fn current_region_meter_levels(&self) -> Result<Vec<RegionMeterLevel>, DesktopError> {
-        let mut state = match self.state.try_lock() {
-            Ok(guard) => guard,
-            Err(std::sync::TryLockError::WouldBlock) => return Ok(vec![]),
-            Err(std::sync::TryLockError::Poisoned(_)) => {
-                return Err(DesktopError::AudioCommand(
-                    "audio v2 state lock poisoned".into(),
-                ))
+        if fallback {
+            let due = state
+                .last_device_recovery_attempt
+                .map_or(true, |last| last.elapsed() >= RECOVERY_RETRY_INTERVAL);
+            if due {
+                if let Err(error) = engine.send_command(&EngineCommand::RecoverOutputDevice) {
+                    if audio_debug_logging_enabled() {
+                        eprintln!("[libretracks-audio] device recovery attempt failed: {error}");
+                    }
+                }
+                // Stamp AFTER the attempt: a slow failing open (seconds on
+                // DirectSound) must not make the next tick immediately due
+                // and starve the state lock.
+                state.last_device_recovery_attempt = Some(Instant::now());
             }
-        };
-        let snapshot = ensure_engine(&mut state)?
-            .get_snapshot()
-            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
-        Ok(snapshot
-            .region_meters
-            .into_iter()
-            .map(|meter| RegionMeterLevel {
-                region_id: meter.region_id,
-                peak: meter.peak,
-            })
-            .collect())
+        } else {
+            state.last_device_recovery_attempt = None;
+        }
+        event
     }
 
     /// True once a session has been loaded into the engine (signature set).
