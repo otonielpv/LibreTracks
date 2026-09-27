@@ -144,6 +144,16 @@ impl MpvLibrary {
         ClientApiVersion((raw >> 16) as u32, (raw & 0xffff) as u32)
     }
 
+    /// The loaded library, to resolve optional symbols (the render API).
+    pub(crate) fn raw_library(&self) -> &libloading::Library {
+        &self._library
+    }
+
+    /// mpv's text for an error code.
+    pub fn describe_error(&self, code: c_int) -> String {
+        self.error_message(code)
+    }
+
     fn error_message(&self, code: c_int) -> String {
         // SAFETY: mpv returns a static string for every code.
         let text = unsafe { CStr::from_ptr((self.error_string)(code)) };
@@ -244,6 +254,11 @@ impl Mpv {
 
     pub fn library(&self) -> &Arc<MpvLibrary> {
         &self.api
+    }
+
+    /// The `mpv_handle*`, for the render API (`render.rs`).
+    pub(crate) fn raw_handle(&self) -> *mut c_void {
+        self.handle
     }
 
     fn check(&self, code: c_int, what: &str) -> Result<(), VideoError> {

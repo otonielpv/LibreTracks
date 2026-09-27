@@ -17,6 +17,7 @@ pub mod output;
 pub mod settings;
 pub mod library;
 pub mod mpv;
+pub mod render;
 #[cfg(windows)]
 pub mod surface_win32;
 pub mod thumbs;
