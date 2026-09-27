@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import type { VideoAssetSummary, VideoLibraryStatus, VideoOutputStatus } from "../desktopApi";
+import type { VideoAudioChoice } from "./videoAudioExtraction";
 
 /**
  * Video state shared between zones of the transport panel: whether libmpv is
@@ -36,6 +37,12 @@ export type VideoStoreState = {
   dismissedSetupSessions: string[];
   setSetupNotice: (notice: VideoSetupNotice | null) => void;
   dismissSetupNotice: () => void;
+  /** "Extract the video's audio?" waiting for an answer (paso 11). */
+  audioPrompt: VideoAudioPrompt | null;
+  setAudioPrompt: (prompt: VideoAudioPrompt | null) => void;
+  /** Extractions running: clip id → progress 0–1. */
+  audioExtractions: Record<string, number>;
+  setAudioExtraction: (clipId: string, fraction: number | null) => void;
   setPlaceAtPlayhead: (place: ((asset: VideoAssetSummary) => void) | null) => void;
   setMediaStatus: (status: VideoLibraryStatus | null) => void;
   setAssets: (assets: VideoAssetSummary[]) => void;
@@ -44,6 +51,8 @@ export type VideoStoreState = {
   setSelectedVideoClipIds: (clipIds: string[]) => void;
   clearVideoSelection: () => void;
 };
+
+export type VideoAudioPrompt = { count: number; resolve: (choice: VideoAudioChoice) => void };
 
 export type VideoSetupNotice =
   | { kind: "configure"; sessionKey: string }
@@ -60,6 +69,8 @@ export const INITIAL_VIDEO_STATE = {
   wizardStep: 0,
   setupNotice: null,
   dismissedSetupSessions: [],
+  audioPrompt: null,
+  audioExtractions: {},
 } satisfies Pick<
   VideoStoreState,
   | "status"
@@ -72,6 +83,8 @@ export const INITIAL_VIDEO_STATE = {
   | "wizardStep"
   | "setupNotice"
   | "dismissedSetupSessions"
+  | "audioPrompt"
+  | "audioExtractions"
 >;
 
 export const useVideoStore = create<VideoStoreState>()((set) => ({
@@ -84,6 +97,14 @@ export const useVideoStore = create<VideoStoreState>()((set) => ({
   openWizard: (step = 0) => set({ wizardOpen: true, wizardStep: step }),
   closeWizard: () => set({ wizardOpen: false, wizardStep: 0 }),
   setSetupNotice: (setupNotice) => set({ setupNotice }),
+  setAudioPrompt: (audioPrompt) => set({ audioPrompt }),
+  setAudioExtraction: (clipId, fraction) =>
+    set((state) => {
+      const next = { ...state.audioExtractions };
+      if (fraction == null) delete next[clipId];
+      else next[clipId] = fraction;
+      return { audioExtractions: next };
+    }),
   dismissSetupNotice: () =>
     set((state) => ({
       setupNotice: null,

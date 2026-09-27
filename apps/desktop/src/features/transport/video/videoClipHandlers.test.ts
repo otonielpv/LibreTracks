@@ -4,6 +4,8 @@ const api = vi.hoisted(() => ({
   createTrack: vi.fn(async () => ({ projectRevision: 1 })),
   deleteVideoClips: vi.fn(async () => ({ projectRevision: 2 })),
   duplicateVideoClips: vi.fn(async () => ({ projectRevision: 3 })),
+  extractVideoAudio: vi.fn(async () => ({ projectRevision: 9 })),
+  getSongView: vi.fn(),
   importVideoFiles: vi.fn(),
   moveVideoClip: vi.fn(async () => ({ projectRevision: 4 })),
   placeVideoClips: vi.fn(async () => ({ projectRevision: 5 })),
@@ -49,6 +51,7 @@ function setup(song: Partial<SongView> = { videoClips: [clip()] }) {
     refreshVideoAssets: vi.fn(async () => undefined),
     reportSkipped: vi.fn(),
     onFirstVideoClip: vi.fn(),
+    decideAudioExtraction: vi.fn(async () => true),
   };
   return { deps, handlers: createVideoClipHandlers(deps) };
 }
@@ -198,5 +201,67 @@ describe("video drag geometry", () => {
     expect(applyVideoDrag(clip(), "fadeIn", 50, null).fadeInSeconds).toBe(8);
     expect(applyVideoDrag(clip(), "fadeOut", -2, null).fadeOutSeconds).toBe(2);
     expect(applyVideoDrag(clip(), "fadeOut", -50, null).fadeOutSeconds).toBe(7);
+  });
+
+  describe("audio of a video (paso 11)", () => {
+    const withAudio = (hasAudio: boolean, filePath = "D:/v.mp4") => ({
+      fileName: "v.mp4",
+      filePath,
+      isMissing: false,
+      info: { durationSeconds: 6, width: 1, height: 1, fps: 30, codec: "h264", hasAudio },
+      hasSlowSeeks: false,
+    });
+
+    it("offers to extract the audio of the placed videos that have sound, then extracts it", async () => {
+      api.importVideoFiles.mockResolvedValueOnce({
+        assets: [withAudio(true), withAudio(false, "D:/mute.mp4")],
+        skipped: [],
+      });
+      api.getSongView.mockResolvedValueOnce({
+        videoClips: [
+          clip(),
+          clip({ id: "new1", filePath: "D:/v.mp4" }),
+          clip({ id: "new2", filePath: "D:/mute.mp4" }),
+        ],
+      });
+      const { handlers, deps } = setup();
+      handlers.importVideoPaths(["D:/v.mp4", "D:/mute.mp4"], { seconds: 30, trackId: null });
+      for (let i = 0; i < 6; i += 1) await flush();
+
+      expect(deps.decideAudioExtraction).toHaveBeenCalledWith(1);
+      expect(api.extractVideoAudio).toHaveBeenCalledTimes(1);
+      expect(api.extractVideoAudio).toHaveBeenCalledWith("new1");
+      expect(deps.applyPlaybackSnapshot).toHaveBeenLastCalledWith({ projectRevision: 9 });
+      expect(useVideoStore.getState().audioExtractions).toEqual({});
+    });
+
+    it("does not ask for videos without sound", async () => {
+      api.importVideoFiles.mockResolvedValueOnce({ assets: [withAudio(false)], skipped: [] });
+      const { handlers, deps } = setup();
+      handlers.importVideoPaths(["D:/v.mp4"], { seconds: 30, trackId: null });
+      for (let i = 0; i < 6; i += 1) await flush();
+      expect(api.getSongView).not.toHaveBeenCalled();
+      expect(deps.decideAudioExtraction).not.toHaveBeenCalled();
+      expect(api.extractVideoAudio).not.toHaveBeenCalled();
+    });
+
+    it("a 'no' extracts nothing", async () => {
+      api.importVideoFiles.mockResolvedValueOnce({ assets: [withAudio(true)], skipped: [] });
+      api.getSongView.mockResolvedValueOnce({ videoClips: [clip(), clip({ id: "new1" })] });
+      const { handlers, deps } = setup();
+      deps.decideAudioExtraction.mockResolvedValueOnce(false);
+      handlers.importVideoPaths(["D:/v.mp4"], { seconds: 30, trackId: null });
+      for (let i = 0; i < 6; i += 1) await flush();
+      expect(deps.decideAudioExtraction).toHaveBeenCalledWith(1);
+      expect(api.extractVideoAudio).not.toHaveBeenCalled();
+    });
+
+    it("the clip menu entry is only for clips whose video has sound", () => {
+      const { handlers } = setup();
+      useVideoStore.getState().setAssets([withAudio(true), withAudio(false, "D:/mute.mp4")]);
+      expect(handlers.clipHasAudio(clip())).toBe(true);
+      expect(handlers.clipHasAudio(clip({ filePath: "D:/mute.mp4" }))).toBe(false);
+      expect(handlers.clipHasAudio(clip({ filePath: "D:/unknown.mp4" }))).toBe(false);
+    });
   });
 });

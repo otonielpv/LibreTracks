@@ -113,6 +113,8 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     showVideoTestPattern: vi.fn(async () => undefined),
     getVideoSyncStats: vi.fn(async () => null),
     setVideoCalibration: vi.fn(async () => undefined),
+    extractVideoAudio: vi.fn(async () => null),
+    listenToVideoAudioExtractProgress: vi.fn(async () => () => {}),
     getTransportSnapshot: vi.fn(testDesktopApiMock.getTransportSnapshot),
     getSongView: vi.fn(testDesktopApiMock.getSongView),
     getWaveformSummaries: vi.fn(testDesktopApiMock.getWaveformSummaries),

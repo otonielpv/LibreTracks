@@ -1037,6 +1037,16 @@ const en = {
         chooseOther: "Choose another",
         continueWithout: "Continue without video",
       },
+      audio: {
+        promptTitle: "This video has audio",
+        promptBody: "Extract it as an audio track? It goes on a new track below the video, lined up with it.",
+        remember: "Remember my choice",
+        extract: "Extract as audio track",
+        no: "No",
+        extracting: "Extracting the video's audio…",
+        extracted: "Video audio extracted to a new track",
+        progress: "Extracting audio ({{count}})… {{percent}}%",
+      },
       badge: {
         ready: "Video: {{monitor}} · OK",
         black: "VIDEO BLACKED OUT",

@@ -401,3 +401,130 @@ fn editing_and_saving_keeps_video_clips_intact() {
         .iter()
         .any(|track| track.kind == TrackKind::Video));
 }
+
+// ---------------------------------------------------------------------------
+// Audio of a video (paso 11). The decoding itself is libmpv's and has its own
+// tests in libretracks-video; here a silent WAV stands in for its output.
+// ---------------------------------------------------------------------------
+
+fn video_info(has_audio: bool) -> libretracks_core::VideoAssetInfo {
+    libretracks_core::VideoAssetInfo {
+        duration_seconds: 10.0,
+        width: 1920,
+        height: 1080,
+        fps: 30.0,
+        rotation_degrees: 0,
+        codec: "h264".into(),
+        hardware_decode: false,
+        has_audio,
+        keyframe_interval_seconds: None,
+    }
+}
+
+/// Plan, "decode" (a silent WAV of `seconds`) and commit.
+fn extract(session: &mut DesktopSession, audio: &AudioController, clip_id: &str, seconds: u32) {
+    let plan = session.plan_video_audio_extraction(clip_id).expect("plan");
+    super::tests::write_silent_test_wav(&plan.destination, seconds);
+    session
+        .commit_video_audio_extraction(&plan, audio)
+        .expect("commit");
+}
+
+#[test]
+fn extracted_audio_lands_below_the_video_track_aligned_with_the_clip() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    // A trimmed clip: starts 1.5 s into the file and lasts 3 s.
+    let mut edited = song(&session);
+    let clip = edited.video_clips.iter_mut().find(|clip| clip.id == "vc1").unwrap();
+    clip.source_start_seconds = 1.5;
+    clip.duration_seconds = 3.0;
+    session.engine.load_song(edited).expect("reload");
+
+    extract(&mut session, &audio, "vc1", 10);
+
+    let song = song(&session);
+    let order: Vec<&str> = song.tracks.iter().map(|track| track.id.as_str()).collect();
+    let v1 = order.iter().position(|id| *id == "v1").unwrap();
+    let new_track = &song.tracks[v1 + 1];
+    assert_eq!(new_track.kind, TrackKind::Audio);
+    assert_eq!(new_track.name, "letras (audio)");
+
+    let extracted = song
+        .clips
+        .iter()
+        .find(|clip| clip.track_id == new_track.id)
+        .expect("audio clip");
+    assert_eq!(extracted.file_path, "audio/letras (audio).wav");
+    assert_eq!(extracted.timeline_start_seconds, 2.0);
+    assert_eq!(extracted.source_start_seconds, 1.5);
+    assert_eq!(extracted.duration_seconds, 3.0);
+}
+
+#[test]
+fn two_videos_with_the_same_name_give_two_wavs() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    let mut edited = song(&session);
+    edited.video_clips[0].file_path = "D:/A/letras.mp4".into();
+    edited.video_clips[1].file_path = "D:/B/LETRAS.mp4".into();
+    session.engine.load_song(edited).expect("reload");
+
+    // Both planned before either finishes: the reservation keeps them apart.
+    let first = session.plan_video_audio_extraction("vc1").expect("plan 1");
+    let second = session.plan_video_audio_extraction("vc2").expect("plan 2");
+    assert_ne!(
+        first.relative_path.to_lowercase(),
+        second.relative_path.to_lowercase()
+    );
+    super::tests::write_silent_test_wav(&first.destination, 6);
+    super::tests::write_silent_test_wav(&second.destination, 6);
+    session.commit_video_audio_extraction(&first, &audio).expect("commit 1");
+    session.commit_video_audio_extraction(&second, &audio).expect("commit 2");
+
+    let paths: Vec<String> = song(&session)
+        .clips
+        .iter()
+        .map(|clip| clip.file_path.clone())
+        .filter(|path| path.contains("(audio)"))
+        .collect();
+    assert_eq!(paths.len(), 2);
+    assert_ne!(paths[0], paths[1]);
+    assert!(first.destination.is_file() && second.destination.is_file());
+}
+
+#[test]
+fn undoing_an_extraction_removes_track_and_clip_but_keeps_the_wav_in_the_library() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    let before = song(&session);
+
+    extract(&mut session, &audio, "vc1", 10);
+    assert_eq!(song(&session).tracks.len(), before.tracks.len() + 1);
+
+    session.undo_action(&audio).expect("undo");
+    let after = song(&session);
+    assert_eq!(after.tracks, before.tracks);
+    assert_eq!(after.clips, before.clips);
+    let library = session.get_library_assets().expect("library");
+    assert!(library
+        .iter()
+        .any(|asset| asset.file_path == "audio/letras (audio).wav"));
+}
+
+#[test]
+fn a_video_without_audio_cannot_be_extracted() {
+    let mut session = two_song_session();
+    session
+        .register_video_assets(vec![("D:/Visuales/letras.mp4".into(), video_info(false))], None)
+        .expect("register");
+    assert!(session.plan_video_audio_extraction("vc1").is_err());
+
+    session
+        .register_video_assets(vec![("D:/Visuales/letras.mp4".into(), video_info(true))], None)
+        .expect("register");
+    let plan = session.plan_video_audio_extraction("vc1").expect("plan");
+    // A failed decode frees the name again.
+    plan.abandon();
+    assert!(!plan.destination.exists());
+}

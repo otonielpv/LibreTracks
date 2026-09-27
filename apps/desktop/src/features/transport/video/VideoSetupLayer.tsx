@@ -1,13 +1,15 @@
 import { useTranslation } from "react-i18next";
 
 import { isMobileApp } from "../desktopApi";
+import { VideoAudioProgress, VideoAudioPrompt } from "./VideoAudioPrompt";
 import { WIZARD_STEP_DISPLAY, VideoSetupWizard } from "./VideoSetupWizard";
 import { useVideoStore } from "./videoStore";
 
 /**
- * Everything the display setup (paso 10) puts on screen: the non-blocking
- * notice on opening a session with video, and the wizard. The transport panel
- * only mounts this; desktop only.
+ * Everything the video feature puts over the panel: the non-blocking notice
+ * on opening a session with video and the display wizard (paso 10), the
+ * "extract its audio?" question and its progress (paso 11). The transport
+ * panel only mounts this; desktop only.
  */
 export function VideoSetupLayer() {
   if (isMobileApp) return null;
@@ -15,6 +17,8 @@ export function VideoSetupLayer() {
     <>
       <VideoSetupNotice />
       <VideoSetupWizard />
+      <VideoAudioPrompt />
+      <VideoAudioProgress />
     </>
   );
 }

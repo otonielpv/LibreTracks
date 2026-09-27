@@ -466,7 +466,7 @@ fn sanitize_import_file_name(file_name: &str) -> Result<String, DesktopError> {
 ///   user later "forgot", leftovers from an interrupted extraction) would
 ///   otherwise be overwritten too — and the rollback path of a failed import
 ///   would then delete it.
-fn allocate_library_audio_path(
+pub(super) fn allocate_library_audio_path(
     song_dir: &Path,
     reserved_paths: &HashSet<String>,
     folder: Option<&str>,

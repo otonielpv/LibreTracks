@@ -7,6 +7,7 @@ description = "Salida de vídeo de LibreTracks: libmpv cargada en ejecución, mo
 
 [dependencies]
 libretracks-core = { path = "../libretracks-core" }
+hound = "3"
 libloading = "0.8"
 serde.workspace = true
 serde_json.workspace = true

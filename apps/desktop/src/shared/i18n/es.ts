@@ -1068,6 +1068,16 @@ const es = {
         chooseOther: "Elegir otra",
         continueWithout: "Seguir sin vídeo",
       },
+      audio: {
+        promptTitle: "Este vídeo tiene audio",
+        promptBody: "¿Extraerlo como pista de audio? Quedará en una pista nueva debajo del vídeo, alineada con él.",
+        remember: "Recordar mi elección",
+        extract: "Extraer como pista de audio",
+        no: "No",
+        extracting: "Extrayendo el audio del vídeo…",
+        extracted: "Audio del vídeo extraído en una pista nueva",
+        progress: "Extrayendo audio ({{count}})… {{percent}} %",
+      },
       badge: {
         ready: "Vídeo: {{monitor}} · OK",
         black: "VÍDEO EN NEGRO",

@@ -6,6 +6,7 @@ import { skippedImportsMessage } from "../library/importPipeline";
 import {
   getVideoMediaStatus,
   isMobileApp,
+  listenToVideoAudioExtractProgress,
   listVideoAssets,
   type SkippedImport,
   type SongView,
@@ -105,6 +106,27 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
   }, [desktop, sessionKey, libmpvAvailable]);
 
   useVideoThumbnails(deps.song, desktop);
+
+  // Progress of audio extractions (paso 11), shown by VideoAudioProgress.
+  useEffect(() => {
+    if (!desktop) return;
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    void listenToVideoAudioExtractProgress(({ clipId, fraction }) => {
+      if (clipId in useVideoStore.getState().audioExtractions) {
+        useVideoStore.getState().setAudioExtraction(clipId, fraction);
+      }
+    })
+      .then((stop) => {
+        if (cancelled) stop();
+        else unlisten = stop;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [desktop]);
 
   // The library's "put it on the timeline" action: at the playhead, on the
   // selected video track if there is one, else on a new video track.

@@ -483,3 +483,53 @@ pub fn video_calibration(
     state.video.set_calibration(grid, flash);
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Audio of a video (paso 11).
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VideoAudioProgress<'a> {
+    clip_id: &'a str,
+    fraction: f64,
+}
+
+/// Decode a video clip's audio to a WAV in the session and put it on a new
+/// audio track below the video track, aligned with the clip (one undo step).
+/// The decoding runs off the session lock; `video:audio-extract-progress`
+/// reports it.
+#[tauri::command(async)]
+pub fn extract_video_audio(
+    app: AppHandle,
+    clip_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let libmpv = state.video.libmpv()?;
+    let plan = with_session(&state, |session, _| session.plan_video_audio_extraction(&clip_id))?;
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let decoded = libretracks_video::audio::extract_audio_to_wav(
+        &libmpv,
+        &plan.source,
+        &plan.destination,
+        plan.duration_seconds,
+        &|fraction| {
+            let _ = app.emit(
+                "video:audio-extract-progress",
+                VideoAudioProgress {
+                    clip_id: &plan.clip_id,
+                    fraction,
+                },
+            );
+        },
+        &cancel,
+    );
+    if let Err(error) = decoded {
+        plan.abandon();
+        return Err(error.to_string());
+    }
+    with_session(&state, |session, audio| {
+        session.commit_video_audio_extraction(&plan, audio)
+    })
+}
+

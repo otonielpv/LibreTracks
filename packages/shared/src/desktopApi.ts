@@ -37,6 +37,7 @@ import type {
   TransportSnapshot,
   VideoClipProps,
   VideoCalibrationGrid,
+  VideoAudioExtractProgress,
   VideoSyncStats,
   VideoDisplayOption,
   VideoOutputSettings,
@@ -2431,4 +2432,18 @@ export async function getVideoSyncStats(): Promise<VideoSyncStats> {
 /** Start the latency calibration flash on a beat grid, or stop it (null). */
 export async function setVideoCalibration(grid: VideoCalibrationGrid | null): Promise<void> {
   return invokeCommand<void>("video_calibration", { grid });
+}
+
+/** Extract a video clip's audio to a WAV on a new track below it (one undo). */
+export async function extractVideoAudio(clipId: string): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("extract_video_audio", { clipId });
+}
+
+export async function listenToVideoAudioExtractProgress(
+  handler: (progress: VideoAudioExtractProgress) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<VideoAudioExtractProgress>("video:audio-extract-progress", (event) => {
+    handler(event.payload);
+  });
 }

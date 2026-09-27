@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 
-use libretracks_core::{source_seconds_at_view, Clip, Track, TrackKind};
+use libretracks_core::{source_seconds_at_view, Clip, Song, Track, TrackKind};
 
 use crate::audio::engine::AudioController;
 use crate::infra::error::DesktopError;
@@ -409,36 +409,7 @@ impl DesktopSession {
             ));
         }
 
-        let audio_to = if parent_track_id.is_some() {
-            "inherit".to_string()
-        } else {
-            "master".to_string()
-        };
-
-        let color = auto_color_for_new_track(&song.tracks, kind, auto_color_enabled(audio));
-
-        let track = Track {
-            id: format!("track_{}", timestamp_suffix()),
-            name: trimmed_name.to_string(),
-            kind,
-            parent_track_id: parent_track_id.map(str::to_string),
-            volume: 1.0,
-            pan: 0.0,
-            muted: false,
-            solo: false,
-            transpose_enabled: true,
-            audio_to,
-            mono_downmix: false,
-            color,
-            auto_created: false,
-            midi_port: None,
-            midi_channel: 1,
-            midi_enabled: true,
-            // A folder the user just made starts open — they need to see what
-            // they are about to drag into it.
-            collapsed: false,
-            height_offset: None,
-        };
+        let track = new_track(&song, trimmed_name, kind, parent_track_id, audio);
 
         insert_track(
             &mut song.tracks,
@@ -1114,5 +1085,46 @@ impl DesktopSession {
 
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
         Ok(self.snapshot())
+    }
+}
+
+/// A new track as "create track" makes it: default mix, the next auto colour,
+/// routed to its folder or to the master.
+pub(super) fn new_track(
+    song: &Song,
+    name: &str,
+    kind: TrackKind,
+    parent_track_id: Option<&str>,
+    audio: &AudioController,
+) -> Track {
+    let audio_to = if parent_track_id.is_some() {
+        "inherit".to_string()
+    } else {
+        "master".to_string()
+    };
+
+    let color = auto_color_for_new_track(&song.tracks, kind, auto_color_enabled(audio));
+
+    Track {
+        id: format!("track_{}", timestamp_suffix()),
+        name: name.to_string(),
+        kind,
+        parent_track_id: parent_track_id.map(str::to_string),
+        volume: 1.0,
+        pan: 0.0,
+        muted: false,
+        solo: false,
+        transpose_enabled: true,
+        audio_to,
+        mono_downmix: false,
+        color,
+        auto_created: false,
+        midi_port: None,
+        midi_channel: 1,
+        midi_enabled: true,
+        // A folder the user just made starts open — they need to see what
+        // they are about to drag into it.
+        collapsed: false,
+        height_offset: None,
     }
 }

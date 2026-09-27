@@ -19,7 +19,7 @@ use crate::VideoError;
 
 /// Options every headless instance shares: no config files, scripts, OSD,
 /// input or audio output.
-fn headless(api: &Arc<MpvLibrary>, extra: &[(&str, &str)]) -> Result<Mpv, VideoError> {
+pub(crate) fn headless(api: &Arc<MpvLibrary>, extra: &[(&str, &str)]) -> Result<Mpv, VideoError> {
     let mpv = Mpv::create(api)?;
     for (name, value) in [
         ("config", "no"),

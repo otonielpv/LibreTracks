@@ -66,6 +66,7 @@ mod midi_edit;
 mod midi_runtime;
 mod video_edit;
 mod video_library;
+mod video_audio;
 mod regions;
 mod session;
 mod song_edit;

@@ -2603,6 +2603,7 @@ dependencies = [
 name = "libretracks-video"
 version = "0.0.1"
 dependencies = [
+ "hound",
  "libloading 0.8.9",
  "libretracks-core",
  "serde",

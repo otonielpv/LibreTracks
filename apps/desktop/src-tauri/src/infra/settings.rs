@@ -344,6 +344,19 @@ pub struct AppSettings {
     /// the output off.
     #[serde(default)]
     pub video_output: libretracks_video::settings::VideoOutputSettings,
+    /// What placing a video with sound does with its audio (paso 11): ask,
+    /// or the choice remembered from that question.
+    #[serde(default)]
+    pub video_audio_on_import: VideoAudioOnImport,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum VideoAudioOnImport {
+    #[default]
+    Ask,
+    Extract,
+    Skip,
 }
 
 impl Default for AppSettings {
@@ -410,6 +423,7 @@ impl Default for AppSettings {
             session_storage_volume: None,
             reference_imported_audio: default_reference_imported_audio(),
             video_output: Default::default(),
+            video_audio_on_import: VideoAudioOnImport::Ask,
         }
     }
 }

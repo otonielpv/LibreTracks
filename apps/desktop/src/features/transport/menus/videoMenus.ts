@@ -63,6 +63,14 @@ export function createVideoMenus(
             video.setColor(clip.id, color);
           }),
       },
+      ...(video.clipHasAudio(clip)
+        ? [
+            {
+              label: t("transport.video.menu.extractAudio"),
+              onSelect: () => video.extractAudio(clip.id),
+            },
+          ]
+        : []),
       ...(d.videoExtraClipActions?.(clip) ?? []),
       {
         label: t("transport.video.menu.delete"),

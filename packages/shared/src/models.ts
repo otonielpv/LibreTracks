@@ -1096,9 +1096,17 @@ export type VideoSyncStats = {
 /** Beat grid the calibration flash follows (view seconds). */
 export type VideoCalibrationGrid = { interval: number; firstBeat: number };
 
+/** What placing a video with sound does with its audio (paso 11). */
+export type VideoAudioOnImport = "ask" | "extract" | "skip";
+
+/** `video:audio-extract-progress`: 0–1 for one clip's extraction. */
+export type VideoAudioExtractProgress = { clipId: string; fraction: number };
+
 export type AppSettings = {
   /** Video output (display, fit, idle, latency). Absent in old settings. */
   videoOutput?: VideoOutputSettings;
+  /** Remembered answer to "extract the video's audio?". Absent = ask. */
+  videoAudioOnImport?: VideoAudioOnImport;
   selectedOutputDevice: string | null;
   selectedAudioBackend: AudioBackendKind | null;
   selectedOutputDeviceId: string | null;

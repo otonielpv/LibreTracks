@@ -9,6 +9,7 @@
 //! En Android e iOS el vídeo no se reproduce: [`library::load_libmpv`]
 //! devuelve [`VideoError::Unsupported`] sin buscar nada.
 
+pub mod audio;
 pub mod extract;
 pub mod monitors;
 pub mod mpv_backend;

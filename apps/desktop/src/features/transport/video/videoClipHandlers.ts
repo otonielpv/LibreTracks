@@ -2,6 +2,8 @@ import {
   createTrack,
   deleteVideoClips,
   duplicateVideoClips,
+  extractVideoAudio,
+  getSongView,
   importVideoFiles,
   moveVideoClip,
   placeVideoClips,
@@ -16,6 +18,7 @@ import {
   type VideoClipSummary,
   type VideoFit,
 } from "../desktopApi";
+import { decideVideoAudioExtraction } from "./videoAudioExtraction";
 import { useVideoStore } from "./videoStore";
 
 /**
@@ -40,6 +43,9 @@ export type VideoClipHandlerDeps = {
   /** Called after the session's first video clip is created (paso 10 opens
    * the display wizard from here when no output is configured). */
   onFirstVideoClip: () => void;
+  /** Whether to extract the audio of `count` just-placed videos with sound
+   * (paso 11). Defaults to asking, or the remembered answer. */
+  decideAudioExtraction?: (count: number) => Promise<boolean>;
 };
 
 export type VideoPlacement = { seconds: number; trackId: string | null };
@@ -67,6 +73,7 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
     refreshVideoAssets,
     reportSkipped,
     onFirstVideoClip,
+    decideAudioExtraction = decideVideoAudioExtraction,
   } = deps;
 
   const songHasVideo = () => (getSong()?.videoClips?.length ?? 0) > 0;
@@ -75,6 +82,7 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
   const placeAssets = async (assets: VideoAssetSummary[], placement: VideoPlacement) => {
     if (!assets.length) return;
     const hadVideo = songHasVideo();
+    const clipIdsBefore = new Set((getSong()?.videoClips ?? []).map((clip) => clip.id));
     const snapshot = await placeVideoClips(
       assets.map((asset) => ({
         filePath: asset.filePath,
@@ -87,6 +95,42 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
     setStatus(t("transport.video.placed", { count: assets.length }));
     if (!hadVideo) {
       onFirstVideoClip();
+    }
+    // Asked after the placement's own action has finished, so the question
+    // never holds up the timeline.
+    const withSound = new Set(assets.filter((asset) => asset.info.hasAudio).map((asset) => asset.filePath));
+    if (withSound.size) {
+      void offerAudioExtraction(clipIdsBefore, withSound);
+    }
+  };
+
+  /** Decode a video clip's audio onto a new audio track below it. */
+  const extractAudio = (clipId: string) =>
+    runAction(async () => {
+      const store = useVideoStore.getState();
+      store.setAudioExtraction(clipId, 0);
+      setStatus(t("transport.video.audio.extracting"));
+      try {
+        applyPlaybackSnapshot(await extractVideoAudio(clipId));
+        setStatus(t("transport.video.audio.extracted"));
+      } finally {
+        useVideoStore.getState().setAudioExtraction(clipId, null);
+      }
+    });
+
+  const offerAudioExtraction = async (clipIdsBefore: Set<string>, withSound: Set<string>) => {
+    let song: SongView | null = null;
+    try {
+      song = await getSongView({ includeWaveforms: false });
+    } catch {
+      return;
+    }
+    const placed = (song?.videoClips ?? []).filter(
+      (clip) => !clipIdsBefore.has(clip.id) && withSound.has(clip.filePath),
+    );
+    if (!placed.length || !(await decideAudioExtraction(placed.length))) return;
+    for (const clip of placed) {
+      await extractAudio(clip.id);
     }
   };
 
@@ -108,6 +152,10 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
       }
     });
   };
+
+  /** The clip's video has a sound track (as import found it). */
+  const clipHasAudio = (clip: VideoClipSummary) =>
+    useVideoStore.getState().assets.some((asset) => asset.filePath === clip.filePath && asset.info.hasAudio);
 
   const placeLibraryAssets = (assets: VideoAssetSummary[], placement: VideoPlacement) => {
     void runAction(async () => {
@@ -218,6 +266,8 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
     deleteSelected,
     duplicateSelected,
     addVideoTrack,
+    extractAudio,
+    clipHasAudio,
   };
 }
 
