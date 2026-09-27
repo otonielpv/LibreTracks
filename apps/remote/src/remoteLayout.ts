@@ -56,7 +56,8 @@ export type WidgetType =
   | "progressMarker"
   | "progressSong"
   | "countdownMarkerBars"
-  | "countdownSongTime";
+  | "countdownSongTime"
+  | "videoBlackButton";
 
 export const ALL_WIDGET_TYPES: readonly WidgetType[] = [
   "readouts",
@@ -102,6 +103,7 @@ export const ALL_WIDGET_TYPES: readonly WidgetType[] = [
   "progressSong",
   "countdownMarkerBars",
   "countdownSongTime",
+  "videoBlackButton",
 ];
 
 /** The layout grid is this many columns wide; widget widths are 1..COLUMNS. */
@@ -265,6 +267,14 @@ export function defaultLayout(profile: LayoutPresetProfile = "standard"): Remote
       placement("controlDeck", 0, deckY, phone ? LAYOUT_COLUMNS : LAYOUT_COLUMNS - jumpW, deckH),
       placement("jumpToSongButton", jumpX, jumpY, jumpW, jumpH),
       placement("markerGrid", 0, belowY, LAYOUT_COLUMNS, phone ? 10 : tablet ? 10 : 12),
+      // Emergency black for the projector (video plan, paso 13).
+      placement(
+        "videoBlackButton",
+        0,
+        belowY + (phone ? 10 : tablet ? 10 : 12),
+        phone ? LAYOUT_COLUMNS : 6,
+        4,
+      ),
     ],
   };
   const mixer: LayoutTab = {

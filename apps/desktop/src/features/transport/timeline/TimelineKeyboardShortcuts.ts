@@ -20,6 +20,7 @@ import {
 } from "../helpers";
 import type { ShortcutActionId } from "../keyboard/actions";
 import { eventToBinding } from "../keyboard/keybinding";
+import { VIDEO_SHORTCUT_HANDLERS } from "../video/videoLive";
 import {
   buildBindingIndex,
   resolveBindings,
@@ -404,6 +405,7 @@ export function useTimelineKeyboardShortcuts({
       "view.zoomIn": () => {},
       "view.zoomOut": () => {},
       "view.zoomReset": () => {},
+      ...VIDEO_SHORTCUT_HANDLERS,
     };
 
     const onKeyDown = (event: KeyboardEvent) => {

@@ -76,6 +76,7 @@ const es = {
       project: "Proyecto",
       view: "Vista",
       navigation: "Navegación",
+      video: "Vídeo",
     },
     action: {
       playPause: "Reproducir / Pausar",
@@ -102,6 +103,10 @@ const es = {
       zoomOut: "Reducir interfaz",
       zoomReset: "Restablecer escala de interfaz",
       cancelOrClear: "Cancelar / Limpiar selección",
+      videoBlack: "Vídeo: negro",
+      videoFadeBlack: "Vídeo: fundido a negro",
+      videoIdle: "Vídeo: mostrar reposo",
+      videoToggleOutput: "Vídeo: activar/desactivar salida",
     },
   },
   transport: {
@@ -1085,6 +1090,12 @@ const es = {
         include: "Incluir los vídeos en el paquete",
         withoutNote: "Sin ellos, los vídeos habrá que copiarlos aparte y reubicarlos al abrir.",
         lightNote: "Los vídeos no viajan: se referencian por su ruta, como el audio.",
+      },
+      live: {
+        black: "Vídeo: negro",
+        fadeBlack: "Vídeo: fundido a negro",
+        idle: "Vídeo: mostrar reposo",
+        output: "Vídeo: activar/desactivar salida",
       },
       badge: {
         ready: "Vídeo: {{monitor}} · OK",

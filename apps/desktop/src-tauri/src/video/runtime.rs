@@ -22,9 +22,9 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use libretracks_core::video_schedule::{
-    active_clip_at, plan_preload, step, take_swap, PlayerAction, PlayerInput, PreloadAction,
-    PreloadParams, PreloadState, SyncParams, SyncState, TransportInput, UpcomingJump,
-    VideoTimeline,
+    active_clip_at, apply_forced_black, plan_preload, step, take_swap, PlayerAction, PlayerInput,
+    PreloadAction, PreloadParams, PreloadState, SyncParams, SyncState, TransportInput,
+    UpcomingJump, VideoTimeline,
 };
 use libretracks_core::VideoFit;
 use libretracks_video::output::{OutputCommand, OutputState, OutputStatus, PlayerCommand, Slot};
@@ -49,7 +49,12 @@ pub trait RuntimeOutput: Send {
     fn status(&self) -> OutputStatus;
     fn send(&self, command: OutputCommand);
     fn settings(&self) -> VideoOutputSettings;
-    fn forced_black(&self) -> bool;
+    /// Forced black, 0 = none, 1 = full (paso 13). Fades move it over time.
+    fn black_amount(&self, now: Instant) -> f64;
+    /// Forced idle screen (paso 13): the timeline is ignored meanwhile.
+    fn forced_idle(&self) -> bool {
+        false
+    }
     /// Latency calibration running (paso 09): the beat grid to flash on.
     fn calibration(&self) -> Option<CalibrationGrid> {
         None
@@ -391,15 +396,26 @@ impl RuntimeCore {
             }
         });
 
-        // Stopped with "idle screen" chosen: show it once and hold.
-        if !running && settings.when_stopped == StoppedScreen::Idle {
+        let black = output.black_amount(now);
+        // A fade to or from black needs frames: tick fast while it moves.
+        let fading = black > 0.0 && black < 1.0;
+
+        // Stopped with "idle screen" chosen, or the idle screen forced from
+        // live control: show it once and hold.
+        let forced_idle = output.forced_idle();
+        if forced_idle || (!running && settings.when_stopped == StoppedScreen::Idle) {
             if !self.stopped_idle_shown {
                 output.send(OutputCommand::ShowIdle);
                 self.stopped_idle_shown = true;
                 self.state = SyncState::default();
+                self.preload = PreloadState::default();
             }
-            self.send_brightness(output, if output.forced_black() { -100.0 } else { 0.0 });
-            return TickRate::Slow;
+            self.send_brightness(output, apply_forced_black(0.0, black));
+            return if fading || (forced_idle && running) {
+                TickRate::Fast
+            } else {
+                TickRate::Slow
+            };
         }
         self.stopped_idle_shown = false;
 
@@ -455,10 +471,12 @@ impl RuntimeCore {
         }
 
         let stopped_black = !running && settings.when_stopped == StoppedScreen::Black;
-        let brightness = if output.forced_black() || stopped_black {
+        // Forced black only touches the brightness: everything above kept
+        // the players in sync, so lifting it shows a picture already in place.
+        let brightness = if stopped_black {
             -100.0
         } else {
-            out.brightness
+            apply_forced_black(out.brightness, black)
         };
         self.send_brightness(output, brightness);
         if self.fit != Some(out.fit) {
@@ -493,7 +511,7 @@ impl RuntimeCore {
             self.stats.error_p95_ms = percentile(&sorted, 0.95).map(|value| value * 1000.0);
         }
 
-        if running {
+        if running || fading {
             TickRate::Fast
         } else {
             TickRate::Slow
@@ -574,8 +592,11 @@ impl RuntimeOutput for SystemOutput {
     fn settings(&self) -> VideoOutputSettings {
         self.0.settings()
     }
-    fn forced_black(&self) -> bool {
-        self.0.forced_black.load(Ordering::Relaxed)
+    fn black_amount(&self, now: Instant) -> f64 {
+        self.0.live().black_amount(now)
+    }
+    fn forced_idle(&self) -> bool {
+        self.0.live().forced_idle
     }
     fn calibration(&self) -> Option<CalibrationGrid> {
         self.0.calibration()
@@ -742,8 +763,12 @@ mod tests {
         fn settings(&self) -> VideoOutputSettings {
             self.settings.clone()
         }
-        fn forced_black(&self) -> bool {
-            self.black
+        fn black_amount(&self, _now: Instant) -> f64 {
+            if self.black {
+                1.0
+            } else {
+                0.0
+            }
         }
     }
 
@@ -1015,5 +1040,62 @@ mod tests {
         assert!(!calibration_flash_on(&grid, 10.70));
         // Before the first beat the grid extends backwards.
         assert!(calibration_flash_on(&grid, -0.25));
+    }
+
+    /// C3: under forced black the players keep following the transport, and
+    /// lifting it shows the picture with no extra seek.
+    #[test]
+    fn forced_black_keeps_syncing_and_lifting_it_needs_no_seek() {
+        let mut core = RuntimeCore::default();
+        let mut inputs = FakeInputs {
+            clock: running_clock(12.0),
+            timeline: one_clip_timeline(),
+            fetches: 0,
+        };
+        let mut output = ready_output();
+        output.black = true;
+        let start = Instant::now();
+        core.tick(&mut inputs, &output, start);
+        {
+            let sent = output.sent.borrow();
+            assert!(sent.contains(&OutputCommand::SetBrightness(-100.0)));
+            // The clip was loaded under the black: sync did not stop.
+            assert!(sent.iter().any(|command| matches!(
+                command,
+                OutputCommand::Player {
+                    command: PlayerCommand::Load { .. },
+                    ..
+                }
+            )));
+        }
+        // Keep ticking in black for a while (the fake player follows).
+        for step in 1..20 {
+            core.tick(
+                &mut inputs,
+                &output,
+                start + Duration::from_millis(step * 20),
+            );
+        }
+        let seeks_before = core.state.seeks;
+        output.sent.borrow_mut().clear();
+
+        output.black = false;
+        core.tick(&mut inputs, &output, start + Duration::from_millis(420));
+        let sent = output.sent.borrow();
+        assert!(
+            sent.contains(&OutputCommand::SetBrightness(0.0)),
+            "{sent:?}"
+        );
+        assert!(
+            !sent.iter().any(|command| matches!(
+                command,
+                OutputCommand::Player {
+                    command: PlayerCommand::Seek { .. } | PlayerCommand::Load { .. },
+                    ..
+                }
+            )),
+            "lifting the black must not seek or reload: {sent:?}"
+        );
+        assert_eq!(core.state.seeks, seeks_before);
     }
 }

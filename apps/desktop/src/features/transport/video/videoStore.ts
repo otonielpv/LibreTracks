@@ -26,6 +26,9 @@ export type VideoStoreState = {
   /** Emergency black (paso 13). Volatile: never saved, a restart clears it. */
   forcedBlack: boolean;
   setForcedBlack: (forcedBlack: boolean) => void;
+  /** Idle screen forced from live control (paso 13). Volatile too. */
+  forcedIdle: boolean;
+  setForcedIdle: (forcedIdle: boolean) => void;
   /** Display setup wizard (paso 10): open, and on which step. */
   wizardOpen: boolean;
   wizardStep: number;
@@ -65,6 +68,7 @@ export const INITIAL_VIDEO_STATE = {
   placeAtPlayhead: null,
   outputStatus: null,
   forcedBlack: false,
+  forcedIdle: false,
   wizardOpen: false,
   wizardStep: 0,
   setupNotice: null,
@@ -79,6 +83,7 @@ export const INITIAL_VIDEO_STATE = {
   | "placeAtPlayhead"
   | "outputStatus"
   | "forcedBlack"
+  | "forcedIdle"
   | "wizardOpen"
   | "wizardStep"
   | "setupNotice"
@@ -94,6 +99,7 @@ export const useVideoStore = create<VideoStoreState>()((set) => ({
   setPlaceAtPlayhead: (placeAtPlayhead) => set({ placeAtPlayhead }),
   setOutputStatus: (outputStatus) => set({ outputStatus }),
   setForcedBlack: (forcedBlack) => set({ forcedBlack }),
+  setForcedIdle: (forcedIdle) => set({ forcedIdle }),
   openWizard: (step = 0) => set({ wizardOpen: true, wizardStep: step }),
   closeWizard: () => set({ wizardOpen: false, wizardStep: 0 }),
   setSetupNotice: (setupNotice) => set({ setupNotice }),

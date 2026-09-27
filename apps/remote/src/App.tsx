@@ -1754,6 +1754,20 @@ function ClickButtonWidget() {
     </div>
   );
 }
+/** Emergency black on the projector (paso 13). Toggles; the desktop badge
+ * shows "NEGRO" while it is on. */
+function VideoBlackButtonWidget() {
+  return (
+    <div className="transport-controls transport-controls-inline transport-controls-solo">
+      <button
+        className="pill-button"
+        onClick={() => sendCommand({ cmd: "videoLiveAction", action: "black" })}
+      >
+        {STRINGS.videoBlack}
+      </button>
+    </div>
+  );
+}
 function GuideButtonWidget() {
   const settings = useRemoteSyncStore((state) => state.settings);
   const voiceGuideEnabled = settings?.voiceGuideEnabled ?? false;
@@ -3930,6 +3944,7 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   stopButton: { labelKey: "stop", Component: StopButtonWidget, defaultW: 4, defaultH: 4 },
   clickButton: { labelKey: "click", Component: ClickButtonWidget, defaultW: 4, defaultH: 4 },
   guideButton: { labelKey: "guide", Component: GuideButtonWidget, defaultW: 4, defaultH: 4 },
+  videoBlackButton: { labelKey: "videoBlack", Component: VideoBlackButtonWidget, defaultW: 6, defaultH: 4 },
   timeline: { labelKey: "widgetTimeline", Component: TimelineWidget, defaultW: LAYOUT_COLUMNS, defaultH: 7 },
   controlDeck: { labelKey: "widgetDeck", Component: DeckWidget, defaultW: LAYOUT_COLUMNS, defaultH: 9 },
   deckVamp: { labelKey: "widgetDeckVamp", Component: VampSectionWidget, defaultW: 8, defaultH: 4 },
@@ -3978,6 +3993,7 @@ const WIDGET_CATEGORY: Record<WidgetType, WidgetCategory> = {
   stopButton: "transport",
   clickButton: "transport",
   guideButton: "transport",
+  videoBlackButton: "transport",
   timeline: "transport",
   controlDeck: "live",
   deckVamp: "live",
@@ -4049,7 +4065,7 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
       return { w: 12, h: 5 };
     case "transportButtons": return { w: 24, h: 6 };
     case "playButton": case "pauseButton": case "stopButton":
-    case "clickButton": case "guideButton":
+    case "clickButton": case "guideButton": case "videoBlackButton":
       return { w: 8, h: 5 };
     case "timeline": return { w: 24, h: 4 };
     case "controlDeck": return { w: 24, h: 10 };

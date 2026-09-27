@@ -20,6 +20,7 @@ import { useVideoStore } from "./videoStore";
 import type { VideoLaneBindings } from "./VideoClipHotspots";
 import { useVideoThumbnails } from "./useVideoThumbnails";
 import { runFirstVideoClipTrigger, runSessionOpenTrigger } from "./videoSetupTriggers";
+import { subscribeToVideoLiveState } from "./videoLive";
 
 /**
  * The whole video feature as the transport panel sees it: one call, a few
@@ -106,6 +107,10 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
   }, [desktop, sessionKey, libmpvAvailable]);
 
   useVideoThumbnails(deps.song, desktop);
+
+  // Black / idle pressed from anywhere (shortcut, MIDI, remote): the badge
+  // follows the backend (paso 13).
+  useEffect(() => (desktop ? subscribeToVideoLiveState() : undefined), [desktop]);
 
   // Progress of audio extractions (paso 11), shown by VideoAudioProgress.
   useEffect(() => {

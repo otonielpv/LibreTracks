@@ -93,9 +93,16 @@ pub struct VideoOutputSettings {
     pub latency_offset_ms: i32,
     #[serde(default)]
     pub hwdec: HwDecMode,
+    /// Length of "fade to black" (paso 13); `None` = 1 s.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub black_fade_ms: Option<u32>,
 }
 
 impl VideoOutputSettings {
+    pub fn black_fade_seconds(&self) -> f64 {
+        f64::from(self.black_fade_ms.unwrap_or(1000).min(10_000)) / 1000.0
+    }
+
     pub fn clamped(mut self) -> Self {
         self.latency_offset_ms = self
             .latency_offset_ms
@@ -146,6 +153,7 @@ mod tests {
             when_stopped: StoppedScreen::Black,
             latency_offset_ms: -80,
             hwdec: HwDecMode::Off,
+            black_fade_ms: Some(1500),
         };
         let json = serde_json::to_value(&settings).expect("serialize");
         assert_eq!(json["idle"]["kind"], "image");

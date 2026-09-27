@@ -39,6 +39,8 @@ import type {
   VideoCalibrationGrid,
   VideoAudioExtractProgress,
   VideoExportPayload,
+  VideoLiveAction,
+  VideoLiveState,
   VideoSyncStats,
   VideoDisplayOption,
   VideoOutputSettings,
@@ -2449,6 +2451,24 @@ export async function getVideoSyncStats(): Promise<VideoSyncStats> {
 /** Start the latency calibration flash on a beat grid, or stop it (null). */
 export async function setVideoCalibration(grid: VideoCalibrationGrid | null): Promise<void> {
   return invokeCommand<void>("video_calibration", { grid });
+}
+
+/** Video live control (paso 13): black, fade to black, idle, output on/off. */
+export async function videoLiveAction(action: VideoLiveAction): Promise<VideoLiveState> {
+  return invokeCommand<VideoLiveState>("video_live_action", { action });
+}
+
+export async function getVideoLiveState(): Promise<VideoLiveState> {
+  return invokeCommand<VideoLiveState>("video_live_state");
+}
+
+export async function listenToVideoLiveState(
+  handler: (state: VideoLiveState) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<VideoLiveState>("video:live-state", (event) => {
+    handler(event.payload);
+  });
 }
 
 /** Extract a video clip's audio to a WAV on a new track below it (one undo). */

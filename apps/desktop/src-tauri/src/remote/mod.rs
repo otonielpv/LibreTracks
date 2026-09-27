@@ -171,6 +171,17 @@ async fn run_remote_command_bridge(
             continue;
         }
 
+        // Video live control (paso 13): no session involved.
+        if let RemoteCommand::VideoLiveAction { action } = &command {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            if let Ok(action) = action.parse() {
+                let _ = crate::video::live::run(&app, action);
+            }
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            let _ = action;
+            continue;
+        }
+
         let state = app.state::<DesktopState>();
         let mut session = match state.session.lock() {
             Ok(session) => session,
@@ -379,7 +390,9 @@ async fn run_remote_command_bridge(
                 handle.publish_settings(&next_settings);
                 session.snapshot_with_sync(&state.audio)
             }
-            RemoteCommand::RequestPadsCatalog => unreachable!("handled before session lock"),
+            RemoteCommand::RequestPadsCatalog | RemoteCommand::VideoLiveAction { .. } => {
+                unreachable!("handled before session lock")
+            }
             RemoteCommand::Ping => continue,
         };
 

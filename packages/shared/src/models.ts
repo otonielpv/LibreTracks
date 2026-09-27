@@ -1096,6 +1096,15 @@ export type VideoSyncStats = {
 /** Beat grid the calibration flash follows (view seconds). */
 export type VideoCalibrationGrid = { interval: number; firstBeat: number };
 
+/** Live control of the video output (paso 13). */
+export type VideoLiveAction = "black" | "fadeBlack" | "idle" | "output";
+
+export type VideoLiveState = {
+  forcedBlack: boolean;
+  forcedIdle: boolean;
+  outputEnabled: boolean;
+};
+
 /** Videos an export would carry and their size in bytes (paso 12). */
 export type VideoExportPayload = { count: number; bytes: number };
 

@@ -146,6 +146,10 @@ pub enum RemoteCommand {
     },
     /// Ask Desktop to publish the ambient-pad catalog to connected remotes.
     RequestPadsCatalog,
+    /// Video live control (paso 13): `black`, `fadeBlack`, `idle`, `output`.
+    VideoLiveAction {
+        action: String,
+    },
     Ping,
 }
 
@@ -655,6 +659,10 @@ mod tests {
 
     #[test]
     fn parses_update_settings_with_arbitrary_payload() {
+        match parse(r#"{"cmd":"videoLiveAction","action":"black"}"#) {
+            RemoteCommand::VideoLiveAction { action } => assert_eq!(action, "black"),
+            other => panic!("unexpected command: {other:?}"),
+        }
         match parse(r#"{"cmd":"updateSettings","settings":{"metronomeEnabled":true}}"#) {
             RemoteCommand::UpdateSettings { settings } => {
                 assert_eq!(settings["metronomeEnabled"], serde_json::json!(true));

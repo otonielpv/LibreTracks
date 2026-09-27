@@ -170,6 +170,31 @@ pub fn brightness_for_gain(gain: f64) -> f64 {
     -100.0 * (1.0 - gain.clamp(0.0, 1.0))
 }
 
+/// How black the forced black is (paso 13), 0 = picture, 1 = black: moving
+/// from `from` towards `target` at one full fade per `fade_seconds`, so a fade
+/// reversed half way takes half a fade to come back. A zero fade is a cut.
+pub fn forced_black_amount(from: f64, target: f64, elapsed_seconds: f64, fade_seconds: f64) -> f64 {
+    if fade_seconds <= 0.0 {
+        return target.clamp(0.0, 1.0);
+    }
+    let travelled = (elapsed_seconds.max(0.0) / fade_seconds).min(1.0);
+    let next = if target > from {
+        (from + travelled).min(target)
+    } else {
+        (from - travelled).max(target)
+    };
+    next.clamp(0.0, 1.0)
+}
+
+/// The brightness the output shows: the picture's own (fades of the clip)
+/// pulled towards black by the forced-black amount. Only the brightness: the
+/// sync underneath never stops, so lifting the black shows a picture that is
+/// already in place.
+pub fn apply_forced_black(picture_brightness: f64, amount: f64) -> f64 {
+    let amount = amount.clamp(0.0, 1.0);
+    picture_brightness + (-100.0 - picture_brightness) * amount
+}
+
 /// Tunables of the control law, with their defaults.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SyncParams {
@@ -1039,5 +1064,26 @@ mod tests {
             plan_preload(&mut state, &preload_params(), &t, 9.0, false, None),
             vec![PreloadAction::Discard]
         );
+    }
+
+    #[test]
+    fn forced_black_cuts_or_fades_and_comes_back() {
+        // A cut: black at once, and back at once.
+        assert_eq!(forced_black_amount(0.0, 1.0, 0.0, 0.0), 1.0);
+        assert_eq!(forced_black_amount(1.0, 0.0, 0.0, 0.0), 0.0);
+        // A 1 s fade: half way at 0.5 s, complete at 1 s and after.
+        assert!((forced_black_amount(0.0, 1.0, 0.5, 1.0) - 0.5).abs() < 1e-9);
+        assert_eq!(forced_black_amount(0.0, 1.0, 3.0, 1.0), 1.0);
+        // Released half way through: it goes back from where it was.
+        assert!((forced_black_amount(0.5, 0.0, 0.25, 1.0) - 0.25).abs() < 1e-9);
+    }
+
+    #[test]
+    fn forced_black_overrides_any_picture_brightness() {
+        for picture in [0.0, -30.0, -100.0] {
+            assert_eq!(apply_forced_black(picture, 1.0), -100.0);
+            assert_eq!(apply_forced_black(picture, 0.0), picture);
+        }
+        assert_eq!(apply_forced_black(0.0, 0.5), -50.0);
     }
 }

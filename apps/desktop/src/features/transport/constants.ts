@@ -130,6 +130,11 @@ export const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
     key: "action:create_marker",
     labelKey: "transport.settingsModal.midiLearnCreateMarker",
   },
+  // Video live control (paso 13); dispatched by video/live.rs.
+  { key: "action:video_black", labelKey: "transport.video.live.black" },
+  { key: "action:video_fade_black", labelKey: "transport.video.live.fadeBlack" },
+  { key: "action:video_idle", labelKey: "transport.video.live.idle" },
+  { key: "action:video_output", labelKey: "transport.video.live.output" },
   {
     key: "action:set_global_jump_mode_immediate",
     labelKey: "transport.settingsModal.midiLearnGlobalJumpModeImmediate",

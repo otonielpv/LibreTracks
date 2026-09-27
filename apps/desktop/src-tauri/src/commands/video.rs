@@ -365,20 +365,28 @@ pub fn video_output_status(state: State<'_, DesktopState>) -> OutputStatus {
 pub fn video_apply_settings(
     app: AppHandle,
     settings: VideoOutputSettings,
-    settings_store: State<'_, AppSettingsStore>,
-    state: State<'_, DesktopState>,
+) -> Result<VideoOutputSettings, String> {
+    persist_and_apply_output_settings(&app, settings)
+}
+
+/// Save the output settings (if they changed) and hand them to the output.
+/// Shared with the live "output on/off" action (paso 13).
+pub fn persist_and_apply_output_settings(
+    app: &AppHandle,
+    settings: VideoOutputSettings,
 ) -> Result<VideoOutputSettings, String> {
     let settings = settings.clamped();
+    let settings_store = app.state::<AppSettingsStore>();
     let mut app_settings = settings_store.current().map_err(|error| error.to_string())?;
     if app_settings.video_output != settings {
         app_settings.video_output = settings.clone();
         settings_store
             .set(app_settings.clone())
             .map_err(|error| error.to_string())?;
-        save_app_settings(&app, &app_settings).map_err(|error| error.to_string())?;
+        save_app_settings(app, &app_settings).map_err(|error| error.to_string())?;
         let _ = app.emit("settings:updated", app_settings);
     }
-    state.video.set_settings(settings.clone());
+    app.state::<DesktopState>().video.set_settings(settings.clone());
     Ok(settings)
 }
 
@@ -531,5 +539,24 @@ pub fn extract_video_audio(
     with_session(&state, |session, audio| {
         session.commit_video_audio_extraction(&plan, audio)
     })
+}
+
+// ---------------------------------------------------------------------------
+// Live control (paso 13).
+// ---------------------------------------------------------------------------
+
+/// Black, fade to black, idle screen, output on/off: `action` is `black`,
+/// `fadeBlack`, `idle` or `output`.
+#[tauri::command(async)]
+pub fn video_live_action(
+    app: AppHandle,
+    action: String,
+) -> Result<crate::video::live::VideoLiveStateDto, String> {
+    crate::video::live::run(&app, action.parse()?)
+}
+
+#[tauri::command(async)]
+pub fn video_live_state(app: AppHandle) -> crate::video::live::VideoLiveStateDto {
+    crate::video::live::state_dto(&app)
 }
 

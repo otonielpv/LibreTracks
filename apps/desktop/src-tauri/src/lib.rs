@@ -503,6 +503,8 @@ pub fn run() {
             commands::video::video_sync_stats,
             commands::video::video_calibration,
             commands::video::extract_video_audio,
+            commands::video::video_live_action,
+            commands::video::video_live_state,
             commands::timeline::set_midi_track_routing,
             commands::timeline::set_midi_track_enabled,
             commands::timeline::set_automation_track_enabled,

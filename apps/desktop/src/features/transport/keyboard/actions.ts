@@ -20,7 +20,8 @@ export type ShortcutGroup =
   | "edit"
   | "view"
   | "project"
-  | "navigation";
+  | "navigation"
+  | "video";
 
 export type ShortcutActionId =
   // transport
@@ -51,7 +52,12 @@ export type ShortcutActionId =
   | "view.zoomOut"
   | "view.zoomReset"
   // navigation
-  | "nav.cancelOrClear";
+  | "nav.cancelOrClear"
+  // video (paso 13)
+  | "video.black"
+  | "video.fadeBlack"
+  | "video.idle"
+  | "video.toggleOutput";
 
 export type ShortcutActionDef = {
   id: ShortcutActionId;
@@ -234,6 +240,33 @@ export const SHORTCUT_ACTIONS: ShortcutActionDef[] = [
     labelKey: "shortcuts.action.cancelOrClear",
     defaultBinding: "Escape",
   },
+
+  // --- Video (paso 13) -----------------------------------------------------
+  {
+    // New: emergency black on the projector. "B" was free.
+    id: "video.black",
+    group: "video",
+    labelKey: "shortcuts.action.videoBlack",
+    defaultBinding: "B",
+  },
+  {
+    id: "video.fadeBlack",
+    group: "video",
+    labelKey: "shortcuts.action.videoFadeBlack",
+    defaultBinding: null,
+  },
+  {
+    id: "video.idle",
+    group: "video",
+    labelKey: "shortcuts.action.videoIdle",
+    defaultBinding: null,
+  },
+  {
+    id: "video.toggleOutput",
+    group: "video",
+    labelKey: "shortcuts.action.videoToggleOutput",
+    defaultBinding: null,
+  },
 ];
 
 export const SHORTCUT_GROUP_ORDER: ShortcutGroup[] = [
@@ -242,6 +275,7 @@ export const SHORTCUT_GROUP_ORDER: ShortcutGroup[] = [
   "project",
   "view",
   "navigation",
+  "video",
 ];
 
 /** i18n key for a group heading (under `shortcuts.group.*`). */

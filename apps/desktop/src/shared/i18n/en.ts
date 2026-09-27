@@ -76,6 +76,7 @@ const en = {
       project: "Project",
       view: "View",
       navigation: "Navigation",
+      video: "Video",
     },
     action: {
       playPause: "Play / Pause",
@@ -102,6 +103,10 @@ const en = {
       zoomOut: "Zoom interface out",
       zoomReset: "Reset interface scale",
       cancelOrClear: "Cancel / Clear selection",
+      videoBlack: "Video: black",
+      videoFadeBlack: "Video: fade to black",
+      videoIdle: "Video: show idle screen",
+      videoToggleOutput: "Video: output on/off",
     },
   },
   transport: {
@@ -1054,6 +1059,12 @@ const en = {
         include: "Include the videos in the package",
         withoutNote: "Without them, the videos have to be copied separately and relinked on opening.",
         lightNote: "Videos do not travel: they are referenced by path, like the audio.",
+      },
+      live: {
+        black: "Video: black",
+        fadeBlack: "Video: fade to black",
+        idle: "Video: show idle screen",
+        output: "Video: output on/off",
       },
       badge: {
         ready: "Video: {{monitor}} · OK",

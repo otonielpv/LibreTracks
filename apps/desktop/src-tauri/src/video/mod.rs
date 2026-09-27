@@ -6,6 +6,7 @@
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod displays;
+pub mod live;
 pub mod runtime;
 pub mod thumbnail_queue;
 
@@ -34,8 +35,9 @@ pub struct VideoSystem {
     /// Output settings in force (the runtime reads the latency offset and
     /// the stopped-screen choice from here).
     settings: std::sync::Mutex<libretracks_video::settings::VideoOutputSettings>,
-    /// Emergency black (paso 13). Volatile by design.
-    pub forced_black: std::sync::atomic::AtomicBool,
+    /// Emergency black and forced idle screen (paso 13). Volatile by design:
+    /// never saved, a restart starts with the picture.
+    live: std::sync::Mutex<live::LiveState>,
     pub runtime: runtime::VideoRuntimeHandle,
     calibration: std::sync::Mutex<Option<runtime::CalibrationGrid>>,
 }
@@ -115,6 +117,23 @@ impl VideoSystem {
             self.send(OutputCommand::SetBrightness(0.0));
         }
         self.runtime.notify();
+    }
+
+    /// The live-control state (forced black / idle).
+    pub fn live(&self) -> live::LiveState {
+        self.live.lock().map(|state| *state).unwrap_or_default()
+    }
+
+    pub(crate) fn update_live(&self, change: impl FnOnce(&mut live::LiveState)) -> live::LiveState {
+        let state = match self.live.lock() {
+            Ok(mut state) => {
+                change(&mut state);
+                *state
+            }
+            Err(_) => live::LiveState::default(),
+        };
+        self.runtime.notify();
+        state
     }
 
     pub fn calibration(&self) -> Option<runtime::CalibrationGrid> {

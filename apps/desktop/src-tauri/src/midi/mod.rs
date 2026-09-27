@@ -289,6 +289,12 @@ fn dispatch_midi_action(
         return Ok(());
     }
 
+    // Video live control (paso 13) never needs the session.
+    if let Some(action) = crate::video::live::VideoLiveAction::from_midi_key(action_key) {
+        crate::video::live::run(app, action)?;
+        return Ok(());
+    }
+
     let state = app.state::<DesktopState>();
     let mut session = state
         .session

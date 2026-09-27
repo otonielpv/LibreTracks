@@ -89,6 +89,7 @@ describe("remoteLayout", () => {
       ["controlDeck", 10, 7],
       ["jumpToSongButton", 10, 7],
       ["markerGrid", 17, 10],
+      ["videoBlackButton", 27, 4],
     ]);
   });
 
