@@ -494,6 +494,11 @@ pub fn run() {
             commands::video::request_video_thumbnails,
             commands::video::get_video_thumbnails,
             commands::video::place_video_clips,
+            commands::video::video_list_displays,
+            commands::video::video_output_status,
+            commands::video::video_apply_settings,
+            commands::video::video_identify_displays,
+            commands::video::video_test_pattern,
             commands::timeline::set_midi_track_routing,
             commands::timeline::set_midi_track_enabled,
             commands::timeline::set_automation_track_enabled,
@@ -597,6 +602,7 @@ mod video_setup {
 
     use crate::state::DesktopState;
     use crate::video::thumbnail_queue::ThumbnailWorkerDeps;
+    use libretracks_video::output::OutputCommand;
 
     #[derive(Clone, serde::Serialize)]
     #[serde(rename_all = "camelCase")]
@@ -608,6 +614,7 @@ mod video_setup {
         if let Ok(resource_dir) = app.path().resource_dir() {
             state.video.set_resource_dir(resource_dir);
         }
+        start_output(app, state);
         let video = Arc::clone(&state.video);
         let emitter = app.clone();
         state.video.thumbnails.start(ThumbnailWorkerDeps {
@@ -622,5 +629,54 @@ mod video_setup {
                 );
             }),
         });
+    }
+
+    /// The output thread, the saved settings, and a watcher that feeds it the
+    /// connected monitors every 2 s (a projector unplugged and plugged back is
+    /// found again by itself) and tells the UI when its state changes.
+    fn start_output(app: &AppHandle, state: &DesktopState) {
+        state.video.start_output();
+        let settings = app
+            .try_state::<crate::infra::settings::AppSettingsStore>()
+            .and_then(|store| store.current().ok())
+            .map(|settings| settings.video_output)
+            .unwrap_or_default();
+        let (monitors, app_monitor) = crate::video::displays::connected_monitors(app);
+        state.video.send(OutputCommand::Displays {
+            monitors,
+            app_monitor,
+        });
+        state.video.send(OutputCommand::ApplySettings(settings));
+
+        let video = Arc::clone(&state.video);
+        let app = app.clone();
+        let _ = std::thread::Builder::new()
+            .name("lt-video-watch".into())
+            .spawn(move || {
+                let mut last_state = None;
+                let mut tick: u32 = 0;
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    tick = tick.wrapping_add(1);
+                    if tick % 8 == 0 {
+                        let (monitors, app_monitor) =
+                            crate::video::displays::connected_monitors(&app);
+                        video.send(OutputCommand::Displays {
+                            monitors,
+                            app_monitor,
+                        });
+                    }
+                    let status = video.output_status();
+                    let key = (
+                        status.state.clone(),
+                        status.shares_app_display,
+                        status.monitor_name.clone(),
+                    );
+                    if last_state.as_ref() != Some(&key) {
+                        last_state = Some(key);
+                        let _ = app.emit("video:output-status", status);
+                    }
+                }
+            });
     }
 }

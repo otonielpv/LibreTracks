@@ -1008,7 +1008,83 @@ export const METRONOME_SUBDIVISIONS = [1, 2, 3, 4] as const;
 
 const METRONOME_PITCH_RANGE = 24; // semitones, +/-
 
+/** A display, identified by OS name plus geometry (see libretracks_video::settings). */
+export type VideoDisplayId = {
+  name: string;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+};
+
+export type VideoOutputMode = "fullscreen" | "window";
+export type VideoIdleScreen = { kind: "black" } | { kind: "image"; path: string };
+export type VideoStoppedScreen = "lastFrame" | "idle" | "black";
+export type VideoHwDecMode = "auto" | "off";
+
+/** Machine settings of the video output (not stored in the session). */
+export type VideoOutputSettings = {
+  enabled: boolean;
+  display: VideoDisplayId | null;
+  mode: VideoOutputMode;
+  fit: VideoFit;
+  idle: VideoIdleScreen;
+  whenStopped: VideoStoppedScreen;
+  latencyOffsetMs: number;
+  hwdec: VideoHwDecMode;
+};
+
+export const DEFAULT_VIDEO_OUTPUT_SETTINGS: VideoOutputSettings = {
+  enabled: false,
+  display: null,
+  mode: "fullscreen",
+  fit: "contain",
+  idle: { kind: "black" },
+  whenStopped: "lastFrame",
+  latencyOffsetMs: 0,
+  hwdec: "auto",
+};
+
+/** A monitor in the display picker, numbered like "Identify" labels it. */
+export type VideoDisplayOption = VideoDisplayId & {
+  isPrimary: boolean;
+  number: number;
+  hasApp: boolean;
+};
+
+export type VideoOutputState =
+  | { state: "disabled" }
+  | { state: "unavailable"; detail: string }
+  | { state: "noDisplay" }
+  | { state: "ready" }
+  | { state: "displayLost" }
+  | { state: "error"; detail: string };
+
+export type VideoPlayerStatus = {
+  file: string | null;
+  timePos: number | null;
+  paused: boolean;
+  speed: number;
+  loads: number;
+  restarts: number;
+  hwdec: string | null;
+  frameDrops: number;
+  lastError: string | null;
+};
+
+export type VideoOutputStatus = {
+  state: VideoOutputState;
+  visibleSlot: "a" | "b";
+  players: [VideoPlayerStatus, VideoPlayerStatus];
+  brightness: number;
+  sharesAppDisplay: boolean;
+  monitorName: string | null;
+  opens: number;
+};
+
 export type AppSettings = {
+  /** Video output (display, fit, idle, latency). Absent in old settings. */
+  videoOutput?: VideoOutputSettings;
   selectedOutputDevice: string | null;
   selectedAudioBackend: AudioBackendKind | null;
   selectedOutputDeviceId: string | null;

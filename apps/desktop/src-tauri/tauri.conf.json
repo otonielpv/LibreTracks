@@ -36,6 +36,7 @@
       "../../remote/dist": "remote-dist",
       "../../../vendor/bin/native/*": ".",
       "resources/voices": "voices",
+      "resources/video": "video",
       "../../../LICENSE": "licenses/LICENSE",
       "../../../THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-NOTICES.md",
       "../../../licenses/*": "licenses",

@@ -36,6 +36,9 @@ import type {
   TransportLifecycleEvent,
   TransportSnapshot,
   VideoClipProps,
+  VideoDisplayOption,
+  VideoOutputSettings,
+  VideoOutputStatus,
   VideoAssetSummary,
   VideoImportResult,
   VideoLibraryStatus,
@@ -2385,5 +2388,36 @@ export async function placeVideoClips(
     items,
     timelineStartSeconds,
     targetTrackId,
+  });
+}
+
+export async function listVideoDisplays(): Promise<VideoDisplayOption[]> {
+  return invokeCommand<VideoDisplayOption[]>("video_list_displays");
+}
+
+export async function getVideoOutputStatus(): Promise<VideoOutputStatus> {
+  return invokeCommand<VideoOutputStatus>("video_output_status");
+}
+
+export async function applyVideoOutputSettings(
+  settings: VideoOutputSettings,
+): Promise<VideoOutputSettings> {
+  return invokeCommand<VideoOutputSettings>("video_apply_settings", { settings });
+}
+
+export async function identifyVideoDisplays(): Promise<void> {
+  return invokeCommand<void>("video_identify_displays");
+}
+
+export async function showVideoTestPattern(on: boolean): Promise<void> {
+  return invokeCommand<void>("video_test_pattern", { on });
+}
+
+export async function listenToVideoOutputStatus(
+  handler: (status: VideoOutputStatus) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<VideoOutputStatus>("video:output-status", (event) => {
+    handler(event.payload);
   });
 }

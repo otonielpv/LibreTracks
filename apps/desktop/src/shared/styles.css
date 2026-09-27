@@ -12310,3 +12310,42 @@ html.lt-ios body {
 .lt-library-video-add .material-symbols-outlined {
   font-size: 16px;
 }
+
+.lt-video-output-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid rgba(63, 184, 175, 0.5);
+  color: #7fe0d8;
+  background: rgba(63, 184, 175, 0.12);
+}
+
+.lt-video-output-badge .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.lt-video-output-badge.is-warning {
+  border-color: rgba(255, 196, 0, 0.6);
+  color: #ffd766;
+  background: rgba(255, 196, 0, 0.12);
+}
+
+.lt-video-output-badge.is-error {
+  border-color: rgba(255, 90, 90, 0.7);
+  color: #ff9d9d;
+  background: rgba(255, 90, 90, 0.14);
+}
+
+.lt-video-output-badge.is-black {
+  border-color: #ffffff;
+  color: #000000;
+  background: #ffffff;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}

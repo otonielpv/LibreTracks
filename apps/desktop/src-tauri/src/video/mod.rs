@@ -4,11 +4,14 @@
 //! Everything here tolerates libmpv being absent: the app starts, audio plays,
 //! and video reports itself unavailable with the reason.
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod displays;
 pub mod thumbnail_queue;
 
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
+use libretracks_video::output::{OutputCommand, OutputStatus, UnavailableBackend, VideoOutput};
 use libretracks_video::MpvLibrary;
 use serde::Serialize;
 
@@ -26,6 +29,7 @@ pub struct VideoSystem {
     resource_dir: OnceLock<PathBuf>,
     library: OnceLock<Result<LoadedLibrary, String>>,
     pub thumbnails: ThumbnailQueue,
+    output: OnceLock<VideoOutput>,
 }
 
 /// Whether video works on this machine, and why not if it does not. Shown by
@@ -66,6 +70,33 @@ impl VideoSystem {
             .as_ref()
             .map(|loaded| Arc::clone(&loaded.library))
             .map_err(Clone::clone)
+    }
+
+    /// Start the output thread. With libmpv it drives the real surface;
+    /// without, every attempt to open reports `Unavailable` with the reason.
+    /// Idempotent.
+    pub fn start_output(&self) -> &VideoOutput {
+        self.output.get_or_init(|| match self.libmpv() {
+            Ok(library) => VideoOutput::spawn(
+                libretracks_video::mpv_backend::MpvOutputBackend::new(library),
+            ),
+            Err(reason) => VideoOutput::spawn(UnavailableBackend(reason)),
+        })
+    }
+
+    /// Queue a command for the output, if it was started. Never blocks.
+    pub fn send(&self, command: OutputCommand) {
+        if let Some(output) = self.output.get() {
+            output.send(command);
+        }
+    }
+
+    /// Latest output status (`Disabled` if the output never started).
+    pub fn output_status(&self) -> OutputStatus {
+        self.output
+            .get()
+            .map(VideoOutput::status)
+            .unwrap_or_default()
     }
 
     pub fn status(&self) -> VideoLibraryStatus {

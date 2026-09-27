@@ -304,3 +304,156 @@ pub fn place_video_clips(
         )
     })
 }
+
+// ---------------------------------------------------------------------------
+// Output (paso 06): displays, settings, status, identify, test pattern.
+// ---------------------------------------------------------------------------
+
+use libretracks_video::output::{OutputCommand, OutputStatus};
+use libretracks_video::settings::VideoOutputSettings;
+use tauri::{AppHandle, Emitter, Manager};
+
+use crate::infra::settings::{save_app_settings, AppSettingsStore};
+
+/// A monitor for the display picker: numbered like "Identify" labels it.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoDisplayOption {
+    #[serde(flatten)]
+    pub monitor: libretracks_video::monitors::MonitorInfo,
+    /// 1-based, in enumeration order: the number "Identify" shows on it.
+    pub number: usize,
+    /// The app's main window is on this monitor.
+    pub has_app: bool,
+}
+
+#[tauri::command(async)]
+pub fn video_list_displays(app: AppHandle) -> Vec<VideoDisplayOption> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let (monitors, app_monitor) = crate::video::displays::connected_monitors(&app);
+        monitors
+            .into_iter()
+            .enumerate()
+            .map(|(index, monitor)| VideoDisplayOption {
+                has_app: app_monitor.as_deref() == Some(monitor.name.as_str()),
+                number: index + 1,
+                monitor,
+            })
+            .collect()
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = app;
+        Vec::new()
+    }
+}
+
+#[tauri::command(async)]
+pub fn video_output_status(state: State<'_, DesktopState>) -> OutputStatus {
+    state.video.output_status()
+}
+
+/// Save the output settings with the rest of the app settings and apply them
+/// live. Changing the fit does not reopen the window; changing the display
+/// or the mode does.
+#[tauri::command(async)]
+pub fn video_apply_settings(
+    app: AppHandle,
+    settings: VideoOutputSettings,
+    settings_store: State<'_, AppSettingsStore>,
+    state: State<'_, DesktopState>,
+) -> Result<VideoOutputSettings, String> {
+    let settings = settings.clamped();
+    let mut app_settings = settings_store.current().map_err(|error| error.to_string())?;
+    if app_settings.video_output != settings {
+        app_settings.video_output = settings.clone();
+        settings_store
+            .set(app_settings.clone())
+            .map_err(|error| error.to_string())?;
+        save_app_settings(&app, &app_settings).map_err(|error| error.to_string())?;
+        let _ = app.emit("settings:updated", app_settings);
+    }
+    state
+        .video
+        .send(OutputCommand::ApplySettings(settings.clone()));
+    Ok(settings)
+}
+
+/// A big number on every monitor for 3 s, matching `VideoDisplayOption.number`.
+#[tauri::command(async)]
+pub fn video_identify_displays(app: AppHandle) -> Result<(), String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        use tauri::{LogicalSize, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
+        let (monitors, _) = crate::video::displays::connected_monitors(&app);
+        let mut labels = Vec::new();
+        for (index, monitor) in monitors.iter().enumerate() {
+            let label = format!("identify-display-{}", index + 1);
+            if let Some(existing) = app.get_webview_window(&label) {
+                let _ = existing.close();
+            }
+            let url = WebviewUrl::App(format!("identify-display.html?n={}", index + 1).into());
+            let window = WebviewWindowBuilder::new(&app, &label, url)
+                .title("LibreTracks")
+                .decorations(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .resizable(false)
+                .focused(false)
+                .inner_size(260.0, 260.0)
+                .visible(false)
+                .build()
+                .map_err(|error| error.to_string())?;
+            let scale = window.scale_factor().unwrap_or(1.0);
+            let side = (260.0 * scale) as i32;
+            let _ = window.set_position(PhysicalPosition::new(
+                monitor.x + (monitor.width as i32 - side) / 2,
+                monitor.y + (monitor.height as i32 - side) / 2,
+            ));
+            let _ = window.set_size(LogicalSize::new(260.0, 260.0));
+            let _ = window.show();
+            labels.push(label);
+        }
+        let app = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            for label in labels {
+                if let Some(window) = app.get_webview_window(&label) {
+                    let _ = window.close();
+                }
+            }
+        });
+        Ok(())
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = app;
+        Ok(())
+    }
+}
+
+/// Resolve an image bundled under `resources/video/`.
+fn bundled_video_image(app: &AppHandle, name: &str) -> Option<String> {
+    app.path()
+        .resolve(format!("video/{name}"), tauri::path::BaseDirectory::Resource)
+        .ok()
+        .filter(|path| path.exists())
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+/// Show (or hide) the test pattern on the output.
+#[tauri::command(async)]
+pub fn video_test_pattern(
+    app: AppHandle,
+    on: bool,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    let image = if on {
+        Some(bundled_video_image(&app, "test-pattern.png").ok_or("falta la carta de ajuste")?)
+    } else {
+        None
+    };
+    state.video.send(OutputCommand::Overlay(image));
+    Ok(())
+}

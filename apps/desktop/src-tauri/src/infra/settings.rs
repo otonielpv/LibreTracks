@@ -339,6 +339,11 @@ pub struct AppSettings {
     /// are untouched either way: this only affects what a NEW import does.
     #[serde(default = "default_reference_imported_audio")]
     pub reference_imported_audio: bool,
+    /// Video output (display, fit, idle screen, latency). Machine settings,
+    /// not the song's: see libretracks_video::settings. Old files open with
+    /// the output off.
+    #[serde(default)]
+    pub video_output: libretracks_video::settings::VideoOutputSettings,
 }
 
 impl Default for AppSettings {
@@ -404,6 +409,7 @@ impl Default for AppSettings {
             decoding_cache_max_gb: None,
             session_storage_volume: None,
             reference_imported_audio: default_reference_imported_audio(),
+            video_output: Default::default(),
         }
     }
 }

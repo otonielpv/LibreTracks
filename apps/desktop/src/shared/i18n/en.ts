@@ -937,6 +937,16 @@ const en = {
       slowSeeks:
         "This video may be slow to respond to jumps. Recommended: export it with one keyframe per second.",
       librarySection: "Videos",
+      badge: {
+        ready: "Video: {{monitor}} · OK",
+        black: "VIDEO BLACKED OUT",
+        sharesApp:
+          "The chosen display is LibreTracks' own: video shows in a window so it does not cover the app.",
+        displayLost: "Video: display disconnected",
+        noDisplay: "Video: choose a display",
+        unavailable: "Video unavailable",
+        error: "Video: error",
+      },
       placeAtPlayhead: "Add to the timeline at the cursor",
       menu: {
         fit: "Fit",

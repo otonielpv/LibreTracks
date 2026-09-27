@@ -968,6 +968,16 @@ const es = {
       slowSeeks:
         "Este vídeo puede tardar en responder a los saltos. Recomendado: exportarlo con un keyframe por segundo.",
       librarySection: "Vídeos",
+      badge: {
+        ready: "Vídeo: {{monitor}} · OK",
+        black: "VÍDEO EN NEGRO",
+        sharesApp:
+          "La pantalla elegida es la de LibreTracks: el vídeo sale en una ventana para no taparla.",
+        displayLost: "Vídeo: pantalla desconectada",
+        noDisplay: "Vídeo: elige una pantalla",
+        unavailable: "Vídeo no disponible",
+        error: "Vídeo: error",
+      },
       placeAtPlayhead: "Añadir al timeline en el cursor",
       menu: {
         fit: "Encaje",

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { VideoAssetSummary, VideoLibraryStatus } from "../desktopApi";
+import type { VideoAssetSummary, VideoLibraryStatus, VideoOutputStatus } from "../desktopApi";
 
 /**
  * Video state shared between zones of the transport panel: whether libmpv is
@@ -19,6 +19,12 @@ export type VideoStoreState = {
    * useVideoFeature on desktop; null elsewhere (the library then shows the
    * videos without the action). */
   placeAtPlayhead: ((asset: VideoAssetSummary) => void) | null;
+  /** Latest `video:output-status` (null until the first one arrives). */
+  outputStatus: VideoOutputStatus | null;
+  setOutputStatus: (status: VideoOutputStatus | null) => void;
+  /** Emergency black (paso 13). Volatile: never saved, a restart clears it. */
+  forcedBlack: boolean;
+  setForcedBlack: (forcedBlack: boolean) => void;
   setPlaceAtPlayhead: (place: ((asset: VideoAssetSummary) => void) | null) => void;
   setMediaStatus: (status: VideoLibraryStatus | null) => void;
   setAssets: (assets: VideoAssetSummary[]) => void;
@@ -33,9 +39,11 @@ export const INITIAL_VIDEO_STATE = {
   assets: [],
   selectedVideoClipIds: [],
   placeAtPlayhead: null,
+  outputStatus: null,
+  forcedBlack: false,
 } satisfies Pick<
   VideoStoreState,
-  "status" | "assets" | "selectedVideoClipIds" | "placeAtPlayhead"
+  "status" | "assets" | "selectedVideoClipIds" | "placeAtPlayhead" | "outputStatus" | "forcedBlack"
 >;
 
 export const useVideoStore = create<VideoStoreState>()((set) => ({
@@ -43,6 +51,8 @@ export const useVideoStore = create<VideoStoreState>()((set) => ({
   setMediaStatus: (status) => set({ status }),
   setAssets: (assets) => set({ assets }),
   setPlaceAtPlayhead: (placeAtPlayhead) => set({ placeAtPlayhead }),
+  setOutputStatus: (outputStatus) => set({ outputStatus }),
+  setForcedBlack: (forcedBlack) => set({ forcedBlack }),
   selectVideoClip: (clipId, additive) =>
     set((state) => {
       if (!additive) {

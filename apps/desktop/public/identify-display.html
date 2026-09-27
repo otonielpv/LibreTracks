@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>LibreTracks</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #3fb8af; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center;
+    font: 700 160px/1 system-ui, sans-serif; color: #07120f; user-select: none; }
+</style>
+</head>
+<body>
+<!-- Paso 06/10 del plan de vídeo: un número grande por pantalla durante 3 s,
+     el mismo que la tarjeta de esa pantalla en Ajustes / asistente. -->
+<span id="n"></span>
+<script>
+  document.getElementById("n").textContent =
+    new URLSearchParams(location.search).get("n") || "?";
+</script>
+</body>
+</html>

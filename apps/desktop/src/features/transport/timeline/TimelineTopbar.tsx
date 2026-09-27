@@ -1,3 +1,4 @@
+import { VideoOutputBadge } from "../video/VideoOutputBadge";
 import { useEffect, useState } from "react";
 import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
@@ -756,6 +757,7 @@ export function TimelineTopbar({
           </div>
           <div className="lt-device-status-slot">
             <AudioDeviceStatusBadge />
+            <VideoOutputBadge />
           </div>
         </div>
       </div>

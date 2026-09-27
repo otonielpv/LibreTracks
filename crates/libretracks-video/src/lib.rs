@@ -10,8 +10,14 @@
 //! devuelve [`VideoError::Unsupported`] sin buscar nada.
 
 pub mod extract;
+pub mod monitors;
+pub mod mpv_backend;
+pub mod output;
+pub mod settings;
 pub mod library;
 pub mod mpv;
+#[cfg(windows)]
+pub mod surface_win32;
 pub mod thumbs;
 
 #[cfg(test)]
