@@ -6,6 +6,11 @@ import {
   type LiveMarkerGroup,
   type LivePlaybackPosition,
 } from "./liveMarkerModel";
+import {
+  cancelGatedFrame,
+  markFrameActivity,
+  requestGatedFrame,
+} from "../frameGate";
 
 const LIVE_UI_POLL_MS = 100;
 const EMPTY_POSITION: LivePlaybackPosition = {
@@ -81,16 +86,17 @@ export function useLiveMarkerPlayback(
       if (!isSamePlaybackStructure(lastResolved, next)) {
         lastResolved = next;
         setPosition(next);
+        markFrameActivity();
       }
-      frameId = window.requestAnimationFrame(followStructure);
+      frameId = requestGatedFrame(followStructure);
     };
 
     publishClock();
-    frameId = window.requestAnimationFrame(followStructure);
+    frameId = requestGatedFrame(followStructure);
     const intervalId = window.setInterval(publishClock, LIVE_UI_POLL_MS);
     return () => {
       window.clearInterval(intervalId);
-      window.cancelAnimationFrame(frameId);
+      cancelGatedFrame(frameId);
     };
   }, []);
 

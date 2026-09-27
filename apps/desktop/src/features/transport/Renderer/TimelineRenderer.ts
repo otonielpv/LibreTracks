@@ -2,6 +2,11 @@ import type { MutableRefObject } from "react";
 
 import type { SongView, WaveformSummaryDto } from "../desktopApi";
 import type { TimelineClipSummary, TimelineTrackSummary } from "../library/pendingAudioImports";
+import {
+  cancelGatedFrame,
+  markFrameActivity,
+  requestGatedFrame,
+} from "../frameGate";
 import { recordCanvasRender } from "../perf/perfMetrics";
 import type { TimelineGrid } from "../timeline/timelineMath";
 import type { TrackRowLayout } from "../tracks/trackLayout";
@@ -142,10 +147,12 @@ export class TimelineRenderer {
     private readonly foregroundContext: CanvasRenderingContext2D,
     private readonly options: TimelineRendererOptions,
   ) {
-    this.animationFrameId = window.requestAnimationFrame(this.render);
+    this.animationFrameId = requestGatedFrame(this.render);
   }
 
   updateState(nextSnapshot: TrackSceneSnapshot) {
+    // New scene or camera from outside: the render loop may be parked.
+    markFrameActivity();
     const previousSnapshot = this.snapshot;
     const cameraChanged = !previousSnapshot || previousSnapshot.cameraX !== nextSnapshot.cameraX;
     const zoomChanged = !previousSnapshot || previousSnapshot.zoomLevel !== nextSnapshot.zoomLevel;
@@ -195,7 +202,7 @@ export class TimelineRenderer {
 
   destroy() {
     this.disposed = true;
-    window.cancelAnimationFrame(this.animationFrameId);
+    cancelGatedFrame(this.animationFrameId);
   }
 
   private markAllDirty() {
@@ -305,6 +312,9 @@ export class TimelineRenderer {
         const willPaint =
           this.dirtyBackground || this.dirtyTracks || this.dirtyForeground;
         const paintStartedAt = willPaint ? performance.now() : 0;
+        if (willPaint) {
+          markFrameActivity();
+        }
 
         // Quantised to whole device pixels for the same reason as the ruler
         // (see CanvasTimeline): a fractional-device-pixel translate makes the
@@ -380,6 +390,6 @@ export class TimelineRenderer {
       }
     }
 
-    this.animationFrameId = window.requestAnimationFrame(this.render);
+    this.animationFrameId = requestGatedFrame(this.render);
   };
 }

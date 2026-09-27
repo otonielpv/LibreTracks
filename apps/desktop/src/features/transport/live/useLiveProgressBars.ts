@@ -1,4 +1,10 @@
 import { useEffect, useRef, type RefObject } from "react";
+import {
+  cancelGatedFrame,
+  markFrameActivity,
+  requestGatedFrame,
+  useFrameGateWake,
+} from "../frameGate";
 
 export function calculateLiveProgress(
   positionSeconds: number,
@@ -33,6 +39,7 @@ type LiveProgressBarOptions = {
  * React remains on the low-frequency clock used for labels and accessibility.
  */
 export function useLiveProgressBars(options: LiveProgressBarOptions) {
+  useFrameGateWake();
   const sourcesRef = useRef(options);
   sourcesRef.current = options;
 
@@ -69,6 +76,7 @@ export function useLiveProgressBars(options: LiveProgressBarOptions) {
         );
         previousMarkerElement = markerElement;
         previousMarkerScale = markerScale;
+        markFrameActivity();
       }
       if (songElement !== previousSongElement || songScale !== previousSongScale) {
         songElement?.style.setProperty(
@@ -77,11 +85,12 @@ export function useLiveProgressBars(options: LiveProgressBarOptions) {
         );
         previousSongElement = songElement;
         previousSongScale = songScale;
+        markFrameActivity();
       }
-      frameId = window.requestAnimationFrame(frame);
+      frameId = requestGatedFrame(frame);
     };
 
-    frameId = window.requestAnimationFrame(frame);
-    return () => window.cancelAnimationFrame(frameId);
+    frameId = requestGatedFrame(frame);
+    return () => cancelGatedFrame(frameId);
   }, []);
 }

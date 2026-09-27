@@ -22,6 +22,12 @@ import {
   type VideoClipPreview,
 } from "./videoCanvasState";
 import { useVideoStore } from "./videoStore";
+import {
+  cancelGatedFrame,
+  markFrameActivity,
+  requestGatedFrame,
+  useFrameGateWake,
+} from "../frameGate";
 
 export type VideoDragMode = "move" | "trimStart" | "trimEnd" | "fadeIn" | "fadeOut";
 
@@ -142,6 +148,7 @@ export type VideoHotspotDeps = {
  * same reason as the MIDI and automation hotspots.
  */
 export function useVideoClipHotspots(deps: VideoHotspotDeps) {
+  useFrameGateWake();
   const depsRef = useRef(deps);
   depsRef.current = deps;
   const elementsRef = useRef(new Map<string, HTMLDivElement>());
@@ -169,15 +176,16 @@ export function useVideoClipHotspots(deps: VideoHotspotDeps) {
         const key = `${left}|${width}|${geometry.fadeInSeconds}|${geometry.fadeOutSeconds}`;
         if (last.get(clipId) === key) continue;
         last.set(clipId, key);
+        markFrameActivity();
         element.style.left = `${left}px`;
         element.style.width = `${width}px`;
         element.style.setProperty("--lt-video-fade-in", `${geometry.fadeInSeconds * pps}px`);
         element.style.setProperty("--lt-video-fade-out", `${geometry.fadeOutSeconds * pps}px`);
       }
-      frame = window.requestAnimationFrame(sync);
+      frame = requestGatedFrame(sync);
     };
-    frame = window.requestAnimationFrame(sync);
-    return () => window.cancelAnimationFrame(frame);
+    frame = requestGatedFrame(sync);
+    return () => cancelGatedFrame(frame);
   }, []);
 
   const beginDrag = useCallback(

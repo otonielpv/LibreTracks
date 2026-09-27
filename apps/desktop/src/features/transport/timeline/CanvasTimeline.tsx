@@ -64,6 +64,12 @@ import { createTimelineVerticalScroller } from "./timelineVerticalScroll";
 import { isMobileApp } from "../desktopApi";
 import { consumeVideoRepaint } from "../video/videoCanvasState";
 import { useTimelineUIStore } from "../uiStore";
+import {
+  cancelGatedFrame,
+  markFrameActivity,
+  requestGatedFrame,
+  useFrameGateWake,
+} from "../frameGate";
 
 type RulerCanvasProps = {
   width: number;
@@ -334,6 +340,7 @@ export function TimelineRulerCanvas({
   onNativeTrackHeightChange,
   children,
 }: RulerCanvasProps) {
+  useFrameGateWake();
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayContentRef = useRef<HTMLDivElement | null>(null);
@@ -535,7 +542,7 @@ export function TimelineRulerCanvas({
         !isRenderableCanvasSize(snapshot.width) ||
         !isRenderableCanvasSize(snapshot.height)
       ) {
-        animationFrameId = window.requestAnimationFrame(render);
+        animationFrameId = requestGatedFrame(render);
         return;
       }
 
@@ -593,6 +600,7 @@ export function TimelineRulerCanvas({
           lastBaseSceneVersion = sceneVersionRef.current;
           lastBaseCameraX = roundedCameraX;
           lastBasePixelsPerSecond = livePixelsPerSecond;
+          markFrameActivity();
         }
 
         // Apply the sub-pixel remainder as a compositor transform every frame
@@ -600,6 +608,7 @@ export function TimelineRulerCanvas({
         if (lastBaseSubpixelOffsetX !== subpixelOffsetX) {
           baseCanvas.style.transform = `translateX(${-subpixelOffsetX}px)`;
           lastBaseSubpixelOffsetX = subpixelOffsetX;
+          markFrameActivity();
         }
 
         if (overlayContentRef.current) {
@@ -636,6 +645,7 @@ export function TimelineRulerCanvas({
             );
             lastOverlayTransformCameraX = cameraX;
             lastOverlayTransformScaleX = overlayScaleX;
+            markFrameActivity();
           }
         }
 
@@ -710,24 +720,26 @@ export function TimelineRulerCanvas({
             lastOverlayMarkerPreviewKey = markerPreviewKey;
             lastOverlayAutomationFeedbackVisible = automationFeedbackVisible;
             lastOverlayPulseFrame = pulseFrame;
+            markFrameActivity();
           }
 
           if (lastOverlaySubpixelOffsetX !== subpixelOffsetX) {
             overlayCanvas.style.transform = `translateX(${-subpixelOffsetX}px)`;
             lastOverlaySubpixelOffsetX = subpixelOffsetX;
+            markFrameActivity();
           }
         }
       } catch (error) {
         console.error("TimelineRulerCanvas render failed", error);
       }
 
-      animationFrameId = window.requestAnimationFrame(render);
+      animationFrameId = requestGatedFrame(render);
     };
 
-    animationFrameId = window.requestAnimationFrame(render);
+    animationFrameId = requestGatedFrame(render);
 
     return () => {
-      window.cancelAnimationFrame(animationFrameId);
+      cancelGatedFrame(animationFrameId);
     };
   }, [cameraXRef, livePixelsPerSecondRef, playheadSecondsRef]);
 
@@ -797,6 +809,7 @@ export function TimelineTrackCanvas({
   onNativeTrackHeightChange,
   onNativeTrackRowHeightStep,
 }: TrackCanvasProps) {
+  useFrameGateWake();
   const backgroundCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const tracksCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const foregroundCanvasRef = useRef<HTMLCanvasElement | null>(null);

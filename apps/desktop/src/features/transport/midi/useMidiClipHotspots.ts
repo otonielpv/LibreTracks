@@ -15,6 +15,12 @@ import {
 } from "../timeline/timelineMath";
 import { buildSongTempoRegions } from "@libretracks/shared/models";
 import type { MidiClipSummary, SongView } from "../desktopApi";
+import {
+  cancelGatedFrame,
+  markFrameActivity,
+  requestGatedFrame,
+  useFrameGateWake,
+} from "../frameGate";
 
 /** Position a clip is being dragged to, while the drag is in flight. */
 export type MidiClipMovePreview = {
@@ -63,6 +69,7 @@ export function useMidiClipHotspots({
   snapEnabled,
   onMoveClip,
 }: MidiClipHotspotDeps) {
+  useFrameGateWake();
   const hotspotsRef = useRef(new Map<string, HTMLButtonElement>());
   const positionsRef = useRef(new Map<string, number>());
   const previewRef = useRef<MidiClipMovePreview>(null);
@@ -235,14 +242,15 @@ export function useMidiClipHotspots({
         if (lastLeftByClip.get(clipId) !== left) {
           element.style.left = `${left}px`;
           lastLeftByClip.set(clipId, left);
+          markFrameActivity();
         }
       }
 
-      animationFrameId = window.requestAnimationFrame(sync);
+      animationFrameId = requestGatedFrame(sync);
     };
 
-    animationFrameId = window.requestAnimationFrame(sync);
-    return () => window.cancelAnimationFrame(animationFrameId);
+    animationFrameId = requestGatedFrame(sync);
+    return () => cancelGatedFrame(animationFrameId);
   }, [cameraXRef, livePixelsPerSecondRef, pixelsPerSecond]);
 
   // Named to match MidiClipHotspots' props so the caller can spread them.
