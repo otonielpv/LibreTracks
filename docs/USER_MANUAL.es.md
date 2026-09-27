@@ -225,7 +225,7 @@ Si armas la sección equivocada, pulsa `Esc` inmediatamente. Si no existe una ma
 
 LibreTracks puede proyectar vídeos (letras, fondos, clips) sincronizados con el audio en una segunda pantalla: un proyector o una TV. El audio manda: el vídeo sigue al transporte, a los saltos, a los vamps y al warp, nunca al revés.
 
-> Solo en escritorio. En Windows funciona tal cual (el instalador trae lo necesario). En Linux hace falta tener instalado `libmpv` (paquete `libmpv2` o `mpv-libs` según la distribución). En macOS la salida de vídeo aún no está disponible. En Android e iOS las sesiones con vídeo se abren y suenan, pero el vídeo no se reproduce ni se puede editar.
+> Solo en escritorio. En Windows y en macOS (12 o posterior) funciona tal cual: la app trae lo necesario. En Linux hace falta tener instalado `libmpv` (paquete `libmpv2` o `mpv-libs` según la distribución). En Android e iOS las sesiones con vídeo se abren y suenan, pero el vídeo no se reproduce ni se puede editar.
 
 ### Añadir vídeo
 

@@ -97,7 +97,26 @@ These ship inside the desktop application (`.app` / `.exe` / `.deb` / `.rpm` /
 - **Loaded at run time.** LibreTracks does not link libmpv: it loads it with
   `LoadLibrary` when video output is used, and works without it.
 - **Other platforms:** Linux uses the system's libmpv (a recommended package,
-  not bundled). macOS and mobile builds do not include mpv.
+  not bundled); macOS bundles its own build (next entry). Mobile builds do not
+  include mpv.
+
+### mpv / libmpv (video output, macOS build)
+- **License:** GNU LGPL-2.1-or-later as built: mpv configured with
+  `-Dgpl=false` and FFmpeg without `--enable-gpl` — see
+  [`licenses/`](./licenses/).
+- **Binary:** `libmpv.2.dylib` (universal x86_64 + arm64, macOS 12.0) in
+  `LibreTracks.app/Contents/Frameworks`, built from source by
+  [`scripts/libmpv-macos.sh`](./scripts/libmpv-macos.sh), which pins every
+  component by version and SHA-256: mpv 0.40.0 (with a small patch that leaves
+  out its Swift-only macOS integration, documented in the script), FFmpeg
+  7.1.1 (LGPL), libplacebo 7.349.0 (LGPL-2.1), libass 0.17.3 (ISC), FreeType
+  2.13.3 (FreeType License), HarfBuzz 10.4.0 (MIT) and FriBidi 1.0.16
+  (LGPL-2.1).
+- **What it contains:** those libraries linked statically into the one dylib,
+  which exports only the `mpv_*` API — separate from the LGPL FFmpeg dylibs the
+  audio engine uses.
+- **Loaded at run time,** like on Windows: without it the app works and video
+  output reports itself unavailable.
 
 ---
 
@@ -163,6 +182,13 @@ anyone can rebuild the application against their own copy of either library. The
 build script for the iOS FFmpeg is in this repository
 ([`scripts/build-ffmpeg-ios.sh`](./scripts/build-ffmpeg-ios.sh)), alongside the
 engine's CMake configuration.
+
+### mpv on macOS (LGPL)
+
+The macOS `libmpv.2.dylib` is built from the sources pinned in
+[`scripts/libmpv-macos.sh`](./scripts/libmpv-macos.sh); that script is the
+complete recipe, and running it rebuilds the library. Because it is loaded at
+run time, a user may replace it with their own build of the same API.
 
 ### mpv (GPL)
 

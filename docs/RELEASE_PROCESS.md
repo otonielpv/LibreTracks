@@ -192,8 +192,28 @@ spike -- info` prints both). Upstream deletes old releases: if the pinned asset
 is gone and the CI cache is cold, upload the same `.7z` to a release of ours and
 point `LT_LIBMPV_ARCHIVE` at it — the SHA-256 still has to match.
 
-Linux uses the distro's libmpv (`recommends` in the .deb/.rpm) and macOS ships
-without video for now, so neither needs anything here.
+Linux uses the distro's libmpv (`recommends` in the .deb/.rpm), so it needs
+nothing here.
+
+### libmpv (video output, macOS)
+
+The `.app` ships our own `libmpv.2.dylib` (universal, LGPL, macOS 12.0) in
+`Contents/Frameworks`, built from pinned sources by `scripts/libmpv-macos.sh`.
+The release job caches the result by that script's hash, so a normal release
+reuses it; `scripts/libmpv-fetch.mjs` then runs `scripts/verify-libmpv-macos.sh`
+(fails on a missing arch, a Homebrew/build-machine path, any exported symbol
+that is not `mpv_*`, or a minimum macOS above 12.0) and the `.app` validation
+checks it again inside the bundle.
+
+Nothing to do on a normal release. A **cold cache** (the script changed, or the
+cache expired) rebuilds FFmpeg, libplacebo, libass… for two architectures: the
+macOS job then takes noticeably longer. To **bump a component**: change its
+version and SHA-256 in the script (`shasum -a 256` of the tarball), build
+locally on a Mac with `LT_LIBMPV_ARCH=arm64 node scripts/libmpv-fetch.mjs` or
+the full universal build, run `cargo test -p libretracks-video` with
+`LIBRETRACKS_LIBMPV` pointing at it, and update the macOS mpv entry in
+`THIRD-PARTY-NOTICES.md`. On an mpv bump, check that the script's Swift-less
+patch still applies (it fails loudly if not).
 
 ## 5. Update web docs (only if user-visible behavior changed)
 

@@ -552,6 +552,34 @@ jobs:
         shell: bash
         run: node scripts/libmpv-fetch.mjs --into vendor/bin/native
 
+      # macOS (step 15): our own universal LGPL libmpv, built from pinned
+      # sources by scripts/libmpv-macos.sh (FFmpeg, libplacebo, libass… static
+      # inside one dylib that exports only mpv_*). The build takes a while, so
+      # the result is cached by the script's hash; the fetch step verifies it
+      # every time and drops it among the declared bundle.macOS.frameworks.
+      - name: Cache libmpv (macOS)
+        id: libmpv-macos-cache
+        if: matrix.platform == 'macos'
+        uses: actions/cache@v4
+        with:
+          path: vendor/bin/libmpv/macos
+          key: libmpv-macos-${{ hashFiles('scripts/libmpv-macos.sh') }}
+
+      - name: libmpv build tools (macOS)
+        if: matrix.platform == 'macos' && steps.libmpv-macos-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          # Build TOOLS only; nothing from Homebrew ends up in the dylib.
+          brew install nasm pkg-config ninja
+          python3 -m venv "$RUNNER_TEMP/libmpv-venv"
+          "$RUNNER_TEMP/libmpv-venv/bin/pip" install --quiet meson jinja2
+          echo "$RUNNER_TEMP/libmpv-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch libmpv (macOS)
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: node scripts/libmpv-fetch.mjs --into vendor/bin/macos-frameworks
+
       - name: Verify ASIO compiled into release engine (Windows)
         if: matrix.platform == 'windows'
         shell: pwsh
@@ -972,6 +1000,19 @@ jobs:
             echo "::error::A bundled dylib does not cover the engine's architectures. The universal release builds universal LGPL FFmpeg from source via scripts/build-ffmpeg-universal.sh. See docs/HANDOFF_macos_ffmpeg_catalina.md §5.2."
             exit 1
           fi
+
+          # 4d) Video output (step 15): our own libmpv is in Frameworks/ and
+          #     still passes its checks once bundled (only mpv_* exported, no
+          #     build-machine paths, minimum macOS). libmpv is loaded at run
+          #     time, so dyld's dry run below would not notice it missing.
+          echo "--- libmpv ---"
+          if [ ! -f "$FRAMEWORKS/libmpv.2.dylib" ]; then
+            echo "::error::Missing $FRAMEWORKS/libmpv.2.dylib: video output would be unavailable. Is it in bundle.macOS.frameworks?"
+            exit 1
+          fi
+          LIBMPV_ARGS=()
+          case " $ENGINE_ARCHS " in *" arm64 "*) ;; *) LIBMPV_ARGS+=(--single-arch) ;; esac
+          bash scripts/verify-libmpv-macos.sh "$FRAMEWORKS/libmpv.2.dylib" "${LIBMPV_ARGS[@]}"
 
           # 5) Dry-run loader resolution: ask dyld to resolve every dependency
           #    of the main binary. Will fail with the same DYLD error users hit

@@ -225,7 +225,7 @@ If you arm the wrong section, press `Esc` immediately. If there is no marker for
 
 LibreTracks can project videos (lyrics, backgrounds, clips) in sync with the audio on a second display: a projector or a TV. Audio is the master: the video follows the transport, jumps, vamps and warp, never the other way round.
 
-> Desktop only. On Windows it works out of the box (the installer brings what it needs). On Linux you need `libmpv` installed (package `libmpv2` or `mpv-libs` depending on the distribution). On macOS video output is not available yet. On Android and iOS sessions with video open and play their audio, but video is neither played nor editable.
+> Desktop only. On Windows and macOS (12 or later) it works out of the box: the app brings what it needs. On Linux you need `libmpv` installed (package `libmpv2` or `mpv-libs` depending on the distribution). On Android and iOS sessions with video open and play their audio, but video is neither played nor editable.
 
 ### Adding video
 

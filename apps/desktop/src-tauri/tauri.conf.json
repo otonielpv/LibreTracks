@@ -160,7 +160,8 @@
         "../../../vendor/bin/macos-frameworks/libavformat.61.dylib",
         "../../../vendor/bin/macos-frameworks/libavcodec.61.dylib",
         "../../../vendor/bin/macos-frameworks/libavutil.59.dylib",
-        "../../../vendor/bin/macos-frameworks/libswresample.5.dylib"
+        "../../../vendor/bin/macos-frameworks/libswresample.5.dylib",
+        "../../../vendor/bin/macos-frameworks/libmpv.2.dylib"
       ]
     },
     "icon": [

@@ -272,6 +272,13 @@ const ensureEngineV2 = (normalizedEnv) => {
     run("bash", ["scripts/macos-bundle-ffmpeg.sh", nativeVendorDir]);
   }
 
+  // macOS video output (docs/plans/video-output, step 15): our own libmpv
+  // next to the engine, like Windows does in desktop-native.ps1. Built once
+  // (scripts/libmpv-macos.sh, slow the first time) and verified every time.
+  if (process.platform === "darwin") {
+    run("node", ["scripts/libmpv-fetch.mjs", "--into", nativeVendorDir]);
+  }
+
   const pathSeparator = process.platform === "win32" ? ";" : ":";
   const vcpkgRoot = normalizedEnv.VCPKG_ROOT
     ?? (normalizedEnv.CMAKE_TOOLCHAIN_FILE
