@@ -528,3 +528,77 @@ fn a_video_without_audio_cannot_be_extracted() {
     plan.abandon();
     assert!(!plan.destination.exists());
 }
+
+// ---------------------------------------------------------------------------
+// Videos carried by a .ltpkg (paso 12).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn packaged_videos_move_into_the_session_and_join_the_library() {
+    let mut session = two_song_session();
+    let song_dir = session.song_dir.clone().unwrap();
+    // A video of the same name already lives in the session: no overwrite.
+    fs::create_dir_all(song_dir.join("video")).unwrap();
+    fs::write(song_dir.join("video/letras.mp4"), b"previous").unwrap();
+
+    let mut staged = libretracks_project::StagedPackageAudio::from_bytes_for_tests(
+        song_dir.join("cache/staging-test"),
+        Vec::<(String, Vec<u8>)>::new(),
+    )
+    .unwrap();
+    staged.add_video_for_tests("video/letras.mp4", b"packaged").unwrap();
+    let meta = vec![libretracks_project::PackageVideoEntry {
+        file_path: "D:/Visuales/letras.mp4".into(),
+        folder_path: Some("Coro".into()),
+        bundled_entry: Some("video/letras.mp4".into()),
+        info: Some(video_info(true)),
+    }];
+
+    let mut song = song(&session);
+    super::video_library::place_bundled_videos_and_register(&song_dir, &mut song, &staged, &meta)
+        .expect("place");
+
+    assert!(song
+        .video_clips
+        .iter()
+        .all(|clip| clip.file_path == "video/letras-1.mp4"));
+    assert_eq!(fs::read(song_dir.join("video/letras-1.mp4")).unwrap(), b"packaged");
+    assert_eq!(fs::read(song_dir.join("video/letras.mp4")).unwrap(), b"previous");
+    session.engine.load_song(song).unwrap();
+    let listed = session.list_video_assets().expect("list");
+    let entry = listed
+        .iter()
+        .find(|asset| asset.file_path == "video/letras-1.mp4")
+        .expect("registered");
+    assert!(!entry.is_missing);
+}
+
+#[test]
+fn a_packaged_video_whose_original_is_still_here_is_reused() {
+    let session = two_song_session();
+    let song_dir = session.song_dir.clone().unwrap();
+    let original = song_dir.join("letras-original.mp4");
+    fs::write(&original, b"original").unwrap();
+    let original_path = original.to_string_lossy().replace('\\', "/");
+
+    let mut staged = libretracks_project::StagedPackageAudio::from_bytes_for_tests(
+        song_dir.join("cache/staging-test"),
+        Vec::<(String, Vec<u8>)>::new(),
+    )
+    .unwrap();
+    staged.add_video_for_tests("video/letras-original.mp4", b"packaged").unwrap();
+    let meta = vec![libretracks_project::PackageVideoEntry {
+        file_path: original_path.clone(),
+        folder_path: None,
+        bundled_entry: Some("video/letras-original.mp4".into()),
+        info: Some(video_info(false)),
+    }];
+    let mut song = song(&session);
+    for clip in &mut song.video_clips {
+        clip.file_path = original_path.clone();
+    }
+    super::video_library::place_bundled_videos_and_register(&song_dir, &mut song, &staged, &meta)
+        .expect("place");
+    assert!(song.video_clips.iter().all(|clip| clip.file_path == original_path));
+    assert!(!song_dir.join("video/letras-original.mp4").exists());
+}

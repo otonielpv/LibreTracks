@@ -1096,6 +1096,9 @@ export type VideoSyncStats = {
 /** Beat grid the calibration flash follows (view seconds). */
 export type VideoCalibrationGrid = { interval: number; firstBeat: number };
 
+/** Videos an export would carry and their size in bytes (paso 12). */
+export type VideoExportPayload = { count: number; bytes: number };
+
 /** What placing a video with sound does with its audio (paso 11). */
 export type VideoAudioOnImport = "ask" | "extract" | "skip";
 

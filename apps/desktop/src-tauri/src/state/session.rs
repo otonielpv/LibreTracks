@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use libretracks_core::Song;
 use libretracks_project::{
-    extract_session_package, load_song_from_file, save_song_to_file, ExtractedSessionPackage,
+    load_song_from_file, save_song_to_file, ExtractedSessionPackage,
     ExtractedSongPackage, SidecarFile,
 };
 
@@ -456,8 +456,14 @@ impl DesktopSession {
         Self::reject_existing_target_dir(target_song_dir)?;
 
         let progress = Self::extraction_progress_reporter(app);
-        extract_session_package(target_song_dir, package_path, progress)
-            .map_err(|error| DesktopError::AudioCommand(error.to_string()))
+        let file = std::fs::File::open(package_path)?;
+        libretracks_project::extract_session_package_from_reader_with_options(
+            target_song_dir,
+            file,
+            super::video_library::package_extract_options(),
+            progress,
+        )
+        .map_err(|error| DesktopError::AudioCommand(error.to_string()))
     }
 
     /// Same as [`Self::extract_session_package_off_lock`], but reading the
@@ -478,8 +484,13 @@ impl DesktopSession {
         Self::reject_existing_target_dir(target_song_dir)?;
 
         let progress = Self::extraction_progress_reporter(app);
-        libretracks_project::extract_session_package_from_reader(target_song_dir, reader, progress)
-            .map_err(|error| DesktopError::AudioCommand(error.to_string()))
+        libretracks_project::extract_session_package_from_reader_with_options(
+            target_song_dir,
+            reader,
+            super::video_library::package_extract_options(),
+            progress,
+        )
+        .map_err(|error| DesktopError::AudioCommand(error.to_string()))
     }
 
     fn reject_existing_target_dir(target_song_dir: &Path) -> Result<(), DesktopError> {

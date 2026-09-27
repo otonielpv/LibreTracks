@@ -315,6 +315,7 @@ export function useProjectActions({
   function handleExportSessionConfirm(
     mode: SessionExportMode,
     writePath?: string,
+    includeVideo = false,
   ) {
     const includeAudio = mode !== "light";
     const prepared = mode === "optimized";
@@ -353,8 +354,8 @@ export function useProjectActions({
           }),
         });
         const started = writePath
-          ? await exportSessionPackageAt(writePath, includeAudio, prepared)
-          : await exportSessionPackage(includeAudio, prepared);
+          ? await exportSessionPackageAt(writePath, includeAudio, prepared, includeVideo)
+          : await exportSessionPackage(includeAudio, prepared, includeVideo);
         if (!started) {
           // User cancelled the save dialog: no terminal event will arrive.
           setSessionExportUiState({ active: false, percent: 0, message: "" });

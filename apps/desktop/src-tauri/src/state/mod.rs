@@ -74,7 +74,7 @@ mod timeline_math;
 mod missing_media;
 pub(crate) use missing_media::MissingMediaEntry;
 pub(crate) use video_edit::VideoClipProps;
-pub(crate) use video_library::VideoAssetSummary;
+pub(crate) use video_library::{package_extract_options, VideoAssetSummary};
 pub(crate) use self::TransportClockMirror as VideoTransportClock;
 mod track_colors;
 mod track_tree;
@@ -2252,6 +2252,12 @@ impl DesktopSession {
         // audio/ folder and re-point the imported clips before anything else
         // touches the source paths.
         place_bundled_audio_and_repoint(&song_dir, &mut imported.song, &imported.bundled_audio)?;
+        video_library::place_bundled_videos_and_register(
+            &song_dir,
+            &mut imported.song,
+            &imported.bundled_audio,
+            &imported.video_library_meta,
+        )?;
         let mut library_assets = list_library_assets(&song_dir, Some(&imported.song))?;
         merge_package_library_meta(
             &song_dir,
@@ -2318,6 +2324,12 @@ impl DesktopSession {
         )?;
         emit_project_load_progress(app, 42, "Copiando audio del paquete...".into(), 0, 0, 0, 0);
         place_bundled_audio_and_repoint(&song_dir, &mut imported.song, &imported.bundled_audio)?;
+        video_library::place_bundled_videos_and_register(
+            &song_dir,
+            &mut imported.song,
+            &imported.bundled_audio,
+            &imported.video_library_meta,
+        )?;
         emit_project_load_progress(
             app,
             45,

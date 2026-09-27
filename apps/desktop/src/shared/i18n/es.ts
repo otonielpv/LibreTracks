@@ -1078,6 +1078,14 @@ const es = {
         extracted: "Audio del vídeo extraído en una pista nueva",
         progress: "Extrayendo audio ({{count}})… {{percent}} %",
       },
+      export: {
+        title: "Vídeos",
+        summary_one: "Tiene {{count}} vídeo ({{size}}).",
+        summary_other: "Tiene {{count}} vídeos ({{size}}).",
+        include: "Incluir los vídeos en el paquete",
+        withoutNote: "Sin ellos, los vídeos habrá que copiarlos aparte y reubicarlos al abrir.",
+        lightNote: "Los vídeos no viajan: se referencian por su ruta, como el audio.",
+      },
       badge: {
         ready: "Vídeo: {{monitor}} · OK",
         black: "VÍDEO EN NEGRO",

@@ -187,7 +187,7 @@ pub fn load_song_from_file(song_file: impl AsRef<Path>) -> Result<Song, ProjectE
 /// was `newest_known_version`. Anything newer is rejected, never read with its
 /// unknown fields dropped. Taking the version as an argument lets the tests
 /// play an older reader against a newer document.
-fn parse_song_document(json: &str, newest_known_version: u32) -> Result<Song, ProjectError> {
+pub(crate) fn parse_song_document(json: &str, newest_known_version: u32) -> Result<Song, ProjectError> {
     let raw_document: Value = serde_json::from_str(json)?;
     reject_legacy_group_format(&raw_document)?;
     match document_version(&raw_document)? {

@@ -300,7 +300,7 @@ describe("createCompactSongHandlers", () => {
         busy: true,
       });
       await vi.waitFor(() =>
-        expect(deps.exportRegionAsPackage).toHaveBeenCalledWith("r1", true),
+        expect(deps.exportRegionAsPackage).toHaveBeenCalledWith("r1", true, false),
       );
     });
 

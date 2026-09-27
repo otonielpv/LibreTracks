@@ -19,8 +19,15 @@
 //! session.ltsession              the full Song document (all regions)
 //! sidecars/<name>                opaque project files (library.json, automation…)
 //! audio/<file_name>              full packages only — audio referenced by clips
+//! video/<song>/<file_name>       only with "include videos" — videos of clips and library
 //! cache/waveforms/<name>.ltpeaks waveform peaks for instant open on the target
 //! ```
+//!
+//! Videos (video plan, paso 12) travel independently of the audio mode: a
+//! Light package can still carry them, and an Optimized one ships them as they
+//! are (there is no "prepared" video). Mobile imports skip `video/` — phones
+//! cannot play it and low-end ones already struggle with big packages — but
+//! keep the clips in the document.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -82,6 +89,11 @@ struct SessionPackageManifest {
     prepared_sample_rate: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     prepared_format: Option<String>,
+    /// True when `video/` carries the session's videos (paso 12). Additive:
+    /// an older reader ignores the folder, and the v8 document inside is what
+    /// stops it from opening (and re-saving) the session without its videos.
+    #[serde(default)]
+    bundled_video: bool,
 }
 
 /// A project file that travels alongside the session document but whose
@@ -117,6 +129,17 @@ pub struct ExtractedSessionPackage {
     /// Light and Full packages, and for anything written before the mode
     /// existed.
     pub prepared_sample_rate: Option<u32>,
+    /// The package carried its videos (they are under `video/` unless the
+    /// import skipped them, see [`ExtractOptions::skip_video`]).
+    pub bundled_video: bool,
+}
+
+/// How an import treats optional payloads.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ExtractOptions {
+    /// Leave `video/` in the zip (mobile). The video clips stay in the
+    /// document with their package paths.
+    pub skip_video: bool,
 }
 
 // Free space lives in `disk_space`: the prepared-render store needs the same
@@ -291,6 +314,17 @@ fn allocate_audio_relative_path(
     folder: Option<&str>,
     file_name: &str,
 ) -> String {
+    allocate_package_relative_path(reserved_lower, "audio", folder, file_name)
+}
+
+/// [`allocate_audio_relative_path`] under any top-level folder (`audio`,
+/// `video`).
+fn allocate_package_relative_path(
+    reserved_lower: &mut HashSet<String>,
+    root: &str,
+    folder: Option<&str>,
+    file_name: &str,
+) -> String {
     let path = Path::new(file_name);
     let stem = path.file_stem().and_then(|v| v.to_str()).unwrap_or("audio");
     let extension = path.extension().and_then(|v| v.to_str());
@@ -304,8 +338,8 @@ fn allocate_audio_relative_path(
             (n, None) => format!("{stem}-{n}"),
         };
         let candidate = match folder {
-            Some(folder) => format!("audio/{folder}/{name}"),
-            None => format!("audio/{name}"),
+            Some(folder) => format!("{root}/{folder}/{name}"),
+            None => format!("{root}/{name}"),
         };
         if reserved_lower.insert(candidate.to_lowercase()) {
             return candidate;
@@ -398,6 +432,131 @@ fn plan_audio_sources(
         });
     }
     planned
+}
+
+/// One distinct video (of a clip or of the library) and where it goes in the
+/// package.
+struct PlannedVideoSource {
+    stored_path: String,
+    source_abs: PathBuf,
+    relative_path: String,
+}
+
+/// The videos the package carries: every video clip's file, then every video
+/// in the library — including those no clip uses, the same lesson as the
+/// audio ("a complete package that drops part of the library is not
+/// complete"). Grouped by song like the audio; a file that does not exist is
+/// left out (it stays a missing video on the other side, as it is here).
+fn plan_video_sources(
+    song_dir: &Path,
+    song: &Song,
+    library: &[LibraryAudioEntry],
+) -> Vec<PlannedVideoSource> {
+    let mut seen = HashSet::new();
+    let mut reserved_lower = HashSet::new();
+    let mut planned = Vec::new();
+    let library_folder_by_path: HashMap<String, String> = library
+        .iter()
+        .filter_map(|entry| {
+            let folder = entry.folder.as_deref().and_then(sanitize_audio_folder_name)?;
+            Some((stored_path_key(&entry.path), folder))
+        })
+        .collect();
+    let clip_entries = song.video_clips.iter().map(|clip| {
+        (
+            clip.file_path.clone(),
+            audio_folder_for_seconds(song, clip.timeline_start_seconds),
+        )
+    });
+    let library_entries = library
+        .iter()
+        .map(|entry| (entry.path.clone(), None::<String>));
+    for (stored_path, region_folder) in clip_entries.chain(library_entries) {
+        if !seen.insert(stored_path_key(&stored_path)) {
+            continue;
+        }
+        let (source_abs, file_name) = crate::asset_path::resolve_asset(song_dir, &stored_path);
+        if file_name.is_empty() || !source_abs.is_file() {
+            continue;
+        }
+        let folder = library_folder_by_path
+            .get(&stored_path_key(&stored_path))
+            .cloned()
+            .or(region_folder);
+        let relative_path = allocate_package_relative_path(
+            &mut reserved_lower,
+            "video",
+            folder.as_deref(),
+            &file_name,
+        );
+        planned.push(PlannedVideoSource {
+            stored_path,
+            source_abs,
+            relative_path,
+        });
+    }
+    planned
+}
+
+/// The videos `library.json` lists (`videoAssets: [{ filePath, folderPath }]`).
+fn library_video_paths(song_dir: &Path) -> Vec<LibraryAudioEntry> {
+    let Ok(bytes) = fs::read(song_dir.join("library.json")) else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return Vec::new();
+    };
+    value
+        .get("videoAssets")
+        .and_then(|assets| assets.as_array())
+        .map(|assets| {
+            assets
+                .iter()
+                .filter_map(|asset| {
+                    let path = asset.get("filePath")?.as_str()?;
+                    (!path.is_empty()).then(|| LibraryAudioEntry {
+                        path: path.to_string(),
+                        folder: asset
+                            .get("folderPath")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// How many videos an export with `include_video` would carry and their size
+/// in bytes, for the export dialog (a `stat` per file, nothing read).
+pub fn session_video_payload(song_dir: &Path, song: &Song) -> (usize, u64) {
+    let planned = plan_video_sources(song_dir, song, &library_video_paths(song_dir));
+    let bytes = planned
+        .iter()
+        .filter_map(|source| fs::metadata(&source.source_abs).ok())
+        .map(|metadata| metadata.len())
+        .sum();
+    (planned.len(), bytes)
+}
+
+/// Copy a (possibly multi-gigabyte) file into the zip without holding it in
+/// memory, uncompressed. Zip64 when it needs it. `false` if it cannot be read.
+pub(crate) fn write_file_entry<W: Write + io::Seek>(
+    zip: &mut ZipWriter<W>,
+    entry_name: &str,
+    source: &Path,
+) -> Result<bool, ProjectError> {
+    let Ok(mut file) = File::open(source) else {
+        return Ok(false);
+    };
+    let size = file.metadata().map(|metadata| metadata.len()).unwrap_or(0);
+    let options = SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored)
+        .large_file(size >= u64::from(u32::MAX));
+    zip.start_file(entry_name, options)
+        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+    io::copy(&mut file, zip)?;
+    Ok(true)
 }
 
 /// Comparable key for a path exactly as a clip or a library asset stores it
@@ -503,9 +662,22 @@ fn rewrite_library_for_package(
     bytes: &[u8],
     song_dir: &Path,
     bundled_by_source_abs: &HashMap<String, String>,
+    bundled_video_by_stored_path: &HashMap<String, String>,
 ) -> Option<Vec<u8>> {
     let mut value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
     let obj = value.as_object_mut()?;
+
+    // Videos: `videoAssets: [{ filePath, folderPath, info }]`, keyed exactly as
+    // the planner saw them.
+    if let Some(videos) = obj.get_mut("videoAssets").and_then(|a| a.as_array_mut()) {
+        for video in videos {
+            if let Some(file_path) = video.get("filePath").and_then(|v| v.as_str()) {
+                if let Some(bundled) = bundled_video_by_stored_path.get(&stored_path_key(file_path)) {
+                    video["filePath"] = serde_json::Value::String(bundled.clone());
+                }
+            }
+        }
+    }
 
     let remap = |file_path: &str| -> Option<String> {
         // Misma resolucion que uso el planificador, o la clave no coincide y el
@@ -588,6 +760,32 @@ pub fn export_session_as_package_with_audio(
     sidecars: &[SidecarFile],
     output_path: &Path,
     audio_mode: SessionPackageAudio,
+    on_progress: impl FnMut(usize, usize),
+) -> Result<SessionPackageExport, ProjectError> {
+    export_session_as_package_with_options(
+        cache_root,
+        song_dir,
+        song,
+        sidecars,
+        output_path,
+        audio_mode,
+        false,
+        on_progress,
+    )
+}
+
+/// Export choosing how the audio travels and whether the videos go inside
+/// (`include_video`, paso 12). Without them, video paths stay as they are and
+/// read as missing media on another machine, to relink there.
+#[allow(clippy::too_many_arguments)]
+pub fn export_session_as_package_with_options(
+    cache_root: &Path,
+    song_dir: &Path,
+    song: &Song,
+    sidecars: &[SidecarFile],
+    output_path: &Path,
+    audio_mode: SessionPackageAudio,
+    include_video: bool,
     mut on_progress: impl FnMut(usize, usize),
 ) -> Result<SessionPackageExport, ProjectError> {
     let include_audio = audio_mode.bundles_audio();
@@ -631,10 +829,34 @@ pub fn export_session_as_package_with_audio(
     // versioned writer the app uses, so a freshly exported set is byte-for-byte
     // a valid session on open. For full packages we serialize a copy whose clips
     // point at the bundled `audio/<unique>` paths.
-    let session_json = if include_audio {
+    let planned_videos = if include_video {
+        plan_video_sources(song_dir, song, &library_video_paths(song_dir))
+    } else {
+        Vec::new()
+    };
+    let bundled_video_by_stored_path: HashMap<String, String> = planned_videos
+        .iter()
+        .map(|source| {
+            (
+                stored_path_key(&source.stored_path),
+                source.relative_path.clone(),
+            )
+        })
+        .collect();
+
+    let session_json = if include_audio || !planned_videos.is_empty() {
         let mut portable = song.clone();
-        for clip in &mut portable.clips {
-            if let Some(relative_path) = relative_by_clip_path.get(&clip.file_path) {
+        if include_audio {
+            for clip in &mut portable.clips {
+                if let Some(relative_path) = relative_by_clip_path.get(&clip.file_path) {
+                    clip.file_path = relative_path.clone();
+                }
+            }
+        }
+        for clip in &mut portable.video_clips {
+            if let Some(relative_path) =
+                bundled_video_by_stored_path.get(&stored_path_key(&clip.file_path))
+            {
                 clip.file_path = relative_path.clone();
             }
         }
@@ -669,8 +891,20 @@ pub fn export_session_as_package_with_audio(
         let Ok(bytes) = fs::read(&source) else {
             continue;
         };
-        let bytes = if include_audio && sidecar.file_name == "library.json" {
-            rewrite_library_for_package(&bytes, song_dir, &bundled_by_source_abs).unwrap_or(bytes)
+        let rewrites_library = include_audio || !planned_videos.is_empty();
+        let bytes = if rewrites_library && sidecar.file_name == "library.json" {
+            let audio_map = if include_audio {
+                bundled_by_source_abs.clone()
+            } else {
+                HashMap::new()
+            };
+            rewrite_library_for_package(
+                &bytes,
+                song_dir,
+                &audio_map,
+                &bundled_video_by_stored_path,
+            )
+            .unwrap_or(bytes)
         } else {
             bytes
         };
@@ -680,7 +914,12 @@ pub fn export_session_as_package_with_audio(
     }
 
     let mut written_waveform_entries = HashSet::new();
-    let planned_total = planned.len();
+    // Videos count in the progress too: they are usually most of the bytes.
+    let planned_total = planned.len() + planned_videos.len();
+    for (index, video) in planned_videos.iter().enumerate() {
+        on_progress(planned.len() + index + 1, planned_total);
+        write_file_entry(&mut zip, &video.relative_path, &video.source_abs)?;
+    }
     for (index, source) in planned.iter().enumerate() {
         // Report progress per source up front so every iteration counts, even
         // the ones that `continue` past a missing file or waveform below.
@@ -787,6 +1026,7 @@ pub fn export_session_as_package_with_audio(
             }
             _ => None,
         },
+        bundled_video: !planned_videos.is_empty(),
     };
     zip.start_file("manifest.json", deflated)
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
@@ -830,12 +1070,27 @@ pub fn extract_session_package_from_reader<R: Read + io::Seek>(
     reader: R,
     on_progress: impl FnMut(usize, usize),
 ) -> Result<ExtractedSessionPackage, ProjectError> {
+    extract_session_package_from_reader_with_options(
+        target_song_dir,
+        reader,
+        ExtractOptions::default(),
+        on_progress,
+    )
+}
+
+/// Extraction with [`ExtractOptions`] (mobile skips the videos).
+pub fn extract_session_package_from_reader_with_options<R: Read + io::Seek>(
+    target_song_dir: &Path,
+    reader: R,
+    options: ExtractOptions,
+    on_progress: impl FnMut(usize, usize),
+) -> Result<ExtractedSessionPackage, ProjectError> {
     // The destination is created by this call, so on failure it is ours to
     // remove: a half-extracted project is worse than none, because the user can
     // try to open it. `extract_session_package_off_lock` rejects a destination
     // that already exists, so nothing here can delete a folder of the user's.
     let existed_before = target_song_dir.exists();
-    let result = extract_session_package_inner(target_song_dir, reader, on_progress);
+    let result = extract_session_package_inner(target_song_dir, reader, options, on_progress);
     if result.is_err() && !existed_before {
         discard_failed_extraction(target_song_dir);
     }
@@ -845,6 +1100,7 @@ pub fn extract_session_package_from_reader<R: Read + io::Seek>(
 fn extract_session_package_inner<R: Read + io::Seek>(
     target_song_dir: &Path,
     reader: R,
+    options: ExtractOptions,
     mut on_progress: impl FnMut(usize, usize),
 ) -> Result<ExtractedSessionPackage, ProjectError> {
     let mut archive =
@@ -883,10 +1139,14 @@ fn extract_session_package_inner<R: Read + io::Seek>(
     // Checked against free space BEFORE the first byte is written: a set that
     // does not fit used to be discovered halfway through, leaving a corrupt
     // half-extracted project behind.
+    let skipped_entry =
+        |name: &str| options.skip_video && normalize_zip_path(name).starts_with("video/");
     let mut uncompressed_total: u64 = 0;
     for index in 0..archive.len() {
         if let Ok(entry) = archive.by_index_raw(index) {
-            uncompressed_total += entry.size();
+            if !skipped_entry(entry.name()) {
+                uncompressed_total += entry.size();
+            }
         }
     }
     if let Some(free_bytes) = free_space_bytes(target_song_dir) {
@@ -906,6 +1166,11 @@ fn extract_session_package_inner<R: Read + io::Seek>(
         let entry_name = normalize_zip_path(zip_file.name());
 
         let entry_size = zip_file.size();
+
+        // Mobile: videos stay in the zip (not counted in the total either).
+        if skipped_entry(&entry_name) {
+            continue;
+        }
 
         // The manifest is already consumed; skip directory entries.
         if entry_name == "manifest.json" || entry_name.ends_with('/') {
@@ -928,6 +1193,8 @@ fn extract_session_package_inner<R: Read + io::Seek>(
             target_song_dir.join(name)
         } else if let Some(name) = entry_name.strip_prefix("audio/") {
             target_song_dir.join("audio").join(name)
+        } else if let Some(name) = entry_name.strip_prefix("video/") {
+            target_song_dir.join("video").join(name)
         } else if let Some(name) = entry_name.strip_prefix("cache/waveforms/") {
             target_song_dir.join("cache").join("waveforms").join(name)
         } else {
@@ -977,6 +1244,7 @@ fn extract_session_package_inner<R: Read + io::Seek>(
             Some("pcm_s16") => manifest.prepared_sample_rate,
             _ => None,
         },
+        bundled_video: manifest.bundled_video,
     })
 }
 
@@ -1458,6 +1726,7 @@ mod tests {
                 bundled_audio: true,
                 prepared_sample_rate: None,
                 prepared_format: None,
+                bundled_video: false,
             })
             .expect("manifest");
             writer.start_file("manifest.json", options).expect("start");
@@ -2105,6 +2374,7 @@ mod tests {
             bundled_audio: false,
             prepared_sample_rate: None,
             prepared_format: None,
+            bundled_video: false,
 };
         zip.write_all(&serde_json::to_vec(&manifest).unwrap())
             .expect("write");
@@ -2129,6 +2399,7 @@ mod tests {
             bundled_audio: false,
             prepared_sample_rate: None,
             prepared_format: None,
+            bundled_video: false,
 };
         zip.write_all(&serde_json::to_vec(&manifest).unwrap())
             .expect("write");
@@ -2147,5 +2418,212 @@ mod tests {
         assert!(!is_safe_relative_entry("/etc/passwd"));
         assert!(!is_safe_relative_entry("C:/Windows/system32"));
         assert!(!is_safe_relative_entry("audio/../../escape.wav"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Videos (video plan, paso 12).
+    // -----------------------------------------------------------------------
+
+    fn video_clip(id: &str, file_path: &str, start: f64) -> libretracks_core::VideoClip {
+        libretracks_core::VideoClip {
+            id: id.into(),
+            track_id: "tv".into(),
+            file_path: file_path.into(),
+            timeline_start_seconds: start,
+            source_start_seconds: 0.0,
+            duration_seconds: 5.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            fit: None,
+            color: None,
+        }
+    }
+
+    /// A session with one video on a clip in song 1, and a second video that
+    /// only sits in the library (the shape that went missing for audio). Both
+    /// outside the session folder, by absolute path.
+    fn video_session(song_dir: &Path, videos_dir: &Path) -> (Song, String, String) {
+        write_session_dir(song_dir);
+        let on_clip = videos_dir.join("Letras.mp4");
+        let library_only = videos_dir.join("Fondo.mov");
+        fs::write(&on_clip, vec![7_u8; 4096]).expect("video 1");
+        fs::write(&library_only, vec![9_u8; 2048]).expect("video 2");
+        let on_clip = on_clip.to_string_lossy().replace('\\', "/");
+        let library_only = library_only.to_string_lossy().replace('\\', "/");
+        fs::write(
+            song_dir.join("library.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "assets": [],
+                "videoAssets": [
+                    { "filePath": on_clip, "info": { "durationSeconds": 5.0 } },
+                    { "filePath": library_only, "folderPath": "Cancion 2", "info": { "durationSeconds": 3.0 } },
+                ],
+            }))
+            .expect("library json"),
+        )
+        .expect("library");
+        let mut song = session();
+        song.tracks.push(Track {
+            kind: TrackKind::Video,
+            ..track("tv", "Video")
+        });
+        song.video_clips = vec![video_clip("vc1", &on_clip, 2.0)];
+        (song, on_clip, library_only)
+    }
+
+    fn export_with_video(song_dir: &Path, song: &Song, include_video: bool) -> PathBuf {
+        let package_path = song_dir.join("set.ltset");
+        export_session_as_package_with_options(
+            song_dir,
+            song_dir,
+            song,
+            &sidecars(),
+            &package_path,
+            SessionPackageAudio::Referenced,
+            include_video,
+            |_, _| {},
+        )
+        .expect("export");
+        package_path
+    }
+
+    fn zip_entries(package_path: &Path) -> Vec<String> {
+        let archive = ZipArchive::new(File::open(package_path).expect("open")).expect("zip");
+        archive.file_names().map(str::to_string).collect()
+    }
+
+    #[test]
+    fn included_videos_travel_with_relative_paths_and_nothing_is_missing() {
+        let src = tempfile::tempdir().expect("src");
+        let videos = tempfile::tempdir().expect("videos");
+        let (song, _, _) = video_session(src.path(), videos.path());
+        let package_path = export_with_video(src.path(), &song, true);
+
+        let entries = zip_entries(&package_path);
+        assert!(entries.contains(&"video/Cancion 1/Letras.mp4".to_string()), "{entries:?}");
+        assert!(entries.contains(&"video/Cancion 2/Fondo.mov".to_string()), "{entries:?}");
+
+        let target = tempfile::tempdir().expect("target");
+        let dest = target.path().join("Imported");
+        let extracted = extract_session_package(&dest, &package_path, |_, _| {}).expect("extract");
+        assert!(extracted.bundled_video);
+
+        // The document's clip and BOTH library entries point inside the set…
+        let imported = crate::load_song_from_file(&extracted.song_file).expect("load");
+        assert_eq!(imported.video_clips[0].file_path, "video/Cancion 1/Letras.mp4");
+        let library: serde_json::Value =
+            serde_json::from_slice(&fs::read(dest.join("library.json")).expect("library"))
+                .expect("json");
+        let library_paths: Vec<&str> = library["videoAssets"]
+            .as_array()
+            .expect("videoAssets")
+            .iter()
+            .map(|video| video["filePath"].as_str().expect("path"))
+            .collect();
+        assert_eq!(
+            library_paths,
+            vec!["video/Cancion 1/Letras.mp4", "video/Cancion 2/Fondo.mov"]
+        );
+        // …and every one of them exists there: no video reads as missing.
+        for path in library_paths.iter().chain([imported.video_clips[0].file_path.as_str()].iter()) {
+            assert!(dest.join(path).is_file(), "{path} missing after import");
+        }
+        assert_eq!(fs::read(dest.join("video/Cancion 1/Letras.mp4")).unwrap(), vec![7_u8; 4096]);
+    }
+
+    #[test]
+    fn without_videos_the_paths_stay_and_no_video_folder_travels() {
+        let src = tempfile::tempdir().expect("src");
+        let videos = tempfile::tempdir().expect("videos");
+        let (song, on_clip, library_only) = video_session(src.path(), videos.path());
+        let package_path = export_with_video(src.path(), &song, false);
+
+        assert!(!zip_entries(&package_path).iter().any(|entry| entry.starts_with("video/")));
+        let target = tempfile::tempdir().expect("target");
+        let dest = target.path().join("Imported");
+        let extracted = extract_session_package(&dest, &package_path, |_, _| {}).expect("extract");
+        assert!(!extracted.bundled_video);
+        let imported = crate::load_song_from_file(&extracted.song_file).expect("load");
+        assert_eq!(imported.video_clips[0].file_path, on_clip);
+        let library: serde_json::Value =
+            serde_json::from_slice(&fs::read(dest.join("library.json")).expect("library"))
+                .expect("json");
+        assert_eq!(library["videoAssets"][1]["filePath"].as_str(), Some(library_only.as_str()));
+    }
+
+    #[test]
+    fn a_session_without_video_exports_exactly_as_before() {
+        let src = tempfile::tempdir().expect("src");
+        let song_dir = src.path();
+        write_session_dir(song_dir);
+        let song = session();
+        let before = song_dir.join("before.ltset");
+        export_session_as_package_with_audio(
+            song_dir, song_dir, &song, &sidecars(), &before, SessionPackageAudio::Referenced, |_, _| {},
+        )
+        .expect("export before");
+        let after = song_dir.join("after.ltset");
+        export_session_as_package_with_options(
+            song_dir, song_dir, &song, &sidecars(), &after, SessionPackageAudio::Referenced, true, |_, _| {},
+        )
+        .expect("export with include_video");
+
+        let read_all = |path: &Path| {
+            let mut archive = ZipArchive::new(File::open(path).expect("open")).expect("zip");
+            let mut entries = Vec::new();
+            for index in 0..archive.len() {
+                let mut entry = archive.by_index(index).expect("entry");
+                let mut bytes = Vec::new();
+                entry.read_to_end(&mut bytes).expect("read");
+                entries.push((entry.name().to_string(), bytes));
+            }
+            entries
+        };
+        let (before, after) = (read_all(&before), read_all(&after));
+        assert_eq!(before, after, "include_video on a session without video changes nothing");
+        let manifest = after.iter().find(|(name, _)| name == "manifest.json").expect("manifest");
+        let manifest: serde_json::Value = serde_json::from_slice(&manifest.1).expect("json");
+        assert_eq!(manifest["bundledVideo"], serde_json::Value::Bool(false));
+    }
+
+    #[test]
+    fn a_mobile_import_leaves_the_videos_out_but_keeps_the_clips() {
+        let src = tempfile::tempdir().expect("src");
+        let videos = tempfile::tempdir().expect("videos");
+        let (song, _, _) = video_session(src.path(), videos.path());
+        let package_path = export_with_video(src.path(), &song, true);
+
+        let target = tempfile::tempdir().expect("target");
+        let dest = target.path().join("Imported");
+        let extracted = extract_session_package_from_reader_with_options(
+            &dest,
+            File::open(&package_path).expect("open"),
+            ExtractOptions { skip_video: true },
+            |_, _| {},
+        )
+        .expect("extract");
+        assert!(!dest.join("video").exists(), "no video written on mobile");
+        let imported = crate::load_song_from_file(&extracted.song_file).expect("load");
+        assert_eq!(imported.video_clips.len(), 1);
+        assert_eq!(imported.video_clips[0].file_path, "video/Cancion 1/Letras.mp4");
+    }
+
+    #[test]
+    fn a_session_with_video_is_a_document_an_older_reader_refuses() {
+        let src = tempfile::tempdir().expect("src");
+        let videos = tempfile::tempdir().expect("videos");
+        let (song, _, _) = video_session(src.path(), videos.path());
+        let package_path = export_with_video(src.path(), &song, true);
+
+        let mut archive = ZipArchive::new(File::open(&package_path).expect("open")).expect("zip");
+        let mut document = String::new();
+        archive
+            .by_name(SONG_FILE_NAME)
+            .expect("document")
+            .read_to_string(&mut document)
+            .expect("read");
+        // A reader that only knows v7 refuses it instead of dropping the videos.
+        assert!(crate::song_store::parse_song_document(&document, 7).is_err());
+        assert!(crate::song_store::parse_song_document(&document, 8).is_ok());
     }
 }

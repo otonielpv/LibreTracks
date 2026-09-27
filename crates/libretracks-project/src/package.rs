@@ -6,7 +6,9 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use libretracks_core::{Clip, MidiClip, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track};
+use libretracks_core::{
+    Clip, MidiClip, Song, SongRegion, TempoMarker, TimeSignatureMarker, Track, VideoClip,
+};
 use serde::{Deserialize, Serialize};
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
@@ -98,6 +100,21 @@ pub struct PackageLibraryAssetEntry {
     pub folder_path: Option<String>,
 }
 
+/// A video the package's clips use (paso 12): where it was on the exporting
+/// machine, its analysis (so the importer registers it without probing), and
+/// the `video/<name>` entry that carries it when videos were included.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageVideoEntry {
+    pub file_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bundled_entry: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub info: Option<libretracks_core::VideoAssetInfo>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SongPackageManifest {
@@ -133,6 +150,14 @@ struct SongPackageManifest {
     /// Absent/false in light packages that only reference audio by path.
     #[serde(default)]
     bundled_audio: bool,
+    /// Video clips whose start falls inside the song, rebased like the audio
+    /// clips. Additive: an older reader ignores them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    video_clips: Vec<VideoClip>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    video_library_meta: Vec<PackageVideoEntry>,
+    #[serde(default)]
+    bundled_video: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -147,6 +172,9 @@ pub struct SongPackageImportResult {
     pub song: Song,
     pub package_title: String,
     pub library_meta: Vec<PackageLibraryAssetEntry>,
+    /// The videos the imported clips use; `bundled_entry` names the staged
+    /// copy in `bundled_audio` when the package carried it.
+    pub video_library_meta: Vec<PackageVideoEntry>,
     /// Audio files bundled in a self-contained package, staged on disk and
     /// keyed by their original file name. Empty for light packages. The caller
     /// moves these into the destination project's `audio/` folder and re-points
@@ -221,6 +249,63 @@ pub fn export_region_as_package_with_audio(
     output_path: &Path,
     audio_mode: crate::SessionPackageAudio,
 ) -> Result<SongPackageExport, ProjectError> {
+    export_region_as_package_with_options(
+        cache_root,
+        song_dir,
+        song,
+        region_id,
+        output_path,
+        audio_mode,
+        false,
+    )
+}
+
+/// Video clips whose start falls inside `region`, rebased to it (the same rule
+/// as the audio clips).
+fn video_clips_in_region(song: &Song, region: &SongRegion) -> Vec<VideoClip> {
+    song.video_clips
+        .iter()
+        .filter(|clip| {
+            clip.timeline_start_seconds >= region.start_seconds - 0.01
+                && clip.timeline_start_seconds < region.end_seconds
+        })
+        .cloned()
+        .map(|mut clip| {
+            clip.timeline_start_seconds -= region.start_seconds;
+            clip
+        })
+        .collect()
+}
+
+/// The videos listed in `library.json`, by normalized path.
+fn read_video_library_meta(song_dir: &Path) -> HashMap<String, PackageVideoEntry> {
+    let Ok(bytes) = fs::read(song_dir.join("library.json")) else {
+        return HashMap::new();
+    };
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return HashMap::new();
+    };
+    let Some(videos) = value.get("videoAssets").and_then(|videos| videos.as_array()) else {
+        return HashMap::new();
+    };
+    videos
+        .iter()
+        .filter_map(|video| serde_json::from_value::<PackageVideoEntry>(video.clone()).ok())
+        .map(|entry| (normalize_package_file_path(&entry.file_path).to_lowercase(), entry))
+        .collect()
+}
+
+/// Export one song; `include_video` also carries the videos its clips use
+/// under `video/` (paso 12).
+pub fn export_region_as_package_with_options(
+    cache_root: &Path,
+    song_dir: &Path,
+    song: &Song,
+    region_id: &str,
+    output_path: &Path,
+    audio_mode: crate::SessionPackageAudio,
+    include_video: bool,
+) -> Result<SongPackageExport, ProjectError> {
     let include_audio = !matches!(audio_mode, crate::SessionPackageAudio::Referenced);
     let mut prepared_sample_rate: Option<u32> = None;
     let region = song
@@ -244,10 +329,12 @@ pub fn export_region_as_package_with_audio(
         })
         .collect::<Vec<_>>();
     let midi_clips = midi_clips_in_region(song, region);
+    let video_clips = video_clips_in_region(song, region);
     let used_track_ids = clips
         .iter()
         .map(|clip| clip.track_id.as_str())
         .chain(midi_clips.iter().map(|clip| clip.track_id.as_str()))
+        .chain(video_clips.iter().map(|clip| clip.track_id.as_str()))
         .collect::<HashSet<_>>();
     let tracks = song
         .tracks
@@ -327,6 +414,39 @@ pub fn export_region_as_package_with_audio(
         entries
     };
 
+    // One entry per distinct video, with the zip entry that carries it when
+    // videos go inside.
+    let video_library_meta = {
+        let known = read_video_library_meta(song_dir);
+        let mut reserved = HashSet::new();
+        let mut entries: Vec<PackageVideoEntry> = Vec::new();
+        for clip in &video_clips {
+            let key = normalize_package_file_path(&clip.file_path).to_lowercase();
+            if entries
+                .iter()
+                .any(|entry| normalize_package_file_path(&entry.file_path).to_lowercase() == key)
+            {
+                continue;
+            }
+            let mut entry = known.get(&key).cloned().unwrap_or(PackageVideoEntry {
+                file_path: clip.file_path.clone(),
+                folder_path: None,
+                bundled_entry: None,
+                info: None,
+            });
+            entry.file_path = clip.file_path.clone();
+            entry.folder_path = entry.folder_path.or_else(|| Some(region.name.clone()));
+            let (source_abs, file_name) = crate::asset_path::resolve_asset(song_dir, &clip.file_path);
+            entry.bundled_entry = (include_video && !file_name.is_empty() && source_abs.is_file())
+                .then(|| unique_entry_name(&mut reserved, "video", &file_name));
+            entries.push(entry);
+        }
+        entries
+    };
+    let bundled_video = video_library_meta
+        .iter()
+        .any(|entry| entry.bundled_entry.is_some());
+
     let manifest = SongPackageManifest {
         song_title: region.name.clone(),
         base_bpm: song.bpm,
@@ -342,6 +462,9 @@ pub fn export_region_as_package_with_audio(
         time_signature_markers,
         library_meta,
         bundled_audio: include_audio,
+        video_clips,
+        video_library_meta: video_library_meta.clone(),
+        bundled_video,
     };
 
     let file = File::create(output_path)?;
@@ -352,6 +475,13 @@ pub fn export_region_as_package_with_audio(
     zip.start_file("manifest.json", options)
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
     zip.write_all(serde_json::to_vec_pretty(&manifest)?.as_slice())?;
+
+    for entry in &video_library_meta {
+        if let Some(entry_name) = &entry.bundled_entry {
+            let (source_abs, _) = crate::asset_path::resolve_asset(song_dir, &entry.file_path);
+            crate::session_package::write_file_entry(&mut zip, entry_name, &source_abs)?;
+        }
+    }
 
     let mut added_files = HashSet::new();
     for clip in &clips {
@@ -464,6 +594,8 @@ pub struct StagedPackageAudio {
     staging_dir: Option<PathBuf>,
     /// Original file name → the staged file holding its bytes.
     files: HashMap<String, PathBuf>,
+    /// `video/<name>` entry → the staged video (paso 12).
+    videos: HashMap<String, PathBuf>,
 }
 
 impl StagedPackageAudio {
@@ -481,6 +613,7 @@ impl StagedPackageAudio {
         let mut staged = Self {
             staging_dir: Some(staging_dir.clone()),
             files: HashMap::new(),
+            videos: HashMap::new(),
         };
         for (index, (file_name, bytes)) in entries.into_iter().enumerate() {
             let path = staging_dir.join(format!("{index}.audio"));
@@ -488,6 +621,18 @@ impl StagedPackageAudio {
             staged.files.insert(file_name, path);
         }
         Ok(staged)
+    }
+
+    /// Add a staged video, for tests of the placing half (paso 12).
+    pub fn add_video_for_tests(&mut self, entry_name: &str, bytes: &[u8]) -> Result<(), ProjectError> {
+        let dir = self
+            .staging_dir
+            .clone()
+            .ok_or_else(|| ProjectError::AudioDecode("no staging dir".into()))?;
+        let path = dir.join(format!("video-{}", self.videos.len()));
+        fs::write(&path, bytes)?;
+        self.videos.insert(entry_name.to_string(), path);
+        Ok(())
     }
 
     /// The staged file for a bundled source, by its original file name.
@@ -506,6 +651,11 @@ impl StagedPackageAudio {
     pub fn contains_key(&self, file_name: &str) -> bool {
         self.files.contains_key(file_name)
     }
+
+    /// The staged video for a manifest `bundled_entry` (`video/<name>`).
+    pub fn video(&self, entry_name: &str) -> Option<&Path> {
+        self.videos.get(entry_name).map(PathBuf::as_path)
+    }
 }
 
 impl Drop for StagedPackageAudio {
@@ -522,6 +672,7 @@ impl Drop for StagedPackageAudio {
 fn extract_package_payload<R: Read + Seek>(
     song_dir: &Path,
     archive: &mut ZipArchive<R>,
+    options: crate::ExtractOptions,
     mut on_progress: impl FnMut(usize, usize),
 ) -> Result<StagedPackageAudio, ProjectError> {
     // The package still ships its `.ltpeaks`; we extract them into the legacy
@@ -544,6 +695,26 @@ fn extract_package_payload<R: Read + Seek>(
             .by_index(index)
             .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
         let entry_name = zip_file.name().to_string();
+
+        // Bundled videos (paso 12): staged like the audio; mobile leaves them.
+        if let Some(name) = entry_name
+            .strip_prefix("video/")
+            .filter(|name| !name.is_empty() && !name.contains('/') && !name.contains('\\'))
+        {
+            if !options.skip_video {
+                if bundled_audio.staging_dir.is_none() {
+                    fs::create_dir_all(&staging_dir)?;
+                    bundled_audio.staging_dir = Some(staging_dir.clone());
+                }
+                let staged_path = staging_dir.join(format!("{index}.{name}"));
+                let mut staged = File::create(&staged_path)?;
+                std::io::copy(&mut zip_file, &mut staged)?;
+                drop(staged);
+                bundled_audio.videos.insert(entry_name.clone(), staged_path);
+            }
+            on_progress(index + 1, entry_total);
+            continue;
+        }
 
         // Bundled source audio (full packages): stage it for the caller to place
         // into the destination project's audio/ folder.
@@ -665,6 +836,21 @@ pub fn extract_song_package_from_reader<R: Read + Seek>(
     reader: R,
     on_extract_progress: impl FnMut(usize, usize),
 ) -> Result<ExtractedSongPackage, ProjectError> {
+    extract_song_package_from_reader_with_options(
+        song_dir,
+        reader,
+        crate::ExtractOptions::default(),
+        on_extract_progress,
+    )
+}
+
+/// Extraction with [`crate::ExtractOptions`] (mobile skips the videos).
+pub fn extract_song_package_from_reader_with_options<R: Read + Seek>(
+    song_dir: &Path,
+    reader: R,
+    options: crate::ExtractOptions,
+    on_extract_progress: impl FnMut(usize, usize),
+) -> Result<ExtractedSongPackage, ProjectError> {
     let mut archive =
         ZipArchive::new(reader).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
 
@@ -683,7 +869,8 @@ pub fn extract_song_package_from_reader<R: Read + Seek>(
         )));
     }
 
-    let bundled_audio = extract_package_payload(song_dir, &mut archive, on_extract_progress)?;
+    let bundled_audio =
+        extract_package_payload(song_dir, &mut archive, options, on_extract_progress)?;
     Ok(ExtractedSongPackage {
         manifest,
         bundled_audio,
@@ -705,6 +892,7 @@ pub fn merge_extracted_song_package(
         bundled_audio,
     } = extracted;
     let library_meta = manifest.library_meta.clone();
+    let video_library_meta = manifest.video_library_meta.clone();
 
     let mut next_song = song.clone();
     // Tracks that already exist in the destination session. A package track
@@ -813,6 +1001,25 @@ pub fn merge_extracted_song_package(
         next_song.midi_clips.push(imported);
     }
 
+    // Video clips go through the same track map, keyed by the package's own
+    // track id, so they land on the video track they were exported with.
+    let mut used_video_clip_ids = next_song
+        .video_clips
+        .iter()
+        .map(|clip| clip.id.clone())
+        .collect::<HashSet<_>>();
+    for clip in &manifest.video_clips {
+        let target_track_id = target_track_id_by_manifest_id
+            .get(&clip.track_id)
+            .cloned()
+            .ok_or_else(|| ProjectError::AudioDecode("package video track not found".into()))?;
+        let mut imported = clip.clone();
+        imported.id = unique_id("video_clip", &clip.id, &mut used_video_clip_ids);
+        imported.track_id = target_track_id;
+        imported.timeline_start_seconds += insert_at_seconds;
+        next_song.video_clips.push(imported);
+    }
+
     for marker in &manifest.section_markers {
         let mut marker = marker.clone();
         marker.start_seconds += insert_at_seconds;
@@ -840,7 +1047,15 @@ pub fn merge_extracted_song_package(
         .take(imported_clip_count)
         .map(|clip| (clip.timeline_start_seconds + clip.duration_seconds) - insert_at_seconds)
         .fold(0.0_f64, f64::max);
-    let region_span = manifest.duration_seconds.max(furthest_clip_end_offset);
+    let furthest_video_end_offset = manifest
+        .video_clips
+        .iter()
+        .map(|clip| clip.timeline_start_seconds + clip.duration_seconds)
+        .fold(0.0_f64, f64::max);
+    let region_span = manifest
+        .duration_seconds
+        .max(furthest_clip_end_offset)
+        .max(furthest_video_end_offset);
     next_song.regions.push(SongRegion {
         id: format!("region_import_{}", timestamp_suffix()),
         name: manifest.song_title.clone(),
@@ -921,8 +1136,30 @@ pub fn merge_extracted_song_package(
         song: next_song,
         package_title: manifest.song_title,
         library_meta,
+        video_library_meta,
         bundled_audio,
     })
+}
+
+/// `<root>/<name>`, suffixed `-1`, `-2`… on a (case-folded) repeat.
+fn unique_entry_name(reserved_lower: &mut HashSet<String>, root: &str, file_name: &str) -> String {
+    let path = Path::new(file_name);
+    let stem = path.file_stem().and_then(|v| v.to_str()).unwrap_or("video");
+    let extension = path.extension().and_then(|v| v.to_str());
+    let mut index = 0_u32;
+    loop {
+        let name = match (index, extension) {
+            (0, Some(ext)) => format!("{stem}.{ext}"),
+            (0, None) => stem.to_string(),
+            (n, Some(ext)) => format!("{stem}-{n}.{ext}"),
+            (n, None) => format!("{stem}-{n}"),
+        };
+        let candidate = format!("{root}/{name}");
+        if reserved_lower.insert(candidate.to_lowercase()) {
+            return candidate;
+        }
+        index += 1;
+    }
 }
 
 fn unique_id(prefix: &str, seed: &str, used: &mut HashSet<String>) -> String {
@@ -1703,5 +1940,156 @@ mod tests {
             false,
         );
         assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // Videos (video plan, paso 12).
+    // -----------------------------------------------------------------------
+
+    fn video_track(id: &str, name: &str) -> Track {
+        Track {
+            kind: TrackKind::Video,
+            ..track(id, name)
+        }
+    }
+
+    fn video_clip(id: &str, track_id: &str, file_path: &str, start: f64) -> VideoClip {
+        VideoClip {
+            id: id.into(),
+            track_id: track_id.into(),
+            file_path: file_path.into(),
+            timeline_start_seconds: start,
+            source_start_seconds: 1.0,
+            duration_seconds: 4.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            fit: None,
+            color: None,
+        }
+    }
+
+    /// Song 2 (30–60 s) holds two video tracks that share a name, each with a
+    /// clip, plus a clip in song 1 that must not travel.
+    fn video_source(videos_dir: &Path) -> Song {
+        let letras = videos_dir.join("letras.mp4");
+        let fondo = videos_dir.join("fondo.mp4");
+        fs::write(&letras, vec![1_u8; 1000]).expect("letras");
+        fs::write(&fondo, vec![2_u8; 500]).expect("fondo");
+        let letras = letras.to_string_lossy().replace('\\', "/");
+        let fondo = fondo.to_string_lossy().replace('\\', "/");
+        let mut source = song();
+        source.regions = vec![region("r1", "Verse", 0.0, 30.0), region("r2", "Coro", 30.0, 60.0)];
+        source.tracks.push(video_track("va", "Video"));
+        source.tracks.push(video_track("vb", "Video"));
+        source.video_clips = vec![
+            video_clip("v_other_song", "va", &letras, 3.0),
+            video_clip("v1", "va", &letras, 32.0),
+            video_clip("v2", "vb", &fondo, 35.5),
+        ];
+        source
+    }
+
+    fn empty_destination() -> Song {
+        let mut destination = song();
+        destination.tracks.clear();
+        destination.clips.clear();
+        destination.regions.clear();
+        destination.section_markers.clear();
+        destination
+    }
+
+    #[test]
+    fn video_clips_land_offset_in_the_new_song_on_their_own_tracks() {
+        let dir = tempdir().expect("tempdir");
+        let source = video_source(dir.path());
+        let package_path = dir.path().join("coro.ltpkg");
+        export_region_as_package_with_options(
+            dir.path(),
+            dir.path(),
+            &source,
+            "r2",
+            &package_path,
+            crate::SessionPackageAudio::Referenced,
+            false,
+        )
+        .expect("export");
+
+        let result = import_song_package(
+            dir.path(),
+            &empty_destination(),
+            &package_path,
+            100.0,
+            SongImportTrackMode::default(),
+        )
+        .expect("import");
+
+        let clips = &result.song.video_clips;
+        assert_eq!(clips.len(), 2, "only song 2's clips travel");
+        let starts: Vec<f64> = clips.iter().map(|clip| clip.timeline_start_seconds).collect();
+        assert_eq!(starts, vec![102.0, 105.5]);
+        assert!(clips.iter().all(|clip| clip.source_start_seconds == 1.0));
+        // Two package tracks named alike stay two tracks: paired by id.
+        assert_ne!(clips[0].track_id, clips[1].track_id);
+        for clip in clips {
+            let track = result.song.tracks.iter().find(|track| track.id == clip.track_id).expect("track");
+            assert_eq!(track.kind, TrackKind::Video);
+        }
+        assert!(validate_song(&result.song).is_ok());
+        // Not included: nothing staged, the meta keeps the original paths.
+        assert!(result.video_library_meta.iter().all(|entry| entry.bundled_entry.is_none()));
+    }
+
+    #[test]
+    fn included_videos_are_staged_for_the_importer() {
+        let dir = tempdir().expect("tempdir");
+        let source = video_source(dir.path());
+        let package_path = dir.path().join("coro.ltpkg");
+        export_region_as_package_with_options(
+            dir.path(),
+            dir.path(),
+            &source,
+            "r2",
+            &package_path,
+            crate::SessionPackageAudio::Referenced,
+            true,
+        )
+        .expect("export");
+
+        let target = tempdir().expect("target");
+        let extracted = extract_song_package(target.path(), &package_path, |_, _| {}).expect("extract");
+        let result = merge_extracted_song_package(
+            &empty_destination(),
+            extracted,
+            0.0,
+            SongImportTrackMode::default(),
+        )
+        .expect("merge");
+        let entries: Vec<&str> = result
+            .video_library_meta
+            .iter()
+            .filter_map(|entry| entry.bundled_entry.as_deref())
+            .collect();
+        assert_eq!(entries, vec!["video/letras.mp4", "video/fondo.mp4"]);
+        let staged = result.bundled_audio.video("video/letras.mp4").expect("staged");
+        assert_eq!(fs::read(staged).expect("read"), vec![1_u8; 1000]);
+
+        // Mobile: nothing staged, clips still there.
+        let target = tempdir().expect("target");
+        let extracted = extract_song_package_from_reader_with_options(
+            target.path(),
+            File::open(&package_path).expect("open"),
+            crate::ExtractOptions { skip_video: true },
+            |_, _| {},
+        )
+        .expect("extract mobile");
+        assert!(extracted.bundled_audio.video("video/letras.mp4").is_none());
+        let result = merge_extracted_song_package(
+            &empty_destination(),
+            extracted,
+            0.0,
+            SongImportTrackMode::default(),
+        )
+        .expect("merge mobile");
+        assert_eq!(result.song.video_clips.len(), 2);
     }
 }

@@ -12486,3 +12486,20 @@ html.lt-ios body {
   align-items: flex-start;
   gap: 8px;
 }
+
+/* Export dialogs: the videos block (paso 12). */
+.lt-video-export-option {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.lt-video-export-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}

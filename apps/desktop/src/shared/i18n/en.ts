@@ -1047,6 +1047,14 @@ const en = {
         extracted: "Video audio extracted to a new track",
         progress: "Extracting audio ({{count}})… {{percent}}%",
       },
+      export: {
+        title: "Videos",
+        summary_one: "It has {{count}} video ({{size}}).",
+        summary_other: "It has {{count}} videos ({{size}}).",
+        include: "Include the videos in the package",
+        withoutNote: "Without them, the videos have to be copied separately and relinked on opening.",
+        lightNote: "Videos do not travel: they are referenced by path, like the audio.",
+      },
       badge: {
         ready: "Video: {{monitor}} · OK",
         black: "VIDEO BLACKED OUT",

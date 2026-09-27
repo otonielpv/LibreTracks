@@ -300,3 +300,84 @@ impl DesktopSession {
         (timeline, self.project_revision)
     }
 }
+
+/// What a package import leaves out (paso 12): phones cannot play video, so
+/// they keep the video clips in the document but never write the files.
+pub(crate) fn package_extract_options() -> libretracks_project::ExtractOptions {
+    libretracks_project::ExtractOptions {
+        skip_video: cfg!(any(target_os = "android", target_os = "ios")),
+    }
+}
+
+/// Place the videos a `.ltpkg` carried and register every video its clips use
+/// (paso 12). A video whose original path still exists here (same machine) is
+/// reused, like the audio; otherwise the staged copy moves into `video/`
+/// under a name no other file uses, and the imported clips follow it. Videos
+/// that did not travel keep their path and read as missing, to relink.
+pub(super) fn place_bundled_videos_and_register(
+    song_dir: &Path,
+    song: &mut libretracks_core::Song,
+    staged: &libretracks_project::StagedPackageAudio,
+    videos: &[libretracks_project::PackageVideoEntry],
+) -> Result<(), DesktopError> {
+    for entry in videos {
+        let original = resolve_audio_file_path(song_dir, &entry.file_path);
+        let staged_video = entry
+            .bundled_entry
+            .as_deref()
+            .and_then(|name| staged.video(name).map(|path| (name, path)));
+        let final_path = match staged_video {
+            Some((entry_name, staged_path)) if !original.is_file() => {
+                let file_name = Path::new(entry_name)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("video.mp4");
+                let relative = free_video_path(song_dir, file_name);
+                let destination = resolve_audio_file_path(song_dir, &relative);
+                if let Some(parent) = destination.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                if std::fs::rename(staged_path, &destination).is_err() {
+                    std::fs::copy(staged_path, &destination)?;
+                }
+                relative
+            }
+            _ => entry.file_path.clone(),
+        };
+        if final_path != entry.file_path {
+            for clip in &mut song.video_clips {
+                if clip.file_path == entry.file_path {
+                    clip.file_path = final_path.clone();
+                }
+            }
+        }
+        if let Some(info) = entry.info.clone() {
+            register_video_entries(
+                song_dir,
+                vec![(final_path, info)],
+                entry.folder_path.as_deref(),
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// `video/<name>`, suffixed `-1`, `-2`… while the name is taken on disk (the
+/// check folds case wherever the filesystem does).
+fn free_video_path(song_dir: &Path, file_name: &str) -> String {
+    let path = Path::new(file_name);
+    let stem = path.file_stem().and_then(|v| v.to_str()).unwrap_or("video");
+    let extension = path.extension().and_then(|v| v.to_str()).unwrap_or("mp4");
+    let mut index = 0_u32;
+    loop {
+        let candidate = if index == 0 {
+            format!("video/{stem}.{extension}")
+        } else {
+            format!("video/{stem}-{index}.{extension}")
+        };
+        if !resolve_audio_file_path(song_dir, &candidate).exists() {
+            return candidate;
+        }
+        index += 1;
+    }
+}

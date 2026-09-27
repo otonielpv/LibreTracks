@@ -27,6 +27,8 @@ pub use package::{
     import_song_package, merge_extracted_song_package, ExtractedSongPackage,
     PackageLibraryAssetEntry, SongImportTrackMode, SongPackageExport, SongPackageImportResult,
     StagedPackageAudio,
+    export_region_as_package_with_options, extract_song_package_from_reader_with_options,
+    PackageVideoEntry,
 };
 pub use prepared_audio::{prepare_audio_to_wav, prepared_relative_path, PreparedAudioInfo};
 pub use session_package::{
@@ -34,6 +36,8 @@ pub use session_package::{
     SessionPackageAudio,
     export_session_as_package, extract_session_package, extract_session_package_from_reader,
     ExtractedSessionPackage,
+    export_session_as_package_with_options, extract_session_package_from_reader_with_options,
+    session_video_payload, ExtractOptions,
     SessionPackageExport, SidecarFile,
 };
 pub use session_sample_rate::{

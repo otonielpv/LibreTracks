@@ -29,9 +29,10 @@ export function confirmSongExport(
     regionId: string,
     includeAudio: boolean,
     writePath?: string,
+    includeVideo?: boolean,
   ) => Promise<void> | void,
 ) {
-  return (regionId: string, includeAudio: boolean) => {
+  return (regionId: string, includeAudio: boolean, includeVideo = false) => {
     const region = song?.regions.find((candidate) => candidate.id === regionId);
     // The values a musician would recognise, not the raw stored ones: the key
     // is the region key AFTER its transposition, and the tempo is the one in
@@ -43,7 +44,7 @@ export function confirmSongExport(
       timeSignature: song?.timeSignature,
     });
     void exportAskingWhere("song", fileName, (path) =>
-      runExport(regionId, includeAudio, path),
+      runExport(regionId, includeAudio, path, includeVideo),
     );
   };
 }
@@ -56,10 +57,10 @@ export function confirmSongExport(
  */
 export function confirmSessionExport<TMode>(
   session: Pick<SongView, "title" | "bpm" | "timeSignature"> | null,
-  runExport: (mode: TMode, writePath?: string) => Promise<void> | void,
+  runExport: (mode: TMode, writePath?: string, includeVideo?: boolean) => Promise<void> | void,
   closeModal: () => void,
 ) {
-  return (mode: TMode) => {
+  return (mode: TMode, includeVideo = false) => {
     closeModal();
     // No key: a set spans many songs in many keys, so declaring one would be a
     // lie. Tempo and meter are the project defaults, which is what someone
@@ -68,6 +69,6 @@ export function confirmSessionExport<TMode>(
       bpm: session?.bpm,
       timeSignature: session?.timeSignature,
     });
-    void finishExportWithChoice(fileName, (path) => runExport(mode, path));
+    void finishExportWithChoice(fileName, (path) => runExport(mode, path, includeVideo));
   };
 }

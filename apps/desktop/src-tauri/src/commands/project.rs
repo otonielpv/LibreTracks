@@ -291,7 +291,7 @@ fn import_package_from_reader_off_lock<R: std::io::Read + std::io::Seek>(
     reader: R,
     insert_at_seconds: f64,
 ) -> Result<TransportSnapshot, String> {
-    use libretracks_project::extract_song_package_from_reader;
+    use libretracks_project::extract_song_package_from_reader_with_options;
 
     // Resolve the destination dir under a brief lock; release it before the
     // expensive extraction.
@@ -308,7 +308,8 @@ fn import_package_from_reader_off_lock<R: std::io::Read + std::io::Seek>(
     crate::state::emit_project_load_message(app, 5, "Leyendo paquete...".into());
     // Decompress off-lock, mapping per-entry progress onto the 7..40% band so
     // the bar moves for large packages (the merge/decode phases own 40..100%).
-    let extracted = extract_song_package_from_reader(&song_dir, reader, |done, total| {
+    let options = crate::state::package_extract_options();
+    let extracted = extract_song_package_from_reader_with_options(&song_dir, reader, options, |done, total| {
         let percent = if total == 0 {
             7
         } else {
@@ -2218,6 +2219,7 @@ pub async fn export_region_as_package(
     app: AppHandle,
     region_id: String,
     include_audio: bool,
+    include_video: Option<bool>,
     state: State<'_, DesktopState>,
 ) -> Result<bool, String> {
     let (song_dir, song, region_name) = {
@@ -2257,13 +2259,14 @@ pub async fn export_region_as_package(
     let cache_root = crate::state::decoding_cache_root();
     let write_path = target.write_path().to_path_buf();
     tauri::async_runtime::spawn_blocking(move || {
-        libretracks_project::export_region_as_package(
+        libretracks_project::export_region_as_package_with_options(
             &cache_root,
             &song_dir,
             &song,
             &region_id,
             &write_path,
-            include_audio,
+            session_audio_mode(include_audio, None),
+            include_video.unwrap_or(false),
         )
         .map_err(|error| error.to_string())?;
         target.finish(&app)
@@ -2283,6 +2286,7 @@ pub async fn export_region_as_package_at(
     region_id: String,
     write_path: String,
     include_audio: bool,
+    include_video: Option<bool>,
     state: State<'_, DesktopState>,
 ) -> Result<bool, String> {
     let (song_dir, song) = {
@@ -2305,13 +2309,14 @@ pub async fn export_region_as_package_at(
     let cache_root = crate::state::decoding_cache_root();
     let write_path = std::path::PathBuf::from(write_path);
     tauri::async_runtime::spawn_blocking(move || {
-        libretracks_project::export_region_as_package(
+        libretracks_project::export_region_as_package_with_options(
             &cache_root,
             &song_dir,
             &song,
             &region_id,
             &write_path,
-            include_audio,
+            session_audio_mode(include_audio, None),
+            include_video.unwrap_or(false),
         )
         .map_err(|error| error.to_string())
     })
@@ -2352,6 +2357,7 @@ pub fn export_session_package(
     app: AppHandle,
     include_audio: bool,
     prepared: Option<bool>,
+    include_video: Option<bool>,
     state: State<'_, DesktopState>,
 ) -> Result<bool, String> {
     let (song_dir, song, sidecars) = {
@@ -2387,13 +2393,14 @@ pub fn export_session_package(
             false,
             None,
         );
-        let result = libretracks_project::export_session_as_package_with_audio(
+        let result = libretracks_project::export_session_as_package_with_options(
             &cache_root,
             &song_dir,
             &song,
             &sidecars,
             &path,
             audio_mode,
+            include_video.unwrap_or(false),
             |done, total| {
                 if total > 0 {
                     // Per-source work is the bulk of the export (audio + waveform
@@ -2493,6 +2500,7 @@ pub async fn export_session_package_at(
     write_path: String,
     include_audio: bool,
     prepared: Option<bool>,
+    include_video: Option<bool>,
     state: State<'_, DesktopState>,
 ) -> Result<bool, String> {
     let (song_dir, song, sidecars) = {
@@ -2527,13 +2535,14 @@ pub async fn export_session_package_at(
     );
 
     let result = tauri::async_runtime::spawn_blocking(move || {
-        libretracks_project::export_session_as_package_with_audio(
+        libretracks_project::export_session_as_package_with_options(
             &cache_root,
             &song_dir,
             &song,
             &sidecars,
             &path,
             audio_mode,
+            include_video.unwrap_or(false),
             |done, total| {
                 if total > 0 {
                     let percent = 5 + ((done as f64 / total as f64) * 93.0) as u8;
@@ -3085,4 +3094,61 @@ mod export_naming_tests {
             songs.path().join("sesion-importada-3")
         );
     }
+}
+
+/// How many videos an export would carry and their size (paso 12), for the
+/// export dialogs. `region_id` narrows it to one song (`.ltpkg`); without it,
+/// the whole session with its video library (`.ltset`). A `stat` per file.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoExportPayload {
+    pub count: usize,
+    pub bytes: u64,
+}
+
+#[tauri::command(async)]
+pub fn video_export_payload(
+    region_id: Option<String>,
+    state: State<'_, DesktopState>,
+) -> Result<VideoExportPayload, String> {
+    let (song_dir, song) = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        let song_dir = session
+            .song_dir
+            .clone()
+            .ok_or_else(|| "No song loaded".to_string())?;
+        let song = session
+            .engine
+            .song()
+            .cloned()
+            .ok_or_else(|| "No song loaded".to_string())?;
+        (song_dir, song)
+    };
+    let (count, bytes) = match region_id {
+        None => libretracks_project::session_video_payload(&song_dir, &song),
+        Some(region_id) => {
+            let region = song
+                .regions
+                .iter()
+                .find(|region| region.id == region_id)
+                .ok_or_else(|| "Region not found".to_string())?;
+            let mut seen = std::collections::HashSet::new();
+            let mut bytes = 0_u64;
+            for clip in &song.video_clips {
+                if clip.timeline_start_seconds < region.start_seconds - 0.01
+                    || clip.timeline_start_seconds >= region.end_seconds
+                    || !seen.insert(clip.file_path.to_lowercase())
+                {
+                    continue;
+                }
+                let path = crate::state::resolve_audio_file_path(&song_dir, &clip.file_path);
+                bytes += std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(0);
+            }
+            (seen.len(), bytes)
+        }
+    };
+    Ok(VideoExportPayload { count, bytes })
 }

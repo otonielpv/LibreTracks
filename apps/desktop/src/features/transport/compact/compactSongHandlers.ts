@@ -70,12 +70,14 @@ export type CompactSongHandlerDeps = {
   exportRegionAsPackage: (
     regionId: string,
     includeAudio: boolean,
+    includeVideo?: boolean,
   ) => Promise<boolean>;
   /** Same export, to an explicit path instead of a save dialog. */
   exportRegionAsPackageAt: (
     regionId: string,
     writePath: string,
     includeAudio: boolean,
+    includeVideo?: boolean,
   ) => Promise<boolean>;
   renameLibraryFolder: (
     oldFolderPath: string,
@@ -376,14 +378,15 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
     regionId: string,
     includeAudio: boolean,
     writePath?: string,
+    includeVideo = false,
   ) => {
     const currentRegion = findRegion(regionId);
     setExportSongTarget(null);
     return runAction(
       async () => {
         const exported = writePath
-          ? await exportRegionAsPackageAt(regionId, writePath, includeAudio)
-          : await exportRegionAsPackage(regionId, includeAudio);
+          ? await exportRegionAsPackageAt(regionId, writePath, includeAudio, includeVideo)
+          : await exportRegionAsPackage(regionId, includeAudio, includeVideo);
         if (exported) {
           setStatus(
             `Paquete exportado para ${currentRegion?.name ?? "la canción"}`,

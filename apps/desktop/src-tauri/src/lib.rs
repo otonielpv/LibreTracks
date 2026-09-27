@@ -416,6 +416,7 @@ pub fn run() {
             commands::project::import_staged_audio_files,
             commands::project::export_region_as_package,
             commands::project::export_region_as_package_at,
+            commands::project::video_export_payload,
             commands::render::render_song_audio,
             commands::render::cancel_render_song_audio,
             commands::project::import_song_package,

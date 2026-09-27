@@ -38,6 +38,7 @@ import type {
   VideoClipProps,
   VideoCalibrationGrid,
   VideoAudioExtractProgress,
+  VideoExportPayload,
   VideoSyncStats,
   VideoDisplayOption,
   VideoOutputSettings,
@@ -1130,8 +1131,18 @@ export async function importStagedAudioFiles(
 export async function exportRegionAsPackage(
   regionId: string,
   includeAudio = false,
+  includeVideo = false,
 ): Promise<boolean> {
-  return invokeCommand<boolean>("export_region_as_package", { regionId, includeAudio });
+  return invokeCommand<boolean>("export_region_as_package", {
+    regionId,
+    includeAudio,
+    includeVideo,
+  });
+}
+
+/** Videos an export would carry (paso 12): one song, or the session (null). */
+export async function getVideoExportPayload(regionId: string | null): Promise<VideoExportPayload> {
+  return invokeCommand<VideoExportPayload>("video_export_payload", { regionId });
 }
 
 /**
@@ -1143,11 +1154,13 @@ export async function exportRegionAsPackageAt(
   regionId: string,
   writePath: string,
   includeAudio = false,
+  includeVideo = false,
 ): Promise<boolean> {
   return invokeCommand<boolean>("export_region_as_package_at", {
     regionId,
     writePath,
     includeAudio,
+    includeVideo,
   });
 }
 
@@ -1221,10 +1234,12 @@ export async function listenToRenderAudioProgress(
 export async function exportSessionPackage(
   includeAudio: boolean,
   prepared = false,
+  includeVideo = false,
 ): Promise<boolean> {
   return invokeCommand<boolean>("export_session_package", {
     includeAudio,
     prepared,
+    includeVideo,
   });
 }
 
@@ -1241,11 +1256,13 @@ export async function exportSessionPackageAt(
   writePath: string,
   includeAudio: boolean,
   prepared = false,
+  includeVideo = false,
 ): Promise<boolean> {
   return invokeCommand<boolean>("export_session_package_at", {
     writePath,
     includeAudio,
     prepared,
+    includeVideo,
   });
 }
 

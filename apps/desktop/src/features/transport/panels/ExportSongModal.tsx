@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { useVideoExportPayload, VideoExportOption } from "../video/VideoExportOption";
 
 export type ExportSongTarget = {
   regionId: string;
@@ -11,7 +12,7 @@ type ExportSongModalProps = {
   target: ExportSongTarget | null;
   onCancel: () => void;
   /** Called with the chosen mode. `includeAudio` true = self-contained package. */
-  onConfirm: (regionId: string, includeAudio: boolean) => void;
+  onConfirm: (regionId: string, includeAudio: boolean, includeVideo: boolean) => void;
 };
 
 /**
@@ -31,6 +32,10 @@ export function ExportSongModal({
   useDismissOnBack(onCancel);
   const { t } = useTranslation();
   const [includeAudio, setIncludeAudio] = useState(true);
+  // A song goes local or to the cloud AFTER this dialog, so the box starts
+  // ticked; one song's videos are rarely what fills a quota.
+  const videoPayload = useVideoExportPayload(target != null, target?.regionId ?? null);
+  const [includeVideo, setIncludeVideo] = useState(true);
 
   if (!target) {
     return null;
@@ -108,6 +113,13 @@ export function ExportSongModal({
               </small>
             </span>
           </label>
+
+          <VideoExportOption
+            payload={videoPayload}
+            light={!includeAudio}
+            includeVideo={includeVideo}
+            onChange={setIncludeVideo}
+          />
         </div>
 
         <div className="lt-inline-actions lt-export-modal-actions">
@@ -117,7 +129,13 @@ export function ExportSongModal({
           <button
             type="button"
             className="is-primary"
-            onClick={() => onConfirm(target.regionId, includeAudio)}
+            onClick={() =>
+              onConfirm(
+                target.regionId,
+                includeAudio,
+                includeAudio && includeVideo && (videoPayload?.count ?? 0) > 0,
+              )
+            }
           >
             {t("transport.exportModal.confirm", { defaultValue: "Exportar" })}
           </button>

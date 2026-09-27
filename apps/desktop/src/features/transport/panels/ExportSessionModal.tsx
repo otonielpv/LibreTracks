@@ -1,6 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { useCloudStore } from "../cloud/cloudStore";
+import {
+  defaultIncludeVideo,
+  useVideoExportPayload,
+  VideoExportOption,
+} from "../video/VideoExportOption";
 
 /** Which of the three shapes the exported `.ltset` takes. */
 export type SessionExportMode = "full" | "optimized" | "light";
@@ -9,8 +15,8 @@ type ExportSessionModalProps = {
   isOpen: boolean;
   sessionTitle: string;
   onCancel: () => void;
-  /** Called with the chosen mode. */
-  onConfirm: (mode: SessionExportMode) => void;
+  /** Called with the chosen mode and whether the videos go inside. */
+  onConfirm: (mode: SessionExportMode, includeVideo: boolean) => void;
 };
 
 /**
@@ -37,6 +43,17 @@ export function ExportSessionModal({
   useDismissOnBack(onCancel, isOpen);
   const { t } = useTranslation();
   const [mode, setMode] = useState<SessionExportMode>("full");
+  const videoPayload = useVideoExportPayload(isOpen, null);
+  const [includeVideo, setIncludeVideo] = useState(true);
+  // The destination was asked before this dialog: a big upload to the cloud
+  // starts without the videos.
+  useEffect(() => {
+    if (videoPayload) {
+      setIncludeVideo(
+        defaultIncludeVideo(videoPayload.bytes, useCloudStore.getState().exportTarget === "cloud"),
+      );
+    }
+  }, [videoPayload]);
 
   if (!isOpen) {
     return null;
@@ -138,6 +155,13 @@ export function ExportSessionModal({
               </small>
             </span>
           </label>
+
+          <VideoExportOption
+            payload={videoPayload}
+            light={mode === "light"}
+            includeVideo={includeVideo}
+            onChange={setIncludeVideo}
+          />
         </div>
 
         <div className="lt-inline-actions lt-export-modal-actions">
@@ -147,7 +171,7 @@ export function ExportSessionModal({
           <button
             type="button"
             className="is-primary"
-            onClick={() => onConfirm(mode)}
+            onClick={() => onConfirm(mode, mode !== "light" && includeVideo && (videoPayload?.count ?? 0) > 0)}
           >
             {t("transport.exportSessionModal.confirm", { defaultValue: "Exportar" })}
           </button>
