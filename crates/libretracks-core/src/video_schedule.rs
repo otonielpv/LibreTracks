@@ -390,6 +390,173 @@ pub fn step(
     out
 }
 
+/// A jump the transport will make by itself: a scheduled marker/song jump,
+/// or the end of the active vamp going back to its start. View seconds.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct UpcomingJump {
+    pub at: f64,
+    pub target: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PreloadParams {
+    /// How long before a jump or clip change the hidden player is prepared.
+    /// Must cover the slowest seek measured in paso 01 (165 ms p95 on a
+    /// 10-second GOP) with room to spare.
+    pub lead: f64,
+    /// How far the transport may be from the expected landing point when the
+    /// swap is decided (tick granularity plus detection delay).
+    pub swap_tolerance: f64,
+}
+
+impl Default for PreloadParams {
+    fn default() -> Self {
+        Self {
+            lead: 1.5,
+            swap_tolerance: 0.3,
+        }
+    }
+}
+
+/// What the hidden player holds, ready to be shown.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Preloaded {
+    pub clip_id: String,
+    pub file_path: String,
+    /// Media time it is paused on.
+    pub media_time: f64,
+    /// Transport position right after the jump / at the clip start.
+    pub target_position: f64,
+    /// When the jump or change is expected.
+    pub swap_at: f64,
+    pub rate: f64,
+    pub from_jump: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PreloadState {
+    pub loaded: Option<Preloaded>,
+    /// Preloads issued (diagnostics and tests).
+    pub preloads: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PreloadAction {
+    /// Load `path` in the hidden player, paused on media time `at`.
+    Preload { path: String, at: f64 },
+    /// The preload is no longer wanted (jump cancelled, transport stopped).
+    Discard,
+}
+
+fn preload_candidate(
+    timeline: &VideoTimeline,
+    position: f64,
+    upcoming: Option<UpcomingJump>,
+    params: &PreloadParams,
+) -> Option<Preloaded> {
+    if let Some(jump) = upcoming {
+        let ahead = jump.at - position;
+        if (0.0..=params.lead).contains(&ahead) {
+            let active = active_clip_at(timeline, jump.target)?;
+            return Some(Preloaded {
+                clip_id: active.clip_id,
+                file_path: active.file_path,
+                media_time: active.media_time,
+                target_position: jump.target,
+                swap_at: jump.at,
+                rate: active.rate,
+                from_jump: true,
+            });
+        }
+    }
+    let next = timeline.next_clip_after(position)?;
+    if next.start - position > params.lead {
+        return None;
+    }
+    // Only if it is what will actually be on screen then.
+    let active = active_clip_at(timeline, next.start)?;
+    if active.clip_id != next.clip_id {
+        return None;
+    }
+    Some(Preloaded {
+        clip_id: active.clip_id,
+        file_path: active.file_path,
+        media_time: active.media_time,
+        target_position: next.start,
+        swap_at: next.start,
+        rate: active.rate,
+        from_jump: false,
+    })
+}
+
+/// Decide what the hidden player should hold. Called every tick while the
+/// transport runs; at most one preload is kept, and a new one replaces it.
+pub fn plan_preload(
+    state: &mut PreloadState,
+    params: &PreloadParams,
+    timeline: &VideoTimeline,
+    position: f64,
+    running: bool,
+    upcoming: Option<UpcomingJump>,
+) -> Vec<PreloadAction> {
+    if !running {
+        return match state.loaded.take() {
+            Some(_) => vec![PreloadAction::Discard],
+            None => Vec::new(),
+        };
+    }
+    let candidate = preload_candidate(timeline, position, upcoming, params);
+    match (&state.loaded, candidate) {
+        (Some(loaded), Some(candidate))
+            if loaded.clip_id == candidate.clip_id
+                && (loaded.target_position - candidate.target_position).abs() < 1e-6 =>
+        {
+            Vec::new()
+        }
+        (_, Some(candidate)) => {
+            let action = PreloadAction::Preload {
+                path: candidate.file_path.clone(),
+                at: candidate.media_time,
+            };
+            state.loaded = Some(candidate);
+            state.preloads += 1;
+            vec![action]
+        }
+        (Some(loaded), None) => {
+            // A preloaded jump that is no longer scheduled was cancelled; a
+            // clip change we are well past without swapping is stale.
+            let cancelled =
+                loaded.from_jump && upcoming.is_none_or(|jump| jump.at != loaded.swap_at);
+            let stale = position > loaded.swap_at + params.swap_tolerance;
+            if cancelled || stale {
+                state.loaded = None;
+                vec![PreloadAction::Discard]
+            } else {
+                Vec::new()
+            }
+        }
+        (None, None) => Vec::new(),
+    }
+}
+
+/// On a jump or clip change: is the hidden player holding exactly what is to
+/// be shown now? If so it is taken (the caller swaps players) and returned.
+pub fn take_swap(
+    state: &mut PreloadState,
+    params: &PreloadParams,
+    timeline: &VideoTimeline,
+    position: f64,
+) -> Option<Preloaded> {
+    let loaded = state.loaded.as_ref()?;
+    let active = active_clip_at(timeline, position)?;
+    if active.clip_id != loaded.clip_id
+        || (position - loaded.target_position).abs() > params.swap_tolerance
+    {
+        return None;
+    }
+    state.loaded.take()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -794,5 +961,83 @@ mod tests {
         let p95 = simulate(params, 1.0);
         eprintln!("sim p95 with k=0: {:.1} ms", p95 * 1e3);
         assert!(p95 >= FRAME, "p95 {:.1} ms should exceed a frame", p95 * 1000.0);
+    }
+
+    // ---- Paso 08: preload and swap ----------------------------------------
+
+    fn preload_params() -> PreloadParams {
+        PreloadParams::default()
+    }
+
+    #[test]
+    fn a_scheduled_jump_is_preloaded_ahead_and_swapped_on_arrival() {
+        let t = timeline(vec![clip("a", 0, 0.0, 600.0)]);
+        let jump = UpcomingJump { at: 100.0, target: 20.0 };
+        let mut state = PreloadState::default();
+        // Too early: nothing.
+        assert!(plan_preload(&mut state, &preload_params(), &t, 90.0, true, Some(jump)).is_empty());
+        // Within the lead: preload the target frame.
+        let actions = plan_preload(&mut state, &preload_params(), &t, 98.6, true, Some(jump));
+        assert_eq!(actions, vec![PreloadAction::Preload { path: "a.mp4".into(), at: 20.0 }]);
+        // Held, not reissued.
+        assert!(plan_preload(&mut state, &preload_params(), &t, 99.5, true, Some(jump)).is_empty());
+        // The transport lands at 20.02: swap.
+        let swapped = take_swap(&mut state, &preload_params(), &t, 20.02).expect("swap");
+        assert_eq!(swapped.target_position, 20.0);
+        assert!(state.loaded.is_none());
+    }
+
+    #[test]
+    fn a_cancelled_jump_discards_the_preload_and_never_swaps() {
+        let t = timeline(vec![clip("a", 0, 0.0, 600.0)]);
+        let jump = UpcomingJump { at: 100.0, target: 20.0 };
+        let mut state = PreloadState::default();
+        plan_preload(&mut state, &preload_params(), &t, 99.0, true, Some(jump));
+        assert!(state.loaded.is_some());
+        let actions = plan_preload(&mut state, &preload_params(), &t, 99.2, true, None);
+        assert_eq!(actions, vec![PreloadAction::Discard]);
+        assert!(take_swap(&mut state, &preload_params(), &t, 20.0).is_none());
+    }
+
+    #[test]
+    fn a_vamp_repeated_twenty_times_preloads_once_per_lap() {
+        let t = timeline(vec![clip("a", 0, 0.0, 600.0)]);
+        let (start, end) = (40.0, 48.0);
+        let mut state = PreloadState::default();
+        let mut position = start;
+        let mut swaps = 0;
+        let dt = 0.01;
+        while swaps < 20 {
+            let jump = UpcomingJump { at: end, target: start };
+            plan_preload(&mut state, &preload_params(), &t, position, true, Some(jump));
+            position += dt;
+            if position >= end {
+                position = start + (position - end);
+                assert!(take_swap(&mut state, &preload_params(), &t, position).is_some());
+                swaps += 1;
+            }
+        }
+        assert_eq!(state.preloads, 20);
+    }
+
+    #[test]
+    fn consecutive_clips_preload_the_next_and_swap_at_the_border() {
+        let t = timeline(vec![clip("a", 0, 0.0, 10.0), clip("b", 0, 10.0, 20.0)]);
+        let mut state = PreloadState::default();
+        let actions = plan_preload(&mut state, &preload_params(), &t, 9.0, true, None);
+        assert_eq!(actions, vec![PreloadAction::Preload { path: "b.mp4".into(), at: 0.0 }]);
+        assert!(take_swap(&mut state, &preload_params(), &t, 9.99).is_none(), "not yet");
+        assert!(take_swap(&mut state, &preload_params(), &t, 10.01).is_some());
+    }
+
+    #[test]
+    fn stopping_discards_whatever_was_preloaded() {
+        let t = timeline(vec![clip("a", 0, 0.0, 10.0), clip("b", 0, 10.0, 20.0)]);
+        let mut state = PreloadState::default();
+        plan_preload(&mut state, &preload_params(), &t, 9.0, true, None);
+        assert_eq!(
+            plan_preload(&mut state, &preload_params(), &t, 9.0, false, None),
+            vec![PreloadAction::Discard]
+        );
     }
 }

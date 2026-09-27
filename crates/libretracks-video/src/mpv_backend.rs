@@ -295,6 +295,10 @@ impl OutputBackend for MpvOutputBackend {
         }
     }
 
+    fn dual_players(&self) -> bool {
+        !self.single_player
+    }
+
     fn poll(&mut self, max_wait: Duration) -> Vec<BackendEvent> {
         let mut events = Vec::new();
         let player_count = if self.single_player { 1 } else { 2 };

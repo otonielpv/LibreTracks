@@ -133,6 +133,10 @@ pub trait OutputBackend: Send {
     fn show_image(&mut self, slot: Slot, path: Option<&str>) -> Result<(), BackendError>;
     /// Wait up to `max_wait` for player events and return them.
     fn poll(&mut self, max_wait: Duration) -> Vec<BackendEvent>;
+    /// Whether slots A and B are two real players (preload + swap possible).
+    fn dual_players(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -178,6 +182,8 @@ pub struct OutputStatus {
     pub monitor_name: Option<String>,
     /// Times the surface was opened (tests; a fit change must not reopen).
     pub opens: u32,
+    /// Two real players: the runtime may preload in the hidden one.
+    pub dual_players: bool,
 }
 
 impl Default for OutputStatus {
@@ -190,6 +196,7 @@ impl Default for OutputStatus {
             shares_app_display: false,
             monitor_name: None,
             opens: 0,
+            dual_players: false,
         }
     }
 }
@@ -297,6 +304,7 @@ impl<B: OutputBackend> OutputController<B> {
                 match result {
                     Ok(()) => {
                         self.status.shares_app_display = plan.shares_app_display;
+                        self.status.dual_players = self.backend.dual_players();
                         self.status.monitor_name = Some(plan.monitor_name.clone());
                         self.plan = Some(plan);
                         self.status.state = OutputState::Ready;
@@ -374,7 +382,12 @@ impl<B: OutputBackend> OutputController<B> {
                         player.time_pos = Some(*seconds);
                         player.time_pos_at = Some(Instant::now());
                     }
-                    PlayerCommand::SetPause(paused) => player.paused = *paused,
+                    PlayerCommand::SetPause(paused) => {
+                        // A paused player's time is exact; re-anchor so the
+                        // reader's extrapolation starts from now.
+                        player.paused = *paused;
+                        player.time_pos_at = Some(Instant::now());
+                    }
                     PlayerCommand::SetSpeed(speed) => player.speed = *speed,
                     PlayerCommand::Stop => {
                         player.file = None;

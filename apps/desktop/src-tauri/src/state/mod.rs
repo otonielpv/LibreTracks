@@ -507,6 +507,11 @@ pub(crate) struct TransportClockMirror {
     pub anchor_position_seconds: f64,
     pub anchor_started_at: Option<Instant>,
     pub generation: u64,
+    /// Next scheduled jump (marker, song or automation cue): when and where,
+    /// in view seconds. Lets the video preload the landing frame.
+    pub upcoming_jump: Option<(f64, f64)>,
+    /// Active vamp (start, end) in view seconds: its end jumps to its start.
+    pub vamp: Option<(f64, f64)>,
 }
 
 impl TransportClockMirror {
@@ -1272,6 +1277,14 @@ impl TransportClock {
 
     pub(super) fn mirror(&self) -> Arc<Mutex<TransportClockMirror>> {
         Arc::clone(&self.mirror)
+    }
+
+    /// Publish the scheduled jump and vamp (view seconds) for the video.
+    pub(super) fn publish_schedule(&self, upcoming_jump: Option<(f64, f64)>, vamp: Option<(f64, f64)>) {
+        if let Ok(mut mirror) = self.mirror.lock() {
+            mirror.upcoming_jump = upcoming_jump;
+            mirror.vamp = vamp;
+        }
     }
 
     fn start_from(&mut self, position_seconds: f64) {
@@ -3125,6 +3138,22 @@ impl DesktopSession {
                 }),
             is_native_runtime: true,
         };
+        self.transport_clock.publish_schedule(
+            snapshot
+                .pending_marker_jump
+                .as_ref()
+                .and_then(|jump| jump.target_seconds.map(|target| (jump.execute_at_seconds, target)))
+                .or_else(|| {
+                    snapshot
+                        .pending_automation_cue
+                        .as_ref()
+                        .map(|cue| (cue.execute_at_seconds, cue.target_seconds))
+                }),
+            snapshot
+                .active_vamp
+                .as_ref()
+                .map(|vamp| (vamp.start_seconds, vamp.end_seconds)),
+        );
         self.perf_metrics.transport_snapshot_build_millis = started_at.elapsed().as_millis();
         self.perf_metrics.transport_snapshot_bytes = to_vec(&snapshot)
             .map(|bytes| bytes.len())

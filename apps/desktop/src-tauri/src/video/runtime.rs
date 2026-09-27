@@ -22,10 +22,12 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use libretracks_core::video_schedule::{
-    step, PlayerAction, PlayerInput, SyncParams, SyncState, TransportInput, VideoTimeline,
+    active_clip_at, plan_preload, step, take_swap, PlayerAction, PlayerInput, PreloadAction,
+    PreloadParams, PreloadState, SyncParams, SyncState, TransportInput, UpcomingJump,
+    VideoTimeline,
 };
 use libretracks_core::VideoFit;
-use libretracks_video::output::{OutputCommand, OutputState, OutputStatus, PlayerCommand};
+use libretracks_video::output::{OutputCommand, OutputState, OutputStatus, PlayerCommand, Slot};
 use libretracks_video::settings::{StoppedScreen, VideoOutputSettings};
 use serde::Serialize;
 
@@ -67,6 +69,8 @@ pub struct VideoSyncStats {
     pub error_p50_ms: Option<f64>,
     pub error_p95_ms: Option<f64>,
     pub forced_seeks: u64,
+    /// Jumps and clip changes served by the preloaded hidden player.
+    pub swaps: u64,
     pub frame_drops: i64,
     pub hwdec: Option<String>,
     pub sync_ticks: u64,
@@ -97,6 +101,13 @@ pub struct RuntimeCore {
     idle_sent: bool,
     errors: VecDeque<f64>,
     last_log: Option<Instant>,
+    preload: PreloadState,
+    preload_params: PreloadParams,
+    /// A swap was sent; wait until the output reports this slot visible.
+    expected_visible: Option<(Slot, Instant)>,
+    /// Last target position, to spot jumps the clock did not announce (a
+    /// vamp wrap re-anchors without a new generation).
+    last_position: Option<f64>,
     pub stats: VideoSyncStats,
 }
 
@@ -117,6 +128,10 @@ impl Default for RuntimeCore {
             idle_sent: false,
             errors: VecDeque::with_capacity(ERROR_WINDOW),
             last_log: None,
+            preload: PreloadState::default(),
+            preload_params: PreloadParams::default(),
+            expected_visible: None,
+            last_position: None,
             stats: VideoSyncStats::default(),
         }
     }
@@ -176,6 +191,8 @@ impl RuntimeCore {
             self.brightness = None;
             self.fit = None;
             self.idle_sent = false;
+            self.preload = PreloadState::default();
+            self.expected_visible = None;
             return TickRate::Park;
         }
 
@@ -192,17 +209,102 @@ impl RuntimeCore {
 
         let settings = output.settings();
         let clock = inputs.clock();
-        let discontinuity = self
-            .last_generation
-            .is_some_and(|generation| generation != clock.generation);
-        self.last_generation = Some(clock.generation);
         let latency = inputs.output_latency();
         let position = (clock.position_at(now) - latency
             + f64::from(settings.latency_offset_ms) / 1000.0)
             .max(0.0);
         let running = clock.running();
+        // A new clock generation is an announced jump; the position going
+        // back, or ahead by more than a tick allows, is an unannounced one.
+        let jumped = running
+            && self.last_position.is_some_and(|last| position < last - 0.1 || position > last + 0.5);
+        let discontinuity = jumped
+            || self
+                .last_generation
+                .is_some_and(|generation| generation != clock.generation);
+        self.last_generation = Some(clock.generation);
+        self.last_position = Some(position);
+
+        // A swap was sent: until the output shows the new slot, its status
+        // still describes the old one. Give it a few ticks.
+        if let Some((expected, since)) = self.expected_visible {
+            if status.visible_slot != expected && now.duration_since(since) < Duration::from_millis(200) {
+                return if running { TickRate::Fast } else { TickRate::Slow };
+            }
+            self.expected_visible = None;
+        }
 
         let slot = status.visible_slot;
+        let hidden = slot.other();
+        if status.dual_players {
+            if running {
+                // Paso 08: serve jumps and clip changes from the hidden player.
+                let changing_clip = active_clip_at(&self.timeline, position)
+                    .is_some_and(|active| self.state.clip_id.as_deref() != Some(active.clip_id.as_str()));
+                if discontinuity || changing_clip {
+                    if let Some(preloaded) =
+                        take_swap(&mut self.preload, &self.preload_params, &self.timeline, position)
+                    {
+                        output.send(OutputCommand::Player {
+                            slot: hidden,
+                            command: PlayerCommand::SetSpeed(preloaded.rate),
+                        });
+                        output.send(OutputCommand::Player {
+                            slot: hidden,
+                            command: PlayerCommand::SetPause(false),
+                        });
+                        output.send(OutputCommand::ShowSlot(hidden));
+                        output.send(OutputCommand::Player {
+                            slot,
+                            command: PlayerCommand::SetPause(true),
+                        });
+                        self.state.clip_id = Some(preloaded.clip_id);
+                        self.state.speed = preloaded.rate;
+                        self.state.paused = false;
+                        self.state.idle = false;
+                        self.state.filtered_error = None;
+                        self.pending_settle = None;
+                        self.expected_visible = Some((hidden, now));
+                        self.stats.swaps += 1;
+                        return TickRate::Fast;
+                    }
+                }
+                let upcoming = clock
+                    .upcoming_jump
+                    .map(|(at, target)| UpcomingJump { at, target })
+                    .or_else(|| {
+                        clock.vamp.and_then(|(start, end)| {
+                            (position >= start - 0.05 && position < end)
+                                .then_some(UpcomingJump { at: end, target: start })
+                        })
+                    });
+                for action in plan_preload(
+                    &mut self.preload,
+                    &self.preload_params,
+                    &self.timeline,
+                    position,
+                    true,
+                    upcoming,
+                ) {
+                    let command = match action {
+                        PreloadAction::Preload { path, at } => PlayerCommand::Load {
+                            path,
+                            start_seconds: at,
+                            paused: true,
+                        },
+                        PreloadAction::Discard => PlayerCommand::Stop,
+                    };
+                    output.send(OutputCommand::Player { slot: hidden, command });
+                }
+            } else if self.preload.loaded.is_some() {
+                self.preload = PreloadState::default();
+                output.send(OutputCommand::Player {
+                    slot: hidden,
+                    command: PlayerCommand::Stop,
+                });
+            }
+        }
+
         let player_status = status.player(slot).clone();
         self.stats.frame_drops = player_status.frame_drops;
         self.stats.hwdec = player_status.hwdec.clone();
@@ -513,6 +615,7 @@ mod tests {
     }
 
     #[derive(Default)]
+    #[allow(dead_code)]
     struct FakeOutput {
         status: RefCell<OutputStatus>,
         sent: RefCell<Vec<OutputCommand>>,
@@ -545,6 +648,19 @@ mod tests {
                     restarts: status.players[index].restarts + 1,
                     ..Default::default()
                 };
+            }
+            if let OutputCommand::ShowSlot(slot) = &command {
+                self.status.borrow_mut().visible_slot = *slot;
+            }
+            if let OutputCommand::Player {
+                slot,
+                command: PlayerCommand::SetPause(paused),
+            } = &command
+            {
+                let mut status = self.status.borrow_mut();
+                let index = if *slot == Slot::A { 0 } else { 1 };
+                status.players[index].paused = *paused;
+                status.players[index].time_pos_at = Some(Instant::now());
             }
             self.sent.borrow_mut().push(command);
         }
@@ -584,6 +700,8 @@ mod tests {
             anchor_position_seconds: at,
             anchor_started_at: Some(Instant::now()),
             generation: 1,
+            upcoming_jump: None,
+            vamp: None,
         }
     }
 
@@ -665,6 +783,8 @@ mod tests {
             anchor_position_seconds: 40.0,
             anchor_started_at: Some(Instant::now()),
             generation: 2,
+            upcoming_jump: None,
+            vamp: None,
         };
         core.tick(&mut inputs, &output, Instant::now());
         assert!(output.sent.borrow().iter().any(|command| matches!(
@@ -723,5 +843,63 @@ mod tests {
         assert_eq!(inputs.busy, 100, "every refresh found the session busy");
         // …and every tick still synced, from the timeline it already had.
         assert_eq!(core.stats.sync_ticks, 100);
+    }
+
+    /// Paso 08, C2: a vamp repeated 20 times over the same stretch is served
+    /// by 20 swaps, one preload per lap into the hidden slot and never a
+    /// third player (there are only two slots by construction).
+    #[test]
+    fn a_vamp_is_served_by_swaps_with_one_preload_per_lap() {
+        let mut core = RuntimeCore::default();
+        let output = ready_output();
+        output.status.borrow_mut().dual_players = true;
+        let base = Instant::now();
+        let (start, end) = (40.0, 48.0);
+        let mut inputs = FakeInputs {
+            clock: VideoTransportClock {
+                anchor_position_seconds: start,
+                anchor_started_at: Some(base),
+                generation: 1,
+                upcoming_jump: None,
+                vamp: Some((start, end)),
+            },
+            timeline: one_clip_timeline(),
+            fetches: 0,
+        };
+        let mut position = start;
+        let mut laps = 0;
+        let mut tick = 0u64;
+        while laps < 20 && tick < 100_000 {
+            // Drive the clock by hand: 10 ms per tick, wrapping at the end.
+            position += 0.01;
+            if position >= end {
+                position = start + (position - end);
+                laps += 1;
+            }
+            let now = base + Duration::from_millis(10 * tick);
+            inputs.clock.anchor_position_seconds = position;
+            inputs.clock.anchor_started_at = Some(now);
+            // An ideal player: the visible one shows exactly the transport.
+            {
+                let mut status = output.status.borrow_mut();
+                let index = if status.visible_slot == Slot::A { 0 } else { 1 };
+                if status.players[index].file.is_some() {
+                    status.players[index].time_pos = Some(position);
+                    status.players[index].time_pos_at = Some(now);
+                }
+            }
+            core.tick(&mut inputs, &output, now);
+            tick += 1;
+        }
+        let hidden_loads = output
+            .sent
+            .borrow()
+            .iter()
+            .filter(|command| matches!(command, OutputCommand::Player { command: PlayerCommand::Load { paused: true, .. }, .. }))
+            .count();
+        assert_eq!(laps, 20);
+        assert!(core.stats.swaps >= 19, "swaps {}", core.stats.swaps);
+        assert!(hidden_loads as u64 <= core.stats.swaps + 2, "loads {hidden_loads}");
+        assert!(core.stats.forced_seeks <= 1, "seeks {}", core.stats.forced_seeks);
     }
 }
