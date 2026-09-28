@@ -181,8 +181,8 @@ pub struct RegionMeterLevel {
 struct MeterFrame {
     tracks: Vec<AudioMeterLevel>,
     regions: Vec<RegionMeterLevel>,
-    /// Playing, or any meter still above zero: poll at the fast rate.
-    active: bool,
+    /// The transport is running: poll at the fast rate.
+    playing: bool,
     /// The output stream is suspended while idle: poll at the slowest rate.
     suspended: bool,
 }
@@ -602,12 +602,18 @@ impl AudioController {
                 );
                 let mut interval = IDLE_INTERVAL;
                 if let Some(frame) = tick.frame {
+                    let tracks_changed = last_track_levels.as_ref() != Some(&frame.tracks);
+                    let regions_changed = last_region_levels.as_ref() != Some(&frame.regions);
+                    // Fast while playing or while the levels still move. NOT
+                    // "while any level is above zero": with the transport
+                    // stopped the engine stops rendering tracks and their
+                    // peaks freeze at the last value, so one play would have
+                    // kept this loop at 30 Hz forever.
                     if frame.suspended {
                         interval = SUSPENDED_INTERVAL;
-                    } else if frame.active {
+                    } else if frame.playing || tracks_changed || regions_changed {
                         interval = ACTIVE_INTERVAL;
                     }
-                    let tracks_changed = last_track_levels.as_ref() != Some(&frame.tracks);
                     if tracks_changed && !frame.tracks.is_empty() {
                         let _ = app_handle.emit("audio:meters", &frame.tracks);
                     }
@@ -627,9 +633,7 @@ impl AudioController {
                             }
                         }
                     }
-                    if last_region_levels.as_ref() != Some(&frame.regions)
-                        && !frame.regions.is_empty()
-                    {
+                    if regions_changed && !frame.regions.is_empty() {
                         let _ = app_handle.emit("audio:region_meters", &frame.regions);
                     }
                     last_track_levels = Some(frame.tracks);
@@ -2549,14 +2553,10 @@ impl AudioController {
                     peak: meter.peak,
                 })
                 .collect();
-            let sounding = tracks
-                .iter()
-                .any(|level| level.left_peak > 0.0 || level.right_peak > 0.0)
-                || regions.iter().any(|level| level.peak > 0.0);
             tick.frame = Some(MeterFrame {
                 tracks,
                 regions,
-                active: playing || sounding,
+                playing,
                 suspended,
             });
         }
