@@ -9,13 +9,14 @@
 //! its shortcuts work during the show.
 //!
 //! The window lives on its own thread with its message loop. Other threads
-//! only post to it or call the cross-thread-safe `SetWindowPos`/`ShowWindow`.
+//! only post to it or call the cross-thread-safe `SetWindowPos`/`ShowWindow`
+//! and `SetWindowLongPtrW` (restyling between fullscreen and window).
 
 use std::ffi::c_void;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use crate::monitors::SurfaceRect;
+use crate::monitors::{SurfacePlan, SurfaceRect};
 
 type Handle = *mut c_void;
 
@@ -82,6 +83,8 @@ extern "system" {
     fn DestroyWindow(hwnd: Handle) -> i32;
     fn SetWindowPos(hwnd: Handle, after: Handle, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
     fn GetClientRect(hwnd: Handle, rect: *mut Rect) -> i32;
+    fn GetWindowRect(hwnd: Handle, rect: *mut Rect) -> i32;
+    fn SetWindowLongPtrW(hwnd: Handle, index: i32, value: isize) -> isize;
     fn GetWindow(hwnd: Handle, cmd: u32) -> Handle;
     fn LoadCursorW(instance: Handle, name: *const u16) -> Handle;
 }
@@ -118,9 +121,34 @@ const SWP_NOACTIVATE: u32 = 0x0010;
 const SWP_NOMOVE: u32 = 0x0002;
 const SWP_NOSIZE: u32 = 0x0001;
 const SWP_ASYNCWINDOWPOS: u32 = 0x4000;
+const SWP_FRAMECHANGED: u32 = 0x0020;
+const GWL_STYLE: i32 = -16;
 const HWND_TOP: Handle = std::ptr::null_mut();
+const HWND_TOPMOST: Handle = -1isize as Handle;
+const HWND_NOTOPMOST: Handle = -2isize as Handle;
 const BLACK_BRUSH: i32 = 4;
 const IDC_ARROW: usize = 32512;
+
+/// Fullscreen is a bare popup; the window has a frame to move and resize.
+/// The extended style is the same for both (never activated, no taskbar
+/// button); being on top is the z-order, set with `SetWindowPos`.
+const EX_STYLE: u32 = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+
+fn style_for(fullscreen: bool) -> u32 {
+    if fullscreen {
+        WS_POPUP | WS_CLIPCHILDREN | WS_VISIBLE
+    } else {
+        WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_VISIBLE
+    }
+}
+
+fn z_order(plan: &SurfacePlan) -> Handle {
+    if plan.on_top {
+        HWND_TOPMOST
+    } else {
+        HWND_NOTOPMOST
+    }
+}
 
 fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(std::iter::once(0)).collect()
@@ -204,27 +232,29 @@ pub struct Win32Surface {
     window: usize,
     slots: [usize; 2],
     thread: Option<std::thread::JoinHandle<()>>,
+    fullscreen: bool,
+    /// Where the user left the window (monitor, outer rect): going back from
+    /// fullscreen puts it there instead of re-centring it.
+    last_window: Option<(String, SurfaceRect)>,
 }
 
 impl Win32Surface {
-    /// Create the window on its own thread. `fullscreen`: a borderless,
-    /// topmost popup covering `rect`; otherwise a normal (movable) window.
-    pub fn create(rect: crate::monitors::SurfaceRect, fullscreen: bool, title: &str) -> Result<Self, String> {
+    /// Create the window on its own thread. Fullscreen: a borderless popup
+    /// covering the plan's rect (topmost if `plan.on_top`); otherwise a
+    /// normal window the user can move and resize.
+    pub fn create(plan: &SurfacePlan, title: &str) -> Result<Self, String> {
         let (sender, receiver) = mpsc::channel::<Result<(usize, [usize; 2]), String>>();
         let title = title.to_string();
+        let rect = plan.rect;
+        let fullscreen = plan.fullscreen;
+        let on_top = plan.on_top;
         let thread = std::thread::Builder::new()
             .name("lt-video-surface".into())
             .spawn(move || unsafe {
                 let instance = GetModuleHandleW(std::ptr::null());
                 register_classes(instance);
-                let (ex_style, style) = if fullscreen {
-                    (
-                        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                        WS_POPUP | WS_CLIPCHILDREN,
-                    )
-                } else {
-                    (WS_EX_NOACTIVATE, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN)
-                };
+                let ex_style = if on_top { EX_STYLE | WS_EX_TOPMOST } else { EX_STYLE };
+                let style = style_for(fullscreen) & !WS_VISIBLE;
                 let class = wide("LibreTracksVideoSurface");
                 let title = wide(&title);
                 let window = CreateWindowExW(
@@ -285,6 +315,8 @@ impl Win32Surface {
             window,
             slots,
             thread: Some(thread),
+            fullscreen: plan.fullscreen,
+            last_window: None,
         })
     }
 
@@ -313,16 +345,43 @@ impl Win32Surface {
         }
     }
 
-    pub fn reposition(&self, rect: SurfaceRect) {
+    /// Move to the plan and restyle if its mode changed (fullscreen <->
+    /// window), keeping the slot children and so the players.
+    pub fn apply(&mut self, plan: &SurfacePlan) {
+        let window = self.window as Handle;
+        let mut flags = SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS;
         unsafe {
+            if !self.fullscreen {
+                let mut outer = Rect::default();
+                if GetWindowRect(window, &mut outer) != 0 {
+                    self.last_window = Some((
+                        plan.monitor_name.clone(),
+                        SurfaceRect {
+                            x: outer.left,
+                            y: outer.top,
+                            width: (outer.right - outer.left).max(1) as u32,
+                            height: (outer.bottom - outer.top).max(1) as u32,
+                        },
+                    ));
+                }
+            }
+            if self.fullscreen != plan.fullscreen {
+                SetWindowLongPtrW(window, GWL_STYLE, style_for(plan.fullscreen) as isize);
+                flags |= SWP_FRAMECHANGED;
+                self.fullscreen = plan.fullscreen;
+            }
+            let rect = match &self.last_window {
+                Some((monitor, rect)) if !plan.fullscreen && *monitor == plan.monitor_name => *rect,
+                _ => plan.rect,
+            };
             SetWindowPos(
-                self.window as Handle,
-                std::ptr::null_mut(),
+                window,
+                z_order(plan),
                 rect.x,
                 rect.y,
                 rect.width as i32,
                 rect.height as i32,
-                SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS,
+                flags,
             );
         }
     }

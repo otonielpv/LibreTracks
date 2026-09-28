@@ -59,7 +59,9 @@ describe("VideoSettingsTab", () => {
     for (const control of screen.getAllByRole("combobox")) {
       expect((control as HTMLSelectElement).disabled).toBe(true);
     }
-    expect((screen.getByRole("checkbox") as HTMLInputElement).disabled).toBe(true);
+    for (const control of screen.getAllByRole("checkbox")) {
+      expect((control as HTMLInputElement).disabled).toBe(true);
+    }
     expect(
       (screen.getByText("transport.video.settings.wizard") as HTMLButtonElement).disabled,
     ).toBe(true);
@@ -70,7 +72,7 @@ describe("VideoSettingsTab", () => {
     render(<VideoSettingsTab />);
     await screen.findByText(/1280×720/);
 
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /settings\.enabled/ }));
     expect(lastApplied()).toMatchObject({ enabled: true });
 
     fireEvent.change(screen.getByLabelText("transport.video.settings.display"), {
@@ -90,6 +92,11 @@ describe("VideoSettingsTab", () => {
       target: { value: "window" },
     });
     expect(lastApplied()).toMatchObject({ mode: "window" });
+
+    const onTop = screen.getByRole("checkbox", { name: /settings\.onTop/ }) as HTMLInputElement;
+    expect(onTop.checked).toBe(true);
+    fireEvent.click(onTop);
+    expect(lastApplied()).toMatchObject({ fullscreenOnTop: false, mode: "window" });
 
     fireEvent.change(screen.getByLabelText("transport.video.settings.whenStopped"), {
       target: { value: "black" },
@@ -129,6 +136,29 @@ describe("VideoSettingsTab", () => {
     view.unmount();
     expect(api.setVideoCalibration).toHaveBeenLastCalledWith(null);
     expect(api.showVideoTestPattern).toHaveBeenLastCalledWith(false);
+  });
+
+  it("follows a mode switched by double-clicking the output", async () => {
+    available(true);
+    render(<VideoSettingsTab />);
+    const mode = (await screen.findByLabelText("transport.video.settings.mode")) as HTMLSelectElement;
+    await waitFor(() => expect(mode.value).toBe("fullscreen"));
+    useVideoStore.setState({
+      outputStatus: {
+        state: { state: "ready" },
+        visibleSlot: "a",
+        players: [] as never,
+        brightness: 0,
+        sharesAppDisplay: false,
+        monitorName: "DISPLAY2",
+        opens: 1,
+        mode: "window",
+        modeToggles: 1,
+      },
+    });
+    await waitFor(() => expect(mode.value).toBe("window"));
+    // The backend already saved it: nothing is applied from here.
+    expect(api.applyVideoOutputSettings).not.toHaveBeenCalled();
   });
 
   it("the wizard button opens the setup wizard", async () => {

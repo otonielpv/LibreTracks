@@ -23,8 +23,8 @@ use std::time::{Duration, Instant};
 use libretracks_core::VideoFit;
 use serde::Serialize;
 
-use crate::monitors::{plan_surface, MonitorInfo, PlacementOutcome, SurfacePlan};
-use crate::settings::{IdleScreen, VideoOutputSettings};
+use crate::monitors::{plan_surface, MonitorInfo, PlacementOutcome, PlanOptions, SurfacePlan};
+use crate::settings::{IdleScreen, VideoOutputMode, VideoOutputSettings};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -114,13 +114,18 @@ pub enum BackendEvent {
     LoadFailed { slot: Slot, reason: String },
     Hwdec { slot: Slot, name: String },
     FrameDrops { slot: Slot, count: i64 },
+    /// The user double-clicked the output: fullscreen <-> window, as in
+    /// Ableton's video window.
+    ToggleFullscreen,
 }
 
 /// The surface plus its two players. Implemented over libmpv by
 /// [`crate::mpv_backend`], and by a fake in tests.
 pub trait OutputBackend: Send {
     fn open(&mut self, plan: &SurfacePlan, settings: &VideoOutputSettings) -> Result<(), BackendError>;
-    /// Move/resize an open surface without recreating the players.
+    /// Move, resize or restyle (fullscreen <-> window, on top or not) an
+    /// open surface without recreating the players: switching mode mid-song
+    /// must not interrupt the picture.
     fn reposition(&mut self, plan: &SurfacePlan) -> Result<(), BackendError>;
     fn close(&mut self);
     fn is_open(&self) -> bool;
@@ -184,6 +189,10 @@ pub struct OutputStatus {
     pub opens: u32,
     /// Two real players: the runtime may preload in the hidden one.
     pub dual_players: bool,
+    /// The mode in force. A double-click on the output changes it without
+    /// going through the settings: the app saves it when `mode_toggles` moves.
+    pub mode: VideoOutputMode,
+    pub mode_toggles: u32,
 }
 
 impl Default for OutputStatus {
@@ -197,6 +206,8 @@ impl Default for OutputStatus {
             monitor_name: None,
             opens: 0,
             dual_players: false,
+            mode: VideoOutputMode::default(),
+            mode_toggles: 0,
         }
     }
 }
@@ -217,6 +228,10 @@ pub struct OutputController<B: OutputBackend> {
     plan: Option<SurfacePlan>,
     overlay: Option<String>,
     fit_override: Option<VideoFit>,
+    /// Fullscreen asked for by double-click on the app's own display (see
+    /// `PlanOptions::cover_app_display`). Volatile: a mode or display change
+    /// from the settings clears it.
+    cover_app_display: bool,
     status: OutputStatus,
 }
 
@@ -230,6 +245,7 @@ impl<B: OutputBackend> OutputController<B> {
             plan: None,
             overlay: None,
             fit_override: None,
+            cover_app_display: false,
             status: OutputStatus::default(),
         }
     }
@@ -260,9 +276,15 @@ impl<B: OutputBackend> OutputController<B> {
             self.status.players = Default::default();
             return;
         }
+        self.status.mode = self.settings.mode;
+        let options = PlanOptions {
+            on_top: self.settings.fullscreen_on_top,
+            cover_app_display: self.cover_app_display,
+        };
         let outcome = plan_surface(
             self.settings.display.as_ref(),
             self.settings.mode,
+            options,
             &self.monitors,
             self.app_monitor.as_deref(),
         );
@@ -283,11 +305,9 @@ impl<B: OutputBackend> OutputController<B> {
                 };
             }
             PlacementOutcome::Place(plan) => {
-                let same_mode = self
-                    .plan
-                    .as_ref()
-                    .is_some_and(|current| current.fullscreen == plan.fullscreen);
-                let result = if self.backend.is_open() && same_mode {
+                // Open: move/restyle in place, even between fullscreen and
+                // window, so the players (and the picture) survive.
+                let result = if self.backend.is_open() && self.plan.is_some() {
                     if self.plan.as_ref() == Some(&plan) {
                         Ok(())
                     } else {
@@ -342,11 +362,18 @@ impl<B: OutputBackend> OutputController<B> {
                 let settings = settings.clamped();
                 let placement_changed = settings.enabled != self.settings.enabled
                     || settings.display != self.settings.display
-                    || settings.mode != self.settings.mode
                     || settings.hwdec != self.settings.hwdec;
+                // Restyled in place by `replan`, no reopen.
+                let style_changed = settings.mode != self.settings.mode
+                    || settings.fullscreen_on_top != self.settings.fullscreen_on_top;
+                if settings.mode != self.settings.mode || settings.display != self.settings.display {
+                    self.cover_app_display = false;
+                }
                 let fit_changed = settings.fit != self.settings.fit;
                 self.settings = settings;
-                if placement_changed || !self.backend.is_open() {
+                if style_changed && !placement_changed && self.backend.is_open() {
+                    self.replan();
+                } else if placement_changed || !self.backend.is_open() {
                     // hwdec is an mpv init option: changing it reopens.
                     if self.backend.is_open() && self.settings.enabled {
                         self.backend.close();
@@ -499,8 +526,27 @@ impl<B: OutputBackend> OutputController<B> {
                 BackendEvent::FrameDrops { slot, count } => {
                     self.status.players[slot.index()].frame_drops = count;
                 }
+                BackendEvent::ToggleFullscreen => self.toggle_fullscreen(),
             }
         }
+    }
+
+    /// Double-click on the output: fullscreen goes to a window and a window
+    /// goes fullscreen, on its display even if the app is there (the user
+    /// asked; another double-click gives the app back).
+    fn toggle_fullscreen(&mut self) {
+        let Some(plan) = self.plan.as_ref() else {
+            return;
+        };
+        if plan.fullscreen {
+            self.settings.mode = VideoOutputMode::Window;
+            self.cover_app_display = false;
+        } else {
+            self.settings.mode = VideoOutputMode::Fullscreen;
+            self.cover_app_display = plan.shares_app_display;
+        }
+        self.status.mode_toggles = self.status.mode_toggles.wrapping_add(1);
+        self.replan();
     }
 
     fn poll_backend(&mut self, max_wait: Duration) {
@@ -660,6 +706,7 @@ pub(crate) mod fake {
         pub open: bool,
         pub opens: u32,
         pub repositions: u32,
+        pub plans: Vec<SurfacePlan>,
         pub commands: Vec<(Slot, PlayerCommand)>,
         pub fits: Vec<VideoFit>,
         pub brightness: Vec<f64>,
@@ -671,14 +718,16 @@ pub(crate) mod fake {
     }
 
     impl OutputBackend for FakeBackend {
-        fn open(&mut self, _: &SurfacePlan, _: &VideoOutputSettings) -> Result<(), BackendError> {
+        fn open(&mut self, plan: &SurfacePlan, _: &VideoOutputSettings) -> Result<(), BackendError> {
             std::thread::sleep(self.delay);
             self.open = true;
             self.opens += 1;
+            self.plans.push(plan.clone());
             Ok(())
         }
-        fn reposition(&mut self, _: &SurfacePlan) -> Result<(), BackendError> {
+        fn reposition(&mut self, plan: &SurfacePlan) -> Result<(), BackendError> {
             self.repositions += 1;
+            self.plans.push(plan.clone());
             Ok(())
         }
         fn close(&mut self) {
@@ -725,7 +774,7 @@ pub(crate) mod fake {
 mod tests {
     use super::fake::FakeBackend;
     use super::*;
-    use crate::settings::{DisplayId, VideoOutputMode};
+    use crate::settings::DisplayId;
 
     fn monitors() -> Vec<MonitorInfo> {
         vec![
@@ -872,6 +921,67 @@ mod tests {
         controller.handle(OutputCommand::ApplySettings(settings));
         assert_eq!(controller.status().state, OutputState::Disabled);
         assert!(!controller.backend().open);
+    }
+
+    #[test]
+    fn a_double_click_toggles_fullscreen_in_place_and_reports_the_new_mode() {
+        let mut controller = ready_controller();
+        controller.handle(load("D:/ok.mp4"));
+        let opens = controller.backend().opens;
+        assert!(controller.backend().plans.last().unwrap().fullscreen);
+
+        controller.absorb(vec![BackendEvent::ToggleFullscreen]);
+        let plan = controller.backend().plans.last().unwrap().clone();
+        assert!(!plan.fullscreen);
+        assert!(!plan.on_top);
+        assert_eq!(controller.status().mode, VideoOutputMode::Window);
+        assert_eq!(controller.status().mode_toggles, 1);
+        // Restyled, not reopened: the loaded clip is still there.
+        assert_eq!(controller.backend().opens, opens);
+        assert_eq!(controller.status().player(Slot::A).file.as_deref(), Some("D:/ok.mp4"));
+
+        controller.absorb(vec![BackendEvent::ToggleFullscreen]);
+        let plan = controller.backend().plans.last().unwrap();
+        assert!(plan.fullscreen && plan.on_top);
+        assert_eq!(controller.status().mode, VideoOutputMode::Fullscreen);
+        assert_eq!(controller.status().mode_toggles, 2);
+
+        // Saving the toggled mode (what the app does) changes nothing more.
+        let repositions = controller.backend().repositions;
+        let mut saved = enabled_on_m2();
+        saved.mode = VideoOutputMode::Fullscreen;
+        controller.handle(OutputCommand::ApplySettings(saved));
+        assert_eq!(controller.backend().repositions, repositions);
+        assert_eq!(controller.backend().opens, opens);
+    }
+
+    #[test]
+    fn on_the_app_display_a_double_click_covers_it_until_the_next_one() {
+        let mut controller = ready_controller();
+        let mut settings = enabled_on_m2();
+        settings.display = Some(monitors()[0].id());
+        controller.handle(OutputCommand::ApplySettings(settings));
+        assert!(controller.status().shares_app_display);
+
+        controller.absorb(vec![BackendEvent::ToggleFullscreen]);
+        assert!(controller.backend().plans.last().unwrap().fullscreen);
+        assert!(!controller.status().shares_app_display);
+
+        controller.absorb(vec![BackendEvent::ToggleFullscreen]);
+        assert!(!controller.backend().plans.last().unwrap().fullscreen);
+        assert!(controller.status().shares_app_display);
+    }
+
+    #[test]
+    fn fullscreen_on_top_is_applied_without_reopening() {
+        let mut controller = ready_controller();
+        let opens = controller.backend().opens;
+        let mut settings = enabled_on_m2();
+        settings.fullscreen_on_top = false;
+        controller.handle(OutputCommand::ApplySettings(settings));
+        let plan = controller.backend().plans.last().unwrap();
+        assert!(plan.fullscreen && !plan.on_top);
+        assert_eq!(controller.backend().opens, opens);
     }
 
     #[test]

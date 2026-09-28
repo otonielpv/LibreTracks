@@ -17,7 +17,13 @@
 //! Measured in the spike (bitácora `state/15.md`): creating and destroying the
 //! GL contexts on every open lost ~13.5 MB each time in AppKit's software
 //! surface path, so the surface is **persistent**: closing the output hides
-//! the panel and stops the players; the panel and contexts live on.
+//! the panel and stops the players; the panel and contexts live on. It also
+//! restyles in place between fullscreen and a window the user can move and
+//! resize (a double-click on it toggles, as in Ableton).
+//!
+//! The panel is non-activating and only becomes key if a view needs it (ours
+//! never do), so clicking it — to move, resize or double-click — leaves the
+//! keyboard with the app.
 
 // OpenGL is deprecated on macOS but present and working up to the latest
 // release, and it is the only API mpv's render API offers (plan D4).
@@ -25,7 +31,8 @@
 
 use std::ffi::{c_char, c_void};
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::cell::OnceCell;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
@@ -33,16 +40,17 @@ use std::time::Duration;
 
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
-use objc2::{AnyThread, MainThreadMarker, MainThreadOnly};
+use objc2::{define_class, msg_send, AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSAutoresizingMaskOptions, NSBackingStoreType, NSColor, NSOpenGLContext,
+    NSAutoresizingMaskOptions, NSBackingStoreType, NSColor, NSEvent, NSOpenGLContext,
     NSOpenGLContextParameter, NSOpenGLPFAAllowOfflineRenderers, NSOpenGLPFADoubleBuffer,
     NSOpenGLPFAOpenGLProfile, NSOpenGLPixelFormat, NSOpenGLPixelFormatAttribute,
-    NSOpenGLProfileVersion3_2Core, NSPanel, NSScreen, NSView, NSWindowCollectionBehavior,
-    NSWindowStyleMask,
+    NSOpenGLProfileVersion3_2Core, NSPanel, NSResponder, NSScreen, NSView,
+    NSWindowCollectionBehavior, NSWindowStyleMask,
 };
 use objc2_foundation::{
-    NSActivityOptions, NSObjectProtocol, NSPoint, NSProcessInfo, NSRect, NSSize, NSString,
+    NSActivityOptions, NSObject, NSObjectProtocol, NSPoint, NSProcessInfo, NSRect, NSSize,
+    NSString,
 };
 use objc2_open_gl::{
     CGLContextObj, CGLFlushDrawable, CGLLockContext, CGLSetCurrentContext, CGLUnlockContext,
@@ -59,6 +67,8 @@ pub type MainThread = Arc<dyn Fn(Box<dyn FnOnce() + Send>) + Send + Sync>;
 
 /// `NSMainMenuWindowLevel + 1`: above the menu bar of the chosen display.
 const FULLSCREEN_LEVEL: isize = 25;
+/// `NSNormalWindowLevel`.
+const NORMAL_LEVEL: isize = 0;
 
 /// Run `job` on the main thread and wait for its result.
 fn on_main<T: Send + 'static>(
@@ -85,6 +95,10 @@ struct Ui {
     contexts: [Retained<NSOpenGLContext>; 2],
     /// Keeps App Nap away while the output is showing (D7).
     activity: Option<Retained<ProtocolObject<dyn NSObjectProtocol>>>,
+    fullscreen: bool,
+    /// Where the user left the window (monitor, frame): going back from
+    /// fullscreen puts it there instead of re-centring it.
+    last_window: Option<(String, NSRect)>,
 }
 
 /// Moves main-thread-only values across threads; they are only dereferenced
@@ -147,6 +161,73 @@ impl Wake {
     }
 }
 
+/// The render threads' wakers, by slot, while attached.
+type Wakes = Arc<Mutex<[Option<Arc<Wake>>; 2]>>;
+
+/// What the content view needs to follow a resize by the user: the GL
+/// contexts must be told on the main thread, the render threads get the new
+/// size and redraw (a paused picture would otherwise stay stretched).
+struct ResizeTarget {
+    views: [Retained<NSView>; 2],
+    contexts: [Retained<NSOpenGLContext>; 2],
+    pixels: [Arc<AtomicU64>; 2],
+    wakes: Wakes,
+}
+
+impl ResizeTarget {
+    fn follow(&self, mtm: MainThreadMarker) {
+        for index in 0..2 {
+            self.contexts[index].update(mtm);
+            self.pixels[index].store(backing_pixels(&self.views[index]), Ordering::Relaxed);
+        }
+        if let Ok(wakes) = self.wakes.lock() {
+            for wake in wakes.iter().flatten() {
+                wake.poke(false);
+            }
+        }
+    }
+}
+
+struct ContentIvars {
+    double_clicks: Arc<AtomicU32>,
+    resize: OnceCell<ResizeTarget>,
+}
+
+define_class!(
+    // SAFETY: NSView may be subclassed; the overrides keep AppKit's
+    // signatures and `setFrameSize:` calls super first.
+    #[unsafe(super(NSView, NSResponder, NSObject))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "LibreTracksVideoContentView"]
+    #[ivars = ContentIvars]
+    struct ContentView;
+
+    impl ContentView {
+        /// The panel is never key, so without this the first click (half of
+        /// a double-click) would only be taken as focusing it.
+        #[unsafe(method(acceptsFirstMouse:))]
+        fn accepts_first_mouse(&self, _event: Option<&NSEvent>) -> bool {
+            true
+        }
+
+        #[unsafe(method(mouseDown:))]
+        fn mouse_down(&self, event: &NSEvent) {
+            if event.clickCount() == 2 {
+                self.ivars().double_clicks.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+
+        #[unsafe(method(setFrameSize:))]
+        fn set_frame_size(&self, size: NSSize) {
+            // SAFETY: NSView's own implementation, same signature.
+            let _: () = unsafe { msg_send![super(self), setFrameSize: size] };
+            if let Some(target) = self.ivars().resize.get() {
+                target.follow(self.mtm());
+            }
+        }
+    }
+);
+
 unsafe extern "C" fn on_mpv_update(data: *mut c_void) {
     // SAFETY: `data` is the `Wake` the render thread keeps alive until the
     // render context (and so this callback) is gone.
@@ -178,7 +259,11 @@ pub struct MacSurface {
     ui: Option<MainOnly<Ui>>,
     gl: [GlSlot; 2],
     renders: [Option<SlotRender>; 2],
-    fullscreen: bool,
+    wakes: Wakes,
+    /// Double-clicks on the panel (counted by the view) and how many the
+    /// backend has seen.
+    double_clicks: Arc<AtomicU32>,
+    seen_double_clicks: AtomicU32,
 }
 
 fn screens(mtm: MainThreadMarker) -> Vec<CocoaScreen> {
@@ -215,6 +300,45 @@ fn frame_for(plan: &SurfacePlan, mtm: MainThreadMarker) -> NSRect {
     )
 }
 
+/// Borderless and above the menu bar (if on top) for fullscreen; a small
+/// titled window the user can move and resize otherwise. Never activates the
+/// app, never becomes key.
+fn configure(ui: &mut Ui, plan: &SurfacePlan, mtm: MainThreadMarker) {
+    let panel = &ui.panel;
+    if !ui.fullscreen {
+        ui.last_window = Some((plan.monitor_name.clone(), panel.frame()));
+    }
+    let style = if plan.fullscreen {
+        NSWindowStyleMask::Borderless | NSWindowStyleMask::NonactivatingPanel
+    } else {
+        NSWindowStyleMask::Titled
+            | NSWindowStyleMask::Resizable
+            | NSWindowStyleMask::UtilityWindow
+            | NSWindowStyleMask::NonactivatingPanel
+    };
+    if panel.styleMask() != style {
+        panel.setStyleMask(style);
+    }
+    panel.setBecomesKeyOnlyIfNeeded(true);
+    panel.setIgnoresMouseEvents(false);
+    panel.setLevel(if plan.on_top { FULLSCREEN_LEVEL } else { NORMAL_LEVEL });
+    panel.setCollectionBehavior(if plan.fullscreen {
+        NSWindowCollectionBehavior::CanJoinAllSpaces
+            | NSWindowCollectionBehavior::FullScreenAuxiliary
+            | NSWindowCollectionBehavior::Stationary
+            | NSWindowCollectionBehavior::IgnoresCycle
+    } else {
+        NSWindowCollectionBehavior::FullScreenAuxiliary
+    });
+    let frame = match &ui.last_window {
+        Some((monitor, frame)) if !plan.fullscreen && *monitor == plan.monitor_name => *frame,
+        _ if plan.fullscreen => frame_for(plan, mtm),
+        _ => panel.frameRectForContentRect(frame_for(plan, mtm)),
+    };
+    panel.setFrame_display(frame, true);
+    ui.fullscreen = plan.fullscreen;
+}
+
 fn backing_pixels(view: &NSView) -> u64 {
     let backing = view.convertRectToBacking(view.bounds());
     pack(backing.size.width, backing.size.height)
@@ -236,45 +360,41 @@ fn end_activity(ui: &mut Ui) {
     }
 }
 
+/// What the surface shares with the main-thread UI it builds.
+struct Shared {
+    pixels: [Arc<AtomicU64>; 2],
+    wakes: Wakes,
+    double_clicks: Arc<AtomicU32>,
+}
+
 fn build_ui(
     plan: &SurfacePlan,
     title: &str,
+    shared_state: Shared,
     mtm: MainThreadMarker,
-) -> Result<(Ui, [(Cgl, u64); 2]), String> {
+) -> Result<(Ui, [Cgl; 2]), String> {
     let frame = frame_for(plan, mtm);
-    let style = if plan.fullscreen {
-        NSWindowStyleMask::Borderless | NSWindowStyleMask::NonactivatingPanel
-    } else {
-        NSWindowStyleMask::Titled | NSWindowStyleMask::NonactivatingPanel
-    };
     let panel = NSPanel::initWithContentRect_styleMask_backing_defer(
         NSPanel::alloc(mtm),
         frame,
-        style,
+        NSWindowStyleMask::Borderless | NSWindowStyleMask::NonactivatingPanel,
         NSBackingStoreType::Buffered,
         false,
     );
     // SAFETY: we keep our own reference; AppKit must not release it on close.
     unsafe { panel.setReleasedWhenClosed(false) };
     panel.setHidesOnDeactivate(false);
-    // Clicks go through: the panel can never become key (D2, focus).
-    panel.setIgnoresMouseEvents(true);
     panel.setBackgroundColor(Some(&NSColor::blackColor()));
     panel.setTitle(&NSString::from_str(title));
-    if plan.fullscreen {
-        panel.setLevel(FULLSCREEN_LEVEL);
-        panel.setCollectionBehavior(
-            NSWindowCollectionBehavior::CanJoinAllSpaces
-                | NSWindowCollectionBehavior::FullScreenAuxiliary
-                | NSWindowCollectionBehavior::Stationary
-                | NSWindowCollectionBehavior::IgnoresCycle,
-        );
-    }
 
-    let content = NSView::initWithFrame(
-        NSView::alloc(mtm),
-        NSRect::new(NSPoint::new(0.0, 0.0), frame.size),
-    );
+    let content = ContentView::alloc(mtm).set_ivars(ContentIvars {
+        double_clicks: Arc::clone(&shared_state.double_clicks),
+        resize: OnceCell::new(),
+    });
+    // SAFETY: NSView's designated initialiser.
+    let content: Retained<ContentView> = unsafe {
+        msg_send![super(content), initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), frame.size)]
+    };
     panel.setContentView(Some(&content));
 
     let mut attributes: [NSOpenGLPixelFormatAttribute; 6] = [
@@ -319,17 +439,29 @@ fn build_ui(
             )
         };
         context.setView(Some(&view), mtm);
-        shared.push((Cgl(context.CGLContextObj()), backing_pixels(&view)));
+        shared.push(Cgl(context.CGLContextObj()));
         views.push(view);
         contexts.push(context);
     }
-    panel.orderFrontRegardless();
-    let ui = Ui {
+    let mut ui = Ui {
         panel,
         views: [views.remove(0), views.remove(0)],
         contexts: [contexts.remove(0), contexts.remove(0)],
         activity: Some(begin_activity()),
+        // Built borderless: `configure` restyles when the plan is a window.
+        fullscreen: true,
+        last_window: None,
     };
+    let target = ResizeTarget {
+        views: ui.views.clone(),
+        contexts: ui.contexts.clone(),
+        pixels: shared_state.pixels,
+        wakes: shared_state.wakes,
+    };
+    configure(&mut ui, plan, mtm);
+    target.follow(mtm);
+    let _ = content.ivars().resize.set(target);
+    ui.panel.orderFrontRegardless();
     Ok((ui, [shared[0], shared[1]]))
 }
 
@@ -338,25 +470,36 @@ impl MacSurface {
     pub fn create(plan: &SurfacePlan, main: MainThread, title: &str) -> Result<Self, String> {
         let plan_owned = plan.clone();
         let title = title.to_string();
-        let (ui, shared) = on_main(&main, move |mtm| {
-            build_ui(&plan_owned, &title, mtm).map(|(ui, shared)| (MainOnly(ui), shared))
+        let pixels = [Arc::new(AtomicU64::new(pack(1.0, 1.0))), Arc::new(AtomicU64::new(pack(1.0, 1.0)))];
+        let wakes: Wakes = Arc::new(Mutex::new([None, None]));
+        let double_clicks = Arc::new(AtomicU32::new(0));
+        let shared_state = Shared {
+            pixels: pixels.clone(),
+            wakes: Arc::clone(&wakes),
+            double_clicks: Arc::clone(&double_clicks),
+        };
+        let (ui, cgls) = on_main(&main, move |mtm| {
+            build_ui(&plan_owned, &title, shared_state, mtm).map(|(ui, cgls)| (MainOnly(ui), cgls))
         })??;
-        let gl = shared.map(|(cgl, pixels)| GlSlot {
-            cgl,
-            pixels: Arc::new(AtomicU64::new(pixels)),
-        });
+        let [first, second] = pixels;
         Ok(Self {
             main,
             ui: Some(ui),
-            gl,
+            gl: [
+                GlSlot { cgl: cgls[0], pixels: first },
+                GlSlot { cgl: cgls[1], pixels: second },
+            ],
             renders: [None, None],
-            fullscreen: plan.fullscreen,
+            wakes,
+            double_clicks,
+            seen_double_clicks: AtomicU32::new(0),
         })
     }
 
-    /// Fullscreen and window use different panel styles: a change rebuilds.
-    pub fn fullscreen(&self) -> bool {
-        self.fullscreen
+    /// Whether the panel was double-clicked since the last call.
+    pub fn take_double_click(&self) -> bool {
+        let clicks = self.double_clicks.load(Ordering::Relaxed);
+        self.seen_double_clicks.swap(clicks, Ordering::Relaxed) != clicks
     }
 
     fn with_ui<T: Send + 'static>(
@@ -379,23 +522,11 @@ impl MacSurface {
         }
     }
 
-    /// Move to the plan's display/rect and follow its new size.
-    pub fn reposition(&mut self, plan: &SurfacePlan) {
+    /// Move to the plan's display/rect and restyle to its mode; the content
+    /// view follows the new size (see [`ResizeTarget`]).
+    pub fn apply(&mut self, plan: &SurfacePlan) {
         let plan = plan.clone();
-        let sizes = self.with_ui(move |ui, mtm| {
-            ui.panel.setFrame_display(frame_for(&plan, mtm), true);
-            let mut sizes = [0u64; 2];
-            for (index, context) in ui.contexts.iter().enumerate() {
-                context.update(mtm);
-                sizes[index] = backing_pixels(&ui.views[index]);
-            }
-            sizes
-        });
-        if let Some(sizes) = sizes {
-            for (slot, size) in self.gl.iter().zip(sizes) {
-                slot.pixels.store(size, Ordering::Relaxed);
-            }
-        }
+        self.with_ui(move |ui, mtm| configure(ui, &plan, mtm));
     }
 
     /// Bring the panel back after [`MacSurface::hide`].
@@ -440,6 +571,9 @@ impl MacSurface {
             .map_err(|error| error.to_string())?;
         match started.recv_timeout(Duration::from_secs(5)) {
             Ok(Ok(())) => {
+                if let Ok(mut wakes) = self.wakes.lock() {
+                    wakes[index] = Some(Arc::clone(&wake));
+                }
                 self.renders[index] = Some(SlotRender { wake, thread });
                 Ok(())
             }
@@ -457,6 +591,9 @@ impl MacSurface {
     /// Stop drawing slot `index`: its render context is freed before this
     /// returns, so the player can then be destroyed.
     pub fn detach(&mut self, index: usize) {
+        if let Ok(mut wakes) = self.wakes.lock() {
+            wakes[index] = None;
+        }
         if let Some(render) = self.renders[index].take() {
             render.wake.poke(true);
             let _ = render.thread.join();
@@ -519,12 +656,16 @@ fn render_loop(
     };
     context.set_update_callback(on_mpv_update, Arc::as_ptr(&wake) as *mut c_void);
     let mut capture = capture::Capture::from_env(index);
+    let mut drawn_size = (0, 0);
 
     while wake.wait() {
-        if context.update() & UPDATE_FRAME == 0 {
+        let size = unpack(pixels.load(Ordering::Relaxed));
+        // A resize redraws the current frame even with no new one (paused).
+        if context.update() & UPDATE_FRAME == 0 && size == drawn_size {
             continue;
         }
-        let (width, height) = unpack(pixels.load(Ordering::Relaxed));
+        drawn_size = size;
+        let (width, height) = size;
         // SAFETY: see above.
         unsafe {
             CGLLockContext(cgl);

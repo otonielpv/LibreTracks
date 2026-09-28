@@ -68,6 +68,15 @@ export function VideoSettingsTab() {
     };
   }, [refreshDisplays]);
 
+  // A double-click on the output switches the mode behind this tab's back:
+  // the backend saves it and reports it in the status.
+  const statusMode = outputStatus?.mode;
+  useEffect(() => {
+    if (statusMode && statusMode !== settingsRef.current.mode) {
+      setSettings((current) => ({ ...current, mode: statusMode }));
+    }
+  }, [statusMode]);
+
   const available = mediaStatus?.available ?? false;
   const disabled = !available;
 
@@ -166,6 +175,7 @@ export function VideoSettingsTab() {
       <label className="lt-settings-field">
         <span>{t("transport.video.settings.mode")}</span>
         <select
+          aria-label={t("transport.video.settings.mode")}
           disabled={disabled}
           value={settings.mode}
           onChange={(event) => apply({ mode: event.target.value as VideoOutputSettings["mode"] })}
@@ -173,6 +183,20 @@ export function VideoSettingsTab() {
           <option value="fullscreen">{t("transport.video.settings.modeFullscreen")}</option>
           <option value="window">{t("transport.video.settings.modeWindow")}</option>
         </select>
+        <small>{t("transport.video.settings.modeHint")}</small>
+      </label>
+
+      <label className="lt-settings-toggle">
+        <input
+          type="checkbox"
+          checked={settings.fullscreenOnTop}
+          disabled={disabled}
+          onChange={(event) => apply({ fullscreenOnTop: event.target.checked })}
+        />
+        <span className="lt-settings-toggle-copy">
+          <strong>{t("transport.video.settings.onTop")}</strong>
+          <small>{t("transport.video.settings.onTopHint")}</small>
+        </span>
       </label>
 
       <label className="lt-settings-field">

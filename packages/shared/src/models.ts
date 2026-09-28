@@ -1027,6 +1027,8 @@ export type VideoOutputSettings = {
   enabled: boolean;
   display: VideoDisplayId | null;
   mode: VideoOutputMode;
+  /** Fullscreen stays above every other window. Window mode never is. */
+  fullscreenOnTop: boolean;
   fit: VideoFit;
   idle: VideoIdleScreen;
   whenStopped: VideoStoppedScreen;
@@ -1038,6 +1040,7 @@ export const DEFAULT_VIDEO_OUTPUT_SETTINGS: VideoOutputSettings = {
   enabled: false,
   display: null,
   mode: "fullscreen",
+  fullscreenOnTop: true,
   fit: "contain",
   idle: { kind: "black" },
   whenStopped: "lastFrame",
@@ -1080,6 +1083,9 @@ export type VideoOutputStatus = {
   sharesAppDisplay: boolean;
   monitorName: string | null;
   opens: number;
+  /** Mode in force; a double-click on the output toggles it. */
+  mode?: VideoOutputMode;
+  modeToggles?: number;
 };
 
 /** Sync diagnostics of the video runtime (paso 07). */

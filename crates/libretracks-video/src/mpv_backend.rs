@@ -9,6 +9,10 @@
 //! Every player runs with `ao=null` and no audio decoding: the audio of a
 //! video is extracted to a normal audio clip (paso 11), so there are never two
 //! sources of the same sound.
+//!
+//! A double-click on the output toggles fullscreen <-> window (as in Ableton).
+//! Where mpv owns the window that gets the clicks (Windows, Linux) it reports
+//! it through a `keybind` + `script-message`; on macOS our own view does.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,6 +27,9 @@ use crate::settings::{fit_mpv_options, VideoOutputSettings};
 const PROP_TIME_POS: u64 = 1;
 const PROP_FRAME_DROPS: u64 = 2;
 const PROP_HWDEC: u64 = 3;
+
+/// `script-message` the double-click binding sends.
+const TOGGLE_MESSAGE: &str = "libretracks-toggle-fullscreen";
 
 fn failed(error: crate::VideoError) -> BackendError {
     BackendError::Failed(error.to_string())
@@ -82,15 +89,13 @@ impl MpvOutputBackend {
             .map(Arc::new)
             .ok_or_else(|| BackendError::Unavailable("esta libmpv no tiene la API de render".into()))?;
 
-        // Reuse the panel unless the mode changed (fullscreen and window are
-        // different panel styles).
+        // The panel is persistent and restyles itself between modes.
         match self.surface.as_mut() {
-            Some(surface) if surface.fullscreen() == plan.fullscreen => {
-                surface.reposition(plan);
+            Some(surface) => {
+                surface.apply(plan);
                 surface.show();
             }
-            _ => {
-                self.surface = None;
+            None => {
                 self.surface = Some(MacSurface::create(plan, main, "LibreTracks — Vídeo").map_err(BackendError::Failed)?);
             }
         }
@@ -133,7 +138,9 @@ impl MpvOutputBackend {
             ("osd-level", "0"),
             ("input-default-bindings", "no"),
             ("input-vo-keyboard", "no"),
-            ("input-cursor", "no"),
+            // Pointer events reach mpv only for the double-click binding
+            // below; nothing else is bound.
+            ("input-cursor", "yes"),
             ("cursor-autohide", "always"),
             ("ao", "null"),
             ("audio", "no"),
@@ -171,6 +178,9 @@ impl MpvOutputBackend {
             mpv.set_option(name, value).map_err(failed)?;
         }
         mpv.initialize().map_err(failed)?;
+        // Best effort: without it (an old libmpv) the mode is still changed
+        // from the settings.
+        let _ = mpv.command(&["keybind", "MBTN_LEFT_DBL", &format!("script-message {TOGGLE_MESSAGE}")]);
         mpv.observe_property(PROP_TIME_POS, "time-pos", ObserveAs::Double)
             .map_err(failed)?;
         mpv.observe_property(PROP_FRAME_DROPS, "frame-drop-count", ObserveAs::Int)
@@ -204,6 +214,9 @@ impl MpvOutputBackend {
             MpvEvent::EndFile(EndFileReason::Error(reason)) => {
                 Some(BackendEvent::LoadFailed { slot, reason })
             }
+            MpvEvent::ClientMessage(args) if args.first().map(String::as_str) == Some(TOGGLE_MESSAGE) => {
+                Some(BackendEvent::ToggleFullscreen)
+            }
             _ => None,
         }
     }
@@ -221,12 +234,8 @@ impl OutputBackend for MpvOutputBackend {
 
         #[cfg(windows)]
         {
-            let surface = crate::surface_win32::Win32Surface::create(
-                plan.rect,
-                plan.fullscreen,
-                "LibreTracks — Vídeo",
-            )
-            .map_err(BackendError::Failed)?;
+            let surface = crate::surface_win32::Win32Surface::create(plan, "LibreTracks — Vídeo")
+                .map_err(BackendError::Failed)?;
             for index in 0..2 {
                 let wid = surface.slot_wid(index).to_string();
                 self.players[index] = Some(self.new_player(settings, &[("wid", wid)])?);
@@ -236,23 +245,29 @@ impl OutputBackend for MpvOutputBackend {
 
         #[cfg(not(any(windows, target_os = "macos")))]
         {
-            let options: Vec<(&str, String)> = if plan.fullscreen {
-                vec![
-                    ("fs", "yes".into()),
-                    ("fs-screen-name", plan.monitor_name.clone()),
-                    ("screen-name", plan.monitor_name.clone()),
-                    ("border", "no".into()),
-                    ("ontop", "yes".into()),
-                ]
+            // Window geometry always, so leaving fullscreen (double-click)
+            // lands on a sensible window on the same display.
+            let geometry = if plan.fullscreen {
+                // Half the display, centred: what window mode plans too.
+                crate::monitors::SurfaceRect {
+                    x: plan.rect.x + plan.rect.width as i32 / 4,
+                    y: plan.rect.y + plan.rect.height as i32 / 4,
+                    width: plan.rect.width / 2,
+                    height: plan.rect.height / 2,
+                }
             } else {
-                vec![(
-                    "geometry",
-                    format!(
-                        "{}x{}+{}+{}",
-                        plan.rect.width, plan.rect.height, plan.rect.x, plan.rect.y
-                    ),
-                )]
+                plan.rect
             };
+            let options: Vec<(&str, String)> = vec![
+                ("fs", if plan.fullscreen { "yes" } else { "no" }.into()),
+                ("fs-screen-name", plan.monitor_name.clone()),
+                ("screen-name", plan.monitor_name.clone()),
+                ("ontop", if plan.on_top { "yes" } else { "no" }.into()),
+                (
+                    "geometry",
+                    format!("{}x{}+{}+{}", geometry.width, geometry.height, geometry.x, geometry.y),
+                ),
+            ];
             self.players[0] = Some(self.new_player(settings, &options)?);
         }
 
@@ -262,22 +277,26 @@ impl OutputBackend for MpvOutputBackend {
 
     fn reposition(&mut self, plan: &SurfacePlan) -> Result<(), BackendError> {
         #[cfg(windows)]
-        if let Some(surface) = &self.surface {
-            surface.reposition(plan.rect);
+        if let Some(surface) = self.surface.as_mut() {
+            surface.apply(plan);
             return Ok(());
         }
         #[cfg(target_os = "macos")]
         if let Some(surface) = self.surface.as_mut() {
-            surface.reposition(plan);
+            surface.apply(plan);
             return Ok(());
         }
+        // Linux: mpv's own window; it remembers its window geometry across
+        // fullscreen, so only the fullscreen screen, the state and on-top move.
         #[cfg(not(any(windows, target_os = "macos")))]
         if let Some(player) = &self.players[0] {
-            if plan.fullscreen {
-                player
-                    .set_property_string("fs-screen-name", &plan.monitor_name)
-                    .map_err(failed)?;
-            }
+            player
+                .set_property_string("fs-screen-name", &plan.monitor_name)
+                .map_err(failed)?;
+            player.set_property_flag("ontop", plan.on_top).map_err(failed)?;
+            player
+                .set_property_flag("fullscreen", plan.fullscreen)
+                .map_err(failed)?;
         }
         let _ = plan;
         Ok(())
@@ -396,6 +415,11 @@ impl OutputBackend for MpvOutputBackend {
             };
             // Block on the first player only; drain the other.
             let mut wait = if index == 0 { max_wait.as_secs_f64() } else { 0.0 };
+            #[cfg(target_os = "macos")]
+            if index == 0 && self.surface.as_ref().is_some_and(|surface| surface.take_double_click()) {
+                events.push(BackendEvent::ToggleFullscreen);
+                wait = 0.0;
+            }
             while let Some(event) = player.wait_event(wait) {
                 wait = 0.0;
                 if let Some(event) = Self::translate(slot, event) {

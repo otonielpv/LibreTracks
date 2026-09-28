@@ -239,6 +239,8 @@ The first time you add a video the **wizard** opens: pick the display (each one 
 
 Everything can be changed later in `Settings → Video`: display, fullscreen or window, fit (contain, cover, stretch), idle screen (black or an image), what to show when stopped, and hardware decoding. With a single monitor you can use window mode meanwhile.
 
+**Double-click the video** to switch from fullscreen to a window you can move and resize, and double-click again to go back. In fullscreen the video stays in front of everything, notifications included; to let other windows come in front, turn off `Fullscreen always in front` in `Settings → Video`.
+
 The badge in the top bar tells which display the video is on and warns when it is disconnected. Plug it back and the picture returns by itself.
 
 ### Calibrating the delay

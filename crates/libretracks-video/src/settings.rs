@@ -71,7 +71,7 @@ impl HwDecMode {
 pub const MIN_LATENCY_OFFSET_MS: i32 = -500;
 pub const MAX_LATENCY_OFFSET_MS: i32 = 500;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoOutputSettings {
     #[serde(default)]
@@ -80,6 +80,11 @@ pub struct VideoOutputSettings {
     pub display: Option<DisplayId>,
     #[serde(default)]
     pub mode: VideoOutputMode,
+    /// Fullscreen stays above every other window (the projector never shows
+    /// a notification or another app). Off: it behaves like a normal window
+    /// and other windows can come in front. Window mode is never on top.
+    #[serde(default = "default_true")]
+    pub fullscreen_on_top: bool,
     #[serde(default)]
     pub fit: VideoFit,
     #[serde(default)]
@@ -96,6 +101,27 @@ pub struct VideoOutputSettings {
     /// Length of "fade to black" (paso 13); `None` = 1 s.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub black_fade_ms: Option<u32>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for VideoOutputSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            display: None,
+            mode: VideoOutputMode::default(),
+            fullscreen_on_top: true,
+            fit: VideoFit::default(),
+            idle: IdleScreen::default(),
+            when_stopped: StoppedScreen::default(),
+            latency_offset_ms: 0,
+            hwdec: HwDecMode::default(),
+            black_fade_ms: None,
+        }
+    }
 }
 
 impl VideoOutputSettings {
@@ -132,6 +158,8 @@ mod tests {
         assert!(!settings.enabled);
         assert_eq!(settings.fit, VideoFit::Contain);
         assert_eq!(settings.when_stopped, StoppedScreen::LastFrame);
+        // Before the setting existed fullscreen was always on top.
+        assert!(settings.fullscreen_on_top);
     }
 
     #[test]
@@ -146,6 +174,7 @@ mod tests {
                 y: 0,
             }),
             mode: VideoOutputMode::Window,
+            fullscreen_on_top: false,
             fit: VideoFit::Cover,
             idle: IdleScreen::Image {
                 path: "D:/logo.png".into(),
@@ -159,6 +188,7 @@ mod tests {
         assert_eq!(json["idle"]["kind"], "image");
         assert_eq!(json["whenStopped"], "black");
         assert_eq!(json["latencyOffsetMs"], -80);
+        assert_eq!(json["fullscreenOnTop"], false);
         let back: VideoOutputSettings = serde_json::from_value(json).expect("parse");
         assert_eq!(back, settings);
     }

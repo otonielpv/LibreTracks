@@ -18,7 +18,7 @@ thiserror.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSArray", "NSEnumerator", "NSGeometry", "NSObject", "NSProcessInfo"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSWindow", "NSPanel", "NSView", "NSScreen", "NSColor", "NSGraphics", "NSOpenGL", "NSOpenGLView", "objc2-open-gl", "objc2-core-foundation"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSEvent", "NSWindow", "NSPanel", "NSView", "NSScreen", "NSColor", "NSGraphics", "NSOpenGL", "NSOpenGLView", "objc2-open-gl", "objc2-core-foundation"] }
 objc2-open-gl = { version = "0.3", default-features = false, features = ["std", "CGLTypes", "CGLCurrent"] }
 
 [dev-dependencies]

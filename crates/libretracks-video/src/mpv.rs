@@ -33,6 +33,12 @@ struct RawEventProperty {
 }
 
 #[repr(C)]
+struct RawEventClientMessage {
+    num_args: c_int,
+    args: *const *const c_char,
+}
+
+#[repr(C)]
 struct RawEventEndFile {
     reason: c_int,
     error: c_int,
@@ -57,6 +63,7 @@ const EVENT_COMMAND_REPLY: c_int = 5;
 const EVENT_START_FILE: c_int = 6;
 const EVENT_END_FILE: c_int = 7;
 const EVENT_FILE_LOADED: c_int = 8;
+const EVENT_CLIENT_MESSAGE: c_int = 16;
 const EVENT_VIDEO_RECONFIG: c_int = 17;
 const EVENT_SEEK: c_int = 20;
 const EVENT_PLAYBACK_RESTART: c_int = 21;
@@ -224,6 +231,8 @@ pub enum MpvEvent {
         id: u64,
         error: Option<String>,
     },
+    /// `script-message` arguments, e.g. from a `keybind`.
+    ClientMessage(Vec<String>),
     Other(i32),
 }
 
@@ -481,6 +490,20 @@ impl Mpv {
                 id: raw.reply_userdata,
                 error: (raw.error < 0).then(|| self.api.error_message(raw.error)),
             }),
+            EVENT_CLIENT_MESSAGE => {
+                let data = raw.data as *const RawEventClientMessage;
+                if data.is_null() {
+                    return Some(MpvEvent::ClientMessage(Vec::new()));
+                }
+                // SAFETY: CLIENT_MESSAGE carries an mpv_event_client_message
+                // with `num_args` zero-terminated strings.
+                let message = unsafe { &*data };
+                let args = (0..message.num_args.max(0) as usize)
+                    .map(|index| unsafe { CStr::from_ptr(*message.args.add(index)) })
+                    .map(|arg| arg.to_string_lossy().into_owned())
+                    .collect();
+                Some(MpvEvent::ClientMessage(args))
+            }
             EVENT_END_FILE => {
                 let data = raw.data as *const RawEventEndFile;
                 let reason = if data.is_null() {

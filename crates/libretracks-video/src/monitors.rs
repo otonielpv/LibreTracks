@@ -89,9 +89,22 @@ pub struct SurfacePlan {
     /// OS name of the monitor, for surfaces that pick it by name (mpv's own
     /// window on Linux).
     pub monitor_name: String,
-    /// The chosen display is the one the app window is on: forced to window
-    /// mode so the output does not cover the app, and the UI warns.
+    /// The output is a window on the display the app window is on (forced
+    /// there so it does not cover the app, unless the user asked for
+    /// fullscreen with a double-click), and the UI warns.
     pub shares_app_display: bool,
+    /// Above every other window. Only ever for fullscreen.
+    pub on_top: bool,
+}
+
+/// What the user asked for beyond the display and the mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PlanOptions {
+    /// `VideoOutputSettings::fullscreen_on_top`.
+    pub on_top: bool,
+    /// Fullscreen even on the app's display: a double-click on the output
+    /// window asked for it, so covering the app is what the user wants.
+    pub cover_app_display: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,6 +121,7 @@ pub enum PlacementOutcome {
 pub fn plan_surface(
     saved: Option<&DisplayId>,
     mode: VideoOutputMode,
+    options: PlanOptions,
     monitors: &[MonitorInfo],
     app_monitor_name: Option<&str>,
 ) -> PlacementOutcome {
@@ -117,8 +131,9 @@ pub fn plan_surface(
     let Some(monitor) = match_display(saved, monitors) else {
         return PlacementOutcome::DisplayLost;
     };
-    let shares_app_display = app_monitor_name == Some(monitor.name.as_str());
-    let fullscreen = mode == VideoOutputMode::Fullscreen && !shares_app_display;
+    let on_app_display = app_monitor_name == Some(monitor.name.as_str());
+    let fullscreen =
+        mode == VideoOutputMode::Fullscreen && (!on_app_display || options.cover_app_display);
     let rect = if fullscreen {
         SurfaceRect {
             x: monitor.x,
@@ -141,7 +156,8 @@ pub fn plan_surface(
         rect,
         fullscreen,
         monitor_name: monitor.name.clone(),
-        shares_app_display,
+        shares_app_display: on_app_display && !fullscreen,
+        on_top: fullscreen && options.on_top,
     })
 }
 
@@ -224,13 +240,14 @@ mod tests {
             plan_surface(
                 Some(&saved("\\\\.\\DISPLAY2", 1920, 0, 1280, 720)),
                 VideoOutputMode::Fullscreen,
+                PlanOptions::default(),
                 &monitors,
                 Some("\\\\.\\DISPLAY1"),
             ),
             PlacementOutcome::DisplayLost
         );
         assert_eq!(
-            plan_surface(None, VideoOutputMode::Fullscreen, &monitors, None),
+            plan_surface(None, VideoOutputMode::Fullscreen, PlanOptions::default(), &monitors, None),
             PlacementOutcome::NoDisplay
         );
     }
@@ -244,12 +261,14 @@ mod tests {
         let PlacementOutcome::Place(plan) = plan_surface(
             Some(&monitors[1].id()),
             VideoOutputMode::Fullscreen,
+            PlanOptions { on_top: true, cover_app_display: false },
             &monitors,
             Some("\\\\.\\DISPLAY1"),
         ) else {
             panic!("should place");
         };
         assert!(plan.fullscreen);
+        assert!(plan.on_top);
         assert_eq!(plan.rect, SurfaceRect { x: -1920, y: 0, width: 1920, height: 1080 });
         assert!(!plan.shares_app_display);
     }
@@ -260,6 +279,7 @@ mod tests {
         let PlacementOutcome::Place(plan) = plan_surface(
             Some(&monitors[0].id()),
             VideoOutputMode::Fullscreen,
+            PlanOptions { on_top: true, cover_app_display: false },
             &monitors,
             Some("\\\\.\\DISPLAY1"),
         ) else {
@@ -267,6 +287,27 @@ mod tests {
         };
         assert!(!plan.fullscreen);
         assert!(plan.shares_app_display);
+        // A window is never on top, whatever the setting says.
+        assert!(!plan.on_top);
         assert_eq!(plan.rect, SurfaceRect { x: 480, y: 270, width: 960, height: 540 });
+    }
+
+    #[test]
+    fn a_double_click_can_cover_the_app_display_and_on_top_is_optional() {
+        let monitors = [monitor("\\\\.\\DISPLAY1", 0, 0, 1920, 1080)];
+        let PlacementOutcome::Place(plan) = plan_surface(
+            Some(&monitors[0].id()),
+            VideoOutputMode::Fullscreen,
+            PlanOptions { on_top: false, cover_app_display: true },
+            &monitors,
+            Some("\\\\.\\DISPLAY1"),
+        ) else {
+            panic!("should place");
+        };
+        assert!(plan.fullscreen);
+        assert!(!plan.on_top);
+        // Covering it on purpose: nothing to warn about.
+        assert!(!plan.shares_app_display);
+        assert_eq!(plan.rect, SurfaceRect { x: 0, y: 0, width: 1920, height: 1080 });
     }
 }

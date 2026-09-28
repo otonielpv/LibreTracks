@@ -684,6 +684,7 @@ mod video_setup {
             .name("lt-video-watch".into())
             .spawn(move || {
                 let mut last_state = None;
+                let mut seen_mode_toggles = 0;
                 let mut tick: u32 = 0;
                 loop {
                     std::thread::sleep(std::time::Duration::from_millis(250));
@@ -697,10 +698,23 @@ mod video_setup {
                         });
                     }
                     let status = video.output_status();
+                    // A double-click on the output switched fullscreen ⇄
+                    // window: save it like a change made in Settings.
+                    if status.mode_toggles != seen_mode_toggles {
+                        seen_mode_toggles = status.mode_toggles;
+                        let mut settings = video.settings();
+                        if settings.mode != status.mode {
+                            settings.mode = status.mode;
+                            let _ = crate::commands::video::persist_and_apply_output_settings(
+                                &app, settings,
+                            );
+                        }
+                    }
                     let key = (
                         status.state.clone(),
                         status.shares_app_display,
                         status.monitor_name.clone(),
+                        status.mode,
                     );
                     if last_state.as_ref() != Some(&key) {
                         last_state = Some(key);
