@@ -12330,11 +12330,14 @@ html.lt-ios body {
   font-size: 14px;
 }
 
-/* A button (it shows/hides the output), but it reads as a status chip. */
+/* A button (it shows/hides the output), but it reads as a status chip. Its
+   slot (.lt-device-status-slot) lets clicks through to what is underneath,
+   so the button takes them back. */
 .lt-video-output-badge {
   font-family: inherit;
   line-height: inherit;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .lt-video-output-badge:disabled {
