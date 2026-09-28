@@ -692,7 +692,7 @@ pistas a la vez",
   the thing that changed; those have no such thing, and bolting a session
   screenshot onto them says nothing. An `art` spec omits `shot` and names
   `art` instead (a piece in `scripts/poster/art.mjs`), plus the optional
-  `artWidth`, `artCaption`, `artLabel`, `artStamp`, `headlineSize`, and
+  `artWidth`, `artCaption`, `artLabel`, `artStamp`, `artStores`, `headlineSize`, and
   `badges`.
 - `badges`: optional, only read by the art pieces. Third-party logos
   (Ko-fi, Google Play, App Store) sitting next to the spec, embedded exactly

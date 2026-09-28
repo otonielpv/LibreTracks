@@ -58,15 +58,21 @@ function kofi(theme, assets = {}, spec = {}) {
  */
 function stores(theme, assets, spec) {
   const label = spec.artLabel ?? 'Instalar';
-  const [gplay, apple] = assets.badgeUris ?? [];
+  // `artStores` names the store behind each entry of `badges`, in order, so a
+  // launch that reaches one store before the other can show only that one.
+  // Default: both, Google Play first.
+  const STORE = {
+    gplay: { cls: 'store-badge store-badge-gplay', alt: 'Disponible en Google Play', name: 'Google Play' },
+    apple: { cls: 'store-badge', alt: 'Consíguelo en el App Store', name: 'App Store' },
+  };
+  const names = spec.artStores ?? ['gplay', 'apple'];
+  const uris = assets.badgeUris ?? [];
   // No badges in the folder yet? Fall back to plain name plates, so the poster
   // still renders while the real artwork is being downloaded.
   const plates =
-    gplay && apple
-      ? `<img class="store-badge store-badge-gplay" src="${gplay}" alt="Disponible en Google Play">
-    <img class="store-badge" src="${apple}" alt="Consíguelo en el App Store">`
-      : `<div class="plate">Google Play</div>
-    <div class="plate">App Store</div>`;
+    uris.length === names.length
+      ? names.map((n, i) => `<img class="${STORE[n].cls}" src="${uris[i]}" alt="${STORE[n].alt}">`).join('\n    ')
+      : names.map((n) => `<div class="plate">${STORE[n].name}</div>`).join('\n    ');
   const css = `
 .art-stores{width:100%;display:flex;flex-direction:column;align-items:center;gap:30px;}
 /* aspect-ratio, not a content-driven height: a phone as wide as it is tall
