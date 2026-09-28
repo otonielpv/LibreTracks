@@ -8334,6 +8334,7 @@ export function TransportPanelContent() {
             <TimelineContextMenus
               contextMenu={contextMenu}
               onDismiss={() => setContextMenu(null)}
+              onNavigate={setContextMenu}
             />
 
             {colorPickerPopover ? (

@@ -67,7 +67,9 @@ export function MidiTrackHeader({
 
   const headerStyle = {
     height: trackHeight,
-    paddingLeft: 8 + trackDepth * 12,
+    // Sangria de carpeta solo en el nombre (ver `.lt-track-title-row` en
+    // styles.css): los controles quedan en columna con el resto de pistas.
+    "--lt-track-indent": `${trackDepth * 12}px`,
     ...(trackColor ? { "--lt-track-color": trackColor } : {}),
   } as CSSProperties;
 

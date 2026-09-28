@@ -43,6 +43,7 @@ const es = {
   common: {
     systemDefault: "Predeterminado del sistema",
     close: "Cerrar",
+    back: "Atrás",
     cancel: "Cancelar",
     apply: "Aplicar",
     create: "Crear",

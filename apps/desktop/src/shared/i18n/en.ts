@@ -43,6 +43,7 @@ const en = {
   common: {
     systemDefault: "System Default",
     close: "Close",
+    back: "Back",
     cancel: "Cancel",
     apply: "Apply",
     create: "Create",

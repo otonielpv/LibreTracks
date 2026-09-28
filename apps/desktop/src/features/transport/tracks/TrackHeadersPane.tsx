@@ -1,6 +1,7 @@
 import {
   useEffect,
   useRef,
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -275,7 +276,12 @@ export function TrackHeadersPane({
               >
                 <div
                   className={`lt-track-header ${trackDensityClass} is-library-preview`}
-                  style={{ height: rowHeight, paddingLeft: 8 + track.depth * 12 }}
+                  style={
+                    {
+                      height: rowHeight,
+                      "--lt-track-indent": `${track.depth * 12}px`,
+                    } as CSSProperties
+                  }
                   aria-hidden="true"
                 >
                   <div className="lt-track-header-body">

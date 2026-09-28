@@ -26,6 +26,16 @@ body,
   margin: 0;
 }
 
+/* Sin esto iOS aplica su "text autosizing": tras maquetar, agranda por su
+   cuenta el texto de los bloques que considera anchos, y un menu (p. ej. el de
+   anadir marca de seccion) salia con un tamano y al rato cambiaba a uno mayor.
+   El preflight de Tailwind lo traia, pero con Tailwind 4 `@tailwind base` ya
+   no inyecta nada, asi que se declara aqui. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   overflow: hidden;
   background:
@@ -4541,8 +4551,20 @@ html.lt-ios body {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
   color: #e5e2e1;
   z-index: 2;
+  padding-left: 8px;
   user-select: none;
   -webkit-user-select: none;
+}
+
+/* Sangria de carpeta: solo el nombre (y el contador de la carpeta), como en
+   Ableton. La cabecera entera ya no se desplaza, asi que botones, faders y
+   rutas quedan en la misma columna en todas las pistas. `--lt-track-indent`
+   lo pone TrackHeaderItem segun la profundidad. */
+.lt-track-title-row > :first-child,
+.lt-track-header-main > .lt-track-meta,
+.lt-midi-track-header .lt-midi-header-text,
+.lt-video-track-header .lt-video-header-icon {
+  margin-left: var(--lt-track-indent, 0px);
 }
 
 .lt-track-header-body {
@@ -4555,7 +4577,10 @@ html.lt-ios body {
   min-height: 0;
   align-items: stretch;
   gap: 0.55rem;
-  padding: 0.7rem 0.85rem 0.7rem 0.8rem;
+  /* Laterales IGUALES a los de las densidades compact/condensed/micro/lane.
+     Cada pista puede tener su propio alto, y con 0.8rem aqui una pista alta
+     entre otras bajas tenia el nombre y el medidor corridos unos 9 px. */
+  padding: 0.7rem 0.35rem 0.7rem 0.25rem;
 }
 
 .lt-track-meter {
@@ -6009,6 +6034,30 @@ html.lt-ios body {
   background: #2a2a2a;
 }
 
+/* Cabecera con "atras" cuando el menu es un submenu. */
+.lt-context-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding-bottom: 0.3rem;
+}
+
+.lt-context-menu-header strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-bottom: 0;
+}
+
+.lt-context-menu button.lt-context-menu-back {
+  flex: 0 0 auto;
+  padding: 0.15rem;
+  color: #bacac5;
+}
+
+.lt-context-menu-back .material-symbols-outlined {
+  font-size: 16px;
+}
+
 .lt-context-menu-swatch {
   width: 12px;
   height: 12px;
@@ -7081,6 +7130,24 @@ html.lt-ios body {
 .lt-compact-clip-menu.is-key-picker {
   max-height: 60vh;
   overflow-y: auto;
+}
+
+/* "Atras" del selector de nota: fija arriba para que siga a mano aunque la
+   lista de 24 tonalidades se haya desplazado. */
+.lt-compact-clip-menu-item.lt-compact-clip-menu-back {
+  position: sticky;
+  top: -0.4rem;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: rgb(15 18 19);
+  border-bottom: 1px solid rgba(186, 202, 197, 0.12);
+  color: #bacac5;
+}
+
+.lt-compact-clip-menu-back .material-symbols-outlined {
+  font-size: 16px;
 }
 
 .lt-compact-song-play {
@@ -8918,6 +8985,18 @@ html.lt-ios body {
 
 .lt-mobile .lt-context-menu.is-mobile-sheet strong {
   padding-bottom: 0.5rem;
+}
+
+/* Con flecha de "atras" a la izquierda el titulo ocupa el centro y el aspa
+   sigue pegada a la derecha. */
+.lt-mobile .lt-context-menu-sheet-header strong {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lt-mobile .lt-context-menu-sheet-header .lt-context-menu-back
+  .material-symbols-outlined {
+  font-size: 20px;
 }
 
 .lt-mobile .lt-context-menu.is-mobile-sheet button {
@@ -11624,8 +11703,23 @@ html.lt-ios body {
   row-gap: 0.2rem;
 }
 
-.lt-mobile .lt-track-header:not(.is-lane) .lt-track-title-row strong {
-  flex: 1 1 100%;
+/* Lo que baja de linea son los BOTONES, no el nombre. Antes el nombre llevaba
+   `flex-basis: 100%` y en una carpeta el aspa `-` se quedaba sola arriba con el
+   nombre debajo, desalineado del resto; el rotulo "mono" bajaba con M/S y los
+   empujaba a la derecha. Ahora la primera linea es aspa + nombre + rotulo, y
+   M/S ocupan siempre la segunda, pegados a la izquierda. */
+.lt-mobile .lt-track-header .lt-track-title-row strong {
+  flex: 0 1 auto;
+}
+
+.lt-mobile .lt-track-header:not(.is-lane) .lt-mobile-track-state {
+  flex: 0 0 100%;
+}
+
+/* En la fila de una linea M/S van al borde derecho, en columna con los de las
+   demas pistas. Pegados al nombre se movian segun lo largo que fuera. */
+.lt-mobile .lt-track-header.is-lane .lt-mobile-track-state {
+  margin-left: auto;
 }
 
 /* Filas altas: el tamano mayor. */
@@ -11679,11 +11773,19 @@ html.lt-ios body {
 
 /* Y el contenido se centra en la fila en vez de pegarse arriba: lo que sobra
    se reparte a los dos lados en vez de acumularse debajo. */
-.lt-mobile .lt-track-header-content,
-.lt-mobile .lt-track-header-summary {
+/* Especificidad de tres clases para ganar a las de densidad
+   (`.lt-track-header.is-compact .lt-track-header-summary`), que ponen
+   `align-items: center` y convierten `content` en rejilla. */
+.lt-mobile .lt-track-header .lt-track-header-content,
+.lt-mobile .lt-track-header .lt-track-header-summary {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  /* `stretch` y no `center`: en columna ese centrado es HORIZONTAL, cada
+     cabecera se colocaba segun el ancho de su nombre y uno largo se desbordaba
+     por los dos lados -cortado por la izquierda- en vez de acabar en puntos
+     suspensivos. */
+  align-items: stretch;
 }
 
 /* La fila desplegada. Va superpuesta a proposito: el alto de la fila lo

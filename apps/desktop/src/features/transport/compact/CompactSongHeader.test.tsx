@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { SongRegionSummary } from "@libretracks/shared/models";
@@ -53,5 +53,16 @@ describe("CompactSongHeader", () => {
 
     expect(container.firstElementChild?.classList.contains("is-queued")).toBe(false);
     expect(screen.queryByText("En cola")).toBeNull();
+  });
+
+  it("el selector de nota tiene atras y vuelve al menu raiz", () => {
+    const { container } = render(renderHeader(false));
+    fireEvent.contextMenu(container.firstElementChild!);
+    fireEvent.click(screen.getByText("Nota de la canción ▸"));
+    expect(screen.getByText(/Sin nota/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "common.back" }));
+    expect(screen.queryByText(/Sin nota/)).toBeNull();
+    expect(screen.getByText("Renombrar canción")).toBeTruthy();
   });
 });

@@ -93,6 +93,10 @@ export function CompactSongHeaderComponent({
   }, []);
   // En Android, atras cierra el menu contextual en vez de salir.
   useDismissOnBack(closeContextMenu, contextMenu !== null);
+  // Con el selector de nota abierto, atras vuelve al menu raiz antes de
+  // cerrar. Se registra despues que el del menu, asi que queda encima.
+  const closeKeyMenu = useCallback(() => setKeyMenuOpen(false), []);
+  useDismissOnBack(closeKeyMenu, contextMenu !== null && keyMenuOpen);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -256,6 +260,17 @@ export function CompactSongHeaderComponent({
         >
           {keyMenuOpen ? (
             <>
+              <button
+                type="button"
+                className="lt-compact-clip-menu-item lt-compact-clip-menu-back"
+                aria-label={t("common.back", { defaultValue: "Atrás" })}
+                onClick={closeKeyMenu}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  arrow_back
+                </span>
+                Nota de la canción
+              </button>
               <button
                 type="button"
                 className="lt-compact-clip-menu-item"

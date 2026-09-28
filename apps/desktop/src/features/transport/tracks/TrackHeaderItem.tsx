@@ -313,7 +313,10 @@ function TrackHeaderItemComponent({
 
   const headerStyle = {
     height: trackHeight,
-    paddingLeft: 8 + trackDepth * 12,
+    // La profundidad en carpetas sangra solo el NOMBRE, como Ableton. Sangrando
+    // la cabecera entera, los botones y faders de las pistas hijas quedaban
+    // desplazados respecto a los del resto.
+    "--lt-track-indent": `${trackDepth * 12}px`,
     ...(trackColor ? { "--lt-track-color": trackColor } : {}),
   } as CSSProperties;
 
