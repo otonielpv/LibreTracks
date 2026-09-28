@@ -107,6 +107,23 @@ Rules:
 - ES and EN sections MUST exist (the in-app update modal parses them by
   language — see `apps/desktop/src/shared/updateCheck.ts:SECTION_HEADINGS`).
 - Headings must start with `## Novedades de v<NEW>` and `## What's New in v<NEW>` literally — the parser matches these.
+- **A new feature says how to reach it, in one short clause.** Users read
+  "Render a song's audio" and then cannot find it. After the benefit, add the
+  path: `Cómo: clic derecho sobre la canción (mantén pulsado en el móvil) →
+  "Renderizar audio…".` / `How: right-click the song (long-press on mobile) →
+  "Render audio…".` Rules for that clause:
+  - Very brief: the gesture and the path, nothing more. It is a signpost, not
+    a tutorial — no step lists, no explanation of options.
+  - Give the gesture for every platform the feature exists on (right-click on
+    desktop, long-press on mobile).
+  - Quote menu items, settings and warnings **exactly as the app labels them**,
+    in each language — check `apps/desktop/src/shared/i18n/es.ts` and `en.ts`
+    rather than writing from memory. Settings are named as `Configuración →
+    <pestaña>` / `Settings → <tab>`.
+  - Verify the gesture in the code or the commit, not from what the feature is
+    "probably" bound to (v1.13.0: render is a right-click, not a double-click).
+  - Fixes and changes to existing behaviour need no "how"; only things the
+    user has to go and find.
 - Keep entries to 5–7 high-signal bullets total (one unified list, not per
   platform). Group related commits. State a shared change once, unlabeled —
   never duplicate it under a platform tag.
@@ -764,6 +781,10 @@ Notes:
   the greeting, the closing line and the URL stay plain.
 - Bullets are user-facing benefits, lifted from the Spanish section of
   `docs/releases/v<NEW>.md` but rewritten for a conversational tone.
+- **Keep the "how" for new features**, shortened to fit the post: the same
+  gesture and path as the release notes (e.g. `Clic derecho en la canción
+  (mantener pulsado en el móvil) y "Renderizar audio…"`). A post that announces
+  a feature without saying where it is gets answered with "¿dónde está?".
 - Keep accents on key words ("rápida", "más", "directo"), but it's OK to
   leave a few off — the original channel does too. Don't over-correct.
 - Download URL is the localized Spanish page: `/es/download/`, not `/downloads`.
@@ -848,6 +869,9 @@ Reddit is not the Facebook group and the copy does not carry over:
   that one comes out by hand.
 - **No sales voice and no greeting.** Plain statements of what changed.
 - **Markdown, not plain text** — unlike Facebook, Reddit renders it.
+- **The "how" comes from the release notes.** The generator lifts the English
+  bullets verbatim, so the `How: …` clause from step 3 carries over; if a
+  bullet reached Reddit without it, fix the release notes, not the draft.
 - English by default. The subreddit decides, not the release.
 
 ### Poster plus download links
