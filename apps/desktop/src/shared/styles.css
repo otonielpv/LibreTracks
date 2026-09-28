@@ -30,10 +30,14 @@ body,
    cuenta el texto de los bloques que considera anchos, y un menu (p. ej. el de
    anadir marca de seccion) salia con un tamano y al rato cambiaba a uno mayor.
    El preflight de Tailwind lo traia, pero con Tailwind 4 `@tailwind base` ya
-   no inyecta nada, asi que se declara aqui. */
+   no inyecta nada, asi que se declara aqui.
+
+   SOLO la forma con prefijo, y no anadir `text-size-adjust` en ninguna otra
+   regla de `html`: Lightning CSS fusiona las dos y conserva la sin prefijo,
+   que iOS no entiende (comprobado en el CSS compilado). main.tsx ademas la
+   fija en linea en iOS, que no depende de la compilacion. */
 html {
   -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
 }
 
 body {

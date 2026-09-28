@@ -22,6 +22,11 @@ if (isMobileApp) {
 }
 if (isIOSApp) {
   document.documentElement.classList.add("lt-ios");
+  // Apaga el "text autosizing" de iOS, que agrandaba la letra de los menus al
+  // rato de abrirlos. Va en linea y no solo en styles.css porque Lightning CSS
+  // fusiona `-webkit-text-size-adjust` con la forma sin prefijo y se queda con
+  // esta ultima, que el WKWebView no entiende: la regla del CSS no llegaba.
+  document.documentElement.style.setProperty("-webkit-text-size-adjust", "100%");
 }
 
 // One line, once, on mobile: what the WebView believes it has to draw on.
