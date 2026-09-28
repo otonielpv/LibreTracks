@@ -94,6 +94,11 @@ import {
   type ExternalDropKind,
   type ExternalDropPreview,
 } from "../library/dragDrop";
+import {
+  EXTERNAL_DROP_LABELS,
+  externalDropBadgeColors,
+  externalDropGuideColors,
+} from "./externalDropLook";
 
 // Must stay in sync with the lane layout in Renderer/drawBackground.ts and
 // the ruler heights in styles.css: 94px is the mobile lanes' bottom edge (87)
@@ -1334,22 +1339,7 @@ export function TimelineCanvasPane({
                 bottom: 0,
                 left: externalDropGuideLeft,
                 width: 1,
-                background:
-                  externalDropPreview.kind === "audio"
-                    ? "#7ae582"
-                    : externalDropPreview.kind === "package"
-                      ? "#ffb86b"
-                      : externalDropPreview.kind === "unknown"
-                        ? "#76b8ff"
-                        : "#ff6b6b",
-                boxShadow:
-                  externalDropPreview.kind === "audio"
-                    ? "0 0 0 1px rgba(122,229,130,0.24), 0 0 18px rgba(122,229,130,0.44)"
-                    : externalDropPreview.kind === "package"
-                      ? "0 0 0 1px rgba(255,184,107,0.22), 0 0 18px rgba(255,184,107,0.42)"
-                      : externalDropPreview.kind === "unknown"
-                        ? "0 0 0 1px rgba(118,184,255,0.22), 0 0 18px rgba(118,184,255,0.42)"
-                        : "0 0 0 1px rgba(255,107,107,0.22), 0 0 18px rgba(255,107,107,0.42)",
+                ...externalDropGuideColors(externalDropPreview.kind),
                 pointerEvents: "none",
               }}
             />
@@ -1374,24 +1364,7 @@ export function TimelineCanvasPane({
                   minHeight: 28,
                   padding: "6px 10px",
                   borderRadius: 999,
-                  background:
-                    externalDropPreview.kind === "audio"
-                      ? "rgba(122,229,130,0.18)"
-                      : externalDropPreview.kind === "package" ||
-                          externalDropPreview.kind === "external"
-                        ? "rgba(255,184,107,0.18)"
-                        : externalDropPreview.kind === "unknown"
-                          ? "rgba(118,184,255,0.16)"
-                          : "rgba(255,107,107,0.18)",
-                  border:
-                    externalDropPreview.kind === "audio"
-                      ? "1px solid rgba(122,229,130,0.34)"
-                      : externalDropPreview.kind === "package" ||
-                          externalDropPreview.kind === "external"
-                        ? "1px solid rgba(255,184,107,0.34)"
-                        : externalDropPreview.kind === "unknown"
-                          ? "1px solid rgba(118,184,255,0.34)"
-                          : "1px solid rgba(255,107,107,0.34)",
+                  ...externalDropBadgeColors(externalDropPreview.kind),
                   color: "#f4f3ee",
                   font: '600 11px "Space Grotesk", sans-serif',
                   letterSpacing: "0.04em",
@@ -1403,17 +1376,7 @@ export function TimelineCanvasPane({
                   whiteSpace: "nowrap",
                 }}
               >
-                {externalDropPreview.kind === "audio"
-                  ? "Audio"
-                  : externalDropPreview.kind === "package"
-                    ? "Package"
-                    : externalDropPreview.kind === "external"
-                      ? "Reaper/Ableton"
-                      : externalDropPreview.kind === "unknown"
-                        ? "Drop"
-                        : externalDropPreview.kind === "mixed"
-                          ? "Mixed"
-                          : "Unsupported"}
+                {EXTERNAL_DROP_LABELS[externalDropPreview.kind]}
               </div>
             </div>
           ) : null}

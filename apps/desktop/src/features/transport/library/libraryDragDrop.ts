@@ -2006,7 +2006,8 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       //   mixed/unsupported → never paint a preview; the drop will be
       //              rejected with a status toast.
       let isPackage: boolean;
-      if (kind === "audio") {
+      if (kind === "audio" || kind === "video") {
+        // Videos land on the column too (routeCompactDroppedVideos).
         isPackage = false;
       } else if (kind === "package") {
         isPackage = true;
