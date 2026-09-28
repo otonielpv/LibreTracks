@@ -12330,6 +12330,28 @@ html.lt-ios body {
   font-size: 14px;
 }
 
+/* A button (it shows/hides the output), but it reads as a status chip. */
+.lt-video-output-badge {
+  font-family: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.lt-video-output-badge:disabled {
+  cursor: default;
+}
+
+/* All well: just the icon, no text taking room in the bar. */
+.lt-video-output-badge.is-icon {
+  padding: 2px 5px;
+}
+
+.lt-video-output-badge.is-off {
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.55);
+  background: transparent;
+}
+
 .lt-video-output-badge.is-warning {
   border-color: rgba(255, 196, 0, 0.6);
   color: #ffd766;

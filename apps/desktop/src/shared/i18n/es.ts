@@ -979,6 +979,7 @@ const es = {
         unavailable: "Vídeo no disponible: {{reason}}",
         state: {
           disabled: "salida desactivada",
+          standby: "esperando una sesión con vídeo",
           unavailable: "no disponible",
           noDisplay: "sin pantalla elegida",
           ready: "salida lista",
@@ -1109,6 +1110,8 @@ const es = {
         noDisplay: "Vídeo: elige una pantalla",
         unavailable: "Vídeo no disponible",
         error: "Vídeo: error",
+        off: "Salida de vídeo apagada. Haz clic para mostrarla.",
+        hide: "Haz clic para ocultar la ventana de vídeo.",
       },
       placeAtPlayhead: "Añadir al timeline en el cursor",
       menu: {

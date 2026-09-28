@@ -153,7 +153,7 @@ describe("VideoSettingsTab", () => {
         monitorName: "DISPLAY2",
         opens: 1,
         mode: "window",
-        modeToggles: 1,
+        userChanges: 1,
       },
     });
     await waitFor(() => expect(mode.value).toBe("window"));

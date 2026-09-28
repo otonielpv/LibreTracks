@@ -32,6 +32,8 @@ fn main() {
 
     let focus_before = os::foreground();
     let output = VideoOutput::spawn(MpvOutputBackend::new(loaded.library));
+    // A session with video: without it the output stays closed.
+    output.send(OutputCommand::SetContent(true));
     output.send(OutputCommand::Displays {
         monitors: monitors.clone(),
         app_monitor,

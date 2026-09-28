@@ -948,6 +948,7 @@ const en = {
         unavailable: "Video unavailable: {{reason}}",
         state: {
           disabled: "output off",
+          standby: "waiting for a session with video",
           unavailable: "unavailable",
           noDisplay: "no display chosen",
           ready: "output ready",
@@ -1078,6 +1079,8 @@ const en = {
         noDisplay: "Video: choose a display",
         unavailable: "Video unavailable",
         error: "Video: error",
+        off: "Video output off. Click to show it.",
+        hide: "Click to hide the video window.",
       },
       placeAtPlayhead: "Add to the timeline at the cursor",
       menu: {

@@ -112,6 +112,8 @@ mod mac {
         println!("libmpv: {}", loaded.path.display());
         let target = monitors.first().cloned().expect("a display");
         let output = VideoOutput::spawn(MpvOutputBackend::new_macos(loaded.library, main_thread));
+        // A session with video: without it the output stays closed.
+        output.send(OutputCommand::SetContent(true));
         output.send(OutputCommand::Displays {
             monitors: monitors.clone(),
             app_monitor: None,

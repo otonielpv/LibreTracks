@@ -68,14 +68,21 @@ export function VideoSettingsTab() {
     };
   }, [refreshDisplays]);
 
-  // A double-click on the output switches the mode behind this tab's back:
-  // the backend saves it and reports it in the status.
+  // A double-click on the output switches the mode, and closing its window
+  // switches it off, behind this tab's back: the backend saves them and
+  // reports them in the status.
   const statusMode = outputStatus?.mode;
+  const statusEnabled = outputStatus?.enabled;
   useEffect(() => {
     if (statusMode && statusMode !== settingsRef.current.mode) {
       setSettings((current) => ({ ...current, mode: statusMode }));
     }
   }, [statusMode]);
+  useEffect(() => {
+    if (statusEnabled !== undefined && statusEnabled !== settingsRef.current.enabled) {
+      setSettings((current) => ({ ...current, enabled: statusEnabled }));
+    }
+  }, [statusEnabled]);
 
   const available = mediaStatus?.available ?? false;
   const disabled = !available;

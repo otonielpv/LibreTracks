@@ -67,6 +67,10 @@ pub enum PlayerCommand {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum OutputCommand {
+    /// Whether the session has any video. Without it the output stays closed
+    /// (enabled or not): opening LibreTracks on a session with no video must
+    /// not put a black window on the projector.
+    SetContent(bool),
     /// Monitors now connected, and the one the app window is on.
     Displays {
         monitors: Vec<MonitorInfo>,
@@ -117,6 +121,8 @@ pub enum BackendEvent {
     /// The user double-clicked the output: fullscreen <-> window, as in
     /// Ableton's video window.
     ToggleFullscreen,
+    /// The user closed the output window: same as switching the output off.
+    Closed,
 }
 
 /// The surface plus its two players. Implemented over libmpv by
@@ -148,6 +154,8 @@ pub trait OutputBackend: Send {
 #[serde(rename_all = "camelCase", tag = "state", content = "detail")]
 pub enum OutputState {
     Disabled,
+    /// Enabled, but the session has no video: nothing is open.
+    Standby,
     /// libmpv missing or unsupported platform; the reason is shown.
     Unavailable(String),
     /// Enabled but no display chosen yet.
@@ -189,10 +197,12 @@ pub struct OutputStatus {
     pub opens: u32,
     /// Two real players: the runtime may preload in the hidden one.
     pub dual_players: bool,
-    /// The mode in force. A double-click on the output changes it without
-    /// going through the settings: the app saves it when `mode_toggles` moves.
+    /// The mode and on/off in force. A double-click or closing the window
+    /// changes them without going through the settings: the app saves them
+    /// when `user_changes` moves.
     pub mode: VideoOutputMode,
-    pub mode_toggles: u32,
+    pub enabled: bool,
+    pub user_changes: u32,
 }
 
 impl Default for OutputStatus {
@@ -207,7 +217,8 @@ impl Default for OutputStatus {
             opens: 0,
             dual_players: false,
             mode: VideoOutputMode::default(),
-            mode_toggles: 0,
+            enabled: false,
+            user_changes: 0,
         }
     }
 }
@@ -232,6 +243,8 @@ pub struct OutputController<B: OutputBackend> {
     /// `PlanOptions::cover_app_display`). Volatile: a mode or display change
     /// from the settings clears it.
     cover_app_display: bool,
+    /// The session has video (`OutputCommand::SetContent`).
+    has_content: bool,
     status: OutputStatus,
 }
 
@@ -246,6 +259,7 @@ impl<B: OutputBackend> OutputController<B> {
             overlay: None,
             fit_override: None,
             cover_app_display: false,
+            has_content: false,
             status: OutputStatus::default(),
         }
     }
@@ -267,16 +281,23 @@ impl<B: OutputBackend> OutputController<B> {
 
     /// Open, move or close the surface to match settings and monitors.
     fn replan(&mut self) {
-        if !self.settings.enabled {
+        self.status.enabled = self.settings.enabled;
+        self.status.mode = self.settings.mode;
+        // The test pattern and the calibration show without session video.
+        let wanted = self.has_content || self.overlay.is_some();
+        if !self.settings.enabled || !wanted {
             if self.backend.is_open() {
                 self.backend.close();
             }
             self.plan = None;
-            self.status.state = OutputState::Disabled;
+            self.status.state = if self.settings.enabled {
+                OutputState::Standby
+            } else {
+                OutputState::Disabled
+            };
             self.status.players = Default::default();
             return;
         }
-        self.status.mode = self.settings.mode;
         let options = PlanOptions {
             on_top: self.settings.fullscreen_on_top,
             cover_app_display: self.cover_app_display,
@@ -348,6 +369,12 @@ impl<B: OutputBackend> OutputController<B> {
 
     pub fn handle(&mut self, command: OutputCommand) {
         match command {
+            OutputCommand::SetContent(has_content) => {
+                if has_content != self.has_content {
+                    self.has_content = has_content;
+                    self.replan();
+                }
+            }
             OutputCommand::Displays {
                 monitors,
                 app_monitor,
@@ -483,7 +510,11 @@ impl<B: OutputBackend> OutputController<B> {
                 }
             }
             OutputCommand::Overlay(path) => {
+                let opens_or_closes = self.overlay.is_some() != path.is_some() && !self.has_content;
                 self.overlay = path.clone();
+                if opens_or_closes {
+                    self.replan();
+                }
                 if !self.backend.is_open() {
                     return;
                 }
@@ -527,6 +558,11 @@ impl<B: OutputBackend> OutputController<B> {
                     self.status.players[slot.index()].frame_drops = count;
                 }
                 BackendEvent::ToggleFullscreen => self.toggle_fullscreen(),
+                BackendEvent::Closed => {
+                    self.settings.enabled = false;
+                    self.status.user_changes = self.status.user_changes.wrapping_add(1);
+                    self.replan();
+                }
             }
         }
     }
@@ -545,7 +581,7 @@ impl<B: OutputBackend> OutputController<B> {
             self.settings.mode = VideoOutputMode::Fullscreen;
             self.cover_app_display = plan.shares_app_display;
         }
-        self.status.mode_toggles = self.status.mode_toggles.wrapping_add(1);
+        self.status.user_changes = self.status.user_changes.wrapping_add(1);
         self.replan();
     }
 
@@ -814,6 +850,7 @@ mod tests {
 
     fn ready_controller() -> OutputController<FakeBackend> {
         let mut controller = OutputController::new(FakeBackend::default());
+        controller.handle(OutputCommand::SetContent(true));
         controller.handle(OutputCommand::Displays {
             monitors: monitors(),
             app_monitor: Some("M1".into()),
@@ -935,7 +972,7 @@ mod tests {
         assert!(!plan.fullscreen);
         assert!(!plan.on_top);
         assert_eq!(controller.status().mode, VideoOutputMode::Window);
-        assert_eq!(controller.status().mode_toggles, 1);
+        assert_eq!(controller.status().user_changes, 1);
         // Restyled, not reopened: the loaded clip is still there.
         assert_eq!(controller.backend().opens, opens);
         assert_eq!(controller.status().player(Slot::A).file.as_deref(), Some("D:/ok.mp4"));
@@ -944,7 +981,7 @@ mod tests {
         let plan = controller.backend().plans.last().unwrap();
         assert!(plan.fullscreen && plan.on_top);
         assert_eq!(controller.status().mode, VideoOutputMode::Fullscreen);
-        assert_eq!(controller.status().mode_toggles, 2);
+        assert_eq!(controller.status().user_changes, 2);
 
         // Saving the toggled mode (what the app does) changes nothing more.
         let repositions = controller.backend().repositions;
@@ -973,6 +1010,44 @@ mod tests {
     }
 
     #[test]
+    fn nothing_opens_until_the_session_has_video_except_the_test_pattern() {
+        let mut controller = OutputController::new(FakeBackend::default());
+        controller.handle(OutputCommand::Displays {
+            monitors: monitors(),
+            app_monitor: Some("M1".into()),
+        });
+        controller.handle(OutputCommand::ApplySettings(enabled_on_m2()));
+        assert_eq!(controller.status().state, OutputState::Standby);
+        assert!(!controller.backend().open);
+
+        // The settings tab's test pattern needs the window anyway.
+        controller.handle(OutputCommand::Overlay(Some("D:/pattern.png".into())));
+        assert_eq!(controller.status().state, OutputState::Ready);
+        controller.handle(OutputCommand::Overlay(None));
+        assert_eq!(controller.status().state, OutputState::Standby);
+        assert!(!controller.backend().open);
+
+        controller.handle(OutputCommand::SetContent(true));
+        assert_eq!(controller.status().state, OutputState::Ready);
+        controller.handle(OutputCommand::SetContent(false));
+        assert_eq!(controller.status().state, OutputState::Standby);
+        assert!(!controller.backend().open);
+    }
+
+    #[test]
+    fn closing_the_window_switches_the_output_off_and_reports_it() {
+        let mut controller = ready_controller();
+        controller.absorb(vec![BackendEvent::Closed]);
+        assert_eq!(controller.status().state, OutputState::Disabled);
+        assert!(!controller.status().enabled);
+        assert_eq!(controller.status().user_changes, 1);
+        assert!(!controller.backend().open);
+        // Switching it on again (the transport button) reopens it.
+        controller.handle(OutputCommand::ApplySettings(enabled_on_m2()));
+        assert_eq!(controller.status().state, OutputState::Ready);
+    }
+
+    #[test]
     fn fullscreen_on_top_is_applied_without_reopening() {
         let mut controller = ready_controller();
         let opens = controller.backend().opens;
@@ -987,6 +1062,7 @@ mod tests {
     #[test]
     fn without_libmpv_everything_reports_unavailable_and_nothing_panics() {
         let mut controller = OutputController::new(UnavailableBackend("libmpv no disponible: x".into()));
+        controller.handle(OutputCommand::SetContent(true));
         controller.handle(OutputCommand::Displays {
             monitors: monitors(),
             app_monitor: None,

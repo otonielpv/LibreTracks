@@ -241,6 +241,8 @@ Todo se puede cambiar después en `Ajustes → Vídeo`: pantalla, pantalla compl
 
 Haz **doble clic en el vídeo** para pasar de pantalla completa a una ventana que puedes mover y redimensionar, y otro doble clic para volver. En pantalla completa el vídeo queda por delante de todo, incluidas las notificaciones; si prefieres que otras ventanas puedan ponerse delante, desactiva `Pantalla completa siempre delante` en `Ajustes → Vídeo`.
 
+La ventana de vídeo solo se abre cuando la sesión tiene algún vídeo. Mientras la tenga, en la barra de arriba aparece un icono de cámara: haz clic en él para ocultar o volver a mostrar la ventana. Cerrar la ventana de vídeo equivale a apagar la salida, y el mismo icono la vuelve a encender.
+
 El indicador de la barra superior dice en qué pantalla sale el vídeo y avisa si se desconecta. Al volver a conectarla, la imagen vuelve sola.
 
 ### Calibrar el retardo

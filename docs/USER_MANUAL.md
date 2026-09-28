@@ -241,6 +241,8 @@ Everything can be changed later in `Settings → Video`: display, fullscreen or 
 
 **Double-click the video** to switch from fullscreen to a window you can move and resize, and double-click again to go back. In fullscreen the video stays in front of everything, notifications included; to let other windows come in front, turn off `Fullscreen always in front` in `Settings → Video`.
 
+The video window only opens when the session has some video. While it does, a camera icon shows in the top bar: click it to hide the window or show it again. Closing the video window switches the output off, and the same icon switches it back on.
+
 The badge in the top bar tells which display the video is on and warns when it is disconnected. Plug it back and the picture returns by itself.
 
 ### Calibrating the delay

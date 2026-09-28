@@ -139,6 +139,9 @@ pub struct RuntimeCore {
     /// Last target position, to spot jumps the clock did not announce (a
     /// vamp wrap re-anchors without a new generation).
     last_position: Option<f64>,
+    /// Last "the session has video" told to the output, which stays closed
+    /// without it.
+    content_sent: Option<bool>,
     pub stats: VideoSyncStats,
 }
 
@@ -163,6 +166,7 @@ impl Default for RuntimeCore {
             preload_params: PreloadParams::default(),
             expected_visible: None,
             last_position: None,
+            content_sent: None,
             stats: VideoSyncStats::default(),
         }
     }
@@ -216,6 +220,15 @@ impl RuntimeCore {
         output: &dyn RuntimeOutput,
         now: Instant,
     ) -> TickRate {
+        // Even while the output is closed: it opens only once the session
+        // has video, and this is the one place that knows.
+        self.refresh_timeline(inputs, now);
+        let has_content = !self.timeline.is_empty();
+        if self.content_sent != Some(has_content) {
+            self.content_sent = Some(has_content);
+            output.send(OutputCommand::SetContent(has_content));
+        }
+
         let status = output.status();
         if status.state != OutputState::Ready {
             // The surface is gone or off: whatever the players had is gone
@@ -230,7 +243,6 @@ impl RuntimeCore {
             return TickRate::Park;
         }
 
-        self.refresh_timeline(inputs, now);
         if self.timeline.is_empty() {
             if !self.idle_sent {
                 output.send(OutputCommand::ShowIdle);
@@ -837,7 +849,29 @@ mod tests {
             core.tick(&mut inputs, &output, Instant::now()),
             TickRate::Park
         );
-        assert!(output.sent.borrow().is_empty());
+        // Only "the session has video", which is what lets it open.
+        assert_eq!(*output.sent.borrow(), vec![OutputCommand::SetContent(true)]);
+        core.tick(&mut inputs, &output, Instant::now());
+        assert_eq!(output.sent.borrow().len(), 1, "told once, not every tick");
+    }
+
+    #[test]
+    fn a_session_without_video_keeps_the_output_closed() {
+        let mut core = RuntimeCore::default();
+        let mut inputs = FakeInputs {
+            clock: running_clock(3.0),
+            timeline: VideoTimeline::default(),
+            fetches: 0,
+        };
+        let output = FakeOutput::default();
+        core.tick(&mut inputs, &output, Instant::now());
+        assert_eq!(*output.sent.borrow(), vec![OutputCommand::SetContent(false)]);
+
+        // A video is added: the next refresh opens it.
+        inputs.timeline = one_clip_timeline();
+        core.mark_dirty();
+        core.tick(&mut inputs, &output, Instant::now());
+        assert_eq!(output.sent.borrow().last(), Some(&OutputCommand::SetContent(true)));
     }
 
     #[test]

@@ -10,9 +10,11 @@
 //! video is extracted to a normal audio clip (paso 11), so there are never two
 //! sources of the same sound.
 //!
-//! A double-click on the output toggles fullscreen <-> window (as in Ableton).
-//! Where mpv owns the window that gets the clicks (Windows, Linux) it reports
-//! it through a `keybind` + `script-message`; on macOS our own view does.
+//! A double-click on the output toggles fullscreen <-> window (as in Ableton),
+//! and closing its window switches the output off. On Windows and macOS our
+//! own surface sees both; on Linux mpv's window does, and reports the
+//! double-click through a `keybind` + `script-message` and the close by
+//! shutting down.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,8 +30,12 @@ const PROP_TIME_POS: u64 = 1;
 const PROP_FRAME_DROPS: u64 = 2;
 const PROP_HWDEC: u64 = 3;
 
-/// `script-message` the double-click binding sends.
+/// `script-message` the double-click binding sends (Linux).
 const TOGGLE_MESSAGE: &str = "libretracks-toggle-fullscreen";
+
+/// mpv handles the pointer only where its own window is the surface (Linux):
+/// elsewhere it would try to drag our window with the clicks.
+const MPV_OWNS_POINTER: bool = !cfg!(any(windows, target_os = "macos"));
 
 fn failed(error: crate::VideoError) -> BackendError {
     BackendError::Failed(error.to_string())
@@ -113,6 +119,24 @@ impl MpvOutputBackend {
         Ok(())
     }
 
+    /// Double-clicks and close requests our own surface saw.
+    fn surface_events(&mut self) -> Vec<BackendEvent> {
+        #[cfg(windows)]
+        if let Some(surface) = self.surface.as_mut() {
+            if surface.take_close_request() {
+                return vec![BackendEvent::Closed];
+            }
+            if surface.take_double_click() {
+                return vec![BackendEvent::ToggleFullscreen];
+            }
+        }
+        #[cfg(target_os = "macos")]
+        if self.surface.as_ref().is_some_and(|surface| surface.take_double_click()) {
+            return vec![BackendEvent::ToggleFullscreen];
+        }
+        Vec::new()
+    }
+
     fn slot_index(&self, slot: Slot) -> usize {
         if self.single_player {
             0
@@ -132,15 +156,16 @@ impl MpvOutputBackend {
 
     fn new_player(&self, settings: &VideoOutputSettings, surface_options: &[(&str, String)]) -> Result<Mpv, BackendError> {
         let mpv = Mpv::create(&self.api).map_err(failed)?;
-        let base: [(&str, &str); 16] = [
+        let base: [(&str, &str); 17] = [
             ("config", "no"),
             ("terminal", "no"),
             ("osd-level", "0"),
             ("input-default-bindings", "no"),
             ("input-vo-keyboard", "no"),
-            // Pointer events reach mpv only for the double-click binding
-            // below; nothing else is bound.
-            ("input-cursor", "yes"),
+            // Where it gets them, pointer events serve only the double-click
+            // binding below; nothing else is bound.
+            ("input-cursor", if MPV_OWNS_POINTER { "yes" } else { "no" }),
+            ("window-dragging", "no"),
             ("cursor-autohide", "always"),
             ("ao", "null"),
             ("audio", "no"),
@@ -180,7 +205,9 @@ impl MpvOutputBackend {
         mpv.initialize().map_err(failed)?;
         // Best effort: without it (an old libmpv) the mode is still changed
         // from the settings.
-        let _ = mpv.command(&["keybind", "MBTN_LEFT_DBL", &format!("script-message {TOGGLE_MESSAGE}")]);
+        if MPV_OWNS_POINTER {
+            let _ = mpv.command(&["keybind", "MBTN_LEFT_DBL", &format!("script-message {TOGGLE_MESSAGE}")]);
+        }
         mpv.observe_property(PROP_TIME_POS, "time-pos", ObserveAs::Double)
             .map_err(failed)?;
         mpv.observe_property(PROP_FRAME_DROPS, "frame-drop-count", ObserveAs::Int)
@@ -210,6 +237,9 @@ impl MpvOutputBackend {
                 _ => None,
             },
             MpvEvent::PlaybackRestart => Some(BackendEvent::PlaybackRestart { slot }),
+            // Only the user makes a player quit (Linux: closing mpv's window);
+            // ours are destroyed without being polled again.
+            MpvEvent::Shutdown => Some(BackendEvent::Closed),
             MpvEvent::FileLoaded => Some(BackendEvent::FileLoaded { slot }),
             MpvEvent::EndFile(EndFileReason::Error(reason)) => {
                 Some(BackendEvent::LoadFailed { slot, reason })
@@ -407,19 +437,15 @@ impl OutputBackend for MpvOutputBackend {
     }
 
     fn poll(&mut self, max_wait: Duration) -> Vec<BackendEvent> {
-        let mut events = Vec::new();
+        let mut events = self.surface_events();
         let player_count = if self.single_player { 1 } else { 2 };
         for (index, slot) in slots().into_iter().enumerate().take(player_count) {
             let Some(player) = &self.players[index] else {
                 continue;
             };
-            // Block on the first player only; drain the other.
-            let mut wait = if index == 0 { max_wait.as_secs_f64() } else { 0.0 };
-            #[cfg(target_os = "macos")]
-            if index == 0 && self.surface.as_ref().is_some_and(|surface| surface.take_double_click()) {
-                events.push(BackendEvent::ToggleFullscreen);
-                wait = 0.0;
-            }
+            // Block on the first player only (unless the surface already had
+            // news); drain the other.
+            let mut wait = if index == 0 && events.is_empty() { max_wait.as_secs_f64() } else { 0.0 };
             while let Some(event) = player.wait_event(wait) {
                 wait = 0.0;
                 if let Some(event) = Self::translate(slot, event) {

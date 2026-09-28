@@ -1057,6 +1057,8 @@ export type VideoDisplayOption = VideoDisplayId & {
 
 export type VideoOutputState =
   | { state: "disabled" }
+  /** On, but the session has no video: nothing is open. */
+  | { state: "standby" }
   | { state: "unavailable"; detail: string }
   | { state: "noDisplay" }
   | { state: "ready" }
@@ -1083,9 +1085,11 @@ export type VideoOutputStatus = {
   sharesAppDisplay: boolean;
   monitorName: string | null;
   opens: number;
-  /** Mode in force; a double-click on the output toggles it. */
+  /** Mode and on/off in force; a double-click on the output or closing its
+   * window changes them, and the backend saves them. */
   mode?: VideoOutputMode;
-  modeToggles?: number;
+  enabled?: boolean;
+  userChanges?: number;
 };
 
 /** Sync diagnostics of the video runtime (paso 07). */

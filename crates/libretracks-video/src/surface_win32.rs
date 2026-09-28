@@ -8,11 +8,19 @@
 //! `WM_MOUSEACTIVATE` with `MA_NOACTIVATE`), so the app keeps the keyboard and
 //! its shortcuts work during the show.
 //!
+//! A double-click toggles fullscreen <-> window. mpv's own window (a child
+//! of ours) gets the clicks, and mpv would rather start dragging with them,
+//! so they are caught from `WM_PARENTNOTIFY`, which Windows sends up to every
+//! ancestor on a button press over a child. Closing the window (its X) only
+//! reports it: the output then switches itself off and destroys it.
+//!
 //! The window lives on its own thread with its message loop. Other threads
 //! only post to it or call the cross-thread-safe `SetWindowPos`/`ShowWindow`
 //! and `SetWindowLongPtrW` (restyling between fullscreen and window).
 
+use std::cell::Cell;
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -87,10 +95,14 @@ extern "system" {
     fn SetWindowLongPtrW(hwnd: Handle, index: i32, value: isize) -> isize;
     fn GetWindow(hwnd: Handle, cmd: u32) -> Handle;
     fn LoadCursorW(instance: Handle, name: *const u16) -> Handle;
+    fn GetCursorPos(point: *mut [i32; 2]) -> i32;
+    fn GetDoubleClickTime() -> u32;
+    fn GetSystemMetrics(index: i32) -> i32;
 }
 #[link(name = "kernel32")]
 extern "system" {
     fn GetModuleHandleW(name: *const u16) -> Handle;
+    fn GetTickCount() -> u32;
 }
 #[link(name = "gdi32")]
 extern "system" {
@@ -101,6 +113,12 @@ const WM_DESTROY: u32 = 0x0002;
 const WM_SIZE: u32 = 0x0005;
 const WM_CLOSE: u32 = 0x0010;
 const WM_MOUSEACTIVATE: u32 = 0x0021;
+const WM_PARENTNOTIFY: u32 = 0x0210;
+const WM_LBUTTONDOWN: u32 = 0x0201;
+/// Posted by `Drop`: really destroy the window (WM_CLOSE only reports).
+const WM_APP_DESTROY: u32 = 0x8000 + 1;
+const SM_CXDOUBLECLK: i32 = 36;
+const SM_CYDOUBLECLK: i32 = 37;
 const MA_NOACTIVATE: isize = 3;
 const WS_EX_TOPMOST: u32 = 0x0000_0008;
 const WS_EX_TOOLWINDOW: u32 = 0x0000_0080;
@@ -154,6 +172,37 @@ fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
+/// Double-clicks and close requests, counted by the window thread and read by
+/// the backend. There is one output surface per process.
+static DOUBLE_CLICKS: AtomicU32 = AtomicU32::new(0);
+static CLOSE_REQUESTS: AtomicU32 = AtomicU32::new(0);
+
+thread_local! {
+    /// The last button press on the surface: (tick count, screen point).
+    /// `WM_PARENTNOTIFY` is sent, not posted, so `GetMessageTime` would be
+    /// stale.
+    static LAST_PRESS: Cell<Option<(u32, [i32; 2])>> = const { Cell::new(None) };
+}
+
+/// Count a double-click when this press follows the previous one within the
+/// system's double-click time and distance.
+unsafe fn on_press() {
+    let time = GetTickCount();
+    let mut point = [0i32; 2];
+    GetCursorPos(&mut point);
+    let previous = LAST_PRESS.with(|last| last.replace(Some((time, point))));
+    if let Some((then, at)) = previous {
+        let quick = time.wrapping_sub(then) <= GetDoubleClickTime();
+        let near = (point[0] - at[0]).abs() <= GetSystemMetrics(SM_CXDOUBLECLK) / 2
+            && (point[1] - at[1]).abs() <= GetSystemMetrics(SM_CYDOUBLECLK) / 2;
+        if quick && near {
+            DOUBLE_CLICKS.fetch_add(1, Ordering::Relaxed);
+            // A third press starts over instead of making another pair.
+            LAST_PRESS.with(|last| last.set(None));
+        }
+    }
+}
+
 /// Keep every child the size of the parent's client area.
 unsafe fn fit_children(parent: Handle) {
     let mut rect = Rect::default();
@@ -180,7 +229,17 @@ unsafe extern "system" fn surface_proc(hwnd: Handle, msg: u32, wparam: usize, lp
             fit_children(hwnd);
             0
         }
+        WM_PARENTNOTIFY => {
+            if (wparam & 0xffff) as u32 == WM_LBUTTONDOWN {
+                on_press();
+            }
+            0
+        }
         WM_CLOSE => {
+            CLOSE_REQUESTS.fetch_add(1, Ordering::Relaxed);
+            0
+        }
+        WM_APP_DESTROY => {
             DestroyWindow(hwnd);
             0
         }
@@ -236,6 +295,8 @@ pub struct Win32Surface {
     /// Where the user left the window (monitor, outer rect): going back from
     /// fullscreen puts it there instead of re-centring it.
     last_window: Option<(String, SurfaceRect)>,
+    seen_double_clicks: u32,
+    seen_close_requests: u32,
 }
 
 impl Win32Surface {
@@ -317,7 +378,21 @@ impl Win32Surface {
             thread: Some(thread),
             fullscreen: plan.fullscreen,
             last_window: None,
+            seen_double_clicks: DOUBLE_CLICKS.load(Ordering::Relaxed),
+            seen_close_requests: CLOSE_REQUESTS.load(Ordering::Relaxed),
         })
+    }
+
+    /// Whether the window was double-clicked since the last call.
+    pub fn take_double_click(&mut self) -> bool {
+        let clicks = DOUBLE_CLICKS.load(Ordering::Relaxed);
+        std::mem::replace(&mut self.seen_double_clicks, clicks) != clicks
+    }
+
+    /// Whether the user asked to close the window since the last call.
+    pub fn take_close_request(&mut self) -> bool {
+        let requests = CLOSE_REQUESTS.load(Ordering::Relaxed);
+        std::mem::replace(&mut self.seen_close_requests, requests) != requests
     }
 
     /// The HWND a slot's mpv renders into, as mpv's `wid` wants it.
@@ -390,7 +465,7 @@ impl Win32Surface {
 impl Drop for Win32Surface {
     fn drop(&mut self) {
         unsafe {
-            PostMessageW(self.window as Handle, WM_CLOSE, 0, 0);
+            PostMessageW(self.window as Handle, WM_APP_DESTROY, 0, 0);
         }
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
