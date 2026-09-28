@@ -544,6 +544,16 @@ fn set_output_device_round_trip() {
 }
 
 #[test]
+fn set_output_suspended_speaks_the_engines_json() {
+    // The C++ parser reads {"type":"SetOutputSuspended","suspended":<bool>};
+    // a renamed field would make every suspend request fail on the phone.
+    let json = serde_json::to_value(EngineCommand::SetOutputSuspended { suspended: true })
+        .expect("serialize");
+    assert_eq!(json["type"], "SetOutputSuspended");
+    assert_eq!(json["suspended"], true);
+}
+
+#[test]
 fn set_sample_rate_round_trip() {
     let cmd = EngineCommand::SetSampleRate { sample_rate: 44100 };
     let rt = round_trip(&cmd);

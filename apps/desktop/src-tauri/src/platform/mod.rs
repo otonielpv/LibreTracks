@@ -59,6 +59,8 @@ pub mod android_memory;
 #[cfg(target_os = "android")]
 pub mod android_persistable_pick;
 #[cfg(target_os = "android")]
+pub mod android_visibility;
+#[cfg(target_os = "android")]
 pub mod android_storage;
 #[cfg(target_os = "android")]
 pub mod android_storage_events;
@@ -123,6 +125,7 @@ mod tests {
             supported_sample_rates: Vec::new(),
             last_error: String::new(),
             fallback_active: false,
+            output_suspended: false,
         }
     }
 

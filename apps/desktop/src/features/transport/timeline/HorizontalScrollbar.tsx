@@ -7,6 +7,12 @@ import {
   type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import {
+  cancelGatedFrame,
+  markFrameActivity,
+  requestGatedFrame,
+  useFrameGateWake,
+} from "../frameGate";
 
 /**
  * Minimum draggable width for the scrollbar thumb. The native webkit thumb
@@ -40,6 +46,7 @@ export function HorizontalScrollbar({
   maxCameraX,
   onScrollTo,
 }: HorizontalScrollbarProps) {
+  useFrameGateWake();
   const trackRef = useRef<HTMLDivElement | null>(null);
   const thumbRef = useRef<HTMLDivElement | null>(null);
   const [trackWidth, setTrackWidth] = useState(0);
@@ -94,16 +101,18 @@ export function HorizontalScrollbar({
         if (width !== lastWidth) {
           thumb.style.width = `${width}px`;
           lastWidth = width;
+          markFrameActivity();
         }
         if (left !== lastLeft) {
           thumb.style.transform = `translate3d(${left}px, 0, 0)`;
           lastLeft = left;
+          markFrameActivity();
         }
       }
-      frameId = window.requestAnimationFrame(render);
+      frameId = requestGatedFrame(render);
     };
-    frameId = window.requestAnimationFrame(render);
-    return () => window.cancelAnimationFrame(frameId);
+    frameId = requestGatedFrame(render);
+    return () => cancelGatedFrame(frameId);
   }, [cameraXRef, computeThumb]);
 
   // Map a track-relative pointer X to a camera offset, centring the thumb on

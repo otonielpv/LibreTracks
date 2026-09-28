@@ -121,6 +121,10 @@ pub struct DeviceInfo {
     /// watchdog retries the device until this drops back to false.
     #[serde(default)]
     pub fallback_active: bool,
+    /// The output stream is paused on purpose while idle
+    /// (`EngineCommand::SetOutputSuspended`); not a device failure.
+    #[serde(default)]
+    pub output_suspended: bool,
 }
 
 fn default_output_channel_count() -> i32 {

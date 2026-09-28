@@ -1,4 +1,10 @@
 import { useEffect, useRef } from "react";
+import {
+  cancelGatedFrame,
+  markFrameActivity,
+  requestGatedFrame,
+  useFrameGateWake,
+} from "../frameGate";
 
 /**
  * Elemento absoluto cuya posición horizontal la manda un ref, no React.
@@ -26,6 +32,7 @@ export function useFollowerX(resolve: () => number | null) {
   const elementRef = useRef<HTMLDivElement | null>(null);
   const resolveRef = useRef(resolve);
   resolveRef.current = resolve;
+  useFrameGateWake();
 
   useEffect(() => {
     let animationFrameId = 0;
@@ -40,18 +47,20 @@ export function useFollowerX(resolve: () => number | null) {
         if (visible !== lastVisible) {
           element.style.display = visible ? "block" : "none";
           lastVisible = visible;
+          markFrameActivity();
         }
         if (x !== null && x !== lastX) {
           element.style.transform = `translateX(${x}px)`;
           lastX = x;
+          markFrameActivity();
         }
       }
 
-      animationFrameId = window.requestAnimationFrame(sync);
+      animationFrameId = requestGatedFrame(sync);
     };
 
-    animationFrameId = window.requestAnimationFrame(sync);
-    return () => window.cancelAnimationFrame(animationFrameId);
+    animationFrameId = requestGatedFrame(sync);
+    return () => cancelGatedFrame(animationFrameId);
   }, []);
 
   return elementRef;

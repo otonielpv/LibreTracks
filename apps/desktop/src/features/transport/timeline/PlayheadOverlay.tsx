@@ -7,6 +7,12 @@ import {
 
 import type { TransportSnapshot } from "../desktopApi";
 import { useRenderCounter } from "../perf/useRenderCounter";
+import {
+  cancelGatedFrame,
+  markFrameActivity,
+  requestGatedFrame,
+  useFrameGateWake,
+} from "../frameGate";
 import { useTransportStore } from "../store";
 import {
   clamp,
@@ -143,6 +149,7 @@ export function PlayheadOverlay({
     pendingJumpExecuteSeconds: null,
     pendingJumpTargetSeconds: null,
   });
+  useFrameGateWake();
   const latestPropsRef = useRef({
     durationSeconds,
     pixelsPerSecond,
@@ -239,6 +246,7 @@ export function PlayheadOverlay({
       if (playheadRef.current && nextTransform !== lastTransform) {
         playheadRef.current.style.transform = nextTransform;
         lastTransform = nextTransform;
+        markFrameActivity();
       }
 
       // Sync instrumentation — log what the playhead is DISPLAYING. Rate-limit
@@ -258,13 +266,13 @@ export function PlayheadOverlay({
         }
       }
 
-      animationFrameId = window.requestAnimationFrame(render);
+      animationFrameId = requestGatedFrame(render);
     };
 
-    animationFrameId = window.requestAnimationFrame(render);
+    animationFrameId = requestGatedFrame(render);
 
     return () => {
-      window.cancelAnimationFrame(animationFrameId);
+      cancelGatedFrame(animationFrameId);
     };
   }, [dragStateRef]);
 

@@ -80,6 +80,7 @@ pub fn enumerate_output_devices() -> Vec<DeviceInfo> {
                 supported_sample_rates: Vec::new(),
                 last_error: String::new(),
                 fallback_active: false,
+                output_suspended: false,
             })
             .collect(),
         Err(err) => {

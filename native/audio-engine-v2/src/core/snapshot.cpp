@@ -49,6 +49,7 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"supported_sample_rates", snap.device.supported_sample_rates},
         {"last_error",  snap.device.last_error},
         {"fallback_active", snap.device.fallback_active},
+        {"output_suspended", snap.device.output_suspended},
     };
 
     j["cpu"] = {

@@ -41,6 +41,8 @@ struct DeviceInfo {
     // running silently; the control layer retries the real device and the UI
     // shows a "no audio output" badge until this drops back to false.
     bool        fallback_active = false;
+    // Stream paused on purpose while idle (CmdSetOutputSuspended).
+    bool        output_suspended = false;
 };
 
 struct CpuDiagnostics {

@@ -13,6 +13,16 @@ TEST_CASE("parse Play command") {
     CHECK(std::holds_alternative<CmdPlay>(cmd));
 }
 
+TEST_CASE("parse SetOutputSuspended in both directions") {
+    auto on = command_from_json(R"({"type":"SetOutputSuspended","suspended":true})");
+    REQUIRE(std::holds_alternative<CmdSetOutputSuspended>(on));
+    CHECK(std::get<CmdSetOutputSuspended>(on).suspended);
+
+    auto off = command_from_json(R"({"type":"SetOutputSuspended","suspended":false})");
+    REQUIRE(std::holds_alternative<CmdSetOutputSuspended>(off));
+    CHECK_FALSE(std::get<CmdSetOutputSuspended>(off).suspended);
+}
+
 TEST_CASE("parse Pause command") {
     auto cmd = command_from_json(R"({"type":"Pause"})");
     CHECK(std::holds_alternative<CmdPause>(cmd));

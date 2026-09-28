@@ -3,3 +3,4 @@
 
 pub mod automation;
 pub mod engine;
+pub mod idle_suspend;

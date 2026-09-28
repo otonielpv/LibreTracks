@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
 
 import { secondsToScreenX } from "./timelineMath";
 import type { AutomationCueSummary } from "../desktopApi";
+import {
+  cancelGatedFrame,
+  markFrameActivity,
+  requestGatedFrame,
+  useFrameGateWake,
+} from "../frameGate";
 
 export type MarkerMovePreview = {
   markerId: string;
@@ -40,6 +46,7 @@ export function useAutomationCueHotspots({
   pixelsPerSecond,
   markerMovePreviewRef,
 }: AutomationCueHotspotDeps) {
+  useFrameGateWake();
   const hotspotsRef = useRef(new Map<string, HTMLButtonElement>());
   const positionsRef = useRef(new Map<string, number>());
   /** Identidad de la lista con la que se construyó `positionsRef`. */
@@ -93,14 +100,15 @@ export function useAutomationCueHotspots({
           // sobre el diamante lo sigue haciendo su `margin-left` negativo.
           element.style.transform = `translateX(${left}px)`;
           lastLeftByCue.set(cueId, left);
+          markFrameActivity();
         }
       }
 
-      animationFrameId = window.requestAnimationFrame(sync);
+      animationFrameId = requestGatedFrame(sync);
     };
 
-    animationFrameId = window.requestAnimationFrame(sync);
-    return () => window.cancelAnimationFrame(animationFrameId);
+    animationFrameId = requestGatedFrame(sync);
+    return () => cancelGatedFrame(animationFrameId);
   }, [cameraXRef, livePixelsPerSecondRef, markerMovePreviewRef, pixelsPerSecond]);
 
   return { registerHotspot };
