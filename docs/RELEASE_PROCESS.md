@@ -114,8 +114,12 @@ Rules:
   "Render audio…".` Rules for that clause:
   - Very brief: the gesture and the path, nothing more. It is a signpost, not
     a tutorial — no step lists, no explanation of options.
-  - Give the gesture for every platform the feature exists on (right-click on
-    desktop, long-press on mobile).
+  - Give the gesture for every platform the feature exists on, and check each
+    one: mobile is NOT always "long-press = right-click". Songs open their menu
+    with a long-press, but a selected track shows its actions in the bottom
+    panel, behind the three dots ("Más acciones" /
+    `mobile/MobileSelectionActionBar.tsx`) — v1.13.0 first shipped "Sumar a
+    mono" as right-click only.
   - Quote menu items, settings and warnings **exactly as the app labels them**,
     in each language — check `apps/desktop/src/shared/i18n/es.ts` and `en.ts`
     rather than writing from memory. Settings are named as `Configuración →
