@@ -415,7 +415,9 @@ impl<B: OutputBackend> OutputController<B> {
                 }
             }
             OutputCommand::Player { slot, command } => {
-                if !self.backend.is_open() {
+                // The test pattern / calibration image stays on top of what
+                // the sync runtime (which does not know about it) sends.
+                if !self.backend.is_open() || self.overlay.is_some() {
                     return;
                 }
                 let player = &mut self.status.players[slot.index()];
@@ -467,6 +469,9 @@ impl<B: OutputBackend> OutputController<B> {
                 }
             }
             OutputCommand::ShowSlot(slot) => {
+                if self.overlay.is_some() {
+                    return;
+                }
                 self.status.visible_slot = slot;
                 if self.backend.is_open() {
                     if let Err(error) = self.backend.show_slot(slot) {
@@ -494,7 +499,7 @@ impl<B: OutputBackend> OutputController<B> {
                 }
             }
             OutputCommand::ShowIdle => {
-                if !self.backend.is_open() {
+                if !self.backend.is_open() || self.overlay.is_some() {
                     return;
                 }
                 let slot = self.status.visible_slot;
@@ -1032,6 +1037,30 @@ mod tests {
         controller.handle(OutputCommand::SetContent(false));
         assert_eq!(controller.status().state, OutputState::Standby);
         assert!(!controller.backend().open);
+    }
+
+    /// The wizard's step 3 showed black: opening the output for the test
+    /// pattern made the sync runtime send the idle screen over it.
+    #[test]
+    fn the_test_pattern_stays_over_what_the_runtime_sends() {
+        let mut controller = OutputController::new(FakeBackend::default());
+        controller.handle(OutputCommand::Displays {
+            monitors: monitors(),
+            app_monitor: Some("M1".into()),
+        });
+        controller.handle(OutputCommand::ApplySettings(enabled_on_m2()));
+        controller.handle(OutputCommand::Overlay(Some("D:/pattern.png".into())));
+        let shown = controller.backend().images.clone();
+        controller.handle(OutputCommand::ShowIdle);
+        controller.handle(load("D:/clip.mp4"));
+        controller.handle(OutputCommand::ShowSlot(Slot::B));
+        assert_eq!(controller.backend().images, shown);
+        assert!(controller.backend().commands.is_empty());
+        assert_eq!(controller.status().visible_slot, Slot::A);
+        assert_eq!(
+            controller.status().player(Slot::A).file.as_deref(),
+            Some("D:/pattern.png")
+        );
     }
 
     #[test]

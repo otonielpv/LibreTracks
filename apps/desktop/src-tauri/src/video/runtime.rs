@@ -22,7 +22,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use libretracks_core::video_schedule::{
-    active_clip_at, apply_forced_black, plan_preload, step, take_swap, PlayerAction, PlayerInput,
+    active_clip_at, apply_forced_black, brightness_for_gain, plan_preload, step, take_swap, PlayerAction, PlayerInput,
     PreloadAction, PreloadParams, PreloadState, SyncParams, SyncState, TransportInput,
     UpcomingJump, VideoTimeline,
 };
@@ -273,12 +273,26 @@ impl RuntimeCore {
         self.last_generation = Some(clock.generation);
         self.last_position = Some(position);
 
+        // The picture's brightness here (clip fades, forced black, black when
+        // stopped). The swap paths below return before the sync step, and a
+        // jump to the start of a fade-in must not show the new frame with the
+        // brightness of where the song was.
+        let black = output.black_amount(now);
+        let picture_brightness = if !running && settings.when_stopped == StoppedScreen::Black {
+            -100.0
+        } else {
+            let fade = active_clip_at(&self.timeline, position)
+                .map_or(0.0, |active| brightness_for_gain(active.fade_gain));
+            apply_forced_black(fade, black)
+        };
+
         // A swap was sent: until the output shows the new slot, its status
         // still describes the old one. Give it a few ticks.
         if let Some((expected, since)) = self.expected_visible {
             if status.visible_slot != expected
                 && now.duration_since(since) < Duration::from_millis(200)
             {
+                self.send_brightness(output, picture_brightness);
                 return if running {
                     TickRate::Fast
                 } else {
@@ -319,6 +333,8 @@ impl RuntimeCore {
                         &self.timeline,
                         position,
                     ) {
+                        // Before it is shown (it applies to both players).
+                        self.send_brightness(output, picture_brightness);
                         output.send(OutputCommand::Player {
                             slot: hidden,
                             command: PlayerCommand::SetSpeed(preloaded.rate),
@@ -408,7 +424,6 @@ impl RuntimeCore {
             }
         });
 
-        let black = output.black_amount(now);
         // A fade to or from black needs frames: tick fast while it moves.
         let fading = black > 0.0 && black < 1.0;
 
@@ -1059,6 +1074,72 @@ mod tests {
             "seeks {}",
             core.stats.forced_seeks
         );
+    }
+
+    /// A jump back to the start of a clip with a fade-in, served by a swap:
+    /// the preloaded frame must come up already black, not with the full
+    /// brightness of where the song was (a flash of picture at the jump).
+    #[test]
+    fn a_swap_into_a_fade_in_is_black_before_it_is_shown() {
+        let mut core = RuntimeCore::default();
+        let output = ready_output();
+        output.status.borrow_mut().dual_players = true;
+        let base = Instant::now();
+        let (start, end) = (0.0, 8.0);
+        let mut timeline = one_clip_timeline();
+        timeline.clips[0].fade_in = 2.0;
+        let mut inputs = FakeInputs {
+            clock: VideoTransportClock {
+                anchor_position_seconds: 6.0,
+                anchor_started_at: Some(base),
+                generation: 1,
+                upcoming_jump: None,
+                vamp: Some((start, end)),
+            },
+            timeline,
+            fetches: 0,
+        };
+        let mut position = 6.0;
+        let mut tick = 0u64;
+        let mut wrapped = false;
+        while !wrapped || tick < 400 {
+            position += 0.01;
+            if position >= end {
+                position = start + (position - end);
+                wrapped = true;
+            }
+            let now = base + Duration::from_millis(10 * tick);
+            inputs.clock.anchor_position_seconds = position;
+            inputs.clock.anchor_started_at = Some(now);
+            {
+                let mut status = output.status.borrow_mut();
+                let index = if status.visible_slot == Slot::A { 0 } else { 1 };
+                if status.players[index].file.is_some() {
+                    status.players[index].time_pos = Some(position);
+                    status.players[index].time_pos_at = Some(now);
+                }
+            }
+            core.tick(&mut inputs, &output, now);
+            tick += 1;
+            if wrapped && core.stats.swaps > 0 {
+                break;
+            }
+        }
+        assert_eq!(core.stats.swaps, 1, "the wrap is served by a swap");
+        let sent = output.sent.borrow();
+        let show = sent
+            .iter()
+            .rposition(|command| matches!(command, OutputCommand::ShowSlot(_)))
+            .expect("a swap");
+        let brightness = sent[..show]
+            .iter()
+            .rev()
+            .find_map(|command| match command {
+                OutputCommand::SetBrightness(value) => Some(*value),
+                _ => None,
+            })
+            .expect("a brightness before the swap");
+        assert!(brightness <= -99.0, "shown at brightness {brightness}");
     }
 
     #[test]
