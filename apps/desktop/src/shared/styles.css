@@ -12403,11 +12403,18 @@ html.lt-ios body {
 }
 
 .lt-video-wizard-footer button.is-primary,
-.lt-video-setup-notice button.is-primary,
-.lt-video-settings button[aria-pressed="true"],
-.lt-video-wizard-body button[aria-pressed="true"] {
+.lt-video-setup-notice button.is-primary {
   border-color: rgb(87 241 219 / 0.24);
   background: rgb(87 241 219 / 0.14);
+}
+
+/* A chosen option reads like a checked card. As specific as the base rule
+   above (its :not()s), or the base rule wins and nothing shows chosen. */
+.lt-video-settings button[aria-pressed="true"]:not(.lt-video-wizard-card),
+.lt-video-wizard-body button[aria-pressed="true"]:not(.lt-video-wizard-card):not(.lt-video-wizard-fit) {
+  border-color: rgb(87 241 219 / 0.6);
+  background: rgb(87 241 219 / 0.1);
+  color: #57f1db;
 }
 
 .lt-video-settings button:disabled,

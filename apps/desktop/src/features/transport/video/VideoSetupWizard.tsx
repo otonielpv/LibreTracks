@@ -138,7 +138,7 @@ function VideoSetupWizardDialog() {
       multiple: false,
       filters: [{ name: t("transport.video.settings.imageFilter"), extensions: ["png", "jpg", "jpeg"] }],
     });
-    if (typeof picked === "string") update({ idle: { kind: "image", path: picked } });
+    if (typeof picked === "string") preview({ ...draftRef.current, idle: { kind: "image", path: picked } });
   };
 
   const onlyOneDisplay = displays.length <= 1;
@@ -243,7 +243,9 @@ function VideoSetupWizardDialog() {
                       role="radio"
                       aria-checked={draft.fit === fit}
                       className="lt-video-wizard-fit"
-                      onClick={() => update({ fit })}
+                      // Straight to the output, like the display step: the
+                      // user sees the choice on the screen it is for.
+                      onClick={() => preview({ ...draftRef.current, fit })}
                     >
                       <span className="lt-video-wizard-frame" style={{ width: 120, height: 120 / monitorAspect }}>
                         <span
@@ -259,7 +261,7 @@ function VideoSetupWizardDialog() {
               <div className="lt-settings-field">
                 <span>{t("transport.video.settings.idle")}</span>
                 <div className="lt-video-settings-row">
-                  <button type="button" aria-pressed={draft.idle.kind === "black"} onClick={() => update({ idle: { kind: "black" } })}>
+                  <button type="button" aria-pressed={draft.idle.kind === "black"} onClick={() => preview({ ...draftRef.current, idle: { kind: "black" } })}>
                     {t("transport.video.settings.idleBlack")}
                   </button>
                   <button type="button" aria-pressed={draft.idle.kind === "image"} onClick={() => void pickIdleImage()}>

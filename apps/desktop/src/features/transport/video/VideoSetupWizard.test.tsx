@@ -69,7 +69,13 @@ describe("VideoSetupWizard", () => {
     fireEvent.click(screen.getByText("transport.video.wizard.check.yes"));
     expect(api.showVideoTestPattern).toHaveBeenLastCalledWith(false);
 
+    // Fit and idle screen show on the output at once, not only on finish.
     fireEvent.click(screen.getByText("transport.video.menu.fitCover"));
+    expect(applied().at(-1)?.[0]).toMatchObject({ enabled: true, fit: "cover" });
+    const black = screen.getByText("transport.video.settings.idleBlack");
+    fireEvent.click(black);
+    expect(black.getAttribute("aria-pressed")).toBe("true");
+    expect(applied().at(-1)?.[0]).toMatchObject({ fit: "cover", idle: { kind: "black" } });
     next();
     fireEvent.click(screen.getByText("transport.video.wizard.sync.skip"));
     fireEvent.click(screen.getByText("transport.video.wizard.finish"));
