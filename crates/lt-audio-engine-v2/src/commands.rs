@@ -123,6 +123,14 @@ pub enum EngineCommand {
         lang: String,
     },
 
+    /// Pause the transport by itself on the exact frame where a song (region)
+    /// ends instead of rolling into the next one. Off by default. A jump due on
+    /// that same boundary still wins. The mixer counts each such pause in the
+    /// snapshot (`pitch.mixer_song_end_pause_count`) so the host can mirror it.
+    SetPauseAtSongEnd {
+        enabled: bool,
+    },
+
     /// Set the ambient-pad config (enable/volume/route/key). Applied
     /// realtime-safely on the next audio block.
     SetPadConfig {

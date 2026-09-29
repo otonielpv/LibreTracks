@@ -5323,6 +5323,25 @@ fn toggling_multicore_render_reaches_the_engine_without_reopening_the_device() {
 }
 
 #[test]
+fn toggling_pause_at_song_end_reaches_the_engine_without_reopening_the_device() {
+    let previous = crate::infra::settings::AppSettings::default();
+    assert!(
+        !previous.pause_at_song_end,
+        "pausar al terminar la canción viene desactivado por defecto"
+    );
+    let mut next = previous.clone();
+    next.pause_at_song_end = true;
+
+    let plan = plan_audio_settings_change(&previous, &next);
+
+    assert!(plan.apply, "el interruptor tiene que llegar al mezclador");
+    assert!(
+        !plan.rebuild_stream,
+        "es un flag del mezclador: reabrir el dispositivo cortaría el audio"
+    );
+}
+
+#[test]
 fn unchanged_audio_settings_do_not_touch_the_engine() {
     let settings = crate::infra::settings::AppSettings::default();
 

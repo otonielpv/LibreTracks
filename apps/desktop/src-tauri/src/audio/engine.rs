@@ -2030,6 +2030,11 @@ impl AudioController {
                 fade_out_seconds: settings.pad_fade_out_seconds as f32,
                 stop_with_transport: settings.pad_stop_with_transport,
             })?;
+            // Pure mixer flag, like the metronome config: a failure here is an
+            // engine bug, so it propagates.
+            engine.send_command(&EngineCommand::SetPauseAtSongEnd {
+                enabled: settings.pause_at_song_end,
+            })?;
             state.settings = settings;
             Ok(())
         })

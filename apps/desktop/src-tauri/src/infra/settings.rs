@@ -274,6 +274,13 @@ pub struct AppSettings {
     pub vamp_mode: String,
     #[serde(default = "default_vamp_bars")]
     pub vamp_bars: u32,
+    /// When true the transport pauses by itself at the end of each song
+    /// (region) instead of rolling straight into the next one, so a set never
+    /// jumps to the next song unannounced. Off by default: back-to-back
+    /// playback is what every install did before this existed. A song jump the
+    /// user queued for that boundary still happens.
+    #[serde(default)]
+    pub pause_at_song_end: bool,
     #[serde(default = "default_timeline_navigation_scheme")]
     pub timeline_navigation_scheme: String,
     #[serde(default = "default_timeline_playhead_follow_mode")]
@@ -411,6 +418,7 @@ impl Default for AppSettings {
             song_transition_mode: default_song_transition_mode(),
             vamp_mode: default_vamp_mode(),
             vamp_bars: default_vamp_bars(),
+            pause_at_song_end: false,
             timeline_navigation_scheme: default_timeline_navigation_scheme(),
             timeline_playhead_follow_mode: default_timeline_playhead_follow_mode(),
             import_merge_matching_tracks: default_import_merge_matching_tracks(),

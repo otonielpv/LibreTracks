@@ -248,6 +248,15 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       );
     },
 
+    handlePauseAtSongEndChange(nextValue: boolean) {
+      persistAudioPatch(
+        { pauseAtSongEnd: nextValue },
+        t("transport.status.pauseAtSongEndUpdated", {
+          defaultValue: "Pause at song end updated.",
+        }),
+      );
+    },
+
     handleVampModeChange(nextValue: AppSettings["vampMode"]) {
       persistAudioPatch({ vampMode: nextValue }, "Vamp settings updated.");
     },

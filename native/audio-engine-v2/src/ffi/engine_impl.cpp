@@ -1146,6 +1146,7 @@ std::string EngineImpl::get_snapshot() const {
         snap.pad.current_gain = pad.current_gain;
         snap.mixer_scheduled_jump_executed_count =
             mixer_->scheduled_jump_executed_count();
+        snap.mixer_song_end_pause_count = mixer_->song_end_pause_count();
     }
 
     if (prep_queue_) {
@@ -2178,6 +2179,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             pad_config_.fade_out_seconds = std::clamp(c.fade_out_seconds, 0.0f, 30.0f);
             pad_config_.stop_with_transport = c.stop_with_transport;
             if (mixer_) mixer_->set_pad_config(pad_config_);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetPauseAtSongEnd>) {
+            if (mixer_) mixer_->set_pause_at_song_end(c.enabled);
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdLoadPadClip>) {

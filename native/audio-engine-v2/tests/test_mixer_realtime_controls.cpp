@@ -592,6 +592,128 @@ TEST_CASE("scheduled region-end jump splits render block at exact trigger frame"
     CHECK(mixer.scheduled_jump_executed_count() == 1);
 }
 
+namespace {
+
+// Two back-to-back songs: A = [0, 96000), B = [96000, 192000).
+std::shared_ptr<Session> two_song_session() {
+    auto session = std::make_shared<Session>(one_track_session(0, 48000 * 4));
+    session->songs[0].regions.push_back(Region{"region-a", "A", 0, 96000, 0});
+    session->songs[0].regions.push_back(Region{"region-b", "B", 96000, 192000, 0});
+    return session;
+}
+
+} // namespace
+
+TEST_CASE("pause at song end is off by default: playback rolls into the next song") {
+    SourceManager sources;
+    add_source(sources, "source", 0.5f, 48000 * 4);
+    auto session = two_song_session();
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+
+    clock.seek(95600);
+    clock.play();
+    clock.clear_pending_start();
+
+    std::vector<float> left(kBlock, 0.0f), right(kBlock, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+    mixer.render(out, 2, kBlock, clock.sample_rate());
+
+    CHECK(clock.position().state == TransportState::Playing);
+    CHECK(clock.position().frame == 95600 + kBlock);
+    CHECK(mixer.song_end_pause_count() == 0);
+}
+
+TEST_CASE("pause at song end stops on the exact end frame and silences the rest") {
+    SourceManager sources;
+    add_source(sources, "source", 0.5f, 48000 * 4);
+    auto session = two_song_session();
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+    mixer.set_pause_at_song_end(true);
+
+    clock.seek(95700);
+    clock.play();
+    clock.clear_pending_start();
+
+    std::vector<float> left(kBlock, 0.0f), right(kBlock, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+    mixer.render(out, 2, kBlock, clock.sample_rate());
+
+    CHECK(clock.position().state == TransportState::Paused);
+    CHECK(clock.position().frame == 96000);
+    CHECK(mixer.song_end_pause_count() == 1);
+
+    // Song A sounds up to its end; past the crossfade ramp nothing of song B
+    // leaks into the block.
+    const std::vector<float> before(left.begin(), left.begin() + 300);
+    const std::vector<float> after(left.begin() + 300 + 128, left.end());
+    CHECK(peak(before) > 0.01f);
+    CHECK(peak(after) < 1.0e-6f);
+
+    // Play resumes from the boundary into song B without pausing again.
+    clock.play();
+    clock.clear_pending_start();
+    mixer.render(out, 2, kBlock, clock.sample_rate());
+    CHECK(clock.position().state == TransportState::Playing);
+    CHECK(clock.position().frame == 96000 + kBlock);
+    CHECK(mixer.song_end_pause_count() == 1);
+}
+
+TEST_CASE("pause at song end yields to a jump scheduled on the same boundary") {
+    SourceManager sources;
+    add_source(sources, "source", 0.5f, 48000 * 4);
+    auto session = two_song_session();
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+    mixer.set_pause_at_song_end(true);
+
+    ScheduledJump jump;
+    jump.jump_id = "region-end";
+    jump.target = frame_target(1234);
+    jump.trigger = JumpTrigger::AtRegionEnd;
+    jump.status = JumpStatus::Pending;
+    REQUIRE(scheduler.schedule(jump).is_ok());
+
+    clock.seek(95600);
+    clock.play();
+    clock.clear_pending_start();
+
+    std::vector<float> left(kBlock, 0.0f), right(kBlock, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+    mixer.render(out, 2, kBlock, clock.sample_rate());
+
+    CHECK(clock.position().state == TransportState::Playing);
+    CHECK(clock.position().frame == 1234 + (kBlock - 400));
+    CHECK(mixer.scheduled_jump_executed_count() == 1);
+    CHECK(mixer.song_end_pause_count() == 0);
+}
+
+TEST_CASE("pause at song end yields to a transition fade heading to silence") {
+    SourceManager sources;
+    add_source(sources, "source", 0.5f, 48000 * 4);
+    auto session = two_song_session();
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+    mixer.set_pause_at_song_end(true);
+    mixer.start_master_fade(0.0f, 0.5);
+
+    clock.seek(95600);
+    clock.play();
+    clock.clear_pending_start();
+
+    std::vector<float> left(kBlock, 0.0f), right(kBlock, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+    mixer.render(out, 2, kBlock, clock.sample_rate());
+
+    CHECK(clock.position().state == TransportState::Playing);
+    CHECK(mixer.song_end_pause_count() == 0);
+}
+
 TEST_CASE("scheduled jump can suppress seek fade for external fade transitions") {
     SourceManager sources;
     add_source(sources, "source", 0.5f, 48000 * 4);

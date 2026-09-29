@@ -313,6 +313,9 @@ const es = {
       autoColorNewTracksHint:
         "Cada pista nueva toma un color de la paleta, recorriéndola en orden, para distinguirlas de un vistazo. Desactívalo si prefieres colorearlas a mano. No repinta las pistas que ya tienes.",
       importMergeMatchingTracks: "Unir pistas con el mismo nombre al importar",
+      pauseAtSongEnd: "Pausar al terminar cada canción",
+      pauseAtSongEndHint:
+        "La reproducción se detiene cuando termina una canción en lugar de pasar directamente a la siguiente. Pulsa Play para empezar la siguiente. Un salto de canción que hayas programado se sigue haciendo.",
       importMergeMatchingTracksHint:
         "Al importar una canción, sus clips se añaden a la pista existente que ya tenga ese nombre. Desactívalo para que cada canción traiga sus propias pistas.",
       interfaceZoom: "Tamaño de la interfaz",
@@ -883,6 +886,7 @@ const es = {
         "Modo de seguimiento del cursor actualizado.",
       importMergeMatchingTracksUpdated:
         "Comportamiento de pistas al importar actualizado.",
+      pauseAtSongEndUpdated: "Pausa al terminar la canción actualizada.",
       referenceImportedAudioUpdated:
         "Comportamiento al importar audio actualizado.",
       autoColorNewTracksUpdated: "Colores automáticos de pista actualizados.",

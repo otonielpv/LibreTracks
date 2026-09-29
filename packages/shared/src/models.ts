@@ -1201,6 +1201,12 @@ export type AppSettings = {
   songTransitionMode: "instant" | "fade_out";
   vampMode: "section" | "bars";
   vampBars: number;
+  /**
+   * When true the transport pauses by itself at the end of each song (region)
+   * instead of rolling straight into the next one. Off by default. A song jump
+   * queued for that boundary still happens.
+   */
+  pauseAtSongEnd: boolean;
   timelineNavigationScheme: "ableton" | "libretracks";
   timelinePlayheadFollowMode: "ahead" | "center";
   /**
@@ -1316,6 +1322,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   songTransitionMode: "instant",
   vampMode: "section",
   vampBars: 4,
+  pauseAtSongEnd: false,
   timelineNavigationScheme: "ableton",
   timelinePlayheadFollowMode: "ahead",
   importMergeMatchingTracks: true,
@@ -1548,6 +1555,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
       settings.vampBars,
       DEFAULT_APP_SETTINGS.vampBars,
     ),
+    pauseAtSongEnd: Boolean(settings.pauseAtSongEnd),
     timelineNavigationScheme,
     timelinePlayheadFollowMode,
     // Defaults to true when absent (older settings files) so existing users

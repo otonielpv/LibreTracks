@@ -208,6 +208,10 @@ struct EngineSnapshot {
     PadSnapshot pad;
 
     std::uint64_t mixer_scheduled_jump_executed_count = 0;
+    // Times the mixer paused the transport on its own at a song's end
+    // (CmdSetPauseAtSongEnd). The host compares it against the last value it
+    // saw to mirror the pause into its own transport state.
+    std::uint64_t mixer_song_end_pause_count = 0;
 
     // Phase 8: prearmed-jump manager diagnostics. All counters monotonic
     // since engine init; ready_count is the live cache size.

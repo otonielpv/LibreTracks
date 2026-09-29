@@ -17,6 +17,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -56,6 +57,9 @@ public:
     void set_track_mute(const Id& track_id, bool mute);
     void set_track_solo(const Id& track_id, bool solo);
     void start_master_fade(float target_gain, double duration_seconds) noexcept;
+    // Pause the transport by itself on the frame where a song (region) ends.
+    // Command thread; read by the audio thread at the top of each block.
+    void set_pause_at_song_end(bool enabled) noexcept;
     // preserve_realtime_state=true: keep existing gain/pan/mute/solo atomics for known tracks
     //   (used for session pointer swaps during transpose/region changes — slider state survives).
     // preserve_realtime_state=false: always load values from session
@@ -130,6 +134,8 @@ public:
     std::uint64_t rendered_track_count() const noexcept;
     std::uint64_t skipped_track_count() const noexcept;
     std::uint64_t scheduled_jump_executed_count() const noexcept;
+    // Times render() paused the transport at a song end (set_pause_at_song_end).
+    std::uint64_t song_end_pause_count() const noexcept;
 
     // Called from the control thread to check if a scheduled jump executed inside the audio
     // callback since the last call. Returns the target frame if one did, or -1 otherwise.
@@ -389,6 +395,8 @@ private:
     std::atomic<std::uint64_t> rendered_track_count_{0};
     std::atomic<std::uint64_t> skipped_track_count_{0};
     std::atomic<std::uint64_t> scheduled_jump_executed_count_{0};
+    std::atomic<bool> pause_at_song_end_{false};
+    std::atomic<std::uint64_t> song_end_pause_count_{0};
 
     std::atomic<std::uint64_t> master_fade_request_seq_{0};
     std::atomic<float> master_fade_target_gain_{1.0f};
@@ -439,6 +447,10 @@ private:
     // multiplies its own window by master_fade_gain_at(), and the block ends by
     // advancing the ramp (end_) whether or not anything was rendered, so the
     // fade keeps wall-clock time even with the transport stopped.
+    // Frame of the song end this block has to pause on, if the option is on,
+    // the transport is rolling and a region ends inside (cur, cur + frames].
+    std::optional<Frame> song_end_pause_frame(const Session* session,
+                                              int num_frames) const noexcept;
     void begin_master_fade_block() noexcept;
     float master_fade_gain_at(int frame_in_block) const noexcept;
     void apply_master_fade_to_tracks(float** output_channels,

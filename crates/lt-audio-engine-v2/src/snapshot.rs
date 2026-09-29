@@ -371,4 +371,8 @@ pub struct PitchSnapshot {
     pub pitch_repair_completed_count: u64,
     #[serde(default)]
     pub mixer_scheduled_jump_executed_count: u64,
+    /// Times the mixer paused the transport on its own at a song's end
+    /// (`EngineCommand::SetPauseAtSongEnd`).
+    #[serde(default)]
+    pub mixer_song_end_pause_count: u64,
 }
