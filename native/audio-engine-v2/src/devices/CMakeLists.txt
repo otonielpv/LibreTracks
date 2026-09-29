@@ -1,6 +1,7 @@
 target_sources(lt_audio_engine_v2 PRIVATE
     audio_device_manager.cpp
     audio_device_manager_oboe.cpp
+    driver_call_guard.cpp
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")

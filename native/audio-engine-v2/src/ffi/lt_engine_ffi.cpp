@@ -122,7 +122,13 @@ LT_API const char* lt_audio_engine_list_devices(LtEngine* engine,
                                                 int32_t force_rescan) {
     if (!engine) return "[]";
     thread_local std::string buf;
-    buf = as_impl(engine)->list_devices(force_rescan != 0);
+    // Enumeration calls into third-party audio drivers. Nothing may unwind
+    // past this point: the Rust caller cannot stop a C++ exception and aborts.
+    try {
+        buf = as_impl(engine)->list_devices(force_rescan != 0);
+    } catch (...) {
+        buf = "[]";
+    }
     return buf.c_str();
 }
 

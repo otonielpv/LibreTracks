@@ -1,6 +1,7 @@
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/core/realtime_thread.h>
 #include <lt_engine/devices/device_channel_layout.h>
+#include <lt_engine/devices/driver_call_guard.h>
 
 #if defined(LT_ENGINE_IOS_AUDIO_SESSION)
 #include <lt_engine/devices/ios_audio_session.h>
@@ -197,6 +198,9 @@ struct AudioDeviceManager::Impl {
     struct CachedLayout {
         int count = 0;
         std::vector<std::string> names;
+        // The driver threw or faulted while probing. Cached so it is not
+        // loaded again until a forced rescan clears the cache.
+        bool probe_failed = false;
     };
     mutable std::mutex                                    cache_mtx;
     mutable std::unordered_map<std::string, CachedLayout> channel_layout_cache;
@@ -670,13 +674,25 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool force_rescan
                 }
                 if (!cache_hit) {
                     const auto t_probe = clk::now();
-                    std::unique_ptr<juce::AudioIODevice> probe(type->createDevice(name, {}));
-                    if (probe != nullptr) {
-                        auto ch_names = probe->getOutputChannelNames();
-                        layout.names.reserve(static_cast<size_t>(ch_names.size()));
-                        for (const auto& cn : ch_names)
-                            layout.names.push_back(cn.toStdString());
+                    // createDevice loads the third-party driver into our
+                    // process (see driver_call_guard.h for why it is fenced).
+                    std::vector<std::string> probed_names;
+                    const auto probe = call_driver_guarded([&] {
+                        std::unique_ptr<juce::AudioIODevice> device(type->createDevice(name, {}));
+                        if (device == nullptr) return;
+                        for (const auto& cn : device->getOutputChannelNames())
+                            probed_names.push_back(cn.toStdString());
+                    });
+                    if (probe.ok) {
+                        layout.names = std::move(probed_names);
                         layout.count = static_cast<int>(layout.names.size());
+                    } else {
+                        layout.probe_failed = true;
+                        // Unconditional: this is the line support needs when a
+                        // user's interface is missing from the list.
+                        lt_debug_log("[LT_AUDIO] probe_device FAILED backend=%s name=\"%s\": %s "
+                                     "- device hidden from the list\n",
+                                     backend.c_str(), device_name.c_str(), probe.error);
                     }
                     const double probe_ms = std::chrono::duration<double, std::milli>(clk::now() - t_probe).count();
                     device_debug_log("[LT_AUDIO_DEBUG] probe_device backend=%s name=\"%s\" probe_ms=%.1f channels=%d\n",
@@ -684,6 +700,12 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool force_rescan
                     std::lock_guard<std::mutex> lk(impl_->cache_mtx);
                     impl_->channel_layout_cache[d.id] = layout;
                 }
+                // A driver that blew up while probing would do the same on
+                // open, so it is not offered. The saved-device check at engine
+                // startup then falls back to the default device instead of
+                // reopening it.
+                if (layout.probe_failed)
+                    continue;
                 d.output_channel_count = layout.count;
                 d.output_channel_names = std::move(layout.names);
             }
