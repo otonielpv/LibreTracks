@@ -4242,6 +4242,11 @@ pub(crate) fn default_project_file_name(title: &str) -> String {
     format!("{fallback}.ltsession")
 }
 
+/// File name pre-filled in the "create session" save dialog.
+pub(crate) fn default_new_session_file_name(audio: &AudioController) -> String {
+    default_project_file_name(default_session_name(ui_locale(audio).as_deref()))
+}
+
 pub(super) fn copy_project_audio_files(
     source_song_dir: &Path,
     target_song_dir: &Path,

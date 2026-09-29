@@ -23,9 +23,10 @@ use crate::models::TransportSnapshot;
 
 use super::missing_media::{collect_missing_media, MissingMediaEntry};
 use super::{
-    build_empty_song, build_template_song, copy_project_audio_files, default_project_file_name,
-    emit_project_load_progress, library_manifest_path, list_library_assets, project_root,
-    read_library_manifest, strip_song_to_template, timestamp_suffix, write_library_manifest,
+    build_empty_song, build_template_song, copy_project_audio_files, default_new_session_file_name,
+    default_project_file_name, default_session_name, emit_project_load_progress,
+    library_manifest_path, list_library_assets, project_root, read_library_manifest,
+    strip_song_to_template, timestamp_suffix, ui_locale, write_library_manifest,
     write_library_manifest_assets, AudioChangeImpact, DesktopSession, LIBRARY_MANIFEST_FILE_NAME,
 };
 
@@ -118,7 +119,7 @@ impl DesktopSession {
             .set_title("Crear proyecto")
             .set_directory(&default_directory)
             .add_filter("LibreTracks Session", &["ltsession"])
-            .set_file_name(&default_project_file_name("Nueva Cancion"))
+            .set_file_name(&default_new_session_file_name(audio))
             .save_file();
 
         let Some(target_pick) = target_pick else {
@@ -140,7 +141,14 @@ impl DesktopSession {
         existing_dir: ExistingProjectDir,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        let title = "Nueva Cancion".to_string();
+        // Title the session after the name the user typed in the save dialog,
+        // like the template path below does.
+        let title = target_pick
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .map(str::to_owned)
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| default_session_name(ui_locale(audio).as_deref()).to_owned());
         let song_id = format!("song_{}", timestamp_suffix());
         let song = build_empty_song(song_id, title);
         self.create_song_at_path_with(target_pick, existing_dir, song, audio)
@@ -170,7 +178,7 @@ impl DesktopSession {
             .and_then(|stem| stem.to_str())
             .map(str::to_owned)
             .filter(|name| !name.is_empty())
-            .unwrap_or_else(|| "Nueva Cancion".to_string());
+            .unwrap_or_else(|| default_session_name(ui_locale(audio).as_deref()).to_owned());
         let song_id = format!("song_{}", timestamp_suffix());
         let song = build_template_song(template_song, song_id, project_name);
 

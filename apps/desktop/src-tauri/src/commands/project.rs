@@ -684,7 +684,7 @@ pub fn start_create_song(app: AppHandle) -> Result<bool, String> {
         .set_title("Crear proyecto")
         .set_directory(&default_directory)
         .add_filter("LibreTracks Session", &["ltsession"])
-        .set_file_name(&crate::state::default_project_file_name("Nueva Cancion"))
+        .set_file_name(&crate::state::default_new_session_file_name(&app.state::<DesktopState>().audio))
         .save_file();
 
     let Some(target_pick) = target_pick else {
@@ -1134,7 +1134,7 @@ pub fn start_create_song_from_template_path(
         .set_title("Crear proyecto desde plantilla")
         .set_directory(&default_directory)
         .add_filter("LibreTracks Session", &["ltsession"])
-        .set_file_name(&crate::state::default_project_file_name("Nueva Cancion"))
+        .set_file_name(&crate::state::default_new_session_file_name(&app.state::<DesktopState>().audio))
         .save_file();
 
     let Some(target_pick) = target_pick else {
@@ -1180,7 +1180,7 @@ pub fn start_create_song_from_template_file(app: AppHandle) -> Result<bool, Stri
         .set_title("Crear proyecto desde plantilla")
         .set_directory(&target_directory)
         .add_filter("LibreTracks Session", &["ltsession"])
-        .set_file_name(&crate::state::default_project_file_name("Nueva Cancion"))
+        .set_file_name(&crate::state::default_new_session_file_name(&app.state::<DesktopState>().audio))
         .save_file();
 
     let Some(target_pick) = target_pick else {

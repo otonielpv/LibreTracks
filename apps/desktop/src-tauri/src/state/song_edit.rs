@@ -55,6 +55,16 @@ pub(super) fn default_region_name(locale: Option<&str>, index: usize) -> String 
     }
 }
 
+/// Default name offered for a brand-new session, in the user's language. It
+/// names the whole session (a setlist of songs), not a song. Kept ASCII: it
+/// becomes the project folder, and audio paths under it reach native decoders.
+pub(super) fn default_session_name(locale: Option<&str>) -> &'static str {
+    match locale {
+        Some("es") => "Nueva Sesion",
+        _ => "New Session",
+    }
+}
+
 /// Last path segment, for naming the offending file in an error message.
 fn file_label(file_path: &str) -> String {
     file_path
@@ -573,6 +583,13 @@ mod region_message_tests {
         assert_eq!(default_region_name(Some("en"), 1), "Song 2");
         assert_eq!(default_region_name(None, 2), "Song 3");
         assert_eq!(default_region_name(Some("pt"), 0), "Song 1");
+    }
+
+    #[test]
+    fn a_new_session_is_named_as_a_session_not_a_song() {
+        assert_eq!(default_session_name(Some("es")), "Nueva Sesion");
+        assert_eq!(default_session_name(Some("en")), "New Session");
+        assert_eq!(default_session_name(None), "New Session");
     }
 
     #[test]
