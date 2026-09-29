@@ -79,6 +79,18 @@ export type CompactSongHandlerDeps = {
     includeAudio: boolean,
     includeVideo?: boolean,
   ) => Promise<boolean>;
+  /**
+   * The `.ltset` export's progress event and indicator, reused so a song
+   * export shows a real percentage too instead of a blocking overlay.
+   */
+  listenToExportProgress: (
+    handler: (event: { percent: number; message: string }) => void,
+  ) => Promise<() => void>;
+  setExportProgressUi: (state: {
+    active: boolean;
+    percent: number;
+    message: string;
+  }) => void;
   renameLibraryFolder: (
     oldFolderPath: string,
     newFolderPath: string,
@@ -139,6 +151,8 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
     deleteSongRegion,
     exportRegionAsPackage,
     exportRegionAsPackageAt,
+    listenToExportProgress,
+    setExportProgressUi,
     renameLibraryFolder,
     moveLibraryAsset,
     deleteLibraryFolder,
@@ -382,8 +396,25 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
   ) => {
     const currentRegion = findRegion(regionId);
     setExportSongTarget(null);
-    return runAction(
-      async () => {
+    // Non-modal indicator rather than the busy overlay: a full package of a
+    // multitrack takes a while on a phone, and on iOS the "Save to…" sheet only
+    // opens once the file is built, so the user needs to see it progress.
+    return runAction(async () => {
+      const unlisten = await listenToExportProgress((event) => {
+        setExportProgressUi({
+          active: true,
+          percent: event.percent,
+          message: event.message,
+        });
+      });
+      try {
+        setExportProgressUi({
+          active: true,
+          percent: 0,
+          message: t("transport.shell.exportingSong", {
+            defaultValue: "Exportando canción...",
+          }),
+        });
         const exported = writePath
           ? await exportRegionAsPackageAt(regionId, writePath, includeAudio, includeVideo)
           : await exportRegionAsPackage(regionId, includeAudio, includeVideo);
@@ -392,9 +423,11 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
             `Paquete exportado para ${currentRegion?.name ?? "la canción"}`,
           );
         }
-      },
-      { busy: true },
-    );
+      } finally {
+        unlisten();
+        setExportProgressUi({ active: false, percent: 0, message: "" });
+      }
+    });
   };
 
   return {

@@ -71,6 +71,8 @@ function setup(overrides: Partial<CompactSongHandlerDeps> = {}) {
     deleteSongRegion: vi.fn(async () => snapshot(6)),
     exportRegionAsPackage: vi.fn(async () => true),
     exportRegionAsPackageAt: vi.fn(async () => true),
+    listenToExportProgress: vi.fn(async () => () => {}),
+    setExportProgressUi: vi.fn(),
     renameLibraryFolder: vi.fn(async () => []),
     moveLibraryAsset: vi.fn(async () => []),
     deleteLibraryFolder: vi.fn(async () => []),
@@ -291,17 +293,58 @@ describe("createCompactSongHandlers", () => {
       expect(deps.exportRegionAsPackage).not.toHaveBeenCalled();
     });
 
-    it("runs the export behind the blocking overlay on confirm", async () => {
-      const { handlers, deps } = setup();
-      handlers.handleConfirmExportSong("r1", true);
+    it("runs the export with the progress indicator, not the blocking overlay", async () => {
+      let progress: ((event: { percent: number; message: string }) => void) | null =
+        null;
+      const unlisten = vi.fn();
+      let finishExport: (value: boolean) => void = () => {};
+      const { handlers, deps } = setup({
+        listenToExportProgress: vi.fn(async (handler) => {
+          progress = handler;
+          return unlisten;
+        }),
+        exportRegionAsPackage: vi.fn(
+          () => new Promise<boolean>((resolve) => (finishExport = resolve)),
+        ),
+      });
+      const done = handlers.handleConfirmExportSong("r1", true);
 
       expect(deps.setExportSongTarget).toHaveBeenCalledWith(null);
-      expect(deps.runAction).toHaveBeenCalledWith(expect.any(Function), {
-        busy: true,
-      });
+      expect(deps.runAction).toHaveBeenCalledWith(expect.any(Function));
       await vi.waitFor(() =>
         expect(deps.exportRegionAsPackage).toHaveBeenCalledWith("r1", true, false),
       );
+
+      progress!({ percent: 51, message: "Empaquetando audio... 5/10" });
+      expect(deps.setExportProgressUi).toHaveBeenLastCalledWith({
+        active: true,
+        percent: 51,
+        message: "Empaquetando audio... 5/10",
+      });
+
+      finishExport(true);
+      await done;
+      expect(unlisten).toHaveBeenCalled();
+      expect(deps.setExportProgressUi).toHaveBeenLastCalledWith({
+        active: false,
+        percent: 0,
+        message: "",
+      });
+    });
+
+    it("clears the indicator when the export fails", async () => {
+      const { handlers, deps } = setup({
+        exportRegionAsPackage: vi.fn(async () => {
+          throw new Error("disk full");
+        }),
+      });
+      await handlers.handleConfirmExportSong("r1", true).catch(() => {});
+
+      expect(deps.setExportProgressUi).toHaveBeenLastCalledWith({
+        active: false,
+        percent: 0,
+        message: "",
+      });
     });
 
     it("stays silent when the export dialog is dismissed", async () => {

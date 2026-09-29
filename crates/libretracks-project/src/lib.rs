@@ -27,7 +27,8 @@ pub use package::{
     import_song_package, merge_extracted_song_package, ExtractedSongPackage,
     PackageLibraryAssetEntry, SongImportTrackMode, SongPackageExport, SongPackageImportResult,
     StagedPackageAudio,
-    export_region_as_package_with_options, extract_song_package_from_reader_with_options,
+    export_region_as_package_with_options, export_region_as_package_with_progress,
+    extract_song_package_from_reader_with_options,
     PackageVideoEntry,
 };
 pub use prepared_audio::{prepare_audio_to_wav, prepared_relative_path, PreparedAudioInfo};

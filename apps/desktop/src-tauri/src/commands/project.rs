@@ -697,7 +697,11 @@ pub fn start_create_song(app: AppHandle) -> Result<bool, String> {
             .lock()
             .map_err(|_| DesktopError::StatePoisoned.to_string())?;
         session
-            .create_song_at_path(target_pick, &state.audio)
+            .create_song_at_path(
+                target_pick,
+                crate::state::ExistingProjectDir::Refuse,
+                &state.audio,
+            )
             .map_err(|error| error.to_string())
     });
 
@@ -758,7 +762,11 @@ pub fn start_create_song_named_at(
             .lock()
             .map_err(|_| DesktopError::StatePoisoned.to_string())?;
         session
-            .create_song_at_path(target_pick, &state.audio)
+            .create_song_at_path(
+                target_pick,
+                crate::state::ExistingProjectDir::ReuseIfNoSession,
+                &state.audio,
+            )
             .map_err(|error| error.to_string())
     });
 
@@ -782,31 +790,7 @@ fn named_session_target(
                     parent.display()
                 ));
             }
-            // On Android the "choose folder" flow reuses the SAF save dialog,
-            // so the picked parent is the folder the user placed `<name>.ltsession`
-            // INTO. When the user navigated into (or created) a folder that already
-            // matches the session name, nesting another `<name>/` under it would
-            // produce `…/Test/Test/`. If the chosen folder is already named `<name>`
-            // and holds no session of its own, inflate the session directly there
-            // instead of nesting.
-            let parent_is_named_like_session = parent
-                .file_name()
-                .and_then(|value| value.to_str())
-                .map(|dir_name| dir_name.eq_ignore_ascii_case(&name))
-                .unwrap_or(false);
-            let song_dir = if parent_is_named_like_session && !dir_holds_session(&parent) {
-                parent.clone()
-            } else {
-                // A chosen folder may already hold a same-named session; pick a
-                // fresh `<name>`, `<name>-2`… folder instead of failing so the
-                // user isn't forced to rename.
-                unique_session_dir(&parent, &name)
-            };
-            let dir_name = song_dir
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or(&name);
-            Ok(song_dir.join(crate::state::default_project_file_name(dir_name)))
+            Ok(session_target_in_parent(&parent, name))
         }
         None => {
             let default_directory = crate::state::create_song_default_directory(&app);
@@ -817,6 +801,39 @@ fn named_session_target(
             Ok(default_directory.join(crate::state::default_project_file_name(&name)))
         }
     }
+}
+
+/// Pseudo save-file path for a new session named `name` inside the user-chosen
+/// `parent`. `create_song_at_path_with` inflates `<pick parent>/<pick stem>/`,
+/// so this returns `<dir parent>/<dir name>.ltsession` — NOT a path inside the
+/// session folder, which would nest it twice (`…/Name/Name/Name.ltsession`).
+fn session_target_in_parent(parent: &std::path::Path, name: &str) -> std::path::PathBuf {
+    // When the user navigated into (or created) a folder already named like the
+    // session, nesting another `<name>/` under it would produce `…/Test/Test/`.
+    // If that folder holds no session of its own, inflate directly there.
+    let parent_is_named_like_session = parent
+        .file_name()
+        .and_then(|value| value.to_str())
+        .map(|dir_name| dir_name.eq_ignore_ascii_case(name))
+        .unwrap_or(false);
+    let song_dir = if parent_is_named_like_session && !dir_holds_session(parent) {
+        parent.to_path_buf()
+    } else {
+        // A chosen folder may already hold a same-named session; pick a fresh
+        // `<name>`, `<name>-2`… folder instead of failing so the user isn't
+        // forced to rename.
+        unique_session_dir(parent, name)
+    };
+    let dir_name = song_dir
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(name)
+        .to_string();
+    let base = song_dir
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| parent.to_path_buf());
+    base.join(crate::state::default_project_file_name(&dir_name))
 }
 
 /// Let the user choose where a new session should be saved and return the
@@ -1091,7 +1108,12 @@ pub fn start_create_song_from_template_named_at(
             .lock()
             .map_err(|_| DesktopError::StatePoisoned.to_string())?;
         session
-            .create_song_from_template_path(template_path, target_pick, &state.audio)
+            .create_song_from_template_path(
+                template_path,
+                target_pick,
+                crate::state::ExistingProjectDir::ReuseIfNoSession,
+                &state.audio,
+            )
             .map_err(|error| error.to_string())
     });
 
@@ -1125,7 +1147,12 @@ pub fn start_create_song_from_template_path(
             .lock()
             .map_err(|_| DesktopError::StatePoisoned.to_string())?;
         session
-            .create_song_from_template_path(template_path, target_pick, &state.audio)
+            .create_song_from_template_path(
+                template_path,
+                target_pick,
+                crate::state::ExistingProjectDir::Refuse,
+                &state.audio,
+            )
             .map_err(|error| error.to_string())
     });
 
@@ -1166,7 +1193,12 @@ pub fn start_create_song_from_template_file(app: AppHandle) -> Result<bool, Stri
             .lock()
             .map_err(|_| DesktopError::StatePoisoned.to_string())?;
         session
-            .create_song_from_template_path(template_path, target_pick, &state.audio)
+            .create_song_from_template_path(
+                template_path,
+                target_pick,
+                crate::state::ExistingProjectDir::Refuse,
+                &state.audio,
+            )
             .map_err(|error| error.to_string())
     });
 
@@ -2322,7 +2354,7 @@ pub async fn export_region_as_package(
     let cache_root = crate::state::decoding_cache_root();
     let write_path = target.write_path().to_path_buf();
     tauri::async_runtime::spawn_blocking(move || {
-        libretracks_project::export_region_as_package_with_options(
+        libretracks_project::export_region_as_package_with_progress(
             &cache_root,
             &song_dir,
             &song,
@@ -2330,8 +2362,21 @@ pub async fn export_region_as_package(
             &write_path,
             session_audio_mode(include_audio, None),
             include_video.unwrap_or(false),
+            |done, total| emit_song_export_progress(&app, done, total, include_audio),
         )
         .map_err(|error| error.to_string())?;
+        // On iOS this is where the "Save to…" sheet opens.
+        crate::state::emit_session_export_progress(
+            &app,
+            99,
+            if cfg!(target_os = "ios") {
+                "Elige dónde guardar la canción...".into()
+            } else {
+                "Guardando paquete...".into()
+            },
+            false,
+            None,
+        );
         target.finish(&app)
     })
     .await
@@ -2346,6 +2391,7 @@ pub async fn export_region_as_package(
 /// dialog. Not wired into any production UI.
 #[tauri::command]
 pub async fn export_region_as_package_at(
+    app: AppHandle,
     region_id: String,
     write_path: String,
     include_audio: bool,
@@ -2372,7 +2418,7 @@ pub async fn export_region_as_package_at(
     let cache_root = crate::state::decoding_cache_root();
     let write_path = std::path::PathBuf::from(write_path);
     tauri::async_runtime::spawn_blocking(move || {
-        libretracks_project::export_region_as_package_with_options(
+        libretracks_project::export_region_as_package_with_progress(
             &cache_root,
             &song_dir,
             &song,
@@ -2380,6 +2426,7 @@ pub async fn export_region_as_package_at(
             &write_path,
             session_audio_mode(include_audio, None),
             include_video.unwrap_or(false),
+            |done, total| emit_song_export_progress(&app, done, total, include_audio),
         )
         .map_err(|error| error.to_string())
     })
@@ -2387,6 +2434,23 @@ pub async fn export_region_as_package_at(
     .map_err(|error| error.to_string())??;
 
     Ok(true)
+}
+
+/// Song (`.ltpkg`) export progress, on the same event and 5–98% band as the
+/// `.ltset` export so the UI shows it in the same indicator. Never sends the
+/// terminal `done` event: the song export commands return when finished, and
+/// the frontend clears the indicator then.
+fn emit_song_export_progress(app: &AppHandle, done: usize, total: usize, include_audio: bool) {
+    if total == 0 {
+        return;
+    }
+    let percent = 5 + ((done as f64 / total as f64) * 93.0) as u8;
+    let message = if include_audio {
+        format!("Empaquetando audio... {done}/{total}")
+    } else {
+        format!("Empaquetando canción... {done}/{total}")
+    };
+    crate::state::emit_session_export_progress(app, percent.min(98), message, false, None);
 }
 
 #[tauri::command(async)]
@@ -3152,8 +3216,44 @@ pub fn import_external_project(
 
 #[cfg(test)]
 mod export_naming_tests {
-    use super::{default_session_package_name, session_file_in_dir, unique_session_dir};
+    use super::{
+        default_session_package_name, session_dir_from_pick, session_file_in_dir,
+        session_target_in_parent, unique_session_dir,
+    };
     use std::path::Path;
+
+    // `create_song_at_path_with` inflates the folder `session_dir_from_pick`
+    // derives from the pick, so these compose both layers: the iOS bug was each
+    // one adding its own `<name>/`, giving `…/Nueva sesion/Nueva sesion/`.
+    #[test]
+    fn chosen_folder_gets_a_single_session_folder() {
+        let parent = tempfile::tempdir().expect("chosen folder");
+        let pick = session_target_in_parent(parent.path(), "Nueva sesion");
+        assert_eq!(
+            session_dir_from_pick(&pick).expect("session dir"),
+            parent.path().join("Nueva sesion")
+        );
+    }
+
+    #[test]
+    fn a_chosen_folder_named_like_the_session_is_used_directly() {
+        let root = tempfile::tempdir().expect("root");
+        let chosen = root.path().join("Nueva sesion");
+        std::fs::create_dir(&chosen).expect("chosen folder");
+        let pick = session_target_in_parent(&chosen, "Nueva sesion");
+        assert_eq!(session_dir_from_pick(&pick).expect("session dir"), chosen);
+    }
+
+    #[test]
+    fn an_existing_session_in_the_chosen_folder_gets_a_suffix() {
+        let parent = tempfile::tempdir().expect("chosen folder");
+        std::fs::create_dir(parent.path().join("Directo")).expect("existing session");
+        let pick = session_target_in_parent(parent.path(), "Directo");
+        assert_eq!(
+            session_dir_from_pick(&pick).expect("session dir"),
+            parent.path().join("Directo-2")
+        );
+    }
 
     #[test]
     fn the_default_ltset_name_comes_from_the_project_folder() {

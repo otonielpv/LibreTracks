@@ -306,6 +306,33 @@ pub fn export_region_as_package_with_options(
     audio_mode: crate::SessionPackageAudio,
     include_video: bool,
 ) -> Result<SongPackageExport, ProjectError> {
+    export_region_as_package_with_progress(
+        cache_root,
+        song_dir,
+        song,
+        region_id,
+        output_path,
+        audio_mode,
+        include_video,
+        |_, _| {},
+    )
+}
+
+/// [`export_region_as_package_with_options`] reporting `(done, total)` over the
+/// song's distinct audio files, which is where nearly all the time goes (audio
+/// and waveform per file). A full package of a multitrack takes long enough on
+/// a phone that the UI needs a real percentage, as the `.ltset` export has.
+#[allow(clippy::too_many_arguments)]
+pub fn export_region_as_package_with_progress(
+    cache_root: &Path,
+    song_dir: &Path,
+    song: &Song,
+    region_id: &str,
+    output_path: &Path,
+    audio_mode: crate::SessionPackageAudio,
+    include_video: bool,
+    mut on_progress: impl FnMut(usize, usize),
+) -> Result<SongPackageExport, ProjectError> {
     let include_audio = !matches!(audio_mode, crate::SessionPackageAudio::Referenced);
     let mut prepared_sample_rate: Option<u32> = None;
     let region = song
@@ -483,11 +510,18 @@ pub fn export_region_as_package_with_options(
         }
     }
 
+    let total_files = clips
+        .iter()
+        .map(|clip| clip.file_path.as_str())
+        .collect::<HashSet<_>>()
+        .len();
     let mut added_files = HashSet::new();
     for clip in &clips {
         if !added_files.insert(clip.file_path.clone()) {
             continue;
         }
+        // Reported as each file STARTS: the body below has early `continue`s.
+        on_progress(added_files.len() - 1, total_files);
         // Por el gancho, para que un `content://` de Android llegue al fichero
         // de verdad. `resolved_name` es el nombre visible, que para un URI no
         // se puede sacar de la ruta local.
@@ -561,6 +595,7 @@ pub fn export_region_as_package_with_options(
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
         zip.write_all(&waveform_bytes)?;
     }
+    on_progress(total_files, total_files);
 
     zip.finish()
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;

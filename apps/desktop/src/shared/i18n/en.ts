@@ -162,6 +162,7 @@ const en = {
       importSession: "Import session",
       importingSession: "Importing session...",
       exportingSession: "Exporting session...",
+      exportingSong: "Exporting song...",
       creatingFromTemplate: "Creating session from template...",
       templatesHeading: "Templates",
       useTemplateFile: "Use template file…",

@@ -69,6 +69,7 @@ mod video_library;
 mod video_audio;
 mod regions;
 mod session;
+pub use session::ExistingProjectDir;
 mod song_edit;
 mod timeline_math;
 mod missing_media;

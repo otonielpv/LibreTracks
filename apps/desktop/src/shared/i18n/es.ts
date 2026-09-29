@@ -162,6 +162,7 @@ const es = {
       importSession: "Importar sesión",
       importingSession: "Importando sesión...",
       exportingSession: "Exportando sesión...",
+      exportingSong: "Exportando canción...",
       creatingFromTemplate: "Creando sesión desde plantilla...",
       templatesHeading: "Plantillas",
       useTemplateFile: "Usar plantilla de archivo…",

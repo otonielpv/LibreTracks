@@ -29,6 +29,32 @@ use super::{
     write_library_manifest_assets, AudioChangeImpact, DesktopSession, LIBRARY_MANIFEST_FILE_NAME,
 };
 
+/// What creating a project does when its `<name>/` folder already exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExistingProjectDir {
+    /// Fail and ask for another name — the desktop save dialog, where the user
+    /// typed the name themselves.
+    Refuse,
+    /// Inflate into the folder unless it already holds a session. The mobile
+    /// "choose folder" flow uses it when the user picked a folder named like the
+    /// session, so it isn't nested as `<name>/<name>/`.
+    ReuseIfNoSession,
+}
+
+fn dir_holds_ltsession(dir: &Path) -> bool {
+    fs::read_dir(dir)
+        .map(|entries| {
+            entries.flatten().any(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("ltsession"))
+            })
+        })
+        .unwrap_or(false)
+}
+
 impl DesktopSession {
     pub fn ensure_song_loaded_for_external_import(
         &mut self,
@@ -99,7 +125,8 @@ impl DesktopSession {
             return Ok(None);
         };
 
-        self.create_song_at_path(target_pick, audio).map(Some)
+        self.create_song_at_path(target_pick, ExistingProjectDir::Refuse, audio)
+            .map(Some)
     }
 
     /// Heavy half of `create_song`: writes the project folder + .ltsession and
@@ -110,12 +137,13 @@ impl DesktopSession {
     pub fn create_song_at_path(
         &mut self,
         target_pick: PathBuf,
+        existing_dir: ExistingProjectDir,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let title = "Nueva Cancion".to_string();
         let song_id = format!("song_{}", timestamp_suffix());
         let song = build_empty_song(song_id, title);
-        self.create_song_at_path_with(target_pick, song, audio)
+        self.create_song_at_path_with(target_pick, existing_dir, song, audio)
     }
 
     /// Create a brand-new project at `target_pick` whose arrangement structure
@@ -127,6 +155,7 @@ impl DesktopSession {
         &mut self,
         template_path: PathBuf,
         target_pick: PathBuf,
+        existing_dir: ExistingProjectDir,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let template_song = load_song_from_file(&template_path).map_err(|error| {
@@ -145,7 +174,7 @@ impl DesktopSession {
         let song_id = format!("song_{}", timestamp_suffix());
         let song = build_template_song(template_song, song_id, project_name);
 
-        self.create_song_at_path_with(target_pick, song, audio)
+        self.create_song_at_path_with(target_pick, existing_dir, song, audio)
     }
 
     /// Shared body for creating a new on-disk project (empty or from a
@@ -155,6 +184,7 @@ impl DesktopSession {
     fn create_song_at_path_with(
         &mut self,
         target_pick: PathBuf,
+        existing_dir: ExistingProjectDir,
         song: Song,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
@@ -171,7 +201,10 @@ impl DesktopSession {
             })?;
 
         let song_dir = parent_dir.join(&project_name);
-        if song_dir.exists() {
+        let reusable = existing_dir == ExistingProjectDir::ReuseIfNoSession
+            && song_dir.is_dir()
+            && !dir_holds_ltsession(&song_dir);
+        if song_dir.exists() && !reusable {
             return Err(DesktopError::AudioCommand(format!(
                 "ya existe una carpeta llamada \"{}\" en esa ubicacion. Elige otro nombre.",
                 project_name

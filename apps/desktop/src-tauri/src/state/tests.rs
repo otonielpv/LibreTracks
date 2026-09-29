@@ -2324,6 +2324,61 @@ fn build_template_song_stamps_fresh_id_and_title() {
 }
 
 #[test]
+fn creating_over_an_existing_folder_is_refused_from_the_desktop_dialog() {
+    let temp = tempdir().expect("temp dir");
+    fs::create_dir(temp.path().join("Show")).expect("existing folder");
+    let mut session = DesktopSession::default();
+    let audio = crate::audio::engine::AudioController::default();
+
+    let result = session.create_song_at_path(
+        temp.path().join("Show.ltsession"),
+        super::ExistingProjectDir::Refuse,
+        &audio,
+    );
+
+    assert!(result.is_err(), "the desktop dialog must not reuse a folder");
+    assert!(!temp.path().join("Show").join("Show.ltsession").exists());
+}
+
+#[test]
+fn the_folder_picker_flow_reuses_a_folder_without_a_session() {
+    let temp = tempdir().expect("temp dir");
+    fs::create_dir(temp.path().join("Show")).expect("picked folder");
+    let mut session = DesktopSession::default();
+    let audio = crate::audio::engine::AudioController::default();
+
+    session
+        .create_song_at_path(
+            temp.path().join("Show.ltsession"),
+            super::ExistingProjectDir::ReuseIfNoSession,
+            &audio,
+        )
+        .expect("empty picked folder is reused");
+
+    assert!(temp.path().join("Show").join("Show.ltsession").exists());
+    assert!(!temp.path().join("Show").join("Show").exists());
+}
+
+#[test]
+fn the_folder_picker_flow_never_overwrites_a_session() {
+    let temp = tempdir().expect("temp dir");
+    let existing = temp.path().join("Show");
+    fs::create_dir(&existing).expect("existing session folder");
+    fs::write(existing.join("Show.ltsession"), b"{}").expect("existing session");
+    let mut session = DesktopSession::default();
+    let audio = crate::audio::engine::AudioController::default();
+
+    let result = session.create_song_at_path(
+        temp.path().join("Show.ltsession"),
+        super::ExistingProjectDir::ReuseIfNoSession,
+        &audio,
+    );
+
+    assert!(result.is_err());
+    assert_eq!(fs::read(existing.join("Show.ltsession")).unwrap(), b"{}");
+}
+
+#[test]
 fn create_song_from_template_path_builds_project_with_template_structure() {
     // Arrange: write a template file to disk from a structured song.
     let temp = tempfile::tempdir().expect("tempdir");
@@ -2336,7 +2391,12 @@ fn create_song_from_template_path_builds_project_with_template_structure() {
     let audio = crate::audio::engine::AudioController::default();
     let target_pick = temp.path().join("NewProject.ltsession");
     session
-        .create_song_from_template_path(template_path, target_pick, &audio)
+        .create_song_from_template_path(
+            template_path,
+            target_pick,
+            super::ExistingProjectDir::Refuse,
+            &audio,
+        )
         .expect("create from template succeeds");
 
     // Assert: the loaded song carries the template's tracks and no clips.
