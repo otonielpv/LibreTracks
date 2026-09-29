@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { AppCloseGuard } from "../features/appClose/AppCloseGuard";
 import { TransportPanel } from "../features/transport/TransportPanel";
 import { isMobileApp, isTauriApp } from "../features/transport/desktopApi";
 import { installAltMenuGuard } from "../features/transport/keyboard/altMenuGuard";
@@ -150,6 +151,7 @@ export function App() {
         />
       ) : null}
       <DialogHost />
+      <AppCloseGuard />
       <TourOverlay />
       <TelemetryController version={currentVersion} />
     </main>
