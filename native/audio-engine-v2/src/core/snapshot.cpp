@@ -182,6 +182,8 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
     j["pitch"] = {
         {"mixer_scheduled_jump_executed_count",
          snap.mixer_scheduled_jump_executed_count},
+        {"mixer_song_end_pause_count",
+         snap.mixer_song_end_pause_count},
     };
 
     return j.dump();

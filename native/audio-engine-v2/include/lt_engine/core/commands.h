@@ -136,6 +136,14 @@ struct CmdSetPadConfig {
     bool stop_with_transport = false;  // pad follows play/stop (switch stays on)
 };
 
+// ---------------------------------------------------------------------------
+// Pause at song end
+// ---------------------------------------------------------------------------
+// When enabled, the transport pauses by itself on the exact frame where a song
+// (region) ends, instead of rolling into the next one. Off by default. A
+// scheduled jump due on that same boundary still wins: the user asked for it.
+struct CmdSetPauseAtSongEnd { bool enabled = false; };
+
 // Decode a single pad key from disk and hand it to the renderer. Runs the
 // (slow) decode on the command thread; the resulting clip is swapped in
 // realtime-safely. `pads_dir/<pad_id>/<key>.<ext>`.
@@ -378,6 +386,7 @@ using EngineCommand = std::variant<
     CmdSetMetronomeConfig,
     CmdSetVoiceGuideConfig, CmdLoadVoiceGuideBank,
     CmdSetPadConfig, CmdLoadPadClip,
+    CmdSetPauseAtSongEnd,
     CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetRegionMasterGain, CmdSetSongRegions,
     CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,
     CmdUpsertSongTracks, CmdPrepareSources,

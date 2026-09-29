@@ -310,6 +310,9 @@ const en = {
       autoColorNewTracksHint:
         "Each new track takes a colour from the palette, cycling through it in order, so you can tell them apart at a glance. Turn it off if you prefer colouring by hand. It never repaints tracks you already have.",
       importMergeMatchingTracks: "Merge tracks with the same name on import",
+      pauseAtSongEnd: "Pause at the end of each song",
+      pauseAtSongEndHint:
+        "Playback stops when a song ends instead of rolling straight into the next one. Press Play to start the next song. A song jump you queued still happens.",
       importMergeMatchingTracksHint:
         "When importing a song, its clips are added to the existing track that already has that name. Turn it off so each song brings its own tracks.",
       interfaceZoom: "Interface size",
@@ -855,6 +858,7 @@ const en = {
       timelineNavigationSchemeUpdated: "Timeline navigation scheme updated.",
       timelinePlayheadFollowModeUpdated: "Playhead follow mode updated.",
       importMergeMatchingTracksUpdated: "Import track behaviour updated.",
+      pauseAtSongEndUpdated: "Pause at song end updated.",
       referenceImportedAudioUpdated: "Audio import behaviour updated.",
       autoColorNewTracksUpdated: "Automatic track colours updated.",
       autoSaveUpdated: "Autosave updated.",

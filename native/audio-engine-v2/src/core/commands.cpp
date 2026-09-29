@@ -473,6 +473,9 @@ EngineCommand command_from_json(const std::string& raw) {
     if (type == "SetBufferSize")
         return CmdSetBufferSize{ j.at("buffer_size").get<int>() };
 
+    if (type == "SetPauseAtSongEnd")
+        return CmdSetPauseAtSongEnd{ j.at("enabled").get<bool>() };
+
     if (type == "SetLowLatency")
         return CmdSetLowLatency{ j.at("enabled").get<bool>() };
 
@@ -551,6 +554,10 @@ std::string command_to_json(const EngineCommand& cmd) {
             j["fade_in_seconds"] = c.fade_in_seconds;
             j["fade_out_seconds"] = c.fade_out_seconds;
             j["stop_with_transport"] = c.stop_with_transport;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetPauseAtSongEnd>) {
+            j["type"] = "SetPauseAtSongEnd";
+            j["enabled"] = c.enabled;
         }
         else if constexpr (std::is_same_v<T, CmdLoadPadClip>) {
             j["type"] = "LoadPadClip";

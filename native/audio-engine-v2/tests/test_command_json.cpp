@@ -23,6 +23,16 @@ TEST_CASE("parse SetOutputSuspended in both directions") {
     CHECK_FALSE(std::get<CmdSetOutputSuspended>(off).suspended);
 }
 
+TEST_CASE("parse SetPauseAtSongEnd in both directions") {
+    auto on = command_from_json(R"({"type":"SetPauseAtSongEnd","enabled":true})");
+    REQUIRE(std::holds_alternative<CmdSetPauseAtSongEnd>(on));
+    CHECK(std::get<CmdSetPauseAtSongEnd>(on).enabled);
+
+    auto off = command_from_json(R"({"type":"SetPauseAtSongEnd","enabled":false})");
+    REQUIRE(std::holds_alternative<CmdSetPauseAtSongEnd>(off));
+    CHECK_FALSE(std::get<CmdSetPauseAtSongEnd>(off).enabled);
+}
+
 TEST_CASE("parse Pause command") {
     auto cmd = command_from_json(R"({"type":"Pause"})");
     CHECK(std::holds_alternative<CmdPause>(cmd));

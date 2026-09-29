@@ -381,6 +381,10 @@ pub struct DesktopSession {
     pub(super) last_transport_runtime_sync_at: Option<Instant>,
     pub(super) last_transport_pitch_sync_at: Option<Instant>,
     pub(super) last_native_scheduled_jump_executed_count: u64,
+    /// Last `mixer_song_end_pause_count` seen from the native engine. When it
+    /// moves, the mixer paused on a song end by itself ("pause at song end")
+    /// and the Rust transport has to follow.
+    pub(super) last_native_song_end_pause_count: u64,
     /// The vamp loop currently programmed in the native scheduler, as
     /// `(start_seconds, end_seconds)` in source time.
     ///
@@ -543,6 +547,7 @@ impl Default for DesktopSession {
             last_transport_runtime_sync_at: None,
             last_transport_pitch_sync_at: None,
             last_native_scheduled_jump_executed_count: 0,
+            last_native_song_end_pause_count: 0,
             scheduled_native_vamp_loop: None,
             automation: AutomationDocument::default(),
             pending_automation_jump: None,
@@ -1595,10 +1600,15 @@ pub(crate) fn plan_audio_settings_change(
         || previous.voice_guide_lead_bars != next.voice_guide_lead_bars
         || previous.voice_guide_count_in_enabled != next.voice_guide_count_in_enabled;
 
+    // Pure mixer flag, flipped between blocks: goes to the engine, never
+    // reopens the stream.
+    let pause_at_song_end_changed = previous.pause_at_song_end != next.pause_at_song_end;
+
     AudioSettingsChangePlan {
         apply: device_changed
             || output_channels_changed
             || render_threads_changed
+            || pause_at_song_end_changed
             || midi_changed
             || metronome_changed
             || voice_guide_changed,
@@ -1890,6 +1900,12 @@ impl DesktopSession {
 
         let runtime_position_seconds =
             self.runtime_seconds_for_engine_position(self.engine.position_seconds());
+        // Baseline for "pause at song end": only pauses taken after this Play
+        // count (the mixer's counter survives across plays and reloads).
+        self.last_native_song_end_pause_count = audio
+            .engine_snapshot()
+            .map(|snapshot| snapshot.pitch.mixer_song_end_pause_count)
+            .unwrap_or(self.last_native_song_end_pause_count);
         audio.prepare_song_buffers_async(song_dir.clone(), song.clone());
         audio.play(song_dir, song, runtime_position_seconds, start_reason)?;
         self.engine.play()?;
@@ -2730,6 +2746,10 @@ impl DesktopSession {
             return Ok(());
         }
 
+        if self.sync_native_song_end_pause_if_needed(audio)? {
+            return Ok(());
+        }
+
         if let Some((runtime_source_position, _running)) = self.runtime_transport_position(audio) {
             self.engine
                 .sync_position_preserving_transport_state(runtime_source_position)?;
@@ -2852,6 +2872,46 @@ impl DesktopSession {
         }
 
         Ok(())
+    }
+
+    /// Mirror a pause the native mixer took by itself at a song end ("pause at
+    /// song end"). The audio already stopped on the exact frame; here the Rust
+    /// transport lands on that same frame and goes to Paused, the same state a
+    /// manual pause leaves, so Play resumes with the next song.
+    fn sync_native_song_end_pause_if_needed(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<bool, DesktopError> {
+        let snapshot = match audio.engine_snapshot() {
+            Ok(snapshot) => snapshot,
+            Err(_) => return Ok(false),
+        };
+        let pause_count = snapshot.pitch.mixer_song_end_pause_count;
+        if pause_count <= self.last_native_song_end_pause_count {
+            return Ok(false);
+        }
+        self.last_native_song_end_pause_count = pause_count;
+        if matches!(
+            snapshot.playback_state,
+            lt_audio_engine_v2::PlaybackState::Playing
+        ) {
+            return Ok(false);
+        }
+
+        let source_song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let position_seconds =
+            source_seconds_at_view(&source_song, snapshot.current_seconds.max(0.0));
+        self.engine
+            .sync_position_preserving_transport_state(position_seconds)?;
+        audio.stop()?;
+        self.engine.pause()?;
+        self.transport_clock.pause_at(position_seconds);
+        self.release_all_midi_notes();
+        Ok(true)
     }
 
     fn sync_native_scheduled_jump_if_needed(

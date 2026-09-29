@@ -1090,6 +1090,32 @@ void Mixer::render(float** output_channels,
             fade_.process(fade_channels, num_channels, post_frames);
         }
         fade_processed_in_split = true;
+    } else if (const auto pause_frame = song_end_pause_frame(session.get(), num_frames)) {
+        // "Pause at song end": render up to the frame the song ends on, then
+        // pause there. The rest of the block stays silent, and the same
+        // crossfade a jump uses ramps the last rendered sample down to it so
+        // the cut does not click. Play resumes from that frame, which is where
+        // the next song starts.
+        const Frame block_start = clock_->position().frame;
+        const int pre_frames = static_cast<int>(std::clamp<Frame>(
+            *pause_frame - block_start, 0, num_frames));
+        render_timeline_span(output_channels, num_channels, pre_frames, 0, session);
+        if (pre_frames > 0)
+            fade_.capture_previous_sample(output_channels, num_channels, pre_frames - 1);
+        clock_->pause();
+        song_end_pause_count_.fetch_add(1, std::memory_order_relaxed);
+        fade_.trigger_crossfade();
+
+        const int post_frames = num_frames - pre_frames;
+        std::array<float*, 64> shifted_channels{};
+        float** fade_channels = output_channels;
+        if (num_channels <= static_cast<int>(shifted_channels.size())) {
+            for (int ch = 0; ch < num_channels; ++ch)
+                shifted_channels[static_cast<std::size_t>(ch)] = output_channels[ch] + pre_frames;
+            fade_channels = shifted_channels.data();
+        }
+        fade_.process(fade_channels, num_channels, post_frames);
+        fade_processed_in_split = true;
     } else if (clock_->position().state == TransportState::Playing && session) {
         std::uint64_t rendered_this_block = 0;
         std::uint64_t skipped_this_block = 0;
@@ -1513,6 +1539,39 @@ void Mixer::start_master_fade(float target_gain, double duration_seconds) noexce
     master_fade_duration_seconds_.store(std::max(0.0, duration_seconds),
                                         std::memory_order_relaxed);
     master_fade_request_seq_.fetch_add(1, std::memory_order_release);
+}
+
+void Mixer::set_pause_at_song_end(bool enabled) noexcept {
+    pause_at_song_end_.store(enabled, std::memory_order_relaxed);
+}
+
+std::optional<Frame> Mixer::song_end_pause_frame(const Session* session,
+                                                 int num_frames) const noexcept {
+    if (!session || num_frames <= 0 || !pause_at_song_end_.load(std::memory_order_relaxed))
+        return std::nullopt;
+    const auto position = clock_->position();
+    if (position.state != TransportState::Playing || clock_->pending_start())
+        return std::nullopt;
+    // A transition fade heading to silence belongs to a jump the host is about
+    // to perform across this boundary (fade-out song changes). Pausing here
+    // would swallow the jump the user asked for.
+    if (master_gain_target_ <= 0.0f)
+        return std::nullopt;
+
+    // Strictly after the current frame: after pausing on a song end the
+    // playhead sits on it, and pressing Play must start the next song instead
+    // of pausing again on the spot.
+    const Frame cur = position.frame;
+    const Frame block_end = cur + num_frames;
+    std::optional<Frame> earliest;
+    for (const auto& song : session->songs) {
+        for (const auto& region : song.regions) {
+            if (region.end_frame > cur && region.end_frame <= block_end
+                && (!earliest || region.end_frame < *earliest))
+                earliest = region.end_frame;
+        }
+    }
+    return earliest;
 }
 
 void Mixer::set_session(std::shared_ptr<const Session> session, bool preserve_realtime_state) {
@@ -2032,6 +2091,7 @@ std::uint64_t Mixer::callback_deadline_miss_count() const noexcept { return call
 std::uint64_t Mixer::rendered_track_count() const noexcept { return rendered_track_count_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::skipped_track_count() const noexcept { return skipped_track_count_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::scheduled_jump_executed_count() const noexcept { return scheduled_jump_executed_count_.load(std::memory_order_relaxed); }
+std::uint64_t Mixer::song_end_pause_count() const noexcept { return song_end_pause_count_.load(std::memory_order_relaxed); }
 
 Frame Mixer::take_pending_scheduled_jump() noexcept {
     const Frame f = pending_scheduled_jump_frame_.load(std::memory_order_acquire);

@@ -96,6 +96,7 @@ type SettingsPanelProps = {
   onTimelinePlayheadFollowModeChange: (
     value: AppSettings["timelinePlayheadFollowMode"],
   ) => void;
+  onPauseAtSongEndChange: (value: boolean) => void;
   onImportMergeMatchingTracksChange: (value: boolean) => void;
   onReferenceImportedAudioChange: (value: boolean) => void;
   onAutoColorNewTracksChange: (value: boolean) => void;
@@ -163,6 +164,7 @@ export function SettingsPanel({
   onLocaleChange,
   onTimelineNavigationSchemeChange,
   onTimelinePlayheadFollowModeChange,
+  onPauseAtSongEndChange,
   onImportMergeMatchingTracksChange,
   onReferenceImportedAudioChange,
   onAutoColorNewTracksChange,
@@ -730,6 +732,30 @@ export function SettingsPanel({
                           },
                         )}
                       </small>
+                    </label>
+
+                    <label className="lt-settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={appSettings.pauseAtSongEnd}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) =>
+                          onPauseAtSongEndChange(event.target.checked)
+                        }
+                      />
+                      <span className="lt-settings-toggle-copy">
+                        <span>
+                          {t("transport.settingsModal.pauseAtSongEnd", {
+                            defaultValue: "Pause at the end of each song",
+                          })}
+                        </span>
+                        <small>
+                          {t("transport.settingsModal.pauseAtSongEndHint", {
+                            defaultValue:
+                              "Playback stops when a song ends instead of rolling straight into the next one. Press Play to start the next song. A song jump you queued still happens.",
+                          })}
+                        </small>
+                      </span>
                     </label>
 
                     <label className="lt-settings-toggle">

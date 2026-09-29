@@ -2075,6 +2075,7 @@ export function TransportPanelContent() {
     handleVampBarsChange,
     handleTimelineNavigationSchemeChange,
     handleTimelinePlayheadFollowModeChange,
+    handlePauseAtSongEndChange,
     handleImportMergeMatchingTracksChange,
     handleAutoColorNewTracksChange,
     handleReferenceImportedAudioChange,
@@ -8188,6 +8189,7 @@ export function TransportPanelContent() {
               onTimelinePlayheadFollowModeChange={
                 handleTimelinePlayheadFollowModeChange
               }
+              onPauseAtSongEndChange={handlePauseAtSongEndChange}
               onImportMergeMatchingTracksChange={
                 handleImportMergeMatchingTracksChange
               }

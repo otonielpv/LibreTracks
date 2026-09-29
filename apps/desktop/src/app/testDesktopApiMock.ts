@@ -445,6 +445,7 @@ function buildInitialState(): DesktopApiMockState {
       songTransitionMode: "instant",
       vampMode: "section",
       vampBars: 4,
+      pauseAtSongEnd: false,
       timelineNavigationScheme: "ableton",
       timelinePlayheadFollowMode: "ahead",
       importMergeMatchingTracks: true,
