@@ -97,6 +97,7 @@ impl ExportTarget {
 }
 
 /// Platform "save as" dialog for exports. Returns None if the user cancels.
+#[cfg_attr(target_os = "ios", allow(dead_code))]
 pub(crate) fn pick_export_target(
     app: &AppHandle,
     title: &str,
@@ -124,6 +125,60 @@ pub(crate) fn pick_export_target(
         Ok(Some(ExportTarget::Saf { temp, target }))
     }
 }
+
+/// [`pick_export_target`] for the commands that can await, which is what iOS
+/// needs: it has no save dialog (the rfd shim answers "cancelled"), so it asks
+/// for a folder through the document picker — iCloud Drive, On My iPhone or any
+/// other provider — and writes the file inside it. Every other platform gets
+/// the ordinary save dialog.
+pub(crate) async fn pick_export_target_async(
+    app: &AppHandle,
+    title: &str,
+    filter_name: &str,
+    extensions: &[&str],
+    suggested_name: &str,
+) -> Result<Option<ExportTarget>, String> {
+    #[cfg(target_os = "ios")]
+    {
+        let _ = (title, filter_name, extensions);
+        let Some(folder) = libretracks_ios_folder_picker::pick_folder(app.clone()).await? else {
+            return Ok(None);
+        };
+        return Ok(Some(ExportTarget::Path(unused_file_path(
+            std::path::Path::new(&folder),
+            suggested_name,
+        ))));
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        pick_export_target(app, title, filter_name, extensions, suggested_name)
+    }
+}
+
+/// `dir/name`, or `dir/stem (2).ext`, `(3)`… when that is taken. A folder
+/// picker never asks "replace the existing file?", so an export must not
+/// silently overwrite yesterday's set of the same name.
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+fn unused_file_path(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
+    let candidate = dir.join(name);
+    if !candidate.exists() {
+        return candidate;
+    }
+    let (stem, extension) = match name.rsplit_once('.') {
+        Some((stem, extension)) if !stem.is_empty() => (stem, Some(extension)),
+        _ => (name, None),
+    };
+    (2..)
+        .map(|index| {
+            dir.join(match extension {
+                Some(extension) => format!("{stem} ({index}).{extension}"),
+                None => format!("{stem} ({index})"),
+            })
+        })
+        .find(|path| !path.exists())
+        .expect("an unbounded range always yields a free name")
+}
+
 #[tauri::command(async)]
 pub fn get_song_view(
     state: State<'_, DesktopState>,
@@ -2245,13 +2300,14 @@ pub async fn export_region_as_package(
         (song_dir, song, region_name)
     };
 
-    let Some(target) = pick_export_target(
+    let Some(target) = pick_export_target_async(
         &app,
         "Exportar Cancion",
         "LibreTracks Package",
         &["ltpkg"],
         &format!("{}.ltpkg", crate::state::slugify(&region_name)),
-    )?
+    )
+    .await?
     else {
         return Ok(false);
     };
@@ -2352,6 +2408,7 @@ pub fn import_song_package(
 /// `session:export-progress` event (a large full export of a big set can take a
 /// while), ending with a terminal `done` event (with `error` on failure).
 /// Returns `false` if the user cancels the save dialog.
+#[cfg(not(target_os = "ios"))]
 #[tauri::command]
 pub fn export_session_package(
     app: AppHandle,
@@ -2360,16 +2417,7 @@ pub fn export_session_package(
     include_video: Option<bool>,
     state: State<'_, DesktopState>,
 ) -> Result<bool, String> {
-    let (song_dir, song, sidecars) = {
-        let session = state
-            .session
-            .lock()
-            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-        session
-            .prepare_session_package_export()
-            .map_err(|error| error.to_string())?
-    };
-
+    let (song_dir, song, sidecars) = prepare_session_export(&state)?;
     let Some(target) = pick_export_target(
         &app,
         "Exportar sesion",
@@ -2380,6 +2428,71 @@ pub fn export_session_package(
     else {
         return Ok(false);
     };
+    spawn_session_export(app, target, song_dir, song, sidecars, include_audio, prepared, include_video);
+    Ok(true)
+}
+
+/// iOS picks the destination through the async document picker, which must
+/// not be awaited from the main thread — hence its own `async` command. The
+/// export itself is the same worker as everywhere else.
+#[cfg(target_os = "ios")]
+#[tauri::command]
+pub async fn export_session_package(
+    app: AppHandle,
+    include_audio: bool,
+    prepared: Option<bool>,
+    include_video: Option<bool>,
+    state: State<'_, DesktopState>,
+) -> Result<bool, String> {
+    let (song_dir, song, sidecars) = prepare_session_export(&state)?;
+    let Some(target) = pick_export_target_async(
+        &app,
+        "Exportar sesion",
+        "LibreTracks Set",
+        &["ltset"],
+        &format!("{}.ltset", default_session_package_name(&song_dir, &song.title)),
+    )
+    .await?
+    else {
+        return Ok(false);
+    };
+    spawn_session_export(app, target, song_dir, song, sidecars, include_audio, prepared, include_video);
+    Ok(true)
+}
+
+fn prepare_session_export(
+    state: &DesktopState,
+) -> Result<
+    (
+        std::path::PathBuf,
+        libretracks_core::Song,
+        Vec<libretracks_project::SidecarFile>,
+    ),
+    String,
+> {
+    let session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .prepare_session_package_export()
+        .map_err(|error| error.to_string())
+}
+
+/// The export worker behind both `export_session_package` variants: writes the
+/// `.ltset` off-thread and reports through `session:export-progress`, ending
+/// with the terminal `done` event the frontend waits for.
+#[allow(clippy::too_many_arguments)]
+fn spawn_session_export(
+    app: AppHandle,
+    target: ExportTarget,
+    song_dir: std::path::PathBuf,
+    song: libretracks_core::Song,
+    sidecars: Vec<libretracks_project::SidecarFile>,
+    include_audio: bool,
+    prepared: Option<bool>,
+    include_video: Option<bool>,
+) {
     let path = target.write_path().to_path_buf();
 
     let cache_root = crate::state::decoding_cache_root();
@@ -2452,8 +2565,6 @@ pub fn export_session_package(
             }
         }
     });
-
-    Ok(true)
 }
 
 /// Export the whole session as a `.ltset` to an explicit path, bypassing the
@@ -3034,8 +3145,22 @@ pub fn import_external_project(
 
 #[cfg(test)]
 mod export_naming_tests {
-    use super::{default_session_package_name, session_file_in_dir, unique_session_dir};
+    use super::{
+        default_session_package_name, session_file_in_dir, unique_session_dir, unused_file_path,
+    };
     use std::path::Path;
+
+    #[test]
+    fn a_folder_picked_export_never_overwrites_an_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(unused_file_path(dir.path(), "set.ltset"), dir.path().join("set.ltset"));
+
+        std::fs::write(dir.path().join("set.ltset"), b"yesterday").unwrap();
+        assert_eq!(unused_file_path(dir.path(), "set.ltset"), dir.path().join("set (2).ltset"));
+
+        std::fs::write(dir.path().join("set (2).ltset"), b"").unwrap();
+        assert_eq!(unused_file_path(dir.path(), "set.ltset"), dir.path().join("set (3).ltset"));
+    }
 
     #[test]
     fn the_default_ltset_name_comes_from_the_project_folder() {

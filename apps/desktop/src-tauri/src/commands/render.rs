@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 #[cfg(not(target_os = "ios"))]
-use crate::commands::project::pick_export_target;
+use crate::commands::project::pick_export_target_async;
 use crate::commands::project::ExportTarget;
 use crate::infra::error::DesktopError;
 use crate::infra::settings::AppSettingsStore;
@@ -534,29 +534,15 @@ fn zip_stems(files: &[lt_audio_engine_v2::RenderedFile], zip_path: &Path) -> Res
     Ok(())
 }
 
-/// Where to save. Desktop and Android use the same save dialog as the other
-/// exports; iOS has no save dialog wired, so it asks for a folder (the picker
-/// the session flow already uses) and writes the file inside it.
+/// Where to save: the same destination picker as the other exports (a folder
+/// on iOS, the save dialog elsewhere).
 async fn pick_render_target(
     app: &AppHandle,
     suggested: &str,
     filter: &str,
     extension: &str,
 ) -> Result<Option<ExportTarget>, String> {
-    #[cfg(target_os = "ios")]
-    {
-        let _ = (filter, extension);
-        let Some(folder) = libretracks_ios_folder_picker::pick_folder(app.clone()).await? else {
-            return Ok(None);
-        };
-        return Ok(Some(ExportTarget::Path(
-            PathBuf::from(folder).join(suggested),
-        )));
-    }
-    #[cfg(not(target_os = "ios"))]
-    {
-        pick_export_target(app, "Renderizar audio", filter, &[extension], suggested)
-    }
+    pick_export_target_async(app, "Renderizar audio", filter, &[extension], suggested).await
 }
 
 #[cfg(test)]
