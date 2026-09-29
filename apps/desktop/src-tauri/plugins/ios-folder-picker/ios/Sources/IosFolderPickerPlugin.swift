@@ -289,7 +289,7 @@ final class IosFolderPickerPlugin: Plugin {
       "source=\(sourceURL.lastPathComponent)")
 
     guard FileManager.default.fileExists(atPath: sourceURL.path) else {
-      invoke.reject("El registro de diagnostico ya no existe")
+      invoke.reject("El archivo a exportar ya no existe")
       return
     }
 
@@ -297,10 +297,10 @@ final class IosFolderPickerPlugin: Plugin {
     onResult = { event in
       switch event {
       case .selected:
-        self.diagnostic("diagnostics export completed")
+        self.diagnostic("file export completed")
         invoke.resolve(["exported": true])
       case .cancelled:
-        self.diagnostic("diagnostics export cancelled")
+        self.diagnostic("file export cancelled")
         invoke.resolve(["exported": false])
       }
     }

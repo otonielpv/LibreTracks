@@ -2931,7 +2931,9 @@ pub fn get_audio_output_devices(
         .list_devices(force.unwrap_or(false))
         .map_err(|error| {
             eprintln!("[audio] get_audio_output_devices FAILED: {error}");
-            error.to_string()
+            // Also to errors.log: a failure here leaves Settings with only
+            // "System Default", and stderr is not visible in release builds.
+            crate::infra::error_log::log_command_err("get_audio_output_devices", error)
         })
 }
 

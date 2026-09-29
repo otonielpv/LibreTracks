@@ -10,6 +10,7 @@
 #include <lt_engine/sources/source_manager.h>
 #include <lt_engine/core/thread_policy.h>
 #include <lt_engine/render/offline_renderer.h>
+#include <lt_engine/debug/logging.h>
 #include <nlohmann/json.hpp>
 #include <cstring>
 #include <vector>
@@ -126,7 +127,13 @@ LT_API const char* lt_audio_engine_list_devices(LtEngine* engine,
     // past this point: the Rust caller cannot stop a C++ exception and aborts.
     try {
         buf = as_impl(engine)->list_devices(force_rescan != 0);
+    } catch (const std::exception& e) {
+        lt::lt_debug_log("[LT_AUDIO] list_devices threw: %s - returning an empty list\n",
+                         e.what());
+        buf = "[]";
     } catch (...) {
+        lt::lt_debug_log("[LT_AUDIO] list_devices threw a non-std exception - "
+                         "returning an empty list\n");
         buf = "[]";
     }
     return buf.c_str();

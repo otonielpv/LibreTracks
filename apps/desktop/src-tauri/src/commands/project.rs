@@ -46,6 +46,10 @@ use crate::platform::file_dialog::FileDialog;
 /// Android's SAF returns a `content://` URI which `std::fs` can't open, so the
 /// export writes to a private temp file and `finish()` copies it into the URI
 /// through the content resolver (then deletes the temp).
+/// iOS writes to a private temp too and `finish()` hands it to the system
+/// export picker ("Save to…"), which is the only destination picker there that
+/// reaches every Files provider (Documents, Drive…): the folder picker greys
+/// out the providers that cannot grant a whole folder.
 pub(crate) enum ExportTarget {
     Path(std::path::PathBuf),
     #[cfg(target_os = "android")]
@@ -53,6 +57,8 @@ pub(crate) enum ExportTarget {
         temp: std::path::PathBuf,
         target: tauri_plugin_fs::FilePath,
     },
+    #[cfg(target_os = "ios")]
+    IosExport { temp: std::path::PathBuf },
 }
 
 impl ExportTarget {
@@ -62,6 +68,8 @@ impl ExportTarget {
             ExportTarget::Path(path) => path,
             #[cfg(target_os = "android")]
             ExportTarget::Saf { temp, .. } => temp,
+            #[cfg(target_os = "ios")]
+            ExportTarget::IosExport { temp } => temp,
         }
     }
 
@@ -77,11 +85,17 @@ impl ExportTarget {
             ExportTarget::Saf { target, .. } => {
                 crate::platform::mobile_files::picked_file_name(target)
             }
+            #[cfg(target_os = "ios")]
+            ExportTarget::IosExport { temp } => temp
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())?,
         };
         (name.contains('.') && !name.contains(':')).then_some(name)
     }
 
     /// Deliver the finished file to its real destination (no-op on desktop).
+    /// Runs on the export's worker thread, never the main thread: on iOS it
+    /// blocks until the user has picked where the file goes.
     pub(crate) fn finish(&self, app: &AppHandle) -> Result<(), String> {
         let _ = app;
         match self {
@@ -91,6 +105,18 @@ impl ExportTarget {
                 let result = crate::platform::mobile_files::copy_path_to_picked_target(app, temp, target);
                 let _ = std::fs::remove_file(temp);
                 result
+            }
+            #[cfg(target_os = "ios")]
+            ExportTarget::IosExport { temp } => {
+                let result = libretracks_ios_folder_picker::export_file_blocking(
+                    app,
+                    &temp.to_string_lossy(),
+                );
+                let _ = std::fs::remove_file(temp);
+                match result? {
+                    true => Ok(()),
+                    false => Err("Exportación cancelada: el archivo no se guardó.".to_string()),
+                }
             }
         }
     }
@@ -127,10 +153,11 @@ pub(crate) fn pick_export_target(
 }
 
 /// [`pick_export_target`] for the commands that can await, which is what iOS
-/// needs: it has no save dialog (the rfd shim answers "cancelled"), so it asks
-/// for a folder through the document picker — iCloud Drive, On My iPhone or any
-/// other provider — and writes the file inside it. Every other platform gets
-/// the ordinary save dialog.
+/// needs. iOS has no save dialog (the rfd shim answers "cancelled") and its
+/// folder picker greys out providers like Documents or Drive, so nothing is
+/// asked up front: the export is written to a private temp and
+/// [`ExportTarget::finish`] offers it through the system export picker, which
+/// reaches every provider. Every other platform gets the ordinary save dialog.
 pub(crate) async fn pick_export_target_async(
     app: &AppHandle,
     title: &str,
@@ -141,42 +168,22 @@ pub(crate) async fn pick_export_target_async(
     #[cfg(target_os = "ios")]
     {
         let _ = (title, filter_name, extensions);
-        let Some(folder) = libretracks_ios_folder_picker::pick_folder(app.clone()).await? else {
-            return Ok(None);
-        };
-        return Ok(Some(ExportTarget::Path(unused_file_path(
-            std::path::Path::new(&folder),
-            suggested_name,
-        ))));
+        // The temp carries the final name: the export picker saves the file
+        // under the source's own name.
+        let dir = app
+            .path()
+            .app_cache_dir()
+            .map_err(|error| error.to_string())?
+            .join("exports");
+        std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+        let temp = dir.join(suggested_name);
+        let _ = std::fs::remove_file(&temp);
+        return Ok(Some(ExportTarget::IosExport { temp }));
     }
     #[cfg(not(target_os = "ios"))]
     {
         pick_export_target(app, title, filter_name, extensions, suggested_name)
     }
-}
-
-/// `dir/name`, or `dir/stem (2).ext`, `(3)`… when that is taken. A folder
-/// picker never asks "replace the existing file?", so an export must not
-/// silently overwrite yesterday's set of the same name.
-#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
-fn unused_file_path(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
-    let candidate = dir.join(name);
-    if !candidate.exists() {
-        return candidate;
-    }
-    let (stem, extension) = match name.rsplit_once('.') {
-        Some((stem, extension)) if !stem.is_empty() => (stem, Some(extension)),
-        _ => (name, None),
-    };
-    (2..)
-        .map(|index| {
-            dir.join(match extension {
-                Some(extension) => format!("{stem} ({index}).{extension}"),
-                None => format!("{stem} ({index})"),
-            })
-        })
-        .find(|path| !path.exists())
-        .expect("an unbounded range always yields a free name")
 }
 
 #[tauri::command(async)]
@@ -2432,9 +2439,9 @@ pub fn export_session_package(
     Ok(true)
 }
 
-/// iOS picks the destination through the async document picker, which must
-/// not be awaited from the main thread — hence its own `async` command. The
-/// export itself is the same worker as everywhere else.
+/// iOS gets its own `async` command because its destination picker is shown
+/// from the export worker once the file exists (see [`pick_export_target_async`]).
+/// The export itself is the same worker as everywhere else.
 #[cfg(target_os = "ios")]
 #[tauri::command]
 pub async fn export_session_package(
@@ -3145,22 +3152,8 @@ pub fn import_external_project(
 
 #[cfg(test)]
 mod export_naming_tests {
-    use super::{
-        default_session_package_name, session_file_in_dir, unique_session_dir, unused_file_path,
-    };
+    use super::{default_session_package_name, session_file_in_dir, unique_session_dir};
     use std::path::Path;
-
-    #[test]
-    fn a_folder_picked_export_never_overwrites_an_existing_file() {
-        let dir = tempfile::tempdir().unwrap();
-        assert_eq!(unused_file_path(dir.path(), "set.ltset"), dir.path().join("set.ltset"));
-
-        std::fs::write(dir.path().join("set.ltset"), b"yesterday").unwrap();
-        assert_eq!(unused_file_path(dir.path(), "set.ltset"), dir.path().join("set (2).ltset"));
-
-        std::fs::write(dir.path().join("set (2).ltset"), b"").unwrap();
-        assert_eq!(unused_file_path(dir.path(), "set.ltset"), dir.path().join("set (3).ltset"));
-    }
 
     #[test]
     fn the_default_ltset_name_comes_from_the_project_folder() {

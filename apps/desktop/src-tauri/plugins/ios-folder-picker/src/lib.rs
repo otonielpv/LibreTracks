@@ -151,6 +151,16 @@ pub async fn pick_file<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, 
         .map_err(|error| format!("iOS file picker worker failed: {error}"))?
 }
 
+/// [`export_file`] for callers that are already on a worker thread (the export
+/// jobs finish there). Blocks until the user picks a destination or cancels;
+/// NEVER call it from the main thread, for the reason given on [`pick_folder`].
+pub fn export_file_blocking<R: Runtime>(
+    app: &AppHandle<R>,
+    source_path: &str,
+) -> Result<bool, String> {
+    app.state::<IosFolderPicker<R>>().export_file(source_path)
+}
+
 /// Exporting also waits for a UIKit document picker result, so keep the
 /// synchronous mobile-plugin bridge off the main thread just like pickFolder.
 pub async fn export_file<R: Runtime>(

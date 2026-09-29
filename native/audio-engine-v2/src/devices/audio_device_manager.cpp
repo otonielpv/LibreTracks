@@ -646,7 +646,10 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool force_rescan
         auto names = type->getDeviceNames(false); // false = output devices
         const auto backend = backend_name.toStdString();
         const bool probe_channels = backend_needs_channel_probe(backend);
-        device_debug_log("[LT_AUDIO_DEBUG] list_devices backend=%s scan_ms=%.1f device_count=%d probe=%d\n",
+        // Unconditional, like the summary at the end: when a user reports
+        // "only System Default shows up", these lines say which backend came
+        // back empty. A handful of lines per Settings open.
+        lt_debug_log("[LT_AUDIO] list_devices backend=%s scan_ms=%.1f device_count=%d probe=%d\n",
                      backend.c_str(), scan_ms, static_cast<int>(names.size()),
                      probe_channels ? 1 : 0);
 
@@ -676,6 +679,10 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool force_rescan
                     const auto t_probe = clk::now();
                     // createDevice loads the third-party driver into our
                     // process (see driver_call_guard.h for why it is fenced).
+                    // Written before the call so that, if a driver still takes
+                    // the process down, the last line names the culprit.
+                    lt_debug_log("[LT_AUDIO] probe_device start backend=%s name=\"%s\"\n",
+                                 backend.c_str(), device_name.c_str());
                     std::vector<std::string> probed_names;
                     const auto probe = call_driver_guarded([&] {
                         std::unique_ptr<juce::AudioIODevice> device(type->createDevice(name, {}));
@@ -695,7 +702,9 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool force_rescan
                                      backend.c_str(), device_name.c_str(), probe.error);
                     }
                     const double probe_ms = std::chrono::duration<double, std::milli>(clk::now() - t_probe).count();
-                    device_debug_log("[LT_AUDIO_DEBUG] probe_device backend=%s name=\"%s\" probe_ms=%.1f channels=%d\n",
+                    // Unconditional: runs once per driver (the result is
+                    // cached) and is the only trace of which drivers we load.
+                    lt_debug_log("[LT_AUDIO] probe_device backend=%s name=\"%s\" probe_ms=%.1f channels=%d\n",
                                  backend.c_str(), device_name.c_str(), probe_ms, layout.count);
                     std::lock_guard<std::mutex> lk(impl_->cache_mtx);
                     impl_->channel_layout_cache[d.id] = layout;
@@ -773,7 +782,7 @@ std::vector<DeviceDescriptor> AudioDeviceManager::list_devices(bool force_rescan
 #endif
 
     const double total_ms = std::chrono::duration<double, std::milli>(clk::now() - t_start).count();
-    device_debug_log("[LT_AUDIO_DEBUG] list_devices total_ms=%.1f total_devices=%d force=%d\n",
+    lt_debug_log("[LT_AUDIO] list_devices total_ms=%.1f total_devices=%d force=%d\n",
                  total_ms, static_cast<int>(result.size()), force_rescan ? 1 : 0);
     return result;
 }

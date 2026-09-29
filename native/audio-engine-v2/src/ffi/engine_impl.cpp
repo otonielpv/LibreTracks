@@ -1663,7 +1663,10 @@ std::string EngineImpl::list_devices(bool force_rescan) const {
             {"last_error",  ""},
         });
     }
-    return arr.dump();
+    // Device and channel names come from third-party drivers. With the default
+    // strict handler, one invalid UTF-8 byte makes dump() throw and the whole
+    // list is lost; `replace` swaps the bad byte for U+FFFD instead.
+    return arr.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 std::string EngineImpl::get_source_peaks(const std::string& source_id,
