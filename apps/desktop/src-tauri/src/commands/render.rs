@@ -25,7 +25,6 @@ use lt_audio_engine_v2::{
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-#[cfg(not(target_os = "ios"))]
 use crate::commands::project::pick_export_target_async;
 use crate::commands::project::ExportTarget;
 use crate::infra::error::DesktopError;
