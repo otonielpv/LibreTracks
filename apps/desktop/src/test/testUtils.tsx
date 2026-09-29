@@ -88,6 +88,10 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     listenToWaveformProgress: vi.fn(testDesktopApiMock.listenToWaveformProgress),
     listenToSettingsUpdated: vi.fn(testDesktopApiMock.listenToSettingsUpdated),
     listenToMidiRawMessage: vi.fn(testDesktopApiMock.listenToMidiRawMessage),
+    // Cerrar la app: la X no existe en los tests y salir no debe matar vitest.
+    listenToAppCloseRequested: vi.fn(async () => () => {}),
+    exitApp: vi.fn(async () => {}),
+    cancelAppClose: vi.fn(async () => {}),
     // Video: libmpv is never there in tests; the feature must cope.
     getVideoMediaStatus: vi.fn(async () => ({
       supportedPlatform: true,

@@ -17,6 +17,7 @@ import {
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { ResourceMeter } from "../panels/ResourceMeter";
 import { AudioDeviceStatusBadge } from "../AudioDeviceStatusBadge";
+import { requestAppClose } from "../../appClose/appCloseService";
 
 type TimelineTopbarProps = {
   openTopMenu: "file" | null;
@@ -437,6 +438,17 @@ export function TimelineTopbar({
                       defaultValue: "Guardar como plantilla…",
                     })}
                   </span>
+                </button>
+                <div className="lt-top-menu-separator" aria-hidden="true" />
+                {/* Salir desde ARCHIVO: guarda, avisa de que esta guardado y
+                    cierra. Es lo que se espera de una app de escritorio; la X
+                    sola no dice si el trabajo se ha guardado. */}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => onTopMenuAction(requestAppClose)}
+                >
+                  <span>{t("timelineTopbar.exit")}</span>
                 </button>
               </div>
             ) : null}

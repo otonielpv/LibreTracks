@@ -154,6 +154,30 @@ export async function listenToTransportLifecycle(
 }
 
 /**
+ * Desktop: the user pressed the window's close button. The backend holds the
+ * close until the UI saves the session and calls {@link exitApp} (or
+ * {@link cancelAppClose} to stay). A second click on the X closes regardless.
+ */
+export async function listenToAppCloseRequested(
+  handler: () => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen("app:close-requested", () => {
+    handler();
+  });
+}
+
+/** Quit the app. The backend still flushes the session on the way out. */
+export async function exitApp(): Promise<void> {
+  return invokeCommand<void>("exit_app");
+}
+
+/** Abort a close the backend was holding for the UI. */
+export async function cancelAppClose(): Promise<void> {
+  return invokeCommand<void>("cancel_app_close");
+}
+
+/**
  * Android: a volume was mounted or unmounted (microSD inserted, USB stick
  * plugged in over OTG, either removed). The backend has already refreshed its
  * volume list when this fires, so a listener just asks again — the storage

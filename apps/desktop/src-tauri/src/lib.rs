@@ -159,7 +159,14 @@ pub fn run() {
     #[cfg(target_os = "ios")]
     let builder = builder.plugin(libretracks_ios_folder_picker::init());
 
-    let builder = builder.manage(EngineV2State::new());
+    let builder = builder
+        .manage(EngineV2State::new())
+        .manage(commands::app_close::AppCloseState::default());
+
+    // La X de la ventana pasa por la interfaz para guardar y avisar de que se
+    // ha guardado antes de cerrar. Ver commands::app_close.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let builder = builder.on_window_event(commands::app_close::handle_window_event);
 
     builder
         .setup(|app| {
@@ -320,6 +327,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::system::healthcheck,
             commands::system::is_debug_build,
+            commands::app_close::exit_app,
+            commands::app_close::cancel_app_close,
             commands::system::get_telemetry_platform,
             commands::system::get_remote_server_info,
             commands::system::get_remote_firewall_status,
