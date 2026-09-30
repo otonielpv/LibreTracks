@@ -16,6 +16,7 @@ import {
   markerCategory,
   getSongTempoRegionAtPosition,
   normalizeAppSettings,
+  DEFAULT_VIDEO_OUTPUT_SETTINGS,
   parseSongKey,
   regionEffectiveKey,
   regionPadKey,
@@ -216,6 +217,22 @@ describe("normalizeAppSettings", () => {
     expect(normalizeAppSettings(DEFAULT_APP_SETTINGS)).toEqual(
       DEFAULT_APP_SETTINGS,
     );
+  });
+
+  it("keeps the video output and the video audio choice", () => {
+    // Dropping them made every later settings save switch the output off.
+    const settings: AppSettings = {
+      ...DEFAULT_APP_SETTINGS,
+      videoOutput: {
+        ...DEFAULT_VIDEO_OUTPUT_SETTINGS,
+        enabled: true,
+        display: { name: "DISPLAY2", width: 1920, height: 1080, x: 1920, y: 0 },
+      },
+      videoAudioOnImport: "extract",
+    };
+    const normalized = normalizeAppSettings(settings);
+    expect(normalized.videoOutput).toEqual(settings.videoOutput);
+    expect(normalized.videoAudioOnImport).toBe("extract");
   });
 
   it("clamps metronome volume into [0, +20 dB headroom]", () => {

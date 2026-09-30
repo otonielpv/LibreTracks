@@ -1573,6 +1573,14 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
       settings.autoSaveIntervalMinutes,
     ),
     midiMappings,
+    // Machine video settings are owned by the video commands; pass them
+    // through untouched. Dropping them here meant any later settings save
+    // (audio, metronome, language...) wrote the output back as "off, no
+    // display" and the setup notice came back on every session with video.
+    ...(settings.videoOutput ? { videoOutput: settings.videoOutput } : {}),
+    ...(settings.videoAudioOnImport
+      ? { videoAudioOnImport: settings.videoAudioOnImport }
+      : {}),
   };
 }
 
