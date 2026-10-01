@@ -50,16 +50,42 @@ describe("contrato responsive móvil", () => {
     expect(shell).not.toContain("width: 100vw");
   });
 
+  // Con el zoom de interfaz (`zoom` en el shell), las unidades de viewport
+  // se multiplican por el zoom en los WebView actuales: al 125 % el shell
+  // media 1,25 pantallas y en iPad la barra superior quedaba bajo la de
+  // estado. Un porcentaje no lo toca el zoom.
+  it("mide el alto del shell en porcentaje, inmune al zoom de interfaz", () => {
+    const shell = declarationsFor("html.lt-mobile .lt-app-shell");
+    expect(shell).toContain("height: 100%");
+    expect(shell).not.toMatch(/height:\s*100d?vh/);
+  });
+
+  // `env()` da pixeles de pantalla y el `zoom` del shell los vuelve a
+  // multiplicar: dentro del shell los insets se dividen por el zoom, y las
+  // reglas usan las variables, nunca `env()` directo.
+  it("compensa los insets de safe-area con el zoom de interfaz", () => {
+    const shellVars =
+      styles.match(/\n\.lt-app-shell\s*\{([^}]*--lt-safe-area-top[^}]*)\}/)?.[1] ?? "";
+    for (const side of ["top", "right", "bottom", "left"]) {
+      expect(shellVars).toContain(
+        `--lt-safe-area-${side}: calc(env(safe-area-inset-${side}, 0px) / var(--lt-ui-zoom, 1))`,
+      );
+    }
+    const uses = styles.match(/env\(safe-area-inset-/g) ?? [];
+    // Solo las 4 de :root y las 4 del shell.
+    expect(uses).toHaveLength(8);
+  });
+
   it("mantiene el shell a pantalla completa y protege controles, no el lienzo", () => {
     const shell = declarationsFor(".lt-mobile .lt-app-shell");
     const topbar = declarationsFor(".lt-mobile .lt-topbar");
     const sideNav = declarationsFor(".lt-mobile .lt-side-nav");
 
     expect(shell).not.toContain("padding:");
-    expect(topbar).toContain("env(safe-area-inset-top");
-    expect(topbar).toContain("env(safe-area-inset-right");
-    expect(topbar).toContain("env(safe-area-inset-left");
-    expect(sideNav).toContain("env(safe-area-inset-left");
+    expect(topbar).toContain("var(--lt-safe-area-top)");
+    expect(topbar).toContain("var(--lt-safe-area-right)");
+    expect(topbar).toContain("var(--lt-safe-area-left)");
+    expect(sideNav).toContain("var(--lt-safe-area-left)");
   });
 
   it("reemplaza la barra horizontal por navegacion tactil en ambos ejes", () => {
@@ -83,8 +109,8 @@ describe("contrato responsive móvil", () => {
     )?.[1];
 
     expect(sheet, "falta la geometría compartida de las hojas").toBeTruthy();
-    expect(sheet).toContain("left: env(safe-area-inset-left");
-    expect(sheet).toContain("right: env(safe-area-inset-right");
+    expect(sheet).toContain("left: var(--lt-safe-area-left)");
+    expect(sheet).toContain("right: var(--lt-safe-area-right)");
     expect(sheet).toContain("max-width:");
     expect(sheet).toContain("margin-left: auto");
   });
@@ -94,11 +120,11 @@ describe("contrato responsive móvil", () => {
   it("no suma dos veces los insets laterales en las hojas", () => {
     const padding = declarationsFor(".lt-mobile .lt-control-popover-panel");
 
-    expect(padding).not.toContain("safe-area-inset-left");
-    expect(padding).not.toContain("safe-area-inset-right");
+    expect(padding).not.toContain("--lt-safe-area-left");
+    expect(padding).not.toContain("--lt-safe-area-right");
     // Abajo sí: la hoja se queda pegada al borde y su última línea no puede
     // quedar bajo el indicador de inicio.
-    expect(padding).toContain("safe-area-inset-bottom");
+    expect(padding).toContain("--lt-safe-area-bottom");
   });
 
   it("fija el documento iOS para que WKWebView no cree scroll exterior", () => {
@@ -286,8 +312,8 @@ describe("contrato responsive móvil", () => {
   it("adapta el tutorial a teléfonos, apaisado y tablets", () => {
     const mobileCard = declarationsFor(".lt-mobile .lt-tour-card");
     expect(mobileCard).toContain("clamp(18rem, 37.5vw, 18.75rem)");
-    expect(mobileCard).toContain("env(safe-area-inset-left");
-    expect(mobileCard).toContain("env(safe-area-inset-right");
+    expect(mobileCard).toContain("var(--lt-safe-area-left)");
+    expect(mobileCard).toContain("var(--lt-safe-area-right)");
     expect(mobileCard).toContain("58dvh");
     expect(styles).toContain("--lt-safe-area-top");
     expect(styles).toContain("--lt-safe-area-right");
@@ -297,8 +323,8 @@ describe("contrato responsive móvil", () => {
       /\.lt-mobile \.lt-tour-menu\s*\{[^}]*position|\.lt-tour-menu\s*\{[^}]*position:\s*fixed/s,
     );
     const mobileMenu = declarationsFor(".lt-mobile .lt-tour-menu");
-    expect(mobileMenu).toContain("env(safe-area-inset-left");
-    expect(mobileMenu).toContain("env(safe-area-inset-right");
+    expect(mobileMenu).toContain("var(--lt-safe-area-left)");
+    expect(mobileMenu).toContain("var(--lt-safe-area-right)");
     expect(mobileMenu).toContain("100dvh");
   });
 

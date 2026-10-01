@@ -18,6 +18,20 @@
   --lt-safe-area-left: env(safe-area-inset-left, 0px);
 }
 
+/* Dentro del shell las mismas variables, pero divididas por el zoom de
+   interfaz. `env()` devuelve pixeles de PANTALLA y el `zoom` del shell los
+   vuelve a multiplicar: al 125 % la barra superior se apartaba 1,25 veces la
+   barra de estado y al 70 % se metia debajo de ella. Dividir aqui deja el
+   inset pintado exactamente del tamano real en cualquier zoom. Lo que vive
+   fuera del shell (portales en body, el tutorial) sigue leyendo las de :root,
+   sin escalar. */
+.lt-app-shell {
+  --lt-safe-area-top: calc(env(safe-area-inset-top, 0px) / var(--lt-ui-zoom, 1));
+  --lt-safe-area-right: calc(env(safe-area-inset-right, 0px) / var(--lt-ui-zoom, 1));
+  --lt-safe-area-bottom: calc(env(safe-area-inset-bottom, 0px) / var(--lt-ui-zoom, 1));
+  --lt-safe-area-left: calc(env(safe-area-inset-left, 0px) / var(--lt-ui-zoom, 1));
+}
+
 html,
 body,
 #root {
@@ -80,18 +94,27 @@ input[type="range"] {
 /* Keep the shell itself edge-to-edge. Interactive regions account for the safe
    area below, so backgrounds and rails do not stop short at the notch, rounded
    corners or home indicator. */
-.lt-mobile .lt-app-shell {
+html.lt-mobile .lt-app-shell {
   box-sizing: border-box;
-  height: 100vh;
-  height: 100dvh;
   /* NO 100vw. Con `viewport-fit=cover` y un notch lateral, `100vw` mide la
      PANTALLA entera mientras que el viewport visible del WebView ya viene
      recortado por los insets. Medido en un iPhone 16 Pro Max (2026-09-12):
      inner=832, safe=L62 R62, y el shell a 100vw daba 956 — 124 px de más que
      se salían por la derecha y, con overflow:hidden, recortaban la interfaz a
      media letra. En iPad los insets laterales son 0 y por eso allí nunca se
-     vio. `100%` es el viewport visible en ambos. */
+     vio. `100%` es el viewport visible en ambos.
+
+     Y tampoco 100dvh: dentro del shell con `zoom`, las unidades de
+     viewport no se resuelven igual en todos los WebView (unos las
+     multiplican por el zoom y otros no), y en iPad al 125 % la interfaz
+     dejaba de ajustarse a la pantalla. Un porcentaje se resuelve contra el
+     contenedor y el zoom no lo toca, asi que `100%` llena la pantalla en
+     cualquier zoom y en cualquier motor. El selector lleva `html` para ganar
+     tambien a la compensacion por `vw`/`vh` de
+     `.lt-ui-zoom-compensate-viewport` (Android), que con un notch lateral
+     volveria a medir de mas. */
   width: 100%;
+  height: 100%;
 }
 
 /* Track headers scroll vertically by default. Reorder mode temporarily claims
@@ -8638,8 +8661,8 @@ html.lt-ios body {
   position: fixed;
   top: auto;
   bottom: 0;
-  left: env(safe-area-inset-left, 0px);
-  right: env(safe-area-inset-right, 0px);
+  left: var(--lt-safe-area-left);
+  right: var(--lt-safe-area-right);
   transform: none;
   min-width: 0;
   max-width: 40rem;
@@ -8920,7 +8943,7 @@ html.lt-ios body {
   gap: 0;
   max-height: 60vh;
   padding: 0.6rem 0.5rem
-    max(0.6rem, calc(env(safe-area-inset-bottom, 0px) + 0.4rem));
+    max(0.6rem, calc(var(--lt-safe-area-bottom) + 0.4rem));
   background: #161616;
 }
 
@@ -10229,10 +10252,10 @@ html.lt-ios body {
 
 .lt-mobile .lt-topbar {
   flex: 0 0 auto;
-  padding-top: max(clamp(0.2rem, 1.2vh, 0.4rem), env(safe-area-inset-top, 0px));
-  padding-right: max(clamp(0.35rem, 1.5vw, 0.75rem), env(safe-area-inset-right, 0px));
+  padding-top: max(clamp(0.2rem, 1.2vh, 0.4rem), var(--lt-safe-area-top));
+  padding-right: max(clamp(0.35rem, 1.5vw, 0.75rem), var(--lt-safe-area-right));
   padding-bottom: clamp(0.2rem, 1.2vh, 0.4rem);
-  padding-left: max(clamp(0.35rem, 1.5vw, 0.75rem), env(safe-area-inset-left, 0px));
+  padding-left: max(clamp(0.35rem, 1.5vw, 0.75rem), var(--lt-safe-area-left));
   gap: clamp(0.2rem, 1vh, 0.45rem);
 }
 
@@ -10373,9 +10396,9 @@ html.lt-ios body {
 /* The rail consumes a bounded fraction of landscape width and its buttons
    share the available height instead of overflowing on short screens. */
 .lt-mobile .lt-side-nav {
-  width: calc(clamp(2.75rem, 7vw, 3.25rem) + env(safe-area-inset-left, 0px));
+  width: calc(clamp(2.75rem, 7vw, 3.25rem) + var(--lt-safe-area-left));
   min-height: 0;
-  padding-left: max(0.25rem, env(safe-area-inset-left, 0px));
+  padding-left: max(0.25rem, var(--lt-safe-area-left));
   overflow-x: hidden;
   overflow-y: auto;
 }
@@ -10454,14 +10477,14 @@ html.lt-ios body {
 .lt-mobile .lt-control-popover-panel {
   padding-top: 0.9rem;
   padding-right: 1rem;
-  padding-bottom: max(1.1rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+  padding-bottom: max(1.1rem, calc(var(--lt-safe-area-bottom) + 0.5rem));
   padding-left: 1rem;
 }
 
 .lt-mobile .lt-dialog-layer {
-  padding-right: max(1rem, env(safe-area-inset-right, 0px));
-  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
-  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, var(--lt-safe-area-right));
+  padding-bottom: max(1rem, var(--lt-safe-area-bottom));
+  padding-left: max(1rem, var(--lt-safe-area-left));
 }
 
 /* Settings is a dense desktop surface. On both mobile targets keep the same
@@ -10622,9 +10645,9 @@ html.lt-ios body {
     overflow-x: auto;
     overflow-y: hidden;
     padding-top: 0.2rem;
-    padding-right: max(0.2rem, env(safe-area-inset-right, 0px));
-    padding-bottom: max(0.2rem, env(safe-area-inset-bottom, 0px));
-    padding-left: max(0.2rem, env(safe-area-inset-left, 0px));
+    padding-right: max(0.2rem, var(--lt-safe-area-right));
+    padding-bottom: max(0.2rem, var(--lt-safe-area-bottom));
+    padding-left: max(0.2rem, var(--lt-safe-area-left));
   }
 
   .lt-mobile .lt-side-nav button {
@@ -10925,22 +10948,22 @@ html.lt-ios body {
   width: min(
     clamp(18rem, 37.5vw, 18.75rem),
     calc(
-      100vw - 1.5rem - env(safe-area-inset-left, 0px) -
-        env(safe-area-inset-right, 0px)
+      100vw - 1.5rem - var(--lt-safe-area-left) -
+        var(--lt-safe-area-right)
     )
   );
   max-height: min(
     58vh,
     calc(
-      100vh - 1.5rem - env(safe-area-inset-top, 0px) -
-        env(safe-area-inset-bottom, 0px)
+      100vh - 1.5rem - var(--lt-safe-area-top) -
+        var(--lt-safe-area-bottom)
     )
   );
   max-height: min(
     58dvh,
     calc(
-      100dvh - 1.5rem - env(safe-area-inset-top, 0px) -
-        env(safe-area-inset-bottom, 0px)
+      100dvh - 1.5rem - var(--lt-safe-area-top) -
+        var(--lt-safe-area-bottom)
     )
   );
   gap: 0.35rem;
@@ -11064,24 +11087,24 @@ html.lt-ios body {
    recorta el `overflow` que permite desplazar la navegación en pantallas bajas. */
 .lt-mobile .lt-tour-menu {
   top: auto;
-  right: max(0.75rem, env(safe-area-inset-right, 0px));
-  bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
-  left: max(0.75rem, env(safe-area-inset-left, 0px));
+  right: max(0.75rem, var(--lt-safe-area-right));
+  bottom: max(0.75rem, var(--lt-safe-area-bottom));
+  left: max(0.75rem, var(--lt-safe-area-left));
   width: min(
     24rem,
     calc(
-      100vw - 1.5rem - env(safe-area-inset-left, 0px) -
-        env(safe-area-inset-right, 0px)
+      100vw - 1.5rem - var(--lt-safe-area-left) -
+        var(--lt-safe-area-right)
     )
   );
   max-width: 24rem;
   max-height: calc(
-    100vh - 1.5rem - env(safe-area-inset-top, 0px) -
-      env(safe-area-inset-bottom, 0px)
+    100vh - 1.5rem - var(--lt-safe-area-top) -
+      var(--lt-safe-area-bottom)
   );
   max-height: calc(
-    100dvh - 1.5rem - env(safe-area-inset-top, 0px) -
-      env(safe-area-inset-bottom, 0px)
+    100dvh - 1.5rem - var(--lt-safe-area-top) -
+      var(--lt-safe-area-bottom)
   );
   margin-right: auto;
   margin-left: auto;
