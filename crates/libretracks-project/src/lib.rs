@@ -177,7 +177,8 @@ mod tests {
         save_song(&song_dir, &demo_song()).expect("song should save");
 
         let json = fs::read_to_string(song_file_path(&song_dir)).expect("song file should exist");
-        assert!(json.contains("\"version\": 8"));
+        // No video in the demo song, so it stays v7 for 1.12.x to open.
+        assert!(json.contains("\"version\": 7"));
         assert!(json.contains("\"timeSignature\""));
         assert!(json.contains("\"regions\""));
         assert!(json.contains("\"timelineStartSeconds\""));

@@ -5,7 +5,7 @@ use std::{
 
 use libretracks_core::{
     validate_song, Clip, DomainError, Marker, MarkerKind, Song, SongRegion, TempoMetadata,
-    TimeSignatureMarker, Track,
+    TimeSignatureMarker, Track, TrackKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -17,6 +17,11 @@ pub const SONG_FILE_NAME: &str = "song.ltsession";
 /// otherwise it would open a session with video and save it back without
 /// the clips.
 const SONG_FORMAT_VERSION: u32 = 8;
+
+/// A song without video is written as v7 so that 1.12.x still opens it: a
+/// session made in 1.13 and moved to a device one release behind was refused
+/// although it held nothing that release could not represent.
+const NO_VIDEO_SONG_FORMAT_VERSION: u32 = 7;
 
 #[derive(Debug, Error)]
 pub enum ProjectError {
@@ -168,10 +173,26 @@ pub fn save_song_to_file(
 pub fn serialize_song_document(song: &Song) -> Result<String, ProjectError> {
     validate_song(song)?;
     let document = SongDocument {
-        version: SONG_FORMAT_VERSION,
+        version: written_format_version(song),
         song: song.clone(),
     };
     Ok(serde_json::to_string_pretty(&document)?)
+}
+
+/// The oldest format that can hold `song` without losing anything. A video
+/// track without clips still needs v8: an older reader does not know the
+/// `video` track kind.
+fn written_format_version(song: &Song) -> u32 {
+    let has_video = !song.video_clips.is_empty()
+        || song
+            .tracks
+            .iter()
+            .any(|track| track.kind == TrackKind::Video);
+    if has_video {
+        SONG_FORMAT_VERSION
+    } else {
+        NO_VIDEO_SONG_FORMAT_VERSION
+    }
 }
 
 pub fn load_song(song_dir: impl AsRef<Path>) -> Result<Song, ProjectError> {
@@ -1137,9 +1158,9 @@ mod tests {
     }
 
     /// C2: a real v7 document shipped in the repo opens with no video clips
-    /// and is saved back as v8 without any other change.
+    /// and, having no video, is saved back as the same v7 document.
     #[test]
-    fn real_v7_document_opens_and_saves_as_v8_unchanged() {
+    fn real_v7_document_without_video_saves_back_as_v7() {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../apps/desktop/src-tauri/resources/demo/song.ltsession");
         let v7_json = std::fs::read_to_string(&fixture).expect("demo fixture");
@@ -1149,19 +1170,44 @@ mod tests {
         let song = load_song_from_file(&fixture).expect("v7 document loads");
         assert!(song.video_clips.is_empty());
 
-        let saved = serialize_song_document(&song).expect("serialize as v8");
-        let mut saved_raw: Value = serde_json::from_str(&saved).expect("saved is json");
-        assert_eq!(saved_raw["version"], 8);
-        assert_eq!(saved_raw["videoClips"], serde_json::json!([]));
+        let saved = serialize_song_document(&song).expect("serialize");
+        let saved_raw: Value = serde_json::from_str(&saved).expect("saved is json");
+        assert_eq!(saved_raw["version"], 7);
+        assert!(saved_raw.get("videoClips").is_none());
 
-        // Nothing else changed: the v8 document minus the new field and the
-        // version is the same song as the v7 one read back.
-        let object = saved_raw.as_object_mut().expect("object");
-        object.remove("videoClips");
-        object.insert("version".into(), Value::from(7));
-        let reread = parse_song_document(&saved_raw.to_string(), SONG_FORMAT_VERSION)
-            .expect("stripped document is a valid v7");
+        let reread = parse_song_document(&saved, 7).expect("a v7 reader opens it");
         assert_eq!(reread, song);
+    }
+
+    /// A session saved by 1.13 without video must open in 1.12.x (a v7
+    /// reader). It used to be written as v8 and refused.
+    #[test]
+    fn a_v7_reader_opens_a_song_without_video_saved_by_the_current_app() {
+        let song = base_song();
+        let dir = tempfile::tempdir().expect("temp dir");
+        save_song(dir.path(), &song).expect("save song");
+        let json = std::fs::read_to_string(song_file_path(dir.path())).expect("read saved file");
+        let raw: Value = serde_json::from_str(&json).expect("saved file is json");
+        assert_eq!(raw["version"], 7);
+        assert!(raw.get("videoClips").is_none());
+
+        let loaded = parse_song_document(&json, 7).expect("a v7 reader opens it");
+        assert_eq!(loaded, song);
+    }
+
+    /// A video track without clips still needs v8: an older reader does not
+    /// know the `video` track kind and would fail or drop the track.
+    #[test]
+    fn a_video_track_without_clips_is_still_written_as_v8() {
+        let mut song = base_song();
+        song.tracks.push(video_track("v1", "Letras"));
+        let json = serialize_song_document(&song).expect("serialize");
+        let raw: Value = serde_json::from_str(&json).expect("json");
+        assert_eq!(raw["version"], 8);
+        assert!(matches!(
+            parse_song_document(&json, 7),
+            Err(ProjectError::UnsupportedVersion(8))
+        ));
     }
 
     /// C3: a reader that only knows v7 must refuse a v8 document with video

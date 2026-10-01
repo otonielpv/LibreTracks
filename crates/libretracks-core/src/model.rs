@@ -51,8 +51,9 @@ pub struct Song {
     /// `midi_clips`: they carry pictures, not audio, and every consumer of
     /// `clips` (mixer, waveforms, warp, render) would have to learn to skip
     /// them. Songs saved before video tracks existed deserialize to an empty
-    /// list.
-    #[serde(default)]
+    /// list. An empty list is left out on save so a song without video stays
+    /// a valid v7 document that 1.12.x opens.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub video_clips: Vec<VideoClip>,
     pub section_markers: Vec<Marker>,
 }
