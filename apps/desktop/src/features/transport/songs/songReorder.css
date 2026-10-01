@@ -1,0 +1,138 @@
+/* Reordenar canciones arrastrando (vistas compacta y live). */
+
+.lt-song-reorder-handle {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.4rem;
+  border-radius: 2px;
+  color: #7f928c;
+  cursor: grab;
+  opacity: 0.55;
+  /* Sin esto el dedo haría scroll en vez de arrastrar, y en iOS la pulsación
+     sacaría el menú de la lupa. */
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.lt-song-reorder-handle .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.lt-song-reorder-handle:hover,
+.lt-song-reorder-handle:focus-visible {
+  color: #57f1db;
+  opacity: 1;
+}
+
+.lt-song-reorder-handle:focus-visible {
+  outline: 1px solid rgb(87 241 219 / 0.7);
+  outline-offset: 1px;
+}
+
+/* Con el dedo el asa es la única forma de agarrar la canción: siempre
+   visible y con un blanco más generoso. */
+@media (pointer: coarse) {
+  .lt-song-reorder-handle {
+    width: 1.6rem;
+    min-height: 2rem;
+    opacity: 0.85;
+  }
+
+  .lt-song-reorder-handle .material-symbols-outlined {
+    font-size: 20px;
+  }
+}
+
+body.lt-song-reordering,
+body.lt-song-reordering * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+.is-reorder-source {
+  opacity: 0.45;
+}
+
+/* Línea de inserción: un borde de la canción junto al hueco donde caería. */
+.lt-compact-song-column.is-drop-before::after,
+.lt-compact-song-column.is-drop-after::after,
+.lt-live-region-row.is-drop-before::after,
+.lt-live-region-row.is-drop-after::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  background: #57f1db;
+  box-shadow: 0 0 6px rgb(87 241 219 / 0.7);
+}
+
+/* La compacta es una fila de columnas: la línea es vertical. La columna
+   recorta su contenido (overflow: hidden), así que va por dentro del borde. */
+.lt-compact-song-column.is-drop-before::after,
+.lt-compact-song-column.is-drop-after::after {
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.lt-compact-song-column.is-drop-before::after {
+  left: 0;
+}
+
+.lt-compact-song-column.is-drop-after::after {
+  right: 0;
+}
+
+/* La setlist live: botones en fila; en pantallas anchas, lista vertical. La
+   fila recorta su contenido, así que la línea va por dentro del borde. */
+.lt-live-region-row {
+  position: relative;
+}
+
+.lt-live-region-row.has-reorder {
+  grid-template-columns: auto minmax(0, 1fr) 2.1rem;
+}
+
+.lt-live-region-row .lt-song-reorder-handle {
+  align-self: stretch;
+  height: auto;
+  margin-left: 0.15rem;
+}
+
+.lt-live-region-row.is-drop-before::after,
+.lt-live-region-row.is-drop-after::after {
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.lt-live-region-row.is-drop-before::after {
+  left: 0;
+}
+
+.lt-live-region-row.is-drop-after::after {
+  right: 0;
+}
+
+@media (min-width: 1180px) {
+  .lt-live-region-row.is-drop-before::after,
+  .lt-live-region-row.is-drop-after::after {
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 3px;
+  }
+
+  .lt-live-region-row.is-drop-before::after {
+    top: 0;
+    bottom: auto;
+  }
+
+  .lt-live-region-row.is-drop-after::after {
+    top: auto;
+    bottom: 0;
+  }
+}

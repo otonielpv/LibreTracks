@@ -65,4 +65,25 @@ describe("CompactSongHeader", () => {
     expect(screen.queryByText(/Sin nota/)).toBeNull();
     expect(screen.getByText("Renombrar canción")).toBeTruthy();
   });
+
+  it("shows the reorder grip only when reordering is wired", () => {
+    const onKeyDown = vi.fn();
+    const { rerender } = render(renderHeader(false));
+    expect(screen.queryByRole("button", { name: "liveView.reorderSong" })).toBeNull();
+
+    rerender(
+      <CompactSongHeaderComponent
+        {...renderHeader(false).props}
+        reorderHandleProps={{
+          onPointerDown: vi.fn(),
+          onClick: vi.fn(),
+          onKeyDown,
+        }}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole("button", { name: "liveView.reorderSong" }), {
+      key: "ArrowRight",
+    });
+    expect(onKeyDown).toHaveBeenCalled();
+  });
 });

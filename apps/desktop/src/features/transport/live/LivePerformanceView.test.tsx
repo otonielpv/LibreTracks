@@ -15,6 +15,7 @@ vi.mock("react-i18next", () => ({
         "liveView.title": "Live View",
         "liveView.selectSong": `Show markers for ${values?.name}`,
         "liveView.playSong": `Play ${values?.name}`,
+        "liveView.reorderSong": `Reorder ${values?.name}`,
         "liveView.songProgress": "Current song progress",
       };
       return messages[key] ?? key;
@@ -217,5 +218,42 @@ describe("LivePerformanceView", () => {
     expect(countdown?.textContent).toContain("liveView.nextIn");
     // Lo que se fija es DONDE vive, que es todo el arreglo.
     expect(countdown?.parentElement?.className).toBe("lt-live-cue-name-line");
+  });
+
+  it("reorders setlist songs by their grip, in start order", () => {
+    const onReorderSong = vi.fn();
+    const renderSetlist = (withReorder: boolean) => (
+      <LivePerformanceView
+        // Desordenadas a propósito: la setlist se pinta por inicio.
+        song={{ ...song, regions: [song.regions[1], song.regions[0]] }}
+        positionSecondsRef={{ current: 10 }}
+        settings={DEFAULT_APP_SETTINGS}
+        pendingMarkerId={null}
+        pendingMarkerName={null}
+        activeVamp={null}
+        onViewModeChange={vi.fn()}
+        onMarkerAction={vi.fn()}
+        onSongAction={vi.fn()}
+        onReorderSong={withReorder ? onReorderSong : undefined}
+        onToggleVamp={vi.fn()}
+        onCancelPendingJump={vi.fn()}
+        onGlobalJumpModeChange={vi.fn()}
+        onGlobalJumpBarsChange={vi.fn()}
+        onSongJumpTriggerChange={vi.fn()}
+        onSongJumpBarsChange={vi.fn()}
+        onSongTransitionModeChange={vi.fn()}
+        onVampModeChange={vi.fn()}
+        onVampBarsChange={vi.fn()}
+      />
+    );
+    const { rerender } = render(renderSetlist(true));
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Reorder Primera" }), {
+      key: "ArrowDown",
+    });
+    expect(onReorderSong).toHaveBeenCalledWith("first", 1);
+
+    rerender(renderSetlist(false));
+    expect(screen.queryByRole("button", { name: "Reorder Primera" })).toBeNull();
   });
 });

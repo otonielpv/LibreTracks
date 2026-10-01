@@ -31,6 +31,12 @@ import {
   calculateLiveProgress,
   useLiveProgressBars,
 } from "./useLiveProgressBars";
+import { SongReorderHandle } from "../songs/SongReorderHandle";
+import {
+  SONG_REORDER_ID_ATTRIBUTE,
+  songReorderClassName,
+  useSongReorder,
+} from "../songs/useSongReorder";
 import type { ViewMode } from "../uiStore";
 import { ViewModeSwitcher } from "../timeline/ViewModeSwitcher";
 import "./LivePerformanceView.css";
@@ -45,6 +51,9 @@ type LivePerformanceViewProps = {
   onViewModeChange: (mode: ViewMode) => void;
   onMarkerAction: (marker: SectionMarkerSummary) => void;
   onSongAction: (region: SongRegionSummary) => void;
+  /** Drag a setlist song to another position; `targetIndex` is its final
+   * position in start order (0 = first). */
+  onReorderSong?: (regionId: string, targetIndex: number) => void;
   onToggleVamp: () => void;
   onCancelPendingJump: () => void;
   onGlobalJumpModeChange: (mode: AppSettings["globalJumpMode"]) => void;
@@ -122,6 +131,7 @@ function LivePerformanceViewComponent({
   onViewModeChange,
   onMarkerAction,
   onSongAction,
+  onReorderSong,
   onToggleVamp,
   onCancelPendingJump,
   onGlobalJumpModeChange,
@@ -154,6 +164,16 @@ function LivePerformanceViewComponent({
     positionSecondsRef,
   );
   const rowRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const setlistRef = useRef<HTMLDivElement | null>(null);
+  const sortedRegionIds = useMemo(
+    () => sortedRegions.map((region) => region.id),
+    [sortedRegions],
+  );
+  const songReorder = useSongReorder({
+    itemIds: sortedRegionIds,
+    containerRef: setlistRef,
+    onReorder: onReorderSong,
+  });
   const markerProgressFillRef = useRef<HTMLSpanElement | null>(null);
   const songProgressFillRef = useRef<HTMLSpanElement | null>(null);
   const lastPlaybackRegionIdRef = useRef<string | null>(null);
@@ -446,17 +466,25 @@ function LivePerformanceViewComponent({
             })}
           </small>
         </div>
-        <div className="lt-live-region-buttons">
+        <div className="lt-live-region-buttons" ref={setlistRef}>
           {sortedRegions.map((region, index) => (
             <div
-              className={`lt-live-region-row${region.id === selectedRegion?.id ? " is-selected" : ""}${region.id === currentRegion?.id ? " is-playing" : ""}${region.id === pendingMarkerId ? " is-queued" : ""}`}
+              className={`lt-live-region-row${region.id === selectedRegion?.id ? " is-selected" : ""}${region.id === currentRegion?.id ? " is-playing" : ""}${region.id === pendingMarkerId ? " is-queued" : ""}${songReorder.enabled ? " has-reorder" : ""}${songReorderClassName(songReorder, region.id, index, sortedRegions.length)}`}
               key={region.id}
+              {...{ [SONG_REORDER_ID_ATTRIBUTE]: region.id }}
             >
+              {songReorder.enabled ? (
+                <SongReorderHandle
+                  name={region.name}
+                  handleProps={songReorder.handleProps(region.id)}
+                />
+              ) : null}
               <button
                 type="button"
                 className="lt-live-region-select"
                 aria-label={t("liveView.selectSong", { name: region.name })}
                 onClick={() => setSelectedRegionId(region.id)}
+                {...songReorder.surfaceProps(region.id)}
               >
                 <span>{index + 1}</span>{region.name}
                 {region.id === pendingMarkerId ? (

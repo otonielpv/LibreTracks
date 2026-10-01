@@ -1657,6 +1657,7 @@ const es = {
     nextSong: "Siguiente cancion",
     selectSong: "Mostrar las marcas de {{name}}",
     playSong: "Reproducir {{name}}",
+    reorderSong: "Arrastra para reordenar {{name}} · las flechas la mueven",
     songProgress: "Progreso de la cancion actual",
     remaining: "Quedan {{time}}",
     pause: "Pausa",

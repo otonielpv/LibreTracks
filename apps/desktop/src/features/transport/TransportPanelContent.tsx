@@ -143,6 +143,7 @@ import {
   updateSectionMarker,
   updateLiveRegionMasterGain,
   moveSongRegion,
+  reorderSongRegion,
   updateSongRegion,
   updateSongRegionMasterGain,
   updateSongRegionTranspose,
@@ -8083,6 +8084,7 @@ export function TransportPanelContent() {
                       onExportSong={handleCompactExportSong}
                       onSetSongKey={handleCompactSetSongKey}
                       onSongColumnWidthChange={handleCompactColumnWidth}
+                      onReorderSong={(id, index) => void runAction(async () => applyPlaybackSnapshot(await reorderSongRegion(id, index)))}
                       bpmByRegion={bpmByRegion}
                       onSnapshotApplied={applyPlaybackSnapshot}
                       onImportSongPackageFromDialog={
@@ -8116,6 +8118,7 @@ export function TransportPanelContent() {
                       onViewModeChange={setViewMode}
                       onMarkerAction={(marker) => void runAction(() => handleMarkerPrimaryAction(marker))}
                       onSongAction={(region) => handleCompactPlaySong(region.id, region.name)}
+                      onReorderSong={(id, index) => void runAction(async () => applyPlaybackSnapshot(await reorderSongRegion(id, index)))}
                       onToggleVamp={() => void runAction(async () => {
                         await toggleTimelineVamp();
                       })}

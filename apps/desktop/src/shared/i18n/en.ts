@@ -1624,6 +1624,7 @@ const en = {
     nextSong: "Next song",
     selectSong: "Show markers for {{name}}",
     playSong: "Play {{name}}",
+    reorderSong: "Drag to reorder {{name}} · arrow keys move it",
     songProgress: "Current song progress",
     remaining: "{{time}} remaining",
     pause: "Pause",

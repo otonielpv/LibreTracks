@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -26,6 +27,15 @@ import {
   type SongRegionSummary,
 } from "../desktopApi";
 import { useTransportStore } from "../store";
+import {
+  SongReorderHandle,
+  type SongReorderHandleProps,
+} from "../songs/SongReorderHandle";
+import { SONG_REORDER_IGNORE_ATTRIBUTE } from "../songs/useSongReorder";
+
+/** Spread onto the fader: dragging it must never start a song reorder from
+ * the header surface. (The context menu already stops pointerdown.) */
+const NO_SONG_REORDER = { [SONG_REORDER_IGNORE_ATTRIBUTE]: "" };
 
 type CompactSongHeaderProps = {
   region: SongRegionSummary;
@@ -49,6 +59,14 @@ type CompactSongHeaderProps = {
    * Transposition / Warp / Master groups in the toolbar pick this up
    * automatically. */
   onSelect: () => void;
+  /** Grip that drags the song to another position (any pointer, keyboard
+   * arrows). Undefined hides the grip — reordering is off. */
+  reorderHandleProps?: SongReorderHandleProps;
+  /** Mouse drag from the header body also reorders, past a few pixels so a
+   * click still selects. */
+  reorderSurfaceProps?: {
+    onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+  };
 };
 
 // Master fader snaps to unity (1.0) within ±3% of full range (0..2), so the
@@ -79,6 +97,8 @@ export function CompactSongHeaderComponent({
   onSetKey,
   isSelected,
   onSelect,
+  reorderHandleProps,
+  reorderSurfaceProps,
 }: CompactSongHeaderProps) {
   const { t } = useTranslation();
   const [contextMenu, setContextMenu] = useState<{
@@ -213,8 +233,15 @@ export function CompactSongHeaderComponent({
       }`}
       onContextMenu={openMenu}
       onClick={handleHeaderClick}
+      onPointerDown={reorderSurfaceProps?.onPointerDown}
     >
       <div className="lt-compact-song-name-row">
+        {reorderHandleProps ? (
+          <SongReorderHandle
+            name={region.name}
+            handleProps={reorderHandleProps}
+          />
+        ) : null}
         <button
           type="button"
           className="lt-compact-song-play"
@@ -369,6 +396,7 @@ export function CompactSongHeaderComponent({
       ) : null}
       <div
         className="lt-compact-song-master"
+        {...NO_SONG_REORDER}
         // The master fader sits inside the clickable header. Swallow
         // clicks so dragging or double-clicking the fader doesn't
         // re-fire the header's selection handler.

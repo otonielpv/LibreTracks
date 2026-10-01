@@ -1627,6 +1627,22 @@ export async function moveSongRegion(
   });
 }
 
+/**
+ * Move a song to position `targetIndex` of the song list (0 = first), the
+ * way the compact and live views reorder. The backend relays every song in
+ * the new order — each one carrying its clips and markers — keeping the gaps
+ * between list positions. One snapshot, one undo entry.
+ */
+export async function reorderSongRegion(
+  regionId: string,
+  targetIndex: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("reorder_song_region", {
+    regionId,
+    targetIndex,
+  });
+}
+
 export async function updateSongRegionTranspose(
   regionId: string,
   transposeSemitones: number,

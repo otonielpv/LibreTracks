@@ -9,6 +9,7 @@ import {
   type CSSProperties,
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 
 import {
@@ -26,6 +27,12 @@ import {
 } from "./CompactMixer";
 import { CompactSongHeader } from "./CompactSongHeader";
 import { columnDensityClass, useColumnResize } from "./useColumnResize";
+import {
+  SONG_REORDER_ID_ATTRIBUTE,
+  songReorderClassName,
+  useSongReorder,
+} from "../songs/useSongReorder";
+import type { SongReorderHandleProps } from "../songs/SongReorderHandle";
 import { isMobileApp } from "../desktopApi";
 import { LIBRARY_ASSET_DRAG_MIME } from "../library/dragDrop";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
@@ -188,6 +195,10 @@ type CompactViewProps = {
    * Fires once per gesture, on release — never during the drag, which is
    * rendered locally. The parent persists it on the region. */
   onSongColumnWidthChange: (regionId: string, widthRem: number | null) => void;
+  /** Dragging a song column to another position of the strip. `targetIndex`
+   * is the song's final position in `regions` (0 = first). Optional so the
+   * view still renders where reordering isn't wired. */
+  onReorderSong?: (regionId: string, targetIndex: number) => void;
   /** Fired from the song-column right-click menu's "Nota" submenu. Sets the
    * song's original key (`null` clears it). Reuses the same backend command
    * (`update_song_region_key`) the DAW context menu uses, so the effective-key
@@ -268,6 +279,7 @@ function CompactViewComponent({
   onExportSong,
   onSetSongKey,
   onSongColumnWidthChange,
+  onReorderSong,
   bpmByRegion,
   onSnapshotApplied,
   onImportSongPackageFromDialog,
@@ -300,6 +312,18 @@ function CompactViewComponent({
     },
     [],
   );
+
+  // Reordering songs by dragging their column (grip, or the header with a
+  // mouse). Paused while a column is being resized: both gestures start on
+  // the column and the resize must win.
+  const songsStripRef = useRef<HTMLDivElement | null>(null);
+  const regionIds = useMemo(() => regions.map((region) => region.id), [regions]);
+  const songReorder = useSongReorder({
+    itemIds: regionIds,
+    containerRef: songsStripRef,
+    onReorder: onReorderSong,
+    disabled: resizingRegionId !== null,
+  });
 
   const handleAddSong = useCallback(async () => {
     try {
@@ -381,16 +405,29 @@ function CompactViewComponent({
           of a .ltpkg file anywhere over the strip — the drop appends a
           new song at the end of the project, mirroring the DAW timeline. */}
       <div
+        ref={songsStripRef}
         className={
           isPackageDragOver
             ? "lt-compact-songs is-package-drop"
             : "lt-compact-songs"
         }
       >
-        {regions.map((region) => (
+        {regions.map((region, index) => (
           <CompactSongColumn
             key={region.id}
             region={region}
+            reorderClassName={songReorderClassName(
+              songReorder,
+              region.id,
+              index,
+              regions.length,
+            )}
+            reorderHandleProps={
+              songReorder.enabled ? songReorder.handleProps : undefined
+            }
+            reorderSurfaceProps={
+              songReorder.enabled ? songReorder.surfaceProps : undefined
+            }
             clips={clipsByRegion[region.id] ?? []}
             moveTargets={moveTargets}
             isActive={region.id === activeRegionId}
@@ -505,6 +542,15 @@ export const CompactView = memo(CompactViewComponent);
 
 type CompactSongColumnProps = {
   region: SongRegionSummary;
+  /** `is-reorder-source` / `is-drop-before` / `is-drop-after` while a song
+   * is being dragged to another position; empty otherwise. */
+  reorderClassName: string;
+  /** Prop factories from useSongReorder; undefined when reordering is off
+   * (a single song, a resize in progress, or no handler wired). */
+  reorderHandleProps?: (regionId: string) => SongReorderHandleProps;
+  reorderSurfaceProps?: (regionId: string) => {
+    onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+  };
   clips: CompactClipEntry[];
   moveTargets: Array<{ id: string; name: string }>;
   isActive: boolean;
@@ -547,6 +593,9 @@ type CompactSongColumnProps = {
 
 function CompactSongColumnComponent({
   region,
+  reorderClassName,
+  reorderHandleProps,
+  reorderSurfaceProps,
   clips,
   moveTargets,
   isActive,
@@ -571,6 +620,14 @@ function CompactSongColumnComponent({
   onResizingChange,
 }: CompactSongColumnProps) {
   const regionId = region.id;
+  const headerReorderHandleProps = useMemo(
+    () => reorderHandleProps?.(regionId),
+    [reorderHandleProps, regionId],
+  );
+  const headerReorderSurfaceProps = useMemo(
+    () => reorderSurfaceProps?.(regionId),
+    [reorderSurfaceProps, regionId],
+  );
   const handleWidthCommit = useCallback(
     (nextWidthRem: number | null) => onWidthChange(regionId, nextWidthRem),
     [onWidthChange, regionId],
@@ -689,12 +746,13 @@ function CompactSongColumnComponent({
     <div
       className={`lt-compact-song-column ${isActive ? "is-active" : ""} ${isQueued ? "is-queued" : ""} ${columnDensityClass(
         widthRem,
-      )}`}
+      )}${reorderClassName}`}
       /* data-region-id lets the library asset pointer-drag pipeline in
          TransportPanelContent identify which song the user just dropped
          onto without having to plumb a per-column React ref through the
          component tree. */
       data-region-id={region.id}
+      {...{ [SONG_REORDER_ID_ATTRIBUTE]: region.id }}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       style={
@@ -718,6 +776,8 @@ function CompactSongColumnComponent({
         onSetKey={onSetKey}
         isSelected={isSelected}
         onSelect={onSelect}
+        reorderHandleProps={headerReorderHandleProps}
+        reorderSurfaceProps={headerReorderSurfaceProps}
       />
       <div
         className={

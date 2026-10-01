@@ -408,6 +408,25 @@ pub fn move_song_region(
         .map_err(|error| error.to_string())
 }
 
+/// Reordena la canción como en una lista: la lleva a `target_index`
+/// (0 = primera). Lo usan las vistas compacta y live, que no tienen eje de
+/// tiempo con el que hablar en segundos.
+#[tauri::command(async)]
+pub fn reorder_song_region(
+    region_id: String,
+    target_index: usize,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .reorder_song_region(&region_id, target_index, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command(async)]
 pub fn update_song_region_transpose(
     region_id: String,
