@@ -52,46 +52,7 @@ body.lt-song-reordering * {
   user-select: none !important;
 }
 
-.is-reorder-source {
-  opacity: 0.45;
-}
-
-/* Línea de inserción: un borde de la canción junto al hueco donde caería. */
-.lt-compact-song-column.is-drop-before::after,
-.lt-compact-song-column.is-drop-after::after,
-.lt-live-region-row.is-drop-before::after,
-.lt-live-region-row.is-drop-after::after {
-  content: "";
-  position: absolute;
-  z-index: 3;
-  pointer-events: none;
-  background: #57f1db;
-  box-shadow: 0 0 6px rgb(87 241 219 / 0.7);
-}
-
-/* La compacta es una fila de columnas: la línea es vertical. La columna
-   recorta su contenido (overflow: hidden), así que va por dentro del borde. */
-.lt-compact-song-column.is-drop-before::after,
-.lt-compact-song-column.is-drop-after::after {
-  top: 0;
-  bottom: 0;
-  width: 3px;
-}
-
-.lt-compact-song-column.is-drop-before::after {
-  left: 0;
-}
-
-.lt-compact-song-column.is-drop-after::after {
-  right: 0;
-}
-
-/* La setlist live: botones en fila; en pantallas anchas, lista vertical. La
-   fila recorta su contenido, así que la línea va por dentro del borde. */
-.lt-live-region-row {
-  position: relative;
-}
-
+/* La setlist live: el asa es la primera columna de la fila. */
 .lt-live-region-row.has-reorder {
   grid-template-columns: auto minmax(0, 1fr) 2.1rem;
 }
@@ -100,39 +61,4 @@ body.lt-song-reordering * {
   align-self: stretch;
   height: auto;
   margin-left: 0.15rem;
-}
-
-.lt-live-region-row.is-drop-before::after,
-.lt-live-region-row.is-drop-after::after {
-  top: 0;
-  bottom: 0;
-  width: 3px;
-}
-
-.lt-live-region-row.is-drop-before::after {
-  left: 0;
-}
-
-.lt-live-region-row.is-drop-after::after {
-  right: 0;
-}
-
-@media (min-width: 1180px) {
-  .lt-live-region-row.is-drop-before::after,
-  .lt-live-region-row.is-drop-after::after {
-    left: 0;
-    right: 0;
-    width: auto;
-    height: 3px;
-  }
-
-  .lt-live-region-row.is-drop-before::after {
-    top: 0;
-    bottom: auto;
-  }
-
-  .lt-live-region-row.is-drop-after::after {
-    top: auto;
-    bottom: 0;
-  }
 }

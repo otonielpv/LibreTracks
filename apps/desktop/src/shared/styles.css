@@ -6219,14 +6219,6 @@ html.lt-ios body {
   background: #201f1f;
 }
 
-.lt-track-header-row.is-drop-before .lt-track-header {
-  box-shadow: inset 0 2px 0 #57f1db;
-}
-
-.lt-track-header-row.is-drop-after .lt-track-header {
-  box-shadow: inset 0 -2px 0 #57f1db;
-}
-
 /* Drop-into-folder. A left-edge inset line is not usable here: a coloured
    folder already paints its own 2px accent bar on that exact edge via
    .lt-track-header::before (z-index 1), which sits above the box-shadow and
@@ -7588,38 +7580,9 @@ html.lt-ios body {
   box-shadow: inset 0 0 0 1px rgb(87 241 219 / 0.7);
 }
 
-/* While being dragged, fade slightly and let mouse move through so the
-   underlying drop indicator on the target strip stays visible. */
-.lt-compact-mixer-strip.is-dragging {
-  opacity: 0.55;
-}
-
-/* Drop indicators. before/after paint a thick teal line on the left
-   or right edge of the hovered strip — the horizontal analogue of
-   the DAW's top/bottom lines. inside-folder lights up the whole
-   strip background so it's unmistakable the dragged tracks will
-   land as children. */
-.lt-compact-mixer-strip.is-drop-before::after,
-.lt-compact-mixer-strip.is-drop-after::after {
-  content: "";
-  position: absolute;
-  top: -2px;
-  bottom: -2px;
-  width: 3px;
-  background: #57f1db;
-  box-shadow: 0 0 6px rgb(87 241 219 / 0.7);
-  pointer-events: none;
-  z-index: 5;
-}
-
-.lt-compact-mixer-strip.is-drop-before::after {
-  left: -2px;
-}
-
-.lt-compact-mixer-strip.is-drop-after::after {
-  right: -2px;
-}
-
+/* Drop into a folder: there is no gap to open beside it (the tracks land at
+   the end of its contents), so the whole strip lights up. Reordering itself
+   is previewed by ../features/transport/reorder/reorderPreview. */
 .lt-compact-mixer-strip.is-drop-inside-folder {
   background: rgb(87 241 219 / 0.12);
   box-shadow: inset 0 0 0 2px rgb(87 241 219 / 0.65);

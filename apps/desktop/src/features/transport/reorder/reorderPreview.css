@@ -1,0 +1,59 @@
+/* Vista previa de reordenado: ver reorderPreview.ts. */
+
+/* Las filas se deslizan a su sitio en vez de saltar. Sólo mientras dura el
+   arrastre: fuera de él, un transform sin transición no debe animarse. */
+.lt-reorder-shifting {
+  transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-reorder-shifting {
+    transition: none;
+  }
+}
+
+/* El fantasma: lo arrastrado, ya en el hueco donde caerá. */
+.lt-reorder-ghost {
+  opacity: 0.38;
+  outline: 1px dashed rgb(87 241 219 / 0.85);
+  outline-offset: -1px;
+  pointer-events: none;
+}
+
+/* Va a quedar dentro de una carpeta plegada: no se verá. */
+.lt-reorder-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* La copia que sigue al puntero. */
+.lt-drag-lift {
+  position: fixed !important;
+  z-index: 1000 !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+  pointer-events: none !important;
+  opacity: 0.94;
+  box-shadow:
+    0 0 0 1px rgb(87 241 219 / 0.75),
+    0 10px 28px rgb(0 0 0 / 0.55);
+  transition: none !important;
+  will-change: transform;
+}
+
+/* Por dentro de la esquina: casi todas las filas recortan su contenido. */
+.lt-drag-lift-count {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  z-index: 1;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: #57f1db;
+  color: #062a24;
+  font: 700 11px/1.2rem Inter, sans-serif;
+  text-align: center;
+  box-sizing: border-box;
+}

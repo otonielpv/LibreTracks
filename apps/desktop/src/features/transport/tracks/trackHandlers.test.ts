@@ -18,13 +18,18 @@ const track = (id: string, parentTrackId: string | null = null): TrackSummary =>
   ({ id, name: id, parentTrackId }) as unknown as TrackSummary;
 
 function setup(overrides: Partial<TrackHandlerDeps> = {}) {
-  const tracksById: Record<string, TrackSummary> = {
-    target: track("target", "parent-1"),
-    dragged: track("dragged"),
-  };
+  const tracks = [
+    track("parent-1"),
+    track("target", "parent-1"),
+    track("dragged"),
+    track("other"),
+  ];
+  const tracksById: Record<string, TrackSummary> = Object.fromEntries(
+    tracks.map((entry) => [entry.id, entry]),
+  );
 
   const deps: TrackHandlerDeps = {
-    getSong: () => ({}) as SongView,
+    getSong: () => ({ tracks }) as unknown as SongView,
     getTracksById: () => tracksById,
     getSelectedTrackIds: () => [],
     runAction: vi.fn(async (action) => {
@@ -94,6 +99,22 @@ describe("createTrackHandlers", () => {
       mode: "after",
     });
     expect(deps.moveTrack).toHaveBeenCalledTimes(2);
+  });
+
+  it("a multi-selection dropped 'after' keeps its on-screen order", async () => {
+    // Each move lands right after the target, so moving them in order would
+    // reverse them; the plan moves them back to front instead.
+    const { handlers, deps } = setup({
+      getSelectedTrackIds: () => ["other", "dragged"],
+    });
+    await handlers.handleTrackDrop("dragged", {
+      targetTrackId: "target",
+      mode: "after",
+    });
+    const moved = vi
+      .mocked(deps.moveTrack)
+      .mock.calls.map(([args]) => args.trackId);
+    expect(moved).toEqual(["other", "dragged"]);
   });
 
   it("create track is cancelled when the name prompt is empty", async () => {

@@ -412,9 +412,7 @@ import {
   mergeOptimisticClipsByTrack,
   nativeClientPointCandidates,
   normalizeEnabledOutputChannelsForOutputCount,
-  resolveCompactTrackDropState,
   resolveNativeAudioImportPayloads,
-  resolveTrackDropState,
   rulerClientXToSeconds,
   selectNativeDropCandidate,
   toClientPointFromNativePosition,
@@ -447,6 +445,7 @@ import {
   type TimelineMenuDeps,
 } from "./menus/timelineMenus";
 import { createTrackHandlers } from "./tracks/trackHandlers";
+import { useTrackDragPreview } from "./tracks/useTrackDragPreview";
 import { createTrackHeaderHandlers } from "./tracks/trackHeaderHandlers";
 import { useTrackHeights } from "./tracks/useTrackHeights";
 import { createCompactSongHandlers } from "./compact/compactSongHandlers";
@@ -1684,11 +1683,6 @@ export function TransportPanelContent() {
   // inside the canvas rAF loop (like clipPreviewSecondsRef) so dragging a clip
   // onto another lane re-paints it there without a React re-render.
   const clipPreviewTrackIdRef = useRef<Record<string, string>>({});
-  const trackDropStateRef = useRef<TrackDropState>(null);
-  const draggedTrackRowRef = useRef<HTMLDivElement | null>(null);
-  const draggedTrackRowsRef = useRef<HTMLDivElement[]>([]);
-  const draggedTrackHeadersRef = useRef<HTMLElement[]>([]);
-  const droppedTrackRowRef = useRef<HTMLDivElement | null>(null);
   const libraryDragHoverRef = useRef<LibraryDragHoverState | null>(null);
   const activeLibraryDragPayloadRef = useRef<LibraryAssetDragPayload[] | null>(
     null,
@@ -2877,41 +2871,15 @@ export function TransportPanelContent() {
     });
   }, []);
 
-  const clearTrackDragVisuals = useCallback(() => {
-    draggedTrackRowsRef.current.forEach((row) => {
-      row.style.transform = "";
-      row.style.zIndex = "";
-      row.style.pointerEvents = "";
-      // Mirror the additional .is-dragging tag the compact branch
-      // applies in applyTrackDragVisuals so re-opening the view
-      // doesn't leave strips faded.
-      row.classList.remove("is-dragging");
+  // Track drag preview ("hueco + fantasma") for the DAW and the compact
+  // mixer. See ./tracks/useTrackDragPreview.
+  const { applyTrackDragVisuals, clearTrackDragVisuals, resolveTrackDrop } =
+    useTrackDragPreview({
+      song,
+      songRef,
+      timelineShellRef,
+      getVisibleTrackIds: () => visibleTracksRef.current.map((track) => track.id),
     });
-
-    draggedTrackHeadersRef.current.forEach((header) => {
-      header.classList.remove("is-dragging");
-    });
-
-    // Sweep both DAW shell and the document — we don't know here
-    // whether the latest drag originated in compact or DAW, and
-    // missing a stale indicator would leave the UI in a "stuck
-    // highlighted" state.
-    const dropTargets = document.querySelectorAll(".is-drop-target");
-    dropTargets.forEach((element) => {
-      element.classList.remove(
-        "is-drop-target",
-        "is-drop-before",
-        "is-drop-after",
-        "is-drop-inside-folder",
-      );
-    });
-
-    draggedTrackRowsRef.current = [];
-    draggedTrackHeadersRef.current = [];
-    draggedTrackRowRef.current = null;
-    droppedTrackRowRef.current = null;
-    trackDropStateRef.current = null;
-  }, []);
 
   // Track create / reorder handlers. See ./tracks/trackHandlers. Reactive state
   // is read through getters (songRef, tracksByIdRef, the timeline UI store) so
@@ -2966,124 +2934,6 @@ export function TransportPanelContent() {
         prompt: (message) => promptDialog(message),
       }),
     [setMidiLearnMode, t],
-  );
-
-  const applyTrackDragVisuals = useCallback(
-    (dragState: NonNullable<TrackDragState>, dropState: TrackDropState) => {
-      const isCompact = dragState.originSurface === "compact";
-      const deltaY =
-        (dragState.currentClientY - dragState.startClientY) /
-        dragState.pointerScaleY;
-      const deltaX =
-        (dragState.currentClientX - dragState.startClientX) /
-        dragState.pointerScaleX;
-
-      // Selector lists vary by origin: DAW drags grab both the
-      // header row and the lane row so they translate together;
-      // compact drags grab the single mixer strip. data-track-id is
-      // present on all three so the same querySelector works.
-      const dragSelector = (trackId: string) =>
-        isCompact
-          ? `.lt-compact-mixer-strip[data-track-id="${trackId}"]`
-          : `.lt-track-header-row[data-track-id="${trackId}"], .lt-track-lane-row[data-track-id="${trackId}"]`;
-
-      if (draggedTrackRowRef.current !== dragState.rowElement) {
-        clearTrackDragVisuals();
-        draggedTrackRowRef.current = dragState.rowElement;
-
-        const dragTrackIds =
-          selectedTrackIds.includes(dragState.trackId) &&
-          selectedTrackIds.length > 1
-            ? selectedTrackIds
-            : [dragState.trackId];
-        const draggedRows: HTMLDivElement[] = [];
-        const draggedHeaders: HTMLElement[] = [];
-
-        // Compact strips live outside the DAW shell, so for compact
-        // drags we query the document directly. DAW drags stay scoped
-        // to the shell to avoid accidentally matching unrelated rows
-        // in side panels.
-        const dragRoot: ParentNode =
-          isCompact ? document : (timelineShellRef.current ?? document);
-        dragTrackIds.forEach((trackId) => {
-          const matchingRows = dragRoot.querySelectorAll(
-            dragSelector(trackId),
-          );
-
-          matchingRows?.forEach((element) => {
-            if (
-              !(element instanceof HTMLDivElement) ||
-              draggedRows.includes(element)
-            ) {
-              return;
-            }
-
-            draggedRows.push(element);
-
-            const header = element.querySelector(".lt-track-header");
-            if (header instanceof HTMLElement) {
-              draggedHeaders.push(header);
-            }
-          });
-        });
-
-        draggedTrackRowsRef.current = draggedRows;
-        draggedTrackHeadersRef.current = draggedHeaders;
-      }
-
-      draggedTrackRowsRef.current.forEach((row) => {
-        row.style.transform = isCompact
-          ? `translate3d(${deltaX}px, 0, 0)`
-          : `translate3d(0, ${deltaY}px, 0)`;
-        row.style.zIndex = "8";
-        row.style.pointerEvents = "none";
-        // Compact strips don't have an inner .lt-track-header child to
-        // tag, so we tag the row (which IS the strip) directly so the
-        // is-dragging CSS picks it up.
-        if (isCompact) {
-          row.classList.add("is-dragging");
-        }
-      });
-
-      draggedTrackHeadersRef.current.forEach((header) => {
-        header.classList.add("is-dragging");
-      });
-
-      const indicatorRoot: ParentNode =
-        isCompact ? document : (timelineShellRef.current ?? document);
-      const dropTargets = indicatorRoot.querySelectorAll(".is-drop-target");
-      dropTargets?.forEach((element) => {
-        if (
-          element instanceof HTMLElement &&
-          element.dataset.trackId !== dropState?.targetTrackId
-        ) {
-          element.classList.remove(
-            "is-drop-target",
-            "is-drop-before",
-            "is-drop-after",
-            "is-drop-inside-folder",
-          );
-        }
-      });
-
-      if (dropState?.targetTrackId) {
-        const nextDropRows = indicatorRoot.querySelectorAll(
-          `[data-track-id="${dropState.targetTrackId}"]`,
-        );
-        nextDropRows?.forEach((element) => {
-          element.classList.remove(
-            "is-drop-before",
-            "is-drop-after",
-            "is-drop-inside-folder",
-          );
-          element.classList.add("is-drop-target", `is-drop-${dropState.mode}`);
-        });
-      }
-
-      droppedTrackRowRef.current = null;
-      trackDropStateRef.current = dropState;
-    },
-    [clearTrackDragVisuals, selectedTrackIds],
   );
 
   function transportSnapshotKey(nextSnapshot: TransportSnapshot) {
@@ -5704,6 +5554,7 @@ export function TransportPanelContent() {
     applyPlaybackSnapshot,
     applyTrackDragVisuals,
     clearTrackDragVisuals,
+    resolveTrackDrop,
     handleTrackDrop,
     queueClipMoveLiveUpdate,
     queueClipMoveBatchLiveUpdate,
@@ -8084,7 +7935,7 @@ export function TransportPanelContent() {
                       onExportSong={handleCompactExportSong}
                       onSetSongKey={handleCompactSetSongKey}
                       onSongColumnWidthChange={handleCompactColumnWidth}
-                      onReorderSong={(id, index) => void runAction(async () => applyPlaybackSnapshot(await reorderSongRegion(id, index)))}
+                      onReorderSong={(id, index) => runAction(async () => applyPlaybackSnapshot(await reorderSongRegion(id, index)))}
                       bpmByRegion={bpmByRegion}
                       onSnapshotApplied={applyPlaybackSnapshot}
                       onImportSongPackageFromDialog={
@@ -8118,7 +7969,7 @@ export function TransportPanelContent() {
                       onViewModeChange={setViewMode}
                       onMarkerAction={(marker) => void runAction(() => handleMarkerPrimaryAction(marker))}
                       onSongAction={(region) => handleCompactPlaySong(region.id, region.name)}
-                      onReorderSong={(id, index) => void runAction(async () => applyPlaybackSnapshot(await reorderSongRegion(id, index)))}
+                      onReorderSong={(id, index) => runAction(async () => applyPlaybackSnapshot(await reorderSongRegion(id, index)))}
                       onToggleVamp={() => void runAction(async () => {
                         await toggleTimelineVamp();
                       })}

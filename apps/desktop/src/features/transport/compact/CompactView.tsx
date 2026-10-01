@@ -29,7 +29,6 @@ import { CompactSongHeader } from "./CompactSongHeader";
 import { columnDensityClass, useColumnResize } from "./useColumnResize";
 import {
   SONG_REORDER_ID_ATTRIBUTE,
-  songReorderClassName,
   useSongReorder,
 } from "../songs/useSongReorder";
 import type { SongReorderHandleProps } from "../songs/SongReorderHandle";
@@ -412,16 +411,10 @@ function CompactViewComponent({
             : "lt-compact-songs"
         }
       >
-        {regions.map((region, index) => (
+        {regions.map((region) => (
           <CompactSongColumn
             key={region.id}
             region={region}
-            reorderClassName={songReorderClassName(
-              songReorder,
-              region.id,
-              index,
-              regions.length,
-            )}
             reorderHandleProps={
               songReorder.enabled ? songReorder.handleProps : undefined
             }
@@ -542,9 +535,6 @@ export const CompactView = memo(CompactViewComponent);
 
 type CompactSongColumnProps = {
   region: SongRegionSummary;
-  /** `is-reorder-source` / `is-drop-before` / `is-drop-after` while a song
-   * is being dragged to another position; empty otherwise. */
-  reorderClassName: string;
   /** Prop factories from useSongReorder; undefined when reordering is off
    * (a single song, a resize in progress, or no handler wired). */
   reorderHandleProps?: (regionId: string) => SongReorderHandleProps;
@@ -593,7 +583,6 @@ type CompactSongColumnProps = {
 
 function CompactSongColumnComponent({
   region,
-  reorderClassName,
   reorderHandleProps,
   reorderSurfaceProps,
   clips,
@@ -746,7 +735,7 @@ function CompactSongColumnComponent({
     <div
       className={`lt-compact-song-column ${isActive ? "is-active" : ""} ${isQueued ? "is-queued" : ""} ${columnDensityClass(
         widthRem,
-      )}${reorderClassName}`}
+      )}`}
       /* data-region-id lets the library asset pointer-drag pipeline in
          TransportPanelContent identify which song the user just dropped
          onto without having to plumb a per-column React ref through the

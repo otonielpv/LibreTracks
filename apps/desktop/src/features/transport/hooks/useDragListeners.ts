@@ -13,12 +13,7 @@ import {
   type ClipMoveRequest,
 } from "../desktopApi";
 import { CLIP_SNAP_RADIUS_PX, DRAG_THRESHOLD_PX } from "../constants";
-import {
-  clipDisplayName,
-  findClip,
-  resolveCompactTrackDropState,
-  resolveTrackDropState,
-} from "../helpers";
+import { clipDisplayName, findClip } from "../helpers";
 import { findSnappedGroupDelta } from "../timeline/clipSnapping";
 import {
   clampGroupRowDelta,
@@ -76,6 +71,15 @@ export type UseDragListenersOptions = {
     dropState: TrackDropState,
   ) => void;
   clearTrackDragVisuals: () => void;
+  /** Where a track drag would land. Resolved against the layout captured when
+   * the drag started, not against what is under the pointer: the preview
+   * slides rows aside, so hit-testing the live DOM would make the target
+   * oscillate. See ../tracks/useTrackDragPreview. */
+  resolveTrackDrop: (
+    dragState: NonNullable<TrackDragState>,
+    clientX: number,
+    clientY: number,
+  ) => TrackDropState;
   /** Only called with a resolved drop target — never with the null variant. */
   handleTrackDrop: (
     trackId: string,
@@ -128,6 +132,7 @@ export function useDragListeners({
   applyPlaybackSnapshot,
   applyTrackDragVisuals,
   clearTrackDragVisuals,
+  resolveTrackDrop,
   handleTrackDrop,
   queueClipMoveLiveUpdate,
   queueClipMoveBatchLiveUpdate,
@@ -153,22 +158,12 @@ export function useDragListeners({
     const paintTrackDropAtPointer = (
       trackDrag: NonNullable<TrackDragState>,
     ) => {
-      const currentSong = songRef.current;
-      if (!currentSong) return;
-      const dropState =
-        trackDrag.originSurface === "compact"
-          ? resolveCompactTrackDropState(
-              currentSong,
-              trackDrag.trackId,
-              trackDrag.currentClientX,
-              trackDrag.currentClientY,
-            )
-          : resolveTrackDropState(
-              currentSong,
-              trackDrag.trackId,
-              trackDrag.currentClientX,
-              trackDrag.currentClientY,
-            );
+      if (!songRef.current) return;
+      const dropState = resolveTrackDrop(
+        trackDrag,
+        trackDrag.currentClientX,
+        trackDrag.currentClientY,
+      );
       applyTrackDragVisuals(trackDrag, dropState);
     };
 
@@ -566,19 +561,7 @@ export function useDragListeners({
           Boolean(currentSong) && (activeTrackDrag.isDragging || movedEnough);
         const dropState =
           shouldTreatAsDrag && currentSong
-            ? activeTrackDrag.originSurface === "compact"
-              ? resolveCompactTrackDropState(
-                  currentSong,
-                  activeTrackDrag.trackId,
-                  event.clientX,
-                  event.clientY,
-                )
-              : resolveTrackDropState(
-                  currentSong,
-                  activeTrackDrag.trackId,
-                  event.clientX,
-                  event.clientY,
-                )
+            ? resolveTrackDrop(activeTrackDrag, event.clientX, event.clientY)
             : null;
 
         trackDragRef.current = null;
@@ -668,6 +651,7 @@ export function useDragListeners({
     applyPlaybackSnapshot,
     applyTrackDragVisuals,
     clearTrackDragVisuals,
+    resolveTrackDrop,
     handleTrackDrop,
     queueClipMoveBatchLiveUpdate,
     queueClipMoveLiveUpdate,

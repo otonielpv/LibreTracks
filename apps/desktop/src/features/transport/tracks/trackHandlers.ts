@@ -6,14 +6,7 @@ import type {
 } from "@libretracks/shared/models";
 
 import type { TrackDropState } from "../types";
-import { AUTOMATION_TRACK_ID } from "../library/pendingAudioImports";
-
-type MoveTrackArgs = {
-  trackId: string;
-  insertAfterTrackId: string | null;
-  insertBeforeTrackId: string | null;
-  parentTrackId: string | null;
-};
+import { planTrackDrop, type MoveTrackArgs } from "./trackMovePlan";
 
 /**
  * Dependencies for the track create / reorder handlers extracted from
@@ -31,7 +24,9 @@ export type TrackHandlerDeps = {
     includeWaveforms?: boolean;
   }) => Promise<SongView | null>;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
-  clearTrackDragVisuals: () => void;
+  /** `settle` after a drop that will change the order: the preview stays
+   * until the new order renders. See ./useTrackDragPreview. */
+  clearTrackDragVisuals: (options?: { settle?: boolean }) => void;
   optimisticallyAppliedRevisionsRef: { current: Set<number> };
   setStatus: (message: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
@@ -54,7 +49,6 @@ export type TrackHandlerDeps = {
 export function createTrackHandlers(deps: TrackHandlerDeps) {
   const {
     getSong,
-    getTracksById,
     getSelectedTrackIds,
     runAction,
     refreshSongView,
@@ -70,151 +64,49 @@ export function createTrackHandlers(deps: TrackHandlerDeps) {
     getVisibleTrackIds,
   } = deps;
 
-  /**
-   * Resolve where the automation lane should land given a drop onto the real
-   * track `targetTrackId` with the given mode. Returns the id of the audio
-   * track the lane sits *after* (`null` = first row).
-   */
-  const automationAfterIdFor = (
-    targetTrackId: string,
-    mode: NonNullable<TrackDropState>["mode"],
-  ): string | null => {
-    if (mode === "after" || mode === "inside-folder") {
-      return targetTrackId;
-    }
-    // "before": land after the visible track that precedes the target,
-    // skipping the automation lane itself.
-    const order = getVisibleTrackIds().filter(
-      (id) => id !== AUTOMATION_TRACK_ID,
-    );
-    const targetIndex = order.indexOf(targetTrackId);
-    if (targetIndex <= 0) {
-      return null;
-    }
-    return order[targetIndex - 1];
-  };
-
-  /** Build the moveTrack args for a single dragged track given the drop mode. */
-  const moveArgsFor = (
-    trackId: string,
-    targetTrack: TrackSummary,
-    mode: NonNullable<TrackDropState>["mode"],
-  ): MoveTrackArgs => {
-    if (mode === "inside-folder") {
-      return {
-        trackId,
-        insertAfterTrackId: null,
-        insertBeforeTrackId: null,
-        parentTrackId: targetTrack.id,
-      };
-    }
-    if (mode === "before") {
-      return {
-        trackId,
-        insertAfterTrackId: null,
-        insertBeforeTrackId: targetTrack.id,
-        parentTrackId: targetTrack.parentTrackId ?? null,
-      };
-    }
-    return {
-      trackId,
-      insertAfterTrackId: targetTrack.id,
-      insertBeforeTrackId: null,
-      parentTrackId: targetTrack.parentTrackId ?? null,
-    };
-  };
-
   return {
     async handleTrackDrop(
       draggedTrackId: string,
       dropState: NonNullable<TrackDropState>,
     ) {
-      // The automation lane is synthetic (not in getTracksById), so its reorder
-      // can't go through moveTrack. Persist its position separately instead.
-      const isAutomationDragged = draggedTrackId === AUTOMATION_TRACK_ID;
-      const isAutomationTarget =
-        dropState.targetTrackId === AUTOMATION_TRACK_ID;
-
-      if (isAutomationDragged) {
-        if (!getSong() || isAutomationTarget) {
-          clearTrackDragVisuals();
-          return;
-        }
-        const afterId = automationAfterIdFor(
-          dropState.targetTrackId,
-          dropState.mode,
-        );
-        await runAction(async () => {
-          try {
-            const snapshot = await setAutomationTrackPosition(afterId);
-            applyPlaybackSnapshot(snapshot);
-            await refreshSongView({ includeWaveforms: false });
-            setStatus(t("transport.automation.statusTrackReordered"));
-          } finally {
-            clearTrackDragVisuals();
-          }
-        });
-        return;
-      }
-
-      if (isAutomationTarget) {
-        // Dropping a real track relative to the automation lane: anchor it to
-        // the lane's own saved position (the track before/after the lane).
-        const order = getVisibleTrackIds();
-        const laneIndex = order.indexOf(AUTOMATION_TRACK_ID);
-        // Find the nearest real track to act as the moveTrack anchor.
-        const realTargetId =
-          dropState.mode === "before"
-            ? order.slice(laneIndex + 1).find((id) => id !== AUTOMATION_TRACK_ID)
-            : order
-                .slice(0, laneIndex)
-                .reverse()
-                .find((id) => id !== AUTOMATION_TRACK_ID);
-        const anchorTrack = realTargetId
-          ? getTracksById()[realTargetId] ?? null
-          : null;
-        if (!getSong() || !anchorTrack || draggedTrackId === anchorTrack.id) {
-          clearTrackDragVisuals();
-          return;
-        }
-        await runAction(async () => {
-          try {
-            const snapshot = await moveTrack(
-              moveArgsFor(draggedTrackId, anchorTrack, dropState.mode),
-            );
-            applyPlaybackSnapshot(snapshot);
-            await refreshSongView();
-            setStatus(t("transport.status.tracksReordered", { count: 1 }));
-          } finally {
-            clearTrackDragVisuals();
-          }
-        });
-        return;
-      }
-
-      const targetTrack = getTracksById()[dropState.targetTrackId] ?? null;
-      if (!getSong() || !targetTrack || draggedTrackId === targetTrack.id) {
+      const song = getSong();
+      // Same plan the drag preview showed, so the drop lands where the ghost
+      // was. See ./trackMovePlan.
+      const plan = song
+        ? planTrackDrop({
+            tracks: song.tracks,
+            visibleTrackIds: getVisibleTrackIds(),
+            selectedTrackIds: getSelectedTrackIds(),
+            draggedTrackId,
+            drop: dropState,
+          })
+        : null;
+      if (!plan) {
         clearTrackDragVisuals();
         return;
       }
 
-      const selectedTrackIds = getSelectedTrackIds();
-      const tracksToMove =
-        selectedTrackIds.includes(draggedTrackId) &&
-        selectedTrackIds.length > 1
-          ? selectedTrackIds
-          : [draggedTrackId];
+      if (plan.kind === "automation") {
+        // The automation lane is synthetic (not in getTracksById), so its
+        // reorder can't go through moveTrack. Persist its position instead.
+        await runAction(async () => {
+          try {
+            const snapshot = await setAutomationTrackPosition(plan.afterTrackId);
+            applyPlaybackSnapshot(snapshot);
+            await refreshSongView({ includeWaveforms: false });
+            setStatus(t("transport.automation.statusTrackReordered"));
+          } finally {
+            clearTrackDragVisuals({ settle: true });
+          }
+        });
+        return;
+      }
 
       await runAction(async () => {
         try {
           let lastSnapshot: TransportSnapshot | null = null;
-          for (const trackId of tracksToMove) {
-            if (trackId === targetTrack.id) {
-              continue;
-            }
-            lastSnapshot = await moveTrack(
-              moveArgsFor(trackId, targetTrack, dropState.mode),
-            );
+          for (const move of plan.moves) {
+            lastSnapshot = await moveTrack(move);
           }
 
           if (lastSnapshot) {
@@ -223,11 +115,11 @@ export function createTrackHandlers(deps: TrackHandlerDeps) {
           await refreshSongView();
           setStatus(
             t("transport.status.tracksReordered", {
-              count: tracksToMove.length,
+              count: plan.moves.length,
             }),
           );
         } finally {
-          clearTrackDragVisuals();
+          clearTrackDragVisuals({ settle: true });
         }
       });
     },

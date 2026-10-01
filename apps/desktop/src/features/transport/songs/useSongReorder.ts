@@ -1,12 +1,18 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
-  useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
+
+import {
+  createReorderPreview,
+  type ReorderAxis,
+  type ReorderPreview,
+} from "../reorder/reorderPreview";
 
 /**
  * Reordenar canciones arrastrándolas en las vistas compacta y live.
@@ -14,7 +20,8 @@ import {
  * Las dos pintan las canciones como una lista (columnas en la compacta, filas
  * o botones en la live, que cambia de eje según el ancho de pantalla), así que
  * el gesto no habla en segundos como el de la DAW sino en posiciones: suelta
- * entre la 2ª y la 3ª y la canción pasa a ser la 3ª.
+ * entre la 2ª y la 3ª y la canción pasa a ser la 3ª. Mientras se arrastra, la
+ * lista abre el hueco y enseña la canción en él (ver reorder/reorderPreview).
  *
  * Dos formas de agarrar una canción:
  *
@@ -40,8 +47,11 @@ export const SONG_REORDER_IGNORE_ATTRIBUTE = "data-no-song-reorder";
 const MOUSE_DRAG_THRESHOLD_PX = 5;
 const AUTO_SCROLL_EDGE_PX = 48;
 const AUTO_SCROLL_MAX_STEP_PX = 18;
+/** Si el soltar no llega a cambiar el orden (un error), la vista previa se
+ * deshace pasado este margen. */
+const SETTLE_FALLBACK_MS = 250;
 
-export type SongReorderAxis = "x" | "y";
+export type SongReorderAxis = ReorderAxis;
 
 type ItemRect = Pick<DOMRect, "left" | "top" | "width" | "height">;
 
@@ -60,31 +70,21 @@ export function resolveReorderAxis(rects: ItemRect[]): SongReorderAxis {
 }
 
 /**
- * Hueco de inserción (0..n) bajo el puntero: cuántos elementos tienen su
- * centro antes que él.
- */
-export function resolveDropGap(
-  rects: ItemRect[],
-  axis: SongReorderAxis,
-  pointer: { x: number; y: number },
-): number {
-  let gap = 0;
-  for (const rect of rects) {
-    const center =
-      axis === "x" ? rect.left + rect.width / 2 : rect.top + rect.height / 2;
-    if ((axis === "x" ? pointer.x : pointer.y) > center) gap += 1;
-  }
-  return gap;
-}
-
-/**
  * Posición final de la canción que estaba en `fromIndex` al soltarla en el
- * hueco `gap`, o `null` si la deja donde estaba. Los huecos a ambos lados de
- * la propia canción no la mueven.
+ * hueco `gap` (0..n), o `null` si la deja donde estaba. Los huecos a ambos
+ * lados de la propia canción no la mueven.
  */
 export function targetIndexForGap(fromIndex: number, gap: number): number | null {
   const target = gap > fromIndex ? gap - 1 : gap;
   return target === fromIndex ? null : target;
+}
+
+/** `ids` con el elemento de `fromIndex` llevado a `toIndex`. */
+export function moveId(ids: readonly string[], fromIndex: number, toIndex: number): string[] {
+  const next = [...ids];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
 }
 
 type DragSession = {
@@ -97,14 +97,17 @@ type DragSession = {
   active: boolean;
   lastX: number;
   lastY: number;
+  preview: ReorderPreview | null;
 };
 
-export type SongReorderState = {
-  /** Canción que se está arrastrando, o null. */
-  draggingId: string | null;
-  /** Hueco donde caería (0..n), o null si soltarla no la movería. */
-  dropGap: number | null;
-};
+/** Destino bajo el puntero, según la disposición de partida. */
+function targetFor(session: DragSession): number | null {
+  if (!session.preview) return null;
+  return targetIndexForGap(
+    session.fromIndex,
+    session.preview.gapAt(session.lastX, session.lastY),
+  );
+}
 
 export function useSongReorder({
   itemIds,
@@ -115,14 +118,14 @@ export function useSongReorder({
   /** Ids en el orden en que se pintan. */
   itemIds: readonly string[];
   containerRef: RefObject<HTMLElement | null>;
-  onReorder: ((id: string, targetIndex: number) => void) | undefined;
+  /** Puede devolver la promesa del guardado: la vista previa se mantiene
+   * hasta que llegue el orden nuevo. */
+  onReorder: ((id: string, targetIndex: number) => unknown) | undefined;
   disabled?: boolean;
 }) {
-  const [state, setState] = useState<SongReorderState>({
-    draggingId: null,
-    dropGap: null,
-  });
   const sessionRef = useRef<DragSession | null>(null);
+  /** Vista previa de un soltar que espera a que React pinte el orden nuevo. */
+  const settlingRef = useRef<ReorderPreview | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
   const detachRef = useRef<(() => void) | null>(null);
   // Lo que leen los listeners de window, que se registran una vez por gesto.
@@ -131,31 +134,65 @@ export function useSongReorder({
 
   const enabled = !disabled && Boolean(onReorder) && itemIds.length > 1;
 
-  const measure = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return null;
-    const elements = Array.from(
-      container.querySelectorAll<HTMLElement>(`[${SONG_REORDER_ID_ATTRIBUTE}]`),
-    );
-    const rects = elements.map((element) => element.getBoundingClientRect());
-    return { container, rects, axis: resolveReorderAxis(rects) };
-  }, [containerRef]);
+  // El orden nuevo ya está en el DOM: cada canción está donde la enseñaba la
+  // vista previa, así que se suelta de golpe y antes de pintar.
+  const orderKey = itemIds.join("\u0000");
+  useLayoutEffect(() => {
+    settlingRef.current?.destroy({ animate: false });
+    settlingRef.current = null;
+  }, [orderKey]);
 
-  const updateDropGap = useCallback(() => {
-    const session = sessionRef.current;
-    const layout = measure();
-    if (!session?.active || !layout) return;
-    const gap = resolveDropGap(layout.rects, layout.axis, {
-      x: session.lastX,
-      y: session.lastY,
-    });
-    const dropGap = targetIndexForGap(session.fromIndex, gap) === null ? null : gap;
-    setState((current) =>
-      current.draggingId === session.id && current.dropGap === dropGap
-        ? current
-        : { draggingId: session.id, dropGap },
+  const settle = useCallback((preview: ReorderPreview, saved: unknown) => {
+    settlingRef.current = preview;
+    preview.dropLift();
+    const fallback = () => {
+      window.setTimeout(() => {
+        if (settlingRef.current !== preview) return;
+        settlingRef.current = null;
+        preview.destroy({ animate: true });
+      }, SETTLE_FALLBACK_MS);
+    };
+    if (saved instanceof Promise) saved.finally(fallback);
+    else fallback();
+  }, []);
+
+  const startPreview = useCallback(
+    (session: DragSession) => {
+      const container = containerRef.current;
+      if (!container) return null;
+      const elements = Array.from(
+        container.querySelectorAll<HTMLElement>(`[${SONG_REORDER_ID_ATTRIBUTE}]`),
+      );
+      const axis = resolveReorderAxis(
+        elements.map((element) => element.getBoundingClientRect()),
+      );
+      const source = elements.find(
+        (element) => element.getAttribute(SONG_REORDER_ID_ATTRIBUTE) === session.id,
+      );
+      return createReorderPreview({
+        items: elements.map((element) => ({
+          id: element.getAttribute(SONG_REORDER_ID_ATTRIBUTE) ?? "",
+          element,
+        })),
+        axis,
+        liftSource: source ?? null,
+        pointer: { x: session.startX, y: session.startY },
+      });
+    },
+    [containerRef],
+  );
+
+  const renderPreview = useCallback((session: DragSession) => {
+    const preview = session.preview;
+    if (!preview) return;
+    const target = targetFor(session);
+    const ids = preview.ids;
+    preview.render(
+      target === null ? ids : moveId(ids, session.fromIndex, target),
+      new Set([session.id]),
     );
-  }, [measure]);
+    preview.moveLift(session.lastX, session.lastY);
+  }, []);
 
   const stopAutoScroll = useCallback(() => {
     if (autoScrollFrameRef.current !== null) {
@@ -169,9 +206,9 @@ export function useSongReorder({
   const autoScrollStep = useCallback(() => {
     autoScrollFrameRef.current = null;
     const session = sessionRef.current;
-    const layout = measure();
-    if (!session?.active || !layout) return;
-    const { container, axis } = layout;
+    const container = containerRef.current;
+    if (!session?.active || !session.preview || !container) return;
+    const axis = session.preview.axis;
     const bounds = container.getBoundingClientRect();
     const position = axis === "x" ? session.lastX : session.lastY;
     const start = axis === "x" ? bounds.left : bounds.top;
@@ -188,9 +225,9 @@ export function useSongReorder({
     else container.scrollTop += step;
     const after = axis === "x" ? container.scrollLeft : container.scrollTop;
     if (after === before) return;
-    updateDropGap();
+    renderPreview(session);
     autoScrollFrameRef.current = requestAnimationFrame(autoScrollStep);
-  }, [measure, updateDropGap]);
+  }, [containerRef, renderPreview]);
 
   const finish = useCallback(
     (commit: boolean) => {
@@ -200,8 +237,7 @@ export function useSongReorder({
       detachRef.current = null;
       stopAutoScroll();
       document.body.classList.remove("lt-song-reordering");
-      setState({ draggingId: null, dropGap: null });
-      if (!session?.active) return;
+      if (!session?.active || !session.preview) return;
 
       // El soltar de un arrastre de superficie llega también como clic al
       // botón o cabecera de debajo; ese clic seleccionaría o reproduciría
@@ -216,20 +252,24 @@ export function useSongReorder({
         0,
       );
 
-      if (!commit) return;
-      const layout = measure();
-      if (!layout) return;
-      const gap = resolveDropGap(layout.rects, layout.axis, {
-        x: session.lastX,
-        y: session.lastY,
-      });
-      const target = targetIndexForGap(session.fromIndex, gap);
-      if (target !== null) latestRef.current.onReorder?.(session.id, target);
+      const target = commit ? targetFor(session) : null;
+      const reorder = latestRef.current.onReorder;
+      if (target === null || !reorder) {
+        session.preview.destroy({ animate: true });
+        return;
+      }
+      settle(session.preview, reorder(session.id, target));
     },
-    [measure, stopAutoScroll],
+    [settle, stopAutoScroll],
   );
 
-  useEffect(() => () => finish(false), [finish]);
+  useEffect(
+    () => () => {
+      finish(false);
+      settlingRef.current?.destroy({ animate: false });
+    },
+    [finish],
+  );
 
   const begin = useCallback(
     (
@@ -240,6 +280,9 @@ export function useSongReorder({
       if (!enabled || sessionRef.current) return;
       const fromIndex = latestRef.current.itemIds.indexOf(id);
       if (fromIndex < 0) return;
+      // Un soltar anterior que aún espera su orden nuevo: se da por terminado.
+      settlingRef.current?.destroy({ animate: false });
+      settlingRef.current = null;
       sessionRef.current = {
         id,
         fromIndex,
@@ -249,6 +292,7 @@ export function useSongReorder({
         active: false,
         lastX: event.clientX,
         lastY: event.clientY,
+        preview: null,
       };
 
       const activate = () => {
@@ -256,7 +300,8 @@ export function useSongReorder({
         if (!session || session.active) return;
         session.active = true;
         document.body.classList.add("lt-song-reordering");
-        setState({ draggingId: session.id, dropGap: null });
+        session.preview = startPreview(session);
+        renderPreview(session);
       };
 
       const onMove = (moveEvent: PointerEvent) => {
@@ -273,7 +318,7 @@ export function useSongReorder({
           activate();
         }
         moveEvent.preventDefault();
-        updateDropGap();
+        renderPreview(session);
         if (autoScrollFrameRef.current === null) {
           autoScrollFrameRef.current = requestAnimationFrame(autoScrollStep);
         }
@@ -303,7 +348,7 @@ export function useSongReorder({
 
       if (immediate) activate();
     },
-    [autoScrollStep, enabled, finish, updateDropGap],
+    [autoScrollStep, enabled, finish, renderPreview, startPreview],
   );
 
   const handleProps = useCallback(
@@ -353,25 +398,5 @@ export function useSongReorder({
     [begin],
   );
 
-  return { ...state, enabled, handleProps, surfaceProps };
-}
-
-/**
- * Clases de una canción de la lista según el arrastre en curso:
- * `is-reorder-source` para la que se arrastra y `is-drop-before` /
- * `is-drop-after` para la línea de inserción.
- */
-export function songReorderClassName(
-  state: SongReorderState,
-  id: string,
-  index: number,
-  count: number,
-): string {
-  let className = "";
-  if (state.draggingId === id) className += " is-reorder-source";
-  if (state.dropGap !== null) {
-    if (state.dropGap === index) className += " is-drop-before";
-    else if (state.dropGap === count && index === count - 1) className += " is-drop-after";
-  }
-  return className;
+  return { enabled, handleProps, surfaceProps };
 }

@@ -34,7 +34,6 @@ import {
 import { SongReorderHandle } from "../songs/SongReorderHandle";
 import {
   SONG_REORDER_ID_ATTRIBUTE,
-  songReorderClassName,
   useSongReorder,
 } from "../songs/useSongReorder";
 import type { ViewMode } from "../uiStore";
@@ -469,7 +468,7 @@ function LivePerformanceViewComponent({
         <div className="lt-live-region-buttons" ref={setlistRef}>
           {sortedRegions.map((region, index) => (
             <div
-              className={`lt-live-region-row${region.id === selectedRegion?.id ? " is-selected" : ""}${region.id === currentRegion?.id ? " is-playing" : ""}${region.id === pendingMarkerId ? " is-queued" : ""}${songReorder.enabled ? " has-reorder" : ""}${songReorderClassName(songReorder, region.id, index, sortedRegions.length)}`}
+              className={`lt-live-region-row${region.id === selectedRegion?.id ? " is-selected" : ""}${region.id === currentRegion?.id ? " is-playing" : ""}${region.id === pendingMarkerId ? " is-queued" : ""}${songReorder.enabled ? " has-reorder" : ""}`}
               key={region.id}
               {...{ [SONG_REORDER_ID_ATTRIBUTE]: region.id }}
             >
