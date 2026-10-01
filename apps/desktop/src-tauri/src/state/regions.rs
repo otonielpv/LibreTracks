@@ -510,8 +510,14 @@ impl DesktopSession {
                     (clip.timeline_start_seconds + delta_seconds).max(0.0);
             }
         }
-        // Video clips travel with their song exactly like audio ones.
+        // Video and MIDI clips travel with their song exactly like audio ones.
         for clip in &mut song.video_clips {
+            if inside_old(clip.timeline_start_seconds) {
+                clip.timeline_start_seconds =
+                    (clip.timeline_start_seconds + delta_seconds).max(0.0);
+            }
+        }
+        for clip in &mut song.midi_clips {
             if inside_old(clip.timeline_start_seconds) {
                 clip.timeline_start_seconds =
                     (clip.timeline_start_seconds + delta_seconds).max(0.0);
@@ -826,6 +832,12 @@ impl DesktopSession {
                             (clip.timeline_start_seconds + delta).max(0.0);
                     }
                 }
+                for clip in song.midi_clips.iter_mut() {
+                    if clip.timeline_start_seconds >= edited_region_end - 1e-6 {
+                        clip.timeline_start_seconds =
+                            (clip.timeline_start_seconds + delta).max(0.0);
+                    }
+                }
                 for marker in song.tempo_markers.iter_mut() {
                     if marker.start_seconds >= edited_region_end - 1e-6 {
                         marker.start_seconds = (marker.start_seconds + delta).max(0.0);
@@ -1019,6 +1031,9 @@ impl DesktopSession {
             clip.timeline_start_seconds < region_start || clip.timeline_start_seconds >= region_end
         });
         song.video_clips.retain(|clip| {
+            clip.timeline_start_seconds < region_start || clip.timeline_start_seconds >= region_end
+        });
+        song.midi_clips.retain(|clip| {
             clip.timeline_start_seconds < region_start || clip.timeline_start_seconds >= region_end
         });
         song.tempo_markers.retain(|marker| {

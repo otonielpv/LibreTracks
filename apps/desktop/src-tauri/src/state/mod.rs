@@ -4387,3 +4387,5 @@ pub(super) fn copy_project_audio_files(
 mod tests;
 #[cfg(test)]
 mod video_tests;
+#[cfg(test)]
+mod midi_song_ops_tests;

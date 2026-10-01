@@ -264,6 +264,11 @@ pub(super) fn shift_song_suffix(song: &mut Song, anchor_seconds: f64, delta_seco
             clip.timeline_start_seconds = (clip.timeline_start_seconds + delta_seconds).max(0.0);
         }
     }
+    for clip in &mut song.midi_clips {
+        if at_or_after_anchor(clip.timeline_start_seconds) {
+            clip.timeline_start_seconds = (clip.timeline_start_seconds + delta_seconds).max(0.0);
+        }
+    }
     for marker in &mut song.tempo_markers {
         if at_or_after_anchor(marker.start_seconds) {
             marker.start_seconds = (marker.start_seconds + delta_seconds).max(0.0);
