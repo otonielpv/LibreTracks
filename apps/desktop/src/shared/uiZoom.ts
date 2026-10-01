@@ -94,6 +94,8 @@ export function shouldCompensateUiZoomViewport(
   // when zoom > 1). WebKit (the macOS Tauri WebView) reflows on `zoom`, so it
   // needs no compensation. Match the Blink hosts and divide the shell size by
   // the zoom to cancel the mismatch (see the compensation class in styles.css).
+  // On the mobile targets the shell is sized with `100%` instead (immune to
+  // `zoom` in every engine), which overrides this compensation in the CSS.
   return /Windows|Win32|Win64|WOW64|Android/i.test(`${userAgent} ${platform}`);
 }
 

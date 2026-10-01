@@ -52,6 +52,7 @@ if (isMobileApp) {
       `inner=${window.innerWidth}x${window.innerHeight} ` +
       `screen=${window.screen.width}x${window.screen.height} ` +
       `dpr=${window.devicePixelRatio} ` +
+      `zoom=${getComputedStyle(document.documentElement).getPropertyValue("--lt-ui-zoom").trim() || "1"} ` +
       `safe=L${safe.paddingLeft} R${safe.paddingRight} T${safe.paddingTop} B${safe.paddingBottom} ` +
       `shell=${rect ? `${Math.round(rect.width)}x${Math.round(rect.height)}@${Math.round(rect.left)},${Math.round(rect.top)}` : "<sin montar>"}`;
     console.log(`[LT_VIEWPORT] ${report}`);
