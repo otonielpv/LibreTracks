@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
 
+import { syncZoomedRects } from "./zoomedRects";
+
 // Interface zoom (UI scale). A per-install preference — independent of the
 // timeline's own zoom and of the backend AppSettings — so small screens (e.g. a
 // 13" MacBook where the default layout is wider than the display) can shrink the
@@ -54,6 +56,9 @@ const applyToDom = (zoom: number): void => {
   const target = shell ?? document.documentElement;
   // `zoom` accepts a unitless multiplier in WebKit/Blink.
   target.style.zoom = String(zoom);
+  // Legacy WebKit (iOS) reports rects of zoomed elements without the zoom;
+  // bring them back to viewport pixels so they match event.clientX/Y.
+  syncZoomedRects(target, zoom);
 };
 
 const persist = (zoom: number): void => {

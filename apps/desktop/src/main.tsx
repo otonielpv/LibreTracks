@@ -9,6 +9,7 @@ import { ErrorBoundary } from "./app/ErrorBoundary";
 import { installGlobalErrorHandlers } from "./shared/errorLogging";
 import { isIOSApp, isMobileApp } from "./features/transport/desktopApi";
 import "./shared/styles.css";
+import { getZoomedRectScale } from "./shared/zoomedRects";
 
 installGlobalErrorHandlers();
 
@@ -53,6 +54,7 @@ if (isMobileApp) {
       `screen=${window.screen.width}x${window.screen.height} ` +
       `dpr=${window.devicePixelRatio} ` +
       `zoom=${getComputedStyle(document.documentElement).getPropertyValue("--lt-ui-zoom").trim() || "1"} ` +
+      `rectScale=${getZoomedRectScale()} ` +
       `safe=L${safe.paddingLeft} R${safe.paddingRight} T${safe.paddingTop} B${safe.paddingBottom} ` +
       `shell=${rect ? `${Math.round(rect.width)}x${Math.round(rect.height)}@${Math.round(rect.left)},${Math.round(rect.top)}` : "<sin montar>"}`;
     console.log(`[LT_VIEWPORT] ${report}`);
