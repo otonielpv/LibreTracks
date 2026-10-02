@@ -8,12 +8,13 @@
 //     a buffer, and drives the render callback with real frames.
 //   * The engine writes non-zero samples into the buffers the hardware hands
 //     it — the signal path, not just the plumbing.
-//   * The recovery path used by an incoming call and by plugging in a USB
-//     interface: the AVAudioSession notification bumps the route generation,
-//     the stall monitor tears the stream down and hands the clock to the
-//     fallback pump (so the transport never stops), and the next open_device —
-//     which is what the Rust watchdog issues every 2 s — gets the hardware
-//     back.
+//   * The recovery paths. An ended interruption and a stalled unit restart the
+//     SAME unit in place, because a tear-down is unrecoverable in the
+//     background. A hardware route change waits for the foreground and then
+//     takes the tear-down path: the stall monitor closes the stream and hands
+//     the clock to the fallback pump (so the transport never stops), and the
+//     next open_device — which is what the Rust watchdog issues every 2 s —
+//     gets the hardware back.
 //
 // What it CANNOT cover, and must not be read as covering:
 //   * Real hardware routes. A simulator has one stereo output; a USB interface
@@ -165,21 +166,74 @@ int main() {
         check(callback.published_channels() == info.output_channel_count,
               "the physical channel map was published to the render layer");
 
-        std::printf("── Interruption recovery (the phone-call path) ─────────\n");
-        const unsigned generation_before = lt::ios_audio_route_generation();
-        const int calls_before = callback.calls();
+        std::printf("── Interruption end (the phone-call path) ──────────────\n");
+        // An ended interruption restarts the SAME unit in place. Tearing it
+        // down instead is what left a minimised iPad silent: from the
+        // background iOS will not let a closed unit come back.
+        const unsigned interruption_before = lt::ios_audio_interruption_end_generation();
         [NSNotificationCenter.defaultCenter
             postNotificationName:AVAudioSessionInterruptionNotification
                           object:AVAudioSession.sharedInstance
                         userInfo:@{AVAudioSessionInterruptionTypeKey:
                                      @(AVAudioSessionInterruptionTypeEnded)}];
         const bool bumped = wait_until(
-            [&] { return lt::ios_audio_route_generation() != generation_before; }, 2000);
-        check(bumped, "the session observer sees the interruption and bumps the route generation");
+            [&] { return lt::ios_audio_interruption_end_generation() != interruption_before; },
+            2000);
+        check(bumped, "the session observer sees the interruption end");
+        // The monitor ticks every 500 ms; give it a few ticks to (not) react.
+        const bool torn_down_on_interruption =
+            wait_until([&] { return manager.fallback_active(); }, 2000);
+        check(!torn_down_on_interruption,
+              "an interruption end resumes the unit in place (no fallback clock)");
+        const int calls_after_interruption = callback.calls();
+        check(wait_until([&] { return callback.calls() > calls_after_interruption + 10; }, 2000),
+              "hardware callbacks keep running after the interruption end");
 
-        // The monitor ticks every 500 ms; give it a few ticks.
+        std::printf("── Stalled unit (restart in place) ─────────────────────\n");
+        // What iOS does to the unit during an interruption, done by hand: the
+        // callbacks freeze. The monitor must restart the unit itself first.
+        check(manager.stop().is_ok(), "the unit can be stopped to fake a stall");
+        const int calls_at_stop = callback.calls();
+        const bool restarted = wait_until(
+            [&] { return callback.calls() > calls_at_stop + 10; }, 6000);
+        check(restarted, "the monitor restarts a stalled unit in place");
+        check(!manager.fallback_active(),
+              "a stall that a restart fixes never reaches the fallback clock");
+
+        std::printf("── Route change in the background ──────────────────────\n");
+        // Posted by name, exactly as the observer listens for it: this test
+        // links no UIKit either.
+        [NSNotificationCenter.defaultCenter
+            postNotificationName:@"UIApplicationDidEnterBackgroundNotification"
+                          object:nil];
+        check(wait_until([] { return lt::ios_app_in_background(); }, 2000),
+              "the session observer sees the app go to the background");
+        const unsigned hardware_before = lt::ios_audio_hardware_route_generation();
+        const unsigned route_generation_before = lt::ios_audio_route_generation();
+        [NSNotificationCenter.defaultCenter
+            postNotificationName:AVAudioSessionRouteChangeNotification
+                          object:AVAudioSession.sharedInstance
+                        userInfo:@{AVAudioSessionRouteChangeReasonKey:
+                                     @(AVAudioSessionRouteChangeReasonNewDeviceAvailable)}];
+        check(wait_until(
+                  [&] { return lt::ios_audio_hardware_route_generation() != hardware_before; },
+                  2000),
+              "the session observer sees the hardware route change");
+        check(lt::ios_audio_route_generation() != route_generation_before,
+              "the combined generation the JUCE backend reads moves too");
+        check(!wait_until([&] { return manager.fallback_active(); }, 2000),
+              "a route change in the background does NOT tear the unit down");
+
+        std::printf("── Back in the foreground (tear-down + fallback) ───────\n");
+        const int calls_before = callback.calls();
+        [NSNotificationCenter.defaultCenter
+            postNotificationName:@"UIApplicationWillEnterForegroundNotification"
+                          object:nil];
+        check(wait_until([] { return !lt::ios_app_in_background(); }, 2000),
+              "the session observer sees the app return to the foreground");
         const bool went_to_fallback = wait_until([&] { return manager.fallback_active(); }, 4000);
-        check(went_to_fallback, "the monitor tears the stream down and starts the fallback clock");
+        check(went_to_fallback,
+              "the deferred route change tears the stream down and starts the fallback clock");
 
         if (went_to_fallback) {
             const int calls_at_fallback = callback.calls();
