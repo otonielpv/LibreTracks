@@ -217,6 +217,7 @@ struct AudioDeviceManager::Impl {
     std::atomic<bool> monitor_stop{false};
 
     void close_stream_locked();
+    bool resume_in_place_locked(const char* why);
     void start_pump_locked();
     void stop_pump_locked();
     void ensure_monitor_started_locked();
@@ -237,6 +238,29 @@ void AudioDeviceManager::Impl::close_stream_locked() {
     adaptor.reset();
     // user_callback is deliberately kept — the pump and the next open both
     // still need it. Only close_device() clears it.
+}
+
+// Restart the EXISTING unit instead of tearing it down: re-activate the
+// session and start the unit again. This is the only recovery that works with
+// the app in the background — a closed unit cannot be reopened from there (see
+// ios_app_in_background) — and in the foreground it is simply cheaper than a
+// reopen. Returns false when iOS refuses, so the caller can fall back to the
+// tear-down path.
+bool AudioDeviceManager::Impl::resume_in_place_locked(const char* why) {
+    if (unit == nullptr)
+        return false;
+    std::string session_error;
+    if (!reactivate_ios_playback_session(&session_error)) {
+        lt_debug_log("[LT_IOS_AUDIO] in-place resume after %s: session refused "
+                     "(%s) background=%d\n",
+                     why, session_error.c_str(), ios_app_in_background() ? 1 : 0);
+        return false;
+    }
+    const OSStatus status = AudioOutputUnitStart(unit);
+    lt_debug_log("[LT_IOS_AUDIO] in-place resume after %s: status=%d "
+                 "background=%d\n",
+                 why, static_cast<int>(status), ios_app_in_background() ? 1 : 0);
+    return status == noErr;
 }
 
 // The internal fallback pump: a plain thread that drives the same render
@@ -297,21 +321,28 @@ void AudioDeviceManager::Impl::ensure_monitor_started_locked() {
     monitor_thread = std::thread([this] { monitor_main(); });
 }
 
-// Stall monitor + route watcher. Two different failures land here:
+// Stall monitor + route watcher. Three different events land here:
 //
 //   * Callbacks frozen. An open RemoteIO unit keeps calling us forever (the
 //     mixer renders silence while stopped), so a frozen count is a reliable
 //     death signal — the interruption case, where iOS stopped the unit and
 //     never restarted it.
-//   * Route generation changed. Plugging an interface in is INVISIBLE to the
+//   * An interruption ended. iOS stopped the unit for a call or another app's
+//     audio and is now giving the session back.
+//   * Hardware route changed. Plugging an interface in is INVISIBLE to the
 //     stall check: iOS migrates the route seamlessly, the callbacks never
 //     pause, and the unit stays open at the channel count it negotiated before
 //     the interface existed. Without this, a four- or eight-output interface
 //     would keep behaving as stereo until the app restarted.
 //
-// Both take the same path: tear the stream down, hand the render callback to
-// the pump, and let the control layer reopen against the route that is there
-// now (it polls fallback_active() and retries open_device()).
+// The last resort for all three is the same: tear the stream down, hand the
+// render callback to the pump, and let the control layer reopen against the
+// route that is there now (it polls fallback_active() and retries
+// open_device()). But that tear-down is fatal in the background — iOS will not
+// let a closed unit come back from there, and suspends the app once it stops
+// playing — so the first two try resume_in_place_locked() first, and a
+// hardware change waits for the foreground (iOS has already moved the audio to
+// the new route; only the channel count is stale).
 void AudioDeviceManager::Impl::monitor_main() {
     constexpr int kMonitorPeriodMs  = 500;
     constexpr int kStallThresholdMs = 1500;
@@ -319,13 +350,27 @@ void AudioDeviceManager::Impl::monitor_main() {
     std::uint64_t last_gen   = 0;
     int           last_count = -1;
     int           diagnostic_ticks = 0;
+    // One in-place restart per stall: if the callbacks are still frozen a
+    // whole threshold later, the unit really is gone and gets torn down.
+    bool          stall_restart_tried = false;
+    bool          hardware_change_pending = false;
     auto          last_change = std::chrono::steady_clock::now();
     const auto ms_between = [](auto a, auto b) {
         return std::chrono::duration<double, std::milli>(b - a).count();
     };
     // Seeded from the current value, not from zero: whatever happened before
     // the monitor started is already reflected in the device that is open.
-    unsigned last_route_generation = ios_audio_route_generation();
+    unsigned last_hardware_generation     = ios_audio_hardware_route_generation();
+    unsigned last_interruption_generation = ios_audio_interruption_end_generation();
+
+    const auto tear_down = [&](const std::string& reason) {
+        last_error = reason;
+        close_stream_locked();
+        start_pump_locked();
+        last_count = -1;
+        stall_restart_tried = false;
+        hardware_change_pending = false;
+    };
 
     while (!monitor_stop.load(std::memory_order_relaxed)) {
         std::this_thread::sleep_for(std::chrono::milliseconds(kMonitorPeriodMs));
@@ -338,25 +383,48 @@ void AudioDeviceManager::Impl::monitor_main() {
         }
         if (pump_run.load(std::memory_order_relaxed) || !adaptor) {
             last_count = -1;
+            stall_restart_tried = false;
+            hardware_change_pending = false;
             // Already on the fallback clock: the control layer is reopening
             // anyway and will pick up whatever route is current. Absorbing the
-            // event here keeps that recovery from being followed by a second,
+            // events here keeps that recovery from being followed by a second,
             // pointless tear-down.
-            last_route_generation = ios_audio_route_generation();
+            last_hardware_generation     = ios_audio_hardware_route_generation();
+            last_interruption_generation = ios_audio_interruption_end_generation();
             continue;
         }
         const auto now = std::chrono::steady_clock::now();
+        const bool background = ios_app_in_background();
 
-        const unsigned route_generation = ios_audio_route_generation();
-        if (route_generation != last_route_generation) {
-            last_route_generation = route_generation;
+        const unsigned interruption_generation = ios_audio_interruption_end_generation();
+        if (interruption_generation != last_interruption_generation) {
+            last_interruption_generation = interruption_generation;
+            if (resume_in_place_locked("interruption end")) {
+                // Re-baseline: the callbacks restart from wherever they are.
+                last_count = -1;
+                stall_restart_tried = false;
+                continue;
+            }
             lt_debug_log(
-                "[LT_IOS_AUDIO] route/interruption event — reopening \"%s\"\n",
-                device_name.c_str());
-            last_error = "iOS audio route changed";
-            close_stream_locked();
-            start_pump_locked();
-            last_count = -1;
+                "[LT_IOS_AUDIO] interruption end — reopening \"%s\" background=%d\n",
+                device_name.c_str(), background ? 1 : 0);
+            tear_down("iOS audio interruption could not be resumed");
+            continue;
+        }
+
+        const unsigned hardware_generation = ios_audio_hardware_route_generation();
+        if (hardware_generation != last_hardware_generation) {
+            last_hardware_generation = hardware_generation;
+            hardware_change_pending = true;
+            if (background) {
+                lt_debug_log("[LT_IOS_AUDIO] route change while in background — "
+                             "reopen deferred to the foreground\n");
+            }
+        }
+        if (hardware_change_pending && !background) {
+            lt_debug_log("[LT_IOS_AUDIO] route change — reopening \"%s\"\n",
+                         device_name.c_str());
+            tear_down("iOS audio route changed");
             continue;
         }
 
@@ -367,10 +435,11 @@ void AudioDeviceManager::Impl::monitor_main() {
             if (lt_env_flag_enabled("LIBRETRACKS_AUDIO_DIAG")) {
                 lt_debug_log(
                     "[LT_IOS_AUDIO] hardware_callback device=\"%s\" backend=\"%s\" "
-                    "callbacks=%d final_peak=%.6f sr=%d buffer=%d channels=%d\n",
+                    "callbacks=%d final_peak=%.6f sr=%d buffer=%d channels=%d "
+                    "background=%d\n",
                     device_name.c_str(), kBackend, count,
                     static_cast<double>(adaptor->output_peak()), sample_rate,
-                    buffer_size, output_channel_count);
+                    buffer_size, output_channel_count, background ? 1 : 0);
             }
         }
         if (gen != last_gen || last_count < 0) {
@@ -382,22 +451,36 @@ void AudioDeviceManager::Impl::monitor_main() {
         if (count != last_count) {
             last_count = count;
             last_change = now;
+            stall_restart_tried = false;
             continue;
         }
         const double stalled_ms    = ms_between(last_change, now);
         const double since_open_ms = ms_between(last_open_time, now);
         if (stalled_ms < kStallThresholdMs || since_open_ms < kFreshOpenGraceMs)
             continue;
+        if (!stall_restart_tried) {
+            stall_restart_tried = true;
+            lt_debug_log("[LT_IOS_AUDIO] callbacks frozen %.0f ms on \"%s\" "
+                         "background=%d — restarting the unit in place\n",
+                         stalled_ms, device_name.c_str(), background ? 1 : 0);
+            if (resume_in_place_locked("stall")) {
+                // Give the restarted unit a full threshold to prove itself.
+                last_change = now;
+                continue;
+            }
+        }
         const std::string reason("output device stopped delivering audio "
                                  "callbacks (interruption or route loss?)");
         fprintf(stderr,
                 "[LT_AUDIO] output device \"%s\" declared dead (%s; callbacks "
                 "frozen %.0f ms) — switching to the internal fallback clock\n",
                 device_name.c_str(), reason.c_str(), stalled_ms);
-        last_error = reason;
-        close_stream_locked();
-        start_pump_locked();
-        last_count = -1;
+        // Also to the engine log: stderr is invisible on a user's device, and
+        // this line is the one that explains a silent app.
+        lt_debug_log("[LT_IOS_AUDIO] \"%s\" declared dead (callbacks frozen "
+                     "%.0f ms) background=%d — fallback clock\n",
+                     device_name.c_str(), stalled_ms, background ? 1 : 0);
+        tear_down(reason);
     }
 }
 

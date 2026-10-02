@@ -45,7 +45,33 @@ int current_ios_output_channel_count();
 // device stays open at the channel count it negotiated before the interface
 // existed — so a four- or eight-output interface would keep behaving as stereo
 // until the app was restarted.
+//
+// This is the SUM of the two counters below, kept for the JUCE backend. The
+// RemoteIO backend reads them separately, because they want different answers
+// while the app is in the background.
 unsigned ios_audio_route_generation();
+
+// Only the hardware half: an interface plugged or unplugged.
+unsigned ios_audio_hardware_route_generation();
+
+// Only the interruption half: an interruption (a phone call) that has just
+// ended.
+unsigned ios_audio_interruption_end_generation();
+
+// True between UIApplicationDidEnterBackground and WillEnterForeground: the
+// app is minimised, the screen is locked, or another app is in front.
+//
+// Matters because closing the RemoteIO unit here is unrecoverable. iOS keeps a
+// backgrounded app alive only while it is actually playing audio, and will not
+// let it start playing again from the background — so a tear-down meant to
+// "reopen cleanly" leaves the app silent and, seconds later, suspended.
+bool ios_app_in_background();
+
+// Lightweight recovery for a unit that iOS stopped but did not take away:
+// re-assert the Playback category if something moved it and re-activate the
+// session. Unlike configure_ios_playback_session it touches no preference
+// (sample rate, buffer, channel count), so it is safe while a unit is open.
+bool reactivate_ios_playback_session(std::string* error_message);
 
 // Human-readable runtime state for field diagnostics (route, volume, sample
 // rate and buffer). Never called from the realtime callback.
