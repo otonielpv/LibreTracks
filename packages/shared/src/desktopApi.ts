@@ -1643,6 +1643,84 @@ export async function reorderSongRegion(
   });
 }
 
+/** A capture warning. `offBeatSection` carries the nearest downbeat (view
+ * seconds) so the UI can offer to snap the marker. */
+export type StructureWarning = {
+  kind: "offBeatSection" | "midiClipCrossesSection";
+  markerId: string;
+  clipId: string | null;
+  suggestedStartSeconds: number | null;
+};
+
+/** Blocks a recapture dropped from an arrangement because their section is
+ * gone. */
+export type DroppedArrangementBlocks = {
+  arrangementId: string;
+  arrangementName: string;
+  sectionNames: string[];
+  arrangementRemoved: boolean;
+};
+
+/** Response of every song-arrangement command. */
+export type SongStructureResult = {
+  snapshot: TransportSnapshot;
+  warnings: StructureWarning[];
+  droppedBlocks: DroppedArrangementBlocks[];
+};
+
+/** An arrangement as the backend stores it. */
+export type ArrangementInput = {
+  id: string;
+  name: string;
+  blocks: { id: string; sectionMarkerId: string }[];
+};
+
+/** Capture the song's original (content, sections, tempo, cues) as it is on
+ * the timeline now. Recaptures if one exists and no arrangement is applied. */
+export async function captureSongStructure(regionId: string): Promise<SongStructureResult> {
+  return invokeCommand<SongStructureResult>("capture_song_structure", { regionId });
+}
+
+/** Create or update an arrangement. With `apply` it is also written on the
+ * timeline, in the same undo step. */
+export async function saveSongArrangement(
+  regionId: string,
+  arrangement: ArrangementInput,
+  apply: boolean,
+): Promise<SongStructureResult> {
+  return invokeCommand<SongStructureResult>("save_song_arrangement", {
+    regionId,
+    arrangement,
+    apply,
+  });
+}
+
+export async function deleteSongArrangement(
+  regionId: string,
+  arrangementId: string,
+): Promise<SongStructureResult> {
+  return invokeCommand<SongStructureResult>("delete_song_arrangement", {
+    regionId,
+    arrangementId,
+  });
+}
+
+/** Apply a saved arrangement, or `null` to go back to the original. */
+export async function applySongArrangement(
+  regionId: string,
+  arrangementId: string | null,
+): Promise<SongStructureResult> {
+  return invokeCommand<SongStructureResult>("apply_song_arrangement", {
+    regionId,
+    arrangementId,
+  });
+}
+
+/** Go back to the original and forget it and its arrangements. */
+export async function discardSongStructure(regionId: string): Promise<SongStructureResult> {
+  return invokeCommand<SongStructureResult>("discard_song_structure", { regionId });
+}
+
 export async function updateSongRegionTranspose(
   regionId: string,
   transposeSemitones: number,

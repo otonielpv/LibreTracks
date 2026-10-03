@@ -20,20 +20,18 @@
 use libretracks_core::Song;
 
 use crate::audio::automation::{
-    save_automation, AutomationAction, AutomationCue, AutomationJumpTarget,
+    save_automation, AutomationAction, AutomationCue, AutomationDocument, AutomationJumpTarget,
 };
 use crate::audio::engine::AudioController;
 use crate::infra::error::DesktopError;
 
+use super::song_structure::cues_for_song_transition;
 use super::{AudioChangeImpact, DesktopSession, UpdatePhase};
 
 impl DesktopSession {
     /// `persist_song_update_internal` que además arrastra las cues de las
-    /// canciones trasladadas entre el `Song` cargado y `song`.
-    ///
-    /// Todo o nada: el documento de automatización se escribe ANTES que el
-    /// `Song`, y si el `Song` no se acepta se vuelve a escribir el viejo. No
-    /// puede quedar la canción movida y sus cues no, ni al revés.
+    /// canciones trasladadas entre el `Song` cargado y `song`, y re-deriva las
+    /// de una canción cuyo arreglo aplicado cambió (`cues_for_song_transition`).
     pub(super) fn persist_song_update_carrying_cues(
         &mut self,
         song: Song,
@@ -48,7 +46,25 @@ impl DesktopSession {
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         let mut automation = self.automation.clone();
-        if !carry_cues_with_regions(&previous, &song, &mut automation.cues) {
+        let automation =
+            cues_for_song_transition(&previous, &song, &mut automation.cues).then_some(automation);
+        self.persist_song_and_automation(song, automation, audio, impact, record_history, phase)
+    }
+
+    /// Persiste `song` y, si viene, el documento de automatización, todo o
+    /// nada: el documento se escribe ANTES que el `Song`, y si el `Song` no se
+    /// acepta se vuelve a escribir el viejo. No puede quedar la canción
+    /// cambiada y sus cues no, ni al revés.
+    pub(super) fn persist_song_and_automation(
+        &mut self,
+        song: Song,
+        automation: Option<AutomationDocument>,
+        audio: &AudioController,
+        impact: AudioChangeImpact,
+        record_history: bool,
+        phase: UpdatePhase,
+    ) -> Result<(), DesktopError> {
+        let Some(automation) = automation.filter(|doc| *doc != self.automation) else {
             return self.persist_song_update_internal(
                 song,
                 audio,
@@ -57,7 +73,7 @@ impl DesktopSession {
                 true,
                 phase,
             );
-        }
+        };
 
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
         save_automation(&song_dir, &automation)

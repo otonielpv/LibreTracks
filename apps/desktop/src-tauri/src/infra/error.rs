@@ -36,4 +36,6 @@ pub enum DesktopError {
     InvalidTrackParent,
     #[error("clip split point is invalid")]
     InvalidSplitPoint,
+    #[error("song arrangement: {0}")]
+    SongStructure(String),
 }

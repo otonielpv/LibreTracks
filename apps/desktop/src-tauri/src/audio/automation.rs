@@ -59,8 +59,7 @@ impl Default for AutomationDocument {
 }
 
 pub use libretracks_core::automation::{
-    AutomationAction, AutomationCue, AutomationJumpTarget, AutomationTransition,
-    AutomationTransitionMode,
+    AutomationAction, AutomationCue, AutomationJumpTarget, AutomationTransitionMode,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -117,6 +116,7 @@ pub fn save_automation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use libretracks_core::automation::AutomationTransition;
 
     #[test]
     fn automation_document_round_trips() {

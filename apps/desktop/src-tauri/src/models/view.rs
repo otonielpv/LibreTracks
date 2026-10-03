@@ -378,6 +378,54 @@ pub struct ArrangementBlockSummary {
     pub section_marker_id: String,
 }
 
+/// Respuesta de las órdenes de arreglos: el snapshot de siempre más lo que el
+/// usuario debe saber de la captura.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SongStructureResult {
+    pub snapshot: TransportSnapshot,
+    pub warnings: Vec<StructureWarningSummary>,
+    pub dropped_blocks: Vec<DroppedArrangementBlocksSummary>,
+}
+
+/// Un aviso de captura.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StructureWarningSummary {
+    /// `offBeatSection` o `midiClipCrossesSection`.
+    pub kind: String,
+    pub marker_id: String,
+    pub clip_id: Option<String>,
+    /// Para `offBeatSection`: el tiempo fuerte más cercano, en vista, para
+    /// ofrecer "ajustar al compás".
+    pub suggested_start_seconds: Option<f64>,
+}
+
+impl StructureWarningSummary {
+    pub(crate) fn off_beat(marker_id: &str, suggested_start_seconds: f64) -> Self {
+        StructureWarningSummary {
+            kind: "offBeatSection".into(),
+            marker_id: marker_id.to_string(),
+            clip_id: None,
+            suggested_start_seconds: suggested_start_seconds
+                .is_finite()
+                .then_some(suggested_start_seconds),
+        }
+    }
+}
+
+/// Bloques que una recaptura quitó de un arreglo porque su sección ya no
+/// existe ("Se quitó «Puente» de Domingo").
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DroppedArrangementBlocksSummary {
+    pub arrangement_id: String,
+    pub arrangement_name: String,
+    pub section_names: Vec<String>,
+    /// Se quedó sin bloques y se borró.
+    pub arrangement_removed: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SongMasterSummary {

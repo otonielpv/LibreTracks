@@ -73,6 +73,7 @@ mod session;
 pub use session::ExistingProjectDir;
 mod song_edit;
 mod song_reorder;
+mod song_structure;
 mod timeline_math;
 mod missing_media;
 pub(crate) use missing_media::MissingMediaEntry;

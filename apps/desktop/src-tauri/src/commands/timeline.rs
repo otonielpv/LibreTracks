@@ -20,9 +20,9 @@ use tauri::State;
 
 use crate::audio::automation::{AutomationCue, MixScene};
 use crate::infra::error::DesktopError;
-use crate::models::TransportSnapshot;
+use crate::models::{SongStructureResult, TransportSnapshot};
 use crate::state::{ClipMoveRequest, DesktopState};
-use libretracks_core::{MarkerCategory, MarkerKind, MidiClip, TrackKind};
+use libretracks_core::{Arrangement, MarkerCategory, MarkerKind, MidiClip, TrackKind};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -424,6 +424,89 @@ pub fn reorder_song_region(
 
     session
         .reorder_song_region(&region_id, target_index, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+// ── Arreglos de canción (reordenar, repetir y quitar secciones) ───────────
+//
+// Cada orden es una sola actualización persistida y una sola entrada de
+// deshacer. Devuelven el snapshot más los avisos de captura.
+
+/// Guarda el original de la canción tal como está en el timeline.
+#[tauri::command(async)]
+pub fn capture_song_structure(
+    region_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<SongStructureResult, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .capture_song_structure(&region_id, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+/// Crea o actualiza un arreglo; con `apply` además lo escribe en el timeline.
+#[tauri::command(async)]
+pub fn save_song_arrangement(
+    region_id: String,
+    arrangement: Arrangement,
+    apply: bool,
+    state: State<'_, DesktopState>,
+) -> Result<SongStructureResult, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .save_song_arrangement(&region_id, arrangement, apply, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command(async)]
+pub fn delete_song_arrangement(
+    region_id: String,
+    arrangement_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<SongStructureResult, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .delete_song_arrangement(&region_id, &arrangement_id, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+/// Aplica un arreglo guardado; `null` vuelve al original.
+#[tauri::command(async)]
+pub fn apply_song_arrangement(
+    region_id: String,
+    arrangement_id: Option<String>,
+    state: State<'_, DesktopState>,
+) -> Result<SongStructureResult, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .apply_song_arrangement(&region_id, arrangement_id.as_deref(), &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+/// Vuelve al original y olvida original y arreglos.
+#[tauri::command(async)]
+pub fn discard_song_structure(
+    region_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<SongStructureResult, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .discard_song_structure(&region_id, &state.audio)
         .map_err(|error| error.to_string())
 }
 

@@ -72,10 +72,18 @@ impl DesktopSession {
 /// `position`. Misma regla que `move_song_region`: 1 ms de tolerancia por la
 /// izquierda para que la marca de tempo clavada en el inicio viaje con su
 /// canción. Con dos canciones pegadas gana la que EMPIEZA ahí.
-fn owning_span(spans: &[(f64, f64)], position: f64) -> Option<usize> {
+pub(super) fn owning_span(spans: &[(f64, f64)], position: f64) -> Option<usize> {
     spans
         .iter()
         .rposition(|&(start, end)| position >= start - 0.001 && position < end)
+}
+
+/// Inicio y fin de cada canción, en el orden de `song.regions`.
+pub(super) fn region_spans(song: &Song) -> Vec<(f64, f64)> {
+    song.regions
+        .iter()
+        .map(|region| (region.start_seconds, region.end_seconds))
+        .collect()
 }
 
 /// Reordena en el sitio. Devuelve `false` si no había nada que mover.
@@ -95,11 +103,46 @@ pub(super) fn reorder_song_regions(song: &mut Song, region_id: &str, target_inde
     }
 
     let previous = song.clone();
-    let spans: Vec<(f64, f64)> = previous
-        .regions
-        .iter()
-        .map(|region| (region.start_seconds, region.end_seconds))
-        .collect();
+    let spans = region_spans(&previous);
+    // A quién pertenece cada elemento, decidido UNA vez sobre las posiciones
+    // de partida: durante la recolocación las canciones se cruzan.
+    let owners = Owners::of(song, &spans);
+    let lengths: Vec<f64> = spans.iter().map(|&(start, end)| end - start).collect();
+
+    let mut order: Vec<usize> = (0..count).collect();
+    let moved = order.remove(from);
+    order.insert(to, moved);
+
+    lay_out_songs(song, &previous, &owners, &order, 0, &lengths);
+    true
+}
+
+/// Coloca las canciones una tras otra en el orden `order`, que indexa
+/// `previous.regions` (ordenadas por inicio). Lo comparten reordenar y aplicar
+/// un arreglo.
+///
+/// - Los HUECOS se quedan con su posición en la lista: el hueco entre la 1ª y
+///   la 2ª posición sigue siendo el mismo, la ocupe quien la ocupe.
+/// - Si una frontera caía en un tiempo fuerte, la nueva también: la canción
+///   que llega se coloca en el primer tiempo fuerte tras la anterior.
+/// - Las `keep_first` primeras posiciones no se mueven (aplicar un arreglo no
+///   toca las canciones de antes ni la arreglada).
+///
+/// `lengths[i]` es la duración que tiene AHORA la canción `i` (aplicar un
+/// arreglo la cambia); `song` ya la refleja en el fin de su región. `owners`
+/// dice de quién es cada elemento de `song`: lo decide quien llama porque, al
+/// aplicar un arreglo, el contenido nuevo de una canción puede pasar de su
+/// fin viejo y ya no se puede deducir de las posiciones.
+pub(super) fn lay_out_songs(
+    song: &mut Song,
+    previous: &Song,
+    owners: &Owners,
+    order: &[usize],
+    keep_first: usize,
+    lengths: &[f64],
+) {
+    let count = order.len();
+    let spans = region_spans(previous);
     // Hueco y alineación de cada frontera de la lista, por posición.
     let gaps: Vec<f64> = spans
         .windows(2)
@@ -108,54 +151,36 @@ pub(super) fn reorder_song_regions(song: &mut Song, region_id: &str, target_inde
     let aligned: Vec<bool> = previous
         .regions
         .windows(2)
-        .map(|pair| region_boundary_was_downbeat_aligned(&previous, &pair[0], &pair[1]))
+        .map(|pair| region_boundary_was_downbeat_aligned(previous, &pair[0], &pair[1]))
         .collect();
-
-    // A quién pertenece cada elemento, decidido UNA vez sobre las posiciones
-    // de partida: durante la recolocación las canciones se cruzan.
-    let owners = Owners {
-        clips: owners_of(&spans, song.clips.iter().map(|c| c.timeline_start_seconds)),
-        video_clips: owners_of(
-            &spans,
-            song.video_clips.iter().map(|c| c.timeline_start_seconds),
-        ),
-        midi_clips: owners_of(
-            &spans,
-            song.midi_clips.iter().map(|c| c.timeline_start_seconds),
-        ),
-        tempo_markers: owners_of(&spans, song.tempo_markers.iter().map(|m| m.start_seconds)),
-        time_signature_markers: owners_of(
-            &spans,
-            song.time_signature_markers.iter().map(|m| m.start_seconds),
-        ),
-        section_markers: owners_of(&spans, song.section_markers.iter().map(|m| m.start_seconds)),
-    };
     let ids: Vec<String> = previous
         .regions
         .iter()
         .map(|region| region.id.clone())
         .collect();
 
-    // Se aparcan todas las canciones lejos, más allá de donde pueda acabar la
-    // nueva disposición, y se traen de vuelta una a una en el orden nuevo. Así
-    // la rejilla de compases que decide dónde cae cada una sólo ve las que ya
-    // están colocadas, nunca una que todavía ocupa su sitio viejo.
+    // Se aparcan las canciones que se recolocan lejos, más allá de donde
+    // pueda acabar la nueva disposición, y se traen de vuelta una a una en el
+    // orden nuevo. Así la rejilla de compases que decide dónde cae cada una
+    // sólo ve las que ya están colocadas, nunca una que todavía ocupa su
+    // sitio viejo.
     let horizon = spans
         .iter()
-        .map(|&(_, end)| end)
+        .zip(lengths)
+        .map(|(&(start, end), &length)| end.max(start + length))
         .fold(song.duration_seconds, f64::max);
     let park = horizon + 3600.0 * (count as f64 + 1.0);
-    for index in 0..count {
+    for &index in order.iter().skip(keep_first) {
         owners.translate(song, &ids[index], index, park);
     }
 
-    let mut order: Vec<usize> = (0..count).collect();
-    let moved = order.remove(from);
-    order.insert(to, moved);
-
     let mut previous_end: Option<f64> = None;
     for (slot, &index) in order.iter().enumerate() {
-        let (start, end) = spans[index];
+        let start = spans[index].0;
+        if slot < keep_first {
+            previous_end = Some(start + lengths[index]);
+            continue;
+        }
         let target_start = match previous_end {
             None => spans[0].0,
             Some(prev_end) if aligned[slot - 1] => {
@@ -169,7 +194,7 @@ pub(super) fn reorder_song_regions(song: &mut Song, region_id: &str, target_inde
         };
         owners.translate(song, &ids[index], index, target_start - (start + park));
         sort_song_regions(&mut song.regions);
-        previous_end = Some(target_start + (end - start));
+        previous_end = Some(target_start + lengths[index]);
     }
 
     let by_start = |left: f64, right: f64| {
@@ -184,7 +209,6 @@ pub(super) fn reorder_song_regions(song: &mut Song, region_id: &str, target_inde
         .sort_by(|l, r| by_start(l.start_seconds, r.start_seconds));
     song.midi_clips
         .sort_by(|l, r| by_start(l.timeline_start_seconds, r.timeline_start_seconds));
-    true
 }
 
 fn owners_of(spans: &[(f64, f64)], positions: impl Iterator<Item = f64>) -> Vec<Option<usize>> {
@@ -194,20 +218,44 @@ fn owners_of(spans: &[(f64, f64)], positions: impl Iterator<Item = f64>) -> Vec<
 }
 
 /// Dueño de cada elemento, en el mismo orden que su lista en `Song`.
-struct Owners {
-    clips: Vec<Option<usize>>,
-    video_clips: Vec<Option<usize>>,
-    midi_clips: Vec<Option<usize>>,
-    tempo_markers: Vec<Option<usize>>,
-    time_signature_markers: Vec<Option<usize>>,
-    section_markers: Vec<Option<usize>>,
+pub(super) struct Owners {
+    pub(super) clips: Vec<Option<usize>>,
+    pub(super) video_clips: Vec<Option<usize>>,
+    pub(super) midi_clips: Vec<Option<usize>>,
+    pub(super) tempo_markers: Vec<Option<usize>>,
+    pub(super) time_signature_markers: Vec<Option<usize>>,
+    pub(super) section_markers: Vec<Option<usize>>,
 }
 
 impl Owners {
+    /// Dueños por posición, con la regla de `owning_span`.
+    pub(super) fn of(song: &Song, spans: &[(f64, f64)]) -> Self {
+        Owners {
+            clips: owners_of(spans, song.clips.iter().map(|c| c.timeline_start_seconds)),
+            video_clips: owners_of(
+                spans,
+                song.video_clips.iter().map(|c| c.timeline_start_seconds),
+            ),
+            midi_clips: owners_of(
+                spans,
+                song.midi_clips.iter().map(|c| c.timeline_start_seconds),
+            ),
+            tempo_markers: owners_of(spans, song.tempo_markers.iter().map(|m| m.start_seconds)),
+            time_signature_markers: owners_of(
+                spans,
+                song.time_signature_markers.iter().map(|m| m.start_seconds),
+            ),
+            section_markers: owners_of(
+                spans,
+                song.section_markers.iter().map(|m| m.start_seconds),
+            ),
+        }
+    }
+
     /// Traslada la canción `index` (región `region_id`) y todo lo suyo.
     ///
     /// Las listas de elementos no se reordenan hasta el final de
-    /// `reorder_song_regions`, así que los índices de `self` siguen valiendo.
+    /// `lay_out_songs`, así que los índices de `self` siguen valiendo.
     fn translate(&self, song: &mut Song, region_id: &str, index: usize, delta: f64) {
         let mine = |owner: &Option<usize>| *owner == Some(index);
         if let Some(region) = song
