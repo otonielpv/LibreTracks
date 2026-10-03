@@ -66,6 +66,10 @@ impl DesktopSession {
             }
         }
         validate_automation_cue(&song, &self.automation, &cue)?;
+        // Una cue dentro de una canción con arreglo aplicado se perdería al
+        // reaplicarlo: se bloquea como editar un clip.
+        super::structure_guard::ensure_cue_editable(&song, cue.at_seconds)?;
+        super::structure_guard::ensure_existing_cue_editable(&song, &self.automation.cues, &cue.id)?;
         cue.name = cue.name.trim().to_string();
         if cue.name.is_empty() {
             cue.name = "Automation cue".into();
@@ -161,6 +165,9 @@ impl DesktopSession {
         cue_id: &str,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
+        if let Some(song) = self.engine.song() {
+            super::structure_guard::ensure_existing_cue_editable(song, &self.automation.cues, cue_id)?;
+        }
         let before = self.automation.cues.len();
         self.automation.cues.retain(|cue| cue.id != cue_id);
         if self.automation.cues.len() != before {

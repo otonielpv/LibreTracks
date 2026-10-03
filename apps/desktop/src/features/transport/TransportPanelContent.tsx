@@ -198,6 +198,9 @@ import { CompactView } from "./compact/CompactView";
 import { LivePerformanceView } from "./live/LivePerformanceView";
 import { BusyOverlay } from "./shell/BusyOverlay";
 import { MissingMidiWarningModal } from "./shell/MissingMidiWarningModal";
+import { StructureGuardDialog } from "./structure/StructureGuardDialog";
+import { openStructureGuardFromError } from "./structure/structureGuard";
+import { createStructureHandlers } from "./structure/structureHandlers";
 import { TimelineToolbar } from "./timeline/TimelineToolbar";
 import { TimelineTopbar } from "./timeline/TimelineTopbar";
 import { PadsPopover } from "./panels/PadsPopover";
@@ -1163,6 +1166,7 @@ export function TransportPanelContent() {
       // status banner auto-hides. The status banner truncates long
       // engine error messages; the console keeps them in full.
       console.error("[lt] action error:", error);
+      openStructureGuardFromError(error, songRef.current);
       return formatTransportError(error, t, songRef.current);
     },
     [t],
@@ -2290,6 +2294,12 @@ export function TransportPanelContent() {
       applySourcesSnapshot(nextSnapshot?.sources);
     },
     [applyPitchPrepareSnapshot, applySourcesSnapshot],
+  );
+
+  // Song arrangements ("Arreglo"). See ./structure.
+  const structureHandlers = useMemo(
+    () => createStructureHandlers({ runAction, applyPlaybackSnapshot, setStatus, t }),
+    [runAction, applyPlaybackSnapshot, setStatus, t],
   );
 
   // Track/clip colour handlers (optimistic song patch + snapshot publish).
@@ -6811,6 +6821,7 @@ export function TransportPanelContent() {
         <AndroidBackGuard />
         <BusyOverlay visible={isShellBusy} feedback={busyFeedback} displayPercent={displayPercent} />
         <MissingMidiWarningModal deviceName={missingMidiDeviceWarning} onDismiss={handleDismissMissingMidiDeviceWarning} onDontShowAgain={handleHideMissingMidiDeviceWarning} />
+        <StructureGuardDialog onEditOriginal={structureHandlers.editOriginal} />
 
         <TimelineTopbar
           runShortcutAction={runShortcutAction}

@@ -21,6 +21,7 @@ import type {
   RegionMeterLevel,
   SectionMarkerSummary,
   SongRegionSummary,
+  SongStructureSummary,
   SongPackageImportResponse,
   SongView,
   TempoMarkerSummary,
@@ -773,6 +774,65 @@ function createRegionFromSelection(
     master: { gain: 1.0 },
     compactColumnWidthRem: null,
   };
+}
+
+/**
+ * Give a region of the mock song a captured original / arrangements, as the
+ * backend's `SongRegionSummary.structure` would carry it.
+ */
+export function setRegionStructureForTest(
+  regionId: string,
+  structure: SongStructureSummary | undefined,
+) {
+  replaceSong({
+    ...state.song,
+    regions: state.song.regions.map((region) =>
+      region.id === regionId ? { ...region, structure } : region,
+    ),
+  });
+}
+
+function updateRegionStructure(
+  regionId: string,
+  update: (structure: SongStructureSummary | undefined) => SongStructureSummary | undefined,
+) {
+  replaceSong({
+    ...state.song,
+    regions: state.song.regions.map((region) =>
+      region.id === regionId
+        ? { ...region, structure: update(region.structure) }
+        : region,
+    ),
+  });
+  return { snapshot: clone(buildSnapshot()), warnings: [], droppedBlocks: [] };
+}
+
+/** Sections of a region from its markers, the way the backend derives them
+ * (simplified: every marker inside the region opens a section). */
+function mockSectionsFor(regionId: string): SongStructureSummary["sections"] {
+  const region = state.song.regions.find((candidate) => candidate.id === regionId);
+  if (!region) return [];
+  const markers = state.song.sectionMarkers
+    .filter(
+      (marker) =>
+        marker.startSeconds >= region.startSeconds &&
+        marker.startSeconds < region.endSeconds,
+    )
+    .sort((left, right) => left.startSeconds - right.startSeconds);
+  return markers.map((marker, index) => {
+    const end = markers[index + 1]?.startSeconds ?? region.endSeconds;
+    return {
+      markerId: marker.id,
+      name: marker.name,
+      kind: marker.kind ?? "custom",
+      variant: marker.variant ?? null,
+      color: marker.color ?? null,
+      implicit: false,
+      startSeconds: marker.startSeconds,
+      endSeconds: end,
+      bars: (end - marker.startSeconds) / 2,
+    };
+  });
 }
 
 export function resetTestDesktopApiMock() {
@@ -1646,6 +1706,51 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
+  captureSongStructure: async (regionId: string) =>
+    updateRegionStructure(regionId, (structure) => ({
+      sections: mockSectionsFor(regionId),
+      arrangements: structure?.arrangements ?? [],
+      appliedArrangementId: null,
+    })),
+  saveSongArrangement: async (
+    regionId: string,
+    arrangement: { id: string; name: string; blocks: { id: string; sectionMarkerId: string }[] },
+    apply: boolean,
+  ) =>
+    updateRegionStructure(regionId, (structure) => {
+      const base = structure ?? {
+        sections: mockSectionsFor(regionId),
+        arrangements: [],
+        appliedArrangementId: null,
+      };
+      const exists = base.arrangements.some((a) => a.id === arrangement.id);
+      return {
+        ...base,
+        arrangements: exists
+          ? base.arrangements.map((a) => (a.id === arrangement.id ? arrangement : a))
+          : [...base.arrangements, arrangement],
+        appliedArrangementId: apply ? arrangement.id : base.appliedArrangementId,
+      };
+    }),
+  applySongArrangement: async (regionId: string, arrangementId: string | null) =>
+    updateRegionStructure(regionId, (structure) =>
+      structure ? { ...structure, appliedArrangementId: arrangementId } : structure,
+    ),
+  deleteSongArrangement: async (regionId: string, arrangementId: string) =>
+    updateRegionStructure(regionId, (structure) =>
+      structure
+        ? {
+            ...structure,
+            arrangements: structure.arrangements.filter((a) => a.id !== arrangementId),
+            appliedArrangementId:
+              structure.appliedArrangementId === arrangementId
+                ? null
+                : structure.appliedArrangementId,
+          }
+        : structure,
+    ),
+  discardSongStructure: async (regionId: string) =>
+    updateRegionStructure(regionId, () => undefined),
   updateSongRegion: async (args: {
     regionId: string;
     name?: string;

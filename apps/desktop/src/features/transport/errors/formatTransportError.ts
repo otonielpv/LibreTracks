@@ -6,6 +6,9 @@ const DURATION_OVERLAP_PATTERN =
   /region duration change would overlap: (\S+) with (\S+)/;
 const REGION_OVERLAP_PATTERN =
   /regions are out of order or overlap: (\S+) before (\S+)/;
+// Must match `DesktopError::SongStructureLocked` (structure/structureGuard.ts
+// keeps the same pattern to open the "Edit original?" dialog).
+const STRUCTURE_LOCKED_PATTERN = /song structure locked: (\S+) arrangement=(.*)$/;
 
 function regionName(song: SongView | null, regionId: string): string | null {
   return song?.regions.find((region) => region.id === regionId)?.name ?? null;
@@ -49,6 +52,10 @@ export function formatTransportError(
     });
   }
 
+  const structureLocked = STRUCTURE_LOCKED_PATTERN.exec(raw);
+  if (structureLocked) {
+    return t("transport.structure.lockedStatus", { name: structureLocked[2] });
+  }
   if (raw.includes("no song is loaded")) {
     return t("transport.errors.noSongLoaded");
   }

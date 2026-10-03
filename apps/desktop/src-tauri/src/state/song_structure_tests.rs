@@ -22,7 +22,7 @@ use crate::audio::automation::{AutomationAction, AutomationCue, AutomationDocume
 use crate::audio::engine::AudioController;
 use crate::state::{next_downbeat_after_in_view_timeline, DesktopSession};
 
-fn region(id: &str, start: f64, end: f64) -> SongRegion {
+pub(crate) fn region(id: &str, start: f64, end: f64) -> SongRegion {
     SongRegion {
         id: id.into(),
         name: id.into(),
@@ -38,7 +38,7 @@ fn region(id: &str, start: f64, end: f64) -> SongRegion {
     }
 }
 
-fn clip(id: &str, start: f64, duration: f64) -> Clip {
+pub(crate) fn clip(id: &str, start: f64, duration: f64) -> Clip {
     Clip {
         id: id.into(),
         track_id: "a1".into(),
@@ -53,7 +53,7 @@ fn clip(id: &str, start: f64, duration: f64) -> Clip {
     }
 }
 
-fn marker(id: &str, start: f64, kind: MarkerKind) -> Marker {
+pub(crate) fn marker(id: &str, start: f64, kind: MarkerKind) -> Marker {
     Marker {
         id: id.into(),
         name: id.into(),
@@ -66,7 +66,7 @@ fn marker(id: &str, start: f64, kind: MarkerKind) -> Marker {
     }
 }
 
-fn mute_cue(id: &str, at: f64) -> AutomationCue {
+pub(crate) fn mute_cue(id: &str, at: f64) -> AutomationCue {
     AutomationCue {
         id: id.into(),
         name: id.into(),
@@ -81,7 +81,7 @@ fn mute_cue(id: &str, at: f64) -> AutomationCue {
 }
 
 /// Fixture con las secciones de r2 de `a`, `b` y `c` segundos de fuente.
-fn song_with_sections(a: f64, b: f64, c: f64) -> Song {
+pub(crate) fn song_with_sections(a: f64, b: f64, c: f64) -> Song {
     let r2_end = 8.0 + a + b + c;
     Song {
         id: "s".into(),
@@ -140,15 +140,15 @@ fn song_with_sections(a: f64, b: f64, c: f64) -> Song {
     }
 }
 
-fn base_song() -> Song {
+pub(crate) fn base_song() -> Song {
     song_with_sections(8.0, 16.0, 8.0)
 }
 
-fn base_cues() -> Vec<AutomationCue> {
+pub(crate) fn base_cues() -> Vec<AutomationCue> {
     vec![mute_cue("k2", 20.0), mute_cue("k3", 42.0)]
 }
 
-fn session_with(song: Song, cues: Vec<AutomationCue>) -> DesktopSession {
+pub(crate) fn session_with(song: Song, cues: Vec<AutomationCue>) -> DesktopSession {
     let root = tempdir().expect("temp dir").keep();
     let song_dir = create_song_folder(&root, "structure").expect("song dir");
     fs::create_dir_all(song_dir.join("audio")).expect("audio dir");
@@ -166,7 +166,7 @@ fn session_with(song: Song, cues: Vec<AutomationCue>) -> DesktopSession {
     session
 }
 
-fn arrangement(id: &str, sections: &[&str]) -> Arrangement {
+pub(crate) fn arrangement(id: &str, sections: &[&str]) -> Arrangement {
     Arrangement {
         id: id.into(),
         name: id.into(),
@@ -181,16 +181,16 @@ fn arrangement(id: &str, sections: &[&str]) -> Arrangement {
     }
 }
 
-fn song_of(session: &DesktopSession) -> Song {
+pub(crate) fn song_of(session: &DesktopSession) -> Song {
     session.engine.song().cloned().expect("song")
 }
 
-fn span(song: &Song, id: &str) -> (f64, f64) {
+pub(crate) fn span(song: &Song, id: &str) -> (f64, f64) {
     let region = song.regions.iter().find(|r| r.id == id).expect("region");
     (region.start_seconds, region.end_seconds)
 }
 
-fn clip_start(song: &Song, id: &str) -> f64 {
+pub(crate) fn clip_start(song: &Song, id: &str) -> f64 {
     song.clips
         .iter()
         .find(|c| c.id == id)
@@ -198,7 +198,7 @@ fn clip_start(song: &Song, id: &str) -> f64 {
         .timeline_start_seconds
 }
 
-fn marker_start(song: &Song, id: &str) -> f64 {
+pub(crate) fn marker_start(song: &Song, id: &str) -> f64 {
     song.section_markers
         .iter()
         .find(|m| m.id == id)
@@ -206,7 +206,7 @@ fn marker_start(song: &Song, id: &str) -> f64 {
         .start_seconds
 }
 
-fn cue_positions(session: &DesktopSession) -> Vec<(String, f64)> {
+pub(crate) fn cue_positions(session: &DesktopSession) -> Vec<(String, f64)> {
     session
         .automation
         .cues
@@ -215,7 +215,7 @@ fn cue_positions(session: &DesktopSession) -> Vec<(String, f64)> {
         .collect()
 }
 
-fn close(actual: f64, expected: f64, what: &str) {
+pub(crate) fn close(actual: f64, expected: f64, what: &str) {
     assert!(
         (actual - expected).abs() < 1e-6,
         "{what}: esperado {expected}, obtenido {actual}"
@@ -228,7 +228,7 @@ fn on_downbeat(song: &Song, view: f64) -> bool {
     (next - view).abs() < 1e-6
 }
 
-fn captured(song: Song, cues: Vec<AutomationCue>) -> (DesktopSession, AudioController) {
+pub(crate) fn captured(song: Song, cues: Vec<AutomationCue>) -> (DesktopSession, AudioController) {
     let mut session = session_with(song, cues);
     let audio = AudioController::default();
     session

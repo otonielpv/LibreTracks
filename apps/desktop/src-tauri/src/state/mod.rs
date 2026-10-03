@@ -74,6 +74,7 @@ pub use session::ExistingProjectDir;
 mod song_edit;
 mod song_reorder;
 mod song_structure;
+mod structure_guard;
 mod timeline_math;
 mod missing_media;
 pub(crate) use missing_media::MissingMediaEntry;
@@ -2453,13 +2454,18 @@ impl DesktopSession {
 
     pub(super) fn persist_song_update_internal(
         &mut self,
-        song: Song,
+        mut song: Song,
         audio: &AudioController,
         impact: AudioChangeImpact,
         record_history: bool,
         bump_revision: bool,
         phase: UpdatePhase,
     ) -> Result<(), DesktopError> {
+        // Antes de tocar nada: una edición que rompa una canción con arreglo
+        // aplicado se rechaza sin persistir (ver `structure_guard`).
+        if let Some(previous) = self.engine.song() {
+            structure_guard::reconcile_song_structures(previous, &mut song)?;
+        }
         self.sync_position(audio)?;
 
         if record_history {

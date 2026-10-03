@@ -38,4 +38,12 @@ pub enum DesktopError {
     InvalidSplitPoint,
     #[error("song arrangement: {0}")]
     SongStructure(String),
+    /// Editar clips o marcas de una canción con arreglo aplicado. La UI lo
+    /// reconoce por el texto (`formatTransportError` / `structureGuard`):
+    /// no cambiar el formato sin cambiar allí la expresión regular.
+    #[error("song structure locked: {region_id} arrangement={arrangement_name}")]
+    SongStructureLocked {
+        region_id: String,
+        arrangement_name: String,
+    },
 }

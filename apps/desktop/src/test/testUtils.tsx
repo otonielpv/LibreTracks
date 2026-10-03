@@ -26,6 +26,10 @@ import { useTourStore } from "../features/tutorial/tourStore";
 import { useCloudStore } from "../features/transport/cloud/cloudStore";
 import { useRenderStore } from "../features/transport/render/renderStore";
 import { INITIAL_VIDEO_STATE, useVideoStore } from "../features/transport/video/videoStore";
+import {
+  INITIAL_STRUCTURE_STATE,
+  useStructureStore,
+} from "../features/transport/structure/structureStore";
 import { resetVideoCanvasState } from "../features/transport/video/videoCanvasState";
 import { emitWaveformReadyForTest, resetTestDesktopApiMock, testDesktopApiMock } from "../app/testDesktopApiMock";
 
@@ -180,6 +184,11 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     createSongRegion: vi.fn(testDesktopApiMock.createSongRegion),
     createEmptySong: vi.fn(testDesktopApiMock.createEmptySong),
     updateSongRegion: vi.fn(testDesktopApiMock.updateSongRegion),
+    captureSongStructure: vi.fn(testDesktopApiMock.captureSongStructure),
+    saveSongArrangement: vi.fn(testDesktopApiMock.saveSongArrangement),
+    applySongArrangement: vi.fn(testDesktopApiMock.applySongArrangement),
+    deleteSongArrangement: vi.fn(testDesktopApiMock.deleteSongArrangement),
+    discardSongStructure: vi.fn(testDesktopApiMock.discardSongStructure),
     updateLiveRegionMasterGain: vi.fn(testDesktopApiMock.updateLiveRegionMasterGain),
     updateSongRegionMasterGain: vi.fn(testDesktopApiMock.updateSongRegionMasterGain),
     deleteSongRegion: vi.fn(testDesktopApiMock.deleteSongRegion),
@@ -355,6 +364,8 @@ beforeEach(async () => {
   // Video selection and library, and the canvas thumbnail/preview registry.
   useVideoStore.setState(INITIAL_VIDEO_STATE);
   resetVideoCanvasState();
+  // Arreglos: el diálogo de la guardia y el editor viven en un store.
+  useStructureStore.setState(INITIAL_STRUCTURE_STATE);
   vi.clearAllMocks();
   vi.restoreAllMocks();
   await i18n.changeLanguage("en");

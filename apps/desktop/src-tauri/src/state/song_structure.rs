@@ -111,7 +111,7 @@ fn original_blocks(sections: &[OriginalSection]) -> Vec<ArrangementBlock> {
 
 /// Contenido construido para el estado aplicado de `structure`, colocado en
 /// una región que ahora empieza en `region_start`.
-fn built_for(structure: &SongStructure, region_start: f64) -> Result<BuiltRegion, StructureError> {
+pub(super) fn built_for_region(structure: &SongStructure, region_start: f64) -> Result<BuiltRegion, StructureError> {
     let blocks = match structure.applied_arrangement() {
         Some(arrangement) => arrangement.blocks.clone(),
         None => original_blocks(&structure.sections),
@@ -216,7 +216,7 @@ pub(super) fn apply_structure(
     let old_blocks = placed_blocks(&structure.sections, &sounding_section_ids(&structure));
     structure.applied_arrangement_id = arrangement_id.map(str::to_string);
     let new_blocks = placed_blocks(&structure.sections, &sounding_section_ids(&structure));
-    let built = built_for(&structure, region.start_seconds)?;
+    let built = built_for_region(&structure, region.start_seconds)?;
 
     let spans = region_spans(&previous);
     let mine = |position: f64| owning_span(&spans, position) == Some(index);
@@ -482,7 +482,7 @@ pub(super) fn cues_for_song_transition(
         };
         let mut state = source.clone();
         state.applied_arrangement_id = after_applied.map(str::to_string);
-        if let Ok(built) = built_for(&state, region.start_seconds) {
+        if let Ok(built) = built_for_region(&state, region.start_seconds) {
             rederived.push((region.id.clone(), built.automation_cues));
         }
     }
@@ -897,4 +897,4 @@ impl From<&CaptureWarning> for StructureWarningSummary {
 
 #[cfg(test)]
 #[path = "song_structure_tests.rs"]
-mod tests;
+pub(super) mod tests;
