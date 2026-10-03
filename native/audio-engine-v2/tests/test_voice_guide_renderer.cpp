@@ -903,3 +903,68 @@ TEST_CASE("dragged markers still resolve a voice clip") {
     REQUIRE(static_cast<bool>(build_as_section));
     CHECK(!build_as_section->samples.empty());
 }
+
+// Arreglos de canción (docs/plans/song-arrangement, paso 08): un arreglo se
+// escribe en el timeline como marcas reales, una por bloque, y un verso
+// repetido es otra marca con el mismo tipo ("verso" y "verso~2"). La voz guía
+// tiene que anunciarlas todas, en orden y con su cuenta, como cualquier marca.
+TEST_CASE("an arrangement with a repeated verse announces Verse, Verse, Chorus in order") {
+    // Cada tipo con su propia amplitud para saber QUÉ clip sonó.
+    auto bank = std::make_shared<VoiceGuideClipBank>();
+    bank->sample_rate = kSampleRate;
+    const int len = 240;
+    for (int k = 0; k < VoiceGuideClipBank::kKindCount; ++k)
+        bank->sections[static_cast<std::size_t>(k)].base.samples.assign(len, 0.10f);
+    bank->sections[static_cast<std::size_t>(MarkerKind::Verse)].base.samples.assign(len, 0.40f);
+    bank->sections[static_cast<std::size_t>(MarkerKind::Chorus)].base.samples.assign(len, 0.80f);
+    for (int n = 2; n < VoiceGuideClipBank::kMaxCount; ++n)
+        bank->counts[static_cast<std::size_t>(n)].samples.assign(len, 0.05f);
+
+    // 120 BPM 4/4 (un compás = 2 s): Verso en 4 s, el verso repetido en 8 s y
+    // el coro en 12 s, cada uno con su compás de cuenta delante.
+    Session session = make_song_no_markers();
+    const auto add = [&](const char* id, MarkerKind kind, double seconds) {
+        Marker marker;
+        marker.id = id;
+        marker.name = id;
+        marker.kind = kind;
+        marker.frame = static_cast<Frame>(std::llround(seconds * kSampleRate));
+        session.songs[0].markers.push_back(marker);
+    };
+    add("verso", MarkerKind::Verse, 4.0);
+    add("verso~2", MarkerKind::Verse, 8.0);
+    add("coro", MarkerKind::Chorus, 12.0);
+
+    SUBCASE("with count-in: three announcements and three full counts") {
+        VoiceGuideRenderer r;
+        r.set_clip_bank(bank);
+        r.set_config({true, 1.0f, "monitor", 1, true});
+        render_all(r, session, kSampleRate * 14);
+        CHECK(r.diagnostics().announcements_fired == 3);
+        CHECK(r.diagnostics().counts_fired == 12);
+    }
+
+    SUBCASE("the section names come out in the arrangement's order") {
+        VoiceGuideRenderer r;
+        r.set_clip_bank(bank);
+        r.set_config({true, 1.0f, "monitor", 1, false}); // sólo los nombres
+        auto ch = render_all(r, session, kSampleRate * 14);
+        // Amplitud de cada arranque, en orden.
+        std::vector<float> levels;
+        int silence = 10000;
+        for (float v : ch[2]) {
+            const float a = std::abs(v);
+            if (a > 0.02f) {
+                if (silence > 64) levels.push_back(0.0f);
+                levels.back() = std::max(levels.back(), a);
+                silence = 0;
+            } else {
+                ++silence;
+            }
+        }
+        REQUIRE(levels.size() == 3);
+        // Verso, verso, coro: los dos primeros iguales, el tercero el doble.
+        CHECK(levels[0] == doctest::Approx(levels[1]));
+        CHECK(levels[2] == doctest::Approx(levels[0] * 2.0f).epsilon(0.05));
+    }
+}

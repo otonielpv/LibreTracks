@@ -116,6 +116,7 @@ import {
   formatBpm,
   keyForRegion,
   type SongClipEntry,
+  appliedArrangementName,
 } from "./songWidgets";
 import {
   TIMELINE_PENDING_SEEK_TIMEOUT_MS,
@@ -2290,6 +2291,11 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
                   ) : null}
                   {region.transposeSemitones !== 0 ? (
                     <em>{formatTransposeSemitones(region.transposeSemitones)} st</em>
+                  ) : null}
+                  {appliedArrangementName(region) ? (
+                    <em className="region-chip-arrangement">
+                      ⇄ {appliedArrangementName(region)}
+                    </em>
                   ) : null}
                 </button>
               ))}

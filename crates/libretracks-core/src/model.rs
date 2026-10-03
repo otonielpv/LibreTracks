@@ -927,6 +927,19 @@ fn stereo_pair(start_channel: usize, available_channels: usize) -> Vec<usize> {
 }
 
 impl Song {
+    /// La instantánea del original de cada canción que tenga una. Quien
+    /// reescriba clips en todo el `Song` (rutas de audio al importar o
+    /// reenlazar, pistas al importar un paquete) tiene que pasar también por
+    /// aquí: la instantánea guarda sus propios clips, y si se queda atrás, al
+    /// volver al original o reaplicar un arreglo el clip apuntaría a un fichero
+    /// o a una pista que ya no existen.
+    pub fn structure_snapshots_mut(&mut self) -> impl Iterator<Item = &mut OriginalSnapshot> {
+        self.regions
+            .iter_mut()
+            .filter_map(|region| region.structure.as_mut())
+            .map(|structure| &mut structure.original)
+    }
+
     pub fn sorted_markers(&self) -> Vec<&Marker> {
         let mut markers = self.section_markers.iter().collect::<Vec<_>>();
         markers.sort_by(|left, right| {

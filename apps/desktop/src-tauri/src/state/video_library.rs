@@ -350,6 +350,13 @@ pub(super) fn place_bundled_videos_and_register(
                     clip.file_path = final_path.clone();
                 }
             }
+            for snapshot in song.structure_snapshots_mut() {
+                for clip in &mut snapshot.video_clips {
+                    if clip.file_path == entry.file_path {
+                        clip.file_path = final_path.clone();
+                    }
+                }
+            }
         }
         if let Some(info) = entry.info.clone() {
             register_video_entries(

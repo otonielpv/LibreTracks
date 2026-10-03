@@ -5545,3 +5545,8 @@ button {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* Arreglo aplicado en el escritorio (sólo se muestra). */
+.region-chip em.region-chip-arrangement {
+  color: #57f1db;
+}

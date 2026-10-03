@@ -294,7 +294,8 @@ fn discard_target(target: &ExportTarget) {
     let _ = std::fs::remove_file(target.write_path());
 }
 
-enum JobError {
+#[derive(Debug)]
+pub(crate) enum JobError {
     Cancelled,
     Failed(String),
 }
@@ -385,16 +386,8 @@ impl RenderJob<'_> {
     /// runtime bounds and one output per file. A mix writes straight to
     /// `write_path`; stems go to `stem_dir` to be zipped afterwards.
     fn engine_request(&self, write_path: &Path, stem_dir: &Path) -> Result<RenderRequest, JobError> {
-        let (project_json, runtime_song) =
-            crate::audio::engine::runtime_session_json(self.song_dir, self.song)
-                .map_err(|error| JobError::Failed(error.to_string()))?;
-        // The runtime region, not the saved one: a varispeed transpose
-        // stretches the timeline and moves the song's bounds with it.
-        let region = runtime_song
-            .regions
-            .iter()
-            .find(|region| region.id == self.request.region_id)
-            .ok_or_else(|| JobError::Failed("Region not found".to_string()))?;
+        let (project_json, (start_seconds, end_seconds)) =
+            render_range(self.song_dir, self.song, &self.request.region_id)?;
 
         let request = self.request;
         let sample_rate =
@@ -474,8 +467,8 @@ impl RenderJob<'_> {
         let engine_request = RenderRequest {
             project_json,
             sample_rate,
-            start_seconds: region.start_seconds,
-            end_seconds: region.end_seconds,
+            start_seconds,
+            end_seconds,
             outputs,
             format: request.format,
             channels: request.channels,
@@ -494,6 +487,26 @@ impl RenderJob<'_> {
     fn emit_progress(&self, fraction: f64, stage: &'static str) {
         (self.emit)(fraction, stage);
     }
+}
+
+/// The LoadSession payload and the bounds the engine renders for a song: the
+/// RUNTIME region, not the saved one — a varispeed transpose stretches the
+/// timeline and moves the song's bounds with it. An arranged song renders as
+/// the linear timeline the arrangement wrote, so its length is the sum of its
+/// blocks.
+pub(crate) fn render_range(
+    song_dir: &Path,
+    song: &libretracks_core::Song,
+    region_id: &str,
+) -> Result<(String, (f64, f64)), JobError> {
+    let (project_json, runtime_song) = crate::audio::engine::runtime_session_json(song_dir, song)
+        .map_err(|error| JobError::Failed(error.to_string()))?;
+    let region = runtime_song
+        .regions
+        .iter()
+        .find(|region| region.id == region_id)
+        .ok_or_else(|| JobError::Failed("Region not found".to_string()))?;
+    Ok((project_json, (region.start_seconds, region.end_seconds)))
 }
 
 fn path_string(path: &Path) -> String {

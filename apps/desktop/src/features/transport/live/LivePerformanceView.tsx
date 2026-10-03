@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { appliedArrangementName } from "../structure/arrangementName";
 
 import {
   getEffectiveBpmAt,
@@ -355,7 +356,14 @@ function LivePerformanceViewComponent({
         <div className="lt-live-section-title">
           <h2 id="lt-live-cue-title">{t("liveView.markerMatrix")}</h2>
           <div className="lt-live-section-actions">
-            <span className="lt-live-section-count">{selectedRegion?.name ?? "—"} · {groups.length} {t("liveView.markers")}</span>
+            <span className="lt-live-section-count">
+              {selectedRegion?.name ?? "—"}
+              {selectedRegion && appliedArrangementName(selectedRegion)
+                ? ` · ${t("transport.structure.live.badge", { name: appliedArrangementName(selectedRegion) })}`
+                : ""}
+              {" · "}
+              {groups.length} {t("liveView.markers")}
+            </span>
             <button
               type="button"
               className="lt-live-cancel"
@@ -486,6 +494,11 @@ function LivePerformanceViewComponent({
                 {...songReorder.surfaceProps(region.id)}
               >
                 <span>{index + 1}</span>{region.name}
+                {appliedArrangementName(region) ? (
+                  <em className="lt-live-region-arrangement">
+                    {t("transport.structure.live.badge", { name: appliedArrangementName(region) })}
+                  </em>
+                ) : null}
                 {region.id === pendingMarkerId ? (
                   <em className="lt-live-region-queued">{t("liveView.queued")}</em>
                 ) : null}

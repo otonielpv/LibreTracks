@@ -2377,11 +2377,28 @@ impl DesktopSession {
             0,
             0,
         );
-        self.persist_song_update(
+        // A song that arrives with an arrangement applied is rebuilt from its
+        // original, so the timeline is exactly build(original, blocks) (the
+        // edit guard's invariant) even if the import renamed ids or dropped
+        // redundant tempo markers. Its cues come with it.
+        let mut cues = self.automation.cues.clone();
+        let rebuilt = song_structure::rebuild_applied_structures(
+            &mut imported.song,
+            &mut cues,
+            &song.regions.iter().map(|r| r.id.clone()).collect::<Vec<_>>(),
+        )?;
+        let automation = rebuilt.then(|| {
+            let mut automation = self.automation.clone();
+            automation.cues = cues;
+            automation
+        });
+        self.persist_song_and_automation(
             imported.song,
+            automation,
             audio,
             AudioChangeImpact::StructureRebuild,
             true,
+            UpdatePhase::Commit,
         )?;
         let loaded_song = self
             .engine

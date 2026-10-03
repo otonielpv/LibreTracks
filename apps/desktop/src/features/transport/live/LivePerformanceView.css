@@ -822,3 +822,12 @@
   }
 
 }
+
+/* Arreglo aplicado (reordenar, repetir o quitar secciones): sólo se indica,
+   en directo no se edita. */
+.lt-live-region-arrangement {
+  margin-left: 0.5rem;
+  font-size: 0.75em;
+  font-style: normal;
+  color: rgb(87 241 219 / 0.85);
+}

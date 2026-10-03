@@ -383,12 +383,30 @@ fn plan_audio_sources(
         .collect();
 
     // Clips first so their bundled names stay stable regardless of the library.
-    let clip_entries = song.clips.iter().map(|clip| {
-        (
-            clip.file_path.clone(),
-            audio_folder_for_seconds(song, clip.timeline_start_seconds),
-        )
-    });
+    // The original of an arranged song may use audio its current arrangement
+    // leaves out: that audio travels too.
+    let snapshot_entries = song
+        .regions
+        .iter()
+        .filter_map(|region| region.structure.as_ref().map(|s| (region, s)))
+        .flat_map(|(region, structure)| {
+            structure.original.clips.iter().map(move |clip| {
+                (
+                    clip.file_path.clone(),
+                    audio_folder_for_seconds(song, region.start_seconds),
+                )
+            })
+        });
+    let clip_entries = song
+        .clips
+        .iter()
+        .map(|clip| {
+            (
+                clip.file_path.clone(),
+                audio_folder_for_seconds(song, clip.timeline_start_seconds),
+            )
+        })
+        .chain(snapshot_entries);
     let library_entries = library
         .iter()
         .map(|entry| (entry.path.clone(), None::<String>));
@@ -852,12 +870,28 @@ pub fn export_session_as_package_with_options(
                     clip.file_path = relative_path.clone();
                 }
             }
+            for snapshot in portable.structure_snapshots_mut() {
+                for clip in &mut snapshot.clips {
+                    if let Some(relative_path) = relative_by_clip_path.get(&clip.file_path) {
+                        clip.file_path = relative_path.clone();
+                    }
+                }
+            }
         }
         for clip in &mut portable.video_clips {
             if let Some(relative_path) =
                 bundled_video_by_stored_path.get(&stored_path_key(&clip.file_path))
             {
                 clip.file_path = relative_path.clone();
+            }
+        }
+        for snapshot in portable.structure_snapshots_mut() {
+            for clip in &mut snapshot.video_clips {
+                if let Some(relative_path) =
+                    bundled_video_by_stored_path.get(&stored_path_key(&clip.file_path))
+                {
+                    clip.file_path = relative_path.clone();
+                }
             }
         }
         crate::song_store::serialize_song_document(&portable)?

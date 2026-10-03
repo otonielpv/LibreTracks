@@ -111,7 +111,10 @@ fn original_blocks(sections: &[OriginalSection]) -> Vec<ArrangementBlock> {
 
 /// Contenido construido para el estado aplicado de `structure`, colocado en
 /// una región que ahora empieza en `region_start`.
-pub(super) fn built_for_region(structure: &SongStructure, region_start: f64) -> Result<BuiltRegion, StructureError> {
+pub(super) fn built_for_region(
+    structure: &SongStructure,
+    region_start: f64,
+) -> Result<BuiltRegion, StructureError> {
     let blocks = match structure.applied_arrangement() {
         Some(arrangement) => arrangement.blocks.clone(),
         None => original_blocks(&structure.sections),
@@ -377,6 +380,30 @@ pub(super) fn apply_structure(
         old_blocks,
         new_blocks,
     })
+}
+
+/// Rebuild from its original every song (not in `existing`) that carries an
+/// applied arrangement: what an imported package needs, since the import may
+/// have renamed ids or dropped redundant tempo markers. Returns whether any
+/// song was rebuilt.
+pub(super) fn rebuild_applied_structures(
+    song: &mut Song,
+    cues: &mut Vec<AutomationCue>,
+    existing: &[String],
+) -> Result<bool, DesktopError> {
+    let pending: Vec<(String, String)> = song
+        .regions
+        .iter()
+        .filter(|region| !existing.contains(&region.id))
+        .filter_map(|region| {
+            let applied = region.structure.as_ref()?.applied_arrangement_id.clone()?;
+            Some((region.id.clone(), applied))
+        })
+        .collect();
+    for (region_id, arrangement_id) in &pending {
+        apply_structure(song, cues, region_id, Some(arrangement_id))?;
+    }
+    Ok(!pending.is_empty())
 }
 
 fn sort_cues(cues: &mut [AutomationCue]) {

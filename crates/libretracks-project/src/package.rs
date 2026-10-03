@@ -158,6 +158,12 @@ struct SongPackageManifest {
     video_library_meta: Vec<PackageVideoEntry>,
     #[serde(default)]
     bundled_video: bool,
+    /// The song's captured original and arrangements, untouched (positions in
+    /// the coordinates of the session it came from: placing it is adding
+    /// `region start - origin`, the same as in that session). Absent in songs
+    /// without one and in packages made before arrangements existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    structure: Option<libretracks_core::SongStructure>,
 }
 
 #[derive(Debug, Clone)]
@@ -357,11 +363,29 @@ pub fn export_region_as_package_with_progress(
         .collect::<Vec<_>>();
     let midi_clips = midi_clips_in_region(song, region);
     let video_clips = video_clips_in_region(song, region);
+    // The original of an arranged song can use tracks and audio that the
+    // applied arrangement leaves out (a section that is not played): they
+    // travel too, or going back to the original after importing would point at
+    // tracks and files that are not there.
+    let structure = region.structure.clone();
+    let snapshot_clips: Vec<Clip> = structure
+        .as_ref()
+        .map(|s| s.original.clips.clone())
+        .unwrap_or_default();
     let used_track_ids = clips
         .iter()
         .map(|clip| clip.track_id.as_str())
         .chain(midi_clips.iter().map(|clip| clip.track_id.as_str()))
         .chain(video_clips.iter().map(|clip| clip.track_id.as_str()))
+        .chain(structure.iter().flat_map(|s| {
+            let original = &s.original;
+            original
+                .clips
+                .iter()
+                .map(|clip| clip.track_id.as_str())
+                .chain(original.midi_clips.iter().map(|clip| clip.track_id.as_str()))
+                .chain(original.video_clips.iter().map(|clip| clip.track_id.as_str()))
+        }))
         .collect::<HashSet<_>>();
     let tracks = song
         .tracks
@@ -417,7 +441,7 @@ pub fn export_region_as_package_with_progress(
         let mut entries = Vec::new();
         let mut added_files = HashSet::new();
 
-        for clip in &clips {
+        for clip in clips.iter().chain(&snapshot_clips) {
             let normalized_file_path = normalize_package_file_path(&clip.file_path);
             if !added_files.insert(normalized_file_path.clone()) {
                 continue;
@@ -492,6 +516,7 @@ pub fn export_region_as_package_with_progress(
         video_clips,
         video_library_meta: video_library_meta.clone(),
         bundled_video,
+        structure,
     };
 
     let file = File::create(output_path)?;
@@ -512,11 +537,12 @@ pub fn export_region_as_package_with_progress(
 
     let total_files = clips
         .iter()
+        .chain(&snapshot_clips)
         .map(|clip| clip.file_path.as_str())
         .collect::<HashSet<_>>()
         .len();
     let mut added_files = HashSet::new();
-    for clip in &clips {
+    for clip in clips.iter().chain(&snapshot_clips) {
         if !added_files.insert(clip.file_path.clone()) {
             continue;
         }
@@ -912,6 +938,57 @@ pub fn extract_song_package_from_reader_with_options<R: Read + Seek>(
     })
 }
 
+/// Point the original of an imported arrangement at the tracks and clip ids the
+/// import gave its content. The `.ltpkg` import maps every package track to a
+/// destination track (reused by name, or new with a fresh id) and renames clip
+/// ids that collide; the original keeps its own clips, so it has to go through
+/// the SAME maps or it would point at tracks that do not exist (or at the
+/// destination session's own tracks that happen to share an id).
+fn remap_structure_ids(
+    mut structure: libretracks_core::SongStructure,
+    track_ids: &HashMap<String, String>,
+    clip_ids: &HashMap<String, String>,
+) -> Result<libretracks_core::SongStructure, ProjectError> {
+    use libretracks_core::AutomationAction;
+
+    let track = |id: &str| {
+        track_ids
+            .get(id)
+            .cloned()
+            .ok_or_else(|| ProjectError::AudioDecode(format!("package track not found: {id}")))
+    };
+    let original = &mut structure.original;
+    for clip in &mut original.clips {
+        clip.track_id = track(&clip.track_id)?;
+        if let Some(id) = clip_ids.get(&clip.id) {
+            clip.id = id.clone();
+        }
+    }
+    for clip in &mut original.midi_clips {
+        clip.track_id = track(&clip.track_id)?;
+    }
+    for clip in &mut original.video_clips {
+        clip.track_id = track(&clip.track_id)?;
+    }
+    // Cue actions that address a track by id; a track the package does not
+    // carry keeps its id (the action then targets nothing, as it would have).
+    for cue in &mut original.automation_cues {
+        for action in &mut cue.actions {
+            match action {
+                AutomationAction::SetTrackMute { track_id, .. }
+                | AutomationAction::SetTrackSolo { track_id, .. }
+                | AutomationAction::SetTrackMix { track_id, .. } => {
+                    if let Some(id) = track_ids.get(track_id.as_str()) {
+                        *track_id = id.clone();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(structure)
+}
+
 /// Merge an already-[`extract_song_package`]ed payload into `song`, producing
 /// the updated song plus the metadata the caller needs to place audio and the
 /// library entries. Fast and session-bound — the desktop app holds the session
@@ -1004,12 +1081,16 @@ pub fn merge_extracted_song_package(
         target_track_id_by_manifest_id.insert(track.id.clone(), track_id);
     }
 
+    // Ids the imported content ended up with (they change on a collision), so
+    // the original of an arrangement can follow them.
+    let mut clip_id_by_manifest_id: HashMap<String, String> = HashMap::new();
     for clip in &manifest.clips {
         let target_track_id = target_track_id_by_manifest_id
             .get(&clip.track_id)
             .cloned()
             .ok_or_else(|| ProjectError::AudioDecode("package track not found".into()))?;
         let clip_id = unique_id("clip", &clip.id, &mut used_clip_ids);
+        clip_id_by_manifest_id.insert(clip.id.clone(), clip_id.clone());
         next_song.clips.push(Clip {
             id: clip_id,
             track_id: target_track_id,
@@ -1102,7 +1183,13 @@ pub fn merge_extracted_song_package(
         warp_source_bpm: None,
         master: libretracks_core::SongMaster::default(),
         compact_column_width_rem: None,
-        structure: None,
+        structure: manifest
+            .structure
+            .clone()
+            .map(|structure| {
+                remap_structure_ids(structure, &target_track_id_by_manifest_id, &clip_id_by_manifest_id)
+            })
+            .transpose()?,
     });
     next_song.regions.sort_by(|left, right| {
         left.start_seconds

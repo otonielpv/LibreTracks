@@ -583,29 +583,38 @@ pub(super) fn place_bundled_audio_and_repoint(
         })
         .collect();
 
-    for clip in &mut song.clips {
-        let Some(file_name) = Path::new(&clip.file_path)
+    // The original of an arranged song keeps clips of its own (some may
+    // belong to sections the applied arrangement leaves out): they are placed
+    // and re-pointed exactly like the timeline clips, under their song's folder.
+    let snapshot_folders: Vec<Option<String>> = song
+        .regions
+        .iter()
+        .filter(|region| region.structure.is_some())
+        .map(|region| audio_folder_for_seconds(song, region.start_seconds))
+        .collect();
+
+    let mut place = |file_path: &mut String, folder: Option<String>| -> Result<(), DesktopError> {
+        let Some(file_name) = Path::new(file_path.as_str())
             .file_name()
             .and_then(|value| value.to_str())
             .map(str::to_string)
         else {
-            continue;
+            return Ok(());
         };
         let Some(staged_path) = bundled_audio.get(&file_name) else {
             // Audio for this clip isn't bundled (light package): leave as-is.
-            continue;
+            return Ok(());
         };
 
         // Prefer the clip's original absolute path when it still resolves on
         // disk — reuse it instead of copying, so the asset isn't duplicated.
-        let original = resolve_audio_file_path(song_dir, &clip.file_path);
+        let original = resolve_audio_file_path(song_dir, file_path);
         if original.is_file() {
-            continue;
+            return Ok(());
         }
 
         // Original is gone: write the bundled copy (once per source) and
         // re-point the clip to it.
-        let folder = folder_for_clip.get(&clip.id).cloned().flatten();
         // Keyed by folder + name: the same file name coming from two songs
         // gets one copy per song, not one shared copy.
         let copy_key = format!("{}/{file_name}", folder.as_deref().unwrap_or(""));
@@ -637,7 +646,18 @@ pub(super) fn place_bundled_audio_and_repoint(
             copied.insert(copy_key, relative_path.clone());
             relative_path
         };
-        clip.file_path = relative_path;
+        *file_path = relative_path;
+        Ok(())
+    };
+
+    for clip in &mut song.clips {
+        let folder = folder_for_clip.get(&clip.id).cloned().flatten();
+        place(&mut clip.file_path, folder)?;
+    }
+    for (snapshot, folder) in song.structure_snapshots_mut().zip(snapshot_folders) {
+        for clip in &mut snapshot.clips {
+            place(&mut clip.file_path, folder.clone())?;
+        }
     }
 
     Ok(())

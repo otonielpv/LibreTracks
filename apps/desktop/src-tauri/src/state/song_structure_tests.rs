@@ -746,3 +746,197 @@ fn an_arrangement_with_repeats_references_no_new_audio_file() {
     assert!(after.clips.len() > base_song().clips.len());
     assert_eq!(files(&after), before);
 }
+
+// ── Paso 08: paquetes, plantillas y render ─────────────────────────────────
+
+fn applied_session() -> (DesktopSession, AudioController) {
+    let (mut session, audio) = captured(base_song(), base_cues());
+    session
+        .save_song_arrangement(
+            "r2",
+            arrangement("largo", &["a", "b", "b", "c"]),
+            true,
+            &audio,
+        )
+        .expect("apply");
+    (session, audio)
+}
+
+/// C3: exportar una canción arreglada a `.ltpkg` e importarla en otra sesión
+/// que ya tiene una pista con el mismo id. La instantánea pasa por el mismo
+/// remapeo de pistas que el contenido, así que volver al original y reaplicar
+/// funcionan y todo apunta a la pista nueva.
+#[test]
+fn an_ltpkg_round_trip_keeps_the_arrangement_and_remaps_its_tracks() {
+    use libretracks_project::{
+        export_region_as_package, extract_song_package, merge_extracted_song_package,
+        SongImportTrackMode,
+    };
+
+    let (session, _) = applied_session();
+    let song = song_of(&session);
+    let source_dir = session.song_dir.clone().expect("dir");
+    let package = source_dir.join("cancion.ltpkg");
+    export_region_as_package(&source_dir, &source_dir, &song, "r2", &package, false)
+        .expect("export");
+
+    // Destino: una sesión con su propia pista "a1" y una canción [0, 8).
+    let mut destination = base_song();
+    destination.regions = vec![region("d1", 0.0, 8.0)];
+    destination.clips = vec![clip("d", 1.0, 1.0)];
+    destination.section_markers.clear();
+    destination.tempo_markers.clear();
+    destination.duration_seconds = 8.0;
+    let root = tempdir().expect("temp").keep();
+    let destination_dir = create_song_folder(&root, "destino").expect("dir");
+    let extracted = extract_song_package(&destination_dir, &package, |_, _| {}).expect("extract");
+    let mut imported = merge_extracted_song_package(
+        &destination,
+        extracted,
+        10.0,
+        SongImportTrackMode::KeepSeparate,
+    )
+    .expect("merge")
+    .song;
+
+    let new_track = imported
+        .tracks
+        .iter()
+        .find(|track| track.id != "a1")
+        .expect("pista importada")
+        .id
+        .clone();
+    let region_id = imported
+        .regions
+        .iter()
+        .find(|region| region.structure.is_some())
+        .expect("la canción importada trae su arreglo")
+        .id
+        .clone();
+    let structure = |song: &Song| {
+        song.regions
+            .iter()
+            .find(|region| region.id == region_id)
+            .and_then(|region| region.structure.clone())
+            .expect("structure")
+    };
+    assert_eq!(
+        structure(&imported).applied_arrangement_id.as_deref(),
+        Some("largo")
+    );
+    assert!(
+        structure(&imported)
+            .original
+            .clips
+            .iter()
+            .all(|clip| clip.track_id == new_track),
+        "el original apunta a la pista importada, no a la 'a1' del destino"
+    );
+
+    // Normalizar (lo que hace la importación de la app), volver al original y
+    // reaplicar.
+    let mut cues = Vec::new();
+    assert!(
+        super::rebuild_applied_structures(&mut imported, &mut cues, &["d1".to_string()])
+            .expect("rebuild")
+    );
+    libretracks_core::validate_song(&imported).expect("válida tras importar");
+    super::apply_structure(&mut imported, &mut cues, &region_id, None).expect("original");
+    libretracks_core::validate_song(&imported).expect("válida en el original");
+    let (start, end) = span(&imported, &region_id);
+    close(end - start, 32.0, "el original dura 32 s");
+    let region_clips: Vec<&Clip> = imported
+        .clips
+        .iter()
+        .filter(|clip| clip.timeline_start_seconds >= start && clip.timeline_start_seconds < end)
+        .collect();
+    assert_eq!(region_clips.len(), 3, "xa, xb, xc");
+    assert!(region_clips.iter().all(|clip| clip.track_id == new_track));
+    super::apply_structure(&mut imported, &mut cues, &region_id, Some("largo")).expect("reaplicar");
+    libretracks_core::validate_song(&imported).expect("válida reaplicada");
+    // La cue del verso viaja con el arreglo (con su pista remapeada).
+    assert!(cues.iter().all(|cue| match &cue.actions[0] {
+        AutomationAction::SetTrackMute { track_id, .. } => track_id == &new_track,
+        _ => true,
+    }));
+}
+
+/// C4: `.ltset` (la sesión entera) conserva el arreglo, y con el audio
+/// empaquetado el original apunta a los ficheros dentro del paquete.
+#[test]
+fn an_ltset_round_trip_keeps_the_arrangement_with_portable_paths() {
+    use libretracks_project::{
+        export_session_as_package, extract_session_package, load_song_from_file,
+    };
+
+    let (session, _) = applied_session();
+    let song = song_of(&session);
+    let source_dir = session.song_dir.clone().expect("dir");
+    let package = source_dir.join("set.ltset");
+    export_session_as_package(
+        &source_dir,
+        &source_dir,
+        &song,
+        &[],
+        &package,
+        true,
+        |_, _| {},
+    )
+    .expect("export");
+    let root = tempdir().expect("temp").keep();
+    let destination = root.join("Importada");
+    let extracted = extract_session_package(&destination, &package, |_, _| {}).expect("extract");
+    let destination = extracted.song_dir.clone();
+    let loaded = load_song_from_file(&extracted.song_file).expect("load");
+
+    let original = loaded.regions[1]
+        .structure
+        .clone()
+        .expect("structure")
+        .original;
+    assert_eq!(
+        loaded.regions[1].structure.as_ref().unwrap().arrangements,
+        song.regions[1].structure.as_ref().unwrap().arrangements
+    );
+    let timeline_paths: std::collections::HashSet<&str> = loaded
+        .clips
+        .iter()
+        .map(|clip| clip.file_path.as_str())
+        .collect();
+    for clip in &original.clips {
+        assert!(
+            timeline_paths.contains(clip.file_path.as_str()),
+            "{} apunta a {} (no portátil)",
+            clip.id,
+            clip.file_path
+        );
+        assert!(
+            destination.join(&clip.file_path).is_file(),
+            "{} no está en el paquete",
+            clip.file_path
+        );
+    }
+}
+
+/// C4: una plantilla no lleva canciones, así que tampoco arreglos; sale una
+/// sesión válida.
+#[test]
+fn a_template_drops_songs_and_their_arrangements() {
+    let (session, _) = applied_session();
+    let template = crate::state::strip_song_to_template(song_of(&session));
+    assert!(template.regions.is_empty());
+    assert!(template.clips.is_empty());
+}
+
+/// C5: el render de una canción arreglada pide al motor el timeline lineal
+/// que escribió el arreglo: su duración es la suma de los bloques.
+#[test]
+fn rendering_an_arranged_song_covers_the_sum_of_its_blocks() {
+    let (session, _) = applied_session();
+    let song = song_of(&session);
+    let song_dir = session.song_dir.clone().expect("dir");
+    let (_, (start, end)) =
+        crate::commands::render::render_range(&song_dir, &song, "r2").expect("range");
+    // A (8) + B (16) + B (16) + C (8).
+    close(end - start, 48.0, "duración del render");
+}

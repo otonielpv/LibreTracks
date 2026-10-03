@@ -9,6 +9,7 @@ import type {
 
 import {
   activeRegion,
+  appliedArrangementName,
   bpmForRegion,
   clipDisplayName,
   clipsForRegion,
@@ -176,4 +177,35 @@ describe("compact song play", () => {
       });
     },
   );
+});
+
+describe("appliedArrangementName", () => {
+  const base = {
+    id: "r1",
+    name: "Canción",
+    startSeconds: 0,
+    endSeconds: 10,
+    transposeSemitones: 0,
+    key: null,
+    warpEnabled: false,
+    warpSourceBpm: null,
+    master: { gain: 1 },
+    compactColumnWidthRem: null,
+  } satisfies SongRegionSummary;
+  const structure = {
+    sections: [],
+    arrangements: [{ id: "a1", name: "Domingo", blocks: [] }],
+    appliedArrangementId: "a1" as string | null,
+  };
+
+  it("names the arrangement the desktop applied", () => {
+    expect(appliedArrangementName({ ...base, structure })).toBe("Domingo");
+  });
+
+  it("is null for a song playing its original or without arrangements", () => {
+    expect(appliedArrangementName(base)).toBeNull();
+    expect(
+      appliedArrangementName({ ...base, structure: { ...structure, appliedArrangementId: null } }),
+    ).toBeNull();
+  });
 });

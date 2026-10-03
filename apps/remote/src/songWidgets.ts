@@ -108,6 +108,16 @@ export function formatBpm(bpm: number): string {
 }
 
 /** The effective key badge for a region (transpose applied), or null. */
+/** Name of the arrangement the desktop wrote on the timeline for this song
+ * (reordered, repeated or dropped sections), or `null` when it plays its
+ * original. The remote only shows it; arrangements are edited on the desktop. */
+export function appliedArrangementName(region: SongRegionSummary): string | null {
+  const structure = region.structure;
+  const appliedId = structure?.appliedArrangementId;
+  if (!structure || !appliedId) return null;
+  return structure.arrangements.find((arrangement) => arrangement.id === appliedId)?.name ?? null;
+}
+
 export function keyForRegion(region: SongRegionSummary): string | null {
   return regionEffectiveKey(region);
 }

@@ -328,6 +328,19 @@ impl DesktopSession {
                 clip.file_path = new_path.to_string();
             }
         }
+        // El original de un arreglo guarda sus propios clips.
+        for snapshot in song.structure_snapshots_mut() {
+            for clip in snapshot.clips.iter_mut() {
+                if clip.file_path == old_path {
+                    clip.file_path = new_path.to_string();
+                }
+            }
+            for clip in snapshot.video_clips.iter_mut() {
+                if clip.file_path == old_path {
+                    clip.file_path = new_path.to_string();
+                }
+            }
+        }
         super::video_library::relink_video_entries(&song_dir, old_path, new_path)?;
 
         if let Some(mut manifest) = read_library_manifest(&song_dir)? {

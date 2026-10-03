@@ -114,3 +114,24 @@ describe("liveMarkerGroupsForRegion", () => {
     ).toEqual(["boundary", "later"]);
   });
 });
+
+/** Arreglos de canción (paso 08, C1): un arreglo escribe una marca real por
+ * bloque, así que un coro repetido son dos marcas con el mismo nombre y tipo
+ * ("coro" y "coro~2"). La vista live no deduplica por nombre ni por tipo: son
+ * dos filas, y la marca de aviso de cada coro va con el suyo. */
+describe("buildLiveMarkerGroups with an arranged song", () => {
+  it("keeps every repeated section as its own row", () => {
+    const groups = buildLiveMarkerGroups([
+      marker("verso", "Verso", 0, "verse"),
+      marker("verso~2", "Verso", 16, "verse"),
+      marker("coro", "Coro", 32, "chorus"),
+      marker("build", "Build", 32, "build"),
+      marker("coro~2", "Coro", 48, "chorus"),
+      marker("build~2", "Build", 48, "build"),
+    ]);
+    expect(groups.map((group) => group.id)).toEqual(["verso", "verso~2", "coro", "coro~2"]);
+    expect(groups.map((group) => group.primary.name)).toEqual(["Verso", "Verso", "Coro", "Coro"]);
+    expect(groups[2].cues.map((cue) => cue.id)).toEqual(["build"]);
+    expect(groups[3].cues.map((cue) => cue.id)).toEqual(["build~2"]);
+  });
+});
