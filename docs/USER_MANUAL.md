@@ -180,6 +180,26 @@ Use `Song Jump` controls when the session contains multiple song regions and you
 
 ![Song jump settings](../screenshots/Song-Jump-Config.png)
 
+### Song arrangements
+
+An arrangement changes a song's form without building jumps: two more choruses at the end, drop the bridge, repeat the verse. The arrangement is written on the timeline as it is (repeat the verse and you see the verse twice), and the songs after it move along on their own.
+
+1. **Mark the song's sections** (Intro, Verse, Chorus…) in the ruler's section row, as usual. At least two are needed. Cue markers (Build, Drums In…) do not split sections: they travel with the section they sit in.
+2. Right-click the song and choose `Arrangement` (in the compact view, from the song menu).
+3. Press `Save as original`. LibreTracks keeps the song as it is, so you can build any arrangement and go back to the original whenever you want. If a marker does not fall on the first beat of a bar, it warns you and offers `Snap to bar`.
+4. **Build the arrangement**: the song's sections are at the top. Click one to add it at the end, or drag it onto the strip below to insert it where you drop it. On the strip, drag blocks to reorder them, `Delete` removes the selected block and `Ctrl+D` duplicates it.
+5. Press `Apply`. The timeline shows the result and the following songs line up behind it, on their bar.
+
+You can keep several arrangements of the same song (`New`, `Rename`, `Delete`) and switch between them from the picker. `Original` puts the song back the way it was; the arrangement is kept.
+
+With an arrangement applied, the song shows `⇄ Sunday` (the arrangement's name) on the ruler, in the compact view, the live view and the remote, and the ruler lightly shades the sections that are repeats.
+
+**Editing a song with an arrangement.** Track volume, mute, pan and outputs change as always. To move, trim or add clips or markers, LibreTracks asks first: `This song has an arrangement. Edit the original?`. `Edit original` goes back to the original (the arrangement is kept), you edit what you need and, when you press `Apply` again, the arrangement is built on the edited song. If you removed a section an arrangement used, it tells you which arrangements it was removed from.
+
+**On phones and tablets** the editor takes the whole screen: the blocks are a vertical list. Drag by the handle on the right to reorder, swipe left to remove (with `Undo` for a few seconds), long-press for `Duplicate` or `Remove`, and use the `+` button to add sections.
+
+Arrangements travel in song packages (`.ltpkg`) and session packages (`.ltset`). If you open the session with an older version of LibreTracks, you will see the arrangement written on the timeline and it will sound the same, but saving from that version loses the arrangement's original.
+
 ## 6. Export Songs And Packages
 
 You can export a song after creating it as a region. The export includes the song configuration so it can be reused in future sessions.

@@ -180,6 +180,26 @@ Usa los controles de `Salto de Cancion` cuando la sesion contiene varias regione
 
 ![Configuracion de saltos de Canciones](../screenshots/Song-Jump-Config.png)
 
+### Arreglos de canción
+
+Un arreglo cambia la forma de una canción sin montar saltos: dos coros más al final, quitar el puente, repetir el verso. El arreglo se escribe en el timeline tal cual (si repites el verso, ves el verso dos veces) y las canciones de después se desplazan solas.
+
+1. **Marca las secciones** de la canción (Intro, Verso, Coro…) en la fila de secciones del ruler, como siempre. Hacen falta al menos dos. Las marcas de aviso (Build, Entra batería…) no cortan secciones: viajan con la sección en la que están.
+2. Haz click derecho sobre la canción y elige `Arreglo` (en la vista compacta, en el menú de la canción).
+3. Pulsa `Guardar como original`. LibreTracks guarda la canción tal como está para poder montar cualquier arreglo y volver al original cuando quieras. Si alguna marca no cae en el primer tiempo de un compás, te avisa y te ofrece `Ajustar al compás`.
+4. **Monta el arreglo**: arriba tienes las secciones de la canción. Haz click en una para añadirla al final, o arrástrala a la tira de abajo para meterla donde la sueltes. En la tira, arrastra los bloques para cambiarlos de orden, `Supr` quita el bloque seleccionado y `Ctrl+D` lo duplica.
+5. Pulsa `Aplicar`. El timeline muestra el resultado y las canciones siguientes se colocan detrás, en su compás.
+
+Puedes guardar varios arreglos de la misma canción (`Nuevo`, `Renombrar`, `Eliminar`) y cambiar de uno a otro desde el selector. `Original` devuelve la canción a como era; el arreglo no se borra.
+
+Con un arreglo aplicado, la canción muestra `⇄ Domingo` (el nombre del arreglo) en el ruler, en la vista compacta, en la vista en directo y en el remote, y el ruler sombrea un poco las secciones que son repeticiones.
+
+**Editar una canción con arreglo.** El volumen, el mute, el pan o las salidas de las pistas se cambian como siempre. Para mover, recortar o añadir clips o marcas, LibreTracks te pregunta antes: `Esta canción tiene un arreglo. ¿Editar el original?`. `Editar original` vuelve al original (el arreglo se guarda), editas lo que quieras y, al volver a pulsar `Aplicar`, el arreglo se monta sobre la canción editada. Si quitaste una sección que usaba algún arreglo, te dice de qué arreglos la ha quitado.
+
+**En el móvil y la tablet** el editor ocupa la pantalla: los bloques son una lista vertical. Arrastra por el asa de la derecha para cambiar el orden, desliza a la izquierda para quitar (con `Deshacer` unos segundos), mantén pulsado para `Duplicar` o `Quitar`, y usa el botón `+` para añadir secciones.
+
+Los arreglos viajan en los paquetes de canción (`.ltpkg`) y de sesión (`.ltset`). Si abres la sesión con una versión anterior de LibreTracks, verás el arreglo escrito en el timeline y sonará igual, pero si guardas desde esa versión se pierde el original del arreglo.
+
 ## Exportar canciones y paquetes
 
 Puedes exportar una canción en caso de aberla creado con las regiones, esto exportará toda la configuración de la canción para tenerla disponible en futuras sesiones. Para ello:
