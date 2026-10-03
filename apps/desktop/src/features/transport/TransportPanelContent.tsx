@@ -199,6 +199,7 @@ import { LivePerformanceView } from "./live/LivePerformanceView";
 import { BusyOverlay } from "./shell/BusyOverlay";
 import { MissingMidiWarningModal } from "./shell/MissingMidiWarningModal";
 import { StructureGuardDialog } from "./structure/StructureGuardDialog";
+import { SongStructurePanel } from "./structure/SongStructurePanel";
 import { openStructureGuardFromError } from "./structure/structureGuard";
 import { createStructureHandlers } from "./structure/structureHandlers";
 import { TimelineToolbar } from "./timeline/TimelineToolbar";
@@ -6822,6 +6823,7 @@ export function TransportPanelContent() {
         <BusyOverlay visible={isShellBusy} feedback={busyFeedback} displayPercent={displayPercent} />
         <MissingMidiWarningModal deviceName={missingMidiDeviceWarning} onDismiss={handleDismissMissingMidiDeviceWarning} onDontShowAgain={handleHideMissingMidiDeviceWarning} />
         <StructureGuardDialog onEditOriginal={structureHandlers.editOriginal} />
+        <SongStructurePanel handlers={structureHandlers} />
 
         <TimelineTopbar
           runShortcutAction={runShortcutAction}

@@ -594,6 +594,7 @@ export function TimelineRulerCanvas({
               regions: snapshot.regions,
               selectedRegionId: snapshot.selectedRegionId,
               activeVamp: snapshot.activeVamp,
+              markers: snapshot.markers,
             });
           }
 

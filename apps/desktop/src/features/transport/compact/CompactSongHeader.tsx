@@ -21,6 +21,8 @@ import {
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
 import { useDismissOnBack } from "../mobile/backNavigation";
 import { openRenderSong } from "../render/renderStore";
+import { ArrangementBadge } from "../structure/ArrangementBadge";
+import { openStructureEditor } from "../structure/structureEditor";
 import {
   regionEffectiveKey,
   SONG_KEY_OPTIONS,
@@ -259,6 +261,7 @@ export function CompactSongHeaderComponent({
         <div className="lt-compact-song-name" title={region.name}>
           {region.name}
         </div>
+        <ArrangementBadge region={region} />
         {isQueued ? (
           <div className="lt-compact-song-queued">{t("liveView.queued")}</div>
         ) : null}
@@ -358,6 +361,16 @@ export function CompactSongHeaderComponent({
                 }}
               >
                 Nota de la canción ▸
+              </button>
+              <button
+                type="button"
+                className="lt-compact-clip-menu-item"
+                onClick={() => {
+                  setContextMenu(null);
+                  openStructureEditor(region.id);
+                }}
+              >
+                {t("transport.structure.menuItem")}
               </button>
               <button
                 type="button"

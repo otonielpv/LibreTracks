@@ -720,3 +720,29 @@ fn switching_between_arrangements_rebuilds_from_the_original() {
     close(clip_start(&song, "xa"), 16.0, "intro después");
     assert_eq!(span(&song, "r3"), (24.0, 32.0));
 }
+
+/// Paso 06 (C4), lado del motor: aplicar un arreglo con repeticiones no trae
+/// ningún fichero nuevo. Los picos se cachean por fichero, así que los clips
+/// recortados y repetidos reutilizan los que ya había: no hay análisis nuevo.
+#[test]
+fn an_arrangement_with_repeats_references_no_new_audio_file() {
+    let (mut session, audio) = captured(base_song(), base_cues());
+    let files = |song: &Song| {
+        song.clips
+            .iter()
+            .map(|c| c.file_path.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+    };
+    let before = files(&song_of(&session));
+    session
+        .save_song_arrangement(
+            "r2",
+            arrangement("largo", &["a", "b", "b", "c", "c"]),
+            true,
+            &audio,
+        )
+        .expect("apply");
+    let after = song_of(&session);
+    assert!(after.clips.len() > base_song().clips.len());
+    assert_eq!(files(&after), before);
+}

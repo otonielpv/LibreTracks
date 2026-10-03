@@ -2,8 +2,6 @@ import type { TransportSnapshot } from "@libretracks/shared/models";
 import type {
   ArrangementInput,
   SongStructureResult,
-  StructureWarning,
-  DroppedArrangementBlocks,
 } from "@libretracks/shared/desktopApi";
 
 import {
@@ -12,8 +10,9 @@ import {
   deleteSongArrangement,
   discardSongStructure,
   saveSongArrangement,
+  updateSectionMarker,
 } from "../desktopApi";
-import { closeStructureGuard } from "./structureStore";
+import { closeStructureGuard, useStructureStore } from "./structureStore";
 
 /**
  * Song-arrangement actions ("Arreglo"), as a factory with injected
@@ -26,24 +25,18 @@ export type StructureHandlerDeps = {
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
   setStatus: (message: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
-  /** Capture warnings and dropped blocks, shown by the editor. */
-  onReport?: (report: StructureReport) => void;
-};
-
-export type StructureReport = {
-  regionId: string;
-  warnings: StructureWarning[];
-  droppedBlocks: DroppedArrangementBlocks[];
 };
 
 export function createStructureHandlers(deps: StructureHandlerDeps) {
   const finish = (regionId: string, result: SongStructureResult) => {
     deps.applyPlaybackSnapshot(result.snapshot);
-    deps.onReport?.({
-      regionId,
-      warnings: result.warnings,
-      droppedBlocks: result.droppedBlocks,
-    });
+    // A command that captured (or recaptured) reports what the editor should
+    // show; one that did not leaves the previous report alone.
+    if (result.warnings.length > 0 || result.droppedBlocks.length > 0) {
+      useStructureStore.setState({
+        report: { regionId, warnings: result.warnings, droppedBlocks: result.droppedBlocks },
+      });
+    }
     for (const dropped of result.droppedBlocks) {
       deps.setStatus(
         deps.t(
@@ -72,6 +65,7 @@ export function createStructureHandlers(deps: StructureHandlerDeps) {
 
     async captureOriginal(regionId: string) {
       await deps.runAction(async () => {
+        useStructureStore.setState({ report: null });
         finish(regionId, await captureSongStructure(regionId));
         deps.setStatus(deps.t("transport.structure.captured"));
       });
@@ -111,6 +105,22 @@ export function createStructureHandlers(deps: StructureHandlerDeps) {
     async deleteArrangement(regionId: string, arrangementId: string) {
       await deps.runAction(async () => {
         finish(regionId, await deleteSongArrangement(regionId, arrangementId));
+      });
+    },
+
+    /** "Snap to bar" on an off-beat warning: move the marker to the nearest
+     * downbeat and capture the original again. */
+    async snapSectionToBar(
+      regionId: string,
+      marker: { id: string; name: string },
+      viewSeconds: number,
+    ) {
+      await deps.runAction(async () => {
+        deps.applyPlaybackSnapshot(
+          await updateSectionMarker(marker.id, marker.name, viewSeconds),
+        );
+        useStructureStore.setState({ report: null });
+        finish(regionId, await captureSongStructure(regionId));
       });
     },
 

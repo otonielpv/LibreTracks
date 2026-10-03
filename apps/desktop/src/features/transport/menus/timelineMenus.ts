@@ -88,6 +88,7 @@ import { colorPickerActions } from "./colorPickerMenu";
 import { clipContextMenuActions } from "./clipMenu";
 import type { ExportSongTarget } from "../panels/ExportSongModal";
 import { openRenderSong } from "../render/renderStore";
+import { openStructureEditor } from "../structure/structureEditor";
 import type { ShortcutActionId } from "../keyboard/actions";
 import { createVideoMenus } from "./videoMenus";
 
@@ -622,6 +623,10 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       {
         label: `${t("transport.menu.songKey", { defaultValue: "Nota de la canción" })} ▸`,
         onSelect: () => openSongRegionKeyMenu(region),
+      },
+      {
+        label: t("transport.structure.menuItem"),
+        onSelect: () => openStructureEditor(region.id),
       },
       {
         label: t("transport.menu.splitSongAtCursor", {

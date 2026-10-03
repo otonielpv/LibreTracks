@@ -1,5 +1,10 @@
 import { create } from "zustand";
 
+import type {
+  DroppedArrangementBlocks,
+  StructureWarning,
+} from "@libretracks/shared/desktopApi";
+
 /**
  * Song-arrangement UI state ("Arreglo"): the edit guard dialog and the block
  * editor's working copy.
@@ -43,6 +48,13 @@ type StructureState = {
    * changes. */
   savedDraft: ArrangementDraft | null;
   selectedBlockId: string | null;
+  /** What the last capture had to say (off-beat sections, MIDI crossing a
+   * boundary, blocks dropped by a recapture). */
+  report: {
+    regionId: string;
+    warnings: StructureWarning[];
+    droppedBlocks: DroppedArrangementBlocks[];
+  } | null;
 };
 
 export const INITIAL_STRUCTURE_STATE: StructureState = {
@@ -51,6 +63,7 @@ export const INITIAL_STRUCTURE_STATE: StructureState = {
   draft: null,
   savedDraft: null,
   selectedBlockId: null,
+  report: null,
 };
 
 export const useStructureStore = create<StructureState>()(() => ({

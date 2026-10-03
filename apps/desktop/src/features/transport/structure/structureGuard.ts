@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import type { SongRegionSummary, SongView } from "@libretracks/shared/models";
 
 import { getSong, useSongStore } from "../songStore";
+import { appliedArrangementName } from "./arrangementName";
 import { openStructureGuard, type StructureGuardRequest } from "./structureStore";
 
 /**
@@ -38,16 +39,6 @@ export function regionAt(
     }
   }
   return owner;
-}
-
-function appliedArrangementName(region: SongRegionSummary): string | null {
-  const structure = region.structure;
-  const appliedId = structure?.appliedArrangementId;
-  if (!structure || !appliedId) return null;
-  return (
-    structure.arrangements.find((arrangement) => arrangement.id === appliedId)
-      ?.name ?? appliedId
-  );
 }
 
 function requestFor(region: SongRegionSummary): StructureGuardRequest | null {

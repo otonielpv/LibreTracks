@@ -1,0 +1,279 @@
+/* Editor de arreglos: ver SongStructurePanel.tsx y SongStructureEditor.tsx. */
+
+.lt-structure-panel {
+  position: fixed;
+  left: 50%;
+  bottom: calc(1rem + var(--lt-safe-area-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 60;
+  box-sizing: border-box;
+  width: min(64rem, calc(100vw - 2rem));
+  max-height: min(70vh, 34rem);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem 1rem;
+  border: 1px solid rgb(87 241 219 / 0.22);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgb(22 25 26 / 0.98), rgb(13 15 16 / 0.98));
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.5);
+  color: #e8eeee;
+}
+
+.lt-structure-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.lt-structure-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-structure-dirty {
+  font-size: 0.75rem;
+  color: #ffd27a;
+}
+
+.lt-structure-close {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1.25rem;
+}
+
+.lt-structure-caption {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.75rem;
+  color: rgb(232 238 238 / 0.6);
+  margin-bottom: 0.4rem;
+}
+
+.lt-structure-caption strong {
+  color: #e8eeee;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lt-structure-total {
+  margin-left: auto;
+}
+
+.lt-structure-toolbar,
+.lt-structure-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lt-structure-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.lt-structure-footer {
+  justify-content: flex-end;
+}
+
+.lt-structure-footer .is-attention {
+  box-shadow: 0 0 0 2px rgb(87 241 219 / 0.55);
+}
+
+.lt-structure-warnings {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  list-style: none;
+  border-left: 3px solid #ffd27a;
+  background: rgb(255 210 122 / 0.08);
+  font-size: 0.8rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.lt-structure-warnings li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.lt-structure-capture {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: start;
+}
+
+.lt-structure-capture p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.lt-structure-detected {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+}
+
+.lt-structure-hint {
+  color: #ffd27a;
+}
+
+/* ── Editor compartido ─────────────────────────────────────────────────── */
+
+.lt-structure-editor {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.lt-structure-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.lt-structure-chip,
+.lt-structure-block {
+  --lt-structure-color: #8a8f94;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  box-sizing: border-box;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-left: 4px solid var(--lt-structure-color);
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.04);
+  color: #e8eeee;
+  font-size: 0.8rem;
+  user-select: none;
+  touch-action: none;
+}
+
+.lt-structure-chip {
+  padding: 0.35rem 0.6rem;
+  cursor: grab;
+}
+
+.lt-structure-chip:hover,
+.lt-structure-chip:focus-visible {
+  background: rgb(255 255 255 / 0.09);
+}
+
+.lt-structure-chip-bars,
+.lt-structure-block-bars,
+.lt-structure-block-index {
+  color: rgb(232 238 238 / 0.55);
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-structure-strip {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.5rem;
+  list-style: none;
+  min-height: 3rem;
+  overflow-x: auto;
+  border: 1px dashed rgb(255 255 255 / 0.12);
+  border-radius: 3px;
+  outline: none;
+}
+
+.lt-structure-strip:focus-visible {
+  border-color: rgb(87 241 219 / 0.6);
+}
+
+.lt-structure-item {
+  flex: none;
+}
+
+.lt-structure-block {
+  padding: 0.5rem 0.7rem;
+  cursor: grab;
+  min-height: 2.25rem;
+}
+
+.lt-structure-block.is-selected {
+  border-color: rgb(87 241 219 / 0.9);
+  background: rgb(87 241 219 / 0.12);
+}
+
+.lt-structure-empty {
+  align-self: center;
+  font-size: 0.8rem;
+  color: rgb(232 238 238 / 0.5);
+}
+
+/* Indicador de dónde caerá una sección arrastrada desde la paleta. */
+.lt-structure-item.is-drop-before {
+  box-shadow: -3px 0 0 rgb(87 241 219 / 0.95);
+}
+
+.lt-structure-strip.is-drop-end {
+  box-shadow: inset -3px 0 0 rgb(87 241 219 / 0.95);
+}
+
+/* ── Disposición vertical (móvil) ──────────────────────────────────────── */
+
+.lt-structure-editor.is-vertical .lt-structure-strip {
+  flex-direction: column;
+  overflow-x: visible;
+  overflow-y: visible;
+  border: 0;
+  padding: 0;
+}
+
+.lt-structure-editor.is-vertical .lt-structure-block {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  font-size: 0.95rem;
+  cursor: default;
+  touch-action: pan-y;
+}
+
+.lt-structure-editor.is-vertical .lt-structure-item.is-drop-before {
+  box-shadow: 0 -3px 0 rgb(87 241 219 / 0.95);
+}
+
+.lt-structure-handle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  color: rgb(232 238 238 / 0.6);
+  cursor: grab;
+  touch-action: none;
+}
+
+/* ── Indicador en la cabecera de la canción (vista compacta) ───────────── */
+
+.lt-structure-badge {
+  border: 1px solid rgb(87 241 219 / 0.35);
+  border-radius: 999px;
+  background: rgb(87 241 219 / 0.08);
+  color: #bff7ee;
+  font-size: 0.7rem;
+  padding: 0.05rem 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 12rem;
+  cursor: pointer;
+}

@@ -8,6 +8,8 @@ import {
   type TempoMarkerSummary,
 } from "../desktopApi";
 import type { TimelineGrid } from "../timeline/timelineMath";
+import { copySectionSpans } from "../structure/copySpans";
+import { appliedArrangementName } from "../structure/arrangementName";
 import { markerCategory, markerColor } from "../markerKinds";
 import {
   MARKER_FLAG_FONT,
@@ -266,7 +268,33 @@ export type RulerBackgroundLayerArgs = {
   regions: SongRegionSummary[];
   selectedRegionId: string | null;
   activeVamp: ActiveVampSummary | null;
+  /** Section markers, to shade the sections an arrangement repeats. */
+  markers?: SectionMarkerSummary[];
 };
+
+/** Light tint over the sections that are repetitions in an arranged song
+ * (copy markers `~n`), so the ruler shows what is repeated. */
+function drawArrangementCopyShading(
+  context: CanvasRenderingContext2D,
+  markers: SectionMarkerSummary[],
+  regions: SongRegionSummary[],
+  width: number,
+  height: number,
+  cameraX: number,
+  pixelsPerSecond: number,
+) {
+  const spans = copySectionSpans(markers, regions);
+  if (spans.length === 0) return;
+  context.save();
+  context.fillStyle = "rgba(87, 241, 219, 0.07)";
+  for (const span of spans) {
+    const left = secondsToScreenX(span.startSeconds, cameraX, pixelsPerSecond);
+    const right = secondsToScreenX(span.endSeconds, cameraX, pixelsPerSecond);
+    if (right < 0 || left > width) continue;
+    context.fillRect(Math.max(0, left), 0, Math.min(width, right) - Math.max(0, left), height);
+  }
+  context.restore();
+}
 
 function drawActiveVampRange(
   context: CanvasRenderingContext2D,
@@ -536,6 +564,11 @@ export function drawRulerRegion(
     badges.push(
       `${region.transposeSemitones > 0 ? `+${region.transposeSemitones}` : region.transposeSemitones} st`,
     );
+  }
+  // The arrangement written on the timeline ("Arreglo"), by name.
+  const arrangementName = appliedArrangementName(region);
+  if (arrangementName) {
+    badges.push(`\u21c4 ${arrangementName}`);
   }
 
   for (const badgeText of badges) {
@@ -815,6 +848,18 @@ export function drawRulerBackgroundLayer(
     args.pixelsPerSecond,
     RULER_GRID_OPACITY_SCALE,
   );
+
+  if (args.markers) {
+    drawArrangementCopyShading(
+      context,
+      args.markers,
+      args.regions,
+      args.width,
+      args.height,
+      args.cameraX,
+      args.pixelsPerSecond,
+    );
+  }
 
   for (const region of args.regions) {
     drawRulerRegion(
