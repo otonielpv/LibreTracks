@@ -277,3 +277,165 @@
   max-width: 12rem;
   cursor: pointer;
 }
+
+/* ── Pantalla completa en móvil y tablet ───────────────────────────────── */
+
+.lt-structure-mobile {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: var(--lt-safe-area-top, env(safe-area-inset-top, 0px))
+    var(--lt-safe-area-right, env(safe-area-inset-right, 0px)) 0
+    var(--lt-safe-area-left, env(safe-area-inset-left, 0px));
+  background: rgb(13 15 16);
+  color: #e8eeee;
+}
+
+.lt-structure-mobile-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.lt-structure-mobile-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* El único scroller de la pantalla: nada dentro lleva overflow propio. */
+.lt-structure-mobile-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.75rem 0.75rem 6rem;
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+}
+
+.lt-structure-mobile.is-wide .lt-structure-mobile-split {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) 2fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.lt-structure-chips.is-tap .lt-structure-chip {
+  min-height: 44px;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.lt-structure-touch {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lt-structure-swipe {
+  touch-action: pan-y;
+  transition: transform 120ms ease-out;
+}
+
+.lt-structure-mobile-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem calc(0.5rem + var(--lt-safe-area-bottom, env(safe-area-inset-bottom, 0px)));
+  background: rgb(22 25 26);
+  border-top: 1px solid rgb(255 255 255 / 0.1);
+}
+
+.lt-structure-mobile-bar .lt-structure-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lt-structure-mobile-bar .lt-structure-select span {
+  display: none;
+}
+
+.lt-structure-mobile-bar select {
+  width: 100%;
+  min-height: 44px;
+}
+
+.lt-structure-fab {
+  position: fixed;
+  right: calc(1rem + var(--lt-safe-area-right, 0px));
+  bottom: calc(5rem + var(--lt-safe-area-bottom, env(safe-area-inset-bottom, 0px)));
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 0;
+  background: rgb(87 241 219);
+  color: rgb(13 15 16);
+  font-size: 2rem;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+}
+
+.lt-structure-toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(5rem + var(--lt-safe-area-bottom, env(safe-area-inset-bottom, 0px)));
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem 0.25rem 0.25rem 0.9rem;
+  border-radius: 4px;
+  background: rgb(40 44 46);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+}
+
+.lt-structure-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  background: rgb(0 0 0 / 0.45);
+}
+
+.lt-structure-sheet {
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 0.75rem 0.75rem calc(0.75rem + var(--lt-safe-area-bottom, env(safe-area-inset-bottom, 0px)));
+  border-radius: 12px 12px 0 0;
+  background: rgb(22 25 26);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.lt-structure-sheet header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lt-structure-sheet.is-menu .lt-structure-touch {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.lt-structure-sheet .is-destructive {
+  color: #ff8a80;
+}

@@ -138,9 +138,9 @@ export function useBlockReorder({
       let target = -1;
       track(event, {
         onDragStart: (pointer) => {
-          const source = list.querySelector<HTMLElement>(
-            `[data-block-id="${CSS.escape(blockId)}"]`,
-          );
+          const source =
+            blockElements(list).find((element) => element.dataset.blockId === blockId) ??
+            null;
           preview = previewFor(list, axis, source, pointer);
         },
         onDragMove: (x, y) => {
