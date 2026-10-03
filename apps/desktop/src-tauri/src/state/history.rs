@@ -130,12 +130,13 @@ impl DesktopSession {
             .ok_or(DesktopError::NoSongLoaded)?;
         self.redo_stack.push(current_song);
 
-        self.persist_song_update_internal(
+        // El historial sólo apila `Song`: las cues de automatización de las
+        // canciones que el deshacer devuelve a su sitio se arrastran aquí.
+        self.persist_song_update_carrying_cues(
             previous_song,
             audio,
             AudioChangeImpact::StructureRebuild,
             false,
-            true,
             // Undo/redo skips history because it IS the history; the resulting
             // state is settled, not a gesture in progress.
             UpdatePhase::Commit,
@@ -164,12 +165,11 @@ impl DesktopSession {
             self.undo_stack.remove(0);
         }
 
-        self.persist_song_update_internal(
+        self.persist_song_update_carrying_cues(
             next_song,
             audio,
             AudioChangeImpact::StructureRebuild,
             false,
-            true,
             // Undo/redo skips history because it IS the history; the resulting
             // state is settled, not a gesture in progress.
             UpdatePhase::Commit,

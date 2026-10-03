@@ -13,7 +13,8 @@
 //! canción que llega se coloca en el primer tiempo fuerte tras la anterior.
 //!
 //! Lo que no pertenece a ninguna canción (una marca suelta entre dos) no se
-//! mueve.
+//! mueve. Las cues de automatización, que no están en el `Song`, las arrastra
+//! `cue_follow` con la misma regla de pertenencia.
 
 use libretracks_core::{source_seconds_at_view, warp_timeline_seconds_at, Song};
 
@@ -24,6 +25,7 @@ use crate::models::TransportSnapshot;
 use super::{
     next_downbeat_after_in_view_timeline, refresh_song_duration,
     region_boundary_was_downbeat_aligned, sort_song_regions, AudioChangeImpact, DesktopSession,
+    UpdatePhase,
 };
 
 impl DesktopSession {
@@ -52,8 +54,15 @@ impl DesktopSession {
         refresh_song_duration(&mut song);
         audio.update_live_song_regions(&song)?;
         // TimelineWindow, como `move_song_region`: se trasladan clips y marcas,
-        // no cambian fuentes ni pistas.
-        self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
+        // no cambian fuentes ni pistas. Las cues de automatización viajan con
+        // su canción en el mismo paso (`cue_follow`).
+        self.persist_song_update_carrying_cues(
+            song,
+            audio,
+            AudioChangeImpact::TimelineWindow,
+            true,
+            UpdatePhase::Commit,
+        )?;
 
         Ok(self.snapshot())
     }

@@ -631,7 +631,16 @@ impl DesktopSession {
         // sesion de referencia empuja 29 pistas y 500 clips al motor C++ en
         // cada empujon de una cancion. La geometria de las regiones ya viaja
         // por `update_live_song_regions`, en la linea de arriba.
-        self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
+        //
+        // Las cues de automatizacion de la cancion movida y de las empujadas
+        // viajan con ellas en el mismo paso (`cue_follow`).
+        self.persist_song_update_carrying_cues(
+            song,
+            audio,
+            AudioChangeImpact::TimelineWindow,
+            true,
+            UpdatePhase::Commit,
+        )?;
 
         Ok(self.snapshot())
     }
@@ -1250,7 +1259,8 @@ impl DesktopSession {
         } else {
             AudioChangeImpact::TransportOnly
         };
-        self.persist_song_update(song, audio, impact, true)?;
+        // Realinear traslada las canciones siguientes: sus cues van con ellas.
+        self.persist_song_update_carrying_cues(song, audio, impact, true, UpdatePhase::Commit)?;
 
         Ok(self.snapshot())
     }
@@ -1365,7 +1375,8 @@ impl DesktopSession {
         } else {
             AudioChangeImpact::TransportOnly
         };
-        self.persist_song_update(song, audio, impact, true)?;
+        // Realinear traslada las canciones siguientes: sus cues van con ellas.
+        self.persist_song_update_carrying_cues(song, audio, impact, true, UpdatePhase::Commit)?;
 
         Ok(self.snapshot())
     }
@@ -1394,7 +1405,8 @@ impl DesktopSession {
         } else {
             AudioChangeImpact::TransportOnly
         };
-        self.persist_song_update(song, audio, impact, true)?;
+        // Realinear traslada las canciones siguientes: sus cues van con ellas.
+        self.persist_song_update_carrying_cues(song, audio, impact, true, UpdatePhase::Commit)?;
 
         Ok(self.snapshot())
     }
