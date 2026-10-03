@@ -101,6 +101,135 @@ pub struct SongRegion {
     /// resized keeps looking exactly as it did before this field existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compact_column_width_rem: Option<f64>,
+    /// Original de la canción y sus arreglos (reordenar, repetir y quitar
+    /// secciones). `None` —y lo que deserializan las sesiones de antes— es una
+    /// canción sin original capturado. Se omite al guardar, así que una canción
+    /// sin arreglos se escribe igual que antes de que existiera el campo. Una
+    /// versión vieja lo ignora y ve el timeline lineal que el arreglo escribió.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structure: Option<SongStructure>,
+}
+
+/// Original de una canción y los arreglos construidos a partir de él.
+///
+/// Invariante: si `applied_arrangement_id` es `Some`, el contenido de la región
+/// en el timeline es exactamente `build_arrangement(original, bloques)`
+/// trasladado a su inicio. Nada guarda contenido arreglado que no se pueda
+/// volver a derivar del original.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SongStructure {
+    /// Contenido de la canción tal como era antes de aplicar ningún arreglo,
+    /// en tiempo de fuente. Ver [`OriginalSnapshot`] para el sistema de
+    /// coordenadas.
+    pub original: OriginalSnapshot,
+    /// Secciones del original, en orden. Se derivan de las marcas de categoría
+    /// Section al capturar y se guardan para no recalcularlas.
+    pub sections: Vec<OriginalSection>,
+    /// Arreglos guardados ("Domingo", "Versión corta"…).
+    #[serde(default)]
+    pub arrangements: Vec<Arrangement>,
+    /// Arreglo aplicado ahora en el timeline. `None` = el timeline ES el
+    /// original.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub applied_arrangement_id: Option<String>,
+}
+
+/// Las mismas listas que `Song`, filtradas a una región, en tiempo de fuente
+/// (sin warp).
+///
+/// **Coordenadas.** Las posiciones se guardan tal como estaban en el timeline
+/// al capturar, junto con `origin_seconds` (el inicio de la región en ese
+/// momento). La posición relativa de algo es `posición - origin_seconds`, y
+/// colocar el original en una región que ahora empieza en `s` es sumar
+/// `s - origin_seconds` a todo. Guardarlo así, y no ya restado, es lo que hace
+/// exacta la identidad: si la canción no se ha movido el desplazamiento es 0
+/// y cada posición vuelve bit a bit, cosa que `(x - s) + s` no garantiza en
+/// coma flotante. Mover la canción no toca la instantánea.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct OriginalSnapshot {
+    /// Inicio de la región cuando se capturó.
+    pub origin_seconds: f64,
+    /// Duración original de la región.
+    pub duration_seconds: f64,
+    /// Tempo que regía en el inicio de la región, venga de una marca de dentro
+    /// o de fuera (la canción anterior, o el tempo base del proyecto). Con él
+    /// se decide si un tramo necesita una marca de tempo de arranque.
+    pub base_bpm: f64,
+    /// Compás que regía en el inicio de la región, igual que `base_bpm`.
+    pub base_time_signature: String,
+    #[serde(default)]
+    pub clips: Vec<Clip>,
+    #[serde(default)]
+    pub midi_clips: Vec<MidiClip>,
+    #[serde(default)]
+    pub video_clips: Vec<VideoClip>,
+    #[serde(default)]
+    pub tempo_markers: Vec<TempoMarker>,
+    #[serde(default)]
+    pub time_signature_markers: Vec<TimeSignatureMarker>,
+    /// Todas las marcas de la región: las de sección y las de cue.
+    #[serde(default)]
+    pub section_markers: Vec<Marker>,
+    /// Cues de automatización de la canción. Viven en el `Song` (aunque en
+    /// ejecución estén en `automation.ltautomation`) para que deshacer, que
+    /// sólo apila `Song`, restaure también su original. Los destinos `Frame`
+    /// de sus saltos están en las mismas coordenadas que el resto.
+    #[serde(default)]
+    pub automation_cues: Vec<crate::automation::AutomationCue>,
+}
+
+/// Una sección del original: desde una marca de categoría Section hasta la
+/// siguiente o el final de la región. Posiciones RELATIVAS al inicio de la
+/// región (en fuente): la primera empieza en 0 y la última acaba en la
+/// duración del original.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OriginalSection {
+    /// Id de la marca que la abre, o el id estable de la sección implícita
+    /// "Inicio" (ver `implicit_start_section_id`) si la primera marca no está
+    /// en el inicio de la región.
+    pub marker_id: String,
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+}
+
+/// Un arreglo guardado: una lista de secciones del original en el orden en
+/// que deben sonar.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Arrangement {
+    pub id: String,
+    pub name: String,
+    pub blocks: Vec<ArrangementBlock>,
+}
+
+/// Un bloque del arreglo: una aparición de una sección del original.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ArrangementBlock {
+    pub id: String,
+    pub section_marker_id: String,
+}
+
+/// Id estable de la sección implícita "Inicio" de una región: el tramo entre
+/// el inicio de la región y su primera marca de sección.
+pub fn implicit_start_section_id(region_id: &str) -> String {
+    format!("{region_id}~start")
+}
+
+impl SongStructure {
+    pub fn applied_arrangement(&self) -> Option<&Arrangement> {
+        let id = self.applied_arrangement_id.as_deref()?;
+        self.arrangements.iter().find(|arrangement| arrangement.id == id)
+    }
+
+    pub fn section(&self, marker_id: &str) -> Option<&OriginalSection> {
+        self.sections
+            .iter()
+            .find(|section| section.marker_id == marker_id)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

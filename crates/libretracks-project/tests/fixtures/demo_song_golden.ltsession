@@ -1,0 +1,331 @@
+{
+  "version": 7,
+  "id": "song_demo",
+  "title": "Demo de LibreTracks",
+  "artist": "LibreTracks",
+  "key": "D",
+  "bpm": 110.0,
+  "timeSignature": "4/4",
+  "durationSeconds": 123.0,
+  "tempoMarkers": [
+    {
+      "id": "tempo-costa-norte",
+      "startSeconds": 0.0,
+      "bpm": 110.0
+    },
+    {
+      "id": "tempo-callejon-blues",
+      "startSeconds": 55.0,
+      "bpm": 90.0
+    }
+  ],
+  "timeSignatureMarkers": [
+    {
+      "id": "signature-demo",
+      "startSeconds": 0.0,
+      "signature": "4/4"
+    }
+  ],
+  "regions": [
+    {
+      "id": "region-costa-norte",
+      "name": "Costa Norte",
+      "startSeconds": 0.0,
+      "endSeconds": 53.0,
+      "transposeSemitones": 0,
+      "key": "D",
+      "warpEnabled": false,
+      "warpSourceBpm": null,
+      "master": {
+        "gain": 1.0
+      }
+    },
+    {
+      "id": "region-callejon-blues",
+      "name": "Callejón Blues",
+      "startSeconds": 55.0,
+      "endSeconds": 123.0,
+      "transposeSemitones": 0,
+      "key": "A",
+      "warpEnabled": false,
+      "warpSourceBpm": null,
+      "master": {
+        "gain": 1.0
+      }
+    }
+  ],
+  "tracks": [
+    {
+      "id": "track-bateria",
+      "name": "Batería",
+      "kind": "audio",
+      "parentTrackId": null,
+      "volume": 1.0,
+      "pan": 0.0,
+      "muted": false,
+      "solo": false,
+      "transposeEnabled": true,
+      "audioTo": "master",
+      "monoDownmix": false,
+      "color": "#e0625f",
+      "autoCreated": false,
+      "midiChannel": 1,
+      "midiEnabled": true,
+      "collapsed": false
+    },
+    {
+      "id": "track-bajo",
+      "name": "Bajo",
+      "kind": "audio",
+      "parentTrackId": null,
+      "volume": 1.0,
+      "pan": 0.0,
+      "muted": false,
+      "solo": false,
+      "transposeEnabled": true,
+      "audioTo": "master",
+      "monoDownmix": false,
+      "color": "#e8a33d",
+      "autoCreated": false,
+      "midiChannel": 1,
+      "midiEnabled": true,
+      "collapsed": false
+    },
+    {
+      "id": "track-piano",
+      "name": "Piano",
+      "kind": "audio",
+      "parentTrackId": null,
+      "volume": 0.7943,
+      "pan": -0.35,
+      "muted": false,
+      "solo": false,
+      "transposeEnabled": true,
+      "audioTo": "master",
+      "monoDownmix": false,
+      "color": "#4c9f70",
+      "autoCreated": false,
+      "midiChannel": 1,
+      "midiEnabled": true,
+      "collapsed": false
+    },
+    {
+      "id": "track-guitarras",
+      "name": "Guitarras",
+      "kind": "folder",
+      "parentTrackId": null,
+      "volume": 0.8913,
+      "pan": 0.0,
+      "muted": false,
+      "solo": false,
+      "transposeEnabled": true,
+      "audioTo": "master",
+      "monoDownmix": false,
+      "color": "#8a7fd0",
+      "autoCreated": false,
+      "midiChannel": 1,
+      "midiEnabled": true,
+      "collapsed": false
+    },
+    {
+      "id": "track-acustica",
+      "name": "Acústica",
+      "kind": "audio",
+      "parentTrackId": "track-guitarras",
+      "volume": 0.7079,
+      "pan": -0.6,
+      "muted": false,
+      "solo": false,
+      "transposeEnabled": true,
+      "audioTo": "inherit",
+      "monoDownmix": false,
+      "color": "#5a8fd6",
+      "autoCreated": false,
+      "midiChannel": 1,
+      "midiEnabled": true,
+      "collapsed": false
+    },
+    {
+      "id": "track-electrica",
+      "name": "Eléctrica",
+      "kind": "audio",
+      "parentTrackId": "track-guitarras",
+      "volume": 0.7943,
+      "pan": 0.6,
+      "muted": false,
+      "solo": false,
+      "transposeEnabled": true,
+      "audioTo": "inherit",
+      "monoDownmix": false,
+      "color": "#b07bd4",
+      "autoCreated": false,
+      "midiChannel": 1,
+      "midiEnabled": true,
+      "collapsed": false
+    }
+  ],
+  "clips": [
+    {
+      "id": "clip-costa-norte-bateria",
+      "trackId": "track-bateria",
+      "filePath": "audio/costa-norte/bateria.mp3",
+      "timelineStartSeconds": 0.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 53.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-costa-norte-bajo",
+      "trackId": "track-bajo",
+      "filePath": "audio/costa-norte/bajo.mp3",
+      "timelineStartSeconds": 0.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 53.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-costa-norte-piano",
+      "trackId": "track-piano",
+      "filePath": "audio/costa-norte/piano.mp3",
+      "timelineStartSeconds": 0.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 53.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-costa-norte-acustica",
+      "trackId": "track-acustica",
+      "filePath": "audio/costa-norte/acustica.mp3",
+      "timelineStartSeconds": 0.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 53.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-costa-norte-electrica",
+      "trackId": "track-electrica",
+      "filePath": "audio/costa-norte/electrica.mp3",
+      "timelineStartSeconds": 0.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 53.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-callejon-blues-bateria",
+      "trackId": "track-bateria",
+      "filePath": "audio/callejon-blues/bateria.mp3",
+      "timelineStartSeconds": 55.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 68.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-callejon-blues-bajo",
+      "trackId": "track-bajo",
+      "filePath": "audio/callejon-blues/bajo.mp3",
+      "timelineStartSeconds": 55.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 68.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-callejon-blues-piano",
+      "trackId": "track-piano",
+      "filePath": "audio/callejon-blues/piano.mp3",
+      "timelineStartSeconds": 55.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 68.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-callejon-blues-acustica",
+      "trackId": "track-acustica",
+      "filePath": "audio/callejon-blues/acustica.mp3",
+      "timelineStartSeconds": 55.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 68.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    },
+    {
+      "id": "clip-callejon-blues-electrica",
+      "trackId": "track-electrica",
+      "filePath": "audio/callejon-blues/electrica.mp3",
+      "timelineStartSeconds": 55.0,
+      "sourceStartSeconds": 0.0,
+      "durationSeconds": 68.0,
+      "gain": 1.0,
+      "fadeInSeconds": null,
+      "fadeOutSeconds": null
+    }
+  ],
+  "midiClips": [],
+  "sectionMarkers": [
+    {
+      "id": "marker-costa-norte-intro-1",
+      "name": "Intro",
+      "startSeconds": 0.0,
+      "digit": 1,
+      "kind": "intro"
+    },
+    {
+      "id": "marker-costa-norte-verse-5",
+      "name": "Estrofa",
+      "startSeconds": 8.727,
+      "digit": 2,
+      "kind": "verse"
+    },
+    {
+      "id": "marker-costa-norte-chorus-13",
+      "name": "Estribillo",
+      "startSeconds": 26.182,
+      "digit": 3,
+      "kind": "chorus"
+    },
+    {
+      "id": "marker-costa-norte-ending-21",
+      "name": "Acorde final",
+      "startSeconds": 43.636,
+      "digit": 4,
+      "kind": "ending"
+    },
+    {
+      "id": "marker-callejon-blues-verse-1",
+      "name": "Vuelta 1",
+      "startSeconds": 55.0,
+      "digit": 5,
+      "kind": "verse"
+    },
+    {
+      "id": "marker-callejon-blues-solo-13",
+      "name": "Vuelta 2",
+      "startSeconds": 87.0,
+      "digit": 6,
+      "kind": "solo"
+    },
+    {
+      "id": "marker-callejon-blues-ending-25",
+      "name": "Golpe final",
+      "startSeconds": 119.0,
+      "digit": 7,
+      "kind": "ending"
+    }
+  ]
+}

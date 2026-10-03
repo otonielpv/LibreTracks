@@ -628,6 +628,7 @@ pub(super) fn replace_song_region_range(song: &mut Song, replacement: SongRegion
                 warp_source_bpm: region.warp_source_bpm,
                 master: region.master.clone(),
                 compact_column_width_rem: region.compact_column_width_rem,
+                structure: None,
             });
         }
 
@@ -649,6 +650,7 @@ pub(super) fn replace_song_region_range(song: &mut Song, replacement: SongRegion
                 warp_source_bpm: region.warp_source_bpm,
                 master: region.master.clone(),
                 compact_column_width_rem: region.compact_column_width_rem,
+                structure: None,
             });
         }
     }
@@ -790,6 +792,7 @@ mod snap_regions_after_to_downbeats_tests {
             warp_source_bpm: None,
             master: SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         }
     }
 

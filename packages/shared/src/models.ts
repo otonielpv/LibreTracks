@@ -260,6 +260,48 @@ export type SongRegionSummary = {
    * use the view's default. Pure view state persisted with the project so a
    * layout the user arranged survives reopening the session. */
   compactColumnWidthRem: number | null;
+  /** Original captured and arrangements of the song (reorder, repeat and drop
+   * sections). Absent when no original has been captured. Mirrors Rust
+   * `SongStructureSummary`; the original snapshot itself never reaches the UI. */
+  structure?: SongStructureSummary;
+};
+
+/** One section of a song's captured original, as the arrangement editor
+ * paints it. Mirrors Rust `StructureSectionSummary`. */
+export type StructureSectionSummary = {
+  markerId: string;
+  /** Empty for the implicit "Start" section — the UI names it (i18n). */
+  name: string;
+  kind: MarkerKind;
+  variant: number | null;
+  color: string | null;
+  /** The span between the song start and its first section marker. */
+  implicit: boolean;
+  /** View-time bounds, as if the original sat on the timeline from the region
+   * start (it does when no arrangement is applied). */
+  startSeconds: number;
+  endSeconds: number;
+  /** Length in bars at the tempo and meter in force when it starts. */
+  bars: number;
+};
+
+export type ArrangementBlockSummary = {
+  id: string;
+  sectionMarkerId: string;
+};
+
+export type ArrangementSummary = {
+  id: string;
+  name: string;
+  blocks: ArrangementBlockSummary[];
+};
+
+export type SongStructureSummary = {
+  sections: StructureSectionSummary[];
+  arrangements: ArrangementSummary[];
+  /** Arrangement written on the timeline now; `null` = the timeline is the
+   * original. */
+  appliedArrangementId: string | null;
 };
 
 export type SongTempoRegionSummary = SongRegionSummary & TimelineRegion;

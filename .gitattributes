@@ -1,3 +1,7 @@
 # Shell scripts must stay LF or they break when executed on macOS/Linux
 # (a CRLF after the shebang makes the kernel look for "/usr/bin/env bash\r").
 *.sh text eol=lf
+
+# Golden files compared byte for byte with include_str!: a CRLF checkout
+# would make the comparison fail on Windows.
+crates/libretracks-project/tests/fixtures/*.ltsession text eol=lf

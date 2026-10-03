@@ -289,6 +289,7 @@ pub(super) fn ensure_region_covers_clip_for_file(
         warp_source_bpm: None,
         master: libretracks_core::SongMaster::default(),
         compact_column_width_rem: None,
+        structure: None,
     });
     sort_song_regions(&mut song.regions);
     Ok(())
@@ -428,6 +429,7 @@ mod region_message_tests {
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         }
     }
 

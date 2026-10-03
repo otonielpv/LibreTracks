@@ -1,9 +1,10 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use libretracks_audio::{ActiveVamp, JumpTrigger, PendingMarkerJump, TransitionType};
+use libretracks_core::song_structure::bars_for_view_duration;
 use libretracks_core::{
     audible_clip_duration_seconds, warp_timeline_seconds_at, Clip, Marker, MarkerCategory,
-    MarkerKind, MidiClip, MidiEvent, Song, SongRegion, TempoMarker, TimeSignatureMarker, TrackKind,
-    VideoClip,
+    MarkerKind, MidiClip, MidiEvent, Song, SongRegion, SongStructure, TempoMarker,
+    TimeSignatureMarker, TrackKind, VideoClip,
 };
 use libretracks_project::{WaveformLod, WaveformSummary};
 use serde::Serialize;
@@ -329,6 +330,52 @@ pub struct SongRegionSummary {
     pub master: SongMasterSummary,
     /// Persisted compact-view column width in rem; `None` = use the default.
     pub compact_column_width_rem: Option<f64>,
+    /// Lo que pinta el editor de arreglos. No lleva la instantánea del
+    /// original, que puede ser grande: sólo secciones y arreglos.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structure: Option<SongStructureSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SongStructureSummary {
+    pub sections: Vec<StructureSectionSummary>,
+    pub arrangements: Vec<ArrangementSummary>,
+    pub applied_arrangement_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StructureSectionSummary {
+    pub marker_id: String,
+    /// Vacío en la sección implícita "Inicio": el nombre lo pone la UI (i18n).
+    pub name: String,
+    pub kind: MarkerKind,
+    pub variant: Option<u8>,
+    pub color: Option<String>,
+    /// El tramo entre el inicio de la canción y su primera marca de sección.
+    pub implicit: bool,
+    /// Inicio y fin en VISTA, como si el original estuviera en el timeline
+    /// desde el inicio de la región (lo está cuando no hay arreglo aplicado).
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+    /// Duración en compases, con el tempo y el compás que rigen al empezar.
+    pub bars: f64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ArrangementSummary {
+    pub id: String,
+    pub name: String,
+    pub blocks: Vec<ArrangementBlockSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ArrangementBlockSummary {
+    pub id: String,
+    pub section_marker_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1116,6 +1163,67 @@ pub(crate) fn region_to_summary(song: &Song, region: &SongRegion) -> SongRegionS
             gain: region.master.gain,
         },
         compact_column_width_rem: region.compact_column_width_rem,
+        structure: region
+            .structure
+            .as_ref()
+            .map(|structure| song_structure_to_summary(song, region, structure)),
+    }
+}
+
+pub(crate) fn song_structure_to_summary(
+    song: &Song,
+    region: &SongRegion,
+    structure: &SongStructure,
+) -> SongStructureSummary {
+    let original = &structure.original;
+    let sections = structure
+        .sections
+        .iter()
+        .map(|section| {
+            let start_seconds =
+                warp_timeline_seconds_at(song, region.start_seconds + section.start_seconds);
+            let end_seconds =
+                warp_timeline_seconds_at(song, region.start_seconds + section.end_seconds);
+            let marker = original
+                .section_markers
+                .iter()
+                .find(|marker| marker.id == section.marker_id);
+            StructureSectionSummary {
+                marker_id: section.marker_id.clone(),
+                name: marker.map(|m| m.name.clone()).unwrap_or_default(),
+                kind: marker.map(|m| m.kind).unwrap_or_default(),
+                variant: marker.and_then(|m| m.variant),
+                color: marker.and_then(|m| m.color.clone()),
+                implicit: marker.is_none(),
+                start_seconds,
+                end_seconds,
+                bars: bars_for_view_duration(
+                    original,
+                    section.start_seconds,
+                    end_seconds - start_seconds,
+                ),
+            }
+        })
+        .collect();
+    SongStructureSummary {
+        sections,
+        arrangements: structure
+            .arrangements
+            .iter()
+            .map(|arrangement| ArrangementSummary {
+                id: arrangement.id.clone(),
+                name: arrangement.name.clone(),
+                blocks: arrangement
+                    .blocks
+                    .iter()
+                    .map(|block| ArrangementBlockSummary {
+                        id: block.id.clone(),
+                        section_marker_id: block.section_marker_id.clone(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+        applied_arrangement_id: structure.applied_arrangement_id.clone(),
     }
 }
 
@@ -1426,6 +1534,7 @@ mod tests {
             key: None,
             master: SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         }
     }
 
@@ -1456,6 +1565,96 @@ mod tests {
                 category_override: None,
             }],
         }
+    }
+
+    /// Paso 02 (C4) del plan de arreglos: las secciones del resumen van en
+    /// tiempo de VISTA. Con warp activo en la segunda canción, el inicio de
+    /// cada sección coincide con el de su marca en vista.
+    #[test]
+    fn structure_sections_are_reported_in_view_time_under_warp() {
+        use libretracks_core::{OriginalSection, OriginalSnapshot, SongStructure};
+
+        let mut song = base_song();
+        song.tempo_markers = vec![TempoMarker {
+            id: "t".into(),
+            start_seconds: 0.0,
+            bpm: 120.0,
+        }];
+        song.regions = vec![region("r1", 0.0, 10.0), region("r2", 10.0, 26.0)];
+        // r2 grabada a 100 BPM y estirada a los 120 del timeline.
+        song.regions[1].warp_enabled = true;
+        song.regions[1].warp_source_bpm = Some(100.0);
+        let section_marker = |id: &str, start: f64, kind: MarkerKind| Marker {
+            id: id.into(),
+            name: id.into(),
+            start_seconds: start,
+            digit: None,
+            kind,
+            variant: None,
+            color: None,
+            category_override: None,
+        };
+        song.section_markers = vec![
+            section_marker("verso", 10.0, MarkerKind::Verse),
+            section_marker("coro", 18.0, MarkerKind::Chorus),
+        ];
+        song.regions[1].structure = Some(SongStructure {
+            original: OriginalSnapshot {
+                origin_seconds: 10.0,
+                duration_seconds: 16.0,
+                base_bpm: 120.0,
+                base_time_signature: "4/4".into(),
+                section_markers: song.section_markers.clone(),
+                // El coro va a 150 BPM en la instantánea (sólo afecta a su
+                // cuenta de compases). Las posiciones están en coordenadas del
+                // timeline: 18 s = 8 s después del origen.
+                tempo_markers: vec![TempoMarker {
+                    id: "t_coro".into(),
+                    start_seconds: 18.0,
+                    bpm: 150.0,
+                }],
+                ..OriginalSnapshot::default()
+            },
+            sections: vec![
+                OriginalSection {
+                    marker_id: "verso".into(),
+                    start_seconds: 0.0,
+                    end_seconds: 8.0,
+                },
+                OriginalSection {
+                    marker_id: "coro".into(),
+                    start_seconds: 8.0,
+                    end_seconds: 16.0,
+                },
+            ],
+            arrangements: vec![],
+            applied_arrangement_id: None,
+        });
+
+        let summary = region_to_summary(&song, &song.regions[1]);
+        let structure = summary.structure.expect("structure summary");
+        for (section, marker) in structure.sections.iter().zip(&song.section_markers) {
+            let marker_view = marker_to_warped_summary(&song, marker).start_seconds;
+            assert!(
+                (section.start_seconds - marker_view).abs() < 1e-9,
+                "{}: sección en {}, marca en {}",
+                section.marker_id,
+                section.start_seconds,
+                marker_view
+            );
+        }
+        // Con warp, 8 s de fuente a 100 BPM son 6,667 s de vista: el verso
+        // NO empieza donde empezaría sin warp.
+        assert!((structure.sections[1].start_seconds - 18.0).abs() > 0.5);
+        // 8 s de fuente a 100 BPM son 13,33 tiempos = 3,33 compases de 4/4;
+        // en vista (6,667 s a 120 BPM) siguen siendo 3,33.
+        let bars = structure.sections[0].bars;
+        assert!((bars - 10.0 / 3.0).abs() < 1e-9, "{bars}");
+        // El coro: 6,667 s de vista a 150 BPM (compás de 1,6 s) = 4,17 compases.
+        let bars = structure.sections[1].bars;
+        assert!((bars - (8.0 * 100.0 / 120.0) / 1.6).abs() < 1e-9, "{bars}");
+        assert!(!structure.sections[0].implicit);
+        assert_eq!(structure.sections[0].kind, MarkerKind::Verse);
     }
 
     // ── small pure helpers ────────────────────────────────────────────────

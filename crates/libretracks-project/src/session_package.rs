@@ -1303,6 +1303,7 @@ mod tests {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         }
     }
 

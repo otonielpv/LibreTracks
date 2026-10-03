@@ -309,6 +309,7 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         }],
         tracks: document.tracks,
         clips: document.clips,
@@ -344,6 +345,7 @@ fn migrate_v3_song(document: LegacySongDocumentV3) -> Result<Song, ProjectError>
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         }],
         tracks: document.tracks,
         clips: document.clips,
@@ -504,6 +506,7 @@ fn fit_regions_to_clips(song: &mut Song) {
                     warp_source_bpm: None,
                     master: libretracks_core::SongMaster::default(),
                     compact_column_width_rem: None,
+                    structure: None,
                 });
             }
         }
@@ -547,6 +550,7 @@ fn fit_regions_to_clips(song: &mut Song) {
                 warp_source_bpm: None,
                 master: libretracks_core::SongMaster::default(),
                 compact_column_width_rem: None,
+                structure: None,
             });
         }
     }
@@ -581,6 +585,21 @@ fn reject_legacy_group_format(document: &Value) -> Result<(), ProjectError> {
 mod tests {
     use super::*;
     use libretracks_core::{Clip, SongMaster, Track, TrackKind};
+
+    /// Una sesión sin arreglos se guarda byte a byte igual que antes de que
+    /// existiera `SongRegion.structure`. El fichero de referencia se generó
+    /// con el código anterior a ese campo, guardando la sesión de demo.
+    #[test]
+    fn a_session_without_structure_saves_exactly_as_before() {
+        let fixture = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../apps/desktop/src-tauri/resources/demo/song.ltsession"
+        );
+        let song = load_song_from_file(fixture).expect("load demo");
+        let saved = serialize_song_document(&song).expect("serialize");
+        let golden = include_str!("../tests/fixtures/demo_song_golden.ltsession");
+        assert_eq!(saved, golden);
+    }
 
     fn base_song() -> Song {
         Song {
@@ -648,6 +667,7 @@ mod tests {
             warp_source_bpm: None,
             master: SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         }
     }
 

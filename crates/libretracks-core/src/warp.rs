@@ -253,6 +253,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         }
     }
 
@@ -395,6 +396,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         };
         s.regions.push(r.clone());
         let ratio = region_warp_ratio_in_song(&r, &s);
@@ -418,6 +420,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         });
 
         assert!((warp_timeline_seconds_at(&s, 10.0) - 10.0).abs() < 1e-9);
@@ -442,6 +445,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         });
         s
     }
@@ -508,6 +512,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         });
 
         // Before the region: identity.
@@ -536,6 +541,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         });
 
         // Mid-region: view 12.5 = local view 2.5 → source = 10 + 2.5 * 2 = 15.
@@ -562,6 +568,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         });
         assert!((warp_timeline_seconds_at(&s, 10.0) - 10.0).abs() < 1e-9);
         assert!((warp_timeline_seconds_at(&s, 20.0) - 15.0).abs() < 1e-9);
@@ -582,6 +589,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         });
 
         let duration = warp_timeline_duration_seconds(&s, 0.0, 12.0);

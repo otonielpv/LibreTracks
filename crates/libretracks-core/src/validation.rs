@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use thiserror::Error;
 
 use crate::model::{
-    MidiEvent, MidiEventKind, Song, TrackKind, MAX_MIDI_CHANNEL, MAX_MIDI_DATA_VALUE,
+    MidiEvent, MidiEventKind, Song, SongStructure, TrackKind, MAX_MIDI_CHANNEL, MAX_MIDI_DATA_VALUE,
     MIN_MIDI_CHANNEL,
 };
 
@@ -143,6 +143,26 @@ pub enum DomainError {
     InvalidVideoClipGeometry { clip_id: String },
     #[error("video clip {clip_id} has fades longer than the clip")]
     InvalidVideoClipFades { clip_id: String },
+    #[error("arrangement {arrangement_id} of region {region_id} uses unknown section {section_marker_id}")]
+    ArrangementUnknownSection {
+        region_id: String,
+        arrangement_id: String,
+        section_marker_id: String,
+    },
+    #[error("arrangement {arrangement_id} of region {region_id} has no blocks")]
+    EmptyArrangement {
+        region_id: String,
+        arrangement_id: String,
+    },
+    #[error("region {region_id} applies unknown arrangement {arrangement_id}")]
+    UnknownAppliedArrangement {
+        region_id: String,
+        arrangement_id: String,
+    },
+    #[error("region {region_id} repeats id {id} in its song structure")]
+    DuplicateSongStructureId { region_id: String, id: String },
+    #[error("original snapshot of region {region_id} has an invalid {item}")]
+    InvalidOriginalSnapshot { region_id: String, item: String },
 }
 
 pub fn validate_song(song: &Song) -> Result<(), DomainError> {
@@ -204,6 +224,10 @@ pub fn validate_song(song: &Song) -> Result<(), DomainError> {
                 region_id: region.id.clone(),
                 gain: format!("{}", region.master.gain),
             });
+        }
+
+        if let Some(structure) = &region.structure {
+            validate_song_structure(&region.id, structure)?;
         }
 
         previous_region_id = Some(region.id.as_str());
@@ -639,6 +663,7 @@ mod tests {
             key: None,
             master: SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         }
     }
 
@@ -1521,4 +1546,144 @@ mod tests {
         assert!(!TrackKind::Midi.reaches_audio_engine());
         assert!(!TrackKind::Video.reaches_audio_engine());
     }
+}
+
+/// Tolerancia de las posiciones relativas del original: la marca de tempo que
+/// el importador clava en el inicio puede quedar 1 ms antes (misma regla de
+/// pertenencia que mover canciones).
+const SNAPSHOT_EDGE_TOLERANCE_SECONDS: f64 = 0.001;
+
+/// Reglas del original y de los arreglos de una región.
+pub fn validate_song_structure(
+    region_id: &str,
+    structure: &SongStructure,
+) -> Result<(), DomainError> {
+    let invalid = |item: String| DomainError::InvalidOriginalSnapshot {
+        region_id: region_id.to_string(),
+        item,
+    };
+    let original = &structure.original;
+    let duration = original.duration_seconds;
+    if !duration.is_finite() || duration <= 0.0 {
+        return Err(invalid("duration".into()));
+    }
+    if !original.base_bpm.is_finite() || original.base_bpm <= 0.0 {
+        return Err(invalid("base bpm".into()));
+    }
+    let origin = original.origin_seconds;
+    if !origin.is_finite() {
+        return Err(invalid("origin".into()));
+    }
+    // Un instante del original: finito, dentro de [0, duración) relativo.
+    let inside = |position: f64| {
+        position.is_finite()
+            && position - origin >= -SNAPSHOT_EDGE_TOLERANCE_SECONDS
+            && position - origin < duration
+    };
+    for clip in &original.clips {
+        let end = clip.timeline_start_seconds - origin + clip.duration_seconds;
+        if !inside(clip.timeline_start_seconds)
+            || !clip.source_start_seconds.is_finite()
+            || !clip.duration_seconds.is_finite()
+            || clip.duration_seconds < 0.0
+            || end > duration + CLIP_REGION_BOUNDARY_EPSILON_SECONDS
+        {
+            return Err(invalid(format!("clip {}", clip.id)));
+        }
+    }
+    for clip in &original.video_clips {
+        if !inside(clip.timeline_start_seconds)
+            || !clip.source_start_seconds.is_finite()
+            || !clip.duration_seconds.is_finite()
+            || clip.end_seconds() - origin > duration + CLIP_REGION_BOUNDARY_EPSILON_SECONDS
+        {
+            return Err(invalid(format!("video clip {}", clip.id)));
+        }
+    }
+    for clip in &original.midi_clips {
+        if !inside(clip.timeline_start_seconds) {
+            return Err(invalid(format!("midi clip {}", clip.id)));
+        }
+    }
+    for marker in &original.tempo_markers {
+        if !inside(marker.start_seconds) || !marker.bpm.is_finite() || marker.bpm <= 0.0 {
+            return Err(invalid(format!("tempo marker {}", marker.id)));
+        }
+    }
+    for marker in &original.time_signature_markers {
+        if !inside(marker.start_seconds) {
+            return Err(invalid(format!("time signature marker {}", marker.id)));
+        }
+    }
+    for marker in &original.section_markers {
+        if !inside(marker.start_seconds) {
+            return Err(invalid(format!("marker {}", marker.id)));
+        }
+    }
+    for cue in &original.automation_cues {
+        if !inside(cue.at_seconds) {
+            return Err(invalid(format!("automation cue {}", cue.id)));
+        }
+    }
+
+    let mut section_ids = HashSet::new();
+    let mut previous_end = 0.0_f64;
+    for section in &structure.sections {
+        if !section_ids.insert(section.marker_id.as_str()) {
+            return Err(DomainError::DuplicateSongStructureId {
+                region_id: region_id.to_string(),
+                id: section.marker_id.clone(),
+            });
+        }
+        let ordered = section.start_seconds.is_finite()
+            && section.end_seconds.is_finite()
+            && section.start_seconds >= previous_end - CLIP_REGION_BOUNDARY_EPSILON_SECONDS
+            && section.end_seconds > section.start_seconds
+            && section.end_seconds <= duration + CLIP_REGION_BOUNDARY_EPSILON_SECONDS;
+        if !ordered {
+            return Err(invalid(format!("section {}", section.marker_id)));
+        }
+        previous_end = section.end_seconds;
+    }
+
+    let mut ids = HashSet::new();
+    for arrangement in &structure.arrangements {
+        if !ids.insert(arrangement.id.as_str()) {
+            return Err(DomainError::DuplicateSongStructureId {
+                region_id: region_id.to_string(),
+                id: arrangement.id.clone(),
+            });
+        }
+        if arrangement.blocks.is_empty() {
+            return Err(DomainError::EmptyArrangement {
+                region_id: region_id.to_string(),
+                arrangement_id: arrangement.id.clone(),
+            });
+        }
+        for block in &arrangement.blocks {
+            if !ids.insert(block.id.as_str()) {
+                return Err(DomainError::DuplicateSongStructureId {
+                    region_id: region_id.to_string(),
+                    id: block.id.clone(),
+                });
+            }
+            if !section_ids.contains(block.section_marker_id.as_str()) {
+                return Err(DomainError::ArrangementUnknownSection {
+                    region_id: region_id.to_string(),
+                    arrangement_id: arrangement.id.clone(),
+                    section_marker_id: block.section_marker_id.clone(),
+                });
+            }
+        }
+    }
+
+    if let Some(applied) = &structure.applied_arrangement_id {
+        if !structure.arrangements.iter().any(|a| &a.id == applied) {
+            return Err(DomainError::UnknownAppliedArrangement {
+                region_id: region_id.to_string(),
+                arrangement_id: applied.clone(),
+            });
+        }
+    }
+    Ok(())
 }

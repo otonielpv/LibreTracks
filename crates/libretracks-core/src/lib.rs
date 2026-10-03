@@ -1,18 +1,25 @@
+pub mod automation;
 pub mod midi_schedule;
 pub mod model;
+pub mod song_structure;
 pub mod validation;
 pub mod video_schedule;
 pub mod warp;
 
+pub use automation::{
+    AutomationAction, AutomationCue, AutomationJumpTarget, AutomationTransition,
+    AutomationTransitionMode,
+};
 pub use model::{
-    default_audio_to, parse_audio_output_route, Clip, Marker, MarkerCategory, MarkerKind, MidiClip,
+    default_audio_to, implicit_start_section_id, Arrangement, ArrangementBlock, OriginalSection,
+    OriginalSnapshot, SongStructure, parse_audio_output_route, Clip, Marker, MarkerCategory, MarkerKind, MidiClip,
     MidiEvent, MidiEventKind, Project, Song, SongMaster, SongRegion, TempoMarker, TempoMetadata,
     is_video_file_path, TempoSource, TimeSignatureMarker, Track, TrackKind, VideoAssetInfo, VideoClip,
     VideoFit, MAX_MIDI_CHANNEL, MAX_MIDI_DATA_VALUE, MIN_MIDI_CHANNEL,
     SLOW_SEEK_KEYFRAME_INTERVAL_SECONDS, VIDEO_FILE_EXTENSIONS,
 };
 pub use validation::{
-    validate_song, DomainError, MAX_COMPACT_COLUMN_WIDTH_REM, MAX_TRANSPOSE_SEMITONES,
+    validate_song, validate_song_structure, DomainError, MAX_COMPACT_COLUMN_WIDTH_REM, MAX_TRANSPOSE_SEMITONES,
     MAX_WARP_SOURCE_BPM, MIN_COMPACT_COLUMN_WIDTH_REM, MIN_TRANSPOSE_SEMITONES,
     MIN_WARP_SOURCE_BPM,
 };
@@ -51,6 +58,7 @@ mod tests {
                 key: None,
                 master: SongMaster::default(),
                 compact_column_width_rem: None,
+                structure: None,
             }],
             tracks: vec![
                 Track {
@@ -141,6 +149,7 @@ mod tests {
             key: None,
             master: SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         });
 
         assert!(validate_song(&song).is_ok());
@@ -195,6 +204,7 @@ mod tests {
             key: None,
             master: SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         });
         // Clip starts inside region_intro [0, 240) but extends past 240.
         song.clips[0].timeline_start_seconds = 230.0;
@@ -222,6 +232,7 @@ mod tests {
             key: None,
             master: SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         });
         song.clips[0].timeline_start_seconds = 0.0;
         song.clips[0].duration_seconds = 10.0000005;
@@ -502,3 +513,7 @@ mod tests {
         assert_eq!(song.next_marker_name(), "Marker 2");
     }
 }
+
+#[cfg(test)]
+#[path = "structure_model_tests.rs"]
+mod structure_model_tests;

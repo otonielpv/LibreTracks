@@ -187,6 +187,7 @@ impl DesktopSession {
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         };
 
         replace_song_region_range(&mut song, region);
@@ -266,6 +267,7 @@ impl DesktopSession {
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         };
 
         song.regions.push(region);
@@ -344,6 +346,7 @@ impl DesktopSession {
             warp_source_bpm: existing_region.warp_source_bpm,
             master: existing_region.master.clone(),
             compact_column_width_rem: existing_region.compact_column_width_rem,
+            structure: existing_region.structure.clone(),
         };
 
         // Resizing a region NEVER moves its contents — the region is
@@ -588,6 +591,7 @@ impl DesktopSession {
             warp_source_bpm: existing_region.warp_source_bpm,
             master: existing_region.master.clone(),
             compact_column_width_rem: existing_region.compact_column_width_rem,
+            structure: existing_region.structure.clone(),
         };
 
         // Same rebuild flow as update_song_region: drop the old copy
@@ -1122,9 +1126,13 @@ impl DesktopSession {
             // the song they cut — the new column showing up at a different
             // width than the one it came from would read as a glitch.
             compact_column_width_rem: region.compact_column_width_rem,
+            // El original capturado describe la canción entera: ninguna de
+            // las dos mitades lo hereda.
+            structure: None,
         };
         // Left half: shrink the original region's end to the cut.
         song.regions[region_index].end_seconds = split_seconds;
+        song.regions[region_index].structure = None;
         song.regions.push(right);
         sort_song_regions(&mut song.regions);
 

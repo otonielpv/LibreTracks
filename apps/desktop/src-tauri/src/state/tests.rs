@@ -81,6 +81,7 @@ fn demo_song() -> Song {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         }],
         tracks: vec![Track {
             id: "track_1".into(),
@@ -149,6 +150,7 @@ fn demo_song_with_varispeed_region() -> Song {
         key: None,
         master: libretracks_core::SongMaster::default(),
         compact_column_width_rem: None,
+        structure: None,
     }];
     // Keep the clip inside the varispeed region ([5, 20]) so the song
     // satisfies the clip-inside-region invariant.
@@ -246,6 +248,7 @@ fn demo_song_with_region_changes_and_sections() -> Song {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         },
         SongRegion {
             id: "region_2".into(),
@@ -258,6 +261,7 @@ fn demo_song_with_region_changes_and_sections() -> Song {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         },
         SongRegion {
             id: "region_3".into(),
@@ -270,6 +274,7 @@ fn demo_song_with_region_changes_and_sections() -> Song {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         },
     ];
     // Keep the clip inside region_1 ([0, 8]) — and small enough that it
@@ -393,6 +398,7 @@ fn hierarchy_song() -> Song {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         }],
         tracks: vec![
             Track {
@@ -945,6 +951,7 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         }],
         tracks: vec![
             Track {
@@ -1440,6 +1447,7 @@ fn varispeed_expansion_next_to_another_song_returns_descriptive_overlap_error() 
         key: None,
         master: libretracks_core::SongMaster::default(),
         compact_column_width_rem: None,
+        structure: None,
     });
     let mut session = session_with_song_dir("transpose-overlap-demo", song);
     let audio = crate::audio::engine::AudioController::default();
@@ -3734,6 +3742,7 @@ fn reconcile_regions_and_clips_keeps_a_clip_from_crossing_into_the_next_song() {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         },
         SongRegion {
             id: "b".into(),
@@ -3746,6 +3755,7 @@ fn reconcile_regions_and_clips_keeps_a_clip_from_crossing_into_the_next_song() {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         },
     ];
     song.clips = vec![Clip {
@@ -3941,6 +3951,7 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         },
         SongRegion {
             id: "region_middle".into(),
@@ -3953,6 +3964,7 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         },
         SongRegion {
             id: "region_following".into(),
@@ -3965,6 +3977,7 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            structure: None,
         },
     ];
     song.clips = vec![
