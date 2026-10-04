@@ -93,7 +93,9 @@ export function useSettingsState({
         return;
       }
       unlisten = dispose;
-    });
+    })
+      // No event bridge (tests, a plain browser): nothing to follow.
+      .catch(() => {});
     return () => {
       disposed = true;
       unlisten?.();

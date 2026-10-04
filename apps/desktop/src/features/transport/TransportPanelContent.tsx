@@ -293,6 +293,7 @@ import { useAudioMeters } from "./hooks/useAudioMeters";
 import { useRegionMeters } from "./hooks/useRegionMeters";
 import { useLibraryActions } from "./hooks/useLibraryActions";
 import { useSettingsState } from "./hooks/useSettingsState";
+import { useMidiCapabilities } from "./hooks/useMidiCapabilities";
 import {
   UI_ZOOM_STATUS_EVENT,
   clientToZoomedCoords,
@@ -426,6 +427,7 @@ import {
 } from "./helpers";
 import { createSettingsHandlers } from "./settings/settingsHandlers";
 import { createMetronomeDeviceHandlers } from "./settings/metronomeDeviceHandlers";
+import { visibleSettingsTabs } from "./settings/visibleSettingsTabs";
 import { createLibraryHandlers } from "./library/libraryHandlers";
 import {
   runAudioImportPipeline,
@@ -6764,15 +6766,7 @@ export function TransportPanelContent() {
     appSettings.selectedMidiDevice &&
     !midiInputDevices.includes(appSettings.selectedMidiDevice),
   );
-  // Keyboard shortcuts and MIDI make no sense on a phone/tablet: no physical
-  // keyboard by default, and midir has no Android backend (the MIDI tabs
-  // would only ever show an empty device list).
-  const androidHiddenSettingsTabs: SettingsTab[] = [
-    "video",
-    "shortcuts",
-    "midi",
-    "midiLearn",
-  ];
+  const midiCapabilities = useMidiCapabilities();
   const allSettingsTabs: Array<{ id: SettingsTab; label: string }> = [
     {
       id: "audio",
@@ -6808,11 +6802,10 @@ export function TransportPanelContent() {
       }),
     },
   ];
-  const settingsTabs = isMobileApp
-    ? allSettingsTabs.filter(
-        (tab) => !androidHiddenSettingsTabs.includes(tab.id),
-      )
-    : allSettingsTabs;
+  const settingsTabs = visibleSettingsTabs(allSettingsTabs, {
+    isMobile: isMobileApp,
+    midiAvailable: midiCapabilities?.available ?? false,
+  });
 
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>

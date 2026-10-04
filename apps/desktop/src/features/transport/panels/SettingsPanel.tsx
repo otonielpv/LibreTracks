@@ -19,7 +19,6 @@ import type {
   MidiLearnFeedback,
   SettingsTab,
 } from "../types";
-import { formatMidiBinding } from "../helpers";
 import { formatUserFacingError } from "../errors/formatTransportError";
 import { UI_ZOOM_STEPS, setUiZoom, useUiZoom } from "../../../shared/uiZoom";
 import { TelemetrySettingsField } from "../../telemetry/TelemetryController";
@@ -33,6 +32,7 @@ import {
   MidiSettingsTab,
   type MidiOutputSettings,
 } from "./MidiSettingsTab";
+import { MidiLearnSettingsTab } from "./MidiLearnSettingsTab";
 import { useDismissOnBack } from "../mobile/backNavigation";
 
 type AudioRoutingOption = { value: string; label: string };
@@ -938,243 +938,25 @@ export function SettingsPanel({
               ) : null}
 
               {activeTab === "midiLearn" ? (
-                <section
-                  className="lt-settings-tab-panel"
-                  role="tabpanel"
-                  id="lt-settings-panel-midiLearn"
-                  aria-labelledby="lt-settings-tab-midiLearn"
-                >
-                  <section
-                    className="lt-midi-learn-panel"
-                    aria-labelledby="lt-midi-learn-panel-title"
-                  >
-                    <div className="lt-midi-learn-panel-header">
-                      <div>
-                        <span
-                          id="lt-midi-learn-panel-title"
-                          className="lt-settings-field-label"
-                        >
-                          {t(
-                            "transport.settingsModal.midiLearnSectionTitle",
-                          )}
-                        </span>
-                        <p>
-                          {t(
-                            "transport.settingsModal.midiLearnSectionDescription",
-                          )}
-                        </p>
-                      </div>
-                      <div className="lt-midi-learn-actions">
-                        <button
-                          type="button"
-                          className={`lt-midi-learn-activate ${midiLearnMode !== null ? "is-active" : ""}`}
-                          disabled={isLoading || isSaving}
-                          onClick={() =>
-                            onMidiLearnToggle({ closePanels: false })
-                          }
-                        >
-                          <span className="material-symbols-outlined">
-                            graphic_eq
-                          </span>
-                          {t("transport.shell.midiLearn")}
-                        </button>
-                        <button
-                          type="button"
-                          className="lt-midi-learn-reset"
-                          disabled={
-                            isLoading ||
-                            isSaving ||
-                            Object.keys(appSettings.midiMappings).length === 0
-                          }
-                          onClick={onResetMidiMappings}
-                        >
-                          {t("transport.settingsModal.midiLearnReset")}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="lt-midi-learn-feedback">
-                      <strong>
-                        {t("transport.settingsModal.midiLearnLatest")}
-                      </strong>
-                      {midiLearnFeedback ? (
-                        <p>
-                          {midiLearnFeedbackCommand?.label ??
-                            midiLearnFeedback.key}
-                          :{" "}
-                          {formatMidiBinding(midiLearnFeedback.binding)}
-                        </p>
-                      ) : (
-                        <p>
-                          {t("transport.settingsModal.midiLearnEmpty")}
-                        </p>
-                      )}
-                    </div>
-
-                    {midiLearnMode !== null ? (
-                      <div className="lt-midi-learn-live">
-                        <strong>
-                          {t(
-                            "transport.settingsModal.midiLearnListening",
-                          )}
-                        </strong>
-                        <p>
-                          {midiLearnMode === ""
-                            ? t("transport.settingsModal.midiLearnArmed")
-                            : t(
-                                "transport.settingsModal.midiLearnTargeting",
-                                {
-                                  key:
-                                    activeMidiLearnCommand?.label ??
-                                    midiLearnMode,
-                                },
-                              )}
-                        </p>
-                      </div>
-                    ) : null}
-
-                    <div className="lt-segmented-control lt-midi-learn-view-tabs">
-                      <button
-                        type="button"
-                        className={
-                          midiLearnView === "core" ? "is-active" : ""
-                        }
-                        onClick={() => onMidiLearnViewChange("core")}
-                      >
-                        {t("transport.settingsModal.midiLearnViewCore")}
-                      </button>
-                      <button
-                        type="button"
-                        className={
-                          midiLearnView === "markers" ? "is-active" : ""
-                        }
-                        onClick={() => onMidiLearnViewChange("markers")}
-                      >
-                        {t(
-                          "transport.settingsModal.midiLearnViewMarkers",
-                          {
-                            count: midiLearnMarkerRows.length,
-                          },
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        className={
-                          midiLearnView === "songs" ? "is-active" : ""
-                        }
-                        onClick={() => onMidiLearnViewChange("songs")}
-                      >
-                        {t(
-                          "transport.settingsModal.midiLearnViewSongs",
-                          {
-                            count: midiLearnSongRows.length,
-                          },
-                        )}
-                      </button>
-                    </div>
-
-                    <div className="lt-midi-learn-table-wrap">
-                      <table className="lt-midi-learn-table">
-                        <thead>
-                          <tr>
-                            <th scope="col">
-                              {t(
-                                "transport.settingsModal.midiLearnTableCommand",
-                              )}
-                            </th>
-                            <th scope="col">
-                              {t(
-                                "transport.settingsModal.midiLearnTableBinding",
-                              )}
-                            </th>
-                            <th scope="col">
-                              {t(
-                                "transport.settingsModal.midiLearnTableAction",
-                              )}
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {visibleMidiLearnRows.map((command) => {
-                            const hasBinding = Boolean(command.binding);
-                            const isTarget = midiLearnMode === command.key;
-
-                            return (
-                              <tr
-                                key={command.key}
-                                className={
-                                  isTarget ? "is-midi-target" : undefined
-                                }
-                              >
-                                <td>
-                                  <strong>{command.label}</strong>
-                                  <code>{command.key}</code>
-                                </td>
-                                <td>
-                                  {hasBinding && command.binding ? (
-                                    <span className="lt-midi-binding-pill">
-                                      {formatMidiBinding(command.binding)}
-                                    </span>
-                                  ) : (
-                                    <span className="lt-midi-binding-empty">
-                                      {t(
-                                        "transport.settingsModal.midiLearnUnassigned",
-                                      )}
-                                    </span>
-                                  )}
-                                </td>
-                                <td>
-                                  <button
-                                    type="button"
-                                    className={`lt-midi-learn-relearn ${isTarget ? "is-active" : ""}`}
-                                    disabled={isLoading || isSaving}
-                                    onClick={() =>
-                                      onMidiLearnCommandRelearn(command.key)
-                                    }
-                                  >
-                                    {isTarget
-                                      ? t(
-                                          "transport.settingsModal.midiLearnListeningShort",
-                                        )
-                                      : t(
-                                          "transport.settingsModal.midiLearnRelearn",
-                                        )}
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="lt-midi-learn-dynamic-actions">
-                      {midiLearnView === "markers" ? (
-                        <button
-                          type="button"
-                          className="lt-midi-learn-map-jump"
-                          disabled={isLoading || isSaving}
-                          onClick={() => onDynamicMidiLearnJump("marker")}
-                        >
-                          {t(
-                            "transport.settingsModal.midiLearnMapMarkerJump",
-                          )}
-                        </button>
-                      ) : null}
-                      {midiLearnView === "songs" ? (
-                        <button
-                          type="button"
-                          className="lt-midi-learn-map-jump"
-                          disabled={isLoading || isSaving}
-                          onClick={() => onDynamicMidiLearnJump("song")}
-                        >
-                          {t(
-                            "transport.settingsModal.midiLearnMapSongJump",
-                          )}
-                        </button>
-                      ) : null}
-                    </div>
-                  </section>
-                </section>
+                <MidiLearnSettingsTab
+                  layout={isMobileApp ? "list" : "table"}
+                  isLoading={isLoading}
+                  isSaving={isSaving}
+                  hasMappings={Object.keys(appSettings.midiMappings).length > 0}
+                  midiLearnMode={midiLearnMode}
+                  midiLearnFeedback={midiLearnFeedback}
+                  midiLearnFeedbackCommand={midiLearnFeedbackCommand}
+                  midiLearnView={midiLearnView}
+                  onMidiLearnViewChange={onMidiLearnViewChange}
+                  midiLearnMarkerRows={midiLearnMarkerRows}
+                  midiLearnSongRows={midiLearnSongRows}
+                  visibleMidiLearnRows={visibleMidiLearnRows}
+                  activeMidiLearnCommand={activeMidiLearnCommand}
+                  onMidiLearnToggle={onMidiLearnToggle}
+                  onResetMidiMappings={onResetMidiMappings}
+                  onMidiLearnCommandRelearn={onMidiLearnCommandRelearn}
+                  onDynamicMidiLearnJump={onDynamicMidiLearnJump}
+                />
               ) : null}
             </div>
           </div>

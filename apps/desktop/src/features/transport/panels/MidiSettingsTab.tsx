@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 
+import { isMobileApp } from "../desktopApi";
+
 /**
  * The Settings modal's MIDI tab: input port (for MIDI learn) and output port
  * (for the timeline's MIDI tracks), plus a test-note button.
@@ -8,6 +10,10 @@ import { useTranslation } from "react-i18next";
  * a size budget (see fileSizeBudget.test.ts) and the rule is to extract, not to
  * raise the limit. The tab is self-contained: every value it needs arrives as a
  * prop, so it holds no state of its own.
+ *
+ * On a phone or tablet (plan mobile-midi, paso 05) the selects go full width,
+ * the test-note button gets a 44 px touch target (styles.css, `.lt-mobile
+ * .lt-midi-settings`) and an empty device list explains how to connect one.
  */
 export type MidiSettingsTabProps = {
   isLoading: boolean;
@@ -61,7 +67,14 @@ export function MidiSettingsTab({
       id="lt-settings-panel-midi"
       aria-labelledby="lt-settings-tab-midi"
     >
-      <div className="lt-settings-section-grid">
+      <div className="lt-settings-section-grid lt-midi-settings">
+        {isMobileApp &&
+        midiInputDevices.length === 0 &&
+        midiOutputDevices.length === 0 ? (
+          <p className="lt-midi-empty-help" role="note">
+            {t("transport.midi.noDevicesMobile")}
+          </p>
+        ) : null}
         <div className="lt-settings-field">
           <label
             className="lt-settings-field-label"
@@ -175,7 +188,7 @@ export function MidiSettingsTab({
           <div className="lt-settings-field-control-row">
             <button
               type="button"
-              className="lt-ghost-button"
+              className="lt-ghost-button lt-midi-test-note"
               disabled={
                 isLoading || isSaving || !selectedMidiOutputDevice
               }

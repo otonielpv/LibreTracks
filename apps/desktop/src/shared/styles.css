@@ -12853,3 +12853,108 @@ html.lt-ios body {
   gap: 6px;
   margin: 0;
 }
+
+/* ── MIDI en iPhone, iPad y Android (plan mobile-midi, paso 05) ───────────
+   La pestaña MIDI con el dedo: selects a todo el ancho, botones de 44 px y,
+   en MIDI Learn, una lista de filas en vez de la tabla de escritorio (que no
+   cabe en un teléfono). Escritorio no cambia: todo va bajo `.lt-mobile` o en
+   clases que solo pinta la vista de lista. */
+.lt-mobile .lt-midi-settings .lt-settings-field-control-row {
+  grid-template-columns: minmax(0, 1fr) 44px;
+}
+
+.lt-mobile .lt-midi-settings select,
+.lt-mobile .lt-midi-settings .lt-settings-icon-button {
+  min-height: 44px;
+}
+
+.lt-mobile .lt-midi-test-note,
+.lt-mobile .lt-midi-learn-map-jump,
+.lt-mobile .lt-midi-learn-activate,
+.lt-mobile .lt-midi-learn-reset {
+  min-height: 44px;
+}
+
+.lt-mobile .lt-midi-test-note {
+  width: 100%;
+}
+
+.lt-midi-empty-help {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px dashed rgb(255 255 255 / 0.14);
+  border-radius: 2px;
+  color: rgb(229 226 225 / 0.82);
+  font: 500 0.9rem/1.45 "Space Grotesk", sans-serif;
+}
+
+.lt-midi-learn-panel.is-list .lt-midi-learn-panel-header,
+.lt-midi-learn-panel.is-list .lt-midi-learn-actions,
+.lt-midi-learn-panel.is-list .lt-midi-learn-view-tabs {
+  flex-wrap: wrap;
+}
+
+.lt-midi-learn-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.06);
+  background: rgb(8 10 11 / 0.75);
+}
+
+.lt-midi-learn-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.05);
+}
+
+.lt-midi-learn-list li:last-child {
+  border-bottom: 0;
+}
+
+.lt-midi-learn-list li.is-midi-target {
+  background: rgb(87 241 219 / 0.06);
+}
+
+.lt-midi-learn-list-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.lt-midi-learn-list-text strong {
+  color: #f3f0ef;
+  font: 700 0.88rem/1.25 "Space Grotesk", sans-serif;
+  overflow-wrap: anywhere;
+}
+
+/* El binding como chip, no como celda. */
+.lt-midi-learn-list .lt-midi-binding-pill,
+.lt-midi-learn-list .lt-midi-binding-empty {
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.lt-midi-learn-list .lt-midi-binding-pill {
+  background: rgb(87 241 219 / 0.12);
+  color: #d8fff7;
+}
+
+.lt-midi-learn-list .lt-midi-binding-empty {
+  background: rgb(255 255 255 / 0.05);
+  color: rgb(229 226 225 / 0.6);
+}
+
+.lt-midi-learn-list .lt-midi-learn-relearn {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useDismissOnBack } from "../mobile/backNavigation";
 
@@ -36,7 +36,13 @@ export function MidiRouteModal({
   onConfirm,
 }: MidiRouteModalProps) {
   // En Android, atras cierra este overlay en vez de salir de la aplicacion.
-  useDismissOnBack(onCancel);
+  // Callback estable: `useDismissOnBack` vuelve a registrar uno nuevo y eso
+  // lo sube a lo alto de la pila del boton atras (por encima de una hoja
+  // abierta despues). El padre pasa una flecha nueva en cada render.
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
+  const onBack = useCallback(() => onCancelRef.current(), []);
+  useDismissOnBack(onBack);
   const { t } = useTranslation();
   const [port, setPort] = useState<string>(() => draft?.port ?? "");
   const [channel, setChannel] = useState<number>(() => draft?.channel ?? 1);
@@ -69,7 +75,7 @@ export function MidiRouteModal({
         </header>
 
         <div className="lt-settings-modal-body">
-          <div className="lt-settings-section-grid">
+          <div className="lt-settings-section-grid lt-midi-settings">
             <label className="lt-settings-field">
               <span className="lt-settings-field-label">
                 {t("transport.midi.routePort")}

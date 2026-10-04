@@ -417,6 +417,7 @@ const en = {
       midiLearnTableAction: "Action",
       midiLearnUnassigned: "Unassigned",
       midiLearnRelearn: "Relearn",
+      midiLearnLearn: "Learn",
       midiLearnListeningShort: "Listening",
     },
     renderModal: {
@@ -1250,6 +1251,8 @@ const en = {
       outputDeviceHint:
         "Port the MIDI tracks send to (lighting desks, lyric software).",
       testNote: "Send test note",
+      noDevicesMobile:
+        "No MIDI devices found. Connect a controller or interface over USB: a camera adapter or USB-C on iPhone and iPad, an OTG cable on Android.",
       testNoteSent: "Test note sent",
       testNoteFailed: "Could not send the test note",
     },

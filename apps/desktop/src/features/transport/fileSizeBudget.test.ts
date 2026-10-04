@@ -47,7 +47,9 @@ const BUDGETS: Record<string, number> = {
   // docs/plans/mobile-daw): todo el vocabulario de tipos de marca -22
   // secciones, 13 avisos y variantes- vive ahora aparte.
   "menus/timelineMenus.ts": 1450,
-  "panels/SettingsPanel.tsx": 1500,
+  // Bajado de 1500 tras extraer panels/MidiLearnSettingsTab.tsx (paso 05 de
+  // docs/plans/mobile-midi).
+  "panels/SettingsPanel.tsx": 1300,
   "timeline/TimelineToolbar.tsx": 1250,
   "compact/CompactView.tsx": 1150,
 };

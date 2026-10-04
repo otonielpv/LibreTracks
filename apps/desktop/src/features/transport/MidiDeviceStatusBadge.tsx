@@ -37,7 +37,9 @@ export function MidiDeviceStatusBadge() {
         return;
       }
       unlisten = dispose;
-    });
+    })
+      // No event bridge (tests, a plain browser): nothing to follow.
+      .catch(() => {});
     void getMidiStatus()
       .then((initial) => {
         if (!disposed) {

@@ -436,6 +436,7 @@ const es = {
       midiLearnTableAction: "Accion",
       midiLearnUnassigned: "Sin asignar",
       midiLearnRelearn: "Reaprender",
+      midiLearnLearn: "Aprender",
       midiLearnListeningShort: "Escuchando",
     },
     renderModal: {
@@ -1281,6 +1282,8 @@ const es = {
       outputDeviceHint:
         "Puerto al que envian las pistas MIDI (mesas de luces, software de letras).",
       testNote: "Enviar nota de prueba",
+      noDevicesMobile:
+        "No hay dispositivos MIDI. Conecta un controlador o una interfaz por USB: con el adaptador de cámara o USB-C en iPhone y iPad, o con un cable OTG en Android.",
       testNoteSent: "Nota de prueba enviada",
       testNoteFailed: "No se pudo enviar la nota de prueba",
     },
