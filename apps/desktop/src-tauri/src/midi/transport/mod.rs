@@ -35,6 +35,12 @@ pub(crate) trait MidiTransport: Send + Sync + 'static {
         -> Result<Box<dyn InputConnection>, String>;
     fn open_output(&self, name: &str) -> Result<Box<dyn OutputConnection>, String>;
     fn capabilities(&self) -> MidiCapabilities;
+
+    /// Ask to be told when ports appear or disappear. Returns false when the
+    /// transport can't notify (then `midi::watch` polls instead).
+    fn watch(&self, _on_change: Box<dyn Fn() + Send + Sync>) -> bool {
+        false
+    }
 }
 
 /// An open input. Dropping it closes the port.

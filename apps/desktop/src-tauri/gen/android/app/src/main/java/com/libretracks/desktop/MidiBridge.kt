@@ -246,6 +246,47 @@ object MidiBridge {
     releaseDevice(open.deviceId)
   }
 
+  private var deviceCallback: MidiManager.DeviceCallback? = null
+
+  /**
+   * Hot-plug (paso 04): tell Rust whenever a MIDI device appears or goes away,
+   * so a pulled OTG cable reconnects by itself. Rust re-lists and reopens off
+   * this thread (reopening here would wait on our own Handler).
+   */
+  @JvmStatic
+  fun registerDeviceCallback(ctx: Context): Boolean {
+    return try {
+      val manager = manager(ctx) ?: return false
+      synchronized(this) {
+        if (deviceCallback == null) {
+          val callback = object : MidiManager.DeviceCallback() {
+            override fun onDeviceAdded(device: MidiDeviceInfo) = notifyChanged()
+
+            override fun onDeviceRemoved(device: MidiDeviceInfo) = notifyChanged()
+          }
+          @Suppress("DEPRECATION")
+          manager.registerDeviceCallback(callback, handler)
+          deviceCallback = callback
+        }
+      }
+      true
+    } catch (error: Throwable) {
+      Log.w(TAG, "registerDeviceCallback: $error")
+      false
+    }
+  }
+
+  private fun notifyChanged() {
+    try {
+      nativeOnDevicesChanged()
+    } catch (error: UnsatisfiedLinkError) {
+      // Native library not loaded yet; the next change will try again.
+    }
+  }
+
   @JvmStatic
   external fun nativeOnMidiBytes(handle: Long, data: ByteArray, offset: Int, count: Int)
+
+  @JvmStatic
+  external fun nativeOnDevicesChanged()
 }

@@ -12,7 +12,10 @@
 mod dispatch;
 pub mod message;
 pub mod output;
+#[cfg(test)]
+mod reconnect_tests;
 pub(crate) mod transport;
+pub(crate) mod watch;
 
 use std::{
     sync::{
@@ -28,7 +31,8 @@ use libretracks_core::midi_wire::{Framer, WireEvent};
 use tauri::AppHandle;
 
 use crate::audio::engine::AudioCommand;
-use dispatch::{dispatch_midi_message, MidiMessage};
+use dispatch::dispatch_midi_message;
+pub(crate) use dispatch::MidiMessage;
 use transport::{platform_transport, MidiTransport};
 
 pub use transport::MidiCapabilities;
@@ -37,69 +41,167 @@ const MIDI_LOOP_POLL_INTERVAL: Duration = Duration::from_millis(100);
 pub(crate) const MIDI_STARTUP_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub(crate) struct MidiListenerHandle {
-    device_name: String,
     should_stop: Arc<AtomicBool>,
     listener_thread: JoinHandle<()>,
     dispatcher_thread: JoinHandle<()>,
 }
 
+/// What an incoming message does. The app passes MIDI Learn dispatch; tests
+/// pass a recorder.
+pub(crate) type DispatchFn = Arc<dyn Fn(MidiMessage) + Send + Sync>;
+
+#[derive(Default)]
+struct InputState {
+    /// The port the user selected, whether or not it is open right now.
+    desired: Option<String>,
+    /// Open listener for `desired`. `None` with `desired` set = *waiting* for
+    /// the port to (re)appear.
+    active: Option<MidiListenerHandle>,
+    dispatch: Option<DispatchFn>,
+}
+
 pub struct MidiManager {
     transport: Arc<dyn MidiTransport>,
-    active_listener: Mutex<Option<MidiListenerHandle>>,
+    state: Mutex<InputState>,
 }
 
 impl Default for MidiManager {
     fn default() -> Self {
-        Self {
-            transport: platform_transport(),
-            active_listener: Mutex::new(None),
-        }
+        Self::with_transport(platform_transport())
     }
 }
 
 impl MidiManager {
+    pub(crate) fn with_transport(transport: Arc<dyn MidiTransport>) -> Self {
+        Self {
+            transport,
+            state: Mutex::new(InputState::default()),
+        }
+    }
+
     pub fn restart(
         &self,
         app: AppHandle,
         _audio_sender: Sender<AudioCommand>,
         selected_device: Option<String>,
     ) -> Result<(), String> {
+        let dispatch: DispatchFn = Arc::new(move |message| {
+            if let Err(error) = dispatch_midi_message(&app, message) {
+                eprintln!("[libretracks-midi] failed to dispatch MIDI message: {error}");
+            }
+        });
+        let result = self.select(dispatch, selected_device);
+        watch::ensure_running();
+        result
+    }
+
+    /// Select (and open) the input port. Re-selecting the open port is a
+    /// no-op. A port that fails to open stays selected and *waiting*: the
+    /// watcher reopens it when it appears.
+    pub(crate) fn select(
+        &self,
+        dispatch: DispatchFn,
+        selected_device: Option<String>,
+    ) -> Result<(), String> {
         let normalized_device = normalize_device_name(selected_device);
-        let mut active_listener = self
-            .active_listener
+        let mut state = self
+            .state
             .lock()
             .map_err(|_| "midi listener state lock poisoned".to_string())?;
+        state.dispatch = Some(dispatch);
 
-        if active_listener
-            .as_ref()
-            .map(|listener| listener.device_name.as_str())
-            == normalized_device.as_deref()
-        {
+        if state.active.is_some() && state.desired == normalized_device {
             return Ok(());
         }
 
-        if let Some(listener) = active_listener.take() {
+        if let Some(listener) = state.active.take() {
             stop_listener(listener);
         }
+        state.desired = normalized_device;
 
-        if let Some(device_name) = normalized_device {
-            let listener =
-                spawn_midi_listener(Arc::clone(&self.transport), device_name, move |message| {
-                    if let Err(error) = dispatch_midi_message(&app, message) {
-                        eprintln!("[libretracks-midi] failed to dispatch MIDI message: {error}");
-                    }
-                })?;
-            *active_listener = Some(listener);
+        if let Some(device_name) = state.desired.clone() {
+            let dispatch = state.dispatch.clone().expect("dispatch set above");
+            state.active = Some(spawn_midi_listener(
+                Arc::clone(&self.transport),
+                device_name,
+                move |message| dispatch(message),
+            )?);
         }
 
         Ok(())
+    }
+
+    /// React to a new device list: close the listener of a port that has
+    /// gone, reopen a waiting port that has come back. Returns true when it
+    /// opened or closed anything.
+    pub(crate) fn on_devices_changed(&self, inputs: &[String]) -> bool {
+        let Ok(mut state) = self.state.lock() else {
+            return false;
+        };
+        let Some(name) = state.desired.clone() else {
+            return false;
+        };
+        let present = inputs.iter().any(|input| *input == name);
+
+        if !present {
+            return match state.active.take() {
+                Some(listener) => {
+                    stop_listener(listener);
+                    true
+                }
+                None => false,
+            };
+        }
+
+        if state.active.is_some() {
+            return false;
+        }
+        let Some(dispatch) = state.dispatch.clone() else {
+            return false;
+        };
+        match spawn_midi_listener(Arc::clone(&self.transport), name, move |message| {
+            dispatch(message)
+        }) {
+            Ok(listener) => {
+                state.active = Some(listener);
+                true
+            }
+            Err(error) => {
+                eprintln!("[libretracks-midi] reopening input failed: {error}");
+                false
+            }
+        }
+    }
+
+    /// The selected input port is open.
+    pub(crate) fn is_connected(&self) -> bool {
+        self.state
+            .lock()
+            .map(|state| state.active.is_some())
+            .unwrap_or(false)
+    }
+
+    /// A port is selected but not open: waiting for it to appear.
+    pub(crate) fn is_waiting(&self) -> bool {
+        self.state
+            .lock()
+            .map(|state| state.desired.is_some() && state.active.is_none())
+            .unwrap_or(false)
+    }
+
+    /// Whether the watcher has anything to do for inputs.
+    pub(crate) fn wants_port(&self) -> bool {
+        self.state
+            .lock()
+            .map(|state| state.desired.is_some())
+            .unwrap_or(false)
     }
 }
 
 impl Drop for MidiManager {
     fn drop(&mut self) {
-        if let Ok(mut active_listener) = self.active_listener.lock() {
-            if let Some(listener) = active_listener.take() {
+        if let Ok(mut state) = self.state.lock() {
+            if let Some(listener) = state.active.take() {
                 stop_listener(listener);
             }
         }
@@ -172,7 +274,6 @@ fn spawn_midi_listener(
         .map_err(|error| error.to_string())?;
 
     Ok(MidiListenerHandle {
-        device_name: port_name,
         should_stop,
         listener_thread,
         dispatcher_thread,

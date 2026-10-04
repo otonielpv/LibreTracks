@@ -1903,6 +1903,33 @@ export async function getMidiCapabilities(): Promise<MidiCapabilities> {
   return invokeCommand<MidiCapabilities>("get_midi_capabilities");
 }
 
+/**
+ * MIDI ports and whether the selected ones are open. `*Waiting` = a port is
+ * selected but its device is missing; it reopens by itself when it returns.
+ */
+export type MidiDevicesStatus = {
+  inputs: string[];
+  outputs: string[];
+  inputConnected: boolean;
+  inputWaiting: boolean;
+  outputConnected: boolean;
+  outputWaiting: boolean;
+};
+
+export async function getMidiStatus(): Promise<MidiDevicesStatus> {
+  return invokeCommand<MidiDevicesStatus>("get_midi_status");
+}
+
+/** Fired when MIDI devices appear or disappear (hot-plug, reconnection). */
+export async function listenToMidiDevicesChanged(
+  handler: (status: MidiDevicesStatus) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<MidiDevicesStatus>("midi:devices_changed", (event) => {
+    handler(event.payload);
+  });
+}
+
 /** Fire a short note so the user can confirm the cabling reaches the target. */
 export async function sendMidiTestNote(
   channel = 1,

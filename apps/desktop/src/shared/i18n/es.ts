@@ -1455,6 +1455,10 @@ const es = {
     deviceLostTitle:
       "El dispositivo de audio dejó de responder. La reproducción sigue en marcha y el sonido volverá automáticamente cuando el dispositivo se recupere.",
     deviceRestored: "Salida de audio restablecida",
+    midiInputWaiting: "Controlador MIDI desconectado",
+    midiOutputWaiting: "Salida MIDI desconectada",
+    midiWaitingTitle:
+      "Falta el dispositivo MIDI seleccionado. Se reconecta solo en cuanto lo vuelvas a enchufar; no hace falta abrir Ajustes.",
   },
   idleWake: {
     title: "La app estaba en reposo",

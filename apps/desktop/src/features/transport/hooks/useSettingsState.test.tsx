@@ -11,11 +11,29 @@ import {
 } from "../desktopApi";
 import { useSettingsState } from "./useSettingsState";
 
+const midiEvents = vi.hoisted(() => ({
+  isTauriApp: false,
+  handler: null as
+    | ((status: { inputs: string[]; outputs: string[] }) => void)
+    | null,
+}));
+
 vi.mock("../desktopApi", () => ({
   getAudioOutputDevices: vi.fn(),
   getMidiInputs: vi.fn(),
   getMidiOutputs: vi.fn(),
   getSettings: vi.fn(),
+  get isTauriApp() {
+    return midiEvents.isTauriApp;
+  },
+  listenToMidiDevicesChanged: vi.fn(
+    async (handler: (status: { inputs: string[]; outputs: string[] }) => void) => {
+      midiEvents.handler = handler;
+      return () => {
+        midiEvents.handler = null;
+      };
+    },
+  ),
 }));
 
 function deferred<T>() {
@@ -29,6 +47,25 @@ function deferred<T>() {
 describe("useSettingsState", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    midiEvents.isTauriApp = false;
+    midiEvents.handler = null;
+  });
+
+  it("follows MIDI hot-plug events without a manual refresh", async () => {
+    midiEvents.isTauriApp = true;
+    const { result } = renderHook(() =>
+      useSettingsState({
+        syncSettingsLanguage: vi.fn().mockResolvedValue(undefined),
+      }),
+    );
+    await waitFor(() => expect(midiEvents.handler).not.toBeNull());
+
+    act(() => {
+      midiEvents.handler?.({ inputs: ["Pedal"], outputs: ["Desk"] });
+    });
+
+    expect(result.current.midiInputDevices).toEqual(["Pedal"]);
+    expect(result.current.midiOutputDevices).toEqual(["Desk"]);
   });
 
   it("hydrates the click state before slow hardware discovery completes", async () => {

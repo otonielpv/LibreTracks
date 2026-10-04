@@ -1424,6 +1424,10 @@ const en = {
     deviceLostTitle:
       "The audio device stopped responding. Playback keeps running and sound will come back automatically once the device recovers.",
     deviceRestored: "Audio output restored",
+    midiInputWaiting: "MIDI controller disconnected",
+    midiOutputWaiting: "MIDI output disconnected",
+    midiWaitingTitle:
+      "The selected MIDI device is missing. It reconnects by itself as soon as you plug it back in; no need to open Settings.",
   },
   idleWake: {
     title: "The app was idle",

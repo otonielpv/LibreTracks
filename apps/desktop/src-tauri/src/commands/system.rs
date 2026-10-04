@@ -411,6 +411,13 @@ pub fn get_midi_capabilities() -> MidiCapabilities {
     crate::midi::get_midi_capabilities()
 }
 
+/// Port lists plus whether the selected ports are open or waiting for their
+/// device. Same payload as the `midi:devices_changed` event.
+#[tauri::command(async)]
+pub fn get_midi_status(app: AppHandle) -> Result<crate::midi::watch::MidiDevicesStatus, String> {
+    crate::midi::watch::current_status(&app)
+}
+
 /// Send a short note on the configured output port so the user can confirm the
 /// cabling reaches the target software without having to build a timeline
 /// first. Note-on and note-off are queued back to back; the receiving device

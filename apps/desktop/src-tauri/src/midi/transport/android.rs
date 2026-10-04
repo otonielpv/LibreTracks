@@ -282,6 +282,36 @@ impl MidiTransport for AndroidTransport {
             ..MidiCapabilities::default()
         }
     }
+
+    fn watch(&self, on_change: Box<dyn Fn() + Send + Sync>) -> bool {
+        if DEVICES_CHANGED.set(on_change).is_err() {
+            return true;
+        }
+        with_bridge(|env, context, class| {
+            env.call_static_method(
+                class,
+                "registerDeviceCallback",
+                "(Landroid/content/Context;)Z",
+                &[JValue::Object(context)],
+            )?
+            .z()
+        })
+        .unwrap_or(false)
+    }
+}
+
+/// Hot-plug callback registered by `watch`.
+static DEVICES_CHANGED: OnceLock<Box<dyn Fn() + Send + Sync>> = OnceLock::new();
+
+/// Called by `MidiBridge`'s `DeviceCallback` on its Handler thread.
+#[no_mangle]
+pub extern "system" fn Java_com_libretracks_desktop_MidiBridge_nativeOnDevicesChanged(
+    _env: JNIEnv,
+    _class: JClass,
+) {
+    if let Some(on_change) = DEVICES_CHANGED.get() {
+        on_change();
+    }
 }
 
 /// Called by `MidiBridge.Forwarder.onSend` on a Java binder thread. Copies

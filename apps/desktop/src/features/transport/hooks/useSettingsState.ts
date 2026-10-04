@@ -12,6 +12,8 @@ import {
   getMidiInputs,
   getMidiOutputs,
   getSettings,
+  isTauriApp,
+  listenToMidiDevicesChanged,
 } from "../desktopApi";
 import type { MidiLearnFeedback, SettingsTab } from "../types";
 
@@ -70,6 +72,33 @@ export function useSettingsState({
   useEffect(() => {
     appSettingsRef.current = appSettings;
   }, [appSettings]);
+
+  // Hot-plug: the backend re-lists MIDI ports when a device comes or goes, so
+  // the MIDI tab follows without pressing "Refresh".
+  useEffect(() => {
+    if (!isTauriApp) {
+      return () => {};
+    }
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenToMidiDevicesChanged((status) => {
+      if (disposed) {
+        return;
+      }
+      setMidiInputDevices(status.inputs);
+      setMidiOutputDevices(status.outputs);
+    }).then((dispose) => {
+      if (disposed) {
+        dispose();
+        return;
+      }
+      unlisten = dispose;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   /**
    * Load persisted settings first, independently from hardware discovery.

@@ -30,7 +30,6 @@ const OUTPUT_POLL_INTERVAL: Duration = Duration::from_millis(5);
 const OUTPUT_STARTUP_TIMEOUT: Duration = Duration::from_secs(2);
 
 struct OutputHandle {
-    port_name: String,
     should_stop: Arc<AtomicBool>,
     sender: Sender<OutboundMidiMessage>,
     thread: JoinHandle<()>,
@@ -44,11 +43,19 @@ struct OutputHandle {
 /// projection through different virtual cables.
 pub struct MidiOutputManager {
     transport: Arc<dyn MidiTransport>,
-    /// The app-wide port. `None` when no output device is configured.
-    active: Mutex<Option<OutputHandle>>,
+    /// The app-wide port.
+    active: Mutex<DefaultPort>,
     /// Ports opened because a track asked for them by name, keyed by port
     /// name. Kept open until `close_all`, since a show reuses them every bar.
     extra: Mutex<HashMap<String, Option<OutputHandle>>>,
+}
+
+/// The app-wide port: what the user selected and whether it is open. Selected
+/// but not open means *waiting* for the device to (re)appear.
+#[derive(Default)]
+struct DefaultPort {
+    desired: Option<String>,
+    handle: Option<OutputHandle>,
 }
 
 impl Default for MidiOutputManager {
@@ -61,7 +68,7 @@ impl MidiOutputManager {
     pub(crate) fn with_transport(transport: Arc<dyn MidiTransport>) -> Self {
         Self {
             transport,
-            active: Mutex::new(None),
+            active: Mutex::new(DefaultPort::default()),
             extra: Mutex::new(HashMap::new()),
         }
     }
@@ -80,19 +87,99 @@ impl MidiOutputManager {
             .lock()
             .map_err(|_| "midi output state lock poisoned".to_string())?;
 
-        if active.as_ref().map(|handle| handle.port_name.as_str()) == normalized.as_deref() {
+        if active.handle.is_some() && active.desired == normalized {
             return Ok(());
         }
 
-        if let Some(handle) = active.take() {
+        if let Some(handle) = active.handle.take() {
             stop_output(handle);
         }
+        active.desired = normalized;
 
-        if let Some(port_name) = normalized {
-            *active = Some(spawn_output(Arc::clone(&self.transport), port_name)?);
+        let result = match active.desired.clone() {
+            // A port that fails to open stays selected and waiting: the
+            // watcher opens it when it appears.
+            Some(port_name) => spawn_output(Arc::clone(&self.transport), port_name, false)
+                .map(|handle| active.handle = Some(handle)),
+            None => Ok(()),
+        };
+        drop(active);
+        super::watch::ensure_running();
+        result
+    }
+
+    /// React to a new device list. A port that has gone is closed; a port
+    /// that comes back is reopened with All Notes Off first, because the
+    /// note-offs sent while it was away never arrived. Per-track ports that
+    /// failed to open are retried when their name appears. Returns true when
+    /// it opened or closed anything.
+    pub(crate) fn on_devices_changed(&self, outputs: &[String]) -> bool {
+        let present = |name: &str| outputs.iter().any(|output| output == name);
+        let mut changed = false;
+
+        if let Ok(mut active) = self.active.lock() {
+            if let Some(name) = active.desired.clone() {
+                if !present(&name) {
+                    if let Some(handle) = active.handle.take() {
+                        stop_output(handle);
+                        changed = true;
+                    }
+                } else if active.handle.is_none() {
+                    match spawn_output(Arc::clone(&self.transport), name, true) {
+                        Ok(handle) => {
+                            active.handle = Some(handle);
+                            changed = true;
+                        }
+                        Err(error) => {
+                            eprintln!("[libretracks-midi] reopening output failed: {error}")
+                        }
+                    }
+                }
+            }
         }
 
-        Ok(())
+        if let Ok(mut extra) = self.extra.lock() {
+            for (name, entry) in extra.iter_mut() {
+                if !present(name) {
+                    if let Some(handle) = entry.take() {
+                        stop_output(handle);
+                        changed = true;
+                    }
+                } else if entry.is_none() {
+                    if let Ok(handle) =
+                        spawn_output(Arc::clone(&self.transport), name.clone(), true)
+                    {
+                        *entry = Some(handle);
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        changed
+    }
+
+    /// The app-wide port is selected but not open.
+    pub(crate) fn is_waiting(&self) -> bool {
+        self.active
+            .lock()
+            .map(|active| active.desired.is_some() && active.handle.is_none())
+            .unwrap_or(false)
+    }
+
+    /// Whether the watcher has anything to do for outputs.
+    pub(crate) fn wants_ports(&self) -> bool {
+        let default = self
+            .active
+            .lock()
+            .map(|active| active.desired.is_some())
+            .unwrap_or(false);
+        default
+            || self
+                .extra
+                .lock()
+                .map(|extra| !extra.is_empty())
+                .unwrap_or(false)
     }
 
     /// True when the app-wide port is open.
@@ -105,7 +192,7 @@ impl MidiOutputManager {
     pub fn is_default_port_open(&self) -> bool {
         self.active
             .lock()
-            .map(|active| active.is_some())
+            .map(|active| active.handle.is_some())
             .unwrap_or(false)
     }
 
@@ -119,7 +206,7 @@ impl MidiOutputManager {
         let Ok(active) = self.active.lock() else {
             return;
         };
-        let Some(handle) = active.as_ref() else {
+        let Some(handle) = active.handle.as_ref() else {
             return;
         };
         for message in messages {
@@ -147,9 +234,14 @@ impl MidiOutputManager {
         let Ok(mut extra) = self.extra.lock() else {
             return;
         };
-        let handle = extra.entry(port_name.to_string()).or_insert_with(|| {
-            spawn_output(Arc::clone(&self.transport), port_name.to_string()).ok()
-        });
+        if !extra.contains_key(port_name) {
+            let handle =
+                spawn_output(Arc::clone(&self.transport), port_name.to_string(), false).ok();
+            extra.insert(port_name.to_string(), handle);
+            // A named port now exists to watch (and to retry if it failed).
+            super::watch::ensure_running();
+        }
+        let handle = &extra[port_name];
         let Some(handle) = handle.as_ref() else {
             return;
         };
@@ -188,7 +280,7 @@ impl MidiOutputManager {
 impl Drop for MidiOutputManager {
     fn drop(&mut self) {
         if let Ok(mut active) = self.active.lock() {
-            if let Some(handle) = active.take() {
+            if let Some(handle) = active.handle.take() {
                 stop_output(handle);
             }
         }
@@ -200,22 +292,25 @@ pub(crate) fn get_midi_output_names() -> Result<Vec<String>, String> {
     platform_transport().output_names()
 }
 
+/// Open `port_name` on its own writer thread. `panic_first` silences the
+/// device before anything else is sent (used when a lost port comes back).
 fn spawn_output(
     transport: Arc<dyn MidiTransport>,
     port_name: String,
+    panic_first: bool,
 ) -> Result<OutputHandle, String> {
     let should_stop = Arc::new(AtomicBool::new(false));
     let (message_sender, message_receiver) = mpsc::channel::<OutboundMidiMessage>();
     let (startup_sender, startup_receiver) = mpsc::channel::<Result<(), String>>();
 
     let thread_stop = should_stop.clone();
-    let thread_port_name = port_name.clone();
     let thread = thread::Builder::new()
         .name("libretracks-midi-output".into())
         .spawn(move || {
             run_output_loop(
                 transport.as_ref(),
-                &thread_port_name,
+                &port_name,
+                panic_first,
                 message_receiver,
                 startup_sender,
                 thread_stop,
@@ -243,7 +338,6 @@ fn spawn_output(
     }
 
     Ok(OutputHandle {
-        port_name,
         should_stop,
         sender: message_sender,
         thread,
@@ -253,6 +347,7 @@ fn spawn_output(
 fn run_output_loop(
     transport: &dyn MidiTransport,
     port_name: &str,
+    panic_first: bool,
     message_receiver: mpsc::Receiver<OutboundMidiMessage>,
     startup_sender: Sender<Result<(), String>>,
     should_stop: Arc<AtomicBool>,
@@ -266,6 +361,12 @@ fn run_output_loop(
     };
 
     let _ = startup_sender.send(Ok(()));
+
+    if panic_first {
+        for message in panic_messages() {
+            let _ = connection.send(&message.to_bytes());
+        }
+    }
 
     while !should_stop.load(Ordering::Acquire) {
         match message_receiver.recv_timeout(OUTPUT_POLL_INTERVAL) {

@@ -309,6 +309,9 @@ pub fn run() {
                         eprintln!("[libretracks-midi] output startup warning: {error}");
                     }
                 });
+            // Hot-plug: reopen selected MIDI ports when their device comes
+            // back (plan mobile-midi, paso 04).
+            midi::watch::init(app.handle());
             remote::initialize_remote(app)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
 
@@ -333,6 +336,7 @@ pub fn run() {
             commands::system::get_midi_inputs,
             commands::system::get_midi_outputs,
             commands::system::get_midi_capabilities,
+            commands::system::get_midi_status,
             commands::system::send_midi_test_note,
             commands::transport::get_transport_snapshot,
             commands::settings::get_settings,

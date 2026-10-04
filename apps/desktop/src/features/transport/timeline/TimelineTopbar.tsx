@@ -21,6 +21,7 @@ import {
   sanitizeTimeSignatureDraft,
 } from "../tempo/tempoFieldInput";
 import { AudioDeviceStatusBadge } from "../AudioDeviceStatusBadge";
+import { MidiDeviceStatusBadge } from "../MidiDeviceStatusBadge";
 import { requestAppClose } from "../../appClose/appCloseService";
 
 type TimelineTopbarProps = {
@@ -779,6 +780,7 @@ export function TimelineTopbar({
           </div>
           <div className="lt-device-status-slot">
             <AudioDeviceStatusBadge />
+            <MidiDeviceStatusBadge />
             <VideoOutputBadge />
           </div>
         </div>
