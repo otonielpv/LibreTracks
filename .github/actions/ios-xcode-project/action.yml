@@ -72,6 +72,21 @@ runs:
         ruby scripts/ios-add-privacy-manifest.rb \
           "$apple_dir/libretracks-desktop.xcodeproj" PrivacyInfo.xcprivacy
 
+    # Textos de permisos (Bluetooth, red local) en ingles y espanol. El
+    # Info.plist solo lleva un texto; las traducciones van en
+    # <lang>.lproj/InfoPlist.strings como recurso localizado del target, y
+    # como el proyecto se regenera en cada build hay que volver a meterlos.
+    - name: Add localized permission texts to the iOS app target
+      shell: bash
+      run: |
+        set -euo pipefail
+        for strings in apps/desktop/src-tauri/ios-localization/*.lproj/InfoPlist.strings; do
+          plutil -lint "$strings"
+        done
+        ruby scripts/ios-add-localized-strings.rb \
+          "apps/desktop/src-tauri/gen/apple/libretracks-desktop.xcodeproj" \
+          apps/desktop/src-tauri/ios-localization
+
     # El Swift de los plugins de Tauri viaja dentro de libapp.a, asi que Xcode
     # no ve ningun .swift en el target y no anade al enlazado la carpeta de las
     # bibliotecas de Swift. Desde Xcode 26 eso tumba el build pidiendo

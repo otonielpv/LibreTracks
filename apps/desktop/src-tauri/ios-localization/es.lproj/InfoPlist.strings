@@ -1,0 +1,8 @@
+/* Textos de permisos de iOS en español. Mismas claves que Info.ios.plist;
+   scripts/ios-add-localized-strings.rb añade este fichero al proyecto de
+   Xcode generado. src/shared/iosInfoPlistStrings.test.ts comprueba que los
+   dos idiomas tienen las mismas claves. */
+
+"NSBluetoothAlwaysUsageDescription" = "LibreTracks usa el Bluetooth para conectar pedaleras y controladores MIDI inalámbricos, para que puedas arrancar canciones y saltar entre secciones con el pie.";
+
+"NSLocalNetworkUsageDescription" = "LibreTracks usa la red local para enviar y recibir MIDI por Wi-Fi con un ordenador u otro dispositivo (sesión MIDI de red), por ejemplo para controlar luces o letras desde tu show.";

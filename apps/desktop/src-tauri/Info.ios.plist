@@ -26,8 +26,17 @@
        local cuando el usuario activa "Sesion MIDI de red" en Ajustes > MIDI
        (MIDINetworkSession), nunca al arrancar. App Review exige un texto que
        diga para que se usa: ver las notas para el revisor del paso 09. -->
+  <!-- Idiomas de la app. Sin esto iOS no usa es.lproj/InfoPlist.strings (los
+       textos de permisos en espanol, ver ios-localization/) aunque el
+       telefono este en espanol. -->
+  <key>CFBundleLocalizations</key>
+  <array>
+    <string>en</string>
+    <string>es</string>
+  </array>
   <!-- Bluetooth LE MIDI (paso 06): CABTMIDICentralViewController, abierto solo
-       desde "Buscar dispositivos Bluetooth" en Ajustes > MIDI. -->
+       desde "Buscar dispositivos Bluetooth" en Ajustes > MIDI. Este texto es
+       el de respaldo; los de cada idioma estan en ios-localization/. -->
   <key>NSBluetoothAlwaysUsageDescription</key>
   <string>LibreTracks uses Bluetooth to connect wireless MIDI pedals and controllers, so you can start songs and jump between sections from a foot switch.</string>
   <key>NSLocalNetworkUsageDescription</key>
