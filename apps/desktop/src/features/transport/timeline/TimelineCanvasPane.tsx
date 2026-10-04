@@ -1443,6 +1443,7 @@ export function TimelineCanvasPane({
                               registerAutomationHotspot(cue.id, element)
                             }
                             type="button"
+                            data-lt-native-touch="" /* tocar/arrastrar en movil */
                             className={`lt-automation-hotspot ${isPending ? "is-pending" : ""} ${isOff ? "is-disabled" : ""}${isDraggingCue ? " is-dragging" : ""}`}
                             aria-label={cueDescription}
                             title={cueDescription}

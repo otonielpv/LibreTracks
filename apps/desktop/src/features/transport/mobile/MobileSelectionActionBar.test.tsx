@@ -53,6 +53,9 @@ const menus: MobileSelectionMenus = {
   songRegionContextMenu: () => [],
   trackContextMenu: () => [{ label: "Renombrar", onSelect: vi.fn() }],
   multiTrackContextMenu: () => [{ label: "Eliminar", onSelect: vi.fn() }],
+  automationTrackContextMenu: () => [
+    { label: "Crear automatismo aqui", onSelect: vi.fn() },
+  ],
 };
 
 const mix = {

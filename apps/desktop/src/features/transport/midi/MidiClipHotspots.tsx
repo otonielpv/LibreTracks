@@ -89,6 +89,10 @@ export function MidiClipHotspots({
             key={clip.id}
             ref={(element) => registerHotspot(clip.id, element)}
             type="button"
+            // Movil: la navegacion tactil se queda con todo toque de un dedo
+            // en los carriles salvo en controles marcados asi; sin esto el
+            // punto no se podia ni abrir ni mover con el dedo.
+            data-lt-native-touch=""
             className={`lt-automation-hotspot${isDragging ? " is-dragging" : ""}`}
             aria-label={label}
             title={label}

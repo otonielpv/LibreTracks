@@ -5199,6 +5199,16 @@ html.lt-ios body {
   cursor: default;
 }
 
+/* Con el dedo, 24 px no se aciertan: objetivo de 44 px centrado igual en el
+   diamante. Los hotspots llevan data-lt-native-touch para que la navegacion
+   tactil les ceda el gesto (tocar abre el editor, arrastrar mueve). */
+.lt-mobile .lt-automation-hotspot {
+  width: 44px;
+  height: 44px;
+  margin-left: -22px;
+  margin-top: -22px;
+}
+
 .lt-region-hotspot {
   position: absolute;
   height: 1.35rem;
@@ -11645,7 +11655,9 @@ html.lt-ios body {
 .lt-export-modal,
 .lt-cloud-modal,
 .lt-storage-choice-modal,
-.lt-cloud-picker-modal {
+.lt-cloud-picker-modal,
+.lt-midi-route-modal,
+.lt-bluetooth-midi-modal {
   max-height: 100%;
   /* El marco no se mueve; lo que scrollea es el cuerpo. */
   overflow: hidden;
@@ -11654,7 +11666,9 @@ html.lt-ios body {
 .lt-export-modal > .lt-settings-modal-body,
 .lt-cloud-modal > .lt-settings-modal-body,
 .lt-storage-choice-modal > .lt-settings-modal-body,
-.lt-cloud-picker-modal > .lt-settings-modal-body {
+.lt-cloud-picker-modal > .lt-settings-modal-body,
+.lt-midi-route-modal > .lt-settings-modal-body,
+.lt-bluetooth-midi-modal > .lt-settings-modal-body {
   overflow-y: auto;
   /* Que el dedo no arrastre la pagina de detras al llegar al final. */
   overscroll-behavior: contain;
@@ -11666,7 +11680,14 @@ html.lt-ios body {
 .lt-cloud-modal > .lt-settings-modal-header,
 .lt-storage-choice-modal > .lt-settings-modal-header,
 .lt-cloud-picker-modal > .lt-settings-modal-header,
-.lt-export-modal > .lt-inline-actions {
+.lt-export-modal > .lt-inline-actions,
+/* Enrutado MIDI y Bluetooth MIDI: en un telefono apaisado no caben, y sin esto
+   el cuerpo se encogia y sus campos se pintaban por debajo de los botones
+   Cancelar/Guardar (visto en iPhone, plan mobile-midi). */
+.lt-midi-route-modal > .lt-settings-modal-header,
+.lt-midi-route-modal > .lt-inline-actions,
+.lt-bluetooth-midi-modal > .lt-settings-modal-header,
+.lt-bluetooth-midi-modal > .lt-inline-actions {
   flex: none;
 }
 

@@ -36,6 +36,11 @@ const desktopMenus: MobileSelectionMenus = {
     action("Eliminar"),
     action("Seleccionar color..."),
   ]),
+  automationTrackContextMenu: vi.fn(() => [
+    action("Crear automatismo aqui"),
+    action("Gestionar escenas"),
+    action("Quitar pista"),
+  ]),
 };
 
 const creation = {
@@ -99,6 +104,25 @@ describe("que da por seleccionado la barra tactil", () => {
     expect(
       resolveMobileSelection({ ...empty, selectedTrackIds: ["t1"] }),
     ).toMatchObject({ kind: "track" });
+  });
+
+  it("la pista de automatizacion, que no esta en song.tracks, tiene su barra", () => {
+    // Antes caia en "nada seleccionado" y la barra ofrecia Seccion/Aviso/Audio
+    // en vez de "Crear automatismo aqui", como si hace la pista MIDI.
+    const target = resolveMobileSelection({
+      ...empty,
+      selectedTrackIds: ["__automation__"],
+    });
+    expect(target).toEqual({ kind: "automationTrack" });
+    const model = mobileSelectionBarModel({
+      target,
+      menus: desktopMenus,
+      creation,
+      t,
+    });
+    expect(model.actions.map((entry) => entry.label)).toEqual(
+      desktopMenus.automationTrackContextMenu().map((entry) => entry.label),
+    );
   });
 
   it("ignora un id que ya no existe en la cancion", () => {

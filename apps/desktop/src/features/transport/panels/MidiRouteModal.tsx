@@ -58,7 +58,7 @@ export function MidiRouteModal({
   return (
     <div className="lt-modal-backdrop" onClick={onCancel}>
       <section
-        className="lt-settings-modal"
+        className="lt-settings-modal lt-midi-route-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="lt-midi-route-title"

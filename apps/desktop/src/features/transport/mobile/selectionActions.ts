@@ -7,6 +7,7 @@ import type {
   TimeSignatureMarkerSummary,
   TrackSummary,
 } from "../desktopApi";
+import { AUTOMATION_TRACK_ID } from "../library/pendingAudioImports";
 import type { ContextMenuAction } from "../types";
 
 export type Translate = (
@@ -23,7 +24,9 @@ export type MobileSelectionTarget =
   | { kind: "timeSignatureMarker"; marker: TimeSignatureMarkerSummary }
   | { kind: "region"; region: SongRegionSummary }
   | { kind: "track"; track: TrackSummary }
-  | { kind: "tracks"; tracks: TrackSummary[] };
+  | { kind: "tracks"; tracks: TrackSummary[] }
+  /** La pista de automatizacion: sintetica, no esta en `song.tracks`. */
+  | { kind: "automationTrack" };
 
 export type MobileSelectionInput = {
   song: SongView | null;
@@ -87,6 +90,16 @@ export function resolveMobileSelection(
     return { kind: "marker", marker };
   }
 
+  // La pista de automatizacion no vive en `song.tracks`: sin esto su
+  // seleccion caia en "nada seleccionado" y la barra ofrecia las acciones
+  // genericas en vez de "Crear automatismo aqui", como hace la pista MIDI.
+  if (
+    input.selectedTrackIds.length === 1 &&
+    input.selectedTrackIds[0] === AUTOMATION_TRACK_ID
+  ) {
+    return { kind: "automationTrack" };
+  }
+
   const tracks = input.selectedTrackIds
     .map((id) => song.tracks.find((entry) => entry.id === id))
     .filter((entry): entry is TrackSummary => Boolean(entry));
@@ -122,6 +135,7 @@ export type MobileSelectionMenus = {
   songRegionContextMenu: (region: SongRegionSummary) => ContextMenuAction[];
   trackContextMenu: (track: TrackSummary) => ContextMenuAction[];
   multiTrackContextMenu: (tracks: TrackSummary[]) => ContextMenuAction[];
+  automationTrackContextMenu: () => ContextMenuAction[];
 };
 
 export type MobileCreationHandlers = {
@@ -208,6 +222,12 @@ export function mobileSelectionBarModel(args: {
       return {
         title: target.track.name,
         actions: menus.trackContextMenu(target.track),
+        count: null,
+      };
+    case "automationTrack":
+      return {
+        title: t("transport.automation.trackName"),
+        actions: menus.automationTrackContextMenu(),
         count: null,
       };
     case "tracks":

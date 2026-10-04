@@ -49,6 +49,7 @@ export function useMobileSelectionBar({
             songRegionContextMenu: timelineMenus.songRegionContextMenu,
             trackContextMenu: timelineMenus.trackContextMenu,
             multiTrackContextMenu: timelineMenus.multiTrackContextMenu,
+            automationTrackContextMenu: timelineMenus.automationTrackContextMenu,
           }
         : null,
     [ready, timelineMenus],
