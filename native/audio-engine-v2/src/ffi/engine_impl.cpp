@@ -1762,11 +1762,21 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             std::holds_alternative<CmdSetOutputDevice>(cmd)
             || std::holds_alternative<CmdSetSampleRate>(cmd)
             || std::holds_alternative<CmdSetBufferSize>(cmd)
-            || std::holds_alternative<CmdSetLowLatency>(cmd);
+            || std::holds_alternative<CmdSetLowLatency>(cmd)
+            || std::holds_alternative<CmdReopenOutputDevice>(cmd);
         if (needs_audio) {
-            device_manager_->start();
+            auto started = device_manager_->start();
             output_suspended_.store(false, std::memory_order_relaxed);
-            fprintf(stderr, "[LT_AUDIO] output stream resumed for playback\n");
+            if (started.is_ok()) {
+                fprintf(stderr, "[LT_AUDIO] output stream resumed for playback\n");
+            } else {
+                // Playing into a stream that will not start is a silent
+                // transport with a moving playhead. A fresh one is the fix.
+                fprintf(stderr,
+                        "[LT_AUDIO] resume for playback failed (%s); reopening device\n",
+                        started.error().c_str());
+                (void)dispatch_command(EngineCommand{CmdReopenOutputDevice{}});
+            }
         } else if (reopens_device) {
             output_suspended_.store(false, std::memory_order_relaxed);
         }
@@ -3593,6 +3603,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // silent fallback forever.
             if (device_manager_->actual_sample_rate() > 0
                 && !device_manager_->fallback_active()
+                && !force_device_reopen_
                 && !req.device_id.empty()
                 && req.device_id == current_device_request_.device_id
                 && req.active_output_channels == current_device_request_.active_output_channels) {
@@ -3785,6 +3796,12 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 return Result<void>::ok();
             }
             auto r = c.suspended ? device_manager_->stop() : device_manager_->start();
+            if (!c.suspended && r.is_err()) {
+                fprintf(stderr, "[LT_AUDIO] resume failed (%s); reopening device\n",
+                        r.error().c_str());
+                output_suspended_.store(false, std::memory_order_relaxed);
+                return dispatch_command(EngineCommand{CmdReopenOutputDevice{}});
+            }
             if (r.is_ok()) {
                 output_suspended_.store(c.suspended, std::memory_order_relaxed);
                 fprintf(stderr, "[LT_AUDIO] output stream %s\n",
@@ -3812,6 +3829,21 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     retry.device_id.empty() ? "<system default>"
                                             : retry.device_id.c_str());
             return dispatch_command(EngineCommand{std::move(retry)});
+        }
+        else if constexpr (std::is_same_v<T, CmdReopenOutputDevice>) {
+            // Same request, fresh stream: the idempotency guard in
+            // CmdSetOutputDevice would otherwise skip a concrete device id
+            // that still looks open.
+            CmdSetOutputDevice reopen;
+            reopen.device_id = current_device_request_.device_id;
+            reopen.active_channels = current_device_request_.active_output_channels;
+            fprintf(stderr, "[LT_AUDIO] ReopenOutputDevice: device_id=\"%s\"\n",
+                    reopen.device_id.empty() ? "<system default>"
+                                             : reopen.device_id.c_str());
+            force_device_reopen_ = true;
+            auto r = dispatch_command(EngineCommand{std::move(reopen)});
+            force_device_reopen_ = false;
+            return r;
         }
         else {
             // Track gain/mute/solo, pitch, scheduler jumps — handled in later phases.

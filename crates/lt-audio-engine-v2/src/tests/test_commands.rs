@@ -554,6 +554,12 @@ fn set_output_suspended_speaks_the_engines_json() {
 }
 
 #[test]
+fn reopen_output_device_speaks_the_engines_json() {
+    let json = serde_json::to_value(EngineCommand::ReopenOutputDevice).expect("serialize");
+    assert_eq!(json["type"], "ReopenOutputDevice");
+}
+
+#[test]
 fn set_pause_at_song_end_speaks_the_engines_json() {
     // The C++ parser reads {"type":"SetPauseAtSongEnd","enabled":<bool>}.
     let json = serde_json::to_value(EngineCommand::SetPauseAtSongEnd { enabled: true })

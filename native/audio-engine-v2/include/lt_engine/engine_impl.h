@@ -83,6 +83,9 @@ private:
     // The open output stream is paused on purpose (CmdSetOutputSuspended).
     // Written on the command thread, read by get_snapshot().
     std::atomic<bool> output_suspended_{false};
+    // Set only while CmdReopenOutputDevice re-dispatches CmdSetOutputDevice,
+    // so the "same device already open" guard lets the reopen through.
+    bool force_device_reopen_ = false;
     std::unique_ptr<TransportClock>     clock_;
     std::unique_ptr<JumpScheduler>      scheduler_;
     std::unique_ptr<SourceManager>      source_manager_;

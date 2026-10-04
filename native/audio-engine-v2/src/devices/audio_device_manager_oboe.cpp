@@ -380,9 +380,26 @@ Result<void> AudioDeviceManager::close_device() {
     return Result<void>::ok();
 }
 
+// Restarts a stream paused by stop() (idle suspension). The result matters:
+// a stream that sat paused for hours may have been disconnected underneath us
+// (a route change, the audio server restarting) and AAudio does not always
+// deliver onErrorAfterClose to a paused stream, so nothing else would notice.
+// Reporting the failure lets the engine reopen the device instead of playing
+// into a dead stream.
 Result<void> AudioDeviceManager::start() {
-    if (impl_->stream)
-        impl_->stream->requestStart();
+    if (!impl_->stream)
+        return Result<void>::ok();
+    if (impl_->stream->getState() == oboe::StreamState::Disconnected
+        || (impl_->adaptor && impl_->adaptor->has_error())) {
+        impl_->last_error = "oboe stream disconnected while paused";
+        return Result<void>::err(impl_->last_error);
+    }
+    const oboe::Result result = impl_->stream->requestStart();
+    if (result != oboe::Result::OK) {
+        impl_->last_error =
+            std::string("oboe requestStart failed: ") + oboe::convertToText(result);
+        return Result<void>::err(impl_->last_error);
+    }
     return Result<void>::ok();
 }
 

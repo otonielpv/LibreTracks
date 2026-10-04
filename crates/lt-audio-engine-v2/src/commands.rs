@@ -300,6 +300,11 @@ pub enum EngineCommand {
     SetOutputSuspended {
         suspended: bool,
     },
+    /// Close and reopen the configured output device even when it looks
+    /// healthy. Sent by the "Resume" prompt after a long idle suspension: a
+    /// stream paused for hours can come back silent without reporting an
+    /// error, and only a fresh one is known to sound.
+    ReopenOutputDevice,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

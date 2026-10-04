@@ -366,6 +366,12 @@ struct CmdSetLowLatency   { bool enabled; };
 // Android host sends it: desktop backends read a paused stream as a dead
 // device and would switch to the fallback clock.
 struct CmdSetOutputSuspended { bool suspended; };
+// Close and reopen the configured output device even when it looks healthy.
+// The "Resume" button after a long idle spell sends it: a stream that sat
+// paused for hours can come back silent without ever reporting an error
+// (a disconnect is not guaranteed to reach a paused AAudio stream), and only a fresh
+// stream is known to sound. Same side effects as CmdSetOutputDevice.
+struct CmdReopenOutputDevice {};
 
 // ---------------------------------------------------------------------------
 // Union type
@@ -391,7 +397,7 @@ using EngineCommand = std::variant<
     CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,
     CmdUpsertSongTracks, CmdPrepareSources,
     CmdSetOutputDevice, CmdSetSampleRate, CmdSetBufferSize, CmdSetLowLatency,
-    CmdRecoverOutputDevice, CmdSetOutputSuspended
+    CmdRecoverOutputDevice, CmdSetOutputSuspended, CmdReopenOutputDevice
 >;
 
 // ---------------------------------------------------------------------------

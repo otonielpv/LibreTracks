@@ -485,6 +485,9 @@ EngineCommand command_from_json(const std::string& raw) {
     if (type == "SetOutputSuspended")
         return CmdSetOutputSuspended{ j.at("suspended").get<bool>() };
 
+    if (type == "ReopenOutputDevice")
+        return CmdReopenOutputDevice{};
+
     throw std::invalid_argument("Unknown command type: " + type);
 }
 
