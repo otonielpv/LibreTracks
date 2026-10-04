@@ -272,6 +272,22 @@ pub fn get_audio_output_meter(
         .map_err(|error| error.to_string())
 }
 
+/// True once after the app comes back from a long idle suspension (Android):
+/// the UI then asks the user to resume before playing.
+#[tauri::command(async)]
+pub fn take_audio_idle_wake(state: State<'_, DesktopState>) -> bool {
+    state.audio.take_idle_wake_pending()
+}
+
+/// The "Resume" button of that prompt: reopen the output device from scratch.
+#[tauri::command(async)]
+pub fn reopen_audio_output(state: State<'_, DesktopState>) -> Result<(), String> {
+    state
+        .audio
+        .reopen_output_device()
+        .map_err(|error| error.to_string())
+}
+
 /// E2E-only: available only when the native engine was built with capture.
 #[tauri::command(async)]
 pub fn get_audio_output_capture(

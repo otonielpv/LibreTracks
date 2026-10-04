@@ -211,6 +211,27 @@ export async function listenToAudioDeviceStatus(
   });
 }
 
+/** Fired when the app comes back from a long idle suspension (Android). The
+ * payload is empty: take the flag with `takeAudioIdleWake`, which the UI also
+ * polls when the page becomes visible. */
+export async function listenToAudioIdleWake(
+  handler: () => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen("audio:idle_wake", () => {
+    handler();
+  });
+}
+
+export async function takeAudioIdleWake(): Promise<boolean> {
+  return invokeCommand<boolean>("take_audio_idle_wake");
+}
+
+/** Close and reopen the output device, as a restart of the app would. */
+export async function reopenAudioOutput(): Promise<void> {
+  await invokeCommand<void>("reopen_audio_output");
+}
+
 export async function listenToRegionMeters(
   handler: (levels: RegionMeterLevel[]) => void,
 ): Promise<() => void> {

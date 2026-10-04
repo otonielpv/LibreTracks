@@ -1425,6 +1425,15 @@ const en = {
       "The audio device stopped responding. Playback keeps running and sound will come back automatically once the device recovers.",
     deviceRestored: "Audio output restored",
   },
+  idleWake: {
+    title: "The app was idle",
+    body: "Audio was paused to save battery while the app wasn't in use. Tap Resume before playing.",
+    resume: "Resume",
+    resuming: "Resuming…",
+    failed:
+      "Audio could not be brought back. Try again, or check the audio output in Settings.",
+    close: "Close",
+  },
   pads: {
     title: "Ambient pads",
     emptyHint:

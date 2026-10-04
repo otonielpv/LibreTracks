@@ -1456,6 +1456,15 @@ const es = {
       "El dispositivo de audio dejó de responder. La reproducción sigue en marcha y el sonido volverá automáticamente cuando el dispositivo se recupere.",
     deviceRestored: "Salida de audio restablecida",
   },
+  idleWake: {
+    title: "La app estaba en reposo",
+    body: "Para ahorrar batería se pausó el audio mientras no se usaba. Pulsa Reanudar antes de reproducir.",
+    resume: "Reanudar",
+    resuming: "Reanudando…",
+    failed:
+      "No se pudo reactivar el audio. Vuelve a intentarlo o revisa la salida de audio en Ajustes.",
+    close: "Cerrar",
+  },
   pads: {
     title: "Pads de ambiente",
     emptyHint:

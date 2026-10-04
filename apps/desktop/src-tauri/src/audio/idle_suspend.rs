@@ -19,16 +19,26 @@ use std::time::{Duration, Instant};
 /// suspended. Long enough that glancing at another app mid-set costs nothing.
 pub const IDLE_GRACE: Duration = Duration::from_secs(30);
 
+/// A stream suspended this long is not trusted to come back by itself: one
+/// paused through a whole gap between rehearsal and service resumed silent
+/// (playhead moving, nothing heard) until the app was restarted. Back in the
+/// foreground after a suspension this long, the user is asked to resume,
+/// which reopens the device from scratch.
+pub const WAKE_PROMPT_AFTER: Duration = Duration::from_secs(5 * 60);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SuspendAction {
     None,
     Suspend,
     Resume,
+    /// Resume, and the stream sat suspended for [`WAKE_PROMPT_AFTER`] or more.
+    ResumeAfterLongIdle,
 }
 
 #[derive(Debug, Default)]
 pub struct IdleSuspendPolicy {
     idle_since: Option<Instant>,
+    suspended_at: Option<Instant>,
 }
 
 impl IdleSuspendPolicy {
@@ -41,12 +51,24 @@ impl IdleSuspendPolicy {
         idle: bool,
         suspended: bool,
     ) -> SuspendAction {
+        if !suspended {
+            // Never suspended, refused, or resumed by the engine itself (a
+            // pedal's Play with the screen off): nothing long to report.
+            self.suspended_at = None;
+        }
         if !backgrounded {
             self.idle_since = None;
-            return if suspended {
-                SuspendAction::Resume
+            if !suspended {
+                return SuspendAction::None;
+            }
+            let long = self
+                .suspended_at
+                .take()
+                .is_some_and(|at| now.duration_since(at) >= WAKE_PROMPT_AFTER);
+            return if long {
+                SuspendAction::ResumeAfterLongIdle
             } else {
-                SuspendAction::None
+                SuspendAction::Resume
             };
         }
         if !idle {
@@ -55,6 +77,7 @@ impl IdleSuspendPolicy {
         }
         let since = *self.idle_since.get_or_insert(now);
         if !suspended && now.duration_since(since) >= IDLE_GRACE {
+            self.suspended_at = Some(now);
             SuspendAction::Suspend
         } else {
             SuspendAction::None
@@ -116,6 +139,48 @@ mod tests {
         policy.step(at(t0, 20), false, true, false);
         assert_eq!(policy.step(at(t0, 40), true, true, false), SuspendAction::None);
         assert_eq!(policy.step(at(t0, 70), true, true, false), SuspendAction::Suspend);
+    }
+
+    #[test]
+    fn a_short_suspension_resumes_without_a_prompt() {
+        let t0 = Instant::now();
+        let mut policy = IdleSuspendPolicy::default();
+        policy.step(t0, true, true, false);
+        assert_eq!(policy.step(at(t0, 30), true, true, false), SuspendAction::Suspend);
+        policy.step(at(t0, 31), true, true, true);
+        assert_eq!(policy.step(at(t0, 120), false, true, true), SuspendAction::Resume);
+    }
+
+    #[test]
+    fn a_long_suspension_asks_to_resume_once() {
+        let t0 = Instant::now();
+        let mut policy = IdleSuspendPolicy::default();
+        policy.step(t0, true, true, false);
+        assert_eq!(policy.step(at(t0, 30), true, true, false), SuspendAction::Suspend);
+        let back = 30 + WAKE_PROMPT_AFTER.as_secs();
+        policy.step(at(t0, back - 1), true, true, true);
+        assert_eq!(
+            policy.step(at(t0, back), false, true, true),
+            SuspendAction::ResumeAfterLongIdle
+        );
+        // The resume command may take a tick to land in the snapshot: the
+        // prompt must not fire twice for the same suspension.
+        assert_eq!(policy.step(at(t0, back + 1), false, true, true), SuspendAction::Resume);
+    }
+
+    #[test]
+    fn a_stream_the_engine_resumed_itself_does_not_prompt() {
+        let t0 = Instant::now();
+        let mut policy = IdleSuspendPolicy::default();
+        policy.step(t0, true, true, false);
+        policy.step(at(t0, 30), true, true, false);
+        // A MIDI pedal pressed Play with the screen off: the engine restarted
+        // the stream, the transport played and stopped, and the app idled
+        // into a second, short suspension.
+        policy.step(at(t0, 400), true, false, false);
+        policy.step(at(t0, 500), true, true, false);
+        assert_eq!(policy.step(at(t0, 530), true, true, false), SuspendAction::Suspend);
+        assert_eq!(policy.step(at(t0, 560), false, true, true), SuspendAction::Resume);
     }
 
     #[test]

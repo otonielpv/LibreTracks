@@ -192,6 +192,9 @@ struct MeterTick {
     /// `None` when the state lock was busy or the snapshot failed.
     frame: Option<MeterFrame>,
     device_status: Option<AudioDeviceStatusEvent>,
+    /// Back in the foreground after a long idle suspension: ask the user to
+    /// resume (see `idle_suspend::WAKE_PROMPT_AFTER`).
+    idle_wake: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -422,6 +425,10 @@ pub struct AudioController {
     meter_thread_started: AtomicBool,
     meter_thread_stop: Arc<AtomicBool>,
     meter_thread: Mutex<Option<JoinHandle<()>>>,
+    /// Set when the app came back from a long idle suspension, until the UI
+    /// takes it. Polled as well as evented: the WebView may not be listening
+    /// yet in the instant the activity comes back.
+    idle_wake_pending: AtomicBool,
     /// Total Category A realtime bridge commands (SetTrackGain/Pan/Mute/Solo/Route/Transpose).
     live_mix_realtime_command_count: AtomicU64,
     live_mix_ensure_live_track_count: AtomicU64,
@@ -521,6 +528,7 @@ impl AudioController {
             meter_thread_started: AtomicBool::new(false),
             meter_thread_stop: Arc::new(AtomicBool::new(false)),
             meter_thread: Mutex::new(None),
+            idle_wake_pending: AtomicBool::new(false),
             live_mix_realtime_command_count: AtomicU64::new(0),
             live_mix_ensure_live_track_count: AtomicU64::new(0),
             metronome_realtime_toggle_count: AtomicU64::new(0),
@@ -641,6 +649,10 @@ impl AudioController {
                 }
                 if let Some(event) = tick.device_status {
                     let _ = app_handle.emit("audio:device_status", &event);
+                }
+                if tick.idle_wake {
+                    controller.idle_wake_pending.store(true, Ordering::Relaxed);
+                    let _ = app_handle.emit("audio:idle_wake", ());
                 }
                 thread::sleep(interval);
             }
@@ -2533,6 +2545,10 @@ impl AudioController {
                 SuspendAction::None => None,
                 SuspendAction::Suspend => Some(true),
                 SuspendAction::Resume => Some(false),
+                SuspendAction::ResumeAfterLongIdle => {
+                    tick.idle_wake = true;
+                    Some(false)
+                }
             };
             if let Some(suspend) = request {
                 if let Err(error) =
@@ -2567,6 +2583,22 @@ impl AudioController {
         }
         state.engine = Some(engine);
         tick
+    }
+
+    /// Whether the app came back from a long idle suspension since the last
+    /// call. Clears the flag: the prompt shows once per wake.
+    pub fn take_idle_wake_pending(&self) -> bool {
+        self.idle_wake_pending.swap(false, Ordering::Relaxed)
+    }
+
+    /// Close and reopen the configured output device, so audio comes back the
+    /// way a restart of the app brings it back. The "Resume" button after a
+    /// long idle suspension sends it.
+    pub fn reopen_output_device(&self) -> Result<(), DesktopError> {
+        self.with_engine_state("reopen_output_device", None, |engine, _state| {
+            engine.send_command(&EngineCommand::ReopenOutputDevice)?;
+            Ok(())
+        })
     }
 
     pub fn current_output_meter_level(
