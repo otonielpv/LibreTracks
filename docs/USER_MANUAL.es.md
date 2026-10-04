@@ -54,6 +54,25 @@ Abre `Aprendizaje MIDI` para asignar notas o mensajes CC del hardware a controle
 
 ![Configuración MIDI](../screenshots/Midi-Config.gif)
 
+Si se desenchufa el dispositivo MIDI seleccionado, la barra superior muestra `Controlador MIDI desconectado`. No hace falta hacer nada: LibreTracks lo reconecta solo en cuanto lo vuelves a enchufar, y la pestaña MIDI actualiza sus listas por sí misma.
+
+### MIDI en iPhone, iPad y Android
+
+Las pestañas `MIDI` y `Aprendizaje MIDI` funcionan igual en un teléfono o una tableta: elige una entrada para tu pedalera o controlador, una salida para tus pistas MIDI y enseña los controles con `Aprender`.
+
+Qué puedes conectar:
+
+- **USB**: cualquier controlador, pedalera o interfaz MIDI class-compliant. En iPhone y iPad, con el adaptador de cámara (Lightning) o directamente al USB-C. En Android, con un cable o adaptador OTG. No hace falta ningún permiso.
+- **Bluetooth LE**: pedaleras y controladores inalámbricos (WIDI, CME, M-VAVE, AirTurn…). En la pestaña `MIDI`, toca `Buscar dispositivos Bluetooth`. En iPhone y iPad se abre el panel de MIDI Bluetooth del sistema; en Android, LibreTracks busca durante unos 10 segundos y muestra lo que encuentra. Después el dispositivo aparece en las listas de entrada y salida como uno USB. Android pide el permiso de Bluetooth la primera vez; si lo deniegas, el MIDI por USB sigue funcionando.
+- **Otras apps del mismo dispositivo**: activa `Publicar puerto MIDI virtual LibreTracks`. Los sintes, las apps de letras o de luces del mismo teléfono o tableta ven un dispositivo MIDI `LibreTracks`: reciben lo que tus pistas MIDI mandan a `LibreTracks Out`, y lo que ellas mandan a `LibreTracks In` puede disparar tus mapeos de Aprendizaje MIDI.
+- **Wi-Fi, solo iPhone y iPad**: activa `Sesión MIDI de red` y, en el Mac, abre `Configuración de Audio MIDI` → `Ventana` → `Mostrar estudio MIDI` → `Red`, donde aparece tu dispositivo. iOS pide acceso a la red local la primera vez.
+
+En segundo plano:
+
+- **Android**: un pedal puede arrancar el show aunque la pantalla esté apagada o haya otra app abierta. Para ahorrar batería, desactiva `Mantener MIDI activo en segundo plano`: la entrada MIDI se cierra mientras LibreTracks está en segundo plano y parado, y se vuelve a abrir al volver.
+- **iPhone y iPad**: iOS suspende las apps que están en pausa en segundo plano, así que un pedal puede dar play mientras LibreTracks está en pantalla o ya reproduciendo, pero no desde la pantalla de bloqueo con la app parada.
+- Cuando LibreTracks pasa a segundo plano parado, manda `All Notes Off` a sus salidas MIDI para que nada se quede sonando en el dispositivo que las recibe.
+
 ## 3. Organización del Proyecto
 
 ### `Biblioteca`

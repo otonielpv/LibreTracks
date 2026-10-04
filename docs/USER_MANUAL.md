@@ -54,6 +54,25 @@ Open `MIDI Learn` to assign hardware notes or CC messages to live controls. Usef
 
 ![MIDI settings](../screenshots/Midi-Config.gif)
 
+If a selected MIDI device is unplugged, the top bar shows `MIDI controller disconnected`. You don't need to do anything: LibreTracks reconnects it by itself as soon as you plug it back in, and the MIDI tab refreshes its lists on its own.
+
+### MIDI on iPhone, iPad and Android
+
+The `MIDI` and `MIDI Learn` tabs work the same on a phone or tablet: choose an input for your pedal or controller, an output for your MIDI tracks, and teach the controls with `Learn`.
+
+What you can connect:
+
+- **USB**: any class-compliant controller, pedalboard or MIDI interface. On iPhone and iPad, use the camera adapter (Lightning) or plug it straight into USB-C. On Android, use an OTG cable or adapter. No permission is needed.
+- **Bluetooth LE**: wireless pedals and controllers (WIDI, CME, M-VAVE, AirTurn…). In the `MIDI` tab, tap `Search Bluetooth devices`. On iPhone and iPad this opens the system Bluetooth MIDI panel; on Android, LibreTracks searches for about 10 seconds and lists what it finds. The device then appears in the input and output lists like a USB one. Android asks for the Bluetooth permission the first time; if you refuse, USB MIDI keeps working.
+- **Other apps on the same device**: turn on `Publish LibreTracks virtual MIDI port`. Synths, lyrics or lighting apps on the same phone or tablet see a `LibreTracks` MIDI device: they receive what your MIDI tracks send to `LibreTracks Out`, and what they send to `LibreTracks In` can trigger your MIDI Learn mappings.
+- **Wi-Fi, iPhone and iPad only**: turn on `Network MIDI session` and, on the Mac, open `Audio MIDI Setup` → `Window` → `Show MIDI Studio` → `Network`, where your device appears. iOS asks for local network access the first time.
+
+In the background:
+
+- **Android**: a pedal can start the show even with the screen off or another app open. To save battery, turn off `Keep MIDI active in the background`: the MIDI input then closes while LibreTracks is in the background and stopped, and reopens when you come back.
+- **iPhone and iPad**: iOS suspends apps that are paused in the background, so a pedal can start playback while LibreTracks is on screen or already playing, not from the lock screen while stopped.
+- When LibreTracks goes to the background while stopped, it sends `All Notes Off` to its MIDI outputs so nothing keeps ringing on the receiving device.
+
 ## 3. Project Organization
 
 ### `Library`
