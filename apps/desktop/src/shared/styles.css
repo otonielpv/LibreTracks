@@ -10280,8 +10280,75 @@ html.lt-ios body {
   min-width: 0;
 }
 
+/* BPM y compás muestran 3-4 cifras ("110", "4/4", "12/8"); a 3.4rem cada
+   caja reservaba el doble de lo que pinta, y ese sitio es el que necesita el
+   medidor de CPU de la derecha. Al editar se ensancha para el decimal. */
+.lt-mobile .lt-bpm-control {
+  padding: 0 0.15rem;
+}
+
 .lt-mobile .lt-bpm-control input {
-  width: clamp(2.6rem, 8vw, 3.4rem);
+  width: 4.5ch;
+  padding: 0 0.15rem;
+  text-align: center;
+}
+
+.lt-mobile .lt-bpm-control input:focus {
+  width: 6ch;
+}
+
+/* Medidor de recursos: la fila de menú solo lleva la pastilla en móvil (sin
+   marca ni ARCHIVO) y va DETRÁS del reloj, arriba a la derecha. */
+.lt-mobile .lt-topbar-menu-row {
+  order: 2;
+}
+
+.lt-mobile .lt-resource-meter {
+  margin-left: 0;
+}
+
+.lt-mobile .lt-resource-meter-trigger {
+  min-height: 1.7rem;
+  padding: 0.15rem 0.35rem;
+}
+
+/* Apilado como el reloj de al lado: "CPU" encima de "12%". */
+.lt-resource-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  font-size: 0.62rem;
+  line-height: 1;
+}
+
+.lt-resource-chip-value {
+  /* Ancho fijo: que "9%" → "10%" no empuje el transporte. */
+  min-width: 4ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.lt-resource-chip[data-severity="ok"] .lt-resource-chip-value {
+  color: #57f1db;
+}
+
+.lt-resource-chip[data-severity="warn"] .lt-resource-chip-value {
+  color: #e0c97e;
+}
+
+.lt-resource-chip[data-severity="high"] .lt-resource-chip-value {
+  color: #e07e7e;
+}
+
+/* En horizontal la pantalla mide ~390 px de alto: el menú no puede pasar del
+   borde inferior. */
+.lt-mobile .lt-resource-meter-panel {
+  min-width: 16rem;
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .lt-mobile .lt-tap-tempo-button {

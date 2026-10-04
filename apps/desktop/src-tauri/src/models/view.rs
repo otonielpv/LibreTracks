@@ -688,6 +688,9 @@ pub struct SystemResourceSnapshot {
     /// Whether the audio engine is currently running (audio fields are
     /// meaningful only when true).
     pub audio_engine_active: bool,
+    /// iOS only: memory the app can still allocate before the system kills it
+    /// (`os_proc_available_memory`). 0 = not reported on this platform.
+    pub available_memory_bytes: u64,
 }
 
 pub(crate) fn song_to_view(

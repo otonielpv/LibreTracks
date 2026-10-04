@@ -1500,6 +1500,8 @@ const en = {
     audioLoad: "Audio load",
     audioUnderruns: "Audio dropouts",
     audioInactive: "Engine stopped",
+    availableMemory: "Memory left for the app",
+    mobileHint: "Updated every second. \"CPU\" is the audio engine load: the share of each buffer's time spent processing it. Over 100% causes dropouts.",
     ofTotal: "{{used}} of {{total}}",
     hint: "Updated every second. Use this to tell whether a slowdown is LibreTracks or the whole machine. \"Audio load\" is the share of the audio buffer budget in use — over 100% causes dropouts.",
   },

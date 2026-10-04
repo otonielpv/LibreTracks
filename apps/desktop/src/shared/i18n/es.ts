@@ -1532,6 +1532,8 @@ const es = {
     audioLoad: "Carga de audio",
     audioUnderruns: "Cortes de audio",
     audioInactive: "Motor detenido",
+    availableMemory: "Memoria libre para la app",
+    mobileHint: "Se actualiza cada segundo. «CPU» es la carga del motor de audio: el porcentaje del tiempo de cada búfer que se gasta en procesarlo. Por encima del 100 % se producen cortes.",
     ofTotal: "{{used}} de {{total}}",
     hint: "Se actualiza cada segundo. Sirve para saber si una ralentización es de LibreTracks o de toda la máquina. La «carga de audio» es el porcentaje del presupuesto del búfer en uso: por encima del 100 % se producen cortes.",
   },

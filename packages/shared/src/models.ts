@@ -774,6 +774,8 @@ export type SystemResourceSnapshot = {
   audioLoadPercent: number;
   audioUnderrunCount: number;
   audioEngineActive: boolean;
+  /** iOS only: memory left before the system kills the app. 0 = not reported. */
+  availableMemoryBytes: number;
 };
 
 function downsampleWaveformLod(

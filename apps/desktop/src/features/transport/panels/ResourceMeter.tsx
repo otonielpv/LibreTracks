@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import {
+  isMobileApp,
+  type SystemResourceSnapshot,
+} from "@libretracks/shared/desktopApi";
+
 import { useSystemResources } from "../hooks/useSystemResources";
+import { useDismissOnBack } from "../mobile/backNavigation";
 
 /** Format a byte count as a human-readable size (e.g. "1.4 GB"). */
 function formatBytes(bytes: number): string {
@@ -44,6 +50,8 @@ export function ResourceMeter() {
   const snapshot = useSystemResources();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  // Android: el botón Atrás cierra el menú antes que cualquier cosa de debajo.
+  useDismissOnBack(() => setOpen(false), open && isMobileApp);
 
   // Close the popover on outside click / Escape, matching how the rest of the
   // top bar's menus behave.
@@ -84,6 +92,20 @@ export function ResourceMeter() {
       ? (snapshot.systemMemoryUsedBytes / snapshot.systemMemoryTotalBytes) * 100
       : 0;
   const audioLoadPercent = Math.max(0, snapshot.audioLoadPercent);
+
+  if (isMobileApp) {
+    return (
+      <MobileResourceMeter
+        open={open}
+        rootRef={rootRef}
+        onToggle={() => setOpen((prev) => !prev)}
+        snapshot={snapshot}
+        processCpuPercent={cpuPercent}
+        audioLoadPercent={audioLoadPercent}
+        systemMemoryPercent={systemMemoryPercent}
+      />
+    );
+  }
 
   const ariaSummary = t("resourceMeter.ariaSummary", {
     cpu: cpuPercent.toFixed(0),
@@ -188,6 +210,124 @@ export function ResourceMeter() {
             ) : null}
           </dl>
           <p className="lt-resource-meter-hint">{t("resourceMeter.hint")}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+type MobileResourceMeterProps = {
+  open: boolean;
+  rootRef: React.RefObject<HTMLDivElement | null>;
+  onToggle: () => void;
+  snapshot: SystemResourceSnapshot;
+  processCpuPercent: number;
+  audioLoadPercent: number;
+  systemMemoryPercent: number;
+};
+
+/**
+ * Variante de móvil: una pastilla «CPU nn%» que abre un menú pequeño.
+ *
+ * El «CPU» de la pastilla es la carga del motor de audio, como en SundayKeys,
+ * AUM o Ableton: es lo único que avisa de que va a haber cortes, y el CPU de
+ * la máquina no se puede leer en Android. El menú enseña solo lo que el móvil
+ * mide de verdad —ni CPU del sistema ni disco (ver `resource_monitor.rs`)—.
+ */
+function MobileResourceMeter({
+  open,
+  rootRef,
+  onToggle,
+  snapshot,
+  processCpuPercent,
+  audioLoadPercent,
+  systemMemoryPercent,
+}: MobileResourceMeterProps) {
+  const { t } = useTranslation();
+  const active = snapshot.audioEngineActive;
+  // Un corte ya oído pinta la pastilla en rojo aunque la carga haya bajado:
+  // es lo que el músico necesita saber al mirar de reojo.
+  const chipSeverity = !active
+    ? undefined
+    : snapshot.audioUnderrunCount > 0
+      ? "high"
+      : severity(audioLoadPercent);
+
+  return (
+    <div
+      className={`lt-resource-meter is-mobile ${open ? "is-open" : ""}`}
+      ref={rootRef}
+    >
+      <button
+        type="button"
+        className="lt-resource-meter-trigger"
+        aria-label={t("resourceMeter.label")}
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        <span className="lt-resource-chip" data-severity={chipSeverity}>
+          <span className="lt-resource-gauge-label">
+            {t("resourceMeter.cpu")}
+          </span>
+          <span className="lt-resource-chip-value">
+            {active ? `${audioLoadPercent.toFixed(0)}%` : "–"}
+          </span>
+        </span>
+      </button>
+
+      {open ? (
+        <div className="lt-resource-meter-panel" role="dialog">
+          <div className="lt-resource-meter-panel-header">
+            {t("resourceMeter.panelTitle")}
+          </div>
+          <dl className="lt-resource-meter-rows">
+            <ResourceRow
+              label={t("resourceMeter.audioLoad")}
+              value={
+                active
+                  ? `${audioLoadPercent.toFixed(1)} %`
+                  : t("resourceMeter.audioInactive")
+              }
+              percent={active ? audioLoadPercent : undefined}
+            />
+            {active ? (
+              <ResourceRow
+                label={t("resourceMeter.audioUnderruns")}
+                value={`${snapshot.audioUnderrunCount}`}
+                percent={snapshot.audioUnderrunCount > 0 ? 100 : 0}
+              />
+            ) : null}
+            <ResourceRow
+              label={t("resourceMeter.processCpu")}
+              value={`${processCpuPercent.toFixed(1)} %`}
+              percent={processCpuPercent}
+            />
+            {snapshot.processMemoryBytes > 0 ? (
+              <ResourceRow
+                label={t("resourceMeter.processRam")}
+                value={formatBytes(snapshot.processMemoryBytes)}
+              />
+            ) : null}
+            {snapshot.availableMemoryBytes > 0 ? (
+              // iOS mata la app al agotar esto, no al llenar la RAM total.
+              <ResourceRow
+                label={t("resourceMeter.availableMemory")}
+                value={formatBytes(snapshot.availableMemoryBytes)}
+              />
+            ) : (
+              <ResourceRow
+                label={t("resourceMeter.systemRam")}
+                value={t("resourceMeter.ofTotal", {
+                  used: formatBytes(snapshot.systemMemoryUsedBytes),
+                  total: formatBytes(snapshot.systemMemoryTotalBytes),
+                })}
+                percent={systemMemoryPercent}
+              />
+            )}
+          </dl>
+          <p className="lt-resource-meter-hint">
+            {t("resourceMeter.mobileHint")}
+          </p>
         </div>
       ) : null}
     </div>

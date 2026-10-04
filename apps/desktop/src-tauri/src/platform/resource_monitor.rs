@@ -23,10 +23,13 @@
 //! a fraction of what Task Manager shows, so we aggregate our process together
 //! with its transitive descendants.
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::collections::HashSet;
 use std::sync::Mutex;
 use std::time::Instant;
 
+// ProcessesToUpdate solo lo usa el muestreo de escritorio.
+#[cfg_attr(any(target_os = "android", target_os = "ios"), allow(unused_imports))]
 use sysinfo::{
     CpuRefreshKind, MemoryRefreshKind, Pid, ProcessRefreshKind, ProcessesToUpdate, RefreshKind,
     System,
@@ -39,9 +42,21 @@ struct MonitorInner {
     pid: Option<Pid>,
     /// Cumulative disk counters from the previous sample, plus the instant we
     /// read them, so the next sample can derive a bytes/sec rate.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     last_disk: Option<DiskBaseline>,
+    /// Móvil: tiempo de CPU acumulado del proceso en la muestra anterior.
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    last_cpu: Option<CpuBaseline>,
 }
 
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[derive(Clone, Copy)]
+struct CpuBaseline {
+    cpu_seconds: f64,
+    at: Instant,
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[derive(Clone, Copy)]
 struct DiskBaseline {
     read_bytes: u64,
@@ -74,7 +89,10 @@ impl Default for ResourceMonitor {
             inner: Mutex::new(MonitorInner {
                 system,
                 pid: sysinfo::get_current_pid().ok(),
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 last_disk: None,
+                #[cfg(any(target_os = "android", target_os = "ios"))]
+                last_cpu: None,
             }),
         }
     }
@@ -92,6 +110,18 @@ impl ResourceMonitor {
             Err(poisoned) => poisoned.into_inner(),
         };
 
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        {
+            mobile::sample(&mut inner)
+        }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            Self::sample_desktop(&mut inner)
+        }
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn sample_desktop(inner: &mut MonitorInner) -> SystemResourceSnapshot {
         inner.system.refresh_cpu_usage();
         inner
             .system
@@ -202,10 +232,157 @@ impl ResourceMonitor {
             audio_load_percent: 0.0,
             audio_underrun_count: 0,
             audio_engine_active: false,
+            available_memory_bytes: 0,
         }
     }
 }
 
+/// Muestreo en Android e iOS.
+///
+/// No sirve el camino de escritorio: el WebView corre en un proceso aislado con
+/// otro uid que no aparece como hijo, Android prohíbe `/proc/stat` a las apps
+/// (CPU del sistema) y en iOS sysinfo no ve ningún proceso. Así que se mide
+/// solo el proceso propio —donde viven el motor de audio y el núcleo— y nunca
+/// se recorre la lista entera, que a 1 Hz gastaría batería para nada.
+#[cfg(any(target_os = "android", target_os = "ios"))]
+mod mobile {
+    use std::time::Instant;
+
+    use sysinfo::MemoryRefreshKind;
+
+    use super::{CpuBaseline, MonitorInner};
+    use crate::models::SystemResourceSnapshot;
+
+    pub(super) fn sample(inner: &mut MonitorInner) -> SystemResourceSnapshot {
+        inner
+            .system
+            .refresh_memory_specifics(MemoryRefreshKind::nothing().with_ram());
+
+        // CPU de la app: tiempo de CPU acumulado (todos los hilos) entre dos
+        // muestras, normalizado a la máquina entera como en escritorio.
+        let now = Instant::now();
+        let cpu_seconds = process_cpu_seconds();
+        let process_cpu_percent = match (inner.last_cpu, cpu_seconds) {
+            (Some(prev), Some(current)) => {
+                let elapsed = now.duration_since(prev.at).as_secs_f64();
+                let cores = std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1) as f64;
+                if elapsed > 0.0 {
+                    ((current - prev.cpu_seconds).max(0.0) / elapsed / cores * 100.0) as f32
+                } else {
+                    0.0
+                }
+            }
+            // Sin muestra anterior todavía: 0 %, igual que el disco en escritorio.
+            _ => 0.0,
+        };
+        inner.last_cpu = cpu_seconds.map(|cpu_seconds| CpuBaseline {
+            cpu_seconds,
+            at: now,
+        });
+
+        SystemResourceSnapshot {
+            process_cpu_percent,
+            process_memory_bytes: process_memory_bytes(inner),
+            // Ni CPU del sistema ni disco: en Android no son legibles y en iOS
+            // no hay API pública de disco por proceso. La UI móvil no los pinta.
+            system_cpu_percent: 0.0,
+            system_memory_used_bytes: inner.system.used_memory(),
+            system_memory_total_bytes: inner.system.total_memory(),
+            disk_read_bytes_per_sec: 0,
+            disk_write_bytes_per_sec: 0,
+            audio_load_percent: 0.0,
+            audio_underrun_count: 0,
+            audio_engine_active: false,
+            available_memory_bytes: available_memory_bytes(),
+        }
+    }
+
+    fn process_cpu_seconds() -> Option<f64> {
+        let mut usage = std::mem::MaybeUninit::<libc::rusage>::zeroed();
+        // SAFETY: getrusage solo escribe en el struct que le pasamos.
+        if unsafe { libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) } != 0 {
+            return None;
+        }
+        // SAFETY: devolvió 0, así que el struct está relleno.
+        let usage = unsafe { usage.assume_init() };
+        let seconds = |tv: libc::timeval| tv.tv_sec as f64 + tv.tv_usec as f64 / 1_000_000.0;
+        Some(seconds(usage.ru_utime) + seconds(usage.ru_stime))
+    }
+
+    #[cfg(target_os = "android")]
+    fn process_memory_bytes(inner: &mut MonitorInner) -> u64 {
+        use sysinfo::{ProcessRefreshKind, ProcessesToUpdate};
+
+        let Some(pid) = inner.pid else {
+            return 0;
+        };
+        inner.system.refresh_processes_specifics(
+            ProcessesToUpdate::Some(&[pid]),
+            true,
+            ProcessRefreshKind::nothing().with_memory(),
+        );
+        inner.system.process(pid).map(|p| p.memory()).unwrap_or(0)
+    }
+
+    /// `phys_footprint`: la cifra que usa iOS para decidir si mata la app y la
+    /// que enseña Xcode. sysinfo no la da (en iOS no ve procesos).
+    #[cfg(target_os = "ios")]
+    fn process_memory_bytes(_inner: &mut MonitorInner) -> u64 {
+        /// `task_vm_info_data_t` hasta `phys_footprint` (TASK_VM_INFO_REV1_COUNT).
+        /// El kernel rellena solo los campos que caben en `count`.
+        #[repr(C)]
+        #[derive(Default)]
+        #[allow(dead_code)]
+        struct TaskVmInfoRev1 {
+            virtual_size: u64,
+            region_count: i32,
+            page_size: i32,
+            // resident_size … compressed_lifetime: no los usamos.
+            _rev0: [u64; 16],
+            phys_footprint: u64,
+        }
+        const TASK_VM_INFO: libc::task_flavor_t = 22;
+
+        let mut info = TaskVmInfoRev1::default();
+        let mut count = (std::mem::size_of::<TaskVmInfoRev1>()
+            / std::mem::size_of::<libc::natural_t>())
+            as libc::mach_msg_type_number_t;
+        // SAFETY: el buffer mide exactamente `count` natural_t.
+        #[allow(deprecated)]
+        let result = unsafe {
+            libc::task_info(
+                libc::mach_task_self(),
+                TASK_VM_INFO,
+                &mut info as *mut TaskVmInfoRev1 as libc::task_info_t,
+                &mut count,
+            )
+        };
+        if result == libc::KERN_SUCCESS {
+            info.phys_footprint
+        } else {
+            0
+        }
+    }
+
+    #[cfg(target_os = "ios")]
+    fn available_memory_bytes() -> u64 {
+        extern "C" {
+            // <os/proc.h>, iOS 13+.
+            fn os_proc_available_memory() -> libc::size_t;
+        }
+        // SAFETY: sin argumentos ni efectos secundarios.
+        unsafe { os_proc_available_memory() as u64 }
+    }
+
+    #[cfg(target_os = "android")]
+    fn available_memory_bytes() -> u64 {
+        0
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 /// Collect `root` plus every transitive child process, so the meter accounts
 /// for the WebView2 renderer/GPU/utility processes spawned under our core.
 ///

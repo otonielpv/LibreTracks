@@ -2525,6 +2525,7 @@ dependencies = [
  "futures-util",
  "hound",
  "jni",
+ "libc",
  "libretracks-audio",
  "libretracks-cloud",
  "libretracks-core",
