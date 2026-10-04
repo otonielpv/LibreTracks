@@ -97,3 +97,43 @@ fn recover_command_is_a_noop_without_fallback() {
         .expect("no-op recovery");
     engine.shutdown().expect("shutdown");
 }
+
+/// The "Resume" prompt after a long idle reopens the output device. It wakes
+/// the app up, it does not press Play: a paused transport stays paused where
+/// it was, a stopped one stays stopped.
+#[test]
+fn reopening_the_output_device_keeps_the_transport_as_it_was() {
+    use crate::PlaybackState;
+
+    let engine = Engine::new().expect("engine");
+    engine.initialize().expect("initialize");
+    engine
+        .send_command(&EngineCommand::LoadSession {
+            project_json: r#"{"id":"reopen-test","name":"reopen","songs":[]}"#.into(),
+        })
+        .expect("load minimal session");
+
+    // Stopped: stays stopped. The reopen itself may fail on a machine with no
+    // audio device; the transport must not care either way.
+    let _ = engine.send_command(&EngineCommand::ReopenOutputDevice);
+    let snap = engine.get_snapshot().expect("snapshot");
+    assert!(matches!(snap.playback_state, PlaybackState::Stopped));
+
+    // Paused mid-song: stays paused, at the same frame.
+    engine.send_command(&EngineCommand::Play).expect("play");
+    std::thread::sleep(Duration::from_millis(200));
+    engine.send_command(&EngineCommand::Pause).expect("pause");
+    let paused_at = engine.get_snapshot().expect("snapshot").current_frame;
+
+    let _ = engine.send_command(&EngineCommand::ReopenOutputDevice);
+    std::thread::sleep(Duration::from_millis(200));
+    let snap = engine.get_snapshot().expect("snapshot");
+    assert!(
+        matches!(snap.playback_state, PlaybackState::Paused),
+        "reopen must not start playback (state={:?})",
+        snap.playback_state
+    );
+    assert_eq!(snap.current_frame, paused_at, "reopen must not move the playhead");
+
+    engine.shutdown().expect("shutdown");
+}
