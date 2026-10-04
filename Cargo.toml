@@ -20,3 +20,9 @@ version = "0.0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+
+# midir with its iOS host-time calls replaced by public mach APIs: the
+# original references private CoreAudio symbols and App Store Connect rejects
+# the upload. See vendor/midir/LIBRETRACKS_PATCH.md.
+[patch.crates-io]
+midir = { path = "vendor/midir" }

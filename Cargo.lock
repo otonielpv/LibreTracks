@@ -2754,8 +2754,6 @@ dependencies = [
 [[package]]
 name = "midir"
 version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a456444d83e7ead06ae6a5c0a215ed70282947ff3897fb45fcb052b757284731"
 dependencies = [
  "alsa",
  "bitflags 1.3.2",
