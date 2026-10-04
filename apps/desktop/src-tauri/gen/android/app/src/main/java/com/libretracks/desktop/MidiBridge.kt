@@ -58,14 +58,19 @@ object MidiBridge {
     Handler(thread.looper)
   }
 
-  /** One open MidiDevice per device id, shared by its ports. */
-  private class SharedDevice(val device: MidiDevice) {
-    var users = 0
-  }
-
-  private val devices = HashMap<Int, SharedDevice>()
-
-  private class OpenPort(val deviceId: Int, val port: Closeable, val receiver: MidiReceiver?)
+  /**
+   * One open port. Each port holds its OWN MidiDevice connection (Android
+   * allows several per client): sharing one per device id with a use count
+   * broke when Android re-registered a device under a new id, and closing
+   * the input then closed the device the output was still using (found on
+   * the emulator).
+   */
+  private class OpenPort(
+    val deviceId: Int,
+    val device: MidiDevice,
+    val port: Closeable,
+    val receiver: MidiReceiver?,
+  )
 
   private val ports = ConcurrentHashMap<Long, OpenPort>()
 
@@ -150,14 +155,8 @@ object MidiBridge {
     }
   }
 
-  /** Opens (or reuses) the device, waiting at most [OPEN_TIMEOUT_MS]. */
-  private fun acquireDevice(ctx: Context, deviceId: Int): MidiDevice? {
-    synchronized(devices) {
-      devices[deviceId]?.let {
-        it.users += 1
-        return it.device
-      }
-    }
+  /** Open a connection to the device, waiting at most [OPEN_TIMEOUT_MS]. */
+  private fun openDeviceBlocking(ctx: Context, deviceId: Int): MidiDevice? {
     val manager = manager(ctx) ?: return null
     val info = deviceInfos(manager).firstOrNull { it.id == deviceId } ?: return null
     val opened = AtomicReference<MidiDevice?>(null)
@@ -170,35 +169,14 @@ object MidiBridge {
       Log.w(TAG, "openDevice($deviceId) timed out")
       return null
     }
-    val device = opened.get() ?: return null
-    synchronized(devices) {
-      val existing = devices[deviceId]
-      if (existing != null) {
-        // Another thread won the race; keep theirs.
-        existing.users += 1
-        try {
-          device.close()
-        } catch (_: Throwable) {
-        }
-        return existing.device
-      }
-      devices[deviceId] = SharedDevice(device).also { it.users = 1 }
-    }
-    return device
+    return opened.get()
   }
 
-  private fun releaseDevice(deviceId: Int) {
-    val toClose = synchronized(devices) {
-      val shared = devices[deviceId] ?: return
-      shared.users -= 1
-      if (shared.users > 0) return
-      devices.remove(deviceId)
-      shared.device
-    }
+  private fun closeQuietly(device: MidiDevice) {
     try {
-      toClose.close()
+      device.close()
     } catch (error: Throwable) {
-      Log.w(TAG, "close device $deviceId: $error")
+      Log.w(TAG, "close device: $error")
     }
   }
 
@@ -216,18 +194,18 @@ object MidiBridge {
   @JvmStatic
   fun openInput(ctx: Context, deviceId: Int, portIndex: Int, handle: Long): Boolean =
     try {
-      val device = acquireDevice(ctx, deviceId)
+      val device = openDeviceBlocking(ctx, deviceId)
       if (device == null) {
         false
       } else {
         val port: MidiOutputPort? = device.openOutputPort(portIndex)
         if (port == null) {
-          releaseDevice(deviceId)
+          closeQuietly(device)
           false
         } else {
           val forwarder = Forwarder(handle)
           port.connect(forwarder)
-          ports[handle] = OpenPort(deviceId, port, forwarder)
+          ports[handle] = OpenPort(deviceId, device, port, forwarder)
           true
         }
       }
@@ -240,16 +218,16 @@ object MidiBridge {
   @JvmStatic
   fun openOutput(ctx: Context, deviceId: Int, portIndex: Int, handle: Long): Boolean =
     try {
-      val device = acquireDevice(ctx, deviceId)
+      val device = openDeviceBlocking(ctx, deviceId)
       if (device == null) {
         false
       } else {
         val port: MidiInputPort? = device.openInputPort(portIndex)
         if (port == null) {
-          releaseDevice(deviceId)
+          closeQuietly(device)
           false
         } else {
-          ports[handle] = OpenPort(deviceId, port, null)
+          ports[handle] = OpenPort(deviceId, device, port, null)
           true
         }
       }
@@ -281,7 +259,7 @@ object MidiBridge {
     } catch (error: Throwable) {
       Log.w(TAG, "close port: $error")
     }
-    releaseDevice(open.deviceId)
+    closeQuietly(open.device)
   }
 
   private var deviceCallback: MidiManager.DeviceCallback? = null
@@ -298,9 +276,14 @@ object MidiBridge {
       synchronized(this) {
         if (deviceCallback == null) {
           val callback = object : MidiManager.DeviceCallback() {
-            override fun onDeviceAdded(device: MidiDeviceInfo) = notifyChanged()
+            override fun onDeviceAdded(device: MidiDeviceInfo) = notifyChanged(false)
 
-            override fun onDeviceRemoved(device: MidiDeviceInfo) = notifyChanged()
+            // A device we had ports open on is gone. If it comes back under
+            // the same name (a re-registered service, a BLE link that
+            // dropped), the name list looks unchanged, so tell Rust to reopen
+            // everything rather than trust the old connections.
+            override fun onDeviceRemoved(device: MidiDeviceInfo) =
+              notifyChanged(ports.values.any { it.deviceId == device.id })
           }
           @Suppress("DEPRECATION")
           manager.registerDeviceCallback(callback, handler)
@@ -314,9 +297,9 @@ object MidiBridge {
     }
   }
 
-  private fun notifyChanged() {
+  private fun notifyChanged(revalidate: Boolean) {
     try {
-      nativeOnDevicesChanged()
+      nativeOnDevicesChanged(revalidate)
     } catch (error: UnsatisfiedLinkError) {
       // Native library not loaded yet; the next change will try again.
     }
@@ -531,5 +514,5 @@ object MidiBridge {
   external fun nativeOnMidiBytes(handle: Long, data: ByteArray, offset: Int, count: Int)
 
   @JvmStatic
-  external fun nativeOnDevicesChanged()
+  external fun nativeOnDevicesChanged(revalidate: Boolean)
 }

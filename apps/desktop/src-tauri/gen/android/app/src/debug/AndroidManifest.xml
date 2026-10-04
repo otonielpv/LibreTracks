@@ -14,5 +14,9 @@
                 android:name="android.media.midi.MidiDeviceService"
                 android:resource="@xml/lt_loopback_midi" />
         </service>
+        <!-- "Unplug"/"replug" LT Loopback from adb (hot-plug tests, paso 04). -->
+        <receiver
+            android:name="com.libretracks.desktop.LtLoopbackToggleReceiver"
+            android:exported="true" />
     </application>
 </manifest>

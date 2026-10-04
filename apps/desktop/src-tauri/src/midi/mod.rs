@@ -212,7 +212,8 @@ impl MidiManager {
     }
 
     /// Close the input for a stay in the background, keeping the selection.
-    /// Returns true when a listener was open.
+    /// Returns true when a listener was open. Mobile only (midi/lifecycle.rs).
+    #[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
     pub(crate) fn suspend(&self) -> bool {
         let Ok(mut state) = self.state.lock() else {
             return false;
@@ -271,6 +272,20 @@ pub(crate) fn apply_platform_settings(settings: &crate::infra::settings::AppSett
     if capabilities.virtual_ports {
         if let Err(error) = transport.set_virtual_ports(settings.midi_virtual_port) {
             eprintln!("[libretracks-midi] virtual ports: {error}");
+        }
+        // Android: switching our MidiDeviceService on or off makes the system
+        // re-register EVERY MIDI service of the package, and connections made
+        // just before can end up tied to the old instance: open, silent.
+        // Seen on the emulator with the debug loopback. Once the system has
+        // settled, reopen everything from scratch.
+        #[cfg(target_os = "android")]
+        {
+            let _ = std::thread::Builder::new()
+                .name("libretracks-midi-settle".into())
+                .spawn(|| {
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                    watch::revalidate_and_check();
+                });
         }
     }
     if capabilities.network_session {

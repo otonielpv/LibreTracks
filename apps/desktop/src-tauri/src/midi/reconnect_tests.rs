@@ -261,6 +261,29 @@ fn revalidating_reopens_a_listener_that_looked_open() {
 }
 
 #[test]
+fn revalidating_outputs_reopens_them_silenced_first() {
+    let transport = Arc::new(FakeTransport::default());
+    transport.set_outputs(&["Desk", "Lyrics"]);
+    let manager = MidiOutputManager::with_transport(transport.clone());
+    manager.restart(Some("Desk".into())).unwrap();
+    manager.send_to(Some("Lyrics"), &[super::message::OutboundMidiMessage::note_on(1, 60, 1)]);
+    assert_eq!(transport.output_opens.load(Ordering::SeqCst), 2);
+
+    manager.revalidate();
+    assert!(manager.is_waiting(), "selection kept, port closed");
+    assert!(manager.wants_ports());
+    transport.sent.lock().unwrap().clear();
+
+    assert!(manager.on_devices_changed(&names(&transport, false)));
+    assert_eq!(transport.output_opens.load(Ordering::SeqCst), 4);
+    assert!(manager.is_default_port_open());
+    // Both reopened ports start with the 32 panic messages.
+    assert!(wait_for(|| transport.sent.lock().unwrap().len() >= 2 * 32 * 3));
+    assert!(!manager.on_devices_changed(&names(&transport, false)));
+    assert_eq!(transport.output_opens.load(Ordering::SeqCst), 4);
+}
+
+#[test]
 fn without_a_backend_nothing_opens_and_nothing_is_watched() {
     let transport = Arc::new(super::transport::null::NullTransport);
     let manager = MidiManager::with_transport(transport.clone());

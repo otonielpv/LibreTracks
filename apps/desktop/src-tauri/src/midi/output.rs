@@ -159,6 +159,26 @@ impl MidiOutputManager {
         changed
     }
 
+    /// Drop every open port but keep the selections, so the next device check
+    /// reopens them from scratch (with All Notes Off first). Used when the
+    /// connections may be dead while the names still look the same: a device
+    /// re-registered, a Bluetooth link that dropped, minutes in the
+    /// background.
+    pub(crate) fn revalidate(&self) {
+        if let Ok(mut active) = self.active.lock() {
+            if let Some(handle) = active.handle.take() {
+                stop_output(handle);
+            }
+        }
+        if let Ok(mut extra) = self.extra.lock() {
+            for entry in extra.values_mut() {
+                if let Some(handle) = entry.take() {
+                    stop_output(handle);
+                }
+            }
+        }
+    }
+
     /// The app-wide port is selected but not open.
     pub(crate) fn is_waiting(&self) -> bool {
         self.active

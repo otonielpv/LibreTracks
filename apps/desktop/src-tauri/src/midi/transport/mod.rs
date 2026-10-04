@@ -42,9 +42,11 @@ pub(crate) trait MidiTransport: Send + Sync + 'static {
     fn open_output(&self, name: &str) -> Result<Box<dyn OutputConnection>, String>;
     fn capabilities(&self) -> MidiCapabilities;
 
-    /// Ask to be told when ports appear or disappear. Returns false when the
-    /// transport can't notify (then `midi::watch` polls instead).
-    fn watch(&self, _on_change: Box<dyn Fn() + Send + Sync>) -> bool {
+    /// Ask to be told when ports appear or disappear. The flag is true when a
+    /// device we had ports open on went away: if it comes back under the same
+    /// name the list looks unchanged, so everything must be reopened. Returns
+    /// false when the transport can't notify (then `midi::watch` polls).
+    fn watch(&self, _on_change: Box<dyn Fn(bool) + Send + Sync>) -> bool {
         false
     }
 

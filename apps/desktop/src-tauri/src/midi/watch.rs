@@ -67,7 +67,13 @@ pub(crate) fn init(app: &AppHandle) {
     if APP.set(app.clone()).is_err() {
         return;
     }
-    let pushes = platform_transport().watch(Box::new(notify_changed));
+    let pushes = platform_transport().watch(Box::new(|revalidate| {
+        if revalidate {
+            revalidate_and_check();
+        } else {
+            notify_changed();
+        }
+    }));
     PUSHES.store(pushes, Ordering::Release);
     ensure_running();
 }
@@ -127,6 +133,23 @@ pub(crate) fn notify_changed() {
     let _ = thread::Builder::new()
         .name("libretracks-midi-recheck".into())
         .spawn(move || check_once(&app));
+}
+
+/// A device we had open went away and may come back under the same name with
+/// our old connections dead: drop every open port, then one check reopens
+/// whatever is present (outputs with All Notes Off first).
+pub(crate) fn revalidate_and_check() {
+    let Some(app) = APP.get().cloned() else {
+        return;
+    };
+    let _ = thread::Builder::new()
+        .name("libretracks-midi-revalidate".into())
+        .spawn(move || {
+            let state = app.state::<DesktopState>();
+            state.midi.revalidate();
+            state.midi_output.revalidate();
+            check_once(&app);
+        });
 }
 
 fn needed(app: &AppHandle) -> bool {

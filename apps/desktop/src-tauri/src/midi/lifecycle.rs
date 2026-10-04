@@ -13,8 +13,10 @@
 //!   threads only wake when bytes arrive or every 100 ms to check a flag.
 //! - **Back on screen**: every port is revalidated as if the device list had
 //!   changed (reuses the paso 04 state machine): the input listener is
-//!   reopened from scratch, Android reopens its remembered Bluetooth devices,
-//!   and a check re-lists everything.
+//!   reopened from scratch (the outputs too, unless a song is playing),
+//!   Android reopens its remembered Bluetooth devices, and a check re-lists
+//!   everything. Found on the emulator: after a stay in the background an
+//!   output could look open and be dead.
 //!
 //! Both run on their own short thread: the callers are the Android UI thread
 //! (`onStart`/`onStop`) and a Tauri command, and this takes the session lock.
@@ -65,7 +67,19 @@ fn on_background(app: &AppHandle) {
 }
 
 fn on_foreground(app: &AppHandle) {
-    app.state::<DesktopState>().midi.revalidate();
+    let state = app.state::<DesktopState>();
+    state.midi.revalidate();
+    // Outputs too, but never in the middle of a song: reopening sends All
+    // Notes Off first, which would cut the show the moment the user unlocks
+    // the phone.
+    let playing = state
+        .session
+        .lock()
+        .map(|session| session.engine.playback_state() == PlaybackState::Playing)
+        .unwrap_or(true);
+    if !playing {
+        state.midi_output.revalidate();
+    }
     super::bluetooth::reopen_remembered(app);
     super::watch::notify_changed();
 }
