@@ -14,7 +14,7 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicI64, Ordering},
+        atomic::{AtomicBool, AtomicI64, Ordering},
         Mutex, OnceLock,
     },
 };
@@ -27,6 +27,7 @@ use jni::{
 
 use super::{
     android_ports::{name_ports, PortAddress},
+    virtual_names::{with_own_virtual_port, VIRTUAL_IN, VIRTUAL_OUT},
     InputConnection, MidiCapabilities, MidiTransport, OnBytes, OutputConnection,
 };
 
@@ -102,9 +103,15 @@ fn with_bridge<T>(
 pub(crate) struct AndroidTransport {
     /// Last listing per direction (`true` = our outputs), name → address.
     addresses: Mutex<HashMap<(bool, String), PortAddress>>,
+    /// "LibreTracks In"/"Out" published through `LtVirtualMidiService`.
+    virtual_enabled: AtomicBool,
 }
 
 impl AndroidTransport {
+    fn own(&self, name: &'static str) -> Option<&'static str> {
+        self.virtual_enabled.load(Ordering::Acquire).then_some(name)
+    }
+
     fn list(&self, our_output: bool) -> Result<Vec<String>, String> {
         let lines = with_bridge(|env, context, class| {
             let array = env
@@ -225,16 +232,75 @@ impl Drop for AndroidOutput {
     }
 }
 
+/// "LibreTracks In": bytes other apps send to our virtual device arrive
+/// through `MidiBridge.onVirtualInput` with this handle.
+struct AndroidVirtualInput {
+    handle: i64,
+}
+
+impl InputConnection for AndroidVirtualInput {}
+
+impl Drop for AndroidVirtualInput {
+    fn drop(&mut self) {
+        let handle = self.handle;
+        let _ = with_bridge(|env, _context, class| {
+            env.call_static_method(class, "detachVirtualInput", "(J)V", &[JValue::Long(handle)])?;
+            Ok(())
+        });
+        if let Ok(mut sinks) = input_sinks().lock() {
+            sinks.remove(&handle);
+        }
+    }
+}
+
+/// "LibreTracks Out": sent to whatever apps are connected to our device.
+struct AndroidVirtualOutput;
+
+impl OutputConnection for AndroidVirtualOutput {
+    fn send(&mut self, bytes: &[u8]) -> Result<(), String> {
+        let sent = with_bridge(|env, _context, class| {
+            let array = env.byte_array_from_slice(bytes)?;
+            env.call_static_method(
+                class,
+                "sendVirtual",
+                "([BI)Z",
+                &[JValue::Object(&array), JValue::Int(bytes.len() as jint)],
+            )?
+            .z()
+        })?;
+        if sent {
+            Ok(())
+        } else {
+            Err(format!("{VIRTUAL_OUT}: send failed"))
+        }
+    }
+}
+
 impl MidiTransport for AndroidTransport {
     fn input_names(&self) -> Result<Vec<String>, String> {
-        self.list(false)
+        Ok(with_own_virtual_port(self.list(false)?, self.own(VIRTUAL_IN)))
     }
 
     fn output_names(&self) -> Result<Vec<String>, String> {
-        self.list(true)
+        Ok(with_own_virtual_port(self.list(true)?, self.own(VIRTUAL_OUT)))
     }
 
     fn open_input(&self, name: &str, on_bytes: OnBytes) -> Result<Box<dyn InputConnection>, String> {
+        if name == VIRTUAL_IN {
+            if self.own(VIRTUAL_IN).is_none() {
+                return Err(format!("{VIRTUAL_IN} is not published"));
+            }
+            let handle = NEXT_HANDLE.fetch_add(1, Ordering::Relaxed);
+            input_sinks()
+                .lock()
+                .map_err(|_| "midi input sinks lock poisoned".to_string())?
+                .insert(handle, on_bytes);
+            with_bridge(|env, _context, class| {
+                env.call_static_method(class, "attachVirtualInput", "(J)V", &[JValue::Long(handle)])?;
+                Ok(())
+            })?;
+            return Ok(Box::new(AndroidVirtualInput { handle }));
+        }
         let address = self.address(false, name)?;
         let handle = NEXT_HANDLE.fetch_add(1, Ordering::Relaxed);
         // Register before opening: the first bytes may arrive before
@@ -258,6 +324,12 @@ impl MidiTransport for AndroidTransport {
     }
 
     fn open_output(&self, name: &str) -> Result<Box<dyn OutputConnection>, String> {
+        if name == VIRTUAL_OUT {
+            return match self.own(VIRTUAL_OUT) {
+                Some(_) => Ok(Box::new(AndroidVirtualOutput)),
+                None => Err(format!("{VIRTUAL_OUT} is not published")),
+            };
+        }
         let address = self.address(true, name)?;
         let handle = NEXT_HANDLE.fetch_add(1, Ordering::Relaxed);
         match self.open("openOutput", address, handle)? {
@@ -279,8 +351,27 @@ impl MidiTransport for AndroidTransport {
         .unwrap_or(false);
         MidiCapabilities {
             available,
+            // Paso 10: LtVirtualMidiService, wherever android.media.midi exists.
+            virtual_ports: available,
             ..MidiCapabilities::default()
         }
+    }
+
+    fn set_virtual_ports(&self, enabled: bool) -> Result<(), String> {
+        let applied = with_bridge(|env, context, class| {
+            env.call_static_method(
+                class,
+                "setVirtualPortEnabled",
+                "(Landroid/content/Context;Z)Z",
+                &[JValue::Object(context), JValue::Bool(enabled.into())],
+            )?
+            .z()
+        })?;
+        if !applied {
+            return Err("could not change the LibreTracks virtual MIDI device".into());
+        }
+        self.virtual_enabled.store(enabled, Ordering::Release);
+        Ok(())
     }
 
     fn watch(&self, on_change: Box<dyn Fn() + Send + Sync>) -> bool {

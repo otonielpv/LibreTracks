@@ -11,14 +11,18 @@ pub(crate) struct PortAddress {
     pub port_index: i32,
 }
 
-/// Parse `deviceId \t portIndex \t deviceName \t portName` lines (the format
-/// `MidiBridge.listPorts` produces) and name every port uniquely. Malformed
-/// lines are skipped rather than failing the whole list.
+/// Parse `deviceId \t portIndex \t deviceName \t portName \t own` lines (the
+/// format `MidiBridge.listPorts` produces) and name every port uniquely.
+/// Malformed lines are skipped rather than failing the whole list.
+///
+/// Lines with `own = 1` are LibreTracks' own virtual device (paso 10) and are
+/// dropped: opening it through `MidiManager` would loop the app into itself.
+/// The transport lists it instead as the internal "LibreTracks In"/"Out".
 pub(crate) fn name_ports(lines: &[String]) -> Vec<(String, PortAddress)> {
     let mut raw = Vec::new();
     let mut addresses = Vec::new();
     for line in lines {
-        let mut fields = line.splitn(4, '\t');
+        let mut fields = line.splitn(5, '\t');
         let (Some(device_id), Some(port_index), Some(device_name)) =
             (fields.next(), fields.next(), fields.next())
         else {
@@ -29,6 +33,9 @@ pub(crate) fn name_ports(lines: &[String]) -> Vec<(String, PortAddress)> {
             continue;
         };
         let port_name = fields.next().map(str::to_string);
+        if fields.next() == Some("1") {
+            continue;
+        }
         raw.push(RawPort {
             device_id: i64::from(device_id),
             device_name: device_name.to_string(),
@@ -67,6 +74,24 @@ mod tests {
                 port_index: 1
             }
         );
+    }
+
+    #[test]
+    fn our_own_virtual_device_is_never_listed_as_a_system_port() {
+        let lines = lines(&[
+            "5\t0\tLibreTracks\tLibreTracks In\t1",
+            "6\t0\tPedal\t\t0",
+            "7\t0\tLT Loopback\tin\t0",
+        ]);
+        let names: Vec<String> = name_ports(&lines).into_iter().map(|(name, _)| name).collect();
+        assert_eq!(names, vec!["Pedal", "LT Loopback"]);
+
+        // With publishing on, the transport adds the internal port exactly once.
+        let inputs = super::super::virtual_names::with_own_virtual_port(
+            names,
+            Some(super::super::virtual_names::VIRTUAL_IN),
+        );
+        assert_eq!(inputs, vec!["Pedal", "LT Loopback", "LibreTracks In"]);
     }
 
     #[test]

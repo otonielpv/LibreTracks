@@ -1,7 +1,9 @@
 package com.libretracks.desktop
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.media.midi.MidiDevice
 import android.media.midi.MidiDeviceInfo
 import android.media.midi.MidiInputPort
@@ -84,10 +86,32 @@ object MidiBridge {
   }
 
   /**
+   * True for LibreTracks' own virtual device (paso 10). Rust drops those
+   * lines: opening our own device through MidiManager would loop the app into
+   * itself. Compared by service class, not by package, because the debug-only
+   * loopback is in our package too and must stay listed.
+   */
+  private fun isOwnVirtualDevice(ctx: Context, info: MidiDeviceInfo): Boolean {
+    if (info.type != MidiDeviceInfo.TYPE_VIRTUAL) return false
+    // The framework puts the providing service under "service_info"; the key
+    // is not public API, so fall back to the names in lt_virtual_midi.xml.
+    @Suppress("DEPRECATION")
+    val service = info.properties.getParcelable<ServiceInfo>("service_info")
+    if (service != null) {
+      return service.packageName == ctx.packageName &&
+        service.name == LtVirtualMidiService::class.java.name
+    }
+    val properties = info.properties
+    return properties.getString(MidiDeviceInfo.PROPERTY_MANUFACTURER) == "LibreTracks" &&
+      properties.getString(MidiDeviceInfo.PROPERTY_PRODUCT) == "LibreTracks"
+  }
+
+  /**
    * Ports in one direction, one line per port:
-   * `deviceId \t portIndex \t deviceName \t portName`. A flat string array is
-   * far simpler to read from JNI than an array of objects. Tabs and newlines
-   * in names are replaced with spaces so the format can't break.
+   * `deviceId \t portIndex \t deviceName \t portName \t own` (`own` is `1` for
+   * our own virtual device). A flat string array is far simpler to read from
+   * JNI than an array of objects. Tabs and newlines in names are replaced with
+   * spaces so the format can't break.
    */
   @JvmStatic
   fun listPorts(ctx: Context, ourOutput: Boolean): Array<String> {
@@ -102,7 +126,8 @@ object MidiBridge {
           info.ports
             .filter { it.type == wanted }
             .map { port ->
-              "${info.id}\t${port.portNumber}\t${clean(deviceName(info))}\t${clean(port.name)}"
+              val own = if (isOwnVirtualDevice(ctx, info)) "1" else "0"
+              "${info.id}\t${port.portNumber}\t${clean(deviceName(info))}\t${clean(port.name)}\t$own"
             }
         }
         .toTypedArray()
@@ -281,6 +306,72 @@ object MidiBridge {
       nativeOnDevicesChanged()
     } catch (error: UnsatisfiedLinkError) {
       // Native library not loaded yet; the next change will try again.
+    }
+  }
+
+  // ── Virtual port "LibreTracks In"/"LibreTracks Out" (paso 10) ──────────
+
+  /** The running [LtVirtualMidiService], while another app has it open. */
+  @Volatile
+  var virtualService: LtVirtualMidiService? = null
+
+  /** Rust's handle for "LibreTracks In"; 0 = nothing attached, drop bytes. */
+  @Volatile
+  private var virtualInputHandle: Long = 0
+
+  /** Turn the virtual device on or off for other apps. */
+  @JvmStatic
+  fun setVirtualPortEnabled(ctx: Context, enabled: Boolean): Boolean {
+    return try {
+      val state =
+        if (enabled) {
+          PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        } else {
+          PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        }
+      ctx.packageManager.setComponentEnabledSetting(
+        ComponentName(ctx, LtVirtualMidiService::class.java),
+        state,
+        PackageManager.DONT_KILL_APP,
+      )
+      true
+    } catch (error: Throwable) {
+      Log.w(TAG, "setVirtualPortEnabled($enabled): $error")
+      false
+    }
+  }
+
+  @JvmStatic
+  fun attachVirtualInput(handle: Long) {
+    virtualInputHandle = handle
+  }
+
+  @JvmStatic
+  fun detachVirtualInput(handle: Long) {
+    if (virtualInputHandle == handle) {
+      virtualInputHandle = 0
+    }
+  }
+
+  /** From [LtVirtualMidiService]: another app sent to "LibreTracks In". */
+  fun onVirtualInput(msg: ByteArray, offset: Int, count: Int) {
+    val handle = virtualInputHandle
+    if (handle == 0L) return
+    try {
+      nativeOnMidiBytes(handle, msg, offset, count)
+    } catch (error: UnsatisfiedLinkError) {
+      // Started by another app before LibreTracks loaded its library.
+    }
+  }
+
+  /** Send on "LibreTracks Out". No connected app = nothing to do. */
+  @JvmStatic
+  fun sendVirtual(bytes: ByteArray, count: Int): Boolean {
+    return try {
+      virtualService?.sendToOtherApps(bytes, count)
+      true
+    } catch (error: Throwable) {
+      false
     }
   }
 

@@ -64,6 +64,23 @@
           android:exported="false"
           android:foregroundServiceType="mediaPlayback" />
 
+        <!-- LibreTracks as a MIDI device for other apps on this phone (plan
+             mobile-midi, paso 10). Disabled here: MidiBridge.setVirtualPortEnabled
+             turns the component on with the "Publish LibreTracks virtual MIDI
+             port" setting, so while it is off no app sees a LibreTracks device. -->
+        <service
+          android:name=".LtVirtualMidiService"
+          android:enabled="false"
+          android:exported="true"
+          android:permission="android.permission.BIND_MIDI_DEVICE_SERVICE">
+          <intent-filter>
+            <action android:name="android.media.midi.MidiDeviceService" />
+          </intent-filter>
+          <meta-data
+            android:name="android.media.midi.MidiDeviceService"
+            android:resource="@xml/lt_virtual_midi" />
+        </service>
+
         <provider
           android:name="androidx.core.content.FileProvider"
           android:authorities="${applicationId}.fileprovider"

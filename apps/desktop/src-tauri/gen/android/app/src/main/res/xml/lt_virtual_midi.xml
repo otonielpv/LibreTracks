@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- LibreTracks' virtual MIDI device (plan mobile-midi, paso 10). Android's
+     naming: an input-port is where OTHER apps send (our "LibreTracks In"), an
+     output-port is where they read (our "LibreTracks Out"). -->
+<devices>
+    <device manufacturer="LibreTracks" product="LibreTracks">
+        <input-port name="LibreTracks In" />
+        <output-port name="LibreTracks Out" />
+    </device>
+</devices>
