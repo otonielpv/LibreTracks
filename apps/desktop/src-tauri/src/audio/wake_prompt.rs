@@ -20,7 +20,7 @@
 use std::time::{Duration, SystemTime};
 
 /// Long enough that glancing at another app, or a short break, costs nothing.
-pub const WAKE_PROMPT_AFTER: Duration = Duration::from_secs(5 * 60);
+pub const WAKE_PROMPT_AFTER: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Debug, Default)]
 pub struct WakePromptPolicy {
