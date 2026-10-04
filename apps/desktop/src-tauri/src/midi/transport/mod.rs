@@ -13,10 +13,16 @@ use std::sync::{Arc, OnceLock};
 
 use serde::Serialize;
 
+#[cfg(target_os = "android")]
+mod android;
+#[cfg(any(target_os = "android", test))]
+mod android_ports;
 #[cfg(not(target_os = "android"))]
 mod midir;
-#[cfg(target_os = "android")]
-mod null;
+// Every current target has a backend; the null transport stays for tests and
+// as the obvious fallback for a future target without one.
+#[cfg(test)]
+pub(crate) mod null;
 
 /// Callback a transport calls with raw bytes from an input port. It may get
 /// one message or several per call; the listener's framer splits them.
@@ -62,7 +68,7 @@ pub(crate) fn platform_transport() -> Arc<dyn MidiTransport> {
             #[cfg(not(target_os = "android"))]
             let transport: Arc<dyn MidiTransport> = Arc::new(midir::MidirTransport::default());
             #[cfg(target_os = "android")]
-            let transport: Arc<dyn MidiTransport> = Arc::new(null::NullTransport);
+            let transport: Arc<dyn MidiTransport> = Arc::new(android::AndroidTransport::default());
             transport
         })
         .clone()

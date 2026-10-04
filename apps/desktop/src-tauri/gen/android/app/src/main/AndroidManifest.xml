@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- MIDI (MidiBridge.kt). required="false" so Play still lists the app on
+         devices without android.media.midi; MidiBridge.isAvailable checks. -->
+    <uses-feature android:name="android.software.midi" android:required="false" />
     <!-- Foreground media service: keeps the AAudio stream alive with the
          screen off / app backgrounded. MEDIA_PLAYBACK type is mandatory on
          API 34+; POST_NOTIFICATIONS lets the pinned notification show on 13+. -->

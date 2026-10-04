@@ -43,3 +43,11 @@
     public void pickPersistableAudioDocuments();
     public void createDocument(java.lang.String);
 }
+
+# MidiBridge: el transporte MIDI de Android (src/midi/transport/android.rs).
+# Rust lo carga por nombre con el class loader de la app y llama a
+# isAvailable/listPorts/openInput/openOutput/send/close por nombre y firma.
+# Sin esta regla R8 lo borraría de la build de release, igual que pasó con
+# SecureTokenStore. `nativeOnMidiBytes` ya lo protege la regla de métodos
+# native de proguard-wry.pro, pero se mantiene todo el objeto por claridad.
+-keep class com.libretracks.desktop.MidiBridge { *; }

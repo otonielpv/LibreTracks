@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Merged into DEBUG builds only. The MIDI loopback device for testing in the
+     emulator (plan mobile-midi, paso 03); see LtLoopbackService.kt. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <service
+            android:name="com.libretracks.desktop.LtLoopbackService"
+            android:exported="true"
+            android:permission="android.permission.BIND_MIDI_DEVICE_SERVICE">
+            <intent-filter>
+                <action android:name="android.media.midi.MidiDeviceService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.media.midi.MidiDeviceService"
+                android:resource="@xml/lt_loopback_midi" />
+        </service>
+    </application>
+</manifest>
