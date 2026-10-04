@@ -216,6 +216,27 @@ pub(crate) fn get_midi_capabilities() -> MidiCapabilities {
     platform_transport().capabilities()
 }
 
+/// Apply the platform MIDI settings that live in the transport rather than in
+/// a port selection: our own virtual ports (iOS paso 07, Android paso 10) and
+/// the iOS network session. Failures are logged, never fatal: a missing
+/// virtual port must not stop the app from starting.
+pub(crate) fn apply_platform_settings(settings: &crate::infra::settings::AppSettings) {
+    let transport = platform_transport();
+    let capabilities = transport.capabilities();
+    if capabilities.virtual_ports {
+        if let Err(error) = transport.set_virtual_ports(settings.midi_virtual_port) {
+            eprintln!("[libretracks-midi] virtual ports: {error}");
+        }
+    }
+    if capabilities.network_session {
+        if let Err(error) = transport.set_network_session(settings.midi_network_session) {
+            eprintln!("[libretracks-midi] network session: {error}");
+        }
+    }
+    // The port lists changed: refresh Settings and reopen anything waiting.
+    watch::notify_changed();
+}
+
 fn spawn_midi_listener(
     transport: Arc<dyn MidiTransport>,
     port_name: String,

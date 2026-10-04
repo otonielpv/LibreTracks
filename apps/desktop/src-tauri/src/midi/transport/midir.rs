@@ -4,9 +4,26 @@
 use midir::{Ignore, MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
 
 use super::{InputConnection, MidiCapabilities, MidiTransport, OnBytes, OutputConnection};
+#[cfg(target_os = "ios")]
+use super::{
+    virtual_names::{with_own_virtual_port, VIRTUAL_IN, VIRTUAL_OUT},
+    virtual_ports::VirtualPorts,
+};
 
 #[derive(Default)]
-pub(crate) struct MidirTransport;
+pub(crate) struct MidirTransport {
+    /// iOS: our own published ports (paso 07).
+    #[cfg(target_os = "ios")]
+    virtual_ports: VirtualPorts,
+}
+
+impl MidirTransport {
+    /// Our own port in a direction, while publishing is on (iOS only).
+    #[cfg(target_os = "ios")]
+    fn own(&self, name: &'static str) -> Option<&'static str> {
+        self.virtual_ports.is_enabled().then_some(name)
+    }
+}
 
 struct MidirInput {
     _connection: MidiInputConnection<()>,
@@ -36,25 +53,31 @@ impl MidiTransport for MidirTransport {
     fn input_names(&self) -> Result<Vec<String>, String> {
         let midi_input =
             MidiInput::new("libretracks-midi-inputs").map_err(|error| error.to_string())?;
-        Ok(sorted_unique(
+        let names = sorted_unique(
             midi_input
                 .ports()
                 .iter()
                 .filter_map(|port| midi_input.port_name(port).ok())
                 .collect(),
-        ))
+        );
+        #[cfg(target_os = "ios")]
+        let names = with_own_virtual_port(names, self.own(VIRTUAL_IN));
+        Ok(names)
     }
 
     fn output_names(&self) -> Result<Vec<String>, String> {
         let midi_output =
             MidiOutput::new("libretracks-midi-outputs").map_err(|error| error.to_string())?;
-        Ok(sorted_unique(
+        let names = sorted_unique(
             midi_output
                 .ports()
                 .iter()
                 .filter_map(|port| midi_output.port_name(port).ok())
                 .collect(),
-        ))
+        );
+        #[cfg(target_os = "ios")]
+        let names = with_own_virtual_port(names, self.own(VIRTUAL_OUT));
+        Ok(names)
     }
 
     fn open_input(
@@ -62,6 +85,10 @@ impl MidiTransport for MidirTransport {
         name: &str,
         mut on_bytes: OnBytes,
     ) -> Result<Box<dyn InputConnection>, String> {
+        #[cfg(target_os = "ios")]
+        if name == VIRTUAL_IN {
+            return self.virtual_ports.attach_input(on_bytes);
+        }
         let mut midi_input =
             MidiInput::new("libretracks-midi-listener").map_err(|error| error.to_string())?;
         midi_input.ignore(Ignore::None);
@@ -89,6 +116,10 @@ impl MidiTransport for MidirTransport {
     }
 
     fn open_output(&self, name: &str) -> Result<Box<dyn OutputConnection>, String> {
+        #[cfg(target_os = "ios")]
+        if name == VIRTUAL_OUT {
+            return self.virtual_ports.output();
+        }
         let midi_output =
             MidiOutput::new("libretracks-midi-output").map_err(|error| error.to_string())?;
         let port = midi_output
@@ -110,7 +141,20 @@ impl MidiTransport for MidirTransport {
     fn capabilities(&self) -> MidiCapabilities {
         MidiCapabilities {
             available: true,
+            // iOS: RTP-MIDI session and our own virtual ports (paso 07).
+            network_session: cfg!(target_os = "ios"),
+            virtual_ports: cfg!(target_os = "ios"),
             ..MidiCapabilities::default()
         }
+    }
+
+    #[cfg(target_os = "ios")]
+    fn set_virtual_ports(&self, enabled: bool) -> Result<(), String> {
+        self.virtual_ports.set_enabled(enabled)
+    }
+
+    #[cfg(target_os = "ios")]
+    fn set_network_session(&self, enabled: bool) -> Result<(), String> {
+        super::ios_network::set_network_session(enabled)
     }
 }

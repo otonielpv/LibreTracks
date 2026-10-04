@@ -860,6 +860,7 @@ const en = {
       timelinePlayheadFollowModeUpdated: "Playhead follow mode updated.",
       importMergeMatchingTracksUpdated: "Import track behaviour updated.",
       pauseAtSongEndUpdated: "Pause at song end updated.",
+      midiSettingsUpdated: "MIDI settings updated.",
       referenceImportedAudioUpdated: "Audio import behaviour updated.",
       autoColorNewTracksUpdated: "Automatic track colours updated.",
       autoSaveUpdated: "Autosave updated.",
@@ -1251,6 +1252,12 @@ const en = {
       outputDeviceHint:
         "Port the MIDI tracks send to (lighting desks, lyric software).",
       testNote: "Send test note",
+      virtualPort: "Publish LibreTracks virtual MIDI port",
+      virtualPortHint:
+        "Other apps on this device see LibreTracks as a MIDI device: they receive what your MIDI tracks send to \"LibreTracks Out\" and can trigger MIDI Learn bindings through \"LibreTracks In\".",
+      networkSession: "Network MIDI session",
+      networkSessionHint:
+        "Send and receive MIDI over Wi-Fi with a Mac (Audio MIDI Setup > Network). iOS will ask for local network access the first time.",
       noDevicesMobile:
         "No MIDI devices found. Connect a controller or interface over USB: a camera adapter or USB-C on iPhone and iPad, an OTG cable on Android.",
       testNoteSent: "Test note sent",

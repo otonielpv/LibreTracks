@@ -73,6 +73,14 @@ pub fn update_audio_settings(
         .set(next_settings.clone())
         .map_err(|error| error.to_string())?;
 
+    // Before the port restarts: selecting "LibreTracks In" in the same save
+    // that turns publishing on needs the port to exist already.
+    if previous_settings.midi_virtual_port != next_settings.midi_virtual_port
+        || previous_settings.midi_network_session != next_settings.midi_network_session
+    {
+        crate::midi::apply_platform_settings(&next_settings);
+    }
+
     if previous_settings.selected_midi_device != next_settings.selected_midi_device {
         state
             .midi

@@ -17,8 +17,14 @@ use serde::Serialize;
 mod android;
 #[cfg(any(target_os = "android", test))]
 mod android_ports;
+#[cfg(target_os = "ios")]
+mod ios_network;
 #[cfg(not(target_os = "android"))]
 mod midir;
+#[cfg(any(target_os = "ios", target_os = "android", test))]
+pub(crate) mod virtual_names;
+#[cfg(target_os = "ios")]
+mod virtual_ports;
 // Every current target has a backend; the null transport stays for tests and
 // as the obvious fallback for a future target without one.
 #[cfg(test)]
@@ -40,6 +46,18 @@ pub(crate) trait MidiTransport: Send + Sync + 'static {
     /// transport can't notify (then `midi::watch` polls instead).
     fn watch(&self, _on_change: Box<dyn Fn() + Send + Sync>) -> bool {
         false
+    }
+
+    /// Publish (or stop publishing) "LibreTracks In" / "LibreTracks Out" for
+    /// other apps on this device. Only where `virtual_ports` is a capability.
+    fn set_virtual_ports(&self, _enabled: bool) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// iOS network (RTP-MIDI) session. Only where `network_session` is a
+    /// capability.
+    fn set_network_session(&self, _enabled: bool) -> Result<(), String> {
+        Ok(())
     }
 }
 

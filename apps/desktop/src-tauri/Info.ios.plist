@@ -22,6 +22,12 @@
   <array>
     <string>audio</string>
   </array>
+  <!-- MIDI de red (plan mobile-midi, paso 07). iOS solo pide el permiso de red
+       local cuando el usuario activa "Sesion MIDI de red" en Ajustes > MIDI
+       (MIDINetworkSession), nunca al arrancar. App Review exige un texto que
+       diga para que se usa: ver las notas para el revisor del paso 09. -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>LibreTracks uses the local network to send and receive MIDI over Wi-Fi with a computer or another device (network MIDI session), for example to drive lights or lyrics from your show.</string>
   <key>UISupportedInterfaceOrientations</key>
   <array>
     <string>UIInterfaceOrientationLandscapeLeft</string>

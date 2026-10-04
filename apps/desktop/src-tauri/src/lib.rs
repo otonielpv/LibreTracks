@@ -277,6 +277,11 @@ pub fn run() {
                     let _ = store.set(after);
                 }
             }
+            // Virtual ports and the iOS network session first, so a saved
+            // selection of "LibreTracks In"/"Out" finds its port below.
+            if let Ok(settings) = state.audio.current_settings() {
+                midi::apply_platform_settings(&settings);
+            }
             state
                 .midi
                 .restart(

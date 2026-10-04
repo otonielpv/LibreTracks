@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
 
+import type { AppSettings } from "@libretracks/shared/models";
+
 import { isMobileApp } from "../desktopApi";
+import { useMidiCapabilities } from "../hooks/useMidiCapabilities";
 
 /**
  * The Settings modal's MIDI tab: input port (for MIDI learn) and output port
@@ -37,6 +40,22 @@ export type MidiOutputSettings = {
   onChange: (value: string) => void;
   onRefresh: () => void;
   onSendTestNote: () => void;
+  /**
+   * Platform MIDI settings (network session, our virtual port). They travel
+   * with this group so the monolith's prop surface doesn't widen; the tab
+   * shows each one only where `get_midi_capabilities` says it exists.
+   */
+  platform: MidiPlatformSettings;
+};
+
+export type MidiPlatformPatch = Partial<
+  Pick<AppSettings, "midiNetworkSession" | "midiVirtualPort">
+>;
+
+export type MidiPlatformSettings = {
+  networkSession: boolean;
+  virtualPort: boolean;
+  onChange: (patch: MidiPlatformPatch) => void;
 };
 
 export function MidiSettingsTab({
@@ -57,8 +76,10 @@ export function MidiSettingsTab({
     onChange: onMidiOutputDeviceChange,
     onRefresh: onRefreshMidiOutputDevices,
     onSendTestNote: onSendMidiTestNote,
+    platform,
   } = midiOutput;
   const { t } = useTranslation();
+  const capabilities = useMidiCapabilities();
 
   return (
     <section
@@ -199,6 +220,40 @@ export function MidiSettingsTab({
           </div>
           <small>{t("transport.midi.outputDeviceHint")}</small>
         </div>
+
+        {capabilities?.virtualPorts ? (
+          <label className="lt-settings-toggle">
+            <input
+              type="checkbox"
+              checked={platform.virtualPort}
+              disabled={isLoading || isSaving}
+              onChange={(event) =>
+                platform.onChange({ midiVirtualPort: event.target.checked })
+              }
+            />
+            <span className="lt-settings-toggle-copy">
+              <span>{t("transport.midi.virtualPort")}</span>
+              <small>{t("transport.midi.virtualPortHint")}</small>
+            </span>
+          </label>
+        ) : null}
+
+        {capabilities?.networkSession ? (
+          <label className="lt-settings-toggle">
+            <input
+              type="checkbox"
+              checked={platform.networkSession}
+              disabled={isLoading || isSaving}
+              onChange={(event) =>
+                platform.onChange({ midiNetworkSession: event.target.checked })
+              }
+            />
+            <span className="lt-settings-toggle-copy">
+              <span>{t("transport.midi.networkSession")}</span>
+              <small>{t("transport.midi.networkSessionHint")}</small>
+            </span>
+          </label>
+        ) : null}
       </div>
     </section>
   );

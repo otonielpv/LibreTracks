@@ -165,6 +165,109 @@ fn main() -> ExitCode {
         Err(error) => check(false, &format!("open_output failed: {error}")),
     }
 
+    // ── Virtual ports (paso 07): seen and used by another CoreMIDI client ──
+    // The test's own client stands in for "another app on the device".
+    match transport.set_virtual_ports(true) {
+        Ok(()) => {
+            thread::sleep(Duration::from_millis(300));
+            let names_in = transport.input_names().unwrap_or_default();
+            let names_out = transport.output_names().unwrap_or_default();
+            check(
+                names_in.iter().filter(|name| *name == "LibreTracks In").count() == 1
+                    && names_out.iter().filter(|name| *name == "LibreTracks Out").count() == 1
+                    && !names_in.iter().any(|name| name == "LibreTracks Out")
+                    && !names_out.iter().any(|name| name == "LibreTracks In"),
+                "each virtual port is listed once, in its own direction",
+            );
+
+            let other_app_sees = |name: &str, sources: bool| {
+                if sources {
+                    coremidi::Sources
+                        .into_iter()
+                        .any(|source| source.name().as_deref() == Some(name))
+                } else {
+                    coremidi::Destinations
+                        .into_iter()
+                        .any(|destination| destination.name().as_deref() == Some(name))
+                }
+            };
+            check(
+                other_app_sees("LibreTracks Out", true) && other_app_sees("LibreTracks In", false),
+                "another client sees LibreTracks Out (source) and LibreTracks In (destination)",
+            );
+
+            // Another app sends to "LibreTracks In": our listener gets it.
+            let virtual_in: Arc<Mutex<Vec<WireEvent>>> = Arc::default();
+            let sink = Arc::clone(&virtual_in);
+            let mut framer = Framer::new();
+            let listener = transport.open_input(
+                "LibreTracks In",
+                Box::new(move |bytes| {
+                    framer.push(bytes, &mut |event| sink.lock().unwrap().push(event));
+                }),
+            );
+            let sender_port = client.output_port("lt-selftest-other-app-out").expect("output port");
+            if let Some(destination) = coremidi::Destinations
+                .into_iter()
+                .find(|destination| destination.name().as_deref() == Some("LibreTracks In"))
+            {
+                let _ = sender_port.send(&destination, &PacketBuffer::new(0, &[0x90, 64, 90]));
+            }
+            check(
+                listener.is_ok()
+                    && wait_until(|| {
+                        virtual_in.lock().unwrap().contains(&WireEvent::Message {
+                            status: 0x90,
+                            data1: 64,
+                            data2: 90,
+                        })
+                    }),
+                "a note sent to LibreTracks In reaches the input listener",
+            );
+            drop(listener);
+
+            // We send on "LibreTracks Out": another app reading it gets it.
+            let read_back: Arc<Mutex<Vec<u8>>> = Arc::default();
+            let reader_sink = Arc::clone(&read_back);
+            let reader = client
+                .input_port("lt-selftest-other-app-in", move |packets: &PacketList| {
+                    let mut sink = reader_sink.lock().unwrap();
+                    for packet in packets.iter() {
+                        sink.extend_from_slice(packet.data());
+                    }
+                })
+                .expect("input port");
+            if let Some(source) = coremidi::Sources
+                .into_iter()
+                .find(|source| source.name().as_deref() == Some("LibreTracks Out"))
+            {
+                let _ = reader.connect_source(&source);
+            }
+            thread::sleep(Duration::from_millis(100));
+            let sent = transport
+                .open_output("LibreTracks Out")
+                .map(|mut connection| connection.send(&[0xC0, 5]));
+            check(
+                matches!(sent, Ok(Ok(())))
+                    && wait_until(|| read_back.lock().unwrap().as_slice() == [0xC0, 5]),
+                "a program change sent on LibreTracks Out reaches another client",
+            );
+
+            let _ = transport.set_virtual_ports(false);
+            thread::sleep(Duration::from_millis(300));
+            check(
+                !transport
+                    .input_names()
+                    .unwrap_or_default()
+                    .iter()
+                    .any(|name| name == "LibreTracks In")
+                    && !other_app_sees("LibreTracks Out", true),
+                "turning publishing off removes both ports",
+            );
+        }
+        Err(error) => check(false, &format!("set_virtual_ports(true) failed: {error}")),
+    }
+
     if failures.is_empty() {
         println!("MIDI_SELFTEST_RESULT=PASS");
         ExitCode::SUCCESS

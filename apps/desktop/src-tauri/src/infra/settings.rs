@@ -187,6 +187,14 @@ pub struct AppSettings {
     pub selected_midi_output_device: Option<String>,
     #[serde(default)]
     pub suppress_missing_midi_device_warning: bool,
+    /// iOS: RTP-MIDI network session (plan mobile-midi, paso 07). Off by
+    /// default: turning it on is what makes iOS ask for local-network access.
+    #[serde(default)]
+    pub midi_network_session: bool,
+    /// Publish "LibreTracks In" / "LibreTracks Out" for other apps on the same
+    /// device (iOS paso 07, Android paso 10). Off by default.
+    #[serde(default)]
+    pub midi_virtual_port: bool,
     #[serde(default = "default_enabled_output_channels")]
     pub enabled_output_channels: Vec<usize>,
     #[serde(default)]
@@ -382,6 +390,8 @@ impl Default for AppSettings {
             selected_midi_device: None,
             selected_midi_output_device: None,
             suppress_missing_midi_device_warning: false,
+            midi_network_session: false,
+            midi_virtual_port: false,
             enabled_output_channels: default_enabled_output_channels(),
             locale: None,
             metronome_enabled: false,

@@ -248,6 +248,18 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       );
     },
 
+    /** MIDI settings that live in the platform transport (plan mobile-midi). */
+    handleMidiPlatformSettingsChange(
+      patch: Partial<Pick<AppSettings, "midiNetworkSession" | "midiVirtualPort">>,
+    ) {
+      persistAudioPatch(
+        patch,
+        t("transport.status.midiSettingsUpdated", {
+          defaultValue: "MIDI settings updated.",
+        }),
+      );
+    },
+
     handlePauseAtSongEndChange(nextValue: boolean) {
       persistAudioPatch(
         { pauseAtSongEnd: nextValue },

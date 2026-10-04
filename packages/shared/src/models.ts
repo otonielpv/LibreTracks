@@ -1195,6 +1195,10 @@ export type AppSettings = {
   /** Port the timeline MIDI tracks send to. Separate from the input device. */
   selectedMidiOutputDevice: string | null;
   suppressMissingMidiDeviceWarning: boolean;
+  /** iOS RTP-MIDI network session. Off by default (asks for local network). */
+  midiNetworkSession: boolean;
+  /** Publish "LibreTracks In"/"LibreTracks Out" for other apps on the device. */
+  midiVirtualPort: boolean;
   enabledOutputChannels: number[];
   locale: string | null;
   metronomeEnabled: boolean;
@@ -1326,6 +1330,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   selectedMidiDevice: null,
   selectedMidiOutputDevice: null,
   suppressMissingMidiDeviceWarning: false,
+  midiNetworkSession: false,
+  midiVirtualPort: false,
   enabledOutputChannels: [0, 1],
   locale: null,
   metronomeEnabled: false,
@@ -1539,6 +1545,8 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     suppressMissingMidiDeviceWarning: Boolean(
       settings.suppressMissingMidiDeviceWarning,
     ),
+    midiNetworkSession: Boolean(settings.midiNetworkSession),
+    midiVirtualPort: Boolean(settings.midiVirtualPort),
     enabledOutputChannels: enabledOutputChannels.length
       ? enabledOutputChannels
       : DEFAULT_APP_SETTINGS.enabledOutputChannels,

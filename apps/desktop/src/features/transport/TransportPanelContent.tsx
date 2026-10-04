@@ -2080,6 +2080,7 @@ export function TransportPanelContent() {
     handleTimelineNavigationSchemeChange,
     handleTimelinePlayheadFollowModeChange,
     handlePauseAtSongEndChange,
+    handleMidiPlatformSettingsChange,
     handleImportMergeMatchingTracksChange,
     handleAutoColorNewTracksChange,
     handleReferenceImportedAudioChange,
@@ -6761,6 +6762,7 @@ export function TransportPanelContent() {
     onChange: handleMidiOutputDeviceChange,
     onRefresh: handleRefreshMidiOutputDevices,
     onSendTestNote: handleSendMidiTestNote,
+    onPlatformChange: handleMidiPlatformSettingsChange,
   });
   const selectedMidiInputDeviceMissing = Boolean(
     appSettings.selectedMidiDevice &&

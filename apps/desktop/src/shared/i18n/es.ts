@@ -888,6 +888,7 @@ const es = {
       importMergeMatchingTracksUpdated:
         "Comportamiento de pistas al importar actualizado.",
       pauseAtSongEndUpdated: "Pausa al terminar la canción actualizada.",
+      midiSettingsUpdated: "Ajustes MIDI actualizados.",
       referenceImportedAudioUpdated:
         "Comportamiento al importar audio actualizado.",
       autoColorNewTracksUpdated: "Colores automáticos de pista actualizados.",
@@ -1282,6 +1283,12 @@ const es = {
       outputDeviceHint:
         "Puerto al que envian las pistas MIDI (mesas de luces, software de letras).",
       testNote: "Enviar nota de prueba",
+      virtualPort: "Publicar puerto MIDI virtual LibreTracks",
+      virtualPortHint:
+        "Las demás apps de este dispositivo ven LibreTracks como un dispositivo MIDI: reciben lo que tus pistas MIDI mandan a \"LibreTracks Out\" y pueden disparar los bindings de MIDI Learn por \"LibreTracks In\".",
+      networkSession: "Sesión MIDI de red",
+      networkSessionHint:
+        "Envía y recibe MIDI por Wi-Fi con un Mac (Configuración de Audio MIDI > Red). iOS pedirá acceso a la red local la primera vez.",
       noDevicesMobile:
         "No hay dispositivos MIDI. Conecta un controlador o una interfaz por USB: con el adaptador de cámara o USB-C en iPhone y iPad, o con un cable OTG en Android.",
       testNoteSent: "Nota de prueba enviada",

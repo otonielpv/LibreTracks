@@ -16,3 +16,7 @@ serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 coremidi = "0.6"
+
+# The transport's iOS network session (ios_network.rs) uses objc2.
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.6"
