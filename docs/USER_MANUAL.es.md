@@ -190,7 +190,7 @@ Un arreglo cambia la forma de una canción sin montar saltos: dos coros más al 
 4. **Monta el arreglo**: arriba tienes las secciones de la canción. Haz click en una para añadirla al final, o arrástrala a la tira de abajo para meterla donde la sueltes. En la tira, arrastra los bloques para cambiarlos de orden, `Supr` quita el bloque seleccionado y `Ctrl+D` lo duplica.
 5. Pulsa `Aplicar`. El timeline muestra el resultado y las canciones siguientes se colocan detrás, en su compás.
 
-Puedes guardar varios arreglos de la misma canción (`Nuevo`, `Renombrar`, `Eliminar`) y cambiar de uno a otro desde el selector. `Original` devuelve la canción a como era; el arreglo no se borra.
+Puedes guardar varios arreglos de la misma canción (`Nuevo`, `Renombrar`, `Eliminar`) y cambiar de uno a otro desde el selector. El primero del selector es siempre `Original`: elígelo y pulsa `Aplicar` para devolver la canción a como era (los arreglos no se borran). El original no se puede borrar ni renombrar; si cambias sus bloques, se crea un arreglo nuevo a partir de él. Si te equivocaste al guardarlo (faltaba una marca, una sección estaba mal puesta), corrige la canción en el timeline y usa `Volver a guardar el original`.
 
 Con un arreglo aplicado, la canción muestra `⇄ Domingo` (el nombre del arreglo) en el ruler, en la vista compacta, en la vista en directo y en el remote, y el ruler sombrea un poco las secciones que son repeticiones.
 

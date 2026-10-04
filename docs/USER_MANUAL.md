@@ -190,7 +190,7 @@ An arrangement changes a song's form without building jumps: two more choruses a
 4. **Build the arrangement**: the song's sections are at the top. Click one to add it at the end, or drag it onto the strip below to insert it where you drop it. On the strip, drag blocks to reorder them, `Delete` removes the selected block and `Ctrl+D` duplicates it.
 5. Press `Apply`. The timeline shows the result and the following songs line up behind it, on their bar.
 
-You can keep several arrangements of the same song (`New`, `Rename`, `Delete`) and switch between them from the picker. `Original` puts the song back the way it was; the arrangement is kept.
+You can keep several arrangements of the same song (`New`, `Rename`, `Delete`) and switch between them from the picker. The first choice in the picker is always `Original`: pick it and press `Apply` to put the song back the way it was (the arrangements are kept). The original cannot be deleted or renamed; changing its blocks creates a new arrangement from it. If you saved it wrong (a marker was missing, a section was in the wrong place), fix the song on the timeline and use `Save the original again`.
 
 With an arrangement applied, the song shows `⇄ Sunday` (the arrangement's name) on the ruler, in the compact view, the live view and the remote, and the ruler lightly shades the sections that are repeats.
 

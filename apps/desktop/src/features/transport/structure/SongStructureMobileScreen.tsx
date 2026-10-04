@@ -434,13 +434,6 @@ export function SongStructureMobileScreen({
         <footer className="lt-structure-mobile-bar">
           <button
             type="button"
-            disabled={!appliedId || applying}
-            onClick={() => void actions.backToOriginal()}
-          >
-            {t("transport.structure.original")}
-          </button>
-          <button
-            type="button"
             className={`is-primary ${dirty || !draftIsApplied ? "is-attention" : ""}`}
             disabled={applying || draft.blocks.length === 0 || (draftIsApplied && !dirty)}
             onClick={() => void apply()}
@@ -507,16 +500,25 @@ export function SongStructureMobileScreen({
           <SheetItem
             icon="edit"
             label={t("transport.structure.rename")}
+            disabled={draft.isOriginal}
             onSelect={() => {
               setMoreOpen(false);
               void actions.rename();
             }}
           />
           <SheetItem
+            icon="restart_alt"
+            label={t("transport.structure.recapture")}
+            onSelect={() => {
+              setMoreOpen(false);
+              void actions.recaptureOriginal();
+            }}
+          />
+          <SheetItem
             icon="delete"
             label={t("transport.structure.delete")}
             destructive
-            disabled={!draft.arrangementId}
+            disabled={!draft.arrangementId || draft.isOriginal}
             onSelect={() => {
               setMoreOpen(false);
               void actions.remove();

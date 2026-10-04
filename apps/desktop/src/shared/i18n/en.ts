@@ -935,6 +935,8 @@ const en = {
       done: "Done",
       addedCount_one: "Added {{count}} time",
       addedCount_other: "Added {{count}} times",
+      recaptureNeedsOriginal:
+        "To save the original again the song has to be showing its original, and it has an arrangement applied now. Go back to the original? Then fix what you need and save it again.",
       emptyStrip: "Add sections from the palette.",
       selector: "Saved arrangement",
       newArrangement: "New",

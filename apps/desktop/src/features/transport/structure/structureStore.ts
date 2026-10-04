@@ -37,7 +37,15 @@ export type ArrangementDraft = {
   arrangementId: string | null;
   name: string;
   blocks: DraftBlock[];
+  /** The song's original order, picked in the selector like any arrangement.
+   * It is read-only: editing its blocks turns it into a new, unsaved
+   * arrangement called `nameIfEdited`. */
+  isOriginal?: boolean;
+  nameIfEdited?: string;
 };
+
+/** Selector value of the original. */
+export const ORIGINAL_SELECTION = "__original__";
 
 type StructureState = {
   guard: StructureGuardRequest | null;
@@ -92,6 +100,7 @@ export function draftsEqual(
   if (!left || !right) return false;
   return (
     left.regionId === right.regionId &&
+    Boolean(left.isOriginal) === Boolean(right.isOriginal) &&
     left.arrangementId === right.arrangementId &&
     left.name === right.name &&
     left.blocks.length === right.blocks.length &&

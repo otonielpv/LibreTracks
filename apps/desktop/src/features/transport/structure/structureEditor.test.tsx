@@ -2,11 +2,16 @@ import { renderHook } from "@testing-library/react";
 
 import type { SongRegionSummary, SongView } from "@libretracks/shared/models";
 
-import { act, en, fireEvent, render, screen, waitFor } from "../../../test/testUtils";
+import { act, en, fireEvent, render, screen, waitFor, within } from "../../../test/testUtils";
 import { useSongStore } from "../songStore";
+import { confirmDialog } from "../../../shared/dialog/dialogService";
+
+vi.mock("../../../shared/dialog/dialogService", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../shared/dialog/dialogService")>()),
+  confirmDialog: vi.fn(async () => true),
+}));
 import { useSongWaveforms } from "../hooks/useSongWaveforms";
 import { ArrangementBadge } from "./ArrangementBadge";
-import { copySectionSpans, isCopyMarkerId } from "./copySpans";
 import { SongStructurePanel } from "./SongStructurePanel";
 import { createStructureHandlers } from "./structureHandlers";
 import {
@@ -127,15 +132,25 @@ describe("structure editor — C1: operations", () => {
     expect(targetIndexForGap(ids, "b", 2)).toBe(1); // su propio hueco
   });
 
-  it("opens on the applied arrangement, else the first, else a new one from the original", () => {
+  it("opens on what the timeline shows: the applied arrangement, else the original", () => {
     expect(initialDraft("r1", STRUCTURE, (k) => k).draft.arrangementId).toBe("domingo");
-    expect(
-      initialDraft("r1", { ...STRUCTURE, appliedArrangementId: null }, (k) => k).draft.arrangementId,
-    ).toBe("domingo");
-    const fresh = initialDraft("r1", { ...STRUCTURE, arrangements: [] }, (k) => k);
-    expect(fresh.draft.arrangementId).toBeNull();
-    expect(sections(fresh.draft)).toEqual(["intro", "verso", "coro"]);
-    expect(fresh.saved).toBeNull();
+    const original = initialDraft("r1", { ...STRUCTURE, appliedArrangementId: null }, (k) => k);
+    expect(original.draft.isOriginal).toBe(true);
+    expect(sections(original.draft)).toEqual(["intro", "verso", "coro"]);
+    // Nada sin guardar: el original es lo que ya hay.
+    expect(original.saved).toBe(original.draft);
+  });
+
+  it("editing the original starts a new unsaved arrangement and leaves the original alone", () => {
+    const { draft } = initialDraft("r1", { ...STRUCTURE, appliedArrangementId: null }, (k) => k);
+    loadDraft(draft, draft);
+    updateDraft((d) => addBlock(d, "coro"));
+    const edited = useStructureStore.getState().draft!;
+    expect(edited.isOriginal).toBe(false);
+    expect(edited.arrangementId).toBeNull();
+    expect(edited.name).toBe("transport.structure.defaultName");
+    expect(sections(edited)).toEqual(["intro", "verso", "coro", "coro"]);
+    expect(isDraftDirty()).toBe(true);
   });
 
   it("tracks unapplied changes and discarding them", () => {
@@ -316,21 +331,6 @@ describe("structure editor — panel", () => {
 });
 
 describe("structure editor — ruler and waveforms", () => {
-  it("shades only the copy sections of songs with an applied arrangement", () => {
-    expect(isCopyMarkerId("coro~2")).toBe(true);
-    expect(isCopyMarkerId("coro")).toBe(false);
-    expect(isCopyMarkerId("r1~start")).toBe(false);
-    const markers = [
-      { id: "coro", name: "Coro", startSeconds: 0, kind: "chorus" as const },
-      { id: "build~2", name: "Build", startSeconds: 12, kind: "build" as const },
-      { id: "coro~2", name: "Coro", startSeconds: 10, kind: "chorus" as const },
-    ];
-    expect(copySectionSpans(markers, [region(STRUCTURE)])).toEqual([
-      { startSeconds: 10, endSeconds: 48 },
-    ]);
-    expect(copySectionSpans(markers, [region({ ...STRUCTURE, appliedArrangementId: null })])).toEqual([]);
-  });
-
   /** C4: an arrangement with repeats adds clips but no new source: the
    * waveform loader does not ask for anything new (peaks are per file). */
   it("applying an arrangement with repeats requests no new waveform", async () => {
@@ -450,5 +450,77 @@ describe("structure editor — palette drag ghost (desktop)", () => {
     expect(strip.querySelector(".lt-structure-insert-ghost")).toBeNull();
     expect(document.querySelector(".lt-structure-insert-lift")).toBeNull();
     expect(sections(useStructureStore.getState().draft!)).toHaveLength(4);
+  });
+});
+
+describe("structure editor — the original as one more choice", () => {
+  const renderPanel = async (structure: SongStructureSummary) => {
+    useSongStore.setState({ song: songWith(structure) });
+    openStructureEditor("r1");
+    render(<SongStructurePanel handlers={handlersSpy()} variant="desktop" />);
+    return screen.findByRole("combobox");
+  };
+
+  it("lists Original first in the selector and has no separate Original button", async () => {
+    const select = await renderPanel(STRUCTURE);
+    const options = within(select).getAllByRole("option").map((option) => option.textContent);
+    expect(options[0]).toBe(en.transport.structure.original);
+    expect(options).toContain("Domingo · " + en.transport.structure.appliedBadge);
+    expect(screen.queryByRole("button", { name: en.transport.structure.original })).toBeNull();
+  });
+
+  it("choosing Original and Apply puts the song back; Rename and Delete stay off", async () => {
+    const desktopApi = await import("../desktopApi");
+    const apply = vi.spyOn(desktopApi, "applySongArrangement").mockResolvedValue({
+      snapshot: null as never,
+      warnings: [],
+      droppedBlocks: [],
+    });
+    const select = await renderPanel(STRUCTURE);
+    await act(async () => {
+      fireEvent.change(select, { target: { value: "__original__" } });
+    });
+    expect(useStructureStore.getState().draft?.isOriginal).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: en.transport.structure.rename }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: en.transport.structure.delete }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: en.transport.structure.apply }));
+    });
+    await waitFor(() => expect(apply).toHaveBeenCalledWith("r1", null));
+  });
+
+  it("“Save the original again” captures it when the timeline shows the original", async () => {
+    const desktopApi = await import("../desktopApi");
+    const capture = vi.spyOn(desktopApi, "captureSongStructure").mockResolvedValue({
+      snapshot: null as never,
+      warnings: [],
+      droppedBlocks: [],
+    });
+    await renderPanel({ ...STRUCTURE, appliedArrangementId: null });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: en.transport.structure.recapture }));
+    });
+    await waitFor(() => expect(capture).toHaveBeenCalledWith("r1"));
+  });
+
+  it("with an arrangement applied it offers to go back to the original first", async () => {
+    const desktopApi = await import("../desktopApi");
+    const capture = vi.spyOn(desktopApi, "captureSongStructure");
+    const apply = vi.spyOn(desktopApi, "applySongArrangement").mockResolvedValue({
+      snapshot: null as never,
+      warnings: [],
+      droppedBlocks: [],
+    });
+    await renderPanel(STRUCTURE);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: en.transport.structure.recapture }));
+    });
+    expect(confirmDialog).toHaveBeenCalledWith(en.transport.structure.recaptureNeedsOriginal);
+    await waitFor(() => expect(apply).toHaveBeenCalledWith("r1", null));
+    expect(capture).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,7 @@ import {
   closeStructureEditor,
   draftForArrangement,
   draftFromOriginal,
+  originalDraft,
   initialDraft,
   isDraftDirty,
   loadDraft,
@@ -17,7 +18,7 @@ import {
   updateDraft,
 } from "./structureEditor";
 import type { StructureHandlers } from "./structureHandlers";
-import { draftsEqual, useStructureStore } from "./structureStore";
+import { draftsEqual, ORIGINAL_SELECTION, useStructureStore } from "./structureStore";
 
 /** Ask before throwing away unapplied changes. Resolves `true` when it is fine
  * to go on. */
@@ -57,7 +58,10 @@ export function useArrangementActions(handlers: StructureHandlers) {
 
   const dirty = draft !== null && !draftsEqual(draft, savedDraft);
   const appliedId = structure?.appliedArrangementId ?? null;
-  const draftIsApplied = draft?.arrangementId != null && draft.arrangementId === appliedId;
+  // The original counts as applied when no arrangement is.
+  const draftIsApplied = draft?.isOriginal
+    ? appliedId === null
+    : draft?.arrangementId != null && draft.arrangementId === appliedId;
 
   const close = async () => {
     if (await confirmDiscardChanges(t)) closeStructureEditor();
@@ -67,18 +71,26 @@ export function useArrangementActions(handlers: StructureHandlers) {
    * mobile screen can close on success or show the error. */
   const apply = async (): Promise<{ ok: boolean; error: unknown }> => {
     if (!regionId || !draft || draft.blocks.length === 0) return { ok: false, error: null };
+    if (draft.isOriginal) {
+      // "Original" in the selector + Apply = put the song back as it was.
+      return handlers.applyArrangement(regionId, null);
+    }
     const id = draft.arrangementId ?? newArrangementId();
     const result = await handlers.saveArrangement(regionId, toArrangementInput(draft, id), true);
     if (result.ok) markDraftSaved(id);
     return result;
   };
 
-  const backToOriginal = async () => {
-    if (regionId) await handlers.applyArrangement(regionId, null);
-  };
-
   const switchTo = async (arrangementId: string) => {
-    if (!regionId || !structure || arrangementId === draft?.arrangementId) return;
+    if (!regionId || !structure) return;
+    if (arrangementId === ORIGINAL_SELECTION) {
+      if (draft?.isOriginal) return;
+      if (!(await confirmDiscardChanges(t))) return;
+      const original = originalDraft(regionId, structure, t);
+      loadDraft(original, original);
+      return;
+    }
+    if (arrangementId === draft?.arrangementId && !draft?.isOriginal) return;
     if (!(await confirmDiscardChanges(t))) return;
     const arrangement = structure.arrangements.find((a) => a.id === arrangementId);
     if (arrangement) {
@@ -93,7 +105,7 @@ export function useArrangementActions(handlers: StructureHandlers) {
   };
 
   const rename = async () => {
-    if (!regionId || !draft) return;
+    if (!regionId || !draft || draft.isOriginal) return;
     const name = (await promptDialog(t("transport.structure.renamePrompt"), draft.name))?.trim();
     if (!name) return;
     updateDraft((d) => ({ ...d, name }));
@@ -114,12 +126,33 @@ export function useArrangementActions(handlers: StructureHandlers) {
   };
 
   const remove = async () => {
-    if (!regionId || !draft?.arrangementId || !structure) return;
+    if (!regionId || !draft?.arrangementId || draft.isOriginal || !structure) return;
     if (!(await confirmDialog(t("transport.structure.deleteConfirm", { name: draft.name })))) {
       return;
     }
     await handlers.deleteArrangement(regionId, draft.arrangementId);
-    loadDraft(draftFromOriginal(regionId, structure, nextArrangementName(structure, t)), null);
+    const original = originalDraft(regionId, structure, t);
+    loadDraft(original, original);
+  };
+
+  /** "Save the original again", for when it was captured wrong. Only the
+   * timeline showing the original can be captured: with an arrangement
+   * applied, it first offers to go back to the original so the user can fix
+   * it and then save it again. */
+  const recaptureOriginal = async () => {
+    if (!regionId || !structure) return;
+    if (appliedId !== null) {
+      if (await confirmDialog(t("transport.structure.recaptureNeedsOriginal"))) {
+        await handlers.applyArrangement(regionId, null);
+        const original = originalDraft(regionId, structure, t);
+        loadDraft(original, original);
+      }
+      return;
+    }
+    if (!(await confirmDiscardChanges(t))) return;
+    await handlers.captureOriginal(regionId);
+    // The sections may have changed: start again from the new original.
+    useStructureStore.setState({ draft: null, savedDraft: null });
   };
 
   return {
@@ -134,11 +167,11 @@ export function useArrangementActions(handlers: StructureHandlers) {
     draftIsApplied,
     close,
     apply,
-    backToOriginal,
     switchTo,
     createNew,
     rename,
     remove,
+    recaptureOriginal,
   };
 }
 

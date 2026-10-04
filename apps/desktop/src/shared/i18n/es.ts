@@ -966,6 +966,8 @@ const es = {
       done: "Listo",
       addedCount_one: "Añadida {{count}} vez",
       addedCount_other: "Añadida {{count}} veces",
+      recaptureNeedsOriginal:
+        "Para volver a guardar el original la canción tiene que estar en su original, y ahora tiene un arreglo aplicado. ¿Volver al original? Después corrige lo que haga falta y vuelve a guardarlo.",
       emptyStrip: "Añade secciones desde la paleta.",
       selector: "Arreglo guardado",
       newArrangement: "Nuevo",

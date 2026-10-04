@@ -99,15 +99,28 @@ export function createStructureHandlers(deps: StructureHandlerDeps) {
       return { ok, error: failure };
     },
 
-    async applyArrangement(regionId: string, arrangementId: string | null, name?: string) {
+    async applyArrangement(
+      regionId: string,
+      arrangementId: string | null,
+      name?: string,
+    ): Promise<{ ok: boolean; error: unknown }> {
+      let ok = false;
+      let failure: unknown = null;
       await deps.runAction(async () => {
-        finish(regionId, await applySongArrangement(regionId, arrangementId));
+        try {
+          finish(regionId, await applySongArrangement(regionId, arrangementId));
+        } catch (error) {
+          failure = error;
+          throw error;
+        }
         deps.setStatus(
           arrangementId
             ? deps.t("transport.structure.applied", { name: name ?? arrangementId })
             : deps.t("transport.structure.backToOriginal"),
         );
+        ok = true;
       });
+      return { ok, error: failure };
     },
 
     async deleteArrangement(regionId: string, arrangementId: string) {

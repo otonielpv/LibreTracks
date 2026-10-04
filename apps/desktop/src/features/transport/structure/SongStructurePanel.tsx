@@ -42,7 +42,7 @@ function DesktopPanel({
   actions: ArrangementActions;
   handlers: StructureHandlers;
 }) {
-  const { t, regionId, region, structure, draft, selectedBlockId, dirty, appliedId, draftIsApplied } =
+  const { t, regionId, region, structure, draft, selectedBlockId, dirty, draftIsApplied } =
     actions;
   if (!regionId || !region) return null;
   return (
@@ -83,15 +83,22 @@ function DesktopPanel({
             <button type="button" onClick={() => void actions.createNew()}>
               {t("transport.structure.newArrangement")}
             </button>
-            <button type="button" onClick={() => void actions.rename()}>
+            <button
+              type="button"
+              disabled={draft.isOriginal}
+              onClick={() => void actions.rename()}
+            >
               {t("transport.structure.rename")}
             </button>
             <button
               type="button"
-              disabled={!draft.arrangementId}
+              disabled={!draft.arrangementId || draft.isOriginal}
               onClick={() => void actions.remove()}
             >
               {t("transport.structure.delete")}
+            </button>
+            <button type="button" onClick={() => void actions.recaptureOriginal()}>
+              {t("transport.structure.recapture")}
             </button>
           </div>
           <SongStructureEditor
@@ -101,13 +108,6 @@ function DesktopPanel({
             layout="horizontal"
           />
           <footer className="lt-structure-footer">
-            <button
-              type="button"
-              disabled={!appliedId}
-              onClick={() => void actions.backToOriginal()}
-            >
-              {t("transport.structure.original")}
-            </button>
             <button
               type="button"
               className={`is-primary ${dirty || !draftIsApplied ? "is-attention" : ""}`}

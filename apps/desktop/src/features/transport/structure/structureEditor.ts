@@ -9,6 +9,7 @@ import type {
 import {
   draftsEqual,
   nextDraftBlockId,
+  ORIGINAL_SELECTION,
   useStructureStore,
   type ArrangementDraft,
   type DraftBlock,
@@ -71,6 +72,31 @@ export function draftFromOriginal(
   };
 }
 
+/** The original, as a selectable read-only draft. */
+export function originalDraft(
+  regionId: string,
+  structure: SongStructureSummary,
+  t: Translate,
+): ArrangementDraft {
+  return {
+    regionId,
+    arrangementId: null,
+    name: t("transport.structure.original"),
+    isOriginal: true,
+    nameIfEdited: nextArrangementName(structure, t),
+    blocks: structure.sections.map((section) => ({
+      id: `original-${section.markerId}`,
+      sectionMarkerId: section.markerId,
+    })),
+  };
+}
+
+/** What the selector shows as selected for a draft. */
+export function selectionOf(draft: ArrangementDraft): string {
+  if (draft.isOriginal) return ORIGINAL_SELECTION;
+  return draft.arrangementId ?? "";
+}
+
 export function nextArrangementName(structure: SongStructureSummary, t: Translate): string {
   const taken = new Set(structure.arrangements.map((arrangement) => arrangement.name));
   for (let n = structure.arrangements.length + 1; ; n += 1) {
@@ -86,17 +112,10 @@ export function initialDraft(
   structure: SongStructureSummary,
   t: Translate,
 ): { draft: ArrangementDraft; saved: ArrangementDraft | null } {
-  const preferred =
-    structure.arrangements.find((a) => a.id === structure.appliedArrangementId) ??
-    structure.arrangements[0];
-  if (preferred) {
-    const draft = draftForArrangement(regionId, preferred);
-    return { draft, saved: draft };
-  }
-  return {
-    draft: draftFromOriginal(regionId, structure, nextArrangementName(structure, t)),
-    saved: null,
-  };
+  // What is on the timeline: the applied arrangement, or the original.
+  const applied = structure.arrangements.find((a) => a.id === structure.appliedArrangementId);
+  const draft = applied ? draftForArrangement(regionId, applied) : originalDraft(regionId, structure, t);
+  return { draft, saved: draft };
 }
 
 export function addBlock(draft: ArrangementDraft, sectionMarkerId: string): ArrangementDraft {
@@ -182,8 +201,26 @@ export function loadDraft(draft: ArrangementDraft, saved: ArrangementDraft | nul
 export function updateDraft(change: (draft: ArrangementDraft) => ArrangementDraft) {
   const { draft } = useStructureStore.getState();
   if (!draft) return;
-  const next = change(draft);
-  if (next !== draft) useStructureStore.setState({ draft: next });
+  let next = change(draft);
+  if (next === draft) return;
+  // The original is read-only: changing its blocks starts a new arrangement
+  // from it (the original itself is never modified).
+  if (draft.isOriginal && !draftsEqual({ ...next, name: draft.name }, draft)) {
+    next = {
+      ...next,
+      isOriginal: false,
+      nameIfEdited: undefined,
+      arrangementId: null,
+      name: draft.nameIfEdited ?? next.name,
+      blocks: next.blocks.map((block) =>
+        block.id.startsWith("original-") ? { ...block, id: nextDraftBlockId() } : block,
+      ),
+    };
+    // Unsaved: there is no saved version to compare with.
+    useStructureStore.setState({ draft: next, savedDraft: null });
+    return;
+  }
+  useStructureStore.setState({ draft: next });
 }
 
 export function selectBlock(blockId: string | null) {
