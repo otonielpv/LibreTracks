@@ -940,3 +940,66 @@ fn rendering_an_arranged_song_covers_the_sum_of_its_blocks() {
     // A (8) + B (16) + B (16) + C (8).
     close(end - start, 48.0, "duración del render");
 }
+
+/// Probado en iOS: duplicar una sección de una canción cuyas marcas tienen
+/// atajo numérico (la demo los tiene) daba "una marca tiene una posición o un
+/// atajo no válidos": las copias heredaban el atajo y el validador rechaza dos
+/// marcas con el mismo. El atajo es de la primera aparición.
+#[test]
+fn repeating_a_section_with_a_shortcut_keeps_the_shortcut_on_the_first_copy_only() {
+    let mut song = base_song();
+    for (index, marker) in song.section_markers.iter_mut().enumerate() {
+        marker.digit = Some(index as u8 + 1);
+    }
+    let (mut session, audio) = captured(song, base_cues());
+
+    session
+        .save_song_arrangement(
+            "r2",
+            arrangement("largo", &["a", "b", "b", "c"]),
+            true,
+            &audio,
+        )
+        .expect("aplicar con atajos");
+
+    let song = song_of(&session);
+    let digit = |id: &str| {
+        song.section_markers
+            .iter()
+            .find(|m| m.id == id)
+            .unwrap()
+            .digit
+    };
+    assert_eq!(digit("b"), Some(2));
+    assert_eq!(digit("b~2"), None);
+    libretracks_core::validate_song(&song).expect("válida");
+}
+
+/// Reordenar secciones sin cambiar la duración total (no hay que empujar nada)
+/// tiene que dejar las marcas ordenadas: el validador las exige en orden.
+#[test]
+fn reordering_without_changing_the_length_keeps_markers_in_order() {
+    // A y C duran lo mismo: "C B A" dura igual que el original.
+    let (mut session, audio) = captured(base_song(), base_cues());
+
+    session
+        .save_song_arrangement(
+            "r2",
+            arrangement("al-reves", &["c", "b", "a"]),
+            true,
+            &audio,
+        )
+        .expect("aplicar sin cambiar la duración");
+
+    let song = song_of(&session);
+    assert_eq!(span(&song, "r2"), (8.0, 40.0));
+    let starts: Vec<f64> = song
+        .section_markers
+        .iter()
+        .map(|m| m.start_seconds)
+        .collect();
+    let mut sorted = starts.clone();
+    sorted.sort_by(f64::total_cmp);
+    assert_eq!(starts, sorted);
+    libretracks_core::validate_song(&song).expect("válida");
+}

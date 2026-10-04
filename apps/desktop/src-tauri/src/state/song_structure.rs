@@ -18,8 +18,8 @@ use libretracks_core::song_structure::{
     BuiltRegion, CaptureWarning, StructureError,
 };
 use libretracks_core::{
-    warp_timeline_seconds_at, Arrangement, ArrangementBlock, OriginalSection, Song, SongStructure,
-    TempoMarker, TimeSignatureMarker,
+    warp_timeline_seconds_at, Arrangement, ArrangementBlock, MarkerCategory, OriginalSection, Song,
+    SongStructure, TempoMarker, TimeSignatureMarker,
 };
 
 use crate::audio::automation::AutomationCue;
@@ -366,6 +366,12 @@ pub(super) fn apply_structure(
         let order: Vec<usize> = (0..spans.len()).collect();
         lay_out_songs(song, &previous, &owners, &order, index + 1, &lengths);
         refresh_song_duration(song);
+    } else {
+        // Sin empujar nada (la duración no cambia: reordenar secciones de igual
+        // longitud) nadie ordena las listas, y las marcas tienen que ir en
+        // orden. Sólo se ordena lo que está desordenado: una lista ya válida no
+        // cambia (la identidad tiene que salir byte a byte).
+        sort_markers_if_needed(song);
     }
 
     // 4. Cues: fuera las de la región, las de las canciones empujadas viajan
@@ -404,6 +410,44 @@ pub(super) fn rebuild_applied_structures(
         apply_structure(song, cues, region_id, Some(arrangement_id))?;
     }
     Ok(!pending.is_empty())
+}
+
+/// Ordena por inicio las listas de marcas que lo necesiten. Las de sección se
+/// validan en orden por categoría (sección y cue cada una en su carril), así
+/// que una lista válida se deja tal cual aunque mezcle carriles.
+fn sort_markers_if_needed(song: &mut Song) {
+    let by_start = |l: f64, r: f64| l.total_cmp(&r);
+    let section_lanes_sorted = [MarkerCategory::Section, MarkerCategory::Cue]
+        .iter()
+        .all(|lane| {
+            let starts: Vec<f64> = song
+                .section_markers
+                .iter()
+                .filter(|marker| marker.category() == *lane)
+                .map(|marker| marker.start_seconds)
+                .collect();
+            starts.windows(2).all(|pair| pair[0] < pair[1])
+        });
+    if !section_lanes_sorted {
+        song.section_markers
+            .sort_by(|l, r| by_start(l.start_seconds, r.start_seconds));
+    }
+    if !song
+        .tempo_markers
+        .windows(2)
+        .all(|p| p[0].start_seconds < p[1].start_seconds)
+    {
+        song.tempo_markers
+            .sort_by(|l, r| by_start(l.start_seconds, r.start_seconds));
+    }
+    if !song
+        .time_signature_markers
+        .windows(2)
+        .all(|p| p[0].start_seconds < p[1].start_seconds)
+    {
+        song.time_signature_markers
+            .sort_by(|l, r| by_start(l.start_seconds, r.start_seconds));
+    }
 }
 
 fn sort_cues(cues: &mut [AutomationCue]) {

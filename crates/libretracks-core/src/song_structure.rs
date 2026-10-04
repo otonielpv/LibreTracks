@@ -592,9 +592,14 @@ pub fn build_arrangement(
                 first_marker_copy
                     .entry(marker.id.as_str())
                     .or_insert_with(|| id.clone());
+                // El atajo numérico (1-9) es de la primera aparición: dos
+                // marcas con el mismo atajo no son válidas y el atajo saltaría
+                // a una de las dos al azar.
+                let digit = if id == marker.id { marker.digit } else { None };
                 built.section_markers.push(Marker {
                     id,
                     start_seconds: marker.start_seconds + span.shift(),
+                    digit,
                     ..marker.clone()
                 });
             }
