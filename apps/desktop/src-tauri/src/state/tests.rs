@@ -5365,6 +5365,30 @@ fn unchanged_audio_settings_do_not_touch_the_engine() {
 }
 
 #[test]
+fn settings_the_engine_ignores_still_reach_its_copy() {
+    // Clearing the MIDI output and choosing it again: neither change touches
+    // the audio engine, but the command diffs against the engine's copy, so a
+    // stale copy made the second change look like "no change" and the port
+    // never reopened.
+    let audio = crate::audio::engine::AudioController::default();
+    let mut session = DesktopSession::default();
+    let mut settings = audio.current_settings().unwrap();
+
+    settings.selected_midi_output_device = Some("LT Loopback".into());
+    session.update_audio_settings(settings.clone(), &audio).unwrap();
+    settings.selected_midi_output_device = None;
+    session.update_audio_settings(settings.clone(), &audio).unwrap();
+    assert_eq!(audio.current_settings().unwrap().selected_midi_output_device, None);
+
+    settings.selected_midi_output_device = Some("LT Loopback".into());
+    settings.midi_virtual_port = true;
+    session.update_audio_settings(settings.clone(), &audio).unwrap();
+    let copy = audio.current_settings().unwrap();
+    assert_eq!(copy.selected_midi_output_device.as_deref(), Some("LT Loopback"));
+    assert!(copy.midi_virtual_port);
+}
+
+#[test]
 fn changing_the_output_device_reopens_the_stream() {
     let previous = crate::infra::settings::AppSettings::default();
     let mut next = previous.clone();

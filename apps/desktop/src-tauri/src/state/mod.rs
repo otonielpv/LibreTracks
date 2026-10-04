@@ -1872,6 +1872,13 @@ impl DesktopSession {
         let previous_settings = audio.current_settings()?;
         let plan = plan_audio_settings_change(&previous_settings, &next_settings);
         if !plan.apply {
+            // Nothing for the engine to do, but its copy of the settings must
+            // still follow: `update_audio_settings` (the command) diffs the
+            // MIDI output and the platform MIDI settings against it. Leaving
+            // it stale meant that clearing the MIDI output and choosing it
+            // again never reopened the port (found on the emulator, plan
+            // mobile-midi).
+            audio.replace_settings(next_settings.clone())?;
             return Ok(next_settings);
         }
 
