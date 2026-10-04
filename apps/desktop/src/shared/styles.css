@@ -10297,6 +10297,12 @@ html.lt-ios body {
   width: 6ch;
 }
 
+/* El tempo lleva decimales ("148,40"): 6 caracteres que se cortaban a 4.5ch. */
+.lt-mobile .lt-bpm-control input[type="number"],
+.lt-mobile .lt-bpm-control input[type="number"]:focus {
+  width: 6.5ch;
+}
+
 /* Medidor de recursos: la fila de menú solo lleva la pastilla en móvil (sin
    marca ni ARCHIVO) y va DETRÁS del reloj, arriba a la derecha. */
 .lt-mobile .lt-topbar-menu-row {
