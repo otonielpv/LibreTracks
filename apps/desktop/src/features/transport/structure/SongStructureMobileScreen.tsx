@@ -9,6 +9,7 @@ import { SwipeableRow } from "./SwipeableRow";
 import {
   addBlock,
   closeStructureEditor,
+  insertBlock,
   duplicateBlock,
   formatBars,
   removeBlock,
@@ -48,9 +49,12 @@ function useWideLayout(): boolean {
 function TapPalette({
   sections,
   t,
+  onPick = (sectionMarkerId) => updateDraft((d) => addBlock(d, sectionMarkerId)),
 }: {
   sections: StructureSectionSummary[];
   t: ArrangementActions["t"];
+  /** Defaults to "add at the end". */
+  onPick?: (sectionMarkerId: string) => void;
 }) {
   return (
     <div className="lt-structure-tap-palette" role="list" aria-label={t("transport.structure.palette")}>
@@ -60,7 +64,7 @@ function TapPalette({
           type="button"
           role="listitem"
           className="lt-structure-tap-row"
-          onClick={() => updateDraft((d) => addBlock(d, section.markerId))}
+          onClick={() => onPick(section.markerId)}
         >
           <span
             className="lt-structure-swatch"
@@ -171,7 +175,16 @@ export function SongStructureMobileScreen({
   const { t, regionId, region, structure, draft, selectedBlockId, dirty, appliedId, draftIsApplied } =
     actions;
   const wide = useWideLayout();
-  const [sheetOpen, setSheetOpen] = useState(false);
+  /** Where the palette sheet inserts (0..n), or `null` when it is closed.
+   * Each pick goes in there and the next one right after it. */
+  const [insertAt, setInsertAtState] = useState<number | null>(null);
+  // Read by the picks: two quick taps must not reuse a stale position from
+  // before the re-render (the second section would land on the first).
+  const insertAtRef = useRef<number | null>(null);
+  const setInsertAt = (value: number | null) => {
+    insertAtRef.current = value;
+    setInsertAtState(value);
+  };
   const [moreOpen, setMoreOpen] = useState(false);
   const [menuBlockId, setMenuBlockId] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ draft: ArrangementDraft; name: string } | null>(null);
@@ -314,6 +327,22 @@ export function SongStructureMobileScreen({
                   layout="vertical"
                   showPalette={false}
                   handleOnly
+                  renderGap={
+                    wide
+                      ? undefined
+                      : (index) => (
+                          <button
+                            type="button"
+                            className="lt-structure-gap"
+                            aria-label={t("transport.structure.insertHere")}
+                            onClick={() => setInsertAt(index)}
+                          >
+                            <span className="material-symbols-outlined" aria-hidden="true">
+                              add
+                            </span>
+                          </button>
+                        )
+                  }
                   wrapBlock={(block, row) => (
                     <SwipeableRow
                       onRemove={() => removeWithUndo(block.id)}
@@ -329,7 +358,7 @@ export function SongStructureMobileScreen({
                   <button
                     type="button"
                     className="lt-structure-add-row"
-                    onClick={() => setSheetOpen(true)}
+                    onClick={() => setInsertAt(draft.blocks.length)}
                   >
                     <span className="material-symbols-outlined" aria-hidden="true">
                       add
@@ -378,9 +407,25 @@ export function SongStructureMobileScreen({
         </footer>
       ) : null}
 
-      {sheetOpen && structure ? (
-        <Sheet title={t("transport.structure.addSection")} t={t} onClose={() => setSheetOpen(false)}>
-          <TapPalette sections={structure.sections} t={t} />
+      {insertAt !== null && structure && draft ? (
+        <Sheet
+          title={
+            insertAt >= draft.blocks.length
+              ? t("transport.structure.addSection")
+              : t("transport.structure.insertAt", { n: insertAt + 1 })
+          }
+          t={t}
+          onClose={() => setInsertAt(null)}
+        >
+          <TapPalette
+            sections={structure.sections}
+            t={t}
+            onPick={(sectionMarkerId) => {
+              const at = insertAtRef.current ?? insertAt;
+              updateDraft((d) => insertBlock(d, at, sectionMarkerId));
+              setInsertAt(at + 1);
+            }}
+          />
         </Sheet>
       ) : null}
 

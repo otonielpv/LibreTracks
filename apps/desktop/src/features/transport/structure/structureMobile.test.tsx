@@ -343,3 +343,35 @@ describe("arrangement editor on mobile — iPhone feedback", () => {
     expect(useStructureStore.getState().draft?.arrangementId).toBeNull();
   });
 });
+
+describe("arrangement editor on mobile — insert between sections", () => {
+  it("the line before a block inserts there, and the next pick goes right after", async () => {
+    await renderMobile();
+    const gaps = screen.getAllByRole("button", { name: en.transport.structure.insertHere });
+    expect(gaps).toHaveLength(3); // antes de cada bloque
+    await act(async () => {
+      fireEvent.click(gaps[1]); // entre Intro y Verso
+    });
+    const sheet = screen.getByRole("dialog", {
+      name: en.transport.structure.insertAt.replace("{{n}}", "2"),
+    });
+    const rows = sheet.querySelectorAll("button.lt-structure-tap-row");
+    await act(async () => {
+      fireEvent.click(rows[2]); // Coro
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen
+          .getByRole("dialog", { name: en.transport.structure.insertAt.replace("{{n}}", "3") })
+          .querySelectorAll("button.lt-structure-tap-row")[0], // Intro
+      );
+    });
+    expect(order()).toEqual(["intro", "coro", "intro", "verso", "coro"]);
+  });
+
+  it("explains the touch gestures, not Delete and Ctrl+D", async () => {
+    await renderMobile();
+    expect(screen.getByText(en.transport.structure.stripHintTouch)).toBeTruthy();
+    expect(screen.queryByText(en.transport.structure.stripHint)).toBeNull();
+  });
+});

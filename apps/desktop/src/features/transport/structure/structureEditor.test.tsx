@@ -377,3 +377,78 @@ describe("structure editor — ruler and waveforms", () => {
     expect(request).not.toHaveBeenCalled();
   });
 });
+
+describe("structure editor — palette drag ghost (desktop)", () => {
+  function pointer(
+    target: Element | Window,
+    type: "pointerdown" | "pointermove" | "pointerup",
+    init: { clientX: number; clientY: number },
+  ) {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, ...init });
+    Object.defineProperty(event, "pointerId", { value: 1 });
+    Object.defineProperty(event, "pointerType", { value: "mouse" });
+    fireEvent(target, event);
+  }
+
+  it("dragging a section opens a gap with its ghost where it will land, then inserts there", async () => {
+    useSongStore.setState({ song: songWith(STRUCTURE) });
+    openStructureEditor("r1");
+    render(<SongStructurePanel handlers={handlersSpy()} variant="desktop" />);
+    const strip = await screen.findByRole("list", { name: en.transport.structure.strip });
+    // Bloques de 100 px en fila (jsdom no maqueta).
+    strip.getBoundingClientRect = () =>
+      ({ left: 0, right: 400, top: 100, bottom: 140, width: 400, height: 40, x: 0, y: 100 }) as DOMRect;
+    strip.querySelectorAll<HTMLElement>("[data-block-id]").forEach((item, index) => {
+      item.getBoundingClientRect = () =>
+        ({ left: index * 100, right: index * 100 + 100, top: 100, bottom: 140, width: 100, height: 40, x: index * 100, y: 100 }) as DOMRect;
+    });
+    const chip = screen.getAllByRole("listitem").find((item) =>
+      item.classList.contains("lt-structure-chip") && item.textContent?.includes("Verso"),
+    ) as HTMLElement;
+
+    await act(async () => {
+      pointer(chip, "pointerdown", { clientX: 50, clientY: 20 });
+      pointer(window, "pointermove", { clientX: 60, clientY: 60 });
+      pointer(window, "pointermove", { clientX: 160, clientY: 120 }); // entre el 2.º y el 3.º
+    });
+    const ghost = strip.querySelector(".lt-structure-insert-ghost");
+    expect(ghost).toBeTruthy();
+    expect(ghost?.textContent).toContain("Verso");
+    const items = Array.from(strip.children);
+    expect(items.indexOf(ghost as Element)).toBe(2);
+    expect(document.querySelector(".lt-structure-insert-lift")).toBeTruthy();
+
+    await act(async () => {
+      pointer(window, "pointerup", { clientX: 160, clientY: 120 });
+    });
+    expect(strip.querySelector(".lt-structure-insert-ghost")).toBeNull();
+    expect(document.querySelector(".lt-structure-insert-lift")).toBeNull();
+    expect(sections(useStructureStore.getState().draft!)).toEqual([
+      "intro",
+      "verso",
+      "verso",
+      "coro",
+      "coro",
+    ]);
+  });
+
+  it("dropping outside the strip inserts nothing and leaves no ghost", async () => {
+    useSongStore.setState({ song: songWith(STRUCTURE) });
+    openStructureEditor("r1");
+    render(<SongStructurePanel handlers={handlersSpy()} variant="desktop" />);
+    const strip = await screen.findByRole("list", { name: en.transport.structure.strip });
+    strip.getBoundingClientRect = () =>
+      ({ left: 0, right: 400, top: 100, bottom: 140, width: 400, height: 40, x: 0, y: 100 }) as DOMRect;
+    const chip = screen.getAllByRole("listitem").find((item) =>
+      item.classList.contains("lt-structure-chip"),
+    ) as HTMLElement;
+    await act(async () => {
+      pointer(chip, "pointerdown", { clientX: 50, clientY: 20 });
+      pointer(window, "pointermove", { clientX: 900, clientY: 600 });
+      pointer(window, "pointerup", { clientX: 900, clientY: 600 });
+    });
+    expect(strip.querySelector(".lt-structure-insert-ghost")).toBeNull();
+    expect(document.querySelector(".lt-structure-insert-lift")).toBeNull();
+    expect(sections(useStructureStore.getState().draft!)).toHaveLength(4);
+  });
+});

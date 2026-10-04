@@ -286,13 +286,25 @@
   color: rgb(232 238 238 / 0.5);
 }
 
-/* Indicador de dónde caerá una sección arrastrada desde la paleta. */
-.lt-structure-item.is-drop-before {
-  box-shadow: -3px 0 0 rgb(87 241 219 / 0.95);
+/* Arrastrar desde la paleta: el fantasma abre el hueco en la tira donde caerá
+   la sección, y una copia sigue al puntero (ver useBlockReorder). */
+.lt-structure-insert-ghost .lt-structure-chip {
+  height: 100%;
+  min-height: 2.25rem;
+  opacity: 0.55;
+  outline: 1px dashed rgb(87 241 219 / 0.85);
+  outline-offset: -1px;
+  pointer-events: none;
 }
 
-.lt-structure-strip.is-drop-end {
-  box-shadow: inset -3px 0 0 rgb(87 241 219 / 0.95);
+.lt-structure-insert-lift {
+  position: fixed;
+  z-index: 1000;
+  margin: 0;
+  pointer-events: none;
+  opacity: 0.92;
+  box-shadow: 0 10px 24px rgb(0 0 0 / 0.5);
+  cursor: grabbing;
 }
 
 /* ── Disposición vertical (móvil) ──────────────────────────────────────── */
@@ -314,8 +326,47 @@
   touch-action: pan-y;
 }
 
-.lt-structure-editor.is-vertical .lt-structure-item.is-drop-before {
-  box-shadow: 0 -3px 0 rgb(87 241 219 / 0.95);
+/* "Insertar aquí" entre bloques en móvil: una línea fina con un "+" al final.
+   La zona de toque es más alta que la línea (40 px). */
+.lt-structure-gap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #57f1db;
+}
+
+.lt-structure-gap::before {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgb(87 241 219 / 0.35) 12%);
+}
+
+.lt-structure-gap .material-symbols-outlined {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 8px;
+  border: 1px solid rgb(87 241 219 / 0.45);
+  border-radius: 50%;
+  background: rgb(87 241 219 / 0.08);
+  font-size: 18px;
+}
+
+.lt-structure-gap:active .material-symbols-outlined {
+  background: rgb(87 241 219 / 0.2);
+}
+
+.lt-structure-editor.is-vertical .lt-structure-strip {
+  gap: 0;
 }
 
 .lt-structure-handle {

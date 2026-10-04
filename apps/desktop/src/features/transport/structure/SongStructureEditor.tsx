@@ -32,6 +32,9 @@ export type SongStructureEditorProps = {
   handleOnly?: boolean;
   /** Extra per-row content (the mobile swipe/long-press wrapper). */
   wrapBlock?: (block: DraftBlock, row: ReactNode) => ReactNode;
+  /** Mobile: something to put in the gap BEFORE block `index` (the "insert
+   * here" line). It lives inside the block's row so it moves with it. */
+  renderGap?: (index: number) => ReactNode;
 };
 
 /**
@@ -47,6 +50,7 @@ export function SongStructureEditor({
   showPalette = true,
   handleOnly = false,
   wrapBlock,
+  renderGap,
 }: SongStructureEditorProps) {
   const { t } = useTranslation();
   const listRef = useRef<HTMLOListElement | null>(null);
@@ -127,7 +131,15 @@ export function SongStructureEditor({
       <div className="lt-structure-strip-wrap">
         <div className="lt-structure-caption">
           <strong>{t("transport.structure.strip")}</strong>
-          <span>{t("transport.structure.stripHint")}</span>
+          {/* Supr y Ctrl+D no existen en una pantalla táctil: en móvil se
+              explican los gestos. */}
+          <span>
+            {t(
+              layout === "horizontal"
+                ? "transport.structure.stripHint"
+                : "transport.structure.stripHintTouch",
+            )}
+          </span>
           <span className="lt-structure-total">
             {t("transport.structure.totalBars", { count: Math.round(totalBars) })}
           </span>
@@ -177,6 +189,7 @@ export function SongStructureEditor({
             );
             return (
               <li key={block.id} data-block-id={block.id} className="lt-structure-item">
+                {renderGap ? renderGap(index) : null}
                 {wrapBlock ? wrapBlock(block, row) : row}
               </li>
             );

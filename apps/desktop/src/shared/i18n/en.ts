@@ -925,6 +925,10 @@ const en = {
       paletteHint: "Click to add at the end. Drag to insert where you drop.",
       strip: "Order",
       stripHint: "Drag to reorder. Delete removes, Ctrl+D duplicates.",
+      stripHintTouch:
+        "Drag by the handle to reorder. Swipe left to remove, long-press to duplicate.",
+      insertAt: "Insert at position {{n}}",
+      insertHere: "Insert a section here",
       emptyStrip: "Add sections from the palette.",
       selector: "Saved arrangement",
       newArrangement: "New",

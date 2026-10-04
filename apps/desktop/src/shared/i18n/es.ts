@@ -956,6 +956,10 @@ const es = {
       paletteHint: "Clic para añadir al final. Arrastra para insertar donde sueltes.",
       strip: "Orden",
       stripHint: "Arrastra para reordenar. Supr quita, Ctrl+D duplica.",
+      stripHintTouch:
+        "Arrastra por el asa para reordenar. Desliza a la izquierda para quitar y mantén pulsado para duplicar.",
+      insertAt: "Insertar en la posición {{n}}",
+      insertHere: "Insertar sección aquí",
       emptyStrip: "Añade secciones desde la paleta.",
       selector: "Arreglo guardado",
       newArrangement: "Nuevo",

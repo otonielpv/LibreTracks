@@ -10,8 +10,8 @@ import {
 const DRAG_THRESHOLD_PX = 6;
 
 const BLOCK_SELECTOR = "[data-block-id]";
-const DROP_BEFORE_CLASS = "is-drop-before";
-const DROP_END_CLASS = "is-drop-end";
+const GHOST_CLASS = "lt-structure-insert-ghost";
+const LIFT_CLASS = "lt-structure-insert-lift";
 
 function blockElements(list: HTMLElement): HTMLElement[] {
   return Array.from(list.querySelectorAll<HTMLElement>(BLOCK_SELECTOR));
@@ -41,10 +41,55 @@ export function targetIndexForGap(ids: readonly string[], draggedId: string, gap
   return from >= 0 && gap > from ? gap - 1 : gap;
 }
 
-function clearDropIndicators(list: HTMLElement | null) {
-  if (!list) return;
-  list.classList.remove(DROP_END_CLASS);
-  for (const element of blockElements(list)) element.classList.remove(DROP_BEFORE_CLASS);
+/**
+ * The "gap + ghost" of a palette drag: a translucent copy of the section opens
+ * a gap in the strip where it will land, and another copy follows the pointer.
+ * The ghost is a plain DOM node React does not know about; it only lives while
+ * the drag does, and nothing in React re-renders the strip meanwhile (the
+ * working copy only changes on drop, after the ghost is gone).
+ */
+function createInsertGhost(list: HTMLElement, source: HTMLElement, pointer: { x: number; y: number }) {
+  const ghost = document.createElement("li");
+  ghost.className = `lt-structure-item ${GHOST_CLASS}`;
+  ghost.setAttribute("aria-hidden", "true");
+  const ghostChip = source.cloneNode(true) as HTMLElement;
+  ghostChip.removeAttribute("role");
+  ghost.appendChild(ghostChip);
+
+  const rect = source.getBoundingClientRect();
+  const lift = source.cloneNode(true) as HTMLElement;
+  lift.removeAttribute("role");
+  lift.classList.add(LIFT_CLASS);
+  lift.setAttribute("aria-hidden", "true");
+  Object.assign(lift.style, {
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${rect.width}px`,
+  });
+  document.body.appendChild(lift);
+
+  let placedAt = -1;
+  return {
+    /** Puts the ghost in gap `index` (0..n), or takes it out with -1. */
+    place(index: number) {
+      if (index === placedAt) return;
+      placedAt = index;
+      if (index < 0) {
+        ghost.remove();
+        return;
+      }
+      const blocks = blockElements(list);
+      const before = blocks[index] ?? null;
+      list.insertBefore(ghost, before);
+    },
+    moveLift(x: number, y: number) {
+      lift.style.transform = `translate3d(${x - pointer.x}px, ${y - pointer.y}px, 0)`;
+    },
+    destroy() {
+      ghost.remove();
+      lift.remove();
+    },
+  };
 }
 
 /**
@@ -168,7 +213,9 @@ export function useBlockReorder({
   const onPalettePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>, sectionMarkerId: string) => {
       const list = listRef.current;
+      const chip = event.currentTarget;
       let preview: ReorderPreview | null = null;
+      let ghost: ReturnType<typeof createInsertGhost> | null = null;
       let gap = -1;
       const overList = (x: number, y: number) => {
         const rect = list?.getBoundingClientRect();
@@ -181,31 +228,36 @@ export function useBlockReorder({
           y <= rect.bottom + margin
         );
       };
+      const finish = () => {
+        ghost?.destroy();
+        ghost = null;
+        (preview as ReorderPreview | null)?.destroy({ animate: false });
+      };
       track(event, {
         onDragStart: (pointer) => {
-          if (list) preview = previewFor(list, axis, null, pointer);
+          if (!list) return;
+          // Measured BEFORE the ghost exists: the gap under the pointer is
+          // decided against the starting layout, so opening the gap does not
+          // make the target oscillate (same rule as the song/track reorder).
+          preview = previewFor(list, axis, null, pointer);
+          ghost = createInsertGhost(list, chip, pointer);
         },
         onDragMove: (x, y) => {
-          clearDropIndicators(list);
+          ghost?.moveLift(x, y);
           if (!list || !preview || !overList(x, y)) {
             gap = -1;
+            ghost?.place(-1);
             return;
           }
           gap = preview.gapAt(x, y);
-          const elements = blockElements(list);
-          if (gap < elements.length) elements[gap].classList.add(DROP_BEFORE_CLASS);
-          else list.classList.add(DROP_END_CLASS);
+          ghost?.place(gap);
         },
         onDrop: () => {
-          clearDropIndicators(list);
-          (preview as ReorderPreview | null)?.destroy({ animate: false });
+          finish();
           if (gap >= 0) onInsert(gap, sectionMarkerId);
         },
         onClick: () => onAppend(sectionMarkerId),
-        onCancel: () => {
-          clearDropIndicators(list);
-          (preview as ReorderPreview | null)?.destroy({ animate: false });
-        },
+        onCancel: finish,
       });
     },
     [axis, listRef, onAppend, onInsert, track],
