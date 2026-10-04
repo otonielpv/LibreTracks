@@ -1891,6 +1891,18 @@ export async function getMidiOutputs(): Promise<string[]> {
   return invokeCommand<string[]>("get_midi_outputs");
 }
 
+/** What MIDI can do on this platform. The UI shows MIDI tabs from this. */
+export type MidiCapabilities = {
+  available: boolean;
+  bluetoothPairing: boolean;
+  networkSession: boolean;
+  virtualPorts: boolean;
+};
+
+export async function getMidiCapabilities(): Promise<MidiCapabilities> {
+  return invokeCommand<MidiCapabilities>("get_midi_capabilities");
+}
+
 /** Fire a short note so the user can confirm the cabling reaches the target. */
 export async function sendMidiTestNote(
   channel = 1,

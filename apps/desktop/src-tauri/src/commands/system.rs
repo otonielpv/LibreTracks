@@ -25,7 +25,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::audio::engine::{AudioDebugSnapshot, AudioOutputMeterLevel};
 use crate::infra::error::DesktopError;
-use crate::midi::get_midi_input_names;
+use crate::midi::{get_midi_input_names, MidiCapabilities};
 use crate::midi::output::{get_midi_output_names, OutboundMidiMessage};
 use crate::models::{DesktopPerformanceSnapshot, SystemResourceSnapshot};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -403,6 +403,12 @@ pub fn get_midi_inputs() -> Result<Vec<String>, String> {
 #[tauri::command(async)]
 pub fn get_midi_outputs() -> Result<Vec<String>, String> {
     get_midi_output_names()
+}
+
+/// What MIDI can do on this platform; the UI shows the MIDI tabs from this.
+#[tauri::command(async)]
+pub fn get_midi_capabilities() -> MidiCapabilities {
+    crate::midi::get_midi_capabilities()
 }
 
 /// Send a short note on the configured output port so the user can confirm the

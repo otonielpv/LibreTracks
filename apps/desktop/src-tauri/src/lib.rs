@@ -1,9 +1,9 @@
 //! LibreTracks application library.
 //!
 //! Desktop builds run this through src/main.rs; Android/iOS load it as a
-//! shared library through `mobile_entry_point`. On Android the remote-control
-//! server and MIDI input are excluded (see the `remote` / `midi` module
-//! splits); the C++ audio engine runs for real through the Oboe/AAudio backend.
+//! shared library through `mobile_entry_point`. On mobile the remote-control
+//! server is excluded (see the `remote` module split); the C++ audio engine
+//! runs for real through the Oboe/AAudio backend.
 
 mod audio;
 mod commands;
@@ -14,10 +14,6 @@ mod platform;
 mod state;
 mod video;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-mod midi;
-#[cfg(any(target_os = "android", target_os = "ios"))]
-#[path = "midi/android.rs"]
 mod midi;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -335,6 +331,7 @@ pub fn run() {
             commands::system::allow_remote_through_firewall,
             commands::system::get_midi_inputs,
             commands::system::get_midi_outputs,
+            commands::system::get_midi_capabilities,
             commands::system::send_midi_test_note,
             commands::transport::get_transport_snapshot,
             commands::settings::get_settings,

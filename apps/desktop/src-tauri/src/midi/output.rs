@@ -6,8 +6,8 @@
 //! `state/midi_runtime.rs` for the scheduling side.
 //!
 //! The connection is owned by a dedicated thread rather than being shared: a
-//! `midir::MidiOutputConnection` is `!Sync`, and the transport tick must never
-//! block on a device that has gone away. Sends are queued over a channel and
+//! transport connection isn't guaranteed to be `Send`, and the transport tick
+//! must never block on a device that has gone away. Sends are queued over a channel and
 //! drained by that thread, so a wedged device costs a bounded queue instead of
 //! a stalled transport.
 
@@ -22,89 +22,12 @@ use std::{
     time::Duration,
 };
 
-use midir::{MidiOutput, MidiOutputPort};
+use super::transport::{platform_transport, MidiTransport};
+
+pub use super::message::{panic_messages, OutboundMidiMessage};
 
 const OUTPUT_POLL_INTERVAL: Duration = Duration::from_millis(5);
 const OUTPUT_STARTUP_TIMEOUT: Duration = Duration::from_secs(2);
-
-/// Status byte nibbles. Channel is OR-ed into the low nibble at send time.
-const STATUS_NOTE_OFF: u8 = 0x80;
-const STATUS_NOTE_ON: u8 = 0x90;
-const STATUS_CONTROL_CHANGE: u8 = 0xB0;
-const STATUS_PROGRAM_CHANGE: u8 = 0xC0;
-
-/// Channel-mode controllers used to silence a device.
-const CC_ALL_SOUND_OFF: u8 = 120;
-const CC_ALL_NOTES_OFF: u8 = 123;
-
-/// One outbound MIDI message, already resolved to wire bytes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OutboundMidiMessage {
-    pub status: u8,
-    pub data1: u8,
-    pub data2: u8,
-    /// Program change is a 2-byte message; everything else here is 3.
-    pub two_bytes: bool,
-}
-
-impl OutboundMidiMessage {
-    /// Build a channel-voice message. `channel` is 1-16 as the user sees it and
-    /// is converted to the wire's 0-based nibble here — the single place that
-    /// conversion happens.
-    fn channel_voice(status: u8, channel: u8, data1: u8, data2: u8, two_bytes: bool) -> Self {
-        let nibble = channel.clamp(1, 16) - 1;
-        Self {
-            status: status | nibble,
-            data1: data1.min(127),
-            data2: data2.min(127),
-            two_bytes,
-        }
-    }
-
-    pub fn note_on(channel: u8, note: u8, velocity: u8) -> Self {
-        Self::channel_voice(STATUS_NOTE_ON, channel, note, velocity, false)
-    }
-
-    pub fn note_off(channel: u8, note: u8) -> Self {
-        Self::channel_voice(STATUS_NOTE_OFF, channel, note, 0, false)
-    }
-
-    pub fn control_change(channel: u8, controller: u8, value: u8) -> Self {
-        Self::channel_voice(STATUS_CONTROL_CHANGE, channel, controller, value, false)
-    }
-
-    pub fn program_change(channel: u8, program: u8) -> Self {
-        Self::channel_voice(STATUS_PROGRAM_CHANGE, channel, program, 0, true)
-    }
-
-    fn to_bytes(self) -> Vec<u8> {
-        if self.two_bytes {
-            vec![self.status, self.data1]
-        } else {
-            vec![self.status, self.data1, self.data2]
-        }
-    }
-}
-
-/// Every message needed to silence all 16 channels: All Sound Off followed by
-/// All Notes Off. Sent on stop, on seek and when the port closes, so a jump
-/// mid-note can never leave a hanging note on the receiving device.
-pub fn panic_messages() -> Vec<OutboundMidiMessage> {
-    let mut messages = Vec::with_capacity(32);
-    for channel in 1..=16u8 {
-        messages.push(OutboundMidiMessage::control_change(
-            channel,
-            CC_ALL_SOUND_OFF,
-            0,
-        ));
-        messages.push(OutboundMidiMessage::control_change(
-            channel,
-            CC_ALL_NOTES_OFF,
-            0,
-        ));
-    }
-    messages
-}
 
 struct OutputHandle {
     port_name: String,
@@ -119,8 +42,8 @@ struct OutputHandle {
 /// name one) plus any number of per-track ports, opened on demand. Two ports
 /// are needed the moment a show drives, say, a lighting desk and lyric
 /// projection through different virtual cables.
-#[derive(Default)]
 pub struct MidiOutputManager {
+    transport: Arc<dyn MidiTransport>,
     /// The app-wide port. `None` when no output device is configured.
     active: Mutex<Option<OutputHandle>>,
     /// Ports opened because a track asked for them by name, keyed by port
@@ -128,7 +51,21 @@ pub struct MidiOutputManager {
     extra: Mutex<HashMap<String, Option<OutputHandle>>>,
 }
 
+impl Default for MidiOutputManager {
+    fn default() -> Self {
+        Self::with_transport(platform_transport())
+    }
+}
+
 impl MidiOutputManager {
+    pub(crate) fn with_transport(transport: Arc<dyn MidiTransport>) -> Self {
+        Self {
+            transport,
+            active: Mutex::new(None),
+            extra: Mutex::new(HashMap::new()),
+        }
+    }
+
     /// Open `selected_device`, closing whatever was open before. `None` (or a
     /// blank name) just closes. Re-selecting the already-open port is a no-op
     /// so saving unrelated settings doesn't interrupt a running show.
@@ -152,7 +89,7 @@ impl MidiOutputManager {
         }
 
         if let Some(port_name) = normalized {
-            *active = Some(spawn_output(port_name)?);
+            *active = Some(spawn_output(Arc::clone(&self.transport), port_name)?);
         }
 
         Ok(())
@@ -210,9 +147,9 @@ impl MidiOutputManager {
         let Ok(mut extra) = self.extra.lock() else {
             return;
         };
-        let handle = extra
-            .entry(port_name.to_string())
-            .or_insert_with(|| spawn_output(port_name.to_string()).ok());
+        let handle = extra.entry(port_name.to_string()).or_insert_with(|| {
+            spawn_output(Arc::clone(&self.transport), port_name.to_string()).ok()
+        });
         let Some(handle) = handle.as_ref() else {
             return;
         };
@@ -260,19 +197,13 @@ impl Drop for MidiOutputManager {
 }
 
 pub(crate) fn get_midi_output_names() -> Result<Vec<String>, String> {
-    let midi_output =
-        MidiOutput::new("libretracks-midi-outputs").map_err(|error| error.to_string())?;
-    let mut names = midi_output
-        .ports()
-        .iter()
-        .filter_map(|port| midi_output.port_name(port).ok())
-        .collect::<Vec<_>>();
-    names.sort();
-    names.dedup();
-    Ok(names)
+    platform_transport().output_names()
 }
 
-fn spawn_output(port_name: String) -> Result<OutputHandle, String> {
+fn spawn_output(
+    transport: Arc<dyn MidiTransport>,
+    port_name: String,
+) -> Result<OutputHandle, String> {
     let should_stop = Arc::new(AtomicBool::new(false));
     let (message_sender, message_receiver) = mpsc::channel::<OutboundMidiMessage>();
     let (startup_sender, startup_receiver) = mpsc::channel::<Result<(), String>>();
@@ -283,6 +214,7 @@ fn spawn_output(port_name: String) -> Result<OutputHandle, String> {
         .name("libretracks-midi-output".into())
         .spawn(move || {
             run_output_loop(
+                transport.as_ref(),
                 &thread_port_name,
                 message_receiver,
                 startup_sender,
@@ -319,31 +251,16 @@ fn spawn_output(port_name: String) -> Result<OutputHandle, String> {
 }
 
 fn run_output_loop(
+    transport: &dyn MidiTransport,
     port_name: &str,
     message_receiver: mpsc::Receiver<OutboundMidiMessage>,
     startup_sender: Sender<Result<(), String>>,
     should_stop: Arc<AtomicBool>,
 ) {
-    let midi_output = match MidiOutput::new("libretracks-midi-output") {
-        Ok(midi_output) => midi_output,
-        Err(error) => {
-            let _ = startup_sender.send(Err(error.to_string()));
-            return;
-        }
-    };
-
-    let port = match resolve_output_port(&midi_output, port_name) {
-        Ok(port) => port,
-        Err(error) => {
-            let _ = startup_sender.send(Err(error));
-            return;
-        }
-    };
-
-    let mut connection = match midi_output.connect(&port, "libretracks-midi-send") {
+    let mut connection = match transport.open_output(port_name) {
         Ok(connection) => connection,
         Err(error) => {
-            let _ = startup_sender.send(Err(error.to_string()));
+            let _ = startup_sender.send(Err(error));
             return;
         }
     };
@@ -365,20 +282,7 @@ fn run_output_loop(
     for message in panic_messages() {
         let _ = connection.send(&message.to_bytes());
     }
-    connection.close();
-}
-
-fn resolve_output_port(midi_output: &MidiOutput, port_name: &str) -> Result<MidiOutputPort, String> {
-    midi_output
-        .ports()
-        .into_iter()
-        .find(|port| {
-            midi_output
-                .port_name(port)
-                .map(|name| name == port_name)
-                .unwrap_or(false)
-        })
-        .ok_or_else(|| format!("MIDI output device not found: {port_name}"))
+    drop(connection);
 }
 
 fn stop_output(handle: OutputHandle) {
@@ -390,46 +294,6 @@ fn stop_output(handle: OutputHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn encodes_channel_as_zero_based_nibble() {
-        // Channel 1 is wire nibble 0 — the off-by-one that silently sends to
-        // the wrong channel if it leaks anywhere else.
-        assert_eq!(OutboundMidiMessage::note_on(1, 60, 100).status, 0x90);
-        assert_eq!(OutboundMidiMessage::note_on(16, 60, 100).status, 0x9F);
-        assert_eq!(OutboundMidiMessage::control_change(10, 74, 5).status, 0xB9);
-    }
-
-    #[test]
-    fn clamps_out_of_range_channels_and_data() {
-        assert_eq!(OutboundMidiMessage::note_on(0, 60, 100).status, 0x90);
-        assert_eq!(OutboundMidiMessage::note_on(99, 60, 100).status, 0x9F);
-        assert_eq!(OutboundMidiMessage::note_on(1, 200, 200).data1, 127);
-        assert_eq!(OutboundMidiMessage::note_on(1, 60, 200).data2, 127);
-    }
-
-    #[test]
-    fn program_change_is_two_bytes() {
-        let message = OutboundMidiMessage::program_change(1, 7);
-        assert!(message.two_bytes);
-        assert_eq!(message.to_bytes(), vec![0xC0, 7]);
-        assert_eq!(
-            OutboundMidiMessage::note_on(1, 60, 100).to_bytes(),
-            vec![0x90, 60, 100]
-        );
-    }
-
-    #[test]
-    fn panic_covers_every_channel_twice() {
-        let messages = panic_messages();
-        assert_eq!(messages.len(), 32);
-        assert!(messages
-            .iter()
-            .any(|m| m.status == 0xB0 && m.data1 == CC_ALL_NOTES_OFF));
-        assert!(messages
-            .iter()
-            .any(|m| m.status == 0xBF && m.data1 == CC_ALL_SOUND_OFF));
-    }
 
     #[test]
     fn sending_with_no_open_port_is_a_no_op() {

@@ -1,5 +1,7 @@
 pub mod automation;
+pub mod midi_port_names;
 pub mod midi_schedule;
+pub mod midi_wire;
 pub mod model;
 pub mod song_structure;
 pub mod validation;
