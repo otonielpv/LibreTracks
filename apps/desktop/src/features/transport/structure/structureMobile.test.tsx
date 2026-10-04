@@ -361,8 +361,9 @@ describe("arrangement editor on mobile — insert between sections", () => {
     });
     await act(async () => {
       fireEvent.click(
+        // El título se queda en la posición donde se abrió la hoja.
         screen
-          .getByRole("dialog", { name: en.transport.structure.insertAt.replace("{{n}}", "3") })
+          .getByRole("dialog", { name: en.transport.structure.insertAt.replace("{{n}}", "2") })
           .querySelectorAll("button.lt-structure-tap-row")[0], // Intro
       );
     });
@@ -373,5 +374,44 @@ describe("arrangement editor on mobile — insert between sections", () => {
     await renderMobile();
     expect(screen.getByText(en.transport.structure.stripHintTouch)).toBeTruthy();
     expect(screen.queryByText(en.transport.structure.stripHint)).toBeNull();
+  });
+});
+
+describe("arrangement editor on mobile — feedback when adding", () => {
+  it("each tap shows on its row and in a summary; Undo takes back the last; Done selects it", async () => {
+    await renderMobile();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: en.transport.structure.addSection }));
+    });
+    const sheet = () => screen.getByRole("dialog", { name: en.transport.structure.addSection });
+    expect(within(sheet()).getByText(en.transport.structure.pickHint)).toBeTruthy();
+    const coro = () => sheet().querySelectorAll<HTMLElement>("button.lt-structure-tap-row")[2];
+
+    await act(async () => {
+      fireEvent.click(coro());
+    });
+    await act(async () => {
+      fireEvent.click(coro());
+    });
+    // El toque se ve: contador en la fila y resumen abajo.
+    expect(coro().querySelector(".lt-structure-tap-count")?.textContent).toBe("×2");
+    expect(within(sheet()).getByRole("status").textContent).toBe(
+      en.transport.structure.addedSummary.replace("{{names}}", "Coro, Coro"),
+    );
+    expect(order()).toEqual(["intro", "verso", "coro", "coro", "coro"]);
+
+    // Un toque de más: se deshace el último.
+    await act(async () => {
+      fireEvent.click(within(sheet()).getByRole("button", { name: en.transport.structure.undoLast }));
+    });
+    expect(order()).toEqual(["intro", "verso", "coro", "coro"]);
+    expect(coro().querySelector(".lt-structure-tap-count")?.textContent).toBe("×1");
+
+    await act(async () => {
+      fireEvent.click(within(sheet()).getByRole("button", { name: en.transport.structure.done }));
+    });
+    expect(screen.queryByRole("dialog", { name: en.transport.structure.addSection })).toBeNull();
+    const draft = useStructureStore.getState().draft!;
+    expect(useStructureStore.getState().selectedBlockId).toBe(draft.blocks[3].id);
   });
 });

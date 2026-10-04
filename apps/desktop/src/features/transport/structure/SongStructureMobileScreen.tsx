@@ -15,6 +15,7 @@ import {
   removeBlock,
   sectionColor,
   sectionLabel,
+  selectBlock,
   updateDraft,
 } from "./structureEditor";
 import type { StructureHandlers } from "./structureHandlers";
@@ -50,11 +51,15 @@ function TapPalette({
   sections,
   t,
   onPick = (sectionMarkerId) => updateDraft((d) => addBlock(d, sectionMarkerId)),
+  counts,
 }: {
   sections: StructureSectionSummary[];
   t: ArrangementActions["t"];
   /** Defaults to "add at the end". */
   onPick?: (sectionMarkerId: string) => void;
+  /** How many times each section was added from this sheet: shown on its row
+   * so a tap visibly registers (the list behind is covered by the sheet). */
+  counts?: Record<string, number>;
 }) {
   return (
     <div className="lt-structure-tap-palette" role="list" aria-label={t("transport.structure.palette")}>
@@ -73,6 +78,16 @@ function TapPalette({
           />
           <span className="lt-structure-tap-name">{sectionLabel(section, t)}</span>
           <span className="lt-structure-tap-bars">{formatBars(section.bars, t)}</span>
+          {counts?.[section.markerId] ? (
+            // Keyed by the count so the "pop" replays on every tap.
+            <span
+              key={counts[section.markerId]}
+              className="lt-structure-tap-count"
+              aria-label={t("transport.structure.addedCount", { count: counts[section.markerId] })}
+            >
+              ×{counts[section.markerId]}
+            </span>
+          ) : null}
           <span className="material-symbols-outlined lt-structure-tap-add" aria-hidden="true">
             add
           </span>
@@ -184,6 +199,34 @@ export function SongStructureMobileScreen({
   const setInsertAt = (value: number | null) => {
     insertAtRef.current = value;
     setInsertAtState(value);
+  };
+  /** Where the sheet was opened (its title stays put) and what it added. */
+  const [insertOpenedAt, setInsertOpenedAt] = useState(0);
+  const [picks, setPicks] = useState<Array<{ blockId: string; sectionMarkerId: string }>>([]);
+  const openInsert = (index: number) => {
+    setInsertOpenedAt(index);
+    setPicks([]);
+    setInsertAt(index);
+  };
+  const pickSection = (sectionMarkerId: string) => {
+    const at = insertAtRef.current ?? 0;
+    updateDraft((d) => insertBlock(d, at, sectionMarkerId));
+    const added = useStructureStore.getState().draft?.blocks[at];
+    if (added) setPicks((current) => [...current, { blockId: added.id, sectionMarkerId }]);
+    setInsertAt(at + 1);
+  };
+  const undoLastPick = () => {
+    const last = picks[picks.length - 1];
+    if (!last) return;
+    updateDraft((d) => removeBlock(d, last.blockId));
+    setPicks((current) => current.slice(0, -1));
+    setInsertAt(Math.max(insertOpenedAt, (insertAtRef.current ?? 1) - 1));
+  };
+  const closeInsert = () => {
+    const last = picks[picks.length - 1];
+    setInsertAt(null);
+    // The last section added stays selected, so the list shows where it went.
+    if (last) selectBlock(last.blockId);
   };
   const [moreOpen, setMoreOpen] = useState(false);
   const [menuBlockId, setMenuBlockId] = useState<string | null>(null);
@@ -335,7 +378,7 @@ export function SongStructureMobileScreen({
                             type="button"
                             className="lt-structure-gap"
                             aria-label={t("transport.structure.insertHere")}
-                            onClick={() => setInsertAt(index)}
+                            onClick={() => openInsert(index)}
                           >
                             <span className="material-symbols-outlined" aria-hidden="true">
                               add
@@ -358,7 +401,7 @@ export function SongStructureMobileScreen({
                   <button
                     type="button"
                     className="lt-structure-add-row"
-                    onClick={() => setInsertAt(draft.blocks.length)}
+                    onClick={() => openInsert(draft.blocks.length)}
                   >
                     <span className="material-symbols-outlined" aria-hidden="true">
                       add
@@ -410,22 +453,39 @@ export function SongStructureMobileScreen({
       {insertAt !== null && structure && draft ? (
         <Sheet
           title={
-            insertAt >= draft.blocks.length
+            insertOpenedAt >= draft.blocks.length - picks.length
               ? t("transport.structure.addSection")
-              : t("transport.structure.insertAt", { n: insertAt + 1 })
+              : t("transport.structure.insertAt", { n: insertOpenedAt + 1 })
           }
           t={t}
-          onClose={() => setInsertAt(null)}
+          onClose={closeInsert}
         >
           <TapPalette
             sections={structure.sections}
             t={t}
-            onPick={(sectionMarkerId) => {
-              const at = insertAtRef.current ?? insertAt;
-              updateDraft((d) => insertBlock(d, at, sectionMarkerId));
-              setInsertAt(at + 1);
-            }}
+            onPick={pickSection}
+            counts={picks.reduce<Record<string, number>>((counts, pick) => {
+              counts[pick.sectionMarkerId] = (counts[pick.sectionMarkerId] ?? 0) + 1;
+              return counts;
+            }, {})}
           />
+          <div className="lt-structure-sheet-footer">
+            <span className="lt-structure-sheet-summary" role="status">
+              {picks.length
+                ? t("transport.structure.addedSummary", {
+                    names: picks.map((pick) => nameOf(pick.sectionMarkerId)).join(", "),
+                  })
+                : t("transport.structure.pickHint")}
+            </span>
+            <div className="lt-structure-sheet-actions">
+              <button type="button" disabled={picks.length === 0} onClick={undoLastPick}>
+                {t("transport.structure.undoLast")}
+              </button>
+              <button type="button" className="is-primary" onClick={closeInsert}>
+                {t("transport.structure.done")}
+              </button>
+            </div>
+          </div>
         </Sheet>
       ) : null}
 

@@ -595,6 +595,57 @@
   font-size: 20px;
 }
 
+/* Cuántas veces se añadió la sección desde esta hoja. La hoja tapa la lista,
+   así que sin esto no se veía si el toque había entrado y se repetía. El
+   "pop" se repite en cada toque (el elemento se recrea con otra clave). */
+.lt-structure-tap-count {
+  flex: none;
+  min-width: 1.9rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: #57f1db;
+  color: #003731;
+  font: 700 12px/1.2 "Space Grotesk", sans-serif;
+  text-align: center;
+  animation: lt-structure-pop 260ms ease-out;
+}
+
+@keyframes lt-structure-pop {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-structure-tap-count {
+    animation: none;
+  }
+}
+
+.lt-structure-sheet-footer {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgb(186 202 197 / 0.12);
+  background: #161616;
+}
+
+.lt-structure-sheet-summary {
+  padding: 0 0.35rem;
+  color: rgb(232 238 238 / 0.7);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.lt-structure-sheet-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
 .lt-structure-mobile.is-wide .lt-structure-tap-palette {
   border: 1px solid rgb(255 255 255 / 0.08);
   border-radius: 2px;
@@ -757,6 +808,7 @@
 .lt-structure-capture > button,
 .lt-structure-warnings button,
 .lt-structure-mobile-bar button,
+.lt-structure-sheet-actions button,
 .lt-structure-toast button {
   display: inline-flex;
   align-items: center;
@@ -777,6 +829,7 @@
 }
 
 .lt-structure-mobile-bar button,
+.lt-structure-sheet-actions button,
 .lt-structure-toast button {
   height: 44px;
   font-size: 11px;
@@ -787,6 +840,7 @@
 .lt-structure-capture > button:hover:not(:disabled),
 .lt-structure-warnings button:hover:not(:disabled),
 .lt-structure-mobile-bar button:hover:not(:disabled),
+.lt-structure-sheet-actions button:hover:not(:disabled),
 .lt-structure-toast button:hover:not(:disabled),
 .lt-structure-panel button:focus-visible,
 .lt-structure-mobile button:focus-visible {
@@ -847,4 +901,27 @@
 
 .lt-structure-close:hover {
   color: #57f1db;
+}
+
+/* La regla global de hoja móvil (`.lt-mobile .lt-context-menu.is-mobile-sheet
+   button`) convierte TODOS los botones de la hoja en filas de menú. Los del
+   pie son botones de acción: se les devuelve su aspecto con más
+   especificidad. */
+.lt-mobile .lt-context-menu.lt-structure-app-sheet .lt-structure-sheet-actions button,
+.lt-structure-app-sheet .lt-structure-sheet-actions button {
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 0.8rem;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 2px;
+  font: 700 11px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lt-mobile .lt-context-menu.lt-structure-app-sheet .lt-structure-sheet-actions button.is-primary,
+.lt-structure-app-sheet .lt-structure-sheet-actions button.is-primary {
+  border-color: rgb(87 241 219 / 0.64);
+  background: linear-gradient(to bottom, #57f1db, #2dd4bf);
+  color: #003731;
 }
