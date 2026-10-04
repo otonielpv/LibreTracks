@@ -49,13 +49,11 @@ path = "../../../crates/libretracks-core"
 
 # Desktop-only dependencies. Mobile builds exclude:
 # - libretracks-remote: the app IS the device on mobile; no remote-control server.
-# - midir: no mobile backend wired into LibreTracks yet.
 # - rfd: desktop-style native file dialogs don't exist on Android/iOS (see
 #   src/file_dialog.rs for the stub; mobile flows will use tauri-plugin-dialog).
 # - tauri-plugin-single-instance: no hay segundo proceso que reenviar en movil.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 libretracks-remote = { path = "../../../crates/libretracks-remote" }
-midir = "0.9"
 rfd = "0.15"
 tauri-plugin-single-instance = "2"
 
@@ -65,6 +63,12 @@ tauri-plugin-single-instance = "2"
 # Deep link: en movil el redirect de OAuth no puede ir por loopback (Google lo
 # retiro para los tipos de cliente Android e iOS), asi que vuelve por un esquema
 # propio derivado del ID de cliente.
+# MIDI: midir covers desktop and iOS (its CoreMIDI backend has
+# cfg(target_os = "ios")). Android has no midir backend; it goes through the
+# JNI bridge in src/midi/transport/android.rs instead.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+midir = "0.9"
+
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 tauri-plugin-deep-link = "2"
 # Medidor de recursos en móvil: getrusage para el CPU de la app y, en iOS,

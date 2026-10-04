@@ -1,0 +1,18 @@
+[package]
+name = "lt-midi-selftest"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Runs the app's real MIDI transport against CoreMIDI virtual endpoints (iOS simulator)."
+
+# Standalone: not a member of the repo workspace, so the desktop build never
+# compiles it. Built only by .github/workflows/ios-audio-probe.yml.
+[workspace]
+
+[dependencies]
+libretracks-core = { path = "../../../crates/libretracks-core" }
+midir = "0.9"
+serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
+coremidi = "0.6"

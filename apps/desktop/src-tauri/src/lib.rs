@@ -240,7 +240,9 @@ pub fn run() {
             state.audio.attach_app_handle(app.handle().clone());
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             video_setup::start(app.handle(), &state);
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            // The worker parks while the song has no MIDI clips, so starting
+            // it everywhere MIDI exists costs nothing when unused.
+            #[cfg(not(target_os = "android"))]
             state.start_midi_runtime();
             let initial_device = runtime_settings.selected_output_device_id.clone();
             let apply_result = state.audio.apply_settings(runtime_settings);

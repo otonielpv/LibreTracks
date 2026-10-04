@@ -13,9 +13,9 @@ use std::sync::{Arc, OnceLock};
 
 use serde::Serialize;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "android"))]
 mod midir;
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(target_os = "android")]
 mod null;
 
 /// Callback a transport calls with raw bytes from an input port. It may get
@@ -59,9 +59,9 @@ pub(crate) fn platform_transport() -> Arc<dyn MidiTransport> {
     static TRANSPORT: OnceLock<Arc<dyn MidiTransport>> = OnceLock::new();
     TRANSPORT
         .get_or_init(|| {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(not(target_os = "android"))]
             let transport: Arc<dyn MidiTransport> = Arc::new(midir::MidirTransport::default());
-            #[cfg(any(target_os = "android", target_os = "ios"))]
+            #[cfg(target_os = "android")]
             let transport: Arc<dyn MidiTransport> = Arc::new(null::NullTransport);
             transport
         })

@@ -98,6 +98,79 @@ jobs:
           SIM_UDID: ${{ steps.sim.outputs.udid }}
         run: xcrun simctl shutdown "${SIM_UDID:-booted}" || true
 
+  # MIDI (plan mobile-midi, paso 02): the app's real transport code, compiled
+  # into a small Rust binary, against CoreMIDI virtual endpoints. Run twice:
+  # once normally (must pass) and once with the note-off withheld on purpose
+  # (must fail), so a green run proves the test can actually see a lost
+  # message.
+  midi-selftest:
+    name: MIDI transport against CoreMIDI virtual ports
+    runs-on: macos-15
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install the simulator Rust target
+        shell: bash
+        run: rustup target add aarch64-apple-ios-sim
+
+      - name: Build the MIDI self-test
+        shell: bash
+        working-directory: tests/ios/midi_selftest
+        run: |
+          set -euo pipefail
+          cargo build --release --target aarch64-apple-ios-sim
+          file target/aarch64-apple-ios-sim/release/lt-midi-selftest
+
+      - name: Boot a simulator
+        id: sim
+        shell: bash
+        run: |
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available -j \
+            | jq -r '[.devices[][] | select(.name | test("iPhone"))] | .[0].udid')"
+          if [ -z "$udid" ] || [ "$udid" = "null" ]; then
+            echo "::error::No iPhone simulator available on this runner."
+            exit 1
+          fi
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Run the self-test
+        shell: bash
+        env:
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          set -euo pipefail
+          xcrun simctl spawn "$SIM_UDID" \
+            "$GITHUB_WORKSPACE/tests/ios/midi_selftest/target/aarch64-apple-ios-sim/release/lt-midi-selftest"
+
+      - name: The self-test fails when a message is lost
+        shell: bash
+        env:
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          set -uo pipefail
+          SIMCTL_CHILD_LT_MIDI_SELFTEST_BREAK=skip_note_off \
+            xcrun simctl spawn "$SIM_UDID" \
+            "$GITHUB_WORKSPACE/tests/ios/midi_selftest/target/aarch64-apple-ios-sim/release/lt-midi-selftest"
+          status=$?
+          if [ "$status" -eq 0 ]; then
+            echo "::error::The self-test passed with the note-off withheld: it cannot detect a lost message."
+            exit 1
+          fi
+          echo "Failed as expected (exit $status)."
+
+      - name: Shut the simulator down
+        if: always()
+        shell: bash
+        env:
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+        run: xcrun simctl shutdown "${SIM_UDID:-booted}" || true
+
   # Runs alongside the probe rather than after it. The probe already answered
   # the question it was written for (the simulator does deliver audio), so its
   # job now is to be the first thing you read when this one fails: a silent
