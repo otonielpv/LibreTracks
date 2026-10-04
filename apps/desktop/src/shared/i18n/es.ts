@@ -975,6 +975,7 @@ const es = {
       duplicateBlock: "Duplicar",
       undoRemove: "Deshacer",
       blockRemoved: "Se quitó «{{name}}»",
+      moreActions: "Más opciones",
       addSection: "Añadir sección",
       dragHandle: "Arrastrar para reordenar",
       close: "Cerrar",

@@ -1,6 +1,6 @@
 import type { SongRegionSummary, SongView } from "@libretracks/shared/models";
 
-import { act, en, fireEvent, render, screen } from "../../../test/testUtils";
+import { act, en, fireEvent, render, screen, waitFor, within } from "../../../test/testUtils";
 import { confirmDialog } from "../../../shared/dialog/dialogService";
 import { useBackDismissStore } from "../mobile/backNavigation";
 import { useSongStore } from "../songStore";
@@ -174,7 +174,7 @@ describe("arrangement editor on mobile — C1", () => {
       fireEvent.click(screen.getByRole("button", { name: en.transport.structure.addSection }));
     });
     const sheet = screen.getByRole("dialog", { name: en.transport.structure.addSection });
-    const chips = sheet.querySelectorAll("button.lt-structure-chip");
+    const chips = sheet.querySelectorAll("button.lt-structure-tap-row");
     await act(async () => {
       fireEvent.click(chips[2]); // Coro
       fireEvent.click(chips[2]); // Coro otra vez
@@ -196,7 +196,7 @@ describe("arrangement editor on mobile — C1", () => {
     const menu = screen.getByRole("menu", { name: "Verso" });
     await act(async () => {
       fireEvent.click(
-        menu.querySelector("button") as HTMLElement, // Duplicar
+        within(menu).getByRole("menuitem", { name: en.transport.structure.duplicateBlock }),
       );
     });
     expect(order()).toEqual(["intro", "verso", "verso", "coro"]);
@@ -273,5 +273,73 @@ describe("arrangement editor on mobile — C3: Android back", () => {
     await pressBack();
     expect(screen.queryByRole("dialog", { name: en.transport.structure.addSection })).toBeNull();
     expect(useStructureStore.getState().editorRegionId).toBe("r1");
+  });
+});
+
+describe("arrangement editor on mobile — iPhone feedback", () => {
+  it("“Add section” sits after the last block, not floating over its handle", async () => {
+    await renderMobile();
+    const add = screen.getByRole("button", { name: en.transport.structure.addSection });
+    expect(add.classList.contains("lt-structure-add-row")).toBe(true);
+    expect(document.querySelector(".lt-structure-fab")).toBeNull();
+    // In the same flow as the list, after it.
+    const strip = screen.getByRole("list", { name: en.transport.structure.strip });
+    expect(strip.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("Apply saves, applies and closes the screen so the timeline shows the result", async () => {
+    const desktopApi = await import("../desktopApi");
+    const save = vi.spyOn(desktopApi, "saveSongArrangement").mockResolvedValue({
+      snapshot: null as never,
+      warnings: [],
+      droppedBlocks: [],
+    });
+    await renderMobile();
+    await act(async () => {
+      updateDraft((d) => addBlock(d, "coro"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: en.transport.structure.apply }));
+    });
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save.mock.calls[0][2]).toBe(true);
+    expect(useStructureStore.getState().editorRegionId).toBeNull();
+  });
+
+  it("a failed Apply shows the error inside the screen and keeps it open", async () => {
+    const desktopApi = await import("../desktopApi");
+    vi.spyOn(desktopApi, "saveSongArrangement").mockRejectedValue(
+      new Error("song structure locked: r1 arrangement=Domingo"),
+    );
+    await renderMobile();
+    await act(async () => {
+      updateDraft((d) => addBlock(d, "coro"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: en.transport.structure.apply }));
+    });
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain(
+      en.transport.structure.lockedStatus.replace("{{name}}", "Domingo"),
+    );
+    expect(useStructureStore.getState().editorRegionId).toBe("r1");
+  });
+
+  it("the ⋮ menu offers New, Rename and Delete as the app's mobile sheet", async () => {
+    await renderMobile();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: en.transport.structure.moreActions }));
+    });
+    const menu = screen.getByRole("menu", { name: "Domingo" });
+    expect(menu.classList.contains("is-mobile-sheet")).toBe(true);
+    const items = within(menu).getAllByRole("menuitem").map((item) => item.textContent);
+    expect(items.join("|")).toContain(en.transport.structure.newArrangement);
+    expect(items.join("|")).toContain(en.transport.structure.rename);
+    expect(items.join("|")).toContain(en.transport.structure.delete);
+    await act(async () => {
+      fireEvent.click(within(menu).getByRole("menuitem", { name: /New|Nuevo/ }));
+    });
+    // A new arrangement starts from the original order, unsaved.
+    expect(useStructureStore.getState().draft?.arrangementId).toBeNull();
   });
 });

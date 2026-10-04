@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
-import { markerCategory, type SongView } from "@libretracks/shared/models";
+import { markerCategory, markerColor, type SongView } from "@libretracks/shared/models";
 
 import { useSongStore } from "../songStore";
 import { sectionLabel } from "./structureEditor";
@@ -47,8 +47,16 @@ export function StructureCapture({
         <strong>{t("transport.structure.detectedSections")}</strong>
       </div>
       <ol className="lt-structure-detected">
-        {detected.map((marker) => (
-          <li key={marker.id}>{marker.name}</li>
+        {detected.map((marker, index) => (
+          <li key={marker.id}>
+            <span className="lt-structure-detected-index">{index + 1}</span>
+            <span
+              className="lt-structure-swatch"
+              style={{ ["--lt-structure-color" as string]: markerColor(marker) }}
+              aria-hidden="true"
+            />
+            {marker.name}
+          </li>
         ))}
       </ol>
       {detected.length < 2 ? (
@@ -56,7 +64,7 @@ export function StructureCapture({
       ) : null}
       <button
         type="button"
-        className="is-primary"
+        className="is-primary lt-structure-capture-button"
         disabled={detected.length < 2}
         onClick={() => void handlers.captureOriginal(regionId)}
       >

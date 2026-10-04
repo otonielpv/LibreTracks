@@ -77,10 +77,18 @@ export function createStructureHandlers(deps: StructureHandlerDeps) {
       regionId: string,
       arrangement: ArrangementInput,
       apply: boolean,
-    ): Promise<boolean> {
+    ): Promise<{ ok: boolean; error: unknown }> {
+      // The error is also handed back: on mobile the editor covers the status
+      // bar where `runAction` reports it, so "Apply" seemed to do nothing.
       let ok = false;
+      let failure: unknown = null;
       await deps.runAction(async () => {
-        finish(regionId, await saveSongArrangement(regionId, arrangement, apply));
+        try {
+          finish(regionId, await saveSongArrangement(regionId, arrangement, apply));
+        } catch (error) {
+          failure = error;
+          throw error;
+        }
         if (apply) {
           deps.setStatus(
             deps.t("transport.structure.applied", { name: arrangement.name }),
@@ -88,7 +96,7 @@ export function createStructureHandlers(deps: StructureHandlerDeps) {
         }
         ok = true;
       });
-      return ok;
+      return { ok, error: failure };
     },
 
     async applyArrangement(regionId: string, arrangementId: string | null, name?: string) {

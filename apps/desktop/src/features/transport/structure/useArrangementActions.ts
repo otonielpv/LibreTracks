@@ -63,11 +63,14 @@ export function useArrangementActions(handlers: StructureHandlers) {
     if (await confirmDiscardChanges(t)) closeStructureEditor();
   };
 
-  const apply = async () => {
-    if (!regionId || !draft || draft.blocks.length === 0) return;
+  /** Saves and applies the working copy. Resolves with the outcome so the
+   * mobile screen can close on success or show the error. */
+  const apply = async (): Promise<{ ok: boolean; error: unknown }> => {
+    if (!regionId || !draft || draft.blocks.length === 0) return { ok: false, error: null };
     const id = draft.arrangementId ?? newArrangementId();
-    const ok = await handlers.saveArrangement(regionId, toArrangementInput(draft, id), true);
-    if (ok) markDraftSaved(id);
+    const result = await handlers.saveArrangement(regionId, toArrangementInput(draft, id), true);
+    if (result.ok) markDraftSaved(id);
+    return result;
   };
 
   const backToOriginal = async () => {
@@ -97,7 +100,7 @@ export function useArrangementActions(handlers: StructureHandlers) {
     // A saved arrangement is renamed right away (it does not change the
     // timeline); the blocks keep their unapplied changes, if any.
     if (draft.arrangementId && savedDraft) {
-      const ok = await handlers.saveArrangement(
+      const { ok } = await handlers.saveArrangement(
         regionId,
         toArrangementInput({ ...savedDraft, name }, draft.arrangementId),
         false,

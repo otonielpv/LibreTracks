@@ -944,6 +944,7 @@ const en = {
       duplicateBlock: "Duplicate",
       undoRemove: "Undo",
       blockRemoved: "Removed “{{name}}”",
+      moreActions: "More options",
       addSection: "Add section",
       dragHandle: "Drag to reorder",
       close: "Close",
