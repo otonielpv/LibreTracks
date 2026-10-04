@@ -10323,8 +10323,9 @@ html.lt-ios body {
 }
 
 .lt-resource-chip-value {
-  /* Ancho fijo: que "9%" → "10%" no empuje el transporte. */
-  min-width: 4ch;
+  /* Ancho fijo para el peor caso, "100%": que el número crezca no empuja el
+     reloj. 5ch y no 4 porque el "%" es más ancho que un dígito. */
+  min-width: 5ch;
   text-align: center;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
