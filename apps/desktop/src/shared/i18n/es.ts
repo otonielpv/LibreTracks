@@ -1458,7 +1458,7 @@ const es = {
   },
   idleWake: {
     title: "La app estaba en reposo",
-    body: "Para ahorrar batería se pausó el audio mientras no se usaba. Pulsa Reanudar antes de reproducir.",
+    body: "La app ha estado un rato sin usarse. Pulsa Reanudar para reactivar el audio; la reproducción seguirá como la dejaste.",
     resume: "Reanudar",
     resuming: "Reanudando…",
     failed:

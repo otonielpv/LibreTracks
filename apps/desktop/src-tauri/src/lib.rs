@@ -384,6 +384,7 @@ pub fn run() {
             commands::system::get_audio_debug_snapshot,
             commands::system::get_audio_output_meter,
             commands::system::take_audio_idle_wake,
+            commands::system::set_app_hidden,
             commands::system::reopen_audio_output,
             commands::system::get_audio_output_capture,
             commands::system::get_desktop_performance_snapshot,

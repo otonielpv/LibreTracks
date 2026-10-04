@@ -5,22 +5,25 @@ import {
   isTauriApp,
   listenToAudioIdleWake,
   reopenAudioOutput,
+  setAppHidden,
   takeAudioIdleWake,
 } from "./desktopApi";
 
 /**
- * "Resume" prompt after a long idle suspension (Android).
+ * "Resume" prompt after a long idle spell, on every platform.
  *
- * With the app in the background and nothing playing, the engine pauses its
- * output stream so the phone can sleep. A stream paused for a long gap (from
- * rehearsal to the service) came back silent once: the playhead moved and
- * nothing was heard until the app was restarted. Back from a suspension that
- * long, this asks the user to resume, which reopens the output device from
- * scratch, the same thing the restart did.
+ * An Android user left the app open from rehearsal to the service; at Play
+ * the playhead moved and nothing was heard until the app was restarted. Back
+ * from a long spell away (background, minimised, hidden) or from a system
+ * sleep with nothing sounding, this asks the user to resume, which reopens the
+ * output device from scratch, the same thing the restart did. It never
+ * presses Play: a paused or stopped transport stays as it was.
  *
- * Self-contained like AudioDeviceStatusBadge: the Rust side raises a flag and
- * an `audio:idle_wake` event; the flag is also polled when the page becomes
- * visible, in case the event fired before the WebView was listening.
+ * Rust decides (audio/wake_prompt.rs) and raises a flag plus an
+ * `audio:idle_wake` event; the flag is also polled when the page becomes
+ * visible, in case the event fired before the WebView was listening. This
+ * component reports the page's visibility, which is how desktop and iOS know
+ * the app is away (Android hears it from the activity).
  */
 export function AudioIdleWakePrompt() {
   const { t } = useTranslation();
@@ -45,8 +48,13 @@ export function AudioIdleWakePrompt() {
         })
         .catch(() => {});
     };
+    const reportVisibility = () => {
+      const hidden = document.visibilityState !== "visible";
+      void setAppHidden(hidden).catch(() => {});
+      return hidden;
+    };
     const onVisibility = () => {
-      if (document.visibilityState === "visible") {
+      if (!reportVisibility()) {
         check();
       }
     };
@@ -59,6 +67,7 @@ export function AudioIdleWakePrompt() {
       unlisten = dispose;
     });
     document.addEventListener("visibilitychange", onVisibility);
+    reportVisibility();
     check();
 
     return () => {

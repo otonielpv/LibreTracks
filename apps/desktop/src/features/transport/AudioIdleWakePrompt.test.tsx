@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
     return value;
   }),
   reopenAudioOutput: vi.fn(async () => {}),
+  setAppHidden: vi.fn(async (_hidden: boolean) => {}),
 }));
 
 vi.mock("./desktopApi", async (importOriginal) => {
@@ -28,6 +29,7 @@ vi.mock("./desktopApi", async (importOriginal) => {
     }),
     takeAudioIdleWake: api.takeAudioIdleWake,
     reopenAudioOutput: api.reopenAudioOutput,
+    setAppHidden: api.setAppHidden,
     appendFrontendError: vi.fn(async () => {}),
   };
 });
@@ -43,6 +45,7 @@ describe("AudioIdleWakePrompt", () => {
   beforeEach(() => {
     api.pending = false;
     api.takeAudioIdleWake.mockClear();
+    api.setAppHidden.mockClear();
     api.reopenAudioOutput.mockReset();
     api.reopenAudioOutput.mockImplementation(async () => {});
   });
@@ -82,6 +85,32 @@ describe("AudioIdleWakePrompt", () => {
     });
     await flush();
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("reports the window's visibility so desktop and iOS know when it is away", async () => {
+    let state: DocumentVisibilityState = "visible";
+    const spy = vi
+      .spyOn(document, "visibilityState", "get")
+      .mockImplementation(() => state);
+    try {
+      render(<AudioIdleWakePrompt />);
+      await flush();
+      expect(api.setAppHidden).toHaveBeenLastCalledWith(false);
+
+      state = "hidden";
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(api.setAppHidden).toHaveBeenLastCalledWith(true);
+
+      state = "visible";
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(api.setAppHidden).toHaveBeenLastCalledWith(false);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("stays open with a retry when reopening fails", async () => {

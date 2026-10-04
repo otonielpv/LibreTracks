@@ -211,7 +211,7 @@ export async function listenToAudioDeviceStatus(
   });
 }
 
-/** Fired when the app comes back from a long idle suspension (Android). The
+/** Fired when the app comes back from a long idle spell. The
  * payload is empty: take the flag with `takeAudioIdleWake`, which the UI also
  * polls when the page becomes visible. */
 export async function listenToAudioIdleWake(
@@ -225,6 +225,12 @@ export async function listenToAudioIdleWake(
 
 export async function takeAudioIdleWake(): Promise<boolean> {
   return invokeCommand<boolean>("take_audio_idle_wake");
+}
+
+/** Tells the engine host whether the window is minimised/hidden, for the
+ * long-idle rule on desktop and iOS (Android reports it natively). */
+export async function setAppHidden(hidden: boolean): Promise<void> {
+  await invokeCommand<void>("set_app_hidden", { hidden });
 }
 
 /** Close and reopen the output device, as a restart of the app would. */

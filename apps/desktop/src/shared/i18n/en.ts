@@ -1427,7 +1427,7 @@ const en = {
   },
   idleWake: {
     title: "The app was idle",
-    body: "Audio was paused to save battery while the app wasn't in use. Tap Resume before playing.",
+    body: "The app hasn't been used for a while. Press Resume to wake the audio up; playback stays as you left it.",
     resume: "Resume",
     resuming: "Resuming…",
     failed:

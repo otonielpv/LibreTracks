@@ -7,7 +7,7 @@ use std::{
         mpsc, Arc, Mutex, OnceLock,
     },
     thread::{self, JoinHandle},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 
 use libretracks_core::{
@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::audio::idle_suspend::{IdleSuspendPolicy, SuspendAction};
+use crate::audio::wake_prompt::WakePromptPolicy;
 use crate::models::{PitchPrepareSummary, SourceReadinessSummary};
 
 use crate::{infra::error::DesktopError, infra::settings::AppSettings};
@@ -429,6 +430,10 @@ pub struct AudioController {
     /// takes it. Polled as well as evented: the WebView may not be listening
     /// yet in the instant the activity comes back.
     idle_wake_pending: AtomicBool,
+    /// The window is minimised or hidden, as the WebView reports it. Unused
+    /// on Android, where the activity tells Rust directly.
+    #[cfg_attr(target_os = "android", allow(dead_code))]
+    app_hidden: AtomicBool,
     /// Total Category A realtime bridge commands (SetTrackGain/Pan/Mute/Solo/Route/Transpose).
     live_mix_realtime_command_count: AtomicU64,
     live_mix_ensure_live_track_count: AtomicU64,
@@ -529,6 +534,7 @@ impl AudioController {
             meter_thread_stop: Arc::new(AtomicBool::new(false)),
             meter_thread: Mutex::new(None),
             idle_wake_pending: AtomicBool::new(false),
+            app_hidden: AtomicBool::new(false),
             live_mix_realtime_command_count: AtomicU64::new(0),
             live_mix_ensure_live_track_count: AtomicU64::new(0),
             metronome_realtime_toggle_count: AtomicU64::new(0),
@@ -588,6 +594,7 @@ impl AudioController {
 
             let mut watchdog_fallback_state: Option<bool> = None;
             let mut idle_policy = IdleSuspendPolicy::default();
+            let mut wake_policy = WakePromptPolicy::default();
             let mut last_watchdog_at = Instant::now();
             let mut last_track_levels: Option<Vec<AudioMeterLevel>> = None;
             let mut last_region_levels: Option<Vec<RegionMeterLevel>> = None;
@@ -603,10 +610,18 @@ impl AudioController {
                 let backgrounded = crate::platform::android_visibility::app_in_background();
                 #[cfg(not(target_os = "android"))]
                 let backgrounded = false;
+                // Android hears it from the activity over JNI; elsewhere the
+                // WebView reports its own visibility (set_app_hidden).
+                #[cfg(target_os = "android")]
+                let away = backgrounded;
+                #[cfg(not(target_os = "android"))]
+                let away = controller.app_hidden.load(Ordering::Relaxed);
                 let tick = controller.meter_tick(
                     watchdog_due.then_some(&mut watchdog_fallback_state),
                     &mut idle_policy,
                     backgrounded,
+                    &mut wake_policy,
+                    away,
                 );
                 let mut interval = IDLE_INTERVAL;
                 if let Some(frame) = tick.frame {
@@ -2509,13 +2524,16 @@ impl AudioController {
 
     /// One pass of the meter thread: a single engine snapshot read under the
     /// state lock, turned into the meter levels, the idle-suspension decision
-    /// (only ever acts in the background, i.e. on Android) and, when
-    /// `watchdog` is given, the device watchdog's verdict.
+    /// (only ever acts in the background, i.e. on Android), the "Resume"
+    /// prompt after a long idle spell (every platform; `away` = not on
+    /// screen) and, when `watchdog` is given, the device watchdog's verdict.
     fn meter_tick(
         &self,
         watchdog: Option<&mut Option<bool>>,
         idle_policy: &mut IdleSuspendPolicy,
         backgrounded: bool,
+        wake_policy: &mut WakePromptPolicy,
+        away: bool,
     ) -> MeterTick {
         // try_lock so the meter thread never blocks command dispatch: if a
         // command holds the lock this tick is simply skipped.
@@ -2541,14 +2559,11 @@ impl AudioController {
             let playing = matches!(snapshot.playback_state, PlaybackState::Playing);
             let suspended = snapshot.device.output_suspended;
             let idle = !playing && !snapshot.transport_pending_start && !snapshot.pad.enabled;
+            tick.idle_wake = wake_policy.step(SystemTime::now(), away, idle);
             let request = match idle_policy.step(Instant::now(), backgrounded, idle, suspended) {
                 SuspendAction::None => None,
                 SuspendAction::Suspend => Some(true),
                 SuspendAction::Resume => Some(false),
-                SuspendAction::ResumeAfterLongIdle => {
-                    tick.idle_wake = true;
-                    Some(false)
-                }
             };
             if let Some(suspend) = request {
                 if let Err(error) =
@@ -2589,6 +2604,11 @@ impl AudioController {
     /// call. Clears the flag: the prompt shows once per wake.
     pub fn take_idle_wake_pending(&self) -> bool {
         self.idle_wake_pending.swap(false, Ordering::Relaxed)
+    }
+
+    /// The WebView's visibility (desktop, iOS). Ignored on Android.
+    pub fn set_app_hidden(&self, hidden: bool) {
+        self.app_hidden.store(hidden, Ordering::Relaxed);
     }
 
     /// Close and reopen the configured output device, so audio comes back the

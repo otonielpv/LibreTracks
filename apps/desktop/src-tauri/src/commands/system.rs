@@ -272,11 +272,19 @@ pub fn get_audio_output_meter(
         .map_err(|error| error.to_string())
 }
 
-/// True once after the app comes back from a long idle suspension (Android):
-/// the UI then asks the user to resume before playing.
+/// True once after the app comes back from a long idle spell (see
+/// audio::wake_prompt): the UI then asks the user to resume before playing.
 #[tauri::command(async)]
 pub fn take_audio_idle_wake(state: State<'_, DesktopState>) -> bool {
     state.audio.take_idle_wake_pending()
+}
+
+/// The window was minimised/hidden (true) or is back on screen (false), as
+/// the WebView sees it. Feeds the long-idle rule on desktop and iOS; Android
+/// hears it from the activity instead.
+#[tauri::command(async)]
+pub fn set_app_hidden(state: State<'_, DesktopState>, hidden: bool) {
+    state.audio.set_app_hidden(hidden);
 }
 
 /// The "Resume" button of that prompt: reopen the output device from scratch.
