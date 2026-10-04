@@ -143,14 +143,63 @@ describe("App / app.render", () => {
       textMatcher(en.timelineTopbar.songBpmAria),
     ) as HTMLInputElement;
 
-    expect(bpmInput.step).toBe("any");
-
     await act(async () => {
       fireEvent.change(bpmInput, { target: { value: "130.55" } });
     });
 
     expect(bpmInput.value).toBe("130.55");
     expect(bpmInput.validity.stepMismatch).toBe(false);
+  });
+
+  it("filters letters out of the tempo field and never commits a half-typed value", async () => {
+    // Regression: as `type="number"` the field accepted "e"; a half-typed
+    // "1e" read back as "", Number("") is 0 and the commit clamped the tempo
+    // to the 20 BPM floor.
+    await renderApp();
+
+    const bpmInput = screen.getByLabelText(
+      textMatcher(en.timelineTopbar.songBpmAria),
+    ) as HTMLInputElement;
+    const originalValue = bpmInput.value;
+
+    await act(async () => {
+      fireEvent.focus(bpmInput);
+      fireEvent.change(bpmInput, { target: { value: "1e" } });
+    });
+    expect(bpmInput.value).toBe("1");
+
+    await act(async () => {
+      fireEvent.change(bpmInput, { target: { value: "e" } });
+    });
+    expect(bpmInput.value).toBe("");
+
+    await act(async () => {
+      fireEvent.blur(bpmInput);
+    });
+    expect(bpmInput.value).toBe(originalValue);
+  });
+
+  it("filters the time signature field to digits and one slash", async () => {
+    await renderApp();
+
+    const signatureInput = screen.getByLabelText(
+      "Compas de la cancion",
+    ) as HTMLInputElement;
+    const originalValue = signatureInput.value;
+
+    await act(async () => {
+      fireEvent.change(signatureInput, { target: { value: "6/8abc/" } });
+    });
+    expect(signatureInput.value).toBe("6/8");
+
+    // Not a time signature (denominator 7): the field reverts on commit.
+    await act(async () => {
+      fireEvent.change(signatureInput, { target: { value: "5/7" } });
+    });
+    await act(async () => {
+      fireEvent.blur(signatureInput);
+    });
+    expect(signatureInput.value).toBe(originalValue);
   });
 
   it("supports transport shortcuts from the keyboard", async () => {

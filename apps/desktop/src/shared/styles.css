@@ -10298,8 +10298,8 @@ html.lt-ios body {
 }
 
 /* El tempo lleva decimales ("148,40"): 6 caracteres que se cortaban a 4.5ch. */
-.lt-mobile .lt-bpm-control input[type="number"],
-.lt-mobile .lt-bpm-control input[type="number"]:focus {
+.lt-mobile .lt-bpm-control input.lt-tempo-input,
+.lt-mobile .lt-bpm-control input.lt-tempo-input:focus {
   width: 6.5ch;
 }
 

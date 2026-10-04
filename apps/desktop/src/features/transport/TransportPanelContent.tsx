@@ -472,9 +472,11 @@ import { MissingMediaModal } from "./panels/MissingMediaModal";
 import { createMissingMediaHandlers } from "./library/missingMediaHandlers";
 import { DismissOnBack } from "./mobile/DismissOnBack";
 import { getEffectiveTempoMarkerAt } from "./tempo/tempoMarkers";
+import {
+  parseBpmDraft,
+  parseTimeSignatureDraft,
+} from "./tempo/tempoFieldInput";
 
-const MIN_SESSION_BPM = 20;
-const MAX_SESSION_BPM = 300;
 /** Max linear gain a track fader reaches (+10 dB ≈ 3.162). The fader is a dB
  * scale now, so track volume must clamp to this headroom, not to unity (1.0). */
 const MAX_TRACK_GAIN = positionToGain(1, TRACK_FADER_SCALE);
@@ -6915,19 +6917,12 @@ export function TransportPanelContent() {
           onTempoCommit={() => {
             tempoDraftFocusedRef.current = false;
             tempoDraftDirtyRef.current = false;
-            const nextBpm = Number(tempoDraft);
+            // null = vacío o a medias ("1e", ","): se vuelve al tempo actual.
+            const clampedBpm = parseBpmDraft(tempoDraft);
             const tempoPositionSeconds = readoutPositionSeconds;
             const currentBpm = getEffectiveBpmAt(song, tempoPositionSeconds);
-            const clampedBpm = Math.max(
-              MIN_SESSION_BPM,
-              Math.min(MAX_SESSION_BPM, nextBpm),
-            );
 
-            if (
-              !song ||
-              !Number.isFinite(clampedBpm) ||
-              clampedBpm === currentBpm
-            ) {
+            if (!song || clampedBpm === null || clampedBpm === currentBpm) {
               setTempoDraft(formatBpmDraft(currentBpm));
               return;
             }
@@ -6957,7 +6952,7 @@ export function TransportPanelContent() {
           }}
           onTimeSignatureDraftChange={setTimeSignatureDraft}
           onTimeSignatureCommit={() => {
-            const nextSignature = timeSignatureDraft.trim();
+            const nextSignature = parseTimeSignatureDraft(timeSignatureDraft);
             const currentSignature = songBaseTimeSignature;
 
             if (!song || !nextSignature || nextSignature === currentSignature) {

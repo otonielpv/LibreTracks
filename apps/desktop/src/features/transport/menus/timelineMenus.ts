@@ -23,6 +23,10 @@ import {
 } from "../../../shared/dialog/dialogService";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
 import {
+  parseBpmDraft,
+  parseTimeSignatureDraft,
+} from "../tempo/tempoFieldInput";
+import {
   addAutomationTrack,
   createSectionMarker,
   createSongRegion,
@@ -525,13 +529,13 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
   async function changeTimelineBpmAt(positionSeconds: number) {
     const d = getDeps();
     const { t } = d;
-    const nextBpm = Number(
-      await promptDialog(
+    const nextBpm = parseBpmDraft(
+      (await promptDialog(
         t("transport.prompt.timelineBpm"),
         d.songBaseBpm.toFixed(2),
-      ),
+      )) ?? "",
     );
-    if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
+    if (nextBpm === null) {
       return;
     }
 
@@ -562,9 +566,9 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
 
   async function createTimeSignatureMarkerAt(positionSeconds: number) {
     const d = getDeps();
-    const nextSignature = (
-      await promptDialog("Compas", d.displayedTimeSignature)
-    )?.trim();
+    const nextSignature = parseTimeSignatureDraft(
+      (await promptDialog("Compas", d.displayedTimeSignature)) ?? "",
+    );
     if (!nextSignature) {
       return;
     }
@@ -775,13 +779,13 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       {
         label: t("transport.menu.changeBpm"),
         onSelect: async () => {
-          const nextBpm = Number(
-            await promptDialog(
+          const nextBpm = parseBpmDraft(
+            (await promptDialog(
               t("transport.prompt.tempoMarkerBpm"),
               marker.bpm.toFixed(2),
-            ),
+            )) ?? "",
           );
-          if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
+          if (nextBpm === null) {
             return;
           }
 
@@ -831,9 +835,9 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       {
         label: t("transport.menu.changeTimeSignature"),
         onSelect: async () => {
-          const nextSignature = (
-            await promptDialog("Compas", marker.signature)
-          )?.trim();
+          const nextSignature = parseTimeSignatureDraft(
+            (await promptDialog("Compas", marker.signature)) ?? "",
+          );
           if (!nextSignature) {
             return;
           }

@@ -16,6 +16,10 @@ import {
 } from "../recentSessions";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { ResourceMeter } from "../panels/ResourceMeter";
+import {
+  sanitizeBpmDraft,
+  sanitizeTimeSignatureDraft,
+} from "../tempo/tempoFieldInput";
 import { AudioDeviceStatusBadge } from "../AudioDeviceStatusBadge";
 import { requestAppClose } from "../../appClose/appCloseService";
 
@@ -466,14 +470,14 @@ export function TimelineTopbar({
             <input
               aria-label={t("timelineTopbar.songBpmAria")}
               disabled={!hasSong}
-              type="number"
-              min={1}
-              // "any" instead of 0.1: on a number input `step` defines the grid
-              // of VALID values, not just the arrow increment, so step=0.1
-              // snapped a typed 130.55 to 130.6 before it ever reached the
-              // commit handler. Tempo is stored as f64 and the engine accepts
-              // arbitrary precision, so the input must not quantise it.
-              step="any"
+              className="lt-tempo-input"
+              // Texto con teclado decimal, no `type="number"`: ese deja meter
+              // "e" y, a medias, da un valor vacio que el commit leia como 0.
+              // Filtrado al teclear (ver tempoFieldInput.ts); sin `step`, el
+              // tempo no se cuantiza (130.55 llega tal cual).
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
               value={tempoDraft}
               onPointerDown={(event) => {
                 if (!learnModeActive) {
@@ -485,7 +489,9 @@ export function TimelineTopbar({
                 onMidiLearnTarget("param:tempo");
               }}
               onFocus={onTempoDraftFocus}
-              onChange={(event) => onTempoDraftChange(event.target.value)}
+              onChange={(event) =>
+                onTempoDraftChange(sanitizeBpmDraft(event.target.value))
+              }
               onBlur={onTempoCommit}
               onKeyDown={handleTempoKeyDown}
             />
@@ -517,7 +523,11 @@ export function TimelineTopbar({
               disabled={!hasSong}
               type="text"
               value={timeSignatureDraft}
-              onChange={(event) => onTimeSignatureDraftChange(event.target.value)}
+              onChange={(event) =>
+                onTimeSignatureDraftChange(
+                  sanitizeTimeSignatureDraft(event.target.value),
+                )
+              }
               onBlur={onTimeSignatureCommit}
               onKeyDown={handleTempoKeyDown}
             />
