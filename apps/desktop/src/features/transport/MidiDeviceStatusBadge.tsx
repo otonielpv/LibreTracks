@@ -4,8 +4,10 @@ import {
   getMidiStatus,
   isTauriApp,
   listenToMidiDevicesChanged,
+  reconnectBluetoothMidi,
   type MidiDevicesStatus,
 } from "./desktopApi";
+import { useMidiCapabilities } from "./hooks/useMidiCapabilities";
 
 /**
  * MIDI device health badge for the transport bar (plan mobile-midi, paso 04).
@@ -19,6 +21,7 @@ import {
 export function MidiDeviceStatusBadge() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<MidiDevicesStatus | null>(null);
+  const capabilities = useMidiCapabilities();
 
   useEffect(() => {
     if (!isTauriApp) {
@@ -73,6 +76,19 @@ export function MidiDeviceStatusBadge() {
         piano_off
       </span>
       {label}
+      {/* A wireless pedal may need a nudge: Android reopens the remembered
+          BLE devices, iOS shows its pairing panel (paso 06). */}
+      {capabilities?.bluetoothPairing ? (
+        <button
+          type="button"
+          className="lt-device-status-action"
+          onClick={() => {
+            void reconnectBluetoothMidi().catch(() => {});
+          }}
+        >
+          {t("timelineTopbar.midiReconnect")}
+        </button>
+      ) : null}
     </span>
   );
 }

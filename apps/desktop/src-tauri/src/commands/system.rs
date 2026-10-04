@@ -411,6 +411,53 @@ pub fn get_midi_capabilities() -> MidiCapabilities {
     crate::midi::get_midi_capabilities()
 }
 
+/// Android: scan for Bluetooth LE MIDI devices for ~10 s, asking for the
+/// Bluetooth permissions first. Errors with `bluetooth_permission_denied`,
+/// `bluetooth_off` or `bluetooth_unsupported` for the UI to explain.
+#[tauri::command(async)]
+pub fn scan_bluetooth_midi() -> Result<Vec<crate::midi::bluetooth::BluetoothMidiDevice>, String> {
+    crate::midi::bluetooth::scan()
+}
+
+/// Android: connect to a scanned BLE MIDI device and remember it.
+#[tauri::command(async)]
+pub fn connect_bluetooth_midi(app: AppHandle, address: String) -> Result<(), String> {
+    crate::midi::bluetooth::connect(&app, &address)
+}
+
+/// iOS: show the system Bluetooth MIDI pairing panel and re-list the ports
+/// when it closes. Android uses scan/connect instead.
+#[tauri::command]
+pub async fn pair_bluetooth_midi(app: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        libretracks_ios_folder_picker::present_bluetooth_midi(app).await?;
+        crate::midi::watch::notify_changed();
+        Ok(())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = app;
+        Err(crate::midi::bluetooth::UNSUPPORTED.to_string())
+    }
+}
+
+/// "Reconnect" from the topbar badge: Android reopens the remembered BLE
+/// devices; iOS shows the pairing panel (iOS keeps pairings but does not
+/// always reconnect them by itself).
+#[tauri::command]
+pub async fn reconnect_bluetooth_midi(app: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        pair_bluetooth_midi(app).await
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        crate::midi::bluetooth::reopen_remembered(&app);
+        Ok(())
+    }
+}
+
 /// Port lists plus whether the selected ports are open or waiting for their
 /// device. Same payload as the `midi:devices_changed` event.
 #[tauri::command(async)]

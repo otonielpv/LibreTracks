@@ -4,6 +4,19 @@
     <!-- MIDI (MidiBridge.kt). required="false" so Play still lists the app on
          devices without android.media.midi; MidiBridge.isAvailable checks. -->
     <uses-feature android:name="android.software.midi" android:required="false" />
+    <!-- Bluetooth LE MIDI pedals (plan mobile-midi, paso 06). Asked at run time
+         only when the user presses "Search Bluetooth devices" in Settings > MIDI.
+         Android 12+: SCAN (neverForLocation: we only look for the MIDI service
+         UUID, never derive location) + CONNECT. Android 11 and older: BLE scans
+         need location; BLUETOOTH/BLUETOOTH_ADMIN are install-time there. -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
     <!-- Foreground media service: keeps the AAudio stream alive with the
          screen off / app backgrounded. MEDIA_PLAYBACK type is mandatory on
          API 34+; POST_NOTIFICATIONS lets the pinned notification show on 13+. -->

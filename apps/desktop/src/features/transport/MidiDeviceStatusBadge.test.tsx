@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import "../../shared/i18n";
@@ -8,6 +8,8 @@ import { MidiDeviceStatusBadge } from "./MidiDeviceStatusBadge";
 const api = vi.hoisted(() => ({
   handler: null as ((status: MidiDevicesStatus) => void) | null,
   initial: null as MidiDevicesStatus | null,
+  bluetoothPairing: false,
+  reconnect: vi.fn(async () => {}),
 }));
 
 vi.mock("./desktopApi", async (importOriginal) => {
@@ -16,6 +18,13 @@ vi.mock("./desktopApi", async (importOriginal) => {
     ...actual,
     isTauriApp: true,
     getMidiStatus: vi.fn(async () => api.initial),
+    getMidiCapabilities: vi.fn(async () => ({
+      available: true,
+      bluetoothPairing: api.bluetoothPairing,
+      networkSession: false,
+      virtualPorts: false,
+    })),
+    reconnectBluetoothMidi: api.reconnect,
     listenToMidiDevicesChanged: vi.fn(
       async (handler: (status: MidiDevicesStatus) => void) => {
         api.handler = handler;
@@ -50,6 +59,8 @@ describe("MidiDeviceStatusBadge", () => {
   beforeEach(() => {
     api.handler = null;
     api.initial = status();
+    api.bluetoothPairing = false;
+    api.reconnect.mockClear();
   });
 
   afterEach(() => {
@@ -85,6 +96,22 @@ describe("MidiDeviceStatusBadge", () => {
       api.handler?.(status());
     });
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("offers Reconnect where Bluetooth MIDI pairing exists", async () => {
+    api.bluetoothPairing = true;
+    api.initial = status({ inputs: [], inputConnected: false, inputWaiting: true });
+    render(<MidiDeviceStatusBadge />);
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
+    expect(api.reconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("has no Reconnect button without Bluetooth pairing (desktop)", async () => {
+    api.initial = status({ inputs: [], inputConnected: false, inputWaiting: true });
+    render(<MidiDeviceStatusBadge />);
+    await flush();
+    expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
   });
 
   it("names the output when only the output is missing", async () => {

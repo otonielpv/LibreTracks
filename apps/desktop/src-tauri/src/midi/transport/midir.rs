@@ -144,6 +144,8 @@ impl MidiTransport for MidirTransport {
             // iOS: RTP-MIDI session and our own virtual ports (paso 07).
             network_session: cfg!(target_os = "ios"),
             virtual_ports: cfg!(target_os = "ios"),
+            // iOS: CABTMIDICentralViewController (paso 06).
+            bluetooth_pairing: cfg!(target_os = "ios"),
             ..MidiCapabilities::default()
         }
     }

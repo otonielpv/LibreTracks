@@ -1286,6 +1286,22 @@ const es = {
       virtualPort: "Publicar puerto MIDI virtual LibreTracks",
       virtualPortHint:
         "Las demás apps de este dispositivo ven LibreTracks como un dispositivo MIDI: reciben lo que tus pistas MIDI mandan a \"LibreTracks Out\" y pueden disparar los bindings de MIDI Learn por \"LibreTracks In\".",
+      bluetoothSearch: "Buscar dispositivos Bluetooth",
+      bluetoothHint:
+        "Pedaleras y controladores MIDI inalámbricos (Bluetooth LE). Enciende el dispositivo y tenlo cerca.",
+      bluetoothTitle: "Dispositivos MIDI Bluetooth",
+      bluetoothScanning: "Buscando dispositivos MIDI Bluetooth…",
+      bluetoothNoneFound:
+        "No se ha encontrado ningún dispositivo MIDI Bluetooth. Comprueba que está encendido, en modo emparejamiento y cerca del teléfono.",
+      bluetoothConnect: "Conectar",
+      bluetoothConnecting: "Conectando…",
+      bluetoothConnected:
+        "{{name}} está conectado. Elígelo arriba como entrada o salida MIDI; se reconecta cada vez que abres LibreTracks.",
+      bluetoothScanAgain: "Buscar de nuevo",
+      bluetoothPermissionDenied:
+        "LibreTracks necesita el permiso de Bluetooth para encontrar dispositivos MIDI inalámbricos. El MIDI por USB sigue funcionando sin él; puedes concederlo en los ajustes del sistema.",
+      bluetoothOff: "El Bluetooth está apagado. Enciéndelo y vuelve a buscar.",
+      bluetoothFailed: "Error de MIDI Bluetooth: {{error}}",
       networkSession: "Sesión MIDI de red",
       networkSessionHint:
         "Envía y recibe MIDI por Wi-Fi con un Mac (Configuración de Audio MIDI > Red). iOS pedirá acceso a la red local la primera vez.",
@@ -1467,6 +1483,7 @@ const es = {
     deviceRestored: "Salida de audio restablecida",
     midiInputWaiting: "Controlador MIDI desconectado",
     midiOutputWaiting: "Salida MIDI desconectada",
+    midiReconnect: "Reconectar",
     midiWaitingTitle:
       "Falta el dispositivo MIDI seleccionado. Se reconecta solo en cuanto lo vuelvas a enchufar; no hace falta abrir Ajustes.",
   },

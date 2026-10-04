@@ -9,6 +9,7 @@
 //! raw bytes into messages; the dispatcher takes session locks and emits
 //! events, so a slow dispatch never backs up the transport's callback.
 
+pub(crate) mod bluetooth;
 mod dispatch;
 pub mod message;
 pub mod output;

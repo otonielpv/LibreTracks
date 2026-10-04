@@ -12958,3 +12958,22 @@ html.lt-ios body {
   min-width: 44px;
   min-height: 44px;
 }
+
+/* "Reconectar" dentro de la pastilla de MIDI desconectado (plan mobile-midi,
+   paso 06). El hueco de la topbar no recibe toques (`pointer-events: none`)
+   para no tapar nada; el botón los recupera solo para sí. */
+.lt-device-status-action {
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.lt-mobile .lt-device-status-action {
+  min-height: 32px;
+}

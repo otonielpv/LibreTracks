@@ -1,9 +1,22 @@
 package com.libretracks.desktop
 
+import android.Manifest
+import android.bluetooth.BluetoothManager
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.os.Looper
+import android.os.ParcelUuid
+import androidx.activity.ComponentActivity
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import java.util.UUID
 import android.media.midi.MidiDevice
 import android.media.midi.MidiDeviceInfo
 import android.media.midi.MidiInputPort
@@ -306,6 +319,145 @@ object MidiBridge {
       nativeOnDevicesChanged()
     } catch (error: UnsatisfiedLinkError) {
       // Native library not loaded yet; the next change will try again.
+    }
+  }
+
+  // ── Bluetooth LE MIDI (paso 06) ─────────────────────────────────────────
+  //
+  // Unlike iOS, Android only publishes a BLE MIDI device while some app holds
+  // it open through openBluetoothDevice. We hold it here (bleDevices) for as
+  // long as the app runs; from then on it is an ordinary entry in
+  // getDevices() and the USB code path (openInput/openOutput) just works.
+
+  private const val BLE_OPEN_TIMEOUT_MS = 10_000L
+  private const val PERMISSION_TIMEOUT_MS = 120_000L
+  private val MIDI_SERVICE_UUID: UUID = UUID.fromString("03B80E5A-EDE8-4B33-A751-6CE34EC4C700")
+  private val bleDevices = ConcurrentHashMap<String, MidiDevice>()
+  private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
+
+  @JvmStatic
+  fun hasBluetoothLe(ctx: Context): Boolean =
+    try {
+      ctx.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)
+    } catch (error: Throwable) {
+      false
+    }
+
+  private fun blePermissions(): Array<String> =
+    if (Build.VERSION.SDK_INT >= 31) {
+      arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+    } else {
+      arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+  private fun hasBlePermissions(ctx: Context): Boolean =
+    blePermissions().all {
+      ContextCompat.checkSelfPermission(ctx, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+  /**
+   * Ask for the BLE permissions if needed, only when the user pressed the
+   * Bluetooth button (never at startup). Blocks the calling (Rust) thread
+   * until the user answers. 1 = granted, 0 = denied, -1 = could not ask.
+   */
+  @JvmStatic
+  fun ensureBluetoothPermissions(ctx: Context): Int {
+    if (hasBlePermissions(ctx)) return 1
+    val activity = ctx as? ComponentActivity ?: return -1
+    val granted = AtomicReference<Boolean?>(null)
+    val latch = CountDownLatch(1)
+    mainHandler.post {
+      try {
+        var launcher: ActivityResultLauncher<Array<String>>? = null
+        launcher =
+          activity.activityResultRegistry.register(
+            "lt-ble-midi-permissions",
+            ActivityResultContracts.RequestMultiplePermissions(),
+          ) { result ->
+            granted.set(result.values.all { it })
+            launcher?.unregister()
+            latch.countDown()
+          }
+        launcher.launch(blePermissions())
+      } catch (error: Throwable) {
+        Log.w(TAG, "ensureBluetoothPermissions: $error")
+        latch.countDown()
+      }
+    }
+    if (!latch.await(PERMISSION_TIMEOUT_MS, TimeUnit.MILLISECONDS)) return -1
+    return when (granted.get()) {
+      true -> 1
+      false -> 0
+      null -> -1
+    }
+  }
+
+  /**
+   * Scan for BLE MIDI devices (filtered by the MIDI service UUID) for
+   * [timeoutMs]. One line per device: `address \t name`. Empty on any error;
+   * `null` when Bluetooth is switched off, so the UI can say so.
+   */
+  @JvmStatic
+  fun scanBle(ctx: Context, timeoutMs: Int): Array<String>? {
+    return try {
+      val adapter =
+        (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+          ?: return emptyArray()
+      if (!adapter.isEnabled) return null
+      val scanner = adapter.bluetoothLeScanner ?: return null
+      val found = LinkedHashMap<String, String>()
+      val callback =
+        object : ScanCallback() {
+          override fun onScanResult(callbackType: Int, result: ScanResult) {
+            val address = result.device.address ?: return
+            val name =
+              result.scanRecord?.deviceName
+                ?: try {
+                  result.device.name
+                } catch (error: SecurityException) {
+                  null
+                }
+                ?: address
+            synchronized(found) { found[address] = name.replace('\t', ' ') }
+          }
+        }
+      val filters =
+        listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(MIDI_SERVICE_UUID)).build())
+      val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
+      scanner.startScan(filters, settings, callback)
+      Thread.sleep(timeoutMs.toLong())
+      scanner.stopScan(callback)
+      synchronized(found) { found.map { (address, name) -> "$address\t$name" }.toTypedArray() }
+    } catch (error: Throwable) {
+      Log.w(TAG, "scanBle: $error")
+      emptyArray()
+    }
+  }
+
+  /** Connect to a BLE MIDI device and keep it open. Blocks up to 10 s. */
+  @JvmStatic
+  fun openBluetooth(ctx: Context, address: String): Boolean {
+    if (bleDevices.containsKey(address)) return true
+    return try {
+      val manager = manager(ctx) ?: return false
+      val adapter =
+        (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+          ?: return false
+      if (!adapter.isEnabled || !hasBlePermissions(ctx)) return false
+      val device = adapter.getRemoteDevice(address)
+      val opened = AtomicReference<MidiDevice?>(null)
+      val latch = CountDownLatch(1)
+      manager.openBluetoothDevice(device, { midiDevice ->
+        opened.set(midiDevice)
+        latch.countDown()
+      }, handler)
+      if (!latch.await(BLE_OPEN_TIMEOUT_MS, TimeUnit.MILLISECONDS)) return false
+      val midiDevice = opened.get() ?: return false
+      bleDevices[address] = midiDevice
+      true
+    } catch (error: Throwable) {
+      Log.w(TAG, "openBluetooth($address): $error")
+      false
     }
   }
 

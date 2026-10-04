@@ -1920,6 +1920,39 @@ export async function getMidiStatus(): Promise<MidiDevicesStatus> {
   return invokeCommand<MidiDevicesStatus>("get_midi_status");
 }
 
+/** A Bluetooth LE MIDI device found by an Android scan. */
+export type BluetoothMidiDevice = { address: string; name: string };
+
+/**
+ * Error codes the Bluetooth MIDI commands reject with, for a clear message.
+ * Anything else is an unexpected error string.
+ */
+export const BLUETOOTH_MIDI_ERRORS = {
+  permissionDenied: "bluetooth_permission_denied",
+  bluetoothOff: "bluetooth_off",
+  unsupported: "bluetooth_unsupported",
+} as const;
+
+/** Android: scan ~10 s for BLE MIDI devices (asks for permissions first). */
+export async function scanBluetoothMidi(): Promise<BluetoothMidiDevice[]> {
+  return invokeCommand<BluetoothMidiDevice[]>("scan_bluetooth_midi");
+}
+
+/** Android: connect to a scanned device; it is reopened on every launch. */
+export async function connectBluetoothMidi(address: string): Promise<void> {
+  return invokeCommand<void>("connect_bluetooth_midi", { address });
+}
+
+/** iOS: the system Bluetooth MIDI pairing panel. Resolves when it closes. */
+export async function pairBluetoothMidi(): Promise<void> {
+  return invokeCommand<void>("pair_bluetooth_midi");
+}
+
+/** "Reconnect": Android reopens remembered devices, iOS shows the panel. */
+export async function reconnectBluetoothMidi(): Promise<void> {
+  return invokeCommand<void>("reconnect_bluetooth_midi");
+}
+
 /** Fired when MIDI devices appear or disappear (hot-plug, reconnection). */
 export async function listenToMidiDevicesChanged(
   handler: (status: MidiDevicesStatus) => void,

@@ -1199,6 +1199,8 @@ export type AppSettings = {
   midiNetworkSession: boolean;
   /** Publish "LibreTracks In"/"LibreTracks Out" for other apps on the device. */
   midiVirtualPort: boolean;
+  /** Android: BLE MIDI devices to reopen at startup (by address). */
+  bluetoothMidiDevices: string[];
   enabledOutputChannels: number[];
   locale: string | null;
   metronomeEnabled: boolean;
@@ -1332,6 +1334,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   suppressMissingMidiDeviceWarning: false,
   midiNetworkSession: false,
   midiVirtualPort: false,
+  bluetoothMidiDevices: [],
   enabledOutputChannels: [0, 1],
   locale: null,
   metronomeEnabled: false,
@@ -1547,6 +1550,11 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     ),
     midiNetworkSession: Boolean(settings.midiNetworkSession),
     midiVirtualPort: Boolean(settings.midiVirtualPort),
+    bluetoothMidiDevices: Array.isArray(settings.bluetoothMidiDevices)
+      ? settings.bluetoothMidiDevices.filter(
+          (address): address is string => typeof address === "string",
+        )
+      : [],
     enabledOutputChannels: enabledOutputChannels.length
       ? enabledOutputChannels
       : DEFAULT_APP_SETTINGS.enabledOutputChannels,

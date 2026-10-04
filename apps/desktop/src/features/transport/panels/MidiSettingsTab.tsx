@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { AppSettings } from "@libretracks/shared/models";
 
-import { isMobileApp } from "../desktopApi";
+import { isIOSApp, isMobileApp, pairBluetoothMidi } from "../desktopApi";
 import { useMidiCapabilities } from "../hooks/useMidiCapabilities";
+import { BluetoothMidiModal } from "./BluetoothMidiModal";
 
 /**
  * The Settings modal's MIDI tab: input port (for MIDI learn) and output port
@@ -80,6 +82,24 @@ export function MidiSettingsTab({
   } = midiOutput;
   const { t } = useTranslation();
   const capabilities = useMidiCapabilities();
+  const [isBluetoothOpen, setIsBluetoothOpen] = useState(false);
+  const [bluetoothError, setBluetoothError] = useState<string | null>(null);
+
+  // iOS has a system pairing panel; Android gets our own scan modal.
+  const openBluetooth = () => {
+    if (!isIOSApp) {
+      setIsBluetoothOpen(true);
+      return;
+    }
+    setBluetoothError(null);
+    void pairBluetoothMidi().catch((error: unknown) => {
+      setBluetoothError(
+        t("transport.midi.bluetoothFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    });
+  };
 
   return (
     <section
@@ -95,6 +115,28 @@ export function MidiSettingsTab({
           <p className="lt-midi-empty-help" role="note">
             {t("transport.midi.noDevicesMobile")}
           </p>
+        ) : null}
+        {capabilities?.bluetoothPairing ? (
+          <div className="lt-settings-field">
+            <button
+              type="button"
+              className="lt-ghost-button lt-midi-test-note"
+              disabled={isLoading || isSaving}
+              onClick={openBluetooth}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">
+                bluetooth_searching
+              </span>
+              {t("transport.midi.bluetoothSearch")}
+            </button>
+            <small>{t("transport.midi.bluetoothHint")}</small>
+            {bluetoothError ? (
+              <small role="alert">{bluetoothError}</small>
+            ) : null}
+          </div>
+        ) : null}
+        {isBluetoothOpen ? (
+          <BluetoothMidiModal onClose={() => setIsBluetoothOpen(false)} />
         ) : null}
         <div className="lt-settings-field">
           <label

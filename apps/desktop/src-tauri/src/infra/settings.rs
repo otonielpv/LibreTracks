@@ -195,6 +195,12 @@ pub struct AppSettings {
     /// device (iOS paso 07, Android paso 10). Off by default.
     #[serde(default)]
     pub midi_virtual_port: bool,
+    /// Android: addresses of the Bluetooth LE MIDI devices the user connected
+    /// (plan mobile-midi, paso 06). Android only publishes a BLE MIDI device
+    /// while an app holds it open, so they are reopened at startup and when
+    /// the app comes back to the foreground. iOS remembers pairings itself.
+    #[serde(default)]
+    pub bluetooth_midi_devices: Vec<String>,
     #[serde(default = "default_enabled_output_channels")]
     pub enabled_output_channels: Vec<usize>,
     #[serde(default)]
@@ -392,6 +398,7 @@ impl Default for AppSettings {
             suppress_missing_midi_device_warning: false,
             midi_network_session: false,
             midi_virtual_port: false,
+            bluetooth_midi_devices: Vec::new(),
             enabled_output_channels: default_enabled_output_channels(),
             locale: None,
             metronome_enabled: false,

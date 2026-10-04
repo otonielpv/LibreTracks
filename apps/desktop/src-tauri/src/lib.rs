@@ -317,6 +317,8 @@ pub fn run() {
             // Hot-plug: reopen selected MIDI ports when their device comes
             // back (plan mobile-midi, paso 04).
             midi::watch::init(app.handle());
+            // Android: BLE MIDI pedals are only published while held open.
+            midi::bluetooth::reopen_remembered(app.handle());
             remote::initialize_remote(app)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
 
@@ -342,6 +344,10 @@ pub fn run() {
             commands::system::get_midi_outputs,
             commands::system::get_midi_capabilities,
             commands::system::get_midi_status,
+            commands::system::scan_bluetooth_midi,
+            commands::system::connect_bluetooth_midi,
+            commands::system::pair_bluetooth_midi,
+            commands::system::reconnect_bluetooth_midi,
             commands::system::send_midi_test_note,
             commands::transport::get_transport_snapshot,
             commands::settings::get_settings,

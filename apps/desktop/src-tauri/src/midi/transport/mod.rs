@@ -14,7 +14,7 @@ use std::sync::{Arc, OnceLock};
 use serde::Serialize;
 
 #[cfg(target_os = "android")]
-mod android;
+pub(crate) mod android;
 #[cfg(any(target_os = "android", test))]
 mod android_ports;
 #[cfg(target_os = "ios")]

@@ -595,7 +595,7 @@ fn dispatch_midi_parameter(
     apply_midi_settings_update(app, settings_store, next_settings)
 }
 
-fn apply_midi_settings_update(
+pub(crate) fn apply_midi_settings_update(
     app: &AppHandle,
     settings_store: &AppSettingsStore,
     next_settings: AppSettings,

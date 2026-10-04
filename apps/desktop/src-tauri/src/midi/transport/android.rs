@@ -353,6 +353,8 @@ impl MidiTransport for AndroidTransport {
             available,
             // Paso 10: LtVirtualMidiService, wherever android.media.midi exists.
             virtual_ports: available,
+            // Paso 06: our own scan + MidiManager.openBluetoothDevice.
+            bluetooth_pairing: available && has_bluetooth_le(),
             ..MidiCapabilities::default()
         }
     }
@@ -389,6 +391,91 @@ impl MidiTransport for AndroidTransport {
         })
         .unwrap_or(false)
     }
+}
+
+// ── Bluetooth LE MIDI (paso 06), through MidiBridge ─────────────────────
+
+/// The device has Bluetooth LE at all.
+pub(crate) fn has_bluetooth_le() -> bool {
+    with_bridge(|env, context, class| {
+        env.call_static_method(
+            class,
+            "hasBluetoothLe",
+            "(Landroid/content/Context;)Z",
+            &[JValue::Object(context)],
+        )?
+        .z()
+    })
+    .unwrap_or(false)
+}
+
+/// Ask for the BLE permissions if missing; blocks until the user answers.
+/// `Ok(true)` granted, `Ok(false)` denied.
+pub(crate) fn ensure_bluetooth_permissions() -> Result<bool, String> {
+    let answer = with_bridge(|env, context, class| {
+        env.call_static_method(
+            class,
+            "ensureBluetoothPermissions",
+            "(Landroid/content/Context;)I",
+            &[JValue::Object(context)],
+        )?
+        .i()
+    })?;
+    match answer {
+        1 => Ok(true),
+        0 => Ok(false),
+        _ => Err("could not ask for the Bluetooth permissions".into()),
+    }
+}
+
+/// Scan for BLE MIDI devices. `Ok(None)` = Bluetooth is switched off.
+pub(crate) fn scan_bluetooth(timeout_ms: i32) -> Result<Option<Vec<(String, String)>>, String> {
+    let lines = with_bridge(|env, context, class| {
+        let array = env
+            .call_static_method(
+                class,
+                "scanBle",
+                "(Landroid/content/Context;I)[Ljava/lang/String;",
+                &[JValue::Object(context), JValue::Int(timeout_ms)],
+            )?
+            .l()?;
+        if array.is_null() {
+            return Ok(None);
+        }
+        let array = JObjectArray::from(array);
+        let len = env.get_array_length(&array)?;
+        let mut lines = Vec::with_capacity(len as usize);
+        for i in 0..len {
+            let item = env.get_object_array_element(&array, i)?;
+            let text: String = env.get_string(&JString::from(item))?.into();
+            lines.push(text);
+        }
+        Ok(Some(lines))
+    })?;
+    Ok(lines.map(|lines| {
+        lines
+            .iter()
+            .filter_map(|line| {
+                let (address, name) = line.split_once('\t')?;
+                Some((address.to_string(), name.to_string()))
+            })
+            .collect()
+    }))
+}
+
+/// Connect to a BLE MIDI device and keep it open (Android only publishes it
+/// while some app holds it). Blocks up to 10 s.
+pub(crate) fn open_bluetooth(address: &str) -> Result<bool, String> {
+    with_bridge(|env, context, class| {
+        let address = env.new_string(address)?;
+        env.call_static_method(
+            class,
+            "openBluetooth",
+            "(Landroid/content/Context;Ljava/lang/String;)Z",
+            &[JValue::Object(context), JValue::Object(&address)],
+        )?
+        .z()
+    })
 }
 
 /// Hot-plug callback registered by `watch`.

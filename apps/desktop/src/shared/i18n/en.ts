@@ -1255,6 +1255,22 @@ const en = {
       virtualPort: "Publish LibreTracks virtual MIDI port",
       virtualPortHint:
         "Other apps on this device see LibreTracks as a MIDI device: they receive what your MIDI tracks send to \"LibreTracks Out\" and can trigger MIDI Learn bindings through \"LibreTracks In\".",
+      bluetoothSearch: "Search Bluetooth devices",
+      bluetoothHint:
+        "Wireless MIDI pedals and controllers (Bluetooth LE). Switch the device on and keep it close.",
+      bluetoothTitle: "Bluetooth MIDI devices",
+      bluetoothScanning: "Searching for Bluetooth MIDI devices…",
+      bluetoothNoneFound:
+        "No Bluetooth MIDI device found. Check it is on, in pairing mode and close to the phone.",
+      bluetoothConnect: "Connect",
+      bluetoothConnecting: "Connecting…",
+      bluetoothConnected:
+        "{{name}} is connected. Choose it as the MIDI input or output above; it reconnects every time you open LibreTracks.",
+      bluetoothScanAgain: "Search again",
+      bluetoothPermissionDenied:
+        "LibreTracks needs the Bluetooth permission to find wireless MIDI devices. USB MIDI keeps working without it; you can allow it in the system settings.",
+      bluetoothOff: "Bluetooth is off. Switch it on and search again.",
+      bluetoothFailed: "Bluetooth MIDI failed: {{error}}",
       networkSession: "Network MIDI session",
       networkSessionHint:
         "Send and receive MIDI over Wi-Fi with a Mac (Audio MIDI Setup > Network). iOS will ask for local network access the first time.",
@@ -1436,6 +1452,7 @@ const en = {
     deviceRestored: "Audio output restored",
     midiInputWaiting: "MIDI controller disconnected",
     midiOutputWaiting: "MIDI output disconnected",
+    midiReconnect: "Reconnect",
     midiWaitingTitle:
       "The selected MIDI device is missing. It reconnects by itself as soon as you plug it back in; no need to open Settings.",
   },

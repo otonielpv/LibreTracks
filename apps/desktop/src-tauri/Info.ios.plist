@@ -26,6 +26,10 @@
        local cuando el usuario activa "Sesion MIDI de red" en Ajustes > MIDI
        (MIDINetworkSession), nunca al arrancar. App Review exige un texto que
        diga para que se usa: ver las notas para el revisor del paso 09. -->
+  <!-- Bluetooth LE MIDI (paso 06): CABTMIDICentralViewController, abierto solo
+       desde "Buscar dispositivos Bluetooth" en Ajustes > MIDI. -->
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>LibreTracks uses Bluetooth to connect wireless MIDI pedals and controllers, so you can start songs and jump between sections from a foot switch.</string>
   <key>NSLocalNetworkUsageDescription</key>
   <string>LibreTracks uses the local network to send and receive MIDI over Wi-Fi with a computer or another device (network MIDI session), for example to drive lights or lyrics from your show.</string>
   <key>UISupportedInterfaceOrientations</key>

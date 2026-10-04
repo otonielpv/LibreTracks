@@ -1,3 +1,4 @@
+import CoreAudioKit
 import Foundation
 import ObjectiveC.runtime
 import Security
@@ -325,6 +326,55 @@ final class IosFolderPickerPlugin: Plugin {
     }
   }
 
+  // MARK: - Bluetooth LE MIDI (plan mobile-midi, paso 06)
+  //
+  // iOS ships the pairing UI: CABTMIDICentralViewController lists BLE MIDI
+  // devices and connects the one the user taps. Once connected, CoreMIDI
+  // publishes it as one more endpoint, so midir lists it with no further
+  // work. Resolves when the user closes the panel (Done or swipe down), so
+  // Rust can re-list ports right then.
+
+  private var bluetoothMidiInvoke: Invoke?
+  private var bluetoothMidiNavigation: UINavigationController?
+
+  @objc public func presentBluetoothMidi(_ invoke: Invoke) throws {
+    DispatchQueue.main.async {
+      if self.bluetoothMidiNavigation != nil {
+        invoke.resolve()
+        return
+      }
+      let central = CABTMIDICentralViewController()
+      central.navigationItem.rightBarButtonItem = UIBarButtonItem(
+        barButtonSystemItem: .done,
+        target: self,
+        action: #selector(self.closeBluetoothMidi))
+      let navigation = UINavigationController(rootViewController: central)
+      navigation.modalPresentationStyle = .formSheet
+      navigation.presentationController?.delegate = self
+
+      guard let presenter = self.activeViewController() else {
+        invoke.reject("No se pudo abrir el panel de Bluetooth MIDI")
+        return
+      }
+      self.bluetoothMidiInvoke = invoke
+      self.bluetoothMidiNavigation = navigation
+      presenter.present(navigation, animated: true)
+    }
+  }
+
+  @objc private func closeBluetoothMidi() {
+    let navigation = bluetoothMidiNavigation
+    navigation?.dismiss(animated: true) {
+      self.finishBluetoothMidi()
+    }
+  }
+
+  fileprivate func finishBluetoothMidi() {
+    bluetoothMidiInvoke?.resolve()
+    bluetoothMidiInvoke = nil
+    bluetoothMidiNavigation = nil
+  }
+
   /// Tauri normally exposes the webview controller through the plugin manager,
   /// but it can still be detached while iOS is completing an orientation or
   /// keyboard transition. Resolve the active scene as a fallback instead of
@@ -462,6 +512,13 @@ final class IosFolderPickerPlugin: Plugin {
       NSLog("[LibreTracks picker] log write failed: %@", error.localizedDescription)
     }
     NSLog("[LibreTracks picker] %@", message)
+  }
+}
+
+// Swipe-down dismissal of the Bluetooth MIDI panel: resolve like Done.
+extension IosFolderPickerPlugin: UIAdaptivePresentationControllerDelegate {
+  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+    finishBluetoothMidi()
   }
 }
 

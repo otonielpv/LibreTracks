@@ -174,6 +174,20 @@ pub async fn export_file<R: Runtime>(
     .map_err(|error| format!("iOS diagnostics export worker failed: {error}"))?
 }
 
+/// Show iOS' Bluetooth MIDI pairing panel (`CABTMIDICentralViewController`)
+/// and wait until the user closes it. Same main-queue rule as the pickers:
+/// the wait runs on a blocking worker, never on Tauri's main thread.
+pub async fn present_bluetooth_midi<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<IosFolderPicker<R>>()
+            .0
+            .run_mobile_plugin::<()>("presentBluetoothMidi", ())
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("iOS Bluetooth MIDI worker failed: {error}"))?
+}
+
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("libretracks-ios-folder-picker")
         .setup(|app, api| {
