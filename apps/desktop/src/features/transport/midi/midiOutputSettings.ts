@@ -31,6 +31,7 @@ export function buildMidiOutputSettings(
     platform: {
       networkSession: appSettings.midiNetworkSession,
       virtualPort: appSettings.midiVirtualPort,
+      keepInBackground: appSettings.keepMidiInBackground,
       onChange: onPlatformChange,
     },
   };

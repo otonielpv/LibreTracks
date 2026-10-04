@@ -25,6 +25,8 @@ pub extern "C" fn Java_com_libretracks_desktop_MainActivity_nativeOnAppVisibilit
     visible: u8,
 ) {
     APP_IN_BACKGROUND.store(visible == 0, Ordering::Relaxed);
+    // MIDI: All Notes Off when leaving idle, revalidate ports on return.
+    crate::midi::lifecycle::visibility_changed(visible != 0);
     eprintln!(
         "[LT_VISIBILITY] app {}",
         if visible != 0 { "visible" } else { "in background" }

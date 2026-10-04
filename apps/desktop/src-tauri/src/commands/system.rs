@@ -285,6 +285,11 @@ pub fn take_audio_idle_wake(state: State<'_, DesktopState>) -> bool {
 #[tauri::command(async)]
 pub fn set_app_hidden(state: State<'_, DesktopState>, hidden: bool) {
     state.audio.set_app_hidden(hidden);
+    // iOS learns about the background from the WebView; Android hears it from
+    // the activity (platform/android_visibility.rs). Desktop windows don't
+    // get suspended, so MIDI is left alone there.
+    #[cfg(target_os = "ios")]
+    crate::midi::lifecycle::visibility_changed(!hidden);
 }
 
 /// The "Resume" button of that prompt: reopen the output device from scratch.

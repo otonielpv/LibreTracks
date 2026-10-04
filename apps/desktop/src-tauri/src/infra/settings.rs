@@ -124,6 +124,10 @@ fn default_reference_imported_audio() -> bool {
     true
 }
 
+fn default_keep_midi_in_background() -> bool {
+    true
+}
+
 fn default_auto_save_enabled() -> bool {
     true
 }
@@ -201,6 +205,12 @@ pub struct AppSettings {
     /// the app comes back to the foreground. iOS remembers pairings itself.
     #[serde(default)]
     pub bluetooth_midi_devices: Vec<String>,
+    /// Android: with the app in the background and the transport stopped, keep
+    /// the MIDI input open so a pedal can still start the show with the screen
+    /// off (plan mobile-midi, paso 08). On by default; off closes the input
+    /// until the app returns.
+    #[serde(default = "default_keep_midi_in_background")]
+    pub keep_midi_in_background: bool,
     #[serde(default = "default_enabled_output_channels")]
     pub enabled_output_channels: Vec<usize>,
     #[serde(default)]
@@ -399,6 +409,7 @@ impl Default for AppSettings {
             midi_network_session: false,
             midi_virtual_port: false,
             bluetooth_midi_devices: Vec::new(),
+            keep_midi_in_background: default_keep_midi_in_background(),
             enabled_output_channels: default_enabled_output_channels(),
             locale: None,
             metronome_enabled: false,

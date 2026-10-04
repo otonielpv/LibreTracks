@@ -224,6 +224,43 @@ fn a_per_track_port_that_failed_is_retried_when_it_appears() {
 }
 
 #[test]
+fn a_suspended_input_stays_closed_until_revalidated() {
+    let transport = Arc::new(FakeTransport::default());
+    transport.set_inputs(&["Pedal"]);
+    let manager = MidiManager::with_transport(transport.clone());
+    manager.select(noop_dispatch(), Some("Pedal".into())).unwrap();
+
+    // Background with "keep MIDI active" off.
+    assert!(manager.suspend());
+    assert_eq!(transport.inputs_open.load(Ordering::SeqCst), 0);
+    assert!(!manager.is_waiting(), "suspended is not waiting: no badge");
+    assert!(!manager.wants_port(), "and nothing polls");
+    assert!(!manager.on_devices_changed(&names(&transport, true)));
+    assert_eq!(transport.input_opens.load(Ordering::SeqCst), 1);
+
+    // Foreground: revalidate, then the next check reopens it once.
+    manager.revalidate();
+    assert!(manager.on_devices_changed(&names(&transport, true)));
+    assert!(!manager.on_devices_changed(&names(&transport, true)));
+    assert_eq!(transport.input_opens.load(Ordering::SeqCst), 2);
+    assert_eq!(transport.inputs_open.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn revalidating_reopens_a_listener_that_looked_open() {
+    let transport = Arc::new(FakeTransport::default());
+    transport.set_inputs(&["Pedal"]);
+    let manager = MidiManager::with_transport(transport.clone());
+    manager.select(noop_dispatch(), Some("Pedal".into())).unwrap();
+
+    manager.revalidate();
+    assert_eq!(transport.inputs_open.load(Ordering::SeqCst), 0);
+    assert!(manager.on_devices_changed(&names(&transport, true)));
+    assert_eq!(transport.input_opens.load(Ordering::SeqCst), 2);
+    assert_eq!(transport.inputs_open.load(Ordering::SeqCst), 1);
+}
+
+#[test]
 fn without_a_backend_nothing_opens_and_nothing_is_watched() {
     let transport = Arc::new(super::transport::null::NullTransport);
     let manager = MidiManager::with_transport(transport.clone());

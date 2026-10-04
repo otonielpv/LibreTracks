@@ -3,7 +3,12 @@ import { useTranslation } from "react-i18next";
 
 import type { AppSettings } from "@libretracks/shared/models";
 
-import { isIOSApp, isMobileApp, pairBluetoothMidi } from "../desktopApi";
+import {
+  isAndroidApp,
+  isIOSApp,
+  isMobileApp,
+  pairBluetoothMidi,
+} from "../desktopApi";
 import { useMidiCapabilities } from "../hooks/useMidiCapabilities";
 import { BluetoothMidiModal } from "./BluetoothMidiModal";
 
@@ -51,12 +56,16 @@ export type MidiOutputSettings = {
 };
 
 export type MidiPlatformPatch = Partial<
-  Pick<AppSettings, "midiNetworkSession" | "midiVirtualPort">
+  Pick<
+    AppSettings,
+    "midiNetworkSession" | "midiVirtualPort" | "keepMidiInBackground"
+  >
 >;
 
 export type MidiPlatformSettings = {
   networkSession: boolean;
   virtualPort: boolean;
+  keepInBackground: boolean;
   onChange: (patch: MidiPlatformPatch) => void;
 };
 
@@ -276,6 +285,27 @@ export function MidiSettingsTab({
             <span className="lt-settings-toggle-copy">
               <span>{t("transport.midi.virtualPort")}</span>
               <small>{t("transport.midi.virtualPortHint")}</small>
+            </span>
+          </label>
+        ) : null}
+
+        {/* Android keeps the process alive in the background (foreground
+            service), so a pedal can play with the screen off; this lets the
+            user opt out to save battery (paso 08). iOS suspends a paused app
+            anyway, so there is nothing to choose there. */}
+        {isAndroidApp && capabilities?.available ? (
+          <label className="lt-settings-toggle">
+            <input
+              type="checkbox"
+              checked={platform.keepInBackground}
+              disabled={isLoading || isSaving}
+              onChange={(event) =>
+                platform.onChange({ keepMidiInBackground: event.target.checked })
+              }
+            />
+            <span className="lt-settings-toggle-copy">
+              <span>{t("transport.midi.keepInBackground")}</span>
+              <small>{t("transport.midi.keepInBackgroundHint")}</small>
             </span>
           </label>
         ) : null}

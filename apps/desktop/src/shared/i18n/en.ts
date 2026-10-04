@@ -1271,6 +1271,9 @@ const en = {
         "LibreTracks needs the Bluetooth permission to find wireless MIDI devices. USB MIDI keeps working without it; you can allow it in the system settings.",
       bluetoothOff: "Bluetooth is off. Switch it on and search again.",
       bluetoothFailed: "Bluetooth MIDI failed: {{error}}",
+      keepInBackground: "Keep MIDI active in the background",
+      keepInBackgroundHint:
+        "A pedal can start the show with the screen off or another app open. Turn it off to save battery: the MIDI input then closes while LibreTracks is in the background and stopped.",
       networkSession: "Network MIDI session",
       networkSessionHint:
         "Send and receive MIDI over Wi-Fi with a Mac (Audio MIDI Setup > Network). iOS will ask for local network access the first time.",

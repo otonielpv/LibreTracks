@@ -1201,6 +1201,8 @@ export type AppSettings = {
   midiVirtualPort: boolean;
   /** Android: BLE MIDI devices to reopen at startup (by address). */
   bluetoothMidiDevices: string[];
+  /** Android: keep the MIDI input open in the background (default on). */
+  keepMidiInBackground: boolean;
   enabledOutputChannels: number[];
   locale: string | null;
   metronomeEnabled: boolean;
@@ -1335,6 +1337,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   midiNetworkSession: false,
   midiVirtualPort: false,
   bluetoothMidiDevices: [],
+  keepMidiInBackground: true,
   enabledOutputChannels: [0, 1],
   locale: null,
   metronomeEnabled: false,
@@ -1555,6 +1558,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
           (address): address is string => typeof address === "string",
         )
       : [],
+    keepMidiInBackground: settings.keepMidiInBackground !== false,
     enabledOutputChannels: enabledOutputChannels.length
       ? enabledOutputChannels
       : DEFAULT_APP_SETTINGS.enabledOutputChannels,

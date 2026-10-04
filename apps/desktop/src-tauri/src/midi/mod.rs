@@ -11,6 +11,8 @@
 
 pub(crate) mod bluetooth;
 mod dispatch;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub(crate) mod lifecycle;
 pub mod message;
 pub mod output;
 #[cfg(test)]
@@ -59,6 +61,10 @@ struct InputState {
     /// the port to (re)appear.
     active: Option<MidiListenerHandle>,
     dispatch: Option<DispatchFn>,
+    /// Closed on purpose while the app is in the background (paso 08, with
+    /// "Keep MIDI active in the background" off). Not waiting: nothing
+    /// reopens it until `revalidate`.
+    suspended: bool,
 }
 
 pub struct MidiManager {
@@ -114,6 +120,8 @@ impl MidiManager {
         if state.active.is_some() && state.desired == normalized_device {
             return Ok(());
         }
+        // The user is choosing a port, so the app is in the foreground.
+        state.suspended = false;
 
         if let Some(listener) = state.active.take() {
             stop_listener(listener);
@@ -143,6 +151,10 @@ impl MidiManager {
             return false;
         };
         let present = inputs.iter().any(|input| *input == name);
+
+        if state.suspended {
+            return false;
+        }
 
         if !present {
             return match state.active.take() {
@@ -186,16 +198,48 @@ impl MidiManager {
     pub(crate) fn is_waiting(&self) -> bool {
         self.state
             .lock()
-            .map(|state| state.desired.is_some() && state.active.is_none())
+            .map(|state| state.desired.is_some() && state.active.is_none() && !state.suspended)
             .unwrap_or(false)
     }
 
-    /// Whether the watcher has anything to do for inputs.
+    /// Whether the watcher has anything to do for inputs. A suspended input
+    /// is not watched: no polling while the app sleeps in the background.
     pub(crate) fn wants_port(&self) -> bool {
         self.state
             .lock()
-            .map(|state| state.desired.is_some())
+            .map(|state| state.desired.is_some() && !state.suspended)
             .unwrap_or(false)
+    }
+
+    /// Close the input for a stay in the background, keeping the selection.
+    /// Returns true when a listener was open.
+    pub(crate) fn suspend(&self) -> bool {
+        let Ok(mut state) = self.state.lock() else {
+            return false;
+        };
+        state.suspended = true;
+        match state.active.take() {
+            Some(listener) => {
+                stop_listener(listener);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Back in the foreground: end any suspension and drop the open listener,
+    /// so the next device check reopens it from scratch. After minutes in the
+    /// background a connection can look open and be dead (a BLE link the
+    /// system dropped, a CoreMIDI client iOS invalidated); reopening costs a
+    /// few milliseconds and rules that out.
+    pub(crate) fn revalidate(&self) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        state.suspended = false;
+        if let Some(listener) = state.active.take() {
+            stop_listener(listener);
+        }
     }
 }
 

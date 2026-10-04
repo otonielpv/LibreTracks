@@ -35,7 +35,12 @@ function renderTab(onChange = vi.fn()) {
     onChange: () => {},
     onRefresh: () => {},
     onSendTestNote: () => {},
-    platform: { networkSession: false, virtualPort: false, onChange },
+    platform: {
+      networkSession: false,
+      virtualPort: false,
+      keepInBackground: true,
+      onChange,
+    },
   };
   render(
     <MidiSettingsTab

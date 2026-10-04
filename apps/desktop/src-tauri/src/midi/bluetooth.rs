@@ -169,7 +169,10 @@ mod tests {
         old.as_object_mut().unwrap().remove("bluetoothMidiDevices");
         old.as_object_mut().unwrap().remove("midiVirtualPort");
         old.as_object_mut().unwrap().remove("midiNetworkSession");
+        old.as_object_mut().unwrap().remove("keepMidiInBackground");
         let loaded: AppSettings = serde_json::from_value(old).unwrap();
+        // Paso 08: on unless the user turned it off.
+        assert!(loaded.keep_midi_in_background);
         assert!(loaded.bluetooth_midi_devices.is_empty());
         assert!(!loaded.midi_virtual_port);
         assert!(!loaded.midi_network_session);

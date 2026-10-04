@@ -56,6 +56,12 @@ pub struct MidiDevicesStatus {
     pub output_waiting: bool,
 }
 
+/// The app, once `init` ran (`None` before, and in unit tests).
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub(crate) fn app_handle() -> Option<AppHandle> {
+    APP.get().cloned()
+}
+
 /// Start watching. Called once from app setup, after the ports were opened.
 pub(crate) fn init(app: &AppHandle) {
     if APP.set(app.clone()).is_err() {

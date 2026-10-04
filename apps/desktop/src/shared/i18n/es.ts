@@ -1302,6 +1302,9 @@ const es = {
         "LibreTracks necesita el permiso de Bluetooth para encontrar dispositivos MIDI inalámbricos. El MIDI por USB sigue funcionando sin él; puedes concederlo en los ajustes del sistema.",
       bluetoothOff: "El Bluetooth está apagado. Enciéndelo y vuelve a buscar.",
       bluetoothFailed: "Error de MIDI Bluetooth: {{error}}",
+      keepInBackground: "Mantener MIDI activo en segundo plano",
+      keepInBackgroundHint:
+        "Un pedal puede arrancar el show con la pantalla apagada o con otra app abierta. Desactívalo para ahorrar batería: la entrada MIDI se cierra mientras LibreTracks está en segundo plano y parado.",
       networkSession: "Sesión MIDI de red",
       networkSessionHint:
         "Envía y recibe MIDI por Wi-Fi con un Mac (Configuración de Audio MIDI > Red). iOS pedirá acceso a la red local la primera vez.",

@@ -413,6 +413,7 @@ function buildInitialState(): DesktopApiMockState {
       midiNetworkSession: false,
       midiVirtualPort: false,
       bluetoothMidiDevices: [],
+      keepMidiInBackground: true,
       enabledOutputChannels: [0, 1],
       locale: "en",
       metronomeEnabled: false,
