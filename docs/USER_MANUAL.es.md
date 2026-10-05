@@ -264,7 +264,7 @@ Si armas la sección equivocada, pulsa `Esc` inmediatamente. Si no existe una ma
 
 LibreTracks puede proyectar vídeos (letras, fondos, clips) sincronizados con el audio en una segunda pantalla: un proyector o una TV. El audio manda: el vídeo sigue al transporte, a los saltos, a los vamps y al warp, nunca al revés.
 
-> Solo en escritorio. En Windows y en macOS (12 o posterior) funciona tal cual: la app trae lo necesario. En Linux hace falta tener instalado `libmpv` (paquete `libmpv2` o `mpv-libs` según la distribución). En Android e iOS las sesiones con vídeo se abren y suenan, pero el vídeo no se reproduce ni se puede editar.
+> En Windows y en macOS (12 o posterior) funciona tal cual: la app trae lo necesario. En Linux hace falta tener instalado `libmpv` (paquete `libmpv2` o `mpv-libs` según la distribución). En iPhone, iPad y Android también: ver [Vídeo en iPhone, iPad y Android](#vídeo-en-iphone-ipad-y-android).
 
 ### Añadir vídeo
 
@@ -313,7 +313,40 @@ Al exportar una canción (`.ltpkg`) o la sesión (`.ltset`) con vídeos, el diá
 - Desmarcada, o en modo Ligero: los vídeos no viajan; en otro equipo aparecen como archivos que faltan y se reubican.
 - Si subes la sesión a la nube y los vídeos pasan de 500 MB, la casilla empieza desmarcada.
 
-Al importar en Android o iOS los vídeos no se extraen (no se pueden reproducir allí), pero los clips se conservan: si la sesión vuelve a escritorio, se reubican los vídeos.
+Al importar en Android o iOS un paquete con vídeos, LibreTracks pregunta antes si traerlos, diciendo cuánto ocupan y cuánto espacio libre queda (ver la sección siguiente).
+
+### Vídeo en iPhone, iPad y Android
+
+El móvil o la tablet manda el audio **y** el vídeo: el proyector muestra solo el vídeo a pantalla completa y en el móvil sigues con LibreTracks, igual que con la ventana de vídeo del ordenador.
+
+**Cómo conectar el proyector**
+
+| Dispositivo | Qué necesitas |
+| --- | --- |
+| iPhone 15 o posterior, iPad con USB-C | Cable USB-C a HDMI |
+| iPhone con Lightning (hasta el 14) | Adaptador Lightning Digital AV de Apple + cable HDMI |
+| iPhone o iPad sin cable | AirPlay hacia un Apple TV o una TV compatible, con `Duplicar pantalla` (experimental: ver abajo) |
+| Android | Un móvil con salida de vídeo por USB-C (DisplayPort) y un cable USB-C a HDMI |
+
+- **Android: no todos los móviles sacan imagen.** Suelen tenerla los Samsung de gama media-alta, los Pixel 8 o posteriores, la mayoría de tablets recientes y algunos Motorola y Xiaomi. Si al conectar el cable no aparece ninguna pantalla, tu móvil no tiene esa salida y ninguna app puede dársela.
+- **Samsung:** al enchufar puede abrirse DeX. Desactívalo (o elige "Duplicar") para que LibreTracks vea la pantalla.
+- **AirPlay es experimental:** el retardo depende del Wi-Fi y puede variar durante la actuación. Calibra en el sitio (`Ajustes → Vídeo → Calibrar…`) y, para un directo, mejor el cable.
+
+**Lo primero que se hace solo:** al poner el primer vídeo en el timeline se abre un asistente de dos pasos: conecta el proyector (si en 20 segundos no aparece nada, te dice qué revisar) y comprueba que ves la carta de ajuste. Por defecto el vídeo sale por **la primera pantalla externa** que aparezca; en `Ajustes → Vídeo` puedes fijar una concreta si tienes cable y AirPlay a la vez.
+
+**El bloqueo del móvil apaga el proyector.** Mientras la salida de vídeo está activa, LibreTracks evita que el móvil se bloquee solo. Si lo bloqueas tú con el botón (o cambias de app), el sistema deja de mandar imagen: el audio sigue sonando, el indicador de arriba muestra **Proyector apagado** y, al desbloquear, la imagen vuelve ya sincronizada.
+
+**Indicador y negro:** en la barra superior hay dos iconos: el estado de la salida (tócalo para ver la pantalla, los reproductores y los avisos) y el **negro a un toque**, que solo se activa con la salida mostrando algo.
+
+**Tener los vídeos en el móvil**
+
+- **Paquetes `.ltset` / `.ltpkg` y la nube:** si traen vídeos, LibreTracks pregunta "Importar también los vídeos", con lo que ocupan y el espacio libre. Viene marcado si caben dejando 1 GB libre; si no caben, no se puede marcar. Sin ellos la sesión suena igual, los clips se conservan y no aparecen como archivos que faltan. Al bajar una sesión grande de la nube con datos móviles, primero pregunta: mejor con Wi-Fi.
+- **Desde el propio dispositivo:** `Añadir vídeo del dispositivo` en el menú de una pista de vídeo, en el `+` de pistas o en la biblioteca. El vídeo **se copia** a la carpeta de la sesión (para que viaje con ella), después de decirte cuánto ocupa.
+- Un vídeo que el móvil no sabe decodificar (por ejemplo ProRes en Android, o HEVC de 10 bits en un móvil sencillo) aparece como **No reproducible en este dispositivo**: no se borra y sigue sonando su audio si lo extrajiste en el ordenador.
+
+**Editar en el timeline:** igual que los clips de audio en el móvil: toca un clip para seleccionarlo y arrástralo (o sus bordes, o las asas de fundido) ya seleccionado. Extraer el audio de un vídeo solo se puede hacer en el ordenador.
+
+**Gama baja:** algunos móviles solo tienen un decodificador de vídeo. Entonces el indicador dice "Un solo reproductor": los saltos de sección pueden congelar la imagen un instante, pero el audio no se ve afectado.
 
 ## 6. Control Remote Movil
 

@@ -264,7 +264,7 @@ If you arm the wrong section, press `Esc` immediately. If there is no marker for
 
 LibreTracks can project videos (lyrics, backgrounds, clips) in sync with the audio on a second display: a projector or a TV. Audio is the master: the video follows the transport, jumps, vamps and warp, never the other way round.
 
-> Desktop only. On Windows and macOS (12 or later) it works out of the box: the app brings what it needs. On Linux you need `libmpv` installed (package `libmpv2` or `mpv-libs` depending on the distribution). On Android and iOS sessions with video open and play their audio, but video is neither played nor editable.
+> On Windows and macOS (12 or later) it works out of the box: the app brings what it needs. On Linux you need `libmpv` installed (package `libmpv2` or `mpv-libs` depending on the distribution). On iPhone, iPad and Android too: see [Video on iPhone, iPad and Android](#video-on-iphone-ipad-and-android).
 
 ### Adding video
 
@@ -313,7 +313,40 @@ When exporting a song (`.ltpkg`) or the session (`.ltset`) with videos, the dial
 - Unticked, or in Light mode: the videos do not travel; on another machine they show as missing files to relink.
 - When uploading the session to the cloud and the videos exceed 500 MB, the box starts unticked.
 
-Importing on Android or iOS does not extract the videos (they cannot play there), but the clips are kept: if the session goes back to desktop, relink the videos.
+Importing a package with videos on Android or iOS first asks whether to bring them, with their size and the free space left (see the next section).
+
+### Video on iPhone, iPad and Android
+
+The phone or tablet drives the audio **and** the video: the projector shows only the video, full screen, and the phone keeps LibreTracks on its screen, like the video window on a computer.
+
+**Connecting the projector**
+
+| Device | What you need |
+| --- | --- |
+| iPhone 15 or later, iPad with USB-C | USB-C to HDMI cable |
+| iPhone with Lightning (up to the 14) | Apple Lightning Digital AV adapter + HDMI cable |
+| iPhone or iPad without a cable | AirPlay to an Apple TV or a compatible TV, with `Screen Mirroring` (experimental: see below) |
+| Android | A phone with video output over USB-C (DisplayPort) and a USB-C to HDMI cable |
+
+- **Android: not every phone outputs video.** Mid- and high-end Samsung phones, Pixel 8 or later, most recent tablets and some Motorola and Xiaomi usually do. If no display shows up when you plug the cable in, your phone does not have that output and no app can add it.
+- **Samsung:** DeX may open when you plug in. Turn it off (or choose "Mirror") so LibreTracks sees the display.
+- **AirPlay is experimental:** its delay depends on the Wi-Fi and can drift during a show. Calibrate on site (`Settings → Video → Calibrate…`) and prefer the cable for a live show.
+
+**What happens by itself:** placing the first video on the timeline opens a two-step wizard: connect the projector (after 20 seconds without a display it tells you what to check) and check that you see the test pattern. By default the video goes to **the first external display** that shows up; in `Settings → Video` you can pin one if you have a cable and AirPlay at once.
+
+**Locking the phone switches the projector off.** While the video output is on, LibreTracks keeps the phone from locking by itself. If you lock it with the button (or switch apps), the system stops sending the picture: the audio keeps playing, the indicator at the top says **Projector off**, and on unlocking the picture comes back already in sync.
+
+**Indicator and black:** the top bar has two icons: the output's state (tap it to see the display, the players and any warning) and **one-tap black**, usable only while the output shows something.
+
+**Getting the videos onto the phone**
+
+- **`.ltset` / `.ltpkg` packages and the cloud:** if they carry videos, LibreTracks asks "Import the videos too", with their size and the free space. It starts ticked if they fit leaving 1 GB free; if they do not fit, it cannot be ticked. Without them the session sounds the same, the clips are kept and do not show as missing files. Downloading a big session from the cloud on mobile data asks first: Wi-Fi is better.
+- **From the device itself:** `Add video from the device` in a video track's menu, in the tracks `+` menu or in the library. The video is **copied** into the session folder (so it travels with it), after telling you its size.
+- A video the phone cannot decode (ProRes on Android, or 10-bit HEVC on a basic phone) shows as **Not playable on this device**: it is not removed.
+
+**Editing on the timeline:** like audio clips on a phone: tap a clip to select it, then drag it (or its edges, or the fade handles). Extracting a video's audio can only be done on a computer.
+
+**Low-end phones:** some phones have a single video decoder. The indicator then says "One player": section jumps may freeze the picture for an instant, but the audio is not affected.
 
 ## 7. Mobile Remote Control
 
