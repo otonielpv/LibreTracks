@@ -4,8 +4,7 @@ import type {
   LibraryImportProgressEvent,
 } from "@libretracks/shared/models";
 import {
-  runAndroidLibraryImport,
-  runIosLibraryImport,
+  runNativeLibraryImport,
   type MobileLibraryImportDeps,
 } from "./mobileLibraryImport";
 import {
@@ -103,7 +102,7 @@ describe("import de biblioteca en Android", () => {
     });
     const { deps } = makeDeps();
 
-    await runAndroidLibraryImport(deps);
+    await runNativeLibraryImport(deps);
 
     expect(namesWhileImporting).toEqual(["bass.wav", "drums.wav"]);
   });
@@ -114,7 +113,7 @@ describe("import de biblioteca en Android", () => {
     );
     const { deps } = makeDeps();
 
-    await runAndroidLibraryImport(deps);
+    await runNativeLibraryImport(deps);
 
     expect(vi.mocked(importPickedLibraryAudio)).toHaveBeenCalledWith("batch-1");
   });
@@ -125,7 +124,7 @@ describe("import de biblioteca en Android", () => {
     );
     const { deps, log } = makeDeps();
 
-    await runAndroidLibraryImport(deps);
+    await runNativeLibraryImport(deps);
 
     expect(log.importing).toEqual([true, false]);
   });
@@ -134,7 +133,7 @@ describe("import de biblioteca en Android", () => {
     vi.mocked(pickLibraryAudioDocuments).mockResolvedValue(pickedBatch());
     const { deps, log } = makeDeps();
 
-    await runAndroidLibraryImport(deps);
+    await runNativeLibraryImport(deps);
 
     expect(log.importing).toEqual([]);
     expect(pendingNames()).toEqual([]);
@@ -150,7 +149,7 @@ describe("import de biblioteca en Android", () => {
     );
     const { deps, log } = makeDeps();
 
-    await runAndroidLibraryImport(deps);
+    await runNativeLibraryImport(deps);
 
     // A spinner left spinning after a failure is worse than no spinner: the
     // panel would look busy forever and the import button stays disabled.
@@ -167,51 +166,12 @@ describe("import de biblioteca en Android", () => {
     });
     const { deps } = makeDeps();
 
-    await runAndroidLibraryImport(deps);
+    await runNativeLibraryImport(deps);
 
     expect(vi.mocked(confirmDialog)).toHaveBeenCalledTimes(1);
     const prompt = vi.mocked(confirmDialog).mock.calls[0][0] as string;
     expect(prompt).toContain('"count":1');
     // The prompt was declined by the default mock, so nothing is placed.
     expect(vi.mocked(createClipsWithAutoTracks)).not.toHaveBeenCalled();
-  });
-});
-
-describe("import de biblioteca en iOS", () => {
-  function iosDeps(): { deps: MobileLibraryImportDeps; log: SpinnerLog } {
-    return makeDeps();
-  }
-
-  it("informa del avance fichero a fichero mientras copia", async () => {
-    vi.mocked(pickFilesViaWebView).mockResolvedValue([
-      new File(["a"], "one.wav"),
-      new File(["b"], "two.wav"),
-    ]);
-    vi.mocked(importStagedAudioFiles).mockResolvedValue({
-      assets: [asset("one.wav"), asset("two.wav")],
-      skipped: [],
-    });
-    const { deps, log } = iosDeps();
-
-    await runIosLibraryImport(deps);
-
-    // Nothing on the backend emits progress for this route, so a static
-    // "Leyendo archivo…" is all the user would get for minutes. The counter has
-    // to advance once per staged file.
-    const staged = log.progress
-      .filter((entry) => entry?.message.includes("importProgressStaging"))
-      .map((entry) => entry?.percent);
-    expect(staged).toEqual([0, 45, 90]);
-    expect(log.importing).toEqual([true, false]);
-  });
-
-  it("no toca el indicador si el usuario cancela el selector", async () => {
-    vi.mocked(pickFilesViaWebView).mockResolvedValue([]);
-    const { deps, log } = iosDeps();
-
-    await runIosLibraryImport(deps);
-
-    expect(log.importing).toEqual([]);
-    expect(vi.mocked(stageFileForImport)).not.toHaveBeenCalled();
   });
 });

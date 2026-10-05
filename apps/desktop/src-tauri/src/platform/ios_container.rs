@@ -14,6 +14,7 @@ use std::path::{Component, Path, PathBuf};
 
 /// La misma ruta, pero dentro del contenedor `current_home`. `None` si `path`
 /// no está dentro de un contenedor de datos de app de iOS.
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 pub fn rebase_onto_container(path: &Path, current_home: &Path) -> Option<PathBuf> {
     let parts: Vec<Component<'_>> = path.components().collect();
     let at = parts.windows(3).position(|window| {

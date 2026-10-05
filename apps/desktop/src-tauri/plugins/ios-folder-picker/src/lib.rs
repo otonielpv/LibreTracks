@@ -30,6 +30,24 @@ struct ExportFileResponse {
     exported: bool,
 }
 
+/// A document picked for import: where to read it and the name to show.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PickedDocument {
+    pub path: String,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PickDocumentsResponse {
+    files: Vec<PickedDocument>,
+}
+
+#[derive(Debug, Serialize)]
+struct PickDocumentsArgs<'a> {
+    kind: &'a str,
+    reference: bool,
+}
+
 #[derive(Debug, Serialize)]
 struct PickVideoArgs<'a> {
     source: &'a str,
@@ -81,6 +99,16 @@ impl<R: Runtime> IosFolderPicker<R> {
         self.0
             .run_mobile_plugin::<PickFileResponse>("pickVideo", PickVideoArgs { source })
             .map(|response| response.file)
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn pick_documents(&self, kind: &str, reference: bool) -> Result<Vec<PickedDocument>, String> {
+        self.0
+            .run_mobile_plugin::<PickDocumentsResponse>(
+                "pickDocuments",
+                PickDocumentsArgs { kind, reference },
+            )
+            .map(|response| response.files)
             .map_err(|error| error.to_string())
     }
 
@@ -171,6 +199,22 @@ pub async fn pick_video<R: Runtime>(app: AppHandle<R>, from_library: bool) -> Re
     tauri::async_runtime::spawn_blocking(move || app.state::<IosFolderPicker<R>>().pick_video(from_library))
         .await
         .map_err(|error| format!("iOS video picker worker failed: {error}"))?
+}
+
+/// Audio (`kind` "audio") or video ("video") documents from Files, several at
+/// once. `reference`: the originals, kept readable by a security-scoped
+/// bookmark; otherwise copies under tmp that the caller moves. Empty when
+/// cancelled. Off the main thread, for the reason given on [`pick_folder`].
+pub async fn pick_documents<R: Runtime>(
+    app: AppHandle<R>,
+    kind: &'static str,
+    reference: bool,
+) -> Result<Vec<PickedDocument>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<IosFolderPicker<R>>().pick_documents(kind, reference)
+    })
+    .await
+    .map_err(|error| format!("iOS document picker worker failed: {error}"))?
 }
 
 /// [`export_file`] for callers that are already on a worker thread (the export

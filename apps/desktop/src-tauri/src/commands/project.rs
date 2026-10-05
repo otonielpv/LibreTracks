@@ -1665,7 +1665,7 @@ pub fn pick_library_files() -> Vec<String> {
 /// What the Android picker hands the frontend: the display names it needs for
 /// the placeholders, plus the id that claims the parked documents. Empty
 /// `file_names` means the user cancelled.
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PickedAudioBatch {
@@ -1705,8 +1705,8 @@ pub fn pick_library_audio_documents(app: AppHandle) -> PickedAudioBatch {
 }
 
 /// ¿Referenciar el original al importar, o copiarlo dentro de la sesión?
-#[cfg(target_os = "android")]
-fn reference_imported_audio(app: &AppHandle) -> bool {
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub(crate) fn reference_imported_audio(app: &AppHandle) -> bool {
     use tauri::Manager;
     app.try_state::<crate::infra::settings::AppSettingsStore>()
         .and_then(|store| store.current().ok())
@@ -1872,6 +1872,118 @@ pub fn import_picked_library_audio(
         }
         None => copied,
     };
+
+    crate::state::emit_library_import_progress(&app, 100, "Importacion completada.".into());
+    prepare_library_assets(&state, &song_dir, &outcome.assets);
+    Ok(outcome)
+}
+
+/// iOS: documents picked by [`pick_library_audio_documents`], waiting for
+/// [`import_picked_library_audio`] to claim them by batch id.
+#[cfg(target_os = "ios")]
+static IOS_PICKED_AUDIO: std::sync::Mutex<Vec<(String, IosPickedAudio)>> =
+    std::sync::Mutex::new(Vec::new());
+
+#[cfg(target_os = "ios")]
+struct IosPickedAudio {
+    documents: Vec<libretracks_ios_folder_picker::PickedDocument>,
+    referenced: bool,
+}
+
+/// iOS: the Files picker, in the same two steps as Android (names first, so
+/// the library shows placeholders while the import runs).
+///
+/// Referencing (the setting, on by default) the originals stay where they
+/// are and a security-scoped bookmark keeps them readable across launches,
+/// as on Android and the desktop. Otherwise the system's copies are moved
+/// into the session. This replaced the WebView chooser, which read every file
+/// through the WebView in base64 slices and always copied.
+#[cfg(target_os = "ios")]
+#[tauri::command]
+pub async fn pick_library_audio_documents(app: AppHandle) -> Result<PickedAudioBatch, String> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT_BATCH: AtomicU64 = AtomicU64::new(1);
+
+    let referenced = reference_imported_audio(&app);
+    let documents = libretracks_ios_folder_picker::pick_documents(app, "audio", referenced).await?;
+    if documents.is_empty() {
+        return Ok(PickedAudioBatch::default());
+    }
+    let file_names = documents.iter().map(|document| document.name.clone()).collect();
+    let batch_id = format!("ios-{}", NEXT_BATCH.fetch_add(1, Ordering::Relaxed));
+    IOS_PICKED_AUDIO
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?
+        .push((
+            batch_id.clone(),
+            IosPickedAudio {
+                documents,
+                referenced,
+            },
+        ));
+    Ok(PickedAudioBatch {
+        batch_id,
+        file_names,
+    })
+}
+
+/// iOS: import a batch parked by [`pick_library_audio_documents`].
+#[cfg(target_os = "ios")]
+#[tauri::command(async)]
+pub fn import_picked_library_audio(
+    app: AppHandle,
+    batch_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<crate::models::LibraryImportResult, String> {
+    let picked = {
+        let mut parked = IOS_PICKED_AUDIO
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        parked
+            .iter()
+            .position(|(id, _)| *id == batch_id)
+            .map(|index| parked.remove(index).1)
+    };
+    let Some(picked) = picked else {
+        return Err("La seleccion de archivos ya no esta disponible. Vuelve a elegirlos.".into());
+    };
+
+    let (song_dir, current_song) = {
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        let song_dir = session
+            .song_dir
+            .clone()
+            .ok_or_else(|| DesktopError::NoSongLoaded.to_string())?;
+        (song_dir, session.engine.song().cloned())
+    };
+
+    let payloads: Vec<crate::state::AudioFilePathImportPayload> = picked
+        .documents
+        .iter()
+        .map(|document| crate::state::AudioFilePathImportPayload {
+            file_name: document.name.clone(),
+            source_path: document.path.clone(),
+        })
+        .collect();
+    let outcome = if picked.referenced {
+        // Por referencia: ni un byte copiado, como en escritorio.
+        crate::state::import_audio_files_from_paths_to_library(
+            &song_dir,
+            current_song.as_ref(),
+            &payloads,
+        )
+    } else {
+        // The system's copies under tmp: moved into audio/.
+        crate::state::import_staged_audio_files_to_library(
+            &song_dir,
+            current_song.as_ref(),
+            &payloads,
+        )
+    }
+    .map_err(|error| error.to_string())?;
 
     crate::state::emit_library_import_progress(&app, 100, "Importacion completada.".into());
     prepare_library_assets(&state, &song_dir, &outcome.assets);

@@ -8,34 +8,30 @@ import { confirmDialog } from "../../../shared/dialog/dialogService";
 import {
   createClipsWithAutoTracks,
   importPickedLibraryAudio,
-  importStagedAudioFiles,
   pickLibraryAudioDocuments,
 } from "../desktopApi";
 import { useTransportStore } from "../store";
 import {
   createPendingAudioImportsFromPaths,
-  createPendingAudioImports,
   nextPaint,
 } from "./pendingAudioImports";
 import { runAudioImportPipeline } from "./importPipeline";
-import { pickFilesViaWebView, stageFileForImport } from "./mobileFilePicker";
 
 /**
- * "Import audio to the library" on phones and tablets — one route per platform,
- * both showing a placeholder per file plus the library panel's progress spinner,
- * kept out of `libraryDragDrop.ts` because neither shares anything with the
- * drag-and-drop pipeline beyond the store callbacks below.
+ * "Import audio to the library" on phones and tablets: a placeholder per file
+ * plus the library panel's progress spinner, kept out of `libraryDragDrop.ts`
+ * because it shares nothing with the drag-and-drop pipeline beyond the store
+ * callbacks below.
  *
- * The two routes exist because the platforms offer different things:
+ * One route for Android and iOS ([`runNativeLibraryImport`]): the system
+ * picker and the import both run backend-side, referencing the originals
+ * where they are (the "import without copying" setting) or copying them
+ * straight into the session.
  *
- * - **Android** ([`runAndroidLibraryImport`]) picks and copies entirely
- *   backend-side, streaming each `content://` descriptor into the session.
- * - **iOS** ([`runIosLibraryImport`]) has no SAF and no rfd dialog, so the
- *   WebView chooser hands over file CONTENTS, staged to the backend in slices.
- *
- * Android used to take the iOS route too. Measured on the phone this came from,
- * that base64-over-IPC staging sustained ~7 MB/s on a device whose disk does
- * 119 MB/s — the "Leyendo archivo…" that lasted minutes on a multitrack.
+ * Both platforms used to stage every file through the WebView in base64
+ * slices. Measured on the phone this came from, that sustained ~7 MB/s on a
+ * device whose disk does 119 MB/s — the "Leyendo archivo…" that lasted
+ * minutes on a multitrack — and on iOS it always copied.
  */
 export type MobileLibraryImportDeps = {
   t: (key: string, options?: Record<string, unknown>) => string;
@@ -92,103 +88,18 @@ async function offerToPlaceOnTimeline(
 }
 
 /**
- * iOS route: the WebView chooser, then staged slices.
- *
- * NOTE: the chooser only opens inside the tap's user-gesture window, so the
- * pick must be the first thing this does — no awaits before it.
- */
-export async function runIosLibraryImport(
-  deps: MobileLibraryImportDeps,
-): Promise<void> {
-  // iOS Files may expose valid audio documents with a generic content type;
-  // `audio/*` then greys them out. Leave the native filter unrestricted and let
-  // the existing import pipeline validate the selected formats.
-  const files = await pickFilesViaWebView();
-  if (!files.length) {
-    return; // user cancelled
-  }
-
-  const pendingImports = createPendingAudioImports(files, 0).map((item) => ({
-    ...item,
-    showInTimeline: false,
-  }));
-  useTransportStore.getState().addPendingAudioImports(pendingImports);
-  deps.setStatus(deps.t("transport.status.libraryImportStarting"));
-  await nextPaint();
-
-  // Nothing on the backend emits progress for this route — the staging loop
-  // below IS the slow part and it runs here — so this side has to report it, or
-  // the panel sits on "Leyendo archivo…" for minutes and reads as hung.
-  deps.setIsImportingLibrary(true);
-  const reportStagingProgress = (done: number) => {
-    deps.setLibraryImportProgress({
-      // 0..90%: the staged import that follows only renames and probes.
-      percent: files.length === 0 ? 0 : Math.round((done * 90) / files.length),
-      message: deps.t("library.importProgressStaging", {
-        done,
-        total: files.length,
-        defaultValue: "Leyendo archivo {{done}} de {{total}}...",
-      }),
-    });
-  };
-  reportStagingProgress(0);
-
-  // Stage sequentially: one in-flight slice at a time keeps the WebView
-  // renderer's heap flat — reading whole files into Uint8Arrays here
-  // OOM-crashed the renderer on low-RAM phones.
-  const stagedPayloads: Array<{ fileName: string; sourcePath: string }> = [];
-  try {
-    await runAudioImportPipeline({
-      pendingIds: pendingImports.map((item) => item.id),
-      beforeImport: async () => {
-        for (let index = 0; index < files.length; index += 1) {
-          const file = files[index];
-          stagedPayloads.push({
-            fileName: file.name,
-            sourcePath: await stageFileForImport(file, index === 0),
-          });
-          reportStagingProgress(index + 1);
-        }
-      },
-      importFn: () => {
-        deps.setLibraryImportProgress({
-          percent: 95,
-          message: deps.t("library.importProgressFinishing", {
-            defaultValue: "Añadiendo a la biblioteca...",
-          }),
-        });
-        return importStagedAudioFiles(stagedPayloads);
-      },
-      onImported: (importedAssets) =>
-        offerToPlaceOnTimeline(deps, importedAssets),
-      mergeLibraryAssets: deps.mergeLibraryAssets,
-      refreshLibraryState: deps.refreshLibraryState,
-      setStatus: deps.setStatus,
-      reportSkipped: deps.reportSkipped,
-      successMessage: (importedAssets) =>
-        deps.t("transport.status.libraryUpdated", {
-          count: importedAssets.length,
-        }),
-    });
-  } finally {
-    deps.setIsImportingLibrary(false);
-    deps.setLibraryImportProgress(null);
-  }
-}
-
-/**
- * Android route: the SAF picker runs backend-side, the copy streams each
- * `content://` descriptor straight into the session.
+ * The system picker runs backend-side (SAF on Android, the Files picker on
+ * iOS); the import references or copies each document.
  *
  * Two steps on purpose. A single command that picked AND imported could not
  * tell the frontend the file names until everything had finished, so the
  * library showed nothing at all while a multitrack copied — it looked broken.
  * Picking first means the placeholders appear immediately, and the import that
- * follows drives them through the same pipeline the iOS route uses.
+ * follows drives them through the shared import pipeline.
  *
  * NOTE: the picker must be the first thing this does — no awaits before it.
  */
-export async function runAndroidLibraryImport(
+export async function runNativeLibraryImport(
   deps: MobileLibraryImportDeps,
 ): Promise<void> {
   const batch = await pickLibraryAudioDocuments();

@@ -104,6 +104,31 @@ private final class VideoFileDelegate: NSObject, UIDocumentPickerDelegate {
   }
 }
 
+private struct PickDocumentsArgs: Decodable {
+  /// "audio" or "video".
+  let kind: String
+  /// Use the originals where they are (security-scoped, bookmarked like the
+  /// session folders) instead of copies the system makes under tmp.
+  let reference: Bool
+}
+
+/// The Files picker for documents to import, several at once.
+private final class ImportDocumentsDelegate: NSObject, UIDocumentPickerDelegate {
+  let done: ([URL]) -> Void
+
+  init(done: @escaping ([URL]) -> Void) {
+    self.done = done
+  }
+
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    done(urls)
+  }
+
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    done([])
+  }
+}
+
 private struct SecureStoreSetArgs: Decodable {
   let name: String
   let value: String
@@ -325,6 +350,45 @@ final class IosFolderPickerPlugin: Plugin {
         picker.allowsMultipleSelection = false
         presenter.present(picker, animated: true)
       }
+    }
+  }
+
+  /// Pick audio or video documents to import. Referencing, each one keeps
+  /// security-scoped access for good (a bookmark restored at launch, like the
+  /// session folders), so the session can read the original where it is, as
+  /// on Android and the desktop. Otherwise the system hands over copies under
+  /// tmp, which Rust moves into the session. Resolves `files: [{path, name}]`,
+  /// empty when cancelled.
+  @objc public func pickDocuments(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(PickDocumentsArgs.self)
+    DispatchQueue.main.async {
+      guard let presenter = self.activeViewController() else {
+        invoke.reject("No se pudo abrir el explorador de archivos de iOS")
+        return
+      }
+      // Audio from Files often comes typed as generic data, which `.audio`
+      // alone would grey out; Rust validates what is picked.
+      let types: [UTType] = args.kind == "video" ? [.movie] : [.audio, .data]
+      let picker = UIDocumentPickerViewController(
+        forOpeningContentTypes: types,
+        asCopy: !args.reference)
+      let delegate = ImportDocumentsDelegate { urls in
+        self.videoPickerDelegate = nil
+        var files: [[String: String]] = []
+        for url in urls {
+          if args.reference {
+            self.retainAccess(to: url)
+          }
+          files.append(["path": url.path, "name": url.lastPathComponent])
+        }
+        self.diagnostic("pickDocuments \(args.kind): \(files.count) file(s), reference=\(args.reference)")
+        invoke.resolve(["files": files])
+      }
+      self.videoPickerDelegate = delegate
+      picker.delegate = delegate
+      picker.allowsMultipleSelection = true
+      picker.modalPresentationStyle = .fullScreen
+      presenter.present(picker, animated: true)
     }
   }
 

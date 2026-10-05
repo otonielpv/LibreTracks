@@ -791,9 +791,9 @@ export function SettingsPanel({
                       </span>
                     </label>
 
-                    {/* Solo Android: escritorio e iOS referencian desde
-                        siempre y no tienen nada que elegir aqui. */}
-                    {isAndroidApp ? (
+                    {/* Solo móvil: escritorio referencia desde siempre y
+                        no tiene nada que elegir aqui. */}
+                    {isMobileApp ? (
                       <label className="lt-settings-toggle">
                         <input
                           type="checkbox"

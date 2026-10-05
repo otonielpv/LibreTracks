@@ -4017,11 +4017,16 @@ pub(crate) fn resolve_audio_file_path(song_dir: &Path, file_path: &str) -> PathB
     }
 
     let path = Path::new(file_path);
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        song_dir.join(path)
+    if !path.is_absolute() {
+        return song_dir.join(path);
     }
+    // iOS: an original referenced from "On my iPhone" lives inside the app's
+    // container, whose path changes when an update changes its UUID.
+    #[cfg(target_os = "ios")]
+    let path = crate::platform::ios_container::current_location(path);
+    #[cfg(not(target_os = "ios"))]
+    let path = path.to_path_buf();
+    path
 }
 
 /// Root directory for the on-disk caches (PCM `.rf64` and per-file waveform

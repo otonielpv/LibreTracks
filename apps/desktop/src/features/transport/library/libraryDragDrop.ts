@@ -23,7 +23,6 @@ import {
   importExternalProjectFromPathWithProgress,
   importSongPackageFromPathWithProgress,
   importStagedAudioFiles,
-  isAndroidApp,
   isMobileApp,
   isTauriApp,
   pickLibraryFiles,
@@ -44,8 +43,7 @@ import {
 } from "./pendingAudioImports";
 import { pickFilesViaWebView, stageFileForImport } from "./mobileFilePicker";
 import {
-  runAndroidLibraryImport,
-  runIosLibraryImport,
+  runNativeLibraryImport,
 } from "./mobileLibraryImport";
 import {
   runAudioImportPipeline,
@@ -1791,33 +1789,14 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       return;
     }
 
-    // Android: the SAF picker and the copy both run backend-side, streaming
-    // each content:// descriptor straight into the session. This used to take
-    // the iOS route below and stage every file through the WebView in base64
+    // Android and iOS: the system picker and the import both run backend-side,
+    // referencing the originals (the setting) or copying them straight into
+    // the session. Both used to stage every file through the WebView in base64
     // slices, measured at ~7 MB/s on a phone whose disk does 119 MB/s — the
-    // "Leyendo archivo…" that lasted minutes. Keeps the one-tap "put these on
-    // the timeline" prompt, which is the usual mobile intent.
-    if (isAndroidApp) {
-      await runAndroidLibraryImport({
-        t: deps().t,
-        setStatus: deps().setStatus,
-        mergeLibraryAssets: deps().mergeLibraryAssets,
-        refreshLibraryState: deps().refreshLibraryState,
-        applyPlaybackSnapshot: deps().applyPlaybackSnapshot,
-        getImportPositionSeconds: () =>
-          deps().displayPositionSecondsRef.current,
-        setIsImportingLibrary: deps().setIsImportingLibrary,
-        setLibraryImportProgress: deps().setLibraryImportProgress,
-        reportSkipped: reportSkippedImports,
-      });
-      return;
-    }
-
-    // iOS: no rfd dialog and no SAF, so the WebView chooser stays. NOTE: it
-    // only opens inside the tap's user-gesture window, so the pick must happen
-    // with no awaits before it — see the module.
+    // "Leyendo archivo…" that lasted minutes — and iOS always copied. Keeps
+    // the one-tap "put these on the timeline" prompt, the usual mobile intent.
     if (isMobileApp) {
-      await runIosLibraryImport({
+      await runNativeLibraryImport({
         t: deps().t,
         setStatus: deps().setStatus,
         mergeLibraryAssets: deps().mergeLibraryAssets,

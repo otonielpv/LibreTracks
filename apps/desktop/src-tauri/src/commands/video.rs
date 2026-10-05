@@ -647,6 +647,24 @@ struct PickedVideo {
     open: Box<dyn FnOnce() -> Result<std::fs::File, String> + Send>,
     /// A local copy made by the picker (iOS), deleted once handled.
     temporary: Option<std::path::PathBuf>,
+    /// Use the original where it is instead of copying it, like imported
+    /// audio: a `content://` with a persistable grant (Android) or a path
+    /// kept open by a security-scoped bookmark (iOS). Never asked about.
+    reference: Option<String>,
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+impl PickedVideo {
+    /// A video referenced where it is: nothing to open or copy.
+    fn referenced(name: String, reference: String) -> Self {
+        Self {
+            name,
+            size: 0,
+            open: Box::new(|| Err("referenciado, no se copia".to_string())),
+            temporary: None,
+            reference: Some(reference),
+        }
+    }
 }
 
 /// Copy, analyse and register picked videos on a worker thread, then emit
@@ -685,53 +703,49 @@ fn add_picked_videos_now(
         .song_dir
         .clone()
         .ok_or_else(|| "Abre una sesión antes de añadir vídeos".to_string())?;
-    let total: u64 = picked.iter().map(|video| video.size).sum();
-    let free = crate::state::free_space_near(&song_dir);
-    if !ask_from_app(app, VideoImportSource::Device, picked.len(), total, free) {
-        // Cancelled by the user: nothing to report. Only "it does not fit"
-        // is worth telling (a video outside the session cannot be used on a
-        // phone, so not copying it means not adding it).
-        let fits = videos_fit(total, free);
-        if fits {
-            for video in &picked {
-                if let Some(temporary) = &video.temporary {
-                    let _ = std::fs::remove_file(temporary);
-                }
-            }
-            return Ok(VideoImportResult {
-                assets: Vec::new(),
-                skipped: Vec::new(),
-            });
-        }
-        let reason = "no cabe en el dispositivo";
-        return Ok(VideoImportResult {
-            assets: Vec::new(),
-            skipped: picked
-                .into_iter()
-                .map(|video| {
-                    if let Some(temporary) = &video.temporary {
-                        let _ = std::fs::remove_file(temporary);
-                    }
-                    video
-                })
-                .map(|video| SkippedImport {
-                    source_path: video.name.clone(),
-                    file_name: video.name,
-                    reason: reason.to_string(),
-                })
-                .collect(),
-        });
-    }
 
     let mut analysed = Vec::new();
     let mut skipped = Vec::new();
-    for video in picked {
+    let skip = |name: &str, reason: String| SkippedImport {
+        file_name: name.to_string(),
+        source_path: name.to_string(),
+        reason,
+    };
+
+    // Referenced: analysed where they are, nothing copied, nothing to ask.
+    let (referenced, to_copy): (Vec<_>, Vec<_>) =
+        picked.into_iter().partition(|video| video.reference.is_some());
+    for video in referenced {
+        let reference = video.reference.unwrap_or_default();
+        match state.video.probe(std::path::Path::new(&reference)) {
+            Ok(info)
+            | Err(libretracks_video::media::ProbeError::Unsupported {
+                info: Some(info), ..
+            }) => analysed.push((reference, info)),
+            Err(error) => skipped.push(skip(&video.name, error.message())),
+        }
+    }
+
+    // Copied: asked first, with the size and the free space (paso 08 §3): a
+    // 1 GB video is not copied by surprise.
+    let total: u64 = to_copy.iter().map(|video| video.size).sum();
+    let free = crate::state::free_space_near(&song_dir);
+    let copy = !to_copy.is_empty()
+        && ask_from_app(app, VideoImportSource::Device, to_copy.len(), total, free);
+    for video in to_copy {
+        if !copy {
+            // Cancelled by the user: nothing to report. Only "it does not
+            // fit" is worth telling (a video outside the session cannot be
+            // used, so not copying it means not adding it).
+            if let Some(temporary) = &video.temporary {
+                let _ = std::fs::remove_file(temporary);
+            }
+            if !videos_fit(total, free) {
+                skipped.push(skip(&video.name, "no cabe en el dispositivo".to_string()));
+            }
+            continue;
+        }
         let name = video.name.clone();
-        let skip = |reason: String| SkippedImport {
-            file_name: name.clone(),
-            source_path: name.clone(),
-            reason,
-        };
         let copied = (video.open)().and_then(|mut file| {
             crate::video::device_import::copy_into_session(&mut file, &song_dir, &video.name)
                 .map_err(|error| error.to_string())
@@ -742,7 +756,7 @@ fn add_picked_videos_now(
         let relative = match copied {
             Ok(relative) => relative,
             Err(error) => {
-                skipped.push(skip(error));
+                skipped.push(skip(&name, error));
                 continue;
             }
         };
@@ -754,7 +768,7 @@ fn add_picked_videos_now(
             }) => analysed.push((relative, info)),
             Err(error) => {
                 let _ = std::fs::remove_file(&absolute);
-                skipped.push(skip(error.message()));
+                skipped.push(skip(&name, error.message()));
             }
         }
     }
@@ -819,6 +833,11 @@ pub fn pick_and_add_videos(app: AppHandle, source: Option<String>) -> Result<boo
     if files.is_empty() {
         return Ok(false);
     }
+    // Like imported audio (`reference_imported_audio`): documents from the
+    // persistable picker are used where they are, if the descriptor can be
+    // reopened and seeked. The gallery's grant is temporary: always copied.
+    let reference = source.as_deref() != Some("gallery")
+        && crate::commands::project::reference_imported_audio(&app);
     let mut picked = Vec::new();
     for file in files {
         let display_name = match &file {
@@ -831,6 +850,14 @@ pub fn pick_and_add_videos(app: AppHandle, source: Option<String>) -> Result<boo
             display_name.as_deref(),
             &crate::platform::mobile_files::picked_file_name(&file),
         );
+        if let tauri_plugin_dialog::FilePath::Url(url) = &file {
+            if reference
+                && crate::platform::android_content_uri::probe_referenceable(url.as_str())
+            {
+                picked.push(PickedVideo::referenced(name, url.as_str().to_string()));
+                continue;
+            }
+        }
         let size = crate::platform::mobile_files::open_picked_file_for_read(&app, &file)
             .and_then(|handle| handle.metadata().map_err(|error| error.to_string()))
             .map(|metadata| metadata.len())
@@ -843,6 +870,7 @@ pub fn pick_and_add_videos(app: AppHandle, source: Option<String>) -> Result<boo
                 crate::platform::mobile_files::open_picked_file_for_read(&open_app, &file)
             }),
             temporary: None,
+            reference: None,
         });
     }
     add_picked_videos(app, picked);
@@ -852,12 +880,39 @@ pub fn pick_and_add_videos(app: AppHandle, source: Option<String>) -> Result<boo
 #[cfg(target_os = "ios")]
 #[tauri::command]
 pub async fn pick_and_add_videos(app: AppHandle, source: Option<String>) -> Result<bool, String> {
-    let from_library = source.as_deref() == Some("gallery");
-    let Some(path) = libretracks_ios_folder_picker::pick_video(app.clone(), from_library).await?
-    else {
+    if source.as_deref() == Some("gallery") {
+        // Photos only ever hands over a copy: it goes into the session.
+        let Some(path) = libretracks_ios_folder_picker::pick_video(app.clone(), true).await? else {
+            return Ok(false);
+        };
+        add_picked_videos(app, vec![copied_ios_video(std::path::PathBuf::from(path))]);
+        return Ok(true);
+    }
+    // Files: referenced where they are, like imported audio (the same
+    // setting), through a security-scoped bookmark; or the system's copies.
+    let reference = crate::commands::project::reference_imported_audio(&app);
+    let documents =
+        libretracks_ios_folder_picker::pick_documents(app.clone(), "video", reference).await?;
+    if documents.is_empty() {
         return Ok(false);
-    };
-    let path = std::path::PathBuf::from(path);
+    }
+    let picked = documents
+        .into_iter()
+        .map(|document| {
+            if reference {
+                PickedVideo::referenced(document.name, document.path)
+            } else {
+                copied_ios_video(std::path::PathBuf::from(document.path))
+            }
+        })
+        .collect();
+    add_picked_videos(app, picked);
+    Ok(true)
+}
+
+/// A video the system copied under tmp for us: moved into the session.
+#[cfg(target_os = "ios")]
+fn copied_ios_video(path: std::path::PathBuf) -> PickedVideo {
     let name = crate::video::device_import::picked_video_name(
         None,
         &path
@@ -869,17 +924,12 @@ pub async fn pick_and_add_videos(app: AppHandle, source: Option<String>) -> Resu
         .map(|metadata| metadata.len())
         .unwrap_or(0);
     let open_path = path.clone();
-    add_picked_videos(
-        app,
-        vec![PickedVideo {
-            name,
-            size,
-            open: Box::new(move || {
-                std::fs::File::open(&open_path).map_err(|error| error.to_string())
-            }),
-            // The plugin's local copy under tmp: gone once it is in the session.
-            temporary: Some(path),
-        }],
-    );
-    Ok(true)
+    PickedVideo {
+        name,
+        size,
+        open: Box::new(move || std::fs::File::open(&open_path).map_err(|error| error.to_string())),
+        // Gone once it is in the session.
+        temporary: Some(path),
+        reference: None,
+    }
 }
