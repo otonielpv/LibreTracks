@@ -12,6 +12,10 @@
 //!    video track, aligned with the clip — one undo step. Undo removes the
 //!    track and the clip; the WAV stays in the library, like imported audio.
 
+// Decoding a video's audio needs libmpv: on Android/iOS nothing calls this
+// (plan video-mobile, paso 09 §2), but the session logic stays compiled.
+#![cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
+
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};

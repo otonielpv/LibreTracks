@@ -42,6 +42,22 @@ pub struct VideoAssetSummary {
     pub info: VideoAssetInfo,
     /// Keyframes further apart than two seconds: jumps into this video can lag.
     pub has_slow_seeks: bool,
+    /// This device cannot decode it (plan video-mobile, paso 07): shown as
+    /// "not playable on this device". The file is there and stays in the
+    /// session; it is not a missing medium.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unplayable_reason: Option<String>,
+}
+
+/// Flag the assets this device cannot decode. Only adds the note: whether a
+/// file is missing still depends on the disk alone, and nothing is removed.
+pub fn mark_unplayable_video_assets(
+    assets: &mut [VideoAssetSummary],
+    reason_for: impl Fn(&str) -> Option<String>,
+) {
+    for asset in assets {
+        asset.unplayable_reason = reason_for(&asset.file_path);
+    }
 }
 
 fn file_name_of(file_path: &str) -> String {
@@ -140,6 +156,7 @@ pub(super) fn summarize(song_dir: &Path, entry: &VideoLibraryEntry) -> VideoAsse
         folder_path: entry.folder_path.clone(),
         has_slow_seeks: entry.info.has_slow_seeks(),
         info: entry.info.clone(),
+        unplayable_reason: None,
     }
 }
 
@@ -222,6 +239,36 @@ mod tests {
         let entries = read_video_entries(dir.path()).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].info.duration_seconds, 12.0);
+    }
+
+    /// Plan video-mobile, paso 07 C4: a codec this device cannot decode is
+    /// "not playable here", never "missing", and stays in the library.
+    #[test]
+    fn an_unplayable_video_is_not_missing_and_stays_in_the_library() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let video = dir.path().join("prores.mov");
+        std::fs::write(&video, b"x").unwrap();
+        let path = video.to_string_lossy().into_owned();
+        register_video_entries(dir.path(), vec![(path.clone(), info(30.0))], None).unwrap();
+
+        let mut assets: Vec<_> = read_video_entries(dir.path())
+            .unwrap()
+            .iter()
+            .map(|entry| summarize(dir.path(), entry))
+            .collect();
+        mark_unplayable_video_assets(&mut assets, |file_path| {
+            // The library stores its own spelling of the path.
+            file_path
+                .ends_with("prores.mov")
+                .then(|| "no reproducible en este dispositivo (códec apcn)".into())
+        });
+        assert_eq!(assets.len(), 1);
+        assert!(!assets[0].is_missing);
+        assert_eq!(
+            assets[0].unplayable_reason.as_deref(),
+            Some("no reproducible en este dispositivo (códec apcn)")
+        );
+        assert_eq!(read_video_entries(dir.path()).unwrap().len(), 1);
     }
 
     #[test]

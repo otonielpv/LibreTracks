@@ -79,7 +79,9 @@ mod timeline_math;
 mod missing_media;
 pub(crate) use missing_media::MissingMediaEntry;
 pub(crate) use video_edit::VideoClipProps;
-pub(crate) use video_library::{package_extract_options, VideoAssetSummary};
+pub(crate) use video_library::{
+    mark_unplayable_video_assets, package_extract_options, VideoAssetSummary,
+};
 pub(crate) use self::TransportClockMirror as VideoTransportClock;
 mod track_colors;
 mod track_tree;

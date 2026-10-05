@@ -1030,6 +1030,7 @@ const en = {
       hideTrack: "Hide this video track",
       showTrack: "Show this video track",
       soloTrack: "Show only this video track",
+      unplayableHere: "Not playable on this device",
       slowSeeks:
         "This video may be slow to respond to jumps. Recommended: export it with one keyframe per second.",
       librarySection: "Videos",

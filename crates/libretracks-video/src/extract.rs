@@ -14,7 +14,9 @@ use std::time::{Duration, Instant};
 use libretracks_core::VideoAssetInfo;
 
 use crate::mpv::{EndFileReason, Mpv, MpvEvent, MpvLibrary};
-use crate::thumbs::{thumbnail_interval_seconds, ThumbnailStrip, THUMBNAIL_WIDTH};
+#[cfg(test)]
+use crate::thumbs::jpeg_dimensions;
+use crate::thumbs::{strip_from_frames, thumbnail_interval_seconds, ThumbnailStrip, THUMBNAIL_WIDTH};
 use crate::VideoError;
 
 /// Options every headless instance shares: no config files, scripts, OSD,
@@ -229,45 +231,14 @@ pub fn extract_thumbnails(
     let _ = std::fs::remove_dir_all(work_dir);
     result?;
     let frames = collected?;
-    let Some((width, height)) = frames.first().and_then(|jpeg| jpeg_dimensions(jpeg)) else {
-        return Err(VideoError::Command(format!(
+    // mpv's properties for the output size are gone once the file has
+    // ended; the JPEG is the ground truth anyway (`strip_from_frames`).
+    strip_from_frames(source_size, source_modified_millis, interval, frames).ok_or_else(|| {
+        VideoError::Command(format!(
             "{}: no se obtuvo ninguna miniatura",
             file_label(source)
-        )));
-    };
-    Ok(ThumbnailStrip {
-        source_size,
-        source_modified_millis,
-        interval_seconds: interval,
-        width,
-        height,
-        frames,
+        ))
     })
-}
-
-/// Width and height from a JPEG's start-of-frame segment. mpv's properties
-/// for the output size are gone once the file has ended, and the JPEG is
-/// the ground truth anyway.
-pub(crate) fn jpeg_dimensions(jpeg: &[u8]) -> Option<(u32, u32)> {
-    if !jpeg.starts_with(&[0xff, 0xd8]) {
-        return None;
-    }
-    let mut at = 2;
-    while at + 9 < jpeg.len() {
-        if jpeg[at] != 0xff {
-            return None;
-        }
-        let marker = jpeg[at + 1];
-        let length = u16::from_be_bytes([jpeg[at + 2], jpeg[at + 3]]) as usize;
-        // SOF0..SOF15 except DHT (C4), JPG (C8) and DAC (CC).
-        if (0xc0..=0xcf).contains(&marker) && !matches!(marker, 0xc4 | 0xc8 | 0xcc) {
-            let height = u16::from_be_bytes([jpeg[at + 5], jpeg[at + 6]]);
-            let width = u16::from_be_bytes([jpeg[at + 7], jpeg[at + 8]]);
-            return Some((u32::from(width), u32::from(height)));
-        }
-        at += 2 + length;
-    }
-    None
 }
 
 fn collect_frames(dir: &Path) -> Result<Vec<Vec<u8>>, VideoError> {

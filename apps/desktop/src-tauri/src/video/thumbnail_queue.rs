@@ -110,11 +110,19 @@ impl QueueState {
     }
 }
 
+/// Makes one strip with this platform's extractor (libmpv on the desktop,
+/// the system's decoders on a phone; plan video-mobile, paso 07). Blocking;
+/// checks the flag to stop early. The second argument is the cache root, for
+/// scratch space.
+pub type StripMaker = Box<
+    dyn Fn(&ThumbnailJob, &Path, &AtomicBool) -> Result<libretracks_video::thumbs::ThumbnailStrip, String>
+        + Send,
+>;
+
 /// What the worker needs from the outside, injected so the queue has no
-/// dependency on Tauri.
+/// dependency on Tauri or on how frames are decoded.
 pub struct ThumbnailWorkerDeps {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub libmpv: Box<dyn Fn() -> Result<Arc<libretracks_video::MpvLibrary>, String> + Send>,
+    pub make_strip: StripMaker,
     pub cache_root: Box<dyn Fn() -> PathBuf + Send>,
     /// Called once the job's strip is on disk.
     pub on_ready: Box<dyn Fn(&ThumbnailJob) + Send>,
@@ -218,49 +226,96 @@ fn make_strip(
     if libretracks_video::thumbs::read_cached(&cache_root, &job.source).is_some() {
         return Ok(());
     }
-    extract_strip(deps, job, &cache_root, cancel)
-}
-
-#[cfg(any(target_os = "android", target_os = "ios"))]
-fn extract_strip(
-    _deps: &ThumbnailWorkerDeps,
-    _job: &ThumbnailJob,
-    _cache_root: &Path,
-    _cancel: &AtomicBool,
-) -> Result<(), String> {
-    Err("miniaturas aún no disponibles en móvil".into())
-}
-
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn extract_strip(
-    deps: &ThumbnailWorkerDeps,
-    job: &ThumbnailJob,
-    cache_root: &Path,
-    cancel: &AtomicBool,
-) -> Result<(), String> {
-    let cache_root = cache_root.to_path_buf();
-    let libmpv = (deps.libmpv)()?;
-    let duration_seconds = if job.duration_seconds > 0.0 {
-        job.duration_seconds
-    } else {
-        libretracks_video::extract::probe(&libmpv, &job.source)
-            .map_err(|error| error.to_string())?
-            .duration_seconds
-    };
-    let work_dir = cache_root
-        .join("video-thumbnails")
-        .join(format!(".work-{}", std::process::id()));
-    let strip = libretracks_video::extract::extract_thumbnails(
-        &libmpv,
-        &job.source,
-        duration_seconds,
-        &work_dir,
-        cancel,
-    )
-    .map_err(|error| error.to_string())?;
+    let strip = (deps.make_strip)(job, &cache_root, cancel)?;
     libretracks_video::thumbs::write_cached(&cache_root, &job.source, &strip)
         .map_err(|error| error.to_string())?;
     Ok(())
+}
+
+/// The desktop's strips: libmpv decodes the whole file once.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn libmpv_strip_maker(
+    libmpv: Box<dyn Fn() -> Result<Arc<libretracks_video::MpvLibrary>, String> + Send>,
+) -> StripMaker {
+    Box::new(move |job, cache_root, cancel| {
+        let libmpv = libmpv()?;
+        let duration_seconds = if job.duration_seconds > 0.0 {
+            job.duration_seconds
+        } else {
+            libretracks_video::extract::probe(&libmpv, &job.source)
+                .map_err(|error| error.to_string())?
+                .duration_seconds
+        };
+        let work_dir = cache_root
+            .join("video-thumbnails")
+            .join(format!(".work-{}", std::process::id()));
+        libretracks_video::extract::extract_thumbnails(
+            &libmpv,
+            &job.source,
+            duration_seconds,
+            &work_dir,
+            cancel,
+        )
+        .map_err(|error| error.to_string())
+    })
+}
+
+/// Above this audio-callback load, a phone stops making thumbnails while the
+/// transport runs: they are a convenience and the engine comes first.
+pub const THUMBNAILS_MAX_AUDIO_LOAD_PERCENT: f64 = 50.0;
+
+/// Whether the thumbnail worker should wait before decoding more frames.
+pub fn thumbnails_should_wait(transport_running: bool, audio_load_percent: f64) -> bool {
+    transport_running && audio_load_percent > THUMBNAILS_MAX_AUDIO_LOAD_PERCENT
+}
+
+/// A [`FrameExtractor`] that waits, batch by batch, while `busy` says the
+/// audio engine needs the CPU, and gives up waiting when the job is
+/// cancelled. `wait` is the pause between checks (a sleep in the app).
+pub struct PausingExtractor<'a> {
+    pub inner: &'a mut dyn libretracks_video::media::FrameExtractor,
+    pub busy: &'a dyn Fn() -> bool,
+    pub wait: &'a dyn Fn(),
+    pub cancel: &'a AtomicBool,
+}
+
+impl libretracks_video::media::FrameExtractor for PausingExtractor<'_> {
+    fn frames(&mut self, path: &Path, times: &[f64], max_width: u32) -> Vec<Option<Vec<u8>>> {
+        while (self.busy)() && !self.cancel.load(Ordering::Relaxed) {
+            (self.wait)();
+        }
+        self.inner.frames(path, times, max_width)
+    }
+}
+
+/// A phone's strips (paso 07 §2): the platform's probe for an unknown
+/// duration, then one frame per interval from the system's decoder, packed
+/// by the same code as the desktop's. One worker thread (this one), low
+/// priority, pausing while the audio engine is loaded.
+pub fn native_strip_maker(
+    probe: Arc<dyn libretracks_video::media::VideoProbe>,
+    extractor: Box<dyn Fn() -> Box<dyn libretracks_video::media::FrameExtractor> + Send>,
+    busy: Box<dyn Fn() -> bool + Send>,
+) -> StripMaker {
+    Box::new(move |job, _cache_root, cancel| {
+        let duration_seconds = if job.duration_seconds > 0.0 {
+            job.duration_seconds
+        } else {
+            probe
+                .probe(&job.source)
+                .map_err(|error| error.message())?
+                .duration_seconds
+        };
+        let mut inner = extractor();
+        let wait = || std::thread::sleep(std::time::Duration::from_millis(250));
+        let mut pausing = PausingExtractor {
+            inner: inner.as_mut(),
+            busy: &*busy,
+            wait: &wait,
+            cancel,
+        };
+        libretracks_video::media::build_strip(&job.source, duration_seconds, &mut pausing, cancel)
+    })
 }
 
 #[cfg(test)]
@@ -331,5 +386,127 @@ mod tests {
         state.cancel_all();
         assert!(state.pending_sources().is_empty());
         assert!(flag.load(Ordering::Relaxed));
+    }
+
+    struct FixedFrames {
+        calls: std::rc::Rc<std::cell::Cell<usize>>,
+    }
+
+    impl libretracks_video::media::FrameExtractor for FixedFrames {
+        fn frames(&mut self, _: &Path, times: &[f64], _: u32) -> Vec<Option<Vec<u8>>> {
+            self.calls.set(self.calls.get() + 1);
+            times
+                .iter()
+                .map(|_| {
+                    // A minimal JPEG start-of-frame, 160×90.
+                    Some(vec![
+                        0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 90, 0x00, 160, 0x03, 0x01,
+                        0x22, 0x00, 0x01, 0xff, 0xd9,
+                    ])
+                })
+                .collect()
+        }
+    }
+
+    /// Paso 07 C2 through the queue: a phone's worker with a fake extractor
+    /// writes a strip the reader finds, under the same cache name as the
+    /// desktop's.
+    #[test]
+    fn the_worker_makes_and_caches_a_strip_with_any_extractor() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let source = dir.path().join("v.mp4");
+        std::fs::write(&source, b"video").unwrap();
+        let cache_root = dir.path().join("cache");
+        let root = cache_root.clone();
+        let deps = ThumbnailWorkerDeps {
+            make_strip: Box::new(|job, _, cancel| {
+                let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+                let mut extractor = FixedFrames { calls };
+                libretracks_video::media::build_strip(
+                    &job.source,
+                    job.duration_seconds,
+                    &mut extractor,
+                    cancel,
+                )
+            }),
+            cache_root: Box::new(move || root.clone()),
+            on_ready: Box::new(|_| {}),
+        };
+        let job = ThumbnailJob {
+            key: "v.mp4".into(),
+            source: source.clone(),
+            duration_seconds: 5.0,
+        };
+        make_strip(&deps, &job, &AtomicBool::new(false)).expect("strip");
+        let cached = libretracks_video::thumbs::read_cached(&cache_root, &source).expect("cached");
+        assert_eq!(cached.frames.len(), 5);
+        assert_eq!(
+            libretracks_video::thumbs::cache_path(&cache_root, &source)
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_string_lossy(),
+            {
+                let (size, modified) = libretracks_video::thumbs::source_freshness(&source).unwrap();
+                libretracks_video::thumbs::cache_file_name(
+                    &libretracks_video::thumbs::source_identity(&source),
+                    size,
+                    modified,
+                )
+            }
+        );
+    }
+
+    #[test]
+    fn thumbnails_wait_only_while_playing_with_a_loaded_engine() {
+        assert!(!thumbnails_should_wait(false, 95.0));
+        assert!(!thumbnails_should_wait(true, 30.0));
+        assert!(thumbnails_should_wait(true, 75.0));
+    }
+
+    #[test]
+    fn the_pausing_extractor_waits_until_the_engine_is_free() {
+        let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+        let mut inner = FixedFrames {
+            calls: calls.clone(),
+        };
+        let checks = std::cell::Cell::new(0);
+        let busy = || {
+            checks.set(checks.get() + 1);
+            checks.get() <= 3
+        };
+        let waits = std::cell::Cell::new(0);
+        let wait = || waits.set(waits.get() + 1);
+        let cancel = AtomicBool::new(false);
+        let mut pausing = PausingExtractor {
+            inner: &mut inner,
+            busy: &busy,
+            wait: &wait,
+            cancel: &cancel,
+        };
+        use libretracks_video::media::FrameExtractor;
+        let frames = pausing.frames(Path::new("v.mp4"), &[0.0, 1.0], 160);
+        assert_eq!(frames.len(), 2);
+        assert_eq!(waits.get(), 3, "waited while busy, then decoded");
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[test]
+    fn a_cancelled_job_does_not_wait_for_the_engine() {
+        let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+        let mut inner = FixedFrames { calls };
+        let busy = || true;
+        let waits = std::cell::Cell::new(0);
+        let wait = || waits.set(waits.get() + 1);
+        let cancel = AtomicBool::new(true);
+        let mut pausing = PausingExtractor {
+            inner: &mut inner,
+            busy: &busy,
+            wait: &wait,
+            cancel: &cancel,
+        };
+        use libretracks_video::media::FrameExtractor;
+        pausing.frames(Path::new("v.mp4"), &[0.0], 160);
+        assert_eq!(waits.get(), 0);
     }
 }

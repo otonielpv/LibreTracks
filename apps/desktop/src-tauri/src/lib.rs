@@ -637,7 +637,6 @@ mod video_setup {
     use tauri::{AppHandle, Emitter, Manager};
 
     use crate::state::DesktopState;
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     use crate::video::thumbnail_queue::ThumbnailWorkerDeps;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     use libretracks_video::output::OutputCommand;
@@ -656,15 +655,43 @@ mod video_setup {
         start_thumbnails(app, state);
     }
 
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    fn start_thumbnails(_app: &AppHandle, _state: &DesktopState) {}
-
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn start_thumbnails(app: &AppHandle, state: &DesktopState) {
+    fn strip_maker(state: &DesktopState) -> crate::video::thumbnail_queue::StripMaker {
         let video = Arc::clone(&state.video);
+        crate::video::thumbnail_queue::libmpv_strip_maker(Box::new(move || video.libmpv()))
+    }
+
+    /// Phone (plan video-mobile, paso 07): the system's decoders, pausing
+    /// while the transport runs with a loaded audio engine.
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    fn strip_maker(state: &DesktopState) -> crate::video::thumbnail_queue::StripMaker {
+        let audio = Arc::clone(&state.audio);
+        let clock = state
+            .session
+            .lock()
+            .ok()
+            .map(|session| session.transport_clock_mirror());
+        crate::video::thumbnail_queue::native_strip_maker(
+            Arc::new(crate::video::SystemProbe(Arc::clone(&state.video))),
+            Box::new(|| Box::new(crate::video::native_media::NativeFrameExtractor)),
+            Box::new(move || {
+                let running = clock
+                    .as_ref()
+                    .and_then(|clock| clock.lock().ok().map(|clock| clock.running()))
+                    .unwrap_or(false);
+                let load = audio
+                    .engine_snapshot()
+                    .map(|engine| engine.cpu.callback_load_percent)
+                    .unwrap_or(0.0);
+                crate::video::thumbnail_queue::thumbnails_should_wait(running, load)
+            }),
+        )
+    }
+
+    fn start_thumbnails(app: &AppHandle, state: &DesktopState) {
         let emitter = app.clone();
         state.video.thumbnails.start(ThumbnailWorkerDeps {
-            libmpv: Box::new(move || video.libmpv()),
+            make_strip: strip_maker(state),
             cache_root: Box::new(crate::state::decoding_cache_root),
             on_ready: Box::new(move |job| {
                 let _ = emitter.emit(

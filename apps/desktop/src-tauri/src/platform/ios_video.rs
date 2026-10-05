@@ -15,7 +15,7 @@
 
 #![cfg(target_os = "ios")]
 
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{c_char, c_void, CStr, CString};
 
 use libretracks_core::VideoFit;
 use libretracks_video::native::NativeVideoBridge;
@@ -37,6 +37,79 @@ extern "C" {
     fn lt_video_swift_set_fit(fit: i32);
     fn lt_video_swift_show_image(slot: i32, path: *const c_char);
     fn lt_video_swift_set_keep_awake(on: bool);
+    // Paso 07: analysis and thumbnails, blocking, answered through the
+    // callback during the call (`VideoProbe.swift`).
+    fn lt_video_swift_probe(
+        path: *const c_char,
+        context: *mut c_void,
+        callback: extern "C" fn(*mut c_void, *const c_char),
+    );
+    fn lt_video_swift_frames(
+        path: *const c_char,
+        times: *const f64,
+        count: i32,
+        width: i32,
+        context: *mut c_void,
+        callback: extern "C" fn(*mut c_void, i32, *const u8, usize),
+    );
+}
+
+extern "C" fn collect_probe(context: *mut c_void, json: *const c_char) {
+    let out = unsafe { &mut *(context as *mut Option<String>) };
+    if !json.is_null() {
+        *out = Some(
+            unsafe { CStr::from_ptr(json) }
+                .to_string_lossy()
+                .into_owned(),
+        );
+    }
+}
+
+extern "C" fn collect_frame(context: *mut c_void, index: i32, data: *const u8, len: usize) {
+    let out = unsafe { &mut *(context as *mut Vec<Option<Vec<u8>>>) };
+    let Some(slot) = usize::try_from(index)
+        .ok()
+        .and_then(|index| out.get_mut(index))
+    else {
+        return;
+    };
+    if !data.is_null() && len > 0 {
+        *slot = Some(unsafe { std::slice::from_raw_parts(data, len) }.to_vec());
+    }
+}
+
+/// `VideoProbe.swift`: the analysis as JSON
+/// (`libretracks_video::media::parse_native_probe`). Blocking.
+pub fn probe_json(path: &str) -> Result<String, String> {
+    let path = c_string(path).ok_or_else(|| "ruta de vídeo no válida".to_string())?;
+    let mut out: Option<String> = None;
+    unsafe {
+        lt_video_swift_probe(
+            path.as_ptr(),
+            &mut out as *mut Option<String> as *mut c_void,
+            collect_probe,
+        )
+    };
+    out.ok_or_else(|| "el análisis nativo no respondió".to_string())
+}
+
+/// One JPEG per time, `None` where the decoder produced nothing. Blocking.
+pub fn frames(path: &str, times: &[f64], max_width: u32) -> Vec<Option<Vec<u8>>> {
+    let mut out: Vec<Option<Vec<u8>>> = vec![None; times.len()];
+    let Some(path) = c_string(path) else {
+        return out;
+    };
+    unsafe {
+        lt_video_swift_frames(
+            path.as_ptr(),
+            times.as_ptr(),
+            times.len() as i32,
+            max_width as i32,
+            &mut out as *mut Vec<Option<Vec<u8>>> as *mut c_void,
+            collect_frame,
+        )
+    };
+    out
 }
 
 fn slot_arg(slot: Slot) -> i32 {

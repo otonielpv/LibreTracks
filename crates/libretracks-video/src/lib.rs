@@ -17,6 +17,7 @@ pub mod audio;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod extract;
 pub mod mac_geometry;
+pub mod media;
 pub mod monitors;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod mpv_backend;

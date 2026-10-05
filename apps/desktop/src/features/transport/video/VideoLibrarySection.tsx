@@ -29,6 +29,7 @@ export function VideoLibrarySection() {
       asset.info.fps ? `${Math.round(asset.info.fps * 100) / 100} fps` : null,
       asset.info.codec,
       asset.hasSlowSeeks ? t("transport.video.slowSeeks") : null,
+      asset.unplayableReason ? t("transport.video.unplayableHere") : null,
     ]
       .filter(Boolean)
       .join(" · ");
@@ -66,6 +67,15 @@ export function VideoLibrarySection() {
                 {formatDuration(asset.info.durationSeconds)}
               </span>
               <span className="lt-library-asset-copy">{asset.fileName}</span>
+              {asset.unplayableReason ? (
+                <span
+                  className="lt-library-video-warning material-symbols-outlined"
+                  title={asset.unplayableReason}
+                  aria-label={t("transport.video.unplayableHere")}
+                >
+                  block
+                </span>
+              ) : null}
               {asset.hasSlowSeeks ? (
                 <span
                   className="lt-library-video-warning material-symbols-outlined"

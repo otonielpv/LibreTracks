@@ -1061,6 +1061,7 @@ const es = {
       hideTrack: "Ocultar esta pista de vídeo",
       showTrack: "Mostrar esta pista de vídeo",
       soloTrack: "Mostrar solo esta pista de vídeo",
+      unplayableHere: "No reproducible en este dispositivo",
       slowSeeks:
         "Este vídeo puede tardar en responder a los saltos. Recomendado: exportarlo con un keyframe por segundo.",
       librarySection: "Vídeos",

@@ -8,6 +8,8 @@
 pub mod displays;
 pub mod live;
 pub mod native_events;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub mod native_media;
 pub mod runtime;
 pub mod thumbnail_queue;
 
@@ -51,6 +53,11 @@ pub struct VideoSystem {
     live: std::sync::Mutex<live::LiveState>,
     pub runtime: runtime::VideoRuntimeHandle,
     calibration: std::sync::Mutex<Option<runtime::CalibrationGrid>>,
+    /// Videos this device cannot decode (plan video-mobile, paso 07 §1), by
+    /// `thumbs::source_identity` of the file on disk, with the reason. Per
+    /// device and per run: never written to the session, which may open on a
+    /// machine that plays them.
+    unplayable: std::sync::Mutex<std::collections::HashMap<String, String>>,
 }
 
 /// Whether video works on this machine, and why not if it does not. Shown by
@@ -194,6 +201,52 @@ impl VideoSystem {
         state
     }
 
+    /// Analyse a video with this platform's decoder (libmpv on the desktop,
+    /// the system's on a phone). Blocking: off the session lock. A codec the
+    /// device cannot decode is remembered, so the library can say "not
+    /// playable on this device" without calling it missing.
+    pub fn probe(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<libretracks_core::VideoAssetInfo, libretracks_video::media::ProbeError> {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let result = self
+            .libmpv()
+            .map_err(libretracks_video::media::ProbeError::Failed)
+            .and_then(|library| {
+                libretracks_video::extract::probe(&library, path)
+                    .map_err(|error| libretracks_video::media::ProbeError::Failed(error.to_string()))
+            });
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        let result = {
+            use libretracks_video::media::VideoProbe;
+            native_media::NativeVideoProbe.probe(path)
+        };
+        if let Ok(mut unplayable) = self.unplayable.lock() {
+            let key = libretracks_video::thumbs::source_identity(path);
+            match &result {
+                Err(error @ libretracks_video::media::ProbeError::Unsupported { .. }) => {
+                    unplayable.insert(key, error.message());
+                }
+                Ok(_) => {
+                    unplayable.remove(&key);
+                }
+                Err(_) => {}
+            }
+        }
+        result
+    }
+
+    /// Why the file at `path` does not play on this device, if a probe said
+    /// so this run.
+    pub fn unplayable_reason(&self, path: &std::path::Path) -> Option<String> {
+        self.unplayable
+            .lock()
+            .ok()?
+            .get(&libretracks_video::thumbs::source_identity(path))
+            .cloned()
+    }
+
     pub fn calibration(&self) -> Option<runtime::CalibrationGrid> {
         self.calibration.lock().ok().and_then(|grid| *grid)
     }
@@ -244,6 +297,19 @@ impl VideoSystem {
                 client_api_version: None,
             },
         }
+    }
+}
+
+/// [`VideoSystem::probe`] as a [`libretracks_video::media::VideoProbe`], for
+/// the thumbnail worker.
+pub struct SystemProbe(pub std::sync::Arc<VideoSystem>);
+
+impl libretracks_video::media::VideoProbe for SystemProbe {
+    fn probe(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<libretracks_core::VideoAssetInfo, libretracks_video::media::ProbeError> {
+        self.0.probe(path)
     }
 }
 

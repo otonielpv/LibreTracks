@@ -58,3 +58,6 @@
 # setBrightness/setFit/showImage/setKeepAwake por nombre y firma; R8 no ve a
 # ningún llamante y lo borraría de la build de release.
 -keep class com.libretracks.desktop.VideoOutputBridge { *; }
+# VideoProbe: análisis y miniaturas de vídeo en Android (paso 07 de
+# video-mobile); Rust llama a probe/frames por nombre y firma.
+-keep class com.libretracks.desktop.VideoProbe { *; }

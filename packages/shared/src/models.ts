@@ -602,6 +602,9 @@ export type VideoAssetSummary = {
   info: VideoAssetInfo;
   /** Keyframes further apart than 2 s: jumps into it can lag. */
   hasSlowSeeks: boolean;
+  /** This device cannot decode it (a phone without the codec). The file is
+   * there and stays in the session; it is not missing. */
+  unplayableReason?: string | null;
 };
 
 export type VideoImportResult = {

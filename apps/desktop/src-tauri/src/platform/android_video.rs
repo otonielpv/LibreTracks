@@ -15,7 +15,7 @@
 
 use std::sync::OnceLock;
 
-use jni::objects::{GlobalRef, JClass, JObject, JString, JValue};
+use jni::objects::{GlobalRef, JByteArray, JClass, JObject, JObjectArray, JString, JValue};
 use jni::sys::{jdouble, jint};
 use jni::{JNIEnv, JavaVM};
 
@@ -27,55 +27,137 @@ use crate::video::native_events;
 
 /// Kotlin namespace, not the Play applicationId (see `android_token_store`).
 const CLASS: &str = "com.libretracks.desktop.VideoOutputBridge";
+/// Analysis and thumbnails (paso 07), blocking, for worker threads.
+const PROBE_CLASS: &str = "com.libretracks.desktop.VideoProbe";
 
 static BRIDGE_CLASS: OnceLock<GlobalRef> = OnceLock::new();
+static PROBE_CLASS_REF: OnceLock<GlobalRef> = OnceLock::new();
 
 fn vm() -> Result<JavaVM, String> {
     let ctx = ndk_context::android_context();
     unsafe { JavaVM::from_raw(ctx.vm().cast()) }.map_err(|e| format!("JavaVM::from_raw: {e}"))
 }
 
-/// Run `body` with an env and the bridge class, loaded once through the app
-/// class loader (a natively attached thread only sees the system one). The
-/// output thread calls at up to 100 Hz, so it attaches permanently and each
-/// call runs in its own local frame.
-fn with_bridge<T>(
-    body: impl FnOnce(&mut JNIEnv, &JClass) -> jni::errors::Result<T>,
+/// Run `body` with an env, the app Context and the class `name`, loaded once
+/// through the app class loader (a natively attached thread only sees the
+/// system one) and cached in `cache`. The output thread calls at up to
+/// 100 Hz, so threads attach permanently and each call runs in its own local
+/// frame.
+fn with_class<T>(
+    name: &str,
+    cache: &'static OnceLock<GlobalRef>,
+    frame: i32,
+    body: impl FnOnce(&mut JNIEnv, &JObject, &JClass) -> jni::errors::Result<T>,
 ) -> Result<T, String> {
     let vm = vm()?;
     let mut env = vm
         .attach_current_thread_permanently()
         .map_err(|e| format!("attach_current_thread_permanently: {e}"))?;
     let context = unsafe { JObject::from_raw(ndk_context::android_context().context().cast()) };
-    let result = env.with_local_frame(16, |env| -> jni::errors::Result<T> {
-        let class = match BRIDGE_CLASS.get() {
+    let result = env.with_local_frame(frame, |env| -> jni::errors::Result<T> {
+        let class = match cache.get() {
             Some(class) => class,
             None => {
                 let loader = env
                     .call_method(&context, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])?
                     .l()?;
-                let name = env.new_string(CLASS)?;
+                let class_name = env.new_string(name)?;
                 let class = env
                     .call_method(
                         &loader,
                         "loadClass",
                         "(Ljava/lang/String;)Ljava/lang/Class;",
-                        &[JValue::Object(&name)],
+                        &[JValue::Object(&class_name)],
                     )?
                     .l()?;
                 let global = env.new_global_ref(class)?;
-                BRIDGE_CLASS.get_or_init(|| global)
+                cache.get_or_init(|| global)
             }
         };
         let class: &JClass = class.as_obj().into();
-        body(env, class)
+        body(env, &context, class)
     });
     // A pending Java exception poisons every later JNI call on this thread.
     if env.exception_check().unwrap_or(false) {
         let _ = env.exception_describe();
         let _ = env.exception_clear();
     }
-    result.map_err(|e| format!("VideoOutputBridge: {e}"))
+    result.map_err(|e| format!("{name}: {e}"))
+}
+
+fn with_bridge<T>(
+    body: impl FnOnce(&mut JNIEnv, &JClass) -> jni::errors::Result<T>,
+) -> Result<T, String> {
+    with_class(CLASS, &BRIDGE_CLASS, 16, |env, _context, class| {
+        body(env, class)
+    })
+}
+
+/// `VideoProbe.probe(context, path)`: the analysis as JSON
+/// (`libretracks_video::media::parse_native_probe`).
+pub fn probe_json(path: &str) -> Result<String, String> {
+    with_class(PROBE_CLASS, &PROBE_CLASS_REF, 16, |env, context, class| {
+        let path = env.new_string(path)?;
+        let value = env
+            .call_static_method(
+                class,
+                "probe",
+                "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(context), JValue::Object(&path)],
+            )?
+            .l()?;
+        Ok(env.get_string(&JString::from(value))?.into())
+    })
+}
+
+/// `VideoProbe.frames(context, path, times, width)`: one JPEG per time, or
+/// null where the decoder produced nothing.
+pub fn frames(path: &str, times: &[f64], max_width: u32) -> Vec<Option<Vec<u8>>> {
+    let result = with_class(
+        PROBE_CLASS,
+        &PROBE_CLASS_REF,
+        (times.len() as i32 + 16).max(16),
+        |env, context, class| {
+            let path = env.new_string(path)?;
+            let array = env.new_double_array(times.len() as i32)?;
+            env.set_double_array_region(&array, 0, times)?;
+            let value = env
+                .call_static_method(
+                    class,
+                    "frames",
+                    "(Landroid/content/Context;Ljava/lang/String;[DI)[[B",
+                    &[
+                        JValue::Object(context),
+                        JValue::Object(&path),
+                        JValue::Object(&array),
+                        JValue::Int(max_width as i32),
+                    ],
+                )?
+                .l()?;
+            let mut out = Vec::with_capacity(times.len());
+            if value.is_null() {
+                out.resize(times.len(), None);
+                return Ok(out);
+            }
+            let array = JObjectArray::from(value);
+            for index in 0..env.get_array_length(&array)? {
+                let item = env.get_object_array_element(&array, index)?;
+                if item.is_null() {
+                    out.push(None);
+                } else {
+                    out.push(Some(env.convert_byte_array(JByteArray::from(item))?));
+                }
+            }
+            Ok(out)
+        },
+    );
+    match result {
+        Ok(frames) => frames,
+        Err(error) => {
+            eprintln!("[LT_VIDEO] frames: {error}");
+            vec![None; times.len()]
+        }
+    }
 }
 
 fn slot_arg(slot: Slot) -> JValue<'static, 'static> {

@@ -6,8 +6,10 @@
 //! source's identity, size and mtime, and the same size and mtime are stored
 //! inside, so an edited video is never shown with stale pictures.
 //!
-//! Everything here is pure and tested without libmpv; the frames themselves
-//! come from [`crate::extract`].
+//! Everything here is pure and tested without libmpv. The frames come from
+//! libmpv on the desktop (`extract`) and from the system's decoders on a
+//! phone (`media::build_strip`); both pack them with [`strip_from_frames`],
+//! so a strip is the same bytes wherever it was made.
 
 use std::path::{Path, PathBuf};
 
@@ -38,6 +40,60 @@ pub fn thumbnail_interval_seconds(duration_seconds: f64) -> f64 {
         .copied()
         .find(|step| (duration_seconds / step).ceil() as usize <= MAX_THUMBNAILS)
         .unwrap_or_else(|| (duration_seconds / MAX_THUMBNAILS as f64).ceil())
+}
+
+/// Media times of the frames a strip holds for a video of `duration_seconds`:
+/// `0, interval, 2·interval…` while below the duration, the same frames
+/// libmpv's `fps=1/interval:round=down` filter keeps on the desktop.
+pub fn thumbnail_times(duration_seconds: f64) -> Vec<f64> {
+    if !duration_seconds.is_finite() || duration_seconds <= 0.0 {
+        return Vec::new();
+    }
+    let interval = thumbnail_interval_seconds(duration_seconds);
+    let count = ((duration_seconds / interval).ceil() as usize).clamp(1, MAX_THUMBNAILS);
+    (0..count).map(|index| index as f64 * interval).collect()
+}
+
+/// Width and height from a JPEG's start-of-frame segment.
+pub fn jpeg_dimensions(jpeg: &[u8]) -> Option<(u32, u32)> {
+    if !jpeg.starts_with(&[0xff, 0xd8]) {
+        return None;
+    }
+    let mut at = 2;
+    while at + 9 < jpeg.len() {
+        if jpeg[at] != 0xff {
+            return None;
+        }
+        let marker = jpeg[at + 1];
+        let length = u16::from_be_bytes([jpeg[at + 2], jpeg[at + 3]]) as usize;
+        // SOF0..SOF15 except DHT (C4), JPG (C8) and DAC (CC).
+        if (0xc0..=0xcf).contains(&marker) && !matches!(marker, 0xc4 | 0xc8 | 0xcc) {
+            let height = u16::from_be_bytes([jpeg[at + 5], jpeg[at + 6]]);
+            let width = u16::from_be_bytes([jpeg[at + 7], jpeg[at + 8]]);
+            return Some((u32::from(width), u32::from(height)));
+        }
+        at += 2 + length;
+    }
+    None
+}
+
+/// Pack JPEG frames into a strip. The size comes from the first frame (the
+/// ground truth, whatever made it); `None` without a readable first frame.
+pub fn strip_from_frames(
+    source_size: u64,
+    source_modified_millis: u64,
+    interval_seconds: f64,
+    frames: Vec<Vec<u8>>,
+) -> Option<ThumbnailStrip> {
+    let (width, height) = frames.first().and_then(|jpeg| jpeg_dimensions(jpeg))?;
+    Some(ThumbnailStrip {
+        source_size,
+        source_modified_millis,
+        interval_seconds,
+        width,
+        height,
+        frames,
+    })
 }
 
 /// Index of the thumbnail showing `media_seconds`.

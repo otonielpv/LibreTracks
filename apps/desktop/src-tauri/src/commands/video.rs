@@ -162,8 +162,6 @@ pub fn import_video_files(
     folder_path: Option<String>,
     state: State<'_, DesktopState>,
 ) -> Result<VideoImportResult, String> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let libmpv = state.video.libmpv()?;
     let mut analysed = Vec::new();
     let mut skipped = Vec::new();
     for file_path in file_paths {
@@ -176,13 +174,16 @@ pub fn import_video_files(
             skipped.push(skip("no es un fichero de vídeo".into()));
             continue;
         }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        match libretracks_video::extract::probe(&libmpv, std::path::Path::new(&file_path)) {
+        match state.video.probe(std::path::Path::new(&file_path)) {
             Ok(info) => analysed.push((file_path, info)),
-            Err(error) => skipped.push(skip(error.to_string())),
+            // A codec this device cannot decode still joins the library with
+            // what could be read (paso 07 §1): it plays on the desktop, and
+            // here it reads "not playable on this device", not "missing".
+            Err(libretracks_video::media::ProbeError::Unsupported {
+                info: Some(info), ..
+            }) => analysed.push((file_path, info)),
+            Err(error) => skipped.push(skip(error.message())),
         }
-        #[cfg(any(target_os = "android", target_os = "ios"))]
-        skipped.push(skip("el análisis de vídeo aún no está disponible en móvil".into()));
     }
 
     let assets = if analysed.is_empty() {
@@ -208,7 +209,17 @@ pub fn import_video_files(
 
 #[tauri::command(async)]
 pub fn list_video_assets(state: State<'_, DesktopState>) -> Result<Vec<VideoAssetSummary>, String> {
-    with_session(&state, |session, _| session.list_video_assets())
+    let (mut assets, song_dir) = with_session(&state, |session, _| {
+        Ok((session.list_video_assets()?, session.song_dir.clone()))
+    })?;
+    crate::state::mark_unplayable_video_assets(&mut assets, |file_path| {
+        let resolved = match song_dir.as_deref() {
+            Some(dir) => crate::state::resolve_audio_file_path(dir, file_path),
+            None => std::path::PathBuf::from(file_path),
+        };
+        state.video.unplayable_reason(&resolved)
+    });
+    Ok(assets)
 }
 
 /// Resolve a stored path (absolute, or relative to the session folder when it
@@ -500,6 +511,7 @@ pub fn video_calibration(
 // Audio of a video (paso 11).
 // ---------------------------------------------------------------------------
 
+#[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct VideoAudioProgress<'a> {
