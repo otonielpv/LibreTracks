@@ -234,6 +234,22 @@ describe("las acciones de la barra son las del escritorio", () => {
     });
   });
 
+  it("con video disponible ofrece Video justo despues de Audio", () => {
+    const onAddVideos = vi.fn();
+    const model = mobileSelectionBarModel({
+      target: resolveMobileSelection(empty),
+      menus: desktopMenus,
+      creation: { ...creation, onAddVideos },
+      t,
+    });
+    expect(model.actions.map((entry) => entry.label).slice(2, 4)).toEqual([
+      "mobileSelectionActions.addAudio",
+      "mobileSelectionActions.addVideo",
+    ]);
+    model.actions[3].onSelect();
+    expect(onAddVideos).toHaveBeenCalledTimes(1);
+  });
+
   it("dice cuantos clips van a recibir la accion", () => {
     const model = mobileSelectionBarModel({
       target: resolveMobileSelection({

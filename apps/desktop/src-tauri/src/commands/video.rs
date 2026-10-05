@@ -787,18 +787,23 @@ pub fn pick_and_add_videos(app: AppHandle) -> Result<bool, String> {
     }
     let mut picked = Vec::new();
     for file in files {
-        let name = crate::platform::mobile_files::picked_file_name(&file);
+        let display_name = match &file {
+            tauri_plugin_dialog::FilePath::Url(url) => {
+                crate::platform::android_video::display_name(url.as_str())
+            }
+            tauri_plugin_dialog::FilePath::Path(_) => None,
+        };
+        let name = crate::video::device_import::picked_video_name(
+            display_name.as_deref(),
+            &crate::platform::mobile_files::picked_file_name(&file),
+        );
         let size = crate::platform::mobile_files::open_picked_file_for_read(&app, &file)
             .and_then(|handle| handle.metadata().map_err(|error| error.to_string()))
             .map(|metadata| metadata.len())
             .unwrap_or(0);
         let open_app = app.clone();
         picked.push(PickedVideo {
-            name: if name.is_empty() {
-                "video.mp4".into()
-            } else {
-                name
-            },
+            name,
             size,
             open: Box::new(move || {
                 crate::platform::mobile_files::open_picked_file_for_read(&open_app, &file)

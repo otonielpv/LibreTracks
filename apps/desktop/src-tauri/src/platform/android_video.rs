@@ -110,6 +110,28 @@ pub fn probe_json(path: &str) -> Result<String, String> {
     })
 }
 
+/// The provider's display name of a picked `content://` document
+/// (`OpenableColumns.DISPLAY_NAME`), if it gives one.
+pub fn display_name(uri: &str) -> Option<String> {
+    with_class(PROBE_CLASS, &PROBE_CLASS_REF, 16, |env, context, class| {
+        let uri = env.new_string(uri)?;
+        let value = env
+            .call_static_method(
+                class,
+                "displayName",
+                "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(context), JValue::Object(&uri)],
+            )?
+            .l()?;
+        if value.is_null() {
+            return Ok(None);
+        }
+        Ok(Some(env.get_string(&JString::from(value))?.into()))
+    })
+    .ok()
+    .flatten()
+}
+
 /// `VideoProbe.frames(context, path, times, width)`: one JPEG per time, or
 /// null where the decoder produced nothing.
 pub fn frames(path: &str, times: &[f64], max_width: u32) -> Vec<Option<Vec<u8>>> {

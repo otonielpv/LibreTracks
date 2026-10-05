@@ -31,6 +31,7 @@ const es = {
     addTempo: "Tempo",
     addTimeSignature: "Compás",
     addAudio: "Audio",
+    addVideo: "Vídeo",
     more: "Más acciones",
     hide: "Ocultar acciones",
     show: "Mostrar acciones",

@@ -31,6 +31,7 @@ const en = {
     addTempo: "Tempo",
     addTimeSignature: "Time signature",
     addAudio: "Audio",
+    addVideo: "Video",
     more: "More actions",
     hide: "Hide actions",
     show: "Show actions",

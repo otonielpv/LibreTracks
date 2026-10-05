@@ -46,6 +46,34 @@ pub fn unique_video_name(dir: &Path, wanted: &str) -> String {
         .unwrap_or(cleaned)
 }
 
+/// The name a picked video gets in the session: the provider's display name
+/// ("ensayo.mp4") when it has one, else what the URI ends in. The photo
+/// picker's URIs end in a bare number (`…/media/32`), which would be a file
+/// with no name and no extension: then "video-32.mp4".
+pub fn picked_video_name(display_name: Option<&str>, uri_tail: &str) -> String {
+    let display_name = display_name.map(str::trim).filter(|name| !name.is_empty());
+    let base = display_name.unwrap_or(uri_tail.trim());
+    let has_extension = base.rsplit_once('.').is_some_and(|(stem, extension)| {
+        !stem.is_empty() && !extension.is_empty() && extension.len() <= 5
+    });
+    match (has_extension, base.is_empty()) {
+        // The photo picker hides the real name on purpose and answers
+        // "<id>.mp4" even through DISPLAY_NAME (seen on Android 16).
+        (true, _)
+            if base
+                .split('.')
+                .next()
+                .is_some_and(|stem| stem.chars().all(|c| c.is_ascii_digit())) =>
+        {
+            format!("video-{base}")
+        }
+        (true, _) => base.to_string(),
+        (false, true) => "video.mp4".to_string(),
+        (false, false) if base.chars().all(|c| c.is_ascii_digit()) => format!("video-{base}.mp4"),
+        (false, false) => format!("{base}.mp4"),
+    }
+}
+
 /// Copy `source` into `song_dir/video/<unique name>` and return the path the
 /// session stores (`video/<name>`, relative). Streams in 1 MiB chunks; a
 /// half-written file is removed on error.
@@ -77,6 +105,17 @@ pub fn copy_into_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Found on the Android emulator: the photo picker's URI ends in "32".
+    #[test]
+    fn a_picked_video_keeps_its_real_name() {
+        assert_eq!(picked_video_name(Some("ensayo.mp4"), "32"), "ensayo.mp4");
+        assert_eq!(picked_video_name(None, "32"), "video-32.mp4");
+        assert_eq!(picked_video_name(Some("  "), "Letras.MOV"), "Letras.MOV");
+        assert_eq!(picked_video_name(Some("Mi vídeo"), "7"), "Mi vídeo.mp4");
+        assert_eq!(picked_video_name(None, ""), "video.mp4");
+        assert_eq!(picked_video_name(Some("32.mp4"), "32"), "video-32.mp4");
+    }
 
     #[test]
     fn a_taken_name_gets_a_number_and_odd_characters_are_replaced() {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { TimelineMenus } from "../menus/timelineMenus";
+import { useVideoStore } from "../video/videoStore";
 import type {
   MobileCreationHandlers,
   MobileSelectionMenus,
@@ -55,8 +56,11 @@ export function useMobileSelectionBar({
     [ready, timelineMenus],
   );
 
+  // Lo publica useVideoFeature solo si el video se puede editar aqui.
+  const addVideo = useVideoStore((state) => state.addFromDevice);
   const creation = useMemo<MobileCreationHandlers>(
     () => ({
+      onAddVideos: addVideo ?? undefined,
       // Los segundos se leen AQUI, al tocar el boton, no al elegir el tipo:
       // la marca cae donde estaba el cabezal cuando lo pediste, aunque la
       // reproduccion siga corriendo mientras eliges.
@@ -72,7 +76,7 @@ export function useMobileSelectionBar({
         void timelineMenus.createTimeSignatureMarkerAt(getPlayheadSeconds());
       },
     }),
-    [timelineMenus, getPlayheadSeconds, onAddAudios],
+    [timelineMenus, getPlayheadSeconds, onAddAudios, addVideo],
   );
 
   return { menus, creation };

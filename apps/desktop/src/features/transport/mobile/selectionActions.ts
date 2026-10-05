@@ -145,6 +145,10 @@ export type MobileCreationHandlers = {
   onCreateCue: () => void;
   /** Abre el MISMO dialogo de importacion que la biblioteca. */
   onAddAudios: () => void;
+  /** Elige un video del dispositivo y lo pone en el cabezal (plan
+   * video-mobile, paso 08 §3). Ausente si este dispositivo no puede
+   * reproducir video: entonces el boton no aparece. */
+  onAddVideos?: () => void;
   /** Tempo y compas en el cabezal. Van los ultimos: la mayoria de sesiones
    * tienen un tempo y un compas constantes, asi que son lo menos frecuente
    * montando y pueden vivir tras el boton de puntos. */
@@ -266,6 +270,16 @@ export function mobileSelectionBarModel(args: {
             }),
             onSelect: creation.onAddAudios,
           },
+          ...(creation.onAddVideos
+            ? [
+                {
+                  label: t("mobileSelectionActions.addVideo", {
+                    defaultValue: "Vídeo",
+                  }),
+                  onSelect: creation.onAddVideos,
+                },
+              ]
+            : []),
           {
             label: t("mobileSelectionActions.addTempo", {
               defaultValue: "Tempo",

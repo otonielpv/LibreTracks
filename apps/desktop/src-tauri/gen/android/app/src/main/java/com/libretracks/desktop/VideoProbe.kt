@@ -8,6 +8,7 @@ import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 import android.util.Log
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -44,6 +45,18 @@ object VideoProbe {
     } else {
       extractor.setDataSource(File(path.removePrefix("file://")).absolutePath)
     }
+  }
+
+  /** The provider's display name of a picked document ("ensayo.mp4"); the
+   *  photo picker's URIs carry only a number. Null when it gives none. */
+  @JvmStatic
+  fun displayName(context: Context, uri: String): String? = try {
+    context.contentResolver
+      .query(Uri.parse(uri), arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+      ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+  } catch (error: Exception) {
+    Log.w(TAG, "display name of $uri: ${error.message}")
+    null
   }
 
   @JvmStatic
