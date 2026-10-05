@@ -1012,7 +1012,8 @@ jobs:
           fi
           LIBMPV_ARGS=()
           case " $ENGINE_ARCHS " in *" arm64 "*) ;; *) LIBMPV_ARGS+=(--single-arch) ;; esac
-          bash scripts/verify-libmpv-macos.sh "$FRAMEWORKS/libmpv.2.dylib" "${LIBMPV_ARGS[@]}"
+          # bash 3.2 (macOS /bin/bash) treats an empty "${arr[@]}" as unbound under set -u.
+          bash scripts/verify-libmpv-macos.sh "$FRAMEWORKS/libmpv.2.dylib" ${LIBMPV_ARGS[@]+"${LIBMPV_ARGS[@]}"}
 
           # 5) Dry-run loader resolution: ask dyld to resolve every dependency
           #    of the main binary. Will fail with the same DYLD error users hit
