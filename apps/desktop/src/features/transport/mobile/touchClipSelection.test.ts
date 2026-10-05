@@ -135,3 +135,62 @@ describe("sumando clips", () => {
     expect(clearRegionSelection).toHaveBeenCalled();
   });
 });
+
+/** Plan video-mobile, paso 09: the video lanes follow the same touch rules
+ * through their HTML hit targets. */
+describe("touch rules over video clips", () => {
+  function videoSetup(selectedVideo: string[] = [], multiSelect = false) {
+    const selectClips = vi.fn();
+    const selectVideoClip = vi.fn();
+    const clearVideoSelection = vi.fn();
+    const api = createTouchClipSelection({
+      getClipsByTrack: () => ({}),
+      getSelectedClipIds: () => [],
+      getCameraX: () => 0,
+      getPixelsPerSecond: () => 10,
+      selectClips,
+      clearRegionSelection: vi.fn(),
+      isMultiSelect: () => multiSelect,
+      toggleClip: vi.fn(),
+      video: {
+        getSelectedVideoClipIds: () => selectedVideo,
+        selectVideoClip,
+        clearVideoSelection,
+      },
+    });
+    const hotspot = document.createElement("div");
+    hotspot.dataset.videoClipId = "vc1";
+    const edge = document.createElement("span");
+    hotspot.append(edge);
+    document.body.append(hotspot);
+    return { api, selectClips, selectVideoClip, clearVideoSelection, hotspot, edge };
+  }
+
+  it("a tap selects the video clip and drops the audio selection", () => {
+    const { api, selectClips, selectVideoClip, edge } = videoSetup();
+    api.onTap(5, 0, edge);
+    expect(selectVideoClip).toHaveBeenCalledWith("vc1", false);
+    expect(selectClips).toHaveBeenCalledWith([]);
+  });
+
+  it("a drag edits only a video clip that is already selected", () => {
+    expect(videoSetup([]).api.shouldEdit(5, 0, videoSetup([]).hotspot)).toBe(false);
+    const selected = videoSetup(["vc1"]);
+    expect(selected.api.shouldEdit(5, 0, selected.edge)).toBe(true);
+  });
+
+  it("a read-only video lane is not selectable: the finger navigates", () => {
+    const { api, selectVideoClip, hotspot } = videoSetup(["vc1"]);
+    hotspot.classList.add("is-read-only");
+    expect(api.shouldEdit(5, 0, hotspot)).toBe(false);
+    api.onTap(5, 0, hotspot);
+    expect(selectVideoClip).not.toHaveBeenCalled();
+  });
+
+  it("a tap elsewhere also lets go of the video selection", () => {
+    const { api, clearVideoSelection } = videoSetup(["vc1"]);
+    api.onTap(5, 0, document.createElement("div"));
+    expect(clearVideoSelection).toHaveBeenCalled();
+  });
+});
+

@@ -2,6 +2,7 @@ import { useMemo, useRef, type MutableRefObject } from "react";
 import type { ClipSummary } from "../desktopApi";
 import { lanePointerToClip } from "../helpers";
 import { useTimelineUIStore } from "../uiStore";
+import { useVideoStore } from "../video/videoStore";
 
 type TouchClipSelectionDeps = {
   /** Clips por pista, tal y como se estan pintando ahora mismo. */
@@ -22,7 +23,29 @@ type TouchClipSelectionDeps = {
    * mostrando sus acciones como si siguiera seleccionada.
    */
   clearRegionSelection: () => void;
+  /**
+   * Video clips (plan video-mobile, paso 09): the same rules — tap selects,
+   * dragging what is already selected edits — over the video lanes' HTML
+   * hit targets. Optional so the audio-only callers stay as they were.
+   */
+  video?: {
+    getSelectedVideoClipIds: () => string[];
+    selectVideoClip: (clipId: string, additive: boolean) => void;
+    clearVideoSelection: () => void;
+  };
 };
+
+/** The editable video clip under the finger, from its hit target. A
+ * read-only lane (a phone whose players could not start) is not a clip to
+ * select or move: the finger navigates over it. */
+export function videoClipIdAt(target: EventTarget | null): string | null {
+  const hotspot =
+    target instanceof Element
+      ? target.closest<HTMLElement>("[data-video-clip-id]")
+      : null;
+  if (!hotspot || hotspot.classList.contains("is-read-only")) return null;
+  return hotspot.dataset.videoClipId ?? null;
+}
 
 /**
  * Reglas de toque de la linea de tiempo en movil y tablet.
@@ -67,11 +90,24 @@ export function createTouchClipSelection(deps: TouchClipSelectionDeps) {
   return {
     /** Cede el gesto a la edicion solo sobre un clip ya seleccionado. */
     shouldEdit(clientX: number, _clientY: number, target: EventTarget | null) {
+      const videoClipId = deps.video ? videoClipIdAt(target) : null;
+      if (videoClipId) {
+        return deps.video!.getSelectedVideoClipIds().includes(videoClipId);
+      }
       const clip = clipAt(clientX, target);
       return Boolean(clip && deps.getSelectedClipIds().includes(clip.id));
     },
     /** Toque limpio: selecciona lo que haya debajo, o limpia la seleccion. */
     onTap(clientX: number, _clientY: number, target: EventTarget | null) {
+      const videoClipId = deps.video ? videoClipIdAt(target) : null;
+      if (videoClipId) {
+        const additive = deps.isMultiSelect();
+        deps.video!.selectVideoClip(videoClipId, additive);
+        // One selection at a time across audio and video, as with a click.
+        if (!additive) deps.selectClips([]);
+        return;
+      }
+      if (!deps.isMultiSelect()) deps.video?.clearVideoSelection();
       const clip = clipAt(clientX, target);
       // Sumando, el toque sobre un clip lo anade o lo quita. Es la unica forma
       // de juntar varios con un dedo: no hay Ctrl que mantener. Fuera de un
@@ -121,6 +157,12 @@ export function useTouchClipSelection(
         toggleClip: (clipId) =>
           useTimelineUIStore.getState().toggleClipSelection(clipId),
         clearRegionSelection: () => clearRegionRef.current(),
+        video: {
+          getSelectedVideoClipIds: () => useVideoStore.getState().selectedVideoClipIds,
+          selectVideoClip: (clipId, additive) =>
+            useVideoStore.getState().selectVideoClip(clipId, additive),
+          clearVideoSelection: () => useVideoStore.getState().clearVideoSelection(),
+        },
       }),
     [cameraXRef, pixelsPerSecondRef],
   );

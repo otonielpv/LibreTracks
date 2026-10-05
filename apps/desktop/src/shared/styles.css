@@ -12445,6 +12445,27 @@ html.lt-ios body {
   right: calc(var(--lt-video-fade-out, 0px) + 6px);
 }
 
+/* Phone and tablet (plan video-mobile, paso 09): a finger needs bigger edges,
+   and there is no hover to reveal the fade handles, so they show while the
+   clip is selected (dragging an unselected clip navigates instead). A
+   read-only lane lets the finger through to the timeline navigation. */
+.lt-mobile .lt-video-clip-hotspot .lt-video-trim {
+  width: 18px;
+}
+
+.lt-mobile .lt-video-clip-hotspot .lt-video-fade {
+  width: 16px;
+  height: 16px;
+}
+
+.lt-mobile .lt-video-clip-hotspot.is-selected .lt-video-fade {
+  opacity: 1;
+}
+
+.lt-mobile .lt-video-clip-hotspot.is-read-only {
+  touch-action: auto;
+}
+
 .lt-library-video-section {
   margin-top: 10px;
 }

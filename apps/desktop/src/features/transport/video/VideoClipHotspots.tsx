@@ -5,6 +5,7 @@ import type { MouseEvent as ReactMouseEvent, MutableRefObject } from "react";
 import type { SongView, VideoClipSummary } from "../desktopApi";
 import type { VideoClipHandlers } from "./videoClipHandlers";
 import { useVideoClipHotspots, type VideoDragMode } from "./useVideoClipHotspots";
+import { useVideoStore } from "./videoStore";
 
 /** What the video feature hands every video lane (see useVideoFeature). */
 export type VideoLaneBindings = {
@@ -40,6 +41,8 @@ export function VideoClipHotspots({
   const { t } = useTranslation();
   const controller = useVideoClipHotspots({ song, ...camera, snapEnabled, ...lane });
   const clips = (song?.videoClips ?? []).filter((clip) => clip.trackId === trackId);
+  // A phone shows the fade handles on the selected clip (no hover there).
+  const selectedIds = useVideoStore((state) => state.selectedVideoClipIds);
   const { register, beginDrag, updateDrag, endDrag, openContextMenu, readOnly } = controller;
 
   const handle = (mode: VideoDragMode, className: string, clip: (typeof clips)[number]) => (
@@ -59,7 +62,9 @@ export function VideoClipHotspots({
         <div
           key={clip.id}
           ref={(element) => register(clip.id, element)}
-          className={`lt-video-clip-hotspot${readOnly ? " is-read-only" : ""}`}
+          className={`lt-video-clip-hotspot${readOnly ? " is-read-only" : ""}${
+            selectedIds.includes(clip.id) ? " is-selected" : ""
+          }`}
           data-video-clip-id={clip.id}
           title={readOnly ? t("transport.video.readOnly") : undefined}
           style={{ top: 2, height: Math.max(4, rowHeight - 4) }}

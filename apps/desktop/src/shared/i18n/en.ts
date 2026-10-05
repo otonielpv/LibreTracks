@@ -1026,7 +1026,7 @@ const en = {
       addTrack: "Add video track",
       trackAdded: "Video track added.",
       missing: "MISSING",
-      readOnly: "Read only: video only plays in the desktop version.",
+      readOnly: "Read only: this device cannot play video.",
       hideTrack: "Hide this video track",
       showTrack: "Show this video track",
       soloTrack: "Show only this video track",

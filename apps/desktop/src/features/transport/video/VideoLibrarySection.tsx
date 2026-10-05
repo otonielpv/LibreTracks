@@ -20,7 +20,8 @@ export function VideoLibrarySection() {
   const { t } = useTranslation();
   const assets = useVideoStore((state) => state.assets);
   const placeAtPlayhead = useVideoStore((state) => state.placeAtPlayhead);
-  if (!assets.length) return null;
+  const addFromDevice = useVideoStore((state) => state.addFromDevice);
+  if (!assets.length && !addFromDevice) return null;
 
   const describe = (asset: VideoAssetSummary) =>
     [
@@ -41,6 +42,18 @@ export function VideoLibrarySection() {
           movie
         </span>
         {t("transport.video.librarySection")}
+        {addFromDevice ? (
+          <button
+            type="button"
+            className="lt-library-video-add"
+            data-lt-native-touch
+            aria-label={t("transport.video.addFromDevice")}
+            title={t("transport.video.addFromDevice")}
+            onClick={() => addFromDevice()}
+          >
+            <span className="material-symbols-outlined">add</span>
+          </button>
+        ) : null}
       </div>
       <div
         className="lt-library-asset-list"

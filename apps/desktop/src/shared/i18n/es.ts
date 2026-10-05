@@ -1057,7 +1057,7 @@ const es = {
       addTrack: "Añadir pista de vídeo",
       trackAdded: "Pista de vídeo añadida.",
       missing: "FALTA",
-      readOnly: "Solo lectura: el vídeo solo se reproduce en la versión de escritorio.",
+      readOnly: "Solo lectura: este dispositivo no puede reproducir vídeo.",
       hideTrack: "Ocultar esta pista de vídeo",
       showTrack: "Mostrar esta pista de vídeo",
       soloTrack: "Mostrar solo esta pista de vídeo",

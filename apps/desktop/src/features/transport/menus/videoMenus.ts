@@ -27,7 +27,7 @@ export function createVideoMenus(
     const d = getDeps();
     const { t } = d;
     const video = handlers();
-    if (!video || isMobileApp) return [];
+    if (!video) return [];
     const fitOption = (fit: VideoFit | null, labelKey: string): ContextMenuAction => ({
       label: `${t("transport.video.menu.fit")}: ${t(labelKey)}${
         (clip.fit ?? null) === fit ? "  ✓" : ""
@@ -63,7 +63,8 @@ export function createVideoMenus(
             video.setColor(clip.id, color);
           }),
       },
-      ...(video.clipHasAudio(clip)
+      // Decoding a video's sound needs libmpv: not on a phone (paso 09 §2).
+      ...(video.clipHasAudio(clip) && !isMobileApp
         ? [
             {
               label: t("transport.video.menu.extractAudio"),
@@ -95,12 +96,30 @@ export function createVideoMenus(
   function videoTrackContextMenu(track: TrackSummary): ContextMenuAction[] {
     const d = getDeps();
     const { t } = d;
-    if (isMobileApp) return [];
+    const video = handlers();
     return [
-      {
-        label: t("transport.video.addTrack"),
-        onSelect: () => handlers()?.addVideoTrack(track.id),
-      },
+      // Phone: copy a video from the device onto this track at the playhead
+      // (plan video-mobile, paso 08 §3).
+      ...(isMobileApp && video
+        ? [
+            {
+              label: t("transport.video.addFromDevice"),
+              onSelect: () =>
+                video.addVideosFromDevice({
+                  seconds: d.displayPositionSecondsRef.current,
+                  trackId: track.id,
+                }),
+            },
+          ]
+        : []),
+      ...(video
+        ? [
+            {
+              label: t("transport.video.addTrack"),
+              onSelect: () => video.addVideoTrack(track.id),
+            },
+          ]
+        : []),
       {
         label: t("common.rename"),
         shortcut: d.shortcutHint("edit.rename"),

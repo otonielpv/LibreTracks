@@ -37,6 +37,7 @@ import {
   deleteSongTimeSignatureMarker,
   deleteTrack,
   deleteTracks,
+  isMobileApp,
   moveTrack,
   removeAutomationTrack,
   scheduleMarkerJump,
@@ -1296,6 +1297,19 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       },
       ...(d.videoHandlers
         ? [{ label: t("transport.video.addTrack"), onSelect: () => d.handleCreateTrack("video", null, null) }]
+        : []),
+      // Phone: the "+" menu also brings a video from the device (paso 09 §2).
+      ...(d.videoHandlers && isMobileApp
+        ? [
+            {
+              label: t("transport.video.addFromDevice"),
+              onSelect: () =>
+                d.videoHandlers?.addVideosFromDevice({
+                  seconds: d.displayPositionSecondsRef.current,
+                  trackId: null,
+                }),
+            },
+          ]
         : []),
     ];
 

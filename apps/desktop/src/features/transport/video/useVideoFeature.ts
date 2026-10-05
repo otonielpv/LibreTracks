@@ -47,7 +47,12 @@ export type VideoFeatureDeps = {
 export function useVideoFeature(deps: VideoFeatureDeps) {
   const depsRef = useRef(deps);
   depsRef.current = deps;
-  const desktop = !isMobileApp;
+  // Plan video-mobile, paso 09: video plays on phones too. What decides
+  // whether it can be edited is the backend's capability (the native players
+  // started), not the platform. On the desktop editing never depended on
+  // libmpv, and still does not.
+  const backendAvailable = useVideoStore((state) => state.status?.available ?? false);
+  const editable = !isMobileApp || backendAvailable;
 
   const handlers = useMemo(
     () =>
@@ -95,23 +100,26 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
     };
   }, [handlers]);
 
-  // Whether libmpv loaded, once per app run (the backend caches it too).
+  // Whether the backend can play video (libmpv on the desktop, the native
+  // players on a phone). On a phone it is only known once the output thread
+  // reported, so it is asked again when the output status changes.
+  const outputState = useVideoStore((state) => state.outputStatus?.state.state ?? null);
   useEffect(() => {
-    if (!desktop) return;
+    if (!isTauriApp) return;
     void getVideoMediaStatus()
       .then((status) => useVideoStore.getState().setMediaStatus(status))
       .catch(() => undefined);
-  }, [desktop]);
+  }, [outputState]);
 
   // The video library follows the open session.
   const sessionKey = `${deps.song?.id ?? ""}|${deps.song?.sessionName ?? ""}`;
   useEffect(() => {
-    if (!desktop || !deps.song) return;
+    if (!deps.song) return;
     void listVideoAssets()
       .then((assets) => useVideoStore.getState().setAssets(assets))
       .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [desktop, sessionKey]);
+  }, [sessionKey]);
 
   // Opening a session with video on a machine without the output set up (or
   // with its display unplugged) shows a non-blocking notice.
@@ -120,22 +128,23 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
   const libmpvAvailable = useVideoStore((state) => state.status?.available ?? false);
   const noticeCheckedForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!desktop || !deps.song || !libmpvAvailable) return;
+    // The desktop's notice and wizard; a phone's setup is paso 10's.
+    if (isMobileApp || !deps.song || !libmpvAvailable) return;
     if (noticeCheckedForRef.current === sessionKey) return;
     noticeCheckedForRef.current = sessionKey;
     void runSessionOpenTrigger(sessionKey, (deps.song.videoClips?.length ?? 0) > 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [desktop, sessionKey, libmpvAvailable]);
+  }, [sessionKey, libmpvAvailable]);
 
-  useVideoThumbnails(deps.song, desktop);
+  useVideoThumbnails(deps.song, true);
 
   // Black / idle pressed from anywhere (shortcut, MIDI, remote): the badge
   // follows the backend (paso 13).
-  useEffect(() => (desktop ? subscribeToVideoLiveState() : undefined), [desktop]);
+  useEffect(() => subscribeToVideoLiveState(), []);
 
   // Progress of audio extractions (paso 11), shown by VideoAudioProgress.
   useEffect(() => {
-    if (!desktop) return;
+    if (isMobileApp) return;
     let unlisten: (() => void) | null = null;
     let cancelled = false;
     void listenToVideoAudioExtractProgress(({ clipId, fraction }) => {
@@ -152,21 +161,25 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
       cancelled = true;
       unlisten?.();
     };
-  }, [desktop]);
+  }, []);
 
   // The library's "put it on the timeline" action: at the playhead, on the
-  // selected video track if there is one, else on a new video track.
+  // selected video track if there is one, else on a new video track. A phone
+  // also offers "add a video from the device" there (paso 08 §3).
   useEffect(() => {
-    if (!desktop) return;
-    useVideoStore.getState().setPlaceAtPlayhead((asset) => {
-      const selectedTrackId = useTimelineUIStore.getState().selectedTrackIds[0] ?? null;
-      handlers.placeLibraryAssets([asset], {
-        seconds: depsRef.current.getPlayheadSeconds(),
-        trackId: selectedTrackId,
-      });
+    if (!editable) return;
+    const atPlayhead = () => ({
+      seconds: depsRef.current.getPlayheadSeconds(),
+      trackId: useTimelineUIStore.getState().selectedTrackIds[0] ?? null,
     });
-    return () => useVideoStore.getState().setPlaceAtPlayhead(null);
-  }, [desktop, handlers]);
+    const store = useVideoStore.getState();
+    store.setPlaceAtPlayhead((asset) => handlers.placeLibraryAssets([asset], atPlayhead()));
+    store.setAddFromDevice(isMobileApp ? () => handlers.addVideosFromDevice(atPlayhead()) : null);
+    return () => {
+      useVideoStore.getState().setPlaceAtPlayhead(null);
+      useVideoStore.getState().setAddFromDevice(null);
+    };
+  }, [editable, handlers]);
 
   // One selection at a time across audio and video unless the user extends
   // it with a modifier (the hotspots handle that side); selecting audio clips
@@ -195,10 +208,10 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
   const lanes = useMemo<VideoLaneBindings>(
     () => ({
       handlers,
-      readOnly: !desktop,
+      readOnly: !editable,
       onContextMenu: (event, clip) => depsRef.current.openClipMenu(event, clip),
     }),
-    [handlers, desktop],
+    [handlers, editable],
   );
 
   const keyboardEdits = useMemo(
@@ -211,13 +224,15 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
   );
 
   return {
-    /** For libraryDragDrop's `importVideoPaths` (absent on mobile). */
-    importVideoPaths: desktop ? handlers.importVideoPaths : undefined,
-    /** For timelineMenus' `videoHandlers` (absent on mobile). */
-    handlers: desktop ? handlers : undefined,
+    /** For libraryDragDrop's `importVideoPaths`: files dropped from the OS,
+     * referenced in place. A phone has no such drop; it copies picked videos
+     * into the session instead (`handlers.addVideosFromDevice`). */
+    importVideoPaths: !isMobileApp ? handlers.importVideoPaths : undefined,
+    /** For timelineMenus' `videoHandlers` (absent where video is read-only). */
+    handlers: editable ? handlers : undefined,
     /** For TimelineCanvasPane's `videoLanes`. */
     lanes,
     /** For useTimelineKeyboardShortcuts' `videoEdits`. */
-    keyboardEdits: desktop ? keyboardEdits : undefined,
+    keyboardEdits: editable ? keyboardEdits : undefined,
   };
 }
