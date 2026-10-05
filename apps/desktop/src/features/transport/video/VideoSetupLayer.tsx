@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { isMobileApp } from "../desktopApi";
 import { VideoAudioProgress, VideoAudioPrompt } from "./VideoAudioPrompt";
 import { VideoImportQuestionModal } from "./VideoImportQuestionModal";
+import { VideoSetupWizardMobile } from "./VideoSetupWizardMobile";
 import { WIZARD_STEP_DISPLAY, VideoSetupWizard } from "./VideoSetupWizard";
 import { useVideoStore } from "./videoStore";
 
@@ -14,7 +15,14 @@ import { useVideoStore } from "./videoStore";
  */
 export function VideoSetupLayer() {
   // The "bring the videos too?" question is a phone's (plan video-mobile).
-  if (isMobileApp) return <VideoImportQuestionModal />;
+  if (isMobileApp) {
+    return (
+      <>
+        <VideoImportQuestionModal />
+        <VideoSetupWizardMobile />
+      </>
+    );
+  }
   return (
     <>
       <VideoSetupNotice />

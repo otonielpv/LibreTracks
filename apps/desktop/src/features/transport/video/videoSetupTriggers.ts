@@ -1,6 +1,7 @@
 import {
   DEFAULT_VIDEO_OUTPUT_SETTINGS,
   getSettings,
+  isMobileApp,
   listVideoDisplays,
   type VideoDisplayOption,
   type VideoOutputSettings,
@@ -13,9 +14,11 @@ import { useVideoStore, type VideoSetupNotice } from "./videoStore";
  * act on the video store.
  */
 
-/** No display chosen, or the output switched off: nothing would project. */
-export function outputIsUnconfigured(settings: VideoOutputSettings) {
-  return !settings.enabled || settings.display == null;
+/** No display chosen, or the output switched off: nothing would project.
+ * A phone needs no display chosen (the first external one is used, plan
+ * video-mobile paso 06), only the output on. */
+export function outputIsUnconfigured(settings: VideoOutputSettings, mobile = false) {
+  return !settings.enabled || (!mobile && settings.display == null);
 }
 
 /** "\\.\DISPLAY2" → "DISPLAY2". */
@@ -55,7 +58,7 @@ export async function runFirstVideoClipTrigger() {
   const store = useVideoStore.getState();
   if (!store.status?.available || store.wizardOpen) return;
   try {
-    if (outputIsUnconfigured(await currentVideoSettings())) {
+    if (outputIsUnconfigured(await currentVideoSettings(), isMobileApp)) {
       useVideoStore.getState().openWizard(0);
     }
   } catch {

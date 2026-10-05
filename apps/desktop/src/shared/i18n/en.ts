@@ -1045,8 +1045,16 @@ const en = {
           noDisplay: "no display chosen",
           ready: "output ready",
           displayLost: "display disconnected",
+          suspended: "projector off while the phone is locked",
           error: "output error",
         },
+        nativeOk: "System player",
+        firstExternal: "The first external display (automatic)",
+        mobileHelpTitle: "Connecting the projector",
+        mobileHelpIos:
+          "iPhone 15 or later and iPad with USB-C: USB-C to HDMI cable. With Lightning: Lightning Digital AV adapter. AirPlay: experimental, calibrate the delay on site. Locking the phone switches the projector off.",
+        mobileHelpAndroid:
+          "Your phone needs video output over USB-C (DisplayPort). If no display shows up when you connect, your phone does not have it. On Samsung, turn DeX off. Locking the phone switches the projector off.",
         enabled: "Video output",
         display: "Display",
         noDisplay: "Not chosen",
@@ -1109,6 +1117,18 @@ const en = {
           oneMonitor:
             "I only see one display. Plug in the projector or TV and it will show up here by itself. Meanwhile you can watch the video in a window.",
           useWindow: "Use a window for now",
+        },
+        mobile: {
+          connectTitle: "Connect the projector",
+          connectBody:
+            "Connect the cable to the projector or TV (or turn on Screen Mirroring to AirPlay). The display will show up here by itself.",
+          waiting: "Waiting for a display…",
+          found: "Display connected: {{name}}",
+          noDisplayHelp: "Nothing showing up? Check this:",
+          checkTitle: "Check the picture",
+          checkBody: "We are projecting a test pattern. Can you see it on the projector?",
+          yes: "Yes, I can see it",
+          no: "I can't see it",
         },
         check: {
           title: "Check the picture",
@@ -1193,6 +1213,12 @@ const en = {
         off: "Video output off. Click to show it.",
         hide: "Click to hide the video window.",
         suspended: "Projector off",
+        blackOn: "Lift the black",
+        blackOff: "Black",
+        statusTitle: "Video output",
+        players_one: "One player",
+        players_other: "Two players",
+        openSettings: "Video settings",
         suspendedHint: "The projector goes dark when the phone is locked. Unlock it to bring it back.",
         noDisplayMobile: "Video: connect a projector",
       },

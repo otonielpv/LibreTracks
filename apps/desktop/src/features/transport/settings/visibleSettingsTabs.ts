@@ -2,12 +2,10 @@ import type { SettingsTab } from "../types";
 
 /**
  * Tabs a phone or tablet never shows: no physical keyboard by default for
- * shortcuts, and no external video output.
+ * shortcuts. (Video is shown since plan video-mobile: a phone drives a
+ * projector by cable or AirPlay.)
  */
-export const MOBILE_HIDDEN_SETTINGS_TABS: readonly SettingsTab[] = [
-  "video",
-  "shortcuts",
-];
+export const MOBILE_HIDDEN_SETTINGS_TABS: readonly SettingsTab[] = ["shortcuts"];
 
 /** Tabs that only make sense when the platform has MIDI. */
 export const MIDI_SETTINGS_TABS: readonly SettingsTab[] = ["midi", "midiLearn"];

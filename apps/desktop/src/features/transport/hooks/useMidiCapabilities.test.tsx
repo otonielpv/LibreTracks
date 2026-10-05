@@ -69,7 +69,7 @@ describe("useMidiCapabilities + visibleSettingsTabs", () => {
           midiAvailable: result.current?.available ?? false,
         }),
       ),
-    ).toEqual(["audio", "general", "diagnostics", "midi", "midiLearn"]);
+    ).toEqual(["audio", "general", "video", "diagnostics", "midi", "midiLearn"]);
   });
 
   it("hides them on mobile when MIDI is not available, as before", async () => {
@@ -84,7 +84,7 @@ describe("useMidiCapabilities + visibleSettingsTabs", () => {
           midiAvailable: result.current?.available ?? false,
         }),
       ),
-    ).toEqual(["audio", "general", "diagnostics"]);
+    ).toEqual(["audio", "general", "video", "diagnostics"]);
   });
 
   it("desktop always shows every tab", () => {

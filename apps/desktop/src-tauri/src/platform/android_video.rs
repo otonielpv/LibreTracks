@@ -387,7 +387,5 @@ pub extern "system" fn Java_com_libretracks_desktop_VideoOutputBridge_nativeOnDi
     lines: JString,
 ) {
     let lines = optional_string(&mut env, &lines).unwrap_or_default();
-    native_events::emit(libretracks_video::output::BackendEvent::DisplaysChanged(
-        native_events::parse_displays(&lines),
-    ));
+    native_events::displays_changed(native_events::parse_displays(&lines));
 }

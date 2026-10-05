@@ -125,6 +125,36 @@ pub fn parse_displays(text: &str) -> Vec<MonitorInfo> {
         .collect()
 }
 
+/// The external displays the native side reported last, for the settings
+/// tab and the wizard (paso 10), and who wants to hear about changes.
+static LAST_DISPLAYS: Mutex<Vec<MonitorInfo>> = Mutex::new(Vec::new());
+type DisplaysListener = Box<dyn Fn(&[MonitorInfo]) + Send + Sync>;
+static DISPLAYS_LISTENER: OnceLock<DisplaysListener> = OnceLock::new();
+
+/// Called by the platform adapters with a new list: remembered, handed to the
+/// output and to the listener (the `video:displays` event).
+pub fn displays_changed(displays: Vec<MonitorInfo>) {
+    if let Ok(mut last) = LAST_DISPLAYS.lock() {
+        last.clone_from(&displays);
+    }
+    if let Some(listener) = DISPLAYS_LISTENER.get() {
+        listener(&displays);
+    }
+    emit(BackendEvent::DisplaysChanged(displays));
+}
+
+pub fn last_displays() -> Vec<MonitorInfo> {
+    LAST_DISPLAYS
+        .lock()
+        .map(|displays| displays.clone())
+        .unwrap_or_default()
+}
+
+/// Set once, at startup, by the app.
+pub fn set_displays_listener(listener: DisplaysListener) {
+    let _ = DISPLAYS_LISTENER.set(listener);
+}
+
 static SINK: OnceLock<Mutex<Option<NativeEventSink>>> = OnceLock::new();
 
 fn sink() -> &'static Mutex<Option<NativeEventSink>> {
@@ -236,6 +266,15 @@ mod tests {
             bare.as_deref(),
             Some("Un solo reproductor: los saltos pueden congelar la imagen un instante")
         );
+    }
+
+    #[test]
+    fn the_last_display_list_is_remembered_for_the_settings() {
+        displays_changed(parse_displays("HDMI\t1920\t1080"));
+        assert_eq!(last_displays().len(), 1);
+        assert_eq!(last_displays()[0].name, "HDMI");
+        displays_changed(Vec::new());
+        assert!(last_displays().is_empty());
     }
 
     #[test]

@@ -2732,3 +2732,13 @@ export async function listenToVideoDeviceImportDone(
     handler(event.payload);
   });
 }
+
+/** Phone: the external displays changed (plan video-mobile, paso 10). */
+export async function listenToVideoDisplays(
+  handler: (displays: VideoDisplayOption[]) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<VideoDisplayOption[]>("video:displays", (event) => {
+    handler(event.payload);
+  });
+}

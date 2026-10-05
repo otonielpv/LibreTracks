@@ -1,6 +1,5 @@
 import {
   getVideoLiveState,
-  isMobileApp,
   listenToVideoLiveState,
   videoLiveAction,
   type VideoLiveAction,
@@ -21,7 +20,6 @@ export function applyVideoLiveState(state: VideoLiveState) {
 }
 
 export async function runVideoLiveAction(action: VideoLiveAction) {
-  if (isMobileApp) return;
   try {
     applyVideoLiveState(await videoLiveAction(action));
   } catch {
@@ -31,7 +29,6 @@ export async function runVideoLiveAction(action: VideoLiveAction) {
 
 /** Mirror the backend state, including presses from MIDI or the remote. */
 export function subscribeToVideoLiveState(): () => void {
-  if (isMobileApp) return () => {};
   let unlisten: (() => void) | null = null;
   let cancelled = false;
   void getVideoLiveState()

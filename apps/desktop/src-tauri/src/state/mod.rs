@@ -80,9 +80,11 @@ mod missing_media;
 pub(crate) use missing_media::MissingMediaEntry;
 pub(crate) use video_edit::VideoClipProps;
 pub(crate) use video_library::{
-    free_space_near, mark_unplayable_video_assets, mark_videos_left_out, package_extract_options,
-    VideoAssetSummary,
+    mark_unplayable_video_assets, mark_videos_left_out, package_extract_options, VideoAssetSummary,
 };
+// Only a phone copies picked videos (`commands/video.rs`, plan video-mobile).
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub(crate) use video_library::free_space_near;
 pub(crate) use self::TransportClockMirror as VideoTransportClock;
 mod track_colors;
 mod track_tree;

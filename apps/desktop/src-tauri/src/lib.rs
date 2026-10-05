@@ -725,7 +725,18 @@ mod video_setup {
             .and_then(|store| store.current().ok())
             .map(|settings| settings.video_output)
             .unwrap_or_default();
-        // On a phone the native side pushes its external displays itself.
+        // On a phone the native side pushes its external displays itself;
+        // the settings tab and the wizard hear about them as `video:displays`.
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        {
+            let emitter = app.clone();
+            crate::video::native_events::set_displays_listener(Box::new(move |displays| {
+                let _ = emitter.emit(
+                    "video:displays",
+                    crate::commands::video::mobile_display_options(displays.to_vec()),
+                );
+            }));
+        }
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             let (monitors, app_monitor) = crate::video::displays::connected_monitors(app);

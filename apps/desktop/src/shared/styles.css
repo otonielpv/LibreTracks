@@ -12466,6 +12466,68 @@ html.lt-ios body {
   touch-action: auto;
 }
 
+/* The video output in the phone's top bar (plan video-mobile, paso 10): a
+   fixed slot of two icons, whatever the state, so it never moves the clock or
+   the BPM. The black button keeps its place while unusable. */
+.lt-video-output-mobile {
+  position: relative;
+  /* Its slot (.lt-device-status-slot) lets touches through; this takes them. */
+  pointer-events: auto;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  width: calc(2 * 32px + 4px);
+}
+
+.lt-video-output-mobile .lt-video-output-badge.is-compact,
+.lt-video-output-mobile .lt-video-black-button {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lt-video-black-button.is-idle {
+  visibility: hidden;
+}
+
+.lt-video-black-button.is-on {
+  background: #000;
+  color: #fff;
+  outline: 2px solid var(--lt-accent, #3fb8af);
+}
+
+.lt-video-output-sheet {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: 15rem;
+  max-width: min(22rem, calc(100vw - 2rem));
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: var(--lt-surface-raised, #1f2328);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.lt-video-output-sheet p {
+  margin: 0;
+}
+
+.lt-video-mobile-help {
+  margin-top: 0.75rem;
+}
+
+.lt-video-mobile-help p {
+  margin: 0.25rem 0 0;
+}
+
 .lt-library-video-section {
   margin-top: 10px;
 }

@@ -1076,8 +1076,16 @@ const es = {
           noDisplay: "sin pantalla elegida",
           ready: "salida lista",
           displayLost: "pantalla desconectada",
+          suspended: "proyector apagado por el bloqueo del móvil",
           error: "error en la salida",
         },
+        nativeOk: "Reproductor del sistema",
+        firstExternal: "La primera pantalla externa (automático)",
+        mobileHelpTitle: "Cómo conectar el proyector",
+        mobileHelpIos:
+          "iPhone 15 o posterior y iPad con USB-C: cable USB-C a HDMI. Con Lightning: adaptador Lightning Digital AV. AirPlay: experimental, calibra el retardo en el sitio. Al bloquear el móvil el proyector se apaga.",
+        mobileHelpAndroid:
+          "Tu móvil necesita salida de vídeo por USB-C (DisplayPort). Si al conectar no aparece ninguna pantalla, tu móvil no la tiene. En Samsung, desactiva DeX. Al bloquear el móvil el proyector se apaga.",
         enabled: "Salida de vídeo",
         display: "Pantalla",
         noDisplay: "Sin elegir",
@@ -1140,6 +1148,18 @@ const es = {
           oneMonitor:
             "Sólo veo una pantalla. Conecta el proyector o la TV y aparecerá aquí sola. Mientras, puedes ver el vídeo en una ventana.",
           useWindow: "Usar una ventana por ahora",
+        },
+        mobile: {
+          connectTitle: "Conecta el proyector",
+          connectBody:
+            "Conecta el cable al proyector o a la TV (o activa Duplicar pantalla hacia AirPlay). La pantalla aparecerá aquí sola.",
+          waiting: "Esperando una pantalla…",
+          found: "Pantalla conectada: {{name}}",
+          noDisplayHelp: "¿No aparece nada? Revisa esto:",
+          checkTitle: "Comprueba la imagen",
+          checkBody: "Estamos proyectando una carta de ajuste. ¿La ves en el proyector?",
+          yes: "Sí, la veo",
+          no: "No la veo",
         },
         check: {
           title: "Comprueba la imagen",
@@ -1224,6 +1244,12 @@ const es = {
         off: "Salida de vídeo apagada. Haz clic para mostrarla.",
         hide: "Haz clic para ocultar la ventana de vídeo.",
         suspended: "Proyector apagado",
+        blackOn: "Quitar el negro",
+        blackOff: "Negro",
+        statusTitle: "Salida de vídeo",
+        players_one: "Un reproductor",
+        players_other: "Dos reproductores",
+        openSettings: "Ajustes de vídeo",
         suspendedHint:
           "El proyector se apaga al bloquear el móvil. Desbloquea para recuperarlo.",
         noDisplayMobile: "Vídeo: conecta un proyector",

@@ -8,6 +8,7 @@ import {
   listenToVideoOutputStatus,
 } from "../desktopApi";
 import { useSongStore } from "../songStore";
+import { VideoOutputBadgeMobile } from "./VideoOutputBadgeMobile";
 import { runVideoLiveAction } from "./videoLive";
 import { useVideoStore } from "./videoStore";
 
@@ -15,7 +16,7 @@ import { useVideoStore } from "./videoStore";
  * `video:output-status` event. Mounted once, by the badge. */
 function useVideoOutputStatusSync() {
   useEffect(() => {
-    if (!isTauriApp || isMobileApp) return;
+    if (!isTauriApp) return;
     let disposed = false;
     let unlisten: (() => void) | null = null;
     const store = useVideoStore.getState();
@@ -46,8 +47,12 @@ function useVideoOutputStatusSync() {
  * what is wrong (display unplugged, libmpv missing).
  */
 export function VideoOutputBadge() {
-  const { t } = useTranslation();
   useVideoOutputStatusSync();
+  return isMobileApp ? <VideoOutputBadgeMobile /> : <VideoOutputBadgeDesktop />;
+}
+
+function VideoOutputBadgeDesktop() {
+  const { t } = useTranslation();
   const status = useVideoStore((state) => state.outputStatus);
   const forcedBlack = useVideoStore((state) => state.forcedBlack);
   const openWizard = useVideoStore((state) => state.openWizard);

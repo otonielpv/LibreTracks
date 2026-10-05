@@ -509,7 +509,21 @@ object VideoOutputBridge {
       state.path = null
       state.paused = true
       val image = presentation?.images?.get(slot) ?: return@post
-      val bitmap = path?.let { BitmapFactory.decodeFile(it) }
+      // A picked idle image may be a content:// document (paso 10).
+      val bitmap = path?.let { source ->
+        try {
+          if (source.startsWith("content://")) {
+            activityRef?.get()?.contentResolver?.openInputStream(Uri.parse(source))?.use {
+              BitmapFactory.decodeStream(it)
+            }
+          } else {
+            BitmapFactory.decodeFile(source.removePrefix("file://"))
+          }
+        } catch (error: Exception) {
+          Log.w(TAG, "image $source: ${error.message}")
+          null
+        }
+      }
       image.setImageBitmap(bitmap)
       if (bitmap == null) image.setImageDrawable(null)
       applyVisibility()

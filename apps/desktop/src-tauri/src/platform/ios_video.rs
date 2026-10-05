@@ -244,7 +244,5 @@ pub extern "C" fn lt_video_ios_event(kind: i32, slot: i32, text: *const c_char) 
 #[no_mangle]
 pub extern "C" fn lt_video_ios_displays(lines: *const c_char) {
     let lines = unsafe { optional_str(lines) }.unwrap_or_default();
-    native_events::emit(BackendEvent::DisplaysChanged(
-        native_events::parse_displays(lines),
-    ));
+    native_events::displays_changed(native_events::parse_displays(lines));
 }

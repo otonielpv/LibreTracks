@@ -9,7 +9,10 @@ import {
   getVideoMediaStatus,
   getVideoSyncStats,
   identifyVideoDisplays,
+  isIOSApp,
+  isMobileApp,
   listVideoDisplays,
+  listenToVideoDisplays,
   showVideoTestPattern,
   type VideoDisplayOption,
   type VideoOutputSettings,
@@ -25,9 +28,15 @@ function displayName(name: string) {
 }
 
 /**
- * Settings → Video (desktop only). Every control applies at once: the fit
- * does not reopen the output window, the display and the mode do. Without
- * libmpv the tab explains why and everything is disabled.
+ * Settings → Video. Every control applies at once: the fit does not reopen
+ * the output window, the display and the mode do. Without a backend (libmpv
+ * on the desktop, the system's players on a phone) the tab explains why and
+ * everything is disabled.
+ *
+ * On a phone or tablet (plan video-mobile, paso 10) there is no window, no
+ * "always on top" and no software decoding to choose: those controls are not
+ * there. The display defaults to "the first external one", and a help
+ * section explains the cable or AirPlay for the platform.
  */
 export function VideoSettingsTab() {
   const { t } = useTranslation();
@@ -57,10 +66,23 @@ export function VideoSettingsTab() {
       .then((status) => useVideoStore.getState().setMediaStatus(status))
       .catch(() => undefined);
     refreshDisplays();
+    // A phone pushes its external displays as they come and go.
+    let unlistenDisplays: (() => void) | null = null;
+    let disposed = false;
+    if (isMobileApp) {
+      void listenToVideoDisplays(setDisplays)
+        .then((stop) => {
+          if (disposed) stop();
+          else unlistenDisplays = stop;
+        })
+        .catch(() => undefined);
+    }
     const timer = window.setInterval(() => {
       void getVideoSyncStats().then(setStats).catch(() => undefined);
     }, 1000);
     return () => {
+      disposed = true;
+      unlistenDisplays?.();
       window.clearInterval(timer);
       // Leaving the tab ends the test pattern (the calibration panel ends
       // its own calibration).
@@ -119,7 +141,9 @@ export function VideoSettingsTab() {
       <div className="lt-video-settings-status" role="status">
         {available ? (
           <span>
-            {t("transport.video.settings.libmpvOk", { version: mediaStatus?.clientApiVersion ?? "?" })}
+            {isMobileApp
+              ? t("transport.video.settings.nativeOk")
+              : t("transport.video.settings.libmpvOk", { version: mediaStatus?.clientApiVersion ?? "?" })}
             {" · "}
             {t(`transport.video.settings.state.${outputState}`)}
           </span>
@@ -158,7 +182,9 @@ export function VideoSettingsTab() {
               });
             }}
           >
-            <option value="">{t("transport.video.settings.noDisplay")}</option>
+            <option value="">
+              {t(isMobileApp ? "transport.video.settings.firstExternal" : "transport.video.settings.noDisplay")}
+            </option>
             {displays.map((display) => (
               <option key={display.name} value={display.name}>
                 {`${display.number} · ${displayName(display.name)} · ${display.width}×${display.height}`}
@@ -170,41 +196,47 @@ export function VideoSettingsTab() {
           <button type="button" disabled={disabled} onClick={refreshDisplays}>
             {t("transport.video.settings.refresh")}
           </button>
-          <button type="button" disabled={disabled} onClick={() => void identifyVideoDisplays()}>
-            {t("transport.video.settings.identify")}
-          </button>
+          {isMobileApp ? null : (
+            <button type="button" disabled={disabled} onClick={() => void identifyVideoDisplays()}>
+              {t("transport.video.settings.identify")}
+            </button>
+          )}
         </div>
         {outputStatus?.sharesAppDisplay ? (
           <small className="is-warning">{t("transport.video.badge.sharesApp")}</small>
         ) : null}
       </div>
 
-      <label className="lt-settings-field">
-        <span>{t("transport.video.settings.mode")}</span>
-        <select
-          aria-label={t("transport.video.settings.mode")}
-          disabled={disabled}
-          value={settings.mode}
-          onChange={(event) => apply({ mode: event.target.value as VideoOutputSettings["mode"] })}
-        >
-          <option value="fullscreen">{t("transport.video.settings.modeFullscreen")}</option>
-          <option value="window">{t("transport.video.settings.modeWindow")}</option>
-        </select>
-        <small>{t("transport.video.settings.modeHint")}</small>
-      </label>
+      {isMobileApp ? null : (
+        <>
+          <label className="lt-settings-field">
+            <span>{t("transport.video.settings.mode")}</span>
+            <select
+              aria-label={t("transport.video.settings.mode")}
+              disabled={disabled}
+              value={settings.mode}
+              onChange={(event) => apply({ mode: event.target.value as VideoOutputSettings["mode"] })}
+            >
+              <option value="fullscreen">{t("transport.video.settings.modeFullscreen")}</option>
+              <option value="window">{t("transport.video.settings.modeWindow")}</option>
+            </select>
+            <small>{t("transport.video.settings.modeHint")}</small>
+          </label>
 
-      <label className="lt-settings-toggle">
-        <input
-          type="checkbox"
-          checked={settings.fullscreenOnTop}
-          disabled={disabled}
-          onChange={(event) => apply({ fullscreenOnTop: event.target.checked })}
-        />
-        <span className="lt-settings-toggle-copy">
-          <strong>{t("transport.video.settings.onTop")}</strong>
-          <small>{t("transport.video.settings.onTopHint")}</small>
-        </span>
-      </label>
+          <label className="lt-settings-toggle">
+            <input
+              type="checkbox"
+              checked={settings.fullscreenOnTop}
+              disabled={disabled}
+              onChange={(event) => apply({ fullscreenOnTop: event.target.checked })}
+            />
+            <span className="lt-settings-toggle-copy">
+              <strong>{t("transport.video.settings.onTop")}</strong>
+              <small>{t("transport.video.settings.onTopHint")}</small>
+            </span>
+          </label>
+        </>
+      )}
 
       <label className="lt-settings-field">
         <span>{t("transport.video.settings.fit")}</span>
@@ -261,17 +293,19 @@ export function VideoSettingsTab() {
         </select>
       </label>
 
-      <label className="lt-settings-field">
-        <span>{t("transport.video.settings.hwdec")}</span>
-        <select
-          disabled={disabled}
-          value={settings.hwdec}
-          onChange={(event) => apply({ hwdec: event.target.value as VideoOutputSettings["hwdec"] })}
-        >
-          <option value="auto">{t("transport.video.settings.hwdecAuto")}</option>
-          <option value="off">{t("transport.video.settings.hwdecOff")}</option>
-        </select>
-      </label>
+      {isMobileApp ? null : (
+        <label className="lt-settings-field">
+          <span>{t("transport.video.settings.hwdec")}</span>
+          <select
+            disabled={disabled}
+            value={settings.hwdec}
+            onChange={(event) => apply({ hwdec: event.target.value as VideoOutputSettings["hwdec"] })}
+          >
+            <option value="auto">{t("transport.video.settings.hwdecAuto")}</option>
+            <option value="off">{t("transport.video.settings.hwdecOff")}</option>
+          </select>
+        </label>
+      )}
 
       <div className="lt-settings-field">
         <span>{t("transport.video.settings.latency")}</span>
@@ -326,6 +360,15 @@ export function VideoSettingsTab() {
           {t("transport.video.settings.wizard")}
         </button>
       </div>
+
+      {isMobileApp ? (
+        <section className="lt-video-mobile-help" aria-label={t("transport.video.settings.mobileHelpTitle")}>
+          <strong>{t("transport.video.settings.mobileHelpTitle")}</strong>
+          <p>
+            {t(isIOSApp ? "transport.video.settings.mobileHelpIos" : "transport.video.settings.mobileHelpAndroid")}
+          </p>
+        </section>
+      ) : null}
 
       <dl className="lt-video-settings-stats">
         <dt>{t("transport.video.settings.statsError")}</dt>

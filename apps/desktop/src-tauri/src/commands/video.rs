@@ -335,7 +335,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::infra::settings::{save_app_settings, AppSettingsStore};
 
 /// A monitor for the display picker: numbered like "Identify" labels it.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoDisplayOption {
     #[serde(flatten)]
@@ -361,11 +361,29 @@ pub fn video_list_displays(app: AppHandle) -> Vec<VideoDisplayOption> {
             })
             .collect()
     }
+    // A phone: the external displays the native side reported (paso 10). The
+    // phone's own screen is never one of them.
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let _ = app;
-        Vec::new()
+        mobile_display_options(crate::video::native_events::last_displays())
     }
+}
+
+/// The display picker's entries on a phone: numbered, none of them the app's.
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
+pub(crate) fn mobile_display_options(
+    displays: Vec<libretracks_video::monitors::MonitorInfo>,
+) -> Vec<VideoDisplayOption> {
+    displays
+        .into_iter()
+        .enumerate()
+        .map(|(index, monitor)| VideoDisplayOption {
+            monitor,
+            number: index + 1,
+            has_app: false,
+        })
+        .collect()
 }
 
 #[tauri::command(async)]
@@ -458,8 +476,21 @@ pub fn video_identify_displays(app: AppHandle) -> Result<(), String> {
     }
 }
 
-/// Resolve an image bundled under `resources/video/`.
+/// Resolve an image bundled under `resources/video/`. Android has no Tauri
+/// resource dir in the APK: `MainActivity` copies the assets to `filesDir`
+/// (like the voice bank and the demo).
 fn bundled_video_image(app: &AppHandle, name: &str) -> Option<String> {
+    #[cfg(target_os = "android")]
+    {
+        return app
+            .path()
+            .app_local_data_dir()
+            .ok()
+            .map(|base| base.join("files").join("video").join(name))
+            .filter(|path| path.is_file())
+            .map(|path| path.to_string_lossy().into_owned());
+    }
+    #[cfg(not(target_os = "android"))]
     app.path()
         .resolve(format!("video/{name}"), tauri::path::BaseDirectory::Resource)
         .ok()

@@ -167,7 +167,8 @@ class MainActivity : TauriActivity() {
       }
       // Independent per folder on purpose: a failure copying the 33 MB voice
       // bank must not cost the user the 7 MB demo, or the other way round.
-      for (name in listOf("voices", "demo")) {
+      // video: the test pattern and the calibration flash (plan video-mobile).
+      for (name in listOf("voices", "demo", "video")) {
         try {
           val dest = File(filesDir, name)
           val stamp = File(filesDir, "$name/.version")
