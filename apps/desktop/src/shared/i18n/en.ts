@@ -180,6 +180,8 @@ const en = {
       deleteSession: "Delete session from device",
       confirmDeleteSession:
         "Delete the session “{{name}}” from this device? Its project, audio and cache will be removed. This cannot be undone.",
+      sessionAlreadyGone:
+        "The session “{{name}}” was no longer on the device; it was removed from recents.",
       deleteSessionFailed: "The session could not be deleted.",
       choosingProjectLocation: "Choose where to save the imported project...",
       pendingJump: "Armed: {{markerName}} | {{trigger}}",

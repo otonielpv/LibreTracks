@@ -986,8 +986,10 @@ export async function listDefaultSessions(): Promise<DefaultSessionSummary[]> {
  * backend refuses the session that is currently open, and on Android refuses
  * anything outside the app's own songs folders.
  */
-export async function deleteSessionAt(songFile: string): Promise<void> {
-  await invokeCommand<null>("delete_session_at", { songFile });
+/** True if the session folder was deleted; false if it was no longer on the
+ * device (then only the recents entry should go, and the user be told so). */
+export async function deleteSessionAt(songFile: string): Promise<boolean> {
+  return invokeCommand<boolean>("delete_session_at", { songFile });
 }
 
 /**

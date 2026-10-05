@@ -87,6 +87,7 @@ export function MobileLanding({
   // Failure of a delete (the session is open, the folder is gone). Kept apart
   // from `folderError`, which belongs to the create form.
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [creatingDemo, setCreatingDemo] = useState(false);
 
   useEffect(() => {
@@ -168,8 +169,10 @@ export function MobileLanding({
     if (!confirmed) {
       return;
     }
+    setSessionNotice(null);
+    let deleted: boolean;
     try {
-      await deleteSessionAt(path);
+      deleted = await deleteSessionAt(path);
     } catch (error: unknown) {
       setSessionError(
         typeof error === "string"
@@ -180,6 +183,11 @@ export function MobileLanding({
       return;
     }
     setRecentSessions(removeRecentSession(path));
+    if (!deleted) {
+      // Nothing on the device under that path: say what really happened
+      // instead of letting the confirmation's "will be deleted" stand.
+      setSessionNotice(t("transport.shell.sessionAlreadyGone", { name }));
+    }
     if (isAndroidApp) {
       setDeviceSessions(await listDefaultSessions().catch(() => []));
     }
@@ -490,6 +498,11 @@ export function MobileLanding({
             {sessionError ? (
               <p className="lt-mobile-landing-error" role="alert">
                 {sessionError}
+              </p>
+            ) : null}
+            {sessionNotice ? (
+              <p className="lt-mobile-landing-notice" role="status">
+                {sessionNotice}
               </p>
             ) : null}
           </div>

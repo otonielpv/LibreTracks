@@ -38,6 +38,9 @@ pub mod storage_volumes;
 // asset le borra bytes al usuario, y detras de un `cfg` no lo mira ningun test.
 pub mod content_uri;
 
+// Igual: decide qué carpeta borra «Borrar sesión» en iOS.
+pub mod ios_container;
+
 // Compilado en todos los sistemas a proposito: solo el lanzamiento del proceso
 // es de Windows, y dejar el modulo entero tras un `cfg` significaria que ningun
 // `cargo check` de macOS/Linux mira su logica. Ver la cabecera del modulo.

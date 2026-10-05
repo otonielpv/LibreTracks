@@ -69,7 +69,7 @@ describe("MobileLanding / borrar una sesión", () => {
     deleteSessionAt.mockReset();
     confirmDialog.mockReset();
     listDefaultSessions.mockResolvedValue([CONCIERTO, ENSAYO]);
-    deleteSessionAt.mockResolvedValue(undefined);
+    deleteSessionAt.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -106,6 +106,19 @@ describe("MobileLanding / borrar una sesión", () => {
       expect(screen.queryByRole("button", { name: CONCIERTO.name })).toBeNull(),
     );
     expect(screen.getByRole("button", { name: ENSAYO.name })).toBeTruthy();
+  });
+
+  it("si la sesión ya no estaba, lo dice en vez de darla por borrada", async () => {
+    confirmDialog.mockResolvedValue(true);
+    deleteSessionAt.mockResolvedValue(false);
+    renderLanding();
+    await screen.findByRole("button", { name: CONCIERTO.name });
+
+    fireEvent.click(trashFor(CONCIERTO.name));
+
+    await waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
+    expect(screen.getByRole("status").textContent).toContain("Concierto");
+    expect(screen.getByRole("status").textContent).toContain("recents");
   });
 
   it("deja la sesión en la lista y explica el fallo cuando el backend se niega", async () => {

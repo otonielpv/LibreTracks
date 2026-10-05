@@ -180,6 +180,8 @@ const es = {
       deleteSession: "Borrar sesion del dispositivo",
       confirmDeleteSession:
         "¿Borrar la sesión «{{name}}» del dispositivo? Se eliminarán su proyecto, su audio y su caché. Esta acción no se puede deshacer.",
+      sessionAlreadyGone:
+        "La sesión «{{name}}» ya no estaba en el dispositivo; se ha quitado de recientes.",
       deleteSessionFailed: "No se pudo borrar la sesión.",
       choosingProjectLocation:
         "Elige donde guardar el proyecto importado...",

@@ -934,8 +934,11 @@ pub fn delete_session_at(
     app: AppHandle,
     song_file: String,
     state: State<'_, DesktopState>,
-) -> Result<(), String> {
-    let song_file = std::path::PathBuf::from(song_file);
+) -> Result<bool, String> {
+    // Recientes guarda rutas absolutas, y en iOS el contenedor de la app cambia
+    // de ruta al actualizar: la sesion sigue ahi, bajo otro UUID.
+    let song_file =
+        crate::platform::ios_container::current_location(std::path::Path::new(&song_file));
 
     // Android keeps every session inside its own songs folders, so the delete
     // is fenced to those. Elsewhere sessions live wherever the user saved
@@ -953,7 +956,9 @@ pub fn delete_session_at(
     // quitar su entrada de recientes.
     let Some(song_dir) = crate::state::resolve_session_dir_to_delete(&song_file, &allowed_roots)?
     else {
-        return Ok(());
+        // Nada borrado: quien llama lo dice, en vez de dar por eliminado un
+        // proyecto que no estaba.
+        return Ok(false);
     };
 
     // Read the open session's folder under a brief lock and release it before
@@ -976,6 +981,7 @@ pub fn delete_session_at(
     }
 
     std::fs::remove_dir_all(&song_dir)
+        .map(|()| true)
         .map_err(|error| format!("No se pudo borrar la sesion: {error}"))
 }
 
@@ -1427,7 +1433,8 @@ pub async fn start_open_project_from_dialog(app: AppHandle) -> Result<bool, Stri
 /// file dialog. Same worker + progress events as the dialog flow.
 #[tauri::command(async)]
 pub fn start_open_project_from_path(app: AppHandle, song_file: String) -> Result<bool, String> {
-    let song_file = std::path::PathBuf::from(song_file);
+    let song_file =
+        crate::platform::ios_container::current_location(std::path::Path::new(&song_file));
     if !song_file.is_file() {
         return Err(format!(
             "No se encontró el archivo de sesión: {}",

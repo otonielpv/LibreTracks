@@ -3470,6 +3470,12 @@ html.lt-ios body {
   font: 400 12px/1.4 "Space Grotesk", sans-serif;
 }
 
+.lt-mobile-landing-notice {
+  margin: 0;
+  color: #b8c2c0;
+  font: 400 12px/1.4 "Space Grotesk", sans-serif;
+}
+
 .lt-timeline-topline {
   min-height: 2.95rem;
   flex-shrink: 0;
