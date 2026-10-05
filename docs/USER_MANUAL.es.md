@@ -334,6 +334,8 @@ El móvil o la tablet manda el audio **y** el vídeo: el proyector muestra solo 
 
 **Lo primero que se hace solo:** al poner el primer vídeo en el timeline se abre un asistente de dos pasos: conecta el proyector (si en 20 segundos no aparece nada, te dice qué revisar) y comprueba que ves la carta de ajuste. Por defecto el vídeo sale por **la primera pantalla externa** que aparezca; en `Ajustes → Vídeo` puedes fijar una concreta si tienes cable y AirPlay a la vez.
 
+**Sin vídeo, la pantalla de reposo.** Con la salida activada y un proyector conectado, LibreTracks lo ocupa aunque la sesión no tenga vídeo y muestra la pantalla de reposo (negro o la imagen que elijas en `Ajustes → Vídeo`): sin eso, el móvil duplicaría su propia pantalla y el público vería la app. Para usar el proyector para otra cosa, desactiva la salida de vídeo.
+
 **El bloqueo del móvil apaga el proyector.** Mientras la salida de vídeo está activa, LibreTracks evita que el móvil se bloquee solo. Si lo bloqueas tú con el botón (o cambias de app), el sistema deja de mandar imagen: el audio sigue sonando, el indicador de arriba muestra **Proyector apagado** y, al desbloquear, la imagen vuelve ya sincronizada.
 
 **Indicador y negro:** en la barra superior hay dos iconos: el estado de la salida (tócalo para ver la pantalla, los reproductores y los avisos) y el **negro a un toque**, que solo se activa con la salida mostrando algo.

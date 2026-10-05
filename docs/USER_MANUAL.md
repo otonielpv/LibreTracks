@@ -334,6 +334,8 @@ The phone or tablet drives the audio **and** the video: the projector shows only
 
 **What happens by itself:** placing the first video on the timeline opens a two-step wizard: connect the projector (after 20 seconds without a display it tells you what to check) and check that you see the test pattern. By default the video goes to **the first external display** that shows up; in `Settings → Video` you can pin one if you have a cable and AirPlay at once.
 
+**No video, the idle screen.** With the output on and a projector connected, LibreTracks takes it even when the session has no video and shows the idle screen (black or the image chosen in `Settings → Video`): otherwise the phone would mirror its own screen and the audience would see the app. To use the projector for something else, switch the video output off.
+
 **Locking the phone switches the projector off.** While the video output is on, LibreTracks keeps the phone from locking by itself. If you lock it with the button (or switch apps), the system stops sending the picture: the audio keeps playing, the indicator at the top says **Projector off**, and on unlocking the picture comes back already in sync.
 
 **Indicator and black:** the top bar has two icons: the output's state (tap it to see the display, the players and any warning) and **one-tap black**, usable only while the output shows something.

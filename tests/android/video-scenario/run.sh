@@ -113,6 +113,12 @@ show "in background" '(async () => (await inv("video_output_status")).state)()'
 $ADB shell $FG >/dev/null
 wait_for "back in the foreground: ready" "$(state_is ready)" 10
 
+echo "--- 10: a session without video shows the idle screen, not the phone"
+js 'inv("pause_transport")' >/dev/null 2>&1
+js 'inv("start_create_song_named", { name: "Sin video" })' >/dev/null
+wait_for "empty session: output stays open" '(async () => { const s = await inv("get_song_view", { includeWaveforms: false }); const o = await inv("video_output_status"); return s.videoClips.length === 0 && o.state.state === "ready"; })()' 30
+check "chosen idle image shown at once" "(async () => { const s = await inv(\"get_settings\"); const path = \"$FILES/video/test-pattern.png\"; await inv(\"video_apply_settings\", { settings: { ...s.videoOutput, idle: { kind: \"image\", path } } }); await new Promise(r => setTimeout(r, 2500)); const o = await inv(\"video_output_status\"); const shown = o.players[o.visibleSlot === \"a\" ? 0 : 1].file === path; await inv(\"video_apply_settings\", { settings: { ...s.videoOutput, idle: { kind: \"black\" } } }); return shown; })()"
+
 echo "--- 10: test pattern"
 check "test pattern image installed and shown" '(async () => { try { await inv("video_test_pattern", { on: true }); await inv("video_test_pattern", { on: false }); return true; } catch (e) { return String(e); } })()'
 

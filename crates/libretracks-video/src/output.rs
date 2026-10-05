@@ -177,6 +177,16 @@ pub trait OutputBackend: Send {
     fn polls_while_closed(&self) -> bool {
         false
     }
+    /// Keep the surface open, showing the idle screen, even when the
+    /// session has no video. A phone needs it: with the surface closed the
+    /// system mirrors the phone's own screen on the projector, so the
+    /// audience would see the musician's UI. The desktop keeps it closed
+    /// (there the projector just shows the extended desktop).
+    fn opens_without_content(&self) -> bool {
+        false
+    }
+    /// The session's video came or went (a phone's keep-awake follows it).
+    fn content_changed(&mut self, _has_content: bool) {}
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -339,8 +349,11 @@ impl<B: OutputBackend> OutputController<B> {
     fn replan(&mut self) {
         self.status.enabled = self.settings.enabled;
         self.status.mode = self.settings.mode;
-        // The test pattern and the calibration show without session video.
-        let wanted = self.has_content || self.overlay.is_some();
+        // The test pattern and the calibration show without session video,
+        // and so does a phone's idle screen (`opens_without_content`).
+        let wanted = self.has_content
+            || self.overlay.is_some()
+            || self.backend.opens_without_content();
         if !self.settings.enabled || !wanted {
             if self.backend.is_open() {
                 self.backend.close();
@@ -453,6 +466,7 @@ impl<B: OutputBackend> OutputController<B> {
             OutputCommand::SetContent(has_content) => {
                 if has_content != self.has_content {
                     self.has_content = has_content;
+                    self.backend.content_changed(has_content);
                     self.replan();
                 }
             }

@@ -72,6 +72,8 @@ pub struct NativeOutputBackend<B: NativeVideoBridge> {
     open: bool,
     dual: bool,
     keep_awake: bool,
+    /// The session has video: only then is the phone kept awake.
+    has_content: bool,
 }
 
 impl<B: NativeVideoBridge> NativeOutputBackend<B> {
@@ -83,6 +85,7 @@ impl<B: NativeVideoBridge> NativeOutputBackend<B> {
             open: false,
             dual,
             keep_awake: false,
+            has_content: false,
         }
     }
 
@@ -134,9 +137,9 @@ impl<B: NativeVideoBridge> OutputBackend for NativeOutputBackend<B> {
     ) -> Result<(), BackendError> {
         self.bridge.open(&plan.monitor_name, settings.fit)?;
         self.open = true;
-        // Only opened when the session has video (or for the test pattern):
-        // this is exactly "the output shows something", paso 06 §4.
-        self.set_keep_awake(true);
+        // The surface also opens for the idle screen of a session without
+        // video; the phone is kept awake only for video (paso 06 §4).
+        self.set_keep_awake(self.has_content);
         Ok(())
     }
 
@@ -214,6 +217,17 @@ impl<B: NativeVideoBridge> OutputBackend for NativeOutputBackend<B> {
 
     fn polls_while_closed(&self) -> bool {
         true
+    }
+
+    fn opens_without_content(&self) -> bool {
+        true
+    }
+
+    fn content_changed(&mut self, has_content: bool) {
+        self.has_content = has_content;
+        if self.open {
+            self.set_keep_awake(has_content);
+        }
     }
 }
 
@@ -582,18 +596,31 @@ mod tests {
     }
 
     #[test]
-    fn closing_releases_the_keep_awake() {
+    fn losing_the_video_releases_the_keep_awake_but_keeps_the_idle_screen() {
         let bridge = FakeBridge::default();
         let (mut controller, _sink) = ready(bridge.clone());
         controller.handle(OutputCommand::SetContent(false));
         let calls = bridge.calls();
-        assert_eq!(&calls[calls.len() - 2..], ["close", "keep-awake false"]);
+        assert_eq!(last_keep_awake(&bridge).as_deref(), Some("keep-awake false"));
+        assert!(!calls.contains(&"close".to_string()));
+        assert_eq!(controller.status().state, OutputState::Ready);
     }
 
-    /// Never asked without video in the session (an enabled output with no
-    /// content stays closed).
     #[test]
-    fn no_keep_awake_without_video_in_the_session() {
+    fn switching_the_output_off_closes_it_and_releases_the_keep_awake() {
+        let bridge = FakeBridge::default();
+        let (mut controller, _sink) = ready(bridge.clone());
+        controller.handle(OutputCommand::ApplySettings(VideoOutputSettings::default()));
+        let calls = bridge.calls();
+        assert_eq!(&calls[calls.len() - 2..], ["close", "keep-awake false"]);
+        assert_eq!(controller.status().state, OutputState::Disabled);
+    }
+
+    /// A phone opens the output for its idle screen even without video in
+    /// the session (otherwise the system mirrors the phone's UI on the
+    /// projector), but never keeps the phone awake for it.
+    #[test]
+    fn without_video_a_phone_shows_the_idle_screen_and_may_sleep() {
         let bridge = FakeBridge::default();
         let (backend, sink) = backend(bridge.clone());
         let mut controller = OutputController::new(backend);
@@ -601,6 +628,14 @@ mod tests {
         sink.send(BackendEvent::DisplaysChanged(vec![external("HDMI")]));
         let events = controller_poll(&mut controller);
         controller.absorb(events);
-        assert!(bridge.calls().is_empty());
+        assert_eq!(controller.status().state, OutputState::Ready);
+        let calls = bridge.calls();
+        assert_eq!(calls.first().map(String::as_str), Some("open HDMI Contain"));
+        assert!(!calls.iter().any(|call| call == "keep-awake true"));
+        controller.handle(OutputCommand::ShowIdle);
+        assert_eq!(
+            bridge.calls().last().map(String::as_str),
+            Some("image A None")
+        );
     }
 }

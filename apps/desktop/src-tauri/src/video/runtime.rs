@@ -28,7 +28,7 @@ use libretracks_core::video_schedule::{
 };
 use libretracks_core::VideoFit;
 use libretracks_video::output::{OutputCommand, OutputState, OutputStatus, PlayerCommand, Slot};
-use libretracks_video::settings::{StoppedScreen, VideoOutputSettings};
+use libretracks_video::settings::{IdleScreen, StoppedScreen, VideoOutputSettings};
 use serde::Serialize;
 
 use crate::state::VideoTransportClock;
@@ -129,6 +129,9 @@ pub struct RuntimeCore {
     brightness: Option<f64>,
     fit: Option<Option<VideoFit>>,
     stopped_idle_shown: bool,
+    /// The idle screen last sent: choosing another image (or black) while
+    /// it is showing must show the new one, not wait for the next idle.
+    idle_screen: Option<IdleScreen>,
     idle_sent: bool,
     errors: VecDeque<f64>,
     last_log: Option<Instant>,
@@ -161,6 +164,7 @@ impl Default for RuntimeCore {
             brightness: None,
             fit: None,
             stopped_idle_shown: false,
+            idle_screen: None,
             idle_sent: false,
             errors: VecDeque::with_capacity(ERROR_WINDOW),
             last_log: None,
@@ -244,6 +248,15 @@ impl RuntimeCore {
             self.preload = PreloadState::default();
             self.expected_visible = None;
             return TickRate::Park;
+        }
+
+        let idle_now = output.settings().idle;
+        if self.idle_screen.as_ref() != Some(&idle_now) {
+            if self.idle_screen.is_some() {
+                self.idle_sent = false;
+                self.stopped_idle_shown = false;
+            }
+            self.idle_screen = Some(idle_now);
         }
 
         if self.timeline.is_empty() {
@@ -1221,6 +1234,37 @@ mod tests {
             "lifting the black must not seek or reload: {sent:?}"
         );
         assert_eq!(core.state.seeks, seeks_before);
+    }
+
+    /// Found on the Android emulator (plan video-mobile): choosing another
+    /// idle image while the idle screen showed kept the old one.
+    #[test]
+    fn changing_the_idle_screen_while_idle_shows_the_new_one() {
+        let mut core = RuntimeCore::default();
+        let mut inputs = FakeInputs {
+            clock: running_clock(3.0),
+            timeline: VideoTimeline::default(),
+            fetches: 0,
+        };
+        let mut output = ready_output();
+        core.tick(&mut inputs, &output, Instant::now());
+        core.tick(&mut inputs, &output, Instant::now());
+        let idles = |output: &FakeOutput| {
+            output
+                .sent
+                .borrow()
+                .iter()
+                .filter(|command| **command == OutputCommand::ShowIdle)
+                .count()
+        };
+        assert_eq!(idles(&output), 1, "shown once, not every tick");
+        output.settings.idle = IdleScreen::Image {
+            path: "/logo.png".into(),
+        };
+        core.tick(&mut inputs, &output, Instant::now());
+        assert_eq!(idles(&output), 2);
+        core.tick(&mut inputs, &output, Instant::now());
+        assert_eq!(idles(&output), 2);
     }
 
     /// Plan video-mobile, paso 03 C3: the real runtime against the native
