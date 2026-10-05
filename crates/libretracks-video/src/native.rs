@@ -472,6 +472,85 @@ mod tests {
         assert!(!controller.backend().dual_players());
     }
 
+    /// Paso 04/05 C6: a corrupt file is reported by the native player after
+    /// the load was queued; the status shows it and the next good clip
+    /// recovers.
+    #[test]
+    fn a_native_load_failure_errors_and_the_next_clip_recovers() {
+        let (mut controller, sink) = ready(FakeBridge::default());
+        let load = |path: &str| OutputCommand::Player {
+            slot: Slot::A,
+            command: PlayerCommand::Load {
+                path: path.into(),
+                start_seconds: 0.0,
+                paused: false,
+            },
+        };
+        controller.handle(load("/broken.mov"));
+        sink.send(BackendEvent::LoadFailed {
+            slot: Slot::A,
+            reason: "The operation could not be completed".into(),
+        });
+        let events = controller_poll(&mut controller);
+        controller.absorb(events);
+        assert!(matches!(
+            controller.status().state,
+            OutputState::Error(ref reason) if reason.contains("could not be completed")
+        ));
+        assert_eq!(controller.status().player(Slot::A).file, None);
+        assert!(controller.status().player(Slot::A).last_error.is_some());
+
+        controller.handle(load("/ok.mp4"));
+        assert_eq!(controller.status().state, OutputState::Ready);
+        assert_eq!(
+            controller.status().player(Slot::A).file.as_deref(),
+            Some("/ok.mp4")
+        );
+    }
+
+    fn last_keep_awake(bridge: &FakeBridge) -> Option<String> {
+        bridge
+            .calls()
+            .into_iter()
+            .rev()
+            .find(|call| call.starts_with("keep-awake"))
+    }
+
+    /// Paso 06 C3: the keep-awake is asked when the output opens with the
+    /// session's video and released when it closes or the video goes.
+    #[test]
+    fn the_keep_awake_follows_the_output_with_content() {
+        let bridge = FakeBridge::default();
+        let (mut controller, sink) = ready(bridge.clone());
+        assert_eq!(
+            bridge
+                .calls()
+                .iter()
+                .filter(|call| call.starts_with("keep-awake"))
+                .collect::<Vec<_>>(),
+            ["keep-awake true"]
+        );
+        // The projector is unplugged: closed, released.
+        sink.send(BackendEvent::DisplaysChanged(Vec::new()));
+        let events = controller_poll(&mut controller);
+        controller.absorb(events);
+        assert_eq!(
+            bridge.calls().last().map(String::as_str),
+            Some("keep-awake false")
+        );
+        // Back: asked again.
+        sink.send(BackendEvent::DisplaysChanged(vec![external("HDMI")]));
+        let events = controller_poll(&mut controller);
+        controller.absorb(events);
+        assert_eq!(last_keep_awake(&bridge).as_deref(), Some("keep-awake true"));
+        // Output switched off in the settings: released.
+        controller.handle(OutputCommand::ApplySettings(VideoOutputSettings::default()));
+        assert_eq!(
+            last_keep_awake(&bridge).as_deref(),
+            Some("keep-awake false")
+        );
+    }
+
     #[test]
     fn closing_releases_the_keep_awake() {
         let bridge = FakeBridge::default();
@@ -479,5 +558,19 @@ mod tests {
         controller.handle(OutputCommand::SetContent(false));
         let calls = bridge.calls();
         assert_eq!(&calls[calls.len() - 2..], ["close", "keep-awake false"]);
+    }
+
+    /// Never asked without video in the session (an enabled output with no
+    /// content stays closed).
+    #[test]
+    fn no_keep_awake_without_video_in_the_session() {
+        let bridge = FakeBridge::default();
+        let (backend, sink) = backend(bridge.clone());
+        let mut controller = OutputController::new(backend);
+        controller.handle(OutputCommand::ApplySettings(enabled()));
+        sink.send(BackendEvent::DisplaysChanged(vec![external("HDMI")]));
+        let events = controller_poll(&mut controller);
+        controller.absorb(events);
+        assert!(bridge.calls().is_empty());
     }
 }
