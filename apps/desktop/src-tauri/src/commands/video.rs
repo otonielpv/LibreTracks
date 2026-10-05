@@ -554,16 +554,17 @@ struct VideoAudioProgress<'a> {
 /// audio track below the video track, aligned with the clip (one undo step).
 /// The decoding runs off the session lock; `video:audio-extract-progress`
 /// reports it.
-/// Decoding a video's audio needs libmpv (plan video-mobile, paso 09 §2):
-/// the menu entry is hidden on mobile; this is the backstop.
+/// On a phone there is no libmpv to decode with, and no need: the new audio
+/// track plays the video file itself (`link_video_audio`).
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tauri::command(async)]
 pub fn extract_video_audio(
     _app: AppHandle,
-    _clip_id: String,
-    _state: State<'_, DesktopState>,
+    clip_id: String,
+    state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
-    Err("extraer el audio de un vídeo solo está disponible en escritorio".into())
+    // No libmpv here: the audio track plays the video file itself.
+    with_session(&state, |session, audio| session.link_video_audio(&clip_id, audio))
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

@@ -140,11 +140,18 @@ impl DesktopSession {
         // (una sesión de Android abierta en Windows lleva rutas `/storage/...`
         // que `Path::is_absolute` no reconoce ahí). Equivocarse aquí borra un
         // fichero del usuario.
+        // On a phone the audio of a video is the video file itself (see
+        // `link_video_audio`): forgetting that entry must not delete the video.
+        let is_a_video = super::video_library::read_video_entries(&song_dir)
+            .unwrap_or_default()
+            .iter()
+            .any(|entry| library_file_identity(&song_dir, &entry.file_path) == doomed_key);
         let deleted_local_audio = !crate::platform::content_uri::is_external_audio_path(
             &normalized_file_path,
         )
             && audio_file_path.exists()
-            && !still_claimed_by_another_asset;
+            && !still_claimed_by_another_asset
+            && !is_a_video;
         // The global waveform entry is keyed by the audio's path+size+mtime, so
         // capture its path BEFORE removing the audio (stat must still succeed).
         let global_waveform_path =
@@ -1392,23 +1399,37 @@ pub(crate) fn list_library_assets(
                 .collect::<HashMap<_, _>>()
         })
         .unwrap_or_default();
+    // On a phone the audio of a video can be the video file itself
+    // (`link_video_audio`): its name and length are the video library's,
+    // already analysed, and symphonia need not parse a video container.
+    let videos = super::video_library::read_video_entries(song_dir)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|entry| (entry.file_path.clone(), entry))
+        .collect::<HashMap<_, _>>();
     let mut assets = Vec::new();
     for file_path in collect_library_file_paths(song_dir, song)? {
         let path = resolve_audio_file_path(song_dir, &file_path);
+        let video = videos.get(&file_path);
         // El nombre NO sale de `path` cuando es un `content://`: en Android esa
         // ruta es `/proc/self/fd/7`, y la pista se llamaría «7».
-        let file_name = crate::platform::content_uri::display_name_for_content_uri(&file_path)
+        let file_name = video
+            .and_then(|video| video.display_name.clone())
+            .or_else(|| crate::platform::content_uri::display_name_for_content_uri(&file_path))
             .unwrap_or_else(|| {
                 path.file_name()
                     .and_then(|value| value.to_str())
                     .unwrap_or(&file_path)
                     .to_string()
             });
-        let is_missing = !path.exists();
-        let duration_seconds = if path.is_file() {
-            read_audio_metadata(&path)?.duration_seconds
-        } else {
-            0.0
+        let is_missing = match video {
+            Some(_) => !super::video_library::video_source_present(song_dir, &file_path),
+            None => !path.exists(),
+        };
+        let duration_seconds = match video {
+            Some(video) => video.info.duration_seconds,
+            None if path.is_file() => read_audio_metadata(&path)?.duration_seconds,
+            None => 0.0,
         };
         let manifest_entry = manifest_assets.get(&file_path);
         assets.push(LibraryAssetSummary {

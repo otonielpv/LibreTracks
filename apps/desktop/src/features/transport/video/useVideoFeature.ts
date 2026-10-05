@@ -77,7 +77,7 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
         },
         onFirstVideoClip: () =>
           (depsRef.current.onFirstVideoClip ?? (() => void runFirstVideoClipTrigger()))(),
-        canExtractAudio: !isMobileApp,
+        canExtractAudio: true,
       }),
     [],
   );

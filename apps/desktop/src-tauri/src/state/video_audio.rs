@@ -12,9 +12,10 @@
 //!    video track, aligned with the clip — one undo step. Undo removes the
 //!    track and the clip; the WAV stays in the library, like imported audio.
 
-// Decoding a video's audio needs libmpv: on Android/iOS nothing calls this
-// (plan video-mobile, paso 09 §2), but the session logic stays compiled.
-#![cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
+// Decoding a video's audio needs libmpv: on Android/iOS the extraction is
+// `link_video_audio` instead, and the desktop never links. Both halves stay
+// compiled (and tested) everywhere.
+#![allow(dead_code)]
 
 use std::collections::HashSet;
 use std::fs;
@@ -69,6 +70,161 @@ fn extracted_file_name(video_path: &str) -> String {
 }
 
 impl DesktopSession {
+    /// The audio of a video clip as an audio track, on a phone (plan
+    /// video-mobile): the new clip plays the VIDEO FILE ITSELF, whose sound
+    /// the engine decodes like any compressed audio (MediaCodec on Android,
+    /// libav on iOS, cached as PCM once). Nothing is extracted or written,
+    /// unless an Android document cannot be read by path: then only that file
+    /// is copied into `audio/`. Same placement as the desktop extraction: a
+    /// new audio track right below the video track, aligned with the clip.
+    pub fn link_video_audio(
+        &mut self,
+        clip_id: &str,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let video = song
+            .video_clips
+            .iter()
+            .find(|clip| clip.id == clip_id)
+            .cloned()
+            .ok_or_else(|| {
+                DesktopError::AudioCommand(format!("clip de vídeo no encontrado: {clip_id}"))
+            })?;
+        let info = self.video_asset_info(&video.file_path);
+        if info.as_ref().is_some_and(|info| !info.has_audio) {
+            return Err(DesktopError::AudioCommand("el vídeo no tiene audio".into()));
+        }
+        let media_seconds = info
+            .as_ref()
+            .map(|info| info.duration_seconds)
+            .unwrap_or(video.source_start_seconds + video.duration_seconds);
+        let duration = video
+            .duration_seconds
+            .min(media_seconds - video.source_start_seconds);
+        if !(duration > 0.0) {
+            return Err(DesktopError::AudioCommand(
+                "el audio del vídeo no llega al tramo del clip".into(),
+            ));
+        }
+        let shown_name = self
+            .video_display_name(&video.file_path)
+            .unwrap_or_else(|| video.file_path.clone());
+        let audio_path = self.audio_path_for_video(&song_dir, &song, &video.file_path, &shown_name)?;
+
+        let video_track = song
+            .tracks
+            .iter()
+            .find(|track| track.id == video.track_id)
+            .cloned()
+            .ok_or_else(|| DesktopError::TrackNotFound(video.track_id.clone()))?;
+        let track_name = format!(
+            "{} (audio)",
+            super::song_edit::file_stem_for_auto_track(&shown_name)
+        );
+        let track = new_track(
+            &song,
+            &track_name,
+            TrackKind::Audio,
+            video_track.parent_track_id.as_deref(),
+            audio,
+        );
+        let track_id = track.id.clone();
+        insert_track(
+            &mut song.tracks,
+            track,
+            Some(&video_track.id),
+            video_track.parent_track_id.as_deref(),
+        )?;
+        ensure_region_covers_clip_for_file(
+            &mut song,
+            video.timeline_start_seconds,
+            video.timeline_start_seconds + duration,
+            Some(&audio_path),
+            ui_locale(audio).as_deref(),
+        )?;
+        song.clips.push(Clip {
+            id: format!("clip_{}_{}", timestamp_suffix(), song.clips.len()),
+            track_id,
+            file_path: audio_path.clone(),
+            timeline_start_seconds: video.timeline_start_seconds,
+            source_start_seconds: video.source_start_seconds,
+            duration_seconds: duration,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        });
+        refresh_song_duration(&mut song);
+
+        let mut assets = list_library_assets(&song_dir, self.engine.song())?;
+        if !assets.iter().any(|asset| asset.file_path == audio_path) {
+            assets.push(LibraryAssetSummary {
+                file_name: Path::new(&shown_name)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or(&shown_name)
+                    .to_string(),
+                file_path: audio_path,
+                duration_seconds: media_seconds,
+                is_missing: false,
+                folder_path: None,
+            });
+            assets.sort_by(|left, right| {
+                left.folder_path
+                    .cmp(&right.folder_path)
+                    .then_with(|| left.file_name.cmp(&right.file_name))
+            });
+            write_library_manifest_assets(&song_dir, &assets)?;
+        }
+
+        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
+        Ok(self.snapshot())
+    }
+
+    /// What the audio clip of [`Self::link_video_audio`] plays: the video's
+    /// own path, unless it is an Android document the engine cannot open by
+    /// path — then a copy of it under `audio/`.
+    fn audio_path_for_video(
+        &self,
+        song_dir: &Path,
+        song: &libretracks_core::Song,
+        video_path: &str,
+        shown_name: &str,
+    ) -> Result<String, DesktopError> {
+        #[cfg(target_os = "android")]
+        if crate::platform::content_uri::is_content_uri(video_path)
+            && !crate::platform::android_content_uri::probe_referenceable(video_path)
+        {
+            let reserved: HashSet<String> = collect_library_file_paths(song_dir, Some(song))?
+                .into_iter()
+                .collect();
+            let file_name = Path::new(shown_name)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("video.mp4");
+            let relative = allocate_library_audio_path(song_dir, &reserved, None, file_name);
+            let destination = resolve_audio_file_path(song_dir, &relative);
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            if let Err(error) =
+                crate::platform::android_content_uri::copy_content_to(video_path, &destination)
+            {
+                let _ = fs::remove_file(&destination);
+                return Err(error.into());
+            }
+            return Ok(relative);
+        }
+        let _ = (song_dir, song, shown_name);
+        Ok(video_path.to_string())
+    }
+
     pub fn plan_video_audio_extraction(
         &self,
         clip_id: &str,

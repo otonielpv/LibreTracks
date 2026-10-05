@@ -1,17 +1,25 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useDismissOnBack } from "../mobile/backNavigation";
 import { useVideoStore } from "./videoStore";
 
 /**
  * "This video has audio. Extract it as an audio track?" with a "remember my
  * choice" box, plus the progress of extractions running. Mounted by
- * VideoSetupLayer (desktop only).
+ * VideoSetupLayer, on phones too (there the audio track plays the video file
+ * itself; nothing is extracted).
  */
 export function VideoAudioPrompt() {
   const { t } = useTranslation();
   const prompt = useVideoStore((state) => state.audioPrompt);
   const [remember, setRemember] = useState(false);
+  // Android's Back answers "no". Stable, so the back stack keeps its order.
+  const dismiss = useCallback(
+    () => useVideoStore.getState().audioPrompt?.resolve({ extract: false, remember: false }),
+    [],
+  );
+  useDismissOnBack(dismiss, prompt !== null);
   if (!prompt) return null;
 
   const answer = (extract: boolean) => {

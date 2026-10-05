@@ -15,11 +15,14 @@ import { useVideoStore } from "./videoStore";
  */
 export function VideoSetupLayer() {
   // The "bring the videos too?" question is a phone's (plan video-mobile).
+  // "Its audio as a track?" is asked on phones too; nothing is decoded
+  // there, so no progress to show.
   if (isMobileApp) {
     return (
       <>
         <VideoImportQuestionModal />
         <VideoSetupWizardMobile />
+        <VideoAudioPrompt />
       </>
     );
   }

@@ -117,6 +117,24 @@ pub fn release(uri: &str) {
     }
 }
 
+/// Copia el contenido de `uri` a `destination` leyendo del descriptor que ya
+/// tenemos abierto. Para los proveedores cuyo `/proc/self/fd` no se deja
+/// reabrir: el motor de audio no los puede leer por ruta, pero una copia sí.
+pub fn copy_content_to(uri: &str, destination: &std::path::Path) -> std::io::Result<u64> {
+    use std::io::{Seek, SeekFrom};
+    let not_found = || std::io::Error::new(std::io::ErrorKind::NotFound, uri.to_string());
+    local_path_for(uri).ok_or_else(not_found)?;
+    let mut source = {
+        let fds = open_fds()
+            .lock()
+            .map_err(|_| std::io::Error::other("descriptores envenenados"))?;
+        fds.get(uri).ok_or_else(not_found)?.try_clone()?
+    };
+    source.seek(SeekFrom::Start(0))?;
+    let mut target = File::create(destination)?;
+    std::io::copy(&mut source, &mut target)
+}
+
 /// Suelta todos. Al cerrar la sesión.
 pub fn release_all() {
     if let Ok(mut fds) = open_fds().lock() {

@@ -64,7 +64,7 @@ export function createVideoMenus(
           }),
       },
       // Decoding a video's sound needs libmpv: not on a phone (paso 09 §2).
-      ...(video.clipHasAudio(clip) && !isMobileApp
+      ...(video.clipHasAudio(clip)
         ? [
             {
               label: t("transport.video.menu.extractAudio"),

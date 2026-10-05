@@ -531,6 +531,100 @@ fn a_video_without_audio_cannot_be_extracted() {
 }
 
 // ---------------------------------------------------------------------------
+// Audio of a video on a phone: the audio track plays the video file itself.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn on_a_phone_the_audio_track_plays_the_video_file_itself() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    session
+        .register_video_assets(vec![("D:/Visuales/letras.mp4".into(), video_info(true))], None)
+        .expect("register");
+    let mut edited = song(&session);
+    let clip = edited.video_clips.iter_mut().find(|clip| clip.id == "vc1").unwrap();
+    clip.source_start_seconds = 1.5;
+    clip.duration_seconds = 3.0;
+    session.engine.load_song(edited).expect("reload");
+
+    session.link_video_audio("vc1", &audio).expect("link");
+
+    let song = song(&session);
+    let v1 = song.tracks.iter().position(|track| track.id == "v1").unwrap();
+    let new_track = &song.tracks[v1 + 1];
+    assert_eq!(new_track.kind, TrackKind::Audio);
+    assert_eq!(new_track.name, "letras (audio)");
+    let linked = song
+        .clips
+        .iter()
+        .find(|clip| clip.track_id == new_track.id)
+        .expect("audio clip");
+    // Nothing extracted: the clip points at the video.
+    assert_eq!(linked.file_path, "D:/Visuales/letras.mp4");
+    assert_eq!(linked.timeline_start_seconds, 2.0);
+    assert_eq!(linked.source_start_seconds, 1.5);
+    assert_eq!(linked.duration_seconds, 3.0);
+
+    session.undo_action(&audio).expect("undo");
+    assert!(!song_has_track_named(&session, "letras (audio)"));
+}
+
+fn song_has_track_named(session: &DesktopSession, name: &str) -> bool {
+    song(session).tracks.iter().any(|track| track.name == name)
+}
+
+#[test]
+fn a_linked_audio_track_is_named_after_the_picked_name() {
+    // A phone document's path has no readable name (`…/video%3A32`).
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    session
+        .register_video_assets(vec![("D:/Visuales/letras.mp4".into(), video_info(true))], None)
+        .expect("register");
+    session
+        .name_video_assets(&[("D:/Visuales/letras.mp4".into(), "Ensayo final.mp4".into())])
+        .expect("name");
+
+    session.link_video_audio("vc1", &audio).expect("link");
+
+    assert!(song_has_track_named(&session, "Ensayo final (audio)"));
+}
+
+#[test]
+fn a_video_without_audio_cannot_be_linked() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    session
+        .register_video_assets(vec![("D:/Visuales/letras.mp4".into(), video_info(false))], None)
+        .expect("register");
+    assert!(session.link_video_audio("vc1", &audio).is_err());
+}
+
+#[test]
+fn forgetting_a_linked_audio_entry_never_deletes_the_video() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    let song_dir = session.song_dir.clone().unwrap();
+    fs::create_dir_all(song_dir.join("video")).expect("video dir");
+    let video_file = song_dir.join("video").join("letras.mp4");
+    fs::write(&video_file, b"not really a video").expect("video file");
+    session
+        .register_video_assets(vec![("video/letras.mp4".into(), video_info(true))], None)
+        .expect("register");
+    let mut edited = song(&session);
+    edited.video_clips[0].file_path = "video/letras.mp4".into();
+    session.engine.load_song(edited).expect("reload");
+
+    session.link_video_audio("vc1", &audio).expect("link");
+    session.undo_action(&audio).expect("undo");
+    session
+        .delete_library_asset("video/letras.mp4")
+        .expect("forget the audio entry");
+
+    assert!(video_file.is_file(), "the video must survive");
+}
+
+// ---------------------------------------------------------------------------
 // Videos carried by a .ltpkg (paso 12).
 // ---------------------------------------------------------------------------
 
