@@ -1,5 +1,6 @@
 ---
 import { marked } from "marked";
+import IosStoreNote from "./IosStoreNote.astro";
 
 interface Props {
   owner?: string;
@@ -212,6 +213,7 @@ const panels = await Promise.all(
                   ))}
                 </div>
               ) : <p>{labels.noAssets}</p>}
+              <IosStoreNote lang={lang} />
               <aside class="platform-note">
                 <strong><span aria-hidden="true">🤖</span> {labels.androidTitle}</strong>
                 <p>{labels.androidBody}</p>
@@ -268,6 +270,7 @@ const panels = await Promise.all(
       <div class="hero-actions">
         <a class="button-link primary" href={releaseUrl}>{labels.open}</a>
       </div>
+      <IosStoreNote lang={lang} />
     </>
   )}
 </section>
