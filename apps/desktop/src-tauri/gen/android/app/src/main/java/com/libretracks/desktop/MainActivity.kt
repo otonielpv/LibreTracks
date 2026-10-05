@@ -19,6 +19,9 @@ import java.io.File
 class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
+    // Before super: Tauri starts the Rust side from there, and the video
+    // output looks for this Activity to put its Presentation on.
+    VideoOutputBridge.attach(this)
     super.onCreate(savedInstanceState)
 
     hideSystemBars()
@@ -120,10 +123,12 @@ class MainActivity : TauriActivity() {
   override fun onStart() {
     super.onStart()
     notifyNativeVisibility(true)
+    VideoOutputBridge.onActivityVisible(true)
   }
 
   override fun onStop() {
     notifyNativeVisibility(false)
+    VideoOutputBridge.onActivityVisible(false)
     super.onStop()
   }
 
@@ -330,6 +335,7 @@ class MainActivity : TauriActivity() {
       }
     }
     storageVolumeReceiver = null
+    VideoOutputBridge.detach(this)
     stopService(Intent(this, AudioPlaybackService::class.java))
     super.onDestroy()
   }

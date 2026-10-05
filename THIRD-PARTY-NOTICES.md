@@ -118,6 +118,14 @@ These ship inside the desktop application (`.app` / `.exe` / `.deb` / `.rpm` /
 - **Loaded at run time,** like on Windows: without it the app works and video
   output reports itself unavailable.
 
+### AndroidX Media3 1.5.1 (video output, Android build)
+- **License:** Apache License 2.0.
+- **Source:** https://github.com/androidx/media
+- **Modules:** `media3-exoplayer` and `media3-ui`, from Google's Maven
+  repository, compiled into the Android app. They play the video clips on an
+  external display through the system's hardware decoders; their audio
+  renderer is disabled. The iOS build uses AVFoundation, part of the system.
+
 ---
 
 ## Application shell & frontend
