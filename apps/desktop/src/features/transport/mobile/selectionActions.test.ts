@@ -242,12 +242,14 @@ describe("las acciones de la barra son las del escritorio", () => {
       creation: { ...creation, onAddVideos },
       t,
     });
-    expect(model.actions.map((entry) => entry.label).slice(2, 4)).toEqual([
+    expect(model.actions.map((entry) => entry.label).slice(2, 5)).toEqual([
       "mobileSelectionActions.addAudio",
-      "mobileSelectionActions.addVideo",
+      "mobileSelectionActions.addVideoGallery",
+      "mobileSelectionActions.addVideoFiles",
     ]);
     model.actions[3].onSelect();
-    expect(onAddVideos).toHaveBeenCalledTimes(1);
+    model.actions[4].onSelect();
+    expect(onAddVideos.mock.calls).toEqual([["gallery"], ["files"]]);
   });
 
   it("dice cuantos clips van a recibir la accion", () => {

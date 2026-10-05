@@ -174,7 +174,9 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
     });
     const store = useVideoStore.getState();
     store.setPlaceAtPlayhead((asset) => handlers.placeLibraryAssets([asset], atPlayhead()));
-    store.setAddFromDevice(isMobileApp ? () => handlers.addVideosFromDevice(atPlayhead()) : null);
+    store.setAddFromDevice(
+      isMobileApp ? (source) => handlers.addVideosFromDevice(atPlayhead(), source) : null,
+    );
     return () => {
       useVideoStore.getState().setPlaceAtPlayhead(null);
       useVideoStore.getState().setAddFromDevice(null);
@@ -195,7 +197,10 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
       }
     });
     const unsubscribeVideo = useVideoStore.subscribe((state, previous) => {
-      if (state.selectedVideoClipIds !== previous.selectedVideoClipIds) {
+      if (
+        state.selectedVideoClipIds !== previous.selectedVideoClipIds ||
+        state.status !== previous.status
+      ) {
         requestVideoRepaint();
       }
     });

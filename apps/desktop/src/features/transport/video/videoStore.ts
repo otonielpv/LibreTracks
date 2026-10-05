@@ -1,6 +1,11 @@
 import { create } from "zustand";
 
-import type { VideoAssetSummary, VideoLibraryStatus, VideoOutputStatus } from "../desktopApi";
+import type {
+  VideoAssetSummary,
+  VideoLibraryStatus,
+  VideoOutputStatus,
+  VideoPickSource,
+} from "../desktopApi";
 import type { VideoAudioChoice } from "./videoAudioExtraction";
 
 /**
@@ -23,7 +28,7 @@ export type VideoStoreState = {
   /** Phone: pick a video on the device and put it at the playhead (plan
    * video-mobile, paso 08 §3). Null on the desktop and when video cannot be
    * edited here. */
-  addFromDevice: (() => void) | null;
+  addFromDevice: ((source: VideoPickSource) => void) | null;
   /** Latest `video:output-status` (null until the first one arrives). */
   outputStatus: VideoOutputStatus | null;
   setOutputStatus: (status: VideoOutputStatus | null) => void;
@@ -51,7 +56,7 @@ export type VideoStoreState = {
   audioExtractions: Record<string, number>;
   setAudioExtraction: (clipId: string, fraction: number | null) => void;
   setPlaceAtPlayhead: (place: ((asset: VideoAssetSummary) => void) | null) => void;
-  setAddFromDevice: (add: (() => void) | null) => void;
+  setAddFromDevice: (add: ((source: VideoPickSource) => void) | null) => void;
   setMediaStatus: (status: VideoLibraryStatus | null) => void;
   setAssets: (assets: VideoAssetSummary[]) => void;
   /** `additive` keeps the rest (Ctrl/Shift click) and toggles `clipId`. */

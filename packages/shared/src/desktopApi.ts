@@ -2704,6 +2704,10 @@ export async function listenToVideoAudioExtractProgress(
   });
 }
 
+/** Where a phone picks a video from: its photo gallery, or its files
+ * (Downloads, a USB stick, Drive; keeps the real name). */
+export type VideoPickSource = "gallery" | "files";
+
 /** Answer "bring the videos too?" (plan video-mobile, paso 08). */
 export async function answerVideoImportQuestion(requestId: number, include: boolean): Promise<boolean> {
   return invokeCommand<boolean>("answer_video_import_question", { requestId, include });
@@ -2720,8 +2724,8 @@ export async function listenToVideoImportQuestion(
 
 /** Phone: pick videos and copy them into the session. False if cancelled;
  * the outcome arrives as `video:device-import-done`. */
-export async function pickAndAddVideos(): Promise<boolean> {
-  return invokeCommand<boolean>("pick_and_add_videos");
+export async function pickAndAddVideos(source: VideoPickSource): Promise<boolean> {
+  return invokeCommand<boolean>("pick_and_add_videos", { source });
 }
 
 export async function listenToVideoDeviceImportDone(

@@ -122,6 +122,13 @@ object VideoOutputBridge {
   @JvmStatic
   fun onActivityVisible(visible: Boolean) {
     appVisible = visible
+    if (visible && suspended && presentation == null) {
+      // The Presentation went while hidden (display removed): Rust still has
+      // to hear that the suspension is over, or it stays "projector off".
+      suspended = false
+      emit(RESUMED, 0, null)
+      return
+    }
     val shown = presentation ?: return
     if (!visible) {
       main.postDelayed({

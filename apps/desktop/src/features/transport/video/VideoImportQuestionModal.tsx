@@ -52,6 +52,7 @@ export function VideoImportQuestionModal() {
   const dismiss = useCallback(() => answer(view?.defaultChecked ?? false), [answer, view?.defaultChecked]);
   useDismissOnBack(dismiss, view !== null);
   if (!question || !view) return null;
+  const device = question.source === "device";
 
   return (
     <div className="lt-modal-backdrop">
@@ -67,22 +68,43 @@ export function VideoImportQuestionModal() {
         <div className="lt-video-wizard-body">
           <p>{view.summary}</p>
           {view.free ? <p>{view.free}</p> : null}
-          <label className="lt-video-settings-row">
-            <input
-              type="checkbox"
-              checked={include}
-              disabled={!view.enabled}
-              onChange={(event) => setInclude(event.target.checked)}
-            />
-            <span>{view.checkboxLabel}</span>
-          </label>
+          {device ? null : (
+            <label className="lt-video-settings-row">
+              <input
+                type="checkbox"
+                checked={include}
+                disabled={!view.enabled}
+                onChange={(event) => setInclude(event.target.checked)}
+              />
+              <span>{view.checkboxLabel}</span>
+            </label>
+          )}
           <small>{view.hint}</small>
         </div>
         <footer className="lt-video-wizard-footer">
           <span className="lt-video-wizard-spacer" />
-          <button type="button" className="is-primary" onClick={() => answer(include && view.enabled)}>
-            {t("transport.video.importQuestion.continue")}
-          </button>
+          {device ? (
+            // A picked video is only usable copied into the session (iOS and
+            // Android cannot reference a file outside it): copy or cancel,
+            // no "import without copying" that would only fail.
+            <>
+              <button type="button" onClick={() => answer(false)}>
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                className="is-primary"
+                disabled={!view.enabled}
+                onClick={() => answer(true)}
+              >
+                {t("transport.video.importQuestion.copy")}
+              </button>
+            </>
+          ) : (
+            <button type="button" className="is-primary" onClick={() => answer(include && view.enabled)}>
+              {t("transport.video.importQuestion.continue")}
+            </button>
+          )}
         </footer>
       </section>
     </div>

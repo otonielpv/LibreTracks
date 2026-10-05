@@ -31,7 +31,8 @@ const es = {
     addTempo: "Tempo",
     addTimeSignature: "Compás",
     addAudio: "Audio",
-    addVideo: "Vídeo",
+    addVideoGallery: "Vídeo de la galería",
+    addVideoFiles: "Vídeo de archivos",
     more: "Más acciones",
     hide: "Ocultar acciones",
     show: "Mostrar acciones",
@@ -1221,10 +1222,13 @@ const es = {
           "Sin ellos la sesión suena igual; los clips de vídeo se conservan y puedes añadir los vídeos más tarde.",
         hintDevice: "Se copian a la carpeta de la sesión para que viajen con ella.",
         noRoom: "No caben dejando 1 GB libre en el dispositivo. Libera espacio o impórtalos más tarde.",
+        copy: "Copiar",
         continue: "Continuar",
       },
       copying: "Copiando vídeos a la sesión…",
       addFromDevice: "Añadir vídeo del dispositivo",
+      addFromGallery: "Añadir vídeo de la galería",
+      addFromFiles: "Añadir vídeo de archivos",
       cloudCellular:
         "Esta sesión ocupa {{size}} y parece que estás con datos móviles. ¿Descargarla igualmente? Mejor con Wi-Fi.",
       live: {

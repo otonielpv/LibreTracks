@@ -148,7 +148,7 @@ export type MobileCreationHandlers = {
   /** Elige un video del dispositivo y lo pone en el cabezal (plan
    * video-mobile, paso 08 §3). Ausente si este dispositivo no puede
    * reproducir video: entonces el boton no aparece. */
-  onAddVideos?: () => void;
+  onAddVideos?: (source: "gallery" | "files") => void;
   /** Tempo y compas en el cabezal. Van los ultimos: la mayoria de sesiones
    * tienen un tempo y un compas constantes, asi que son lo menos frecuente
    * montando y pueden vivir tras el boton de puntos. */
@@ -273,10 +273,16 @@ export function mobileSelectionBarModel(args: {
           ...(creation.onAddVideos
             ? [
                 {
-                  label: t("mobileSelectionActions.addVideo", {
-                    defaultValue: "Vídeo",
+                  label: t("mobileSelectionActions.addVideoGallery", {
+                    defaultValue: "Vídeo de la galería",
                   }),
-                  onSelect: creation.onAddVideos,
+                  onSelect: () => creation.onAddVideos?.("gallery"),
+                },
+                {
+                  label: t("mobileSelectionActions.addVideoFiles", {
+                    defaultValue: "Vídeo de archivos",
+                  }),
+                  onSelect: () => creation.onAddVideos?.("files"),
                 },
               ]
             : []),

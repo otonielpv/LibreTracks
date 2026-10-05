@@ -12466,21 +12466,19 @@ html.lt-ios body {
   touch-action: auto;
 }
 
-/* The video output in the phone's top bar (plan video-mobile, paso 10): a
-   fixed slot of two icons, whatever the state, so it never moves the clock or
-   the BPM. The black button keeps its place while unusable. */
+/* The video output in the phone's top bar (plan video-mobile, paso 10): one
+   fixed-size icon whatever the state, so it never moves the clock or the BPM
+   (two icons pushed the transport into a scroll on an iPhone). */
 .lt-video-output-mobile {
   position: relative;
   /* Its slot (.lt-device-status-slot) lets touches through; this takes them. */
   pointer-events: auto;
   display: inline-flex;
   flex: 0 0 auto;
-  gap: 4px;
-  width: calc(2 * 32px + 4px);
+  width: 32px;
 }
 
-.lt-video-output-mobile .lt-video-output-badge.is-compact,
-.lt-video-output-mobile .lt-video-black-button {
+.lt-video-output-mobile .lt-video-output-badge.is-compact {
   width: 32px;
   min-width: 32px;
   height: 32px;
@@ -12490,8 +12488,12 @@ html.lt-ios body {
   justify-content: center;
 }
 
-.lt-video-black-button.is-idle {
-  visibility: hidden;
+.lt-video-output-sheet .lt-video-black-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  justify-content: center;
 }
 
 .lt-video-black-button.is-on {

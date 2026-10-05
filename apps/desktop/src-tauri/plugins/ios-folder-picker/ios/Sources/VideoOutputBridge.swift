@@ -219,8 +219,17 @@ final class VideoOutputController {
   private func setSuspended(_ value: Bool) {
     guard suspended != value else { return }
     suspended = value
-    guard window != nil else { return }
-    emit(value ? .suspended : .resumed)
+    if value {
+      // Nothing to hide without a window.
+      guard window != nil else { return }
+      emit(.suspended)
+    } else {
+      // ALWAYS: iOS usually tears the external window down while the app is
+      // in the background (AirPlay), so by now there may be no window, and
+      // Rust is still waiting to hear the suspension is over. Found on an
+      // iPhone: the badge stayed on "projector off" until a restart.
+      emit(.resumed)
+    }
   }
 
   // MARK: Surface

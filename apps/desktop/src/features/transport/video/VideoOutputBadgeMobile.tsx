@@ -35,11 +35,10 @@ export function mobileBadgeAppearance(
 
 /**
  * The video output in the phone's top bar (plan video-mobile, paso 10 §3–4):
- * a fixed two-icon slot — status and emergency black — so nothing in it ever
- * changes the bar's width and moves the clock or the BPM. The black button is
- * only usable while the output shows something; otherwise it keeps its place,
- * invisible. Tapping the status opens the full state in a sheet that floats
- * over the timeline.
+ * ONE icon, whatever the state, so it never changes the bar's width (two
+ * icons pushed the transport into a scroll on an iPhone). The icon says the
+ * state, black included; tapping it opens a sheet floating over the timeline
+ * with the emergency black first, then the state and the wizard.
  */
 export function VideoOutputBadgeMobile() {
   const { t } = useTranslation();
@@ -72,20 +71,20 @@ export function VideoOutputBadgeMobile() {
           {icon}
         </span>
       </button>
-      <button
-        type="button"
-        className={`lt-video-black-button${forcedBlack ? " is-on" : ""}${showing ? "" : " is-idle"}`}
-        aria-label={t(forcedBlack ? "transport.video.badge.blackOn" : "transport.video.badge.blackOff")}
-        aria-pressed={forcedBlack}
-        disabled={!showing}
-        onClick={() => void runVideoLiveAction("black")}
-      >
-        <span className="material-symbols-outlined" aria-hidden="true">
-          {forcedBlack ? "image" : "hide_image"}
-        </span>
-      </button>
       {sheetOpen ? (
         <div className="lt-video-output-sheet" role="dialog" aria-label={t("transport.video.badge.statusTitle")}>
+          <button
+            type="button"
+            className={`lt-video-black-button${forcedBlack ? " is-on" : ""}`}
+            aria-pressed={forcedBlack}
+            disabled={!showing}
+            onClick={() => void runVideoLiveAction("black")}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">
+              {forcedBlack ? "image" : "hide_image"}
+            </span>
+            {t(forcedBlack ? "transport.video.badge.blackOn" : "transport.video.badge.blackOff")}
+          </button>
           <strong>{t("transport.video.badge.statusTitle")}</strong>
           <p>{stateText}</p>
           {status.monitorName ? <p>{status.monitorName}</p> : null}

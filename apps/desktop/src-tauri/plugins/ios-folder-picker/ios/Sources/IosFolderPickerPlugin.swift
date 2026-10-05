@@ -1,6 +1,7 @@
 import CoreAudioKit
 import Foundation
 import ObjectiveC.runtime
+import PhotosUI
 import Security
 import Tauri
 import UIKit
@@ -22,6 +23,85 @@ fileprivate enum FolderPickerEvent {
 
 private struct ExportFileArgs: Decodable {
   let sourcePath: String
+}
+
+private struct PickVideoArgs: Decodable {
+  /// "library" (Photos) or "files" (the Files app).
+  let source: String
+}
+
+/// Where picked videos wait, as plain local files, until Rust copies them
+/// into the session and deletes them (plan video-mobile, paso 08 §3).
+private func pickedVideosDirectory() -> URL {
+  let dir = FileManager.default.temporaryDirectory
+    .appendingPathComponent("lt-picked-videos", isDirectory: true)
+  try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  return dir
+}
+
+/// Copy a file the system only lends us (the Photos picker deletes it when
+/// the callback returns) next to the others, under `name`.
+private func keepPickedVideo(_ url: URL, name: String) -> URL? {
+  let target = pickedVideosDirectory().appendingPathComponent(name)
+  try? FileManager.default.removeItem(at: target)
+  do {
+    try FileManager.default.copyItem(at: url, to: target)
+    return target
+  } catch {
+    return nil
+  }
+}
+
+/// The Photos picker, videos only. Needs no photo-library permission: the
+/// system hands over just what the user picked.
+private final class VideoLibraryDelegate: NSObject, PHPickerViewControllerDelegate {
+  let done: (URL?) -> Void
+
+  init(done: @escaping (URL?) -> Void) {
+    self.done = done
+  }
+
+  func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+    picker.dismiss(animated: true)
+    guard let provider = results.first?.itemProvider,
+      provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier)
+    else {
+      done(nil)
+      return
+    }
+    let suggested = provider.suggestedName
+    provider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, _ in
+      guard let url = url else {
+        self.done(nil)
+        return
+      }
+      let ext = url.pathExtension.isEmpty ? "mov" : url.pathExtension
+      let name = suggested.map { "\($0).\(ext)" } ?? url.lastPathComponent
+      self.done(keepPickedVideo(url, name: name))
+    }
+  }
+}
+
+/// The Files picker, videos only, as a copy: a plain local file that Rust
+/// can read without security-scoped access.
+private final class VideoFileDelegate: NSObject, UIDocumentPickerDelegate {
+  let done: (URL?) -> Void
+
+  init(done: @escaping (URL?) -> Void) {
+    self.done = done
+  }
+
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    guard let url = urls.first else {
+      done(nil)
+      return
+    }
+    done(keepPickedVideo(url, name: url.lastPathComponent))
+  }
+
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    done(nil)
+  }
 }
 
 private struct SecureStoreSetArgs: Decodable {
@@ -60,6 +140,7 @@ final class IosFolderPickerPlugin: Plugin {
   private let bookmarksKey = "LibreTracksSecurityScopedFolderBookmarks"
   private var activeURLs: [URL] = []
   private var pickerDelegate: FolderPickerDelegate?
+  private var videoPickerDelegate: NSObject?
   private var onResult: ((FolderPickerEvent) -> Void)?
   private var retainSelectedURL = true
   private var memoryWarningObserver: NSObjectProtocol?
@@ -203,6 +284,47 @@ final class IosFolderPickerPlugin: Plugin {
         return
       }
       presenter.present(picker, animated: true)
+    }
+  }
+
+  /// Pick one video from Photos ("library") or Files ("files") for the
+  /// session (plan video-mobile, paso 08 §3). Resolves `file` with a local
+  /// copy under tmp/lt-picked-videos, which Rust moves into the session.
+  @objc public func pickVideo(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(PickVideoArgs.self)
+    let finish: (URL?) -> Void = { url in
+      DispatchQueue.main.async {
+        self.videoPickerDelegate = nil
+        if let url = url {
+          invoke.resolve(["file": url.path])
+        } else {
+          invoke.resolve(["file": NSNull()])
+        }
+      }
+    }
+    DispatchQueue.main.async {
+      guard let presenter = self.activeViewController() else {
+        invoke.reject("No se pudo abrir el selector de vídeos de iOS")
+        return
+      }
+      if args.source == "library" {
+        var configuration = PHPickerConfiguration()
+        configuration.filter = .videos
+        configuration.selectionLimit = 1
+        configuration.preferredAssetRepresentationMode = .current
+        let picker = PHPickerViewController(configuration: configuration)
+        let delegate = VideoLibraryDelegate(done: finish)
+        self.videoPickerDelegate = delegate
+        picker.delegate = delegate
+        presenter.present(picker, animated: true)
+      } else {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.movie], asCopy: true)
+        let delegate = VideoFileDelegate(done: finish)
+        self.videoPickerDelegate = delegate
+        picker.delegate = delegate
+        picker.allowsMultipleSelection = false
+        presenter.present(picker, animated: true)
+      }
     }
   }
 

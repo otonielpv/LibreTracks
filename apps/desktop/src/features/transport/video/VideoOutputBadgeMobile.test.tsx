@@ -50,36 +50,37 @@ beforeEach(async () => {
 
 /** Plan video-mobile, paso 10 C3. */
 describe("the phone's video badge", () => {
-  it("keeps the same two-icon slot in every state, so the top bar never shifts", () => {
+  it("is one icon in every state, so the top bar never shifts or scrolls", () => {
     const { container } = render(<VideoOutputBadge />);
     for (const state of STATES) {
       act(() => useVideoStore.getState().setOutputStatus(status(state)));
       const slot = container.querySelector(".lt-video-output-mobile")!;
       expect(slot, state.state).not.toBeNull();
       const buttons = slot.querySelectorAll(":scope > button");
-      expect(buttons.length, state.state).toBe(2);
-      // Icons only: no text label that would widen the slot.
-      for (const button of buttons) {
-        expect(button.children.length).toBe(1);
-        expect(button.firstElementChild!.classList.contains("material-symbols-outlined")).toBe(true);
-      }
+      expect(buttons.length, state.state).toBe(1);
+      // Icon only: no text label that would widen the slot.
+      expect(buttons[0].children.length).toBe(1);
+      expect(buttons[0].firstElementChild!.classList.contains("material-symbols-outlined")).toBe(true);
     }
   });
 
-  it("offers black at one tap only while the output shows something", () => {
+  it("puts black first in the sheet, usable only while the output shows something", () => {
     render(<VideoOutputBadge />);
     act(() => useVideoStore.getState().setOutputStatus(status({ state: "noDisplay" })));
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
     const black = () => screen.getByRole("button", { pressed: false });
     expect(black().hasAttribute("disabled")).toBe(true);
-    expect(black().classList.contains("is-idle")).toBe(true);
 
     act(() => useVideoStore.getState().setOutputStatus(status({ state: "ready" })));
-    expect(black().hasAttribute("disabled")).toBe(false);
+    const sheet = screen.getByRole("dialog");
+    expect(sheet.querySelector("button")).toBe(black());
     fireEvent.click(black());
     expect(live.runVideoLiveAction).toHaveBeenCalledWith("black");
 
     act(() => useVideoStore.getState().setForcedBlack(true));
-    expect(screen.getByRole("button", { pressed: true }).getAttribute("aria-label")).toBe("Quitar el negro");
+    expect(screen.getByRole("button", { pressed: true }).textContent).toContain("Quitar el negro");
+    // The icon in the bar says it too.
+    expect(document.querySelector(".lt-video-output-badge")!.textContent).toBe("hide_image");
   });
 
   it("opens the full state on a tap: display, players and the lock hint", () => {

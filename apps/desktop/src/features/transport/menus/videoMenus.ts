@@ -103,12 +103,20 @@ export function createVideoMenus(
       ...(isMobileApp && video
         ? [
             {
-              label: t("transport.video.addFromDevice"),
+              label: t("transport.video.addFromGallery"),
               onSelect: () =>
-                video.addVideosFromDevice({
-                  seconds: d.displayPositionSecondsRef.current,
-                  trackId: track.id,
-                }),
+                video.addVideosFromDevice(
+                  { seconds: d.displayPositionSecondsRef.current, trackId: track.id },
+                  "gallery",
+                ),
+            },
+            {
+              label: t("transport.video.addFromFiles"),
+              onSelect: () =>
+                video.addVideosFromDevice(
+                  { seconds: d.displayPositionSecondsRef.current, trackId: track.id },
+                  "files",
+                ),
             },
           ]
         : []),

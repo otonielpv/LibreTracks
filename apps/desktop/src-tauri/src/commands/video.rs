@@ -645,6 +645,8 @@ struct PickedVideo {
     name: String,
     size: u64,
     open: Box<dyn FnOnce() -> Result<std::fs::File, String> + Send>,
+    /// A local copy made by the picker (iOS), deleted once handled.
+    temporary: Option<std::path::PathBuf>,
 }
 
 /// Copy, analyse and register picked videos on a worker thread, then emit
@@ -686,15 +688,32 @@ fn add_picked_videos_now(
     let total: u64 = picked.iter().map(|video| video.size).sum();
     let free = crate::state::free_space_near(&song_dir);
     if !ask_from_app(app, VideoImportSource::Device, picked.len(), total, free) {
-        let reason = if videos_fit(total, free) {
-            "no se copió"
-        } else {
-            "no cabe en el dispositivo"
-        };
+        // Cancelled by the user: nothing to report. Only "it does not fit"
+        // is worth telling (a video outside the session cannot be used on a
+        // phone, so not copying it means not adding it).
+        let fits = videos_fit(total, free);
+        if fits {
+            for video in &picked {
+                if let Some(temporary) = &video.temporary {
+                    let _ = std::fs::remove_file(temporary);
+                }
+            }
+            return Ok(VideoImportResult {
+                assets: Vec::new(),
+                skipped: Vec::new(),
+            });
+        }
+        let reason = "no cabe en el dispositivo";
         return Ok(VideoImportResult {
             assets: Vec::new(),
             skipped: picked
                 .into_iter()
+                .map(|video| {
+                    if let Some(temporary) = &video.temporary {
+                        let _ = std::fs::remove_file(temporary);
+                    }
+                    video
+                })
                 .map(|video| SkippedImport {
                     source_path: video.name.clone(),
                     file_name: video.name,
@@ -717,6 +736,9 @@ fn add_picked_videos_now(
             crate::video::device_import::copy_into_session(&mut file, &song_dir, &video.name)
                 .map_err(|error| error.to_string())
         });
+        if let Some(temporary) = &video.temporary {
+            let _ = std::fs::remove_file(temporary);
+        }
         let relative = match copied {
             Ok(relative) => relative,
             Err(error) => {
@@ -758,33 +780,53 @@ fn add_picked_videos_now(
     Ok(VideoImportResult { assets, skipped })
 }
 
-/// Pick videos on the phone and add them to the session. Returns false if
-/// the picker was cancelled; the result arrives as `video:device-import-done`.
-/// On the desktop videos are referenced where they are (drag and drop, the
-/// library), so this does nothing there.
+/// Pick videos on the phone and add them to the session. `source` is
+/// `"gallery"` (the system's photos picker) or `"files"` (the documents
+/// picker: Downloads, a USB stick, Drive; keeps the real name). Returns false
+/// if the picker was cancelled; the result arrives as
+/// `video:device-import-done`. On the desktop videos are referenced where
+/// they are (drag and drop, the library), so this does nothing there.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
-pub fn pick_and_add_videos(app: AppHandle) -> Result<bool, String> {
-    let _ = app;
+pub fn pick_and_add_videos(app: AppHandle, source: Option<String>) -> Result<bool, String> {
+    let _ = (app, source);
     Ok(false)
 }
 
 #[cfg(target_os = "android")]
 #[tauri::command]
-pub fn pick_and_add_videos(app: AppHandle) -> Result<bool, String> {
-    // The documents picker, not the photo picker: it reaches Downloads, a
-    // USB stick or Drive, and keeps the real file name.
-    let uris = crate::platform::android_persistable_pick::pick_video_documents()?;
-    if uris.is_empty() {
+pub fn pick_and_add_videos(app: AppHandle, source: Option<String>) -> Result<bool, String> {
+    let files: Vec<tauri_plugin_dialog::FilePath> = if source.as_deref() == Some("gallery") {
+        // The photos picker: the gallery, but it hides the real file name
+        // ("32.mp4" -> `picked_video_name` makes it "video-32.mp4").
+        use tauri_plugin_dialog::DialogExt;
+        let (sender, receiver) = std::sync::mpsc::channel();
+        app.dialog()
+            .file()
+            .set_title("Selecciona vídeos")
+            .add_filter("Vídeo", &["mp4", "mov", "m4v", "mkv", "webm", "3gp"])
+            .pick_files(move |files| {
+                let _ = sender.send(files);
+            });
+        receiver.recv().ok().flatten().unwrap_or_default()
+    } else {
+        crate::platform::android_persistable_pick::pick_video_documents()?
+            .into_iter()
+            .filter_map(|uri| uri.parse::<tauri::Url>().ok())
+            .map(tauri_plugin_dialog::FilePath::Url)
+            .collect()
+    };
+    if files.is_empty() {
         return Ok(false);
     }
     let mut picked = Vec::new();
-    for uri in uris {
-        let Ok(url) = uri.parse::<tauri::Url>() else {
-            continue;
+    for file in files {
+        let display_name = match &file {
+            tauri_plugin_dialog::FilePath::Url(url) => {
+                crate::platform::android_video::display_name(url.as_str())
+            }
+            tauri_plugin_dialog::FilePath::Path(_) => None,
         };
-        let file = tauri_plugin_dialog::FilePath::Url(url);
-        let display_name = crate::platform::android_video::display_name(&uri);
         let name = crate::video::device_import::picked_video_name(
             display_name.as_deref(),
             &crate::platform::mobile_files::picked_file_name(&file),
@@ -800,6 +842,7 @@ pub fn pick_and_add_videos(app: AppHandle) -> Result<bool, String> {
             open: Box::new(move || {
                 crate::platform::mobile_files::open_picked_file_for_read(&open_app, &file)
             }),
+            temporary: None,
         });
     }
     add_picked_videos(app, picked);
@@ -808,24 +851,34 @@ pub fn pick_and_add_videos(app: AppHandle) -> Result<bool, String> {
 
 #[cfg(target_os = "ios")]
 #[tauri::command]
-pub async fn pick_and_add_videos(app: AppHandle) -> Result<bool, String> {
-    let Some(path) = libretracks_ios_folder_picker::pick_file(app.clone()).await? else {
+pub async fn pick_and_add_videos(app: AppHandle, source: Option<String>) -> Result<bool, String> {
+    let from_library = source.as_deref() == Some("gallery");
+    let Some(path) = libretracks_ios_folder_picker::pick_video(app.clone(), from_library).await?
+    else {
         return Ok(false);
     };
     let path = std::path::PathBuf::from(path);
-    let name = path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "video.mov".into());
+    let name = crate::video::device_import::picked_video_name(
+        None,
+        &path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+    );
     let size = std::fs::metadata(&path)
         .map(|metadata| metadata.len())
         .unwrap_or(0);
+    let open_path = path.clone();
     add_picked_videos(
         app,
         vec![PickedVideo {
             name,
             size,
-            open: Box::new(move || std::fs::File::open(&path).map_err(|error| error.to_string())),
+            open: Box::new(move || {
+                std::fs::File::open(&open_path).map_err(|error| error.to_string())
+            }),
+            // The plugin's local copy under tmp: gone once it is in the session.
+            temporary: Some(path),
         }],
     );
     Ok(true)

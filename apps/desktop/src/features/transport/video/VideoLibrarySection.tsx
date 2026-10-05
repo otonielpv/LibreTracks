@@ -43,16 +43,28 @@ export function VideoLibrarySection() {
         </span>
         {t("transport.video.librarySection")}
         {addFromDevice ? (
-          <button
-            type="button"
-            className="lt-library-video-add"
-            data-lt-native-touch
-            aria-label={t("transport.video.addFromDevice")}
-            title={t("transport.video.addFromDevice")}
-            onClick={() => addFromDevice()}
-          >
-            <span className="material-symbols-outlined">add</span>
-          </button>
+          <>
+            <button
+              type="button"
+              className="lt-library-video-add"
+              data-lt-native-touch
+              aria-label={t("transport.video.addFromGallery")}
+              title={t("transport.video.addFromGallery")}
+              onClick={() => addFromDevice("gallery")}
+            >
+              <span className="material-symbols-outlined">photo_library</span>
+            </button>
+            <button
+              type="button"
+              className="lt-library-video-add"
+              data-lt-native-touch
+              aria-label={t("transport.video.addFromFiles")}
+              title={t("transport.video.addFromFiles")}
+              onClick={() => addFromDevice("files")}
+            >
+              <span className="material-symbols-outlined">folder_open</span>
+            </button>
+          </>
         ) : null}
       </div>
       <div

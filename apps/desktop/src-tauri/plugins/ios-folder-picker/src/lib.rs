@@ -31,6 +31,11 @@ struct ExportFileResponse {
 }
 
 #[derive(Debug, Serialize)]
+struct PickVideoArgs<'a> {
+    source: &'a str,
+}
+
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ExportFileArgs<'a> {
     source_path: &'a str,
@@ -67,6 +72,14 @@ impl<R: Runtime> IosFolderPicker<R> {
     pub fn pick_file(&self) -> Result<Option<String>, String> {
         self.0
             .run_mobile_plugin::<PickFileResponse>("pickFile", ())
+            .map(|response| response.file)
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn pick_video(&self, from_library: bool) -> Result<Option<String>, String> {
+        let source = if from_library { "library" } else { "files" };
+        self.0
+            .run_mobile_plugin::<PickFileResponse>("pickVideo", PickVideoArgs { source })
             .map(|response| response.file)
             .map_err(|error| error.to_string())
     }
@@ -149,6 +162,15 @@ pub async fn pick_file<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, 
     tauri::async_runtime::spawn_blocking(move || app.state::<IosFolderPicker<R>>().pick_file())
         .await
         .map_err(|error| format!("iOS file picker worker failed: {error}"))?
+}
+
+/// A video from Photos (`from_library`) or Files, as a local copy under the
+/// app's tmp dir; the caller moves it into the session. Off the main thread,
+/// for the reason given on [`pick_folder`].
+pub async fn pick_video<R: Runtime>(app: AppHandle<R>, from_library: bool) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || app.state::<IosFolderPicker<R>>().pick_video(from_library))
+        .await
+        .map_err(|error| format!("iOS video picker worker failed: {error}"))?
 }
 
 /// [`export_file`] for callers that are already on a worker thread (the export

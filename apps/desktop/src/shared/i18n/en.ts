@@ -31,7 +31,8 @@ const en = {
     addTempo: "Tempo",
     addTimeSignature: "Time signature",
     addAudio: "Audio",
-    addVideo: "Video",
+    addVideoGallery: "Video from the gallery",
+    addVideoFiles: "Video from files",
     more: "More actions",
     hide: "Hide actions",
     show: "Show actions",
@@ -1190,10 +1191,13 @@ const en = {
           "Without them the session sounds the same; the video clips are kept and you can add the videos later.",
         hintDevice: "They are copied into the session folder so they travel with it.",
         noRoom: "They do not fit leaving 1 GB free on the device. Free some space or import them later.",
+        copy: "Copy",
         continue: "Continue",
       },
       copying: "Copying videos into the session…",
       addFromDevice: "Add video from the device",
+      addFromGallery: "Add video from the gallery",
+      addFromFiles: "Add video from files",
       cloudCellular:
         "This session takes {{size}} and you seem to be on mobile data. Download it anyway? Wi-Fi is better.",
       live: {

@@ -740,7 +740,9 @@ export function drawTrackClipsLayer(
       drawVideoLane(context, snapshot, trackTop, track.id, rowHeight, {
         trackColor: track.color,
         muted: track.muted,
-        readOnly: isMobileApp,
+        // Dimmed only where video cannot play here (plan video-mobile, paso
+        // 09): a phone whose native players did not start.
+        readOnly: isMobileApp && !(useVideoStore.getState().status?.available ?? false),
         selectedClipIds: new Set(useVideoStore.getState().selectedVideoClipIds),
         missingLabel: i18n.t("transport.video.missing"),
       });

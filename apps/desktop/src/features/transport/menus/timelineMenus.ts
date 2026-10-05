@@ -1302,12 +1302,20 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       ...(d.videoHandlers && isMobileApp
         ? [
             {
-              label: t("transport.video.addFromDevice"),
+              label: t("transport.video.addFromGallery"),
               onSelect: () =>
-                d.videoHandlers?.addVideosFromDevice({
-                  seconds: d.displayPositionSecondsRef.current,
-                  trackId: null,
-                }),
+                d.videoHandlers?.addVideosFromDevice(
+                  { seconds: d.displayPositionSecondsRef.current, trackId: null },
+                  "gallery",
+                ),
+            },
+            {
+              label: t("transport.video.addFromFiles"),
+              onSelect: () =>
+                d.videoHandlers?.addVideosFromDevice(
+                  { seconds: d.displayPositionSecondsRef.current, trackId: null },
+                  "files",
+                ),
             },
           ]
         : []),

@@ -12,6 +12,7 @@ import {
   trimVideoClip,
   updateVideoClip,
   type DeviceVideoImportDone,
+  type VideoPickSource,
   type SkippedImport,
   type SongView,
   type TransportSnapshot,
@@ -167,9 +168,9 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
    * backend asks about the size, copies them into the session on a worker
    * and answers with `video:device-import-done` → `finishDeviceImport`. */
   let pendingDevicePlacement: VideoPlacement | null = null;
-  const addVideosFromDevice = (placement: VideoPlacement | null) => {
+  const addVideosFromDevice = (placement: VideoPlacement | null, source: VideoPickSource) => {
     void runAction(async () => {
-      if (await pickAndAddVideos()) {
+      if (await pickAndAddVideos(source)) {
         pendingDevicePlacement = placement;
         setStatus(t("transport.video.copying"));
       }

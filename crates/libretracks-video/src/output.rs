@@ -640,6 +640,12 @@ impl<B: OutputBackend> OutputController<B> {
                     let player = &mut self.status.players[slot.index()];
                     player.time_pos = Some(seconds);
                     player.time_pos_at = Some(Instant::now());
+                    // A player reporting time again is a picture on screen:
+                    // a "resumed" the native side never sent (or that was
+                    // lost) must not leave the output stuck as suspended.
+                    if self.suspended {
+                        self.absorb(vec![BackendEvent::Resumed]);
+                    }
                 }
                 BackendEvent::PlaybackRestart { slot } => {
                     self.status.players[slot.index()].restarts += 1;
@@ -1294,6 +1300,22 @@ mod tests {
         assert_eq!(controller.status().state, OutputState::Suspended);
         controller.absorb(vec![BackendEvent::Resumed]);
         assert_eq!(controller.status().state, OutputState::Ready);
+    }
+
+    /// Found on an iPhone: after minimising and coming back the badge stayed
+    /// on "projector off". Time reported again is a picture on screen.
+    #[test]
+    fn a_player_reporting_time_again_ends_a_suspension() {
+        let mut controller = ready_controller();
+        controller.handle(load("D:/ok.mp4"));
+        controller.absorb(vec![BackendEvent::Suspended]);
+        assert_eq!(controller.status().state, OutputState::Suspended);
+        controller.absorb(vec![BackendEvent::TimePos {
+            slot: Slot::A,
+            seconds: 3.0,
+        }]);
+        assert_eq!(controller.status().state, OutputState::Ready);
+        assert_eq!(controller.status().resumes, 1);
     }
 
     #[test]
