@@ -13,6 +13,7 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
+
 use std::thread;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -112,6 +113,7 @@ impl QueueState {
 /// What the worker needs from the outside, injected so the queue has no
 /// dependency on Tauri.
 pub struct ThumbnailWorkerDeps {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub libmpv: Box<dyn Fn() -> Result<Arc<libretracks_video::MpvLibrary>, String> + Send>,
     pub cache_root: Box<dyn Fn() -> PathBuf + Send>,
     /// Called once the job's strip is on disk.
@@ -216,6 +218,27 @@ fn make_strip(
     if libretracks_video::thumbs::read_cached(&cache_root, &job.source).is_some() {
         return Ok(());
     }
+    extract_strip(deps, job, &cache_root, cancel)
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn extract_strip(
+    _deps: &ThumbnailWorkerDeps,
+    _job: &ThumbnailJob,
+    _cache_root: &Path,
+    _cancel: &AtomicBool,
+) -> Result<(), String> {
+    Err("miniaturas aún no disponibles en móvil".into())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn extract_strip(
+    deps: &ThumbnailWorkerDeps,
+    job: &ThumbnailJob,
+    cache_root: &Path,
+    cancel: &AtomicBool,
+) -> Result<(), String> {
+    let cache_root = cache_root.to_path_buf();
     let libmpv = (deps.libmpv)()?;
     let duration_seconds = if job.duration_seconds > 0.0 {
         job.duration_seconds

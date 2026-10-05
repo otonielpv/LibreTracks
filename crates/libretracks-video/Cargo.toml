@@ -8,10 +8,14 @@ description = "Salida de vídeo de LibreTracks: libmpv cargada en ejecución, mo
 [dependencies]
 libretracks-core = { path = "../libretracks-core" }
 hound = "3"
-libloading = "0.8"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+# libmpv is loaded at run time on the desktop only (plan video-mobile, regla
+# 2: nothing of libmpv on Android/iOS, where AVPlayer and Media3 play).
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+libloading = "0.8"
 
 # macOS output surface (paso 15): AppKit panel + OpenGL views. The same
 # objc2 family tao already pulls in.

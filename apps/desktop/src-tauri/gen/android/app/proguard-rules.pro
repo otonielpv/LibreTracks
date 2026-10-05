@@ -51,3 +51,10 @@
 # SecureTokenStore. `nativeOnMidiBytes` ya lo protege la regla de métodos
 # native de proguard-wry.pro, pero se mantiene todo el objeto por claridad.
 -keep class com.libretracks.desktop.MidiBridge { *; }
+
+# VideoOutputBridge: la salida de vídeo de Android (src/platform/android_video.rs,
+# plan video-mobile). Rust lo carga por nombre con el class loader de la app y
+# llama a start/open/close/load/seek/setPause/setSpeed/stop/showSlot/
+# setBrightness/setFit/showImage/setKeepAwake por nombre y firma; R8 no ve a
+# ningún llamante y lo borraría de la build de release.
+-keep class com.libretracks.desktop.VideoOutputBridge { *; }

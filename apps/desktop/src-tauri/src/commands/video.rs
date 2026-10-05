@@ -162,6 +162,7 @@ pub fn import_video_files(
     folder_path: Option<String>,
     state: State<'_, DesktopState>,
 ) -> Result<VideoImportResult, String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let libmpv = state.video.libmpv()?;
     let mut analysed = Vec::new();
     let mut skipped = Vec::new();
@@ -175,10 +176,13 @@ pub fn import_video_files(
             skipped.push(skip("no es un fichero de vídeo".into()));
             continue;
         }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         match libretracks_video::extract::probe(&libmpv, std::path::Path::new(&file_path)) {
             Ok(info) => analysed.push((file_path, info)),
             Err(error) => skipped.push(skip(error.to_string())),
         }
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        skipped.push(skip("el análisis de vídeo aún no está disponible en móvil".into()));
     }
 
     let assets = if analysed.is_empty() {
@@ -507,6 +511,19 @@ struct VideoAudioProgress<'a> {
 /// audio track below the video track, aligned with the clip (one undo step).
 /// The decoding runs off the session lock; `video:audio-extract-progress`
 /// reports it.
+/// Decoding a video's audio needs libmpv (plan video-mobile, paso 09 §2):
+/// the menu entry is hidden on mobile; this is the backstop.
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command(async)]
+pub fn extract_video_audio(
+    _app: AppHandle,
+    _clip_id: String,
+    _state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    Err("extraer el audio de un vídeo solo está disponible en escritorio".into())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command(async)]
 pub fn extract_video_audio(
     app: AppHandle,

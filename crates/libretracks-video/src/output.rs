@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 use libretracks_core::VideoFit;
 use serde::Serialize;
 
-use crate::monitors::{plan_surface, MonitorInfo, PlacementOutcome, PlanOptions, SurfacePlan};
+use crate::monitors::{plan_mobile_surface, plan_surface, MonitorInfo, PlacementOutcome, PlanOptions, SurfacePlan};
 use crate::settings::{IdleScreen, VideoOutputMode, VideoOutputSettings};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -123,6 +123,24 @@ pub enum BackendEvent {
     ToggleFullscreen,
     /// The user closed the output window: same as switching the output off.
     Closed,
+    /// The external displays now connected (mobile: the native side lists
+    /// them itself and pushes every change; the phone's own screen is never
+    /// in the list).
+    DisplaysChanged(Vec<MonitorInfo>),
+    /// Mobile: whether a second player could be created after all (a
+    /// low-end SoC may run out of hardware decoders), and the note the
+    /// status shows when it could not.
+    DualPlayers {
+        available: bool,
+        note: Option<String>,
+    },
+    /// Mobile: the system hid the output (the phone was locked by hand, or
+    /// the app went to the background). The audio carries on.
+    Suspended,
+    /// Mobile: the output shows again; the picture must be resynced at once.
+    Resumed,
+    /// Mobile: the native side could not build the surface on the display.
+    SurfaceFailed(String),
 }
 
 /// The surface plus its two players. Implemented over libmpv by
@@ -148,6 +166,17 @@ pub trait OutputBackend: Send {
     fn dual_players(&self) -> bool {
         true
     }
+    /// Mobile: with no display chosen, use the first external one that
+    /// appears (plan video-mobile, paso 06 §2). The desktop asks the user.
+    fn auto_display(&self) -> bool {
+        false
+    }
+    /// Whether events can arrive while the surface is closed. The native
+    /// side reports displays being plugged in exactly then; libmpv has
+    /// nothing to say without a surface.
+    fn polls_while_closed(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -163,6 +192,9 @@ pub enum OutputState {
     Ready,
     /// The configured display is not connected; reopens by itself.
     DisplayLost,
+    /// Mobile: the system hid the output (phone locked, app in the
+    /// background). Comes back by itself, resynced, on unlock.
+    Suspended,
     Error(String),
 }
 
@@ -197,12 +229,19 @@ pub struct OutputStatus {
     pub opens: u32,
     /// Two real players: the runtime may preload in the hidden one.
     pub dual_players: bool,
+    /// Why there is only one player when the platform could have two (a
+    /// low-end phone without a second hardware decoder).
+    pub players_note: Option<String>,
     /// The mode and on/off in force. A double-click or closing the window
     /// changes them without going through the settings: the app saves them
     /// when `user_changes` moves.
     pub mode: VideoOutputMode,
     pub enabled: bool,
     pub user_changes: u32,
+    /// Times the output came back from `Suspended` (mobile). The sync
+    /// runtime treats a change as a discontinuity: whatever the players did
+    /// while the system hid them, the picture is resynced at once.
+    pub resumes: u32,
 }
 
 impl Default for OutputStatus {
@@ -216,9 +255,11 @@ impl Default for OutputStatus {
             monitor_name: None,
             opens: 0,
             dual_players: false,
+            players_note: None,
             mode: VideoOutputMode::default(),
             enabled: false,
             user_changes: 0,
+            resumes: 0,
         }
     }
 }
@@ -245,6 +286,8 @@ pub struct OutputController<B: OutputBackend> {
     cover_app_display: bool,
     /// The session has video (`OutputCommand::SetContent`).
     has_content: bool,
+    /// Mobile: the system is hiding the output (`BackendEvent::Suspended`).
+    suspended: bool,
     status: OutputStatus,
 }
 
@@ -260,6 +303,7 @@ impl<B: OutputBackend> OutputController<B> {
             fit_override: None,
             cover_app_display: false,
             has_content: false,
+            suspended: false,
             status: OutputStatus::default(),
         }
     }
@@ -270,6 +314,18 @@ impl<B: OutputBackend> OutputController<B> {
 
     pub fn backend(&self) -> &B {
         &self.backend
+    }
+
+    #[cfg(test)]
+    pub(crate) fn backend_mut(&mut self) -> &mut B {
+        &mut self.backend
+    }
+
+    /// Poll the backend's events without the output thread, so a caller can
+    /// drive the controller inline (the app's runtime tests do).
+    #[doc(hidden)]
+    pub fn poll_backend_for_tests(&mut self, max_wait: Duration) -> Vec<BackendEvent> {
+        self.backend.poll(max_wait)
     }
 
     fn fail(&mut self, error: BackendError) {
@@ -302,13 +358,17 @@ impl<B: OutputBackend> OutputController<B> {
             on_top: self.settings.fullscreen_on_top,
             cover_app_display: self.cover_app_display,
         };
-        let outcome = plan_surface(
-            self.settings.display.as_ref(),
-            self.settings.mode,
-            options,
-            &self.monitors,
-            self.app_monitor.as_deref(),
-        );
+        let outcome = if self.backend.auto_display() {
+            plan_mobile_surface(self.settings.display.as_ref(), &self.monitors)
+        } else {
+            plan_surface(
+                self.settings.display.as_ref(),
+                self.settings.mode,
+                options,
+                &self.monitors,
+                self.app_monitor.as_deref(),
+            )
+        };
         match outcome {
             PlacementOutcome::NoDisplay | PlacementOutcome::DisplayLost => {
                 if self.backend.is_open() {
@@ -348,7 +408,11 @@ impl<B: OutputBackend> OutputController<B> {
                         self.status.dual_players = self.backend.dual_players();
                         self.status.monitor_name = Some(plan.monitor_name.clone());
                         self.plan = Some(plan);
-                        self.status.state = OutputState::Ready;
+                        self.status.state = if self.suspended {
+                            OutputState::Suspended
+                        } else {
+                            OutputState::Ready
+                        };
                         let _ = self.backend.show_slot(self.status.visible_slot);
                         let _ = self.backend.set_brightness(self.status.brightness);
                         let _ = self
@@ -568,6 +632,43 @@ impl<B: OutputBackend> OutputController<B> {
                     self.status.user_changes = self.status.user_changes.wrapping_add(1);
                     self.replan();
                 }
+                BackendEvent::DisplaysChanged(monitors) => {
+                    if monitors != self.monitors || self.app_monitor.is_some() {
+                        self.monitors = monitors;
+                        self.app_monitor = None;
+                        self.replan();
+                    }
+                }
+                BackendEvent::DualPlayers { available, note } => {
+                    self.status.dual_players = available;
+                    self.status.players_note = if available { None } else { note };
+                }
+                BackendEvent::Suspended => {
+                    self.suspended = true;
+                    if self.status.state == OutputState::Ready {
+                        self.status.state = OutputState::Suspended;
+                    }
+                }
+                BackendEvent::Resumed => {
+                    self.suspended = false;
+                    if self.status.state == OutputState::Suspended {
+                        // Leaving `Suspended` is what resyncs: the runtime
+                        // drops its sync state on any state other than
+                        // `Ready` and starts over (seek to the target) the
+                        // moment it reads `Ready` again, without waiting for
+                        // the next jump.
+                        self.status.state = OutputState::Ready;
+                        self.status.resumes = self.status.resumes.wrapping_add(1);
+                    }
+                }
+                BackendEvent::SurfaceFailed(reason) => {
+                    if self.backend.is_open() {
+                        self.backend.close();
+                    }
+                    self.plan = None;
+                    self.status.players = Default::default();
+                    self.status.state = OutputState::Error(reason);
+                }
             }
         }
     }
@@ -696,6 +797,9 @@ fn run<B: OutputBackend>(
                 Ok(command) => controller.handle(command),
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => return,
+            }
+            if controller.backend.polls_while_closed() {
+                controller.poll_backend(Duration::ZERO);
             }
         }
     }
@@ -1121,6 +1225,59 @@ mod tests {
         );
         controller.handle(OutputCommand::SetBrightness(-100.0));
         assert_eq!(controller.backend().brightness.last(), Some(&-100.0));
+    }
+
+    /// Plan video-mobile paso 06 C2: ready → suspended → ready, and the
+    /// display going away and back in between.
+    #[test]
+    fn locking_the_phone_suspends_and_unlocking_resumes() {
+        let mut controller = ready_controller();
+        controller.handle(load("D:/ok.mp4"));
+        controller.absorb(vec![BackendEvent::Suspended]);
+        assert_eq!(controller.status().state, OutputState::Suspended);
+        // Nothing was closed: the players are where they were.
+        assert!(controller.backend().open);
+        assert_eq!(controller.status().player(Slot::A).file.as_deref(), Some("D:/ok.mp4"));
+
+        controller.absorb(vec![BackendEvent::Resumed]);
+        assert_eq!(controller.status().state, OutputState::Ready);
+    }
+
+    #[test]
+    fn a_display_lost_while_suspended_comes_back_suspended_until_resumed() {
+        let mut controller = ready_controller();
+        controller.absorb(vec![BackendEvent::Suspended]);
+        controller.handle(OutputCommand::Displays {
+            monitors: monitors()[..1].to_vec(),
+            app_monitor: Some("M1".into()),
+        });
+        assert_eq!(controller.status().state, OutputState::DisplayLost);
+        // Resuming while the display is gone does not pretend it is ready.
+        controller.absorb(vec![BackendEvent::Resumed]);
+        assert_eq!(controller.status().state, OutputState::DisplayLost);
+        controller.absorb(vec![BackendEvent::Suspended]);
+        controller.handle(OutputCommand::Displays {
+            monitors: monitors(),
+            app_monitor: Some("M1".into()),
+        });
+        assert_eq!(controller.status().state, OutputState::Suspended);
+        controller.absorb(vec![BackendEvent::Resumed]);
+        assert_eq!(controller.status().state, OutputState::Ready);
+    }
+
+    #[test]
+    fn a_resume_without_a_suspend_changes_nothing() {
+        let mut controller = ready_controller();
+        controller.absorb(vec![BackendEvent::Resumed]);
+        assert_eq!(controller.status().state, OutputState::Ready);
+    }
+
+    #[test]
+    fn a_surface_that_cannot_be_built_is_an_error_and_closes() {
+        let mut controller = ready_controller();
+        controller.absorb(vec![BackendEvent::SurfaceFailed("Presentation: display removed".into())]);
+        assert!(matches!(controller.status().state, OutputState::Error(ref m) if m.contains("Presentation")));
+        assert!(!controller.backend().open);
     }
 
     #[test]

@@ -1,24 +1,31 @@
-//! Video on the desktop side: loading libmpv, the thumbnail worker and (later
-//! steps) the output window and the sync runtime.
+//! Video in the app: the output (libmpv on the desktop, AVPlayer / Media3 on
+//! iOS / Android), the sync runtime, the thumbnail worker.
 //!
-//! Everything here tolerates libmpv being absent: the app starts, audio plays,
-//! and video reports itself unavailable with the reason.
+//! Everything here tolerates the backend being absent: the app starts, audio
+//! plays, and video reports itself unavailable with the reason.
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod displays;
 pub mod live;
+pub mod native_events;
 pub mod runtime;
 pub mod thumbnail_queue;
 
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::sync::Arc;
+use std::sync::OnceLock;
 
-use libretracks_video::output::{OutputCommand, OutputStatus, UnavailableBackend, VideoOutput};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use libretracks_video::output::UnavailableBackend;
+use libretracks_video::output::{OutputCommand, OutputStatus, VideoOutput};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use libretracks_video::MpvLibrary;
 use serde::Serialize;
 
 use thumbnail_queue::ThumbnailQueue;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[derive(Clone)]
 struct LoadedLibrary {
     library: Arc<MpvLibrary>,
@@ -29,6 +36,7 @@ struct LoadedLibrary {
 #[derive(Default)]
 pub struct VideoSystem {
     resource_dir: OnceLock<PathBuf>,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     library: OnceLock<Result<LoadedLibrary, String>>,
     /// macOS: how the output reaches the AppKit main thread (Tauri's).
     #[cfg(target_os = "macos")]
@@ -50,7 +58,8 @@ pub struct VideoSystem {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoLibraryStatus {
-    /// False on Android/iOS: video is desktop-only.
+    /// Video is played on this platform (every platform since plan
+    /// video-mobile; kept for the UI, which still reads it).
     pub supported_platform: bool,
     pub available: bool,
     pub reason: Option<String>,
@@ -65,6 +74,7 @@ impl VideoSystem {
         let _ = self.resource_dir.set(dir);
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn loaded(&self) -> &Result<LoadedLibrary, String> {
         self.library.get_or_init(|| {
             libretracks_video::load_libmpv(self.resource_dir.get().map(PathBuf::as_path))
@@ -78,6 +88,7 @@ impl VideoSystem {
 
     /// libmpv, loaded on first use. The result (success or failure) is kept
     /// for the life of the process: a failed load is not retried per call.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn libmpv(&self) -> Result<Arc<MpvLibrary>, String> {
         self.loaded()
             .as_ref()
@@ -88,6 +99,7 @@ impl VideoSystem {
     /// Start the output thread. With libmpv it drives the real surface;
     /// without, every attempt to open reports `Unavailable` with the reason.
     /// Idempotent.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn start_output(&self) -> &VideoOutput {
         self.output.get_or_init(|| match self.libmpv() {
             Ok(library) => VideoOutput::spawn(self.backend(library)),
@@ -95,7 +107,32 @@ impl VideoSystem {
         })
     }
 
-    #[cfg(not(target_os = "macos"))]
+    /// Start the output thread over the native players (plan video-mobile,
+    /// paso 03). The event sink is installed before the native side starts
+    /// listening for displays, so the first list is not lost. Idempotent.
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    pub fn start_output(&self) -> &VideoOutput {
+        self.output.get_or_init(|| {
+            use libretracks_video::native::{native_event_channel, NativeOutputBackend};
+            let (sink, events) = native_event_channel();
+            native_events::install_sink(sink);
+            #[cfg(target_os = "android")]
+            let (bridge, start): (_, fn()) = (
+                crate::platform::android_video::AndroidVideoBridge,
+                crate::platform::android_video::AndroidVideoBridge::start,
+            );
+            #[cfg(target_os = "ios")]
+            let (bridge, start): (_, fn()) = (
+                crate::platform::ios_video::IosVideoBridge,
+                crate::platform::ios_video::IosVideoBridge::start,
+            );
+            let output = VideoOutput::spawn(NativeOutputBackend::new(bridge, events));
+            start();
+            output
+        })
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
     fn backend(&self, library: Arc<MpvLibrary>) -> libretracks_video::mpv_backend::MpvOutputBackend {
         libretracks_video::mpv_backend::MpvOutputBackend::new(library)
     }
@@ -183,8 +220,14 @@ impl VideoSystem {
             .unwrap_or_default()
     }
 
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     pub fn status(&self) -> VideoLibraryStatus {
-        let supported_platform = !cfg!(any(target_os = "android", target_os = "ios"));
+        mobile_library_status(self.output.get().map(VideoOutput::status).as_ref())
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn status(&self) -> VideoLibraryStatus {
+        let supported_platform = true;
         match self.loaded() {
             Ok(loaded) => VideoLibraryStatus {
                 supported_platform,
@@ -204,9 +247,52 @@ impl VideoSystem {
     }
 }
 
+/// What the settings tab and the timeline are told on a phone (paso 03 §4):
+/// the native players are there unless the output said otherwise. The libmpv
+/// fields stay `None`; the UI already treats them as optional.
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
+fn mobile_library_status(output: Option<&OutputStatus>) -> VideoLibraryStatus {
+    use libretracks_video::output::OutputState;
+    let (available, reason) = match output.map(|status| &status.state) {
+        None => (false, Some("la salida de vídeo no ha arrancado".to_string())),
+        Some(OutputState::Unavailable(reason)) => (false, Some(reason.clone())),
+        Some(_) => (true, None),
+    };
+    VideoLibraryStatus {
+        supported_platform: true,
+        available,
+        reason,
+        library_path: None,
+        client_api_version: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Paso 03 C4/C7: on a phone the status follows the native output.
+    #[test]
+    fn the_mobile_status_follows_the_native_output() {
+        use libretracks_video::output::OutputState;
+        let ready = OutputStatus {
+            state: OutputState::NoDisplay,
+            ..Default::default()
+        };
+        let status = mobile_library_status(Some(&ready));
+        assert!(status.supported_platform && status.available);
+        assert_eq!(status.library_path, None);
+
+        let missing = OutputStatus {
+            state: OutputState::Unavailable("VideoOutputBridge no está".into()),
+            ..Default::default()
+        };
+        let status = mobile_library_status(Some(&missing));
+        assert!(!status.available);
+        assert_eq!(status.reason.as_deref(), Some("VideoOutputBridge no está"));
+
+        assert!(!mobile_library_status(None).available);
+    }
 
     /// C6 del paso 02: una libmpv que no existe deja el vídeo desactivado con
     /// el motivo, sin pánico, y el fallo se recuerda (no se reintenta).

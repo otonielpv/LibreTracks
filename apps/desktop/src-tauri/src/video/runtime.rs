@@ -142,6 +142,8 @@ pub struct RuntimeCore {
     /// Last "the session has video" told to the output, which stays closed
     /// without it.
     content_sent: Option<bool>,
+    /// Last `OutputStatus::resumes` seen: a phone unlocked again.
+    last_resumes: Option<u32>,
     pub stats: VideoSyncStats,
 }
 
@@ -167,6 +169,7 @@ impl Default for RuntimeCore {
             expected_visible: None,
             last_position: None,
             content_sent: None,
+            last_resumes: None,
             stats: VideoSyncStats::default(),
         }
     }
@@ -266,7 +269,13 @@ impl RuntimeCore {
             && self
                 .last_position
                 .is_some_and(|last| position < last - 0.1 || position > last + 0.5);
+        // Back from a phone lock (mobile): resync now, not at the next jump.
+        let resumed = self
+            .last_resumes
+            .is_some_and(|resumes| resumes != status.resumes);
+        self.last_resumes = Some(status.resumes);
         let discontinuity = jumped
+            || resumed
             || self
                 .last_generation
                 .is_some_and(|generation| generation != clock.generation);
@@ -1212,5 +1221,215 @@ mod tests {
             "lifting the black must not seek or reload: {sent:?}"
         );
         assert_eq!(core.state.seeks, seeks_before);
+    }
+
+    /// Plan video-mobile, paso 03 C3: the real runtime against the native
+    /// backend (what runs on a phone), with a bridge that only records.
+    mod native {
+        use super::*;
+        use libretracks_core::VideoFit;
+        use libretracks_video::monitors::MonitorInfo;
+        use libretracks_video::native::{
+            native_event_channel, NativeEventSink, NativeOutputBackend, NativeVideoBridge,
+        };
+        use libretracks_video::output::{BackendError, BackendEvent, OutputController};
+
+        #[derive(Clone, Default)]
+        struct RecordingBridge(Arc<Mutex<Vec<String>>>);
+
+        impl RecordingBridge {
+            fn take(&self) -> Vec<String> {
+                std::mem::take(&mut *self.0.lock().unwrap())
+            }
+        }
+
+        impl NativeVideoBridge for RecordingBridge {
+            fn open(&self, display: &str, _: VideoFit) -> Result<(), BackendError> {
+                self.0.lock().unwrap().push(format!("open {display}"));
+                Ok(())
+            }
+            fn close(&self) {
+                self.0.lock().unwrap().push("close".into());
+            }
+            fn player(&self, slot: Slot, command: &PlayerCommand) {
+                let text = match command {
+                    PlayerCommand::Load {
+                        path,
+                        start_seconds,
+                        ..
+                    } => format!("load {slot:?} {path} {start_seconds:.2}"),
+                    PlayerCommand::Seek { seconds } => format!("seek {slot:?} {seconds:.2}"),
+                    other => format!("{other:?}"),
+                };
+                self.0.lock().unwrap().push(text);
+            }
+            fn show_slot(&self, _: Slot) {}
+            fn set_brightness(&self, _: f64) {}
+            fn set_fit(&self, _: VideoFit) {}
+            fn show_image(&self, _: Slot, _: Option<&str>) {}
+            fn dual_players(&self) -> bool {
+                false
+            }
+        }
+
+        /// The output thread's controller, driven inline: each command is
+        /// applied as it is sent, and `pump` folds the native events.
+        struct InlineOutput {
+            controller: RefCell<OutputController<NativeOutputBackend<RecordingBridge>>>,
+            settings: VideoOutputSettings,
+        }
+
+        // Single-threaded tests; the trait wants Send.
+        unsafe impl Send for InlineOutput {}
+
+        impl InlineOutput {
+            fn pump(&self) {
+                let mut controller = self.controller.borrow_mut();
+                let events = controller.poll_backend_for_tests(Duration::from_millis(1));
+                controller.absorb(events);
+            }
+        }
+
+        impl RuntimeOutput for InlineOutput {
+            fn status(&self) -> OutputStatus {
+                self.controller.borrow().status().clone()
+            }
+            fn send(&self, command: OutputCommand) {
+                self.controller.borrow_mut().handle(command);
+            }
+            fn settings(&self) -> VideoOutputSettings {
+                self.settings.clone()
+            }
+            fn black_amount(&self, _: Instant) -> f64 {
+                0.0
+            }
+        }
+
+        fn phone() -> (InlineOutput, RecordingBridge, NativeEventSink) {
+            let bridge = RecordingBridge::default();
+            let (sink, events) = native_event_channel();
+            let settings = VideoOutputSettings {
+                enabled: true,
+                ..Default::default()
+            };
+            let mut controller =
+                OutputController::new(NativeOutputBackend::new(bridge.clone(), events));
+            controller.handle(OutputCommand::ApplySettings(settings.clone()));
+            (
+                InlineOutput {
+                    controller: RefCell::new(controller),
+                    settings,
+                },
+                bridge,
+                sink,
+            )
+        }
+
+        fn external(name: &str) -> BackendEvent {
+            BackendEvent::DisplaysChanged(vec![MonitorInfo {
+                name: name.into(),
+                width: 1920,
+                height: 1080,
+                x: 0,
+                y: 0,
+                is_primary: false,
+            }])
+        }
+
+        #[test]
+        fn a_clip_loads_follows_and_jumps_on_the_native_backend() {
+            let (output, bridge, sink) = phone();
+            let mut core = RuntimeCore::default();
+            let mut inputs = FakeInputs {
+                clock: running_clock(12.0),
+                timeline: one_clip_timeline(),
+                fetches: 0,
+            };
+            // The session has video, but no projector yet: parked.
+            assert_eq!(core.tick(&mut inputs, &output, Instant::now()), TickRate::Park);
+            assert_eq!(output.status().state, OutputState::NoDisplay);
+
+            // The projector is plugged in: the native side reports it.
+            sink.send(external("HDMI"));
+            output.pump();
+            assert_eq!(output.status().state, OutputState::Ready);
+            assert_eq!(bridge.take(), ["open HDMI"]);
+
+            // Loads the clip at the transport position.
+            assert_eq!(core.tick(&mut inputs, &output, Instant::now()), TickRate::Fast);
+            let calls = bridge.take();
+            assert!(
+                calls.iter().any(|call| call.starts_with("load A D:/a.mp4 12.")),
+                "{calls:?}"
+            );
+
+            // The native player answers and then reports its time.
+            sink.send(BackendEvent::FileLoaded { slot: Slot::A });
+            sink.send(BackendEvent::PlaybackRestart { slot: Slot::A });
+            sink.send(BackendEvent::TimePos {
+                slot: Slot::A,
+                seconds: 12.0,
+            });
+            output.pump();
+            assert_eq!(output.status().player(Slot::A).restarts, 1);
+            for _ in 0..5 {
+                core.tick(&mut inputs, &output, Instant::now());
+            }
+            let calls = bridge.take();
+            assert!(
+                !calls
+                    .iter()
+                    .any(|call| call.starts_with("load") || call.starts_with("seek")),
+                "in sync, so no reload or seek: {calls:?}"
+            );
+
+            // A jump to 40 s (new transport generation) seeks the player.
+            inputs.clock = VideoTransportClock {
+                anchor_position_seconds: 40.0,
+                anchor_started_at: Some(Instant::now()),
+                generation: 2,
+                upcoming_jump: None,
+                vamp: None,
+            };
+            core.tick(&mut inputs, &output, Instant::now());
+            let calls = bridge.take();
+            assert!(calls.iter().any(|call| call.starts_with("seek A 40.")), "{calls:?}");
+        }
+
+        /// Paso 06 C2 seen from the runtime: while suspended it parks, and
+        /// on resume it resyncs at once (a seek), without waiting for a jump.
+        #[test]
+        fn resuming_after_a_lock_resyncs_at_once() {
+            let (output, bridge, sink) = phone();
+            let mut core = RuntimeCore::default();
+            let mut inputs = FakeInputs {
+                clock: running_clock(12.0),
+                timeline: one_clip_timeline(),
+                fetches: 0,
+            };
+            sink.send(external("AirPlay"));
+            output.pump();
+            core.tick(&mut inputs, &output, Instant::now());
+            sink.send(BackendEvent::PlaybackRestart { slot: Slot::A });
+            output.pump();
+            core.tick(&mut inputs, &output, Instant::now());
+            bridge.take();
+
+            sink.send(BackendEvent::Suspended);
+            output.pump();
+            assert_eq!(core.tick(&mut inputs, &output, Instant::now()), TickRate::Park);
+            assert!(bridge.take().is_empty(), "nothing is sent while suspended");
+
+            sink.send(BackendEvent::Resumed);
+            output.pump();
+            core.tick(&mut inputs, &output, Instant::now());
+            let calls = bridge.take();
+            assert!(
+                calls
+                    .iter()
+                    .any(|call| call.starts_with("seek A") || call.starts_with("load A")),
+                "resynced on resume: {calls:?}"
+            );
+        }
     }
 }

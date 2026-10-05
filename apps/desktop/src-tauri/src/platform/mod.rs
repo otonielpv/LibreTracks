@@ -46,6 +46,8 @@ pub mod windows_firewall;
 #[cfg(target_os = "ios")]
 pub mod ios_token_store;
 #[cfg(target_os = "ios")]
+pub mod ios_video;
+#[cfg(target_os = "ios")]
 pub mod ios_webview;
 
 #[cfg(target_os = "android")]
@@ -66,6 +68,8 @@ pub mod android_storage;
 pub mod android_storage_events;
 #[cfg(target_os = "android")]
 pub mod android_token_store;
+#[cfg(target_os = "android")]
+pub mod android_video;
 #[cfg(target_os = "android")]
 pub mod mobile_files;
 

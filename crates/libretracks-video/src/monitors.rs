@@ -116,6 +116,45 @@ pub enum PlacementOutcome {
     NoDisplay,
 }
 
+/// Where the output goes on a phone or tablet (plan video-mobile, paso 06
+/// §2), where the list only ever holds *external* displays, all at (0, 0),
+/// and there is usually one or none.
+///
+/// - Nothing pinned: the first external display that appears, without asking.
+/// - A display pinned in the settings (AirPlay and a cable at once): that
+///   one and only that one, recognised **by name**. Position means nothing
+///   here (every display sits at the origin) and two projectors share a
+///   resolution, so the desktop's geometric match would hand the show to
+///   whichever screen is plugged in. If the pinned one is gone, the plan
+///   reads "display lost" even when another is connected, as on the desktop.
+///
+/// Always fullscreen: there is no window on a projector driven by a phone.
+pub fn plan_mobile_surface(pinned: Option<&DisplayId>, monitors: &[MonitorInfo]) -> PlacementOutcome {
+    let monitor = match pinned {
+        Some(pinned) => monitors.iter().find(|monitor| monitor.name == pinned.name),
+        None => monitors.first(),
+    };
+    let Some(monitor) = monitor else {
+        return if pinned.is_some() {
+            PlacementOutcome::DisplayLost
+        } else {
+            PlacementOutcome::NoDisplay
+        };
+    };
+    PlacementOutcome::Place(SurfacePlan {
+        rect: SurfaceRect {
+            x: 0,
+            y: 0,
+            width: monitor.width,
+            height: monitor.height,
+        },
+        fullscreen: true,
+        monitor_name: monitor.name.clone(),
+        shares_app_display: false,
+        on_top: false,
+    })
+}
+
 /// Decide where the surface goes for `saved` and `mode`, given the monitors
 /// now connected and the one the main window is on.
 pub fn plan_surface(
@@ -178,6 +217,67 @@ mod tests {
 
     fn saved(name: &str, x: i32, y: i32, width: u32, height: u32) -> DisplayId {
         monitor(name, x, y, width, height).id()
+    }
+
+    fn external(name: &str) -> MonitorInfo {
+        MonitorInfo {
+            name: name.into(),
+            width: 1920,
+            height: 1080,
+            x: 0,
+            y: 0,
+            is_primary: false,
+        }
+    }
+
+    fn mobile_outcome(pinned: Option<&DisplayId>, monitors: &[MonitorInfo]) -> PlacementOutcome {
+        plan_mobile_surface(pinned, monitors)
+    }
+
+    fn placed_on(outcome: &PlacementOutcome) -> Option<&str> {
+        match outcome {
+            PlacementOutcome::Place(plan) => Some(plan.monitor_name.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Paso 06 C1, the five cases of the mobile display choice.
+    #[test]
+    fn on_a_phone_with_no_external_display_there_is_nothing_to_open() {
+        assert_eq!(mobile_outcome(None, &[]), PlacementOutcome::NoDisplay);
+    }
+
+    #[test]
+    fn on_a_phone_the_only_external_display_is_used_without_asking() {
+        let outcome = mobile_outcome(None, &[external("HDMI")]);
+        assert_eq!(placed_on(&outcome), Some("HDMI"));
+        let PlacementOutcome::Place(plan) = outcome else { unreachable!() };
+        assert!(plan.fullscreen && !plan.shares_app_display);
+    }
+
+    #[test]
+    fn on_a_phone_with_two_displays_the_first_one_wins() {
+        let monitors = [external("HDMI"), external("AirPlay: Salón")];
+        assert_eq!(placed_on(&mobile_outcome(None, &monitors)), Some("HDMI"));
+    }
+
+    #[test]
+    fn on_a_phone_a_pinned_display_beats_the_first_one() {
+        let monitors = [external("HDMI"), external("AirPlay: Salón")];
+        let pinned = external("AirPlay: Salón").id();
+        assert_eq!(
+            placed_on(&mobile_outcome(Some(&pinned), &monitors)),
+            Some("AirPlay: Salón")
+        );
+    }
+
+    #[test]
+    fn on_a_phone_a_pinned_display_that_is_gone_is_lost_even_with_another_present() {
+        let pinned = external("AirPlay: Salón").id();
+        assert_eq!(
+            mobile_outcome(Some(&pinned), &[external("HDMI")]),
+            PlacementOutcome::DisplayLost
+        );
     }
 
     #[test]

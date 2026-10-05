@@ -238,7 +238,6 @@ pub fn run() {
 
             let state = app.state::<DesktopState>();
             state.audio.attach_app_handle(app.handle().clone());
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             video_setup::start(app.handle(), &state);
             // The worker parks while the song has no MIDI clips, so starting
             // it on every platform costs nothing when unused.
@@ -629,16 +628,18 @@ fn save_session_on_exit(app: &tauri::AppHandle) {
     }
 }
 
-/// Wiring of the desktop video services to the Tauri app: where the bundled
-/// libmpv lives and the thumbnail worker's events.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+/// Wiring of the video services to the Tauri app: where the bundled libmpv
+/// lives (desktop), the thumbnail worker's events, the output and the sync
+/// runtime (every platform since plan video-mobile, paso 03).
 mod video_setup {
     use std::sync::Arc;
 
     use tauri::{AppHandle, Emitter, Manager};
 
     use crate::state::DesktopState;
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     use crate::video::thumbnail_queue::ThumbnailWorkerDeps;
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     use libretracks_video::output::OutputCommand;
 
     #[derive(Clone, serde::Serialize)]
@@ -652,6 +653,14 @@ mod video_setup {
             state.video.set_resource_dir(resource_dir);
         }
         start_output(app, state);
+        start_thumbnails(app, state);
+    }
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    fn start_thumbnails(_app: &AppHandle, _state: &DesktopState) {}
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn start_thumbnails(app: &AppHandle, state: &DesktopState) {
         let video = Arc::clone(&state.video);
         let emitter = app.clone();
         state.video.thumbnails.start(ThumbnailWorkerDeps {
@@ -687,11 +696,15 @@ mod video_setup {
             .and_then(|store| store.current().ok())
             .map(|settings| settings.video_output)
             .unwrap_or_default();
-        let (monitors, app_monitor) = crate::video::displays::connected_monitors(app);
-        state.video.send(OutputCommand::Displays {
-            monitors,
-            app_monitor,
-        });
+        // On a phone the native side pushes its external displays itself.
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            let (monitors, app_monitor) = crate::video::displays::connected_monitors(app);
+            state.video.send(OutputCommand::Displays {
+                monitors,
+                app_monitor,
+            });
+        }
         state.video.set_settings(settings);
 
         // The sync runtime: reads the published transport clock, try_locks the
@@ -720,6 +733,7 @@ mod video_setup {
                 loop {
                     std::thread::sleep(std::time::Duration::from_millis(250));
                     tick = tick.wrapping_add(1);
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if tick % 8 == 0 {
                         let (monitors, app_monitor) =
                             crate::video::displays::connected_monitors(&app);
@@ -749,6 +763,7 @@ mod video_setup {
                         status.shares_app_display,
                         status.monitor_name.clone(),
                         status.mode,
+                        status.players_note.clone(),
                     );
                     if last_state.as_ref() != Some(&key) {
                         last_state = Some(key);
