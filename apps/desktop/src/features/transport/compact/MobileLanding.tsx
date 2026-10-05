@@ -152,9 +152,9 @@ export function MobileLanding({
   };
 
   /**
-   * Delete a session from the device, after confirming. Mobile only: on
-   * desktop the trash icon in the recents list means "forget this entry", and
-   * the user has a real file manager for the rest.
+   * Delete a session from the device, after confirming. Android only: on iOS
+   * and desktop the trash icon in the recents list means "forget this entry",
+   * and the user has a file manager (Files) for the rest.
    *
    * El backend da por buena una sesion que ya no esta (no hay nada que
    * borrar), asi que la entrada de recientes se va tambien en ese caso: es lo
@@ -458,25 +458,25 @@ export function MobileLanding({
                       >
                         {entry.name}
                       </button>
-                      {/* On a phone the trash DELETES the session: there is no
-                          file manager to do it with, and a list that only
-                          forgets entries leaves the storage full. On desktop it
-                          keeps its original, non-destructive meaning. */}
+                      {/* On Android the trash DELETES the session: sessions
+                          live in the app's own folders, out of reach of any
+                          file manager. On iOS (Files) and desktop it only
+                          forgets the entry; deleting is the user's, there. */}
                       <button
                         type="button"
                         className="lt-empty-state-recent-remove"
                         title={
-                          isMobileApp
+                          isAndroidApp
                             ? t("transport.shell.deleteSession")
                             : t("transport.shell.removeRecent")
                         }
                         aria-label={
-                          isMobileApp
+                          isAndroidApp
                             ? t("transport.shell.deleteSession")
                             : t("transport.shell.removeRecent")
                         }
                         onClick={() => {
-                          if (isMobileApp) {
+                          if (isAndroidApp) {
                             void deleteSession(entry.path, entry.name);
                             return;
                           }
