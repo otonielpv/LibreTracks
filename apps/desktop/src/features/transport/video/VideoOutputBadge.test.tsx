@@ -71,6 +71,15 @@ describe("VideoOutputBadge", () => {
     expect(live.runVideoLiveAction).toHaveBeenCalledWith("output");
   });
 
+  it("on a locked phone says the projector is off and how to get it back", () => {
+    render(<VideoOutputBadge />);
+    act(() => useVideoStore.getState().setOutputStatus(status({ state: "suspended" })));
+    const button = screen.getByRole("button");
+    expect(button.textContent).toContain("Projector off");
+    expect(button.getAttribute("title")).toContain("Unlock it to bring it back");
+    expect(button.hasAttribute("disabled")).toBe(true);
+  });
+
   it("spells out when the display is gone or libmpv is missing", () => {
     render(<VideoOutputBadge />);
     act(() => useVideoStore.getState().setOutputStatus(status({ state: "displayLost" })));

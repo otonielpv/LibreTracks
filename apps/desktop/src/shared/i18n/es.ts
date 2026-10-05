@@ -1203,6 +1203,10 @@ const es = {
         error: "Vídeo: error",
         off: "Salida de vídeo apagada. Haz clic para mostrarla.",
         hide: "Haz clic para ocultar la ventana de vídeo.",
+        suspended: "Proyector apagado",
+        suspendedHint:
+          "El proyector se apaga al bloquear el móvil. Desbloquea para recuperarlo.",
+        noDisplayMobile: "Vídeo: conecta un proyector",
       },
       placeAtPlayhead: "Añadir al timeline en el cursor",
       menu: {

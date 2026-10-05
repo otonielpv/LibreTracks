@@ -89,6 +89,15 @@ export function VideoOutputBadge() {
       title = label;
       tone = "is-error";
       break;
+    case "suspended":
+      // Phone or tablet locked by hand: the system hides the output. Nothing
+      // to click; unlocking brings it back, resynced.
+      icon = "screen_lock_portrait";
+      label = t("transport.video.badge.suspended");
+      title = t("transport.video.badge.suspendedHint");
+      tone = "is-warning";
+      onClick = undefined;
+      break;
     case "noDisplay":
       label = t("transport.video.badge.noDisplay");
       title = label;

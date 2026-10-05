@@ -1172,6 +1172,9 @@ const en = {
         error: "Video: error",
         off: "Video output off. Click to show it.",
         hide: "Click to hide the video window.",
+        suspended: "Projector off",
+        suspendedHint: "The projector goes dark when the phone is locked. Unlock it to bring it back.",
+        noDisplayMobile: "Video: connect a projector",
       },
       placeAtPlayhead: "Add to the timeline at the cursor",
       menu: {

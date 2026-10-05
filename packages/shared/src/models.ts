@@ -1107,6 +1107,9 @@ export type VideoOutputState =
   | { state: "noDisplay" }
   | { state: "ready" }
   | { state: "displayLost" }
+  /** Phone or tablet: the system hid the output (locked by hand, app in the
+   * background). Comes back by itself, resynced, on unlock. */
+  | { state: "suspended" }
   | { state: "error"; detail: string };
 
 export type VideoPlayerStatus = {
@@ -1134,6 +1137,10 @@ export type VideoOutputStatus = {
   mode?: VideoOutputMode;
   enabled?: boolean;
   userChanges?: number;
+  /** Two real players (jumps without a freeze). */
+  dualPlayers?: boolean;
+  /** Why there is only one player (a phone without a second decoder). */
+  playersNote?: string | null;
 };
 
 /** Sync diagnostics of the video runtime (paso 07). */
