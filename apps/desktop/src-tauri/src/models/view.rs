@@ -1041,10 +1041,11 @@ pub(crate) fn video_clip_to_summary(
 ) -> VideoClipSummary {
     let view_start = warp_timeline_seconds_at(song, clip.timeline_start_seconds);
     let view_end = warp_timeline_seconds_at(song, clip.end_seconds());
-    let path = std::path::Path::new(&clip.file_path);
+    // The same answer the video library gives (a phone's `content://` is not
+    // a path on disk, so `exists()` would always call it missing).
     let is_missing = match song_dir {
-        Some(dir) if path.is_relative() => !dir.join(path).exists(),
-        _ => !path.exists(),
+        Some(dir) => !crate::state::video_source_present(dir, &clip.file_path),
+        None => !std::path::Path::new(&clip.file_path).exists(),
     };
     VideoClipSummary {
         id: clip.id.clone(),

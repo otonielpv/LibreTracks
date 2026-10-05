@@ -17,6 +17,7 @@ import { useSongStore } from "../songStore";
 import { TrackHeaderItem } from "./TrackHeaderItem";
 import { MidiTrackHeader } from "../midi/MidiTrackHeader";
 import { VideoTrackHeader } from "../video/VideoTrackHeader";
+import { useVideoStore } from "../video/videoStore";
 import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
 import { useTimelineUIStore } from "../uiStore";
 
@@ -110,6 +111,9 @@ export function TrackHeadersPane({
   headerActions,
 }: TrackHeadersPaneProps) {
   const { t } = useTranslation();
+  // Same rule as the video lanes (`useVideoFeature`): on a phone video is
+  // read-only only while its native players have not started.
+  const videoAvailable = useVideoStore((state) => state.status?.available ?? false);
   // Narrow selector: this pane only needs to know whether a project is loaded,
   // so it no longer re-renders on every unrelated mutation of `song`.
   const hasSong = useSongStore((state) => state.song !== null);
@@ -338,7 +342,7 @@ export function TrackHeadersPane({
                   solo={track.solo}
                   isSelected={isTrackSelected}
                   densityClass={trackDensityClass}
-                  readOnly={isMobileApp}
+                  readOnly={isMobileApp && !videoAvailable}
                   onSelectTrack={onSelectTrack}
                   onOpenContextMenu={onOpenContextMenu}
                   onStartTrackDrag={onStartTrackDrag}

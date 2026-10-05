@@ -104,7 +104,7 @@ impl DesktopSession {
 
         Ok(VideoAudioPlan {
             clip_id: clip_id.to_string(),
-            source: resolve_audio_file_path(&song_dir, &clip.file_path),
+            source: super::video_library::resolve_video_source(&song_dir, &clip.file_path),
             destination,
             relative_path,
             duration_seconds: info

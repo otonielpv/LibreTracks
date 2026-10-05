@@ -275,7 +275,11 @@ impl DesktopSession {
         let track_id = if target_is_video {
             target_track_id.unwrap_or_default().to_string()
         } else {
-            let name = super::song_edit::file_stem_for_auto_track(&items[0].0);
+            let name = super::song_edit::file_stem_for_auto_track(
+                &self
+                    .video_display_name(&items[0].0)
+                    .unwrap_or_else(|| items[0].0.clone()),
+            );
             let track =
                 new_video_track(&song, &name, super::arrangement::auto_color_enabled(audio));
             let id = track.id.clone();

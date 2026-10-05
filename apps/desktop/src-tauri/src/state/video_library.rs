@@ -9,7 +9,7 @@
 //! audio lists, because the audio listing reads audio metadata from every path
 //! it knows and one video there would fail the whole listing.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use libretracks_core::VideoAssetInfo;
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,10 @@ pub struct VideoLibraryEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder_path: Option<String>,
     pub info: VideoAssetInfo,
+    /// The name to show when the path has none a person would recognise: a
+    /// phone's `content://` document ends in an id like `video%3A32`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
 }
 
 /// A video as the library panel shows it.
@@ -115,6 +119,7 @@ pub(super) fn register_video_entries(
                     file_path,
                     folder_path: folder_path.clone(),
                     info,
+                    display_name: None,
                 };
                 entries.push(entry.clone());
                 entry
@@ -148,11 +153,35 @@ pub(super) fn relink_video_entries(
     Ok(())
 }
 
+/// Where a video's decoder reads it. Unlike audio, a `content://` stays a URI:
+/// the phone's player and probe open it themselves, while turning it into a
+/// `/proc/self/fd` path (what the C++ audio engine needs) fails on document
+/// providers that do not let that path be reopened.
+pub(crate) fn resolve_video_source(song_dir: &Path, file_path: &str) -> PathBuf {
+    if crate::platform::content_uri::is_content_uri(file_path) {
+        return PathBuf::from(file_path);
+    }
+    resolve_audio_file_path(song_dir, file_path)
+}
+
+/// Whether a video's file is there to read: for a `content://`, whether
+/// Android still hands over a descriptor (the persistable grant holds).
+pub(crate) fn video_source_present(song_dir: &Path, file_path: &str) -> bool {
+    #[cfg(target_os = "android")]
+    if crate::platform::content_uri::is_content_uri(file_path) {
+        return crate::platform::android_content_uri::local_path_for(file_path).is_some();
+    }
+    resolve_video_source(song_dir, file_path).is_file()
+}
+
 pub(super) fn summarize(song_dir: &Path, entry: &VideoLibraryEntry) -> VideoAssetSummary {
     VideoAssetSummary {
-        file_name: file_name_of(&entry.file_path),
+        file_name: entry
+            .display_name
+            .clone()
+            .unwrap_or_else(|| file_name_of(&entry.file_path)),
         file_path: entry.file_path.clone(),
-        is_missing: !resolve_audio_file_path(song_dir, &entry.file_path).is_file(),
+        is_missing: !video_source_present(song_dir, &entry.file_path),
         folder_path: entry.folder_path.clone(),
         has_slow_seeks: entry.info.has_slow_seeks(),
         info: entry.info.clone(),
@@ -191,6 +220,38 @@ impl DesktopSession {
             .iter()
             .map(|entry| summarize(&song_dir, entry))
             .collect())
+    }
+
+    /// Give library videos the names their paths cannot carry, as
+    /// (file path, name). Paths the library does not know are ignored.
+    pub fn name_video_assets(&self, names: &[(String, String)]) -> Result<(), DesktopError> {
+        let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
+        let mut entries = read_video_entries(&song_dir)?;
+        let mut changed = false;
+        for entry in &mut entries {
+            if let Some((_, name)) = names
+                .iter()
+                .find(|(path, _)| normalize_library_file_path(path) == entry.file_path)
+            {
+                entry.display_name = Some(name.clone());
+                changed = true;
+            }
+        }
+        if changed {
+            write_video_entries(&song_dir, entries)?;
+        }
+        Ok(())
+    }
+
+    /// The name the library shows for a video path, if it stores one.
+    pub(super) fn video_display_name(&self, file_path: &str) -> Option<String> {
+        let song_dir = self.song_dir.as_deref()?;
+        let file_path = normalize_library_file_path(file_path);
+        read_video_entries(song_dir)
+            .ok()?
+            .into_iter()
+            .find(|entry| entry.file_path == file_path)?
+            .display_name
     }
 
     /// Analysis stored for a video path, if the library knows it.
@@ -334,7 +395,7 @@ impl DesktopSession {
         let timeline = match (self.engine.song(), self.song_dir.as_deref()) {
             (Some(song), Some(song_dir)) => {
                 libretracks_core::video_schedule::VideoTimeline::from_song(song, |path| {
-                    resolve_audio_file_path(song_dir, path)
+                    resolve_video_source(song_dir, path)
                         .to_string_lossy()
                         .into_owned()
                 })

@@ -149,9 +149,22 @@ pub fn cache_file_name(identity: &str, size: u64, modified_millis: u64) -> Strin
     format!("{stem}-{hash:016x}.ltthumbs")
 }
 
+/// How a platform stats a source that is not a path on disk (Android's
+/// `content://` documents): `Some` answers, `None` falls back to the file.
+static FRESHNESS_HOOK: std::sync::OnceLock<fn(&Path) -> Option<(u64, u64)>> =
+    std::sync::OnceLock::new();
+
+/// Install [`FRESHNESS_HOOK`]. Once per process; later calls are ignored.
+pub fn set_freshness_hook(hook: fn(&Path) -> Option<(u64, u64)>) {
+    let _ = FRESHNESS_HOOK.set(hook);
+}
+
 /// Size and mtime (milliseconds since the epoch) of a file, or `None` if it
 /// cannot be stat'd.
 pub fn source_freshness(path: &Path) -> Option<(u64, u64)> {
+    if let Some(stamp) = FRESHNESS_HOOK.get().and_then(|hook| hook(path)) {
+        return Some(stamp);
+    }
     let metadata = std::fs::metadata(path).ok()?;
     let modified = metadata
         .modified()

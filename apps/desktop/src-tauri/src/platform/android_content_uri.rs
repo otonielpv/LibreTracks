@@ -76,6 +76,26 @@ pub fn local_path_for(uri: &str) -> Option<PathBuf> {
     }
 }
 
+/// Tamaño y fecha (ms) del documento, sacados del descriptor ya abierto
+/// (`fstat`): la caché de miniaturas de vídeo los usa para saber si sigue
+/// valiendo, y un `content://` no se puede consultar como ruta.
+pub fn content_freshness(path: &std::path::Path) -> Option<(u64, u64)> {
+    let uri = path.to_str()?;
+    if !crate::platform::content_uri::is_content_uri(uri) {
+        return None;
+    }
+    local_path_for(uri)?;
+    let fds = open_fds().lock().ok()?;
+    let metadata = fds.get(uri)?.metadata().ok()?;
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|delta| delta.as_millis() as u64)
+        .unwrap_or(0);
+    Some((metadata.len(), modified))
+}
+
 /// El `content://` al que corresponde una ruta `/proc/self/fd/N` que entregó
 /// [`local_path_for`]. El camino inverso, para las cachés que se indexan por
 /// ruta: el número de descriptor cambia en cada arranque, el URI no.

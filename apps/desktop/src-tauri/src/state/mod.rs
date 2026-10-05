@@ -80,7 +80,8 @@ mod missing_media;
 pub(crate) use missing_media::MissingMediaEntry;
 pub(crate) use video_edit::VideoClipProps;
 pub(crate) use video_library::{
-    mark_unplayable_video_assets, mark_videos_left_out, package_extract_options, VideoAssetSummary,
+    mark_unplayable_video_assets, mark_videos_left_out, package_extract_options, resolve_video_source,
+    video_source_present, VideoAssetSummary,
 };
 // Only a phone copies picked videos (`commands/video.rs`, plan video-mobile).
 #[cfg(any(target_os = "android", target_os = "ios"))]

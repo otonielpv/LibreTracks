@@ -214,7 +214,7 @@ pub fn list_video_assets(state: State<'_, DesktopState>) -> Result<Vec<VideoAsse
     })?;
     crate::state::mark_unplayable_video_assets(&mut assets, |file_path| {
         let resolved = match song_dir.as_deref() {
-            Some(dir) => crate::state::resolve_audio_file_path(dir, file_path),
+            Some(dir) => crate::state::resolve_video_source(dir, file_path),
             None => std::path::PathBuf::from(file_path),
         };
         state.video.unplayable_reason(&resolved)
@@ -227,7 +227,7 @@ pub fn list_video_assets(state: State<'_, DesktopState>) -> Result<Vec<VideoAsse
 fn thumbnail_job_for(state: &State<'_, DesktopState>, file_path: &str) -> Option<ThumbnailJob> {
     let session = state.session.lock().ok()?;
     let source = match session.song_dir.as_deref() {
-        Some(dir) => crate::state::resolve_audio_file_path(dir, file_path),
+        Some(dir) => crate::state::resolve_video_source(dir, file_path),
         None => std::path::PathBuf::from(file_path),
     };
     let duration_seconds = session
@@ -713,6 +713,9 @@ fn add_picked_videos_now(
     };
 
     // Referenced: analysed where they are, nothing copied, nothing to ask.
+    // Their paths may carry no readable name (`content://…/video%3A32`), so
+    // the picker's name is kept in the library.
+    let mut names = Vec::new();
     let (referenced, to_copy): (Vec<_>, Vec<_>) =
         picked.into_iter().partition(|video| video.reference.is_some());
     for video in referenced {
@@ -721,7 +724,10 @@ fn add_picked_videos_now(
             Ok(info)
             | Err(libretracks_video::media::ProbeError::Unsupported {
                 info: Some(info), ..
-            }) => analysed.push((reference, info)),
+            }) => {
+                names.push((reference.clone(), video.name.clone()));
+                analysed.push((reference, info));
+            }
             Err(error) => skipped.push(skip(&video.name, error.message())),
         }
     }
@@ -777,7 +783,14 @@ fn add_picked_videos_now(
         Vec::new()
     } else {
         with_session(&state, |session, _| {
-            session.register_video_assets(analysed, None)
+            let mut assets = session.register_video_assets(analysed, None)?;
+            session.name_video_assets(&names)?;
+            for asset in &mut assets {
+                if let Some((_, name)) = names.iter().find(|(path, _)| *path == asset.file_path) {
+                    asset.file_name = name.clone();
+                }
+            }
+            Ok(assets)
         })?
     };
     state.video.thumbnails.request(
@@ -785,7 +798,7 @@ fn add_picked_videos_now(
             .iter()
             .map(|asset| ThumbnailJob {
                 key: asset.file_path.clone(),
-                source: crate::state::resolve_audio_file_path(&song_dir, &asset.file_path),
+                source: crate::state::resolve_video_source(&song_dir, &asset.file_path),
                 duration_seconds: asset.info.duration_seconds,
             })
             .collect(),
@@ -850,9 +863,11 @@ pub fn pick_and_add_videos(app: AppHandle, source: Option<String>) -> Result<boo
             display_name.as_deref(),
             &crate::platform::mobile_files::picked_file_name(&file),
         );
+        // Only the grant has to hold: the player and the probe open the
+        // `content://` themselves (no `/proc/self/fd` reopen, unlike audio).
         if let tauri_plugin_dialog::FilePath::Url(url) = &file {
             if reference
-                && crate::platform::android_content_uri::probe_referenceable(url.as_str())
+                && crate::platform::android_content_uri::local_path_for(url.as_str()).is_some()
             {
                 picked.push(PickedVideo::referenced(name, url.as_str().to_string()));
                 continue;

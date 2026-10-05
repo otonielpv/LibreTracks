@@ -45,6 +45,9 @@ export type VideoLaneStyle = {
   readOnly: boolean;
   selectedClipIds: ReadonlySet<string>;
   missingLabel: string;
+  /** The library's names by file path, for paths that carry none (a phone's
+   * `content://…/video%3A32`). Falls back to the path's last segment. */
+  namesByPath?: ReadonlyMap<string, string>;
 };
 
 function fileNameOf(filePath: string): string {
@@ -204,7 +207,7 @@ export function drawVideoLane(
     context.globalAlpha *= 0.9;
     context.fillRect(left, top, width, labelHeight);
     context.globalAlpha /= 0.9;
-    const name = fileNameOf(clip.filePath);
+    const name = style.namesByPath?.get(clip.filePath) ?? fileNameOf(clip.filePath);
     const textLeft = Math.max(left, 0) + 5;
     const available = right - textLeft - 4;
     if (available > 12) {

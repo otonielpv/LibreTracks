@@ -1,4 +1,4 @@
-import type { SongView, WaveformSummaryDto } from "../desktopApi";
+import type { SongView, VideoAssetSummary, WaveformSummaryDto } from "../desktopApi";
 import { getPendingClipLabel, type TimelineClipSummary, type TimelineTrackSummary } from "../library/pendingAudioImports";
 import { clipDisplayName } from "../helpers";
 // The canvas renderer is not a React component, so it reads from the i18n
@@ -21,6 +21,20 @@ import {
 } from "./WaveformTileCache";
 
 const waveformTileCache = new WaveformTileCache();
+
+let videoNamesCache: { assets: readonly VideoAssetSummary[]; names: Map<string, string> } | null =
+  null;
+
+/** File path -> name the library shows, rebuilt only when the list changes. */
+function videoNamesByPath(assets: readonly VideoAssetSummary[]): ReadonlyMap<string, string> {
+  if (videoNamesCache?.assets !== assets) {
+    videoNamesCache = {
+      assets,
+      names: new Map(assets.map((asset) => [asset.filePath, asset.fileName])),
+    };
+  }
+  return videoNamesCache.names;
+}
 
 /** Read-only cache gauge for native crash breadcrumbs. Unlike the PerfHud
  * metric, this remains available when performance recording is switched off. */
@@ -745,6 +759,7 @@ export function drawTrackClipsLayer(
         readOnly: isMobileApp && !(useVideoStore.getState().status?.available ?? false),
         selectedClipIds: new Set(useVideoStore.getState().selectedVideoClipIds),
         missingLabel: i18n.t("transport.video.missing"),
+        namesByPath: videoNamesByPath(useVideoStore.getState().assets),
       });
       continue;
     }

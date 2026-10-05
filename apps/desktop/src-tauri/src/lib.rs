@@ -650,6 +650,12 @@ mod video_setup {
     }
 
     pub fn start(app: &AppHandle, state: &DesktopState) {
+        // Referenced videos on Android are `content://` documents: their
+        // thumbnails are stamped through the open descriptor, not a stat.
+        #[cfg(target_os = "android")]
+        libretracks_video::thumbs::set_freshness_hook(
+            crate::platform::android_content_uri::content_freshness,
+        );
         if let Ok(resource_dir) = app.path().resource_dir() {
             state.video.set_resource_dir(resource_dir);
         }
