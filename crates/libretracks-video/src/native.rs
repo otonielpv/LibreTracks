@@ -551,6 +551,36 @@ mod tests {
         );
     }
 
+    /// Found on the Android emulator: with the display on "automatic",
+    /// unplugging the projector said "connect a projector" instead of
+    /// "display disconnected".
+    #[test]
+    fn an_automatic_display_that_goes_away_is_lost_not_missing() {
+        let (mut controller, sink) = ready(FakeBridge::default());
+        assert_eq!(controller.status().state, OutputState::Ready);
+        sink.send(BackendEvent::DisplaysChanged(Vec::new()));
+        let events = controller_poll(&mut controller);
+        controller.absorb(events);
+        assert_eq!(controller.status().state, OutputState::DisplayLost);
+        // Still lost while nothing comes back (another replan on the way).
+        controller.handle(OutputCommand::SetBrightness(-100.0));
+        controller.handle(OutputCommand::ApplySettings(enabled()));
+        assert_eq!(controller.status().state, OutputState::DisplayLost);
+        sink.send(BackendEvent::DisplaysChanged(vec![external("HDMI")]));
+        let events = controller_poll(&mut controller);
+        controller.absorb(events);
+        assert_eq!(controller.status().state, OutputState::Ready);
+    }
+
+    #[test]
+    fn with_no_projector_ever_plugged_it_asks_for_one() {
+        let (backend, _sink) = backend(FakeBridge::default());
+        let mut controller = OutputController::new(backend);
+        controller.handle(OutputCommand::SetContent(true));
+        controller.handle(OutputCommand::ApplySettings(enabled()));
+        assert_eq!(controller.status().state, OutputState::NoDisplay);
+    }
+
     #[test]
     fn closing_releases_the_keep_awake() {
         let bridge = FakeBridge::default();

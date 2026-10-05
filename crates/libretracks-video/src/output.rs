@@ -371,6 +371,23 @@ impl<B: OutputBackend> OutputController<B> {
         };
         match outcome {
             PlacementOutcome::NoDisplay | PlacementOutcome::DisplayLost => {
+                // A phone with no display pinned has no "chosen display" to
+                // lose, but a projector that was showing the session and is
+                // now gone is still a lost display, not "connect one"
+                // (plan video-mobile paso 06 §3; found on the emulator).
+                let was_showing = self.plan.is_some()
+                    || matches!(
+                        self.status.state,
+                        OutputState::DisplayLost | OutputState::Suspended
+                    );
+                let outcome = if self.backend.auto_display()
+                    && outcome == PlacementOutcome::NoDisplay
+                    && was_showing
+                {
+                    PlacementOutcome::DisplayLost
+                } else {
+                    outcome
+                };
                 if self.backend.is_open() {
                     self.backend.close();
                 }
