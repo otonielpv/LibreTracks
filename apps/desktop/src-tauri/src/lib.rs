@@ -535,6 +535,8 @@ pub fn run() {
             commands::video::extract_video_audio,
             commands::video::video_live_action,
             commands::video::video_live_state,
+            commands::video::answer_video_import_question,
+            commands::video::pick_and_add_videos,
             commands::timeline::set_midi_track_routing,
             commands::timeline::set_midi_track_enabled,
             commands::timeline::set_automation_track_enabled,

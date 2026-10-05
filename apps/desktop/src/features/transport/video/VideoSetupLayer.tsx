@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { isMobileApp } from "../desktopApi";
 import { VideoAudioProgress, VideoAudioPrompt } from "./VideoAudioPrompt";
+import { VideoImportQuestionModal } from "./VideoImportQuestionModal";
 import { WIZARD_STEP_DISPLAY, VideoSetupWizard } from "./VideoSetupWizard";
 import { useVideoStore } from "./videoStore";
 
@@ -12,7 +13,8 @@ import { useVideoStore } from "./videoStore";
  * panel only mounts this; desktop only.
  */
 export function VideoSetupLayer() {
-  if (isMobileApp) return null;
+  // The "bring the videos too?" question is a phone's (plan video-mobile).
+  if (isMobileApp) return <VideoImportQuestionModal />;
   return (
     <>
       <VideoSetupNotice />

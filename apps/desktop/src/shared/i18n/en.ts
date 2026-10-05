@@ -1156,6 +1156,25 @@ const en = {
         withoutNote: "Without them, the videos have to be copied separately and relinked on opening.",
         lightNote: "Videos do not travel: they are referenced by path, like the audio.",
       },
+      importQuestion: {
+        title: "Videos",
+        package_one: "This package carries {{count}} video ({{size}}).",
+        package_other: "This package carries {{count}} videos ({{size}}).",
+        device_one: "You are about to copy {{count}} video ({{size}}) into the session.",
+        device_other: "You are about to copy {{count}} videos ({{size}}) into the session.",
+        free: "Free space: {{size}}.",
+        includePackage: "Import the videos too",
+        includeDevice: "Copy the videos",
+        hintPackage:
+          "Without them the session sounds the same; the video clips are kept and you can add the videos later.",
+        hintDevice: "They are copied into the session folder so they travel with it.",
+        noRoom: "They do not fit leaving 1 GB free on the device. Free some space or import them later.",
+        continue: "Continue",
+      },
+      copying: "Copying videos into the session…",
+      addFromDevice: "Add video from the device",
+      cloudCellular:
+        "This session takes {{size}} and you seem to be on mobile data. Download it anyway? Wi-Fi is better.",
       live: {
         black: "Video: black",
         fadeBlack: "Video: fade to black",

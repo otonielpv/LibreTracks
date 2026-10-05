@@ -348,12 +348,68 @@ impl DesktopSession {
     }
 }
 
-/// What a package import leaves out (paso 12): phones cannot play video, so
-/// they keep the video clips in the document but never write the files.
-pub(crate) fn package_extract_options() -> libretracks_project::ExtractOptions {
-    libretracks_project::ExtractOptions {
-        skip_video: cfg!(any(target_os = "android", target_os = "ios")),
+/// Whether a package import writes its videos (plan video-mobile, paso 08
+/// §1). The desktop always does. A phone reads the size of `video/` from the
+/// zip index, asks (`video::import_question`) and leaves them in the zip if
+/// the user says no or they do not fit with a margin. `reader` is left at
+/// its start; `destination` is where the session will be written.
+pub(crate) fn package_extract_options<R: std::io::Read + std::io::Seek>(
+    app: &tauri::AppHandle,
+    reader: &mut R,
+    destination: &Path,
+) -> libretracks_project::ExtractOptions {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let _ = (app, reader, destination);
+        libretracks_project::ExtractOptions::default()
     }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        use std::io::SeekFrom;
+        let payload = libretracks_project::package_video_payload(&mut *reader).unwrap_or_default();
+        let _ = reader.seek(SeekFrom::Start(0));
+        if payload.count == 0 {
+            return libretracks_project::ExtractOptions::default();
+        }
+        let include = crate::video::import_question::ask_from_app(
+            app,
+            crate::video::import_question::VideoImportSource::Package,
+            payload.count,
+            payload.bytes,
+            free_space_near(destination),
+        );
+        libretracks_project::ExtractOptions {
+            skip_video: !include,
+        }
+    }
+}
+
+/// Free space on the volume `path` will be on (its first existing ancestor).
+pub(crate) fn free_space_near(path: &Path) -> Option<u64> {
+    path.ancestors()
+        .find(|ancestor| ancestor.exists())
+        .and_then(libretracks_project::free_space_bytes)
+}
+
+/// Remember that this session's videos were left out on purpose (paso 08
+/// §2), so a phone does not report them as missing.
+pub(crate) fn mark_videos_left_out(song_dir: &Path) -> Result<(), DesktopError> {
+    let mut manifest: LibraryManifest = read_library_manifest(song_dir)?.unwrap_or_default();
+    if manifest.videos_left_out {
+        return Ok(());
+    }
+    manifest.videos_left_out = true;
+    let json = serde_json::to_vec_pretty(&manifest)
+        .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+    libretracks_project::write_file_atomically(&library_manifest_path(song_dir), &json)?;
+    Ok(())
+}
+
+pub(crate) fn videos_left_out(song_dir: &Path) -> bool {
+    read_library_manifest(song_dir)
+        .ok()
+        .flatten()
+        .is_some_and(|manifest| manifest.videos_left_out)
 }
 
 /// Place the videos a `.ltpkg` carried and register every video its clips use

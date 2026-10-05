@@ -834,6 +834,9 @@ pub struct ExtractedSongPackage {
     /// Source audio bundled in a full package, staged on disk and keyed by
     /// original file name. Empty for light packages.
     pub bundled_audio: StagedPackageAudio,
+    /// The package carried videos and this import left them out on purpose
+    /// (plan video-mobile, paso 08).
+    pub videos_left_out: bool,
 }
 
 /// How an import resolves a package track whose name and kind already exist in
@@ -930,11 +933,19 @@ pub fn extract_song_package_from_reader_with_options<R: Read + Seek>(
         )));
     }
 
+    let videos_left_out = options.skip_video
+        && (0..archive.len()).any(|index| {
+            archive.by_index_raw(index).is_ok_and(|entry| {
+                let name = entry.name().replace('\\', "/");
+                name.starts_with("video/") && !name.ends_with('/')
+            })
+        });
     let bundled_audio =
         extract_package_payload(song_dir, &mut archive, options, on_extract_progress)?;
     Ok(ExtractedSongPackage {
         manifest,
         bundled_audio,
+        videos_left_out,
     })
 }
 
@@ -1002,6 +1013,7 @@ pub fn merge_extracted_song_package(
     let ExtractedSongPackage {
         manifest,
         bundled_audio,
+        ..
     } = extracted;
     let library_meta = manifest.library_meta.clone();
     let video_library_meta = manifest.video_library_meta.clone();

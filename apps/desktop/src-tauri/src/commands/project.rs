@@ -350,7 +350,7 @@ fn import_package_off_lock(
 fn import_package_from_reader_off_lock<R: std::io::Read + std::io::Seek>(
     app: &AppHandle,
     state: &DesktopState,
-    reader: R,
+    mut reader: R,
     insert_at_seconds: f64,
 ) -> Result<TransportSnapshot, String> {
     use libretracks_project::extract_song_package_from_reader_with_options;
@@ -370,7 +370,9 @@ fn import_package_from_reader_off_lock<R: std::io::Read + std::io::Seek>(
     crate::state::emit_project_load_message(app, 5, "Leyendo paquete...".into());
     // Decompress off-lock, mapping per-entry progress onto the 7..40% band so
     // the bar moves for large packages (the merge/decode phases own 40..100%).
-    let options = crate::state::package_extract_options();
+    // A phone asks before writing the package's videos (plan video-mobile,
+    // paso 08); the desktop always brings them.
+    let options = crate::state::package_extract_options(app, &mut reader, &song_dir);
     let extracted = extract_song_package_from_reader_with_options(&song_dir, reader, options, |done, total| {
         let percent = if total == 0 {
             7
@@ -380,6 +382,9 @@ fn import_package_from_reader_off_lock<R: std::io::Read + std::io::Seek>(
         crate::state::emit_project_load_message(app, percent, "Descomprimiendo paquete...".into());
     })
     .map_err(|error| error.to_string())?;
+    if extracted.videos_left_out {
+        let _ = crate::state::mark_videos_left_out(&song_dir);
+    }
 
     // Fast, session-bound half: merge + persist under the lock.
     let mut session = state

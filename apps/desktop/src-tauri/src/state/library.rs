@@ -377,6 +377,11 @@ pub(super) struct LibraryManifest {
     /// audio write carries it over untouched.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(super) video_assets: Vec<super::video_library::VideoLibraryEntry>,
+    /// The session came from a package whose videos were left out on
+    /// purpose (plan video-mobile, paso 08 §2): a phone does not report them
+    /// as missing. Session-wide, additive, no format bump.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(super) videos_left_out: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1258,15 +1263,14 @@ pub(super) fn write_library_manifest_state(
     normalized_folders.sort();
     normalized_folders.dedup();
 
+    // The video side of the manifest is not the audio library's to change.
+    let previous = read_library_manifest(song_dir).ok().flatten().unwrap_or_default();
     let manifest = LibraryManifest {
         file_paths: normalized_paths,
         assets: normalized_assets,
         folders: normalized_folders,
-        video_assets: read_library_manifest(song_dir)
-            .ok()
-            .flatten()
-            .map(|manifest| manifest.video_assets)
-            .unwrap_or_default(),
+        video_assets: previous.video_assets,
+        videos_left_out: previous.videos_left_out,
     };
     let manifest_json = serde_json::to_vec_pretty(&manifest)
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;

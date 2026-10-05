@@ -1175,6 +1175,25 @@ export type VideoExportPayload = { count: number; bytes: number };
 /** What placing a video with sound does with its audio (paso 11). */
 export type VideoAudioOnImport = "ask" | "extract" | "skip";
 
+/** `video:import-question` (plan video-mobile, paso 08): a phone asks
+ * before writing videos from a package or copying picked ones. */
+export type VideoImportQuestion = {
+  requestId: number;
+  source: "package" | "device";
+  count: number;
+  bytes: number;
+  freeBytes: number | null;
+  /** They fit with a 1 GB margin; when false "bring them" is disabled. */
+  fits: boolean;
+  defaultInclude: boolean;
+};
+
+/** `video:device-import-done`: the videos added from the phone. */
+export type DeviceVideoImportDone = {
+  result: { assets: VideoAssetSummary[]; skipped: SkippedImport[] } | null;
+  error: string | null;
+};
+
 /** `video:audio-extract-progress`: 0–1 for one clip's extraction. */
 export type VideoAudioExtractProgress = { clipId: string; fraction: number };
 

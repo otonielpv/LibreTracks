@@ -80,7 +80,8 @@ mod missing_media;
 pub(crate) use missing_media::MissingMediaEntry;
 pub(crate) use video_edit::VideoClipProps;
 pub(crate) use video_library::{
-    mark_unplayable_video_assets, package_extract_options, VideoAssetSummary,
+    free_space_near, mark_unplayable_video_assets, mark_videos_left_out, package_extract_options,
+    VideoAssetSummary,
 };
 pub(crate) use self::TransportClockMirror as VideoTransportClock;
 mod track_colors;

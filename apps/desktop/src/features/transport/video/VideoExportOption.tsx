@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { getVideoExportPayload, isMobileApp, type VideoExportPayload } from "../desktopApi";
+import { getVideoExportPayload, type VideoExportPayload } from "../desktopApi";
 
 /** Above this, an upload to the cloud leaves the videos out unless ticked:
  * the quota and the upload time punish it (paso 12). */
@@ -28,13 +28,14 @@ export function formatBytes(bytes: number, locale?: string) {
 /**
  * The videos an export would carry (count and size, a `stat` per file), read
  * when the dialog opens. `regionId` for one song, `null` for the session.
- * Stays null on mobile: videos never leave a phone.
+ * Phones too since plan video-mobile: a session edited on a phone goes
+ * back to the desktop with its videos.
  */
 export function useVideoExportPayload(open: boolean, regionId: string | null) {
   const [payload, setPayload] = useState<VideoExportPayload | null>(null);
   useEffect(() => {
     setPayload(null);
-    if (!open || isMobileApp) return;
+    if (!open) return;
     let cancelled = false;
     void getVideoExportPayload(regionId)
       .then((result) => {

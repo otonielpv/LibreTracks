@@ -510,14 +510,27 @@ impl DesktopSession {
         Self::reject_existing_target_dir(target_song_dir)?;
 
         let progress = Self::extraction_progress_reporter(app);
-        let file = std::fs::File::open(package_path)?;
-        libretracks_project::extract_session_package_from_reader_with_options(
+        let mut file = std::fs::File::open(package_path)?;
+        let options = super::video_library::package_extract_options(app, &mut file, target_song_dir);
+        let extracted = libretracks_project::extract_session_package_from_reader_with_options(
             target_song_dir,
             file,
-            super::video_library::package_extract_options(),
+            options,
             progress,
         )
-        .map_err(|error| DesktopError::AudioCommand(error.to_string()))
+        .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        Self::remember_videos_left_out(&extracted);
+        Ok(extracted)
+    }
+
+    /// Paso 08 §2 of plan video-mobile: a session whose videos stayed in the
+    /// package on purpose says so in its `library.json`.
+    fn remember_videos_left_out(extracted: &ExtractedSessionPackage) {
+        if extracted.videos_left_out {
+            if let Err(error) = super::video_library::mark_videos_left_out(&extracted.song_dir) {
+                eprintln!("[libretracks-video] no se pudo anotar la sesión sin vídeos: {error}");
+            }
+        }
     }
 
     /// Same as [`Self::extract_session_package_off_lock`], but reading the
@@ -538,13 +551,18 @@ impl DesktopSession {
         Self::reject_existing_target_dir(target_song_dir)?;
 
         let progress = Self::extraction_progress_reporter(app);
-        libretracks_project::extract_session_package_from_reader_with_options(
+        let mut reader = reader;
+        let options =
+            super::video_library::package_extract_options(app, &mut reader, target_song_dir);
+        let extracted = libretracks_project::extract_session_package_from_reader_with_options(
             target_song_dir,
             reader,
-            super::video_library::package_extract_options(),
+            options,
             progress,
         )
-        .map_err(|error| DesktopError::AudioCommand(error.to_string()))
+        .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        Self::remember_videos_left_out(&extracted);
+        Ok(extracted)
     }
 
     fn reject_existing_target_dir(target_song_dir: &Path) -> Result<(), DesktopError> {

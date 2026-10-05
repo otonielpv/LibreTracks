@@ -1,10 +1,15 @@
+import i18n from "../../../shared/i18n";
+import { confirmDialog } from "../../../shared/dialog/dialogService";
 import {
   discardStagedPackage,
   downloadFromCloud,
   getCloudStagingDir,
+  isMobileApp,
   type CloudFile,
   type CloudFolder,
 } from "../desktopApi";
+import { formatBytes } from "../video/VideoExportOption";
+import { connectionType, shouldConfirmCloudDownload } from "../video/videoImportQuestion";
 import {
   isCloudTransferCancellation,
   newTransfer,
@@ -102,6 +107,17 @@ export async function importFromCloud(
 ): Promise<boolean> {
   const file = await pickCloudFile(folder);
   if (!file) {
+    return false;
+  }
+  // A phone on mobile data asks before pulling a big set (with its videos)
+  // down (plan video-mobile, paso 08 §4).
+  if (
+    isMobileApp &&
+    shouldConfirmCloudDownload(file.sizeBytes, connectionType()) &&
+    !(await confirmDialog(
+      i18n.t("transport.video.cloudCellular", { size: formatBytes(file.sizeBytes, i18n.language) }),
+    ))
+  ) {
     return false;
   }
   let localPath: string | null = null;

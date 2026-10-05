@@ -44,12 +44,17 @@ pub struct MissingMediaEntry {
     pub candidates: Vec<String>,
 }
 
+/// Si un vídeo que falta es un medio que reportar (plan video-mobile, paso 08
+/// §2). En escritorio, siempre. En móvil también —allí ya se reproduce—,
+/// salvo que la sesión se importara **a propósito** sin sus vídeos: entonces
+/// los clips se conservan y llenar de avisos una sesión ligera no ayuda.
+pub fn videos_reported(mobile: bool, videos_left_out: bool) -> bool {
+    !mobile || !videos_left_out
+}
+
 /// Cada fichero que la sesión usa, con la pista que lo usa: los clips de audio
-/// y, en escritorio, los de vídeo. En móvil el vídeo no se reproduce, así que
-/// un vídeo que falta allí no es un problema que reportar (plan de vídeo, paso
-/// 12): se conserva en el documento y se reubica al volver a escritorio.
-fn media_references(song: &Song) -> impl Iterator<Item = (&str, &str)> {
-    let videos_play_here = !cfg!(any(target_os = "android", target_os = "ios"));
+/// y, si `videos_play_here`, los de vídeo.
+fn media_references(song: &Song, videos_play_here: bool) -> impl Iterator<Item = (&str, &str)> {
     song.clips
         .iter()
         .map(|clip| (clip.file_path.as_str(), clip.track_id.as_str()))
@@ -73,7 +78,7 @@ fn media_references(song: &Song) -> impl Iterator<Item = (&str, &str)> {
 ///    tener que recordarla en ningún sitio, y sobrevive a reinstalar.
 pub fn known_search_dirs(song_dir: &Path, song: &Song) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = vec![song_dir.join("audio")];
-    for (file_path, _) in media_references(song) {
+    for (file_path, _) in media_references(song, true) {
         let resolved = resolve_audio_file_path(song_dir, file_path);
         // Sólo los que están: la carpeta de uno que falta no nos dice nada.
         if !resolved.is_file() {
@@ -132,10 +137,24 @@ pub fn find_candidates(file_name: &str, dirs: &[PathBuf]) -> Vec<String> {
 /// suena lo que pueda sonar — un músico que abre una sesión cinco minutos
 /// antes de tocar necesita eso, no una pregunta.
 pub fn collect_missing_media(song_dir: &Path, song: &Song) -> Vec<MissingMediaEntry> {
+    let mobile = cfg!(any(target_os = "android", target_os = "ios"));
+    collect_missing_media_with(
+        song_dir,
+        song,
+        videos_reported(mobile, super::video_library::videos_left_out(song_dir)),
+    )
+}
+
+/// [`collect_missing_media`] with the video decision made by the caller.
+pub fn collect_missing_media_with(
+    song_dir: &Path,
+    song: &Song,
+    videos_play_here: bool,
+) -> Vec<MissingMediaEntry> {
     // Agrupado por ruta: un mismo fichero usado por seis clips es UNA entrada
     // que hay que reparar una vez, no seis filas idénticas.
     let mut by_path: BTreeMap<String, (usize, BTreeSet<String>)> = BTreeMap::new();
-    for (file_path, track_id) in media_references(song) {
+    for (file_path, track_id) in media_references(song, videos_play_here) {
         if resolve_audio_file_path(song_dir, file_path).is_file() {
             continue;
         }
@@ -443,5 +462,73 @@ mod tests {
             missing[0].candidates,
             vec![moved.to_string_lossy().into_owned()]
         );
+    }
+
+    fn session_with_one_video(dir: &Path) -> Song {
+        let mut video_track = track("v1", "Letras");
+        video_track.kind = TrackKind::Video;
+        let mut song = song_with(vec![video_track], vec![]);
+        song.video_clips = vec![libretracks_core::VideoClip {
+            id: "a".into(),
+            track_id: "v1".into(),
+            file_path: "video/Cancion 1/Letras.mp4".into(),
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 4.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            fit: None,
+            color: None,
+        }];
+        touch(&dir.join("video").join("Cancion 1").join("Letras.mp4"));
+        song
+    }
+
+    /// Plan video-mobile, paso 08 C3: on a phone, a session imported without
+    /// its videos on purpose reports none missing...
+    #[test]
+    fn a_phone_session_imported_without_videos_reports_none_missing() {
+        let dir = tempdir().expect("temp dir");
+        let song = session_with_one_video(dir.path());
+        std::fs::remove_dir_all(dir.path().join("video")).unwrap();
+        super::super::video_library::mark_videos_left_out(dir.path()).unwrap();
+        let left_out = super::super::video_library::videos_left_out(dir.path());
+        assert!(left_out);
+        let missing = collect_missing_media_with(dir.path(), &song, videos_reported(true, left_out));
+        assert!(missing.is_empty());
+        // The desktop still reports them: there they can be relinked.
+        assert_eq!(
+            collect_missing_media_with(dir.path(), &song, videos_reported(false, left_out)).len(),
+            1
+        );
+    }
+
+    /// ...and one imported with them reports a video that is then deleted.
+    #[test]
+    fn a_phone_session_imported_with_videos_reports_a_deleted_one() {
+        let dir = tempdir().expect("temp dir");
+        let song = session_with_one_video(dir.path());
+        let left_out = super::super::video_library::videos_left_out(dir.path());
+        assert!(!left_out);
+        assert!(collect_missing_media_with(dir.path(), &song, videos_reported(true, left_out)).is_empty());
+
+        std::fs::remove_file(dir.path().join("video").join("Cancion 1").join("Letras.mp4")).unwrap();
+        let missing = collect_missing_media_with(dir.path(), &song, videos_reported(true, left_out));
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].file_name, "Letras.mp4");
+    }
+
+    #[test]
+    fn marking_the_videos_left_out_keeps_the_rest_of_the_library() {
+        let dir = tempdir().expect("temp dir");
+        std::fs::write(
+            dir.path().join("library.json"),
+            br#"{"filePaths":["audio/a.wav"],"assets":[{"filePath":"audio/a.wav"}],"folders":[]}"#,
+        )
+        .unwrap();
+        super::super::video_library::mark_videos_left_out(dir.path()).unwrap();
+        let text = std::fs::read_to_string(dir.path().join("library.json")).unwrap();
+        assert!(text.contains("audio/a.wav"));
+        assert!(text.contains("videosLeftOut"));
     }
 }

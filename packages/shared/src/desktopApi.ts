@@ -38,6 +38,8 @@ import type {
   VideoClipProps,
   VideoCalibrationGrid,
   VideoAudioExtractProgress,
+  VideoImportQuestion,
+  DeviceVideoImportDone,
   VideoExportPayload,
   VideoLiveAction,
   VideoLiveState,
@@ -2698,6 +2700,35 @@ export async function listenToVideoAudioExtractProgress(
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
   return listen<VideoAudioExtractProgress>("video:audio-extract-progress", (event) => {
+    handler(event.payload);
+  });
+}
+
+/** Answer "bring the videos too?" (plan video-mobile, paso 08). */
+export async function answerVideoImportQuestion(requestId: number, include: boolean): Promise<boolean> {
+  return invokeCommand<boolean>("answer_video_import_question", { requestId, include });
+}
+
+export async function listenToVideoImportQuestion(
+  handler: (question: VideoImportQuestion) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<VideoImportQuestion>("video:import-question", (event) => {
+    handler(event.payload);
+  });
+}
+
+/** Phone: pick videos and copy them into the session. False if cancelled;
+ * the outcome arrives as `video:device-import-done`. */
+export async function pickAndAddVideos(): Promise<boolean> {
+  return invokeCommand<boolean>("pick_and_add_videos");
+}
+
+export async function listenToVideoDeviceImportDone(
+  handler: (done: DeviceVideoImportDone) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<DeviceVideoImportDone>("video:device-import-done", (event) => {
     handler(event.payload);
   });
 }

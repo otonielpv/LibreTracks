@@ -55,6 +55,9 @@ const EXCEPTIONS: Record<string, string> = {
   // picked names — the copying is a separate `(async)` command
   // (`import_picked_library_audio`), so nothing heavy runs here either.
   pick_library_audio_documents: "SAF picker",
+  // Plan video-mobile, paso 08: the phone's picker for videos. The copy into
+  // the session runs on its own thread (`add_picked_videos`).
+  pick_and_add_videos: "SAF / document picker",
   export_session_package: "rfd dialog",
   // Lanza el gestor de archivos del sistema, que en macOS es API de hilo
   // principal.

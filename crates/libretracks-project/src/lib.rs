@@ -3,6 +3,7 @@
 mod asset_path;
 mod atomic_write;
 mod disk_space;
+pub use disk_space::free_space_bytes;
 mod importer;
 mod package;
 mod prepared_audio;
@@ -38,7 +39,7 @@ pub use session_package::{
     export_session_as_package, extract_session_package, extract_session_package_from_reader,
     ExtractedSessionPackage,
     export_session_as_package_with_options, extract_session_package_from_reader_with_options,
-    session_video_payload, ExtractOptions,
+    package_video_payload, session_video_payload, ExtractOptions, PackageVideoPayload,
     SessionPackageExport, SidecarFile,
 };
 pub use session_sample_rate::{

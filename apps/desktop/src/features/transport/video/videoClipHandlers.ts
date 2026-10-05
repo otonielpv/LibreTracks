@@ -6,10 +6,12 @@ import {
   getSongView,
   importVideoFiles,
   moveVideoClip,
+  pickAndAddVideos,
   placeVideoClips,
   splitVideoClips,
   trimVideoClip,
   updateVideoClip,
+  type DeviceVideoImportDone,
   type SkippedImport,
   type SongView,
   type TransportSnapshot,
@@ -46,6 +48,9 @@ export type VideoClipHandlerDeps = {
   /** Whether to extract the audio of `count` just-placed videos with sound
    * (paso 11). Defaults to asking, or the remembered answer. */
   decideAudioExtraction?: (count: number) => Promise<boolean>;
+  /** Decoding a video's sound needs libmpv: false on phones, where the
+   * question is never asked (plan video-mobile, paso 09 §2). */
+  canExtractAudio?: boolean;
 };
 
 export type VideoPlacement = { seconds: number; trackId: string | null };
@@ -74,6 +79,7 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
     reportSkipped,
     onFirstVideoClip,
     decideAudioExtraction = decideVideoAudioExtraction,
+    canExtractAudio = true,
   } = deps;
 
   const songHasVideo = () => (getSong()?.videoClips?.length ?? 0) > 0;
@@ -99,7 +105,7 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
     // Asked after the placement's own action has finished, so the question
     // never holds up the timeline.
     const withSound = new Set(assets.filter((asset) => asset.info.hasAudio).map((asset) => asset.filePath));
-    if (withSound.size) {
+    if (withSound.size && canExtractAudio) {
       void offerAudioExtraction(clipIdsBefore, withSound);
     }
   };
@@ -156,6 +162,40 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
   /** The clip's video has a sound track (as import found it). */
   const clipHasAudio = (clip: VideoClipSummary) =>
     useVideoStore.getState().assets.some((asset) => asset.filePath === clip.filePath && asset.info.hasAudio);
+
+  /** Phone (plan video-mobile, paso 08 §3): pick videos on the device. The
+   * backend asks about the size, copies them into the session on a worker
+   * and answers with `video:device-import-done` → `finishDeviceImport`. */
+  let pendingDevicePlacement: VideoPlacement | null = null;
+  const addVideosFromDevice = (placement: VideoPlacement | null) => {
+    void runAction(async () => {
+      if (await pickAndAddVideos()) {
+        pendingDevicePlacement = placement;
+        setStatus(t("transport.video.copying"));
+      }
+    });
+  };
+
+  const finishDeviceImport = (done: DeviceVideoImportDone) => {
+    const placement = pendingDevicePlacement;
+    pendingDevicePlacement = null;
+    if (done.error) {
+      setStatus(done.error);
+      return;
+    }
+    const result = done.result;
+    if (!result) return;
+    reportSkipped(result.skipped);
+    void runAction(async () => {
+      await refreshVideoAssets();
+      if (!result.assets.length) return;
+      if (placement) {
+        await placeAssets(result.assets, placement);
+      } else {
+        setStatus(t("transport.video.imported", { count: result.assets.length }));
+      }
+    });
+  };
 
   const placeLibraryAssets = (assets: VideoAssetSummary[], placement: VideoPlacement) => {
     void runAction(async () => {
@@ -254,6 +294,8 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
 
   return {
     importVideoPaths,
+    addVideosFromDevice,
+    finishDeviceImport,
     placeLibraryAssets,
     moveClip,
     trimClip,

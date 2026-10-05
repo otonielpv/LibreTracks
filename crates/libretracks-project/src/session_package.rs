@@ -132,6 +132,39 @@ pub struct ExtractedSessionPackage {
     /// The package carried its videos (they are under `video/` unless the
     /// import skipped them, see [`ExtractOptions::skip_video`]).
     pub bundled_video: bool,
+    /// The package carried videos and this import left them in the zip on
+    /// purpose (plan video-mobile, paso 08): the session must not report them
+    /// as missing.
+    pub videos_left_out: bool,
+}
+
+/// The videos a package carries, read from the zip's central directory
+/// without inflating anything (they are stored, not compressed).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageVideoPayload {
+    pub count: usize,
+    pub bytes: u64,
+}
+
+/// How many videos a `.ltset` or `.ltpkg` carries and their size, before
+/// deciding whether to import them (plan video-mobile, paso 08 §1). Both
+/// formats keep them under `video/`.
+pub fn package_video_payload<R: Read + io::Seek>(reader: R) -> Result<PackageVideoPayload, ProjectError> {
+    let mut archive =
+        ZipArchive::new(reader).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+    let mut payload = PackageVideoPayload::default();
+    for index in 0..archive.len() {
+        let Ok(entry) = archive.by_index_raw(index) else {
+            continue;
+        };
+        let name = normalize_zip_path(entry.name());
+        if name.starts_with("video/") && !name.ends_with('/') {
+            payload.count += 1;
+            payload.bytes += entry.size();
+        }
+    }
+    Ok(payload)
 }
 
 /// How an import treats optional payloads.
@@ -1176,10 +1209,13 @@ fn extract_session_package_inner<R: Read + io::Seek>(
     let skipped_entry =
         |name: &str| options.skip_video && normalize_zip_path(name).starts_with("video/");
     let mut uncompressed_total: u64 = 0;
+    let mut videos_left_out = false;
     for index in 0..archive.len() {
         if let Ok(entry) = archive.by_index_raw(index) {
             if !skipped_entry(entry.name()) {
                 uncompressed_total += entry.size();
+            } else if !entry.name().ends_with('/') {
+                videos_left_out = true;
             }
         }
     }
@@ -1279,6 +1315,7 @@ fn extract_session_package_inner<R: Read + io::Seek>(
             _ => None,
         },
         bundled_video: manifest.bundled_video,
+        videos_left_out,
     })
 }
 
@@ -2641,6 +2678,49 @@ mod tests {
         let imported = crate::load_song_from_file(&extracted.song_file).expect("load");
         assert_eq!(imported.video_clips.len(), 1);
         assert_eq!(imported.video_clips[0].file_path, "video/Cancion 1/Letras.mp4");
+        assert!(extracted.videos_left_out);
+    }
+
+    /// Plan video-mobile, paso 08 C1: a phone that chose to bring the videos
+    /// extracts them under `video/` with relative paths, like the desktop.
+    #[test]
+    fn a_mobile_import_that_keeps_the_videos_extracts_them_relative() {
+        let src = tempfile::tempdir().expect("src");
+        let videos = tempfile::tempdir().expect("videos");
+        let (song, _, _) = video_session(src.path(), videos.path());
+        let package_path = export_with_video(src.path(), &song, true);
+
+        let payload = package_video_payload(File::open(&package_path).expect("open")).expect("payload");
+        // The clip's video (4096 bytes) and the library-only one (2048).
+        assert_eq!(payload, PackageVideoPayload { count: 2, bytes: 6144 });
+
+        let target = tempfile::tempdir().expect("target");
+        let dest = target.path().join("Imported");
+        let extracted = extract_session_package_from_reader_with_options(
+            &dest,
+            File::open(&package_path).expect("open"),
+            ExtractOptions { skip_video: false },
+            |_, _| {},
+        )
+        .expect("extract");
+        assert!(!extracted.videos_left_out);
+        let imported = crate::load_song_from_file(&extracted.song_file).expect("load");
+        let relative = &imported.video_clips[0].file_path;
+        assert_eq!(relative, "video/Cancion 1/Letras.mp4");
+        assert!(dest.join(relative).is_file(), "the video is on disk where the clip says");
+        assert_eq!(std::fs::metadata(dest.join(relative)).unwrap().len(), 4096);
+    }
+
+    #[test]
+    fn a_package_without_videos_has_an_empty_video_payload() {
+        let src = tempfile::tempdir().expect("src");
+        let videos = tempfile::tempdir().expect("videos");
+        let (song, _, _) = video_session(src.path(), videos.path());
+        let package_path = export_with_video(src.path(), &song, false);
+        assert_eq!(
+            package_video_payload(File::open(&package_path).expect("open")).expect("payload"),
+            PackageVideoPayload::default()
+        );
     }
 
     #[test]

@@ -6,7 +6,9 @@ import { skippedImportsMessage } from "../library/importPipeline";
 import {
   getVideoMediaStatus,
   isMobileApp,
+  isTauriApp,
   listenToVideoAudioExtractProgress,
+  listenToVideoDeviceImportDone,
   listVideoAssets,
   type SkippedImport,
   type SongView,
@@ -70,9 +72,28 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
         },
         onFirstVideoClip: () =>
           (depsRef.current.onFirstVideoClip ?? (() => void runFirstVideoClipTrigger()))(),
+        canExtractAudio: !isMobileApp,
       }),
     [],
   );
+
+  // Videos added from the phone arrive when the backend has copied them
+  // (plan video-mobile, paso 08 §3).
+  useEffect(() => {
+    if (!isTauriApp) return;
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    void listenToVideoDeviceImportDone((done) => handlers.finishDeviceImport(done))
+      .then((stop) => {
+        if (cancelled) stop();
+        else unlisten = stop;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [handlers]);
 
   // Whether libmpv loaded, once per app run (the backend caches it too).
   useEffect(() => {

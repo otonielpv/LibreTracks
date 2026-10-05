@@ -1187,6 +1187,25 @@ const es = {
         withoutNote: "Sin ellos, los vídeos habrá que copiarlos aparte y reubicarlos al abrir.",
         lightNote: "Los vídeos no viajan: se referencian por su ruta, como el audio.",
       },
+      importQuestion: {
+        title: "Vídeos",
+        package_one: "Este paquete trae {{count}} vídeo ({{size}}).",
+        package_other: "Este paquete trae {{count}} vídeos ({{size}}).",
+        device_one: "Vas a copiar {{count}} vídeo ({{size}}) a la sesión.",
+        device_other: "Vas a copiar {{count}} vídeos ({{size}}) a la sesión.",
+        free: "Espacio libre: {{size}}.",
+        includePackage: "Importar también los vídeos",
+        includeDevice: "Copiar los vídeos",
+        hintPackage:
+          "Sin ellos la sesión suena igual; los clips de vídeo se conservan y puedes añadir los vídeos más tarde.",
+        hintDevice: "Se copian a la carpeta de la sesión para que viajen con ella.",
+        noRoom: "No caben dejando 1 GB libre en el dispositivo. Libera espacio o impórtalos más tarde.",
+        continue: "Continuar",
+      },
+      copying: "Copiando vídeos a la sesión…",
+      addFromDevice: "Añadir vídeo del dispositivo",
+      cloudCellular:
+        "Esta sesión ocupa {{size}} y parece que estás con datos móviles. ¿Descargarla igualmente? Mejor con Wi-Fi.",
       live: {
         black: "Vídeo: negro",
         fadeBlack: "Vídeo: fundido a negro",
