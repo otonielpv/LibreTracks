@@ -461,6 +461,10 @@ export function TimelineTopbar({
         </nav>
         ) : null}
 
+        {/* Phone: the video output's two icons sit in this row, next to the
+            meter. Floating below the bar (the desktop's slot) they covered
+            the toolbar's Master/Region buttons (plan video-mobile, paso 10). */}
+        {isMobileApp ? <VideoOutputBadge /> : null}
         <ResourceMeter />
       </div>
 
@@ -781,7 +785,7 @@ export function TimelineTopbar({
           <div className="lt-device-status-slot">
             <AudioDeviceStatusBadge />
             <MidiDeviceStatusBadge />
-            <VideoOutputBadge />
+            {isMobileApp ? null : <VideoOutputBadge />}
           </div>
         </div>
       </div>
