@@ -10,6 +10,9 @@
 //! The decision and the waiting are here, compiled everywhere and tested; the
 //! texts are the frontend's (`videoImportQuestion.ts`).
 
+// Used by the phone builds; compiled everywhere so the desktop tests cover it.
+#![cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
+
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Mutex, OnceLock};
@@ -182,32 +185,22 @@ mod tests {
         let _turn = ASKING
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        // `emit` runs once the question is registered: it hands the id over,
+        // so the answer can never race the registration.
+        let (asked, ids) = std::sync::mpsc::channel();
         let include = std::thread::scope(|scope| {
-            let worker = scope.spawn(|| {
+            let worker = scope.spawn(move || {
                 ask(
                     VideoImportSource::Package,
                     1,
                     10,
                     Some(10 * GB),
                     Duration::from_secs(30),
-                    |_| true,
+                    |question| asked.send(question.request_id).is_ok(),
                 )
             });
-            // The question is registered before `emit` returns; retry until
-            // the worker has put it in place.
-            let mut answered = false;
-            for _ in 0..1000 {
-                let id = pending()
-                    .lock()
-                    .ok()
-                    .and_then(|slot| slot.as_ref().map(|(id, _)| *id));
-                if let Some(id) = id {
-                    answered = answer(id, false);
-                    break;
-                }
-                std::thread::yield_now();
-            }
-            assert!(answered);
+            let id = ids.recv().expect("the question was asked");
+            assert!(answer(id, false));
             worker.join().unwrap()
         });
         assert!(!include, "the user said no");

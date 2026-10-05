@@ -262,9 +262,11 @@ pub fn libmpv_strip_maker(
 
 /// Above this audio-callback load, a phone stops making thumbnails while the
 /// transport runs: they are a convenience and the engine comes first.
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 pub const THUMBNAILS_MAX_AUDIO_LOAD_PERCENT: f64 = 50.0;
 
 /// Whether the thumbnail worker should wait before decoding more frames.
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 pub fn thumbnails_should_wait(transport_running: bool, audio_load_percent: f64) -> bool {
     transport_running && audio_load_percent > THUMBNAILS_MAX_AUDIO_LOAD_PERCENT
 }
@@ -272,6 +274,7 @@ pub fn thumbnails_should_wait(transport_running: bool, audio_load_percent: f64) 
 /// A [`FrameExtractor`] that waits, batch by batch, while `busy` says the
 /// audio engine needs the CPU, and gives up waiting when the job is
 /// cancelled. `wait` is the pause between checks (a sleep in the app).
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 pub struct PausingExtractor<'a> {
     pub inner: &'a mut dyn libretracks_video::media::FrameExtractor,
     pub busy: &'a dyn Fn() -> bool,
@@ -292,6 +295,7 @@ impl libretracks_video::media::FrameExtractor for PausingExtractor<'_> {
 /// duration, then one frame per interval from the system's decoder, packed
 /// by the same code as the desktop's. One worker thread (this one), low
 /// priority, pausing while the audio engine is loaded.
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 pub fn native_strip_maker(
     probe: Arc<dyn libretracks_video::media::VideoProbe>,
     extractor: Box<dyn Fn() -> Box<dyn libretracks_video::media::FrameExtractor> + Send>,

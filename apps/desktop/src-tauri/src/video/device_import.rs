@@ -8,6 +8,9 @@
 //! tested; the picker and the worker that uses them are in
 //! `commands/video.rs`.
 
+// Used by the phone builds; compiled everywhere so the desktop tests cover it.
+#![cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
+
 use std::io::{Read, Write};
 use std::path::Path;
 

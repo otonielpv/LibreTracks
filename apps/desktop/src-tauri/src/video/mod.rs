@@ -304,6 +304,7 @@ impl VideoSystem {
 
 /// [`VideoSystem::probe`] as a [`libretracks_video::media::VideoProbe`], for
 /// the thumbnail worker.
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 pub struct SystemProbe(pub std::sync::Arc<VideoSystem>);
 
 impl libretracks_video::media::VideoProbe for SystemProbe {

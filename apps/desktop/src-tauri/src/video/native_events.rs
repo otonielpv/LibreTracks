@@ -8,6 +8,9 @@
 //! [`decode_event`] / [`parse_displays`] / [`emit`] here. Everything that
 //! decides something is in this file and tested.
 
+// Used by the phone builds; compiled everywhere so the desktop tests cover it.
+#![cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
+
 use std::sync::{Mutex, OnceLock};
 
 use libretracks_video::monitors::MonitorInfo;

@@ -385,6 +385,7 @@ pub(crate) fn package_extract_options<R: std::io::Read + std::io::Seek>(
 }
 
 /// Free space on the volume `path` will be on (its first existing ancestor).
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 pub(crate) fn free_space_near(path: &Path) -> Option<u64> {
     path.ancestors()
         .find(|ancestor| ancestor.exists())

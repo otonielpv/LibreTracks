@@ -631,6 +631,7 @@ pub fn answer_video_import_question(request_id: u64, include: bool) -> bool {
 }
 
 /// `video:device-import-done`: what adding videos from the phone left.
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceVideoImportDone {
