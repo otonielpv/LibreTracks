@@ -23,6 +23,7 @@ pub mod monitors;
 pub mod mpv_backend;
 pub mod native;
 pub mod output;
+pub mod remote_clock;
 pub mod settings;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod library;
