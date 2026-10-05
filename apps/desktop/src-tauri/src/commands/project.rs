@@ -18,8 +18,8 @@
 
 use std::thread;
 
-// Only the Android picker's return type derives it.
-#[cfg(target_os = "android")]
+// Only the mobile pickers' return type derives it.
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
