@@ -220,11 +220,24 @@ class MainActivity : TauriActivity() {
   // por onActivityResult, que es de la Activity, y porque el repo ya tiene el
   // camino Kotlin -> Rust montado (ver nativeOnTrimMemory).
   fun pickPersistableAudioDocuments() {
+    // SAF filtra por MIME y los proveedores publican audio con tipos que una
+    // lista nuestra no acertaria; se acepta todo y valida el importador.
+    openPersistableDocuments("*/*")
+  }
+
+  // Videos para copiar a la sesion (plan video-mobile, paso 08 §3). El
+  // selector de DOCUMENTOS y no el de fotos: el de fotos solo ve la galeria y
+  // oculta el nombre real del fichero ("32.mp4"); este llega a Descargas, un
+  // pendrive o Drive y conserva "ensayo.mp4". El resultado vuelve por el
+  // mismo camino que el del audio.
+  fun pickVideoDocuments() {
+    openPersistableDocuments("video/*")
+  }
+
+  private fun openPersistableDocuments(mime: String) {
     val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
       addCategory(Intent.CATEGORY_OPENABLE)
-      // SAF filtra por MIME y los proveedores publican audio con tipos que una
-      // lista nuestra no acertaria; se acepta todo y valida el importador.
-      type = "*/*"
+      type = mime
       putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
       addFlags(
         Intent.FLAG_GRANT_READ_URI_PERMISSION or

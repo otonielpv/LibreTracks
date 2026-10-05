@@ -41,6 +41,7 @@
 # Activity tiene que añadirse aquí.
 -keepclassmembers class com.libretracks.desktop.MainActivity {
     public void pickPersistableAudioDocuments();
+    public void pickVideoDocuments();
     public void createDocument(java.lang.String);
 }
 

@@ -55,6 +55,16 @@ const PICK_TIMEOUT: Duration = Duration::from_secs(600);
 /// Tauri nunca corren en el hilo de UI de Android, y el resultado de la
 /// actividad llega justamente en ese hilo, que queda libre.
 pub fn pick_persistable_audio_documents() -> Result<Vec<String>, String> {
+    pick_documents("pickPersistableAudioDocuments")
+}
+
+/// El mismo selector de documentos, filtrado a video (plan video-mobile, paso
+/// 08 §3): conserva el nombre real y llega a Descargas, pendrives o Drive.
+pub fn pick_video_documents() -> Result<Vec<String>, String> {
+    pick_documents("pickVideoDocuments")
+}
+
+fn pick_documents(method: &str) -> Result<Vec<String>, String> {
     let (tx, rx): (Sender<Vec<String>>, Receiver<Vec<String>>) = mpsc::channel();
     {
         let mut pending = PENDING
@@ -66,7 +76,7 @@ pub fn pick_persistable_audio_documents() -> Result<Vec<String>, String> {
         *pending = Some(tx);
     }
 
-    if let Err(error) = start_picker() {
+    if let Err(error) = start_picker(method) {
         let _ = PENDING.lock().map(|mut pending| pending.take());
         return Err(error);
     }
@@ -80,7 +90,7 @@ pub fn pick_persistable_audio_documents() -> Result<Vec<String>, String> {
     }
 }
 
-fn start_picker() -> Result<(), String> {
+fn start_picker(method: &str) -> Result<(), String> {
     let ctx = ndk_context::android_context();
     let vm = unsafe { JavaVM::from_raw(ctx.vm().cast()) }
         .map_err(|e| format!("JavaVM::from_raw: {e}"))?;
@@ -90,9 +100,9 @@ fn start_picker() -> Result<(), String> {
         .map_err(|e| format!("attach_current_thread: {e}"))?;
 
     let result = env
-        .call_method(&activity, "pickPersistableAudioDocuments", "()V", &[])
+        .call_method(&activity, method, "()V", &[])
         .map(|_| ())
-        .map_err(|e| format!("pickPersistableAudioDocuments: {e}"));
+        .map_err(|e| format!("{method}: {e}"));
     // Si Java lanzó (un `NoSuchMethodError` porque R8 borró el método, por
     // ejemplo), la excepción se queda PENDIENTE en este hilo: jni-rs devuelve
     // el error pero no la limpia. Cualquier llamada JNI posterior en el mismo

@@ -772,27 +772,19 @@ pub fn pick_and_add_videos(app: AppHandle) -> Result<bool, String> {
 #[cfg(target_os = "android")]
 #[tauri::command]
 pub fn pick_and_add_videos(app: AppHandle) -> Result<bool, String> {
-    use tauri_plugin_dialog::DialogExt;
-    let (sender, receiver) = std::sync::mpsc::channel();
-    app.dialog()
-        .file()
-        .set_title("Selecciona vídeos")
-        .add_filter("Vídeo", &["mp4", "mov", "m4v", "mkv", "webm", "3gp"])
-        .pick_files(move |files| {
-            let _ = sender.send(files);
-        });
-    let files = receiver.recv().ok().flatten().unwrap_or_default();
-    if files.is_empty() {
+    // The documents picker, not the photo picker: it reaches Downloads, a
+    // USB stick or Drive, and keeps the real file name.
+    let uris = crate::platform::android_persistable_pick::pick_video_documents()?;
+    if uris.is_empty() {
         return Ok(false);
     }
     let mut picked = Vec::new();
-    for file in files {
-        let display_name = match &file {
-            tauri_plugin_dialog::FilePath::Url(url) => {
-                crate::platform::android_video::display_name(url.as_str())
-            }
-            tauri_plugin_dialog::FilePath::Path(_) => None,
+    for uri in uris {
+        let Ok(url) = uri.parse::<tauri::Url>() else {
+            continue;
         };
+        let file = tauri_plugin_dialog::FilePath::Url(url);
+        let display_name = crate::platform::android_video::display_name(&uri);
         let name = crate::video::device_import::picked_video_name(
             display_name.as_deref(),
             &crate::platform::mobile_files::picked_file_name(&file),
