@@ -115,6 +115,12 @@ export interface E2ETestHooks {
    */
   scheduleMarkerJump: (markerId: string) => Promise<void>;
   getTimelineView: () => { cameraX: number; zoomLevel: number };
+  /**
+   * Frame the timeline (zoom + horizontal scroll), for the user-guide
+   * screenshot harness: a capture often needs a specific stretch of the
+   * session in view, and Ctrl+wheel through WebDriver is unreliable.
+   */
+  setTimelineView: (view: { cameraX?: number; zoomLevel?: number }) => void;
   getTrackMeters: () => MeterDictionary;
   getAudioOutputMeter: () => Promise<AudioOutputMeterLevel>;
   /** Capture the most recent final stereo output for spectral (FFT) analysis. */
@@ -385,6 +391,11 @@ export function useE2ETestHooks(
       getTimelineView: () => {
         const { cameraX, zoomLevel } = useTimelineUIStore.getState();
         return { cameraX, zoomLevel };
+      },
+      setTimelineView: ({ cameraX, zoomLevel }) => {
+        const store = useTimelineUIStore.getState();
+        if (zoomLevel !== undefined) store.setZoomLevel(zoomLevel);
+        if (cameraX !== undefined) store.setCameraX(cameraX);
       },
       getTrackMeters: () => useTransportStore.getState().meters,
       getAudioOutputMeter,
