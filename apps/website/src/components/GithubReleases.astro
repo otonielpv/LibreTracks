@@ -1,6 +1,6 @@
 ---
 import { marked } from "marked";
-import IosStoreNote from "./IosStoreNote.astro";
+import StoreBadges from "./StoreBadges.astro";
 
 interface Props {
   owner?: string;
@@ -114,20 +114,10 @@ const labels = {
     : "Releases could not be loaded during the build. You can open GitHub Releases directly.",
   noAssets: isSpanish ? "Esta release no contiene instaladores publicados." : "This release has no published installers.",
   open: isSpanish ? "Abrir en GitHub" : "Open on GitHub",
-  // Android is not on this page any more: it ships through Google Play and
-  // nothing else. A store build is signed with Google's key, so it cannot
-  // update a hand-installed APK — offering both channels at once strands
-  // people on a build that never updates itself. Until the listing is public
-  // this note is the whole Android story; when it goes live, replace it with
-  // the official badge and the listing URL.
-  androidTitle: isSpanish ? "Android: en breve en Google Play" : "Android: coming soon on Google Play",
-  androidBody: isSpanish
-    ? "LibreTracks para Android llega en breve a Google Play, y la tienda será la única forma de instalarlo: aquí ya no se publica el archivo APK. La aplicación de la tienda se actualiza sola en cuanto sale una versión nueva; la que se instalaba a mano, no."
-    : "LibreTracks for Android is coming to Google Play shortly, and the listing will be the only way to install it: the APK is no longer published here. The store build updates itself as soon as a new version ships; a hand-installed one does not.",
 };
 
 // Android assets never reach the download cards. The APK is not a supported
-// install channel any more (see `androidTitle` above), and the AAB is the
+// install channel any more (see StoreBadges.astro), and the AAB is the
 // file that goes to Play Console — a visitor cannot install it at all.
 // Filtering here also covers the older releases that still carry both.
 const INSTALLER_ASSET = /\.(msi|exe|dmg|deb|appimage|rpm)$/i;
@@ -213,11 +203,7 @@ const panels = await Promise.all(
                   ))}
                 </div>
               ) : <p>{labels.noAssets}</p>}
-              <IosStoreNote lang={lang} />
-              <aside class="platform-note">
-                <strong><span aria-hidden="true">🤖</span> {labels.androidTitle}</strong>
-                <p>{labels.androidBody}</p>
-              </aside>
+              <StoreBadges lang={lang} />
               <div class="hero-actions" style="margin-top: 1.25rem;">
                 <a class="button-link" href={panel.release.html_url}>{labels.open}</a>
               </div>
@@ -270,7 +256,7 @@ const panels = await Promise.all(
       <div class="hero-actions">
         <a class="button-link primary" href={releaseUrl}>{labels.open}</a>
       </div>
-      <IosStoreNote lang={lang} />
+      <StoreBadges lang={lang} />
     </>
   )}
 </section>

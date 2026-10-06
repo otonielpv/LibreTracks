@@ -1887,42 +1887,17 @@ button.analytics-ranked-row:hover span,
   border-top: 1px solid color-mix(in srgb, var(--lt-muted) 14%, transparent);
 }
 
-/* Platform caveat shown under the installer list (see GithubReleases.astro).
-   Temporary: goes away with the note it styles once the DMG is notarized. */
-.platform-note {
+.store-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   margin-top: 1.25rem;
-  padding: 0.9rem 1rem;
-  border-radius: 4px;
-  background: var(--lt-surface-low);
-  border: 1px solid color-mix(in srgb, var(--lt-primary) 28%, transparent);
-}
-
-.platform-note strong {
-  display: block;
-  margin-bottom: 0.4rem;
-}
-
-.platform-note p {
-  margin: 0 0 0.5rem;
-  color: color-mix(in srgb, var(--lt-text) 76%, transparent);
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
-.platform-note code {
-  display: block;
-  overflow-x: auto;
-  padding: 0.5rem 0.6rem;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--lt-muted) 12%, transparent);
-  font-size: 0.82rem;
 }
 
 .store-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
-  margin-top: 0.25rem;
   padding: 0.45rem 1rem 0.45rem 0.8rem;
   border-radius: 8px;
   border: 1px solid #a6a6a6;
