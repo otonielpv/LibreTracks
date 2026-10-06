@@ -3916,6 +3916,7 @@ export function TransportPanelContent() {
     scheduleMarkerJumpWithGlobalMode,
     scheduleRegionJumpWithOptions,
     handleNextSongClick,
+    handlePreviousSongClick,
     toggleTimelineVamp,
   } = useTimelineActions({
     appSettings,
@@ -6868,6 +6869,7 @@ export function TransportPanelContent() {
               setStatus(t("transport.status.playbackStarted"));
             })
           }
+          onPreviousSong={() => void runAction(handlePreviousSongClick)}
           onNextSong={() =>
             void runAction(async () => {
               await handleNextSongClick();

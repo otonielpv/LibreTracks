@@ -66,6 +66,7 @@ type TimelineTopbarProps = {
   onPlayTransport: () => void;
   onPauseTransport: () => void;
   onNextSong: () => void;
+  onPreviousSong: () => void;
   metronomeEnabled: boolean;
   onToggleMetronome: () => void;
   metronomeButtonRef?: React.Ref<HTMLButtonElement>;
@@ -127,6 +128,7 @@ export function TimelineTopbar({
   onPlayTransport,
   onPauseTransport,
   onNextSong,
+  onPreviousSong,
   metronomeEnabled,
   onToggleMetronome,
   metronomeButtonRef,
@@ -564,7 +566,19 @@ export function TimelineTopbar({
           </div>
 
           <div className="lt-transport-buttons" data-lt-tour={TOUR_TARGETS.topbarTransport}>
-            <button type="button" aria-label={t("timelineTopbar.previous")} disabled={isProjectEmpty}>
+            <button
+              type="button"
+              aria-label={t("timelineTopbar.previous")}
+              disabled={isProjectEmpty && !learnModeActive}
+              onClick={() => {
+                if (learnModeActive) {
+                  onMidiLearnTarget("action:previous_song");
+                  return;
+                }
+
+                onPreviousSong();
+              }}
+            >
               <span className="material-symbols-outlined">skip_previous</span>
             </button>
             <button

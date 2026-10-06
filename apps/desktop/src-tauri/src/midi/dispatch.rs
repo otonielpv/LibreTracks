@@ -438,6 +438,11 @@ fn dispatch_midi_action(
             emit_transport_lifecycle_event(app, "sync", &snapshot);
             snapshot
         }
+        "action:previous_song" => {
+            let snapshot = jump_to_previous_region(&mut session, &state.audio, settings)?;
+            emit_transport_lifecycle_event(app, "sync", &snapshot);
+            snapshot
+        }
         _ => return Ok(()),
     };
 
@@ -630,25 +635,69 @@ fn jump_to_next_region(
     audio: &crate::audio::engine::AudioController,
     settings: &AppSettings,
 ) -> Result<crate::models::TransportSnapshot, String> {
+    jump_to_neighbour_region(session, audio, settings, next_region_index)
+}
+
+fn jump_to_previous_region(
+    session: &mut crate::state::DesktopSession,
+    audio: &crate::audio::engine::AudioController,
+    settings: &AppSettings,
+) -> Result<crate::models::TransportSnapshot, String> {
+    jump_to_neighbour_region(session, audio, settings, previous_region_index)
+}
+
+/// Mirrors `findNextSongRegion` in the frontend (timeline/songNavigation.ts):
+/// the first song starting after the cursor, wrapping to the first.
+fn next_region_index(starts: &[f64], position_seconds: f64) -> Option<usize> {
+    if starts.is_empty() {
+        return None;
+    }
+    starts
+        .iter()
+        .position(|start| *start > position_seconds + f64::EPSILON)
+        .or(Some(0))
+}
+
+/// Mirrors `findPreviousSongRegion` in the frontend: the song before the one
+/// under the cursor, wrapping from the first song to the last.
+fn previous_region_index(starts: &[f64], position_seconds: f64) -> Option<usize> {
+    if starts.is_empty() {
+        return None;
+    }
+    let current = starts
+        .iter()
+        .rposition(|start| *start <= position_seconds + f64::EPSILON);
+    match current {
+        Some(index) if index > 0 => Some(index - 1),
+        _ => Some(starts.len() - 1),
+    }
+}
+
+fn jump_to_neighbour_region(
+    session: &mut crate::state::DesktopSession,
+    audio: &crate::audio::engine::AudioController,
+    settings: &AppSettings,
+    pick: fn(&[f64], f64) -> Option<usize>,
+) -> Result<crate::models::TransportSnapshot, String> {
     let song = session
         .engine
         .song()
         .cloned()
         .ok_or_else(|| "no song loaded".to_string())?;
 
-    if song.regions.is_empty() {
+    let mut regions = song.regions.iter().collect::<Vec<_>>();
+    regions.sort_by(|a, b| a.start_seconds.total_cmp(&b.start_seconds));
+    let starts = regions
+        .iter()
+        .map(|region| region.start_seconds)
+        .collect::<Vec<_>>();
+    let position_seconds = session.engine.position_seconds();
+    let Some(index) = pick(&starts, position_seconds) else {
         return session
             .snapshot_with_sync(audio)
             .map_err(|error| error.to_string());
-    }
-
-    let position_seconds = session.engine.position_seconds();
-    let next_region = song
-        .regions
-        .iter()
-        .find(|region| region.start_seconds > position_seconds + f64::EPSILON)
-        .or_else(|| song.regions.first())
-        .ok_or_else(|| "no song regions available".to_string())?;
+    };
+    let region_id = regions[index].id.clone();
 
     let jump_trigger =
         parse_jump_trigger(&settings.song_jump_trigger, Some(settings.song_jump_bars))
@@ -657,7 +706,7 @@ fn jump_to_next_region(
         .map_err(|error| error.to_string())?;
 
     session
-        .schedule_region_jump(&next_region.id, jump_trigger, transition, audio)
+        .schedule_region_jump(&region_id, jump_trigger, transition, audio)
         .map_err(|error| error.to_string())
 }
 
@@ -714,12 +763,34 @@ fn map_cc_to_range(value: u8, min: u32, max: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::map_cc_to_range;
+    use super::{map_cc_to_range, next_region_index, previous_region_index};
 
     #[test]
     fn maps_cc_values_to_useful_ranges() {
         assert_eq!(map_cc_to_range(0, 1, 16), 1);
         assert_eq!(map_cc_to_range(127, 1, 16), 16);
         assert_eq!(map_cc_to_range(64, 1, 16), 9);
+    }
+
+    // Same cases as timeline/songNavigation.test.ts: the MIDI pedal and the
+    // on-screen buttons must pick the same song.
+    #[test]
+    fn previous_song_goes_back_one_and_wraps_to_the_last() {
+        let starts = [0.0, 100.0, 250.0];
+        assert_eq!(previous_region_index(&starts, 150.0), Some(0));
+        assert_eq!(previous_region_index(&starts, 300.0), Some(1));
+        assert_eq!(previous_region_index(&starts, 100.0), Some(0));
+        assert_eq!(previous_region_index(&starts, 0.0), Some(2));
+        assert_eq!(previous_region_index(&starts, 42.0), Some(2));
+        assert_eq!(previous_region_index(&[], 10.0), None);
+    }
+
+    #[test]
+    fn next_song_goes_forward_one_and_wraps_to_the_first() {
+        let starts = [0.0, 100.0, 250.0];
+        assert_eq!(next_region_index(&starts, 0.0), Some(1));
+        assert_eq!(next_region_index(&starts, 150.0), Some(2));
+        assert_eq!(next_region_index(&starts, 260.0), Some(0));
+        assert_eq!(next_region_index(&[], 10.0), None);
     }
 }

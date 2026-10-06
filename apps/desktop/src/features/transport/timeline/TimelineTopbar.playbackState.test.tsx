@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { createRef } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TimelineTopbar } from "./TimelineTopbar";
@@ -19,7 +19,10 @@ afterEach(cleanup);
  * que este test puede afirmar es que la clase cambia, que es justo el gancho
  * del que cuelga la regla `.is-play.is-active`.
  */
-function renderTopbar(playbackState: PlaybackState) {
+function renderTopbar(
+  playbackState: PlaybackState,
+  handlers: { onPreviousSong?: () => void; onNextSong?: () => void } = {},
+) {
   const noop = vi.fn();
   return render(
     <TimelineTopbar
@@ -57,7 +60,8 @@ function renderTopbar(playbackState: PlaybackState) {
       runShortcutAction={noop}
       onPlayTransport={noop}
       onPauseTransport={noop}
-      onNextSong={noop}
+      onNextSong={handlers.onNextSong ?? noop}
+      onPreviousSong={handlers.onPreviousSong ?? noop}
       metronomeEnabled={false}
       onToggleMetronome={noop}
       onOpenMetronome={noop}
@@ -113,5 +117,21 @@ describe("TimelineTopbar transport state", () => {
 
     // En pausa, reproducir vuelve a estar apagado: nunca hay dos encendidos.
     expect(playButton().className).toBe("is-play");
+  });
+});
+
+// El boton Anterior se dibujaba sin onClick: pulsarlo no hacia nada.
+describe("TimelineTopbar song navigation", () => {
+  it("Anterior y Siguiente llaman cada uno a su accion", () => {
+    const onPreviousSong = vi.fn();
+    const onNextSong = vi.fn();
+    renderTopbar("playing", { onPreviousSong, onNextSong });
+
+    fireEvent.click(screen.getByLabelText(i18n.t("timelineTopbar.previous")));
+    expect(onPreviousSong).toHaveBeenCalledTimes(1);
+    expect(onNextSong).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByLabelText(i18n.t("timelineTopbar.next")));
+    expect(onNextSong).toHaveBeenCalledTimes(1);
   });
 });

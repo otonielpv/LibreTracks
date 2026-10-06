@@ -6,6 +6,7 @@ import {
   scheduleRegionJump,
   toggleVamp,
 } from "../desktopApi";
+import { findNextSongRegion, findPreviousSongRegion } from "./songNavigation";
 
 type UseTimelineActionsProps = {
   appSettings: AppSettings;
@@ -110,24 +111,28 @@ export function useTimelineActions({
     return nextSnapshot;
   }
 
+  function currentPositionSeconds() {
+    return snapshotRef.current?.positionSeconds ?? displayPositionSecondsRef.current;
+  }
+
   async function handleNextSongClick() {
-    if (!song || song.regions.length === 0) {
-      return;
-    }
-
-    const currentPosition =
-      snapshotRef.current?.positionSeconds ??
-      displayPositionSecondsRef.current;
-    const nextRegion =
-      song.regions.find(
-        (region) => region.startSeconds > currentPosition + Number.EPSILON,
-      ) ?? song.regions[0];
-
+    const nextRegion = song ? findNextSongRegion(song.regions, currentPositionSeconds()) : null;
     if (!nextRegion) {
       return;
     }
 
     await scheduleRegionJumpWithOptions(nextRegion.id, nextRegion.name);
+  }
+
+  async function handlePreviousSongClick() {
+    const previousRegion = song
+      ? findPreviousSongRegion(song.regions, currentPositionSeconds())
+      : null;
+    if (!previousRegion) {
+      return;
+    }
+
+    await scheduleRegionJumpWithOptions(previousRegion.id, previousRegion.name);
   }
 
   async function toggleTimelineVamp() {
@@ -233,6 +238,7 @@ export function useTimelineActions({
     scheduleMarkerJumpWithGlobalMode,
     scheduleRegionJumpWithOptions,
     handleNextSongClick,
+    handlePreviousSongClick,
     toggleTimelineVamp,
     handleSelectRegionFromMidi,
     handleRegionTransposeFromMidi,
