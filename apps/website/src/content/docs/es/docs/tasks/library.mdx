@@ -1,0 +1,139 @@
+---
+title: Biblioteca y audio
+description: "Cómo importar audio en LibreTracks, ordenarlo en carpetas, llevarlo a la línea de tiempo (un archivo, varios o una carpeta entera como canción) y qué hacer cuando falta un archivo."
+sidebar:
+  order: 1
+---
+
+import Clip from "../../../../../components/guide/Clip.astro";
+
+Todo el audio de una sesión pasa por la **Biblioteca**. Desde ahí lo ordenas y
+lo llevas a la línea de tiempo. Abre el panel con el botón **Biblioteca** de la
+barra lateral; qué es cada botón está en
+[Barra lateral y Biblioteca](/es/docs/interface/side-nav-library/#la-biblioteca).
+
+## Importar audio
+
+Hay tres formas, y todas acaban en el mismo sitio:
+
+- **Importar audio**, en la cabecera de la Biblioteca: eliges uno o varios
+  archivos.
+- **Arrastrar archivos** desde el explorador de Windows o el Finder de macOS
+  a la línea de tiempo. Se importan y se colocan donde los sueltes.
+- **En el móvil**, el botón **Audio** de la barra de acciones o
+  **Importar audio** en la Biblioteca. Al terminar, la app te pregunta si
+  quieres añadirlos al timeline: cada audio crea su propia pista en la posición
+  del cursor.
+
+Formatos: WAV, AIFF, FLAC, MP3 y otros formatos habituales; en el móvil
+también AAC/M4A, OGG y Opus.
+
+Cada archivo aparece en la Biblioteca **en cuanto empieza a importarse**, con
+su progreso, sin esperar a que termine el lote entero. El audio comprimido (MP3,
+FLAC…) se prepara una sola vez en segundo plano y se guarda en la
+[caché de audio](/es/docs/interface/settings/#general), así que la próxima vez
+que abras la sesión carga al instante. Puedes darle a reproducir mientras se
+prepara: las pistas que aún no están listas entran solas en cuanto lo están.
+
+:::note[¿Se copia mi archivo?]
+No. LibreTracks **usa el audio desde donde está** en tu disco; importar solo lo
+añade a la sesión. Por eso, si luego mueves o borras ese archivo, la pista se
+queda muda (ver [Cuando falta un archivo](#cuando-falta-un-archivo)).
+
+El audio solo se copia cuando **exportas** una canción (`.ltpkg`) o una sesión
+entera (`.ltset`), para que viaje dentro del paquete. En Android, al importar
+se copia a la sesión salvo que actives *Importar sin copiar el audio a la
+sesión* (ver [LibreTracks en el móvil](/es/docs/mobile/#importar-audio-sin-copiarlo)).
+:::
+
+## Ordenar en carpetas
+
+Las carpetas de la Biblioteca son **virtuales**: ordenan la lista, pero no
+mueven ni copian nada en el disco. Lo habitual es una carpeta por canción, con
+sus stems dentro.
+
+<Clip
+  src="/guide/desktop/library-folder.mp4"
+  width={380}
+  poster="/guide/desktop/library-folder.webp"
+  caption="Clic derecho en «Sin carpeta» › Crear carpeta virtual, y arrastrar audios a la carpeta nueva."
+/>
+
+- **Crear una carpeta**: botón **Carpeta** de la cabecera, o clic derecho en
+  *Sin carpeta* › **Crear carpeta virtual**.
+- **Meter audio en una carpeta**: arrástralo sobre el nombre de la carpeta. Con
+  varios seleccionados (<kbd>Ctrl</kbd>+clic, <kbd>Mayús</kbd>+clic) se mueven
+  todos juntos. También con clic derecho › **Mover a carpeta…**, que se activa
+  en cuanto existe alguna carpeta.
+- **Sacarlo de la carpeta**: clic derecho › **Mover a la raíz**, o arrástralo
+  a *Sin carpeta*.
+- **Renombrar** o **eliminar** una carpeta: clic derecho en su nombre. Al
+  eliminarla, su audio **no se borra**: vuelve a *Sin carpeta*.
+- **Quitar audio de la Biblioteca**: selecciónalo y pulsa <kbd>Supr</kbd>, o
+  clic derecho › **Borrar**. Tu archivo original no se toca. Solo se borra del
+  disco el audio que vive dentro de la carpeta de la sesión, como el que llegó
+  con una canción o sesión importada. Un audio que se está usando en el
+  timeline no se puede quitar: borra antes sus clips.
+- **Plegar o desplegar** una carpeta: clic en su nombre. LibreTracks recuerda
+  cuáles dejaste plegadas.
+
+## Llevar el audio a la línea de tiempo
+
+### Un archivo o varios
+
+Arrastra el archivo desde la Biblioteca a la línea de tiempo:
+
+- **Sobre una pista**: el clip cae en esa pista, donde sueltas.
+- **En el hueco de debajo de las pistas**: se crea una pista nueva para él.
+- **Sobre la columna de nombres de pista** (a la izquierda): atajo para
+  colocarlo **al principio del timeline**, en esa pista, o en una pista nueva
+  si lo sueltas debajo de la última.
+
+Con varios archivos seleccionados, arrástralos juntos. Mientras arrastras ves
+dónde va a caer cada uno y, si no cabe, la app te explica por qué al soltar
+(por ejemplo, porque atravesaría otra canción).
+
+Si sueltas el audio fuera de cualquier canción, LibreTracks crea una canción
+nueva para él. Si lo sueltas dentro de una canción pero se sale por el final,
+la canción se alarga para contenerlo.
+
+### Una carpeta entera, como canción
+
+Es la forma más rápida de montar una canción: **arrastra el nombre de la
+carpeta** a la línea de tiempo. Se crea una canción con el nombre de la
+carpeta, y cada audio va a **su propia pista**, todos empezando a la vez, como
+los stems que son.
+
+<Clip
+  src="/guide/desktop/library-folder-to-song.mp4"
+  poster="/guide/desktop/library-folder-to-song.webp"
+  caption="Arrastrar una carpeta de la Biblioteca al final del timeline crea la canción con una pista por audio."
+/>
+
+- Mantén <kbd>Ctrl</kbd> al soltar para que los audios vayan **uno detrás de
+  otro en la misma pista**, en vez de uno en cada pista. Útil para una carpeta
+  de tomas o de partes de una misma pista.
+- La canción tiene que **caber entera** donde la sueltas. Si chocaría con la
+  siguiente, la app te avisa y no cambia nada. Sí puedes pegarla justo al final
+  de la anterior.
+- Sin arrastrar: clic derecho en la carpeta › **Añadir al timeline como
+  canción**. La canción se coloca al **final de la sesión**, en el primer tiempo
+  fuerte libre.
+
+Si el ajuste *Unir pistas con el mismo nombre al importar* está activado
+(Configuración › General), los audios se juntan con las pistas que ya tengan
+ese nombre. Desactívalo si prefieres que cada canción tenga sus propias pistas.
+
+## Cuando falta un archivo
+
+Si mueves o borras un audio que usa la sesión, sus pistas suenan en silencio y
+aparece el aviso **Faltan archivos multimedia** sobre la línea de tiempo. Al
+pulsarlo se abre **Archivos que faltan**, con cada archivo perdido y las pistas
+que lo usan:
+
+- **Usar el de *carpeta***: LibreTracks ha encontrado un archivo con el mismo
+  nombre en otra carpeta. Un clic y queda enlazado.
+- **Buscar…**: eliges tú el archivo nuevo.
+
+En la Biblioteca, el archivo que falta también ofrece **Localizar archivo…**
+en su menú.

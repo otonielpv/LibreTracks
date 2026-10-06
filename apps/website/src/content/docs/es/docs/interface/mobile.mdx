@@ -1,0 +1,232 @@
+---
+title: En el móvil y la tablet
+description: "La interfaz de LibreTracks en Android e iOS, pantalla por pantalla: inicio, botones que solo existen en el móvil, barra de acciones, selección de pistas y clips, menús de pulsación larga, Biblioteca, Vista Compacta y Vista Live."
+sidebar:
+  order: 6
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+import Clip from "../../../../../components/guide/Clip.astro";
+
+En el móvil y la tablet, LibreTracks es la misma aplicación que en el
+ordenador: el mismo motor, el mismo formato de sesión y las mismas vistas. La
+app siempre se usa **en horizontal**. Lo que cambia es cómo se toca:
+
+- **No hay clic derecho**: **mantén pulsado** para abrir el menú de algo.
+- **No hay menú Archivo**: sus opciones están en la barra lateral.
+- Las acciones de lo que tienes seleccionado aparecen en una **barra flotante**
+  abajo.
+
+Esta página recorre esas diferencias. Los gestos, dónde se guardan las
+sesiones y la salida de audio están en
+[LibreTracks en el móvil](/es/docs/mobile/).
+
+## Pantalla de inicio
+
+![Pantalla de inicio en el móvil](/guide/mobile/landing.png)
+
+<Legend>
+
+1. **Sesiones**: la lista de tus sesiones, para abrir otra sin salir de la que
+   tienes abierta.
+2. **Guardar** la sesión abierta.
+3. **Archivo**: importar una canción, la nube, exportar la sesión y guardarla
+   como plantilla. Ver [abajo](#el-botón-archivo).
+4. **Biblioteca**: el audio de la sesión.
+5. **Configuración**.
+6. **Tutorial**: los recorridos guiados, adaptados a la pantalla táctil.
+7. **Crear** una sesión nueva.
+8. **Importar sesión**: abre un `.ltset` que te hayas pasado desde el
+   ordenador.
+9. **Nube**: sesiones y canciones de tu Google Drive.
+10. **Canción de demostración**: una sesión de ejemplo con dos canciones, para
+    probar sin importar nada.
+
+</Legend>
+
+El **Remote** no está en esta barra: sirve para controlar el ordenador *desde*
+el móvil, con el navegador. Ver [Remote personalizable](/es/docs/remote-control/).
+
+### El botón Archivo
+
+![Opciones del botón Archivo](/guide/mobile/file-actions.png)
+
+- **Importar canción**: añade una canción `.ltpkg` a la sesión abierta.
+- **Nube**: sube o descarga de tu Google Drive.
+- **Exportar sesión…**: la sesión entera, con su audio, en un `.ltset`.
+- **Guardar como plantilla…**.
+
+Las dos últimas solo se activan con una sesión abierta.
+
+## La pantalla de trabajo
+
+![La vista DAW en el móvil](/guide/mobile/daw-overview.png)
+
+<Legend>
+
+1. **BPM** de la canción bajo el cursor.
+2. **Tap**: toca al ritmo para calcular el tempo.
+3. **Compás**.
+4. **Deshacer** y **rehacer**.
+5. **Transporte**, metrónomo, voz guía y pads, igual que en el ordenador. Ver
+   [la barra superior](/es/docs/interface/main-screen/#transporte).
+6. **Posición** en compases y en tiempo.
+7. **CPU**: la carga del motor de audio. Tócala para ver el detalle.
+8. **Botones de las pistas**. Ver [abajo](#botones-de-las-pistas).
+9. **Barra de acciones**: sin nada seleccionado, sirve para **añadir**. Ver
+   [abajo](#añadir).
+
+</Legend>
+
+Debajo de la barra superior está la misma
+[barra de herramientas](/es/docs/interface/toolbar/) que en el ordenador; desliza
+el dedo sobre ella para ver los grupos que no caben.
+
+### Botones de las pistas
+
+![Botones sobre la lista de pistas](/guide/mobile/track-header-actions.png)
+
+<Legend>
+
+1. **Reordenar pistas**: activa un modo en el que arrastras las pistas para
+   cambiar su orden. Vuelve a tocarlo para salir.
+2. **Pistas más bajas**.
+3. **Pistas más altas**.
+4. **Bloquear la regla**: con el candado puesto, tocar la regla no mueve el
+   cursor. Evita saltos sin querer mientras tocas en directo.
+
+</Legend>
+
+### Añadir
+
+Sin nada seleccionado, la barra de acciones ofrece **Sección** (una marca de
+sección en el cursor), **Aviso** (una marca de aviso) y **Audio** (importar
+audio a la sesión). El botón **…** muestra todas las opciones:
+
+![Todas las opciones de Añadir](/guide/mobile/add-sheet.png)
+
+La flecha **⌄** recoge la barra para ver más línea de tiempo.
+
+### Medidor de recursos
+
+![Detalle del medidor de recursos](/guide/mobile/resource-panel.png)
+
+En el móvil la pastilla **CPU** muestra la **carga de audio**: la parte del
+tiempo de cada bloque que el motor necesita para procesarlo. Por encima del
+100 % se oyen cortes. **Cortes de audio** cuenta los que ya ha habido.
+
+## Seleccionar una pista
+
+Toca el **nombre** de una pista para seleccionarla. La barra de acciones
+cambia y muestra lo que puedes hacer con ella:
+
+![Pista seleccionada y su barra de acciones](/guide/mobile/track-selected.png)
+
+<Legend>
+
+1. La **pista seleccionada**, resaltada.
+2. Qué hay seleccionado.
+3. **Acciones rápidas**: insertar pista, insertar carpeta, restablecer el alto…
+4. **Más acciones**: el menú completo de la pista.
+5. **Mezcla**: muestra los controles de mezcla junto a la barra. Ver abajo.
+6. **Seleccionar varias**: a partir de aquí, cada pista que tocas se añade a
+   la selección.
+7. **Quitar selección**.
+8. **Ocultar** la barra.
+
+</Legend>
+
+Las cabeceras de pista en el teléfono solo muestran **M** y **S**. El resto de
+la mezcla aparece al seleccionar la pista: una fila sobre ella con su **T**,
+volumen, panorama y salida. El botón **Mezcla** lleva esos controles junto a la
+barra de acciones:
+
+![Controles de mezcla de la pista seleccionada](/guide/mobile/track-mix.png)
+
+<Clip
+  src="/guide/mobile/track-select-mix.mp4"
+  poster="/guide/mobile/track-select-mix.webp"
+  caption="Toca el nombre de la pista para seleccionarla; «Mezcla» muestra sus controles junto a la barra."
+/>
+
+Con varias pistas seleccionadas, los cambios se aplican a todas, y el volumen
+y el panorama se mueven en la misma proporción.
+
+**Más acciones** abre el menú completo de la pista, el mismo que el clic
+derecho del ordenador ([ver opciones](/es/docs/interface/timeline/#sobre-una-pista)):
+
+![Menú completo de la pista](/guide/mobile/track-more.png)
+
+## Seleccionar un clip
+
+Toca un clip para seleccionarlo:
+
+![Barra de acciones de un clip](/guide/mobile/clip-selected.png)
+
+Las acciones del clip, las mismas que su
+[menú del ordenador](/es/docs/interface/timeline/#sobre-un-clip), aparecen en la
+barra: **Cortar en cursor** (se activa cuando el cursor está sobre el clip),
+**Duplicar**, **Seleccionar color…**, y las que no caben en **…**.
+
+Con el clip seleccionado, arrástralo para moverlo. Así un roce sin querer
+nunca mueve el audio.
+
+## Mantener pulsado
+
+Mantén pulsada una canción, una marca o cualquier punto de la línea de tiempo
+para abrir su menú, el mismo que el clic derecho del ordenador.
+
+![Menú de una canción al mantenerla pulsada](/guide/mobile/song-sheet.png)
+
+![Menú de una marca al mantenerla pulsada](/guide/mobile/marker-sheet.png)
+
+Qué hace cada opción está en
+[Menús del clic derecho](/es/docs/interface/timeline/#menús-del-clic-derecho).
+
+## Biblioteca
+
+![Biblioteca en el móvil](/guide/mobile/library.png)
+
+Igual que en el ordenador: **Carpeta**, **Importar audio** y el audio
+ordenado por carpetas. Toca un archivo para seleccionarlo y aparecen sus
+acciones. Para cerrar la Biblioteca, vuelve a tocar su botón en la barra
+lateral. En Android puedes importar audio **sin copiarlo** a la sesión: ver
+[Importar audio sin copiarlo](/es/docs/mobile/#importar-audio-sin-copiarlo).
+
+## Configuración
+
+![Configuración en el móvil](/guide/mobile/settings.png)
+
+Las mismas pestañas que en el ordenador
+([ver Configuración](/es/docs/interface/settings/)), salvo **Atajos**, que no
+tiene sentido sin teclado. En el móvil hay además opciones propias: dónde
+guardar las sesiones (memoria interna, tarjeta SD o pendrive), importar sin
+copiar y la salida de baja latencia. Están explicadas en
+[LibreTracks en el móvil](/es/docs/mobile/).
+
+## Vista Compacta y Vista Live
+
+Las tres vistas están en los tres primeros botones de la barra de
+herramientas, como en el ordenador.
+
+![Vista Compacta en el móvil](/guide/mobile/compact.png)
+
+La **Vista Compacta** muestra una columna por canción con sus pistas, el botón
+para reproducirla y su fader de volumen. **+ Nueva canción** e
+**Importar .ltpkg** están al final, y **Mixer** abre el mezclador de abajo. Ver
+[Vista Compacta](/es/docs/compact-view/).
+
+![Vista Live en el móvil](/guide/mobile/live.png)
+
+La **Vista Live** es la de tocar: las marcas de la canción como botones
+grandes, con cuánto falta para la siguiente, el repertorio abajo y los ajustes
+de salto siempre a mano. Ver [Vista Live](/es/docs/live-view/).
+
+## Sesiones
+
+![Lista de sesiones](/guide/mobile/sessions.png)
+
+El botón **Sesiones** de la barra lateral abre esta ventana sin cerrar la
+sesión actual. Desde aquí creas, importas o abres otra. Para borrar una sesión
+del dispositivo, usa la papelera junto a su nombre; la que tienes abierta no se
+puede borrar.

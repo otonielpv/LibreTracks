@@ -4,6 +4,7 @@ import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import sitemap from "@astrojs/sitemap";
 import tailwind from "@astrojs/tailwind";
+import rehypeGuideImageSize from "./src/plugins/rehypeGuideImageSize.mjs";
 
 // `<lastmod>` only helps while Google trusts it, and stamping every URL with the
 // build date is the fastest way to lose that trust: one typo fix would claim all
@@ -54,6 +55,9 @@ export default defineConfig({
   // instead of the page. `always` makes `astro dev` 404 on those links so they
   // are caught here rather than in a Search Console coverage report.
   trailingSlash: "always",
+  markdown: {
+    rehypePlugins: [rehypeGuideImageSize],
+  },
   i18n: {
     defaultLocale: "en",
     locales: ["en", "es"],
@@ -109,6 +113,18 @@ export default defineConfig({
       ],
       customCss: ["./src/styles/fonts.css", "./src/styles/starlight.css"],
       sidebar: [
+        {
+          label: "The interface, button by button",
+          translations: { es: "La interfaz, botón a botón" },
+          collapsed: false,
+          autogenerate: { directory: "docs/interface" },
+        },
+        {
+          label: "Building the show",
+          translations: { es: "Montar el show" },
+          collapsed: false,
+          autogenerate: { directory: "docs/tasks" },
+        },
         {
           label: "Overview & Core",
           translations: { es: "Resumen y conceptos" },

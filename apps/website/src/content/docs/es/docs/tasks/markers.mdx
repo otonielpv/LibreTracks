@@ -1,0 +1,120 @@
+---
+title: Marcas
+description: "Las marcas de LibreTracks: secciones y avisos, cómo crearlas con su tipo y variante, moverlas, convertir una sección en aviso arrastrándola de fila, y cómo se usan para saltar en directo."
+sidebar:
+  order: 3
+---
+
+import Clip from "../../../../../components/guide/Clip.astro";
+
+Las marcas dividen cada canción en partes con nombre. Son lo que usas para
+**saltar** en directo y lo que la [voz guía](/es/docs/voice-guide/) anuncia a la
+banda. Hay dos clases, y cada una vive en su propia fila de la regla:
+
+| | **Secciones** (fila de abajo) | **Avisos** (fila de arriba) |
+| --- | --- | --- |
+| Para qué | Las partes de la canción: Intro, Verso, Coro… | Indicaciones para la banda: *Entra batería*, *Última vez*… |
+| Voz guía | Dice el nombre y **cuenta la entrada** («Coro, 1, 2, 3, 4») | Dice el aviso cuando llega, sin cuenta. Si cae justo al inicio de una sección, se dice entre el nombre y la cuenta |
+| Saltar a ella | Sí, y la banda oye la cuenta antes | También se puede saltar, pero sin cuenta propia |
+| Vista Live y Remote | Una tarjeta por sección | Dentro de la sección si coinciden en el tiempo; si va suelto, su propia tarjeta marcada como *Aviso* |
+| Saltos numerados por MIDI | Cuentan | No cuentan |
+
+## Crear una marca
+
+<Clip
+  src="/guide/desktop/marker-create.mp4"
+  poster="/guide/desktop/marker-create.webp"
+  caption="Clic derecho en la regla › Crear Marca › tipo › variante."
+/>
+
+1. Haz **clic derecho en la regla**, en el punto exacto donde quieres la
+   marca.
+2. Elige **Crear Marca**.
+3. Elige el **tipo**. El menú los separa en *Secciones* y *Avisos*.
+4. Algunos tipos tienen **variantes numeradas**: Verso 1 a 6, y Coro, Puente y
+   Pre Coro 1 a 4. Elige la que toca para que la voz guía diga «Coro 2» y no
+   solo «Coro».
+
+![Menú de tipos de marca](/guide/desktop/marker-kind-menu.png)
+
+En el móvil, la barra de acciones tiene **Sección** y **Aviso**, que crean la
+marca en la posición del cursor. También puedes mantener pulsada la regla.
+
+### Tipos de sección
+
+Intro, Verso, Pre Coro, Coro, Post Coro, Puente, Breakdown, Drop, Solo, Outro,
+A Capella, Instrumental, Interludio, Estribillo, Repetición, Vamp, Final,
+Exhortación, Rap, Otra Vuelta y **Personalizado** (para lo que no encaje; le
+pones tú el nombre y el color).
+
+### Tipos de aviso
+
+Preparados, Sube Intensidad, Subir Lento, Bajar Intensidad, Toda La Banda,
+Entra Batería, Pausa, Sostener, Suave, Swell, Golpes, Última Vez, Final Grande,
+Sube Tono, Baja Tono, Batería, Bajo, Guitarra, Teclado, Ad Lib, Espontáneo y
+Siguiente Canción.
+
+Cada tipo tiene su color, que es el que ves en la regla, en la Vista Live y en
+el Remote.
+
+## Mover una marca
+
+- **Arrastra la bandera** a lo largo de la regla. Con el
+  [imán](/es/docs/interface/toolbar/#vista-y-edición) encendido se pega a la
+  rejilla; mantén <kbd>Mayús</kbd> mientras arrastras para colocarla libre.
+- Para una posición exacta: clic derecho › **Posición…**, y escribe el
+  *compás.tiempo* o los segundos.
+
+### Convertir una sección en aviso, y al revés
+
+Arrastra la marca **hacia arriba**, a la fila de avisos, o **hacia abajo**, a
+la de secciones. La marca conserva su nombre y su tipo, pero pasa a
+comportarse como la otra clase (ver la tabla de arriba). Por ejemplo, un
+«Coro» llevado a la fila de avisos deja de tener cuenta de entrada.
+
+<Clip
+  src="/guide/desktop/marker-lane-drag.mp4"
+  poster="/guide/desktop/marker-lane-drag.webp"
+  caption="Arrastrar una marca de una fila a otra cambia su clase sin moverla en el tiempo."
+/>
+
+Puedes arrastrar en diagonal para cambiar de fila y de posición a la vez. La
+línea que separa las dos filas está justo en medio, así que no hay que
+afinar.
+
+## Editar y borrar
+
+Clic derecho en la marca (o mantenerla pulsada en el móvil):
+
+- **Saltar a esta marca**: lleva el cursor a la marca, sin esperar.
+- **Renombrar** (<kbd>F2</kbd>).
+- **Posición…**.
+- **Tipo de marca…**: cambia el tipo o la variante.
+- **Color…**: solo en las marcas de tipo *Personalizado*. Las demás toman el
+  color de su tipo.
+- **Borrar** (<kbd>Supr</kbd>).
+
+## Saltar entre marcas en directo
+
+Un clic en una marca de sección **programa un salto** a ella. Cuándo se ejecuta
+lo decide el ajuste
+[Salto de marca](/es/docs/interface/toolbar/#salto-de-marca): al momento, tras
+unos compases o al llegar a la siguiente marca. Mientras espera, se activa
+**Cancelar salto**. Para anularlo, pulsa <kbd>Esc</kbd> o vuelve a hacer clic en
+la misma marca.
+
+Otras formas de saltar:
+
+- **Teclas numéricas**: <kbd>0</kbd> salta a la primera marca de la sesión,
+  <kbd>1</kbd> a la segunda, y así hasta <kbd>9</kbd>. Pulsar otra vez la misma
+  tecla cancela el salto. <kbd>Mayús</kbd>+número hace lo mismo con las
+  canciones.
+- La **[Vista Live](/es/docs/live-view/)**, con una tarjeta por marca.
+- El **[Remote](/es/docs/remote-control/)** desde el móvil.
+- Un **pedal MIDI**: en
+  [MIDI Learn](/es/docs/interface/settings/#midi-learn), pestaña *Marcas*.
+- Una **[pista de automatismos](/es/docs/automation/)**, para que el salto
+  ocurra solo en un punto exacto.
+
+Con la voz guía encendida, cuando programas un salto la banda oye el nombre de
+la sección de destino y la cuenta de entrada, y todos entran juntos.

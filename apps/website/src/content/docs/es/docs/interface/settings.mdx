@@ -1,0 +1,162 @@
+---
+title: Configuración
+description: "Cada pestaña de la Configuración de LibreTracks: dispositivo de audio, salidas, buffer, idioma, guardado automático, caché, vídeo, atajos de teclado, MIDI, MIDI Learn y diagnóstico."
+sidebar:
+  order: 5
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+
+Abre la Configuración con el botón **Configuración** de la barra lateral. Los
+cambios se guardan solos al momento, salvo las salidas de hardware, que
+tienen su propio botón *Aplicar*.
+
+![Ventana de Configuración con sus pestañas](/guide/desktop/settings-overview.png)
+
+<Legend>
+
+1. [**Audio**](#audio): tarjeta de sonido, salidas y rendimiento.
+2. [**General**](#general): idioma, manejo de la línea de tiempo, guardado
+   automático y caché.
+3. [**Vídeo**](#vídeo): la pantalla o proyector para las pistas de vídeo.
+4. [**Atajos**](#atajos): las teclas de cada acción.
+5. [**Diagnóstico**](#diagnóstico): registros para cuando algo falla.
+6. [**MIDI**](#midi): controlador de entrada y puerto de salida.
+7. [**MIDI Learn**](#midi-learn): asignar pedales y botones a acciones.
+8. **Cerrar**. También con <kbd>Esc</kbd>.
+
+</Legend>
+
+## Audio
+
+![Pestaña Audio, primera parte](/guide/desktop/settings-audio-1.png)
+
+- **Audio System**: el tipo de driver. La lista depende de tu equipo. En
+  Windows, **ASIO** es el de menor retardo si tu interfaz lo tiene, y
+  **Windows Audio** (WASAPI) funciona con cualquier tarjeta. Evita
+  **DirectSound** para tocar en directo.
+- **Dispositivo de audio**: la tarjeta o interfaz por la que sale el sonido.
+- **Refrescar dispositivos de audio**: vuelve a buscar interfaces, por ejemplo
+  si has enchufado una con la app abierta.
+- **Frecuencia de muestreo**: déjala en *Auto* salvo que tu interfaz necesite
+  una concreta. Al abrir una sesión, LibreTracks intenta igualarla a la del
+  audio para no tener que convertirlo.
+
+![Pestaña Audio, segunda parte](/guide/desktop/settings-audio-2.png)
+
+- **Tamaño de buffer**: más pequeño, menos retardo; más grande, menos riesgo
+  de cortes. Si oyes chasquidos o cortes, súbelo.
+- **Salidas de hardware**: marca los canales de tu interfaz que quieres usar
+  y pulsa **Aplicar**. Solo los canales marcados aparecen como salida en las
+  pistas. Ver [Salidas de audio y metrónomo](/es/docs/audio-routing-metronome/).
+- **Procesamiento multinúcleo**: reparte el trabajo de audio entre varios
+  núcleos del procesador. Déjalo activado.
+
+## General
+
+![Pestaña General: idioma y navegación](/guide/desktop/settings-general-1.png)
+
+- **Idioma** de la app.
+- **Navegación de la línea de tiempo**: cómo responden la rueda del ratón y el
+  trackpad. En modo *Ableton*, pellizcar o <kbd>Ctrl</kbd>+rueda hace zoom;
+  <kbd>Alt</kbd>+rueda cambia el alto de la pista bajo el ratón.
+- **Seguimiento del cursor**: dónde se queda el cursor cuando la línea de
+  tiempo lo sigue.
+
+![Pestaña General: reproducción e importación](/guide/desktop/settings-general-2.png)
+
+- **Pausar al terminar cada canción**: en vez de pasar sola a la siguiente,
+  la reproducción se para al final de cada canción. Ideal cuando hay que
+  hablar entre canciones.
+- **Unir pistas con el mismo nombre al importar**: al importar una canción,
+  su «Bajo» va a la pista «Bajo» que ya tienes, en lugar de crear otra.
+- **Colorear las pistas nuevas automáticamente**.
+- **Guardar automáticamente**: guarda la sesión cada cierto tiempo, nunca
+  mientras reproduces.
+
+![Pestaña General: interfaz y caché](/guide/desktop/settings-general-3.png)
+
+- **Guardar cada**: cada cuántos minutos.
+- **Tamaño de la interfaz**: hazla más pequeña si no cabe en tu pantalla, o
+  más grande para verla de lejos. Atajos: <kbd>Ctrl</kbd>+<kbd>+</kbd>,
+  <kbd>Ctrl</kbd>+<kbd>−</kbd> y <kbd>Ctrl</kbd>+<kbd>0</kbd>.
+- **Caché de audio**: el MP3, FLAC y demás audio comprimido se descomprime
+  una vez y se guarda aquí, para que la próxima vez la sesión cargue al
+  instante. Puedes cambiar la carpeta, ponerle un tamaño máximo o vaciarla
+  para liberar espacio.
+
+![Pestaña General: actualizaciones y estadísticas](/guide/desktop/settings-general-4.png)
+
+- **Buscar actualizaciones**: comprueba si hay una versión nueva. La app
+  también avisa sola al arrancar.
+- **Estadísticas opcionales de uso**: datos agregados y anónimos que ayudan a
+  mejorar LibreTracks. Nunca se envía audio, nombres ni contenido de tus
+  sesiones.
+
+## Vídeo
+
+![Pestaña Vídeo: salida y pantalla](/guide/desktop/settings-video-1.png)
+
+- **Salida de vídeo**: actívala para que las pistas de vídeo salgan por otra
+  pantalla.
+- **Pantalla**: el proyector o la televisión. **Identificar pantallas** muestra
+  un número en cada una para saber cuál es cuál.
+- **Modo**: pantalla completa o ventana.
+
+![Pestaña Vídeo: comportamiento](/guide/desktop/settings-video-2.png)
+
+- **Encaje**: cómo se ajusta la imagen a la pantalla.
+- **Pantalla de reposo**: qué se ve cuando no suena ningún vídeo.
+- **Al parar**: qué se queda en pantalla al detener la reproducción.
+
+![Pestaña Vídeo: sincronía](/guide/desktop/settings-video-3.png)
+
+- **Compensación de retardo**: si el proyector muestra la imagen tarde
+  respecto al audio, adelántala aquí. **Calibrar…** y **Carta de ajuste** te
+  ayudan a medirlo.
+
+## Atajos
+
+![Pestaña Atajos](/guide/desktop/settings-shortcuts-1.png)
+
+Busca una acción, pulsa **Editar** y después la combinación de teclas. La
+**×** quita el atajo y **Restablecer todo** vuelve a los de fábrica. Si la
+combinación ya la usa otra acción, la app te lo dice. La lista completa de
+atajos por defecto está en [Atajos de teclado](/es/docs/live-control-flow/#atajos).
+
+## Diagnóstico
+
+![Pestaña Diagnóstico](/guide/desktop/settings-diagnostics.png)
+
+Si la app se cierra, se congela o una pista se queda muda, aquí están los
+registros que nos ayudan a encontrar la causa. **Guardar registro…** crea un
+archivo que puedes enviar al pedir ayuda. Los registros no incluyen audio ni
+datos personales.
+
+## MIDI
+
+![Pestaña MIDI](/guide/desktop/settings-midi.png)
+
+- **Dispositivo de entrada MIDI**: el pedal, pad o controlador con el que
+  quieres manejar LibreTracks. El botón de la derecha vuelve a buscar
+  dispositivos.
+- **Salida MIDI**: el puerto por el que las pistas MIDI envían notas y
+  cambios de programa a teclados, mesas de luces o software de letras.
+  **Enviar nota de prueba** comprueba que llega.
+
+## MIDI Learn
+
+![Pestaña MIDI Learn](/guide/desktop/settings-midiLearn-1.png)
+
+Hay dos formas de asignar un pedal o un botón de tu controlador a una acción:
+
+- **Desde la lista**: pulsa **Reaprender** en la fila de la acción y después
+  pisa el pedal.
+- **Desde la pantalla**: pulsa **Aprendizaje MIDI**, cierra la Configuración,
+  haz clic en el botón que quieras controlar (*Reproducir*, *Vamp*, una
+  marca, el BPM…) y pisa el pedal. Vuelve a pulsar *Aprendizaje MIDI* para
+  salir.
+
+La asignación aparece en la columna **Asignación MIDI actual**, y la última
+que has hecho, arriba. **Resetear mapeos MIDI** las borra todas. Las pestañas
+**Marcas** y **Canciones** asignan saltos a marcas y canciones concretas.

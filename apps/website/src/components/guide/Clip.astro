@@ -1,0 +1,28 @@
+---
+// Short, silent, looping screen recording. MP4 instead of GIF: roughly a tenth
+// of the weight at a sharper picture. `poster` is shown until the clip loads
+// and is what a reader with reduced motion keeps seeing.
+interface Props {
+  src: string;
+  poster?: string;
+  caption?: string;
+  width?: number;
+}
+const { src, poster, caption, width } = Astro.props;
+---
+
+<figure class="lt-clip" style={width ? `max-width:${width}px` : undefined}>
+  <video src={src} poster={poster} autoplay loop muted playsinline preload="metadata" aria-label={caption}></video>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  // Respect reduced motion: stop the loop and leave the poster.
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.querySelectorAll<HTMLVideoElement>(".lt-clip video").forEach((v) => {
+      v.removeAttribute("autoplay");
+      v.pause();
+      v.controls = true;
+    });
+  }
+</script>

@@ -73,3 +73,91 @@ starlight-theme-select {
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
+
+/* ---- User guide ------------------------------------------------------ */
+
+/* Annotated screenshots open full size on click (script in StarlightHead). */
+.sl-markdown-content img {
+  cursor: zoom-in;
+}
+
+.lt-zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2vmin;
+  background: rgba(0, 0, 0, 0.88);
+  cursor: zoom-out;
+}
+
+.lt-zoom img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+/* Legend under an annotated screenshot: numbers drawn like the badges. */
+.lt-legend ol {
+  list-style: none;
+  counter-reset: lt-legend;
+  padding-left: 0;
+  max-width: 78ch;
+}
+
+.lt-legend ol > li {
+  counter-increment: lt-legend;
+  position: relative;
+  padding-left: 2.4rem;
+  margin-top: 0.6rem;
+}
+
+.lt-legend ol > li::before {
+  content: counter(lt-legend);
+  position: absolute;
+  left: 0;
+  top: 0.05rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: #ffc21a;
+  border: 1.5px solid #111;
+  color: #111;
+  font-weight: 800;
+  font-size: 0.85rem;
+  line-height: 1.5rem;
+  text-align: center;
+}
+
+.lt-clip {
+  margin: 2.5rem auto;
+}
+
+.lt-clip video {
+  display: block;
+  width: 100%;
+  /* A portrait clip (one side panel) must not fill more than the screen:
+     cap the height and let the width follow the aspect ratio. */
+  max-height: 70vh;
+  object-fit: contain;
+  background: #000;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.lt-clip figcaption {
+  margin-top: 0.6rem;
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-gray-3);
+  text-align: center;
+}
+
+/* Guide captures carry their CSS size (rehypeGuideImageSize); never upscale. */
+.sl-markdown-content img[width] {
+  max-width: 100%;
+  height: auto;
+}

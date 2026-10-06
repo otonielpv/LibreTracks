@@ -1,0 +1,134 @@
+---
+title: Canciones
+description: "Cómo crear, mover, alargar, partir, reordenar y exportar canciones en LibreTracks, y qué ajustes tiene cada una: tonalidad, master, transposición, warp y pausa al final."
+sidebar:
+  order: 2
+---
+
+import Clip from "../../../../../components/guide/Clip.astro";
+
+Una sesión de LibreTracks es un **repertorio**: varias canciones seguidas en la
+línea de tiempo. Cada canción es una barra con nombre en la regla (en algunos
+sitios de la app se llama *región*) y contiene sus clips, sus marcas y sus
+cambios de tempo. Todo lo que está dentro de una canción viaja con ella.
+
+## Crear una canción
+
+Hay varias formas, según de dónde venga el audio:
+
+- **Desde una carpeta de la Biblioteca**: arrastra la carpeta al timeline. Ver
+  [Biblioteca y audio](/es/docs/tasks/library/#una-carpeta-entera-como-canción).
+- **Soltando audio en un hueco vacío** del timeline: se crea una canción que lo
+  contiene.
+- **Desde un tramo de la regla**: arrastra sobre una zona vacía de la regla
+  para marcar el tramo, haz clic derecho dentro y elige **Crear canción desde
+  selección**.
+
+<Clip
+  src="/guide/desktop/song-from-range.mp4"
+  poster="/guide/desktop/song-from-range.webp"
+  caption="Arrastrar sobre la regla vacía marca un tramo; clic derecho › Crear canción desde selección."
+/>
+
+- **Importando una canción exportada** (`.ltpkg`): menú Archivo ›
+  **Importar canción**, o arrastra el archivo al timeline. Llega con su audio,
+  sus marcas y sus ajustes. Se coloca al final de la sesión.
+- **Importando un proyecto de Reaper o Ableton** (`.rpp`, `.als`). Ver
+  [Integración y ecosistema](/es/docs/integration-ecosystem/).
+- En la **Vista Compacta**, el botón **+ Nueva canción** crea una canción
+  vacía al final.
+
+## Mover, alargar y acortar
+
+**Mover**: arrastra la barra de la canción por la regla. Con ella se mueven sus
+clips, marcas y cambios de tempo.
+
+<Clip
+  src="/guide/desktop/song-move.mp4"
+  poster="/guide/desktop/song-move.webp"
+  caption="Arrastrar la barra de una canción la mueve con todo su contenido."
+/>
+
+- Hacia la **derecha**, si choca con la siguiente canción la **empuja**, y con
+  ella a todas las que vienen detrás.
+- Hacia la **izquierda** no puede montarse sobre la anterior.
+- Se pega a la rejilla; mantén <kbd>Mayús</kbd> para moverla libremente.
+
+**Alargar o acortar**: arrastra el borde izquierdo o derecho de la barra.
+
+<Clip
+  src="/guide/desktop/song-resize.mp4"
+  poster="/guide/desktop/song-resize.webp"
+  caption="Arrastrar el borde derecho de la canción la alarga."
+/>
+
+- El **borde derecho** se pega al pulso; el **izquierdo**, al compás.
+- Un borde **no puede cruzar el audio** que la canción contiene: se para justo
+  en el primer o el último clip. Así nunca se queda un clip fuera.
+- Tampoco puede invadir la canción de al lado.
+- Alargar el final deja silencio después del último clip, útil para dar aire
+  antes de la siguiente canción.
+
+## Partir una canción en dos
+
+Útil cuando importas un proyecto entero como una sola canción y quieres
+separarlo en las canciones reales del repertorio.
+
+1. Coloca el cursor donde quieres cortar.
+2. Pulsa <kbd>Mayús</kbd>+<kbd>S</kbd>, o clic derecho en la canción ›
+   **Partir canción en el cursor**.
+
+La parte izquierda conserva el nombre; la derecha se llama igual con «(2)».
+Las dos mantienen los ajustes de la original (tono, warp, master). Los clips
+que cruzan el corte se parten también, sin perder audio.
+
+## Ajustes de cada canción
+
+Cada canción tiene sus propios ajustes. Selecciónala con un clic en su barra
+para verlos en la [barra de herramientas](/es/docs/interface/toolbar/#master-transposición-y-warp),
+o usa su menú (clic derecho):
+
+- **Renombrar canción** (<kbd>F2</kbd>).
+- **Nota de la canción**: su tonalidad. Aparece junto al nombre, en la Vista
+  Live y en el Remote, y **se transpone sola** cuando cambias el tono: una
+  canción en *D* subida 2 semitonos se muestra en *E*.
+- **Master**: el volumen de toda la canción. No afecta al metrónomo ni a la voz
+  guía.
+- **Transposición** y **warp**: ver
+  [Cambio de tono, warp y el botón T](/es/docs/pitch-and-warp/). Ojo: sin warp,
+  transponer cambia la velocidad, así que la canción se alarga o se acorta, y
+  las siguientes se desplazan para no solaparse.
+- **Cambiar BPM original**: el tempo al que se grabó el audio, que usa el warp.
+
+## Reordenar el repertorio
+
+- En la **vista DAW**, mueve las canciones por la regla (ver arriba).
+- En la **Vista Compacta** y en la **Vista Live**, arrastra la canción por su
+  **asa** (los seis puntos a su izquierda) a su nuevo puesto. Mientras
+  arrastras ves dónde va a caer. Con el asa seleccionada, las flechas del
+  teclado la mueven de una en una. La canción se mueve entera, con su audio,
+  marcas y tempo, y los huecos entre canciones se conservan.
+
+## Pasar de una canción a otra en directo
+
+Por defecto, al terminar una canción la reproducción sigue con la siguiente.
+Si prefieres parar entre canciones (para hablar, por ejemplo), activa **Pausar
+al terminar cada canción** en Configuración › General: la reproducción se para
+justo en el último fotograma de cada canción, y *Play* empieza la siguiente.
+
+Para saltar a otra canción: los botones **Anterior** y **Siguiente**,
+<kbd>Mayús</kbd>+número (<kbd>Mayús</kbd>+<kbd>0</kbd> es la primera canción),
+la Vista Live, el Remote o un pedal MIDI. Cuándo y cómo se hace el salto lo
+decide [Transición de canción](/es/docs/interface/toolbar/#transición-de-canción).
+
+## Exportar, renderizar y borrar
+
+Desde el menú de la canción:
+
+- **Exportar canción**: crea un `.ltpkg` con la canción, su audio, sus marcas y
+  sus ajustes, para llevarla a otra sesión o a otro equipo.
+- **Renderizar audio…**: exporta la mezcla a WAV, entera o una pista por
+  archivo.
+- **Borrar canción** (<kbd>Supr</kbd>): elimina la canción con sus clips,
+  marcas y cambios de tempo. Se deshace con <kbd>Ctrl</kbd>+<kbd>Z</kbd>, y el
+  audio sigue en la Biblioteca.

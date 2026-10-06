@@ -1,0 +1,145 @@
+---
+title: La pantalla principal
+description: "Qué es cada zona de la pantalla de LibreTracks en el ordenador y para qué sirve cada botón de la barra superior: tempo, transporte, metrónomo, voz guía, pads y menú Archivo."
+sidebar:
+  order: 1
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+import Clip from "../../../../../components/guide/Clip.astro";
+
+Cuando abres una sesión, LibreTracks muestra la **vista DAW**: la línea de
+tiempo con tus canciones de izquierda a derecha y las pistas de arriba abajo.
+Esta página recorre la pantalla por zonas y explica la barra superior botón a
+botón. Haz clic en cualquier captura para verla a tamaño completo.
+
+![Pantalla principal de LibreTracks con sus diez zonas numeradas](/guide/desktop/daw-zones.png)
+
+<Legend>
+
+1. **Menú Archivo**: crear, abrir, guardar, importar y exportar sesiones.
+   [Ver el menú completo](#menú-archivo).
+2. **Tempo y compás** de la canción que está bajo el cursor, el botón *Tap* y
+   deshacer/rehacer. [Más abajo](#tempo-compás-y-deshacer).
+3. **Transporte**: reproducir, pausar y detener, y los interruptores del
+   metrónomo, la voz guía y los pads. [Más abajo](#transporte).
+4. **Lecturas**: tempo, compás, posición y tiempo transcurrido.
+   [Más abajo](#lecturas-y-medidor-de-recursos).
+5. **Medidor de recursos**: CPU, memoria, disco y carga de audio.
+6. **Barra lateral**: Biblioteca, Remote, Configuración y Tutorial.
+7. **Barra de herramientas**: cambio de vista, imán, seguir el cursor, Vamp,
+   saltos y los ajustes de la canción seleccionada (master, tono y warp).
+8. **Regla**: las canciones de la sesión, los compases, las marcas de sección
+   y los cambios de tempo. Haz clic en ella para mover el cursor.
+9. **Cabeceras de pista**: silenciar (M), solo (S), transposición (T),
+   volumen, panorama y salida de audio de cada pista.
+10. **Pistas**: los clips de audio, las pistas MIDI y la pista de
+    automatismos, sobre la línea de tiempo.
+
+</Legend>
+
+## Tempo, compás y deshacer
+
+![Parte izquierda de la barra superior](/guide/desktop/topbar-left.png)
+
+<Legend>
+
+1. **Archivo**: abre el [menú Archivo](#menú-archivo).
+2. **BPM**: el tempo. Escribe un número y pulsa Intro. Afecta al tramo de
+   tempo en el que está el cursor, y la etiqueta de la derecha te dice cuál:
+   *Tempo @ 00:00.000* significa «el tempo que empieza en el segundo 0».
+3. **Tap**: pulsa al ritmo de la música cuatro o cinco veces y LibreTracks
+   calcula el tempo y lo aplica a ese mismo tramo.
+4. **Compás**: la métrica (4/4, 6/8, 3/4…) del tramo bajo el cursor.
+5. **Deshacer** (Ctrl+Z) el último cambio de la sesión.
+6. **Rehacer** (Ctrl+Mayús+Z o Ctrl+Y) lo que acabas de deshacer.
+
+</Legend>
+
+:::tip[Cada canción con su tempo]
+El tempo y el compás no son globales: cada canción de la sesión tiene los
+suyos. Coloca el cursor sobre la canción que quieras cambiar antes de escribir
+el BPM o de usar *Tap*.
+:::
+
+## Transporte
+
+![Botones de transporte, metrónomo, voz guía y pads](/guide/desktop/topbar-transport.png)
+
+<Legend>
+
+1. **Anterior**: salta a la canción anterior a la que suena. Igual que
+   *Siguiente*, respeta el ajuste *Salto de canción*. Desde la primera canción
+   va a la última.
+2. **Detener** (Mayús+Espacio): para la reproducción y devuelve el cursor al
+   principio de la sesión.
+3. **Reproducir** (Espacio) desde la posición del cursor.
+4. **Pausar** (Espacio): para la reproducción y deja el cursor donde está, para
+   seguir desde ahí.
+5. **Click**: enciende o apaga el metrónomo.
+6. **Ajustes del metrónomo**: salida, volumen, sonidos, acento y subdivisión.
+   Ver [Salidas de audio y metrónomo](/es/docs/audio-routing-metronome/).
+7. **Guía**: enciende o apaga la voz guía, que anuncia cada sección antes de
+   que llegue.
+8. **Ajustes de la voz guía**. Ver [Voz guía](/es/docs/voice-guide/).
+9. **Pads**: enciende o apaga el pad de ambiente.
+10. **Ajustes de los pads**: tonalidad, volumen, fundidos y pads propios. Ver
+    [Pads de ambiente](/es/docs/ambient-pads/).
+11. **Siguiente**: salta a la siguiente canción de la sesión. El momento del
+    salto (inmediato, al final de la canción, tras unos compases…) lo decide el
+    ajuste *Salto de canción* de la barra de herramientas. Desde la última
+    canción vuelve a la primera.
+
+</Legend>
+
+Las flechitas junto a *Click*, *Guía* y *Pads* abren su panel de ajustes sin
+tener que ir a Configuración:
+
+<Clip
+  src="/guide/desktop/metronome-settings.mp4"
+  poster="/guide/desktop/metronome-settings.webp"
+  caption="La flecha junto a «Click» abre los ajustes del metrónomo."
+/>
+
+## Lecturas y medidor de recursos
+
+![Medidor de recursos y lecturas de posición](/guide/desktop/topbar-right.png)
+
+<Legend>
+
+1. **Medidor de recursos**: uso de CPU, memoria (RAM), lectura de disco y
+   **carga de audio**. La carga de audio es la parte del tiempo de cada bloque
+   de sonido que el motor necesita para procesarlo: si pasa del 100 % se
+   oyen cortes. Haz clic para ver el detalle.
+2. **Tempo** que suena en la posición actual.
+3. **Compás** que suena en la posición actual.
+4. **Bar**: la posición musical, como *compás.tiempo.fracción*. «12.3.00» es
+   el comienzo del tercer tiempo del compás 12.
+5. **Timecode**: el tiempo transcurrido desde el principio de la sesión.
+6. **Estado** del transporte: detenido, reproduciendo o en pausa.
+
+</Legend>
+
+## Menú Archivo
+
+![Menú Archivo desplegado](/guide/desktop/file-menu.png)
+
+- **Nuevo proyecto**: crea una sesión vacía en una carpeta nueva.
+- **Nuevo desde plantilla…**: crea una sesión a partir de una plantilla
+  `.lttemplate`, con sus pistas y salidas ya montadas.
+- **Abrir** y **Abrir reciente**: abre una sesión `.ltsession`.
+- **Importar canción**: añade a la sesión abierta una canción exportada
+  (`.ltpkg`), con su audio, marcas y ajustes.
+- **Importar sesión…** y **Exportar sesión…**: pasan una sesión completa, con
+  todo su audio, en un único archivo `.ltset`. Es la forma de llevarla a otro
+  ordenador o al móvil.
+- **Nube…**: sube y descarga sesiones y canciones de tu Google Drive.
+- **Importar Reaper/Ableton**: crea la estructura a partir de un proyecto
+  `.rpp` o `.als`.
+- **Guardar** (Ctrl+S) y **Guardar como** (Ctrl+Mayús+S).
+- **Guardar como plantilla…**: guarda las pistas y las salidas, sin audio, para
+  reutilizarlas en la próxima sesión.
+- **Salir**: guarda la sesión, te dice dónde se ha guardado y cierra la app.
+
+Más detalle sobre estos formatos en
+[Integración y ecosistema](/es/docs/integration-ecosystem/).

@@ -1,0 +1,132 @@
+---
+title: La barra de herramientas
+description: "Para qué sirve cada control de la barra de herramientas de LibreTracks: cambio de vista, imán, seguir el cursor, Vamp, salto de marca, transición de canción, master, transposición y warp."
+sidebar:
+  order: 2
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+
+La barra de herramientas está justo debajo de la barra superior. A la izquierda
+cambias de vista y de modo de edición. A la derecha decides **cómo** se mueve el
+directo: qué pasa al pulsar Vamp, cuándo se ejecuta un salto y cómo suena cada
+canción.
+
+La mayoría de grupos tienen un botón <kbd>☰</kbd> (tres líneas con
+deslizadores) que abre su panel de ajustes. El resumen que ves en el grupo,
+como *En la siguiente marca*, es el ajuste que está activo ahora.
+
+## Vista y edición
+
+![Parte izquierda de la barra de herramientas](/guide/desktop/toolbar-left.png)
+
+<Legend>
+
+1. **Vista DAW**: la línea de tiempo completa, para montar y editar canciones.
+2. **Vista Compacta**: una columna por canción, con un mezclador compartido.
+   Ver [Vista Compacta](/es/docs/compact-view/).
+3. **Vista Live**: botones grandes para tocar en directo, sin edición. Ver
+   [Vista Live](/es/docs/live-view/).
+4. **Imán** (ajustar a la rejilla): al mover clips, marcas o canciones, se
+   pegan a la subdivisión de la rejilla. Apágalo para colocarlos libremente.
+   Con el imán apagado, la línea diagonal sobre el icono lo indica.
+5. **Seguir el cursor**: durante la reproducción, la línea de tiempo se
+   desplaza sola para que el cursor no se salga de la pantalla.
+6. **Vamp**: repite un tramo en bucle hasta que lo vuelvas a pulsar. Ver
+   [abajo](#vamp).
+7. **Salto de marca**: cuándo se ejecuta un salto a una marca. Ver
+   [abajo](#salto-de-marca).
+
+</Legend>
+
+## Saltos y ajustes de la canción
+
+![Parte derecha de la barra de herramientas](/guide/desktop/toolbar-right.png)
+
+<Legend>
+
+8. **Transición de canción**: cuándo y cómo se pasa a otra canción. Ver
+   [abajo](#transición-de-canción).
+9. **Master** de la canción seleccionada.
+10. **Transposición** de la canción seleccionada, en semitonos.
+11. **Warp** de la canción seleccionada.
+12. **Cancelar salto**: anula un salto que está programado y aún no se ha
+    ejecutado. También con <kbd>Esc</kbd>.
+
+</Legend>
+
+Los grupos 9, 10 y 11 actúan sobre **la canción seleccionada**. Haz clic en el
+nombre de una canción, en la regla, para seleccionarla. Sin canción
+seleccionada, el grupo te lo recuerda: *Selecciona una región…*
+
+## Vamp
+
+![Panel de ajustes de Vamp](/guide/desktop/toolbar-vamp-panel.png)
+
+El botón **Vamp** del grupo enciende y apaga el bucle. En su panel eliges qué
+se repite:
+
+- **Sección**: la sección en la que está el cursor, de su marca a la
+  siguiente.
+- **Compases**: el número de compases que indiques, empezando al principio
+  del compás en el que estás.
+
+Útil cuando la banda alarga un final, el pastor sigue hablando o alguien
+necesita más tiempo en el escenario. Pulsa Vamp otra vez para salir y la
+canción sigue desde ahí.
+
+## Salto de marca
+
+![Panel de ajustes del salto de marca](/guide/desktop/toolbar-marker-jump-panel.png)
+
+Un salto a una marca se programa al hacer clic en una marca de sección, al
+pulsar su número (<kbd>1</kbd>…<kbd>9</kbd>, <kbd>0</kbd>), desde el Remote o
+con un pedal MIDI. Este panel decide **cuándo** se ejecuta:
+
+- **Inmediato**: en el momento.
+- **Tras X compases**: cuando pasen los compases que indiques.
+- **En la siguiente marca**: al llegar a la próxima marca de sección, para que
+  el cambio caiga en un principio de frase.
+
+Mientras el salto espera se activa *Cancelar salto*; si pasas el ratón por
+encima te dice a qué marca vas. Si te equivocas de marca, pulsa <kbd>Esc</kbd>
+o vuelve a hacer clic en la misma marca.
+
+## Transición de canción
+
+![Panel de transición de canción](/guide/desktop/toolbar-song-jump-panel.png)
+
+Se aplica cuando saltas a otra canción: con los botones *Anterior* y
+*Siguiente*, con <kbd>Mayús</kbd>+número, desde la Vista Live o desde el
+Remote. La fila de arriba dice **cuándo**:
+
+- **Inmediato**.
+- **Al final de la canción** que está sonando.
+- **Tras X compases**.
+- **En la siguiente marca**.
+
+La fila de abajo dice **cómo**: **Corte limpio** pasa directamente a la otra
+canción; **Fade out** baja el volumen de la actual antes de saltar.
+
+## Master, transposición y warp
+
+![Master de la canción seleccionada](/guide/desktop/toolbar-master-panel.png)
+
+**Master** sube o baja el volumen de toda la canción seleccionada, sin tocar
+el metrónomo ni la voz guía. Sirve para igualar canciones que vienen más
+fuertes o más flojas.
+
+![Transposición de la canción seleccionada](/guide/desktop/toolbar-transpose-panel.png)
+
+**Transposición** cambia el tono de la canción seleccionada entre −12 y +12
+semitonos con los botones <kbd>−</kbd> y <kbd>+</kbd>.
+
+![Warp de la canción seleccionada](/guide/desktop/toolbar-warp-panel.png)
+
+**Warp** cambia el tempo sin cambiar el tono. Con warp apagado, transponer
+cambia también la velocidad, como un disco acelerado; con warp encendido, la
+canción conserva su duración. El BPM original del audio se ajusta desde el menú
+de la canción, en *Cambiar BPM original*.
+
+La combinación de transposición, warp y el botón **T** de cada pista se explica
+paso a paso en [Cambio de tono, warp y el botón T](/es/docs/pitch-and-warp/).

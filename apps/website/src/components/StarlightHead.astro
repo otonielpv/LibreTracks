@@ -16,3 +16,30 @@ const xDefault = new URL(englishPath, Astro.site ?? "https://libretracks.com");
 
 {normalizedHead.map(({ tag: Tag, attrs, content }) => <Tag {...attrs} set:html={content} />)}
 {path !== "/404" && <link rel="alternate" hreflang="x-default" href={xDefault.href} />}
+
+<script>
+  // Click-to-zoom for docs screenshots: the column is ~900px and the
+  // annotated captures are taken at 2x, so the detail is there to see.
+  document.addEventListener("click", (event) => {
+    const target = event.target as HTMLElement | null;
+    const overlay = target?.closest(".lt-zoom");
+    if (overlay) {
+      overlay.remove();
+      return;
+    }
+    if (!(target instanceof HTMLImageElement) || !target.closest(".sl-markdown-content")) return;
+    if (target.closest("a")) return;
+    const layer = document.createElement("div");
+    layer.className = "lt-zoom";
+    layer.setAttribute("role", "dialog");
+    layer.setAttribute("aria-label", target.alt);
+    const img = document.createElement("img");
+    img.src = target.currentSrc || target.src;
+    img.alt = target.alt;
+    layer.appendChild(img);
+    document.body.appendChild(layer);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") document.querySelector(".lt-zoom")?.remove();
+  });
+</script>

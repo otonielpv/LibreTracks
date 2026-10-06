@@ -1,0 +1,181 @@
+---
+title: Regla, pistas y menús
+description: "Cómo leer la regla de LibreTracks (canciones, marcas de aviso, marcas de sección, cambios de tempo), qué hace cada control de la cabecera de pista y qué ofrece cada menú del clic derecho."
+sidebar:
+  order: 3
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+
+Debajo de la barra de herramientas está la línea de tiempo: arriba la **regla**,
+a la izquierda las **cabeceras de pista** y a la derecha los **clips**. Casi
+todo lo que se edita aquí se hace con **clic derecho**, que abre un menú
+distinto según dónde pulses.
+
+## La regla
+
+![Regla con una canción, dos tipos de marca y un cambio de tempo](/guide/desktop/ruler.png)
+
+<Legend>
+
+1. **Canción**: cada barra con nombre es una canción de la sesión (en el
+   programa también se llaman *regiones*). Haz clic para seleccionarla y
+   arrastra para moverla. La letra a la derecha del nombre, si la hay, es su
+   tonalidad.
+2. **Marcas de aviso** (fila de arriba): *Entra batería*, *Última vez*… No son
+   destinos de salto. La [voz guía](/es/docs/voice-guide/) las anuncia y el
+   [Remote](/es/docs/remote-control/) las muestra a la banda.
+3. **Marcas de sección** (fila de abajo): *Intro*, *Verso*, *Coro*… Haz clic
+   en una para saltar a ella. El momento del salto lo decide
+   [Salto de marca](/es/docs/interface/toolbar/#salto-de-marca).
+4. **Cambio de tempo**: desde ese punto la canción va a otro BPM. Los cambios
+   de compás se ven igual, con la métrica en lugar del BPM.
+
+</Legend>
+
+Los números de la regla son la posición en compases (*1.1.00*) y, debajo, el
+tiempo transcurrido. Haz clic en la regla, fuera de las marcas, para mover el
+cursor.
+
+## Cabecera de pista
+
+![Controles de la cabecera de una pista de audio](/guide/desktop/track-header.png)
+
+<Legend>
+
+1. **Nombre** de la pista. Selecciónala y pulsa <kbd>F2</kbd> para
+   renombrarla.
+2. **M** (*mute*): silencia la pista.
+3. **S** (*solo*): deja sonar solo esta pista y las demás que estén en solo.
+4. **Volumen** en decibelios. 0 dB es el volumen original del audio.
+   Doble clic sobre el fader para volver a 0 dB.
+5. **Salida de audio**: por dónde suena la pista. *Master* es la salida
+   principal; *Out 3/4*, *Out 5*… son salidas físicas de tu interfaz;
+   *Heredado (Carpeta)* usa la salida de la carpeta que la contiene. Ver
+   [Salidas de audio y metrónomo](/es/docs/audio-routing-metronome/).
+6. **T** (transposición): con el warp de la canción encendido, decide si esta
+   pista cambia de tono al transponer. Apágalo en el click o la guía para que
+   no se desafinen. Ver [el botón T](/es/docs/pitch-and-warp/).
+7. **Panorama**: izquierda/derecha. *C* es centro; doble clic para volver
+   al centro.
+8. **Medidor** de nivel de la pista.
+
+</Legend>
+
+Con varias pistas seleccionadas (<kbd>Ctrl</kbd>+clic o <kbd>Mayús</kbd>+clic
+en las cabeceras), tocar cualquiera de estos controles los cambia en todas. El
+volumen y el panorama se mueven en la misma proporción en todas, así que se
+conserva el balance de la mezcla.
+
+Para cambiar el alto de una pista, arrastra su borde inferior. Con
+<kbd>Alt</kbd> cambias el de todas a la vez, y con doble clic vuelve al alto
+normal.
+
+### Carpetas
+
+![Cabecera de una carpeta](/guide/desktop/folder-header.png)
+
+<Legend>
+
+1. **Abrir o cerrar** la carpeta (**+** / **−**). Cerrada, ves un único
+   bloque con el número de pistas que contiene.
+2. **Salida de la carpeta**: las pistas de dentro que tengan
+   *Heredado (Carpeta)* salen por aquí. Cambias la salida de toda la batería,
+   por ejemplo, en un solo sitio.
+
+</Legend>
+
+Los controles **M**, **S** y volumen de la carpeta afectan a todas sus pistas.
+
+## Menús del clic derecho
+
+### Sobre una canción
+
+![Menú de una canción](/guide/desktop/menu-song.png)
+
+- **Renombrar canción** (<kbd>F2</kbd>).
+- **Nota de la canción**: su tonalidad. Se muestra junto al nombre y se
+  transpone con ella.
+- **Partir canción en el cursor** (<kbd>Mayús</kbd>+<kbd>S</kbd>): la divide en
+  dos canciones en la posición del cursor.
+- **Cambiar BPM original**: el tempo al que se grabó el audio, que usa el
+  [warp](/es/docs/pitch-and-warp/).
+- **Exportar canción**: la guarda como `.ltpkg` para llevarla a otra sesión.
+- **Renderizar audio…**: exporta su mezcla a WAV, entera o pista por pista.
+- **Borrar canción** (<kbd>Supr</kbd>).
+
+### Sobre una marca
+
+![Menú de una marca](/guide/desktop/menu-marker.png)
+
+- **Saltar a esta marca**: mueve el cursor a la marca.
+- **Renombrar** (<kbd>F2</kbd>).
+- **Posición…**: escribe la posición exacta, en *compás.tiempo* o en
+  segundos.
+- **Tipo de marca…**: Intro, Verso, Coro… o un aviso como *Entra batería*. El
+  tipo da el color y lo que dice la voz guía.
+- **Borrar**.
+
+Las marcas también se arrastran por la regla para moverlas.
+
+### Sobre un cambio de tempo
+
+![Menú de un cambio de tempo](/guide/desktop/menu-tempo.png)
+
+- **Cambiar BPM** de ese tramo.
+- **Borrar marca**: el tramo vuelve al tempo anterior.
+
+### Sobre la regla vacía
+
+![Menú de la regla](/guide/desktop/menu-ruler.png)
+
+- **Crear marca** en el punto donde has hecho clic. Primero eliges su tipo.
+- **Cambiar BPM del timeline**: el tempo de partida de la sesión.
+- **Crear marca de compás**: un cambio de métrica (por ejemplo, a 6/8) desde
+  ese punto.
+- **Crear automatismo**: una acción automática en ese punto. Ver
+  [Automatizaciones](/es/docs/automation/).
+- **Limpiar selección del timeline**.
+
+Si antes arrastras sobre la regla para seleccionar un tramo, la primera opción
+pasa a ser **Crear canción desde selección**.
+
+### Sobre una pista
+
+![Menú de una pista](/guide/desktop/menu-track.png)
+
+- **Insertar track** e **Insertar carpeta**, justo debajo.
+- **Restablecer alto de la pista**.
+- **Renombrar** (<kbd>F2</kbd>) y **Seleccionar color…**.
+- **Sumar a mono**: mezcla los dos canales en uno, para una pista estéreo que
+  sale por una salida mono.
+- **Borrar**.
+- **Meter en la carpeta anterior** y **Sacar de la carpeta**.
+- **Añadir pista MIDI**: para enviar notas o cambios de programa a teclados,
+  luces o software externo.
+
+El menú de una carpeta es el mismo.
+
+### Sobre un clip
+
+![Menú de un clip](/guide/desktop/menu-clip.png)
+
+- **Cortar en cursor** (<kbd>S</kbd>): parte el clip en la posición del
+  cursor.
+- **Duplicar** (<kbd>Ctrl</kbd>+<kbd>D</kbd>).
+- **Seleccionar color…**.
+- **Borrar** (<kbd>Supr</kbd>).
+
+Cortar, mover o duplicar clips **nunca modifica tus archivos de audio**: solo
+cambia qué parte del audio suena y dónde.
+
+### Sobre la pista de automatismos
+
+![Menú de la pista de automatismos](/guide/desktop/menu-automation.png)
+
+- **Crear automatismo aquí**.
+- **Gestionar escenas de mezcla…**: guarda mezclas completas para aplicarlas
+  de golpe.
+- **Quitar pista de automatismos**: borra también todos sus automatismos.
+
+Ver [Automatizaciones](/es/docs/automation/).

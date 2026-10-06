@@ -1,0 +1,95 @@
+---
+title: Barra lateral y Biblioteca
+description: "Qué abre cada botón de la barra lateral de LibreTracks (Biblioteca, Remote, Configuración y Tutorial) y cómo se usa la Biblioteca para importar, organizar y llevar audio a la línea de tiempo."
+sidebar:
+  order: 4
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+
+La barra lateral es la columna estrecha de la izquierda. Está siempre visible,
+con o sin sesión abierta.
+
+![Botones de la barra lateral](/guide/desktop/side-nav.png)
+
+<Legend>
+
+1. **Biblioteca**: abre o cierra el panel con el audio de la sesión. Ver
+   [abajo](#la-biblioteca).
+2. **Remote**: muestra el código QR y la dirección para controlar LibreTracks
+   desde el móvil o la tablet. Ver [abajo](#remote).
+3. **Configuración**: audio, interfaz, vídeo, atajos, MIDI y diagnóstico. Ver
+   [Configuración](/es/docs/interface/settings/).
+4. **Tutorial**: recorridos guiados dentro de la propia app.
+
+</Legend>
+
+## La Biblioteca
+
+La Biblioteca guarda todo el audio que has traído a la sesión, se use o no en
+la línea de tiempo. Desde aquí lo importas, lo ordenas en carpetas y lo
+arrastras a las pistas.
+
+![Panel de la Biblioteca](/guide/desktop/library-panel.png)
+
+<Legend>
+
+1. **Carpeta**: crea una carpeta para ordenar el audio. Son carpetas
+   *virtuales*: no mueven ni copian nada en el disco.
+2. **Importar audio**: elige archivos WAV, AIFF, MP3, FLAC… También puedes
+   arrastrarlos desde el explorador de archivos directamente a la línea de
+   tiempo: se importan y se colocan donde los sueltes.
+3. **Sin carpeta**: el audio que todavía no está en ninguna carpeta.
+4. **Un archivo de audio**, con su duración. Arrástralo a la línea de tiempo
+   para crear un clip.
+
+</Legend>
+
+También puedes arrastrar **una carpeta entera** a la línea de tiempo: cada
+audio va a su propia pista, uno debajo de otro, como los stems de una canción.
+Si mantienes <kbd>Ctrl</kbd> al soltar, van uno detrás de otro en la misma
+pista.
+
+Para seleccionar varios archivos usa <kbd>Ctrl</kbd>+clic o
+<kbd>Mayús</kbd>+clic, y arrástralos juntos. <kbd>Supr</kbd> quita la
+selección de la Biblioteca. Importar no copia el audio (la sesión lo usa desde
+donde está) y quitarlo de la Biblioteca **no borra tu archivo original**. Más
+detalle en [Biblioteca y audio](/es/docs/tasks/library/).
+
+### Clic derecho en un archivo
+
+![Menú de un archivo de la Biblioteca](/guide/desktop/menu-library-asset.png)
+
+- **Mover a carpeta…** y **Mover a la raíz**.
+- **Borrar** el archivo de la Biblioteca.
+
+### Clic derecho en una carpeta
+
+![Menú de una carpeta de la Biblioteca](/guide/desktop/menu-library-folder.png)
+
+- **Añadir al timeline como canción**: crea una canción nueva con todos los
+  audios de la carpeta, cada uno en su pista. Es la forma más rápida de montar
+  una canción a partir de sus stems: una carpeta por canción, y un clic.
+- **Crear carpeta virtual**.
+
+En las carpetas que has creado tú también aparecen **Renombrar carpeta** y
+**Eliminar carpeta**.
+
+## Remote
+
+![Ventana de conexión del Remote](/guide/desktop/remote-modal.png)
+
+El ordenador y el móvil tienen que estar en la **misma red WiFi**. Escanea el
+código QR con la cámara del móvil, o escribe en su navegador una de las dos
+direcciones. No hace falta instalar nada en el móvil. Qué se puede hacer desde
+ahí, y cómo personalizar sus pantallas, está en
+[Remote personalizable](/es/docs/remote-control/).
+
+## Tutorial
+
+![Menú de recorridos guiados](/guide/desktop/tutorial-menu.png)
+
+Cada recorrido va señalando los controles reales de la pantalla, paso a paso.
+Algunos pasos te piden abrir el panel del que hablan y continúan solos cuando lo
+haces. Los que ya has hecho llevan una marca, y puedes repetirlos cuando
+quieras.
