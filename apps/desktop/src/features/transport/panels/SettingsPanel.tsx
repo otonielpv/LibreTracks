@@ -205,8 +205,11 @@ export function SettingsPanel({
       >
         <header className="lt-settings-modal-header">
           <div>
+            {/* The active section, not a fixed "Audio": the eyebrow used to
+                read "Audio" on every tab. */}
             <span className="lt-settings-modal-eyebrow">
-              {t("transport.settingsModal.eyebrow")}
+              {settingsTabs.find((tab) => tab.id === activeTab)?.label ??
+                t("transport.settingsModal.eyebrow")}
             </span>
             <h2 id="lt-settings-modal-title">
               {t("transport.settingsModal.title")}
