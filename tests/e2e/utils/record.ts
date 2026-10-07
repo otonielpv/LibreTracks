@@ -146,6 +146,21 @@ export class Recorder {
     }
   }
 
+  /** Real left click at a point (canvas targets have no element to click). */
+  async clickAt(target: Point, settleMs = 450) {
+    await this.moveTo(target);
+    await this.ripple();
+    await browser
+      .action("pointer", { id: "guide-mouse", parameters: { pointerType: "mouse" } })
+      .move({ x: Math.round(target.x), y: Math.round(target.y) })
+      .down({ button: 0 })
+      .up({ button: 0 })
+      .perform();
+    await browser.pause(settleMs);
+    await this.drawCursor();
+    await this.frame();
+  }
+
   /** Real right click at the target (opens the app's context menu). */
   async rightClick(target: string | Point, settleMs = 450) {
     await this.moveTo(target);

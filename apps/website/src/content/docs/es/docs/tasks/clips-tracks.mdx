@@ -1,0 +1,152 @@
+---
+title: Clips y pistas
+description: "Cómo seleccionar, mover, cortar, duplicar, copiar y pegar clips en LibreTracks, y cómo crear, ordenar, agrupar en carpetas y ajustar pistas."
+sidebar:
+  order: 4
+---
+
+import Clip from "../../../../../components/guide/Clip.astro";
+
+Un **clip** es un trozo de audio colocado en una pista. Una **pista** es una
+fila de la línea de tiempo con su volumen, su panorama y su salida. Editar clips
+**nunca modifica tus archivos de audio**: solo cambia qué parte suena y dónde.
+
+Lo que hace cada botón de la cabecera de pista está en
+[Regla, pistas y menús](/es/docs/interface/timeline/#cabecera-de-pista).
+
+## Seleccionar clips
+
+- **Clic** en un clip: lo selecciona (y lleva el cursor a ese punto).
+- <kbd>Ctrl</kbd>+**clic**: añade o quita ese clip de la selección.
+- <kbd>Mayús</kbd>+**clic**: selecciona un **rectángulo**, desde el último
+  clip que tocaste hasta este. Entran todos los clips de las pistas que hay
+  entre medias y en ese tramo de tiempo. Es lo que necesitas después de cortar
+  varias pistas por el mismo punto: un gesto y tienes todos los trozos.
+- <kbd>Ctrl</kbd>+<kbd>A</kbd>: todos los clips.
+- <kbd>Esc</kbd>: quita la selección.
+
+Un clic en una zona vacía de una pista mueve el cursor ahí; arrastrar sobre
+una zona vacía desplaza la vista.
+
+## Mover clips
+
+Arrastra el clip. Con varios seleccionados, se mueven todos juntos.
+
+- **En el tiempo**, el clip se pega a la rejilla si el
+  [imán](/es/docs/interface/toolbar/#vista-y-edición) está encendido.
+- Mantén <kbd>Ctrl</kbd> mientras arrastras para que sus bordes se **imanten**
+  al cursor de reproducción, a las marcas, a los bordes de las canciones y a
+  los bordes de otros clips. Así se alinea un clip exactamente con otro.
+- **A otra pista**: arrástralo hacia arriba o hacia abajo. Mientras arrastras
+  ves en qué pista va a caer. El clip **no salta por encima de una carpeta**:
+  se queda en la última pista válida antes de ella. Para llevarlo al otro lado,
+  despliega la carpeta o muévelo en dos pasos.
+- Con las flechas <kbd>←</kbd> <kbd>→</kbd> desplazas la selección una
+  división de la rejilla.
+
+<Clip
+  src="/guide/desktop/clip-to-track.mp4"
+  poster="/guide/desktop/clip-to-track.webp"
+  caption="Arrastrar un clip hacia arriba lo pasa a la pista de encima."
+/>
+
+Un clip siempre vive dentro de una canción. Si al moverlo se sale por el final
+de la suya, la canción se alarga para contenerlo; si eso la haría chocar con la
+siguiente, el movimiento no se hace y la app te dice por qué.
+
+## Cortar, duplicar, copiar y pegar
+
+**Cortar** (<kbd>S</kbd>): parte los clips seleccionados por la posición del
+cursor. También desde el menú del clip, **Cortar en cursor**.
+
+<Clip
+  src="/guide/desktop/clip-split.mp4"
+  poster="/guide/desktop/clip-split.webp"
+  caption="Clic en la regla para poner el cursor, clic en el clip y S para cortarlo."
+/>
+
+:::tip[Acortar un clip]
+Los clips de audio no tienen tiradores para recortarlos. Para quitar el
+principio o el final de uno, córtalo con <kbd>S</kbd> en el punto que quieras y
+borra el trozo que sobra.
+:::
+
+- **Duplicar** (<kbd>Ctrl</kbd>+<kbd>D</kbd>): pone una copia de la selección
+  justo detrás, en las mismas pistas.
+- **Copiar** y **pegar** (<kbd>Ctrl</kbd>+<kbd>C</kbd>,
+  <kbd>Ctrl</kbd>+<kbd>V</kbd>): la copia se pega justo detrás de lo que tengas
+  seleccionado en ese momento (o detrás del original, si no hay nada
+  seleccionado), en las mismas pistas.
+- **Borrar** (<kbd>Supr</kbd> o <kbd>Retroceso</kbd>).
+- **Color**: clic derecho › **Seleccionar color…**. Con varios clips
+  seleccionados, se colorean todos.
+
+Todo se deshace con <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
+
+## Crear pistas
+
+- **Clic derecho en el hueco que hay debajo de las pistas**: **Añadir track de
+  audio**, **Añadir carpeta**, **Añadir pista MIDI**, **Añadir pista de vídeo**
+  y **Añadir pista de automatismos** (solo hay una por sesión).
+- **Clic derecho en una pista** › **Insertar track** o **Insertar carpeta**:
+  la crea justo debajo.
+- Al **soltar audio** en el hueco de debajo de las pistas se crea una pista
+  para él, y al arrastrar una carpeta de la Biblioteca, una por cada audio.
+
+Las pistas nuevas toman un color de la paleta, una distinta cada vez. Si
+prefieres colorearlas tú, apaga *Colorear las pistas nuevas automáticamente*
+en Configuración › General.
+
+## Ordenar pistas
+
+Arrastra la **cabecera** de la pista arriba o abajo. Mientras arrastras, el
+resto de pistas se aparta para enseñarte el hueco donde va a caer, y la pista
+se ve en su sitio nuevo con sus clips. Con varias pistas seleccionadas se
+mueven todas, en el orden en que están.
+
+<Clip
+  src="/guide/desktop/track-reorder.mp4"
+  poster="/guide/desktop/track-reorder.webp"
+  caption="Arrastrar la cabecera de una pista la cambia de sitio; el resto se aparta para mostrar dónde va a caer."
+/>
+
+En el móvil, activa primero el modo de reordenar con el botón de flechas que hay
+sobre la lista de pistas (ver [En el móvil](/es/docs/interface/mobile/#botones-de-las-pistas)).
+
+## Carpetas
+
+Una carpeta agrupa pistas: por ejemplo, todos los micros de la batería. Se
+pliega para ahorrar espacio, y su **M**, **S** y volumen afectan a todas sus
+pistas a la vez.
+
+- **Meter una pista en una carpeta**: arrástrala sobre la fila de la carpeta,
+  hacia el centro. Si la sueltas en el borde de arriba o de abajo, queda encima
+  o debajo de la carpeta, fuera de ella.
+- **Sin arrastrar**: clic derecho en la pista › **Meter en la carpeta
+  anterior**. Con varias pistas seleccionadas, clic derecho › **Mover a
+  carpeta…** y elige una carpeta o **Carpeta nueva…**: van todas de una vez.
+- **Sacarla**: clic derecho › **Sacar de la carpeta**.
+- **Salida de audio compartida**: las pistas de dentro con salida
+  *Heredado (Carpeta)* salen por la salida de la carpeta. Cambias la de toda la
+  batería en un solo sitio.
+
+LibreTracks recuerda qué carpetas dejaste plegadas.
+
+## Más ajustes de pista
+
+- **Seleccionar varias pistas**: <kbd>Ctrl</kbd>+clic o <kbd>Mayús</kbd>+clic
+  en las cabeceras. Lo que toques en una (M, S, T, volumen, panorama, salida) se
+  aplica a todas; el volumen y el panorama se mueven en la misma proporción,
+  así que se conserva la mezcla.
+- **Renombrar**: selecciona la pista y pulsa <kbd>F2</kbd>.
+- **Color**: clic derecho › **Seleccionar color…**.
+- **Alto**: arrastra el borde inferior de la cabecera; con <kbd>Alt</kbd>,
+  cambias todas a la vez, y con doble clic vuelve al alto normal. También
+  <kbd>Alt</kbd>+rueda del ratón sobre la pista (con
+  <kbd>Alt</kbd>+<kbd>Mayús</kbd>+rueda, todas).
+- **Sumar a mono**: mezcla los dos canales de una pista estéreo en uno. Útil
+  para una pista que sale por una salida mono de tu interfaz. Aparece la
+  etiqueta *mono* junto al nombre; **Volver a estéreo** lo deshace.
+- **Borrar**: clic derecho › **Borrar**, o <kbd>Supr</kbd> con la pista
+  seleccionada. Si tiene clips, la app te pregunta si quieres borrarla junto
+  con ellos.

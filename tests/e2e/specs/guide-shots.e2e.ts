@@ -828,4 +828,113 @@ describe("user guide screenshots", function () {
     if (!moved || moved.startSeconds <= newest.startSeconds) throw new Error("song-move: song did not move");
     await rec3.encode();
   });
+
+  it("clips: clips and tracks", async () => {
+    await ensureSession();
+    await AppPage.resetShell();
+    const view = async () => (await AppPage.songView())!;
+    /** data-guide=<tag> on the track header whose name is exactly `name`. */
+    const headerOf = async (name: string, tagName: string) => {
+      const ok = await runInPage(
+        (n: string, t: string) => {
+          document.querySelectorAll(`[data-guide="${t}"]`).forEach((el) => el.removeAttribute("data-guide"));
+          const header = Array.from(document.querySelectorAll(".lt-track-header")).find(
+            (h) => (h.querySelector(".lt-track-title-row strong")?.textContent ?? "").trim() === n,
+          );
+          header?.setAttribute("data-guide", t);
+          return Boolean(header);
+        },
+        name,
+        tagName,
+      );
+      if (!ok) throw new Error(`no track header "${name}"`);
+      return `[data-guide="${tagName}"]`;
+    };
+
+    // Frame the second song ("Único Dios", whose only audio is the Batería
+    // clip) large enough to read.
+    const song = (await view()).regions.find((r) => r.name === "Único Dios");
+    if (!song) throw new Error("no Único Dios");
+    await setTimelineView({ zoomLevel: 0.25 });
+    await browser.pause(800);
+    await setTimelineView({ cameraX: Math.max(0, song.startSeconds * 0.25 * 18 - 120) });
+    const lanes = await rectOf(".lt-track-layers");
+    const ruler = await rectOf(tour("timeline-ruler"));
+    if (!lanes || !ruler) throw new Error("no lanes");
+    const xAt = (seconds: number) => lanes.x + seconds * 0.25 * 18 - Math.max(0, song.startSeconds * 0.25 * 18 - 120);
+    const bateria = await rectOf(await headerOf("Batería", "bateria"));
+    const drums = await rectOf(await headerOf("Drums", "drums"));
+    if (!bateria || !drums) throw new Error("no rows");
+    const clip = { x: lanes.x - 260, y: ruler.y - 10, w: 1100, h: Math.min(drums.y + drums.h + 20, 1000) - ruler.y + 10 };
+
+    // 1) Split a clip at the cursor.
+    const mid = song.startSeconds + (song.endSeconds - song.startSeconds) / 2;
+    const clipsBefore = (await view()).clips.length;
+    const rec = new Recorder(cdp, "clip-split", clip, outDir, { x: xAt(mid) + 120, y: bateria.y - 40 });
+    await rec.hold(0.4);
+    await rec.clickAt({ x: xAt(mid), y: ruler.y + 30 });
+    await rec.clickAt({ x: xAt(mid - 20), y: bateria.y + bateria.h / 2 });
+    await rec.hold(0.4);
+    await rec.key("s", 900);
+    await rec.hold(1.2);
+    if ((await view()).clips.length !== clipsBefore + 1) throw new Error("clip-split: clip was not split");
+    await rec.encode();
+
+    // 2) Move a clip to the track right above. A vertical clip drag stops at
+    // the first folder row it meets, so the target must be adjacent: open
+    // "Dios es Real" and use its last child, which sits on top of Batería.
+    void drums;
+    const folderToggle = await runInPage(() => {
+      const header = Array.from(document.querySelectorAll(".lt-track-header.is-folder")).find(
+        (h) => (h.querySelector(".lt-track-title-row strong")?.textContent ?? "").trim() === "Dios es Real",
+      );
+      const toggle = header?.querySelector(".lt-folder-toggle") as HTMLElement | null;
+      if (!toggle) return false;
+      if (toggle.textContent?.trim() === "+") toggle.click();
+      return true;
+    });
+    if (!folderToggle) throw new Error("no Dios es Real folder");
+    await browser.pause(1500);
+    const tracksNow = (await view()).tracks;
+    const bateriaIdx = tracksNow.findIndex((t) => t.name === "Batería");
+    const above = tracksNow[bateriaIdx - 1];
+    if (!above || above.kind === "folder") throw new Error("no audio track right above Batería");
+    const bateriaId = tracksNow[bateriaIdx].id;
+    const left = (await view()).clips
+      .filter((c) => c.trackId === bateriaId)
+      .sort((a2, b2) => a2.timelineStartSeconds - b2.timelineStartSeconds)[0];
+    const bRow = await rectOf(await headerOf("Batería", "bateria"));
+    if (!left || !bRow) throw new Error("no clip to move");
+    const upRow = { y: bRow.y - bRow.h / 2 };
+    const clip2 = { x: clip.x, y: Math.max(0, bRow.y - 260), w: clip.w, h: 420 };
+    const rec2 = new Recorder(cdp, "clip-to-track", clip2, outDir, { x: xAt(left.timelineStartSeconds + 40), y: bRow.y + 120 });
+    await rec2.hold(0.4);
+    const grab = { x: xAt(left.timelineStartSeconds + 15), y: bRow.y + bRow.h / 2 };
+    await rec2.dragTo({ x: grab.x, y: upRow.y }, 1000, { from: grab });
+    await rec2.hold(1.2);
+    const after = (await view()).clips.find((c) => c.id === left.id);
+    if (after?.trackId !== above.id) throw new Error(`clip-to-track: clip stayed on ${after?.trackId}`);
+    await rec2.encode();
+
+    // 3) Reorder: drag "Drums" above the folder right on top of it.
+    const names = async () => (await view()).tracks.map((t) => t.name);
+    const orderBefore = await names();
+    const drumsHead = await rectOf(await headerOf("Drums", "drums"));
+    const folderAbove = await rectOf(await headerOf("Único Dios", "unico"));
+    if (!drumsHead || !folderAbove) throw new Error("no headers to reorder");
+    const rec3 = new Recorder(
+      cdp,
+      "track-reorder",
+      { x: 80, y: Math.max(0, folderAbove.y - 200), w: 900, h: 420 },
+      outDir,
+      { x: drumsHead.x + 180, y: drumsHead.y + 120 },
+    );
+    await rec3.hold(0.4);
+    const from = { x: drumsHead.x + 70, y: drumsHead.y + 12 };
+    await rec3.dragTo({ x: from.x, y: folderAbove.y + 4 }, 1100, { from });
+    await rec3.hold(1.2);
+    const orderAfter = await names();
+    if (orderAfter.join("|") === orderBefore.join("|")) throw new Error("track-reorder: order did not change");
+    await rec3.encode();
+  });
 });
