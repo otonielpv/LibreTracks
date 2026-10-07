@@ -532,6 +532,7 @@ describe("user guide screenshots", function () {
   });
 
   it("side nav, library, remote, tutorial", async () => {
+    await ensureSession();
     await AppPage.resetShell();
     await annotatedShot(
       "side-nav",
@@ -567,9 +568,10 @@ describe("user guide screenshots", function () {
     // The URLs carry this PC's LAN address and host name.
     await runInPage(() => {
       document
-        .querySelectorAll<HTMLElement>('[aria-labelledby="lt-remote-modal-title"] a')
+        // The QR encodes the same address and host name.
+        .querySelectorAll<HTMLElement>('[aria-labelledby="lt-remote-modal-title"] a, [aria-labelledby="lt-remote-modal-title"] svg, [aria-labelledby="lt-remote-modal-title"] canvas, [aria-labelledby="lt-remote-modal-title"] img')
         .forEach((el) => {
-          el.style.filter = "blur(5px)";
+          el.style.filter = el.tagName === "A" ? "blur(5px)" : "blur(9px)";
         });
     });
     await shot("remote-modal", { selector: '[aria-labelledby="lt-remote-modal-title"]', margin: 16 });
@@ -588,6 +590,7 @@ describe("user guide screenshots", function () {
   });
 
   it("settings tabs", async () => {
+    await ensureSession();
     await AppPage.openSettings();
     const tabs = ["audio", "general", "video", "shortcuts", "diagnostics", "midi", "midiLearn"];
     await annotatedShot(
