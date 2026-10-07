@@ -1,0 +1,47 @@
+{
+  "title": "Tu primera canción en LibreTracks",
+  "voice": "es-ES-AlvaroNeural",
+  "rate": "+5%",
+  "scenes": [
+    {
+      "id": "01-intro",
+      "text": "Hola. En este vídeo vas a montar tu primera canción en LibreTracks y a tocarla en directo. Solo necesitas los stems de la canción: un audio por instrumento, en una carpeta de tu ordenador."
+    },
+    {
+      "id": "02-crear",
+      "text": "Al abrir la aplicación ves la pantalla de inicio. Pulsa Crear, y elige el nombre y la carpeta de la sesión. Una sesión es tu repertorio: puede tener una sola canción, o todo el set."
+    },
+    {
+      "id": "03-arrastrar",
+      "text": "Ahora abre la carpeta con los stems, selecciónalos todos, y arrástralos a la línea de tiempo. Se crea la canción, con cada audio en su propia pista. LibreTracks usa tus archivos desde donde están: no los copia."
+    },
+    {
+      "id": "04-biblioteca",
+      "text": "Todo ese audio queda también en la Biblioteca. Desde ahí puedes ordenarlo en carpetas, y arrastrar una carpeta entera para crear otra canción."
+    },
+    {
+      "id": "06-tempo",
+      "text": "Escribe el tempo de la canción en el campo BPM, y enciende el click. Al reproducir, el click tiene que caer justo con la batería."
+    },
+    {
+      "id": "07-marcas",
+      "text": "Ahora marca las secciones. Haz clic derecho en la regla, al comienzo de cada parte, elige Crear marca, Secciones, y su tipo: intro, verso, coro."
+    },
+    {
+      "id": "08-guia",
+      "text": "Con las marcas puestas, enciende la Guía. Antes de cada sección, una voz le dice a la banda qué viene, y le cuenta la entrada."
+    },
+    {
+      "id": "09-salidas",
+      "text": "Para que el click y la guía suenen solo en los oídos de la banda, elige la salida de audio de cada pista. La música va a Master, hacia la mesa. El click, a otra salida de tu interfaz."
+    },
+    {
+      "id": "10-live",
+      "text": "Y a tocar. Pulsa Tab hasta la vista Live: cada sección es un botón grande. Tócalo y la canción salta a esa parte, en el momento justo."
+    },
+    {
+      "id": "11-final",
+      "text": "Guarda con Control S, y listo. Si quieres más detalle de cualquier paso, tienes la guía completa en libretracks punto com. ¡A tocar!"
+    }
+  ]
+}

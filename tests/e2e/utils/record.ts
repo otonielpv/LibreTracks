@@ -25,6 +25,16 @@ export type Cdp = <T = unknown>(cmd: string, params?: Record<string, unknown>) =
 
 type Point = { x: number; y: number };
 
+/**
+ * Video mode (the narrated tutorials): every frame comes out at exactly
+ * `width`x`height`, and the clip rectangle becomes a CAMERA that zoomTo /
+ * zoomOut animate over the page. Captures are taken at the page's device
+ * pixel ratio, so a zoom up to `dpr`x stays sharp.
+ */
+export type VideoOptions = { width: number; height: number; dpr: number; viewport: { w: number; h: number } };
+
+const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+
 export class Recorder {
   private frames: Array<{ file: string; seconds: number }> = [];
   private dir: string;
@@ -37,8 +47,12 @@ export class Recorder {
     private clip: Box,
     private outDir: string,
     start: Point = { x: clip.x + clip.w * 0.8, y: clip.y + clip.h * 0.85 },
+    private video?: VideoOptions,
   ) {
-    this.dir = path.join(outDir, `.frames-${name}`);
+    // Absolute: ffmpeg's concat demuxer resolves list entries from the list's
+    // own folder, so a relative outDir pointed at nothing.
+    this.outDir = path.resolve(outDir);
+    this.dir = path.join(this.outDir, `.frames-${name}`);
     rmSync(this.dir, { recursive: true, force: true });
     mkdirSync(this.dir, { recursive: true });
     this.cursor = start;
@@ -77,9 +91,10 @@ export class Recorder {
 
   /** Captures the current screen and holds it for `seconds`. */
   async frame(seconds = 1 / FPS) {
+    const scale = this.video ? this.video.width / (this.clip.w * this.video.dpr) : 1;
     const { data } = await this.cdp<{ data: string }>("Page.captureScreenshot", {
       format: "png",
-      clip: { x: this.clip.x, y: this.clip.y, width: this.clip.w, height: this.clip.h, scale: 1 },
+      clip: { x: this.clip.x, y: this.clip.y, width: this.clip.w, height: this.clip.h, scale },
       captureBeyondViewport: false,
     });
     const file = path.join(this.dir, `${String(this.index++).padStart(5, "0")}.png`);
@@ -269,6 +284,78 @@ export class Recorder {
     await this.frame();
   }
 
+  /** Total length of what has been recorded so far, in seconds. */
+  get seconds() {
+    return this.frames.reduce((total, f) => total + f.seconds, 0);
+  }
+
+  /** Holds the last picture until the clip is `total` seconds long. */
+  async holdUntil(total: number) {
+    const missing = total - this.seconds;
+    if (missing > 0.02) await this.hold(missing);
+  }
+
+  /** 16:9 camera box around `target`, at most `maxZoom`x, inside the page. */
+  private cameraFor(target: Box, margin: number, maxZoom: number): Box {
+    if (!this.video) throw new Error("record: zoom needs video mode");
+    const { viewport: vp, width, height } = this.video;
+    const aspect = width / height;
+    let w = Math.max(target.w + 2 * margin, (target.h + 2 * margin) * aspect, vp.w / maxZoom);
+    w = Math.min(w, vp.w);
+    const h = w / aspect;
+    const cx = target.x + target.w / 2;
+    const cy = target.y + target.h / 2;
+    const x = Math.min(Math.max(cx - w / 2, 0), vp.w - w);
+    const y = Math.min(Math.max(cy - h / 2, 0), vp.h - h);
+    return { x, y, w, h };
+  }
+
+  private async animateCamera(to: Box, ms: number) {
+    const from = { ...this.clip };
+    const steps = Math.max(1, Math.round((ms / 1000) * FPS));
+    for (let i = 1; i <= steps; i++) {
+      const e = ease(i / steps);
+      this.clip = {
+        x: from.x + (to.x - from.x) * e,
+        y: from.y + (to.y - from.y) * e,
+        w: from.w + (to.w - from.w) * e,
+        h: from.h + (to.h - from.h) * e,
+      };
+      await this.drawCursor();
+      await this.frame();
+    }
+  }
+
+  /** Smoothly zooms the camera onto an element (or box). */
+  async zoomTo(target: string | Box, opts: { ms?: number; margin?: number; maxZoom?: number } = {}) {
+    const box = typeof target === "string" ? await rectOf(target) : target;
+    if (!box) throw new Error(`record: ${String(target)} not visible`);
+    await this.animateCamera(this.cameraFor(box, opts.margin ?? 80, opts.maxZoom ?? 2), opts.ms ?? 900);
+  }
+
+  /** Back to the whole page. */
+  async zoomOut(ms = 800) {
+    if (!this.video) throw new Error("record: zoom needs video mode");
+    await this.animateCamera({ x: 0, y: 0, w: this.video.viewport.w, h: this.video.viewport.h }, ms);
+  }
+
+  /**
+   * Records something that moves on its own clock (playback, a playhead) for
+   * `ms` of real time. Frames come as fast as captures allow and each one
+   * lasts as long as it really took, so it plays back at true speed.
+   */
+  async realtime(ms: number) {
+    const end = Date.now() + ms;
+    let last = Date.now();
+    while (Date.now() < end) {
+      await this.drawCursor();
+      await this.frame(0);
+      const now = Date.now();
+      this.frames[this.frames.length - 1].seconds = (now - last) / 1000;
+      last = now;
+    }
+  }
+
   /** Writes <name>.mp4 and <name>.webp (poster = last frame) next to the shots. */
   async encode() {
     await runInPage((id: string) => document.getElementById(id)?.remove(), CURSOR_ID);
@@ -294,14 +381,16 @@ export class Recorder {
         "-i",
         listFile,
         "-vf",
-        // Wide clips are capped at 1800px: the docs column shows them at ~900.
-        `fps=${FPS},scale='min(1800,iw)':-2`,
+        this.video
+          ? `fps=${FPS},scale=${this.video.width}:${this.video.height}:flags=lanczos,setsar=1`
+          : // Wide clips are capped at 1800px: the docs column shows them at ~900.
+            `fps=${FPS},scale='min(1800,iw)':-2`,
         "-c:v",
         "libx264",
         "-preset",
         "slow",
         "-crf",
-        "24",
+        this.video ? "18" : "24",
         "-pix_fmt",
         "yuv420p",
         "-movflags",
