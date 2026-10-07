@@ -1183,4 +1183,33 @@ describe("user guide screenshots", function () {
     await shot("midi-route", { selector: '[aria-labelledby="lt-midi-route-title"]', margin: 12 });
     await (await $(await tagByText('[aria-labelledby="lt-midi-route-title"] button', "Cancelar", "dialog-cancel"))).click();
   });
+
+  it("automation", async () => {
+    await ensureSession();
+    await AppPage.resetShell();
+    await setTimelineView({ zoomLevel: 0.25 });
+    await browser.pause(800);
+    await setTimelineView({ cameraX: 0 });
+    // A cue of the session: a click opens its editor.
+    const cue = ".lt-track-lane.is-automation .lt-automation-cue-hotspot, .lt-track-lane.is-automation button";
+    await (await $(cue)).click();
+    await browser.pause(900);
+    await shot("automation-cue-editor", { selector: '.lt-modal-backdrop [role="dialog"], .lt-modal-backdrop section', margin: 12 });
+    await (await $(await tagByText(".lt-modal-backdrop button", "Cancelar", "dialog-cancel"))).click();
+    await browser.pause(500);
+
+    await rightClick(cue);
+    await menuShot("menu-automation-cue", cue);
+
+    // Mix scenes, from the automation header's menu.
+    await rightClick(".lt-track-header.is-automation", { fx: 0.4 });
+    await (await $(await tagByText(".lt-context-menu button", "Gestionar escenas", "menu-item"))).click();
+    await browser.pause(900);
+    // An empty manager explains nothing: create one scene to show its editor.
+    await (await $(await tagByText(".lt-modal-backdrop button", "Nueva escena", "new-scene"))).click();
+    await browser.pause(900);
+    await shot("mix-scenes", { selector: '.lt-modal-backdrop [role="dialog"], .lt-modal-backdrop section', margin: 12 });
+    await (await $(await tagByText(".lt-modal-backdrop button", "Cerrar", "dialog-close"))).click();
+    await browser.pause(400);
+  });
 });

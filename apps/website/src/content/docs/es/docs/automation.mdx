@@ -1,0 +1,89 @@
+---
+title: Automatizaciones
+description: "La pista de automatismos de LibreTracks: acciones que se disparan solas en un punto exacto (saltos, mute, solo, volumen, escenas de mezcla, pads y esperas), cómo limitar sus repeticiones y cómo crear escenas de mezcla."
+---
+
+Un **automatismo** es una lista de acciones que LibreTracks ejecuta sola cuando
+la reproducción pasa por un punto exacto: saltar a otra sección, silenciar una
+pista, bajar un fader, cambiar el pad… Sirve para que una canción «se toque
+sola» y no tengas que acordarte de cada cambio en directo.
+
+Los automatismos viven en la **pista de automatismos** (solo hay una por
+sesión) y se ven como diamantes en su carril.
+
+## Crear la pista de automatismos
+
+Clic derecho en el hueco que hay bajo las pistas, o en el menú de cualquier
+pista › **Añadir pista de automatismos**. El botón de encendido de su cabecera
+desactiva todos los automatismos a la vez, por ejemplo para un ensayo.
+
+## Crear un automatismo
+
+1. Clic derecho en el carril de automatismos, en el punto exacto ›
+   **Crear automatismo aquí**. (También desde la regla: **Crear
+   automatismo**).
+2. Añade las acciones con los botones de **Añadir acción**.
+3. **Guardar**.
+
+![Editor de un automatismo](/guide/desktop/automation-cue-editor.png)
+
+Las acciones se ejecutan **en orden**, de arriba abajo; usa las flechas para
+reordenarlas.
+
+| Acción | Qué hace |
+| --- | --- |
+| **Saltar a…** | Salta a una canción, a una marca o a una posición exacta. Puede ser instantáneo o con un **fade out** de unos segundos. Siempre es la última acción. |
+| **Mute / unmute pista** | Silencia o vuelve a activar una pista. |
+| **Solo / unsolo pista** | Pone o quita el solo de una pista. |
+| **Volumen / paneo** | Lleva el volumen (0–100) y el panorama de una pista a un valor, de golpe o con un **suavizado** de unos segundos. |
+| **Aplicar escena** | Aplica una [escena de mezcla](#escenas-de-mezcla) a la vez. |
+| **Controlar pads** | Enciende o apaga el [pad](/es/docs/ambient-pads/) y fija pack, tonalidad, salida, volumen y fundidos. |
+| **Esperar** | Deja pasar unos segundos antes de la siguiente acción. |
+
+**Limitar repeticiones**: por defecto el automatismo se dispara cada vez que la
+reproducción pasa por él. Actívalo para que lo haga solo unas veces (por
+ejemplo, saltar atrás al coro solo la primera vez). Cuando agota sus
+repeticiones, el diamante se ve apagado. Las cuentas vuelven a cero al pulsar
+**Detener**.
+
+## Editar, mover y desactivar
+
+- **Clic** en el diamante: abre el editor. Al pasar el ratón por encima ves un
+  resumen de lo que hace.
+- **Arrástralo** para cambiarlo de sitio.
+- **Clic derecho**:
+
+![Menú de un automatismo](/guide/desktop/menu-automation-cue.png)
+
+**Editar automatismo…**, **Renombrar automatismo**, **Desactivar automatismo**
+(se queda en su sitio sin dispararse) y **Eliminar automatismo**.
+
+Los automatismos viajan con su canción: si mueves o reordenas la canción, se
+mueven con ella.
+
+## Escenas de mezcla
+
+Una **escena** es una mezcla guardada: el volumen, el panorama, el mute y el
+solo de las pistas que elijas. Con la acción **Aplicar escena** se aplica de
+golpe, por ejemplo para dejar solo voz y click en un final a capella y
+recuperar la mezcla completa en la siguiente sección.
+
+Clic derecho en la cabecera de la pista de automatismos › **Gestionar escenas
+de mezcla…**:
+
+![Gestor de escenas de mezcla](/guide/desktop/mix-scenes.png)
+
+1. **+ Nueva escena** y ponle un nombre.
+2. En cada pista, marca qué controla la escena (**Vol**, **Pan**, **Mute**,
+   **Solo**) y ajusta su valor. Lo que no marques no se toca al aplicarla.
+
+## Consejos
+
+- Un **salto** desde un automatismo se anuncia con la [voz guía](/es/docs/voice-guide/)
+  como cualquier otro: la banda oye a dónde va.
+- Usa un **suavizado** corto en los cambios de volumen para que no se oiga un
+  escalón.
+- Si quieres ensayar sin que salten, apaga la pista de automatismos con su
+  botón de encendido.
+- Para saltos que decides en el momento (no programados), mira
+  [Control en vivo](/es/docs/live-control-flow/).
