@@ -38,25 +38,36 @@ El disparador puede ser inmediato, tras un numero de compases, al final de la ca
 
 ## Atajos
 
-La mayoria de atajos del timeline se pueden reasignar desde `Configuracion` -> `Atajos`. El panel agrupa acciones por transporte, edicion, proyecto, vista y navegacion, y permite editar, quitar o restaurar bindings sin tocar un archivo de configuracion.
+Todos se pueden cambiar en **Configuración › Atajos** (ver
+[Configuración](/es/docs/interface/settings/#atajos)). Los de fábrica:
 
-Atajos por defecto utiles:
+| Tecla | Acción |
+| --- | --- |
+| <kbd>Espacio</kbd> | Reproducir / pausar |
+| <kbd>Mayús</kbd>+<kbd>Espacio</kbd> | Detener (vuelve al principio) |
+| <kbd>Inicio</kbd> | Ir al inicio |
+| <kbd>0</kbd> … <kbd>9</kbd> | Saltar a la 1.ª … 10.ª marca de la sesión, por orden de tiempo y contando también los avisos (otra vez la misma tecla cancela) |
+| <kbd>Mayús</kbd>+<kbd>0</kbd> … <kbd>9</kbd> | Saltar a la canción nº 1 … 10 |
+| <kbd>Esc</kbd> | Cancelar un salto pendiente o quitar la selección |
+| <kbd>S</kbd> | Cortar los clips seleccionados en el cursor |
+| <kbd>Mayús</kbd>+<kbd>S</kbd> | Partir la canción en el cursor |
+| <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> | Copiar / pegar clips |
+| <kbd>Ctrl</kbd>+<kbd>D</kbd> | Duplicar |
+| <kbd>Supr</kbd> o <kbd>Retroceso</kbd> | Borrar la selección (clips, pistas o canción) |
+| <kbd>F2</kbd> | Renombrar la canción, pista o marca seleccionada |
+| <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Deshacer |
+| <kbd>Ctrl</kbd>+<kbd>Mayús</kbd>+<kbd>Z</kbd> o <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Rehacer |
+| <kbd>Ctrl</kbd>+<kbd>A</kbd> | Seleccionar todos los clips |
+| <kbd>←</kbd> / <kbd>→</kbd> | Desplazar los clips seleccionados una división |
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> / <kbd>Ctrl</kbd>+<kbd>Mayús</kbd>+<kbd>S</kbd> | Guardar / guardar como |
+| <kbd>Tab</kbd> / <kbd>Mayús</kbd>+<kbd>Tab</kbd> | Cambiar de vista: DAW, Compacta, Live (y al revés) |
+| <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>-</kbd> / <kbd>Ctrl</kbd>+<kbd>0</kbd> | Agrandar, reducir o restablecer la interfaz |
+| <kbd>B</kbd> | Vídeo: negro inmediato |
 
-- `Space`: alterna `Play` / `Pause`
-- `Shift + Space`: detener
-- `Home`: ir al inicio
-- `S`: partir el clip o los clips seleccionados en el playhead
-- `Shift + S`: partir la cancion bajo el playhead
-- `Delete`: borrar la seleccion actual, incluida una region de cancion seleccionada
-- `F2`: renombrar la cancion, pista o marca seleccionada
-- `Ctrl + C` / `Ctrl + V` / `Ctrl + D`: copiar, pegar y duplicar
-- `Ctrl + A`: seleccionar todos los clips
-- `Left` / `Right`: desplazar clips seleccionados una subdivision de snap
-- `Esc`: cancelar un salto pendiente o limpiar la seleccion
-- `0-9`: arma un salto a la marca correspondiente
-- `Shift + 0-9`: arma un salto a la region de cancion seleccionada
+Las acciones de vídeo *fundido a negro*, *pantalla de reposo* y *activar
+salida* no tienen tecla de fábrica; asígnalas tú si las usas.
 
-Si armas el destino equivocado, pulsa `Esc` inmediatamente.
+Si programas el salto equivocado, pulsa <kbd>Esc</kbd> enseguida.
 
 ## Transposicion Y Warp En Vivo
 
