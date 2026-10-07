@@ -114,6 +114,12 @@ export default defineConfig({
       customCss: ["./src/styles/fonts.css", "./src/styles/starlight.css"],
       sidebar: [
         {
+          label: "Getting started",
+          translations: { es: "Primeros pasos" },
+          collapsed: false,
+          autogenerate: { directory: "docs/start" },
+        },
+        {
           label: "The interface, button by button",
           translations: { es: "La interfaz, botón a botón" },
           collapsed: false,

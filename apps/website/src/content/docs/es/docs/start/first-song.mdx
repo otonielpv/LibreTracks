@@ -1,0 +1,102 @@
+---
+title: Tu primera canción, paso a paso
+description: "De cero a una canción lista para tocar en LibreTracks: crear la sesión, traer los stems, marcar las secciones, poner el click en los oídos y tocarla en la Vista Live."
+sidebar:
+  order: 1
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+
+Este recorrido te lleva de la app recién instalada a una canción lista para
+tocar en directo. Necesitas los **stems** de la canción (un audio por
+instrumento: batería, bajo, teclados, click, guía…) en una carpeta de tu
+ordenador. Cada paso enlaza a su página con todo el detalle.
+
+¿Prefieres trastear primero? En el móvil, la **Canción de demostración** de la
+pantalla de inicio abre una sesión de ejemplo sin importar nada. Y en
+cualquier momento, el botón **Tutorial** de la barra lateral te enseña los
+controles sobre la propia app.
+
+## 1. Crear la sesión
+
+Al abrir LibreTracks ves la pantalla de inicio:
+
+![Pantalla de inicio](/guide/desktop/landing-overview.png)
+
+<Legend>
+
+1. **Crear**: una sesión nueva. Eliges nombre y carpeta; LibreTracks crea ahí
+   la carpeta de la sesión.
+2. **Abrir**: una sesión que ya tienes (`.ltsession`).
+3. **Importar sesión**: una sesión entera exportada (`.ltset`), por ejemplo
+   desde otro ordenador.
+4. **Importar Reaper/Ableton**: parte de un proyecto `.rpp` o `.als`.
+5. **Nube**: sesiones y canciones de tu Google Drive.
+6. **Plantillas**: empieza con las pistas y salidas de una sesión anterior.
+   A la derecha aparecen tus sesiones **recientes**.
+
+</Legend>
+
+Pulsa **Crear**. Una **sesión** es tu repertorio: puede tener una canción o
+todo el set del domingo.
+
+## 2. Traer los stems
+
+1. Abre la **Biblioteca** con su botón de la barra lateral.
+2. **Importar audio** y elige todos los stems de la canción.
+3. Crea una **carpeta** en la Biblioteca con el nombre de la canción y mete
+   en ella los stems.
+4. Arrastra el **nombre de la carpeta** a la línea de tiempo.
+
+LibreTracks crea la canción con el nombre de la carpeta y un audio por pista,
+todos empezando a la vez. Ver [Biblioteca y audio](/es/docs/tasks/library/).
+
+LibreTracks usa los archivos desde donde están: no los muevas ni los borres
+mientras uses la sesión.
+
+## 3. Poner el tempo
+
+En la barra superior, escribe el **BPM** de la canción (o usa **Tap**) y, si
+no es 4/4, el **compás**. Enciende el **Click** y dale a **Play**: el click
+tiene que caer con la batería. Ver [Tempo y compás](/es/docs/tasks/tempo/).
+
+## 4. Marcar las secciones
+
+Para cada parte de la canción: clic derecho en la regla, en su comienzo ›
+**Crear Marca** › **Secciones** › Intro, Verso, Coro… Añade **Avisos** como
+*Entra batería* o *Última vez* donde quieras que la banda oiga una
+indicación. Ver [Marcas](/es/docs/tasks/markers/).
+
+Con las marcas puestas, enciende la **Guía** y la banda oirá «Coro, 1, 2, 3,
+4» antes de cada sección. Ver [Voz guía](/es/docs/voice-guide/).
+
+## 5. Separar lo que oye el público de lo que oye la banda
+
+1. **Configuración › Audio**: elige tu interfaz y marca sus salidas en
+   *Salidas de hardware* › **Aplicar**.
+2. En la cabecera de las pistas de **click** y **guía**, pon la salida de los
+   oídos (por ejemplo *Out 3/4*); deja la música en **Master**.
+3. Haz lo mismo con la salida del **metrónomo** y de la **voz guía**, en las
+   flechas junto a *Click* y *Guía*.
+
+Ver [Salidas de audio y metrónomo](/es/docs/audio-routing-metronome/).
+
+## 6. Tocarla
+
+Pulsa <kbd>Tab</kbd> hasta llegar a la **Vista Live**: cada sección es un
+botón grande. Tócalo para saltar a esa parte; cuándo ocurre el salto lo eliges
+arriba (al momento, tras unos compases o en la siguiente marca). Para alargar
+un final, **Vamp**. Ver [Vista Live](/es/docs/live-view/) y
+[Control en vivo](/es/docs/live-control-flow/).
+
+Guarda con <kbd>Ctrl</kbd>+<kbd>S</kbd>. LibreTracks también guarda solo cada
+pocos minutos.
+
+## Y después
+
+- Más canciones: repite el paso 2 con otra carpeta; se colocan una detrás de
+  otra.
+- Otra tonalidad o tempo: [Cambio de tono, warp y el botón T](/es/docs/pitch-and-warp/).
+- Manejarlo con un pedal: [MIDI](/es/docs/tasks/midi/).
+- Desde el móvil de la banda: [Remote](/es/docs/remote-control/).
+- Llevarlo a otro equipo o al móvil: **Archivo › Exportar sesión…**.
