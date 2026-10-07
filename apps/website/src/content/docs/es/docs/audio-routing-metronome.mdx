@@ -1,72 +1,107 @@
 ---
 title: Salidas de audio y metrónomo
-description: Configura el dispositivo de audio, las salidas externas, las rutas por pista, el metrónomo (click) y el MIDI en LibreTracks.
+description: "Cómo elegir la interfaz de audio en LibreTracks, activar sus salidas, mandar cada pista a una salida distinta (click y guía a los oídos, música a la mesa) y configurar el metrónomo."
 ---
 
-## Dispositivo De Audio
+import Clip from "../../../../components/guide/Clip.astro";
 
-Abre `Configuracion`, elige el `Dispositivo de audio` correcto y verifica la salida antes del ensayo y antes del show. `Predeterminado del sistema` sigue la salida del sistema operativo, pero una interfaz dedicada suele ser mas segura para directo.
+En directo lo habitual es separar lo que oye el público de lo que oye la banda:
+la **música** va a la mesa de sonido y el **click** y la **guía** van solo a
+los oídos de los músicos. LibreTracks lo hace mandando cada pista a una salida
+distinta de tu interfaz de audio.
 
-La pagina de audio tambien puede refrescar la lista de dispositivos detectados y te deja elegir una frecuencia de muestreo de salida explicita o dejarla en `Auto`, ademas de ajustar el tamano del buffer cuando necesitas una respuesta mas segura o mas rapida.
+Si buscas un plan completo, de los stems a la mesa, con niveles y prueba de
+sonido, mira la guía
+[Cómo rutear audio multitrack en directo](/es/guias/salidas-audio-multitrack/).
 
-![Configuracion de audio](/screenshots/Configuracion-Audio.gif)
+## 1. Elegir la interfaz de audio
 
-## Salidas Hardware
+En **Configuración › Audio** elige el sistema de audio y el dispositivo. Para
+directo, mejor una interfaz dedicada que la tarjeta de sonido del ordenador.
+Lo que significa cada ajuste está en
+[Configuración › Audio](/es/docs/interface/settings/#audio).
 
-Activa las salidas fisicas que quieras usar en `Configuracion > Audio`. La rejilla de checkboxes muestra todos los canales que el driver expone realmente — dos para una interfaz estereo tipica, ocho para una MOTU ASIO, treinta y dos para una Behringer X32 por USB, etc. — en lugar de una lista fija.
+## 2. Activar las salidas
 
-Los cambios de canal usan un flujo explicito de **Aplicar** / **Descartar**: cada tick actualiza una seleccion borrador local, y el dispositivo de audio solo se reabre cuando pulsas `Aplicar`. Esto evita reabrir el dispositivo (lo que en drivers ASIO puede tardar varios segundos) una vez por click cuando configuras varios canales seguidos. `Descartar` devuelve el borrador a la seleccion activa.
+En la misma pestaña, **Salidas de hardware** muestra todos los canales que tu
+interfaz tiene de verdad: dos en una interfaz estéreo, ocho, dieciséis o
+treinta y dos en interfaces y mesas digitales por USB.
 
-Desde la cabecera de cada pista puedes rutear a `Master` o directamente a cualquiera de los destinos `Ext. Out` mono o estereo que tengas activados.
+![Salidas de hardware en Configuración › Audio](/guide/desktop/settings-audio-2.png)
 
-Las pistas hijas dentro de una carpeta tambien pueden usar `Inherited (Folder)`. En ese modo, la hija sigue automaticamente la salida de la carpeta, asi puedes mover un grupo completo de click o guia entre buses cambiando solo la carpeta.
+1. Marca los canales que vas a usar (**Todos** y **Ninguno** ayudan).
+2. Pulsa **Aplicar**. La interfaz se reabre una sola vez con todos los
+   cambios; **Descartar** deja las cosas como estaban.
 
-Cuando anades o mueves un track dentro de una carpeta, LibreTracks ahora pone automaticamente esa pista en `Inherited (Folder)`. Despues puedes cambiar el routing manualmente en cualquier momento.
+Solo los canales marcados aparecen después como salida en las pistas.
 
-![Menu de routing de pista](/screenshots/Track-Audio-Route.png)
+## 3. Mandar cada pista a su salida
 
-Routing habitual:
+En la cabecera de cada pista, el selector de salida:
 
-- Stems y playback musical a `Master`.
-- Click, count-ins, cues habladas o guias a una salida externa de cue.
-- Salidas de cue independientes del fader de Master.
-- Carpeta enviada a una salida externa y pistas hijas en `Inherited (Folder)` para un setup mas rapido.
+![Selector de salida de una pista](/guide/desktop/track-route-list.png)
 
-Consulta [Cómo rutear audio multitrack en directo](/es/guias/salidas-audio-multitrack/) para un plan paso a paso que lleve esos stems a canales identificados en la mesa, con el ajuste de niveles y una prueba de sonido repetible.
+- **Master**: la salida principal (los dos primeros canales). Pasa por el
+  master de la canción.
+- **Out 3**, **Out 4**…: un canal físico, en mono.
+- **Out 3/4**…: un par de canales, en estéreo.
+- **Heredado (Carpeta)**: solo en pistas dentro de una carpeta. La pista sale
+  por donde salga su carpeta. Al meter una pista en una carpeta, se pone así
+  sola.
 
-## Rutas Internas
+:::tip[Truco: rutea la carpeta, no cada pista]
+Mete el click y la guía en una carpeta, manda la carpeta a la salida de los
+oídos y deja las pistas en *Heredado (Carpeta)*. Si mañana cambias de
+interfaz, solo tocas un selector.
+:::
 
-Internamente, las pistas guardan su destino en `audioTo`.
+Una pista estéreo que va a una salida mono suena entera si activas **Sumar a
+mono** en su menú (clic derecho).
 
-- `master` y `main` van al par estereo principal.
-- `monitor` va a canales 2-3 si hay al menos cuatro canales hardware; si no, vuelve al par principal.
-- `ext:0` va al canal fisico 0.
-- `ext:2-3` va a un par estereo fisico usando indices externos desde cero.
+Un reparto típico:
 
-## Metronomo
+| Qué | Salida |
+| --- | --- |
+| Stems de la música | Master (a la mesa) |
+| Click, cuentas, guías habladas | Out 3/4 (a los oídos) |
+| Metrónomo y voz guía | La misma salida de oídos |
 
-LibreTracks incluye metronomo integrado, asi que no hace falta importar un archivo de click. Activa `Metronomo` desde la barra superior y despues elige salida y volumen en ajustes.
+## El metrónomo
 
-![Activar metronomo](/screenshots/Activate-Click.png)
+LibreTracks lleva un metrónomo propio: no hace falta importar ningún archivo
+de click. Sigue el [tempo y el compás](/es/docs/tasks/tempo/) de cada canción,
+incluidos los cambios a mitad.
 
-![Configuracion de metronomo](/screenshots/Click-Config.png)
+- El botón **Click** de la barra superior lo enciende y lo apaga.
+- La **flecha** de al lado abre sus ajustes.
 
-## Hardware MIDI
+<Clip
+  src="/guide/desktop/metronome-settings.mp4"
+  poster="/guide/desktop/metronome-settings.webp"
+  caption="La flecha junto a «Click» abre los ajustes del metrónomo."
+/>
 
-Elige un `Dispositivo de entrada MIDI` en `Configuracion`. Usa `Refrescar dispositivos MIDI` si conectaste el controlador despues de abrir la app.
+![Ajustes del metrónomo](/guide/desktop/metronome-popover.png)
 
-`MIDI Learn` asigna notas o mensajes CC a controles de directo como `Play`, `Stop`, `Vamp`, modos de salto de marca, disparadores de salto de cancion, modo de transicion, selección de regiones, acciones de transposicion y controles de numero de compases.
+- **Activar metrónomo**: lo mismo que el botón *Click*.
+- **Salida del metrónomo**: a qué salida va. Ponlo en la de los oídos, no en
+  Master.
+- **Volumen del metrónomo**.
+- **Acento activado**: el primer tiempo de cada compás suena distinto. Su
+  **sonido** y su **tono** se eligen aparte.
+- **Sonido del pulso** y **Tono del pulso**: el resto de tiempos.
+- **Subdivisión**: corcheas, tresillos o semicorcheas entre tiempo y tiempo,
+  con su propio sonido, tono y volumen. Útil en baladas lentas.
 
-![Configuracion MIDI](/screenshots/Midi-Config.gif)
+El metrónomo no pasa por el master de la canción: bajar el master de una
+canción no baja el click.
 
-## Pistas De Salida MIDI
+## La voz guía
 
-En escritorio, añade una pista MIDI desde el menú contextual de la lista de pistas cuando el show necesite controlar un instrumento, una mesa de luces, una aplicación de letras u otro destino MIDI. Desde la cabecera puedes elegir el puerto y uno de los 16 canales; cada mensaje también puede usar otro canal cuando haga falta.
+La voz que anuncia las secciones tiene su propia salida y su propio volumen,
+en la flecha junto a **Guía**. Ver [Voz guía](/es/docs/voice-guide/).
 
-Haz clic derecho en el carril MIDI para añadir un clip en el punto elegido. Un clip puede contener notas, controles, cambios de programa y curvas de control suaves con distintos desfases. Los mensajes que coinciden en el tiempo siguen el orden del editor, donde puedes reordenarlos, plegarlos o probarlos antes de guardar.
+## MIDI
 
-![Editor MIDI con mensajes de nota, control y programa](/screenshots/Midi-Track-Editor.png)
-
-Los clips MIDI guardados aparecen directamente en el timeline y se pueden editar, arrastrar a otro punto, desactivar desde el botón de encendido de la pista o exportar dentro de un paquete de canción de LibreTracks.
-
-![Pista de salida MIDI y clip en el timeline](/screenshots/Midi-Track-Timeline.png)
+Los controladores, los pedales y las pistas MIDI se explican en
+[MIDI](/es/docs/tasks/midi/).

@@ -992,8 +992,11 @@ describe("user guide screenshots", function () {
     await AppPage.resetShell();
     const view = async () => (await AppPage.songView())!;
     const regionNamed = async (name: string) => (await view()).regions.find((r) => r.name === name)!;
+    // Each block frames the timeline itself: the previous one may have left
+    // the camera scrolled away from what this one needs.
     await setTimelineView({ zoomLevel: 0.0625 });
     await browser.pause(800);
+    await setTimelineView({ cameraX: 0 });
     const before = await regionNamed("Voy Cantando");
     if (!before) throw new Error("no Voy Cantando");
     const toolbar = await rectOf(".lt-timeline-topline");
@@ -1050,5 +1053,131 @@ describe("user guide screenshots", function () {
     if (!restored) throw new Error("warp: song length was not restored");
     await rec2.encode();
     await closeToolbarGroup("toolbar-warp");
+  });
+
+  it("popovers and routing", async () => {
+    await ensureSession();
+    await AppPage.resetShell();
+
+    /** Opens a topbar popover by its arrow and captures it, a screenful at a time. */
+    const popoverShots = async (splitId: string, name: string) => {
+      // Voice guide and pads hide their settings while off: switch them on
+      // for the capture and back off afterwards.
+      const toggle = await $(`${tour(splitId)} > button:nth-of-type(1)`);
+      const wasOn = ((await toggle.getAttribute("class")) ?? "").includes("is-active");
+      if (!wasOn && splitId !== "topbar-metronome") {
+        await toggle.click();
+        await browser.pause(1200);
+      }
+      await (await $(`${tour(splitId)} > button:nth-of-type(2)`)).click();
+      await browser.pause(800);
+      const pages = await runInPage(() => {
+        const panel = document.querySelector(".lt-pads-popover") as HTMLElement | null;
+        if (!panel) return 0;
+        const scroller =
+          (Array.from(panel.querySelectorAll<HTMLElement>("*")).find((el) => el.scrollHeight > el.clientHeight + 8 &&
+            getComputedStyle(el).overflowY !== "visible") ?? panel);
+        scroller.setAttribute("data-guide", "pop-scroller");
+        scroller.scrollTop = 0;
+        const overflow = scroller.scrollHeight - scroller.clientHeight;
+        return overflow <= 8 ? 1 : Math.min(4, 1 + Math.ceil(overflow / (scroller.clientHeight - 60)));
+      });
+      if (!pages) throw new Error(`${name}: popover did not open`);
+      for (let page = 0; page < pages; page++) {
+        await runInPage((p: number) => {
+          const sc = document.querySelector('[data-guide="pop-scroller"]') as HTMLElement | null;
+          if (sc) sc.scrollTop = p * (sc.clientHeight - 60);
+        }, page);
+        await browser.pause(300);
+        await annotatedShot(`${name}${pages > 1 ? `-${page + 1}` : ""}`, [{ selector: ".lt-pads-popover", pad: 2 }], {
+          style: "spotlight",
+          crop: { marks: 24 },
+        });
+      }
+      await browser.keys(["Escape"]);
+      await browser.pause(400);
+      if (!wasOn && splitId !== "topbar-metronome") {
+        await toggle.click();
+        await browser.pause(600);
+      }
+    };
+
+    await popoverShots("topbar-metronome", "metronome-popover");
+    await popoverShots("topbar-voice-guide", "voice-guide-popover");
+    await popoverShots("topbar-pads", "pads-popover");
+
+    // The pad manager (official packs + the user's own pads).
+    const padToggle = await $(`${tour("topbar-pads")} > button:nth-of-type(1)`);
+    const padWasOn = ((await padToggle.getAttribute("class")) ?? "").includes("is-active");
+    if (!padWasOn) {
+      await padToggle.click();
+      await browser.pause(1200);
+    }
+    await (await $(`${tour("topbar-pads")} > button:nth-of-type(2)`)).click();
+    await browser.pause(700);
+    await (await $(await tagByText(".lt-pads-popover button", "Gestor de pads", "pad-manager"))).click();
+    await browser.pause(1200);
+    await shot("pad-manager", { selector: '.lt-modal-backdrop [role="dialog"], .lt-modal-backdrop section', margin: 12 });
+    await browser.keys(["Escape"]);
+    await browser.pause(500);
+    await browser.keys(["Escape"]);
+    if (!padWasOn) {
+      await padToggle.click();
+      await browser.pause(600);
+    }
+
+    // A track's output selector, open.
+    // A track inside a folder: the case that also offers "Heredado (Carpeta)".
+    await runInPage(() => {
+      const header = Array.from(document.querySelectorAll(".lt-track-header.is-folder")).find(
+        (h) => (h.querySelector(".lt-track-title-row strong")?.textContent ?? "").trim() === "Dios es Real",
+      );
+      const toggleEl = header?.querySelector(".lt-folder-toggle") as HTMLElement | null;
+      if (toggleEl && toggleEl.textContent?.trim() === "+") toggleEl.click();
+    });
+    await browser.pause(1500);
+    const track = await tagByText(".lt-track-header:not(.is-folder):not(.is-automation)", "Keys", "track");
+    await (await $(`${track} .lt-audio-route-trigger`)).click();
+    await browser.pause(600);
+    await annotatedShot(
+      "track-route-list",
+      [
+        { selector: `${track} .lt-audio-route-trigger`, pad: 2, noBox: true },
+        { selector: ".lt-audio-route-list", pad: 2 },
+      ],
+      { style: "spotlight", crop: { marks: 30 } },
+    );
+    await browser.keys(["Escape"]);
+  });
+
+  it("midi", async () => {
+    await ensureSession();
+    await AppPage.resetShell();
+    await setTimelineView({ zoomLevel: 0.25 });
+    await browser.pause(800);
+    await setTimelineView({ cameraX: 0 });
+    // The MIDI clip on "MIDI Luces": its editor, opened from its menu.
+    await rightClick(".lt-track-lane.is-midi .lt-automation-hotspot");
+    await menuShot("menu-midi-clip", ".lt-track-lane.is-midi .lt-automation-hotspot");
+    await rightClick(".lt-track-lane.is-midi .lt-automation-hotspot");
+    await (await $(await tagByText(".lt-context-menu button", "Editar MIDI", "menu-item"))).click();
+    await browser.pause(900);
+    await shot("midi-clip-editor", { selector: '[role="dialog"]', margin: 12 });
+    // The MIDI editor does not close on Escape: use its own Cancel button.
+    await (await $(await tagByText('[role="dialog"] button', "Cancelar", "dialog-cancel"))).click();
+    await browser.pause(500);
+
+    // The MIDI track's own menu and its routing window.
+    // The MIDI track row, not the automation lane (which shares the header class).
+    const header = await tagByText(".lt-midi-track-header:not(.is-automation)", "MIDI Luces", "midi-header");
+    // Aim at the name text: the header's centre is the power button.
+    const name = `${header} .lt-midi-header-text`;
+    await rightClick(name, { fx: 0.3 });
+    await menuShot("menu-midi-track", header);
+    await rightClick(name, { fx: 0.3 });
+    await (await $(await tagByText(".lt-context-menu button", "Enrutado MIDI", "menu-item"))).click();
+    await browser.pause(800);
+    await shot("midi-route", { selector: '[aria-labelledby="lt-midi-route-title"]', margin: 12 });
+    await (await $(await tagByText('[aria-labelledby="lt-midi-route-title"] button', "Cancelar", "dialog-cancel"))).click();
   });
 });

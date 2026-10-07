@@ -1,0 +1,111 @@
+---
+title: MIDI
+description: "Cómo manejar LibreTracks con un pedal o controlador MIDI (MIDI Learn) y cómo enviar MIDI desde la línea de tiempo a teclados, mesas de luces o software de letras con pistas MIDI."
+sidebar:
+  order: 7
+---
+
+LibreTracks habla MIDI en los dos sentidos:
+
+- **Entrada**: un pedal, un pad o un controlador maneja la app (reproducir,
+  saltar, Vamp…).
+- **Salida**: una **pista MIDI** envía notas, controles y cambios de programa
+  en momentos exactos de la canción, a un teclado, a la mesa de luces o al
+  software de letras.
+
+## Conectar un controlador
+
+En **Configuración › MIDI**, elige el **Dispositivo de entrada MIDI**. Si lo
+enchufas con la app abierta, pulsa el botón de refrescar de al lado.
+
+![Pestaña MIDI de la Configuración](/guide/desktop/settings-midi.png)
+
+Si el cable se suelta en pleno directo, aparece el aviso **Controlador MIDI
+desconectado** en la barra superior, y la app lo vuelve a abrir sola en
+cuanto lo enchufas otra vez. No hace falta ir a la Configuración.
+
+En el móvil también funcionan los controladores **Bluetooth**: en la pestaña
+MIDI, **Buscar dispositivos Bluetooth**.
+
+## Asignar pedales y botones (MIDI Learn)
+
+La forma de asignarlos está en
+[Configuración › MIDI Learn](/es/docs/interface/settings/#midi-learn).
+Qué se puede manejar:
+
+- **Transporte**: reproducir, pausar, detener, canción anterior y siguiente.
+- **Saltos**: a cada marca de sección y a cada canción (pestañas *Marcas* y
+  *Canciones*), cancelar el salto, y el modo, los compases y la transición de
+  los saltos.
+- **Vamp**: encender y apagar, modo (sección o compases) y número de compases.
+- **Tono**: subir, bajar o restablecer la transposición de la canción
+  seleccionada; seleccionar la canción anterior o siguiente.
+- **Interruptores**: metrónomo y voz guía.
+- **Valores con un control giratorio** (CC): BPM, volumen del metrónomo,
+  compases de los saltos y del Vamp.
+- **Vídeo**: negro, fundido a negro, pantalla de reposo y activar la salida.
+- **Sesión**: nuevo, abrir, guardar, guardar como, deshacer, rehacer y crear
+  una marca en el cursor.
+
+## Enviar MIDI desde la canción
+
+### 1. Elegir la salida
+
+En **Configuración › MIDI**, **Salida MIDI** es el puerto por defecto por el
+que salen las pistas MIDI. **Enviar nota de prueba** comprueba que llega al
+otro lado.
+
+### 2. Crear una pista MIDI
+
+Clic derecho en el hueco bajo las pistas, o en una pista, › **Añadir pista
+MIDI**. Puedes tener varias: una por cada aparato que quieras controlar.
+
+Su menú (clic derecho en la cabecera):
+
+![Menú de una pista MIDI](/guide/desktop/menu-midi-track.png)
+
+- **Enrutado MIDI**: el **puerto** (el cable) y el **canal** (de 1 a 16) por
+  los que salen sus mensajes. *Salida por defecto* usa el puerto de la
+  Configuración.
+
+![Enrutado MIDI de una pista](/guide/desktop/midi-route.png)
+
+- **Desactivar pista MIDI**: deja de enviar sin borrar nada (también con el
+  botón de encendido de la cabecera). Útil en un ensayo sin luces.
+
+### 3. Añadir mensajes
+
+Clic derecho en la pista MIDI, en el punto exacto › **Añadir MIDI aquí**. Se
+abre el editor:
+
+![Editor de un clip MIDI](/guide/desktop/midi-clip-editor.png)
+
+- **Nombre**: para reconocerlo en la línea de tiempo (*Luces del coro*).
+- **Añadir mensaje**, de cuatro tipos:
+  - **Nota**: nota, velocidad y duración (0 = un toque).
+  - **Control**: un CC con su valor.
+  - **Programa**: un cambio de programa (cambiar de sonido o de escena).
+  - **Curva de control**: un CC que va de un valor a otro durante un
+    tiempo, para fundidos suaves.
+- **Desfase (s)**: cuánto después del punto del clip sale ese mensaje.
+- **Canal (opcional)**: para que un mensaje salga por otro canal que el de la
+  pista.
+- Los mensajes que coinciden en el tiempo salen en el orden de la lista; usa
+  **Subir** y **Bajar** para cambiarlo.
+- **Probar MIDI** envía los mensajes ahora mismo, sin guardar, para comprobar
+  que el aparato responde.
+
+El clip aparece en la pista como una marca con su nombre. Clic derecho en él:
+
+![Menú de un clip MIDI](/guide/desktop/menu-midi-clip.png)
+
+**Editar MIDI** o **Eliminar MIDI**. Los clips MIDI se arrastran para moverlos,
+viajan con su canción cuando la mueves y van dentro de las canciones
+exportadas.
+
+## LibreTracks como dispositivo MIDI (móvil)
+
+En Android e iOS, LibreTracks puede publicarse como un **dispositivo MIDI
+virtual**: otras apps del mismo móvil o tablet lo ven como un puerto de entrada
+y de salida. Se activa en Configuración › MIDI › **Publicar puerto MIDI
+virtual LibreTracks**.
