@@ -1,0 +1,107 @@
+---
+title: Cambio de tono, warp y el botón T
+description: "Cómo cambiar el tono y el tempo de una canción en LibreTracks: transposición por canción, warp, BPM original y el botón T de cada pista para que el click y la guía no se desafinen."
+---
+
+import Clip from "../../../../components/guide/Clip.astro";
+
+Tres controles deciden cómo suena cada canción, y conviene no mezclarlos:
+
+| Control | Dónde está | Qué hace |
+| --- | --- | --- |
+| **Transposición** | Barra de herramientas, con la canción seleccionada | Sube o baja el tono, de −12 a +12 semitonos |
+| **Warp** | Barra de herramientas, con la canción seleccionada | Separa tono y velocidad: el audio sigue el tempo del timeline sin desafinarse |
+| **T** | Cabecera de cada pista | Decide si esa pista cambia de tono al transponer (solo con warp) |
+
+El modelo es el mismo que Warp en Ableton Live.
+
+## Transponer una canción
+
+1. Haz clic en el nombre de la canción, en la regla, para seleccionarla.
+2. En la barra de herramientas, abre **Transposición** con su botón de ajustes.
+3. Pulsa <kbd>+</kbd> o <kbd>−</kbd>: cada pulsación es un semitono.
+
+<Clip
+  src="/guide/desktop/transpose-varispeed.mp4"
+  poster="/guide/desktop/transpose-varispeed.webp"
+  caption="+2 semitonos con el warp apagado: la canción sube de tono y además se acorta, y su tonalidad pasa de D a E."
+/>
+
+Lo que ocurre depende del warp:
+
+- **Warp apagado** (lo normal al empezar): funciona como acelerar o frenar una
+  cinta. Subir el tono **acorta** la canción y bajarlo la alarga. Las canciones
+  siguientes se recolocan solas para no solaparse. Todas las pistas cambian, sin
+  excepción.
+- **Warp encendido**: el tono cambia y la duración **no**. Es lo que quieres
+  casi siempre en directo.
+
+La tonalidad de la canción (la letra junto a su nombre) se transpone sola, y la
+etiqueta *+2 st* recuerda que está transpuesta.
+
+## Encender el warp
+
+Con la canción seleccionada, abre **Warp** en la barra de herramientas y pulsa
+el interruptor.
+
+<Clip
+  src="/guide/desktop/warp-on.mp4"
+  poster="/guide/desktop/warp-on.webp"
+  caption="Al encender el warp, la canción conserva el tono nuevo y recupera su duración original."
+/>
+
+Al encenderlo, LibreTracks guarda el tempo actual de la canción como su
+**BPM original**: el tempo al que se grabó el audio. A partir de ahí:
+
+- Si cambias el **BPM** de la canción, el audio se estira o se encoge para
+  seguirlo, **sin cambiar de tono**. El panel lo muestra como
+  *140 → 132 (×0,943)*.
+- Si el BPM original no es el correcto (por ejemplo, el audio se grabó a 72 y
+  la sesión decía 70), corrígelo en el menú de la canción ›
+  **Cambiar BPM original**.
+
+:::caution[El warp consume procesador]
+Cada pista con warp cuesta más procesador que una sin él. En un ordenador o
+un móvil modesto, enciéndelo solo en las canciones que lo necesiten y vigila
+el [medidor de recursos](/es/docs/interface/main-screen/#lecturas-y-medidor-de-recursos).
+:::
+
+## El botón T: pistas que no deben cambiar de tono
+
+Al transponer, el **click**, la **guía hablada** o un **pad** grabado en su
+tonalidad no deberían cambiar. Para eso está el botón **T** de cada pista:
+
+- **T encendido** (por defecto): la pista sigue la transposición.
+- **T apagado**: la pista se queda en su tono original, pero sigue el tempo del
+  warp, así que no se desincroniza.
+
+El botón **T** solo tiene efecto con el **warp encendido**. Con el warp
+apagado, transponer cambia la velocidad, y una pista que no la cambiara se
+desincronizaría al instante; por eso, sin warp, todas las pistas cambian.
+
+| Warp | Transposición | T de la pista | Resultado |
+| --- | --- | --- | --- |
+| Apagado | 0 | cualquiera | Audio original |
+| Apagado | ≠ 0 | cualquiera | Cambia el tono **y** la duración (todas las pistas) |
+| Encendido | 0 | cualquiera | Sigue el tempo; tono original |
+| Encendido | ≠ 0 | encendido | Cambia el tono; duración según el warp |
+| Encendido | ≠ 0 | apagado | Tono original; duración según el warp |
+
+## Receta para el directo
+
+1. Monta la sesión con el BPM al que se grabó cada canción y el warp apagado.
+2. Si la banda pide la canción **más rápida o más lenta**, enciende el warp y
+   cambia el BPM.
+3. Si pide **otra tonalidad**, enciende el warp y transpón. Apaga la **T** de
+   las pistas de click y guía.
+4. Haz los cambios de tono **antes de dar a Play**, o entre canciones. Cambiar
+   el tono mientras suena obliga al motor a recolocar sus voces y, en equipos
+   modestos, puede producir pequeños cortes.
+
+## Por qué las marcas no se mueven de su sitio musical
+
+Las marcas, los bordes de las canciones y los cambios de tempo y compás se
+guardan en la posición del **audio original**. Cuando el warp o la
+transposición cambian la duración de una canción, todo se desplaza con ella y
+sigue cayendo en el mismo punto musical: el Coro sigue empezando donde empieza
+el Coro.

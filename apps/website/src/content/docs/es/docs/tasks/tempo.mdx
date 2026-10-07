@@ -1,0 +1,87 @@
+---
+title: Tempo y compás
+description: "Cómo ajustar el tempo y el compás de cada canción en LibreTracks: el campo BPM, Tap, cambios de tempo y de compás a mitad de canción, y qué depende de ellos (rejilla, metrónomo, voz guía, saltos)."
+sidebar:
+  order: 5
+---
+
+import Clip from "../../../../../components/guide/Clip.astro";
+
+El tempo y el compás no mueven el audio: lo que hacen es decirle a LibreTracks
+**dónde caen los compases y los tiempos**. De ellos dependen la rejilla y el
+imán, los números de la regla, el **metrónomo**, la cuenta de la
+**voz guía**, los saltos *tras X compases* y el Vamp por compases. Si el
+metrónomo no cuadra con la música, lo que hay que corregir es el tempo.
+
+Cada canción tiene el suyo. Cuando importas una canción, llega con su tempo y
+su compás ya puestos en su inicio.
+
+:::note[¿Y si quiero que la música vaya más rápida?]
+Cambiar el BPM no acelera el audio. Para eso está el **warp**: con el warp de la
+canción encendido, el audio se estira para seguir el tempo de la línea de
+tiempo sin cambiar de tono. Ver
+[Cambio de tono, warp y el botón T](/es/docs/pitch-and-warp/).
+:::
+
+## Cambiar el tempo de un tramo
+
+En la barra superior:
+
+- **BPM**: escribe el tempo y pulsa <kbd>Intro</kbd>. Cambia el tramo de tempo
+  en el que está el cursor; la etiqueta *Tempo @ 6:12.4* te dice dónde empieza
+  ese tramo. Acepta decimales (por ejemplo, 152,8).
+- **Tap**: pulsa al ritmo de la música. Desde el segundo toque calcula el
+  tempo con la media de los últimos ocho, y lo aplica al mismo tramo. Si
+  pasan más de dos segundos y medio sin tocar, la cuenta empieza de nuevo.
+
+Ninguno de los dos crea un cambio de tempo nuevo: corrigen el que ya hay.
+
+## Cambiar de tempo a mitad de canción
+
+1. Haz **clic derecho en la regla**, en el punto donde cambia el tempo.
+2. Elige **Cambiar BPM del timeline**.
+3. Escribe el tempo nuevo.
+
+<Clip
+  src="/guide/desktop/tempo-change.mp4"
+  poster="/guide/desktop/tempo-change.webp"
+  caption="Clic derecho en la regla › Cambiar BPM del timeline: desde ese punto, la canción va a 132."
+/>
+
+Aparece una marca turquesa con el BPM. Desde ahí hasta el siguiente cambio, todo
+va a ese tempo. Si haces lo mismo al principio de la sesión, cambias el tempo
+de partida en vez de crear una marca.
+
+Clic derecho en la marca: **Cambiar BPM** o **Borrar marca** (el tramo vuelve
+al tempo anterior). En el móvil, la barra de acciones › **…** › **Tempo** crea
+el cambio en la posición del cursor.
+
+## Cambiar de compás
+
+Igual que el tempo: clic derecho en la regla › **Crear marca de compás**, y
+escribe la métrica (por ejemplo, `6/8` o `3/4`).
+
+<Clip
+  src="/guide/desktop/time-signature-change.mp4"
+  poster="/guide/desktop/time-signature-change.webp"
+  caption="Clic derecho en la regla › Crear marca de compás › 6/8: la regla se renumera desde ese punto."
+/>
+
+- El numerador va de 1 a 32 y el denominador puede ser 1, 2, 4, 8, 16 o 32.
+- El campo **Compás** de la barra superior funciona distinto del BPM: con el
+  cursor al principio de la sesión cambia el compás de partida, y en cualquier
+  otro punto **crea un cambio de compás** en la posición del cursor.
+- Clic derecho en la marca de compás: **Cambiar compás** o **Borrar marca**.
+
+La voz guía cuenta según el compás: en 3/4 dice «1, 2, 3», en 5/4 cuenta hasta
+cinco.
+
+## Comprobar que el tempo es el bueno
+
+1. Enciende el **metrónomo** (botón *Click*).
+2. Reproduce la canción: el clic tiene que caer con la batería.
+3. Si se adelanta o se atrasa poco a poco, el tempo está mal: usa *Tap* o
+   escribe el valor exacto.
+4. Si va bien pero desplazado, el inicio de la canción no está en un tiempo
+   fuerte. Mueve la canción (o el audio) hasta que el primer golpe caiga en el
+   inicio de un compás.

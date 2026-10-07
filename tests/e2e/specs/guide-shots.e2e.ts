@@ -937,4 +937,118 @@ describe("user guide screenshots", function () {
     if (orderAfter.join("|") === orderBefore.join("|")) throw new Error("track-reorder: order did not change");
     await rec3.encode();
   });
+
+  it("clips: tempo", async () => {
+    await ensureSession();
+    await AppPage.resetShell();
+    const view = async () => (await AppPage.songView())!;
+    const song = (await view()).regions.find((r) => r.name === "Único Dios");
+    if (!song) throw new Error("no Único Dios");
+    await setTimelineView({ zoomLevel: 0.25 });
+    await browser.pause(800);
+    const cam = Math.max(0, song.startSeconds * 0.25 * 18 - 120);
+    await setTimelineView({ cameraX: cam });
+    const lanes = await rectOf(".lt-track-layers");
+    const ruler = await rectOf(tour("timeline-ruler"));
+    if (!lanes || !ruler) throw new Error("no ruler");
+    const xAt = (seconds: number) => lanes.x + seconds * 0.25 * 18 - cam;
+    const clip = { x: lanes.x - 40, y: ruler.y - 10, w: 1000, h: 300 };
+    const at = song.startSeconds + (song.endSeconds - song.startSeconds) * 0.45;
+    const replaceDialogValue = async (rec: Recorder, value: string) => {
+      await (await $("#lt-dialog-input")).waitForDisplayed({ timeout: 5000 });
+      await browser.keys(["Control", "a"]);
+      await browser.keys(["Control"]);
+      await rec.type(value);
+      await rec.hold(0.4);
+      await rec.key("Enter", 900);
+    };
+
+    const tempoBefore = (await view()).tempoMarkers.length;
+    const rec = new Recorder(cdp, "tempo-change", clip, outDir, { x: xAt(at) + 160, y: ruler.y + 200 });
+    await rec.hold(0.4);
+    await rec.rightClick({ x: xAt(at), y: ruler.y + 30 });
+    await rec.click(await tagByText(".lt-context-menu button", "Cambiar BPM del timeline", "menu-item"));
+    await replaceDialogValue(rec, "132");
+    await rec.hold(1.4);
+    if ((await view()).tempoMarkers.length !== tempoBefore + 1) throw new Error("tempo-change: no tempo marker created");
+    await rec.encode();
+
+    const sigBefore = (await view()).timeSignatureMarkers.length;
+    const at2 = song.startSeconds + (song.endSeconds - song.startSeconds) * 0.7;
+    const rec2 = new Recorder(cdp, "time-signature-change", clip, outDir, { x: xAt(at2) + 160, y: ruler.y + 200 });
+    await rec2.hold(0.4);
+    await rec2.rightClick({ x: xAt(at2), y: ruler.y + 30 });
+    await rec2.click(await tagByText(".lt-context-menu button", "Crear marca de comp", "menu-item"));
+    await replaceDialogValue(rec2, "6/8");
+    await rec2.hold(1.4);
+    if ((await view()).timeSignatureMarkers.length !== sigBefore + 1) {
+      throw new Error("time-signature-change: no time signature marker created");
+    }
+    await rec2.encode();
+  });
+
+  it("clips: pitch and warp", async () => {
+    await ensureSession();
+    await AppPage.resetShell();
+    const view = async () => (await AppPage.songView())!;
+    const regionNamed = async (name: string) => (await view()).regions.find((r) => r.name === name)!;
+    await setTimelineView({ zoomLevel: 0.0625 });
+    await browser.pause(800);
+    const before = await regionNamed("Voy Cantando");
+    if (!before) throw new Error("no Voy Cantando");
+    const toolbar = await rectOf(".lt-timeline-topline");
+    const ruler = await rectOf(tour("timeline-ruler"));
+    const vp = await viewport();
+    if (!toolbar || !ruler) throw new Error("no toolbar");
+    const lastRight = await runInPage(() =>
+      Math.max(...Array.from(document.querySelectorAll(".lt-region-hotspot")).map((el) => el.getBoundingClientRect().right)),
+    );
+    // From the toolbar down to the first lanes, and only as wide as the songs:
+    // full width shrinks the change out of sight at column size.
+    const clipLeft = Math.max(0, ruler.x - 20);
+    const clip = {
+      x: clipLeft,
+      y: toolbar.y - 6,
+      w: Math.min(vp.w - clipLeft, lastRight + 160 - clipLeft),
+      h: ruler.y + ruler.h + 60 - toolbar.y,
+    };
+    const bar = await runInPage(() => {
+      const bars = Array.from(document.querySelectorAll(".lt-region-hotspot"));
+      bars.forEach((el) => el.removeAttribute("data-guide"));
+      const target = bars.find((el) => (el.textContent ?? "").includes("Voy Cantando"));
+      target?.setAttribute("data-guide", "voy");
+      return Boolean(target);
+    });
+    if (!bar) throw new Error("no Voy Cantando bar");
+
+    // 1) +2 semitones with warp off: varispeed, the song gets shorter.
+    const rec = new Recorder(cdp, "transpose-varispeed", clip, outDir, { x: vp.w * 0.6, y: ruler.y + 120 });
+    await rec.hold(0.5);
+    await rec.click('[data-guide="voy"]');
+    await rec.click(`${tour("toolbar-transpose")} .lt-control-popover-trigger`);
+    const up = 'button[aria-label="Subir un semitono la region seleccionada"]';
+    await rec.click(up, 900);
+    await rec.click(up, 1200);
+    await rec.hold(1.6);
+    const afterPitch = await regionNamed("Voy Cantando");
+    if (afterPitch.transposeSemitones !== 2) throw new Error(`transpose: semitones ${afterPitch.transposeSemitones}`);
+    const shorter = afterPitch.endSeconds - afterPitch.startSeconds < before.endSeconds - before.startSeconds - 1;
+    if (!shorter) throw new Error("transpose: song did not get shorter without warp");
+    await rec.encode();
+    await closeToolbarGroup("toolbar-transpose");
+
+    // 2) Warp on: the song keeps the new key and gets its length back.
+    const rec2 = new Recorder(cdp, "warp-on", clip, outDir, { x: vp.w * 0.6, y: ruler.y + 120 });
+    await rec2.hold(0.5);
+    await rec2.click(`${tour("toolbar-warp")} .lt-control-popover-trigger`);
+    await rec2.click('button[aria-label="Activar warp en la region seleccionada"]', 1500);
+    await rec2.hold(1.8);
+    const afterWarp = await regionNamed("Voy Cantando");
+    if (!afterWarp.warpEnabled) throw new Error("warp: not enabled");
+    const restored =
+      Math.abs(afterWarp.endSeconds - afterWarp.startSeconds - (before.endSeconds - before.startSeconds)) < 1;
+    if (!restored) throw new Error("warp: song length was not restored");
+    await rec2.encode();
+    await closeToolbarGroup("toolbar-warp");
+  });
 });
