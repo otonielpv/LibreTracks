@@ -47,7 +47,17 @@ function AudioRouteComboboxImpl({ value, options, ariaLabel, onChange }: Props) 
     setListMounted(node !== null);
   }, []);
 
-  const selectedIndex = options.findIndex((o) => o.value === value);
+  // A session saved before tracks leaving a folder were reset can hold
+  // "inherit" on a track with no folder. The engine plays that through
+  // Master and the list only offers "inherit" inside a folder, so show it as
+  // what it is instead of the raw word.
+  const shownValue =
+    !options.some((o) => o.value === value) &&
+    value.trim().toLowerCase() === "inherit" &&
+    options.some((o) => o.value === "master")
+      ? "master"
+      : value;
+  const selectedIndex = options.findIndex((o) => o.value === shownValue);
   const selectedLabel = selectedIndex >= 0 ? options[selectedIndex].label : value;
 
   // El desplegable vive en `document.body` con posicion fija, asi que nadie lo
@@ -245,7 +255,7 @@ function AudioRouteComboboxImpl({ value, options, ariaLabel, onChange }: Props) 
             onClick={(event) => event.stopPropagation()}
           >
             {options.map((option, index) => {
-              const isSelected = option.value === value;
+              const isSelected = option.value === shownValue;
               const isActive = index === activeIndex;
               return (
                 <li

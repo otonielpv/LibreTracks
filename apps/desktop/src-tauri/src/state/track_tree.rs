@@ -45,6 +45,7 @@ pub(super) fn reparent_track(
     if should_force_inherit_route {
         root_track.audio_to = "inherit".to_string();
     }
+    clear_orphan_inherit_route(root_track);
 
     let insert_index = resolve_insert_index(
         tracks,
@@ -70,11 +71,23 @@ pub(super) fn delete_track_and_repair_hierarchy(
         for track in tracks.iter_mut() {
             if track.parent_track_id.as_deref() == Some(track_id) {
                 track.parent_track_id = deleted_track.parent_track_id.clone();
+                clear_orphan_inherit_route(track);
             }
         }
     }
 
     Ok(deleted_track)
+}
+
+/// A track with no folder above it has nothing to inherit from: the engine
+/// already plays an "inherit" route like that through Master
+/// (`effective_track_audio_to`), but the stored value stayed "inherit" and
+/// the output selector, which only offers "Heredado (Carpeta)" inside a
+/// folder, showed the raw word. Store what is actually heard.
+fn clear_orphan_inherit_route(track: &mut Track) {
+    if track.parent_track_id.is_none() && track.audio_to.trim().eq_ignore_ascii_case("inherit") {
+        track.audio_to = "master".to_string();
+    }
 }
 
 pub(super) fn resolve_insert_index(

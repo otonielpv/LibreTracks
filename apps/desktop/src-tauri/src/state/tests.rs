@@ -902,6 +902,46 @@ fn reparent_track_sets_inherit_route_when_entering_new_folder() {
     assert_eq!(moved.audio_to, "inherit");
 }
 
+// Leaving every folder must not keep "inherit": the selector only offers it
+// inside a folder and showed the raw word; Master is what the engine plays.
+#[test]
+fn reparent_track_out_of_every_folder_turns_inherit_into_master() {
+    let mut tracks = hierarchy_song().tracks;
+    let child_a = tracks
+        .iter_mut()
+        .find(|track| track.id == "track_child_a")
+        .expect("child should exist");
+    child_a.audio_to = "inherit".to_string();
+
+    super::reparent_track(&mut tracks, "track_child_a", None, None, None)
+        .expect("moving to the top level should succeed");
+
+    let moved = tracks
+        .iter()
+        .find(|track| track.id == "track_child_a")
+        .expect("moved track should exist");
+    assert_eq!(moved.parent_track_id, None);
+    assert_eq!(moved.audio_to, "master");
+}
+
+#[test]
+fn deleting_a_top_level_folder_turns_its_inheriting_children_to_master() {
+    let mut tracks = hierarchy_song().tracks;
+    for track in tracks.iter_mut().filter(|t| t.parent_track_id.as_deref() == Some("track_folder_a")) {
+        track.audio_to = "inherit".to_string();
+    }
+
+    super::delete_track_and_repair_hierarchy(&mut tracks, "track_folder_a")
+        .expect("deleting the folder should succeed");
+
+    let child = tracks
+        .iter()
+        .find(|track| track.id == "track_child_a")
+        .expect("child should survive its folder");
+    assert_eq!(child.parent_track_id, None);
+    assert_eq!(child.audio_to, "master");
+}
+
 #[test]
 fn reparent_track_keeps_manual_route_when_reordering_inside_same_folder() {
     let mut tracks = hierarchy_song().tracks;
