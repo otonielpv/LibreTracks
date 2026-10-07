@@ -387,6 +387,15 @@ export class Recorder {
   /** Writes <name>.mp4 and <name>.webp (poster = last frame) next to the shots. */
   async encode() {
     await runInPage((id: string) => document.getElementById(id)?.remove(), CURSOR_ID);
+    // The concat demuxer decodes every entry with the FIRST file's codec: the
+    // JPEG frames of realtime() between PNGs were dropped ("Invalid PNG
+    // signature") and playback came out as a still picture. One format.
+    for (const f of this.frames) {
+      if (!f.file.endsWith(".jpg")) continue;
+      const png = f.file.replace(/\.jpg$/, ".png");
+      execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", f.file, png]);
+      f.file = png;
+    }
     const list = this.frames
       .map((f) => `file '${f.file.replace(/\\/g, "/")}'\nduration ${f.seconds.toFixed(4)}`)
       .join("\n");
