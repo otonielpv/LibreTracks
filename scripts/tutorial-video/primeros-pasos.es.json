@@ -5,43 +5,135 @@
   "scenes": [
     {
       "id": "01-intro",
-      "text": "Hola. En este vídeo vas a montar tu primera canción en LibreTracks y a tocarla en directo. Solo necesitas los stems de la canción: un audio por instrumento, en una carpeta de tu ordenador."
+      "text": "Hola. En este vídeo vas a montar tu primera canción en LibreTracks, paso a paso, y a tocarla en directo. Solo necesitas los stems de la canción: un audio por instrumento, en una carpeta de tu ordenador."
     },
     {
       "id": "02-crear",
-      "text": "Al abrir la aplicación ves la pantalla de inicio. Pulsa Crear, y elige el nombre y la carpeta de la sesión. Una sesión es tu repertorio: puede tener una sola canción, o todo el set."
+      "text": "Lo primero es crear una sesión. Pulsa Crear. En la ventana que se abre eliges dónde guardarla, en la carpeta o el disco que quieras, y le pones un nombre. Una sesión es tu repertorio: puede tener una sola canción, o todo el set del domingo.",
+      "camera": [
+        {
+          "t": 0,
+          "x": 0,
+          "y": 0,
+          "w": 1920
+        },
+        {
+          "t": 3.6,
+          "x": 0,
+          "y": 0,
+          "w": 1920
+        },
+        {
+          "t": 4.4,
+          "x": 0,
+          "y": 0,
+          "w": 980
+        },
+        {
+          "t": 11.4,
+          "x": 0,
+          "y": 0,
+          "w": 980
+        },
+        {
+          "t": 12.2,
+          "x": 0,
+          "y": 0,
+          "w": 1920
+        }
+      ]
     },
     {
       "id": "03-arrastrar",
-      "text": "Ahora abre la carpeta con los stems, selecciónalos todos, y arrástralos a la línea de tiempo. Se crea la canción, con cada audio en su propia pista. LibreTracks usa tus archivos desde donde están: no los copia."
+      "text": "Ahora abre la carpeta con los stems, selecciónalos todos, y arrástralos a la línea de tiempo. Se crea la canción, con cada audio en su propia pista. LibreTracks usa tus archivos desde donde están: no los copia.",
+      "camera": [
+        {
+          "t": 0,
+          "x": 0,
+          "y": 0,
+          "w": 1920
+        },
+        {
+          "t": 1.4,
+          "x": 0,
+          "y": 0,
+          "w": 1920
+        },
+        {
+          "t": 2.2,
+          "x": 0,
+          "y": 0,
+          "w": 1060
+        },
+        {
+          "t": 5.4,
+          "x": 0,
+          "y": 0,
+          "w": 1060
+        },
+        {
+          "t": 6.2,
+          "x": 0,
+          "y": 0,
+          "w": 1920
+        }
+      ]
     },
     {
-      "id": "04-biblioteca",
+      "id": "04-renombrar",
+      "text": "La canción se crea con un nombre genérico. Haz clic derecho en su barra, en la regla, elige Renombrar canción, y escribe su nombre."
+    },
+    {
+      "id": "05-nota",
+      "text": "En ese mismo menú, Nota de la canción indica su tonalidad. Aparece junto al nombre, en la vista Live y en el remote. Y si después cambias el tono, la nota se transpone sola."
+    },
+    {
+      "id": "06-biblioteca",
       "text": "Todo ese audio queda también en la Biblioteca. Desde ahí puedes ordenarlo en carpetas, y arrastrar una carpeta entera para crear otra canción."
     },
     {
-      "id": "06-tempo",
-      "text": "Escribe el tempo de la canción en el campo BPM, y enciende el click. Al reproducir, el click tiene que caer justo con la batería."
+      "id": "07-carpetas",
+      "text": "Para tener las pistas ordenadas, agrúpalas en carpetas. Selecciona varias con Control y clic, haz clic derecho, Mover a carpeta, Carpeta nueva, y dale un nombre. La carpeta se pliega, y su mute, su solo y su volumen afectan a todas sus pistas."
     },
     {
-      "id": "07-marcas",
-      "text": "Ahora marca las secciones. Haz clic derecho en la regla, al comienzo de cada parte, elige Crear marca, Secciones, y su tipo: intro, verso, coro."
+      "id": "08-tempo",
+      "text": "Escribe el tempo de la canción en el campo BPM, y enciende el click. Al darle a reproducir, el click tiene que caer justo con la batería."
     },
     {
-      "id": "08-guia",
-      "text": "Con las marcas puestas, enciende la Guía. Antes de cada sección, una voz le dice a la banda qué viene, y le cuenta la entrada."
+      "id": "09-master",
+      "text": "Cada canción tiene su propio volumen master. Selecciona la canción, y ajústalo en la barra de herramientas. Sirve para igualar canciones que vienen más fuertes o más flojas, y no afecta al click ni a la guía."
     },
     {
-      "id": "09-salidas",
-      "text": "Para que el click y la guía suenen solo en los oídos de la banda, elige la salida de audio de cada pista. La música va a Master, hacia la mesa. El click, a otra salida de tu interfaz."
+      "id": "10-tono",
+      "text": "Para cambiar el tono, selecciona la canción, abre Transposición, y súbelo. Con el warp apagado, funciona como acelerar una cinta: sube el tono, pero también la velocidad. Fíjate en cómo se acorta la canción."
     },
     {
-      "id": "10-live",
-      "text": "Y a tocar. Pulsa Tab hasta la vista Live: cada sección es un botón grande. Tócalo y la canción salta a esa parte, en el momento justo."
+      "id": "11-warp",
+      "text": "Si enciendes el warp, el tono sigue cambiado, pero la velocidad se mantiene: la canción recupera su duración. Y con el warp encendido, apaga la T del click y de la guía, para que no cambien de tono."
     },
     {
-      "id": "11-final",
-      "text": "Guarda con Control S, y listo. Si quieres más detalle de cualquier paso, tienes la guía completa en libretracks punto com. ¡A tocar!"
+      "id": "12-secciones",
+      "text": "Ahora las marcas. Hay dos tipos. Las secciones van en la fila de abajo: intro, verso, coro. Sirven para saltar en directo, y la voz guía las anuncia. Se crean con clic derecho en la regla, Crear marca, Secciones."
+    },
+    {
+      "id": "13-avisos",
+      "text": "Los avisos van en la fila de arriba: indicaciones para la banda, como entra batería, o última vez. Y para cambiar una marca de tipo, basta con arrastrarla de una fila a la otra."
+    },
+    {
+      "id": "14-guia",
+      "text": "Con las marcas puestas, enciende la Guía. Escucha: antes de cada sección, una voz la anuncia, y cuenta la entrada."
+    },
+    {
+      "id": "15-salidas",
+      "text": "Para que el click y la guía suenen solo en los oídos de la banda, elige la salida de audio de su carpeta. La música va a Master, hacia la mesa. El click y la guía, a otra salida de tu interfaz."
+    },
+    {
+      "id": "16-live",
+      "text": "Y a tocar. Pulsa Tab hasta la vista Live: cada sección es un botón grande. Tócalo, y la canción salta a esa parte en el momento justo."
+    },
+    {
+      "id": "17-final",
+      "text": "Guarda con Control S, y listo. Tienes la guía completa, botón a botón, en libretracks punto com. ¡A tocar!"
     }
   ]
 }

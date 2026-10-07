@@ -1,5 +1,5 @@
 import { browser } from "@wdio/globals";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { rectOf, runInPage, type Box } from "./annotate.js";
@@ -37,6 +37,8 @@ const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) /
 
 export class Recorder {
   private frames: Array<{ file: string; seconds: number }> = [];
+  /** App audio recorded during realtime() moments: where it goes in the clip. */
+  private audioClips: Array<{ at: number; wav: string; trim: number }> = [];
   private dir: string;
   cursor: Point;
   private index = 0;
@@ -90,14 +92,16 @@ export class Recorder {
   }
 
   /** Captures the current screen and holds it for `seconds`. */
-  async frame(seconds = 1 / FPS) {
+  async frame(seconds = 1 / FPS, fast = false) {
     const scale = this.video ? this.video.width / (this.clip.w * this.video.dpr) : 1;
     const { data } = await this.cdp<{ data: string }>("Page.captureScreenshot", {
-      format: "png",
+      // JPEG during realtime capture: PNG encoding at 1080p halves the frame rate.
+      format: fast ? "jpeg" : "png",
+      ...(fast ? { quality: 90 } : {}),
       clip: { x: this.clip.x, y: this.clip.y, width: this.clip.w, height: this.clip.h, scale },
       captureBeyondViewport: false,
     });
-    const file = path.join(this.dir, `${String(this.index++).padStart(5, "0")}.png`);
+    const file = path.join(this.dir, `${String(this.index++).padStart(5, "0")}.${fast ? "jpg" : "png"}`);
     writeFileSync(file, Buffer.from(data, "base64"));
     this.frames.push({ file, seconds });
   }
@@ -349,11 +353,35 @@ export class Recorder {
     let last = Date.now();
     while (Date.now() < end) {
       await this.drawCursor();
-      await this.frame(0);
+      await this.frame(0, true);
       const now = Date.now();
       this.frames[this.frames.length - 1].seconds = (now - last) / 1000;
       last = now;
     }
+  }
+
+  /**
+   * realtime() while recording what the app plays (loopback of the default
+   * speaker, scripts/tutorial-video/loopback.py). The WAV and where it starts
+   * in this clip are written next to the clip as <name>.audio.json.
+   */
+  async realtimeWithAudio(ms: number, loopbackScript: string) {
+    const wav = path.join(this.dir, `audio-${this.audioClips.length}.wav`);
+    const proc = spawn("python", [loopbackScript, wav, String(ms / 1000 + 1.5)], { stdio: ["ignore", "pipe", "inherit"] });
+    const start = await new Promise<number>((resolve, reject) => {
+      let buf = "";
+      proc.stdout.on("data", (d: Buffer) => {
+        buf += d.toString();
+        const m = buf.match(/START ([0-9.]+)/);
+        if (m) resolve(Number(m[1]));
+      });
+      proc.on("exit", () => reject(new Error("loopback recorder exited before starting")));
+    });
+    const at = this.seconds;
+    const t0 = Date.now() / 1000;
+    await this.realtime(ms);
+    await new Promise((resolve) => proc.on("exit", resolve));
+    this.audioClips.push({ at, wav, trim: Math.max(0, t0 - start) });
   }
 
   /** Writes <name>.mp4 and <name>.webp (poster = last frame) next to the shots. */
@@ -402,6 +430,14 @@ export class Recorder {
     execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", last.file, "-quality", "82", path.join(this.outDir, `${this.name}.webp`)], {
       stdio: "inherit",
     });
+    if (this.audioClips.length > 0) {
+      const kept = this.audioClips.map((c, i) => {
+        const dest = path.join(this.outDir, `${this.name}.audio-${i}.wav`);
+        execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-ss", c.trim.toFixed(3), "-i", c.wav, dest]);
+        return { at: c.at, wav: path.basename(dest) };
+      });
+      writeFileSync(path.join(this.outDir, `${this.name}.audio.json`), JSON.stringify(kept, null, 2));
+    }
     rmSync(this.dir, { recursive: true, force: true });
     console.log(`[guideshots] wrote ${this.name}.mp4 (${this.frames.length} frames)`);
   }

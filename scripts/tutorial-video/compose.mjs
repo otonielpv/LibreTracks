@@ -39,6 +39,26 @@ const toStamp = (sec) => {
   return `${h}:${m}:${s},${String(ms % 1000).padStart(3, "0")}`;
 };
 
+/**
+ * Camera keyframes ({t, x, y, w} in source pixels, 16:9) for scenes recorded
+ * from the desktop at true size, as a zoompan filter: linear between
+ * keyframes, held before the first and after the last.
+ */
+function cameraFilter(keys) {
+  const piece = (field) => {
+    let expr = String(keys[keys.length - 1][field]);
+    for (let i = keys.length - 2; i >= 0; i--) {
+      const a = keys[i];
+      const b = keys[i + 1];
+      const lerp = `${a[field]}+(${b[field] - a[field]})*(it-${a.t})/${Math.max(0.001, b.t - a.t)}`;
+      expr = `if(lt(it,${b.t}),${lerp},${expr})`;
+    }
+    return `if(lt(it,${keys[0].t}),${keys[0][field]},${expr})`;
+  };
+  const w = piece("w");
+  return `zoompan=z='1920/(${w})':x='${piece("x")}':y='${piece("y")}':d=1:s=1920x1080:fps=30,`;
+}
+
 const parts = [];
 const cues = [];
 let clock = 0;
@@ -50,12 +70,32 @@ for (const scene of script.scenes) {
   const videoLen = probe(video);
   const len = Math.max(videoLen, LEAD + voiceLen + TAIL);
   const part = path.join(work, `${scene.id}.mp4`);
+  // The app's own audio (click, voice guide, the song) recorded during the
+  // scene's playback moments, placed where it happened and ducked under the
+  // narration so the voice always stays on top.
+  const audioMeta = path.join(scenesDir, `${scene.id}.audio.json`);
+  const appClips = existsSync(audioMeta) ? JSON.parse(readFileSync(audioMeta, "utf8")) : [];
+  const inputs = ["-i", video, "-i", voice];
+  for (const clip of appClips) inputs.push("-i", path.join(scenesDir, clip.wav));
+  const ms = (s) => Math.round(s * 1000);
+  let audioGraph = `[1:a]adelay=${ms(LEAD)}|${ms(LEAD)},apad,aresample=48000,asplit=2[voice][key];`;
+  if (appClips.length > 0) {
+    appClips.forEach((clip, i) => {
+      audioGraph += `[${i + 2}:a]aresample=48000,adelay=${ms(clip.at)}|${ms(clip.at)},volume=0.8[app${i}];`;
+    });
+    audioGraph +=
+      appClips.map((_, i) => `[app${i}]`).join("") +
+      `amix=inputs=${appClips.length}:normalize=0,apad[appmix];` +
+      `[appmix][key]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=450:makeup=1[ducked];` +
+      `[voice][ducked]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.89:level=false[a]`;
+  } else {
+    audioGraph += `[key]anullsink;[voice]anull[a]`;
+  }
   ff([
-    "-i", video,
-    "-i", voice,
+    ...inputs,
     "-filter_complex",
-    `[0:v]fps=30,scale=1920:1080:flags=lanczos,setsar=1,tpad=stop_mode=clone:stop_duration=${(len - videoLen + 0.1).toFixed(2)}[v];` +
-      `[1:a]adelay=${Math.round(LEAD * 1000)}|${Math.round(LEAD * 1000)},apad,aresample=48000[a]`,
+    `[0:v]fps=30,scale=1920:1080:flags=lanczos,${scene.camera ? cameraFilter(scene.camera) : ""}setsar=1,tpad=stop_mode=clone:stop_duration=${(len - videoLen + 0.1).toFixed(2)}[v];` +
+      audioGraph,
     "-map", "[v]", "-map", "[a]",
     "-t", len.toFixed(3),
     "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
