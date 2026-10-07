@@ -1212,4 +1212,50 @@ describe("user guide screenshots", function () {
     await (await $(await tagByText(".lt-modal-backdrop button", "Cerrar", "dialog-close"))).click();
     await browser.pause(400);
   });
+
+  it("compact and live views", async () => {
+    await ensureSession();
+    await AppPage.resetShell();
+    const viewBtn = (n: number) => `${tour("view-mode-switcher")} button:nth-of-type(${n})`;
+
+    await (await $(viewBtn(2))).click();
+    await browser.pause(2000);
+    const col = await tag(".lt-compact-song-column", "col0");
+    await annotatedShot("compact-view", [
+      { selector: `${col} .lt-song-reorder-handle`, n: 1, badge: "above", pad: 2 },
+      { selector: `${col} .lt-compact-song-play`, n: 2, badge: "above", pad: 2 },
+      { selector: `${col} .lt-compact-song-name`, n: 3, badge: "above" },
+      { selector: `${col} .lt-compact-song-master, ${col} .lt-compact-song-fader`, n: 4, badge: "below" },
+      { selector: `${col} .lt-compact-clip-entry`, n: 5 },
+      { selector: ".lt-compact-column-resizer", n: 6, badge: "below", pad: 2 },
+      { selector: ".lt-compact-view-add-song", n: 7 },
+      { selector: ".lt-compact-view-import-song", n: 8 },
+      { selector: ".lt-compact-mixer", n: 9, pad: 0 },
+    ]);
+    // The desktop mixer is always visible (the show/hide toggle is mobile only,
+    // and ".lt-compact-mixer-toggle" also matches every strip's M/S buttons).
+    const strip = await tag(".lt-compact-mixer-strip", "strip0");
+    await annotatedShot(
+      "compact-mixer",
+      [
+        { selector: `${strip} .lt-compact-mixer-strip-name`, n: 1, badge: "above" },
+        { selector: `${strip} .lt-compact-mixer-strip-toggles`, n: 2, badge: "above" },
+        { selector: `${strip} .lt-compact-mixer-pan`, n: 3 },
+        { selector: `${strip} .lt-compact-mixer-fader`, n: 4 },
+        { selector: `${strip} .lt-compact-mixer-audio-to`, n: 5, badge: "below" },
+      ],
+      { crop: { selector: ".lt-compact-mixer", margin: 12 } },
+    );
+
+    await (await $(viewBtn(3))).click();
+    await browser.pause(2500);
+    await annotatedShot("live-view", [
+      { selector: ".lt-live-header", n: 1, pad: 2 },
+      { selector: ".lt-live-settings", n: 2, pad: 2 },
+      { selector: ".lt-live-cue-panel", n: 3, pad: 2 },
+      { selector: ".lt-live-setlist", n: 4, pad: 2 },
+    ]);
+    await (await $(viewBtn(1))).click();
+    await browser.pause(1200);
+  });
 });

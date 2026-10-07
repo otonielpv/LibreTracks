@@ -3,9 +3,28 @@ title: Vista Compacta
 description: "Usa la Vista Compacta de LibreTracks para ver canciones en columnas, mezclar, arrastrar, importar desde Reaper o Ableton y reordenar pistas."
 ---
 
+import Legend from "../../../../components/guide/Legend.astro";
+
 La **Vista Compacta** es una segunda proyeccion del mismo proyecto. La vista DAW (timeline lineal) y la vista compacta comparten el mismo modelo: lo que haces en una se ve inmediatamente en la otra. 
 
-![Vista Compacta](/screenshots/Compact-View.webp)
+![Vista Compacta con sus controles numerados](/guide/desktop/compact-view.png)
+
+<Legend>
+
+1. **Asa**: arrastra la canción por aquí para cambiarla de puesto en el
+   repertorio. Con el asa seleccionada, las flechas la mueven de una en una.
+2. **Play** de la canción: la toca ya si no suena nada, o programa el salto a
+   ella si está sonando otra.
+3. **Nombre**, BPM y tonalidad. Clic para seleccionar la canción; clic derecho
+   para su menú.
+4. **Master** de la canción, con su medidor.
+5. **Clips** de la canción, en el orden de sus pistas.
+6. **Borde de la columna**: arrástralo para hacerla más ancha o más estrecha.
+7. **+ Nueva canción**: una canción vacía al final del repertorio.
+8. **Importar .ltpkg**: añade una canción exportada.
+9. **Mezclador** compartido por todas las canciones.
+
+</Legend>
 
 Rota entre las vistas con la tecla `Tab` (y `Shift+Tab` para ir en sentido contrario), o elige una con los botones `view_timeline` / `view_module` / `stadium` de la barra de herramientas. La tercera es la [Vista Live](/es/docs/live-view/), para el directo.
 
@@ -72,6 +91,19 @@ Tambien puedes **arrastrar un `.ltpkg` desde el explorador del sistema** a cualq
 Tambien puedes soltar un unico Reaper `.rpp` o Ableton `.als` sobre la tira compacta. LibreTracks lo convierte en material de cancion y lo anade al final del setlist. Usa `Archivo` -> `Importar Reaper/Ableton` si prefieres importar mediante dialogo.
 
 ### 2) Strip Inferior — Mixer Compacto
+
+![Una tira del mezclador compacto](/guide/desktop/compact-mixer.png)
+
+<Legend>
+
+1. **Nombre** de la pista o carpeta. En las carpetas, cuántas pistas lleva
+   dentro; despliégala para ver sus tiras.
+2. **M**, **S** y **T** (silenciar, solo y transposición).
+3. **Panorama**.
+4. **Volumen** en dB, con su medidor.
+5. **Salida de audio**.
+
+</Legend>
 
 Un mixer horizontal con una columna por pista del proyecto: nombre, M/S/T, fader vertical teal con vumetro post-fader, slider de pan azul, y selector de routing. Las pistas que son `folder` tienen un fondo mas oscuro y un borde-acento mas grueso a la izquierda; las pistas hijas muestran un `↳ Nombre Carpeta` debajo del nombre y una banda fina con el color del padre, al estilo Reaper. Si una pista tiene color asignado, ese color se usa como acento.
 

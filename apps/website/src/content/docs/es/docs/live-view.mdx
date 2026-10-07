@@ -3,9 +3,20 @@ title: Vista Live
 description: "Vista Live de LibreTracks: las marcas de la canción como botones grandes, repertorio siempre visible, ajustes de salto y vamp a un toque, en PC, tablet y móvil."
 ---
 
-La **Vista Live** es la tercera proyección del mismo proyecto, pensada para el momento de tocar. No edita nada: muestra en grande lo único que necesitas sobre el escenario — a dónde puedes saltar, qué está sonando ahora y qué viene después.
+import Legend from "../../../../components/guide/Legend.astro";
 
-![Vista Live en escritorio](/screenshots/Live-View.png)
+La **Vista Live** es la tercera proyección del mismo proyecto, pensada para el momento de tocar. No edita nada (salvo el orden del repertorio): muestra en grande lo único que necesitas sobre el escenario — a dónde puedes saltar, qué está sonando ahora y qué viene después.
+
+![Vista Live en escritorio con sus zonas numeradas](/guide/desktop/live-view.png)
+
+<Legend>
+
+1. **Cabecera**: la canción que suena, su BPM y su tonalidad.
+2. **Ajustes de directo**: salto de marca, salto de canción y Vamp.
+3. **Marcas del directo**: un botón grande por marca.
+4. **Repertorio**: la canción actual con lo que queda, y el resto de canciones.
+
+</Legend>
 
 Cambia de vista con los tres botones de la barra (`view_timeline` para la vista DAW, `view_module` para la Vista Compacta y `stadium` para la Vista Live) o rotando entre ellas con `Tab`; `Shift+Tab` rota en sentido contrario.
 
@@ -39,6 +50,11 @@ Cada marca de la canción seleccionada es un botón grande y numerado, con el co
 ### Repertorio
 
 La columna de repertorio muestra la canción actual con su progreso y el tiempo que queda, y debajo el resto de canciones de la sesión con su botón de play. Seleccionar una canción muestra sus marcas sin saltar a ella, así puedes preparar el siguiente tema mientras suena el actual.
+
+Para cambiar el orden del repertorio, arrastra una canción por su **asa** (los
+seis puntos a su izquierda): el resto se aparta para enseñarte dónde va a caer.
+La canción se mueve entera, con su audio, marcas y tempo. Es lo único que se
+puede editar desde la Vista Live.
 
 ## En Móvil Y Tablet
 
