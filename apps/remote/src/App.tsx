@@ -2191,7 +2191,7 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
         <article className="transport-control-card transport-control-card-group remote-control-card">
           <div className="remote-control-card-head">
             <div>
-              <small>Vamp / Loop</small>
+              <small>{STRINGS.widgetDeckVamp}</small>
               <strong>{vampSummary}</strong>
             </div>
             <button
@@ -2216,7 +2216,7 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
         <article className="transport-control-card transport-control-card-group remote-control-card">
           <div className="remote-control-card-head">
             <div>
-              <small>Jump Config</small>
+              <small>{STRINGS.widgetDeckJump}</small>
               <strong>{jumpModeSummary}</strong>
             </div>
             <button
@@ -2241,7 +2241,7 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
         <article className="transport-control-card transport-control-card-song transport-control-card-group remote-control-card">
           <div className="remote-control-card-head">
             <div>
-              <small>Song Transition</small>
+              <small>{STRINGS.widgetDeckSong}</small>
               <strong>{songSummary}</strong>
             </div>
             <button

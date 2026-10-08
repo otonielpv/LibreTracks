@@ -1,0 +1,227 @@
+---
+title: Remote personalizable
+description: "Controla LibreTracks desde el navegador de una tablet o un móvil: conectar, transporte, saltos, marcas, mezclador, metrónomo, guía y pads, y cómo diseñar tus propias pestañas de widgets."
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+
+El **Remote** es LibreTracks en el navegador de otro dispositivo: una tablet en
+el atril, el móvil del batería, el del director musical. No hay que instalar
+nada. Controla la misma sesión que tienes abierta en el ordenador: lo que
+pulsas en el Remote pasa en el ordenador, y lo que pasa en el ordenador se ve
+en el Remote.
+
+El Remote **no reproduce audio**. El sonido sale siempre del ordenador; el
+Remote es solo un mando.
+
+## Conectar
+
+1. En LibreTracks, pulsa **Remote** en la barra lateral.
+2. El ordenador y la tablet tienen que estar en la **misma red** (la misma
+   Wi‑Fi, o el ordenador por cable al mismo router).
+3. En la tablet, **escanea el código QR** con la cámara, o escribe en el
+   navegador una de las dos direcciones que aparecen.
+
+![Panel de conexión del Remote en el ordenador](/guide/desktop/remote-modal.png)
+
+- **URL por IP** funciona en cualquier dispositivo.
+- **URL por hostname (.local)** es más fácil de recordar y no cambia aunque
+  el router le dé otra IP al ordenador, pero no todos los dispositivos la
+  entienden: si no abre, usa la de IP.
+
+Puedes conectar **varios dispositivos a la vez**: cada uno con su propio
+diseño de pantalla. LibreTracks tiene que seguir abierto en el ordenador
+mientras usas el Remote.
+
+:::tip[Si no conecta]
+Comprueba que los dos están en la misma red y que la Wi‑Fi no es de
+«invitados» (suelen aislar los dispositivos entre sí). En Windows, si el
+cortafuegos está bloqueando el Remote, el propio panel lo avisa con un botón
+**Permitir en el cortafuegos** (Windows pide confirmación de administrador).
+:::
+
+En un **móvil**, el Remote está pensado para usarse en **vertical**. Si lo
+abres en horizontal te pide girarlo, con la opción **Usarlo en horizontal
+igualmente**. En una tablet funciona en las dos orientaciones.
+
+## La pestaña Controles
+
+Es lo primero que ves. Así la monta LibreTracks en una tablet:
+
+![Pestaña Controles del Remote en una tablet](/guide/remote/remote-controls.png)
+
+<Legend>
+
+1. **Pestañas**: Controles, Mixer y Herramientas. Puedes cambiarlas, crear
+   más y renombrarlas (ver [Diseñar tus pestañas](#diseñar-tus-pestañas)).
+2. **Estado**: Detenido, Reproduciendo o Pausado.
+3. **Editar layout**: entra en el editor para mover, añadir o quitar
+   bloques.
+4. **Tamaño**: `−` y `+` agrandan o encogen todo el Remote (cuatro niveles),
+   sin cambiar dónde está cada cosa. Útil si lo miras desde lejos.
+5. **Lecturas**: tiempo, compás y pulso, BPM, compás musical y la canción
+   que suena.
+6. **Transporte**: Reproducir, Pausa, Detener, y los interruptores del
+   **Click** y la **Guía** de voz.
+7. **Línea de tiempo** de la canción, con sus marcas y el cursor. Arrastra
+   para moverte. El botón de la esquina activa **Saltar al tocar**: con él
+   encendido, un toque en la línea lleva el cursor ahí.
+8. **Vamp / Loop**: cómo se repite (la sección actual o unos compases).
+   **VAMP** lo activa; **CONFIG** abre sus ajustes.
+9. **Config de salto**: cuándo ocurre un salto a una marca: **Inmediato**, al
+   cabo de unos **Compases**, o en la **Siguiente** marca.
+10. **Transición de canción**: cuándo se pasa a otra canción (al momento, al
+    cabo de unos compases, en la siguiente marca o al final de la canción) y
+    cómo (con **corte limpio** o con **fade out**).
+11. **Cancelar salto**: anula el salto que está esperando.
+12. **Canciones** del repertorio, con su tonalidad si la tienen. Toca una para
+    seleccionarla. A la derecha, **Transponer** cambia el tono de la canción
+    seleccionada en semitonos.
+13. **Saltar a canción**: salta a la canción seleccionada, con la transición
+    que tengas configurada.
+14. **Marcas** de la canción. Toca una para saltar a ella según la Config de
+    salto; la que va a sonar lleva la etiqueta **SIGUIENTE**. Los **avisos**
+    aparecen con borde discontinuo, para que la banda los vea venir. La `×`
+    oculta una marca en este dispositivo (la quita del Remote, no de la
+    sesión); **Mostrar ocultas** las vuelve a enseñar.
+
+</Legend>
+
+Los tres **CONFIG** abren un panel flotante encima del diseño; se cierra
+tocando fuera, con su `×` o con `Escape`.
+
+Saltos, Vamp y transiciones funcionan igual que en el ordenador: los detalles
+están en [Control en vivo](/es/docs/live-control-flow/).
+
+## La pestaña Mixer
+
+![Pestaña Mixer del Remote](/guide/remote/remote-mixer.png)
+
+<Legend>
+
+1. **Solo canción activa**: muestra solo las pistas que suenan en la canción
+   actual. Apagado, salen todas.
+2. **Master de la canción**: el volumen de la canción seleccionada (el mismo
+   que en el ordenador). No afecta al click ni a la guía.
+3. **Pista**: su tipo (Audio, Carpeta, MIDI) y su nombre, con su color.
+4. **Panorama**: izquierda, centro o derecha. Toca **Centro** para volver al
+   centro.
+5. **Volumen** en dB, con su medidor.
+6. **M** (mute), **S** (solo) y **T** (si la pista sigue la
+   [transposición](/es/docs/pitch-and-warp/)).
+7. Una **carpeta**: su fader mueve todas las pistas que tiene dentro.
+
+</Legend>
+
+Las tiras se desplazan en horizontal con el dedo cuando no caben.
+
+## La pestaña Herramientas
+
+![Pestaña Herramientas del Remote](/guide/remote/remote-tools.png)
+
+<Legend>
+
+1. **Metrónomo**: encendido, volumen, salida, acento, el sonido y el tono del
+   acento y del pulso, y la subdivisión con su propio sonido y volumen. Ver
+   [Salidas de audio y metrónomo](/es/docs/audio-routing-metronome/).
+2. **Guía de voz**: encendida, volumen, salida, idioma, con cuántos compases
+   de antelación avisa y si cuenta la entrada. Ver [Voz guía](/es/docs/voice-guide/).
+3. **Pads de ambiente**: encendidos, pack, salida, tonalidad (o que siga la de
+   la canción), volumen, entrada y salida suaves y si se paran con la
+   reproducción. Ver [Pads de ambiente](/es/docs/ambient-pads/).
+
+</Legend>
+
+Los packs de pads se descargan y se gestionan en el ordenador; el Remote
+muestra los que ya tienes instalados.
+
+## Diseñar tus pestañas
+
+Cada músico necesita cosas distintas: el batería quiere el click y las marcas
+grandes; el director, los saltos y las canciones. Con **Editar layout**
+montas tu propia pantalla con bloques (**widgets**) y la repartes en las
+pestañas que quieras.
+
+![Barra del editor de layout y los controles de un widget](/guide/remote/remote-edit.png)
+
+<Legend>
+
+1. **Listo**: guarda los cambios y sale del editor.
+2. **Cancelar**: sale deshaciendo todo lo que hayas cambiado desde que
+   entraste.
+3. **Posición libre** / **Desplazar**: cómo se colocan los widgets. En
+   *Posición libre* pueden solaparse y nada se mueve solo. En *Desplazar*, al
+   soltar un widget encima de otro, el de abajo (y los que tiene debajo) bajan
+   para hacerle sitio.
+4. **Alto de las pestañas**: hace la barra de pestañas más alta, para
+   acertar con el dedo.
+5. **Exportar**, **Importar** y **Restaurar layout** (ver abajo).
+6. Cada **pestaña**: `‹ ›` la cambian de orden, el lápiz la renombra y la `×`
+   la borra (la última no se puede borrar).
+7. **+ Pestaña**: añade una pestaña vacía.
+8. La **barra de título** del widget: arrástrala para moverlo.
+9. **Ancho** (`↔`) y **alto** (`↕`) con botones, y **Quitar** para eliminar el
+   widget.
+10. **Esquina**: arrástrala para cambiar el tamaño con el dedo.
+
+</Legend>
+
+Al entrar en el editor se abre la **paleta de widgets** en la parte de abajo.
+Arrastra uno hasta su sitio en la rejilla (verás el hueco que va a ocupar) o
+tócalo para añadirlo al final. **Ocultar widgets** la recoge si te tapa algo;
+**Mostrar widgets** la vuelve a abrir.
+
+![Paleta de widgets](/guide/remote/remote-palette.png)
+
+Están agrupados así:
+
+- **Información**: las lecturas juntas o una a una (tiempo, compás/beat, BPM,
+  compás, nombre de canción, nombre de proyecto).
+- **Transporte**: el transporte entero o cada botón suelto (Reproducir,
+  Pausa, Detener, Click, Guía), la línea de tiempo y **Negro**, que pone en
+  negro la salida de vídeo (el proyector) y lo quita al volver a tocarlo.
+- **Control en directo**: el panel de control entero o sus partes (Vamp,
+  Config de salto, Transición de canción, Canción y transposición), el botón
+  Saltar a canción, la rejilla de marcas, y lecturas para la banda:
+  **siguiente sección**, **siguiente canción**, **tonalidad**, barras de
+  progreso **hasta la siguiente sección o canción** y cuentas atrás **en
+  segundos o en compases**.
+- **Canciones**: la **vista compacta de canciones**, con sus clips (la
+  activa o **todas**, en una fila con desplazamiento horizontal). Su play
+  empieza la canción, o salta a ella con la transición configurada si ya
+  está sonando otra.
+- **Mezclador**: el mezclador entero o sus partes (filtro de canción, master
+  de canción, faders).
+- **Herramientas**: metrónomo, guía de voz y pads.
+- **Diseño**: **títulos** y **notas** con el texto que quieras, **espacios en
+  blanco**, **separadores** (línea, discontinua o solo espacio) y **grupos**.
+  Suelta un widget dentro de un grupo (el marco se ilumina) y se moverá con
+  él; sácalo para separarlo. Quitar un grupo no quita lo que tiene dentro.
+
+Cada widget se adapta a su tamaño: si lo haces pequeño, las listas largas
+(marcas, faders) se desplazan dentro de él en vez de encogerse hasta no
+leerse.
+
+### Dónde se guarda tu diseño
+
+El diseño se guarda **en ese navegador de ese dispositivo**. Otra tablet, u
+otro navegador en la misma, empieza con el diseño de serie, adaptado a su
+tamaño (móvil, tablet o pantalla grande).
+
+- **Exportar** descarga tu diseño como un archivo `.json`.
+- **Importar** carga un `.json` exportado, por ejemplo en la tablet de otro
+  músico o en un dispositivo nuevo.
+- **Restaurar layout** vuelve al diseño de serie para ese dispositivo.
+
+Si borras los datos del navegador, el diseño se pierde: exporta una copia
+cuando lo tengas listo.
+
+## Consejos para el directo
+
+- Diseña la pantalla **en el mismo dispositivo y la misma orientación** que
+  vas a usar en el escenario, y con el mismo nivel de tamaño.
+- Pon lo esencial (play, marcas, saltos) donde no haga falta desplazarse.
+- Si puedes, conecta el ordenador **por cable** al router y usa una Wi‑Fi
+  dedicada para las tablets. Una Wi‑Fi saturada retrasa los toques.
+- Desactiva el bloqueo automático de pantalla de la tablet durante el
+  concierto.
