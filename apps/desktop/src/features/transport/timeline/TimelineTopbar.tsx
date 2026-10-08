@@ -526,7 +526,7 @@ export function TimelineTopbar({
           <label className="lt-bpm-control" data-lt-tour={TOUR_TARGETS.topbarTimeSignature}>
             <span>Compas</span>
             <input
-              aria-label="Compas de la cancion"
+              aria-label={t("timelineTopbar.songTimeSignatureAria")}
               disabled={!hasSong}
               type="text"
               value={timeSignatureDraft}

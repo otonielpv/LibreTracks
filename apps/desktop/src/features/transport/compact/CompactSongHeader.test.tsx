@@ -58,12 +58,12 @@ describe("CompactSongHeader", () => {
   it("el selector de nota tiene atras y vuelve al menu raiz", () => {
     const { container } = render(renderHeader(false));
     fireEvent.contextMenu(container.firstElementChild!);
-    fireEvent.click(screen.getByText("Nota de la canción ▸"));
+    fireEvent.click(screen.getByText("compactView.songKey ▸"));
     expect(screen.getByText(/Sin nota/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "common.back" }));
     expect(screen.queryByText(/Sin nota/)).toBeNull();
-    expect(screen.getByText("Renombrar canción")).toBeTruthy();
+    expect(screen.getByText("compactView.renameSong")).toBeTruthy();
   });
 
   it("shows the reorder grip only when reordering is wired", () => {

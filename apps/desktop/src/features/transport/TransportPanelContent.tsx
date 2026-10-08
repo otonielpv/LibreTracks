@@ -576,6 +576,7 @@ function TimelineColorPopover({
   onApply,
   onDismiss,
 }: TimelineColorPopoverProps) {
+  const { t } = useTranslation();
   const [draftColor, setDraftColor] = useState(initialColor);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const position = useClampedOverlayPosition(popoverRef, x, y);
@@ -674,7 +675,7 @@ function TimelineColorPopover({
       </label>
       <div className="lt-color-popover-actions">
         <button type="button" onClick={onDismiss}>
-          Cancelar
+          {t("common.cancel")}
         </button>
         <button
           type="button"
@@ -686,7 +687,7 @@ function TimelineColorPopover({
             }
           }}
         >
-          Aplicar
+          {t("common.apply")}
         </button>
       </div>
     </div>

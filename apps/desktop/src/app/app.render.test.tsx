@@ -183,7 +183,7 @@ describe("App / app.render", () => {
     await renderApp();
 
     const signatureInput = screen.getByLabelText(
-      "Compas de la cancion",
+      "Song time signature",
     ) as HTMLInputElement;
     const originalValue = signatureInput.value;
 

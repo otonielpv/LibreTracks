@@ -276,7 +276,7 @@ export function CompactSongHeaderComponent({
         {regionEffectiveKey(region) ? (
           <div
             className="lt-compact-song-key"
-            title="Nota de la canción (con el cambio de tono aplicado)"
+            title={t("compactView.songKeyTitle")}
           >
             {regionEffectiveKey(region)}
           </div>
@@ -299,7 +299,7 @@ export function CompactSongHeaderComponent({
                 <span className="material-symbols-outlined" aria-hidden="true">
                   arrow_back
                 </span>
-                Nota de la canción
+                {t("compactView.songKey")}
               </button>
               <button
                 type="button"
@@ -338,7 +338,7 @@ export function CompactSongHeaderComponent({
                   onRename();
                 }}
               >
-                Renombrar canción
+                {t("compactView.renameSong")}
               </button>
               <button
                 type="button"
@@ -348,7 +348,7 @@ export function CompactSongHeaderComponent({
                   onSetBpm();
                 }}
               >
-                Cambiar BPM…
+                {t("compactView.changeBpm")}
               </button>
               <button
                 type="button"
@@ -360,7 +360,7 @@ export function CompactSongHeaderComponent({
                   setKeyMenuOpen(true);
                 }}
               >
-                Nota de la canción ▸
+                {t("compactView.songKey")} ▸
               </button>
               <button
                 type="button"
@@ -380,7 +380,7 @@ export function CompactSongHeaderComponent({
                   onExport();
                 }}
               >
-                Exportar canción
+                {t("compactView.exportSong")}
               </button>
               <button
                 type="button"
@@ -401,7 +401,7 @@ export function CompactSongHeaderComponent({
                   onDelete();
                 }}
               >
-                Eliminar canción
+                {t("compactView.deleteSong")}
               </button>
             </>
           )}

@@ -650,7 +650,7 @@ function CompactMixerStripComponent({
           aria-pressed={track.transposeEnabled}
           aria-label={`Toggle transpose for ${track.name}`}
           onClick={() => handlers.onToggleTranspose(track.id)}
-          title="Sigue el transpose de la canción"
+          title={t("compactView.followsTranspose")}
         >
           T
         </button>

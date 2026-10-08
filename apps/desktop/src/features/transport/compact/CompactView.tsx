@@ -465,7 +465,7 @@ function CompactViewComponent({
               <span className="material-symbols-outlined">
                 library_music
               </span>
-              <span>Importar aquí</span>
+              <span>{t("compactView.importHere")}</span>
             </div>
           </div>
         ) : null}
@@ -475,18 +475,18 @@ function CompactViewComponent({
             className="lt-compact-view-add-song"
             onClick={handleAddSong}
           >
-            + Nueva canción
+            {t("compactView.newSong")}
           </button>
           <button
             type="button"
             className="lt-compact-view-import-song"
             onClick={onImportSongPackageFromDialog}
-            title="Importar canción desde .ltpkg"
+            title={t("compactView.importPackageTitle")}
           >
             <span className="material-symbols-outlined" aria-hidden="true">
               folder_open
             </span>
-            Importar .ltpkg
+            {t("compactView.importPackage")}
           </button>
         </div>
       </div>
@@ -608,6 +608,7 @@ function CompactSongColumnComponent({
   onWidthChange,
   onResizingChange,
 }: CompactSongColumnProps) {
+  const { t } = useTranslation();
   const regionId = region.id;
   const headerReorderHandleProps = useMemo(
     () => reorderHandleProps?.(regionId),
@@ -777,7 +778,7 @@ function CompactSongColumnComponent({
       >
         {clips.length === 0 && placeholderCount === 0 ? (
           <div className="lt-compact-song-clip-stack-empty">
-            Suelta clips aquí
+            {t("compactView.dropClipsHere")}
           </div>
         ) : (
           clips.map((clip) => (
@@ -822,7 +823,7 @@ function CompactSongColumnComponent({
                 className="lt-compact-clip-entry is-drop-placeholder"
                 aria-hidden="true"
               >
-                <span className="lt-compact-clip-name">Nuevo clip</span>
+                <span className="lt-compact-clip-name">{t("compactView.newClip")}</span>
               </div>
             ))
           : null}
@@ -837,7 +838,7 @@ function CompactSongColumnComponent({
           onPointerDown={(event) => event.stopPropagation()}
         >
           <div className="lt-compact-clip-menu-group">
-            <div className="lt-compact-clip-menu-label">Mover a track</div>
+            <div className="lt-compact-clip-menu-label">{t("compactView.moveToTrack")}</div>
             <div className="lt-compact-clip-menu-list">
               {moveTargets
                 .filter((target) => target.id !== activeClip.trackId)
@@ -857,7 +858,7 @@ function CompactSongColumnComponent({
               {moveTargets.filter((t) => t.id !== activeClip.trackId).length ===
               0 ? (
                 <div className="lt-compact-clip-menu-empty">
-                  No hay otras tracks disponibles
+                  {t("compactView.noOtherTracks")}
                 </div>
               ) : null}
             </div>
@@ -871,7 +872,7 @@ function CompactSongColumnComponent({
               setContextMenu(null);
             }}
           >
-            Eliminar clip
+            {t("compactView.deleteClip")}
           </button>
         </div>
       ) : null}
@@ -888,7 +889,7 @@ function CompactSongColumnComponent({
         aria-valuemin={COMPACT_COLUMN_MIN_WIDTH_REM}
         aria-valuemax={COMPACT_COLUMN_MAX_WIDTH_REM}
         tabIndex={0}
-        title="Arrastra para cambiar el ancho · doble clic para restablecer"
+        title={t("compactView.resizeColumn")}
         className={
           isResizing
             ? "lt-compact-column-resizer is-resizing"

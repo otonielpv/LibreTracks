@@ -212,7 +212,7 @@ describe("App / library", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /renombrar canci/i }));
+      fireEvent.click(screen.getByRole("button", { name: /rename song/i }));
     });
 
     await submitPromptDialog("Renamed Song");
