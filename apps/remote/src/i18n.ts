@@ -25,6 +25,10 @@ function detectLanguage(): RemoteLanguage {
 
 const STRINGS = {
   en: {
+    defaultTabControls: "Controls",
+    defaultTabMixer: "Mixer",
+    defaultTabTools: "Tools",
+    defaultTabMain: "Main",
     appTitle: "Remote",
     time: "Time",
     barBeat: "Bar",
@@ -238,6 +242,10 @@ const STRINGS = {
     cancelEditing: "Cancel",
   },
   es: {
+    defaultTabControls: "Controles",
+    defaultTabMixer: "Mixer",
+    defaultTabTools: "Herramientas",
+    defaultTabMain: "Principal",
     appTitle: "Remote",
     time: "Tiempo",
     barBeat: "Bar",

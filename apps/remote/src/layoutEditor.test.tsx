@@ -506,9 +506,9 @@ describe("layout editor", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /edit layout|editar layout/i }));
 
-    // Default order (before any persistence): Controles, Mixer, Herramientas.
+    // Default order (before any persistence): Controls, Mixer, Tools (the test browser is in English).
     const names = () => screen.getAllByRole("tab").map((el) => el.textContent);
-    expect(names()).toEqual(["Controles", "Mixer", "Herramientas"]);
+    expect(names()).toEqual(["Controls", "Mixer", "Tools"]);
 
     // Move the second tab (Mixer) left; index 0's move-left is disabled.
     const moveLeft = screen.getAllByRole("button", {
@@ -517,14 +517,14 @@ describe("layout editor", () => {
     fireEvent.click(moveLeft[1]);
 
     // Order swapped in the UI and persisted.
-    expect(names()).toEqual(["Mixer", "Controles", "Herramientas"]);
+    expect(names()).toEqual(["Mixer", "Controls", "Tools"]);
     const stored = JSON.parse(
       window.localStorage.getItem("libretracks.remote.layout") ?? "{}",
     );
     expect(stored.tabs.map((t: { name: string }) => t.name)).toEqual([
       "Mixer",
-      "Controles",
-      "Herramientas",
+      "Controls",
+      "Tools",
     ]);
   });
 });

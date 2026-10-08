@@ -1,3 +1,5 @@
+import { getRemoteStrings } from "./i18n";
+
 /**
  * Remote layout model + persistence. Kept free of React/component imports so it
  * can be unit-tested in isolation; the widget registry that binds these types
@@ -259,7 +261,7 @@ export function defaultLayout(profile: LayoutPresetProfile = "standard"): Remote
   const belowY = phone ? deckY + deckH + jumpH : deckY + deckH;
   const controls: LayoutTab = {
     id: newTabId(),
-    name: "Controles",
+    name: getRemoteStrings().defaultTabControls,
     widgets: [
       placement("readouts", 0, 0, LAYOUT_COLUMNS, phone ? 6 : tablet ? 3 : 4),
       placement("transportButtons", 0, phone ? 6 : tablet ? 3 : 4, LAYOUT_COLUMNS, phone ? 3 : tablet ? 3 : 5),
@@ -279,12 +281,12 @@ export function defaultLayout(profile: LayoutPresetProfile = "standard"): Remote
   };
   const mixer: LayoutTab = {
     id: newTabId(),
-    name: "Mixer",
+    name: getRemoteStrings().defaultTabMixer,
     widgets: [placement("mixer", 0, 0, LAYOUT_COLUMNS, 28)],
   };
   const tools: LayoutTab = {
     id: newTabId(),
-    name: "Herramientas",
+    name: getRemoteStrings().defaultTabTools,
     widgets: phone
       ? [
           placement("metronomeSettings", 0, 0, LAYOUT_COLUMNS, DEFAULT_METRONOME_WIDGET_HEIGHT),
@@ -671,7 +673,7 @@ export function normalizeLayout(raw: unknown): RemoteLayout {
     if (widgets.length === 0) {
       return defaultLayout();
     }
-    const tab: LayoutTab = { id: newTabId(), name: "Principal", widgets };
+    const tab: LayoutTab = { id: newTabId(), name: getRemoteStrings().defaultTabMain, widgets };
     return { version: LAYOUT_VERSION, tabs: [tab], activeTabId: tab.id, placementMode, tabHeightRem };
   }
 

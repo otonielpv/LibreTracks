@@ -5195,7 +5195,9 @@ export function App() {
   const presetProfile = currentLayoutPresetProfile();
   const [layout, setLayout] = useState<RemoteLayout>(() => {
     const stored = readStoredLayout();
-    const controls = stored.tabs.find((tab) => tab.name === "Controles") ?? stored.tabs[0];
+    // Layouts saved before the tab names were translated say "Controles".
+    const controlsNames: string[] = [STRINGS.defaultTabControls, "Controles", "Controls"];
+    const controls = stored.tabs.find((tab) => controlsNames.includes(tab.name)) ?? stored.tabs[0];
     // Both the current preset and the previous one (which had no standalone
     // jumpToSongButton row) count as "untouched", so a user who never edited
     // their layout regenerates onto the new shape instead of silently losing

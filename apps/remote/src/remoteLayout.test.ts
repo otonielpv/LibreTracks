@@ -40,7 +40,7 @@ describe("remoteLayout", () => {
 
   it("default layout includes controls, mixer and performance tools", () => {
     const layout = defaultLayout();
-    expect(layout.tabs.map((t) => t.name)).toEqual(["Controles", "Mixer", "Herramientas"]);
+    expect(layout.tabs.map((t) => t.name)).toEqual(["Controls", "Mixer", "Tools"]);
     expect(layout.tabs[2].widgets.map((widget) => widget.type)).toEqual([
       "metronomeSettings",
       "voiceGuideSettings",
@@ -236,7 +236,7 @@ describe("remoteLayout", () => {
       ],
     });
     expect(migrated.tabs).toHaveLength(1);
-    expect(migrated.tabs[0].name).toBe("Principal");
+    expect(migrated.tabs[0].name).toBe("Main");
     expect(migrated.tabs[0].widgets.map((w) => w.type)).toEqual([
       "timeline",
       "currentKey",
