@@ -1491,5 +1491,26 @@ describe("user guide screenshots", function () {
     await wizardButton("^cancelar$");
     await browser.keys(["Escape"]);
     await browser.pause(800);
+
+    // The question about a video's sound comes when a video is PLACED through
+    // the app (the commands above skip it): double-click the library row.
+    await (await $(tour("side-nav-library"))).click();
+    await browser.pause(1200);
+    await runInPage(() => document.querySelector(".lt-library-video-section")?.scrollIntoView({ block: "center" }));
+    await (await $(".lt-library-video-section .lt-library-asset-row")).doubleClick();
+    let prompt = false;
+    for (let i = 0; i < 20 && !prompt; i++) {
+      await browser.pause(500);
+      prompt = Boolean(await rectOf(".lt-video-audio-prompt"));
+    }
+    if (prompt) {
+      await shot("video-audio-prompt", { selector: ".lt-video-audio-prompt", margin: 12 });
+      await (await $(await tagByText(".lt-video-audio-prompt button", "No", "audio-no"))).click();
+      await browser.pause(1000);
+      await browser.keys(["Control", "z"]);
+      await browser.keys(["Control"]);
+    } else {
+      console.log("[guideshots] SKIPPED video-audio-prompt: not asked (choice remembered in settings?)");
+    }
   });
 });

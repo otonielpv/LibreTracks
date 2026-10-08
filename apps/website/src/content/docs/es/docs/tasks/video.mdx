@@ -27,17 +27,41 @@ con warp.
 Formatos: **MP4, MOV, MKV, WebM, AVI y MPG**. Igual que el audio, el vídeo
 se usa **desde donde está** en tu disco, sin copiarlo.
 
-Si el vídeo **tiene sonido**, LibreTracks te pregunta si quieres **extraerlo
-como pista de audio**: queda en una pista nueva debajo del vídeo, alineada con
-él, y así puedes mandarlo a la salida que quieras y mezclarlo como cualquier
-otra pista. Puedes marcar **Recordar mi elección**.
-
 :::tip[Para que los saltos respondan al momento]
 Un vídeo exportado con pocos fotogramas clave tarda en responder cuando
 saltas a otra parte. Si LibreTracks lo detecta, lo avisa con un icono en la
 Biblioteca. Al exportarlo desde tu editor, usa **un fotograma clave por
 segundo**.
 :::
+
+## El sonido del vídeo
+
+Si el vídeo que colocas **tiene sonido**, LibreTracks te pregunta si quieres
+separarlo a una pista de audio normal:
+
+![Pregunta al colocar un vídeo con sonido](/guide/desktop/video-audio-prompt.png)
+
+- **Extraer como pista de audio**: el sonido se guarda como un audio más
+  (un WAV en la Biblioteca) y se coloca en una **pista de audio nueva debajo
+  del vídeo**, alineado con él. A partir de ahí es una pista como cualquier
+  otra: tiene su volumen, su mute y su solo, la mandas a la salida que
+  quieras y la puedes mover o recortar.
+- **No**: el vídeo se coloca sin sonido.
+
+:::caution[El vídeo nunca suena por sí mismo]
+LibreTracks reproduce **solo la imagen** del vídeo. Si no extraes su audio,
+ese sonido no se oye en ningún sitio. Así nunca suenan dos veces la misma
+cosa, y el sonido del vídeo pasa por tu mezcla y tus salidas como el resto.
+:::
+
+Si colocas varios vídeos a la vez, la pregunta sale una sola vez para todos.
+**Recordar mi elección** aplica la misma respuesta a partir de entonces, sin
+volver a preguntar. ¿Dijiste que no y ahora lo quieres? Clic derecho en el
+clip de vídeo → **Extraer audio**.
+
+Como el audio extraído es un archivo de audio normal, **viaja en los
+paquetes** aunque exportes sin los vídeos: la canción suena igual en otro
+equipo.
 
 También puedes crear una pista de vídeo vacía con clic derecho en la zona
 vacía de la lista de pistas → **Añadir pista de vídeo**.
@@ -70,7 +94,8 @@ Clic derecho en un clip:
 - **Dividir en el cursor** (`S`) y **Duplicar** (`Ctrl+D`).
 - **Encaje** de este clip: el de la salida, **Ajustar** (bandas negras),
   **Rellenar** (recorta para llenar la pantalla) o **Estirar**.
-- **Quitar fundidos**, **Color**, **Extraer audio** y **Borrar** (`Supr`).
+- **Quitar fundidos**, **Color**, **Extraer audio** (separa su sonido a una
+  pista de audio, ver [arriba](#el-sonido-del-vídeo)) y **Borrar** (`Supr`).
 
 ## Elegir la pantalla: el asistente
 
