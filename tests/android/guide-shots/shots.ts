@@ -467,6 +467,33 @@ const steps: Record<string, () => Promise<void>> = {
     await sleep(1200);
     await shot("sessions");
   },
+  /** The two settings only a phone has: low latency output and import without copying. */
+  async mobileSettings() {
+    const toggle = async (tab: string, text: string, name: string) => {
+      await tap(`#lt-settings-tab-${tab}`);
+      await sleep(700);
+      await run(
+        (needle: string) =>
+          Array.from(document.querySelectorAll("label.lt-settings-toggle"))
+            .find((l) => (l.textContent ?? "").includes(needle))
+            ?.scrollIntoView({ block: "center" }),
+        text,
+      );
+      await sleep(600);
+      await annotatedShot(name, [{ selector: "label.lt-settings-toggle", text, pad: 4 }], {
+        style: "spotlight",
+        crop: { marks: 70 },
+      });
+    };
+    // A modal left open by the step before (Sessions) would cover the rail.
+    if (await rectOf(".lt-settings-modal-close, .lt-modal-backdrop")) await back();
+    await sleep(500);
+    await tap(tour("side-nav-settings"));
+    await sleep(900);
+    await toggle("audio", "Baja latencia", "settings-low-latency");
+    await toggle("general", "Importar sin copiar", "settings-import-no-copy");
+    await back();
+  },
 };
 
 const argv = process.argv.slice(2);
