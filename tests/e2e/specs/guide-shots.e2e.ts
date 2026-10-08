@@ -1258,4 +1258,99 @@ describe("user guide screenshots", function () {
     await (await $(viewBtn(1))).click();
     await browser.pause(1200);
   });
+
+  it("export, render and cloud", async () => {
+    await ensureSession();
+    await AppPage.resetShell();
+    const clickItem = async (selector: string, text: string) => {
+      await (await $(await tagByText(selector, text, "share-item"))).click();
+      await browser.pause(1200);
+    };
+    const closeModal = async (modal: string) => {
+      await (await $(await tagByText(`${modal} button`, "Cancelar", "share-cancel"))).click();
+      await browser.pause(800);
+    };
+
+    // Song: export and render live in the song bar's menu.
+    await rightClick(".lt-region-hotspot", { fx: 0.3 });
+    await clickItem(".lt-context-menu button", "Exportar Cancion");
+    const songModal = '[aria-labelledby="lt-export-modal-title"]';
+    await annotatedShot(
+      "export-song-modal",
+      [
+        { selector: `${songModal} .lt-export-option`, nth: 0, n: 1 },
+        { selector: `${songModal} .lt-export-option`, nth: 1, n: 2 },
+      ],
+      { crop: { selector: songModal, margin: 16 } },
+    );
+    await closeModal(songModal);
+
+    await rightClick(".lt-region-hotspot", { fx: 0.3 });
+    await clickItem(".lt-context-menu button", "Renderizar audio");
+    const renderModal = '[aria-labelledby="lt-render-modal-title"]';
+    await annotatedShot(
+      "render-modal",
+      [
+        { selector: `${renderModal} .lt-render-track-tools`, n: 1 },
+        { selector: `${renderModal} .lt-render-track-list`, n: 2 },
+        { selector: `${renderModal} .lt-export-option`, nth: 0, n: 3 },
+        { selector: `${renderModal} .lt-export-option`, nth: 1, n: 4 },
+        { selector: `${renderModal} .lt-render-grid`, n: 5 },
+        { selector: `${renderModal} .lt-render-check`, nth: 0, n: 6 },
+        { selector: `${renderModal} .lt-render-check`, nth: 1, n: 7 },
+        { selector: `${renderModal} .lt-render-check`, nth: 2, n: 8 },
+        { selector: `${renderModal} .lt-render-check`, nth: 3, n: 9 },
+        { selector: `${renderModal} .lt-render-file-name`, n: 10 },
+      ],
+      { crop: { selector: renderModal, margin: 16 } },
+    );
+    await closeModal(renderModal);
+
+    // Session: export and the cloud live in the File menu.
+    const fileMenu = `${tour("topbar-file-menu")} .lt-top-menu-trigger`;
+    await (await $(fileMenu)).click();
+    await browser.pause(600);
+    await clickItem(".lt-top-menu-dropdown button", "Exportar sesi");
+    // With the cloud available, export (and import) ask where first.
+    if (await rectOf(".lt-storage-choice-modal")) {
+      await shot("storage-choice", { selector: ".lt-storage-choice-modal", margin: 16 });
+      await clickItem(".lt-storage-choice-modal button", "Este equipo");
+    }
+    const sessionModal = '[aria-labelledby="lt-export-session-modal-title"]';
+    await annotatedShot(
+      "export-session-modal",
+      [
+        { selector: `${sessionModal} .lt-export-option`, nth: 0, n: 1 },
+        { selector: `${sessionModal} .lt-export-option`, nth: 1, n: 2 },
+        { selector: `${sessionModal} .lt-export-option`, nth: 2, n: 3 },
+      ],
+      { crop: { selector: sessionModal, margin: 16 } },
+    );
+    await closeModal(sessionModal);
+
+    await (await $(fileMenu)).click();
+    await browser.pause(600);
+    await clickItem(".lt-top-menu-dropdown button", "Nube");
+    // The harness runs with the developer's own Drive account: wait for the
+    // lists, then blur everything that is theirs (space used, file names).
+    for (let i = 0; i < 30; i++) {
+      const loading = await runInPage(() =>
+        Array.from(document.querySelectorAll(".lt-cloud-modal .lt-cloud-note")).some((n) => /cargando/i.test(n.textContent ?? "")),
+      );
+      if (!loading) break;
+      await browser.pause(500);
+    }
+    await runInPage(() =>
+      document
+        .querySelectorAll<HTMLElement>(
+          ".lt-cloud-modal .lt-cloud-quota > *:not(.lt-cloud-quota-bar):not(.lt-cloud-quota-hint), .lt-cloud-modal .lt-cloud-file-name, .lt-cloud-modal .lt-cloud-file-meta, .lt-cloud-modal .lt-cloud-file-size",
+        )
+        .forEach((el) => {
+          el.style.filter = "blur(6px)";
+        }),
+    );
+    await shot("cloud-panel", { selector: ".lt-cloud-modal", margin: 16 });
+    await (await $(".lt-cloud-modal .lt-settings-modal-close")).click();
+    await browser.pause(600);
+  });
 });

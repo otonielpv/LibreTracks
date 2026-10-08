@@ -156,7 +156,7 @@ export default defineConfig({
             { label: "Ambient Pads", translations: { es: "Pads de ambiente" }, slug: "docs/ambient-pads" },
             { label: "Automation", translations: { es: "Automatizaciones" }, slug: "docs/automation" },
             { label: "Custom Remote", translations: { es: "Remote personalizable" }, slug: "docs/remote-control" },
-            { label: "Integration & Ecosystem", translations: { es: "Integración y ecosistema" }, slug: "docs/integration-ecosystem" },
+            { label: "Export, Import & Share", translations: { es: "Exportar, importar y compartir" }, slug: "docs/integration-ecosystem" },
           ],
         },
       ],

@@ -1,0 +1,226 @@
+---
+title: Exportar, importar y compartir
+description: "Llevar canciones y sesiones a otro equipo o al móvil (.ltpkg y .ltset), la nube con tu Google Drive, renderizar a WAV, plantillas de sesión e importar proyectos de Reaper y Ableton."
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+
+Todo lo que preparas en LibreTracks se puede mover: una canción suelta a la
+sesión de otro músico, la sesión entera al ordenador del directo o al móvil, o
+una mezcla en WAV para quien la necesite. Esta página explica cada camino.
+
+| Quieres… | Usa | Archivo |
+| --- | --- | --- |
+| Pasar **una canción** a otra sesión | Exportar canción | `.ltpkg` |
+| Llevarte **la sesión entera** a otro equipo | Exportar sesión | `.ltset` |
+| Empezar sesiones nuevas con **tus pistas y salidas** | Guardar como plantilla | `.lttemplate` |
+| Mandar **un audio** (mezcla o pistas) | Renderizar audio | `.wav` / `.zip` |
+| Tenerlo todo **en la nube** | Importar / Exportar → Google Drive | — |
+
+:::note[Tus audios no se copian al importarlos]
+Al añadir audio a una sesión, LibreTracks lo usa **desde donde está** en tu
+disco; no hace una copia. Por eso, si vas a llevarte la sesión a otro equipo,
+expórtala en modo **Completo**: es entonces cuando los audios se meten dentro
+del archivo. En Android, en cambio, el audio se copia a la sesión por defecto.
+:::
+
+## Exportar una canción (.ltpkg)
+
+Haz clic derecho en la **barra de la canción**, en la regla, y elige
+**Exportar canción**.
+
+![Diálogo Exportar canción](/guide/desktop/export-song-modal.png)
+
+<Legend>
+
+1. **Completo (para compartir)**: mete dentro tus audios originales, tal
+   cual. El paquete se abre en cualquier equipo.
+2. **Ligero**: no lleva audio, solo apunta a tus archivos por su ruta. Ocupa
+   muy poco, pero solo funciona en este mismo equipo.
+
+</Legend>
+
+El paquete lleva la canción con sus pistas, clips, marcas, tempo, tonalidad,
+transposición y salidas. Si la canción tiene vídeos, aparece además una
+casilla para incluirlos.
+
+El nombre del archivo se propone con los datos de la canción, por ejemplo
+`Dios es Real [140bpm D 4-4].ltpkg`, para reconocerla de un vistazo en una
+carpeta o en la nube.
+
+### Importar una canción
+
+Una canción `.ltpkg` se **añade** a la sesión que tienes abierta, al final
+del repertorio. Puedes:
+
+- Usar **Archivo → Importar canción**.
+- Pulsar **Importar .ltpkg** en la [Vista Compacta](/es/docs/compact-view/).
+- **Arrastrar** el `.ltpkg` desde el explorador al timeline o a la Vista
+  Compacta.
+
+Si una pista del paquete se llama igual que una que ya tienes, sus clips van
+a esa pista en vez de crear otra.
+
+## Exportar la sesión entera (.ltset)
+
+Un `.ltset` lleva **toda la sesión** en un único archivo: todas las
+canciones, la biblioteca, las automatizaciones y las formas de onda. Es la
+forma de prepararla en casa y abrirla tal cual en el ordenador del directo, o
+pasarla al móvil.
+
+Abre **Archivo → Exportar sesión…**
+
+![Diálogo Exportar sesión](/guide/desktop/export-session-modal.png)
+
+<Legend>
+
+1. **Completo (para llevártelo)**: incluye tus audios originales (un MP3
+   sigue siendo MP3). Se abre en cualquier equipo; al abrirlo, LibreTracks
+   prepara el audio, y en móviles o equipos lentos eso tarda un rato.
+2. **Optimizado (para móviles y equipos lentos)**: en vez de los originales
+   lleva el audio **ya preparado** para reproducir, así que la sesión abre al
+   instante. Ocupa más y no sirve para recuperar los originales: guárdalos
+   aparte.
+3. **Ligero**: sin audio, apunta a tus archivos por su ruta. Solo para este
+   mismo equipo.
+
+</Legend>
+
+Solo se empaquetan los audios **que usan tus clips**, no toda la biblioteca.
+Mientras se exporta, un indicador muestra el progreso y puedes seguir
+trabajando.
+
+### Importar una sesión
+
+Usa **Archivo → Importar sesión…**, o el botón **Importar sesión** de la
+pantalla de inicio (no hace falta tener nada abierto). Eliges el `.ltset`,
+eliges **dónde guardar** la sesión, y LibreTracks crea ahí su carpeta y la
+abre. A diferencia de una canción, una sesión **no se mezcla** con la que
+tenías: se abre como sesión nueva.
+
+## La nube: tu Google Drive
+
+LibreTracks puede guardar canciones y sesiones en **tu propia cuenta de
+Google Drive**, para pasarlas del ordenador al móvil o a otro equipo sin
+cables ni pendrives. LibreTracks no tiene servidores: los archivos están en tu
+Drive, en una carpeta `LibreTracks`, y la app **solo puede ver los archivos
+que ha creado ella**, nada más de tu cuenta.
+
+Con la cuenta conectada, **Importar** y **Exportar** (de canción y de sesión)
+preguntan primero dónde:
+
+![Elegir entre este equipo y Google Drive](/guide/desktop/storage-choice.png)
+
+- **Exportar → Google Drive** sube el archivo a tu cuenta. Al exportar una
+  canción se pregunta después de elegir el modo; al exportar una sesión, antes.
+- **Importar → Google Drive** muestra lo que tienes subido, con buscador y
+  filtros, y lo descarga.
+
+El botón **Nube** (en **Archivo → Nube…** y en la pantalla de inicio) no sube
+ni baja nada: es para **gestionar la cuenta**.
+
+![Panel de la nube](/guide/desktop/cloud-panel.png)
+
+- **Conectar con Google Drive** abre el navegador para que inicies sesión y
+  des permiso. La primera vez es lo único que ves en el panel.
+- **Desconectar** quita la cuenta de este dispositivo. Lo que tienes en Drive
+  no se borra.
+- El **espacio** usado y libre es el de **toda tu cuenta de Google**, que se
+  comparte con Gmail y Fotos.
+- Las listas **Sesiones** y **Canciones** muestran lo que has subido, con su
+  tamaño, y un botón **Borrar** para quitarlo de Drive.
+
+La conexión se guarda en el propio dispositivo: en el móvil hay que conectar
+la cuenta también.
+
+## Renderizar audio
+
+Para mandar la canción a alguien que no usa LibreTracks (el músico que se la
+tiene que aprender, un técnico, una grabación), renderízala a WAV: haz clic
+derecho en la barra de la canción y elige **Renderizar audio…**.
+
+![Diálogo Renderizar audio](/guide/desktop/render-modal.png)
+
+<Legend>
+
+1. **Todas** / **Ninguna**, y cuántas pistas van marcadas.
+2. Las **pistas** de la canción. Marca las que quieres; la casilla de una
+   carpeta marca o desmarca todas las suyas.
+3. **Mezcla (un archivo)**: las pistas marcadas sumadas en un solo WAV.
+4. **Pistas por separado (.zip)**: un WAV por pista, todos alineados desde el
+   principio de la canción, dentro de un `.zip`.
+5. **Formato** (WAV de 16, 24 o 32 bits en coma flotante), **frecuencia de
+   muestreo** (por defecto la del proyecto) y **canales** (estéreo o mono).
+6. **Aplicar la mezcla**: el volumen y el panorama de cada pista y carpeta, y
+   el master de la canción, tal como suenan. Desmarcado, todo sale a 0 dB y
+   centrado.
+7. **Normalizar**: ajusta cada archivo para que su pico quede en −0,3 dB.
+8. **Incluir el metrónomo**.
+9. **Incluir la voz guía**. En pistas por separado, el metrónomo y la guía
+   salen cada uno en su propio archivo.
+10. **Nombre del archivo**. Se propone solo según lo que elijas, por ejemplo
+    «Dios es Real (sin Vocals)» si quitas una pista.
+
+</Legend>
+
+El render se hace aparte, sin interrumpir lo que esté sonando, y **Detener**
+lo cancela. Si algún audio no se pudo leer, sale en
+silencio y te lo dice al terminar.
+
+## Plantillas de sesión
+
+Si siempre montas las mismas pistas (click, guía, batería, bajo… con sus
+carpetas, colores y salidas), guárdalas como plantilla y empieza cada sesión
+nueva con todo puesto.
+
+- **Archivo → Guardar como plantilla…** crea un archivo `.lttemplate` con la
+  **estructura**: pistas, carpetas, nombres, colores y salidas. A propósito
+  **no** guarda clips, canciones, marcas, tempo ni la mezcla (volúmenes,
+  mute…), para que cada sesión empiece limpia.
+- **Archivo → Nuevo desde plantilla…**, o la lista **Plantillas** de la
+  [pantalla de inicio](/es/docs/interface/main-screen/), crean una sesión
+  nueva a partir de ella. **Usar plantilla de archivo…** abre una que tengas
+  en otra carpeta.
+
+Como es un archivo, puedes pasárselo a otro técnico o llevarlo a otro equipo.
+
+## Importar proyectos de Reaper y Ableton
+
+Si la canción está montada en Reaper o en Ableton Live, no hace falta
+exportar los stems y volver a colocarlos: **Archivo → Importar
+Reaper/Ableton** (o el botón de la pantalla de inicio) lee el proyecto `.rpp`
+o `.als` y crea las pistas y los clips.
+
+- Con una sesión abierta, el proyecto se añade **al final del repertorio**.
+- Desde la pantalla de inicio, primero eliges el proyecto y después dónde
+  guardar la sesión nueva.
+- También puedes **arrastrar** un `.rpp` o `.als` al timeline (cae donde lo
+  sueltas, o al final si pisaría otra canción) o a la Vista Compacta (se
+  añade como canción nueva al final).
+
+Se conserva lo que importa para tocar en directo, no cada detalle de la DAW:
+
+- **Reaper**: los items de audio pasan a clips; se recrean las pistas y las
+  carpetas con su mezcla básica; se importan los cambios de
+  tempo y de compás; cada **región** pasa a ser una canción y cada **marcador**,
+  una marca de sección dentro de ella.
+- **Ableton Live**: los clips de audio del Arrangement pasan a clips en sus
+  pistas; los **locators** pasan a ser marcas de sección; se importan el tempo
+  y el compás. Todo el Arrangement es **una sola canción**, porque en Ableton
+  los locators marcan secciones, no canciones.
+
+Los plugins y efectos de la DAW no se importan: LibreTracks reproduce el
+audio de los clips.
+
+## Los archivos de LibreTracks
+
+| Archivo | Qué es |
+| --- | --- |
+| `.ltsession` | La sesión con la que trabajas (dentro de su carpeta). |
+| `.ltpkg` | Una canción exportada. |
+| `.ltset` | Una sesión entera exportada. |
+| `.lttemplate` | Una plantilla de sesión. |
+
+En Windows cada tipo tiene su propio icono en el Explorador, y un doble clic
+lo abre en LibreTracks. En macOS y Linux también quedan asociados a la app,
+con su icono general.
