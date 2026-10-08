@@ -20,7 +20,7 @@ use crate::infra::error::DesktopError;
 use crate::models::{LibraryAssetSummary, LibraryImportResult, SkippedImport};
 
 use super::{
-    decoding_cache_root, resolve_audio_file_path, slugify, AudioFileImportPayload,
+    decoding_cache_root, resolve_audio_file_path, AudioFileImportPayload,
     AudioFilePathImportPayload, DesktopSession, LIBRARY_MANIFEST_FILE_NAME,
 };
 
@@ -456,9 +456,57 @@ fn sanitize_import_file_name(file_name: &str, header: &[u8]) -> Result<String, D
         .filter(|value| !value.is_empty())
         .or_else(|| sniff_audio_extension(header).map(str::to_string))
         .ok_or_else(|| DesktopError::AudioCommand("imported file extension is invalid".into()))?;
-    let sanitized_stem = slugify(stem);
+    let sanitized_stem = library_file_stem(stem);
 
     Ok(format!("{}.{}", sanitized_stem, extension))
+}
+
+/// The name an imported audio keeps on disk, which is also what its track is
+/// called when it lands on the timeline.
+///
+/// It used to go through `slugify`, lowercase with every non-alphanumeric
+/// turned into a dash: a phone import of `Tecla 1.wav` became a track called
+/// «tecla-1», while the same file dropped on the desktop (which references it
+/// by its own path) stayed «Tecla 1». Case and spaces are kept now; the result
+/// is still plain ASCII (accents folded, «Batería» → «Bateria») because these
+/// paths reach native decoders, and without characters a file system rejects.
+/// Collisions are case-folded by [`allocate_library_audio_path`].
+fn library_file_stem(stem: &str) -> String {
+    let mut out = String::new();
+    for character in stem.chars() {
+        let folded = match character {
+            'á' | 'à' | 'ä' | 'â' | 'ã' => 'a',
+            'Á' | 'À' | 'Ä' | 'Â' | 'Ã' => 'A',
+            'é' | 'è' | 'ë' | 'ê' => 'e',
+            'É' | 'È' | 'Ë' | 'Ê' => 'E',
+            'í' | 'ì' | 'ï' | 'î' => 'i',
+            'Í' | 'Ì' | 'Ï' | 'Î' => 'I',
+            'ó' | 'ò' | 'ö' | 'ô' | 'õ' => 'o',
+            'Ó' | 'Ò' | 'Ö' | 'Ô' | 'Õ' => 'O',
+            'ú' | 'ù' | 'ü' | 'û' => 'u',
+            'Ú' | 'Ù' | 'Ü' | 'Û' => 'U',
+            'ñ' => 'n',
+            'Ñ' => 'N',
+            'ç' => 'c',
+            'Ç' => 'C',
+            other => other,
+        };
+        let kept = if folded.is_ascii_alphanumeric() || matches!(folded, ' ' | '-' | '_' | '(' | ')') {
+            folded
+        } else {
+            '-'
+        };
+        let repeats = matches!(kept, ' ' | '-') && out.ends_with(kept);
+        if !repeats {
+            out.push(kept);
+        }
+    }
+    let trimmed = out.trim_matches(|c: char| c == ' ' || c == '-');
+    if trimmed.is_empty() {
+        "audio".to_string()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 /// Bytes [`sniff_audio_extension`] needs to recognise every format it knows.
@@ -1504,6 +1552,26 @@ pub(crate) fn list_library_assets(
             .then_with(|| left.file_name.cmp(&right.file_name))
     });
     Ok(assets)
+}
+
+#[cfg(test)]
+mod file_stem_tests {
+    use super::library_file_stem;
+
+    #[test]
+    fn keeps_case_and_spaces_so_the_track_reads_like_the_file() {
+        assert_eq!(library_file_stem("Tecla 1"), "Tecla 1");
+        assert_eq!(library_file_stem("BajoSnt"), "BajoSnt");
+        assert_eq!(library_file_stem("Voz_Guía (final)"), "Voz_Guia (final)");
+    }
+
+    #[test]
+    fn folds_accents_and_drops_what_a_file_system_rejects() {
+        assert_eq!(library_file_stem("Batería"), "Bateria");
+        assert_eq!(library_file_stem("Coro: 1/2 *ok*?"), "Coro- 1-2 -ok");
+        assert_eq!(library_file_stem("  a   b  "), "a b");
+        assert_eq!(library_file_stem("???"), "audio");
+    }
 }
 
 #[cfg(test)]

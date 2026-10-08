@@ -2198,10 +2198,11 @@ fn delete_library_asset_rejects_a_case_variant_a_clip_still_uses() {
     assert!(audio_path.exists(), "the clip's audio must survive");
 }
 
-/// Imports slugify to lowercase; a session that arrived in a `.ltset` keeps the
-/// original casing of its audio. On a case-insensitive filesystem both spellings
-/// are one file, so handing out the lowercase name as "free" silently replaced
-/// the other song's audio.
+/// A session that arrived in a `.ltset` keeps the original casing of its
+/// audio, and imports used to lowercase their names. On a case-insensitive
+/// filesystem both spellings are one file, so handing out the other spelling
+/// as "free" silently replaced the other song's audio. Imports keep their case
+/// now, which makes the clash direct: the same name must still not be reused.
 #[test]
 fn import_never_overwrites_an_existing_file_that_differs_only_in_case() {
     let mut session = session_with_song_dir(
@@ -2228,7 +2229,7 @@ fn import_never_overwrites_an_existing_file_that_differs_only_in_case() {
         .expect("import should succeed");
 
     assert_eq!(imported.assets.len(), 1);
-    assert_eq!(imported.assets[0].file_path, "audio/bajo-1.wav");
+    assert_eq!(imported.assets[0].file_path, "audio/Bajo-1.wav");
     assert_eq!(
         fs::read(&existing_path).expect("existing audio should still read"),
         existing_bytes,
@@ -2323,7 +2324,7 @@ fn bytes_import_of_a_wav_named_without_extension_gets_one_from_its_contents() {
         }])
         .expect("a WAV without extension in its name should import");
 
-    assert_eq!(imported.assets[0].file_path, "audio/bajo.wav");
+    assert_eq!(imported.assets[0].file_path, "audio/Bajo.wav");
 }
 
 /// A name with no extension AND contents that are not audio still fails with
