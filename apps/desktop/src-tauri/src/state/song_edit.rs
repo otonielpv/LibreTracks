@@ -32,16 +32,22 @@ fn format_duration_label(seconds: f64) -> String {
     format!("{}:{:02}", total / 60, total % 60)
 }
 
-/// The UI language, lowercased: the one the user picked, or else the one the
-/// frontend reports it is showing (the system's). `None` when neither is
-/// known. Auto-created songs are named in this language.
+/// The UI language, lowercased: the one the frontend reports it is showing,
+/// or else the one saved in the settings. `None` when neither is known.
+/// Auto-created songs are named in this language.
+///
+/// What is on screen goes first: the audio controller's copy of the settings
+/// is not refreshed by `save_settings`, so after switching the language in
+/// Settings it kept the old one and new songs came out as "Canción 4" in an
+/// English UI until the next restart.
 pub(super) fn ui_locale(audio: &AudioController) -> Option<String> {
-    audio
-        .current_settings()
-        .ok()
-        .and_then(|settings| settings.locale)
-        .map(|locale| locale.to_ascii_lowercase())
-        .or_else(crate::infra::settings::displayed_ui_language)
+    crate::infra::settings::displayed_ui_language().or_else(|| {
+        audio
+            .current_settings()
+            .ok()
+            .and_then(|settings| settings.locale)
+            .map(|locale| locale.to_ascii_lowercase())
+    })
 }
 
 /// Default name for the `index`-th auto-created song, in the user's language.
