@@ -524,7 +524,7 @@ export function TimelineTopbar({
           </button>
 
           <label className="lt-bpm-control" data-lt-tour={TOUR_TARGETS.topbarTimeSignature}>
-            <span>Compas</span>
+            <span>{t("timelineTopbar.timeSignatureLabel")}</span>
             <input
               aria-label={t("timelineTopbar.songTimeSignatureAria")}
               disabled={!hasSong}
@@ -783,7 +783,7 @@ export function TimelineTopbar({
               <strong ref={transportReadoutTempoRef}>{`${(Number.isFinite(displayedBpm) ? displayedBpm : fallbackBpm).toFixed(2)} BPM`}</strong>
             </div>
             <div className="lt-readout-block">
-              <span>Compas</span>
+              <span>{t("timelineTopbar.timeSignatureLabel")}</span>
               <strong>{displayedTimeSignature}</strong>
             </div>
             <div className="lt-readout-block">

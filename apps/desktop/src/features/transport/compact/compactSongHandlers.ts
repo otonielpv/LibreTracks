@@ -245,7 +245,7 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
     const currentRegion = findRegion(regionId);
     if (!currentRegion) return;
     const nextName = (
-      await prompt("Renombrar canción", currentRegion.name)
+      await prompt(t("compactView.renamePrompt"), currentRegion.name)
     )?.trim();
     if (!nextName || nextName === currentRegion.name) return;
     void runAction(async () => {
@@ -257,7 +257,7 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
       );
       applyPlaybackSnapshot(snapshot);
       await syncSongLibraryFolderAfterRename(currentRegion.name, nextName);
-      setStatus(`Canción renombrada como "${nextName}"`);
+      setStatus(t("compactView.renamed", { name: nextName }));
     });
   };
 
@@ -275,13 +275,13 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
       currentRegion.startSeconds,
     );
     const raw = await prompt(
-      `BPM de "${currentRegion.name}"`,
+      t("compactView.bpmPrompt", { name: currentRegion.name }),
       currentBpm.toFixed(2),
     );
     if (raw === null) return;
     const nextBpm = Number(raw.replace(",", "."));
     if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
-      setStatus("BPM inválido");
+      setStatus(t("compactView.invalidBpm"));
       return;
     }
     void runAction(async () => {
@@ -291,7 +291,7 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
       );
       applyPlaybackSnapshot(snapshot);
       setStatus(
-        `BPM de "${currentRegion.name}" ajustado a ${nextBpm.toFixed(2)}`,
+        t("compactView.bpmSet", { name: currentRegion.name, bpm: nextBpm.toFixed(2) }),
       );
     });
   };
@@ -311,9 +311,7 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
     ).length;
     if (clipCount > 0) {
       const confirmed = await confirm(
-        `Borrar canción "${currentRegion.name}" y sus ${clipCount} ${
-          clipCount === 1 ? "clip" : "clips"
-        }?`,
+        t("compactView.deleteConfirm", { name: currentRegion.name, count: clipCount }),
       );
       if (!confirmed) return;
     }
@@ -321,7 +319,7 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
       const snapshot = await deleteSongRegion(regionId);
       applyPlaybackSnapshot(snapshot);
       setSelectedRegionId(null);
-      setStatus(`Canción "${currentRegion.name}" eliminada`);
+      setStatus(t("compactView.deleted", { name: currentRegion.name }));
     });
   };
 
@@ -420,7 +418,7 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
           : await exportRegionAsPackage(regionId, includeAudio, includeVideo);
         if (exported) {
           setStatus(
-            `Paquete exportado para ${currentRegion?.name ?? "la canción"}`,
+            t("compactView.exported", { name: currentRegion?.name ?? t("compactView.exportedFallback") }),
           );
         }
       } finally {

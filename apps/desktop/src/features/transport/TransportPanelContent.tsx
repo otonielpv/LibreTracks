@@ -6968,7 +6968,7 @@ export function TransportPanelContent() {
                       nextSignature,
                     );
               applyPlaybackSnapshot(nextSnapshot);
-              setStatus(`Compas actualizado a ${nextSignature}`);
+              setStatus(t("transport.status.timeSignatureUpdated", { signature: nextSignature }));
             });
           }}
           midiLearnMode={midiLearnMode}
@@ -7688,7 +7688,7 @@ export function TransportPanelContent() {
                             setSelectedRegionId(null);
                             openMenu(
                               event,
-                              `Compas ${marker.signature}`,
+                              t("transport.menu.timeSignatureMarkerTitle", { signature: marker.signature }),
                               timeSignatureMarkerContextMenu(marker),
                             );
                           }}

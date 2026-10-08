@@ -568,7 +568,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
   async function createTimeSignatureMarkerAt(positionSeconds: number) {
     const d = getDeps();
     const nextSignature = parseTimeSignatureDraft(
-      (await promptDialog("Compas", d.displayedTimeSignature)) ?? "",
+      (await promptDialog(d.t("transport.menu.timeSignaturePrompt"), d.displayedTimeSignature)) ?? "",
     );
     if (!nextSignature) {
       return;
@@ -585,7 +585,10 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       d.applyPlaybackSnapshot(nextSnapshot);
       d.setTimeSignatureDraft(nextSignature);
       d.setStatus(
-        `Compas ${nextSignature} en ${formatClock(positionSeconds)}`,
+        d.t("transport.status.timeSignatureMarkerCreated", {
+          signature: nextSignature,
+          time: formatClock(positionSeconds),
+        }),
       );
     });
   }
@@ -837,7 +840,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         label: t("transport.menu.changeTimeSignature"),
         onSelect: async () => {
           const nextSignature = parseTimeSignatureDraft(
-            (await promptDialog("Compas", marker.signature)) ?? "",
+            (await promptDialog(d.t("transport.menu.timeSignaturePrompt"), marker.signature)) ?? "",
           );
           if (!nextSignature) {
             return;
@@ -850,7 +853,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
             );
             d.applyPlaybackSnapshot(nextSnapshot);
             d.setTimeSignatureDraft(nextSignature);
-            d.setStatus(`Compas actualizado a ${nextSignature}`);
+            d.setStatus(d.t("transport.status.timeSignatureUpdated", { signature: nextSignature }));
           });
         },
       },
@@ -861,7 +864,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
             const nextSnapshot = await deleteSongTimeSignatureMarker(marker.id);
             d.applyPlaybackSnapshot(nextSnapshot);
             d.setStatus(
-              `Marca de compas eliminada en ${formatClock(marker.startSeconds)}`,
+              d.t("transport.status.timeSignatureMarkerDeleted", { time: formatClock(marker.startSeconds) }),
             );
           });
         },

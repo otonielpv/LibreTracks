@@ -247,8 +247,8 @@ export function CompactSongHeaderComponent({
         <button
           type="button"
           className="lt-compact-song-play"
-          aria-label={`Reproducir ${region.name}`}
-          title={`Reproducir ${region.name} (respeta la transición global)`}
+          aria-label={t("compactView.playAria", { name: region.name })}
+          title={t("compactView.playTitle", { name: region.name })}
           onClick={(event) => {
             // Don't bubble to the header — the play button shouldn't
             // also select the region, only transport-jump to it.
@@ -268,7 +268,7 @@ export function CompactSongHeaderComponent({
         {bpm !== undefined ? (
           <div
             className="lt-compact-song-bpm"
-            title={`BPM efectivo al inicio de la canción`}
+            title={t("compactView.bpmTitle")}
           >
             {bpm.toFixed(bpm % 1 === 0 ? 0 : 2)} BPM
           </div>

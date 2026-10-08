@@ -226,7 +226,7 @@ describe("createCompactSongHandlers", () => {
         await handlers.handleCompactSetSongBpm("r1");
 
         expect(deps.upsertSongTempoMarker).not.toHaveBeenCalled();
-        expect(deps.setStatus).toHaveBeenCalledWith("BPM inválido");
+        expect(deps.setStatus).toHaveBeenCalledWith("compactView.invalidBpm:{}");
       }
     });
 
@@ -262,7 +262,7 @@ describe("createCompactSongHandlers", () => {
       await handlers.handleCompactDeleteSong("r1");
 
       // Only the clip inside [0, 10) is counted.
-      expect(deps.confirm).toHaveBeenCalledWith(expect.stringContaining("1 clip"));
+      expect(deps.confirm).toHaveBeenCalledWith(expect.stringContaining('"count":1'));
       expect(deps.deleteSongRegion).toHaveBeenCalled();
     });
 

@@ -497,16 +497,16 @@ export function TimelineToolbar({
               }`}
               aria-label={
                 compactMixerFilterActiveSong
-                  ? "Mostrar todos los tracks en el mixer"
-                  : "Mostrar solo los tracks de la cancion activa en el mixer"
+                  ? t("timelineToolbar.mixerFilterShowAll")
+                  : t("timelineToolbar.mixerFilterShowActive")
               }
               aria-pressed={compactMixerFilterActiveSong}
               title={
                 compactMixerFilterAvailable
                   ? compactMixerFilterActiveSong
-                    ? "Mostrando solo tracks de la cancion activa"
-                    : "Mostrar solo tracks de la cancion activa"
-                  : "Sin cancion activa: el filtro no tiene efecto ahora"
+                    ? t("timelineToolbar.mixerFilterOn")
+                    : t("timelineToolbar.mixerFilterOff")
+                  : t("timelineToolbar.mixerFilterUnavailable")
               }
               disabled={
                 !compactMixerFilterAvailable && !compactMixerFilterActiveSong
