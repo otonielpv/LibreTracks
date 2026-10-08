@@ -43,7 +43,9 @@ const pageSource = (pathname) => {
       : [`src/pages/${clean}.astro`, `src/pages/${clean}/index.astro`];
   const docs = clean.match(/^(?:(es)\/)?docs(?:\/(.+))?$/);
   if (docs) {
-    candidates.push(`src/content/docs/${docs[1] ? "es/docs" : "docs"}/${docs[2] ?? "index"}.md`);
+    // Guide pages with numbered captures are .mdx (they import Legend/Clip).
+    const base = `src/content/docs/${docs[1] ? "es/docs" : "docs"}/${docs[2] ?? "index"}`;
+    candidates.push(`${base}.md`, `${base}.mdx`);
   }
   return candidates.find((candidate) => existsSync(new URL(candidate, import.meta.url)));
 };
@@ -158,6 +160,12 @@ export default defineConfig({
             { label: "Custom Remote", translations: { es: "Remote personalizable" }, slug: "docs/remote-control" },
             { label: "Export, Import & Share", translations: { es: "Exportar, importar y compartir" }, slug: "docs/integration-ecosystem" },
           ],
+        },
+        {
+          label: "Help",
+          translations: { es: "Ayuda" },
+          collapsed: false,
+          autogenerate: { directory: "docs/help" },
         },
       ],
     }),

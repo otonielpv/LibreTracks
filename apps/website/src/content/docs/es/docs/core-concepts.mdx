@@ -1,0 +1,113 @@
+---
+title: Conceptos base
+description: "Las piezas de LibreTracks en pocas palabras: sesión, canción, pista, clip, marca, biblioteca y salidas, y cómo encajan entre ellas."
+---
+
+Antes de entrar en los botones, conviene tener claras las piezas con las que
+trabaja LibreTracks. Son pocas, y casi todo lo demás se explica a partir de
+ellas.
+
+## La sesión: tu repertorio
+
+Una **sesión** es lo que llevas al concierto: una o varias canciones en
+orden, con sus pistas, su mezcla y sus salidas. Es lo que abres, guardas y te
+llevas a otro equipo.
+
+En el disco, una sesión es **una carpeta** con:
+
+- el archivo **`.ltsession`**, que es el que abres;
+- una carpeta **`audio`**, donde acaban los audios que llegan **dentro de un
+  paquete** al importarlo (un `.ltpkg` o un `.ltset` completo);
+- una carpeta **`cache`** con las formas de onda (se regeneran solas si la
+  borras).
+
+Tus audios **no se copian** dentro de la sesión: LibreTracks los usa desde
+donde estén. Por eso, si mueves o borras un audio original, esa pista se
+queda muda (LibreTracks te avisa y te deja localizarlo). Para llevarte la
+sesión a otro equipo, expórtala; ver
+[Exportar, importar y compartir](/es/docs/integration-ecosystem/).
+
+## La canción: la pieza principal
+
+Dentro de la sesión todo se organiza en **canciones**. En el timeline, cada
+canción es un tramo con nombre en la regla (la **barra de la canción**), y
+todo lo que hay debajo le pertenece: sus clips, sus marcas, su tempo.
+
+Lo que más importa entender:
+
+- **Cada clip pertenece a una sola canción.** Si mueves una canción, se mueve
+  todo lo suyo; si la borras, se borra todo lo suyo.
+- **Muchos ajustes son de la canción, no de la sesión**: el **tempo** y el
+  **compás**, la **tonalidad**, la **transposición** y el **warp**, y su
+  **volumen master**. Así cada canción del repertorio puede ir en su tono y a
+  su velocidad.
+- En directo saltas **entre canciones** con una transición (al final, en la
+  siguiente marca, con fundido…).
+
+Se crean desde una zona del timeline, desde una carpeta de la Biblioteca,
+arrastrando audios o importando un `.ltpkg`. Ver [Canciones](/es/docs/tasks/songs/).
+
+## Las pistas
+
+Las **pistas** son las filas del timeline. Son de la sesión entera: la pista
+«Batería» es la misma en todas las canciones, aunque en cada una tenga clips
+distintos (o ninguno).
+
+| Pista | Para qué |
+| --- | --- |
+| **Audio** | Lleva los clips de audio: los stems de la canción, el click, la guía. |
+| **Carpeta** | Agrupa otras pistas. Su volumen, mute y solo afectan a todas, y puede decidir la salida de todas a la vez. |
+| **MIDI** | Envía mensajes MIDI a otros aparatos (mesa de luces, letras). Ver [MIDI](/es/docs/tasks/midi/). |
+| **Vídeo** | Lleva los vídeos que se proyectan. Ver [Vídeo](/es/docs/tasks/video/). |
+| **Automatismos** | Una fila especial con acciones a una hora exacta: saltar, mutear, mover un fader… Ver [Automatizaciones](/es/docs/automation/). |
+
+Cada pista tiene su **salida**: a dónde manda su sonido (Master, unos
+auriculares, otra salida de tu interfaz). Ver
+[Salidas de audio y metrónomo](/es/docs/audio-routing-metronome/).
+
+Las pistas que LibreTracks crea solo al soltar un audio se borran solas
+cuando se quedan sin clips. Las que creas tú no se borran nunca solas.
+
+## Los clips
+
+Un **clip** es un trozo de un audio colocado en una pista, en un momento de
+una canción. Es solo una **referencia**: recortarlo, partirlo o duplicarlo no
+cambia nunca el archivo original. Ver [Clips y pistas](/es/docs/tasks/clips-tracks/).
+
+## La Biblioteca
+
+La **Biblioteca** es la lista de todos los audios (y vídeos) de la sesión,
+estén o no en el timeline. Desde ahí los arrastras al timeline, los ordenas
+en **carpetas** (que son solo de la Biblioteca: no mueven los archivos) y
+creas canciones a partir de una carpeta. Ver [Biblioteca y audio](/es/docs/tasks/library/).
+
+## Las marcas
+
+Las **marcas** señalan momentos de la canción. Hay dos tipos:
+
+- **Secciones** (Intro, Verso, Coro…): son los destinos para saltar en
+  directo, y la [voz guía](/es/docs/voice-guide/) las anuncia.
+- **Avisos** (Entra batería, Última vez…): indicaciones para la banda, que
+  también se ven en el Remote y en la Vista Live.
+
+Arrastrando una marca de una fila a la otra cambia de tipo. Ver
+[Marcas](/es/docs/tasks/markers/).
+
+## Tempo y compás
+
+Cada canción tiene su **tempo** y su **compás**, y puede cambiarlos a mitad
+con un cambio de tempo o de compás en la regla. El click, la rejilla y los
+saltos «en unos compases» los siguen. Ver [Tempo y compás](/es/docs/tasks/tempo/).
+
+## Tres maneras de ver lo mismo
+
+La sesión se puede ver de tres formas, y lo que cambias en una se ve en las
+otras (`Tab` pasa de una a otra):
+
+- La **vista DAW**, el timeline: para montar y editar.
+- La [Vista Compacta](/es/docs/compact-view/): cada canción en una columna,
+  para ordenar el repertorio y mezclar.
+- La [Vista Live](/es/docs/live-view/): botones grandes para tocar en
+  directo.
+
+Y desde otro dispositivo, el [Remote](/es/docs/remote-control/).

@@ -10,14 +10,20 @@ LibreTracks es una app nativa ligera (Rust + Tauri), no un DAW de estudio pesado
 | Plataforma | Mínimo | Notas |
 | --- | --- | --- |
 | **Windows** | Windows 10 (64 bits) | Necesita el runtime **WebView2**, que viene preinstalado en Windows 10/11 actuales. |
-| **macOS** | macOS 10.15 **Catalina** | Intel y Apple Silicon. Mantén el sistema actualizado — la interfaz usa el WebView del sistema y un WebKit antiguo puede renderizar partes de la UI de forma incorrecta. |
+| **macOS** | macOS 12 **Monterey** | Intel y Apple Silicon (app universal). |
 | **Linux** | Ubuntu 22.04 / Fedora 36 o posterior | Requiere `webkit2gtk-4.1`, `gtk3` y ALSA. Se distribuye como `.deb`, `.rpm` y `.AppImage`. |
 
 La AppImage usa WebKitGTK, GTK y Mesa del propio sistema, igual que los paquetes
 `.deb` y `.rpm`. Esto evita mezclar controladores gráficos actuales con librerías
 antiguas y mejora la compatibilidad con Bazzite, Arch y Fedora bajo Wayland.
 
-> **¿Por qué macOS 10.15+?** La UI de escritorio corre dentro del WebView del sistema operativo. LibreTracks distribuye su CSS adaptado al WebKit del Safari 13 de Catalina, y el motor de audio incluye sus propias librerías de FFmpeg/códecs dentro de la app, así que arranca sin depender de nada instalado en el sistema. Las versiones anteriores de macOS traen un WebKit demasiado antiguo para renderizar la interfaz y carecen de símbolos que la app necesita al arrancar.
+> **¿Por qué macOS 12?** El motor de cambio de tono y warp (Bungee) y el reparto del audio entre núcleos necesitan funciones del sistema que llegaron con macOS 11 y 12. En versiones anteriores la app no arranca.
+
+## iPhone y iPad
+
+LibreTracks está en el **App Store** para iPhone y iPad con **iOS / iPadOS 15
+o posterior**. Funciona en horizontal. Lo que cambia respecto al ordenador está
+en [En el móvil y la tablet](/es/docs/interface/mobile/).
 
 ## Android
 
@@ -30,7 +36,7 @@ o un pendrive, los gestos táctiles, la salida de audio) está en
 
 | | Mínimo | Cómodo | Notas |
 | --- | --- | --- | --- |
-| **Android** | 8.0 (API 26) | 10 o posterior | ARM de 64 bits (`arm64-v8a`) |
+| **Android** | 7.0 (API 24) | 10 o posterior | ARM de 64 bits (`arm64-v8a`); se instala desde Google Play |
 | **RAM** | 2 GB | 3 GB+ | LibreTracks ajusta sus búferes al dispositivo |
 | **Espacio libre** | 2x el tamaño de tu sesión | 3x | Importar descomprime la sesión y prepara su audio |
 
@@ -75,10 +81,35 @@ El motor de audio incluye FFmpeg en **las tres plataformas**, así que los mismo
 | --- | --- | --- |
 | **CPU** | Doble núcleo de 64 bits moderno | Cuatro núcleos o más — necesario para varias pistas de pitch/warp a la vez |
 | **RAM** | 4 GB | 8 GB o más |
-| **Almacenamiento** | SSD con espacio para tus sesiones y audio | SSD; las sesiones guardan el audio + cachés de picos junto al proyecto |
+| **Almacenamiento** | Espacio para tus audios y la caché | SSD. Además de tus audios (que se usan desde donde estén), cada sesión guarda junto a ella una caché de formas de onda y de audio preparado |
 | **Pantalla** | 1280×800 | 1440×900 o mayor |
 
 El pitch y el warp en tiempo real son la parte más exigente de la app. Una sola pista transpuesta es ligera; ejecutar muchas pistas transpuestas a la vez es lo que se beneficia de una CPU más rápida. En un cuatro núcleos moderno típico puedes mantener nueve o más voces de pitch simultáneas dentro del presupuesto de audio.
+
+## Vídeo
+
+Para proyectar [vídeo](/es/docs/tasks/video/) necesitas una **segunda
+pantalla** (proyector, TV o monitor) conectada al ordenador; con una sola
+pantalla el vídeo se puede ver en una ventana.
+
+- **Windows y macOS**: el reproductor de vídeo (libmpv) viene dentro de la
+  app.
+- **Linux**: si en **Configuración → Vídeo** sale «Vídeo no disponible»,
+  instala la librería de mpv de tu distribución (`libmpv2` en Debian/Ubuntu,
+  `mpv-libs` en Fedora).
+- La decodificación por hardware usa la tarjeta gráfica; un vídeo 1080p en
+  H.264 va bien en cualquier equipo actual.
+- En **móvil**, hace falta salida de vídeo por cable: USB‑C a HDMI
+  (DisplayPort por USB‑C en Android) o el adaptador Lightning Digital AV.
+
+## Remote y nube
+
+- El [Remote](/es/docs/remote-control/) funciona en el **navegador** de
+  cualquier móvil o tablet actual (Chrome, Safari, Firefox, Edge), sin
+  instalar nada. Ordenador y dispositivo tienen que estar en la **misma red**.
+- La [nube](/es/docs/integration-ecosystem/#la-nube-tu-google-drive) necesita
+  una **cuenta de Google** (gratuita) y conexión a internet al subir o bajar.
+  El espacio es el de tu Google Drive.
 
 ## Configuración de audio en directo
 
