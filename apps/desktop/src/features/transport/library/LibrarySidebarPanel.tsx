@@ -386,7 +386,7 @@ export function LibrarySidebarPanel({
 
     if (asset.isMissing && onLocateAsset) {
       actions.unshift({
-        label: "Localizar archivo...",
+        label: t("library.locateFile"),
         onSelect: () => onLocateAsset(asset.filePath),
       });
     }

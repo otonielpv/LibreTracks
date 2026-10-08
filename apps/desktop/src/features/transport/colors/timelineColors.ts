@@ -1,20 +1,21 @@
 import type { TrackSummary } from "@libretracks/shared/models";
 
+// `key` names the colour in i18n: colorPicker.presets.<key>.
 export const TIMELINE_COLOR_PRESETS = [
-  { label: "Rojo", value: "#E35D5B" },
-  { label: "Coral", value: "#F08A6C" },
-  { label: "Naranja", value: "#EE8A3C" },
-  { label: "Ambar", value: "#E0A83A" },
-  { label: "Lima", value: "#B7D34A" },
-  { label: "Verde", value: "#57B66C" },
-  { label: "Esmeralda", value: "#2FA98A" },
-  { label: "Cian", value: "#3CDDC7" },
-  { label: "Celeste", value: "#4FB8E6" },
-  { label: "Azul", value: "#5C8CE6" },
-  { label: "Indigo", value: "#6F6FE0" },
-  { label: "Violeta", value: "#9C73E6" },
-  { label: "Magenta", value: "#C96FD6" },
-  { label: "Rosa", value: "#DF6FA8" },
+  { key: "red", value: "#E35D5B" },
+  { key: "coral", value: "#F08A6C" },
+  { key: "orange", value: "#EE8A3C" },
+  { key: "amber", value: "#E0A83A" },
+  { key: "lime", value: "#B7D34A" },
+  { key: "green", value: "#57B66C" },
+  { key: "emerald", value: "#2FA98A" },
+  { key: "cyan", value: "#3CDDC7" },
+  { key: "skyBlue", value: "#4FB8E6" },
+  { key: "blue", value: "#5C8CE6" },
+  { key: "indigo", value: "#6F6FE0" },
+  { key: "violet", value: "#9C73E6" },
+  { key: "magenta", value: "#C96FD6" },
+  { key: "pink", value: "#DF6FA8" },
 ] as const;
 
 const RECENT_COLORS_STORAGE_KEY = "libretracks.recentColors";

@@ -482,7 +482,7 @@ describe("App / timeline-tracks", () => {
     //    actual colour popover with the <input type="color"> the
     //    test is checking for.
     await act(async () => {
-      fireEvent.click(await screen.findByRole("button", { name: "Personalizado..." }));
+      fireEvent.click(await screen.findByRole("button", { name: "Custom..." }));
     });
 
     const colorPopover = container.querySelector(".lt-color-popover") as HTMLElement | null;

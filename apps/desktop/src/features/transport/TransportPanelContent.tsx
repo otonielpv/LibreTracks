@@ -611,15 +611,15 @@ function TimelineColorPopover({
             type="button"
             className="lt-color-popover-swatch"
             style={{ background: preset.value }}
-            aria-label={preset.label}
-            title={preset.label}
+            aria-label={t(`colorPicker.presets.${preset.key}`)}
+            title={t(`colorPicker.presets.${preset.key}`)}
             onClick={() => setDraftColor(preset.value)}
           />
         ))}
       </div>
       {recentColors.length > 0 ? (
         <>
-          <span className="lt-color-popover-recents-title">Recientes</span>
+          <span className="lt-color-popover-recents-title">{t("colorPicker.recent")}</span>
           <div className="lt-color-popover-recents">
             {recentColors.map((color) => (
               <button

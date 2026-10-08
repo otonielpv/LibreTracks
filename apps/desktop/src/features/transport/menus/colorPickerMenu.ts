@@ -1,3 +1,4 @@
+import i18n from "../../../shared/i18n";
 import type { ContextMenuAction } from "../types";
 import {
   TIMELINE_COLOR_PRESETS,
@@ -37,12 +38,12 @@ export function colorPickerActions({
 
   return [
     ...TIMELINE_COLOR_PRESETS.map((preset) => ({
-      label: `${preset.label}${currentColor === preset.value ? " (actual)" : ""}`,
+      label: `${i18n.t(`colorPicker.presets.${preset.key}`)}${currentColor === preset.value ? ` ${i18n.t("colorPicker.current")}` : ""}`,
       swatch: preset.value,
       onSelect: () => applyColor(preset.value),
     })),
     {
-      label: "Personalizado...",
+      label: i18n.t("colorPicker.custom"),
       swatch: currentColor ?? "#3CDDC7",
       onSelect: () =>
         openCustomColorPopover(title, currentColor, (color) =>
@@ -50,7 +51,7 @@ export function colorPickerActions({
         ),
     },
     {
-      label: "Quitar color",
+      label: i18n.t("colorPicker.remove"),
       disabled: !currentColor,
       onSelect: () => onColor(null),
     },
