@@ -403,6 +403,7 @@ pub fn run() {
             commands::system::get_system_resource_snapshot,
             commands::system::get_ownership_diagnostics,
             commands::system::append_debug_log,
+            commands::system::set_ui_language,
             commands::system::append_picker_diagnostic,
             commands::system::read_error_log,
             commands::system::append_frontend_error,

@@ -472,6 +472,27 @@ impl Default for AppSettings {
 ///
 /// Note: changing the folder does NOT migrate existing `.rf64` files — the old
 /// directory keeps its contents until purged (matches Ableton Live's behaviour).
+/// The language the frontend is DISPLAYING, as it last reported it.
+///
+/// `AppSettings::locale` is only set when the user picks a language; while it
+/// is unset the frontend follows the system (`navigator.language`, which on
+/// Android honours the per-app language). The backend has no reliable way to
+/// read that itself, so names it makes up ("Canción 1", "Nueva Sesion") came
+/// out in English on a Spanish phone that had never touched the setting. Not
+/// persisted: it is a fact about the running UI, not a preference.
+static DISPLAYED_UI_LANGUAGE: Mutex<Option<String>> = Mutex::new(None);
+
+pub fn set_displayed_ui_language(language: &str) {
+    let language = language.trim().to_ascii_lowercase();
+    if let Ok(mut current) = DISPLAYED_UI_LANGUAGE.lock() {
+        *current = (!language.is_empty()).then_some(language);
+    }
+}
+
+pub fn displayed_ui_language() -> Option<String> {
+    DISPLAYED_UI_LANGUAGE.lock().ok().and_then(|current| current.clone())
+}
+
 pub fn default_decoding_cache_dir(app: &AppHandle) -> PathBuf {
     #[cfg(target_os = "windows")]
     {
@@ -661,6 +682,14 @@ fn settings_file_path(app: &AppHandle) -> Result<PathBuf, io::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn displayed_ui_language_is_reported_and_cleared() {
+        set_displayed_ui_language(" ES ");
+        assert_eq!(displayed_ui_language().as_deref(), Some("es"));
+        set_displayed_ui_language("");
+        assert_eq!(displayed_ui_language(), None);
+    }
 
     #[test]
     fn startup_turns_the_pad_off_without_losing_its_configuration() {

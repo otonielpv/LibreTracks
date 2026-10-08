@@ -578,6 +578,13 @@ fn append_update_log(app: &AppHandle, line: &str) {
     let _ = writeln!(file, "[{timestamp_ms}] {line}");
 }
 
+/// The frontend reports the language it is displaying, so names the backend
+/// makes up follow it while the user has not picked one in Settings.
+#[tauri::command(async)]
+pub fn set_ui_language(language: String) {
+    crate::infra::settings::set_displayed_ui_language(&language);
+}
+
 #[tauri::command(async)]
 pub fn append_debug_log(app: AppHandle, line: String) -> Result<(), String> {
     let log_dir = {

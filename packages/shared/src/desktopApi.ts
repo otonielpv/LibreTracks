@@ -572,6 +572,11 @@ export async function reportUiRenderMetric(renderMillis: number): Promise<void> 
   await invokeCommand("report_ui_render_metric", { renderMillis });
 }
 
+/** The language the UI is showing, for names the backend makes up. */
+export async function setUiLanguage(language: string): Promise<void> {
+  await invokeCommand("set_ui_language", { language });
+}
+
 export async function appendDebugLog(line: string): Promise<void> {
   await invokeCommand("append_debug_log", { line });
 }
