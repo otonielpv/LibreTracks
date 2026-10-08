@@ -1,40 +1,54 @@
 ---
 title: Control en vivo
-description: Saltos de marca, bucles Vamp, saltos de canción, transiciones, atajos de teclado y control remoto durante el directo.
+description: "Cómo moverse por el repertorio en directo con LibreTracks: saltos a marcas y canciones, cuándo ocurren, Vamp, transiciones, atajos de teclado, pedal MIDI y el Remote."
 ---
 
-## Modos De Salto De Marca
+En directo casi todo se reduce a tres preguntas: **a dónde** saltas, **cuándo**
+ocurre el salto y **cómo** suena el cambio. LibreTracks resuelve las tres igual
+desde el teclado, la [Vista Live](/es/docs/live-view/), un pedal MIDI o el
+[Remote](/es/docs/remote-control/): todos programan el mismo salto.
 
-LibreTracks soporta tres comportamientos de salto:
+## Saltar a una marca
 
-- `Immediate`: salta al instante.
-- `At next marker`: espera al siguiente limite de seccion.
-- `After X bars`: programa el salto tras el numero de compases configurado.
+Un clic en una marca de sección (o su tecla numérica) **programa** el salto. El
+ajuste *Salto de marca* de la barra de herramientas decide cuándo ocurre:
 
-Es comportamiento nativo del transporte, asi que la misma logica esta disponible desde desktop, atajos, mapeos MIDI y remote.
+![Ajustes del salto de marca](/guide/desktop/toolbar-marker-jump-panel.png)
 
-![Modos de salto de marca](/screenshots/Marker-Jump-Modes.png)
+- **Inmediato**: al momento.
+- **Tras X compases**: cuando pasan los compases que elijas.
+- **En la siguiente marca**: al llegar la siguiente sección, para que el cambio
+  caiga al principio de una frase.
 
-Con la [Voz Guia](/es/docs/voice-guide/) activada, un salto armado a una marca con tipo se anuncia y se cuenta antes de ejecutarse, para que la banda oiga la seccion destino y entre junta en el downbeat.
+Mientras espera, **Cancelar salto** se ilumina; <kbd>Esc</kbd> o un clic en la
+misma marca lo anulan. Con la [voz guía](/es/docs/voice-guide/) encendida, la
+banda oye la sección de destino y la cuenta de entrada antes del salto.
 
-## Vamp
+## Vamp: repetir hasta que haga falta
 
-`Vamp` mantiene la reproduccion en un bucle musical mientras la banda, la accion de escenario o una intervencion necesita mas tiempo. `Vamp Mode` puede repetir la `Section` actual o un numero fijo de `Bars`. Pulsa `Vamp` de nuevo para salir.
+**Vamp** repite un tramo en bucle mientras la banda alarga un final, alguien
+habla o hace falta más tiempo. Elige qué se repite:
 
-![Configuracion de Vamp](/screenshots/Vamp-Config.png)
+![Ajustes de Vamp](/guide/desktop/toolbar-vamp-panel.png)
 
-## Saltos De Cancion Y Transiciones
+- **Sección**: la sección en la que está el cursor.
+- **Compases**: el número de compases que pongas.
 
-Los saltos de cancion apuntan a regiones de cancion. Son utiles cuando una sesion contiene un set completo, una sesion de ensayo o varios cues.
+Vuelve a pulsar **Vamp** para salir; la canción sigue desde ahí.
 
-El disparador puede ser inmediato, tras un numero de compases, al final de la cancion/region actual o en la siguiente marca de seccion.
+## Pasar a otra canción
 
-`Song Transition` controla como pasa la cancion actual a la siguiente:
+Los botones **Anterior** y **Siguiente**, <kbd>Mayús</kbd>+número, la Vista Live
+o el Remote saltan de canción. *Transición de canción* decide cuándo y cómo:
 
-- `Clean cut`: cambia directamente.
-- `Fade out`: desvanece la reproduccion actual antes del salto.
+![Ajustes de la transición de canción](/guide/desktop/toolbar-song-jump-panel.png)
 
-![Configuracion de saltos de cancion](/screenshots/Song-Jump-Config.png)
+- **Cuándo**: inmediato, al final de la canción, tras unos compases o en la
+  siguiente marca.
+- **Cómo**: **Corte limpio** o **Fade out** de la canción que suena.
+
+Si prefieres que la reproducción se pare entre canciones, activa *Pausar al
+terminar cada canción* en Configuración › General.
 
 ## Atajos
 
@@ -69,24 +83,21 @@ salida* no tienen tecla de fábrica; asígnalas tú si las usas.
 
 Si programas el salto equivocado, pulsa <kbd>Esc</kbd> enseguida.
 
-## Transposicion Y Warp En Vivo
+## Con un pedal MIDI
 
-`Region Transpose`, `Region Warp` y el toggle `T` por pista deciden como suena cada clip y como se desplaza la rejilla del timeline. La interaccion entre los tres sigue el modelo de Ableton Live — consulta [Pitch, Warp y el boton T](/es/docs/pitch-and-warp/) para la tabla de decision completa y el comportamiento de la rejilla.
+Cualquier acción de esta página se puede asignar a un pedal o a un botón de tu
+controlador: saltar a la marca 3, siguiente canción, Vamp, cancelar salto…
+Ver [MIDI](/es/docs/tasks/midi/).
 
-En directo, la regla practica:
+## Desde el móvil: el Remote
 
-- Cambia de tonalidad entre canciones o con la reproduccion detenida cuando puedas — recolocar el pitch en pleno playback puede generar picos breves de CPU en equipos modestos.
-- Activa `Region Warp` cuando la banda pida cambio de tempo sin cambio de tono, o cuando necesites cambios de pitch que preserven la duracion del clip.
-- Usa el toggle `T` por pista solo con warp activado, para mantener una pista de click o guia en su tono original mientras el resto del tema transpone.
+Abre **Remote** en la barra lateral, escanea el QR con el móvil o la tablet
+(misma Wi‑Fi) y la banda tiene en la mano el transporte, los saltos, el Vamp,
+el tono y la mezcla. Ver [Remote personalizable](/es/docs/remote-control/).
 
-## Remote Movil
+## Cambiar de tono en directo
 
-Abre `Remote` en la app desktop y escanea el codigo QR o abre la URL mostrada desde un movil o tablet en la misma red local.
-
-![Panel de conexion remote](/screenshots/Remote.png)
-
-El remote incluye transporte, saltos de marca, saltos de cancion, Vamp, modo de transicion, navegacion entre regiones, controles de transposicion y una vista de mixer para volumen, paneo, mute y solo. Su editor permite construir pestañas propias con widgets responsivos para móvil, tablet o pantalla grande; consulta [Remote personalizable](/es/docs/remote-control/) para el flujo completo.
-
-La vista de mixer ahora se comporta mas como una superficie util de directo: mantiene el movimiento de volumen y paneo fluido mientras arrastras, muestra medidores por pista, ofrece una accion rapida para centrar el paneo y replica la agrupacion por color de las carpetas para identificar grupos mejor desde el movil.
-
-![Mixer remote](/screenshots/Remote_Mixer.png)
+Haz los cambios de tono **antes de dar a Play** o entre canciones: cambiarlo
+mientras suena obliga al motor a recolocar sus voces y, en equipos modestos,
+puede producir pequeños cortes. Cómo combinar tono, warp y el botón **T** está
+en [Cambio de tono, warp y el botón T](/es/docs/pitch-and-warp/).

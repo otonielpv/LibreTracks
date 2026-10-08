@@ -1,40 +1,54 @@
 ---
 title: Live control
-description: Marker jumps, Vamp, song jumps, transitions, shortcuts, and remote control.
+description: "How to move around the setlist live with LibreTracks: jumps to markers and songs, when they happen, Vamp, transitions, keyboard shortcuts, MIDI pedal and the Remote."
 ---
 
-## Marker Jump Modes
+Live, almost everything comes down to three questions: **where** you jump,
+**when** the jump happens and **how** the change sounds. LibreTracks answers
+all three the same way from the keyboard, [Live View](/docs/live-view/), a MIDI
+pedal or the [Remote](/docs/remote-control/): they all schedule the same jump.
 
-LibreTracks supports three marker jump behaviors:
+## Jumping to a marker
 
-- `Immediate`: jump instantly.
-- `At next marker`: wait until the next section boundary.
-- `After X bars`: schedule the jump after the configured number of bars.
+A click on a section marker (or its number key) **schedules** the jump. The
+*Marker Jump* setting in the toolbar decides when it happens:
 
-This is native transport behavior, so the same logic is available from desktop controls, keyboard shortcuts, MIDI mappings, and the remote.
+![The marker jump settings](/guide/desktop-en/toolbar-marker-jump-panel.png)
 
-![Marker jump modes](/screenshots/Marker-Jump-Modes.png)
+- **Immediate**: right away.
+- **After X bars**: once the bars you set have gone by.
+- **At next marker**: when the next section arrives, so the change lands at the
+  start of a phrase.
 
-When the [Voice Guide](/docs/voice-guide/) is enabled, an armed jump to a typed marker is announced and counted in before it fires, so the band hears the destination section and lands together on the downbeat.
+While it waits, **Cancel jump** lights up; <kbd>Esc</kbd> or a click on the same
+marker calls it off. With the [voice guide](/docs/voice-guide/) on, the band
+hears the destination section and the count-in before the jump.
 
-## Vamp
+## Vamp: repeat until it is time
 
-`Vamp` keeps playback looping musically while the band, stage action, or speaker needs more time. `Vamp Mode` can repeat the current `Section` or a fixed number of `Bars`. Press `Vamp` again to leave the loop.
+**Vamp** loops a stretch while the band stretches an ending, someone speaks or
+more time is needed. Choose what repeats:
 
-![Vamp configuration](/screenshots/Vamp-Config.png)
+![The Vamp settings](/guide/desktop-en/toolbar-vamp-panel.png)
 
-## Song Jumps And Transitions
+- **Section**: the section the cursor is in.
+- **Bars**: the number of bars you set.
 
-Song jumps target song regions. They are useful when one session contains a full set, a rehearsal timeline, or several cues.
+Press **Vamp** again to leave; the song carries on from there.
 
-The trigger can be immediate, after a configured number of bars, at the end of the current song/region, or at the next section marker.
+## Moving to another song
 
-`Song Transition` controls how the current song hands off to the next one:
+The **Previous** and **Next** buttons, <kbd>Shift</kbd>+number, Live View or the
+Remote jump between songs. *Song Transition* decides when and how:
 
-- `Clean cut`: switches directly.
-- `Fade out`: fades current playback before the jump.
+![The song transition settings](/guide/desktop-en/toolbar-song-jump-panel.png)
 
-![Song jump configuration](/screenshots/Song-Jump-Config.png)
+- **When**: immediately, at the end of the song, after a few bars or at the
+  next marker.
+- **How**: **Clean cut** or **Fade out** of the song that is playing.
+
+If you would rather playback stopped between songs, turn on *Pause at the end
+of each song* in Settings › General.
 
 ## Keyboard shortcuts
 
@@ -67,26 +81,23 @@ They can all be changed in **Settings › Shortcuts** (see
 The video actions *fade to black*, *idle screen* and *turn output on* have no
 default key; assign them yourself if you use them.
 
-If you arm the wrong destination, press `Esc` immediately.
+If you schedule the wrong jump, press <kbd>Esc</kbd> straight away.
 
-## Transpose And Warp In Live Use
+## With a MIDI pedal
 
-`Region Transpose`, `Region Warp`, and the per-track `T` toggle decide how each clip sounds and how the timeline grid shifts. The interaction between these three is the same Ableton-style model — see [Pitch, Warp & The T Button](/docs/pitch-and-warp/) for the full decision table and grid behavior.
+Any action on this page can be assigned to a pedal or a button on your
+controller: jump to marker 3, next song, Vamp, cancel jump… See
+[MIDI](/docs/tasks/midi/).
 
-In live use, the rule of thumb is:
+## From the phone: the Remote
 
-- Change the key between songs or with playback stopped when you can — retiming pitch mid-playback can cause brief CPU spikes on modest machines.
-- Enable `Region Warp` when the band wants a tempo change without changing key, or when you need pitch changes that preserve clip length.
-- Use the per-track `T` toggle only with warp on, to keep a click or guide track in its original key while the rest of the song transposes.
+Open **Remote** in the side bar, scan the QR code with the phone or tablet
+(same Wi‑Fi) and the band has transport, jumps, Vamp, pitch and the mix in
+their hands. See [Custom Remote](/docs/remote-control/).
 
-## Mobile Remote
+## Changing key live
 
-Open `Remote` in the desktop app, then scan the QR code or open the displayed URL from a phone or tablet on the same local network.
-
-![Remote connection panel](/screenshots/Remote.png)
-
-The remote exposes transport, marker jumps, song jumps, Vamp controls, song transition mode, region navigation, transpose controls, and a mixer view for volume, pan, mute, and solo. Its editor builds custom tabs from responsive widgets for phones, tablets, and large screens; see [Custom Remote](/docs/remote-control/) for the complete workflow.
-
-The mixer view now behaves more like a live utility surface: it keeps draft volume and pan changes responsive while you drag, shows per-track meters, offers a quick center action for pan, and mirrors folder color grouping so it is easier to identify groups from a phone.
-
-![Remote mixer](/screenshots/Remote_Mixer.png)
+Make pitch changes **before pressing Play** or between songs: changing it
+while it plays makes the engine rearrange its voices and, on modest computers,
+can cause small dropouts. How pitch, warp and the **T** button combine is in
+[Pitch, warp and the T button](/docs/pitch-and-warp/).

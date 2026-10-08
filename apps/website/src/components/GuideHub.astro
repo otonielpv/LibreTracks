@@ -1,0 +1,194 @@
+---
+// The Guides page (/es/guias/, /guides/): where a new user starts. Two video
+// walkthroughs first, then hands-on walkthroughs in the order people need
+// them, each one landing on the docs page that explains it with screenshots,
+// and last the two planning articles. The docs stay the button-by-button
+// reference; this page is the way in.
+import SiteLayout from "../layouts/SiteLayout.astro";
+
+interface Props {
+  lang: "es" | "en";
+}
+
+const { lang } = Astro.props;
+const es = lang === "es";
+const docs = es ? "/es/docs" : "/docs";
+const cards = `/guide/cards/${lang}`;
+
+const t = es
+  ? {
+      title: "Guías de LibreTracks: aprende a usarlo paso a paso",
+      description:
+        "Guías paso a paso de LibreTracks con vídeo y capturas: tu primera canción, el móvil, click y guía a los oídos, marcas y voz guía, el directo, tono y tempo, vídeo, Remote y compartir sesiones.",
+      eyebrow: "Guías",
+      heading: "Aprende LibreTracks paso a paso",
+      intro:
+        "Empieza por el vídeo de tu primera canción y sigue en orden: cada guía te lleva a la página con todas las capturas de lo que hay que tocar.",
+      startHere: "Empieza aquí",
+      video: "Vídeo",
+      walkthroughs: "Guías paso a paso",
+      walkthroughsIntro: "En el orden en que las vas a necesitar.",
+      articles: "Planificar el directo",
+      articlesIntro: "Artículos para pensar el sistema completo antes de llegar a la sala.",
+      reference: "¿Buscas un botón concreto?",
+      referenceBody: "La documentación explica la pantalla entera, botón a botón.",
+      referenceCta: "Ir a la documentación",
+      read: "Ver la guía",
+    }
+  : {
+      title: "LibreTracks guides: learn it step by step",
+      description:
+        "Step-by-step LibreTracks guides with video and screenshots: your first song, mobile, click and guide to the in-ears, markers and voice guide, playing live, pitch and tempo, video, Remote and sharing sessions.",
+      eyebrow: "Guides",
+      heading: "Learn LibreTracks step by step",
+      intro:
+        "Start with the video of your first song and carry on in order: each guide takes you to the page with screenshots of everything you need to touch.",
+      startHere: "Start here",
+      video: "Video",
+      walkthroughs: "Step-by-step guides",
+      walkthroughsIntro: "In the order you are going to need them.",
+      articles: "Planning the show",
+      articlesIntro: "Articles to think through the whole system before you get to the venue.",
+      reference: "Looking for a specific button?",
+      referenceBody: "The documentation explains the whole screen, button by button.",
+      referenceCta: "Go to the documentation",
+      read: "Read the guide",
+    };
+
+const featured = es
+  ? [
+      {
+        href: `${docs}/start/first-song/`,
+        image: `${cards}/video-desktop.webp`,
+        meta: "Vídeo · 4 min · Ordenador",
+        title: "Tu primera canción",
+        body: "De los stems al directo: crear la sesión, traer el audio, marcas, click, voz guía y tocarla en la Vista Live.",
+      },
+      {
+        href: `${docs}/mobile/`,
+        image: `${cards}/video-mobile.webp`,
+        meta: "Vídeo · 3 min · Móvil y tablet",
+        title: "Primeros pasos en el móvil",
+        body: "La misma canción montada desde el teléfono o la tablet, en Android y en iPhone/iPad.",
+      },
+    ]
+  : [
+      {
+        href: `${docs}/start/first-song/`,
+        image: `${cards}/video-desktop.webp`,
+        meta: "Video · 4 min · Computer",
+        title: "Your first song",
+        body: "From stems to the stage: create the session, bring in the audio, markers, click, voice guide and play it in Live View.",
+      },
+      {
+        href: `${docs}/mobile/`,
+        image: `${cards}/video-mobile.webp`,
+        meta: "Video · 3 min · Phone and tablet",
+        title: "First steps on mobile",
+        body: "The same song built from a phone or tablet, on Android and iPhone/iPad.",
+      },
+    ];
+
+const walkthroughs = es
+  ? [
+      { href: `${docs}/tasks/library/`, image: "library", title: "Traer el audio y montar canciones", body: "Importa los stems, ordénalos en carpetas y arrastra una carpeta para crear la canción con una pista por audio." },
+      { href: `${docs}/audio-routing-metronome/`, image: "routing", title: "Click y guía solo a los oídos", body: "Elige la interfaz, activa sus salidas y manda la música a la mesa y el click a la banda." },
+      { href: `${docs}/tasks/markers/`, image: "markers", title: "Marcas y voz guía", body: "Secciones para saltar, avisos para la banda y una voz que anuncia cada parte y cuenta la entrada." },
+      { href: `${docs}/live-view/`, image: "live", title: "Tocar en directo", body: "La Vista Live, saltos a marcas y canciones, Vamp para alargar un final y cancelar un salto a tiempo." },
+      { href: `${docs}/pitch-and-warp/`, image: "pitch", title: "Cambiar tono y tempo", body: "Transpón una canción sin que el click y la guía se desafinen, o tócala más rápida sin cambiar el tono." },
+      { href: `${docs}/tasks/video/`, image: "video", title: "Proyectar vídeo", body: "Vídeos sincronizados con la música en el proyector o la tele, con el asistente de pantalla y el negro de emergencia." },
+      { href: `${docs}/remote-control/`, image: "remote", title: "Controlar desde el móvil", body: "El Remote en el navegador del móvil o la tablet: transporte, saltos y mezcla para toda la banda." },
+      { href: `${docs}/integration-ecosystem/`, image: "share", title: "Llevar la sesión a otro equipo", body: "Exporta una canción o la sesión entera con su audio, pásala al móvil o súbela a tu Google Drive." },
+    ]
+  : [
+      { href: `${docs}/tasks/library/`, image: "library", title: "Bring in audio and build songs", body: "Import the stems, sort them into folders and drag a folder to create the song with one track per file." },
+      { href: `${docs}/audio-routing-metronome/`, image: "routing", title: "Click and guide to the in-ears only", body: "Choose the interface, enable its outputs and send the music to the desk and the click to the band." },
+      { href: `${docs}/tasks/markers/`, image: "markers", title: "Markers and voice guide", body: "Sections to jump to, cues for the band and a voice that announces each part and counts it in." },
+      { href: `${docs}/live-view/`, image: "live", title: "Playing live", body: "Live View, jumps to markers and songs, Vamp to stretch an ending and cancelling a jump in time." },
+      { href: `${docs}/pitch-and-warp/`, image: "pitch", title: "Changing key and tempo", body: "Transpose a song without the click and guide going out of tune, or play it faster without changing pitch." },
+      { href: `${docs}/tasks/video/`, image: "video", title: "Projecting video", body: "Videos in sync with the music on the projector or TV, with the display wizard and the emergency black." },
+      { href: `${docs}/remote-control/`, image: "remote", title: "Control from your phone", body: "The Remote in the phone's or tablet's browser: transport, jumps and mix for the whole band." },
+      { href: `${docs}/integration-ecosystem/`, image: "share", title: "Take the session to another computer", body: "Export a song or the whole session with its audio, move it to your phone or upload it to Google Drive." },
+    ];
+
+const articles = es
+  ? [
+      { href: "/es/guias/lanzar-pistas-en-directo/", meta: "4 pasos · 6 min", title: "Cómo lanzar pistas en directo", body: "Stems, click, voz guía, orden de canciones, ensayo y un plan de respaldo." },
+      { href: "/es/guias/salidas-audio-multitrack/", meta: "Checklist · 5 min", title: "Cómo rutear audio multitrack en directo", body: "Planifica las salidas, separa la mezcla del público de los avisos y compruébalo antes de la prueba de sonido." },
+    ]
+  : [
+      { href: "/guides/run-backing-tracks-live/", meta: "4 steps · 6 min", title: "How to run backing tracks live", body: "Stems, click, guide vocals, song order, rehearsal and a fallback plan." },
+      { href: "/guides/multitrack-audio-routing/", meta: "Checklist · 5 min", title: "Multitrack audio routing for live shows", body: "Plan the outputs, separate the audience mix from the cues and check it before soundcheck." },
+    ];
+---
+
+<SiteLayout title={t.title} description={t.description} lang={lang}>
+  <main class="site-shell band guide-hub">
+    <header class="guide-hub-intro">
+      <p class="eyebrow">{t.eyebrow}</p>
+      <h1>{t.heading}</h1>
+      <p>{t.intro}</p>
+    </header>
+
+    <section aria-labelledby="guide-start">
+      <h2 id="guide-start" class="guide-hub-section">{t.startHere}</h2>
+      <div class="guide-card-grid">
+        {featured.map((card) => (
+          <a class="guide-card guide-card-video" href={card.href}>
+            <span class="guide-card-media">
+              <img src={card.image} alt="" width="1280" height="720" loading="eager" />
+              <span class="guide-card-play" aria-hidden="true">▶</span>
+            </span>
+            <div>
+              <span class="guide-card-meta">{card.meta}</span>
+              <h3>{card.title}</h3>
+              <p>{card.body}</p>
+              <strong>{t.read} <span aria-hidden="true">→</span></strong>
+            </div>
+          </a>
+        ))}
+      </div>
+    </section>
+
+    <section aria-labelledby="guide-steps">
+      <h2 id="guide-steps" class="guide-hub-section">{t.walkthroughs}</h2>
+      <p class="guide-hub-lead">{t.walkthroughsIntro}</p>
+      <ol class="guide-step-grid">
+        {walkthroughs.map((card, index) => (
+          <li>
+            <a class="guide-card guide-card-step" href={card.href}>
+              <img src={`${cards}/${card.image}.webp`} alt="" width="800" height="450" loading="lazy" />
+              <div>
+                <span class="guide-card-meta">{String(index + 1).padStart(2, "0")}</span>
+                <h3>{card.title}</h3>
+                <p>{card.body}</p>
+              </div>
+            </a>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <section aria-labelledby="guide-articles">
+      <h2 id="guide-articles" class="guide-hub-section">{t.articles}</h2>
+      <p class="guide-hub-lead">{t.articlesIntro}</p>
+      <div class="guide-article-list">
+        {articles.map((article) => (
+          <a class="guide-article" href={article.href}>
+            <span class="guide-card-meta">{article.meta}</span>
+            <h3>{article.title}</h3>
+            <p>{article.body}</p>
+          </a>
+        ))}
+      </div>
+    </section>
+
+    <aside class="guide-hub-reference">
+      <div>
+        <h2>{t.reference}</h2>
+        <p>{t.referenceBody}</p>
+      </div>
+      <a class="button-link" href={`${docs}/interface/main-screen/`}>{t.referenceCta}</a>
+    </aside>
+  </main>
+</SiteLayout>
