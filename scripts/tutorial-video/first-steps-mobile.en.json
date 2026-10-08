@@ -1,0 +1,55 @@
+{
+  "title": "Your first song in LibreTracks, on mobile",
+  "voice": "en-US-AndrewNeural",
+  "rate": "+0%",
+  "scenes": [
+    {
+      "id": "01-intro",
+      "text": "Hi. In this video you'll build your first song in LibreTracks on your phone or tablet, and play it live. All you need are the song's stems on the phone: one audio file per instrument."
+    },
+    {
+      "id": "02-crear",
+      "text": "First, create a session. Press Create, type its name, and press Create again. A session is your setlist: it can hold a single song, or the whole Sunday set."
+    },
+    {
+      "id": "03-audios",
+      "text": "Now press Add audio, and the phone's file picker opens. This phone is in Spanish, but the steps are the same: tap Audio, press and hold the first file, choose select all in the menu, and confirm."
+    },
+    {
+      "id": "04-colocar",
+      "text": "LibreTracks asks whether you want to put them on the timeline: press OK. The song is created, with each audio file on its own track."
+    },
+    {
+      "id": "05-renombrar",
+      "text": "The song gets a generic name. Tap its bar, up on the ruler: its actions appear at the bottom. Press Rename Song, and type its name."
+    },
+    {
+      "id": "06-nota",
+      "text": "Right there, Song key sets its key. It shows next to the name, and in Live View."
+    },
+    {
+      "id": "07-tempo",
+      "text": "Tap the tempo, at the top left, and type the song's BPM. Turn on the click with the note button, and press play: the click has to land right with the drums."
+    },
+    {
+      "id": "08-carpeta",
+      "text": "To keep your tracks tidy, group them into folders. Tap a track, press the select several button, and tap the other one. Then, Move to folder, New folder, and give it a name. Its volume, mute and solo affect all of its tracks."
+    },
+    {
+      "id": "09-marcas",
+      "text": "Now the markers. Tap the ruler to move the cursor, and in the bar at the bottom press Section: intro, verse, chorus. They're for jumping live. With Cue you add directions for the band, like all in."
+    },
+    {
+      "id": "10-guia",
+      "text": "With the markers in place, turn on the voice guide, with the megaphone button. Listen: before each section, a voice announces it, and counts it in."
+    },
+    {
+      "id": "11-live",
+      "text": "And now, play. This is Live View: each section is a big button. Tap it, and the song jumps to that part at just the right moment."
+    },
+    {
+      "id": "12-final",
+      "text": "Save the session, and you're done. The complete guide, button by button, is at libretracks dot com. Enjoy playing!"
+    }
+  ]
+}

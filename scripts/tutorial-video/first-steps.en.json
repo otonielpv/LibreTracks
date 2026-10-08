@@ -1,0 +1,139 @@
+{
+  "title": "Your first song in LibreTracks",
+  "voice": "en-US-AndrewNeural",
+  "rate": "+0%",
+  "scenes": [
+    {
+      "id": "01-intro",
+      "text": "Hi. In this video you'll build your first song in LibreTracks, step by step, and play it live. All you need are the song's stems: one audio file per instrument, in a folder on your computer."
+    },
+    {
+      "id": "02-crear",
+      "text": "First, create a session. Press Create. In the window that opens, choose where to save it, in any folder or drive you like, and give it a name. A session is your setlist: it can hold a single song, or the whole Sunday set.",
+      "camera": [
+        {
+          "t": 0,
+          "x": 0,
+          "y": 0,
+          "w": 1920
+        },
+        {
+          "t": 3.6,
+          "x": 0,
+          "y": 0,
+          "w": 1920
+        },
+        {
+          "t": 4.4,
+          "x": 0,
+          "y": 0,
+          "w": 980
+        },
+        {
+          "t": 11.4,
+          "x": 0,
+          "y": 0,
+          "w": 980
+        },
+        {
+          "t": 12.2,
+          "x": 0,
+          "y": 0,
+          "w": 1920
+        }
+      ]
+    },
+    {
+      "id": "03-arrastrar",
+      "text": "Now open the folder with the stems, select them all, and drag them onto the timeline. The song is created, with each audio file on its own track. LibreTracks uses your files from where they are: it doesn't copy them.",
+      "camera": [
+        {
+          "t": 0,
+          "x": 0,
+          "y": 0,
+          "w": 1920
+        },
+        {
+          "t": 1.4,
+          "x": 0,
+          "y": 0,
+          "w": 1920
+        },
+        {
+          "t": 2.2,
+          "x": 0,
+          "y": 0,
+          "w": 1060
+        },
+        {
+          "t": 5.4,
+          "x": 0,
+          "y": 0,
+          "w": 1060
+        },
+        {
+          "t": 6.2,
+          "x": 0,
+          "y": 0,
+          "w": 1920
+        }
+      ]
+    },
+    {
+      "id": "04-renombrar",
+      "text": "The song gets a generic name. Right-click its bar on the ruler, choose Rename Song, and type its name."
+    },
+    {
+      "id": "05-nota",
+      "text": "In that same menu, Song key sets its key. It shows next to the name, in Live View and on the Remote. And if you change the pitch later, the key is transposed by itself."
+    },
+    {
+      "id": "06-biblioteca",
+      "text": "All that audio is also in the Library. From there you can sort it into folders, and drag a whole folder to create another song."
+    },
+    {
+      "id": "07-carpetas",
+      "text": "To keep your tracks tidy, group them into folders. Select several with Control and click, right-click, Move to folder, New folder, and give it a name. The folder folds away, and its mute, solo and volume affect all of its tracks."
+    },
+    {
+      "id": "08-tempo",
+      "text": "Type the song's tempo in the BPM field, and turn on the click. When you press play, the click has to land right with the drums."
+    },
+    {
+      "id": "09-master",
+      "text": "Each song has its own master volume. Select the song, and set it in the toolbar. It evens out songs that come in louder or quieter, and it doesn't affect the click or the guide."
+    },
+    {
+      "id": "10-tono",
+      "text": "To change the key, select the song, open Transpose, and raise it. With warp off, it works like speeding up a tape: the pitch goes up, but so does the speed. Watch how the song gets shorter."
+    },
+    {
+      "id": "11-warp",
+      "text": "If you turn warp on, the pitch stays changed, but the speed is kept: the song gets its length back. And with warp on, turn off the T on the click and the guide, so they don't change key."
+    },
+    {
+      "id": "12-secciones",
+      "text": "Now the markers. There are two kinds. Sections go on the bottom row: intro, verse, chorus. They're for jumping live, and the voice guide announces them. Create them by right-clicking the ruler, Create marker, Sections."
+    },
+    {
+      "id": "13-avisos",
+      "text": "Cues go on the top row: directions for the band, like drums in, or last time. And to change a marker's kind, just drag it from one row to the other."
+    },
+    {
+      "id": "14-guia",
+      "text": "With the markers in place, turn on the Guide. Listen: before each section, a voice announces it, and counts it in."
+    },
+    {
+      "id": "15-salidas",
+      "text": "So the click and the guide play only in the band's in-ears, choose the audio output of their folder. The music goes to Master, to the desk. The click and the guide, to another output on your interface."
+    },
+    {
+      "id": "16-live",
+      "text": "And now, play. Press Tab until you reach Live View: each section is a big button. Tap it, and the song jumps to that part at just the right moment."
+    },
+    {
+      "id": "17-final",
+      "text": "Save with Control S, and you're done. The complete guide, button by button, is at libretracks dot com. Enjoy playing!"
+    }
+  ]
+}

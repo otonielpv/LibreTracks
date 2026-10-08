@@ -10,6 +10,10 @@
 //
 // --dry runs the actions with a screenshot per scene instead of recording.
 //
+// LT_GUIDESHOTS_LANG=en records the English video: the app and its voice guide
+// in English, labels from the app's own translation (uiText.ts). The system
+// file picker stays in Spanish, like the Windows dialog in the desktop video.
+//
 // Before running (once per emulator): the stems in /sdcard/Music/<song>/ and
 // indexed (adb shell content call --method scan_volume --uri content://media
 // --arg external_primary). The run itself keeps the device landscape and the
@@ -41,10 +45,13 @@ import {
   viewport,
   waitFor,
 } from "../lib/device.ts";
+import { L, UI_LANG } from "../../e2e/utils/uiText.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..", "..");
-const tutorialDir = path.resolve(process.env.LT_TUTORIAL_DIR ?? "marketing/tutorial-video/primeros-pasos-movil");
+const tutorialDir = path.resolve(
+  process.env.LT_TUTORIAL_DIR ?? `marketing/tutorial-video/${UI_LANG === "en" ? "first-steps-mobile" : "primeros-pasos-movil"}`,
+);
 const scenesDir = path.join(tutorialDir, "scenes");
 mkdirSync(scenesDir, { recursive: true });
 const loopback = path.join(repoRoot, "scripts", "tutorial-video", "loopback.py");
@@ -59,8 +66,13 @@ const durations: Record<string, number> = (() => {
   }
 })();
 
-const SESSION_NAME = "Domingo";
-const SONG = "Fiel";
+const SESSION_NAME = UI_LANG === "en" ? "Sunday" : "Domingo";
+const SONG = UI_LANG === "en" ? "Faithful" : "Fiel";
+const FOLDER_NAME = UI_LANG === "en" ? "Monitors" : "Monitores";
+const TITLES =
+  UI_LANG === "en"
+    ? { intro: ["Your first song in LibreTracks", "On phone and tablet"], end: ["libretracks.com", "The complete guide, button by button"] }
+    : { intro: ["Tu primera canción en LibreTracks", "En el móvil y la tablet"], end: ["libretracks.com", "La guía completa, botón a botón"] };
 const tour = (id: string) => `[data-lt-tour="${id}"]`;
 const clickText = async (selector: string, text: string) =>
   run(
@@ -197,13 +209,13 @@ adb("shell cmd locale set-app-locales com.google.android.documentsui --locales e
 adb("shell cmd media_session volume --stream 3 --set 15");
 adb(`shell am force-stop ${APP}`);
 if (!only.length || only.includes("01-intro")) adb(`shell pm clear ${APP}`);
-adb(`shell cmd locale set-app-locales ${APP} --locales es-ES`);
+adb(`shell cmd locale set-app-locales ${APP} --locales ${UI_LANG === "en" ? "en-US" : "es-ES"}`);
 adb(`shell am start -n ${APP}/com.libretracks.desktop.MainActivity`);
 await connect();
 await send("Page.enable");
 await sleep(12_000);
 // First-run prompts out of the way.
-for (const label of ["No, gracias", "Saltar tutorial"]) {
+for (const label of [L("No, gracias"), L("Saltar tutorial")]) {
   if (await rectOf("button", { text: label })) {
     await tap("button", { text: label });
     await sleep(800);
@@ -211,17 +223,23 @@ for (const label of ["No, gracias", "Saltar tutorial"]) {
 }
 console.log("[tutorial] viewport", JSON.stringify(await viewport()));
 // Song arrangements are not announced yet: keep their menu entries off camera.
-await run(() => {
+await run((label: string) => {
   const hide = () =>
     document.querySelectorAll("button").forEach((b) => {
-      if (/^arreglo/i.test((b.textContent ?? "").trim())) (b as HTMLElement).style.display = "none";
+      if ((b.textContent ?? "").trim().toLowerCase().startsWith(label)) (b as HTMLElement).style.display = "none";
     });
   hide();
   new MutationObserver(hide).observe(document.body, { childList: true, subtree: true });
-});
+}, L("Arreglo").toLowerCase());
+// The voice guide speaks the video's language (pm clear reset it).
+await run(async (lang: string) => {
+  const invoke = (window as any).__TAURI_INTERNALS__.invoke;
+  const settings = await invoke("get_settings");
+  await invoke("update_audio_settings", { settings: { ...settings, voiceGuideLanguage: lang } });
+}, UI_LANG);
 
 await scene("01-intro", async () => {
-  await titleCard("Tu primera canción en LibreTracks", "En el móvil y la tablet");
+  await titleCard(TITLES.intro[0], TITLES.intro[1]);
   await sleep(4000);
   await removeTitleCard();
   await sleep(1500);
@@ -229,17 +247,17 @@ await scene("01-intro", async () => {
 
 await scene("02-crear", async () => {
   await tap(tour("landing-create"), { settle: 1200 });
-  await run(() => (document.querySelector('input[placeholder="Nombre de la sesion"]') as HTMLInputElement).focus());
+  await run((ph: string) => (document.querySelector(`input[placeholder="${ph}"]`) as HTMLInputElement).focus(), L("Nombre de la sesion"));
   await sleep(900);
   typeSlow(SESSION_NAME);
   await sleep(900);
   await hideKeyboard();
-  await tap("button", { text: "Crear", settle: 4000 });
-  await waitFor("button", { text: "Añadir audios" });
+  await tap("button", { text: L("Crear"), settle: 4000 });
+  await waitFor("button", { text: L("Añadir audios") });
 });
 
 await scene("03-audios", async () => {
-  await tap("button", { text: "Añadir audios", settle: 3500 });
+  await tap("button", { text: L("Añadir audios"), settle: 3500 });
   await uiTap("Audio");
   await sleep(800);
   const first = uiNodes().find((n) => n.text.endsWith(".wav"));
@@ -262,9 +280,9 @@ await scene("04-colocar", async () => {
 
 await scene("05-renombrar", async () => {
   await tap(".lt-region-hotspot", { settle: 1500 });
-  await waitFor("button", { text: "Renombrar Cancion" });
+  await waitFor("button", { text: L("Renombrar Cancion") });
   await sleep(600);
-  await tap("button", { text: "Renombrar Cancion", settle: 1200 });
+  await tap("button", { text: L("Renombrar Cancion"), settle: 1200 });
   await waitFor("#lt-dialog-input");
   await run(() => (document.querySelector("#lt-dialog-input") as HTMLInputElement).select());
   await sleep(500);
@@ -314,8 +332,8 @@ async function exact(selector: string, text: string) {
 }
 
 await scene("06-nota", async () => {
-  if (!(await rectOf(bar, { text: "Nota de la cancion" }))) await tap(".lt-region-hotspot", { settle: 1500 });
-  await tap("button", { text: "Nota de la cancion", settle: 1200 });
+  if (!(await rectOf(bar, { text: L("Nota de la cancion") }))) await tap(".lt-region-hotspot", { settle: 1500 });
+  await tap("button", { text: L("Nota de la cancion"), settle: 1200 });
   await tap(await exact("button", "D"), { settle: 1500 });
   const key = await run(async () => {
     const view = (await (window as any).__TAURI_INTERNALS__.invoke("get_song_view")) as any;
@@ -325,7 +343,7 @@ await scene("06-nota", async () => {
 });
 
 await scene("07-tempo", async () => {
-  await tap(`${bar} button[aria-label="Quitar selección"]`, { settle: 800 });
+  await tap(`${bar} button[aria-label="${L("Quitar selección")}"]`, { settle: 800 });
   await tap(tour("topbar-tempo"), { settle: 1000 });
   await run(() => (document.querySelector(".lt-tempo-input") as HTMLInputElement | null)?.select());
   typeSlow("128");
@@ -334,9 +352,9 @@ await scene("07-tempo", async () => {
   await sleep(800);
   await hideKeyboard();
   await tap(`${tour("topbar-metronome")} > button:nth-of-type(1)`, { settle: 800 });
-  await tap('button[aria-label="Reproducir"]', { settle: 300 });
+  await tap(`button[aria-label="${L("Reproducir")}"]`, { settle: 300 });
   await listen(7000);
-  await tap('button[aria-label="Detener"]', { settle: 800 });
+  await tap(`button[aria-label="${L("Detener")}"]`, { settle: 800 });
   peek("07-after");
 });
 
@@ -345,31 +363,31 @@ await scene("08-carpeta", async () => {
   await run(() => document.querySelector('[data-tut="Click"]')?.scrollIntoView({ block: "center" }));
   await sleep(600);
   await tap(`${click} .lt-track-title-row strong`, { settle: 1000 });
-  await tap(`${bar} button[aria-label="Seleccionar varias pistas"]`, { settle: 800 });
+  await tap(`${bar} button[aria-label="${L("Seleccionar varias pistas")}"]`, { settle: 800 });
   const guia = await headerOf("Guia");
   await tap(`${guia} .lt-track-title-row strong`, { settle: 1000 });
-  await tap(`${bar} button`, { text: "Mover a carpeta", settle: 1200 });
+  await tap(`${bar} button`, { text: L("Mover a carpeta"), settle: 1200 });
   peek("08-menu");
-  await tap(await exact("button", "Carpeta nueva…"), { settle: 1200 });
+  await tap(await exact("button", L("Carpeta nueva…")), { settle: 1200 });
   await waitFor("#lt-dialog-input");
   await run(() => (document.querySelector("#lt-dialog-input") as HTMLInputElement).select());
-  typeSlow("Monitores");
+  typeSlow(FOLDER_NAME);
   await sleep(700);
   await hideKeyboard();
   await tap("button", { text: "OK", settle: 1500 });
-  const folder = await run(async () => {
+  const folder = await run(async (folderName: string) => {
     const view = (await (window as any).__TAURI_INTERNALS__.invoke("get_song_view")) as any;
-    const f = view.tracks.find((t: any) => t.name === "Monitores");
+    const f = view.tracks.find((t: any) => t.name === folderName);
     return f ? view.tracks.filter((t: any) => t.parentTrackId === f.id).map((t: any) => t.name).join(",") : "";
-  });
+  }, FOLDER_NAME);
   if (folder !== "Click,Guia") throw new Error(`08-carpeta: folder holds "${folder}"`);
   peek("08-done");
 });
 
 await scene("09-marcas", async () => {
-  if (await rectOf(`${bar} button[aria-label="Quitar selección"]`)) await tap(`${bar} button[aria-label="Quitar selección"]`, { settle: 800 });
-  await tap(`${bar} button`, { text: "Sección", settle: 1200 });
-  await tap(await exact("button", "Intro"), { settle: 1500 });
+  if (await rectOf(`${bar} button[aria-label="${L("Quitar selección")}"]`)) await tap(`${bar} button[aria-label="${L("Quitar selección")}"]`, { settle: 800 });
+  await tap(`${bar} button`, { text: L("Sección"), settle: 1200 });
+  await tap(await exact("button", L("Intro")), { settle: 1500 });
   // Move the cursor with a tap on the ruler, a fifth into the song.
   const song = await rectOf(".lt-region-hotspot");
   const ruler = await rectOf(tour("timeline-ruler"));
@@ -377,19 +395,19 @@ await scene("09-marcas", async () => {
   await touch(song.x + song.w * 0.2, ruler.y + ruler.h * 0.6);
   await sleep(1200);
   peek("09-cursor");
-  await tap(`${bar} button`, { text: "Sección", settle: 1200 });
-  await tap(await exact("button", "Verso ▸"), { settle: 1200 });
-  await tap(await exact("button", "Verso"), { settle: 1500 });
+  await tap(`${bar} button`, { text: L("Sección"), settle: 1200 });
+  await tap(await exact("button", `${L("Verso")} ▸`), { settle: 1200 });
+  await tap(await exact("button", L("Verso")), { settle: 1500 });
   await touch(song.x + song.w * 0.4, ruler.y + ruler.h * 0.6);
   await sleep(1200);
-  await tap(`${bar} button`, { text: "Sección", settle: 1200 });
-  await tap(await exact("button", "Coro ▸"), { settle: 1200 });
-  await tap(await exact("button", "Coro"), { settle: 1500 });
+  await tap(`${bar} button`, { text: L("Sección"), settle: 1200 });
+  await tap(await exact("button", `${L("Coro")} ▸`), { settle: 1200 });
+  await tap(await exact("button", L("Coro")), { settle: 1500 });
   // A cue for the band, just before the verse.
   await touch(song.x + song.w * 0.14, ruler.y + ruler.h * 0.6);
   await sleep(1200);
-  await tap(`${bar} button`, { text: "Aviso", settle: 1200 });
-  await tap(await exact("button", "Toda La Banda"), { settle: 1500 });
+  await tap(`${bar} button`, { text: L("Aviso"), settle: 1200 });
+  await tap(await exact("button", L("Toda La Banda")), { settle: 1500 });
   const markers = await run(async () => {
     const view = (await (window as any).__TAURI_INTERNALS__.invoke("get_song_view")) as any;
     return (view.sectionMarkers ?? view.markers ?? []).map((m: any) => m.name).join(",");
@@ -406,25 +424,25 @@ await scene("10-guia", async () => {
   if (!song || !ruler) throw new Error("10-guia: no ruler");
   await touch(song.x + song.w * 0.33, ruler.y + ruler.h * 0.6);
   await sleep(1000);
-  await tap('button[aria-label="Reproducir"]', { settle: 300 });
+  await tap(`button[aria-label="${L("Reproducir")}"]`, { settle: 300 });
   await listen(8000);
-  await tap('button[aria-label="Detener"]', { settle: 800 });
+  await tap(`button[aria-label="${L("Detener")}"]`, { settle: 800 });
 });
 
 await scene("11-live", async () => {
   await tap(`${tour("view-mode-switcher")} button:nth-of-type(3)`, { settle: 2000 });
   peek("11-live");
-  await tap('button[aria-label="Reproducir"]', { settle: 300 });
+  await tap(`button[aria-label="${L("Reproducir")}"]`, { settle: 300 });
   await listen(2500);
-  await tap("button", { text: "Coro", settle: 300 });
+  await tap("button", { text: L("Coro"), settle: 300 });
   await listen(5000);
-  await tap('button[aria-label="Detener"]', { settle: 800 });
+  await tap(`button[aria-label="${L("Detener")}"]`, { settle: 800 });
 });
 
 await scene("12-final", async () => {
   await tap(`${tour("view-mode-switcher")} button:nth-of-type(1)`, { settle: 1500 });
-  await tap('button[aria-label="Guardar"]', { settle: 1500 });
-  await titleCard("libretracks.com", "La guía completa, botón a botón");
+  await tap(`button[aria-label="${L("Guardar")}"]`, { settle: 1500 });
+  await titleCard(TITLES.end[0], TITLES.end[1]);
   await sleep(4000);
 });
 

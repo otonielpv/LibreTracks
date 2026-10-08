@@ -4,7 +4,9 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:
 import path from "node:path";
 import AppPage from "../pageobjects/app.page.js";
 import { rectOf, runInPage } from "../utils/annotate.js";
+import { useAppLocale, useVoiceGuideLanguage } from "../utils/appLocale.js";
 import { Recorder, type VideoOptions } from "../utils/record.js";
+import { L, UI_LANG } from "../utils/uiText.js";
 
 /**
  * Not a test — records the scenes of the narrated "first song" tutorial
@@ -22,6 +24,10 @@ import { Recorder, type VideoOptions } from "../utils/record.js";
  *
  * Optional LT_TUTORIAL_SCENES=04-renombrar,08-tempo re-encodes only those
  * scenes (the rest still run, so the app reaches the right state).
+ *
+ * LT_GUIDESHOTS_LANG=en records the English video: the app and the voice
+ * guide in English (both put back afterwards), labels from the app's own
+ * translation (uiText.ts). The Windows dialog and Explorer stay as they are.
  */
 
 const repoRoot = path.resolve(__dirname, "..", "..", "..");
@@ -33,7 +39,13 @@ const STEMS = ["Bateria.wav", "BajoSnt.wav", "Piano.wav", "Tecla 1.wav", "Vocale
 // Where the session and the stems live on camera: a short path with no user
 // name in it (the dialog and Explorer show it).
 const SHOWS = "C:\\Shows";
-const SESSION_NAME = "Domingo";
+const SESSION_NAME = UI_LANG === "en" ? "Sunday" : "Domingo";
+const FOLDER_NAME = UI_LANG === "en" ? "Monitors" : "Monitores";
+const TITLES =
+  UI_LANG === "en"
+    ? { intro: ["Your first song in LibreTracks", "From stems to the stage, step by step"], end: ["libretracks.com", "The complete guide, button by button"] }
+    : { intro: ["Tu primera canción en LibreTracks", "De los stems al directo, paso a paso"], end: ["libretracks.com", "La guía completa, botón a botón"] };
+const restores: Array<() => Promise<void>> = [];
 const loopback = path.join(repoRoot, "scripts", "tutorial-video", "loopback.py");
 
 const tour = (id: string) => `[data-lt-tour="${id}"]`;
@@ -201,8 +213,17 @@ describe("first-song tutorial video", function () {
     scenesDir = path.join(tutorialDir, "scenes");
     mkdirSync(scenesDir, { recursive: true });
     await AppPage.waitUntilBooted();
+    if (UI_LANG === "en") {
+      restores.push(await useAppLocale("en"));
+      await AppPage.waitUntilBooted();
+      restores.push(await useVoiceGuideLanguage("en"));
+    }
     await emulate1080p();
     video = { width: W, height: H, dpr: 2, viewport: { w: W, h: H } };
+  });
+
+  after(async () => {
+    for (const restore of restores.reverse()) await restore();
   });
 
   afterEach(async function () {
@@ -242,7 +263,7 @@ describe("first-song tutorial video", function () {
     // 01 — title over the start screen.
     {
       const { rec, done } = scene("01-intro");
-      await titleCard("Tu primera canción en LibreTracks", "De los stems al directo, paso a paso");
+      await titleCard(TITLES.intro[0], TITLES.intro[1]);
       await rec.hold(durations["01-intro"] - 2.2);
       await removeTitleCard();
       await rec.hold(1.5);
@@ -305,7 +326,7 @@ describe("first-song tutorial video", function () {
       if (!ruler) throw new Error("no ruler");
       await rec.zoomTo({ x: ruler.x, y: ruler.y - 30, w: 900, h: 260 }, { margin: 30 });
       await rec.rightClick(songBar);
-      await rec.click(await tagByText(".lt-context-menu button", "Renombrar Cancion", "mi"), 500);
+      await rec.click(await tagByText(".lt-context-menu button", L("Renombrar Cancion"), "mi"), 500);
       await promptType(rec, SONG);
       if ((await view()).regions[0]?.name !== SONG) throw new Error("04-renombrar: not renamed");
       await rec.hold(0.8);
@@ -316,7 +337,7 @@ describe("first-song tutorial video", function () {
     {
       const { rec, done } = scene("05-nota");
       await rec.rightClick(songBar);
-      await rec.click(await tagByText(".lt-context-menu button", "Nota de la cancion", "mi"), 600);
+      await rec.click(await tagByText(".lt-context-menu button", L("Nota de la cancion"), "mi"), 600);
       await rec.click(await tagByText(".lt-context-menu button", "A#", "key", true), 600);
       if ((await view()).regions[0]?.key !== "A#") throw new Error("05-nota: key not set");
       await rec.zoomTo(songBar, { margin: 120 });
@@ -351,14 +372,14 @@ describe("first-song tutorial video", function () {
       await ctrlClick(`${guia} .lt-track-title-row strong`);
       await rec.hold(0.5);
       await rec.rightClick(`${guia} .lt-track-title-row strong`);
-      await rec.click(await tagByText(".lt-context-menu button", "Mover a carpeta", "mi"), 600);
-      await rec.click(await tagByText(".lt-context-menu button", "Carpeta nueva", "mi2"), 600);
-      await promptType(rec, "Monitores");
+      await rec.click(await tagByText(".lt-context-menu button", L("Mover a carpeta"), "mi"), 600);
+      await rec.click(await tagByText(".lt-context-menu button", L("Carpeta nueva"), "mi2"), 600);
+      await promptType(rec, FOLDER_NAME);
       const tracks = (await view()).tracks;
-      const folder = tracks.find((t) => t.name === "Monitores");
+      const folder = tracks.find((t) => t.name === FOLDER_NAME);
       const clickTrack = tracks.find((t) => t.name === "Click");
       if (!folder || clickTrack?.parentTrackId !== folder.id) throw new Error("07-carpetas: folder not made");
-      const folderHead = await headerOf("Monitores", "h-mon");
+      const folderHead = await headerOf(FOLDER_NAME, "h-mon");
       await rec.click(`${folderHead} .lt-folder-toggle`, 700);
       await rec.hold(1.2);
       await rec.click(`${folderHead} .lt-folder-toggle`, 700);
@@ -379,9 +400,9 @@ describe("first-song tutorial video", function () {
       await rec.click(`${tour("topbar-metronome")} > button:nth-of-type(1)`, 600);
       await rec.zoomOut(700);
       await rec.key("Home", 300);
-      await rec.click('button[aria-label="Reproducir"]', 150);
+      await rec.click(`button[aria-label="${L("Reproducir")}"]`, 150);
       await rec.realtimeWithAudio(6500, loopback);
-      await rec.click('button[aria-label="Detener"]', 500);
+      await rec.click(`button[aria-label="${L("Detener")}"]`, 500);
       await done();
     }
 
@@ -408,7 +429,7 @@ describe("first-song tutorial video", function () {
       await rec.click(songBar, 400);
       await rec.zoomTo(tour("toolbar-transpose"), { margin: 260 });
       await rec.click(`${tour("toolbar-transpose")} .lt-control-popover-trigger`, 600);
-      const up = 'button[aria-label="Subir un semitono la region seleccionada"]';
+      const up = `button[aria-label="${L("Subir un semitono la region seleccionada")}"]`;
       await rec.click(up, 900);
       await rec.click(up, 1200);
       await rec.click(`${tour("toolbar-transpose")} .lt-control-popover-trigger`, 500);
@@ -420,9 +441,9 @@ describe("first-song tutorial video", function () {
         throw new Error("10-tono: the song did not get shorter");
       }
       await rec.key("Home", 400);
-      await rec.click('button[aria-label="Reproducir"]', 150);
+      await rec.click(`button[aria-label="${L("Reproducir")}"]`, 150);
       await rec.realtimeWithAudio(5000, loopback);
-      await rec.click('button[aria-label="Detener"]', 500);
+      await rec.click(`button[aria-label="${L("Detener")}"]`, 500);
       await done();
     }
 
@@ -432,7 +453,7 @@ describe("first-song tutorial video", function () {
       await rec.click(songBar, 400);
       await rec.zoomTo(tour("toolbar-warp"), { margin: 260 });
       await rec.click(`${tour("toolbar-warp")} .lt-control-popover-trigger`, 600);
-      await rec.click('button[aria-label="Activar warp en la region seleccionada"]', 1500);
+      await rec.click(`button[aria-label="${L("Activar warp en la region seleccionada")}"]`, 1500);
       await rec.click(`${tour("toolbar-warp")} .lt-control-popover-trigger`, 500);
       await rec.zoomOut(800);
       await rec.hold(1);
@@ -445,9 +466,9 @@ describe("first-song tutorial video", function () {
       }
       await rec.zoomOut(700);
       await rec.key("Home", 400);
-      await rec.click('button[aria-label="Reproducir"]', 150);
+      await rec.click(`button[aria-label="${L("Reproducir")}"]`, 150);
       await rec.realtimeWithAudio(5000, loopback);
-      await rec.click('button[aria-label="Detener"]', 500);
+      await rec.click(`button[aria-label="${L("Detener")}"]`, 500);
       await done();
     }
 
@@ -458,12 +479,12 @@ describe("first-song tutorial video", function () {
       const before = (await view()).sectionMarkers.length;
       for (let attempt = 0; attempt < 2; attempt++) {
         await rec.rightClick({ x, y: ruler.y + 30 });
-        await rec.click(await tagByText(".lt-context-menu button", "Crear Marca", "m1"), 400);
-        await rec.click(await tagByText(".lt-context-menu button", group, "m2"), 400);
-        await rec.click(await tagByText(".lt-context-menu button", kind, "m3", true), 400);
+        await rec.click(await tagByText(".lt-context-menu button", L("Crear Marca"), "m1"), 400);
+        await rec.click(await tagByText(".lt-context-menu button", L(group), "m2"), 400);
+        await rec.click(await tagByText(".lt-context-menu button", L(kind), "m3", true), 400);
         await browser.pause(400);
         if (await rectOf(".lt-context-menu")) {
-          await rec.click(await tagByText(".lt-context-menu button", kind, "m4", true), 400);
+          await rec.click(await tagByText(".lt-context-menu button", L(kind), "m4", true), 400);
         }
         await browser.pause(400);
         if ((await view()).sectionMarkers.length > before) return;
@@ -495,8 +516,8 @@ describe("first-song tutorial video", function () {
       if (!bar || !ruler13) throw new Error("no bar");
       await rec.zoomTo({ x: ruler13.x, y: ruler13.y - 70, w: Math.min(1200, bar.x + bar.w - ruler13.x + 40), h: 420 }, { margin: 30, ms: 10 });
       await addMarker(rec, bar.x + bar.w * 0.37, "Avisos", "Entra Batería");
-      const cue = await rectOf(await tagByText(".lt-marker-hotspot", "Entra", "cue"));
-      const verso = await tagByText(".lt-marker-hotspot", "Verso", "verso");
+      const cue = await rectOf(await tagByText(".lt-marker-hotspot", L("Entra Batería"), "cue"));
+      const verso = await tagByText(".lt-marker-hotspot", L("Verso"), "verso");
       const vb = await rectOf(verso);
       if (!cue || !vb) throw new Error("13-avisos: markers not found");
       await rec.dragTo({ x: vb.x + vb.w / 2, y: cue.y + cue.h / 2 }, 900, { from: verso });
@@ -514,7 +535,7 @@ describe("first-song tutorial video", function () {
       await rec.zoomOut(700);
       // Seek a little over two bars before the chorus by clicking the ruler.
       const song = await view();
-      const coro = song.sectionMarkers.find((m) => /coro/i.test(m.name));
+      const coro = song.sectionMarkers.find((m) => m.name.toLowerCase().includes(L("Coro").toLowerCase()));
       const cam = await runInPage(() =>
         (window as unknown as { __ltE2E: { getTimelineView: () => { cameraX: number; zoomLevel: number } } }).__ltE2E.getTimelineView(),
       );
@@ -525,16 +546,16 @@ describe("first-song tutorial video", function () {
         const x = ruler.x + at * cam.zoomLevel * 18 - cam.cameraX;
         await rec.clickAt({ x, y: ruler.y + 30 }, 500);
       }
-      await rec.click('button[aria-label="Reproducir"]', 150);
+      await rec.click(`button[aria-label="${L("Reproducir")}"]`, 150);
       await rec.realtimeWithAudio(7500, loopback);
-      await rec.click('button[aria-label="Detener"]', 500);
+      await rec.click(`button[aria-label="${L("Detener")}"]`, 500);
       await done();
     }
 
     // 15 — outputs, on the Monitores folder.
     {
       const { rec, done } = scene("15-salidas");
-      const header = await headerOf("Monitores", "h-mon");
+      const header = await headerOf(FOLDER_NAME, "h-mon");
       await rec.zoomTo(header, { margin: 180 });
       await rec.click(`${header} .lt-audio-route-trigger`, 700);
       await rec.hold(2.5);
@@ -550,13 +571,13 @@ describe("first-song tutorial video", function () {
       await rec.key("Home", 300);
       await rec.key("Tab", 900);
       await rec.key("Tab", 1200);
-      await rec.click('button[aria-label="Reproducir"]', 150);
+      await rec.click(`button[aria-label="${L("Reproducir")}"]`, 150);
       await rec.realtimeWithAudio(2500, loopback);
-      const chorus = await tagByText(".lt-live-cue-grid button, .lt-live-cue-grid [role='button']", "Coro", "chorus");
+      const chorus = await tagByText(".lt-live-cue-grid button, .lt-live-cue-grid [role='button']", L("Coro"), "chorus");
       await rec.zoomTo(".lt-live-cue-panel", { margin: 40, maxZoom: 1.4 });
       await rec.click(chorus, 100);
       await rec.realtimeWithAudio(6000, loopback);
-      await rec.click('button[aria-label="Detener"]', 400);
+      await rec.click(`button[aria-label="${L("Detener")}"]`, 400);
       await done();
     }
 
@@ -567,7 +588,7 @@ describe("first-song tutorial video", function () {
       await browser.keys(["Control", "s"]);
       await browser.keys(["Control"]);
       await rec.hold(1.5);
-      await titleCard("libretracks.com", "La guía completa, botón a botón");
+      await titleCard(TITLES.end[0], TITLES.end[1]);
       await rec.hold(3);
       await done();
       await removeTitleCard();

@@ -29,3 +29,23 @@ export async function useAppLocale(language: "es" | "en"): Promise<() => Promise
     }, previous);
   };
 }
+
+/**
+ * Sets the voice guide's language for a run and returns how to undo it. Goes
+ * through update_audio_settings like the app's own popover: save_settings does
+ * not reach the engine, which would keep announcing in the old language.
+ */
+export async function useVoiceGuideLanguage(language: "es" | "en"): Promise<() => Promise<void>> {
+  const apply = async (lang: string) =>
+    (await browser.execute(async (l: string) => {
+      const invoke = (window as unknown as { __TAURI_INTERNALS__: { invoke: Invoke } }).__TAURI_INTERNALS__.invoke;
+      const settings = (await invoke("get_settings")) as Record<string, unknown>;
+      const before = settings.voiceGuideLanguage as string;
+      await invoke("update_audio_settings", { settings: { ...settings, voiceGuideLanguage: l } });
+      return before;
+    }, lang)) as string;
+  const previous = await apply(language);
+  return async () => {
+    await apply(previous);
+  };
+}
