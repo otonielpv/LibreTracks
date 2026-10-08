@@ -231,7 +231,7 @@ describe("cabeceras finas y expansion en fila", () => {
     });
     tapHeader();
 
-    fireEvent.click(screen.getByRole("button", { name: "Audio To Voz" }));
+    fireEvent.click(screen.getByRole("button", { name: "Salida de Voz" }));
     const option = screen.getByRole("option", { name: "Ext. Out 1-2" });
 
     fireEvent.pointerDown(option);

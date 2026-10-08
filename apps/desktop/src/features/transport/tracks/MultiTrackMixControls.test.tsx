@@ -96,7 +96,7 @@ describe("mezcla de una multiseleccion", () => {
         mix={mix()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Audio To/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Salida de / }));
     expect(screen.queryByRole("option", { name: /Heredad/i })).toBeNull();
 
     cleanup();
@@ -110,7 +110,7 @@ describe("mezcla de una multiseleccion", () => {
         mix={mix()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Audio To/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Salida de / }));
     expect(screen.getByRole("option", { name: /Heredad/i })).toBeTruthy();
   });
 
