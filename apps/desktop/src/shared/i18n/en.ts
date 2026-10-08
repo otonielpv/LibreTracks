@@ -1932,7 +1932,7 @@ const en = {
     vampType: "Vamp type",
     markerMatrix: "Live markers",
     markers: "markers",
-    warning: "Warning",
+    warning: "Cue",
     now: "Now",
     queued: "Queued",
     vampSectionBadge: "VAMP · MARKER ↻",
