@@ -1,0 +1,134 @@
+---
+title: Songs
+description: "How to create, move, lengthen, split, reorder and export songs in LibreTracks, and the settings each one has: key, master, transposition, warp and pause at the end."
+sidebar:
+  order: 2
+---
+
+import Clip from "../../../../components/guide/Clip.astro";
+
+A LibreTracks session is a **setlist**: several songs one after another on the
+timeline. Each song is a named bar on the ruler (in some places the app calls
+it a *region*) and holds its clips, its markers and its tempo changes.
+Everything inside a song travels with it.
+
+## Creating a song
+
+There are several ways, depending on where the audio comes from:
+
+- **From a Library folder**: drag the folder onto the timeline. See
+  [Library and audio](/docs/tasks/library/#a-whole-folder-as-a-song).
+- **Dropping audio into an empty gap** on the timeline: a song is created to
+  hold it.
+- **From a stretch of the ruler**: drag across an empty part of the ruler to
+  mark the stretch, right-click inside it and choose **Create Song From
+  Selection**.
+
+<Clip
+  src="/guide/desktop-en/song-from-range.mp4"
+  poster="/guide/desktop-en/song-from-range.webp"
+  caption="Dragging across the empty ruler marks a stretch; right-click › Create Song From Selection."
+/>
+
+- **Importing an exported song** (`.ltpkg`): File menu › **Import song**, or
+  drag the file onto the timeline. It arrives with its audio, its markers and
+  its settings, and is placed at the end of the session.
+- **Importing a Reaper or Ableton project** (`.rpp`, `.als`). See
+  [Export, import and share](/docs/integration-ecosystem/).
+- In **Compact View**, the **+ New song** button creates an empty song at the
+  end.
+
+## Moving, lengthening and shortening
+
+**Move**: drag the song's bar along the ruler. Its clips, markers and tempo
+changes move with it.
+
+<Clip
+  src="/guide/desktop-en/song-move.mp4"
+  poster="/guide/desktop-en/song-move.webp"
+  caption="Dragging a song's bar moves it with everything in it."
+/>
+
+- To the **right**, if it hits the next song it **pushes** it, and every song
+  after it too.
+- To the **left** it cannot overlap the previous one.
+- It snaps to the grid; hold <kbd>Shift</kbd> to move it freely.
+
+**Lengthen or shorten**: drag the bar's left or right edge.
+
+<Clip
+  src="/guide/desktop-en/song-resize.mp4"
+  poster="/guide/desktop-en/song-resize.webp"
+  caption="Dragging the song's right edge lengthens it."
+/>
+
+- The **right edge** snaps to the beat; the **left** one, to the bar.
+- An edge **cannot cross the audio** the song holds: it stops right at the
+  first or last clip. That way a clip is never left outside.
+- Nor can it run into the song next to it.
+- Lengthening the end leaves silence after the last clip, handy for giving
+  some air before the next song.
+
+## Splitting a song in two
+
+Handy when you import a whole project as a single song and want to split it
+into the setlist's real songs.
+
+1. Put the cursor where you want to cut.
+2. Press <kbd>Shift</kbd>+<kbd>S</kbd>, or right-click the song › **Split song
+   at cursor**.
+
+The left part keeps the name; the right one gets the same name with "(2)".
+Both keep the original's settings (key, warp, master). Clips that cross the
+cut are split too, without losing any audio.
+
+## Each song's settings
+
+Each song has its own settings. Select it by clicking its bar to see them in
+the [toolbar](/docs/interface/toolbar/#master-transposition-and-warp), or use
+its menu (right-click):
+
+- **Rename Song** (<kbd>F2</kbd>).
+- **Song key**: its key. It shows next to the name, in Live View and on the
+  Remote, and **transposes by itself** when you change the pitch: a song in
+  *D* raised 2 semitones shows as *E*.
+- **Master**: the volume of the whole song. It does not affect the metronome
+  or the voice guide.
+- **Transposition** and **warp**: see
+  [Pitch, warp and the T button](/docs/pitch-and-warp/). Note: without warp,
+  transposing changes the speed, so the song gets longer or shorter, and the
+  following ones shift so they don't overlap.
+- **Change Original BPM**: the tempo the audio was recorded at, used by warp.
+
+## Reordering the setlist
+
+- In the **DAW view**, move the songs along the ruler (see above).
+- In **Compact View** and **Live View**, drag the song by its **handle** (the
+  six dots on its left) to its new place. While you drag you see where it will
+  land. With the handle selected, the arrow keys move it one place at a time.
+  The song moves whole, with its audio, markers and tempo, and the gaps
+  between songs are kept.
+
+## Going from one song to the next live
+
+By default, when a song ends playback carries on with the next one. If you
+would rather stop between songs (to speak, for example), turn on **Pause at
+the end of each song** in Settings › General: playback stops right on the last
+frame of each song, and *Play* starts the next one.
+
+To jump to another song: the **Previous** and **Next** buttons,
+<kbd>Shift</kbd>+number (<kbd>Shift</kbd>+<kbd>0</kbd> is the first song),
+Live View, the Remote or a MIDI pedal. When and how the jump happens is set by
+[Song Transition](/docs/interface/toolbar/#song-transition).
+
+## Exporting, rendering and deleting
+
+From the song's menu:
+
+- **Export Song**: creates an `.ltpkg` with the song, its audio, its markers
+  and its settings, to take it to another session or another computer.
+- **Render audio…**: exports the mix to WAV, whole or one track per file.
+- **Delete Song** (<kbd>Del</kbd> with the song selected): removes the song
+  with its clips, markers and tempo changes. If it still has clips, it asks
+  you to confirm. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it, and the audio stays
+  in the Library.

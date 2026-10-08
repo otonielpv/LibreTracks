@@ -1,0 +1,86 @@
+---
+title: Automation
+description: "The LibreTracks automation track: actions that fire by themselves at an exact point (jumps, mute, solo, volume, mix scenes, pads and waits), how to limit their repeats and how to create mix scenes."
+---
+
+An **automation** is a list of actions LibreTracks runs by itself when
+playback passes an exact point: jump to another section, mute a track, pull
+down a fader, change the pad… It lets a song "play itself" so you don't have to
+remember every change live.
+
+Automations live on the **automation track** (there is only one per session)
+and show as diamonds on its lane.
+
+## Creating the automation track
+
+Right-click the gap below the tracks, or use any track's menu › **Add
+automation track**. The power button on its header turns all automations off
+at once, for a rehearsal for example.
+
+## Creating an automation
+
+1. Right-click the automation lane, at the exact point › **Create automation
+   here**. (Also from the ruler: **Create automation**.)
+2. Add the actions with the **Add action** buttons.
+3. **Save**.
+
+![The automation editor](/guide/desktop-en/automation-cue-editor.png)
+
+The actions run **in order**, top to bottom; use the arrows to reorder them.
+
+| Action | What it does |
+| --- | --- |
+| **Jump to...** | Jumps to a song, a marker or an exact position. It can be instant or with a **fade out** of a few seconds. It is always the last action. |
+| **Mute / unmute track** | Mutes a track or turns it back on. |
+| **Solo / unsolo track** | Sets or clears a track's solo. |
+| **Volume / pan** | Takes a track's volume (0–100) and pan to a value, at once or with a few seconds of **smoothing**. |
+| **Apply scene** | Applies a [mix scene](#mix-scenes) in one go. |
+| **Control pads** | Turns the [pad](/docs/ambient-pads/) on or off and sets pack, key, output, volume and fades. |
+| **Wait** | Lets a few seconds go by before the next action. |
+
+**Limit repeats**: by default the automation fires every time playback passes
+it. Turn this on so it only does so a few times (for example, jumping back to
+the chorus only the first time). When it runs out of repeats, the diamond
+shows dimmed. The counts go back to zero when you press **Stop**.
+
+## Editing, moving and disabling
+
+- **Click** the diamond: opens the editor. Hovering over it shows a summary of
+  what it does.
+- **Drag it** to move it.
+- **Right-click**:
+
+![An automation's menu](/guide/desktop-en/menu-automation-cue.png)
+
+**Edit automation...**, **Rename automation**, **Disable automation** (it
+stays in place without firing) and **Delete automation**.
+
+Automations travel with their song: if you move or reorder the song, they move
+with it.
+
+## Mix scenes
+
+A **scene** is a saved mix: the volume, pan, mute and solo of the tracks you
+choose. With the **Apply scene** action it is applied in one go, for example to
+leave just voice and click for an a cappella ending and bring back the full
+mix in the next section.
+
+Right-click the automation track's header › **Manage mix scenes...**:
+
+![The mix scene manager](/guide/desktop-en/mix-scenes.png)
+
+1. **+ New scene** and give it a name.
+2. On each track, tick what the scene controls (**Vol**, **Pan**, **Mute**,
+   **Solo**) and set its value. Whatever you don't tick is left alone when it
+   is applied.
+
+## Tips
+
+- A **jump** from an automation is announced by the
+  [voice guide](/docs/voice-guide/) like any other: the band hears where they
+  are going.
+- Use a short **smoothing** on volume changes so you don't hear a step.
+- If you want to rehearse without them jumping, turn the automation track off
+  with its power button.
+- For jumps you decide on the spot (not scheduled), see
+  [Live control](/docs/live-control-flow/).

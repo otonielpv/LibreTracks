@@ -1,0 +1,113 @@
+---
+title: Core concepts
+description: "The pieces of LibreTracks in a few words: session, song, track, clip, marker, Library and outputs, and how they fit together."
+---
+
+Before getting into the buttons, it helps to know the pieces LibreTracks works
+with. There are only a few, and almost everything else follows from them.
+
+## The session: your setlist
+
+A **session** is what you take to the show: one or more songs in order, with
+their tracks, their mix and their outputs. It is what you open, save and take
+to another computer.
+
+On disk, a session is **a folder** with:
+
+- the **`.ltsession`** file, the one you open;
+- an **`audio`** folder, where audio that arrives **inside a package** ends up
+  when you import it (an `.ltpkg` or a full `.ltset`);
+- a **`cache`** folder with the waveforms (they are rebuilt if you delete it).
+
+Your audio files are **not copied** into the session: LibreTracks plays them
+from wherever they are. So if you move or delete an original, that track goes
+silent (LibreTracks tells you and lets you locate it again). To take a session
+to another computer, export it; see
+[Export, import and share](/docs/integration-ecosystem/).
+
+## The song: the main piece
+
+Inside a session everything is organised in **songs**. On the timeline each
+song is a named stretch of the ruler (the **song bar**), and everything below
+it belongs to it: its clips, its markers, its tempo.
+
+What matters most:
+
+- **Every clip belongs to one song.** Move a song and everything in it moves;
+  delete it and everything in it goes.
+- **Many settings belong to the song, not the session**: the **tempo** and
+  **time signature**, the **key**, the **transposition** and **warp**, and its
+  **master volume**. That way each song in the setlist can be in its own key
+  and at its own speed.
+- Live, you jump **between songs** with a transition (at the end, at the next
+  marker, with a fade…).
+
+Songs are created from a stretch of the timeline, from a Library folder, by
+dropping audio files or by importing an `.ltpkg`. See [Songs](/docs/tasks/songs/).
+
+## Tracks
+
+**Tracks** are the rows of the timeline. They belong to the whole session: the
+"Drums" track is the same in every song, even if each song has different clips
+on it (or none).
+
+| Track | What for |
+| --- | --- |
+| **Audio** | Holds the audio clips: the song's stems, the click, the guide. |
+| **Folder** | Groups other tracks. Its volume, mute and solo apply to all of them, and it can set the output for all of them at once. |
+| **MIDI** | Sends MIDI messages to other gear (lighting desk, lyrics). See [MIDI](/docs/tasks/midi/). |
+| **Video** | Holds the videos that are projected. See [Video](/docs/tasks/video/). |
+| **Automation** | A special row with actions at an exact time: jump, mute, move a fader… See [Automation](/docs/automation/). |
+
+Each track has an **output**: where it sends its sound (Master, a pair of
+headphones, another output of your interface). See
+[Audio outputs and metronome](/docs/audio-routing-metronome/).
+
+Tracks that LibreTracks creates on its own when you drop an audio file are
+deleted automatically when they are left without clips. Tracks you create
+yourself are never deleted on their own.
+
+## Clips
+
+A **clip** is a piece of an audio file placed on a track, at a point in a
+song. It is only a **reference**: trimming, splitting or duplicating it never
+changes the original file. See [Clips and tracks](/docs/tasks/clips-tracks/).
+
+## The Library
+
+The **Library** is the list of every audio file (and video) in the session,
+whether it is on the timeline or not. From there you drag files to the
+timeline, sort them into **folders** (which only exist in the Library: they
+do not move the files) and create songs from a folder. See
+[Library and audio](/docs/tasks/library/).
+
+## Markers
+
+**Markers** point at moments in the song. There are two kinds:
+
+- **Sections** (Intro, Verse, Chorus…): the destinations for jumping live,
+  announced by the [voice guide](/docs/voice-guide/).
+- **Cues** (Drums in, Last time…): directions for the band, which also show in
+  the Remote and in the Live View.
+
+Dragging a marker from one row to the other changes its kind. See
+[Markers](/docs/tasks/markers/).
+
+## Tempo and time signature
+
+Each song has its own **tempo** and **time signature**, and can change them
+midway with a tempo or time-signature change on the ruler. The click, the
+grid and jumps "after a few bars" follow them. See
+[Tempo and time signature](/docs/tasks/tempo/).
+
+## Three ways to see the same thing
+
+The session can be shown three ways, and what you change in one shows in the
+others (`Tab` switches between them):
+
+- The **DAW view**, the timeline: for building and editing.
+- The [Compact View](/docs/compact-view/): each song in a column, for
+  arranging the setlist and mixing.
+- The [Live View](/docs/live-view/): big buttons for playing live.
+
+And from another device, the [Remote](/docs/remote-control/).

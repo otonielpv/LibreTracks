@@ -1,0 +1,107 @@
+---
+title: MIDI
+description: "How to drive LibreTracks with a MIDI pedal or controller (MIDI Learn) and how to send MIDI from the timeline to keyboards, lighting desks or lyrics software with MIDI tracks."
+sidebar:
+  order: 7
+---
+
+LibreTracks speaks MIDI both ways:
+
+- **Input**: a pedal, a pad or a controller drives the app (play, jump,
+  Vamp…).
+- **Output**: a **MIDI track** sends notes, controls and program changes at
+  exact moments in the song, to a keyboard, the lighting desk or the lyrics
+  software.
+
+## Connecting a controller
+
+In **Settings › MIDI**, choose the **MIDI input device**. If you plug it in
+with the app open, press the refresh button next to it.
+
+![The MIDI tab in Settings](/guide/desktop-en/settings-midi.png)
+
+If the cable comes loose mid-show, the **MIDI controller disconnected** notice
+appears in the top bar, and the app opens it again by itself as soon as you
+plug it back in. There is no need to go to Settings.
+
+On mobile, **Bluetooth** controllers work too: in the MIDI tab, **Search
+Bluetooth devices**.
+
+## Assigning pedals and buttons (MIDI Learn)
+
+How to assign them is in
+[Settings › MIDI Learn](/docs/interface/settings/#midi-learn). What you can
+control:
+
+- **Transport**: play, pause, stop, previous and next song.
+- **Jumps**: to each section marker and each song (the *Markers* and *Songs*
+  tabs), cancel the jump, and the mode, bars and transition of jumps.
+- **Vamp**: on and off, mode (section or bars) and number of bars.
+- **Pitch**: raise, lower or reset the transposition of the selected song;
+  select the previous or next song.
+- **Switches**: metronome and voice guide.
+- **Values with a rotary control** (CC): BPM, metronome volume, bars for jumps
+  and for Vamp.
+- **Video**: black, fade to black, idle screen and turning the output on.
+- **Session**: new, open, save, save as, undo, redo and create a marker at the
+  cursor.
+
+## Sending MIDI from the song
+
+### 1. Choose the output
+
+In **Settings › MIDI**, **MIDI output** is the default port MIDI tracks send
+through. **Send test note** checks that it gets to the other side.
+
+### 2. Create a MIDI track
+
+Right-click the gap below the tracks, or a track, › **Add MIDI track**. You can
+have several: one for each device you want to control.
+
+Its menu (right-click the header):
+
+![A MIDI track's menu](/guide/desktop-en/menu-midi-track.png)
+
+- **MIDI routing**: the **port** (the cable) and the **channel** (1 to 16) its
+  messages go out on. *Default output* uses the port from Settings.
+
+![A track's MIDI routing](/guide/desktop-en/midi-route.png)
+
+- **Disable MIDI track**: stops sending without deleting anything (also with
+  the power button on the header). Handy in a rehearsal without lights.
+
+### 3. Add messages
+
+Right-click the MIDI track, at the exact point › **Add MIDI here**. The editor
+opens:
+
+![The MIDI clip editor](/guide/desktop-en/midi-clip-editor.png)
+
+- **Name**: to recognise it on the timeline (*Chorus lights*).
+- **Add message**, of four kinds:
+  - **Note**: note, velocity and duration (0 = a single hit).
+  - **Control**: a CC with its value.
+  - **Program**: a program change (switching sound or scene).
+  - **Control curve**: a CC that goes from one value to another over a period
+    of time, for smooth fades.
+- **Offset (s)**: how long after the clip's point that message goes out.
+- **Channel (optional)**: so a message goes out on a different channel from
+  the track's.
+- Messages that coincide in time go out in the order of the list; use **Move
+  up** and **Move down** to change it.
+- **Test MIDI** sends the messages right now, without saving, to check that
+  the device responds.
+
+The clip shows on the track as a marker with its name. Right-click it:
+
+![A MIDI clip's menu](/guide/desktop-en/menu-midi-clip.png)
+
+**Edit MIDI** or **Delete MIDI**. MIDI clips can be dragged to move them, they
+travel with their song when you move it and they go inside exported songs.
+
+## LibreTracks as a MIDI device (mobile)
+
+On Android and iOS, LibreTracks can publish itself as a **virtual MIDI
+device**: other apps on the same phone or tablet see it as an input and output
+port. Turn it on in Settings › MIDI › **Publish LibreTracks virtual MIDI
+port**.

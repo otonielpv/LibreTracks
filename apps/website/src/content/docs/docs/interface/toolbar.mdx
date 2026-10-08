@@ -1,0 +1,130 @@
+---
+title: The toolbar
+description: "What each control in the LibreTracks toolbar does: view switcher, snap, follow the cursor, Vamp, marker jump, song transition, master, transposition and warp."
+sidebar:
+  order: 2
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+
+The toolbar sits right below the top bar. On the left you switch views and
+editing modes. On the right you decide **how** the show moves: what happens
+when you press Vamp, when a jump happens and how each song sounds.
+
+Most groups have a <kbd>☰</kbd> button (three lines with sliders) that opens
+their settings panel. The summary shown in the group, like *At next marker*,
+is the setting that is active right now.
+
+## View and editing
+
+![The left part of the toolbar](/guide/desktop-en/toolbar-left.png)
+
+<Legend>
+
+1. **DAW view**: the full timeline, for building and editing songs.
+2. **Compact View**: one column per song, with a shared mixer. See
+   [Compact View](/docs/compact-view/).
+3. **Live View**: big buttons for playing live, with no editing. See
+   [Live View](/docs/live-view/).
+4. **Snap** (to the grid): when you move clips, markers or songs, they stick to
+   the grid's subdivision. Turn it off to place them freely. With snap off, a
+   diagonal line over the icon shows it.
+5. **Follow the cursor**: during playback the timeline scrolls by itself so
+   the cursor does not leave the screen.
+6. **Vamp**: repeats a stretch in a loop until you press it again. See
+   [below](#vamp).
+7. **Marker Jump**: when a jump to a marker happens. See
+   [below](#marker-jump).
+
+</Legend>
+
+## Jumps and song settings
+
+![The right part of the toolbar](/guide/desktop-en/toolbar-right.png)
+
+<Legend>
+
+8. **Song Transition**: when and how you move to another song. See
+   [below](#song-transition).
+9. **Master** of the selected song.
+10. **Transpose** of the selected song, in semitones.
+11. **Warp** of the selected song.
+12. **Cancel jump**: cancels a jump that is scheduled and has not happened
+    yet. Also with <kbd>Esc</kbd>.
+
+</Legend>
+
+Groups 9, 10 and 11 act on **the selected song**. Click a song's name on the
+ruler to select it. With no song selected, the group reminds you to select a
+region.
+
+## Vamp
+
+![The Vamp settings panel](/guide/desktop-en/toolbar-vamp-panel.png)
+
+The group's **Vamp** button turns the loop on and off. In its panel you choose
+what repeats:
+
+- **Section**: the section the cursor is in, from its marker to the next one.
+- **Bars**: the number of bars you set, starting at the beginning of the bar
+  you are in.
+
+Handy when the band stretches an ending, the pastor keeps talking or someone
+needs more time on stage. Press Vamp again to leave it and the song carries on
+from there.
+
+## Marker Jump
+
+![The marker jump settings panel](/guide/desktop-en/toolbar-marker-jump-panel.png)
+
+A jump to a marker is scheduled when you click a section marker, press its
+number (<kbd>1</kbd>…<kbd>9</kbd>, <kbd>0</kbd>), from the Remote or with a MIDI
+pedal. This panel decides **when** it happens:
+
+- **Immediate**: right away.
+- **After X bars**: once the bars you set have gone by.
+- **At next marker**: when the next section marker arrives, so the change
+  lands at the start of a phrase.
+
+While the jump waits, *Cancel jump* lights up; hover over it to see which
+marker you are going to. If you picked the wrong marker, press <kbd>Esc</kbd> or
+click the same marker again.
+
+## Song Transition
+
+![The song transition panel](/guide/desktop-en/toolbar-song-jump-panel.png)
+
+It applies when you jump to another song: with the *Previous* and *Next*
+buttons, with <kbd>Shift</kbd>+number, from the Live View or from the Remote. The
+top row says **when**:
+
+- **Immediate**.
+- **At song end** of the one that is playing.
+- **After X bars**.
+- **At next marker**.
+
+The bottom row says **how**: **Clean cut** goes straight to the other song;
+**Fade out** lowers the current one before jumping.
+
+## Master, transposition and warp
+
+![Master of the selected song](/guide/desktop-en/toolbar-master-panel.png)
+
+**Master** raises or lowers the volume of the whole selected song, without
+touching the metronome or the voice guide. It is for evening out songs that
+come in louder or quieter.
+
+![Transposition of the selected song](/guide/desktop-en/toolbar-transpose-panel.png)
+
+**Transpose** changes the key of the selected song between −12 and +12
+semitones with the <kbd>−</kbd> and <kbd>+</kbd> buttons.
+
+![Warp of the selected song](/guide/desktop-en/toolbar-warp-panel.png)
+
+**Warp** changes the tempo without changing the pitch. With warp off,
+transposing changes the speed too, like a sped-up record; with warp on, the
+song keeps its length. The audio's original BPM is set from the song's menu,
+with *Change Original BPM*.
+
+How transposition, warp and each track's **T** button combine is explained
+step by step in [Pitch, warp and the T button](/docs/pitch-and-warp/).

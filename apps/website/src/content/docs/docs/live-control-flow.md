@@ -1,5 +1,5 @@
 ---
-title: Live Control Flow
+title: Live control
 description: Marker jumps, Vamp, song jumps, transitions, shortcuts, and remote control.
 ---
 
@@ -36,25 +36,36 @@ The trigger can be immediate, after a configured number of bars, at the end of t
 
 ![Song jump configuration](/screenshots/Song-Jump-Config.png)
 
-## Shortcuts
+## Keyboard shortcuts
 
-Most timeline shortcuts can be reassigned from `Settings` -> `Shortcuts`. The panel groups actions by transport, edit, project, view, and navigation, and lets you edit, remove, or reset bindings without editing a config file.
+They can all be changed in **Settings › Shortcuts** (see
+[Settings](/docs/interface/settings/#shortcuts)). The defaults:
 
-Useful defaults:
+| Key | Action |
+| --- | --- |
+| <kbd>Space</kbd> | Play / pause |
+| <kbd>Shift</kbd>+<kbd>Space</kbd> | Stop (back to the start) |
+| <kbd>Home</kbd> | Go to the start |
+| <kbd>0</kbd> … <kbd>9</kbd> | Jump to the 1st … 10th marker in the session, in time order and counting cues too (the same key again cancels) |
+| <kbd>Shift</kbd>+<kbd>0</kbd> … <kbd>9</kbd> | Jump to song no. 1 … 10 |
+| <kbd>Esc</kbd> | Cancel a pending jump or clear the selection |
+| <kbd>S</kbd> | Split the selected clips at the cursor |
+| <kbd>Shift</kbd>+<kbd>S</kbd> | Split the song at the cursor |
+| <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> | Copy / paste clips |
+| <kbd>Ctrl</kbd>+<kbd>D</kbd> | Duplicate |
+| <kbd>Del</kbd> or <kbd>Backspace</kbd> | Delete the selection (clips, tracks or song) |
+| <kbd>F2</kbd> | Rename the selected song, track or marker |
+| <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Undo |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Redo |
+| <kbd>Ctrl</kbd>+<kbd>A</kbd> | Select all clips |
+| <kbd>←</kbd> / <kbd>→</kbd> | Nudge the selected clips by one division |
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Save / save as |
+| <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> | Switch view: DAW, Compact, Live (and back) |
+| <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>-</kbd> / <kbd>Ctrl</kbd>+<kbd>0</kbd> | Enlarge, shrink or reset the interface |
+| <kbd>B</kbd> | Video: instant black |
 
-- `Space`: toggle `Play` / `Pause`
-- `Shift + Space`: stop
-- `Home`: go to the start
-- `S`: split selected clip or clips at the playhead
-- `Shift + S`: split the song under the playhead
-- `Delete`: delete the current selection, including a selected song region
-- `F2`: rename the selected song, track, or marker
-- `Ctrl + C` / `Ctrl + V` / `Ctrl + D`: copy, paste, and duplicate
-- `Ctrl + A`: select all clips
-- `Left` / `Right`: nudge selected clips by one snap subdivision
-- `Esc`: cancel a pending jump or clear selection
-- `0-9`: arm a jump to the corresponding marker
-- `Shift + 0-9`: arm a jump to the selected song region
+The video actions *fade to black*, *idle screen* and *turn output on* have no
+default key; assign them yourself if you use them.
 
 If you arm the wrong destination, press `Esc` immediately.
 

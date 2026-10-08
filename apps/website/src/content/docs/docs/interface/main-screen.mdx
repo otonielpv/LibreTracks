@@ -1,0 +1,153 @@
+---
+title: The main screen
+description: "What each area of the LibreTracks screen on a computer is, and what every button in the top bar does: tempo, transport, metronome, voice guide, pads and the File menu."
+sidebar:
+  order: 1
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+import Clip from "../../../../components/guide/Clip.astro";
+
+When you open a session, LibreTracks shows the **DAW view**: the timeline with
+your songs from left to right and the tracks from top to bottom. This page
+goes through the screen area by area and explains the top bar button by
+button. Click any screenshot to see it full size.
+
+![The LibreTracks main screen with its ten areas numbered](/guide/desktop-en/daw-zones.png)
+
+<Legend>
+
+1. **File menu**: create, open, save, import and export sessions.
+   [See the full menu](#file-menu).
+2. **Tempo and time signature** of the song under the cursor, the *Tap*
+   button and undo/redo. [Below](#tempo-time-signature-and-undo).
+3. **Transport**: play, pause and stop, and the metronome, voice guide and
+   pads switches. [Below](#transport).
+4. **Readouts**: tempo, time signature, position and elapsed time.
+   [Below](#readouts-and-resource-meter).
+5. **Resource meter**: CPU, memory, disk and audio load.
+6. **Side bar**: Library, Remote, Settings and Tutorial.
+7. **Toolbar**: view switcher, snap, follow the cursor, Vamp, jumps and the
+   settings of the selected song (master, pitch and warp).
+8. **Ruler**: the session's songs, the bars, the section markers and the
+   tempo changes. Click it to move the cursor.
+9. **Track headers**: mute (M), solo (S), transposition (T), volume, pan and
+   audio output of each track.
+10. **Tracks**: the audio clips, the MIDI tracks and the automation track, on
+    the timeline.
+
+</Legend>
+
+## Tempo, time signature and undo
+
+![The left part of the top bar](/guide/desktop-en/topbar-left.png)
+
+<Legend>
+
+1. **File**: opens the [File menu](#file-menu).
+2. **BPM**: the tempo. Type a number and press Enter. It changes the tempo
+   section the cursor is in, and the label on its right tells you which one:
+   *Tempo @ 00:00.000* means "the tempo that starts at second 0".
+3. **Tap**: tap along with the music four or five times and LibreTracks works
+   out the tempo and applies it to that same section.
+4. **Time signature** (4/4, 6/8, 3/4…). With the cursor at the start of the
+   session it changes the starting time signature; anywhere else, it creates a
+   time-signature change there. See [Tempo and time signature](/docs/tasks/tempo/).
+5. **Undo** (Ctrl+Z) the last change to the session.
+6. **Redo** (Ctrl+Shift+Z or Ctrl+Y) what you just undid.
+
+</Legend>
+
+:::tip[Each song with its own tempo]
+Tempo and time signature are not global: each song in the session has its
+own. Put the cursor on the song you want to change before typing the BPM or
+using *Tap*.
+:::
+
+## Transport
+
+![The transport, metronome, voice guide and pads buttons](/guide/desktop-en/topbar-transport.png)
+
+<Legend>
+
+1. **Previous**: jumps to the song before the one that is playing. Like
+   *Next*, it follows the *Song Jump* setting. From the first song it goes to
+   the last.
+2. **Stop** (Shift+Space): stops playback and takes the cursor back to the
+   start of the session.
+3. **Play** (Space) from the cursor position.
+4. **Pause** (Space): stops playback and leaves the cursor where it is, to
+   carry on from there.
+5. **Click**: turns the metronome on or off.
+6. **Metronome settings**: output, volume, sounds, accent and subdivision.
+   See [Audio outputs and metronome](/docs/audio-routing-metronome/).
+7. **Guide**: turns the voice guide on or off; it announces each section
+   before it arrives.
+8. **Voice guide settings**. See [Voice guide](/docs/voice-guide/).
+9. **Pads**: turns the ambient pad on or off.
+10. **Pads settings**: key, volume, fades and your own pads. See
+    [Ambient pads](/docs/ambient-pads/).
+11. **Next**: jumps to the next song in the session. When the jump happens
+    (immediately, at the end of the song, after a few bars…) is set by the
+    *Song Jump* setting in the toolbar. From the last song it goes back to the
+    first.
+
+</Legend>
+
+The little arrows next to *Click*, *Guide* and *Pads* open their settings
+panel without going to Settings:
+
+<Clip
+  src="/guide/desktop-en/metronome-settings.mp4"
+  poster="/guide/desktop-en/metronome-settings.webp"
+  caption="The arrow next to “Click” opens the metronome settings."
+/>
+
+## Readouts and resource meter
+
+![The resource meter and position readouts](/guide/desktop-en/topbar-right.png)
+
+<Legend>
+
+1. **Resource meter**: CPU, memory (RAM), disk reads and **audio load**.
+   Audio load is the share of each block of sound's time that the engine needs
+   to process it: above 100 % you hear dropouts. Click it for the details.
+2. **Tempo** playing at the current position.
+3. **Time signature** playing at the current position.
+4. **Bar**: the musical position, as *bar.beat.fraction*. "12.3.00" is the
+   start of the third beat of bar 12.
+5. **Timecode**: the time elapsed since the start of the session.
+6. Transport **status**: stopped, playing or paused.
+
+</Legend>
+
+## File menu
+
+![The File menu, open](/guide/desktop-en/file-menu.png)
+
+- **New project**: creates an empty session in a new folder.
+- **New from template…**: creates a session from an `.lttemplate`, with its
+  tracks and outputs already set up.
+- **Open** and **Open recent**: open an `.ltsession`.
+- **Import song**: adds an exported song (`.ltpkg`) to the open session, with
+  its audio, markers and settings.
+- **Import session…** and **Export session…**: move a whole session, with all
+  its audio, in a single `.ltset` file. It is how you take it to another
+  computer or to your phone.
+- **Cloud…**: connects or disconnects your Google Drive account, shows the
+  space used and lets you delete the songs and sessions you uploaded.
+- **Import Reaper/Ableton**: builds the structure from an `.rpp` or `.als`
+  project.
+- **Save** (Ctrl+S) and **Save as** (Ctrl+Shift+S).
+- **Save as template…**: saves the tracks and outputs, without audio, to reuse
+  them in your next session.
+- **Exit**: saves the session, tells you where it was saved and closes the
+  app.
+
+With the cloud connected, **Import** and **Export** (of songs and sessions)
+first ask where: **This device** or your **Google Drive**. In other words,
+uploading and downloading happen from those same buttons; the Cloud one is
+only for managing the account.
+
+More on these formats in
+[Export, import and share](/docs/integration-ecosystem/).

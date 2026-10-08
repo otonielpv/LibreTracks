@@ -1,0 +1,201 @@
+---
+title: LibreTracks on Mobile
+description: "What changes in LibreTracks on Android, iPhone and iPad: where sessions are kept (internal storage, SD card or USB drive), importing audio without copying it, touch gestures, the back button, audio output and moving sessions from the computer."
+---
+
+import Clip from "../../../components/guide/Clip.astro";
+import TutorialVideo from "../../../components/guide/TutorialVideo.astro";
+
+LibreTracks on a phone or tablet is **the same app** as on the computer: the
+same audio engine, the same session format and the same DAW, Compact and Live
+views. A session built on the computer opens as it is on the phone, and the
+other way round.
+
+It installs from **Google Play** on Android and from the **App Store** on
+iPhone and iPad (see [System requirements](/docs/system-requirements/)). On a
+phone the app always runs **in landscape**.
+
+This video builds a song from start to finish on a phone:
+
+<TutorialVideo
+  src="/video/first-steps-mobile.mp4"
+  poster="/video/first-steps-mobile.webp"
+  title="Your first song in LibreTracks, on a phone"
+  duration="3:10"
+/>
+
+This page covers what changes: storage, the finger instead of the mouse and
+the audio output. What each button on the touch screen does is in
+[On a phone or tablet](/docs/interface/mobile/).
+
+## Start screen
+
+When you open the app you see **Your sessions**, the list of sessions saved
+on the device. From there you create a new session, open an existing one or
+import an `.ltset`. The bin icon deletes a session from the device, with its
+audio and its cache; the session you have open cannot be deleted.
+
+The **Demo song** opens a sample session that comes with the app, with two
+songs and six tracks, to try the transport, the mix and the jumps without
+importing anything. It always opens the same session: pressing it several
+times does not create copies.
+
+## Importing audio without copying it
+
+As on the computer, when you import audio the session **uses your original
+files** instead of duplicating them. That way a multitrack takes up on the
+phone what its files take up and nothing more.
+
+![The Import without copying audio into the session setting](/guide/mobile-en/settings-import-no-copy.png)
+
+The setting is **Settings → General → Import without copying audio into the
+session**, and it is on by default.
+
+- If you move or delete an original file, its track goes silent and the file
+  shows up in **Missing files**, where you can link it again.
+- Files that live **in the cloud** (Google Drive, or "Recent" in the file
+  picker, for example) cannot be read directly: those are always copied.
+- **Turn it off** if you would rather have each audio file copied into the
+  session; for example, if you will delete the originals from the phone after
+  importing. It only affects what you import from then on.
+- Deleting a track or a session **never** deletes your original files: only
+  what is inside the session's folder is deleted.
+
+When you import several files, each one shows up in the library as soon as it
+starts being prepared, with its progress, without waiting for the whole batch.
+
+## Where sessions are kept (Android)
+
+If your Android has a **microSD card**, or you plug in a **USB stick or drive
+(OTG)**, you can keep sessions there instead of in internal storage. It is set
+in **Settings → General → Where to keep sessions**. If the phone only has
+internal storage, the setting does not appear.
+
+- The list shows each volume with the name Android gives it (for example
+  "SanDisk SD card" or "USB drive") and the free space it has left.
+- **It only affects new sessions.** The ones you already have keep opening
+  from where they are, and they all show together in "Your sessions".
+- **The audio cache goes with the sessions.** It is what takes the most room,
+  so when you pick the card, the cache is kept there too and does not fill the
+  internal storage.
+- If you **remove the card or the USB drive**, LibreTracks notices straight
+  away: it warns in Settings and keeps new sessions in internal storage until
+  you connect it again. When it is mounted again, everything updates on its
+  own, without restarting the app.
+
+LibreTracks keeps sessions in its own folder on each volume, so it does not
+ask for any storage permission.
+
+:::caution[USB drives and cards]
+Wait for a save to finish before you unplug a USB drive. If it is removed
+halfway, the session stays as it was at the last complete save and is not
+lost, but changes that were not saved yet are.
+:::
+
+## Gestures on the timeline
+
+On the computer you use the mouse and right-click. On a phone it works like
+this:
+
+| Gesture | What it does |
+| --- | --- |
+| **One finger** | Scrolls in any direction: left and right move through time, up and down go through the tracks. |
+| **Two-finger pinch** | Zooms only. |
+| **Tap** | Selects what is underneath: a clip, a marker, a track or a song. Tapping an empty spot clears the selection. |
+| **Drag something already selected** | Moves it. You tap it first and then drag it, so an accidental swipe does not move the audio. |
+| **Press and hold** | Opens the menu at the exact spot where you put your finger. |
+
+There are no navigate and edit modes to switch between: it all depends on
+whether what you drag was selected.
+
+### The action bar
+
+What right-click shows on the computer shows on a phone in a **floating bar**
+above the timeline. When you tap something, the bar shows what you can do with
+it, and with nothing selected it offers to **add** a section, a cue, audio or
+video. If there are more actions than fit, the dots button opens the full
+list. The arrow tucks the bar away to see more timeline.
+
+With **several tracks selected**, the bar includes a mix button that changes
+the volume, pan, output and transposition of all of them at once. Volume and
+pan move relative to each other and keep the mix they already had.
+
+<Clip
+  src="/guide/mobile-en/track-select-mix.mp4"
+  poster="/guide/mobile-en/track-select-mix.webp"
+  caption="Selecting two tracks and mixing them together"
+/>
+
+### Tracks and folders
+
+Dragging a track on a phone **only changes its order**. To put tracks in a
+folder, select them and choose **Move to folder…** in their menu, to an
+existing folder or a new one. To take them out, **Remove From Folder**. That
+way you do not have to hit the middle of the folder's row with your finger.
+
+## The back button (Android)
+
+Android's back button **closes whatever you have open first** (a setting, a
+menu, a panel) instead of leaving the app. If nothing is open and something is
+playing, the first press warns ("Playing. Press back again to exit.") and you
+need a second press to leave, so you do not cut off a rehearsal by accident.
+
+## Audio output
+
+In **Settings → Audio** you choose the output. If you connect a **USB audio
+interface** (with an OTG cable on Android, or with the camera adapter or USB‑C
+on iPhone and iPad), it shows up there with its channels and is routed as on
+the computer (see [Audio outputs and metronome](/docs/audio-routing-metronome/)).
+A phone has a single audio system, so there is no ASIO or WASAPI selector.
+
+On **Android** there is also a **Low latency** setting:
+
+![The Low latency setting on Android](/guide/mobile-en/settings-low-latency.png)
+
+- **Off** (the default), LibreTracks uses Android's normal playback output.
+  That is why you hear the system's sound settings, like Dolby Atmos, the
+  equaliser or the surround effect, as in any music player. If you do not want
+  them, turn them off in Android's sound settings.
+- **On**, it uses Android's fast output: less delay, especially with USB
+  interfaces, but without the system effects and, on modest phones, with a
+  risk of dropouts. Turn it on if you play live over the tracks and notice the
+  delay.
+
+If the app goes unused for a good while, the phone can put the audio to sleep
+to save battery; when you come back, **Resume** wakes it up (see
+[Troubleshooting](/docs/help/troubleshooting/#the-app-was-idle-appears)).
+
+## MIDI and video
+
+- **MIDI**: connect a controller or a MIDI interface over USB (OTG on Android,
+  an adapter on iPhone and iPad). On iPhone and iPad you can also send and
+  receive MIDI **over Wi‑Fi** with a Mac (Audio MIDI Setup → Network). See
+  [MIDI](/docs/tasks/midi/).
+- **Video**: videos are added from the gallery or from files with the **Add**
+  button in the action bar, and go out to a projector or a TV connected by
+  cable: USB‑C to HDMI (the phone needs video out over USB‑C) or the Lightning
+  Digital AV adapter; on iPhone and iPad also over AirPlay, experimental for
+  now (calibrate the delay at the venue). **Settings → Video** has a guide to
+  connecting it. Locking the phone turns the projector off. See
+  [Video on the projector](/docs/tasks/video/).
+
+## Audio cache
+
+Audio that is not WAV (MP3, FLAC…) is prepared once and kept in the cache, so
+it loads instantly next time. On a phone the cache folder cannot be changed:
+it always goes with the volume where you keep sessions. In **Settings** you
+can see how big it is, set a limit and clear it.
+
+## Moving sessions from the computer to the phone
+
+The easiest way is to build the session on the computer and take it to the
+phone:
+
+- **Export the session as an `.ltset`** and open it with **Import session** on
+  the start screen. On a modest phone, **Optimized** mode carries the audio
+  already prepared and the session opens without waiting. More in
+  [System requirements](/docs/system-requirements/#making-a-big-session-load-faster).
+- **Through Google Drive**: export to Drive from the computer and, on the
+  phone, **Import session → Google Drive**. The files are in your own Drive,
+  not on any LibreTracks server. The account has to be connected on the phone
+  too (see [The cloud](/docs/integration-ecosystem/#the-cloud-your-google-drive)).

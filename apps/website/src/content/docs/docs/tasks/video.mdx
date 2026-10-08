@@ -1,0 +1,214 @@
+---
+title: Video on the projector
+description: "Add videos to your songs and project them in sync on a second screen, a projector or a TV: video track, display wizard, fit, idle screen, calibrating the delay and the emergency black."
+sidebar:
+  order: 8
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+
+LibreTracks can play **video in sync with the music** on a second screen: the
+venue's projector, a TV or a monitor for the band. The video sits on its own
+track on the timeline, like the audio, and follows the song when you play,
+jump to a marker, Vamp or change the tempo with warp.
+
+## Adding a video
+
+**Drag the video file** from your file manager:
+
+- **onto the timeline**: it is placed where you drop it, on a video track (if
+  there is none, one is created);
+- **into the Library**: it goes into the **Videos** section. Double-click it,
+  or press `+`, to put it on the timeline at the cursor.
+
+![The Videos section of the Library](/guide/desktop-en/library-videos.png)
+
+Formats: **MP4, MOV, MKV, WebM, AVI and MPG**. Like audio, the video is used
+**from wherever it is** on your disk, without copying it.
+
+:::tip[So jumps respond straight away]
+A video exported with few keyframes takes a while to respond when you jump
+somewhere else. If LibreTracks detects it, it flags it with an icon in the
+Library. When you export it from your editor, use **one keyframe per
+second**.
+:::
+
+## The sound of the video
+
+If the video you place **has sound**, LibreTracks asks whether you want to
+split it off to a normal audio track:
+
+![The question when placing a video with sound](/guide/desktop-en/video-audio-prompt.png)
+
+- **Extract as audio track**: the sound is saved as one more audio file (a
+  WAV in the Library) and placed on a **new audio track below the video**,
+  aligned with it. From then on it is a track like any other: it has its
+  volume, mute and solo, you send it to whichever output you like and you can
+  move or trim it.
+- **No**: the video is placed without sound.
+
+:::caution[A video never plays its own sound]
+LibreTracks plays **only the picture** of a video. If you do not extract its
+audio, that sound is not heard anywhere. That way the same sound never plays
+twice, and the video's sound goes through your mix and outputs like
+everything else.
+:::
+
+If you place several videos at once, the question comes once for all of them.
+**Remember my choice** applies the same answer from then on, without asking
+again. To change it, or to be asked again, go to **Settings → Video → When
+placing a video with sound**: **Ask**, **Always extract the audio to a track**
+or **Don't extract the audio**.
+
+Said no to a video and now you want its sound? Right-click the clip →
+**Extract audio**.
+
+Since the extracted audio is an ordinary audio file, it **travels in
+packages** even if you export without the videos: the song sounds the same on
+another computer.
+
+You can also create an empty video track by right-clicking the empty part of
+the track list → **Add video track**.
+
+## The video track and clip
+
+![A video track with its clip](/guide/desktop-en/video-track.png)
+
+<Legend>
+
+1. Track **name** (right-click to rename it, change its colour or delete it).
+2. **Eye**: shows or hides this track on the output.
+3. **S** (solo): shows only this video track.
+4. The **clip**, with thumbnails of the video. Drag it to move it.
+5. Clip **edges**: drag them to trim the start or the end.
+6. **Fade handles**, on the top corners (they appear when you hover): drag
+   them to fade the video in or out from black.
+
+</Legend>
+
+With **several video tracks** whose clips overlap in time, the one on the
+**top track** is shown. That way you can put a long background below and
+short clips above it.
+
+Right-click a clip:
+
+![A video clip's menu](/guide/desktop-en/menu-video-clip.png)
+
+- **Split at cursor** (`S`) and **Duplicate** (`Ctrl+D`).
+- **Fit** for this clip: the output's, **Fit (black bars)**, **Fill (crops)**
+  to fill the screen, or **Stretch**.
+- **Remove fades**, **Color**, **Extract audio** (splits its sound off to an
+  audio track, see [above](#the-sound-of-the-video)) and **Delete** (`Del`).
+
+## Choosing the display: the wizard
+
+When you open a session with video and have not chosen a display yet (or the
+one you chose is not connected), LibreTracks says so:
+
+![The session-with-video notice](/guide/desktop-en/video-notice.png)
+
+**Set up** opens the wizard (it is also in **Settings → Video → Wizard…**).
+Nothing is saved until you press **Done** at the end.
+
+1. **Welcome**.
+
+   ![Wizard, step 1](/guide/desktop-en/video-wizard-1.png)
+
+2. **Choose the display**. Each connected screen shows a big number: pick the
+   card with the number you see on the projector. The one marked *where
+   LibreTracks is* is the computer's own screen. If you only have one, you can
+   **use a window for now**.
+
+   ![Wizard, choosing the display](/guide/desktop-en/video-wizard-2.png)
+
+3. **Check the picture**: a test pattern is projected. If you can see it,
+   **Yes, I can see it**; if not, **No, try another**.
+
+   ![Wizard, checking the picture](/guide/desktop-en/video-wizard-3.png)
+
+4. **Fit and idle screen**: how the video adapts to the screen (**Fit** with
+   black bars, **Fill** cropping, or **Stretch**) and what shows when there is
+   no video (**Black** or an **image** of your own, like your church's or
+   band's logo).
+
+   ![Wizard, fit and idle screen](/guide/desktop-en/video-wizard-4.png)
+
+5. **Sync** (optional): calibrate the projector's delay now or later (see
+   below).
+
+   ![Wizard, sync](/guide/desktop-en/video-wizard-5.png)
+
+6. **Done**: sums up where the video will go.
+
+   ![Wizard, done](/guide/desktop-en/video-wizard-6.png)
+
+## Video settings
+
+Everything in the wizard, and a bit more, is in **Settings → Video**:
+
+![Video settings (1)](/guide/desktop-en/settings-video-1.png)
+
+- **Video output**: turns projection on or off.
+- **Display**, with **Refresh** (if you just connected one) and **Identify
+  displays** (shows the number on each one).
+- **Mode**: **Fullscreen** or **Window**. Double-clicking the video switches
+  between them; the window can be moved and resized.
+- **Fullscreen always in front**: nothing covers the projector, not even
+  notifications. Untick it if you need to put another window on top.
+
+![Video settings (2)](/guide/desktop-en/settings-video-2.png)
+
+- **Fit** and **Idle screen**, as in the wizard.
+- **When stopped**: what stays on screen when you stop: the **last frame**,
+  the **idle screen** or **black**.
+- **Hardware decoding**: **Automatic** uses the graphics card. Turn it off
+  only if a video looks wrong.
+
+![Video settings (3)](/guide/desktop-en/settings-video-3.png)
+
+- **Delay compensation** (see below).
+- **Test pattern**: projects a test image to focus and frame the projector.
+- **When placing a video with sound**: ask, always extract its audio to a
+  track, or never extract it (see [The sound of the video](#the-sound-of-the-video)).
+- At the bottom, a few sync and frame **statistics**, useful if something goes
+  wrong.
+
+### Calibrating the delay
+
+Projectors and many TVs show the picture **slightly late** compared with the
+sound. **Delay compensation** fixes it: a positive value brings the picture
+forward.
+
+With **Calibrate…**, turn the metronome on and press Play: the output shows a
+**white flash on every beat**. Move the slider until flash and click line up.
+Or measure it: tap 10 times when you **see** the flash and another 10 when you
+**hear** the click, and LibreTracks suggests the value. Do it **at the venue**,
+with the real projector and sound.
+
+## Live
+
+- **Emergency black**: the **`B`** key blacks out the projection instantly,
+  and another press brings it back. There are also actions for **fade to
+  black**, **show the idle screen** and **turn the output on or off**, which you
+  can assign keys to in [Settings → Shortcuts](/docs/interface/settings/) or a
+  MIDI control.
+- The **Remote** has a **Black** button to do it from the tablet. See
+  [Custom Remote](/docs/remote-control/).
+- In the top bar, an **indicator** shows which display the video goes out on
+  and warns if it is disconnected ("Video: display disconnected") or black. If
+  the projector drops out mid-show, the music keeps playing and the indicator
+  tells you.
+
+## Taking the videos to another computer
+
+When you [export](/docs/integration-ecosystem/) a song or a session that has
+video, an **Include the videos in the package** checkbox appears, with how
+much they take up. Without them the package is much lighter, but you will
+have to copy the videos separately and locate them again when you open it.
+When you import a package with videos, LibreTracks asks whether you want to
+**import the videos too** and checks they fit.
+
+On **Android and iPhone/iPad** the video also goes out by cable (USB‑C to
+HDMI, or the Lightning Digital AV adapter). **Settings → Video** on the phone
+has a guide to connecting it. If you lock the phone, the projector turns off
+until you unlock it.

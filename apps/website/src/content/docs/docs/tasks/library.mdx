@@ -1,0 +1,134 @@
+---
+title: Library and audio
+description: "How to import audio into LibreTracks, sort it into folders, bring it to the timeline (one file, several or a whole folder as a song) and what to do when a file is missing."
+sidebar:
+  order: 1
+---
+
+import Clip from "../../../../components/guide/Clip.astro";
+
+All of a session's audio goes through the **Library**. From there you sort it
+and bring it to the timeline. Open the panel with the **Library** button in the
+side bar; what each button does is in
+[Side bar and Library](/docs/interface/side-nav-library/#the-library).
+
+## Importing audio
+
+There are three ways, and they all end up in the same place:
+
+- **Import audio**, in the Library's header: you pick one or more files.
+- **Drag files** from Windows Explorer or the macOS Finder onto the timeline.
+  They are imported and placed where you drop them.
+- **On mobile**, the **Audio** button in the action bar or **Import audio** in
+  the Library. When it finishes, the app asks whether you want to add them to
+  the timeline: each audio file gets its own track at the cursor position.
+
+Formats: WAV, AIFF, FLAC, MP3 and other common formats; on mobile also
+AAC/M4A, OGG and Opus.
+
+Each file shows up in the Library **as soon as it starts importing**, with its
+progress, without waiting for the whole batch. Compressed audio (MP3, FLAC…) is
+prepared once in the background and kept in the
+[audio cache](/docs/interface/settings/#general), so the next time you open the
+session it loads instantly. You can press play while it is being prepared: the
+tracks that are not ready yet come in by themselves as soon as they are.
+
+:::note[Is my file copied?]
+No. LibreTracks **uses the audio from wherever it is** on your disk; importing
+only adds it to the session. That is why, if you later move or delete that
+file, the track goes silent (see [When a file is missing](#when-a-file-is-missing)).
+
+Audio is only copied when you **export** a song (`.ltpkg`) or a whole session
+(`.ltset`), so it travels inside the package. On mobile it works the same by
+default; if you would rather it copied, turn off *Import without copying audio
+into the session* (see [LibreTracks on mobile](/docs/mobile/#importing-audio-without-copying-it)).
+:::
+
+## Sorting into folders
+
+Library folders are **virtual**: they sort the list, but they do not move or
+copy anything on disk. The usual thing is one folder per song, with its stems
+inside.
+
+<Clip
+  src="/guide/desktop-en/library-folder.mp4"
+  width={380}
+  poster="/guide/desktop-en/library-folder.webp"
+  caption="Right-click “Unfiled” › Create virtual folder, and drag audio files into the new folder."
+/>
+
+- **Create a folder**: the **Folder** button in the header, or right-click
+  *Unfiled* › **Create virtual folder**.
+- **Put audio in a folder**: drag it onto the folder's name. With several
+  selected (<kbd>Ctrl</kbd>+click, <kbd>Shift</kbd>+click) they all move
+  together. Also with right-click › **Move to folder…**, which is enabled as
+  soon as there is a folder.
+- **Take it out of the folder**: right-click › **Move to root**, or drag it to
+  *Unfiled*.
+- **Rename** or **delete** a folder: right-click its name. When you delete it,
+  its audio **is not deleted**: it goes back to *Unfiled*.
+- **Remove audio from the Library**: select it and press <kbd>Del</kbd>, or
+  right-click › **Delete**. Your original file is not touched. Only audio that
+  lives inside the session's folder, like the audio that came with an
+  imported song or session, is deleted from disk. An audio file that is in use
+  on the timeline cannot be removed: delete its clips first.
+- **Fold or unfold** a folder: click its name. LibreTracks remembers which ones
+  you left folded.
+
+## Bringing audio to the timeline
+
+### One file or several
+
+Drag the file from the Library onto the timeline:
+
+- **Onto a track**: the clip lands on that track, where you drop it.
+- **Into the gap below the tracks**: a new track is created for it.
+- **Onto the track name column** (on the left): a shortcut to place it **at
+  the start of the timeline**, on that track, or on a new track if you drop it
+  below the last one.
+
+With several files selected, drag them together. While you drag you see where
+each one will land and, if it doesn't fit, the app tells you why when you drop
+(for example, because it would cross another song).
+
+If you drop the audio outside any song, LibreTracks creates a new song for it.
+If you drop it inside a song but it runs past the end, the song is lengthened
+to hold it.
+
+### A whole folder, as a song
+
+It is the fastest way to build a song: **drag the folder's name** onto the
+timeline. A song is created with the folder's name, and each audio file goes
+to **its own track**, all starting together, like the stems they are.
+
+<Clip
+  src="/guide/desktop-en/library-folder-to-song.mp4"
+  poster="/guide/desktop-en/library-folder-to-song.webp"
+  caption="Dragging a Library folder to the end of the timeline creates the song with one track per audio file."
+/>
+
+- Hold <kbd>Ctrl</kbd> when you drop so the audio files go **one after the
+  other on the same track**, instead of one per track. Handy for a folder of
+  takes or of parts of the same track.
+- The song has to **fit whole** where you drop it. If it would collide with
+  the next one, the app warns you and changes nothing. You can butt it right
+  up against the end of the previous one.
+- Without dragging: right-click the folder › **Add to timeline as a song**.
+  The song is placed at the **end of the session**, on the first free
+  downbeat.
+
+If the *Merge tracks with the same name on import* setting is on (Settings ›
+General), the audio files are merged into the tracks that already have that
+name. Turn it off if you want each song to have its own tracks.
+
+## When a file is missing
+
+If you move or delete an audio file the session uses, its tracks play silent
+and the **Missing media files** notice appears above the timeline. Pressing it
+opens **Missing files**, with each lost file and the tracks that use it:
+
+- **Use the one in *folder***: LibreTracks has found a file with the same name
+  in another folder. One click and it is relinked.
+- **Browse…**: you pick the new file yourself.
+
+In the Library, the missing file also offers **Locate file...** in its menu.

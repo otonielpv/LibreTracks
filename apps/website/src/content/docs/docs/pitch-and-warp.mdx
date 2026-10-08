@@ -1,0 +1,105 @@
+---
+title: Pitch, warp and the T button
+description: "How to change a song's pitch and tempo in LibreTracks: per-song transposition, warp, original BPM and each track's T button so the click and the guide don't go out of tune."
+---
+
+import Clip from "../../../components/guide/Clip.astro";
+
+Three controls decide how each song sounds, and it pays not to mix them up:
+
+| Control | Where it is | What it does |
+| --- | --- | --- |
+| **Transpose** | Toolbar, with the song selected | Raises or lowers the pitch, from −12 to +12 semitones |
+| **Warp** | Toolbar, with the song selected | Separates pitch and speed: the audio follows the timeline's tempo without going out of tune |
+| **T** | Each track's header | Decides whether that track changes pitch when you transpose (only with warp) |
+
+The model is the same as Warp in Ableton Live.
+
+## Transposing a song
+
+1. Click the song's name on the ruler to select it.
+2. In the toolbar, open **Transpose** with its settings button.
+3. Press <kbd>+</kbd> or <kbd>−</kbd>: each press is one semitone.
+
+<Clip
+  src="/guide/desktop-en/transpose-varispeed.mp4"
+  poster="/guide/desktop-en/transpose-varispeed.webp"
+  caption="+2 semitones with warp off: the song goes up in pitch and also gets shorter, and its key goes from D to E."
+/>
+
+What happens depends on warp:
+
+- **Warp off** (the usual starting point): it works like speeding up or slowing
+  down a tape. Raising the pitch **shortens** the song and lowering it
+  lengthens it. The following songs move by themselves so they don't overlap.
+  Every track changes, without exception.
+- **Warp on**: the pitch changes and the length **doesn't**. It is what you
+  want almost always live.
+
+The song's key (the letter next to its name) is transposed by itself, and the
+*+2 st* label reminds you it is transposed.
+
+## Turning warp on
+
+With the song selected, open **Warp** in the toolbar and flip the switch.
+
+<Clip
+  src="/guide/desktop-en/warp-on.mp4"
+  poster="/guide/desktop-en/warp-on.webp"
+  caption="When warp is turned on, the song keeps its new pitch and gets its original length back."
+/>
+
+When you turn it on, LibreTracks saves the song's current tempo as its
+**original BPM**: the tempo the audio was recorded at. From then on:
+
+- If you change the song's **BPM**, the audio stretches or shrinks to follow
+  it, **without changing pitch**. The panel shows it as *140 → 132 (×0.943)*.
+- If the original BPM isn't right (for example, the audio was recorded at 72
+  and the session said 70), fix it in the song's menu › **Change Original
+  BPM**.
+
+:::caution[Warp uses CPU]
+Each track with warp costs more CPU than one without. On a modest computer or
+phone, turn it on only for the songs that need it and keep an eye on the
+[resource meter](/docs/interface/main-screen/#readouts-and-resource-meter).
+:::
+
+## The T button: tracks that shouldn't change pitch
+
+When you transpose, the **click**, the **spoken guide** or a **pad** recorded
+in its own key shouldn't change. That is what each track's **T** button is
+for:
+
+- **T on** (the default): the track follows the transposition.
+- **T off**: the track stays in its original pitch, but follows warp's tempo,
+  so it doesn't drift out of sync.
+
+The **T** button only has an effect with **warp on**. With warp off,
+transposing changes the speed, and a track that didn't change it would drift
+out of sync instantly; that is why, without warp, every track changes.
+
+| Warp | Transpose | Track's T | Result |
+| --- | --- | --- | --- |
+| Off | 0 | any | Original audio |
+| Off | ≠ 0 | any | Changes pitch **and** length (every track) |
+| On | 0 | any | Follows the tempo; original pitch |
+| On | ≠ 0 | on | Changes pitch; length set by warp |
+| On | ≠ 0 | off | Original pitch; length set by warp |
+
+## A recipe for live
+
+1. Build the session with the BPM each song was recorded at and warp off.
+2. If the band asks for the song **faster or slower**, turn warp on and change
+   the BPM.
+3. If they ask for **another key**, turn warp on and transpose. Turn off the
+   **T** on the click and guide tracks.
+4. Make pitch changes **before pressing Play**, or between songs. Changing
+   pitch while it plays makes the engine rearrange its voices and, on modest
+   computers, can cause small dropouts.
+
+## Why markers don't move from their musical place
+
+Markers, song edges and tempo and time-signature changes are stored at the
+position of the **original audio**. When warp or transposition changes a
+song's length, everything moves with it and keeps landing on the same musical
+point: the Chorus still starts where the Chorus starts.

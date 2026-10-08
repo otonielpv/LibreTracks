@@ -1,0 +1,116 @@
+---
+title: Your first song, step by step
+description: "From zero to a song ready to play in LibreTracks: create the session, bring in the stems, mark the sections, put the click in the in-ears and play it in Live View."
+sidebar:
+  order: 1
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+import TutorialVideo from "../../../../components/guide/TutorialVideo.astro";
+
+This walkthrough takes you from a freshly installed app to a song ready to
+play live. You need the song's **stems** (one audio file per instrument:
+drums, bass, keys, click, guide…) in a folder on your computer. Each step links
+to its page with all the details.
+
+If you would rather watch it before reading it, this video does the whole
+walkthrough in the app, with narration and LibreTracks' own sound:
+
+<TutorialVideo
+  src="/video/first-steps.mp4"
+  poster="/video/first-steps.webp"
+  title="Your first song in LibreTracks"
+  duration="4:40"
+/>
+
+Would you rather play around first? On mobile, the **Demo song** on the start
+screen opens an example session without importing anything. And at any time,
+the **Tutorial** button in the side bar shows you the controls on the app
+itself.
+
+## 1. Create the session
+
+When you open LibreTracks you see the start screen:
+
+![The start screen](/guide/desktop-en/landing-overview.png)
+
+<Legend>
+
+1. **Create**: a new session. You choose a name and a folder; LibreTracks
+   creates the session's folder there.
+2. **Open**: a session you already have (`.ltsession`).
+3. **Import session**: a whole exported session (`.ltset`), for example from
+   another computer. If the cloud is connected, it asks whether to take it
+   from this computer or from your Google Drive.
+4. **Import Reaper/Ableton**: start from an `.rpp` or `.als` project.
+5. **Cloud**: connect or disconnect your Google Drive account, and see or
+   delete what you have uploaded. To bring something down from the cloud you
+   use **Import**.
+6. **Templates**: start with the tracks and outputs of an earlier session.
+   Your **recent** sessions appear on the right.
+
+</Legend>
+
+Press **Create**. A **session** is your setlist: it can hold one song or the
+whole Sunday set.
+
+## 2. Bring in the stems
+
+1. Open the **Library** with its button in the side bar.
+2. **Import audio** and choose all the song's stems.
+3. Create a **folder** in the Library with the song's name and put the stems
+   in it.
+4. Drag the **folder's name** onto the timeline.
+
+LibreTracks creates the song with the folder's name and one audio file per
+track, all starting together. See [Library and audio](/docs/tasks/library/).
+
+LibreTracks uses the files from where they are: don't move or delete them
+while you use the session.
+
+## 3. Set the tempo
+
+In the top bar, type the song's **BPM** (or use **Tap**) and, if it isn't 4/4,
+the **time signature**. Turn on **Click** and press **Play**: the click has to
+land with the drums. See [Tempo and time signature](/docs/tasks/tempo/).
+
+## 4. Mark the sections
+
+For each part of the song: right-click the ruler where it starts › **Create
+marker** › **Sections** › Intro, Verse, Chorus… Add **Cues** like *Drums In*
+or *Last Time* wherever you want the band to hear a direction. See
+[Markers](/docs/tasks/markers/).
+
+With the markers in place, turn on **Guide** and the band will hear "Chorus,
+1, 2, 3, 4" before each section. See [Voice guide](/docs/voice-guide/).
+
+## 5. Separate what the audience hears from what the band hears
+
+1. **Settings › Audio**: choose your interface and tick its outputs under
+   *Hardware outputs* › **Apply**.
+2. On the header of the **click** and **guide** tracks, set the in-ear output
+   (for example *Out 3/4*); leave the music on **Master**.
+3. Do the same with the output of the **metronome** and the **voice guide**,
+   with the arrows next to *Click* and *Guide*.
+
+See [Audio outputs and metronome](/docs/audio-routing-metronome/).
+
+## 6. Play it
+
+Press <kbd>Tab</kbd> until you reach **Live View**: each section is a big
+button. Tap it to jump to that part; when the jump happens you choose at the
+top (right away, after a few bars or at the next marker). To stretch an
+ending, **Vamp**. See [Live View](/docs/live-view/) and
+[Live control](/docs/live-control-flow/).
+
+Save with <kbd>Ctrl</kbd>+<kbd>S</kbd>. LibreTracks also saves by itself every
+few minutes.
+
+## What next
+
+- More songs: repeat step 2 with another folder; they are placed one after
+  another.
+- Another key or tempo: [Pitch, warp and the T button](/docs/pitch-and-warp/).
+- Drive it with a pedal: [MIDI](/docs/tasks/midi/).
+- From the band's phones: [Remote](/docs/remote-control/).
+- Take it to another computer or to your phone: **File › Export session…**.

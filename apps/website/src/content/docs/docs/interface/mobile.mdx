@@ -1,0 +1,236 @@
+---
+title: On phone and tablet
+description: "The LibreTracks interface on Android and iOS, screen by screen: start screen, mobile-only buttons, the action bar, selecting tracks and clips, long-press menus, Library, Compact View and Live View."
+sidebar:
+  order: 6
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+import Clip from "../../../../components/guide/Clip.astro";
+
+On phone and tablet, LibreTracks is the same app as on the computer: the same
+engine, the same session format and the same views. The app is always used
+**in landscape**. What changes is how you touch it:
+
+- **There is no right-click**: **press and hold** to open something's menu.
+- **There is no File menu**: its options are in the side bar.
+- The actions for whatever you have selected show up in a **floating bar** at
+  the bottom.
+
+This page goes through those differences. Gestures, where sessions are kept
+and the audio output are in [LibreTracks on mobile](/docs/mobile/).
+
+## Start screen
+
+![The start screen on mobile](/guide/mobile-en/landing.png)
+
+<Legend>
+
+1. **Sessions**: the list of your sessions, to open another one without
+   leaving the one you have open.
+2. **Save** the open session.
+3. **File**: import a song, manage the cloud, export the session and save it
+   as a template. See [below](#the-file-button).
+4. **Library**: the session's audio.
+5. **Settings**.
+6. **Tutorial**: the guided tours, adapted to the touch screen.
+7. **Create** a new session.
+8. **Import session**: opens an `.ltset`, from the phone or from your Google
+   Drive.
+9. **Cloud**: connect or disconnect your Google Drive account, and delete what
+   you have uploaded.
+10. **Demo song**: an example session with two songs, to try things out
+    without importing anything.
+
+</Legend>
+
+The **Remote** is not in this bar: it is for controlling the computer *from*
+the phone, with the browser. See [Custom Remote](/docs/remote-control/).
+
+### The File button
+
+![The File button's options](/guide/mobile-en/file-actions.png)
+
+- **Import song**: adds an `.ltpkg` song to the open session.
+- **Cloud**: manages your Google Drive account (connect, disconnect, delete
+  what you uploaded).
+- **Export session…**: the whole session, with its audio, in an `.ltset`.
+- **Save as template…**.
+
+The last two are only enabled with a session open. As on the computer, with
+the cloud connected **Import** and **Export** ask whether to use the phone or
+your Google Drive.
+
+## The work screen
+
+![The DAW view on mobile](/guide/mobile-en/daw-overview.png)
+
+<Legend>
+
+1. **BPM** of the song under the cursor.
+2. **Tap**: tap along to work out the tempo.
+3. **Time signature**.
+4. **Undo** and **redo**.
+5. **Transport**, metronome, voice guide and pads, as on the computer. See
+   [the top bar](/docs/interface/main-screen/#transport).
+6. **Position** in bars and in time.
+7. **CPU**: the audio engine's load. Tap it for the details.
+8. **Track buttons**. See [below](#track-buttons).
+9. **Action bar**: with nothing selected, it is for **adding**. See
+   [below](#adding).
+
+</Legend>
+
+Below the top bar is the same [toolbar](/docs/interface/toolbar/) as on the
+computer; swipe across it to see the groups that don't fit.
+
+### Track buttons
+
+![The buttons above the track list](/guide/mobile-en/track-header-actions.png)
+
+<Legend>
+
+1. **Reorder tracks**: turns on a mode where you drag tracks to change their
+   order. Tap it again to leave.
+2. **Shorter tracks**.
+3. **Taller tracks**.
+4. **Lock the ruler**: with the padlock on, tapping the ruler does not move
+   the cursor. It avoids accidental jumps while you play live.
+
+</Legend>
+
+### Adding
+
+With nothing selected, the action bar offers **Section** (a section marker at
+the cursor), **Cue** (a cue marker) and **Audio** (import audio into the
+session). The **…** button shows every option:
+
+![Every Add option](/guide/mobile-en/add-sheet.png)
+
+Besides section, cue and audio, there are **Video from the gallery** and
+**Video from files**, to add a video that is projected with the song (see
+[Video on the projector](/docs/tasks/video/)).
+
+The **⌄** arrow folds the bar away to see more of the timeline.
+
+### Resource meter
+
+![The resource meter's details](/guide/mobile-en/resource-panel.png)
+
+On mobile the **CPU** pill shows the **audio load**: the share of each block
+of sound's time that the engine needs to process it. Above 100 % you hear
+dropouts. **Audio dropouts** counts the ones there have been so far.
+
+## Selecting a track
+
+Tap a track's **name** to select it. The action bar changes and shows what you
+can do with it:
+
+![A selected track and its action bar](/guide/mobile-en/track-selected.png)
+
+<Legend>
+
+1. The **selected track**, highlighted.
+2. What is selected.
+3. **Quick actions**: insert track, insert folder, reset the height…
+4. **More actions**: the track's full menu.
+5. **Mix**: shows the mix controls next to the bar. See below.
+6. **Select several**: from here on, every track you tap is added to the
+   selection.
+7. **Clear selection**.
+8. **Hide** the bar.
+
+</Legend>
+
+On a phone the track headers only show **M** and **S**. The rest of the mix
+appears when you select the track: a row above it with its **T**, volume, pan
+and output. The **Mix** button brings those controls next to the action bar:
+
+![The selected track's mix controls](/guide/mobile-en/track-mix.png)
+
+<Clip
+  src="/guide/mobile-en/track-select-mix.mp4"
+  poster="/guide/mobile-en/track-select-mix.webp"
+  caption="Tap the track's name to select it; “Mix” shows its controls next to the bar."
+/>
+
+With several tracks selected, changes apply to all of them, and volume and pan
+move by the same proportion.
+
+**More actions** opens the track's full menu, the same as a right-click on the
+computer ([see the options](/docs/interface/timeline/#on-a-track)):
+
+![The track's full menu](/guide/mobile-en/track-more.png)
+
+## Selecting a clip
+
+Tap a clip to select it:
+
+![A clip's action bar](/guide/mobile-en/clip-selected.png)
+
+The clip's actions, the same as its
+[computer menu](/docs/interface/timeline/#on-a-clip), show up in the bar:
+**Split At Cursor** (enabled when the cursor is over the clip),
+**Duplicate**, **Select colour…**, and the ones that don't fit under **…**.
+
+With the clip selected, drag it to move it. That way an accidental brush never
+moves the audio.
+
+## Press and hold
+
+Press and hold a song, a marker or any point on the timeline to open its menu,
+the same as a right-click on the computer.
+
+![A song's menu after pressing and holding it](/guide/mobile-en/song-sheet.png)
+
+![A marker's menu after pressing and holding it](/guide/mobile-en/marker-sheet.png)
+
+What each option does is in
+[Right-click menus](/docs/interface/timeline/#right-click-menus).
+
+## Library
+
+![The Library on mobile](/guide/mobile-en/library.png)
+
+The same as on the computer: **Folder**, **Import audio** and the audio sorted
+into folders. Tap a file to select it and its actions appear. To close the
+Library, tap its button in the side bar again. As on the computer, the audio
+is used **without copying it** into the session (this can be changed): see
+[Importing audio without copying it](/docs/mobile/#importing-audio-without-copying-it).
+
+## Settings
+
+![Settings on mobile](/guide/mobile-en/settings.png)
+
+The same tabs as on the computer ([see Settings](/docs/interface/settings/)),
+except **Shortcuts**, which makes no sense without a keyboard. On mobile there
+are also options of its own: where to keep sessions (internal storage, SD card
+or USB stick), importing without copying and the low-latency output. They are
+explained in [LibreTracks on mobile](/docs/mobile/).
+
+## Compact View and Live View
+
+The three views are on the first three buttons of the toolbar, as on the
+computer.
+
+![Compact View on mobile](/guide/mobile-en/compact.png)
+
+**Compact View** shows one column per song with its tracks, the button to play
+it and its volume fader. **+ New song** and **Import .ltpkg** are at the end,
+and **Mixer** opens the mixer at the bottom. See
+[Compact View](/docs/compact-view/).
+
+![Live View on mobile](/guide/mobile-en/live.png)
+
+**Live View** is the one for playing: the song's markers as big buttons, with
+how long until the next one, the setlist at the bottom and the jump settings
+always at hand. See [Live View](/docs/live-view/).
+
+## Sessions
+
+![The session list](/guide/mobile-en/sessions.png)
+
+The **Sessions** button in the side bar opens this window without closing the
+current session. From here you create, import or open another one. To delete a
+session from the device, use the bin next to its name; the one you have open
+cannot be deleted.

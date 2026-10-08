@@ -1,0 +1,91 @@
+---
+title: Tempo and time signature
+description: "How to set each song's tempo and time signature in LibreTracks: the BPM field, Tap, tempo and time-signature changes mid-song, and what depends on them (grid, metronome, voice guide, jumps)."
+sidebar:
+  order: 5
+---
+
+import Clip from "../../../../components/guide/Clip.astro";
+
+Tempo and time signature don't move the audio: what they do is tell
+LibreTracks **where the bars and beats fall**. The grid and snap, the numbers
+on the ruler, the **metronome**, the **voice guide**'s count, *after X bars*
+jumps and Vamp by bars all depend on them. If the metronome doesn't line up
+with the music, the tempo is what needs fixing.
+
+Each song has its own. When you import a song, it arrives with its tempo and
+time signature already set at its start.
+
+:::note[What if I want the music to go faster?]
+Changing the BPM doesn't speed up the audio. That is what **warp** is for:
+with the song's warp on, the audio stretches to follow the timeline's tempo
+without changing pitch. See [Pitch, warp and the T button](/docs/pitch-and-warp/).
+:::
+
+## Changing the tempo of a section
+
+In the top bar:
+
+- **BPM**: type the tempo and press <kbd>Enter</kbd>. It changes the tempo
+  section the cursor is in; the *Tempo @ 6:12.4* label tells you where that
+  section starts. It accepts decimals (for example, 152.8).
+- **Tap**: tap along with the music. From the second tap it works out the
+  tempo from the average of the last eight, and applies it to the same
+  section. If more than two and a half seconds go by without a tap, the count
+  starts again.
+
+Neither of them creates a new tempo change: they correct the one that is
+already there.
+
+## Changing tempo mid-song
+
+1. **Right-click the ruler**, at the point where the tempo changes.
+2. Choose **Change Timeline BPM**.
+3. Type the new tempo.
+
+<Clip
+  src="/guide/desktop-en/tempo-change.mp4"
+  poster="/guide/desktop-en/tempo-change.webp"
+  caption="Right-click the ruler › Change Timeline BPM: from that point, the song plays at 132."
+/>
+
+A turquoise marker with the BPM appears. From there to the next change,
+everything plays at that tempo. If you do the same at the start of the
+session, you change the starting tempo instead of creating a marker.
+
+Right-click the marker: **Change BPM** or **Delete Marker** (the section goes
+back to the previous tempo). On mobile, the action bar › **…** › **Tempo**
+creates the change at the cursor position.
+
+## Changing time signature
+
+Same as the tempo: right-click the ruler › **Create time-signature marker**,
+and type the metre (for example, `6/8` or `3/4`).
+
+<Clip
+  src="/guide/desktop-en/time-signature-change.mp4"
+  poster="/guide/desktop-en/time-signature-change.webp"
+  caption="Right-click the ruler › Create time-signature marker › 6/8: the ruler is renumbered from that point."
+/>
+
+- The numerator goes from 1 to 32 and the denominator can be 1, 2, 4, 8, 16 or
+  32.
+- The **Time signature** field in the top bar works differently from the BPM:
+  with the cursor at the start of the session it changes the starting time
+  signature, and anywhere else it **creates a time-signature change** at the
+  cursor position.
+- Right-click the time-signature marker: **Change time signature** or
+  **Delete Marker**.
+
+The voice guide counts according to the time signature: in 3/4 it says
+"1, 2, 3", in 5/4 it counts up to five.
+
+## Checking the tempo is right
+
+1. Turn on the **metronome** (the *Click* button).
+2. Play the song: the click has to land with the drums.
+3. If it gradually drifts ahead or behind, the tempo is wrong: use *Tap* or
+   type the exact value.
+4. If it keeps time but is shifted, the song doesn't start on a downbeat.
+   Move the song (or the audio) until the first hit lands at the start of a
+   bar.

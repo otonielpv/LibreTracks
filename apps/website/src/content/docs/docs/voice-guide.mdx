@@ -1,0 +1,109 @@
+---
+title: Voice guide
+description: Spoken section announcements, dynamic cues and count-ins before markers and scheduled jumps.
+---
+
+The **voice guide** tells the band what is coming, like the Playback app for
+iPad: before each section a voice says its name ("Chorus", "Verse 2",
+"Bridge") and counts the bar before it ("1, 2, 3, 4"), so everyone comes in
+together. It also says short **cues** wherever you put them: "Build", "All
+in", "Drums in", "Key change up"…
+
+If you are looking for a player with no monthly fee, see how it fits in the
+guides [free alternative to MultiTracks Playback](/playback-multitracks-alternative/)
+and [free alternative to Prime Worship](/prime-worship-alternative/).
+
+The voice guide works with your songs' **markers**: what it says depends on
+each marker's type. How to create and change them is in
+[Markers](/docs/tasks/markers/).
+
+## Turning it on and setting it up
+
+The **Guide** button in the top bar turns it on and off. The arrow next to it
+opens its settings:
+
+![The voice guide settings](/guide/desktop-en/voice-guide-popover.png)
+
+- **Voice guide**: on or off, like the button.
+- **Language**: Spanish or English.
+- **Voice guide output**: where it goes. Like the metronome, it doesn't go
+  through the song's mix. Send it to the band's in-ears, not to Master. The
+  **Monitor** option uses channels 3 and 4 if your interface has them
+  (otherwise, the main output). See
+  [Audio outputs and metronome](/docs/audio-routing-metronome/).
+- **Lead-in bars**: how many bars before the marker it starts speaking (1 by
+  default). In fast songs, 2 feels more comfortable.
+- **Count-in** (*Count the remaining beats after the section name*): whether
+  it counts the beats after the name. Turn it off to hear just the name.
+- **Voice volume**.
+
+## What each marker says
+
+| Marker | What you hear |
+| --- | --- |
+| **Section** (Intro, Verse, Chorus…) | Its name and the count of the bar before |
+| **Section with a variant** (Chorus 2, Verse 3) | The name with its number |
+| **Cue** (Drums In, Last Time…) | The cue when it arrives, with no count |
+| **Custom** | Just the count, with no name |
+
+If you don't want a marker announced, leave it as *Custom*: it still works
+for jumping, but silently.
+
+## How it fits the bar
+
+The bar before the marker carries the **full count** ("1, 2, 3, 4" in 4/4).
+The section's name is placed to **finish right before** that count, whether
+it is short or long, so they never overlap:
+
+```
+            [ Verse two ]  one  two  three  four
+                           └───── count-in bar ─────┘  → Verse 2 comes in here
+```
+
+The count follows the song's **time signature**, even if it changes mid-song:
+in 3/4 it counts "1, 2, 3", in 5/4 up to five. (In compound time like 6/8, for
+now it counts every eighth note.)
+
+## Cues
+
+A **cue** on its own, away from any section, is said right when you reach it,
+with no count.
+
+A cue that falls at the start of a section (or just before it) **is chained
+into the announcement**, between the name and the count. The band hears the
+section, then the direction and then the count:
+
+```
+            [ Chorus ] [ Build ]  one  two  three  four
+                                  └───── count-in bar ─────┘  → the Chorus comes in here
+```
+
+Several cues at the same point are said in order ("Last time", "Big
+ending"…). The count never moves: it always lands on the section's first
+beat.
+
+## Scheduled jumps
+
+When you schedule a jump to a section (at the end of the song, after a few
+bars or at the next marker), the voice announces the **destination** section
+and counts up to the moment of the jump. The band knows where they are going
+before they get there.
+
+The cues at the destination are announced too: jump to a "Solo" with a
+"Guitar" cue and you hear "Solo, guitar, 1, 2, 3, 4". That cue is said only
+once: it isn't repeated when playback then passes over it.
+
+If the jump leaves very little room (for example, a jump of one bar), the
+**count always plays**; the name is only added if it fits.
+
+Cues are jump destinations too: you can jump to a cue with a click, from Live
+View or from the Remote. What they don't have is a count of their own.
+
+## Tips
+
+- Put the voice guide and the metronome on the same in-ear output, or on
+  separate outputs if the monitor engineer wants to control them separately.
+- Use **cues** for arrangement directions (build, stop the band, key change)
+  without filling the song with sections.
+- On the [Remote](/docs/remote-control/) the band also sees the section
+  markers and the cues, with their colour.

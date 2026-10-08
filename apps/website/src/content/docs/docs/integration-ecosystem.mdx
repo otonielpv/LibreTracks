@@ -1,0 +1,223 @@
+---
+title: Export, import and share
+description: "Take songs and sessions to another computer or to your phone (.ltpkg and .ltset), the cloud with your Google Drive, rendering to WAV, session templates and importing Reaper and Ableton projects."
+---
+
+import Legend from "../../../components/guide/Legend.astro";
+
+Everything you prepare in LibreTracks can travel: a single song into another
+musician's session, the whole session to the show computer or to your phone,
+or a mix as a WAV for whoever needs it. This page explains each route.
+
+| You want to… | Use | File |
+| --- | --- | --- |
+| Move **one song** into another session | Export song | `.ltpkg` |
+| Take **the whole session** to another computer | Export session | `.ltset` |
+| Start new sessions with **your tracks and outputs** | Save as template | `.lttemplate` |
+| Send **an audio file** (mix or stems) | Render audio | `.wav` / `.zip` |
+| Keep it all **in the cloud** | Import / Export → Google Drive | — |
+
+:::note[Your audio is not copied when you import it]
+When you add audio to a session, LibreTracks plays it **from wherever it is**
+on your disk; it does not make a copy. So if you are taking the session to
+another computer, export it in **Full** mode: that is when the audio goes
+inside the file. On a phone it works the same (except for files that live in
+the cloud, which are copied).
+:::
+
+## Exporting a song (.ltpkg)
+
+Right-click the **song bar** on the ruler and choose **Export Song**.
+
+![The Export song dialog](/guide/desktop-en/export-song-modal.png)
+
+<Legend>
+
+1. **Full (for sharing)**: puts your original audio files inside, untouched.
+   The package opens on any computer.
+2. **Light**: carries no audio, it only points at your files by their path.
+   It is tiny, but it only works on this same computer.
+
+</Legend>
+
+The package carries the song with its tracks, clips, markers, tempo, key,
+transposition and outputs. If the song has videos, a checkbox to include them
+appears too.
+
+The file name is suggested from the song's details, for example
+`Dios es Real [140bpm D 4-4].ltpkg`, so you can recognise it at a glance in a
+folder or in the cloud.
+
+### Importing a song
+
+An `.ltpkg` song is **added** to the session you have open, at the end of the
+setlist. You can:
+
+- Use **File → Import song**.
+- Press **Import .ltpkg** in the [Compact View](/docs/compact-view/).
+- **Drag** the `.ltpkg` from your file manager onto the timeline or the
+  Compact View.
+
+If a track in the package has the same name as one you already have, its
+clips go to that track instead of creating another one.
+
+## Exporting the whole session (.ltset)
+
+An `.ltset` carries **the whole session** in a single file: every song, the
+library, the automation and the waveforms. It is how you prepare it at home
+and open it as it is on the show computer, or move it to your phone.
+
+Open **File → Export session…**
+
+![The Export session dialog](/guide/desktop-en/export-session-modal.png)
+
+<Legend>
+
+1. **Full (to take with you)**: includes your original audio files (an MP3
+   stays an MP3). It opens on any computer; when it opens, LibreTracks
+   prepares the audio, which takes a while on phones and slow computers.
+2. **Optimized (for phones and slow machines)**: instead of the originals it
+   carries the audio **already prepared** for playback, so the session opens
+   instantly. It is bigger and cannot be used to recover the originals: keep
+   them somewhere else.
+3. **Light**: no audio, it points at your files by their path. Only for this
+   same computer.
+
+</Legend>
+
+Only the audio **your clips use** is packed, not the whole library. While it
+exports, an indicator shows the progress and you can keep working.
+
+### Importing a session
+
+Use **File → Import session…**, or the **Import session** button on the start
+screen (nothing needs to be open). Pick the `.ltset`, choose **where to save**
+the session, and LibreTracks creates its folder there and opens it. Unlike a
+song, a session is **not merged** into the one you had: it opens as a new
+session.
+
+## The cloud: your Google Drive
+
+LibreTracks can keep songs and sessions in **your own Google Drive
+account**, to move them from the computer to your phone or another computer
+without cables or USB sticks. LibreTracks has no servers: the files are in
+your Drive, in a `LibreTracks` folder, and the app **can only see the files it
+created**, nothing else in your account.
+
+With the account connected, **Import** and **Export** (of songs and sessions)
+first ask where:
+
+![Choosing between this device and Google Drive](/guide/desktop-en/storage-choice.png)
+
+- **Export → Google Drive** uploads the file to your account. For a song it
+  asks after you pick the mode; for a session, before.
+- **Import → Google Drive** shows what you have uploaded, with search and
+  filters, and downloads it.
+
+The **Cloud** button (in **File → Cloud…** and on the start screen) does not
+upload or download anything: it is for **managing the account**.
+
+![The cloud panel](/guide/desktop-en/cloud-panel.png)
+
+- **Connect Google Drive** opens the browser so you can sign in and grant
+  access. The first time, that is all the panel shows.
+- **Disconnect** removes the account from this device. Nothing in your Drive
+  is deleted.
+- The **space** used and free is that of **your whole Google account**, shared
+  with Gmail and Photos.
+- The **Sessions** and **Songs** lists show what you uploaded, with its size,
+  and a **Delete** button to remove it from Drive.
+
+The connection is kept on each device: on your phone you connect the account
+there too.
+
+## Rendering audio
+
+To send the song to someone who does not use LibreTracks (the musician who has
+to learn it, a sound engineer, a recording), render it to WAV: right-click the
+song bar and choose **Render audio…**.
+
+![The Render audio dialog](/guide/desktop-en/render-modal.png)
+
+<Legend>
+
+1. **All** / **None**, and how many tracks are ticked.
+2. The song's **tracks**. Tick the ones you want; a folder's checkbox ticks or
+   unticks all of its tracks.
+3. **Mix (one file)**: the ticked tracks summed into a single WAV.
+4. **Separate tracks (.zip)**: one WAV per track, all aligned to the start of
+   the song, inside a `.zip`.
+5. **Format** (16-bit, 24-bit or 32-bit float WAV), **sample rate** (the
+   project's by default) and **channels** (stereo or mono).
+6. **Apply the mix**: the volume and pan of each track and folder, and the
+   song's master, as they sound. Unticked, everything comes out at 0 dB and
+   centred.
+7. **Normalize**: adjusts each file so its peak sits at −0.3 dB.
+8. **Include the metronome**.
+9. **Include the voice guide**. With separate tracks, the metronome and the
+   guide each come out as their own file.
+10. **File name**. It is suggested from what you pick, for example
+    "Dios es Real (no Vocals)" if you leave out a track.
+
+</Legend>
+
+The render happens on the side, without interrupting whatever is playing, and
+**Stop** cancels it. If an audio file could not be read, it comes out silent
+and you are told at the end.
+
+## Session templates
+
+If you always set up the same tracks (click, guide, drums, bass… with their
+folders, colours and outputs), save them as a template and start each new
+session with everything in place.
+
+- **File → Save as template…** creates a `.lttemplate` file with the
+  **structure**: tracks, folders, names, colours and outputs. On purpose it
+  does **not** keep clips, songs, markers, tempo or the mix (volumes, mute…),
+  so each session starts clean.
+- **File → New from template…**, or the **Templates** list on the
+  [start screen](/docs/interface/main-screen/), creates a new session from it.
+  **Use template file…** opens one you keep in another folder.
+
+Since it is a file, you can hand it to another engineer or take it to another
+computer.
+
+## Importing Reaper and Ableton projects
+
+If the song is built in Reaper or in Ableton Live, there is no need to export
+the stems and place them again: **File → Import Reaper/Ableton** (or the
+button on the start screen) reads the `.rpp` or `.als` project and creates the
+tracks and clips.
+
+- With a session open, the project is added **at the end of the setlist**.
+- From the start screen, you first pick the project and then where to save
+  the new session.
+- You can also **drag** an `.rpp` or `.als` onto the timeline (it lands where
+  you drop it, or at the end if it would overlap another song) or onto the
+  Compact View (it is added as a new song at the end).
+
+What matters for playing live is kept, not every detail of the DAW:
+
+- **Reaper**: audio items become clips; tracks and folders are recreated with
+  their basic mix; tempo and time-signature changes are imported; each
+  **region** becomes a song and each **marker**, a section marker in it.
+- **Ableton Live**: the Arrangement's audio clips become clips on their
+  tracks; **locators** become section markers; tempo and time signature are
+  imported. The whole Arrangement is **one song**, because in Ableton locators
+  mark sections, not songs.
+
+The DAW's plugins and effects are not imported: LibreTracks plays the audio
+of the clips.
+
+## LibreTracks files
+
+| File | What it is |
+| --- | --- |
+| `.ltsession` | The session you work in (inside its folder). |
+| `.ltpkg` | An exported song. |
+| `.ltset` | An exported whole session. |
+| `.lttemplate` | A session template. |
+
+On Windows each type has its own icon in File Explorer, and a double-click
+opens it in LibreTracks. On macOS and Linux they are also associated with the
+app, with its general icon.

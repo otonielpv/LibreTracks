@@ -1,0 +1,93 @@
+---
+title: Side bar and Library
+description: "What each button in the LibreTracks side bar opens (Library, Remote, Settings and Tutorial) and how to use the Library to import, organise and bring audio to the timeline."
+sidebar:
+  order: 4
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+
+The side bar is the narrow column on the left. It is always visible, with or
+without a session open.
+
+![The side bar buttons](/guide/desktop-en/side-nav.png)
+
+<Legend>
+
+1. **Library**: opens or closes the panel with the session's audio. See
+   [below](#the-library).
+2. **Remote**: shows the QR code and the address to control LibreTracks from a
+   phone or tablet. See [below](#remote).
+3. **Settings**: audio, interface, video, shortcuts, MIDI and diagnostics. See
+   [Settings](/docs/interface/settings/).
+4. **Tutorial**: guided tours inside the app itself.
+
+</Legend>
+
+## The Library
+
+The Library keeps all the audio you have brought into the session, whether it
+is used on the timeline or not. From here you import it, sort it into folders
+and drag it onto the tracks.
+
+![The Library panel](/guide/desktop-en/library-panel.png)
+
+<Legend>
+
+1. **Folder**: creates a folder to sort the audio. They are *virtual*
+   folders: they do not move or copy anything on disk.
+2. **Import audio**: pick WAV, AIFF, MP3, FLAC… files. You can also drag them
+   from your file manager straight onto the timeline: they are imported and
+   placed where you drop them.
+3. **Unfiled**: the audio that is not in any folder yet.
+4. **An audio file**, with its length. Drag it onto the timeline to create a
+   clip.
+
+</Legend>
+
+You can also drag **a whole folder** onto the timeline: each audio file goes to
+its own track, one below the other, like a song's stems. If you hold
+<kbd>Ctrl</kbd> when you drop, they go one after the other on the same track.
+
+To select several files use <kbd>Ctrl</kbd>+click or <kbd>Shift</kbd>+click, and
+drag them together. <kbd>Del</kbd> removes the selection from the Library.
+Importing does not copy the audio (the session uses it from where it is), and
+removing it from the Library **does not delete your original file**. More in
+[Library and audio](/docs/tasks/library/).
+
+### Right-click on a file
+
+![A Library file's menu](/guide/desktop-en/menu-library-asset.png)
+
+- **Move to folder…** and **Move to root**.
+- **Delete** the file from the Library.
+
+### Right-click on a folder
+
+![A Library folder's menu](/guide/desktop-en/menu-library-folder.png)
+
+- **Add to timeline as a song**: creates a new song with all the audio in the
+  folder, each file on its own track. It is the fastest way to build a song
+  from its stems: one folder per song, and one click.
+- **Create virtual folder**.
+
+Folders you created also show **Rename folder** and **Delete folder**.
+
+## Remote
+
+![The Remote connection window](/guide/desktop-en/remote-modal.png)
+
+The computer and the phone have to be on the **same Wi‑Fi network**. Scan the
+QR code with the phone's camera, or type one of the two addresses into its
+browser. Nothing needs to be installed on the phone. What you can do from
+there, and how to customise its screens, is in
+[Custom Remote](/docs/remote-control/).
+
+## Tutorial
+
+![The guided tours menu](/guide/desktop-en/tutorial-menu.png)
+
+Each tour points at the real controls on the screen, step by step. Some steps
+ask you to open the panel they talk about and carry on by themselves when you
+do. The ones you have done are ticked, and you can replay them whenever you
+like.

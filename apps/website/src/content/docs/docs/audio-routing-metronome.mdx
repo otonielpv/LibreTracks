@@ -1,0 +1,105 @@
+---
+title: Audio outputs and metronome
+description: "How to choose the audio interface in LibreTracks, enable its outputs, send each track to a different output (click and guide to the in-ears, music to the desk) and set up the metronome."
+---
+
+import Clip from "../../../components/guide/Clip.astro";
+
+Live, the usual thing is to separate what the audience hears from what the
+band hears: the **music** goes to the sound desk and the **click** and the
+**guide** go only to the musicians' in-ears. LibreTracks does it by sending
+each track to a different output of your audio interface.
+
+If you are after a complete plan, from the stems to the desk, with levels and
+a soundcheck, see the guide
+[How to route multitrack audio live](/guides/multitrack-audio-routing/).
+
+## 1. Choose the audio interface
+
+In **Settings › Audio** choose the audio system and the device. For live use,
+a dedicated interface is better than the computer's sound card. What each
+setting means is in [Settings › Audio](/docs/interface/settings/#audio).
+
+## 2. Enable the outputs
+
+In the same tab, **Hardware outputs** shows every channel your interface
+really has: two on a stereo interface, eight, sixteen or thirty-two on USB
+interfaces and digital desks.
+
+![Hardware outputs in Settings › Audio](/guide/desktop-en/settings-audio-2.png)
+
+1. Tick the channels you are going to use (**Select all** and **Clear** help).
+2. Press **Apply**. The interface reopens just once with all the changes;
+   **Discard** leaves things as they were.
+
+Only the ticked channels show up afterwards as outputs on the tracks.
+
+## 3. Send each track to its output
+
+On each track's header, the output selector:
+
+![A track's output selector](/guide/desktop-en/track-route-list.png)
+
+- **Master**: the main output (the first two channels). It goes through the
+  song's master.
+- **Out 3**, **Out 4**…: one physical channel, in mono.
+- **Out 3/4**…: a pair of channels, in stereo.
+- **Inherited (Folder)**: only on tracks inside a folder. The track goes out
+  wherever its folder goes. When you put a track in a folder, it is set like
+  this by itself.
+
+:::tip[Tip: route the folder, not each track]
+Put the click and the guide in a folder, send the folder to the in-ear output
+and leave the tracks on *Inherited (Folder)*. If you change interface
+tomorrow, you only touch one selector.
+:::
+
+A stereo track that goes to a mono output plays in full if you turn on **Sum
+to mono** in its menu (right-click).
+
+A typical split:
+
+| What | Output |
+| --- | --- |
+| Music stems | Master (to the desk) |
+| Click, count-ins, spoken guides | Out 3/4 (to the in-ears) |
+| Metronome and voice guide | The same in-ear output |
+
+## The metronome
+
+LibreTracks has its own metronome: there is no need to import any click file.
+It follows each song's [tempo and time signature](/docs/tasks/tempo/),
+including changes mid-song.
+
+- The **Click** button in the top bar turns it on and off.
+- The **arrow** next to it opens its settings.
+
+<Clip
+  src="/guide/desktop-en/metronome-settings.mp4"
+  poster="/guide/desktop-en/metronome-settings.webp"
+  caption="The arrow next to “Click” opens the metronome settings."
+/>
+
+![The metronome settings](/guide/desktop-en/metronome-popover.png)
+
+- **Enable metronome**: the same as the *Click* button.
+- **Metronome output**: which output it goes to. Set it to the in-ear one, not
+  Master.
+- **Metronome volume**.
+- **Accent enabled**: the first beat of each bar sounds different. Its
+  **sound** and **pitch** are chosen separately.
+- **Beat sound** and **Beat pitch**: the rest of the beats.
+- **Subdivision**: eighths, triplets or sixteenths between beats, with their
+  own sound, pitch and volume. Handy in slow ballads.
+
+The metronome does not go through the song's master: turning down a song's
+master doesn't turn down the click.
+
+## The voice guide
+
+The voice that announces the sections has its own output and volume, under the
+arrow next to **Guide**. See [Voice guide](/docs/voice-guide/).
+
+## MIDI
+
+Controllers, pedals and MIDI tracks are explained in [MIDI](/docs/tasks/midi/).

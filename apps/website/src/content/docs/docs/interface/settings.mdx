@@ -1,0 +1,158 @@
+---
+title: Settings
+description: "Every tab of the LibreTracks Settings: audio device, outputs, buffer, language, autosave, cache, video, keyboard shortcuts, MIDI, MIDI Learn and diagnostics."
+sidebar:
+  order: 5
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+
+Open Settings with the **Settings** button in the side bar. Changes are saved
+on their own straight away, except the hardware outputs, which have their own
+*Apply* button.
+
+![The Settings window and its tabs](/guide/desktop-en/settings-overview.png)
+
+<Legend>
+
+1. [**Audio**](#audio): sound card, outputs and performance.
+2. [**General**](#general): language, timeline handling, autosave and cache.
+3. [**Video**](#video): the screen or projector for video tracks.
+4. [**Shortcuts**](#shortcuts): the keys for each action.
+5. [**Diagnostics**](#diagnostics): logs for when something goes wrong.
+6. [**MIDI**](#midi): input controller and output port.
+7. [**MIDI Learn**](#midi-learn): assign pedals and buttons to actions.
+8. **Close**. Also with <kbd>Esc</kbd>.
+
+</Legend>
+
+## Audio
+
+![The Audio tab, first part](/guide/desktop-en/settings-audio-1.png)
+
+- **Audio System**: the kind of driver. The list depends on your computer. On
+  Windows, **ASIO** has the lowest delay if your interface supports it, and
+  **Windows Audio** (WASAPI) works with any sound card. Avoid **DirectSound**
+  for playing live.
+- **Audio device**: the sound card or interface the sound goes out of.
+- **Refresh audio devices**: looks for interfaces again, for example if you
+  plugged one in with the app open.
+- **Sample rate**: leave it on *Auto* unless your interface needs a specific
+  one. When you open a session, LibreTracks tries to match the audio's rate so
+  it doesn't have to convert it.
+
+![The Audio tab, second part](/guide/desktop-en/settings-audio-2.png)
+
+- **Buffer size**: smaller means less delay; bigger means less risk of
+  dropouts. If you hear clicks or dropouts, raise it.
+- **Hardware outputs**: tick the channels of your interface you want to use
+  and press **Apply**. Only the ticked channels show up as outputs on the
+  tracks. See [Audio outputs and metronome](/docs/audio-routing-metronome/).
+- **Multicore processing**: spreads the audio work across several processor
+  cores. Leave it on.
+
+## General
+
+![The General tab: language and navigation](/guide/desktop-en/settings-general-1.png)
+
+- The app's **Language**.
+- **Timeline navigation**: how the mouse wheel and the trackpad respond. In
+  *Ableton* mode, pinching or <kbd>Ctrl</kbd>+wheel zooms;
+  <kbd>Alt</kbd>+wheel changes the height of the track under the mouse.
+- **Playhead follow**: where the cursor stays when the timeline follows it.
+
+![The General tab: playback and import](/guide/desktop-en/settings-general-2.png)
+
+- **Pause at the end of each song**: instead of moving on to the next one by
+  itself, playback stops at the end of each song. Ideal when someone has to
+  speak between songs.
+- **Merge tracks with the same name on import**: when you import a song, its
+  "Bass" goes to the "Bass" track you already have instead of creating
+  another.
+- **Colour new tracks automatically**.
+- **Autosave**: saves the session every so often, never while you play.
+
+![The General tab: interface and cache](/guide/desktop-en/settings-general-3.png)
+
+- **Save every**: how many minutes.
+- **Interface size**: make it smaller if it doesn't fit your screen, or bigger
+  to read it from a distance. Shortcuts: <kbd>Ctrl</kbd>+<kbd>+</kbd>,
+  <kbd>Ctrl</kbd>+<kbd>−</kbd> and <kbd>Ctrl</kbd>+<kbd>0</kbd>.
+- **Audio cache**: MP3, FLAC and other compressed audio is decompressed once
+  and kept here, so the session loads instantly next time. You can change the
+  folder, give it a maximum size or empty it to free up space.
+
+![The General tab: updates and statistics](/guide/desktop-en/settings-general-4.png)
+
+- **Check for updates**: checks whether there is a new version. The app also
+  tells you by itself when it starts.
+- **Optional usage statistics**: aggregated, anonymous data that helps improve
+  LibreTracks. Audio, names and the content of your sessions are never sent.
+
+## Video
+
+![The Video tab: output and display](/guide/desktop-en/settings-video-1.png)
+
+- **Video output**: turn it on so video tracks go out to another screen.
+- **Display**: the projector or the TV. **Identify displays** shows a number
+  on each one so you can tell which is which.
+- **Mode**: fullscreen or window.
+
+![The Video tab: behaviour](/guide/desktop-en/settings-video-2.png)
+
+- **Fit**: how the picture adapts to the screen.
+- **Idle screen**: what shows when no video is playing.
+- **When stopped**: what stays on screen when you stop playback.
+
+![The Video tab: sync](/guide/desktop-en/settings-video-3.png)
+
+- **Delay compensation**: if the projector shows the picture late compared
+  with the audio, bring it forward here. **Calibrate…** and **Test pattern**
+  help you measure it.
+- **When placing a video with sound**: ask, always extract its audio to a
+  track, or never extract it. See
+  [Video on the projector](/docs/tasks/video/#the-sound-of-the-video).
+
+## Shortcuts
+
+![The Shortcuts tab](/guide/desktop-en/settings-shortcuts-1.png)
+
+Search for an action, press **Edit** and then the key combination. The **×**
+removes the shortcut and **Reset all** goes back to the factory ones. If
+another action already uses the combination, the app tells you. The full list
+of default shortcuts is in [Keyboard shortcuts](/docs/live-control-flow/#keyboard-shortcuts).
+
+## Diagnostics
+
+![The Diagnostics tab](/guide/desktop-en/settings-diagnostics.png)
+
+If the app closes, freezes or a track goes silent, here are the logs that help
+us find the cause. **Save log...** creates a file you can send when you ask
+for help. The logs contain no audio and no personal data.
+
+## MIDI
+
+![The MIDI tab](/guide/desktop-en/settings-midi.png)
+
+- **MIDI input device**: the pedal, pad or controller you want to drive
+  LibreTracks with. The button on the right looks for devices again.
+- **MIDI output**: the port MIDI tracks send notes and program changes
+  through, to keyboards, lighting desks or lyrics software. **Send test note**
+  checks that it gets there.
+
+## MIDI Learn
+
+![The MIDI Learn tab](/guide/desktop-en/settings-midiLearn-1.png)
+
+There are two ways to assign a pedal or a button on your controller to an
+action:
+
+- **From the list**: press **Relearn** on the action's row and then step on
+  the pedal.
+- **From the screen**: press **MIDI Learn**, close Settings, click the button
+  you want to control (*Play*, *Vamp*, a marker, the BPM…) and step on the
+  pedal. Press *MIDI Learn* again to leave.
+
+The assignment shows in the **Current MIDI binding** column, and the last one
+you made, at the top. **Reset MIDI mappings** clears them all. The **Markers**
+and **Songs** tabs assign jumps to specific markers and songs.

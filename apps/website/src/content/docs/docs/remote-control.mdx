@@ -1,0 +1,221 @@
+---
+title: Custom Remote
+description: "Control LibreTracks from the browser of a tablet or a phone: connecting, transport, jumps, markers, mixer, metronome, guide and pads, and how to design your own tabs of widgets."
+---
+
+import Legend from "../../../components/guide/Legend.astro";
+
+The **Remote** is LibreTracks in the browser of another device: a tablet on
+the music stand, the drummer's phone, the music director's. There is nothing
+to install. It controls the same session you have open on the computer: what
+you press on the Remote happens on the computer, and what happens on the
+computer shows on the Remote.
+
+The Remote **does not play audio**. The sound always comes from the computer;
+the Remote is only a controller.
+
+## Connecting
+
+1. In LibreTracks, press **Remote** in the side bar.
+2. The computer and the tablet have to be on the **same network** (the same
+   Wi‑Fi, or the computer wired to the same router).
+3. On the tablet, **scan the QR code** with the camera, or type one of the two
+   addresses into the browser.
+
+![The Remote connection panel on the computer](/guide/desktop-en/remote-modal.png)
+
+- **IP URL** works on any device.
+- **Hostname URL (.local)** is easier to remember and does not change if the
+  router gives the computer a different IP, but not every device understands
+  it: if it does not open, use the IP one.
+
+You can connect **several devices at once**, each with its own screen layout.
+LibreTracks has to stay open on the computer while you use the Remote.
+
+:::tip[If it will not connect]
+Check that both are on the same network and that the Wi‑Fi is not a
+"guest" network (those usually isolate devices from each other). On Windows,
+if the firewall is blocking the Remote, the panel itself says so, with an
+**Allow through the firewall** button (Windows asks for administrator
+confirmation).
+:::
+
+On a **phone**, the Remote is meant to be used **in portrait**. If you open it
+in landscape it asks you to rotate, with a **Use it in landscape anyway**
+option. On a tablet it works both ways.
+
+## The Controls tab
+
+It is the first thing you see. This is how LibreTracks lays it out on a tablet:
+
+![The Remote's Controls tab on a tablet](/guide/remote-en/remote-controls.png)
+
+<Legend>
+
+1. **Tabs**: Controls, Mixer and Tools. You can change them, add more and
+   rename them (see [Designing your tabs](#designing-your-tabs)).
+2. **Status**: Stopped, Playing or Paused.
+3. **Edit layout**: opens the editor to move, add or remove blocks.
+4. **Size**: `−` and `+` make the whole Remote bigger or smaller (four
+   levels), without changing where anything is. Useful when you look at it
+   from a distance.
+5. **Readouts**: time, bar and beat, BPM, time signature and the song that is
+   playing.
+6. **Transport**: Play, Pause, Stop, and the **Click** and voice **Guide**
+   switches.
+7. **Timeline** of the song, with its markers and the cursor. Drag to move
+   around. The button in the corner turns **Tap to seek** on: with it on, a tap
+   on the timeline moves the cursor there.
+8. **Vamp / Loop**: how it repeats (the current section or a number of bars).
+   **VAMP** turns it on; **CONFIG** opens its settings.
+9. **Jump config**: when a jump to a marker happens: **Immediate**, after a few
+   **Bars**, or at the **Next** marker.
+10. **Song transition**: when you move to another song (right away, after a
+    few bars, at the next marker or at the end of the song) and how (with a
+    **Clean cut** or a **Fade out**).
+11. **Cancel jump**: cancels the jump that is waiting.
+12. The setlist's **songs**, with their key if they have one. Tap one to
+    select it. On the right, **Transpose** changes the key of the selected
+    song in semitones.
+13. **Jump to Song**: jumps to the selected song, with the transition you
+    have set.
+14. The song's **markers**. Tap one to jump to it according to the Jump
+    config; the one that will play next is tagged **NEXT**. **Cues** show with a
+    dashed border, so the band sees them coming. The `×` hides a marker on
+    this device (it removes it from the Remote, not from the session); **Show
+    hidden** brings them back.
+
+</Legend>
+
+The three **CONFIG** buttons open a floating panel above the layout; it closes
+by tapping outside, with its `×` or with `Escape`.
+
+Jumps, Vamp and transitions work as on the computer: the details are in
+[Live control](/docs/live-control-flow/).
+
+## The Mixer tab
+
+![The Remote's Mixer tab](/guide/remote-en/remote-mixer.png)
+
+<Legend>
+
+1. **Active song only**: shows only the tracks that play in the current song.
+   Off, they all show.
+2. **Song master**: the volume of the selected song (the same as on the
+   computer). It does not affect the click or the guide.
+3. **Track**: its type (Audio, Folder, MIDI) and name, in its colour.
+4. **Pan**: left, center or right. Tap **Center** to return to the center.
+5. **Volume** in dB, with its meter.
+6. **M** (mute), **S** (solo) and **T** (whether the track follows the
+   [transposition](/docs/pitch-and-warp/)).
+7. A **folder**: its fader moves every track inside it.
+
+</Legend>
+
+The strips scroll sideways with your finger when they do not fit.
+
+## The Tools tab
+
+![The Remote's Tools tab](/guide/remote-en/remote-tools.png)
+
+<Legend>
+
+1. **Metronome**: on/off, volume, output, accent, the sound and pitch of the
+   accent and the beat, and the subdivision with its own sound and volume. See
+   [Audio outputs and metronome](/docs/audio-routing-metronome/).
+2. **Voice guide**: on/off, volume, output, language, how many bars ahead it
+   announces and whether it counts in. See [Voice guide](/docs/voice-guide/).
+3. **Ambient pads**: on/off, pack, output, key (or follow the song's),
+   volume, fade in and out, and whether they stop with playback. See
+   [Ambient pads](/docs/ambient-pads/).
+
+</Legend>
+
+Pad packs are downloaded and managed on the computer; the Remote shows the
+ones you already have installed.
+
+## Designing your tabs
+
+Every musician needs different things: the drummer wants the click and big
+markers; the director wants the jumps and the songs. With **Edit layout** you
+build your own screen out of blocks (**widgets**) and spread it over as many
+tabs as you like.
+
+![The layout editor bar and a widget's controls](/guide/remote-en/remote-edit.png)
+
+<Legend>
+
+1. **Done**: keeps the changes and leaves the editor.
+2. **Cancel**: leaves, undoing everything you changed since you came in.
+3. **Free position** / **Push down**: how widgets are placed. In *Free
+   position* they may overlap and nothing moves by itself. In *Push down*,
+   dropping a widget on top of another pushes that one (and those below it)
+   down to make room.
+4. **Tab height**: makes the tab bar taller, to hit it with a finger.
+5. **Export**, **Import** and **Reset layout** (see below).
+6. Each **tab**: `‹ ›` reorder it, the pencil renames it and the `×` deletes
+   it (the last one cannot be deleted).
+7. **+ Tab**: adds an empty tab.
+8. The widget's **title bar**: drag it to move the widget.
+9. **Width** (`↔`) and **height** (`↕`) with buttons, and **Remove** to delete
+   the widget.
+10. **Corner**: drag it to resize with your finger.
+
+</Legend>
+
+When you enter the editor, the **widget palette** opens at the bottom. Drag a
+widget to its place on the grid (you will see the space it is going to take)
+or tap it to add it at the end. **Hide widgets** puts the palette away if it is
+in the way; **Show widgets** opens it again.
+
+![The widget palette](/guide/remote-en/remote-palette.png)
+
+They are grouped like this:
+
+- **Information**: the readouts together or one by one (time, bar/beat, BPM,
+  time signature, song name, project name).
+- **Transport**: the whole transport or each button on its own (Play, Pause,
+  Stop, Click, Guide), the timeline and **Black**, which blacks out the
+  [video](/docs/tasks/video/) output (the projector) and brings it back with
+  another tap.
+- **Live control**: the whole control deck or its parts (Vamp, Jump config,
+  Song transition, Song and transpose), the Jump to song button, the marker
+  grid, and readouts for the band: **next section**, **next song**, **key**,
+  progress bars **until the next section or song** and countdowns **in
+  seconds or bars**.
+- **Songs**: the **compact song view**, with its clips (the active song or
+  **all** of them, in one row that scrolls sideways). Its play button starts
+  the song, or jumps to it with the configured transition if another one is
+  playing.
+- **Mixer**: the whole mixer or its parts (song filter, song master, faders).
+- **Tools**: metronome, voice guide and pads.
+- **Layout**: **titles** and **notes** with your own text, **blank space**,
+  **separators** (line, dashed or space only) and **groups**. Drop a widget
+  inside a group (its frame lights up) and it moves with it; drag it out to
+  separate it. Removing a group does not remove what is inside.
+
+Each widget adapts to its size: if you make it small, long lists (markers,
+faders) scroll inside it instead of shrinking until they cannot be read.
+
+### Where your layout is saved
+
+The layout is saved **in that browser on that device**. Another tablet, or
+another browser on the same one, starts with the default layout, adapted to
+its size (phone, tablet or large screen).
+
+- **Export** downloads your layout as a `.json` file.
+- **Import** loads an exported `.json`, for example on another musician's
+  tablet or a new device.
+- **Reset layout** goes back to the default layout for that device.
+
+If you clear the browser's data, the layout is lost: export a copy once it is
+ready.
+
+## Tips for the show
+
+- Design the screen **on the same device and in the same orientation** you
+  will use on stage, and at the same size level.
+- Put the essentials (play, markers, jumps) where you do not need to scroll.
+- If you can, wire the computer to the router and use a dedicated Wi‑Fi for
+  the tablets. A crowded Wi‑Fi delays taps.
+- Turn off the tablet's auto-lock during the show.

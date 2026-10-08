@@ -1,0 +1,174 @@
+---
+title: Ruler, tracks and menus
+description: "How to read the LibreTracks ruler (songs, cue markers, section markers, tempo changes), what each control in a track header does and what each right-click menu offers."
+sidebar:
+  order: 3
+---
+
+import Legend from "../../../../components/guide/Legend.astro";
+
+Below the toolbar is the timeline: the **ruler** on top, the **track headers**
+on the left and the **clips** on the right. Almost everything you edit here is
+done with a **right-click**, which opens a different menu depending on where
+you click.
+
+## The ruler
+
+![The ruler with a song, both kinds of marker and a tempo change](/guide/desktop-en/ruler.png)
+
+<Legend>
+
+1. **Song**: each named bar is a song in the session (the app also calls them
+   *regions*). Click to select it and drag to move it. The letter to the right
+   of the name, if there is one, is its key.
+2. **Cue markers** (top row): *Drums In*, *Last Time*… They are not jump
+   destinations. The [voice guide](/docs/voice-guide/) announces them and the
+   [Remote](/docs/remote-control/) shows them to the band.
+3. **Section markers** (bottom row): *Intro*, *Verse*, *Chorus*… Click one to
+   jump to it. When the jump happens is set by
+   [Marker Jump](/docs/interface/toolbar/#marker-jump).
+4. **Tempo change**: from that point the song plays at another BPM.
+   Time-signature changes look the same, with the time signature instead of the
+   BPM.
+
+</Legend>
+
+The numbers on the ruler are the position in bars (*1.1.00*) and, below, the
+elapsed time. Click the ruler, away from the markers, to move the cursor.
+
+## Track header
+
+![The controls of an audio track header](/guide/desktop-en/track-header.png)
+
+<Legend>
+
+1. Track **name**. Select it and press <kbd>F2</kbd> to rename it.
+2. **M** (mute): silences the track.
+3. **S** (solo): plays only this track and any others in solo.
+4. **Volume** in decibels. 0 dB is the audio's original volume. Double-click
+   the fader to go back to 0 dB.
+5. **Audio output**: where the track plays. *Master* is the main output;
+   *Out 3/4*, *Out 5*… are physical outputs of your interface;
+   *Inherited (Folder)* uses the output of the folder it is in. See
+   [Audio outputs and metronome](/docs/audio-routing-metronome/).
+6. **T** (transposition): with the song's warp on, it decides whether this
+   track changes key when you transpose. Turn it off on the click or the guide
+   so they do not go out of tune. See [the T button](/docs/pitch-and-warp/).
+7. **Pan**: left/right. *C* is center; double-click to go back to the center.
+8. Track level **meter**.
+
+</Legend>
+
+With several tracks selected (<kbd>Ctrl</kbd>+click or <kbd>Shift</kbd>+click on
+the headers), touching any of these controls changes it on all of them. Volume
+and pan move by the same proportion on all of them, so the balance of the mix
+is kept.
+
+To change a track's height, drag its bottom edge. With <kbd>Alt</kbd> you change
+all of them at once, and a double-click goes back to the normal height.
+
+### Folders
+
+![A folder header](/guide/desktop-en/folder-header.png)
+
+<Legend>
+
+1. **Open or close** the folder (**+** / **−**). Closed, you see a single block
+   with the number of tracks it holds.
+2. **Folder output**: the tracks inside set to *Inherited (Folder)* go out
+   here. You change the output of the whole drum kit, for example, in one
+   place.
+
+</Legend>
+
+The folder's **M**, **S** and volume controls affect all of its tracks.
+
+## Right-click menus
+
+### On a song
+
+![A song's menu](/guide/desktop-en/menu-song.png)
+
+- **Rename Song** (<kbd>F2</kbd>).
+- **Song key**: its key. It shows next to the name and is transposed with it.
+- **Split song at cursor** (<kbd>Shift</kbd>+<kbd>S</kbd>): splits it into two
+  songs at the cursor position.
+- **Change Original BPM**: the tempo the audio was recorded at, used by
+  [warp](/docs/pitch-and-warp/).
+- **Export Song**: saves it as an `.ltpkg` to take to another session.
+- **Render audio…**: exports its mix to WAV, whole or track by track.
+- **Delete Song** (<kbd>Del</kbd>).
+
+### On a marker
+
+![A marker's menu](/guide/desktop-en/menu-marker.png)
+
+- **Jump to This Marker**: moves the cursor to the marker.
+- **Rename** (<kbd>F2</kbd>).
+- **Exact position...**: type the exact position, as *bar.beat* or in
+  seconds.
+- **Marker type...**: Intro, Verse, Chorus… or a cue like *Drums In*. The type
+  sets the colour and what the voice guide says.
+- **Delete**.
+
+Markers can also be dragged along the ruler to move them.
+
+### On a tempo change
+
+![A tempo change's menu](/guide/desktop-en/menu-tempo.png)
+
+- **Change BPM** of that section.
+- **Delete Marker**: the section goes back to the previous tempo.
+
+### On the empty ruler
+
+![The ruler's menu](/guide/desktop-en/menu-ruler.png)
+
+- **Create marker** at the point you clicked. You pick its type first.
+- **Change Timeline BPM**: the session's starting tempo.
+- **Create time-signature marker**: a change of time signature (to 6/8, for
+  example) from that point.
+- **Create automation**: an automatic action at that point. See
+  [Automation](/docs/automation/).
+- **Clear Timeline Selection**.
+
+If you first drag on the ruler to select a stretch, the first option becomes
+**Create Song From Selection**.
+
+### On a track
+
+![A track's menu](/guide/desktop-en/menu-track.png)
+
+- **Insert Track** and **Insert Folder Track**, right below.
+- **Reset track height**.
+- **Rename** (<kbd>F2</kbd>) and **Select colour…**.
+- **Sum to mono**: mixes both channels into one, for a stereo track that goes
+  out of a mono output.
+- **Delete**.
+- **Indent Into Previous Folder** and **Remove From Folder**.
+- **Add MIDI track**: to send notes or program changes to keyboards, lights
+  or external software.
+
+A folder's menu is the same.
+
+### On a clip
+
+![A clip's menu](/guide/desktop-en/menu-clip.png)
+
+- **Split At Cursor** (<kbd>S</kbd>): splits the clip at the cursor position.
+- **Duplicate** (<kbd>Ctrl</kbd>+<kbd>D</kbd>).
+- **Select colour…**.
+- **Delete** (<kbd>Del</kbd>).
+
+Splitting, moving or duplicating clips **never changes your audio files**: it
+only changes which part of the audio plays and where.
+
+### On the automation track
+
+![The automation track's menu](/guide/desktop-en/menu-automation.png)
+
+- **Create automation here**.
+- **Manage mix scenes...**: saves whole mixes to apply them in one go.
+- **Remove automation track**: also deletes all of its automation.
+
+See [Automation](/docs/automation/).

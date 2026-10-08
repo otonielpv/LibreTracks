@@ -1,0 +1,151 @@
+---
+title: Clips and tracks
+description: "How to select, move, split, duplicate, copy and paste clips in LibreTracks, and how to create, order, group into folders and adjust tracks."
+sidebar:
+  order: 4
+---
+
+import Clip from "../../../../components/guide/Clip.astro";
+
+A **clip** is a piece of audio placed on a track. A **track** is a row of the
+timeline with its volume, its pan and its output. Editing clips **never
+changes your audio files**: it only changes which part plays and where.
+
+What each button in the track header does is in
+[Ruler, tracks and menus](/docs/interface/timeline/#track-header).
+
+## Selecting clips
+
+- **Click** a clip: selects it (and moves the cursor to that point).
+- <kbd>Ctrl</kbd>+**click**: adds that clip to the selection or takes it out.
+- <kbd>Shift</kbd>+**click**: selects a **rectangle**, from the last clip you
+  touched to this one. Every clip on the tracks in between, in that stretch of
+  time, is included. It is what you need after splitting several tracks at the
+  same point: one gesture and you have all the pieces.
+- <kbd>Ctrl</kbd>+<kbd>A</kbd>: every clip.
+- <kbd>Esc</kbd>: clears the selection.
+
+A click on an empty part of a track moves the cursor there; dragging across an
+empty part scrolls the view.
+
+## Moving clips
+
+Drag the clip. With several selected, they all move together.
+
+- **In time**, the clip snaps to the grid if
+  [snap](/docs/interface/toolbar/#view-and-editing) is on.
+- Hold <kbd>Ctrl</kbd> while you drag so its edges **snap** to the playback
+  cursor, the markers, the edges of songs and the edges of other clips. That
+  way a clip lines up exactly with another.
+- **To another track**: drag it up or down. While you drag you see which track
+  it will land on. The clip **does not jump over a folder**: it stays on the
+  last valid track before it. To take it to the other side, open the folder or
+  move it in two steps.
+- The <kbd>←</kbd> <kbd>→</kbd> arrows move the selection by one grid
+  division.
+
+<Clip
+  src="/guide/desktop-en/clip-to-track.mp4"
+  poster="/guide/desktop-en/clip-to-track.webp"
+  caption="Dragging a clip upwards moves it to the track above."
+/>
+
+A clip always lives inside a song. If moving it takes it past the end of its
+song, the song is lengthened to hold it; if that would make it collide with
+the next one, the move doesn't happen and the app tells you why.
+
+## Splitting, duplicating, copying and pasting
+
+**Split** (<kbd>S</kbd>): splits the selected clips at the cursor position.
+Also from the clip's menu, **Split At Cursor**.
+
+<Clip
+  src="/guide/desktop-en/clip-split.mp4"
+  poster="/guide/desktop-en/clip-split.webp"
+  caption="Click the ruler to place the cursor, click the clip and press S to split it."
+/>
+
+:::tip[Shortening a clip]
+Audio clips have no handles for trimming. To remove the start or the end of
+one, split it with <kbd>S</kbd> at the point you want and delete the leftover
+piece.
+:::
+
+- **Duplicate** (<kbd>Ctrl</kbd>+<kbd>D</kbd>): puts a copy of the selection
+  right after it, on the same tracks.
+- **Copy** and **paste** (<kbd>Ctrl</kbd>+<kbd>C</kbd>,
+  <kbd>Ctrl</kbd>+<kbd>V</kbd>): the copy is pasted right after whatever you
+  have selected at that moment (or after the original, if nothing is
+  selected), on the same tracks.
+- **Delete** (<kbd>Del</kbd> or <kbd>Backspace</kbd>).
+- **Colour**: right-click › **Select colour…**. With several clips selected,
+  they are all coloured.
+
+Everything can be undone with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
+
+## Creating tracks
+
+- **Right-click the gap below the tracks**: **Add Audio Track**, **Add Folder
+  Track**, **Add MIDI track**, **Add video track** and **Add automation
+  track** (there is only one per session).
+- **Right-click a track** › **Insert Track** or **Insert Folder Track**: it is
+  created right below.
+- **Dropping audio** into the gap below the tracks creates a track for it, and
+  dragging a Library folder creates one per audio file.
+
+New tracks take a colour from the palette, a different one each time. If you
+would rather colour them yourself, turn off *Colour new tracks automatically*
+in Settings › General.
+
+## Ordering tracks
+
+Drag the track's **header** up or down. While you drag, the other tracks move
+aside to show you the gap where it will land, and the track is shown in its new
+place with its clips. With several tracks selected they all move, in the order
+they are in.
+
+<Clip
+  src="/guide/desktop-en/track-reorder.mp4"
+  poster="/guide/desktop-en/track-reorder.webp"
+  caption="Dragging a track's header moves it; the others move aside to show where it will land."
+/>
+
+On mobile, first turn on reorder mode with the arrows button above the track
+list (see [On phone and tablet](/docs/interface/mobile/#track-buttons)).
+
+## Folders
+
+A folder groups tracks: for example, all the drum mics. It folds away to save
+space, and its **M**, **S** and volume affect all its tracks at once.
+
+- **Put a track in a folder**: drag it onto the folder's row, towards the
+  middle. If you drop it on the top or bottom edge, it ends up above or below
+  the folder, outside it.
+- **Without dragging**: right-click the track › **Indent Into Previous
+  Folder**. With several tracks selected, right-click › **Move to folder…** and
+  choose a folder or **New folder…**: they all go in one go.
+- **Take it out**: right-click › **Remove From Folder**.
+- **Shared audio output**: the tracks inside set to *Inherited (Folder)* go
+  out through the folder's output. You change the whole drum kit's in one
+  place.
+
+LibreTracks remembers which folders you left folded.
+
+## More track settings
+
+- **Select several tracks**: <kbd>Ctrl</kbd>+click or <kbd>Shift</kbd>+click on
+  the headers. Whatever you touch on one (M, S, T, volume, pan, output) applies
+  to all of them; volume and pan move by the same proportion, so the mix is
+  kept.
+- **Rename**: select the track and press <kbd>F2</kbd>.
+- **Colour**: right-click › **Select colour…**.
+- **Height**: drag the bottom edge of the header; with <kbd>Alt</kbd>, you
+  change all of them at once, and a double-click goes back to the normal
+  height. Also <kbd>Alt</kbd>+mouse wheel over the track (with
+  <kbd>Alt</kbd>+<kbd>Shift</kbd>+wheel, all of them).
+- **Sum to mono**: mixes the two channels of a stereo track into one. Handy
+  for a track that goes out of a mono output on your interface. A *mono* tag
+  appears next to the name; **Back to stereo** undoes it.
+- **Delete**: right-click › **Delete**, or <kbd>Del</kbd> with the track
+  selected. If it has clips, the app asks whether you want to delete it along
+  with them.

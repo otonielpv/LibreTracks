@@ -10,14 +10,20 @@ LibreTracks is a lightweight native app (Rust + Tauri) rather than a heavyweight
 | Platform | Minimum | Notes |
 | --- | --- | --- |
 | **Windows** | Windows 10 (64‑bit) | Needs the **WebView2** runtime, which is preinstalled on current Windows 10/11. |
-| **macOS** | macOS 10.15 **Catalina** | Intel and Apple Silicon. Keep the system up to date — the in‑app UI uses the system WebView, and an old WebKit can render parts of the interface incorrectly. |
+| **macOS** | macOS 12 **Monterey** | Intel and Apple Silicon (universal app). |
 | **Linux** | Ubuntu 22.04 / Fedora 36 or newer | Requires `webkit2gtk-4.1`, `gtk3` and ALSA. Provided as `.deb`, `.rpm` and `.AppImage`. |
 
 The AppImage uses the host's WebKitGTK, GTK and Mesa stack, just like the `.deb`
 and `.rpm` packages. This avoids mixing current graphics drivers with older
 bundled libraries and improves Wayland compatibility on Bazzite, Arch and Fedora.
 
-> **Why macOS 10.15+?** The desktop UI runs inside the operating system's WebView. LibreTracks ships CSS down‑levelled for the WebKit in Catalina's Safari 13, and the audio engine bundles its own FFmpeg/codec libraries inside the app, so it launches without any system‑wide dependencies. Older macOS releases ship a WebKit too old to render the interface and miss symbols the app needs at launch.
+> **Why macOS 12?** The pitch and warp engine (Bungee) and the way audio is spread across CPU cores need system features that arrived with macOS 11 and 12. On older versions the app does not start.
+
+## iPhone and iPad
+
+LibreTracks is on the **App Store** for iPhone and iPad with **iOS / iPadOS 15
+or newer**. It runs in landscape. What changes compared with the computer is
+in [On a phone or tablet](/docs/interface/mobile/).
 
 ## Android
 
@@ -29,7 +35,7 @@ drive, touch gestures, audio output), see
 
 | | Minimum | Comfortable | Notes |
 | --- | --- | --- | --- |
-| **Android** | 8.0 (API 26) | 10 or newer | 64-bit ARM (`arm64-v8a`) |
+| **Android** | 7.0 (API 24) | 10 or newer | 64-bit ARM (`arm64-v8a`); installed from Google Play |
 | **RAM** | 2 GB | 3 GB+ | LibreTracks sizes its buffers to the device |
 | **Free storage** | 2x your session size | 3x | Importing unpacks the session and prepares its audio |
 
@@ -71,10 +77,34 @@ The audio engine bundles FFmpeg on **all three platforms**, so the same formats 
 | --- | --- | --- |
 | **CPU** | Modern 64‑bit dual‑core | Quad‑core or better — needed for several pitch/warp tracks at once |
 | **RAM** | 4 GB | 8 GB+ |
-| **Storage** | SSD with room for your sessions and audio | SSD; sessions keep audio + peak caches alongside the project |
+| **Storage** | Room for your audio and the cache | SSD. Besides your audio files (played from wherever they are), each session keeps a cache of waveforms and prepared audio |
 | **Display** | 1280×800 | 1440×900 or larger |
 
 Real‑time pitch and warp are the heaviest part of the app. A single shifted track is light; running many shifted tracks simultaneously is what benefits from a faster CPU. On a typical modern quad‑core you can keep nine or more concurrent pitch‑shifted voices within the audio budget.
+
+## Video
+
+To project [video](/docs/tasks/video/) you need a **second screen**
+(projector, TV or monitor) connected to the computer; with a single screen
+the video can be shown in a window.
+
+- **Windows and macOS**: the video player (libmpv) is built into the app.
+- **Linux**: if **Settings → Video** says "Video unavailable", install your
+  distribution's mpv library (`libmpv2` on Debian/Ubuntu, `mpv-libs` on
+  Fedora).
+- Hardware decoding uses the graphics card; a 1080p H.264 video plays fine on
+  any current machine.
+- On a **phone**, you need wired video out: USB‑C to HDMI (DisplayPort over
+  USB‑C on Android) or the Lightning Digital AV adapter.
+
+## Remote and cloud
+
+- The [Remote](/docs/remote-control/) runs in the **browser** of any current
+  phone or tablet (Chrome, Safari, Firefox, Edge), with nothing to install.
+  The computer and the device have to be on the **same network**.
+- The [cloud](/docs/integration-ecosystem/#the-cloud-your-google-drive) needs a
+  (free) **Google account** and an internet connection while uploading or
+  downloading. The space is that of your Google Drive.
 
 ## Live Audio Setup
 

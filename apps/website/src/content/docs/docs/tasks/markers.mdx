@@ -1,0 +1,115 @@
+---
+title: Markers
+description: "LibreTracks markers: sections and cues, how to create them with their type and variant, move them, turn a section into a cue by dragging it to the other row, and how they are used to jump live."
+sidebar:
+  order: 3
+---
+
+import Clip from "../../../../components/guide/Clip.astro";
+
+Markers split each song into named parts. They are what you use to **jump**
+live and what the [voice guide](/docs/voice-guide/) announces to the band.
+There are two kinds, and each one lives in its own row of the ruler:
+
+| | **Sections** (bottom row) | **Cues** (top row) |
+| --- | --- | --- |
+| What for | The parts of the song: Intro, Verse, Chorus… | Directions for the band: *Drums In*, *Last Time*… |
+| Voice guide | Says the name and **counts in** ("Chorus, 1, 2, 3, 4") | Says the cue when it arrives, with no count. If it falls right at the start of a section, it is said between the name and the count |
+| Jumping to it | Yes, and the band hears the count first | You can jump to it too, but without a count of its own |
+| Live View and Remote | One card per section | Inside the section if they coincide in time; if it stands alone, its own card marked as *Cue* |
+| Numbered MIDI jumps | Count | Don't count |
+
+## Creating a marker
+
+<Clip
+  src="/guide/desktop-en/marker-create.mp4"
+  poster="/guide/desktop-en/marker-create.webp"
+  caption="Right-click the ruler › Create marker › type › variant."
+/>
+
+1. **Right-click the ruler**, at the exact point where you want the marker.
+2. Choose **Create marker**.
+3. Choose the **type**. The menu splits them into *Sections* and *Cues*.
+4. Some types have **numbered variants**: Verse 1 to 6, and Chorus, Bridge and
+   Pre-Chorus 1 to 4. Pick the right one so the voice guide says "Chorus 2" and
+   not just "Chorus".
+
+![The marker type menu](/guide/desktop-en/marker-kind-menu.png)
+
+On mobile, the action bar has **Section** and **Cue**, which create the marker
+at the cursor position. You can also press and hold the ruler.
+
+### Section types
+
+Intro, Verse, Pre-Chorus, Chorus, Post-Chorus, Bridge, Breakdown, Drop, Solo,
+Outro, Acapella, Instrumental, Interlude, Refrain, Tag, Vamp, Ending,
+Exhortation, Rap, Turnaround and **Custom** (for anything that doesn't fit;
+you give it its name and colour).
+
+### Cue types
+
+Get Ready, Build, Slowly Build, Ease Down, All In, Drums In, Break, Hold,
+Softly, Swell, Hits, Last Time, Big Ending, Key Change Up, Key Change Down,
+Drums, Bass, Guitar, Keys, Ad Lib, Worship Freely and Next Song.
+
+Each type has its colour, which is the one you see on the ruler, in Live View
+and on the Remote.
+
+## Moving a marker
+
+- **Drag the flag** along the ruler. With
+  [snap](/docs/interface/toolbar/#view-and-editing) on it sticks to the grid;
+  hold <kbd>Shift</kbd> while you drag to place it freely.
+- For an exact position: right-click › **Exact position...**, and type the
+  *bar.beat* or the seconds.
+
+### Turning a section into a cue, and back
+
+Drag the marker **up**, to the cue row, or **down**, to the section row. The
+marker keeps its name and type, but behaves like the other kind from then on
+(see the table above). For example, a "Chorus" moved to the cue row no longer
+has a count-in.
+
+<Clip
+  src="/guide/desktop-en/marker-lane-drag.mp4"
+  poster="/guide/desktop-en/marker-lane-drag.webp"
+  caption="Dragging a marker from one row to the other changes its kind without moving it in time."
+/>
+
+You can drag diagonally to change row and position at once. The line between
+the two rows is right in the middle, so there is no need to be precise.
+
+## Editing and deleting
+
+Right-click the marker (or press and hold it on mobile):
+
+- **Jump to This Marker**: moves the cursor to the marker, without waiting.
+- **Rename** (<kbd>F2</kbd>).
+- **Exact position...**.
+- **Marker type...**: changes the type or the variant.
+- **Color...**: only on *Custom* markers. The others take the colour of their
+  type.
+- **Delete** (<kbd>Del</kbd>).
+
+## Jumping between markers live
+
+Clicking a section marker **schedules a jump** to it. When it happens is set
+by the [Marker Jump](/docs/interface/toolbar/#marker-jump) setting: right away,
+after a few bars or when the next marker arrives. While it waits, **Cancel
+jump** lights up. To call it off, press <kbd>Esc</kbd> or click the same marker
+again.
+
+Other ways to jump:
+
+- **Number keys**: <kbd>0</kbd> jumps to the first marker in the session,
+  <kbd>1</kbd> to the second, and so on up to <kbd>9</kbd>. Pressing the same
+  key again cancels the jump. <kbd>Shift</kbd>+number does the same with songs.
+- **[Live View](/docs/live-view/)**, with a card per marker.
+- The **[Remote](/docs/remote-control/)** from the phone.
+- A **MIDI pedal**: in [MIDI Learn](/docs/interface/settings/#midi-learn), the
+  *Markers* tab.
+- An **[automation track](/docs/automation/)**, so the jump happens by itself
+  at an exact point.
+
+With the voice guide on, when you schedule a jump the band hears the name of
+the destination section and the count-in, and everyone comes in together.

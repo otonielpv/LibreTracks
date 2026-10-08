@@ -1,0 +1,97 @@
+---
+title: LibreTracks Documentation
+description: "The guide to LibreTracks, the free multitrack player for playing live: getting started, every button explained, building the show, live control, the Remote, mobile and troubleshooting."
+---
+
+import { CardGrid, LinkCard } from "@astrojs/starlight/components";
+import TutorialVideo from "../../../components/guide/TutorialVideo.astro";
+
+**LibreTracks** is a multitrack player for playing live with backing tracks:
+you load the stems of your songs, add the click, the voice guide and the
+section markers, send each thing to its own output (the music to the front
+of house, the click to the in‑ears) and, at the show, jump from section to
+section with a tap. It is free and open source, and runs on **Windows, macOS
+and Linux**, on **iPhone and iPad** and on **Android**.
+
+It is not a production tool: songs are recorded and mixed in your usual DAW
+(Reaper, Ableton Live, Logic, Cubase…), and LibreTracks is what you use on
+stage.
+
+## First time here?
+
+This video builds a song from start to finish, with narration and the app's
+own sound:
+
+<TutorialVideo
+  src="/video/first-steps.mp4"
+  poster="/video/first-steps.webp"
+  title="Your first song in LibreTracks"
+  duration="4:40"
+/>
+
+Using it on a phone or tablet? Watch
+[the same walkthrough on a phone](/docs/mobile/), in 3 minutes.
+
+<CardGrid>
+  <LinkCard
+    title="Your first song, step by step"
+    description="The video, in writing: from a fresh install to playing live."
+    href="/docs/start/first-song/"
+  />
+  <LinkCard
+    title="Core concepts"
+    description="Session, song, track, clip, marker: the pieces LibreTracks works with."
+    href="/docs/core-concepts/"
+  />
+  <LinkCard
+    title="The main screen"
+    description="What each area of the window is and what every button does."
+    href="/docs/interface/main-screen/"
+  />
+  <LinkCard
+    title="System requirements"
+    description="The computer, system and audio interface you need."
+    href="/docs/system-requirements/"
+  />
+</CardGrid>
+
+## What is in this guide
+
+**The interface, button by button.** Numbered screenshots of every part of
+the app: the [main screen](/docs/interface/main-screen/), the
+[toolbar](/docs/interface/toolbar/), the
+[ruler, tracks and their menus](/docs/interface/timeline/), the
+[side bar and the Library](/docs/interface/side-nav-library/), the
+[settings](/docs/interface/settings/) and what changes
+[on a phone or tablet](/docs/interface/mobile/).
+
+**Building the show.** How to do each thing:
+[bring in audio](/docs/tasks/library/), create and arrange
+[songs](/docs/tasks/songs/), place [markers](/docs/tasks/markers/), edit
+[clips and tracks](/docs/tasks/clips-tracks/), set the
+[tempo and time signature](/docs/tasks/tempo/), send [MIDI](/docs/tasks/midi/)
+and project [video](/docs/tasks/video/).
+
+**Live and audio outputs.** The [outputs and the metronome](/docs/audio-routing-metronome/),
+[pitch and warp](/docs/pitch-and-warp/),
+[jumps, Vamp and transitions](/docs/live-control-flow/), the
+[Live View](/docs/live-view/) and the [Compact View](/docs/compact-view/), the
+[voice guide](/docs/voice-guide/), the [ambient pads](/docs/ambient-pads/),
+[automation](/docs/automation/) and the [Remote](/docs/remote-control/) to run
+everything from a tablet.
+
+**Sharing.** [Export and import](/docs/integration-ecosystem/) songs and
+sessions, the cloud with your Google Drive, rendering to WAV and templates.
+
+## Inside the app
+
+The **Tutorial** button in the side bar opens guided tours that point at the
+controls in the app itself: getting started, building a song, preparing for
+the show and the three views. You can replay them whenever you like.
+
+## If something does not work
+
+See [Troubleshooting](/docs/help/troubleshooting/). If it is not there, ask in
+the [Facebook group](https://www.facebook.com/groups/1795788251804551) or on
+[Reddit](https://www.reddit.com/r/LibreTracks/), or open an issue on
+[GitHub](https://github.com/otonielpv/LibreTracks/issues).
