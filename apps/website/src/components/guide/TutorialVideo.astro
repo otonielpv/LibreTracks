@@ -1,0 +1,39 @@
+---
+// A narrated tutorial: sound on, controls, nothing plays until the reader
+// asks. Unlike Clip (silent loops), it only loads metadata up front, so the
+// page does not pull the whole file on open. Subtitles are burnt in.
+interface Props {
+  src: string;
+  poster: string;
+  title: string;
+  duration?: string;
+}
+const { src, poster, title, duration } = Astro.props;
+---
+
+<figure class="lt-tutorial-video">
+  <video src={src} poster={poster} controls preload="none" playsinline aria-label={title}></video>
+  <figcaption>
+    {title}
+    {duration && <span> · {duration}</span>}
+  </figcaption>
+</figure>
+
+<style>
+  .lt-tutorial-video {
+    margin: 1.5rem 0;
+  }
+  .lt-tutorial-video video {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 0.5rem;
+    background: #000;
+    border: 1px solid var(--sl-color-gray-5);
+  }
+  .lt-tutorial-video figcaption {
+    margin-top: 0.5rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+</style>

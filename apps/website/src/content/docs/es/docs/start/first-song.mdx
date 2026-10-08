@@ -6,11 +6,22 @@ sidebar:
 ---
 
 import Legend from "../../../../../components/guide/Legend.astro";
+import TutorialVideo from "../../../../../components/guide/TutorialVideo.astro";
 
 Este recorrido te lleva de la app recién instalada a una canción lista para
 tocar en directo. Necesitas los **stems** de la canción (un audio por
 instrumento: batería, bajo, teclados, click, guía…) en una carpeta de tu
 ordenador. Cada paso enlaza a su página con todo el detalle.
+
+Si prefieres verlo antes de leerlo, este vídeo hace el recorrido entero en la
+app, con voz y con el sonido de LibreTracks:
+
+<TutorialVideo
+  src="/video/primeros-pasos.mp4"
+  poster="/video/primeros-pasos.webp"
+  title="Tu primera canción en LibreTracks"
+  duration="4:42"
+/>
 
 ¿Prefieres trastear primero? En el móvil, la **Canción de demostración** de la
 pantalla de inicio abre una sesión de ejemplo sin importar nada. Y en
@@ -29,9 +40,11 @@ Al abrir LibreTracks ves la pantalla de inicio:
    la carpeta de la sesión.
 2. **Abrir**: una sesión que ya tienes (`.ltsession`).
 3. **Importar sesión**: una sesión entera exportada (`.ltset`), por ejemplo
-   desde otro ordenador.
+   desde otro ordenador. Si tienes la nube conectada, te pregunta si la coges
+   de este equipo o de tu Google Drive.
 4. **Importar Reaper/Ableton**: parte de un proyecto `.rpp` o `.als`.
-5. **Nube**: sesiones y canciones de tu Google Drive.
+5. **Nube**: conectar o desconectar tu cuenta de Google Drive, y ver o borrar
+   lo que tienes subido. Para traer algo de la nube se usa **Importar**.
 6. **Plantillas**: empieza con las pistas y salidas de una sesión anterior.
    A la derecha aparecen tus sesiones **recientes**.
 
