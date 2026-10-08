@@ -16,12 +16,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { drawMarks, OVERLAY_ID, type Box, type Mark } from "../../e2e/utils/annotateOverlay.ts";
+import { L, UI_LANG } from "../../e2e/utils/uiText.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..", "..");
 const sharp = createRequire(path.join(repoRoot, "package.json"))("sharp");
 const outDir =
-  process.env.LT_GUIDESHOTS_DIR ?? path.join(repoRoot, "apps", "website", "public", "guide", "mobile");
+  process.env.LT_GUIDESHOTS_DIR ??
+  path.join(repoRoot, "apps", "website", "public", "guide", UI_LANG === "en" ? "mobile-en" : "mobile");
 mkdirSync(outDir, { recursive: true });
 
 import {
@@ -175,7 +177,7 @@ const steps: Record<string, () => Promise<void>> = {
     await sleep(1500);
     for (const label of ["Saltar tutorial", "Skip tutorial"]) {
       if (await rectOf("button", { text: label })) {
-        if (label === "Saltar tutorial") await shot("tutorial-welcome");
+        if (label === "Saltar tutorial" || label === "Skip tutorial") await shot("tutorial-welcome");
         await tap("button", { text: label });
       }
     }
@@ -188,7 +190,7 @@ const steps: Record<string, () => Promise<void>> = {
   async landing() {
     await annotatedShot("landing", [
       { selector: tour("side-nav-sessions"), n: 1, badge: "corner" },
-      { selector: '.lt-side-nav button[aria-label="Guardar"]', n: 2, badge: "corner" },
+      { selector: `.lt-side-nav button[aria-label="${L("Guardar")}"]`, n: 2, badge: "corner" },
       { selector: tour("mobile-file-actions"), n: 3, badge: "corner" },
       { selector: tour("side-nav-library"), n: 4, badge: "corner" },
       { selector: tour("side-nav-settings"), n: 5, badge: "corner" },
@@ -206,7 +208,7 @@ const steps: Record<string, () => Promise<void>> = {
   async demo() {
     // A modal left open by a previous run (Sessions, Settings) sits over
     // the timeline: close it first.
-    if (await rectOf("button", { text: "Cerrar" })) await tap("button", { text: "Cerrar" });
+    if (await rectOf("button", { text: L("Cerrar") })) await tap("button", { text: L("Cerrar") });
     // Right after a sheet closes the first tap can be swallowed by the
     // dismissal; retry instead of failing the whole run.
     for (let i = 0; i < 3 && !(await rectOf(".lt-timeline-shell")); i++) {
@@ -239,7 +241,7 @@ const steps: Record<string, () => Promise<void>> = {
       [0, 1, 2, 3].map((i) => ({ selector: hdr, nth: i, n: i + 1, badge: "corner" as const })),
       { crop: { marks: 20 } },
     );
-    await tap('button[aria-label="Más acciones"]');
+    await tap(`button[aria-label="${L("Más acciones")}"]`);
     await shot("add-sheet");
     await back();
     await tap(".lt-resource-meter button, .lt-resource-meter");
@@ -256,21 +258,21 @@ const steps: Record<string, () => Promise<void>> = {
       { selector: ".lt-track-header.is-selected", n: 1 },
       { selector: `${bar} .lt-mobile-selection-actions-title`, n: 2, badge: "above" },
       { selector: `${bar} .lt-mobile-selection-action`, nth: 0, n: 3, badge: "above" },
-      { selector: `${bar} button[aria-label="Más acciones"]`, n: 4, badge: "above" },
-      { selector: `${bar} button[aria-label="Mezcla"]`, n: 5, badge: "above" },
-      { selector: `${bar} button[aria-label="Seleccionar varias pistas"]`, n: 6, badge: "above" },
-      { selector: `${bar} button[aria-label="Quitar selección"]`, n: 7, badge: "above" },
-      { selector: `${bar} button[aria-label="Ocultar acciones"]`, n: 8, badge: "above" },
+      { selector: `${bar} button[aria-label="${L("Más acciones")}"]`, n: 4, badge: "above" },
+      { selector: `${bar} button[aria-label="${L("Mezcla")}"]`, n: 5, badge: "above" },
+      { selector: `${bar} button[aria-label="${L("Seleccionar varias pistas")}"]`, n: 6, badge: "above" },
+      { selector: `${bar} button[aria-label="${L("Quitar selección")}"]`, n: 7, badge: "above" },
+      { selector: `${bar} button[aria-label="${L("Ocultar acciones")}"]`, n: 8, badge: "above" },
     ]);
-    await tap(`${bar} button[aria-label="Mezcla"]`);
+    await tap(`${bar} button[aria-label="${L("Mezcla")}"]`);
     await annotatedShot("track-mix", [{ selector: ".lt-mobile-selection-mix", pad: 2 }], {
       style: "spotlight",
     });
-    await tap(`${bar} button[aria-label="Mezcla"]`);
-    await tap(`${bar} button[aria-label="Más acciones"]`);
+    await tap(`${bar} button[aria-label="${L("Mezcla")}"]`);
+    await tap(`${bar} button[aria-label="${L("Más acciones")}"]`);
     await shot("track-more");
     await back();
-    await tap(`${bar} button[aria-label="Quitar selección"]`);
+    await tap(`${bar} button[aria-label="${L("Quitar selección")}"]`);
   },
 
   async clipSelect() {
@@ -282,18 +284,18 @@ const steps: Record<string, () => Promise<void>> = {
     await annotatedShot("clip-selected", [
       { selector: ".lt-mobile-selection-actions", pad: 2 },
     ], { style: "spotlight" });
-    await tap('.lt-mobile-selection-actions button[aria-label="Quitar selección"]');
+    await tap(`.lt-mobile-selection-actions button[aria-label="${L("Quitar selección")}"]`);
   },
 
   async longPressSong() {
     await longPress(".lt-region-hotspot", { nth: 0 });
     // Song arrangements are in the build but not announced yet (2026-10):
     // keep "Arreglo" out of the published capture until the feature ships.
-    await run(() => {
+    await run((label: string) => {
       document.querySelectorAll<HTMLElement>(".lt-context-menu button").forEach((el) => {
-        if ((el.textContent ?? "").trim() === "Arreglo") el.style.display = "none";
+        if ((el.textContent ?? "").trim() === label) el.style.display = "none";
       });
-    });
+    }, L("Arreglo"));
     await sleep(300);
     await shot("song-sheet");
     await back();
@@ -330,9 +332,9 @@ const steps: Record<string, () => Promise<void>> = {
     await recordClip("track-select-mix", async () => {
       await sleep(600);
       await tap(".lt-track-header .lt-track-title-row strong", { nth: 1, settle: 1400 });
-      await tap('.lt-mobile-selection-actions button[aria-label="Mezcla"]', { settle: 2200 });
-      await tap('.lt-mobile-selection-actions button[aria-label="Mezcla"]', { settle: 600 });
-      await tap('.lt-mobile-selection-actions button[aria-label="Quitar selección"]', { settle: 900 });
+      await tap(`.lt-mobile-selection-actions button[aria-label="${L("Mezcla")}"]`, { settle: 2200 });
+      await tap(`.lt-mobile-selection-actions button[aria-label="${L("Mezcla")}"]`, { settle: 600 });
+      await tap(`.lt-mobile-selection-actions button[aria-label="${L("Quitar selección")}"]`, { settle: 900 });
     });
   },
 
@@ -364,8 +366,8 @@ const steps: Record<string, () => Promise<void>> = {
     await sleep(500);
     await tap(tour("side-nav-settings"));
     await sleep(900);
-    await toggle("audio", "Baja latencia", "settings-low-latency");
-    await toggle("general", "Importar sin copiar", "settings-import-no-copy");
+    await toggle("audio", L("Baja latencia"), "settings-low-latency");
+    await toggle("general", L("Importar sin copiar"), "settings-import-no-copy");
     await back();
   },
 };
@@ -375,7 +377,7 @@ if (argv.includes("--clear")) {
   adb(`shell am force-stop ${APP}`);
   adb(`shell pm clear ${APP}`);
 }
-adb(`shell cmd locale set-app-locales ${APP} --locales es-ES`);
+adb(`shell cmd locale set-app-locales ${APP} --locales ${UI_LANG === "en" ? "en-US" : "es-ES"}`);
 adb(`shell am start -n ${APP}/com.libretracks.desktop.MainActivity`);
 await connect();
 await send("Page.enable");

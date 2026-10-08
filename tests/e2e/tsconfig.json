@@ -13,7 +13,10 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "strict": true,
-    "noEmit": true
+    "noEmit": true,
+    // tests/e2e/utils/uiText.ts is also imported by the Android harnesses,
+    // which Node runs directly and which therefore need the .ts extension.
+    "allowImportingTsExtensions": true
   },
   "include": ["**/*.ts"]
 }

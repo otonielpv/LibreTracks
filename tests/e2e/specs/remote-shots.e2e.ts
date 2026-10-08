@@ -5,6 +5,7 @@ import path from "node:path";
 import { remote } from "webdriverio";
 import sharp from "sharp";
 import AppPage from "../pageobjects/app.page.js";
+import { UI_LANG } from "../utils/uiText.js";
 import { unionBox } from "../utils/annotate.js";
 import { drawMarks, OVERLAY_ID, type Box, type Mark } from "../utils/annotateOverlay.js";
 
@@ -23,7 +24,11 @@ const repoRoot = path.resolve(__dirname, "..", "..", "..");
 const golden = process.env.LT_SHOTS_SESSION ?? "";
 const workDir = path.join(os.tmpdir(), "lt-remote-session");
 const session = golden ? path.join(workDir, path.basename(golden)) : "";
-const outDir = process.env.LT_REMOTESHOTS_DIR ?? path.join(repoRoot, "apps", "website", "public", "guide", "remote");
+const outDir =
+  process.env.LT_REMOTESHOTS_DIR ??
+  path.join(repoRoot, "apps", "website", "public", "guide", UI_LANG === "en" ? "remote-en" : "remote");
+// The Remote follows the browser's language.
+const browserLang = UI_LANG === "en" ? "en-US" : "es-ES";
 
 type Device = { name: string; width: number; height: number; dpr: number };
 const TABLET: Device = { name: "tablet", width: 1180, height: 820, dpr: 2 };
@@ -55,13 +60,13 @@ async function openRemote(device: Device) {
       browserName: "MicrosoftEdge",
       "wdio:edgedriverOptions": { binary: edgeDriverPath() },
       "ms:edgeOptions": {
-        args: ["--headless=new", "--hide-scrollbars", `--lang=es-ES`],
+        args: ["--headless=new", "--hide-scrollbars", `--lang=${browserLang}`],
         mobileEmulation: {
           deviceMetrics: { width: device.width, height: device.height, pixelRatio: device.dpr, touch: true },
           userAgent:
             "Mozilla/5.0 (Linux; Android 14; SM-X810) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36",
         },
-        prefs: { intl: { accept_languages: "es-ES,es" } },
+        prefs: { intl: { accept_languages: `${browserLang},${browserLang.slice(0, 2)}` } },
       },
     },
   });

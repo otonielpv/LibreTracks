@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import AppPage from "../pageobjects/app.page.js";
+import { useAppLocale } from "../utils/appLocale.js";
+import { parkOsCursor } from "../utils/osCursor.js";
 import { Recorder } from "../utils/record.js";
+import { L, Lre, UI_LANG } from "../utils/uiText.js";
 import {
   annotate,
   clearAnnotations,
@@ -40,7 +43,9 @@ const workDir = path.join(os.tmpdir(), "lt-guide-session");
 const session = golden ? path.join(workDir, path.basename(golden)) : "";
 const outDir =
   process.env.LT_GUIDESHOTS_DIR ??
-  path.join(repoRoot, "apps", "website", "public", "guide", "desktop");
+  path.join(repoRoot, "apps", "website", "public", "guide", UI_LANG === "en" ? "desktop-en" : "desktop");
+// Undoes the language switch of an English run (see useAppLocale).
+let restoreLocale: (() => Promise<void>) | null = null;
 
 const tour = (id: string) => `[data-lt-tour="${id}"]`;
 const transportButton = (n: number) => `.lt-transport-buttons > button:nth-of-type(${n})`;
@@ -226,7 +231,7 @@ async function rightClick(selector: string, at: { fx?: number; fy?: number } = {
  * yet (song arrangements, 2026-10). Hidden from the guide captures until the
  * feature is public; remove an entry here when it ships.
  */
-const UNANNOUNCED_MENU_ITEMS = ["Arreglo"];
+const UNANNOUNCED_MENU_ITEMS = [L("Arreglo")];
 
 async function hideUnannouncedMenuItems() {
   await runInPage((labels: string[]) => {
@@ -286,6 +291,10 @@ describe("user guide screenshots", function () {
     cpSync(path.dirname(golden), workDir, { recursive: true });
     mkdirSync(outDir, { recursive: true });
     await AppPage.waitUntilBooted();
+    if (UI_LANG === "en") {
+      restoreLocale = await useAppLocale("en");
+      await AppPage.waitUntilBooted();
+    }
     await browser.setWindowSize(1940, 1140);
     // Windows clamps the window to the screen, so the real viewport is a bit
     // shorter than 1080. The emulated one must match it exactly: if it is
@@ -301,6 +310,13 @@ describe("user guide screenshots", function () {
       });
     }
     console.log("[guideshots] viewport", JSON.stringify(await viewport()));
+  });
+
+  // The real mouse over the window breaks the synthetic drags (osCursor.ts).
+  beforeEach(() => parkOsCursor());
+
+  after(async () => {
+    await restoreLocale?.();
   });
 
   it("landing", async () => {
@@ -428,7 +444,7 @@ describe("user guide screenshots", function () {
         { selector: tour("toolbar-master"), n: 9 },
         { selector: tour("toolbar-transpose"), n: 10 },
         { selector: tour("toolbar-warp"), n: 11 },
-        { selector: 'button[aria-label="Cancelar salto"]', n: 12 },
+        { selector: `button[aria-label="${L("Cancelar salto")}"]`, n: 12 },
       ],
       { crop: { marks: 16 } },
     );
@@ -660,7 +676,7 @@ describe("user guide screenshots", function () {
     await rec.hold(0.5);
     const root = await tag(".lt-library-root-group > :first-child", "root-head");
     await rec.rightClick(root);
-    await rec.click(await tagByText(".lt-context-menu button", "Crear carpeta", "menu-item"));
+    await rec.click(await tagByText(".lt-context-menu button", L("Crear carpeta"), "menu-item"));
     await (await $("#lt-dialog-input")).waitForDisplayed({ timeout: 5000 });
     await rec.type("Ensayo");
     await rec.hold(0.4);
@@ -727,12 +743,12 @@ describe("user guide screenshots", function () {
     await rec.hold(0.5);
     // Empty spot of the bars row, inside the first song.
     await rec.rightClick({ x: ruler.x + 330, y: ruler.y + 40 });
-    await rec.click(await tagByText(".lt-context-menu button", "Crear Marca", "menu-item"));
+    await rec.click(await tagByText(".lt-context-menu button", L("Crear Marca"), "menu-item"));
     await rec.hold(0.6);
     // The kind menu opens on two groups: Secciones / Avisos.
-    await rec.click(await tagByText(".lt-context-menu button", "Secciones", "menu-group"));
+    await rec.click(await tagByText(".lt-context-menu button", L("Secciones"), "menu-group"));
     await rec.hold(0.4);
-    await rec.click(await tagByExactText(".lt-context-menu button", "Coro", "menu-kind"));
+    await rec.click(await tagByExactText(".lt-context-menu button", L("Coro"), "menu-kind"));
     await rec.hold(0.6);
     await annotatedShot("marker-kind-menu", [{ selector: ".lt-context-menu", pad: 2 }], {
       style: "spotlight",
@@ -743,7 +759,7 @@ describe("user guide screenshots", function () {
     await rec.encode();
 
     // Section <-> cue: drag a section flag up into the cue row.
-    const coro = await tagByText(".lt-marker-hotspot", "Coro 2", "coro");
+    const coro = await tagByText(".lt-marker-hotspot", `${L("Coro")} 2`, "coro");
     const cueRow = await rectOf(await tagByText(".lt-marker-hotspot", "Entra", "cue-row"));
     const coroBox = await rectOf(coro);
     if (!coroBox || !cueRow) throw new Error("no markers");
@@ -790,7 +806,7 @@ describe("user guide screenshots", function () {
     await rec.dragTo({ x: lastRight + 300, y: rowY }, 1000, { from: { x: lastRight + 40, y: rowY } });
     await rec.hold(0.5);
     await rec.rightClick({ x: lastRight + 170, y: rowY });
-    await rec.click(await tagByText(".lt-context-menu button", "Crear Cancion desde", "menu-item"));
+    await rec.click(await tagByText(".lt-context-menu button", L("Crear Cancion desde"), "menu-item"));
     await rec.hold(1.5);
     const afterCreate = await regionsOf();
     if (afterCreate.length !== before.length + 1) throw new Error("song-from-range: no song created");
@@ -815,7 +831,10 @@ describe("user guide screenshots", function () {
     await rec2.dragToCdp({ x: h.x + h.w / 2 + 180, y: h.y + h.h / 2 }, 900, { from: handle });
     await rec2.hold(1.2);
     const resized = (await regionsOf()).find((r) => r.id === newest.id);
-    if (!resized || resized.endSeconds <= newest.endSeconds) throw new Error("song-resize: end did not move");
+    if (!resized || resized.endSeconds <= newest.endSeconds) {
+      const hit = await runInPage((x: number, y: number) => { const e = document.elementFromPoint(x, y); return e ? `${e.tagName}.${e.className}` : "none"; }, h.x + h.w / 2, h.y + h.h / 2);
+      throw new Error(`song-resize: end did not move (handle ${JSON.stringify(h)}, hit ${hit}, ${newest.name} ${newest.endSeconds} -> ${resized?.endSeconds})`);
+    }
     await rec2.encode();
 
     // 3) Move it along the timeline.
@@ -906,6 +925,10 @@ describe("user guide screenshots", function () {
     const left = (await view()).clips
       .filter((c) => c.trackId === bateriaId)
       .sort((a2, b2) => a2.timelineStartSeconds - b2.timelineStartSeconds)[0];
+    // Opening the folder pushes Batería down, past the bottom of a 1009px
+    // window: bring it back into view before measuring it.
+    await runInPage(() => document.querySelector('[data-guide="bateria"]')?.scrollIntoView({ block: "center" }));
+    await browser.pause(600);
     const bRow = await rectOf(await headerOf("Batería", "bateria"));
     if (!left || !bRow) throw new Error("no clip to move");
     const upRow = { y: bRow.y - bRow.h / 2 };
@@ -916,7 +939,10 @@ describe("user guide screenshots", function () {
     await rec2.dragTo({ x: grab.x, y: upRow.y }, 1000, { from: grab });
     await rec2.hold(1.2);
     const after = (await view()).clips.find((c) => c.id === left.id);
-    if (after?.trackId !== above.id) throw new Error(`clip-to-track: clip stayed on ${after?.trackId}`);
+    if (after?.trackId !== above.id) {
+      const hit = await runInPage((x: number, y: number) => { const e = document.elementFromPoint(x, y); return e ? `${e.tagName}.${e.className}` : "none"; }, grab.x, grab.y);
+      throw new Error(`clip-to-track: clip stayed on ${after?.trackId} (target ${above.name}, grab ${JSON.stringify(grab)} hit ${hit}, up ${upRow.y}, row ${JSON.stringify(bRow)})`);
+    }
     await rec2.encode();
 
     // 3) Reorder: drag "Drums" above the folder right on top of it.
@@ -970,7 +996,7 @@ describe("user guide screenshots", function () {
     const rec = new Recorder(cdp, "tempo-change", clip, outDir, { x: xAt(at) + 160, y: ruler.y + 200 });
     await rec.hold(0.4);
     await rec.rightClick({ x: xAt(at), y: ruler.y + 30 });
-    await rec.click(await tagByText(".lt-context-menu button", "Cambiar BPM del timeline", "menu-item"));
+    await rec.click(await tagByText(".lt-context-menu button", L("Cambiar BPM del timeline"), "menu-item"));
     await replaceDialogValue(rec, "132");
     await rec.hold(1.4);
     if ((await view()).tempoMarkers.length !== tempoBefore + 1) throw new Error("tempo-change: no tempo marker created");
@@ -981,7 +1007,7 @@ describe("user guide screenshots", function () {
     const rec2 = new Recorder(cdp, "time-signature-change", clip, outDir, { x: xAt(at2) + 160, y: ruler.y + 200 });
     await rec2.hold(0.4);
     await rec2.rightClick({ x: xAt(at2), y: ruler.y + 30 });
-    await rec2.click(await tagByText(".lt-context-menu button", "Crear marca de comp", "menu-item"));
+    await rec2.click(await tagByText(".lt-context-menu button", L("Crear marca de comp"), "menu-item"));
     await replaceDialogValue(rec2, "6/8");
     await rec2.hold(1.4);
     if ((await view()).timeSignatureMarkers.length !== sigBefore + 1) {
@@ -1032,7 +1058,7 @@ describe("user guide screenshots", function () {
     await rec.hold(0.5);
     await rec.click('[data-guide="voy"]');
     await rec.click(`${tour("toolbar-transpose")} .lt-control-popover-trigger`);
-    const up = 'button[aria-label="Subir un semitono la region seleccionada"]';
+    const up = `button[aria-label="${L("Subir un semitono la region seleccionada")}"]`;
     await rec.click(up, 900);
     await rec.click(up, 1200);
     await rec.hold(1.6);
@@ -1047,7 +1073,7 @@ describe("user guide screenshots", function () {
     const rec2 = new Recorder(cdp, "warp-on", clip, outDir, { x: vp.w * 0.6, y: ruler.y + 120 });
     await rec2.hold(0.5);
     await rec2.click(`${tour("toolbar-warp")} .lt-control-popover-trigger`);
-    await rec2.click('button[aria-label="Activar warp en la region seleccionada"]', 1500);
+    await rec2.click(`button[aria-label="${L("Activar warp en la region seleccionada")}"]`, 1500);
     await rec2.hold(1.8);
     const afterWarp = await regionNamed("Voy Cantando");
     if (!afterWarp.warpEnabled) throw new Error("warp: not enabled");
@@ -1118,7 +1144,7 @@ describe("user guide screenshots", function () {
     }
     await (await $(`${tour("topbar-pads")} > button:nth-of-type(2)`)).click();
     await browser.pause(700);
-    await (await $(await tagByText(".lt-pads-popover button", "Gestor de pads", "pad-manager"))).click();
+    await (await $(await tagByText(".lt-pads-popover button", L("Gestor de pads"), "pad-manager"))).click();
     await browser.pause(1200);
     await shot("pad-manager", { selector: '.lt-modal-backdrop [role="dialog"], .lt-modal-backdrop section', margin: 12 });
     await browser.keys(["Escape"]);
@@ -1163,11 +1189,11 @@ describe("user guide screenshots", function () {
     await rightClick(".lt-track-lane.is-midi .lt-automation-hotspot");
     await menuShot("menu-midi-clip", ".lt-track-lane.is-midi .lt-automation-hotspot");
     await rightClick(".lt-track-lane.is-midi .lt-automation-hotspot");
-    await (await $(await tagByText(".lt-context-menu button", "Editar MIDI", "menu-item"))).click();
+    await (await $(await tagByText(".lt-context-menu button", L("Editar MIDI"), "menu-item"))).click();
     await browser.pause(900);
     await shot("midi-clip-editor", { selector: '[role="dialog"]', margin: 12 });
     // The MIDI editor does not close on Escape: use its own Cancel button.
-    await (await $(await tagByText('[role="dialog"] button', "Cancelar", "dialog-cancel"))).click();
+    await (await $(await tagByText('[role="dialog"] button', L("Cancelar"), "dialog-cancel"))).click();
     await browser.pause(500);
 
     // The MIDI track's own menu and its routing window.
@@ -1178,10 +1204,10 @@ describe("user guide screenshots", function () {
     await rightClick(name, { fx: 0.3 });
     await menuShot("menu-midi-track", header);
     await rightClick(name, { fx: 0.3 });
-    await (await $(await tagByText(".lt-context-menu button", "Enrutado MIDI", "menu-item"))).click();
+    await (await $(await tagByText(".lt-context-menu button", L("Enrutado MIDI"), "menu-item"))).click();
     await browser.pause(800);
     await shot("midi-route", { selector: '[aria-labelledby="lt-midi-route-title"]', margin: 12 });
-    await (await $(await tagByText('[aria-labelledby="lt-midi-route-title"] button', "Cancelar", "dialog-cancel"))).click();
+    await (await $(await tagByText('[aria-labelledby="lt-midi-route-title"] button', L("Cancelar"), "dialog-cancel"))).click();
   });
 
   it("automation", async () => {
@@ -1195,7 +1221,7 @@ describe("user guide screenshots", function () {
     await (await $(cue)).click();
     await browser.pause(900);
     await shot("automation-cue-editor", { selector: '.lt-modal-backdrop [role="dialog"], .lt-modal-backdrop section', margin: 12 });
-    await (await $(await tagByText(".lt-modal-backdrop button", "Cancelar", "dialog-cancel"))).click();
+    await (await $(await tagByText(".lt-modal-backdrop button", L("Cancelar"), "dialog-cancel"))).click();
     await browser.pause(500);
 
     await rightClick(cue);
@@ -1203,13 +1229,13 @@ describe("user guide screenshots", function () {
 
     // Mix scenes, from the automation header's menu.
     await rightClick(".lt-track-header.is-automation", { fx: 0.4 });
-    await (await $(await tagByText(".lt-context-menu button", "Gestionar escenas", "menu-item"))).click();
+    await (await $(await tagByText(".lt-context-menu button", L("Gestionar escenas"), "menu-item"))).click();
     await browser.pause(900);
     // An empty manager explains nothing: create one scene to show its editor.
-    await (await $(await tagByText(".lt-modal-backdrop button", "Nueva escena", "new-scene"))).click();
+    await (await $(await tagByText(".lt-modal-backdrop button", L("Nueva escena"), "new-scene"))).click();
     await browser.pause(900);
     await shot("mix-scenes", { selector: '.lt-modal-backdrop [role="dialog"], .lt-modal-backdrop section', margin: 12 });
-    await (await $(await tagByText(".lt-modal-backdrop button", "Cerrar", "dialog-close"))).click();
+    await (await $(await tagByText(".lt-modal-backdrop button", L("Cerrar"), "dialog-close"))).click();
     await browser.pause(400);
   });
 
@@ -1267,13 +1293,13 @@ describe("user guide screenshots", function () {
       await browser.pause(1200);
     };
     const closeModal = async (modal: string) => {
-      await (await $(await tagByText(`${modal} button`, "Cancelar", "share-cancel"))).click();
+      await (await $(await tagByText(`${modal} button`, L("Cancelar"), "share-cancel"))).click();
       await browser.pause(800);
     };
 
     // Song: export and render live in the song bar's menu.
     await rightClick(".lt-region-hotspot", { fx: 0.3 });
-    await clickItem(".lt-context-menu button", "Exportar Cancion");
+    await clickItem(".lt-context-menu button", L("Exportar Cancion"));
     const songModal = '[aria-labelledby="lt-export-modal-title"]';
     await annotatedShot(
       "export-song-modal",
@@ -1286,7 +1312,7 @@ describe("user guide screenshots", function () {
     await closeModal(songModal);
 
     await rightClick(".lt-region-hotspot", { fx: 0.3 });
-    await clickItem(".lt-context-menu button", "Renderizar audio");
+    await clickItem(".lt-context-menu button", L("Renderizar audio"));
     const renderModal = '[aria-labelledby="lt-render-modal-title"]';
     await annotatedShot(
       "render-modal",
@@ -1310,11 +1336,11 @@ describe("user guide screenshots", function () {
     const fileMenu = `${tour("topbar-file-menu")} .lt-top-menu-trigger`;
     await (await $(fileMenu)).click();
     await browser.pause(600);
-    await clickItem(".lt-top-menu-dropdown button", "Exportar sesi");
+    await clickItem(".lt-top-menu-dropdown button", L("Exportar sesi"));
     // With the cloud available, export (and import) ask where first.
     if (await rectOf(".lt-storage-choice-modal")) {
       await shot("storage-choice", { selector: ".lt-storage-choice-modal", margin: 16 });
-      await clickItem(".lt-storage-choice-modal button", "Este equipo");
+      await clickItem(".lt-storage-choice-modal button", L("Este equipo"));
     }
     const sessionModal = '[aria-labelledby="lt-export-session-modal-title"]';
     await annotatedShot(
@@ -1330,12 +1356,16 @@ describe("user guide screenshots", function () {
 
     await (await $(fileMenu)).click();
     await browser.pause(600);
-    await clickItem(".lt-top-menu-dropdown button", "Nube");
+    await clickItem(".lt-top-menu-dropdown button", L("Nube"));
     // The harness runs with the developer's own Drive account: wait for the
     // lists, then blur everything that is theirs (space used, file names).
     for (let i = 0; i < 30; i++) {
-      const loading = await runInPage(() =>
-        Array.from(document.querySelectorAll(".lt-cloud-modal .lt-cloud-note")).some((n) => /cargando/i.test(n.textContent ?? "")),
+      const loading = await runInPage(
+        (word: string) =>
+          Array.from(document.querySelectorAll(".lt-cloud-modal .lt-cloud-note")).some((n) =>
+            (n.textContent ?? "").toLowerCase().includes(word),
+          ),
+        L("Cargando").replace(/[.…]+$/, "").toLowerCase(),
       );
       if (!loading) break;
       await browser.pause(500);
@@ -1397,7 +1427,7 @@ describe("user guide screenshots", function () {
     await browser.pause(4000);
     if (await rectOf(".lt-video-setup-notice")) {
       await shot("video-notice", { selector: ".lt-video-setup-notice", margin: 12 });
-      await (await $(await tagByText(".lt-video-setup-notice button", "Ahora no", "notice-no"))).click();
+      await (await $(await tagByText(".lt-video-setup-notice button", L("Ahora no"), "notice-no"))).click();
       await browser.pause(800);
     } else {
       console.log("[guideshots] SKIPPED video-notice: not shown");
@@ -1459,7 +1489,7 @@ describe("user guide screenshots", function () {
     await AppPage.openSettings();
     await (await AppPage.settingsTab("video")).click();
     await browser.pause(1000);
-    await (await $(await tagByText(".lt-settings-modal button", "Asistente", "wiz"))).click();
+    await (await $(await tagByText(".lt-settings-modal button", L("Asistente"), "wiz"))).click();
     await browser.pause(1500);
     const wizard = ".lt-video-wizard";
     const wizardButton = async (re: string) => {
@@ -1474,7 +1504,7 @@ describe("user guide screenshots", function () {
       await browser.pause(1800);
     };
     await shot("video-wizard-1", { selector: wizard, margin: 12 });
-    await wizardButton("^siguiente$");
+    await wizardButton(Lre("Siguiente"));
     const cards = await runInPage(() => document.querySelectorAll(".lt-video-wizard-card").length);
     await runInPage((i: number) => (document.querySelectorAll(".lt-video-wizard-card")[i] as HTMLElement).click(), cards > 1 ? 1 : 0);
     await browser.pause(2500);
@@ -1482,13 +1512,13 @@ describe("user guide screenshots", function () {
       const title = await runInPage(() => document.querySelector(".lt-video-wizard h2, .lt-video-wizard h3")?.textContent ?? "");
       console.log(`[guideshots] wizard step ${i}: ${title}`);
       await shot(`video-wizard-${i}`, { selector: wizard, margin: 12 });
-      if (/listo/i.test(title)) break;
-      if (/elige la pantalla/i.test(title)) await wizardButton("^siguiente$");
-      else if (/comprueba/i.test(title)) await wizardButton("^sí, la veo$");
-      else if (/sincron/i.test(title)) await wizardButton("^omitir");
-      else await wizardButton("^siguiente$");
+      if (title.trim().toLowerCase() === L("Listo").toLowerCase()) break;
+      if (title.toLowerCase().includes(L("Elige la pantalla").toLowerCase())) await wizardButton(Lre("Siguiente"));
+      else if (title.toLowerCase().includes(L("Comprueba la imagen").toLowerCase())) await wizardButton(UI_LANG === "en" ? "^Yes, I (can )?see it$" : Lre("Sí, la veo"));
+      else if (title.toLowerCase().startsWith(L("Sincronía (opcional)").split(" ")[0].toLowerCase())) await wizardButton(`^${L("Omitir").split(",")[0]}`);
+      else await wizardButton(Lre("Siguiente"));
     }
-    await wizardButton("^cancelar$");
+    await wizardButton(Lre("Cancelar"));
     await browser.keys(["Escape"]);
     await browser.pause(800);
 
@@ -1505,7 +1535,7 @@ describe("user guide screenshots", function () {
     }
     if (prompt) {
       await shot("video-audio-prompt", { selector: ".lt-video-audio-prompt", margin: 12 });
-      await (await $(await tagByText(".lt-video-audio-prompt button", "No", "audio-no"))).click();
+      await (await $(await tagByText(".lt-video-audio-prompt button", L("No"), "audio-no"))).click();
       await browser.pause(1000);
       await browser.keys(["Control", "z"]);
       await browser.keys(["Control"]);

@@ -1,3 +1,4 @@
+import { L } from "../utils/uiText.js";
 import { browser, $, $$ } from "@wdio/globals";
 
 export type E2ESongView = {
@@ -179,17 +180,17 @@ class AppPage {
 
   /** Side-nav "Biblioteca" (library) toggle. */
   get libraryNavButton() {
-    return $('button[aria-label="Biblioteca"]');
+    return $(`button[aria-label="${L("Biblioteca")}"]`);
   }
 
   /** Side-nav "Remote" toggle. */
   get remoteNavButton() {
-    return $('button[aria-label="Remote"]');
+    return $(`button[aria-label="${L("Remote")}"]`);
   }
 
   /** Side-nav "Configuracion" (settings) toggle. */
   get settingsNavButton() {
-    return $('button[aria-label="Configuracion"]');
+    return $(`button[aria-label="${L("Configuracion")}"]`);
   }
 
   // --- Settings modal ------------------------------------------------------
@@ -280,22 +281,22 @@ class AppPage {
 
   /** Transport play button (aria-label "Reproducir"). */
   get playButton() {
-    return $('button[aria-label="Reproducir"]');
+    return $(`button[aria-label="${L("Reproducir")}"]`);
   }
 
   /** Transport stop button (aria-label "Detener"). */
   get stopButton() {
-    return $('button[aria-label="Detener"]');
+    return $(`button[aria-label="${L("Detener")}"]`);
   }
 
   /** Transport pause button (aria-label "Pausar"). */
   get pauseButton() {
-    return $('button[aria-label="Pausar"]');
+    return $(`button[aria-label="${L("Pausar")}"]`);
   }
 
   /** Metronome toggle (aria-label "Metronomo"). Round-trips to the engine. */
   get metronomeButton() {
-    return $('button[aria-label="Metronomo"]');
+    return $(`button[aria-label="${L("Metronomo")}"]`);
   }
 
   // --- Session flows -------------------------------------------------------
