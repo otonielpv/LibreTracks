@@ -1,0 +1,55 @@
+{
+  "title": "Tu primera canción en LibreTracks, en el móvil",
+  "voice": "es-ES-AlvaroNeural",
+  "rate": "+5%",
+  "scenes": [
+    {
+      "id": "01-intro",
+      "text": "Hola. En este vídeo vas a montar tu primera canción en LibreTracks desde el móvil o la tablet, y a tocarla en directo. Solo necesitas los stems de la canción en el teléfono: un audio por instrumento."
+    },
+    {
+      "id": "02-crear",
+      "text": "Lo primero es crear una sesión. Pulsa Crear, escribe su nombre, y vuelve a pulsar Crear. Una sesión es tu repertorio: puede tener una sola canción, o todo el set del domingo."
+    },
+    {
+      "id": "03-audios",
+      "text": "Ahora pulsa Añadir audios, y se abre el selector de archivos del teléfono. Toca Audio, mantén pulsado el primer audio, y en el menú elige Seleccionar todo. Después, pulsa Seleccionar."
+    },
+    {
+      "id": "04-colocar",
+      "text": "LibreTracks te pregunta si quieres ponerlos en el timeline: pulsa OK. Se crea la canción, con cada audio en su propia pista."
+    },
+    {
+      "id": "05-renombrar",
+      "text": "La canción se crea con un nombre genérico. Toca su barra, arriba, en la regla: abajo aparecen sus acciones. Pulsa Renombrar canción, y escribe su nombre."
+    },
+    {
+      "id": "06-nota",
+      "text": "Ahí mismo, Nota de la canción indica su tonalidad. Se ve junto al nombre, y en la vista Live."
+    },
+    {
+      "id": "07-tempo",
+      "text": "Toca el tempo, arriba a la izquierda, y escribe los BPM de la canción. Enciende el click con el botón de la nota, y dale a reproducir: el click tiene que caer justo con la batería."
+    },
+    {
+      "id": "08-carpeta",
+      "text": "Para ordenar las pistas, agrúpalas en carpetas. Toca una pista, pulsa el botón de seleccionar varias, y toca la otra. Luego, Mover a carpeta, Carpeta nueva, y le pones nombre. Su volumen, su mute y su solo afectan a todas sus pistas."
+    },
+    {
+      "id": "09-marcas",
+      "text": "Ahora las marcas. Toca la regla para llevar el cursor, y en la barra de abajo pulsa Sección: intro, verso, coro. Sirven para saltar en directo. Con Aviso pones indicaciones para la banda, como toda la banda."
+    },
+    {
+      "id": "10-guia",
+      "text": "Con las marcas puestas, enciende la guía de voz, con el botón del megáfono. Escucha: antes de cada sección, una voz la anuncia, y cuenta la entrada."
+    },
+    {
+      "id": "11-live",
+      "text": "Y a tocar. Esta es la vista Live: cada sección es un botón grande. Tócalo, y la canción salta a esa parte en el momento justo."
+    },
+    {
+      "id": "12-final",
+      "text": "Guarda la sesión, y listo. Tienes la guía completa, botón a botón, en libretracks punto com. ¡A tocar!"
+    }
+  ]
+}
