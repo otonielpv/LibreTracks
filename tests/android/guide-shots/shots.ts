@@ -24,150 +24,24 @@ const outDir =
   process.env.LT_GUIDESHOTS_DIR ?? path.join(repoRoot, "apps", "website", "public", "guide", "mobile");
 mkdirSync(outDir, { recursive: true });
 
-const sdk = process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT;
-const ADB = sdk ? `"${sdk}/platform-tools/adb"` : "adb";
-const adb = (args: string) => execSync(`${ADB} ${args}`, { env: { ...process.env, MSYS_NO_PATHCONV: "1" } }).toString();
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const APP = "com.libretracks.app";
-
-// ---- DevTools connection ---------------------------------------------------
-
-let ws: WebSocket;
-let nextId = 1;
-const pending = new Map<number, (value: { result?: any; error?: any }) => void>();
-
-async function connect() {
-  let socket: string | undefined;
-  for (let i = 0; i < 60 && !socket; i++) {
-    socket = adb("shell cat /proc/net/unix").match(/@(webview_devtools_remote_\d+)/)?.[1];
-    if (!socket) await sleep(2000);
-  }
-  if (!socket) throw new Error("no webview devtools socket (is the DEBUG apk running?)");
-  adb(`forward tcp:9334 localabstract:${socket}`);
-  const pages = (await (await fetch("http://127.0.0.1:9334/json")).json()) as Array<any>;
-  const page = pages.find((p) => p.type === "page") ?? pages[0];
-  ws = new WebSocket(page.webSocketDebuggerUrl);
-  await new Promise((resolve, reject) => {
-    ws.onopen = resolve;
-    ws.onerror = reject;
-  });
-  ws.onmessage = (event) => {
-    const data = JSON.parse(String(event.data));
-    pending.get(data.id)?.(data);
-    pending.delete(data.id);
-  };
-}
-
-async function send<T = any>(method: string, params: Record<string, unknown> = {}): Promise<T> {
-  const id = nextId++;
-  ws.send(JSON.stringify({ id, method, params }));
-  const reply = await new Promise<{ result?: any; error?: any }>((resolve) => pending.set(id, resolve));
-  if (reply.error) throw new Error(`${method}: ${JSON.stringify(reply.error)}`);
-  return reply.result as T;
-}
-
-/** Runs a self-contained function in the page and returns its JSON value. */
-async function run<T>(fn: (...args: any[]) => T, ...args: unknown[]): Promise<Awaited<T>> {
-  const expression = `(async () => { var __name = (f) => f; return await (${fn.toString()})(...${JSON.stringify(args)}); })()`;
-  const res = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
-  if (res.exceptionDetails) {
-    throw new Error(res.exceptionDetails.exception?.description ?? JSON.stringify(res.exceptionDetails));
-  }
-  return res.result?.value;
-}
-
-// ---- Page helpers ----------------------------------------------------------
-
-async function rectOf(selector: string, opts: { nth?: number; text?: string } = {}): Promise<Box | null> {
-  return run(
-    (sel: string, nth: number, text: string | null) => {
-      const el = Array.from(document.querySelectorAll(sel)).filter((e) => {
-        const r = e.getBoundingClientRect();
-        if (r.width <= 0 || r.height <= 0) return false;
-        return !text || (e.textContent ?? "").toLowerCase().includes(text.toLowerCase());
-      })[nth];
-      if (!el) return null;
-      const r = el.getBoundingClientRect();
-      return { x: r.left, y: r.top, w: r.width, h: r.height };
-    },
-    selector,
-    opts.nth ?? 0,
-    opts.text ?? null,
-  );
-}
-
-async function waitFor(selector: string, opts: { text?: string; timeout?: number } = {}) {
-  const until = Date.now() + (opts.timeout ?? 20_000);
-  while (Date.now() < until) {
-    if (await rectOf(selector, opts)) return;
-    await sleep(400);
-  }
-  throw new Error(`waitFor: ${selector}${opts.text ? ` "${opts.text}"` : ""} never appeared`);
-}
-
-async function viewport() {
-  return run(() => ({ w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio }));
-}
-
-/**
- * Touch through Android's input system (`adb shell input`), not CDP: only
- * real input events draw the "show touches" circles the clips rely on, and
- * it is exactly the path a finger takes. The app is fullscreen, so CSS px
- * map to screen px by devicePixelRatio alone.
- */
-let dprCache = 0;
-let recording = false;
-async function touch(x: number, y: number, holdMs = 60) {
-  if (!dprCache) dprCache = (await viewport()).dpr;
-  if (recording) {
-    // Android's own "show touches" dots are too faint to read in a scaled
-    // clip: draw the same yellow ripple the desktop clips use.
-    await run(
-      (cx: number, cy: number, ms: number) => {
-        const dot = document.createElement("div");
-        dot.style.cssText =
-          `position:fixed;left:${cx - 22}px;top:${cy - 22}px;width:44px;height:44px;` +
-          "border-radius:50%;border:3px solid #FFC21A;background:rgba(255,194,26,.35);" +
-          "z-index:2147483647;pointer-events:none;transition:transform .5s ease-out, opacity .5s ease-out";
-        document.body.appendChild(dot);
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            dot.style.transform = "scale(1.6)";
-            dot.style.opacity = "0";
-          }, ms);
-        });
-        setTimeout(() => dot.remove(), ms + 700);
-      },
-      x,
-      y,
-      Math.max(200, holdMs),
-    );
-  }
-  const px = Math.round(x * dprCache);
-  const py = Math.round(y * dprCache);
-  if (holdMs > 300) adb(`shell input swipe ${px} ${py} ${px} ${py} ${holdMs}`);
-  else adb(`shell input tap ${px} ${py}`);
-}
-
-/** A real finger tap on the centre of the element. */
-async function tap(selector: string, opts: { nth?: number; text?: string; settle?: number } = {}) {
-  const r = await rectOf(selector, opts);
-  if (!r) throw new Error(`tap: ${selector}${opts.text ? ` "${opts.text}"` : ""} not visible`);
-  await touch(r.x + r.w / 2, r.y + r.h / 2);
-  await sleep(opts.settle ?? 700);
-}
-
-async function longPress(selector: string, opts: { nth?: number; text?: string; ms?: number } = {}) {
-  const r = await rectOf(selector, opts);
-  if (!r) throw new Error(`longPress: ${selector} not visible`);
-  await touch(r.x + r.w / 2, r.y + r.h / 2, opts.ms ?? 900);
-  await sleep(700);
-}
-
-async function back() {
-  adb("shell input keyevent 4");
-  await sleep(700);
-}
+import {
+  ADB,
+  adb,
+  APP,
+  back,
+  connect,
+  disconnect,
+  longPress,
+  rectOf,
+  run,
+  send,
+  setTouchRipple,
+  sleep,
+  tap,
+  touch,
+  viewport,
+  waitFor,
+} from "../lib/device.ts";
 
 // ---- Captures --------------------------------------------------------------
 
@@ -243,11 +117,11 @@ async function recordClip(name: string, action: () => Promise<void>, crop?: Box)
     env: { ...process.env, MSYS_NO_PATHCONV: "1" },
   });
   await sleep(1200);
-  recording = true;
+  setTouchRipple(true);
   try {
     await action();
   } finally {
-    recording = false;
+    setTouchRipple(false);
   }
   await sleep(1800);
   // Stop it ON the device with SIGINT so it finalises the MP4; killing the
@@ -513,7 +387,7 @@ for (const [name, step] of Object.entries(steps)) {
   console.log(`[mobileshots] step ${name}`);
   await step();
 }
-ws.close();
+disconnect();
 process.exit(0);
 
 // Exported for steps added below this line in later edits.
