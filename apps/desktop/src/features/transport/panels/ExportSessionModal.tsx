@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useDismissOnBack } from "../mobile/backNavigation";
 import { useCloudStore } from "../cloud/cloudStore";
@@ -44,16 +44,23 @@ export function ExportSessionModal({
   const { t } = useTranslation();
   const [mode, setMode] = useState<SessionExportMode>("full");
   const videoPayload = useVideoExportPayload(isOpen, null);
-  const [includeVideo, setIncludeVideo] = useState(true);
+  // The user's tick, or null while they haven't touched it. The default is
+  // derived in render, not set from an effect: an effect still pending when
+  // the user clicks would enqueue its value after the click and undo it.
+  const [includeVideoChoice, setIncludeVideo] = useState<boolean | null>(null);
+  // A new payload (the dialog reopened) forgets the previous choice.
+  const [choicePayload, setChoicePayload] = useState(videoPayload);
+  if (choicePayload !== videoPayload) {
+    setChoicePayload(videoPayload);
+    setIncludeVideo(null);
+  }
   // The destination was asked before this dialog: a big upload to the cloud
   // starts without the videos.
-  useEffect(() => {
-    if (videoPayload) {
-      setIncludeVideo(
-        defaultIncludeVideo(videoPayload.bytes, useCloudStore.getState().exportTarget === "cloud"),
-      );
-    }
-  }, [videoPayload]);
+  const includeVideo =
+    includeVideoChoice ??
+    (videoPayload
+      ? defaultIncludeVideo(videoPayload.bytes, useCloudStore.getState().exportTarget === "cloud")
+      : true);
 
   if (!isOpen) {
     return null;
