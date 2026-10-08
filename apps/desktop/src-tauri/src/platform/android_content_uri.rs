@@ -193,6 +193,115 @@ pub(crate) fn clear_pending_exception(env: &mut jni::JNIEnv) {
     }
 }
 
+/// El nombre que el proveedor da al documento (`OpenableColumns.DISPLAY_NAME`).
+///
+/// El id del documento no sirve para esto: «Descargas» entrega `msf:28`, el
+/// proveedor de medios `audio:1234`, Drive un id opaco. De ahí salían pistas
+/// llamadas «28» y, sin extensión, imports rechazados. `None` si el proveedor
+/// no responde; quien llama cae al nombre sacado del URI.
+pub fn query_display_name(uri: &str) -> Option<String> {
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { JavaVM::from_raw(ctx.vm().cast()) }.ok()?;
+    let activity = unsafe { JObject::from_raw(ctx.context().cast()) };
+    let mut env = vm.attach_current_thread().ok()?;
+    let result = query_display_name_with(&mut env, &activity, uri);
+    if let Err(error) = &result {
+        eprintln!("[LT_URI] sin DISPLAY_NAME para {uri}: {error}");
+        clear_pending_exception(&mut env);
+    }
+    // Sólo el último componente: el nombre acaba en una ruta de staging y un
+    // proveedor que colara una `/` la saltaría.
+    result
+        .ok()
+        .flatten()
+        .and_then(|name| name.rsplit(['/', '\\']).next().map(|last| last.trim().to_string()))
+        .filter(|name| !name.is_empty())
+}
+
+fn query_display_name_with(
+    env: &mut jni::JNIEnv,
+    activity: &JObject,
+    uri: &str,
+) -> Result<Option<String>, String> {
+    let resolver = env
+        .call_method(
+            activity,
+            "getContentResolver",
+            "()Landroid/content/ContentResolver;",
+            &[],
+        )
+        .and_then(|value| value.l())
+        .map_err(|e| format!("getContentResolver: {e}"))?;
+
+    let uri_string = env
+        .new_string(uri)
+        .map_err(|e| format!("new_string: {e}"))?;
+    let parsed = env
+        .call_static_method(
+            "android/net/Uri",
+            "parse",
+            "(Ljava/lang/String;)Landroid/net/Uri;",
+            &[JValue::Object(&uri_string)],
+        )
+        .and_then(|value| value.l())
+        .map_err(|e| format!("Uri.parse: {e}"))?;
+
+    // OpenableColumns.DISPLAY_NAME es la constante "_display_name".
+    let column = env
+        .new_string("_display_name")
+        .map_err(|e| format!("new_string: {e}"))?;
+    let projection = env
+        .new_object_array(1, "java/lang/String", &column)
+        .map_err(|e| format!("new_object_array: {e}"))?;
+    let null = JObject::null();
+    let cursor = env
+        .call_method(
+            &resolver,
+            "query",
+            "(Landroid/net/Uri;[Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)Landroid/database/Cursor;",
+            &[
+                JValue::Object(&parsed),
+                JValue::Object(&projection),
+                JValue::Object(&null),
+                JValue::Object(&null),
+                JValue::Object(&null),
+            ],
+        )
+        .and_then(|value| value.l())
+        .map_err(|e| format!("query: {e}"))?;
+    if cursor.is_null() {
+        return Ok(None);
+    }
+
+    let name = (|| -> Result<Option<String>, String> {
+        let has_row = env
+            .call_method(&cursor, "moveToFirst", "()Z", &[])
+            .and_then(|value| value.z())
+            .map_err(|e| format!("moveToFirst: {e}"))?;
+        if !has_row {
+            return Ok(None);
+        }
+        let value = env
+            .call_method(&cursor, "getString", "(I)Ljava/lang/String;", &[JValue::Int(0)])
+            .and_then(|value| value.l())
+            .map_err(|e| format!("getString: {e}"))?;
+        if value.is_null() {
+            return Ok(None);
+        }
+        let value = jni::objects::JString::from(value);
+        let name: String = env
+            .get_string(&value)
+            .map_err(|e| format!("get_string: {e}"))?
+            .into();
+        Ok(Some(name))
+    })();
+    // Cerrar el cursor pase lo que pase: uno abierto lo acaba reclamando el
+    // finalizador del JVM, como el descriptor de `open_content_fd`.
+    clear_pending_exception(env);
+    let _ = env.call_method(&cursor, "close", "()V", &[]);
+    name
+}
+
 fn raw_fd(file: &File) -> RawFd {
     use std::os::fd::AsRawFd;
     file.as_raw_fd()

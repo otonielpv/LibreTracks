@@ -2271,6 +2271,83 @@ fn import_never_overwrites_audio_missing_from_the_manifest() {
     );
 }
 
+/// Android names a picked document after its SAF id when the provider gives
+/// nothing better, and Downloads hands out `msf:28` — so a WAV arrived named
+/// "28". Reported from the field as "the file extension is not valid".
+#[test]
+fn staged_import_of_a_wav_named_without_extension_gets_one_from_its_contents() {
+    let session = session_with_song_dir(
+        "library-import-no-extension-demo",
+        build_empty_song("song_1".into(), "Nueva".into()),
+    );
+    let song_dir = session.song_dir.clone().expect("song dir should exist");
+    write_library_manifest(&song_dir, &[]).expect("manifest should save");
+
+    let staged_path = song_dir.join("cache").join("saf-import").join("0").join("28");
+    write_silent_test_wav(&staged_path, 2);
+
+    let imported = super::import_staged_audio_files_to_library(
+        &song_dir,
+        None,
+        &[AudioFilePathImportPayload {
+            file_name: "28".into(),
+            source_path: staged_path.to_string_lossy().into_owned(),
+        }],
+    )
+    .expect("a WAV without extension in its name should import");
+
+    assert!(imported.skipped.is_empty(), "{:?}", imported.skipped);
+    assert_eq!(imported.assets.len(), 1);
+    assert_eq!(imported.assets[0].file_path, "audio/28.wav");
+    assert!(song_dir.join("audio").join("28.wav").is_file());
+}
+
+/// Same name problem on the bytes route (the WebView chooser).
+#[test]
+fn bytes_import_of_a_wav_named_without_extension_gets_one_from_its_contents() {
+    let mut session = session_with_song_dir(
+        "library-import-bytes-no-extension-demo",
+        build_empty_song("song_1".into(), "Nueva".into()),
+    );
+    let song_dir = session.song_dir.clone().expect("song dir should exist");
+    write_library_manifest(&song_dir, &[]).expect("manifest should save");
+
+    let incoming_path = song_dir.join("incoming");
+    write_silent_test_wav(&incoming_path, 2);
+    let incoming_bytes = fs::read(&incoming_path).expect("incoming audio should read");
+
+    let imported = session
+        .import_audio_files_from_bytes(&[AudioFileImportPayload {
+            file_name: "Bajo".into(),
+            bytes: incoming_bytes,
+        }])
+        .expect("a WAV without extension in its name should import");
+
+    assert_eq!(imported.assets[0].file_path, "audio/bajo.wav");
+}
+
+/// A name with no extension AND contents that are not audio still fails with
+/// the same message as before — sniffing must not invent a format.
+#[test]
+fn bytes_import_without_extension_of_unknown_contents_is_still_rejected() {
+    let mut session = session_with_song_dir(
+        "library-import-unknown-no-extension-demo",
+        build_empty_song("song_1".into(), "Nueva".into()),
+    );
+
+    let error = session
+        .import_audio_files_from_bytes(&[AudioFileImportPayload {
+            file_name: "notas".into(),
+            bytes: b"esto no es audio".to_vec(),
+        }])
+        .expect_err("unknown contents without extension must be rejected");
+
+    assert!(
+        error.to_string().contains("imported file extension is invalid"),
+        "{error}"
+    );
+}
+
 fn song_with_folder_hierarchy() -> Song {
     let mut song = demo_song();
     // A parent folder track + a child audio routed to a custom bus, plus the

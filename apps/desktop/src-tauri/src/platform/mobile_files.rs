@@ -122,7 +122,15 @@ pub struct PickedAudioDocument {
 
 impl PickedAudioDocument {
     pub fn new(picked: FilePath) -> Self {
-        let file_name = picked_file_name(&picked);
+        // The provider's own name first: the id-derived one is "28" for a pick
+        // from Downloads, and without its ".wav" the import refused the file.
+        let file_name = match &picked {
+            FilePath::Url(url) => {
+                crate::platform::android_content_uri::query_display_name(url.as_str())
+            }
+            FilePath::Path(_) => None,
+        }
+        .unwrap_or_else(|| picked_file_name(&picked));
         let file_name = if file_name.trim().is_empty() {
             "audio".to_string()
         } else {

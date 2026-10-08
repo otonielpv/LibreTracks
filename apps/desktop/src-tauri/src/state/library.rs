@@ -432,7 +432,9 @@ pub(super) fn library_file_identity(song_dir: &Path, file_path: &str) -> String 
     key.strip_prefix("//?/").map(str::to_string).unwrap_or(key)
 }
 
-fn sanitize_import_file_name(file_name: &str) -> Result<String, DesktopError> {
+/// `header` is the start of the file's contents. It is only consulted when the
+/// name carries no extension — see [`sniff_audio_extension`].
+fn sanitize_import_file_name(file_name: &str, header: &[u8]) -> Result<String, DesktopError> {
     let trimmed = file_name.trim();
     if trimmed.is_empty() {
         return Err(DesktopError::AudioCommand(
@@ -452,10 +454,60 @@ fn sanitize_import_file_name(file_name: &str) -> Result<String, DesktopError> {
         .and_then(|value| value.to_str())
         .map(|value| value.trim().to_ascii_lowercase())
         .filter(|value| !value.is_empty())
+        .or_else(|| sniff_audio_extension(header).map(str::to_string))
         .ok_or_else(|| DesktopError::AudioCommand("imported file extension is invalid".into()))?;
     let sanitized_stem = slugify(stem);
 
     Ok(format!("{}.{}", sanitized_stem, extension))
+}
+
+/// Bytes [`sniff_audio_extension`] needs to recognise every format it knows.
+const AUDIO_SNIFF_BYTES: usize = 12;
+
+/// The extension an audio file should have, judged by its first bytes.
+///
+/// For names that arrive WITHOUT one. On Android the name of a picked document
+/// comes from the picker, and some providers — Downloads (`msf:28`), the media
+/// provider behind "Recents" (`audio:1234`), Drive — only hand back an opaque
+/// id. The file was a perfectly good WAV; refusing it as "extension is invalid"
+/// is what users reported. The extension matters because the copy lands in
+/// `audio/` under this name and the decoders choose by it.
+fn sniff_audio_extension(header: &[u8]) -> Option<&'static str> {
+    let at = |offset: usize, magic: &[u8]| header.get(offset..offset + magic.len()) == Some(magic);
+    if (at(0, b"RIFF") || at(0, b"RF64")) && at(8, b"WAVE") {
+        return Some("wav");
+    }
+    if at(0, b"FORM") && (at(8, b"AIFF") || at(8, b"AIFC")) {
+        return Some("aiff");
+    }
+    if at(0, b"fLaC") {
+        return Some("flac");
+    }
+    if at(0, b"OggS") {
+        return Some("ogg");
+    }
+    if at(4, b"ftyp") {
+        return Some("m4a");
+    }
+    if at(0, b"ID3") {
+        return Some("mp3");
+    }
+    match header {
+        // Frame sync. The layer bits tell them apart: ADTS (AAC) leaves them
+        // at 00, MPEG audio never does.
+        [0xFF, second, ..] if second & 0xF6 == 0xF0 => Some("aac"),
+        [0xFF, second, ..] if second & 0xE0 == 0xE0 && second & 0x06 != 0 => Some("mp3"),
+        _ => None,
+    }
+}
+
+fn read_audio_sniff_header(path: &Path) -> Vec<u8> {
+    use std::io::Read;
+    let mut header = Vec::with_capacity(AUDIO_SNIFF_BYTES);
+    if let Ok(file) = fs::File::open(path) {
+        let _ = file.take(AUDIO_SNIFF_BYTES as u64).read_to_end(&mut header);
+    }
+    header
 }
 
 /// Pick a free `audio/<name>` for a file being brought into the session.
@@ -698,7 +750,7 @@ pub fn import_audio_files_from_bytes_to_library(
             .collect::<HashSet<_>>();
 
         for file in files {
-            let sanitized_file_name = sanitize_import_file_name(&file.file_name)?;
+            let sanitized_file_name = sanitize_import_file_name(&file.file_name, &file.bytes)?;
             let relative_path = allocate_library_audio_path(song_dir, &reserved_paths, None, &sanitized_file_name);
             reserved_paths.insert(relative_path.clone());
 
@@ -812,7 +864,10 @@ pub fn import_staged_audio_files_to_library(
                 continue;
             }
 
-            let sanitized_file_name = sanitize_import_file_name(&file.file_name)?;
+            let sanitized_file_name = sanitize_import_file_name(
+                &file.file_name,
+                &read_audio_sniff_header(&source_path),
+            )?;
             let relative_path = allocate_library_audio_path(song_dir, &reserved_paths, None, &sanitized_file_name);
             reserved_paths.insert(relative_path.clone());
 
@@ -1449,4 +1504,31 @@ pub(crate) fn list_library_assets(
             .then_with(|| left.file_name.cmp(&right.file_name))
     });
     Ok(assets)
+}
+
+#[cfg(test)]
+mod sniff_tests {
+    use super::sniff_audio_extension;
+
+    #[test]
+    fn recognises_the_formats_the_importer_accepts() {
+        assert_eq!(sniff_audio_extension(b"RIFF\x24\x00\x00\x00WAVEfmt "), Some("wav"));
+        assert_eq!(sniff_audio_extension(b"RF64\xff\xff\xff\xffWAVEds64"), Some("wav"));
+        assert_eq!(sniff_audio_extension(b"FORM\x00\x00\x00\x00AIFFCOMM"), Some("aiff"));
+        assert_eq!(sniff_audio_extension(b"fLaC\x00\x00\x00\x22"), Some("flac"));
+        assert_eq!(sniff_audio_extension(b"OggS\x00\x02\x00\x00"), Some("ogg"));
+        assert_eq!(sniff_audio_extension(b"\x00\x00\x00\x20ftypM4A "), Some("m4a"));
+        assert_eq!(sniff_audio_extension(b"ID3\x04\x00\x00"), Some("mp3"));
+        assert_eq!(sniff_audio_extension(&[0xFF, 0xFB, 0x90, 0x64]), Some("mp3"));
+        assert_eq!(sniff_audio_extension(&[0xFF, 0xF1, 0x50, 0x80]), Some("aac"));
+    }
+
+    #[test]
+    fn does_not_guess_on_anything_else() {
+        assert_eq!(sniff_audio_extension(b""), None);
+        assert_eq!(sniff_audio_extension(b"RIFF"), None);
+        assert_eq!(sniff_audio_extension(b"RIFF\x00\x00\x00\x00AVI LIST"), None);
+        assert_eq!(sniff_audio_extension(b"PK\x03\x04"), None);
+        assert_eq!(sniff_audio_extension(b"esto no es audio"), None);
+    }
 }
