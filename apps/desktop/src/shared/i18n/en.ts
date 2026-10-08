@@ -1167,6 +1167,12 @@ const en = {
         hwdec: "Hardware decoding",
         hwdecAuto: "Automatic",
         hwdecOff: "Off",
+        audioOnImport: "When placing a video with sound",
+        audioOnImportAsk: "Ask",
+        audioOnImportExtract: "Always extract the audio to a track",
+        audioOnImportSkip: "Don't extract the audio",
+        audioOnImportHint:
+          "A video never plays its own sound: you only hear it if you extract it to an audio track. This is where you change what you saved with “Remember my choice”.",
         latency: "Delay compensation",
         latencyMs: "Compensation in milliseconds",
         latencyHint:

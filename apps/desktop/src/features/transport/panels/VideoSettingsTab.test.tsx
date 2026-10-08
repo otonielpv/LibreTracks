@@ -123,9 +123,12 @@ describe("VideoSettingsTab", () => {
 
   it("calibration starts with the song's beat grid and ends when the tab closes", async () => {
     available(true);
-    api.getSettings.mockResolvedValueOnce({
-      videoOutput: { enabled: true } as never,
-    });
+    // Read twice: by the tab and by its "sound of a video" field.
+    for (let i = 0; i < 2; i++) {
+      api.getSettings.mockResolvedValueOnce({
+        videoOutput: { enabled: true } as never,
+      });
+    }
     const view = render(<VideoSettingsTab />);
     const calibrate = await screen.findByText("transport.video.settings.calibrate");
     await waitFor(() => expect((calibrate as HTMLButtonElement).disabled).toBe(false));

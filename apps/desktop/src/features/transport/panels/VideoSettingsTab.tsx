@@ -18,6 +18,7 @@ import {
   type VideoOutputSettings,
   type VideoSyncStats,
 } from "../desktopApi";
+import { VideoAudioOnImportField } from "../video/VideoAudioOnImportField";
 import { VideoCalibrationPanel } from "../video/VideoCalibrationPanel";
 import { MAX_OFFSET_MS, MIN_OFFSET_MS } from "../video/videoCalibration";
 import { useVideoStore } from "../video/videoStore";
@@ -360,6 +361,8 @@ export function VideoSettingsTab() {
           {t("transport.video.settings.wizard")}
         </button>
       </div>
+
+      <VideoAudioOnImportField disabled={disabled} />
 
       {isMobileApp ? (
         <section className="lt-video-mobile-help" aria-label={t("transport.video.settings.mobileHelpTitle")}>

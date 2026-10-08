@@ -1192,6 +1192,12 @@ const es = {
         hwdec: "Decodificación por hardware",
         hwdecAuto: "Automática",
         hwdecOff: "Desactivada",
+        audioOnImport: "Al colocar un vídeo con sonido",
+        audioOnImportAsk: "Preguntar",
+        audioOnImportExtract: "Extraer siempre el audio a una pista",
+        audioOnImportSkip: "No extraer el audio",
+        audioOnImportHint:
+          "El vídeo nunca suena por sí mismo: su sonido solo se oye si lo extraes a una pista de audio. Aquí se cambia lo que guardaste con «Recordar mi elección».",
         latency: "Compensación de retardo",
         latencyMs: "Compensación en milisegundos",
         latencyHint:
