@@ -1353,4 +1353,143 @@ describe("user guide screenshots", function () {
     await (await $(".lt-cloud-modal .lt-settings-modal-close")).click();
     await browser.pause(600);
   });
+
+  // Video. LT_GUIDESHOTS_VIDEO = a test video (ffmpeg testsrc with audio);
+  // it is placed over the first song with the same commands the library drag
+  // uses, then the session is saved and reopened like a real one.
+  it("video", async function () {
+    const videoPath = process.env.LT_GUIDESHOTS_VIDEO;
+    if (!videoPath) this.skip();
+    await ensureSession();
+    const song = await AppPage.songView();
+    if (!song) throw new Error("no song loaded");
+    const first = [...song.regions].sort((a, b) => a.startSeconds - b.startSeconds)[0];
+    await browser.execute(
+      async (file: string, at: number, length: number) => {
+        const invoke = (
+          window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string, args?: unknown) => Promise<unknown> } }
+        ).__TAURI_INTERNALS__.invoke;
+        const result = (await invoke("import_video_files", { filePaths: [file], folderPath: null })) as {
+          assets: Array<{ filePath: string; info: { durationSeconds: number } }>;
+          skipped: unknown[];
+        };
+        if (!result.assets.length) throw new Error(`video not imported: ${JSON.stringify(result.skipped)}`);
+        await invoke("place_video_clips", {
+          items: result.assets.map((a) => ({ filePath: a.filePath, durationSeconds: Math.min(length, a.info.durationSeconds) })),
+          timelineStartSeconds: at,
+          targetTrackId: null,
+        });
+        await invoke("save_project");
+      },
+      videoPath as string,
+      first.startSeconds,
+      first.endSeconds - first.startSeconds,
+    );
+    // Opened from another session, like a real "open the project": the video
+    // library and the "this session has video" notice follow a session
+    // CHANGE, so reopening the same one would show neither.
+    const scratch = path.join(os.tmpdir(), "lt-guide-scratch");
+    rmSync(scratch, { recursive: true, force: true });
+    mkdirSync(scratch, { recursive: true });
+    await AppPage.createSession("Vacia", scratch);
+    await browser.pause(2000);
+    await AppPage.reopenSessionUntil(session, (s) => s.tracks.some((t) => t.kind === "video"), 180_000);
+    await browser.pause(4000);
+    if (await rectOf(".lt-video-setup-notice")) {
+      await shot("video-notice", { selector: ".lt-video-setup-notice", margin: 12 });
+      await (await $(await tagByText(".lt-video-setup-notice button", "Ahora no", "notice-no"))).click();
+      await browser.pause(800);
+    } else {
+      console.log("[guideshots] SKIPPED video-notice: not shown");
+    }
+    await AppPage.resetShell();
+    await browser.pause(3000);
+    const loaded = await AppPage.songView();
+    const videoTrack = loaded?.tracks.find((t) => t.kind === "video");
+    const topLevel = loaded?.tracks.filter((t) => !t.parentTrackId && t.kind !== "video") ?? [];
+    if (videoTrack && topLevel.length && loaded?.tracks[0]?.id !== videoTrack.id) {
+      await AppPage.moveTrack({ trackId: videoTrack.id, insertBeforeTrackId: topLevel[0].id, parentTrackId: null });
+      await browser.pause(1500);
+    }
+    // Close enough that the 90 s clip shows its thumbnail strip.
+    await setTimelineView({ cameraX: 0, zoomLevel: 0.25 });
+    await browser.pause(6000);
+
+    // The track and its clip, with the clip's handles showing (hover).
+    const clip = await rectOf(".lt-video-clip-hotspot");
+    if (!clip) throw new Error("no video clip on screen");
+    await browser
+      .action("pointer", { id: "guide-mouse", parameters: { pointerType: "mouse" } })
+      .move({ x: Math.round(clip.x + clip.w * 0.5), y: Math.round(clip.y + clip.h * 0.5) })
+      .perform();
+    await browser.pause(600);
+    await annotatedShot(
+      "video-track",
+      [
+        { selector: ".lt-video-track-header .lt-video-header-name", n: 1 },
+        { selector: ".lt-video-track-header .lt-video-eye", n: 2, badge: "above" },
+        { selector: ".lt-video-track-header .lt-video-solo", n: 3, badge: "above" },
+        { selector: ".lt-video-clip-hotspot", n: 4, badge: "below" },
+        { selector: ".lt-video-trim.is-end", n: 5, badge: "below" },
+        { selector: ".lt-video-fade.is-in", n: 6, badge: "above" },
+      ],
+      { crop: { marks: 40 } },
+    );
+
+    // The clip's own menu.
+    await rightClickAt(clip.x + clip.w * 0.4, clip.y + clip.h * 0.6);
+    await menuShot("menu-video-clip", ".lt-video-clip-hotspot");
+
+    // The library lists videos in their own section.
+    await (await $(tour("side-nav-library"))).click();
+    await browser.pause(1200);
+    const hasSection = await runInPage(() => {
+      const el = document.querySelector(".lt-library-video-section");
+      el?.scrollIntoView({ block: "center" });
+      return Boolean(el);
+    });
+    console.log(`[guideshots] library video section: ${hasSection}`);
+    await browser.pause(600);
+    await shot("library-videos", { selector: ".lt-library-video-section", margin: 12 });
+    await (await $(tour("side-nav-library"))).click();
+    await browser.pause(600);
+
+    // The setup wizard. Choosing the second screen projects a test card on it
+    // for a moment; Cancel at the end keeps the settings as they were.
+    await AppPage.openSettings();
+    await (await AppPage.settingsTab("video")).click();
+    await browser.pause(1000);
+    await (await $(await tagByText(".lt-settings-modal button", "Asistente", "wiz"))).click();
+    await browser.pause(1500);
+    const wizard = ".lt-video-wizard";
+    const wizardButton = async (re: string) => {
+      const ok = await runInPage((pattern: string) => {
+        const b = Array.from(document.querySelectorAll(".lt-video-wizard button")).find((e) =>
+          new RegExp(pattern, "i").test((e.textContent ?? "").trim()),
+        ) as HTMLElement | undefined;
+        b?.click();
+        return Boolean(b);
+      }, re);
+      if (!ok) throw new Error(`wizard: no button /${re}/`);
+      await browser.pause(1800);
+    };
+    await shot("video-wizard-1", { selector: wizard, margin: 12 });
+    await wizardButton("^siguiente$");
+    const cards = await runInPage(() => document.querySelectorAll(".lt-video-wizard-card").length);
+    await runInPage((i: number) => (document.querySelectorAll(".lt-video-wizard-card")[i] as HTMLElement).click(), cards > 1 ? 1 : 0);
+    await browser.pause(2500);
+    for (let i = 2; i <= 6; i++) {
+      const title = await runInPage(() => document.querySelector(".lt-video-wizard h2, .lt-video-wizard h3")?.textContent ?? "");
+      console.log(`[guideshots] wizard step ${i}: ${title}`);
+      await shot(`video-wizard-${i}`, { selector: wizard, margin: 12 });
+      if (/listo/i.test(title)) break;
+      if (/elige la pantalla/i.test(title)) await wizardButton("^siguiente$");
+      else if (/comprueba/i.test(title)) await wizardButton("^sí, la veo$");
+      else if (/sincron/i.test(title)) await wizardButton("^omitir");
+      else await wizardButton("^siguiente$");
+    }
+    await wizardButton("^cancelar$");
+    await browser.keys(["Escape"]);
+    await browser.pause(800);
+  });
 });

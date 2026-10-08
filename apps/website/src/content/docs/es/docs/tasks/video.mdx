@@ -1,0 +1,185 @@
+---
+title: Vídeo en el proyector
+description: "Añade vídeos a tus canciones y proyéctalos sincronizados en una segunda pantalla, un proyector o una TV: pista de vídeo, asistente de pantalla, encaje, pantalla de reposo, calibrar el retardo y el negro de emergencia."
+sidebar:
+  order: 8
+---
+
+import Legend from "../../../../../components/guide/Legend.astro";
+
+LibreTracks puede reproducir **vídeo sincronizado con la música** en una
+segunda pantalla: el proyector de la sala, una TV o un monitor para la banda.
+El vídeo va en una pista propia del timeline, como el audio, y sigue a la
+canción cuando reproduces, saltas a una marca, haces Vamp o cambias el tempo
+con warp.
+
+## Añadir un vídeo
+
+**Arrastra el archivo de vídeo** desde el explorador:
+
+- **al timeline**: se coloca donde lo sueltas, en una pista de vídeo (si no
+  hay ninguna, se crea);
+- **a la Biblioteca**: queda en la sección **Vídeos**. Doble clic, o el `+`,
+  lo pone en el timeline en la posición del cursor.
+
+![Sección Vídeos de la Biblioteca](/guide/desktop/library-videos.png)
+
+Formatos: **MP4, MOV, MKV, WebM, AVI y MPG**. Igual que el audio, el vídeo
+se usa **desde donde está** en tu disco, sin copiarlo.
+
+Si el vídeo **tiene sonido**, LibreTracks te pregunta si quieres **extraerlo
+como pista de audio**: queda en una pista nueva debajo del vídeo, alineada con
+él, y así puedes mandarlo a la salida que quieras y mezclarlo como cualquier
+otra pista. Puedes marcar **Recordar mi elección**.
+
+:::tip[Para que los saltos respondan al momento]
+Un vídeo exportado con pocos fotogramas clave tarda en responder cuando
+saltas a otra parte. Si LibreTracks lo detecta, lo avisa con un icono en la
+Biblioteca. Al exportarlo desde tu editor, usa **un fotograma clave por
+segundo**.
+:::
+
+También puedes crear una pista de vídeo vacía con clic derecho en la zona
+vacía de la lista de pistas → **Añadir pista de vídeo**.
+
+## La pista y el clip de vídeo
+
+![Pista de vídeo con su clip](/guide/desktop/video-track.png)
+
+<Legend>
+
+1. **Nombre** de la pista (clic derecho para renombrarla, cambiar el color o
+   borrarla).
+2. **Ojo**: muestra u oculta esta pista en la salida.
+3. **S** (solo): muestra solo esta pista de vídeo.
+4. El **clip**, con miniaturas del vídeo. Arrástralo para moverlo.
+5. **Bordes** del clip: arrástralos para recortar el principio o el final.
+6. **Tiradores de fundido**, en las esquinas de arriba (aparecen al pasar el
+   ratón): arrástralos para que el vídeo entre o salga fundiendo desde negro.
+
+</Legend>
+
+Si hay **varias pistas de vídeo** y sus clips coinciden en el tiempo, se ve
+el de la pista **de más arriba**. Así puedes poner un fondo largo abajo y
+clips cortos encima.
+
+Clic derecho en un clip:
+
+![Menú de un clip de vídeo](/guide/desktop/menu-video-clip.png)
+
+- **Dividir en el cursor** (`S`) y **Duplicar** (`Ctrl+D`).
+- **Encaje** de este clip: el de la salida, **Ajustar** (bandas negras),
+  **Rellenar** (recorta para llenar la pantalla) o **Estirar**.
+- **Quitar fundidos**, **Color**, **Extraer audio** y **Borrar** (`Supr`).
+
+## Elegir la pantalla: el asistente
+
+Cuando abres una sesión con vídeo y aún no has elegido pantalla (o la que
+elegiste no está conectada), LibreTracks lo avisa:
+
+![Aviso de sesión con vídeo](/guide/desktop/video-notice.png)
+
+**Configurar** abre el asistente (también está en **Configuración → Vídeo →
+Asistente…**). Nada se guarda hasta que pulsas **Listo** al final.
+
+1. **Bienvenida**.
+
+   ![Asistente, paso 1](/guide/desktop/video-wizard-1.png)
+
+2. **Elige la pantalla**. Cada pantalla conectada muestra un número grande:
+   elige la tarjeta con el número que ves en el proyector. La que lleva
+   *donde está LibreTracks* es la del propio ordenador. Si solo tienes una,
+   puedes **usar una ventana** mientras tanto.
+
+   ![Asistente, elegir pantalla](/guide/desktop/video-wizard-2.png)
+
+3. **Comprueba la imagen**: se proyecta una carta de ajuste. Si la ves, **Sí,
+   la veo**; si no, **No, probar otra**.
+
+   ![Asistente, comprobar la imagen](/guide/desktop/video-wizard-3.png)
+
+4. **Encaje y pantalla de reposo**: cómo se adapta el vídeo a la pantalla
+   (**Ajustar** con bandas negras, **Rellenar** recortando o **Estirar**) y
+   qué se ve cuando no hay vídeo (**Negro** o una **imagen** tuya, como el
+   logo de la iglesia o del grupo).
+
+   ![Asistente, encaje y reposo](/guide/desktop/video-wizard-4.png)
+
+5. **Sincronía** (opcional): calibra el retardo del proyector ahora o más
+   tarde (ver abajo).
+
+   ![Asistente, sincronía](/guide/desktop/video-wizard-5.png)
+
+6. **Listo**: resume por dónde saldrá el vídeo.
+
+   ![Asistente, listo](/guide/desktop/video-wizard-6.png)
+
+## Ajustes de vídeo
+
+Todo lo del asistente, y algo más, está en **Configuración → Vídeo**:
+
+![Ajustes de vídeo (1)](/guide/desktop/settings-video-1.png)
+
+- **Salida de vídeo**: enciende o apaga la proyección.
+- **Pantalla**, con **Actualizar** (si acabas de conectar una) e
+  **Identificar pantallas** (muestra el número en cada una).
+- **Modo**: **pantalla completa** o **ventana**. Doble clic en el vídeo pasa
+  de una a otra; la ventana se puede mover y cambiar de tamaño.
+- **Pantalla completa siempre delante**: nada tapa el proyector, ni las
+  notificaciones. Desmárcalo si necesitas poner otra ventana encima.
+
+![Ajustes de vídeo (2)](/guide/desktop/settings-video-2.png)
+
+- **Encaje** y **Pantalla de reposo**, como en el asistente.
+- **Al parar**: qué queda en pantalla cuando paras: el **último fotograma**,
+  la **pantalla de reposo** o **negro**.
+- **Decodificación por hardware**: **Automática** usa la tarjeta gráfica.
+  Desactívala solo si un vídeo se ve mal.
+
+![Ajustes de vídeo (3)](/guide/desktop/settings-video-3.png)
+
+- **Compensación de retardo** (ver abajo).
+- **Carta de ajuste**: proyecta una imagen de prueba para enfocar y encuadrar
+  el proyector.
+- Abajo, unas **estadísticas** de sincronía y fotogramas, útiles si algo va
+  mal.
+
+### Calibrar el retardo
+
+Los proyectores y muchas TV muestran la imagen **un poco tarde** respecto al
+sonido. La **compensación de retardo** lo corrige: un valor positivo adelanta
+la imagen.
+
+Con **Calibrar…**, activa el metrónomo y pulsa Play: la salida muestra un
+**destello blanco en cada pulso**. Mueve el deslizador hasta que destello y
+clic coincidan. O mídelo: toca 10 veces al **ver** el destello y otras 10 al
+**oír** el clic, y LibreTracks te propone el valor. Hazlo **en la sala**, con
+el proyector y el sonido de verdad.
+
+## En directo
+
+- **Negro de emergencia**: la tecla **`B`** pone la proyección en negro al
+  instante, y otra pulsación lo quita. También hay acciones para **fundido a
+  negro**, **mostrar la pantalla de reposo** y **encender o apagar la
+  salida**, a las que puedes asignar teclas en
+  [Configuración → Atajos](/es/docs/interface/settings/) o un control MIDI.
+- El **Remote** tiene un botón **Negro** para hacerlo desde la tablet. Ver
+  [Remote personalizable](/es/docs/remote-control/).
+- En la barra superior, un **indicador** dice por qué pantalla sale el vídeo
+  y avisa si se desconecta («Vídeo: pantalla desconectada») o si está en
+  negro. Si el proyector se desconecta en pleno concierto, la música sigue
+  sonando y el indicador lo avisa.
+
+## Llevar los vídeos a otro equipo
+
+Al [exportar](/es/docs/integration-ecosystem/) una canción o una sesión que
+tiene vídeo, aparece la casilla **Incluir los vídeos en el paquete**, con lo
+que ocupan. Sin ellos el paquete pesa mucho menos, pero tendrás que copiar
+los vídeos aparte y volver a localizarlos al abrir. Al importar un paquete
+con vídeos, LibreTracks pregunta si quieres **importar también los vídeos**
+y comprueba que caben.
+
+En **Android y iPhone/iPad** el vídeo también sale por cable (USB‑C a HDMI, o
+el adaptador Lightning Digital AV). En **Configuración → Vídeo** del móvil
+tienes una guía de cómo conectarlo. Si bloqueas el móvil, el proyector se
+apaga hasta que lo desbloqueas.
