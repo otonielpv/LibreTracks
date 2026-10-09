@@ -58,7 +58,8 @@ cursor.
    no se desafinen. Ver [el botón T](/es/docs/pitch-and-warp/).
 7. **Panorama**: izquierda/derecha. *C* es centro; doble clic para volver
    al centro.
-8. **Medidor** de nivel de la pista.
+8. **Medidor** de nivel de la pista, con una barra por canal: izquierdo y
+   derecho. Ver [abajo](#el-medidor).
 
 </Legend>
 
@@ -66,6 +67,19 @@ Con varias pistas seleccionadas (<kbd>Ctrl</kbd>+clic o <kbd>Mayús</kbd>+clic
 en las cabeceras), tocar cualquiera de estos controles los cambia en todas. El
 volumen y el panorama se mueven en la misma proporción en todas, así que se
 conserva el balance de la mezcla.
+
+### El medidor
+
+![Medidor estéreo de una pista mientras suena](/guide/desktop/track-meter-stereo.png)
+
+El medidor tiene **dos barras**, una por canal, así ves de un vistazo hacia
+dónde va la pista: con el panorama a la izquierda sube más la barra izquierda.
+Si la señal satura, se enciende en rojo la parte de arriba **del canal que
+satura**, y una rayita blanca recuerda el pico más alto durante un momento.
+
+Si pasas la pista a **mono** (clic derecho en la pista › *Sumar a mono*), el
+medidor pasa a **una sola barra**, y vuelve a dos con *Volver a estéreo*. Lo mismo en el mezclador de la
+[Vista Compacta](/es/docs/compact-view/).
 
 Para cambiar el alto de una pista, arrastra su borde inferior. Con
 <kbd>Alt</kbd> cambias el de todas a la vez, y con doble clic vuelve al alto
@@ -100,6 +114,9 @@ Los controles **M**, **S** y volumen de la carpeta afectan a todas sus pistas.
   dos canciones en la posición del cursor.
 - **Cambiar BPM original**: el tempo al que se grabó el audio, que usa el
   [warp](/es/docs/pitch-and-warp/).
+- **Fades de la canción ▸**: fundido de entrada y de salida de la canción, en
+  segundos. También se ajustan arrastrando las esquinas de la canción en la
+  regla. Ver [Fade de entrada y de salida](/es/docs/tasks/songs/#fade-de-entrada-y-de-salida).
 - **Exportar canción**: la guarda como `.ltpkg` para llevarla a otra sesión.
 - **Renderizar audio…**: exporta su mezcla a WAV, entera o pista por pista.
 - **Borrar canción** (<kbd>Supr</kbd>).

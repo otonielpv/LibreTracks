@@ -5,6 +5,7 @@ sidebar:
   order: 2
 ---
 
+import Legend from "../../../../../components/guide/Legend.astro";
 import Clip from "../../../../../components/guide/Clip.astro";
 
 Una sesión de LibreTracks es un **repertorio**: varias canciones seguidas en la
@@ -99,6 +100,39 @@ o usa su menú (clic derecho):
   transponer cambia la velocidad, así que la canción se alarga o se acorta, y
   las siguientes se desplazan para no solaparse.
 - **Cambiar BPM original**: el tempo al que se grabó el audio, que usa el warp.
+- **Fades de la canción ▸**: fundido de entrada y de salida. Ver
+  [abajo](#fade-de-entrada-y-de-salida).
+
+## Fade de entrada y de salida
+
+Cada canción puede **entrar y salir con un fundido** sin tener que ponérselo a
+cada clip. Afecta solo a las pistas: el click y la voz guía suenan a su volumen
+desde el primer compás.
+
+![Esquinas de fade de una canción en la regla](/guide/desktop/song-fade-handles.png)
+
+<Legend>
+
+1. **Fade de entrada**: arrastra la esquina superior izquierda de la canción
+   hacia la derecha. La rampa se dibuja sobre la barra de la canción.
+2. **Fade de salida**: arrastra la esquina superior derecha hacia la izquierda.
+
+</Legend>
+
+Las esquinas se ven al pasar el ratón por la canción, con la canción
+seleccionada o cuando ya tiene un fundido. Si prefieres escribir los segundos,
+usa clic derecho en la canción › **Fades de la canción**:
+
+![Menú «Fades de la canción»](/guide/desktop/menu-song-fades.png)
+
+- El fundido va **por posición**, como el de un clip: si saltas a mitad de la
+  canción suena a volumen completo; si empiezas desde su principio, entra con
+  el fundido.
+- **0** quita el fundido. Ninguno puede pasar del largo de la canción.
+- Viaja con la canción al exportarla (`.ltpkg`) y se oye igual al
+  [renderizar](#exportar-renderizar-y-borrar).
+- Para cortar una canción **en directo** en cualquier momento, usa
+  [Fade out y parar](/es/docs/interface/main-screen/#fade-out-y-parar).
 
 ## Reordenar el repertorio
 
@@ -106,7 +140,9 @@ o usa su menú (clic derecho):
 - En la **Vista Compacta** y en la **Vista Live**, arrastra la canción por su
   **asa** (los seis puntos a su izquierda) a su nuevo puesto. Mientras
   arrastras ves dónde va a caer. Con el asa seleccionada, las flechas del
-  teclado la mueven de una en una. La canción se mueve entera, con su audio,
+  teclado la mueven de una en una. En el móvil, **mantén el dedo** un momento
+  sobre el asa antes de arrastrar (notarás una vibración donde el teléfono la
+  tiene): así un deslizamiento rápido no reordena por error. La canción se mueve entera, con su audio,
   marcas y tempo, y los huecos entre canciones se conservan.
 
 ## Pasar de una canción a otra en directo

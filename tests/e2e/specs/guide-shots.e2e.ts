@@ -374,15 +374,17 @@ describe("user guide screenshots", function () {
       [
         { selector: transportButton(1), n: 1, badge: "below", pad: 1 },
         { selector: transportButton(2), n: 2, badge: "below", pad: 1 },
+        // 3 is «Fade out y parar», between Stop and Play since 2026-10.
         { selector: transportButton(3), n: 3, badge: "below", pad: 1 },
         { selector: transportButton(4), n: 4, badge: "below", pad: 1 },
-        { selector: split("topbar-metronome", 1), n: 5, badge: "below", pad: 1 },
-        { selector: split("topbar-metronome", 2), n: 6, badge: "below", pad: 1 },
-        { selector: split("topbar-voice-guide", 1), n: 7, badge: "below", pad: 1 },
-        { selector: split("topbar-voice-guide", 2), n: 8, badge: "below", pad: 1 },
-        { selector: split("topbar-pads", 1), n: 9, badge: "below", pad: 1 },
-        { selector: split("topbar-pads", 2), n: 10, badge: "below", pad: 1 },
-        { selector: ".lt-transport-buttons > button:last-of-type", n: 11, badge: "below" },
+        { selector: transportButton(5), n: 5, badge: "below", pad: 1 },
+        { selector: split("topbar-metronome", 1), n: 6, badge: "below", pad: 1 },
+        { selector: split("topbar-metronome", 2), n: 7, badge: "below", pad: 1 },
+        { selector: split("topbar-voice-guide", 1), n: 8, badge: "below", pad: 1 },
+        { selector: split("topbar-voice-guide", 2), n: 9, badge: "below", pad: 1 },
+        { selector: split("topbar-pads", 1), n: 10, badge: "below", pad: 1 },
+        { selector: split("topbar-pads", 2), n: 11, badge: "below", pad: 1 },
+        { selector: ".lt-transport-buttons > button:last-of-type", n: 12, badge: "below" },
       ],
       { crop: { marks: 14 } },
     );
@@ -1283,6 +1285,159 @@ describe("user guide screenshots", function () {
     ]);
     await (await $(viewBtn(1))).click();
     await browser.pause(1200);
+  });
+
+  // Novedades de 2026-10: biblioteca de carpetas, organizar por canción,
+  // fades de canción, «Fade out y parar», vúmetros estéreo y las marcas
+  // nuevas. Lanzar solo esto con --mochaOpts.grep "novedades".
+  it("novedades: library, song fades, fade-out, meters and markers", async () => {
+    await ensureSession();
+    await AppPage.resetShell();
+
+    // The folder library shows the places saved in the app settings — the
+    // REAL ones of whoever runs this. Show only a folder of the session copy
+    // and put the user's settings back at the end.
+    const invoke = (cmd: string, args: Record<string, unknown> = {}) =>
+      browser.executeAsync(
+        (c: string, a: Record<string, unknown>, done: (v: unknown) => void) => {
+          const w = window as unknown as {
+            __TAURI_INTERNALS__: { invoke: (c: string, a: unknown) => Promise<unknown> };
+          };
+          w.__TAURI_INTERNALS__.invoke(c, a).then(done, (e) => done({ __error: String(e) }));
+        },
+        cmd,
+        args,
+      );
+    const original = (await invoke("get_settings")) as Record<string, unknown>;
+    try {
+      await invoke("save_settings", {
+        settings: { ...original, libraryMode: "folders", libraryPlaces: [path.join(workDir, "audio")] },
+      });
+      await browser.pause(800);
+      await AppPage.openLibrary();
+      await browser.pause(1200);
+      const place = await tag(".lt-folder-library-place-toggle", "place0");
+      await (await $(place)).click();
+      await browser.pause(1200);
+      await annotatedShot(
+        "library-folders",
+        [
+          { selector: ".lt-folder-library-add", n: 1 },
+          { selector: ".lt-folder-library-search", n: 2 },
+          { selector: ".lt-folder-library-place > .lt-folder-library-row", n: 3, nth: 0 },
+          { selector: ".lt-folder-library-session-toggle", n: 4 },
+        ],
+        { crop: { marks: 24 } },
+      );
+      // «Organizar por canción» only shows with unfiled audio, and the shots
+      // session has every asset in a folder: take one out the way a user does
+      // (this is the work copy).
+      if (!(await rectOf(".lt-library-organize-button"))) {
+        // Low in the panel the click would land past the window's edge.
+        const asset = await tag(".lt-library-asset-list [aria-label]", "asset-to-root");
+        await runInPage(() => document.querySelector("[data-guide=asset-to-root]")?.scrollIntoView({ block: "center" }));
+        await browser.pause(400);
+        await rightClick(asset);
+        const toRoot = await tagByText(".lt-context-menu button", L("Mover a la ra"), "menu-root").catch(() => null);
+        if (toRoot) {
+          await (await $(toRoot)).click();
+          await browser.pause(1200);
+        } else {
+          await browser.keys(["Escape"]);
+        }
+      }
+      if (await rectOf(".lt-library-organize-button")) {
+        await runInPage(() =>
+          document.querySelector(".lt-library-root-group > summary")?.scrollIntoView({ block: "center" }),
+        );
+        await browser.pause(500);
+        await annotatedShot(
+          "library-organize",
+          [
+            { selector: ".lt-library-root-group > summary", pad: 2 },
+            { selector: ".lt-library-organize-button", n: 1, pad: 2 },
+          ],
+          { style: "spotlight", crop: { marks: 40 } },
+        );
+      } else {
+        console.log("[guideshots] SKIPPED library-organize: no unfiled audio in the session");
+      }
+      await AppPage.resetShell();
+    } finally {
+      await invoke("save_settings", { settings: original });
+    }
+
+    // Song fades: give the first song a fade in and out, then show its band
+    // with the corner handles (they show on the selected song).
+    const first = [...((await AppPage.songView())?.regions ?? [])].sort((a, b) => a.startSeconds - b.startSeconds)[0];
+    if (!first) throw new Error("no song");
+    const length = first.endSeconds - first.startSeconds;
+    await invoke("update_song_region_fades", {
+      regionId: first.id,
+      // Long enough to read at the width of the docs column.
+      fadeInSeconds: length / 5,
+      fadeOutSeconds: length / 4,
+    });
+    await browser.pause(1500);
+    await setTimelineView({ zoomLevel: Math.max(0.05, 1000 / (length * 18)), cameraX: first.startSeconds * (1000 / (length * 18)) * 18 });
+    await browser.pause(800);
+    const band = await tag(".lt-region-hotspot", "song0");
+    await (await $(band)).click();
+    await browser.pause(800);
+    await annotatedShot(
+      "song-fade-handles",
+      [
+        { selector: `${band} .lt-song-fade-handle.is-in`, n: 1, badge: "below", pad: 4 },
+        { selector: `${band} .lt-song-fade-handle.is-out`, n: 2, badge: "below", pad: 4 },
+      ],
+      { crop: { selector: band, margin: 14 } },
+    );
+    await rightClick(band, { fx: 0.5 });
+    await (await $(await tagByText(".lt-context-menu button", L("Fades de la canción"), "menu-fades"))).click();
+    await browser.pause(500);
+    await menuShot("menu-song-fades", band);
+
+    // The stereo meters need playback: a minute into the first song, where
+    // the band plays, and a track whose meter is really moving.
+    await invoke("seek_transport", { positionSeconds: first.startSeconds + Math.min(60, length / 3) });
+    await (await $(`.lt-transport-buttons button[aria-label="${L("Reproducir")}"]`)).click();
+    await browser.pause(5000);
+    await runInPage(() => {
+      document.querySelectorAll("[data-guide=header0]").forEach((el) => el.removeAttribute("data-guide"));
+      const live = Array.from(document.querySelectorAll<HTMLElement>(".lt-track-header")).find((header) => {
+        const bars = Array.from(header.querySelectorAll<HTMLElement>(".lt-track-meter-bar"));
+        return bars.length === 2 && bars.every((bar) => Number(bar.style.opacity || "0") > 0.5);
+      });
+      live?.setAttribute("data-guide", "header0");
+    });
+    const header = '[data-guide="header0"]';
+    if (!(await rectOf(header))) throw new Error("no track meter moving");
+    await annotatedShot(
+      "track-meter-stereo",
+      [{ selector: `${header} .lt-track-meter`, n: 1, pad: 3 }],
+      { crop: { selector: header, margin: 12 } },
+    );
+    await (await $(`.lt-transport-buttons button[aria-label="${L("Detener")}"]`)).click();
+    await browser.pause(800);
+
+    // Marker kinds: the new sections (instrument solos) and cues (tempo).
+    await setTimelineView({ zoomLevel: 1, cameraX: 0 });
+    const ruler = await rectOf(tour("timeline-ruler"));
+    if (!ruler) throw new Error("no ruler");
+    for (const [group, name] of [
+      [L("Secciones"), "marker-kinds-sections"],
+      [L("Avisos"), "marker-kinds-cues"],
+    ] as const) {
+      await rightClickAt(ruler.x + 330, ruler.y + 40);
+      await (await $(await tagByText(".lt-context-menu button", L("Crear Marca"), "menu-item"))).click();
+      await browser.pause(600);
+      await (await $(await tagByText(".lt-context-menu button", group, "menu-group"))).click();
+      await browser.pause(600);
+      await menuShot(name, null);
+      await browser.keys(["Escape"]);
+      await browser.pause(300);
+    }
+    await AppPage.resetShell();
   });
 
   it("export, render and cloud", async () => {

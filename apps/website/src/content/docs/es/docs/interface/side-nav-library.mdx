@@ -14,8 +14,8 @@ con o sin sesión abierta.
 
 <Legend>
 
-1. **Biblioteca**: abre o cierra el panel con el audio de la sesión. Ver
-   [abajo](#la-biblioteca).
+1. **Biblioteca**: abre o cierra el panel con tus carpetas y el audio de la
+   sesión. Ver [abajo](#la-biblioteca).
 2. **Remote**: muestra el código QR y la dirección para controlar LibreTracks
    desde el móvil o la tablet. Ver [abajo](#remote).
 3. **Configuración**: audio, interfaz, vídeo, atajos, MIDI y diagnóstico. Ver
@@ -26,9 +26,47 @@ con o sin sesión abierta.
 
 ## La Biblioteca
 
-La Biblioteca guarda todo el audio que has traído a la sesión, se use o no en
-la línea de tiempo. Desde aquí lo importas, lo ordenas en carpetas y lo
-arrastras a las pistas.
+La Biblioteca tiene dos partes: arriba, **tus carpetas del disco**, para
+encontrar el audio y llevarlo a la línea de tiempo; debajo, **En esta sesión**,
+con todo el audio que ya has traído a la sesión.
+
+### Tus carpetas
+
+![Biblioteca de carpetas](/guide/desktop/library-folders.png)
+
+<Legend>
+
+1. **Añadir carpeta**: elige una carpeta de tu disco (la de tus multitracks,
+   la de los samples…). Se queda guardada para todas tus sesiones.
+2. **Buscar**: filtra por nombre lo que tengas desplegado, sin importar
+   mayúsculas ni tildes (*bateria* encuentra *Batería*).
+3. **Una carpeta añadida**. Clic para desplegarla. Al pasar el ratón aparecen
+   **Actualizar** (vuelve a leerla, si has añadido archivos) y la **X**, que la
+   quita de la Biblioteca sin borrar nada del disco.
+4. **En esta sesión**: el audio que ya está en la sesión. Ver
+   [abajo](#en-esta-sesión).
+
+</Legend>
+
+- **Arrastra un audio** a la línea de tiempo para usarlo: se importa y se
+  coloca donde lo sueltes. Con <kbd>Ctrl</kbd>+clic eliges varios y los
+  arrastras juntos.
+- **Arrastra una carpeta** a la línea de tiempo y se crea una canción con su
+  nombre, con cada audio en su pista. Ver
+  [Una carpeta entera, como canción](/es/docs/tasks/library/#una-carpeta-entera-como-canción).
+- Las carpetas se leen **al desplegarlas**, de una en una, así que da igual lo
+  grande que sea el disco.
+
+Si prefieres la Biblioteca de antes, con solo el audio de la sesión, activa
+**Usar la biblioteca clásica** en
+[Configuración › General](/es/docs/interface/settings/#general).
+
+### En esta sesión
+
+Aquí está todo el audio que has traído a la sesión, se use o no en la línea de
+tiempo. Desde aquí lo importas, lo ordenas en carpetas virtuales y lo
+arrastras a las pistas. Clic en **En esta sesión** para plegarla o
+desplegarla.
 
 ![Panel de la Biblioteca](/guide/desktop/library-panel.png)
 
@@ -55,6 +93,20 @@ Para seleccionar varios archivos usa <kbd>Ctrl</kbd>+clic o
 selección de la Biblioteca. Importar no copia el audio (la sesión lo usa desde
 donde está) y quitarlo de la Biblioteca **no borra tu archivo original**. Más
 detalle en [Biblioteca y audio](/es/docs/tasks/library/).
+
+### Organizar por canción
+
+![Botón «Organizar por canción»](/guide/desktop/library-organize.png)
+
+El botón con la varita de **Sin carpeta** (1) ordena de una vez el audio suelto:
+crea **una carpeta por canción**, con su nombre, y mete en ella los audios que
+esa canción usa en la línea de tiempo.
+
+- Si la carpeta ya existe, la reutiliza.
+- El audio que no se usa en ninguna canción, o que usan varias (un click
+  compartido, por ejemplo), se queda en *Sin carpeta*, y el aviso te dice
+  cuántos.
+- Solo aparece cuando hay audio en *Sin carpeta*.
 
 ### Clic derecho en un archivo
 

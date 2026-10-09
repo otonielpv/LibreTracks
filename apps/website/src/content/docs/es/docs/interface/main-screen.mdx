@@ -75,19 +75,21 @@ el BPM o de usar *Tap*.
    va a la última.
 2. **Detener** (Mayús+Espacio): para la reproducción y devuelve el cursor al
    principio de la sesión.
-3. **Reproducir** (Espacio) desde la posición del cursor.
-4. **Pausar** (Espacio): para la reproducción y deja el cursor donde está, para
+3. **Fade out y parar**: apaga la canción que suena con un fundido y después
+   para. Ver [abajo](#fade-out-y-parar).
+4. **Reproducir** (Espacio) desde la posición del cursor.
+5. **Pausar** (Espacio): para la reproducción y deja el cursor donde está, para
    seguir desde ahí.
-5. **Click**: enciende o apaga el metrónomo.
-6. **Ajustes del metrónomo**: salida, volumen, sonidos, acento y subdivisión.
+6. **Click**: enciende o apaga el metrónomo.
+7. **Ajustes del metrónomo**: salida, volumen, sonidos, acento y subdivisión.
    Ver [Salidas de audio y metrónomo](/es/docs/audio-routing-metronome/).
-7. **Guía**: enciende o apaga la voz guía, que anuncia cada sección antes de
+8. **Guía**: enciende o apaga la voz guía, que anuncia cada sección antes de
    que llegue.
-8. **Ajustes de la voz guía**. Ver [Voz guía](/es/docs/voice-guide/).
-9. **Pads**: enciende o apaga el pad de ambiente.
-10. **Ajustes de los pads**: tonalidad, volumen, fundidos y pads propios. Ver
+9. **Ajustes de la voz guía**. Ver [Voz guía](/es/docs/voice-guide/).
+10. **Pads**: enciende o apaga el pad de ambiente.
+11. **Ajustes de los pads**: tonalidad, volumen, fundidos y pads propios. Ver
     [Pads de ambiente](/es/docs/ambient-pads/).
-11. **Siguiente**: salta a la siguiente canción de la sesión. El momento del
+12. **Siguiente**: salta a la siguiente canción de la sesión. El momento del
     salto (inmediato, al final de la canción, tras unos compases…) lo decide el
     ajuste *Salto de canción* de la barra de herramientas. Desde la última
     canción vuelve a la primera.
@@ -102,6 +104,26 @@ tener que ir a Configuración:
   poster="/guide/desktop/metronome-settings.webp"
   caption="La flecha junto a «Click» abre los ajustes del metrónomo."
 />
+
+### Fade out y parar
+
+Para cortar una canción en directo sin un corte seco. Mientras suena, pulsa
+**Fade out y parar**: la canción se apaga poco a poco y, al terminar el
+fundido, el transporte se para. El botón se queda en **ámbar** mientras dura el
+fundido.
+
+- **Pulsarlo otra vez** durante el fundido para en seco: es la salida de
+  emergencia.
+- Solo se apagan las **pistas**. El click y la voz guía siguen a su volumen
+  hasta que se para.
+- Si pulsas **Detener** o **Pausar** durante el fundido, se cancela; al volver
+  a reproducir, la canción suena a su volumen normal.
+- La duración se ajusta en
+  [Configuración › General](/es/docs/interface/settings/#general) (5 segundos
+  por defecto).
+- También se puede disparar con un **atajo de teclado** (sin asignar de serie:
+  ponle uno en Configuración › Atajos), con un **pedal MIDI** (MIDI learn) y
+  desde el [Remote](/es/docs/remote-control/).
 
 ## Lecturas y medidor de recursos
 

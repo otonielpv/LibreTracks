@@ -78,8 +78,11 @@ Todos se pueden cambiar en **Configuración › Atajos** (ver
 | <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>-</kbd> / <kbd>Ctrl</kbd>+<kbd>0</kbd> | Agrandar, reducir o restablecer la interfaz |
 | <kbd>B</kbd> | Vídeo: negro inmediato |
 
-Las acciones de vídeo *fundido a negro*, *pantalla de reposo* y *activar
-salida* no tienen tecla de fábrica; asígnalas tú si las usas.
+**Fade out y parar** (apagar la canción con un fundido y parar; ver
+[Fade out y parar](/es/docs/interface/main-screen/#fade-out-y-parar)) y las
+acciones de vídeo *fundido a negro*, *pantalla de reposo* y *activar salida*
+no tienen tecla de fábrica, para que no se disparen sin querer en directo;
+asígnalas tú si las usas.
 
 Si programas el salto equivocado, pulsa <kbd>Esc</kbd> enseguida.
 
