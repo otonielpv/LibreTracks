@@ -268,7 +268,9 @@
 .lt-live-cue-grid {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  /* As many columns as fit in the markers column: one beside the lyrics on a
+     narrow screen, two or three with the lyrics hidden or on a wide one. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
   /* Keep the matrix geometry stable when AVISO/AHORA/countdown lines change.
      Compact layouts restore automatic rows below so content can still grow. */
   grid-auto-rows: 3.8rem;
@@ -781,6 +783,7 @@
   }
 
   .lt-live-cue-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 10.5rem), 1fr));
     grid-auto-rows: auto;
     gap: 0.22rem;
     padding: 0.12rem 0.25rem 0.25rem;
