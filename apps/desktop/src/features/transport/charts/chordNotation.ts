@@ -112,3 +112,33 @@ export function transposeChord(chord: string, semitones: number, flats = false):
   }
   return `${open}${result}${close}`;
 }
+
+const NOTE_RE = /[A-G](?:##|bb|#|b|♯|♭)?/g;
+
+/**
+ * A line of melody notes as sheets write them — "DC#-A-DC#-A//B",
+ * "B - B - C# - D" — split into its groups ("D C#", "A"…). A `//` (or `|`)
+ * ends a phrase and comes back as a `"‖"` group. `null` if the line is
+ * anything else: tablature has fret numbers, lyrics have words.
+ */
+export function parseNoteRun(text: string): string[][] | null {
+  if (/\d/.test(text) || !/[-/|]/.test(text)) return null;
+  const groups: string[][] = [];
+  for (const piece of text.trim().split(/(\/\/+|\|+)|[\s-]+/)) {
+    if (!piece) continue;
+    if (/^(?:\/\/+|\|+)$/.test(piece)) {
+      groups.push(["‖"]);
+      continue;
+    }
+    if (!/^(?:[A-G](?:##|bb|#|b|♯|♭)?)+$/.test(piece)) return null;
+    groups.push(piece.match(NOTE_RE) ?? []);
+  }
+  return groups.filter((group) => group[0] !== "‖").length >= 3 ? groups : null;
+}
+
+/** A note line moved by `semitones`, separators untouched. Anything that is
+ * not a note line comes back as it was. */
+export function transposeNoteRun(text: string, semitones: number, flats = false): string {
+  if (!semitones || !parseNoteRun(text)) return text;
+  return text.replace(NOTE_RE, (note) => transposeChord(note, semitones, flats));
+}

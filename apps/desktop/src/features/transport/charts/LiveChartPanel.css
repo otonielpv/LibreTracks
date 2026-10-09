@@ -328,6 +328,24 @@
   font: italic 500 0.85em/1.3 Inter, sans-serif;
 }
 
+/* Melody notes ("DC#-A-DC#//B"): drawn like the row of chords above them,
+   one group per beat, a double bar where the sheet ends a phrase. */
+.lt-chart-notes {
+  gap: 0.2em 0.9em;
+}
+
+.lt-chart-notes .lt-chart-chord {
+  min-height: 0;
+  padding-right: 0;
+  font-size: 0.95em;
+  line-height: 1.4;
+}
+
+.lt-chart-notes-bar {
+  color: #5d6b67;
+  font: 700 1em/1.4 Inter, sans-serif;
+}
+
 /* Tablature and note lines: character for character, never wrapped. */
 .lt-chart-tab {
   margin: 0;

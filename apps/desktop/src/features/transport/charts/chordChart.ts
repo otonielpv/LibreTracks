@@ -1,6 +1,6 @@
 import type { MarkerKind } from "@libretracks/shared/models";
 
-import { transposeChord } from "./chordNotation";
+import { transposeChord, transposeNoteRun } from "./chordNotation";
 
 /**
  * A song's lyrics and chords, as LibreTracks understands them.
@@ -15,8 +15,8 @@ export type ChartSegment = { chord: string | null; text: string };
 export type ChartLine =
   | { kind: "lyrics"; segments: ChartSegment[] }
   | { kind: "comment"; text: string }
-  /** Kept character for character in a fixed-width font: guitar tablature,
-   * melody notes ("D-C#-A"), chord grids. Never transposed. */
+  /** Kept character for character: guitar tablature, chord grids, melody
+   * notes ("D-C#-A"). Only melody notes are transposed (and drawn as notes). */
   | { kind: "tab"; text: string };
 
 export type ChartSection = {
@@ -251,7 +251,9 @@ export function transposeChart(doc: ChartDoc, semitones: number, flats = false):
                 chord: segment.chord ? transposeChord(segment.chord, semitones, flats) : null,
               })),
             }
-          : line,
+          : line.kind === "tab"
+            ? { kind: "tab" as const, text: transposeNoteRun(line.text, semitones, flats) }
+            : line,
       ),
     })),
   };

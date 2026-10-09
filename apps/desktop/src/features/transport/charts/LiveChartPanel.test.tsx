@@ -166,6 +166,17 @@ describe("LiveChartPanel", () => {
     expect(chords.slice(0, 2)).toEqual(["D", "G"]);
   });
 
+  it("draws a line of melody notes as notes, in the song's key", () => {
+    const notes: SongChart = {
+      text: ["{section: Intro}", "{start_of_tab}", "DC#-A-DC#//B", "{end_of_tab}"].join("\n"),
+      links: [{ markerId: "verse", section: 0 }],
+    };
+    const { container } = renderPanel(region(notes, 2), { current: 0 });
+    const groups = [...container.querySelectorAll(".lt-chart-notes > span")].map((node) => node.textContent);
+    expect(groups).toEqual(["E D#", "B", "E D#", "‖", "C#"]);
+    expect(container.querySelector("pre.lt-chart-tab")).toBeNull();
+  });
+
   it("hides the chords for singers who only want the words", () => {
     const { container } = renderPanel(region(linked), { current: 0 });
     fireEvent.click(screen.getByRole("button", { name: "liveChart.showChords" }));

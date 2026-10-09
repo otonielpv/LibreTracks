@@ -20,7 +20,7 @@ import {
 
 import { ChartEditorModal } from "./ChartEditorModal";
 import { parseChordPro, transposeChart, type ChartLine } from "./chordChart";
-import { keyPrefersFlats } from "./chordNotation";
+import { keyPrefersFlats, parseNoteRun } from "./chordNotation";
 import {
   applyLineRecording,
   autoLinkChart,
@@ -90,6 +90,20 @@ function ChartLineView({
     );
   }
   if (line.kind === "tab") {
+    const notes = parseNoteRun(line.text);
+    if (notes) {
+      return (
+        <p className={`lt-chart-line lt-chart-notes is-${state}`} data-line-key={lineKey}>
+          {notes.map((group, index) =>
+            group[0] === "‖" ? (
+              <span key={index} className="lt-chart-notes-bar" aria-hidden="true">‖</span>
+            ) : (
+              <span key={index} className="lt-chart-chord">{group.join(" ")}</span>
+            ),
+          )}
+        </p>
+      );
+    }
     return (
       <pre className={`lt-chart-tab is-${state}`} data-line-key={lineKey}>
         {line.text}

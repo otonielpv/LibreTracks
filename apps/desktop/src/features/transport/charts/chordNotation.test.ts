@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isChord, isChordLineFiller, keyPrefersFlats, transposeChord } from "./chordNotation";
+import { isChord, isChordLineFiller, keyPrefersFlats, parseNoteRun, transposeChord, transposeNoteRun } from "./chordNotation";
 
 describe("isChord", () => {
   it.each([
@@ -59,5 +59,23 @@ describe("transposeChord", () => {
     expect(keyPrefersFlats("Dm")).toBe(true);
     expect(keyPrefersFlats("G")).toBe(false);
     expect(keyPrefersFlats(null)).toBe(false);
+  });
+});
+
+describe("melody note lines", () => {
+  it("splits a run of notes into groups and phrase bars", () => {
+    expect(parseNoteRun("DC#-A-DC#-A//B")).toEqual([["D", "C#"], ["A"], ["D", "C#"], ["A"], ["‖"], ["B"]]);
+    expect(parseNoteRun("B - B - C# - D")).toEqual([["B"], ["B"], ["C#"], ["D"]]);
+  });
+
+  it("is not tablature, lyrics or a lone chord", () => {
+    expect(parseNoteRun("G--12-12--")).toBeNull();
+    expect(parseNoteRun("Eres tú mi Jesús")).toBeNull();
+    expect(parseNoteRun("C-G")).toBeNull();
+  });
+
+  it("transposes the notes and keeps the separators", () => {
+    expect(transposeNoteRun("DC#-A-DC#//B", 2)).toBe("ED#-B-ED#//C#");
+    expect(transposeNoteRun("E--3--", 2)).toBe("E--3--");
   });
 });
