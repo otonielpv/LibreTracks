@@ -97,6 +97,7 @@ type SettingsPanelProps = {
     value: AppSettings["timelinePlayheadFollowMode"],
   ) => void;
   onPauseAtSongEndChange: (value: boolean) => void;
+  onFadeOutStopSecondsChange: (value: number) => void;
   onImportMergeMatchingTracksChange: (value: boolean) => void;
   onReferenceImportedAudioChange: (value: boolean) => void;
   onAutoColorNewTracksChange: (value: boolean) => void;
@@ -165,6 +166,7 @@ export function SettingsPanel({
   onTimelineNavigationSchemeChange,
   onTimelinePlayheadFollowModeChange,
   onPauseAtSongEndChange,
+  onFadeOutStopSecondsChange,
   onImportMergeMatchingTracksChange,
   onReferenceImportedAudioChange,
   onAutoColorNewTracksChange,
@@ -759,6 +761,27 @@ export function SettingsPanel({
                           })}
                         </small>
                       </span>
+                    </label>
+
+                    <label className="lt-settings-field">
+                      <span className="lt-settings-field-label">
+                        {t("transport.settingsModal.fadeOutStopSeconds")}
+                      </span>
+                      <input
+                        type="number"
+                        min={0.1}
+                        max={30}
+                        step={0.5}
+                        value={appSettings.fadeOutStopSeconds}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) => {
+                          const seconds = Number(event.target.value);
+                          if (Number.isFinite(seconds) && seconds > 0) {
+                            onFadeOutStopSecondsChange(seconds);
+                          }
+                        }}
+                      />
+                      <small>{t("transport.settingsModal.fadeOutStopSecondsHint")}</small>
                     </label>
 
                     <label className="lt-settings-toggle">

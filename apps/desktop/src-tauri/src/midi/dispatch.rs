@@ -203,6 +203,13 @@ fn dispatch_midi_action(
             emit_transport_lifecycle_event(app, "stop", &snapshot);
             snapshot
         }
+        "action:fade_out_stop" => {
+            let snapshot = session
+                .fade_out_and_stop(settings.fade_out_stop_seconds, &state.audio)
+                .map_err(|error| error.to_string())?;
+            emit_transport_lifecycle_event(app, "sync", &snapshot);
+            snapshot
+        }
         "action:create_song" => {
             let Some(snapshot) = session
                 .create_song(app, &state.audio)

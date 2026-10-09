@@ -1685,6 +1685,7 @@ function TransportControlButtons() {
       <button className="pill-button" onClick={() => sendCommand({ cmd: "stop" })}>
         {STRINGS.stop}
       </button>
+      <FadeStopPill />
       {/* Keep Click + Voice guide grouped while giving each a full action slot. */}
       <div className="pill-button-split">
         <button
@@ -1738,6 +1739,27 @@ function StopButtonWidget() {
       <button className="pill-button" onClick={() => sendCommand({ cmd: "stop" })}>
         {STRINGS.stop}
       </button>
+    </div>
+  );
+}
+/** «Fade out y parar»: the desktop fades the song out and stops; pressing it
+ * again during the fade stops at once. Lit while the fade runs. */
+function FadeStopPill() {
+  const fading = useRemoteSyncStore((state) => state.snapshot?.fadingToStop === true);
+  return (
+    <button
+      className={`pill-button ${fading ? "is-active" : ""}`}
+      aria-pressed={fading}
+      onClick={() => sendCommand({ cmd: "fadeOutStop" })}
+    >
+      {STRINGS.fadeStop}
+    </button>
+  );
+}
+function FadeStopButtonWidget() {
+  return (
+    <div className="transport-controls transport-controls-inline transport-controls-solo">
+      <FadeStopPill />
     </div>
   );
 }
@@ -3948,6 +3970,7 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   playButton: { labelKey: "play", Component: PlayButtonWidget, defaultW: 4, defaultH: 4 },
   pauseButton: { labelKey: "pause", Component: PauseButtonWidget, defaultW: 4, defaultH: 4 },
   stopButton: { labelKey: "stop", Component: StopButtonWidget, defaultW: 4, defaultH: 4 },
+  fadeStopButton: { labelKey: "fadeStop", Component: FadeStopButtonWidget, defaultW: 4, defaultH: 4 },
   clickButton: { labelKey: "click", Component: ClickButtonWidget, defaultW: 4, defaultH: 4 },
   guideButton: { labelKey: "guide", Component: GuideButtonWidget, defaultW: 4, defaultH: 4 },
   videoBlackButton: { labelKey: "videoBlack", Component: VideoBlackButtonWidget, defaultW: 6, defaultH: 4 },
@@ -3997,6 +4020,7 @@ const WIDGET_CATEGORY: Record<WidgetType, WidgetCategory> = {
   playButton: "transport",
   pauseButton: "transport",
   stopButton: "transport",
+  fadeStopButton: "transport",
   clickButton: "transport",
   guideButton: "transport",
   videoBlackButton: "transport",
@@ -4070,7 +4094,7 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
     case "readoutSignature": case "readoutSong": case "readoutSession":
       return { w: 12, h: 5 };
     case "transportButtons": return { w: 24, h: 6 };
-    case "playButton": case "pauseButton": case "stopButton":
+    case "playButton": case "pauseButton": case "stopButton": case "fadeStopButton":
     case "clickButton": case "guideButton": case "videoBlackButton":
       return { w: 8, h: 5 };
     case "timeline": return { w: 24, h: 4 };

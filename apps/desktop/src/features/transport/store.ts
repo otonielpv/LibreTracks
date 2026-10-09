@@ -150,6 +150,7 @@ function shouldPublishPlaybackSnapshot(
     current.playbackState !== next.playbackState ||
     current.projectRevision !== next.projectRevision ||
     current.mixRevision !== next.mixRevision ||
+    current.fadingToStop !== next.fadingToStop ||
     current.songDir !== next.songDir ||
     current.songFilePath !== next.songFilePath ||
     current.isNativeRuntime !== next.isNativeRuntime ||

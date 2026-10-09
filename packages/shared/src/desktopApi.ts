@@ -1467,6 +1467,15 @@ export async function stopTransport(): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("stop_transport");
 }
 
+/**
+ * «Fade out y parar»: fade the playing song out over the configured
+ * `fadeOutStopSeconds`, then stop. Calling it again during the fade stops at
+ * once. A no-op unless playing.
+ */
+export async function fadeOutAndStop(): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("fade_out_and_stop");
+}
+
 export async function seekTransport(positionSeconds: number): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("seek_transport", { positionSeconds });
 }

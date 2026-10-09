@@ -538,6 +538,13 @@ html.lt-ios body {
   font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24;
 }
 
+/* «Fade out y parar» mientras el fade corre: ambar, el mismo aviso que la
+   vista Live. Otra pulsacion para en seco. */
+.lt-transport-buttons button.lt-fade-stop.is-active {
+  background: rgb(244 201 93 / 0.16);
+  color: #f4c95d;
+}
+
 .lt-transport-buttons button.is-toggle {
   width: auto;
   min-width: 3.6rem;

@@ -92,6 +92,14 @@ fn default_song_jump_bars() -> u32 {
     4
 }
 
+/// Default length of «Fade out y parar»: the 5 s Playback (MultiTracks) uses
+/// for its own end-of-song fade.
+pub const DEFAULT_FADE_OUT_STOP_SECONDS: f64 = 5.0;
+
+fn default_fade_out_stop_seconds() -> f64 {
+    DEFAULT_FADE_OUT_STOP_SECONDS
+}
+
 fn default_song_transition_mode() -> String {
     "instant".into()
 }
@@ -294,6 +302,9 @@ pub struct AppSettings {
     pub song_jump_bars: u32,
     #[serde(default = "default_song_transition_mode")]
     pub song_transition_mode: String,
+    /// Duration of the «Fade out y parar» live action, in seconds.
+    #[serde(default = "default_fade_out_stop_seconds")]
+    pub fade_out_stop_seconds: f64,
     #[serde(default = "default_vamp_mode")]
     pub vamp_mode: String,
     #[serde(default = "default_vamp_bars")]
@@ -444,6 +455,7 @@ impl Default for AppSettings {
             song_jump_trigger: default_song_jump_trigger(),
             song_jump_bars: default_song_jump_bars(),
             song_transition_mode: default_song_transition_mode(),
+            fade_out_stop_seconds: default_fade_out_stop_seconds(),
             vamp_mode: default_vamp_mode(),
             vamp_bars: default_vamp_bars(),
             pause_at_song_end: false,

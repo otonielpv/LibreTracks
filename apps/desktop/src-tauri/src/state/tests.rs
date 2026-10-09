@@ -4695,6 +4695,45 @@ fn song_region_fades_are_stored_capped_and_validated() {
         .is_err());
 }
 
+/// «Fade out y parar»: fades while playing, stops when the fade runs out, and
+/// a second press stops at once. Pause cancels it. Every way out leaves the
+/// fade cleared, or the next Play would start under a silenced master.
+#[test]
+fn fade_out_and_stop_fades_then_stops() {
+    let mut session = session_with_song_dir("fade-stop-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+
+    // Not playing: nothing to fade.
+    let idle = session.fade_out_and_stop(5.0, &audio).expect("idle press is fine");
+    assert!(!idle.fading_to_stop);
+
+    session.play(&audio).expect("play should succeed");
+    let fading = session.fade_out_and_stop(5.0, &audio).expect("fade should start");
+    assert!(fading.fading_to_stop);
+    assert_eq!(fading.playback_state, "playing", "it keeps playing while it fades");
+
+    // Before the end, the sync tick leaves it playing.
+    assert!(!session.finish_fade_stop_if_due(&audio).expect("tick"));
+    session.expire_fade_stop_for_test();
+    assert!(session.finish_fade_stop_if_due(&audio).expect("tick"));
+    let stopped = session.snapshot();
+    assert_eq!(stopped.playback_state, "stopped");
+    assert!(!stopped.fading_to_stop);
+
+    // Second press while fading = stop now.
+    session.play(&audio).expect("play should succeed");
+    session.fade_out_and_stop(5.0, &audio).expect("fade should start");
+    let now = session.fade_out_and_stop(5.0, &audio).expect("second press");
+    assert_eq!(now.playback_state, "stopped");
+    assert!(!now.fading_to_stop);
+
+    // Pause during the fade cancels it.
+    session.play(&audio).expect("play should succeed");
+    session.fade_out_and_stop(5.0, &audio).expect("fade should start");
+    let paused = session.pause(&audio).expect("pause should succeed");
+    assert!(!paused.fading_to_stop);
+}
+
 /// Commit path (pointer-up): must bump revision and send exactly one realtime command.
 #[test]
 fn commit_track_mix_bumps_revision_and_sends_one_realtime_command() {

@@ -2082,6 +2082,7 @@ export function TransportPanelContent() {
     handleTimelineNavigationSchemeChange,
     handleTimelinePlayheadFollowModeChange,
     handlePauseAtSongEndChange,
+    handleFadeOutStopSecondsChange,
     handleMidiPlatformSettingsChange,
     handleImportMergeMatchingTracksChange,
     handleAutoColorNewTracksChange,
@@ -8052,6 +8053,7 @@ export function TransportPanelContent() {
                 handleTimelinePlayheadFollowModeChange
               }
               onPauseAtSongEndChange={handlePauseAtSongEndChange}
+              onFadeOutStopSecondsChange={handleFadeOutStopSecondsChange}
               onImportMergeMatchingTracksChange={
                 handleImportMergeMatchingTracksChange
               }

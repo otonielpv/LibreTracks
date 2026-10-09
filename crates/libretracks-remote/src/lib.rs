@@ -76,6 +76,8 @@ pub enum RemoteCommand {
     Play,
     Pause,
     Stop,
+    /// «Fade out y parar»: fade the song out and stop (again = stop now).
+    FadeOutStop,
     Seek {
         position_seconds: f64,
     },
@@ -552,6 +554,10 @@ mod tests {
         assert!(matches!(parse(r#"{"cmd":"play"}"#), RemoteCommand::Play));
         assert!(matches!(parse(r#"{"cmd":"pause"}"#), RemoteCommand::Pause));
         assert!(matches!(parse(r#"{"cmd":"stop"}"#), RemoteCommand::Stop));
+        assert!(matches!(
+            parse(r#"{"cmd":"fadeOutStop"}"#),
+            RemoteCommand::FadeOutStop
+        ));
         assert!(matches!(parse(r#"{"cmd":"ping"}"#), RemoteCommand::Ping));
         assert!(matches!(
             parse(r#"{"cmd":"requestPadsCatalog"}"#),

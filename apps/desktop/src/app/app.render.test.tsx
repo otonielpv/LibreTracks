@@ -50,7 +50,8 @@ describe("App / app.render", () => {
     expect(screen.getByText("LIBRETRACKS")).toBeTruthy();
     expect(screen.getByRole("button", { name: textMatcher(en.timelineTopbar.play) })).toBeTruthy();
     expect(screen.getByRole("button", { name: textMatcher(en.timelineTopbar.pause) })).toBeTruthy();
-    expect(screen.getByRole("button", { name: textMatcher(en.timelineTopbar.stop) })).toBeTruthy();
+    // Exact name: "Fade out and stop" sits next to it and also contains "stop".
+    expect(screen.getByRole("button", { name: en.timelineTopbar.stop })).toBeTruthy();
     expect(screen.getByRole("button", { name: textMatcher(en.timelineToolbar.enableFollowPlayhead) })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /browser/i })).toBeNull();
     expect(screen.queryByLabelText(textMatcher(en.library.panelAria))).toBeNull();

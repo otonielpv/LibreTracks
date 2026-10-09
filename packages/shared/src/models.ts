@@ -950,6 +950,8 @@ export type TransportSnapshot = {
    * must refetch the mix or it keeps showing the buttons from before the cue.
    * Optional for snapshots from older backends and the browser demo. */
   mixRevision?: number;
+  /** A «Fade out y parar» is running. Optional for older backends. */
+  fadingToStop?: boolean;
   songDir?: string | null;
   songFilePath?: string | null;
   isNativeRuntime: boolean;
@@ -1298,6 +1300,8 @@ export type AppSettings = {
   songJumpTrigger: "immediate" | "region_end" | "after_bars" | "next_marker";
   songJumpBars: number;
   songTransitionMode: "instant" | "fade_out";
+  /** Length of the «Fade out y parar» live action, in seconds (0.1–30). */
+  fadeOutStopSeconds: number;
   vampMode: "section" | "bars";
   vampBars: number;
   /**
@@ -1423,6 +1427,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   songJumpTrigger: "immediate",
   songJumpBars: 4,
   songTransitionMode: "instant",
+  fadeOutStopSeconds: 5,
   vampMode: "section",
   vampBars: 4,
   pauseAtSongEnd: false,
@@ -1661,6 +1666,9 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
       DEFAULT_APP_SETTINGS.songJumpBars,
     ),
     songTransitionMode,
+    fadeOutStopSeconds: Number.isFinite(settings.fadeOutStopSeconds)
+      ? Math.min(30, Math.max(0.1, settings.fadeOutStopSeconds))
+      : DEFAULT_APP_SETTINGS.fadeOutStopSeconds,
     vampMode,
     vampBars: normalizeJumpBars(
       settings.vampBars,

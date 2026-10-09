@@ -86,6 +86,30 @@ pub fn stop_transport(
     Ok(snapshot)
 }
 
+/// «Fade out y parar»: fade the playing song out over the configured time and
+/// stop. A second call during the fade stops at once. See `state::fade_stop`.
+#[tauri::command(async)]
+pub fn fade_out_and_stop(
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+    settings_store: State<'_, AppSettingsStore>,
+) -> Result<TransportSnapshot, String> {
+    let seconds = settings_store
+        .current()
+        .map_err(|error| error.to_string())?
+        .fade_out_stop_seconds;
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    let snapshot = session
+        .fade_out_and_stop(seconds, &state.audio)
+        .map_err(|error| error.to_string())?;
+    emit_transport_lifecycle_event(&app, "sync", &snapshot);
+    Ok(snapshot)
+}
+
 #[tauri::command(async)]
 pub fn seek_transport(
     app: AppHandle,

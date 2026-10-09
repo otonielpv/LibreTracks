@@ -448,6 +448,7 @@ function buildInitialState(): DesktopApiMockState {
       songJumpTrigger: "immediate",
       songJumpBars: 4,
       songTransitionMode: "instant",
+      fadeOutStopSeconds: 5,
       vampMode: "section",
       vampBars: 4,
       pauseAtSongEnd: false,

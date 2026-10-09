@@ -40,6 +40,8 @@ pub struct TransportSnapshot {
     /// See `DesktopSession::mix_revision`: bumps when automation changes the
     /// mix, so the UI knows to refetch the tracks' mute/solo/volume/pan.
     pub mix_revision: u64,
+    /// A «Fade out y parar» is running: the UI lights its button.
+    pub fading_to_stop: bool,
     pub song_dir: Option<String>,
     pub song_file_path: Option<String>,
     pub is_native_runtime: bool,

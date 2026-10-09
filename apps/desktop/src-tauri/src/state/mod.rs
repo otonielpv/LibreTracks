@@ -61,6 +61,7 @@ mod audio_prep;
 mod automation_runtime;
 mod cue_follow;
 mod external_import;
+mod fade_stop;
 mod history;
 mod library;
 mod midi_edit;
@@ -433,6 +434,8 @@ pub struct DesktopSession {
     /// playback state, not an edit (no autosave, no undo), but the UI still
     /// has to refetch the mix or it keeps showing the pre-automation buttons.
     pub(super) mix_revision: u64,
+    /// «Fade out y parar» in progress (see `fade_stop`).
+    pub(super) fade_stop: Option<fade_stop::FadeStop>,
     pub(super) undo_stack: Vec<Song>,
     pub(super) redo_stack: Vec<Song>,
     pub(super) live_history_anchor: Option<Song>,
@@ -575,6 +578,7 @@ impl Default for DesktopSession {
             active_midi_curves: Vec::new(),
             project_revision: 0,
             mix_revision: 0,
+            fade_stop: None,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             live_history_anchor: None,
@@ -1907,6 +1911,7 @@ impl DesktopSession {
     }
 
     pub fn play(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
+        self.cancel_fade_stop(audio)?;
         self.sync_position(audio)?;
         let song = self
             .engine
@@ -1950,6 +1955,7 @@ impl DesktopSession {
 
     pub fn pause(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
+        self.cancel_fade_stop(audio)?;
 
         audio.stop()?;
 
@@ -1965,6 +1971,8 @@ impl DesktopSession {
 
     pub fn stop(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
         audio.stop()?;
+        // After the audio stops, so lifting the gain back to 1 is never heard.
+        self.cancel_fade_stop(audio)?;
 
         self.engine.stop()?;
         self.transport_clock.stop();
@@ -2787,6 +2795,10 @@ impl DesktopSession {
         // engine reporting Playing, which MIDI has no reason to wait for.
         self.advance_midi_playback()?;
 
+        if self.finish_fade_stop_if_due(audio)? {
+            return Ok(());
+        }
+
         if self.sync_native_scheduled_jump_if_needed(audio)? {
             return Ok(());
         }
@@ -3243,6 +3255,7 @@ impl DesktopSession {
                 .map(|sample| transport_drift_summary_to_view(source_song.as_ref(), sample)),
             project_revision: self.project_revision,
             mix_revision: self.mix_revision,
+            fading_to_stop: self.is_fading_to_stop(),
             song_dir: self
                 .song_dir
                 .as_ref()

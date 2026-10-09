@@ -27,6 +27,7 @@ export type WidgetType =
   | "playButton"
   | "pauseButton"
   | "stopButton"
+  | "fadeStopButton"
   | "clickButton"
   | "guideButton"
   | "timeline"
@@ -73,6 +74,7 @@ export const ALL_WIDGET_TYPES: readonly WidgetType[] = [
   "playButton",
   "pauseButton",
   "stopButton",
+  "fadeStopButton",
   "clickButton",
   "guideButton",
   "timeline",

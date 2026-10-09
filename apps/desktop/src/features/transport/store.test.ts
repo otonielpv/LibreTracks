@@ -131,6 +131,15 @@ describe("useTransportStore", () => {
       expect(get().playback).toBe(next);
     });
 
+    // The fade button lights from this flag; dropping the snapshot would leave
+    // it dark while the song fades out.
+    it("publishes when a fade-to-stop starts", () => {
+      get().setPlaybackState(makeSnapshot({ fadingToStop: false }));
+      const next = makeSnapshot({ fadingToStop: true });
+      get().setPlaybackState(next);
+      expect(get().playback).toBe(next);
+    });
+
     it("publishes when a pending marker jump appears", () => {
       get().setPlaybackState(makeSnapshot());
       const withJump = makeSnapshot({

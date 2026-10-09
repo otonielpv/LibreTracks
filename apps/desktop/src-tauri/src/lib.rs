@@ -296,6 +296,7 @@ pub fn run() {
             commands::system::reconnect_bluetooth_midi,
             commands::system::send_midi_test_note,
             commands::transport::get_transport_snapshot,
+            commands::transport::fade_out_and_stop,
             commands::settings::get_settings,
             commands::settings::save_settings,
             commands::settings::update_audio_settings,

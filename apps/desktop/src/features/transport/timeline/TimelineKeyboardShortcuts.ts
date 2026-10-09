@@ -10,6 +10,7 @@ import {
   redoAction,
   seekTransport,
   stopTransport,
+  fadeOutAndStop,
   undoAction,
 } from "../desktopApi";
 import {
@@ -197,6 +198,12 @@ export function useTimelineKeyboardShortcuts({
           const nextSnapshot = await stopTransport();
           applyPlaybackSnapshot(nextSnapshot);
           setStatus(t("transport.status.playbackStopped"));
+        });
+      },
+      "transport.fadeOutStop": (event) => {
+        event.preventDefault();
+        void runAction(async () => {
+          applyPlaybackSnapshot(await fadeOutAndStop());
         });
       },
       "transport.gotoStart": (event) => {

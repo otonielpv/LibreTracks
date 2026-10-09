@@ -27,6 +27,7 @@ export type ShortcutActionId =
   // transport
   | "transport.playPause"
   | "transport.stop"
+  | "transport.fadeOutStop"
   | "transport.gotoStart"
   // edit
   | "edit.splitClip"
@@ -88,6 +89,14 @@ export const SHORTCUT_ACTIONS: ShortcutActionDef[] = [
     group: "transport",
     labelKey: "shortcuts.action.stop",
     defaultBinding: "Shift+Space",
+  },
+  {
+    // No default key: neither Ableton nor Playback ship one, and a stray
+    // press would fade the show out.
+    id: "transport.fadeOutStop",
+    group: "transport",
+    labelKey: "shortcuts.action.fadeOutStop",
+    defaultBinding: null,
   },
   {
     id: "transport.gotoStart",

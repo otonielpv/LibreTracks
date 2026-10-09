@@ -101,6 +101,7 @@ export const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
   { key: "action:play", labelKey: "timelineTopbar.play" },
   { key: "action:pause", labelKey: "timelineTopbar.pause" },
   { key: "action:stop", labelKey: "timelineTopbar.stop" },
+  { key: "action:fade_out_stop", labelKey: "timelineTopbar.fadeOutStop" },
   { key: "action:previous_song", labelKey: "timelineTopbar.previous" },
   { key: "action:next_song", labelKey: "timelineTopbar.next" },
   {

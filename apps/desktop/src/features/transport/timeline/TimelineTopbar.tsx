@@ -23,6 +23,7 @@ import {
 import { AudioDeviceStatusBadge } from "../AudioDeviceStatusBadge";
 import { MidiDeviceStatusBadge } from "../MidiDeviceStatusBadge";
 import { requestAppClose } from "../../appClose/appCloseService";
+import { FadeStopButton } from "./FadeStopButton";
 
 type TimelineTopbarProps = {
   openTopMenu: "file" | null;
@@ -596,6 +597,11 @@ export function TimelineTopbar({
             >
               <span className="material-symbols-outlined">stop</span>
             </button>
+            <FadeStopButton
+              className="lt-fade-stop"
+              learnModeActive={learnModeActive}
+              onMidiLearnTarget={onMidiLearnTarget}
+            />
             <button
               type="button"
               aria-label={t("timelineTopbar.play")}

@@ -86,6 +86,7 @@ const es = {
     action: {
       playPause: "Reproducir / Pausar",
       stop: "Detener",
+      fadeOutStop: "Fade out y parar",
       gotoStart: "Ir al inicio",
       splitClip: "Dividir clip en el cursor",
       splitSong: "Dividir canción en el cursor",
@@ -383,6 +384,9 @@ const es = {
         "Cada pista nueva toma un color de la paleta, recorriéndola en orden, para distinguirlas de un vistazo. Desactívalo si prefieres colorearlas a mano. No repinta las pistas que ya tienes.",
       importMergeMatchingTracks: "Unir pistas con el mismo nombre al importar",
       pauseAtSongEnd: "Pausar al terminar cada canción",
+      fadeOutStopSeconds: "Duración de «Fade out y parar» (s)",
+      fadeOutStopSecondsHint:
+        "Lo que tarda en apagarse la canción al pulsar «Fade out y parar». Pulsarlo otra vez durante el fade para en seco.",
       pauseAtSongEndHint:
         "La reproducción se detiene cuando termina una canción en lugar de pasar directamente a la siguiente. Pulsa Play para empezar la siguiente. Un salto de canción que hayas programado se sigue haciendo.",
       importMergeMatchingTracksHint:
@@ -982,6 +986,7 @@ const es = {
       importMergeMatchingTracksUpdated:
         "Comportamiento de pistas al importar actualizado.",
       pauseAtSongEndUpdated: "Pausa al terminar la canción actualizada.",
+      fadeOutStopUpdated: "Duración del fade out actualizada.",
       midiSettingsUpdated: "Ajustes MIDI actualizados.",
       referenceImportedAudioUpdated:
         "Comportamiento al importar audio actualizado.",
@@ -1676,6 +1681,8 @@ const es = {
     tapTempoShort: "Tap",
     previous: "Anterior",
     stop: "Detener",
+    fadeOutStop: "Fade out y parar",
+    fadeOutStopActive: "Fade out en curso: pulsa otra vez para parar ya",
     undo: "Deshacer",
     redo: "Rehacer",
     play: "Reproducir",

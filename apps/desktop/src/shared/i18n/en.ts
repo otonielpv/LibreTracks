@@ -86,6 +86,7 @@ const en = {
     action: {
       playPause: "Play / Pause",
       stop: "Stop",
+      fadeOutStop: "Fade out and stop",
       gotoStart: "Go to start",
       splitClip: "Split clip at cursor",
       splitSong: "Split song at cursor",
@@ -386,6 +387,9 @@ const en = {
         "Each new track takes a colour from the palette, cycling through it in order, so you can tell them apart at a glance. Turn it off if you prefer colouring by hand. It never repaints tracks you already have.",
       importMergeMatchingTracks: "Merge tracks with the same name on import",
       pauseAtSongEnd: "Pause at the end of each song",
+      fadeOutStopSeconds: "“Fade out and stop” length (s)",
+      fadeOutStopSecondsHint:
+        "How long the song takes to fade when you press “Fade out and stop”. Pressing it again during the fade stops at once.",
       pauseAtSongEndHint:
         "Playback stops when a song ends instead of rolling straight into the next one. Press Play to start the next song. A song jump you queued still happens.",
       importMergeMatchingTracksHint:
@@ -960,6 +964,7 @@ const en = {
       timelinePlayheadFollowModeUpdated: "Playhead follow mode updated.",
       importMergeMatchingTracksUpdated: "Import track behaviour updated.",
       pauseAtSongEndUpdated: "Pause at song end updated.",
+      fadeOutStopUpdated: "Fade out length updated.",
       midiSettingsUpdated: "MIDI settings updated.",
       referenceImportedAudioUpdated: "Audio import behaviour updated.",
       autoColorNewTracksUpdated: "Automatic track colours updated.",
@@ -1650,6 +1655,8 @@ const en = {
     tapTempoShort: "Tap",
     previous: "Previous",
     stop: "Stop",
+    fadeOutStop: "Fade out and stop",
+    fadeOutStopActive: "Fading out: press again to stop now",
     undo: "Undo",
     redo: "Redo",
     play: "Play",

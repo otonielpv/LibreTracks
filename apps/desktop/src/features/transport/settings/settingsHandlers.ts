@@ -274,6 +274,14 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       );
     },
 
+    handleFadeOutStopSecondsChange(nextValue: number) {
+      // normalizeAppSettings clamps to 0.1–30 s, so a cleared input is safe.
+      persistAudioPatch(
+        { fadeOutStopSeconds: nextValue },
+        t("transport.status.fadeOutStopUpdated"),
+      );
+    },
+
     handleVampModeChange(nextValue: AppSettings["vampMode"]) {
       persistAudioPatch({ vampMode: nextValue }, "Vamp settings updated.");
     },
