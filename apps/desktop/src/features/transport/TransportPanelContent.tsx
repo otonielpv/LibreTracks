@@ -2169,6 +2169,7 @@ export function TransportPanelContent() {
       createLibraryHandlers({
         getPlaybackSongDir: () => playbackSongDirRef.current,
         getLibraryAssets: () => libraryAssetsRef.current,
+        getSong: () => songRef.current,
         runAction,
         waitForUiPaint,
         setStatus,
@@ -2207,6 +2208,7 @@ export function TransportPanelContent() {
     handleDeleteLibraryAssets,
     handleCreateLibraryFolder,
     handleMoveLibraryAssets,
+    handleOrganizeUnfiledBySong,
     handleRenameLibraryFolder,
     handleDeleteLibraryFolder,
   } = libraryHandlers;
@@ -7169,6 +7171,7 @@ export function TransportPanelContent() {
                   );
                 }}
                 onAddFolderToTimeline={handleAddLibraryFolderToTimeline}
+                onOrganizeBySong={() => void handleOrganizeUnfiledBySong()}
                 browserDrop={browserDrop}
               />
               {shouldShowEmptyState ? (

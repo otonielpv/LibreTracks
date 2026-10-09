@@ -70,6 +70,8 @@ type LibrarySidebarPanelProps = {
     folderPath: string | null,
     assets: PendingLibraryAssetSummary[],
   ) => void;
+  /** "Organise by song": the unfiled audio goes into one folder per song. */
+  onOrganizeBySong?: () => void;
 };
 
 function formatAssetDuration(durationSeconds: number) {
@@ -98,6 +100,7 @@ export function LibrarySidebarPanel({
   onDeleteRequested,
   onAddSelectionToTimeline,
   onAddFolderToTimeline,
+  onOrganizeBySong,
 }: LibrarySidebarPanelProps) {
   const { t } = useTranslation();
   const [selectedAssetPaths, setSelectedAssetPaths] = useState<string[]>([]);
@@ -778,6 +781,24 @@ export function LibrarySidebarPanel({
                   <strong title={t("library.rootFolder")}>{t("library.rootFolder")}</strong>
                   <small>{t("library.assetsInFolder", { count: rootAssets.length })}</small>
                 </span>
+                {onOrganizeBySong && rootAssets.length > 0 ? (
+                  <button
+                    type="button"
+                    className="lt-library-organize-button"
+                    aria-label={t("library.organize.button")}
+                    title={t("library.organize.hint")}
+                    // Inside the <summary>: without these the press would
+                    // start dragging the group and the click would fold it.
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onOrganizeBySong();
+                    }}
+                  >
+                    <span className="material-symbols-outlined">auto_fix_high</span>
+                  </button>
+                ) : null}
               </summary>
               <div className="lt-library-group-list">{renderAssetRows(rootAssets)}</div>
             </details>

@@ -2790,6 +2790,31 @@ html.lt-ios body {
   cursor: pointer;
 }
 
+.lt-library-organize-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid rgb(87 241 219 / 0.2);
+  border-radius: 2px;
+  background: rgb(32 31 31 / 0.95);
+  color: #57f1db;
+  cursor: pointer;
+}
+
+.lt-library-organize-button:hover {
+  border-color: rgb(87 241 219 / 0.5);
+  background: rgb(87 241 219 / 0.12);
+}
+
+.lt-library-organize-button .material-symbols-outlined {
+  font-size: 16px;
+}
+
 .lt-library-folder-summary.is-drag-target {
   background:
     linear-gradient(135deg, rgb(87 241 219 / 0.28), rgb(45 212 191 / 0.14)),

@@ -1,4 +1,6 @@
-import type { LibraryAssetSummary } from "@libretracks/shared/models";
+import type { LibraryAssetSummary, SongView } from "@libretracks/shared/models";
+
+import { planOrganizeBySong } from "./organizeBySong";
 
 import type { LibraryClipPreviewState } from "../types";
 
@@ -18,6 +20,8 @@ type LibraryFolderSummary = string;
 export type LibraryHandlerDeps = {
   getPlaybackSongDir: () => string | null;
   getLibraryAssets: () => LibraryAssetSummary[];
+  /** The loaded song: "organise by song" reads where each asset is used. */
+  getSong: () => SongView | null;
   runAction: (action: () => Promise<void>) => Promise<void>;
   waitForUiPaint: () => Promise<void>;
   setStatus: (message: string) => void;
@@ -54,6 +58,7 @@ export function createLibraryHandlers(deps: LibraryHandlerDeps) {
   const {
     getPlaybackSongDir,
     getLibraryAssets,
+    getSong,
     runAction,
     waitForUiPaint,
     setStatus,
@@ -77,6 +82,43 @@ export function createLibraryHandlers(deps: LibraryHandlerDeps) {
   } = deps;
 
   return {
+    /** "Unfiled" → one folder per song, with the audio each song uses. */
+    async handleOrganizeUnfiledBySong() {
+      const unfiled = getLibraryAssets().filter((asset) => !asset.folderPath);
+      const plan = planOrganizeBySong(unfiled, getSong(), t("library.organize.fallbackName"));
+      const leftOut = plan.unused + plan.shared;
+      if (!plan.moves.length) {
+        setStatus(t("library.organize.nothing"));
+        return;
+      }
+
+      await runAction(async () => {
+        const existing = new Set(await getLibraryFolders());
+        let nextAssets = getLibraryAssets();
+        let moved = 0;
+        for (const move of plan.moves) {
+          if (!existing.has(move.folder)) {
+            await createLibraryFolder(move.folder);
+            existing.add(move.folder);
+          }
+          for (const filePath of move.filePaths) {
+            nextAssets = await moveLibraryAsset(filePath, move.folder);
+            moved += 1;
+          }
+        }
+        const { folders } = await loadLibraryState();
+        setLibraryAssets(nextAssets);
+        setLibraryFolders(folders);
+        setStatus(
+          t(leftOut ? "library.organize.doneWithLeftOut" : "library.organize.done", {
+            count: moved,
+            folders: plan.moves.length,
+            leftOut,
+          }),
+        );
+      });
+    },
+
     async handleImportLibraryAssetsClick() {
       if (!getPlaybackSongDir()) {
         setStatus(t("transport.status.importRequiresSession"));

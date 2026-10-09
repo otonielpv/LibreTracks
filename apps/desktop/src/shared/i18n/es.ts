@@ -1862,6 +1862,19 @@ const es = {
     markersCount: "{{count}} marcas",
   },
   library: {
+    organize: {
+      button: "Organizar por canción",
+      hint: "Crea una carpeta por canción y mete en ella los audios sin carpeta que usa",
+      fallbackName: "Canción",
+      nothing:
+        "Nada que organizar: los audios sin carpeta no se usan en ninguna canción o se usan en varias.",
+      done_one: "{{count}} audio organizado en {{folders}} carpeta(s) por canción.",
+      done_other: "{{count}} audios organizados en {{folders}} carpeta(s) por canción.",
+      doneWithLeftOut_one:
+        "{{count}} audio organizado en {{folders}} carpeta(s). {{leftOut}} se quedan sin carpeta: no se usan en ninguna canción o se usan en varias.",
+      doneWithLeftOut_other:
+        "{{count}} audios organizados en {{folders}} carpeta(s). {{leftOut}} se quedan sin carpeta: no se usan en ninguna canción o se usan en varias.",
+    },
     folders: {
       title: "Carpetas",
       panelAria: "Biblioteca de carpetas",

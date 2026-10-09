@@ -1834,6 +1834,18 @@ const en = {
     markersCount: "{{count}} markers",
   },
   library: {
+    organize: {
+      button: "Organise by song",
+      hint: "Creates one folder per song and moves into it the unfiled audio it uses",
+      fallbackName: "Song",
+      nothing: "Nothing to organise: the unfiled audio is used by no song, or by several.",
+      done_one: "{{count}} audio file organised into {{folders}} song folder(s).",
+      done_other: "{{count}} audio files organised into {{folders}} song folder(s).",
+      doneWithLeftOut_one:
+        "{{count}} audio file organised into {{folders}} folder(s). {{leftOut}} stay unfiled: used by no song, or by several.",
+      doneWithLeftOut_other:
+        "{{count}} audio files organised into {{folders}} folder(s). {{leftOut}} stay unfiled: used by no song, or by several.",
+    },
     folders: {
       title: "Folders",
       panelAria: "Folder library",

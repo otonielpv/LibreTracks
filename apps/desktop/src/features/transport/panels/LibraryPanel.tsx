@@ -39,6 +39,8 @@ type LibraryPanelProps = {
     folderPath: string | null,
     assets: PendingLibraryAssetSummary[],
   ) => void;
+  /** "Unfiled" → one folder per song (classic library). */
+  onOrganizeBySong?: () => void;
   /** Drops from the folder library (disk folders) onto the timeline. */
   browserDrop: BrowserDrop;
 };
@@ -63,6 +65,7 @@ export function LibraryPanel({
   onDeleteRequested,
   onAddSelectionToTimeline,
   onAddFolderToTimeline,
+  onOrganizeBySong,
   browserDrop,
 }: LibraryPanelProps) {
   const { t } = useTranslation();
@@ -120,6 +123,7 @@ export function LibraryPanel({
       onDeleteRequested={onDeleteRequested}
       onAddSelectionToTimeline={onAddSelectionToTimeline}
       onAddFolderToTimeline={onAddFolderToTimeline}
+      onOrganizeBySong={onOrganizeBySong}
     />
   );
 

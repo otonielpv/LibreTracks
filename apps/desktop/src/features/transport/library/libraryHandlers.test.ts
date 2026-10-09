@@ -20,6 +20,7 @@ function setup(overrides: Partial<LibraryHandlerDeps> = {}) {
   const deps: LibraryHandlerDeps = {
     getPlaybackSongDir: () => "/songs/demo",
     getLibraryAssets: () => [],
+    getSong: () => null,
     runAction: vi.fn(async (action) => {
       await action();
     }),
@@ -48,6 +49,36 @@ function setup(overrides: Partial<LibraryHandlerDeps> = {}) {
 }
 
 describe("createLibraryHandlers", () => {
+  it("organises the unfiled audio into one folder per song", async () => {
+    const song = {
+      regions: [{ id: "r1", name: "Oceans", startSeconds: 0, endSeconds: 100 }],
+      clips: [{ filePath: "/a/Drums.wav", timelineStartSeconds: 0, durationSeconds: 90 }],
+    } as never;
+    const { handlers, deps } = setup({
+      getSong: () => song,
+      getLibraryAssets: () => [asset("/a/Drums.wav"), asset("/a/Unused.wav")],
+    });
+    await handlers.handleOrganizeUnfiledBySong();
+    expect(deps.createLibraryFolder).toHaveBeenCalledWith("Oceans");
+    expect(deps.moveLibraryAsset).toHaveBeenCalledWith("/a/Drums.wav", "Oceans");
+    expect(deps.moveLibraryAsset).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses a folder that already has the song's name", async () => {
+    const song = {
+      regions: [{ id: "r1", name: "Oceans", startSeconds: 0, endSeconds: 100 }],
+      clips: [{ filePath: "/a/Drums.wav", timelineStartSeconds: 0, durationSeconds: 90 }],
+    } as never;
+    const { handlers, deps } = setup({
+      getSong: () => song,
+      getLibraryAssets: () => [asset("/a/Drums.wav")],
+      getLibraryFolders: vi.fn(async () => ["Oceans"]),
+    });
+    await handlers.handleOrganizeUnfiledBySong();
+    expect(deps.createLibraryFolder).not.toHaveBeenCalled();
+    expect(deps.moveLibraryAsset).toHaveBeenCalledWith("/a/Drums.wav", "Oceans");
+  });
+
   it("import is blocked without an active session", async () => {
     const { handlers, deps } = setup({ getPlaybackSongDir: () => null });
     await handlers.handleImportLibraryAssetsClick();
