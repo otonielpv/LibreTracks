@@ -47,11 +47,16 @@ type FolderLibraryPanelProps = {
   sessionAssetCount: number;
 };
 
+/** Desktop has room for both, so the session's audio starts open. On a phone
+ * opening it takes the whole library (see the CSS), so it starts folded and
+ * the disk folders are what shows first. */
 function readSessionOpen(): boolean {
+  const fallback = !isMobileApp;
   try {
-    return window.localStorage.getItem(SESSION_OPEN_KEY) !== "0";
+    const saved = window.localStorage.getItem(SESSION_OPEN_KEY);
+    return saved === null ? fallback : saved !== "0";
   } catch {
-    return true;
+    return fallback;
   }
 }
 
@@ -332,7 +337,10 @@ export function FolderLibraryPanel({
   }, [drag]);
 
   return (
-    <aside className="lt-folder-library" aria-label={t("library.folders.panelAria")}>
+    <aside
+      className={`lt-folder-library${sessionOpen ? " is-session-open" : ""}`}
+      aria-label={t("library.folders.panelAria")}
+    >
       <div className="lt-library-panel-header">
         <div>
           <span className="lt-library-panel-eyebrow">{t("library.eyebrow")}</span>

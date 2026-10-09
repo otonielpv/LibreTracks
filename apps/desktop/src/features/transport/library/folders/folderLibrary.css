@@ -310,3 +310,17 @@
     box-sizing: border-box;
   }
 }
+
+/* Phone: no room for both halves. «En esta sesión» works as an accordion:
+   open, the classic library takes the whole height and the disk folders,
+   the search and «Añadir carpeta» step aside; folded, they come back. */
+.lt-mobile .lt-folder-library.is-session-open .lt-folder-library-places,
+.lt-mobile .lt-folder-library.is-session-open .lt-folder-library-add,
+.lt-mobile .lt-folder-library.is-session-open .lt-folder-library-search {
+  display: none;
+}
+
+.lt-mobile .lt-folder-library.is-session-open .lt-folder-library-session {
+  flex: 1 1 auto;
+  min-height: 0;
+}

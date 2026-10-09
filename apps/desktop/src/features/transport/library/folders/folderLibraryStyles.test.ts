@@ -28,4 +28,14 @@ describe("biblioteca clásica dentro de «En esta sesión»", () => {
     expect(nested).toContain("min-width: 0");
     expect(nested).toContain("width: auto");
   });
+
+  // iPhone: the classic library squeezed under the folders was unusable.
+  it("en el móvil, abierta, ocupa todo el alto de la biblioteca", () => {
+    expect(rule(".lt-mobile .lt-folder-library.is-session-open .lt-folder-library-session")).toContain(
+      "flex: 1 1 auto",
+    );
+    expect(css).toMatch(
+      /\.lt-mobile \.lt-folder-library\.is-session-open \.lt-folder-library-places[^{]*\{\s*display: none/,
+    );
+  });
 });
