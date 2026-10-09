@@ -1555,6 +1555,7 @@ const es = {
       waitSeconds: "Esperar (s)",
       trackLabel: "Pista",
       chooseTrack: "Elige una pista...",
+      tracksNoSong: "Pistas fuera de canción",
       noTracks: "No hay pistas",
     },
     mixScene: {

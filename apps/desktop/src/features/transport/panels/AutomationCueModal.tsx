@@ -18,6 +18,11 @@ import {
 } from "../desktopApi";
 import { formatClock, formatCompactTime } from "../helpers";
 import { duplicateMarkerNames, groupMarkersBySong } from "./jumpTargetGroups";
+import {
+  defaultTrackIdAt,
+  groupTracksBySong,
+  type TrackSongGroup,
+} from "./trackSongGroups";
 import { useDismissOnBack } from "../mobile/backNavigation";
 
 /**
@@ -86,8 +91,11 @@ function makeAction(
   type: AutomationActionSummary["type"],
   song: SongView | null,
   appSettings: AppSettings,
+  atSeconds: number,
 ): AutomationActionSummary {
-  const firstTrack = song?.tracks.find((t) => t.kind !== "folder")?.id ?? "";
+  // La pista de la canción donde está el cue, no la primera de la sesión: con
+  // varias canciones, la primera de la sesión casi nunca es la que se quiere.
+  const firstTrack = defaultTrackIdAt(song, atSeconds);
   const firstScene = song?.mixScenes?.[0]?.id ?? "";
   switch (type) {
     case "jump": {
@@ -165,7 +173,7 @@ export function AutomationCueModal({
 
   const regions = song?.regions ?? [];
   const markers = song?.sectionMarkers ?? [];
-  const tracks = (song?.tracks ?? []).filter((t) => t.kind !== "folder");
+  const trackGroups = groupTracksBySong(song);
   const scenes = song?.mixScenes ?? [];
   const isEditing = draft.cueId !== null;
 
@@ -205,7 +213,7 @@ export function AutomationCueModal({
     });
 
   const addAction = (type: AutomationActionSummary["type"]) =>
-    setActions((prev) => normalize([...prev, makeAction(type, song, appSettings)]));
+    setActions((prev) => normalize([...prev, makeAction(type, song, appSettings, draft.atSeconds)]));
 
   const hasJump = actions.some((a) => a.type === "jump");
   // Highest index a non-jump row may move down to: the slot just above the
@@ -304,7 +312,7 @@ export function AutomationCueModal({
                   action={action}
                   regions={regions}
                   markers={markers}
-                  tracks={tracks}
+                  trackGroups={trackGroups}
                   scenes={scenes}
                   installedPads={installedPads}
                   padRouteOptions={padRouteOptions}
@@ -439,7 +447,7 @@ type EditorProps = {
   action: AutomationActionSummary;
   regions: SongView["regions"];
   markers: SongView["sectionMarkers"];
-  tracks: SongView["tracks"];
+  trackGroups: TrackSongGroup[];
   scenes: NonNullable<SongView["mixScenes"]>;
   installedPads: PadCatalogEntry[];
   padRouteOptions: Array<{ value: string; label: string }>;
@@ -451,7 +459,7 @@ function ActionEditor({
   action,
   regions,
   markers,
-  tracks,
+  trackGroups,
   scenes,
   installedPads,
   padRouteOptions,
@@ -569,7 +577,7 @@ function ActionEditor({
     return (
       <div className="lt-automation-action-fields">
         <TrackSelect
-          tracks={tracks}
+          trackGroups={trackGroups}
           value={action.trackId}
           t={t}
           onChange={(trackId) => onChange({ ...action, trackId })}
@@ -606,7 +614,7 @@ function ActionEditor({
     return (
       <div className="lt-automation-action-fields">
         <TrackSelect
-          tracks={tracks}
+          trackGroups={trackGroups}
           value={action.trackId}
           t={t}
           onChange={(trackId) => onChange({ ...action, trackId })}
@@ -882,16 +890,21 @@ function PadCueFadeField({
 }
 
 function TrackSelect({
-  tracks,
+  trackGroups,
   value,
   t,
   onChange,
 }: {
-  tracks: SongView["tracks"];
+  trackGroups: TrackSongGroup[];
   value: string;
   t: (key: string, options?: Record<string, unknown>) => string;
   onChange: (trackId: string) => void;
 }) {
+  // Un grupo por canción, como el selector de destino de salto: con cinco
+  // canciones hay cinco «Drums» y la lista plana no deja saber cuál es cuál.
+  // Una pista que suena en varias canciones sale en cada grupo; es la misma
+  // pista (mismo id), así que elegirla en cualquiera de ellos da lo mismo.
+  const hasTracks = trackGroups.length > 0;
   return (
     <label className="lt-settings-field">
       <span className="lt-settings-field-label">
@@ -900,15 +913,26 @@ function TrackSelect({
       <select value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="" disabled>
           {t(
-            tracks.length
+            hasTracks
               ? "transport.automation.chooseTrack"
               : "transport.automation.noTracks",
           )}
         </option>
-        {tracks.map((track) => (
-          <option key={track.id} value={track.id}>
-            {track.name}
-          </option>
+        {trackGroups.map((group) => (
+          <optgroup
+            key={group.region?.id ?? "__no_song__"}
+            label={
+              group.region
+                ? group.region.name
+                : t("transport.automation.tracksNoSong")
+            }
+          >
+            {group.tracks.map((track) => (
+              <option key={track.id} value={track.id}>
+                {track.name}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
     </label>

@@ -1,5 +1,6 @@
 import type { AutomationCueSummary, SongView } from "../desktopApi";
 import { formatGainDb } from "@libretracks/shared/faderScale";
+import { trackDisplayName } from "../panels/trackSongGroups";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -9,8 +10,9 @@ export function describeAutomationCue(
   song: SongView | null,
   t: Translate,
 ): string {
-  const trackName = (id: string) =>
-    song?.tracks.find((t) => t.id === id)?.name ?? id;
+  // Con el nombre de la canción cuando se repite: «Silenciar Drums» no dice
+  // cuál de los cinco «Drums» de la sesión.
+  const trackName = (id: string) => trackDisplayName(song, id);
   const sceneName = (id: string) =>
     song?.mixScenes?.find((s) => s.id === id)?.name ?? id;
   const targetName = (target: AutomationCueSummary["actions"][number]) => {

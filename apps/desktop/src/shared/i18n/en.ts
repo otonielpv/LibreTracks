@@ -1529,6 +1529,7 @@ const en = {
       waitSeconds: "Wait (s)",
       trackLabel: "Track",
       chooseTrack: "Choose a track...",
+      tracksNoSong: "Tracks outside any song",
       noTracks: "No tracks",
     },
     mixScene: {
