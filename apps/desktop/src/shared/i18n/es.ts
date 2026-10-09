@@ -687,6 +687,9 @@ const es = {
       get_ready: "Preparados",
       ease_down: "Bajar Intensidad",
       next_song: "Siguiente Canción",
+      drum_solo: "Solo Batería",
+      bass_solo: "Solo Bajo",
+      guitar_solo: "Solo Guitarra",
     },
     prompt: {
       timelineBpm: "Nuevo BPM del timeline",

@@ -50,6 +50,9 @@ MarkerKind marker_kind_from_string(const std::string& token) noexcept {
     if (token == "ease_down") return MarkerKind::EaseDown;
     if (token == "get_ready") return MarkerKind::GetReady;
     if (token == "next_song") return MarkerKind::NextSong;
+    if (token == "drum_solo") return MarkerKind::DrumSolo;
+    if (token == "bass_solo") return MarkerKind::BassSolo;
+    if (token == "guitar_solo") return MarkerKind::GuitarSolo;
     return MarkerKind::Custom;
 }
 

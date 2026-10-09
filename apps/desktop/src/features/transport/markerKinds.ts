@@ -32,6 +32,9 @@ export const MARKER_KINDS: readonly MarkerKind[] = [
   "breakdown",
   "drop",
   "solo",
+  "drum_solo",
+  "bass_solo",
+  "guitar_solo",
   "outro",
   "acapella",
   "instrumental",
@@ -96,6 +99,9 @@ const MARKER_KIND_LABELS: Record<MarkerKind, string> = {
   get_ready: "Get Ready",
   ease_down: "Ease Down",
   next_song: "Next Song",
+  drum_solo: "Drum Solo",
+  bass_solo: "Bass Solo",
+  guitar_solo: "Guitar Solo",
 };
 
 

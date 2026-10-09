@@ -276,6 +276,9 @@ const char* section_filename(int kind_index) noexcept {
         case MarkerKind::Rap: return "rap";
         case MarkerKind::Turnaround: return "turnaround";
         case MarkerKind::NextSong: return "next_song";
+        case MarkerKind::DrumSolo: return "drum_solo";
+        case MarkerKind::BassSolo: return "bass_solo";
+        case MarkerKind::GuitarSolo: return "guitar_solo";
         // Cue kinds and Custom have no entry in the sections tree.
         default: return nullptr;
     }

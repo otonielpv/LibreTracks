@@ -674,6 +674,9 @@ const en = {
       get_ready: "Get Ready",
       ease_down: "Ease Down",
       next_song: "Next Song",
+      drum_solo: "Drum Solo",
+      bass_solo: "Bass Solo",
+      guitar_solo: "Guitar Solo",
     },
     prompt: {
       timelineBpm: "New timeline BPM",

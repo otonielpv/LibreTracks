@@ -66,6 +66,9 @@ export type MarkerKind =
   | "ease_down"
   | "get_ready"
   | "next_song"
+  | "drum_solo"
+  | "bass_solo"
+  | "guitar_solo"
   | "custom";
 
 /** Whether a marker behaves as a song section (Verse, Chorus — name + count-in)
@@ -175,6 +178,11 @@ const MARKER_KIND_COLORS: Record<MarkerKind, string> = {
   get_ready: "#d9a05c",
   ease_down: "#8fb0a8",
   next_song: "#7f9fd0",
+  // Instrument solos: variations of Solo's yellow, so they read as solos but
+  // can still be told apart from it and from each other.
+  drum_solo: "#e8b04f",
+  bass_solo: "#c8d65a",
+  guitar_solo: "#f0915a",
 };
 
 /** Resting-state colour for a kind. Falls back to the custom grey for unknown

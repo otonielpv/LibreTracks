@@ -667,6 +667,12 @@ pub enum MarkerKind {
     EaseDown,
     GetReady,
     NextSong,
+    // Instrument solos: sections (count-in like any other), appended per the
+    // ABI rule. Their clips are the pack's own "Solo" + instrument cue joined
+    // (scripts/voice-guide/make-instrument-solo-clips.mjs).
+    DrumSolo,
+    BassSolo,
+    GuitarSolo,
     /// User-defined section with no pre-recorded voice clip; the announcement
     /// falls back to silence (or TTS, if added later).
     #[default]
@@ -732,6 +738,9 @@ impl MarkerKind {
             MarkerKind::EaseDown => "ease_down",
             MarkerKind::GetReady => "get_ready",
             MarkerKind::NextSong => "next_song",
+            MarkerKind::DrumSolo => "drum_solo",
+            MarkerKind::BassSolo => "bass_solo",
+            MarkerKind::GuitarSolo => "guitar_solo",
             MarkerKind::Custom => "custom",
         }
     }

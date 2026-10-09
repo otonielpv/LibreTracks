@@ -152,7 +152,11 @@ enum class MarkerKind : int {
     EaseDown = 39,
     GetReady = 40,
     NextSong = 41,
-    Custom = 42,
+    // Instrument solos: sections, appended per the ABI rule.
+    DrumSolo = 42,
+    BassSolo = 43,
+    GuitarSolo = 44,
+    Custom = 45,
 };
 
 // Map a serialized snake_case kind token (as sent by Rust/TS) to the enum.

@@ -811,6 +811,9 @@ TEST_CASE("shipped voice pack covers every announced kind") {
         {MarkerKind::Chorus,        "chorus",         false},
         {MarkerKind::Turnaround,    "turnaround",     false},
         {MarkerKind::NextSong,      "next_song",      false},
+        {MarkerKind::DrumSolo,      "drum_solo",      false},
+        {MarkerKind::BassSolo,      "bass_solo",      false},
+        {MarkerKind::GuitarSolo,    "guitar_solo",    false},
         {MarkerKind::Build,         "build",          true},
         {MarkerKind::EaseDown,      "ease_down",      true},
         {MarkerKind::GetReady,      "get_ready",      true},
@@ -846,6 +849,14 @@ TEST_CASE("new marker kinds report the right category") {
     CHECK(marker_kind_from_string("ease_down") == MarkerKind::EaseDown);
     CHECK(marker_kind_from_string("get_ready") == MarkerKind::GetReady);
     CHECK(marker_kind_from_string("next_song") == MarkerKind::NextSong);
+
+    // Instrument solos are sections: name + count-in, never one-shots.
+    CHECK_FALSE(marker_kind_is_cue(MarkerKind::DrumSolo));
+    CHECK_FALSE(marker_kind_is_cue(MarkerKind::BassSolo));
+    CHECK_FALSE(marker_kind_is_cue(MarkerKind::GuitarSolo));
+    CHECK(marker_kind_from_string("drum_solo") == MarkerKind::DrumSolo);
+    CHECK(marker_kind_from_string("bass_solo") == MarkerKind::BassSolo);
+    CHECK(marker_kind_from_string("guitar_solo") == MarkerKind::GuitarSolo);
 }
 
 // Dragging a marker between the two ruler rows stores a category override. The
