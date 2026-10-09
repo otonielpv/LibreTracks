@@ -687,6 +687,8 @@ const en = {
       drum_solo: "Drum Solo",
       bass_solo: "Bass Solo",
       guitar_solo: "Guitar Solo",
+      tempo_up: "Speed Up",
+      tempo_down: "Slow Down",
     },
     prompt: {
       timelineBpm: "New timeline BPM",

@@ -156,7 +156,10 @@ enum class MarkerKind : int {
     DrumSolo = 42,
     BassSolo = 43,
     GuitarSolo = 44,
-    Custom = 45,
+    // Tempo cues (one-shot warnings; the tempo does not change).
+    TempoUp = 45,
+    TempoDown = 46,
+    Custom = 47,
 };
 
 // Map a serialized snake_case kind token (as sent by Rust/TS) to the enum.

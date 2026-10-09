@@ -690,6 +690,10 @@ pub enum MarkerKind {
     DrumSolo,
     BassSolo,
     GuitarSolo,
+    // Tempo cues: one-shot spoken warnings that the tempo goes up or down. The
+    // tempo itself does not change. Appended per the ABI rule.
+    TempoUp,
+    TempoDown,
     /// User-defined section with no pre-recorded voice clip; the announcement
     /// falls back to silence (or TTS, if added later).
     #[default]
@@ -758,6 +762,8 @@ impl MarkerKind {
             MarkerKind::DrumSolo => "drum_solo",
             MarkerKind::BassSolo => "bass_solo",
             MarkerKind::GuitarSolo => "guitar_solo",
+            MarkerKind::TempoUp => "tempo_up",
+            MarkerKind::TempoDown => "tempo_down",
             MarkerKind::Custom => "custom",
         }
     }
@@ -787,7 +793,9 @@ impl MarkerKind {
             | MarkerKind::Swell
             | MarkerKind::WorshipFreely
             | MarkerKind::EaseDown
-            | MarkerKind::GetReady => MarkerCategory::Cue,
+            | MarkerKind::GetReady
+            | MarkerKind::TempoUp
+            | MarkerKind::TempoDown => MarkerCategory::Cue,
             // NextSong falls through: it is announced with a count-in like a
             // section, not fired as a one-shot.
             _ => MarkerCategory::Section,

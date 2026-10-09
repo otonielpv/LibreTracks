@@ -69,6 +69,8 @@ export type MarkerKind =
   | "drum_solo"
   | "bass_solo"
   | "guitar_solo"
+  | "tempo_up"
+  | "tempo_down"
   | "custom";
 
 /** Whether a marker behaves as a song section (Verse, Chorus — name + count-in)
@@ -96,6 +98,8 @@ export const CUE_KINDS: readonly MarkerKind[] = [
   "big_ending",
   "key_change_up",
   "key_change_down",
+  "tempo_up",
+  "tempo_down",
   "drums",
   "bass",
   "guitar",
@@ -183,6 +187,10 @@ const MARKER_KIND_COLORS: Record<MarkerKind, string> = {
   drum_solo: "#e8b04f",
   bass_solo: "#c8d65a",
   guitar_solo: "#f0915a",
+  // Tempo cues next to the key-change greens, in a cooler teal: both say
+  // "something about the song changes here".
+  tempo_up: "#5cc6c0",
+  tempo_down: "#4f9fb8",
 };
 
 /** Resting-state colour for a kind. Falls back to the custom grey for unknown

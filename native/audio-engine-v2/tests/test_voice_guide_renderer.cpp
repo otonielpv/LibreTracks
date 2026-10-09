@@ -814,6 +814,8 @@ TEST_CASE("shipped voice pack covers every announced kind") {
         {MarkerKind::DrumSolo,      "drum_solo",      false},
         {MarkerKind::BassSolo,      "bass_solo",      false},
         {MarkerKind::GuitarSolo,    "guitar_solo",    false},
+        {MarkerKind::TempoUp,       "tempo_up",       true},
+        {MarkerKind::TempoDown,     "tempo_down",     true},
         {MarkerKind::Build,         "build",          true},
         {MarkerKind::EaseDown,      "ease_down",      true},
         {MarkerKind::GetReady,      "get_ready",      true},
@@ -857,6 +859,12 @@ TEST_CASE("new marker kinds report the right category") {
     CHECK(marker_kind_from_string("drum_solo") == MarkerKind::DrumSolo);
     CHECK(marker_kind_from_string("bass_solo") == MarkerKind::BassSolo);
     CHECK(marker_kind_from_string("guitar_solo") == MarkerKind::GuitarSolo);
+
+    // Tempo cues are one-shot warnings, not sections with a count-in.
+    CHECK(marker_kind_is_cue(MarkerKind::TempoUp));
+    CHECK(marker_kind_is_cue(MarkerKind::TempoDown));
+    CHECK(marker_kind_from_string("tempo_up") == MarkerKind::TempoUp);
+    CHECK(marker_kind_from_string("tempo_down") == MarkerKind::TempoDown);
 }
 
 // Dragging a marker between the two ruler rows stores a category override. The

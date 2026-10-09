@@ -309,6 +309,8 @@ const char* cue_filename(int kind_index) noexcept {
         case MarkerKind::WorshipFreely: return "worship_freely";
         case MarkerKind::EaseDown: return "ease_down";
         case MarkerKind::GetReady: return "get_ready";
+        case MarkerKind::TempoUp: return "tempo_up";
+        case MarkerKind::TempoDown: return "tempo_down";
         default: return nullptr;
     }
 }

@@ -700,6 +700,8 @@ const es = {
       drum_solo: "Solo Batería",
       bass_solo: "Solo Bajo",
       guitar_solo: "Solo Guitarra",
+      tempo_up: "Sube Tempo",
+      tempo_down: "Baja Tempo",
     },
     prompt: {
       timelineBpm: "Nuevo BPM del timeline",
