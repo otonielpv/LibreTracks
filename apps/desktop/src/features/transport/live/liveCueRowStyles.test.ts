@@ -46,8 +46,10 @@ describe("colores de las marcas en la vista Live", () => {
     expect(code).not.toContain("color-mix(");
   });
 
-  it("en el iPhone la vista sale de la franja del indicador de inicio", () => {
-    // Pegada al borde, reordenar canciones peleaba con el gesto de cambiar de app.
-    expect(rule(".lt-ios .lt-live-view")).toContain("var(--lt-safe-area-bottom)");
+  it("en el iPhone la vista llega al borde inferior", () => {
+    // El margen del indicador de inicio existía porque la lista de canciones
+    // iba abajo y reordenar peleaba con el gesto de cambiar de app. La lista
+    // está ahora en la cabecera: ese hueco era espacio perdido.
+    expect(css).not.toMatch(/\.lt-ios \.lt-live-view\s*\{[^}]*safe-area-bottom/);
   });
 });

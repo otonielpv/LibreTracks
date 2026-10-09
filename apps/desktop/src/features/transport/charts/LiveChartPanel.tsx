@@ -119,7 +119,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const manualScrollAtRef = useRef(0);
+  const manualScrollAtRef = useRef(Number.NEGATIVE_INFINITY);
   const [fontScale, setFontScale] = useState(() =>
     readStored(FONT_SCALE_KEY, 1, (value) => {
       const parsed = Number(value);
@@ -171,7 +171,11 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     const key = playback.line === null ? `${playback.section}-head` : `${playback.section}-${playback.line}`;
     const target = scroller.querySelector<HTMLElement>(`[data-line-key="${key}"]`);
     if (!target) return;
-    const top = Math.max(0, target.offsetTop - scroller.clientHeight * 0.18);
+    // From the on-screen positions, not offsetTop: offsetTop is measured
+    // from the nearest positioned ancestor, which is not the scroller, and on
+    // iOS that put the current line out of view.
+    const offset = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    const top = Math.max(0, scroller.scrollTop + offset - scroller.clientHeight * 0.18);
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (typeof scroller.scrollTo === "function") {
       scroller.scrollTo({ top, behavior: reduceMotion ? "auto" : "smooth" });

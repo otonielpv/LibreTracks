@@ -100,6 +100,29 @@ describe("LiveChartPanel", () => {
     expect(screen.getByTitle("liveChart.upNext").textContent).toContain("Coro 1");
   });
 
+  it("scrolls so the current line sits near the top of the panel", () => {
+    const scrollTo = vi.fn();
+    HTMLElement.prototype.scrollTo = scrollTo as never;
+    const rect = (top: number) => ({ top, bottom: top + 20, left: 0, right: 0, width: 0, height: 20, x: 0, y: top, toJSON: () => ({}) });
+    const original = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (this.getAttribute("data-testid") === "live-chart-scroller") return rect(100) as DOMRect;
+      if (this.getAttribute("data-line-key") === "0-1") return rect(500) as DOMRect;
+      return rect(0) as DOMRect;
+    };
+    const clientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get: () => 300 });
+    try {
+      // Second verse line playing; the line is 400 px below the scroller's top.
+      renderPanel(region(linked), { current: 12 });
+      // 400 px down, minus 18 % of a 300 px panel of lead.
+      expect(scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ top: 346 }));
+    } finally {
+      Element.prototype.getBoundingClientRect = original;
+      if (clientHeight) Object.defineProperty(HTMLElement.prototype, "clientHeight", clientHeight);
+    }
+  });
+
   it("follows the playhead into the next section", () => {
     vi.useFakeTimers();
     try {

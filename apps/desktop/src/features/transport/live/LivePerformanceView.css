@@ -26,7 +26,7 @@
 }
 
 .lt-live-view.has-chart {
-  grid-template-columns: minmax(16rem, 1fr) minmax(0, 1.35fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-areas:
     "header header"
     "settings settings"
@@ -727,7 +727,7 @@
   }
 
   .lt-live-view.has-chart {
-    grid-template-columns: minmax(12rem, 0.8fr) minmax(0, 1.2fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .lt-live-heading > .material-symbols-outlined,
@@ -846,11 +846,3 @@
   color: rgb(87 241 219 / 0.85);
 }
 
-/* iPhone: el indicador de inicio ocupa la franja inferior; lo de abajo de la
-   vista (la letra o las marcas) se aparta de él. */
-.lt-ios .lt-live-view {
-  padding-bottom: max(
-    var(--lt-live-page-padding),
-    calc(var(--lt-safe-area-bottom) + 0.5rem)
-  );
-}
