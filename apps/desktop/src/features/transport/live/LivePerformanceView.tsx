@@ -40,7 +40,6 @@ import {
 import type { ViewMode } from "../uiStore";
 import { ViewModeSwitcher } from "../timeline/ViewModeSwitcher";
 import "./LivePerformanceView.css";
-import { FadeStopButton } from "../timeline/FadeStopButton";
 
 type LivePerformanceViewProps = {
   song: SongView;
@@ -294,7 +293,6 @@ function LivePerformanceViewComponent({
           <span>{currentRegion ? `${getEffectiveBpmAt(song, currentRegion.startSeconds).toFixed(0)} BPM` : `${song.bpm.toFixed(0)} BPM`}</span>
           <span>{regionEffectiveKey(currentRegion) ?? "—"}</span>
         </div>
-        <FadeStopButton className="lt-live-fade-stop" />
       </header>
 
       <section className="lt-live-settings" aria-label={t("liveView.performanceSettings")}>

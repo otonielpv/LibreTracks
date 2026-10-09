@@ -348,6 +348,10 @@ export function FolderLibraryPanel({
         </button>
         <input
           type="search"
+          // Sin esto el WebView rellenaba el buscador con lo último escrito en
+          // otro campo («Song 1») y la lista salía filtrada sin motivo.
+          autoComplete="off"
+          name="lt-folder-library-search"
           className="lt-folder-library-search"
           placeholder={t("library.folders.search")}
           aria-label={t("library.folders.search")}

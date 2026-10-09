@@ -193,32 +193,6 @@
   background: rgb(87 241 219 / 0.12);
 }
 
-/* «Fade out y parar» en la cabecera: al final, lejos del selector de vista,
-   y grande para acertarle en directo. Ambar mientras el fade corre: es el
-   aviso de que otra pulsacion para en seco. */
-.lt-live-fade-stop {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 2.4rem;
-  min-height: 2.1rem;
-  margin-left: auto;
-  border: 1px solid rgb(255 255 255 / 0.12);
-  border-radius: 0.35rem;
-  color: #c9d4d0;
-  background: #171a19;
-}
-
-.lt-live-fade-stop:disabled {
-  opacity: 0.4;
-}
-
-.lt-live-fade-stop.is-active {
-  border-color: #f4c95d;
-  color: #f4c95d;
-  background: rgb(70 54 13 / 0.45);
-}
-
 .lt-live-song-transition {
   display: flex;
   flex: 0 0 auto;

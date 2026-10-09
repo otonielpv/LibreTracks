@@ -219,19 +219,28 @@
 .lt-folder-library-session-toggle {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.55rem 0.7rem;
+  gap: 0.45rem;
+  width: 100%;
+  min-height: 2.6rem;
+  padding: 0.6rem 0.85rem;
   border: 0;
-  background: transparent;
-  color: #bacac5;
-  font: 700 10px/1 "Space Grotesk", sans-serif;
-  letter-spacing: 0.1em;
+  background: rgb(255 255 255 / 0.03);
+  color: #e5e2e1;
+  font: 700 12px/1.1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.08em;
+  text-align: left;
   text-transform: uppercase;
   cursor: pointer;
 }
 
+.lt-folder-library-session-toggle:hover {
+  background: rgb(87 241 219 / 0.07);
+  color: #57f1db;
+}
+
 .lt-folder-library-session-toggle .material-symbols-outlined {
-  font-size: 15px;
+  font-size: 20px;
+  color: #57f1db;
 }
 
 .lt-folder-library-session-body {
