@@ -84,7 +84,7 @@ describe("App / app.render", () => {
     expect(container.querySelector(".lt-ruler-canvas-layer")).toBeTruthy();
   });
 
-  it("cycles DAW, Compact, Live and Chart views with Tab", async () => {
+  it("cycles DAW, Compact and Live views with Tab", async () => {
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
       value: vi.fn(),
@@ -100,29 +100,15 @@ describe("App / app.render", () => {
     ).toBeTruthy();
 
     fireEvent.keyDown(window, { code: "Tab", key: "Tab" });
-    expect(
-      screen.getByRole("main", { name: textMatcher(en.chartView.title) }),
-    ).toBeTruthy();
-
-    fireEvent.keyDown(window, { code: "Tab", key: "Tab" });
     expect(container.querySelector(".lt-ruler-canvas-layer")).toBeTruthy();
   });
 
-  it("cycles Chart, Live, Compact and DAW views with Shift+Tab", async () => {
+  it("cycles Live, Compact and DAW views with Shift+Tab", async () => {
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
       value: vi.fn(),
     });
     const { container } = await renderApp();
-
-    fireEvent.keyDown(window, {
-      code: "Tab",
-      key: "Tab",
-      shiftKey: true,
-    });
-    expect(
-      screen.getByRole("main", { name: textMatcher(en.chartView.title) }),
-    ).toBeTruthy();
 
     fireEvent.keyDown(window, {
       code: "Tab",

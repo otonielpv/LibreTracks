@@ -108,83 +108,83 @@ pub struct SongRegion {
     /// versión vieja lo ignora y ve el timeline lineal que el arreglo escribió.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub structure: Option<SongStructure>,
-    /// Partitura de la canción (PDF de acordes/letra) y dónde empieza cada
-    /// sección dentro de ella. `None` —y lo que deserializan las sesiones de
-    /// antes— es una canción sin partitura. Se omite al guardar, así que una
-    /// versión vieja abre la sesión igual.
+    /// Letra y acordes de la canción (ChordPro) y cómo se sincronizan con sus
+    /// marcas. `None` —y lo que deserializan las sesiones de antes— es una
+    /// canción sin letra. Se omite al guardar, así que una versión vieja abre
+    /// la sesión igual.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chart: Option<SongChart>,
 }
 
-/// PDF asociado a una canción y los puntos que lo sincronizan con ella.
+/// Letra y acordes de una canción, y su sincronía con la secuencia.
 ///
-/// El PDF se referencia por ruta, como el audio importado: no se copia a la
-/// sesión. Sólo viaja dentro de un `.ltpkg`/`.ltset` al exportar.
+/// El texto es ChordPro (`{section: Coro}`, `[C]letra`): pocos KB que viajan
+/// dentro de la sesión. Del PDF del que salió no se guarda nada.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SongChart {
-    pub file_path: String,
-    /// Un punto por marca de sección como mucho. Van anclados a la MARCA y no a
-    /// un tiempo para que sobrevivan a mover la marca y a los arreglos: una
-    /// repetición `"{id}~{n}"` resuelve al punto de `id`.
+    pub text: String,
+    /// Qué sección del texto se muestra en cada marca. Anclados a la MARCA, no
+    /// a un tiempo: sobreviven a mover la marca y a los arreglos (una
+    /// repetición `"{id}~{n}"` usa el enlace de `id`).
     #[serde(default)]
-    pub anchors: Vec<ChartAnchor>,
+    pub links: Vec<ChartLink>,
+}
+
+/// Una marca y la sección del texto que suena desde ella.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartLink {
+    pub marker_id: String,
+    /// Índice de la sección en el texto, empezando en 0.
+    pub section: u32,
+    /// Cuándo empieza cada línea de la sección, en pulsos desde la marca.
+    /// Vacío = repartidas a partes iguales hasta la marca siguiente. En
+    /// pulsos y no en segundos para que un cambio de tempo no las descuadre.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub line_beats: Vec<f64>,
 }
 
 impl SongChart {
-    /// Mayor tamaño de PDF aceptado. Una partitura ronda los cientos de KB; el
-    /// tope sólo evita meter por error un libro escaneado en la sesión.
-    pub const MAX_BYTES: usize = 25 * 1024 * 1024;
+    /// Mayor texto aceptado. Una canción ronda los 2-4 KB; el tope sólo evita
+    /// que un import descontrolado engorde la sesión.
+    pub const MAX_TEXT_BYTES: usize = 256 * 1024;
 
-    /// El punto de una marca. Una repetición creada por un arreglo
-    /// (`"{id}~{n}"`) usa el de su marca original.
-    pub fn anchor_for(&self, marker_id: &str) -> Option<&ChartAnchor> {
-        let base = chart_anchor_marker_id(marker_id);
-        self.anchors.iter().find(|anchor| anchor.marker_id == base)
+    pub fn link_for(&self, marker_id: &str) -> Option<&ChartLink> {
+        let base = chart_link_marker_id(marker_id);
+        self.links.iter().find(|link| link.marker_id == base)
     }
 
-    /// Pone (o mueve) el punto de una marca. `y` se recorta a la página.
-    pub fn set_anchor(&mut self, marker_id: &str, page: u32, y: f64) {
-        let marker_id = chart_anchor_marker_id(marker_id).to_string();
-        let y = if y.is_finite() { y.clamp(0.0, 1.0) } else { 0.0 };
-        match self.anchors.iter_mut().find(|anchor| anchor.marker_id == marker_id) {
-            Some(anchor) => {
-                anchor.page = page;
-                anchor.y = y;
+    /// Deja el gráfico en un estado válido: enlaces a marcas que existen, uno
+    /// por marca (el último gana), con ids de marca original y pulsos finitos,
+    /// no negativos y en orden.
+    pub fn normalize(&mut self, marker_exists: impl Fn(&str) -> bool) {
+        let mut normalized: Vec<ChartLink> = Vec::new();
+        for mut link in std::mem::take(&mut self.links) {
+            link.marker_id = chart_link_marker_id(&link.marker_id).to_string();
+            if !marker_exists(&link.marker_id) {
+                continue;
             }
-            None => self.anchors.push(ChartAnchor { marker_id, page, y }),
+            let mut beats: Vec<f64> = link
+                .line_beats
+                .iter()
+                .copied()
+                .filter(|beat| beat.is_finite())
+                .map(|beat| beat.max(0.0))
+                .collect();
+            beats.sort_by(|left, right| left.total_cmp(right));
+            link.line_beats = beats;
+            normalized.retain(|existing| existing.marker_id != link.marker_id);
+            normalized.push(link);
         }
-    }
-
-    pub fn remove_anchor(&mut self, marker_id: &str) {
-        let base = chart_anchor_marker_id(marker_id);
-        self.anchors.retain(|anchor| anchor.marker_id != base);
+        self.links = normalized;
     }
 }
 
-/// El id de marca con el que se guarda un punto: sin el sufijo `~n` que los
+/// El id de marca con el que se guarda un enlace: sin el sufijo `~n` que los
 /// arreglos ponen a las repeticiones.
-pub fn chart_anchor_marker_id(marker_id: &str) -> &str {
+pub fn chart_link_marker_id(marker_id: &str) -> &str {
     marker_id.split('~').next().unwrap_or(marker_id)
-}
-
-/// Si unos bytes son un PDF: la cabecera `%PDF-` puede ir precedida de basura,
-/// y los lectores la buscan en el primer KB.
-pub fn looks_like_pdf(bytes: &[u8]) -> bool {
-    let head = &bytes[..bytes.len().min(1024)];
-    head.windows(5).any(|window| window == b"%PDF-")
-}
-
-/// Dónde empieza una sección dentro del PDF.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct ChartAnchor {
-    pub marker_id: String,
-    /// Página, empezando en 0.
-    pub page: u32,
-    /// Altura dentro de la página, de 0 (arriba) a 1 (abajo). Fracción y no
-    /// píxeles para que valga a cualquier tamaño de pantalla.
-    pub y: f64,
 }
 
 /// Original de una canción y los arreglos construidos a partir de él.

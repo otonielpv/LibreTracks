@@ -52,13 +52,11 @@ describe("useTimelineUIStore", () => {
   });
 
   describe("view mode", () => {
-    it("cycles the keyboard toggle through DAW, Compact, Live and Chart", () => {
+    it("cycles the keyboard toggle through DAW, Compact and Live", () => {
       get().toggleViewMode();
       expect(get().viewMode).toBe("compact");
       get().toggleViewMode();
       expect(get().viewMode).toBe("live");
-      get().toggleViewMode();
-      expect(get().viewMode).toBe("chart");
       get().toggleViewMode();
       expect(get().viewMode).toBe("daw");
 
@@ -67,9 +65,7 @@ describe("useTimelineUIStore", () => {
       expect(recordProductEvent).toHaveBeenCalledWith("feature_daw_view");
     });
 
-    it("cycles backward through DAW, Chart, Live and Compact", () => {
-      get().toggleViewModeBackward();
-      expect(get().viewMode).toBe("chart");
+    it("cycles backward through DAW, Live and Compact", () => {
       get().toggleViewModeBackward();
       expect(get().viewMode).toBe("live");
       get().toggleViewModeBackward();

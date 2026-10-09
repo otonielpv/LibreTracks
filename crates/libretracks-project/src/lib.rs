@@ -2,8 +2,6 @@
 
 mod asset_path;
 mod atomic_write;
-mod charts;
-pub use charts::{chart_file_name, store_chart_pdf, unique_chart_path, CHARTS_DIR};
 mod disk_space;
 pub use disk_space::free_space_bytes;
 mod importer;

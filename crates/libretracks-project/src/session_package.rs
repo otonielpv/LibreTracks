@@ -20,7 +20,6 @@
 //! sidecars/<name>                opaque project files (library.json, automation…)
 //! audio/<file_name>              full packages only — audio referenced by clips
 //! video/<song>/<file_name>       only with "include videos" — videos of clips and library
-//! charts/<file_name>.pdf        always — the songs' PDF charts (a few hundred KB)
 //! cache/waveforms/<name>.ltpeaks waveform peaks for instant open on the target
 //! ```
 //!
@@ -591,20 +590,6 @@ pub fn session_video_payload(song_dir: &Path, song: &Song) -> (usize, u64) {
     (planned.len(), bytes)
 }
 
-/// The `charts/<name>.pdf` entries a session's songs use, once each. A chart
-/// stored anywhere but under `charts/` (hand-edited session) is left out: its
-/// path would not resolve on the importing side anyway.
-fn chart_entries(song: &Song) -> Vec<String> {
-    let mut seen = HashSet::new();
-    song.regions
-        .iter()
-        .filter_map(|region| region.chart.as_ref())
-        .map(|chart| chart.file_path.replace('\\', "/"))
-        .filter(|path| path.starts_with("charts/") && is_safe_relative_entry(path))
-        .filter(|path| seen.insert(path.to_lowercase()))
-        .collect()
-}
-
 /// Copy a (possibly multi-gigabyte) file into the zip without holding it in
 /// memory, uncompressed. Zip64 when it needs it. `false` if it cannot be read.
 pub(crate) fn write_file_entry<W: Write + io::Seek>(
@@ -995,14 +980,6 @@ pub fn export_session_as_package_with_options(
         zip.write_all(&bytes)?;
     }
 
-    // Song charts go in every mode, Light included: they live inside the
-    // session folder under a relative path, which the imported session (a new
-    // folder) would not have otherwise. An older reader skips the unknown
-    // `charts/` entries.
-    for entry_name in chart_entries(song) {
-        write_file_entry(&mut zip, &entry_name, &song_dir.join(&entry_name))?;
-    }
-
     let mut written_waveform_entries = HashSet::new();
     // Videos count in the progress too: they are usually most of the bytes.
     let planned_total = planned.len() + planned_videos.len();
@@ -1290,8 +1267,6 @@ fn extract_session_package_inner<R: Read + io::Seek>(
             target_song_dir.join("video").join(name)
         } else if let Some(name) = entry_name.strip_prefix("cache/waveforms/") {
             target_song_dir.join("cache").join("waveforms").join(name)
-        } else if let Some(name) = entry_name.strip_prefix("charts/") {
-            target_song_dir.join("charts").join(name)
         } else {
             // Unknown top-level entry from a future/foreign writer — ignore it
             // rather than scattering files into the project root.
@@ -2201,61 +2176,6 @@ mod tests {
             b"AUTO"
         );
         assert!(dest_dir.join("library.json").exists());
-    }
-
-    #[test]
-    fn charts_travel_even_in_a_light_package_and_open_in_the_new_session() {
-        let src = tempfile::tempdir().expect("src");
-        let song_dir = src.path();
-        write_session_dir(song_dir);
-        fs::create_dir_all(song_dir.join("charts")).expect("charts dir");
-        fs::write(song_dir.join("charts").join("Acordes.pdf"), b"%PDF-1.7 chart").expect("pdf");
-        let mut song = session();
-        song.regions[0].chart = Some(libretracks_core::SongChart {
-            file_path: "charts/Acordes.pdf".into(),
-            anchors: vec![libretracks_core::ChartAnchor {
-                marker_id: "verse".into(),
-                page: 0,
-                y: 0.25,
-            }],
-        });
-        // The same PDF on two songs goes in once.
-        song.regions[1].chart = song.regions[0].chart.clone();
-        let package_path = song_dir.join("light.ltset");
-        export_session_as_package(
-            song_dir,
-            song_dir,
-            &song,
-            &sidecars(),
-            &package_path,
-            false,
-            |_, _| {},
-        )
-        .expect("export light");
-
-        let entries: Vec<String> = {
-            let mut archive = ZipArchive::new(fs::File::open(&package_path).expect("open")).expect("zip");
-            (0..archive.len())
-                .map(|index| archive.by_index_raw(index).expect("entry").name().to_string())
-                .collect()
-        };
-        assert_eq!(
-            entries.iter().filter(|name| name.starts_with("charts/")).count(),
-            1,
-            "{entries:?}"
-        );
-
-        let target = tempfile::tempdir().expect("target");
-        let dest_dir = target.path().join("Destino");
-        let extracted =
-            extract_session_package(&dest_dir, &package_path, |_, _| {}).expect("extract");
-        let loaded = crate::load_song_from_file(&extracted.song_file).expect("load");
-        let chart = loaded.regions[0].chart.as_ref().expect("chart kept");
-        assert_eq!(chart.anchors.len(), 1);
-        assert_eq!(
-            fs::read(dest_dir.join(&chart.file_path)).expect("pdf in the new session"),
-            b"%PDF-1.7 chart"
-        );
     }
 
     #[test]

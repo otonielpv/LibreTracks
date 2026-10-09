@@ -164,9 +164,8 @@ struct SongPackageManifest {
     /// without one and in packages made before arrangements existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     structure: Option<libretracks_core::SongStructure>,
-    /// The song's PDF chart and its anchors. The PDF travels under the same
-    /// `charts/<name>.pdf` entry its `file_path` names. Additive: an older
-    /// reader ignores both.
+    /// The song's lyrics and chords (ChordPro) and their links to its markers,
+    /// which keep their ids on import. Additive: an older reader ignores it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     region_chart: Option<libretracks_core::SongChart>,
 }
@@ -522,10 +521,7 @@ pub fn export_region_as_package_with_progress(
         video_library_meta: video_library_meta.clone(),
         bundled_video,
         structure,
-        region_chart: region
-            .chart
-            .clone()
-            .filter(|chart| song_dir.join(&chart.file_path).is_file()),
+        region_chart: region.chart.clone(),
     };
 
     let file = File::create(output_path)?;
@@ -536,16 +532,6 @@ pub fn export_region_as_package_with_progress(
     zip.start_file("manifest.json", options)
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
     zip.write_all(serde_json::to_vec_pretty(&manifest)?.as_slice())?;
-
-    // The chart always goes in, light package or not: it lives in the session
-    // folder, which the importing session is not.
-    if let Some(chart) = &manifest.region_chart {
-        crate::session_package::write_file_entry(
-            &mut zip,
-            &chart.file_path.replace('\\', "/"),
-            &song_dir.join(&chart.file_path),
-        )?;
-    }
 
     for entry in &video_library_meta {
         if let Some(entry_name) = &entry.bundled_entry {
@@ -942,7 +928,7 @@ pub fn extract_song_package_from_reader_with_options<R: Read + Seek>(
         .by_name("manifest.json")
         .map_err(|error| ProjectError::AudioDecode(error.to_string()))?
         .read_to_string(&mut manifest_json)?;
-    let mut manifest: SongPackageManifest = serde_json::from_str(&manifest_json)?;
+    let manifest: SongPackageManifest = serde_json::from_str(&manifest_json)?;
     if !(libretracks_core::MIN_TRANSPOSE_SEMITONES..=libretracks_core::MAX_TRANSPOSE_SEMITONES)
         .contains(&manifest.region_transpose_semitones)
     {
@@ -959,7 +945,6 @@ pub fn extract_song_package_from_reader_with_options<R: Read + Seek>(
                 name.starts_with("video/") && !name.ends_with('/')
             })
         });
-    manifest.region_chart = place_package_chart(song_dir, &mut archive, manifest.region_chart.take())?;
     let bundled_audio =
         extract_package_payload(song_dir, &mut archive, options, on_extract_progress)?;
     Ok(ExtractedSongPackage {
@@ -967,33 +952,6 @@ pub fn extract_song_package_from_reader_with_options<R: Read + Seek>(
         bundled_audio,
         videos_left_out,
     })
-}
-
-/// Copies the package's chart into the destination's `charts/` under a free
-/// name and points the chart at it. A chart whose PDF is missing from the zip,
-/// or is not a PDF, is dropped: anchors into a document nobody has are noise.
-fn place_package_chart<R: Read + Seek>(
-    song_dir: &Path,
-    archive: &mut ZipArchive<R>,
-    chart: Option<libretracks_core::SongChart>,
-) -> Result<Option<libretracks_core::SongChart>, ProjectError> {
-    let Some(mut chart) = chart else {
-        return Ok(None);
-    };
-    let entry_name = chart.file_path.replace('\\', "/");
-    let bytes = match archive.by_name(&entry_name) {
-        Ok(mut entry) if entry.size() <= libretracks_core::SongChart::MAX_BYTES as u64 => {
-            let mut bytes = Vec::new();
-            entry.read_to_end(&mut bytes)?;
-            bytes
-        }
-        _ => return Ok(None),
-    };
-    if !libretracks_core::looks_like_pdf(&bytes) {
-        return Ok(None);
-    }
-    chart.file_path = crate::store_chart_pdf(song_dir, &entry_name, &bytes)?;
-    Ok(Some(chart))
 }
 
 /// Point the original of an imported arrangement at the tracks and clip ids the
@@ -1896,69 +1854,23 @@ mod tests {
     }
 
     #[test]
-    fn a_song_chart_travels_in_a_light_package_with_its_anchors() {
+    fn a_song_chart_travels_in_the_package_with_its_links() {
         let dir = tempdir().expect("tempdir");
         let song_dir = dir.path();
-        fs::create_dir_all(song_dir.join("charts")).expect("charts dir");
-        fs::write(song_dir.join("charts").join("Verse.pdf"), b"%PDF-1.7 verse").expect("pdf");
         let mut source = song();
-        source.regions[0].chart = Some(libretracks_core::SongChart {
-            file_path: "charts/Verse.pdf".into(),
-            anchors: vec![libretracks_core::ChartAnchor {
+        let chart = libretracks_core::SongChart {
+            text: "{section: Verso 1}
+[C]Letra".into(),
+            links: vec![libretracks_core::ChartLink {
                 marker_id: "m1".into(),
-                page: 1,
-                y: 0.4,
+                section: 0,
+                line_beats: vec![0.0, 8.0],
             }],
-        });
+        };
+        source.regions[0].chart = Some(chart.clone());
         let package_path = song_dir.join("verse.ltpkg");
         export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
             .expect("export light");
-
-        // The destination already has a chart with that name: no overwrite.
-        let target = tempdir().expect("target");
-        fs::create_dir_all(target.path().join("charts")).expect("charts dir");
-        fs::write(target.path().join("charts").join("Verse.pdf"), b"%PDF- other").expect("pdf");
-        let empty = Song {
-            tracks: vec![],
-            clips: vec![],
-            regions: vec![],
-            section_markers: vec![],
-            ..song()
-        };
-        let result = import_song_package(
-            target.path(),
-            &empty,
-            &package_path,
-            0.0,
-            SongImportTrackMode::default(),
-        )
-        .expect("import");
-
-        let chart = result.song.regions[0].chart.as_ref().expect("chart imported");
-        assert_eq!(chart.file_path, "charts/Verse (2).pdf");
-        assert_eq!(chart.anchors.len(), 1);
-        assert_eq!(
-            fs::read(target.path().join(&chart.file_path)).expect("pdf placed"),
-            b"%PDF-1.7 verse"
-        );
-        assert_eq!(
-            fs::read(target.path().join("charts").join("Verse.pdf")).expect("untouched"),
-            b"%PDF- other"
-        );
-    }
-
-    #[test]
-    fn a_chart_whose_pdf_is_gone_is_not_exported() {
-        let dir = tempdir().expect("tempdir");
-        let song_dir = dir.path();
-        let mut source = song();
-        source.regions[0].chart = Some(libretracks_core::SongChart {
-            file_path: "charts/missing.pdf".into(),
-            anchors: vec![],
-        });
-        let package_path = song_dir.join("verse.ltpkg");
-        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
-            .expect("a missing chart does not fail the export");
 
         let empty = Song {
             tracks: vec![],
@@ -1975,7 +1887,7 @@ mod tests {
             SongImportTrackMode::default(),
         )
         .expect("import");
-        assert!(result.song.regions[0].chart.is_none());
+        assert_eq!(result.song.regions[0].chart.as_ref(), Some(&chart));
     }
 
     #[test]

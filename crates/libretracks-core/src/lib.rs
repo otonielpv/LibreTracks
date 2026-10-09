@@ -14,7 +14,7 @@ pub use automation::{
 };
 pub use model::{
     default_audio_to, implicit_start_section_id, Arrangement, ArrangementBlock, OriginalSection,
-    OriginalSnapshot, SongStructure, SongChart, ChartAnchor, chart_anchor_marker_id, looks_like_pdf, parse_audio_output_route, Clip, Marker, MarkerCategory, MarkerKind, MidiClip,
+    OriginalSnapshot, SongStructure, SongChart, ChartLink, chart_link_marker_id, parse_audio_output_route, Clip, Marker, MarkerCategory, MarkerKind, MidiClip,
     MidiEvent, MidiEventKind, Project, Song, SongMaster, SongRegion, TempoMarker, TempoMetadata,
     is_video_file_path, TempoSource, TimeSignatureMarker, Track, TrackKind, VideoAssetInfo, VideoClip,
     VideoFit, MAX_MIDI_CHANNEL, MAX_MIDI_DATA_VALUE, MIN_MIDI_CHANNEL,

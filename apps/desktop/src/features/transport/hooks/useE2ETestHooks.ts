@@ -65,12 +65,14 @@ import {
   updateSongRegionKey,
   updateSongRegionWarp,
   updateSongRegionMasterGain,
+  setSongRegionChart,
   type ClipMoveRequest,
+  type SongChart,
   type MarkerKind,
   type TrackKind,
 } from "../desktopApi";
 import { useTransportStore, type MeterDictionary } from "../store";
-import { useTimelineUIStore } from "../uiStore";
+import { useTimelineUIStore, type ViewMode } from "../uiStore";
 
 /**
  * Exposes a tiny, stable automation surface on `window.__ltE2E` — but ONLY when
@@ -355,6 +357,10 @@ export interface E2ETestHooks {
     regionId: string,
     masterGain: number,
   ) => Promise<void>;
+  /** Replace a song's lyrics and chords (null removes them). */
+  setSongRegionChart: (regionId: string, chart: SongChart | null) => Promise<void>;
+  /** Switch the main view (daw, compact, live). */
+  setViewMode: (mode: ViewMode) => void;
 }
 
 type E2EWindow = Window & { __ltE2E?: E2ETestHooks };
@@ -611,6 +617,10 @@ export function useE2ETestHooks(
       updateSongRegionMasterGain: async (regionId, masterGain) => {
         await updateSongRegionMasterGain(regionId, masterGain);
       },
+      setSongRegionChart: async (regionId, chart) => {
+        await setSongRegionChart(regionId, chart);
+      },
+      setViewMode: (mode) => useTimelineUIStore.getState().setViewMode(mode),
     };
 
     return () => {

@@ -144,6 +144,7 @@ import {
   updateLiveRegionMasterGain,
   moveSongRegion,
   reorderSongRegion,
+  setSongRegionChart,
   updateSongRegion,
   updateSongRegionMasterGain,
   updateSongRegionTranspose,
@@ -196,7 +197,6 @@ import { settlePerfCommits } from "./perf/perfMetrics";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { CompactView } from "./compact/CompactView";
 import { LivePerformanceView } from "./live/LivePerformanceView";
-import { ChartView } from "./charts/ChartView";
 import { BusyOverlay } from "./shell/BusyOverlay";
 import { MissingMidiWarningModal } from "./shell/MissingMidiWarningModal";
 import { StructureGuardDialog } from "./structure/StructureGuardDialog";
@@ -7375,7 +7375,7 @@ export function TransportPanelContent() {
                     mix={multiTrackMix}
                     audioRoutingOptions={audioRoutingOptions}
                   />
-                  {viewMode !== "live" && viewMode !== "chart" ? (
+                  {viewMode !== "live" ? (
                   <TimelineToolbar
                     snapEnabled={snapEnabled}
                     subdivisionPerBeat={timelineGrid.subdivisionPerBeat}
@@ -8020,7 +8020,7 @@ export function TransportPanelContent() {
                       onViewModeChange={setViewMode}
                       onMarkerAction={(marker) => void runAction(() => handleMarkerPrimaryAction(marker))}
                       onSongAction={(region) => handleCompactPlaySong(region.id, region.name)}
-                      onReorderSong={(id, index) => runAction(async () => applyPlaybackSnapshot(await reorderSongRegion(id, index)))}
+                      onChartChange={(regionId, chart) => runAction(async () => applyPlaybackSnapshot(await setSongRegionChart(regionId, chart)))}
                       onToggleVamp={() => void runAction(async () => {
                         await toggleTimelineVamp();
                       })}
@@ -8035,16 +8035,6 @@ export function TransportPanelContent() {
                       onSongTransitionModeChange={handleSongTransitionModeChange}
                       onVampModeChange={handleVampModeChange}
                       onVampBarsChange={handleVampBarsChange}
-                    />
-                  ) : null}
-
-                  {viewMode === "chart" && song ? (
-                    <ChartView
-                      song={song}
-                      positionSecondsRef={displayPositionSecondsRef}
-                      onViewModeChange={setViewMode}
-                      onSnapshot={applyPlaybackSnapshot}
-                      run={runAction}
                     />
                   ) : null}
                 </section>

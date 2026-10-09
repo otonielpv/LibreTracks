@@ -1,9 +1,7 @@
-//! La partitura de una canción: se copia a `charts/`, sus puntos se anclan a la
-//! marca original y cada cambio es un paso de deshacer.
+//! La letra de una canción: se valida, sus enlaces se anclan a la marca
+//! original y cada cambio es un paso de deshacer.
 
-use std::fs;
-
-use libretracks_core::{Marker, MarkerKind, Song, SongMaster, SongRegion};
+use libretracks_core::{ChartLink, Marker, MarkerKind, Song, SongChart, SongMaster, SongRegion};
 use libretracks_project::{create_song_folder, save_song, SONG_FILE_NAME};
 use tempfile::tempdir;
 
@@ -63,95 +61,91 @@ fn session() -> DesktopSession {
     session
 }
 
-fn chart(session: &DesktopSession) -> Option<libretracks_core::SongChart> {
+fn chart(session: &DesktopSession) -> Option<SongChart> {
     session.engine.song().expect("song").regions[0].chart.clone()
 }
 
+fn lyrics(links: Vec<ChartLink>) -> SongChart {
+    SongChart {
+        text: "{section: Coro}
+[C]Gracia sublime es".into(),
+        links,
+    }
+}
+
+fn link(marker_id: &str, line_beats: Vec<f64>) -> ChartLink {
+    ChartLink {
+        marker_id: marker_id.into(),
+        section: 0,
+        line_beats,
+    }
+}
+
 #[test]
-fn a_chart_is_copied_into_the_session_and_assigned_to_the_song() {
+fn a_chart_is_stored_with_links_normalized_to_existing_original_markers() {
     let mut session = session();
     let audio = AudioController::default();
     session
-        .set_song_region_chart_from_bytes("r1", "Acordes.pdf", PDF, &audio)
+        .set_song_region_chart(
+            "r1",
+            Some(lyrics(vec![link("chorus~2", vec![4.0, 0.0]), link("ghost", vec![])])),
+            &audio,
+        )
         .expect("set chart");
 
-    let chart = chart(&session).expect("chart assigned");
-    assert_eq!(chart.file_path, "charts/Acordes.pdf");
-    let on_disk = session.song_region_chart_path("r1").expect("path");
-    assert_eq!(fs::read(on_disk).expect("copied"), PDF);
+    let stored = chart(&session).expect("chart stored");
+    assert_eq!(stored.links, vec![link("chorus", vec![0.0, 4.0])]);
 }
 
 #[test]
-fn a_second_chart_with_the_same_name_does_not_overwrite_the_first() {
+fn an_empty_text_clears_the_chart() {
     let mut session = session();
     let audio = AudioController::default();
     session
-        .set_song_region_chart_from_bytes("r1", "a.pdf", PDF, &audio)
-        .expect("first");
+        .set_song_region_chart("r1", Some(lyrics(vec![])), &audio)
+        .expect("set");
     session
-        .set_song_region_chart_from_bytes("r1", "a.pdf", PDF, &audio)
-        .expect("second");
-    assert_eq!(chart(&session).expect("chart").file_path, "charts/a (2).pdf");
-}
-
-#[test]
-fn something_that_is_not_a_pdf_is_refused_and_nothing_changes() {
-    let mut session = session();
-    let audio = AudioController::default();
-    let error = session
-        .set_song_region_chart_from_bytes("r1", "song.pdf", b"RIFF....WAVE", &audio)
-        .expect_err("not a pdf");
-    assert!(error.to_string().contains("not a PDF"), "{error}");
+        .set_song_region_chart(
+            "r1",
+            Some(SongChart { text: "  
+".into(), links: vec![] }),
+            &audio,
+        )
+        .expect("blank");
     assert!(chart(&session).is_none());
 }
 
 #[test]
-fn an_anchor_set_from_a_repeat_is_stored_on_the_original_marker() {
+fn an_oversized_chart_is_refused_and_nothing_changes() {
     let mut session = session();
     let audio = AudioController::default();
-    session
-        .set_song_region_chart_from_bytes("r1", "a.pdf", PDF, &audio)
-        .expect("chart");
-    session
-        .set_song_chart_anchor("r1", "chorus~2", 1, 0.5, &audio)
-        .expect("anchor");
-
-    let chart = chart(&session).expect("chart");
-    assert_eq!(chart.anchors.len(), 1);
-    assert_eq!(chart.anchors[0].marker_id, "chorus");
-    assert!(session
-        .set_song_chart_anchor("r1", "ghost", 0, 0.0, &audio)
-        .is_err());
+    let huge = SongChart {
+        text: "a".repeat(SongChart::MAX_TEXT_BYTES + 1),
+        links: vec![],
+    };
+    assert!(session.set_song_region_chart("r1", Some(huge), &audio).is_err());
+    assert!(chart(&session).is_none());
 }
 
 #[test]
-fn replacing_the_chart_drops_anchors_that_pointed_into_the_old_one() {
+fn removing_a_chart_can_be_undone() {
     let mut session = session();
     let audio = AudioController::default();
     session
-        .set_song_region_chart_from_bytes("r1", "a.pdf", PDF, &audio)
-        .expect("chart");
-    session
-        .set_song_chart_anchor("r1", "chorus", 0, 0.3, &audio)
-        .expect("anchor");
-    session
-        .set_song_region_chart_from_bytes("r1", "b.pdf", PDF, &audio)
-        .expect("replace");
-    assert!(chart(&session).expect("chart").anchors.is_empty());
-}
-
-#[test]
-fn removing_a_chart_can_be_undone_and_its_file_is_still_there() {
-    let mut session = session();
-    let audio = AudioController::default();
-    session
-        .set_song_region_chart_from_bytes("r1", "a.pdf", PDF, &audio)
-        .expect("chart");
-    session.clear_song_region_chart("r1", &audio).expect("clear");
+        .set_song_region_chart("r1", Some(lyrics(vec![link("chorus", vec![])])), &audio)
+        .expect("set");
+    session.set_song_region_chart("r1", None, &audio).expect("clear");
     assert!(chart(&session).is_none());
 
     session.undo_action(&audio).expect("undo");
-    assert!(chart(&session).is_some());
-    let path = session.song_region_chart_path("r1").expect("path");
-    assert!(path.is_file(), "undo must find the PDF on disk");
+    assert_eq!(chart(&session), Some(lyrics(vec![link("chorus", vec![])])));
+}
+
+#[test]
+fn an_unknown_song_is_an_error() {
+    let mut session = session();
+    let audio = AudioController::default();
+    assert!(session
+        .set_song_region_chart("nope", Some(lyrics(vec![])), &audio)
+        .is_err());
 }

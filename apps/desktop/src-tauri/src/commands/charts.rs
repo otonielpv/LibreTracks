@@ -1,40 +1,17 @@
-//! Partitura PDF de cada canción. Ver `state/charts.rs`.
+//! Letra y acordes de cada canción. Ver `state/charts.rs`.
 
+use libretracks_core::SongChart;
 use tauri::State;
 
 use crate::infra::error::DesktopError;
 use crate::models::TransportSnapshot;
 use crate::state::DesktopState;
 
-/// Copia un PDF elegido por el usuario a la sesión y lo asigna a la canción.
-/// Los bytes vienen del selector del WebView (`<input type="file">`), el mismo
-/// en escritorio, Android e iOS.
-///
-/// En base64 y no como cuerpo binario: en Android el IPC va por el puente de
-/// cadenas y `InvokeBody::Raw` nunca llega (ver `stage_imported_audio_chunk`).
+/// Sustituye la letra de una canción; `chart: null` la quita.
 #[tauri::command(async)]
 pub fn set_song_region_chart(
     region_id: String,
-    file_name: String,
-    bytes_base64: String,
-    state: State<'_, DesktopState>,
-) -> Result<TransportSnapshot, String> {
-    use base64::Engine as _;
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(bytes_base64.as_bytes())
-        .map_err(|error| format!("set_song_region_chart: bad base64: {error}"))?;
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-    session
-        .set_song_region_chart_from_bytes(&region_id, &file_name, &bytes, &state.audio)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command(async)]
-pub fn clear_song_region_chart(
-    region_id: String,
+    chart: Option<SongChart>,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
     let mut session = state
@@ -42,61 +19,6 @@ pub fn clear_song_region_chart(
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
     session
-        .clear_song_region_chart(&region_id, &state.audio)
+        .set_song_region_chart(&region_id, chart, &state.audio)
         .map_err(|error| error.to_string())
-}
-
-#[tauri::command(async)]
-pub fn set_song_chart_anchor(
-    region_id: String,
-    marker_id: String,
-    page: u32,
-    y: f64,
-    state: State<'_, DesktopState>,
-) -> Result<TransportSnapshot, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-    session
-        .set_song_chart_anchor(&region_id, &marker_id, page, y, &state.audio)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command(async)]
-pub fn remove_song_chart_anchor(
-    region_id: String,
-    marker_id: String,
-    state: State<'_, DesktopState>,
-) -> Result<TransportSnapshot, String> {
-    let mut session = state
-        .session
-        .lock()
-        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-    session
-        .remove_song_chart_anchor(&region_id, &marker_id, &state.audio)
-        .map_err(|error| error.to_string())
-}
-
-/// Los bytes del PDF de una canción, en base64 por la misma razón que al
-/// guardarlo. La ruta se resuelve bajo el lock y el fichero se lee FUERA de
-/// él: leer disco con la sesión bloqueada congela la UI.
-#[tauri::command(async)]
-pub fn read_song_region_chart(
-    region_id: String,
-    state: State<'_, DesktopState>,
-) -> Result<String, String> {
-    use base64::Engine as _;
-    let path = {
-        let session = state
-            .session
-            .lock()
-            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-        session
-            .song_region_chart_path(&region_id)
-            .map_err(|error| error.to_string())?
-    };
-    std::fs::read(&path)
-        .map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes))
-        .map_err(|error| format!("chart unreadable: {}: {error}", path.display()))
 }

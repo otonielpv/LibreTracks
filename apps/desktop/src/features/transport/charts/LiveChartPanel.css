@@ -1,0 +1,421 @@
+.lt-live-chart {
+  --lt-chart-font-scale: 1;
+  --lt-chart-accent: #57f1db;
+  grid-area: chart;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* The same card as the markers panel next to it. */
+  border: 1px solid var(--lt-live-border, rgb(186 202 197 / 0.13));
+  border-radius: 0.55rem;
+  background: linear-gradient(145deg, rgb(255 255 255 / 0.025), transparent), var(--lt-live-surface, #151817);
+}
+
+.lt-live-chart-toolbar {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.4rem 0.3rem 0.65rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+}
+
+.lt-live-chart-heading {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.lt-live-chart-heading small {
+  color: #7f928c;
+  font: 700 9px/1 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.lt-live-chart-heading strong {
+  overflow: hidden;
+  color: #f5faf8;
+  font: 700 0.85rem/1.1 Inter, sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-live-chart-next {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  overflow: hidden;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid rgb(244 201 93 / 0.35);
+  border-radius: 999px;
+  color: #f4c95d;
+  font: 700 0.68rem/1 "Space Grotesk", sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-live-chart-next .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.lt-live-chart-tools {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.lt-live-chart-tools {
+  flex-wrap: nowrap;
+}
+
+.lt-live-chart-tools .lt-icon-button.is-recording {
+  color: #ff8a95;
+  box-shadow:
+    0 0 0 1px rgba(255, 93, 108, 0.35),
+    0 0 18px rgba(255, 93, 108, 0.22);
+}
+
+.lt-live-chart-tools .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Same family as the live view's VAMP / cancel buttons. */
+.lt-live-chart-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.1rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 0.3rem;
+  color: #9aa8a3;
+  background: #171a19;
+  font: 750 9px/1 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.lt-live-chart-action .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.lt-live-chart-action.is-primary {
+  border-color: rgb(87 241 219 / 0.38);
+  color: #65f2dc;
+  background: rgb(87 241 219 / 0.09);
+}
+
+.lt-live-chart-action:disabled {
+  opacity: 0.4;
+}
+
+.lt-live-chart-recorder {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.55rem;
+  border-bottom: 1px solid rgb(255 93 108 / 0.3);
+  background: rgb(255 93 108 / 0.08);
+  color: #ffb3ba;
+  font-size: 0.75rem;
+}
+
+.lt-live-chart-recorder > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lt-live-chart-tap {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2.6rem;
+  padding: 0 1rem;
+  border: 1px solid rgb(255 93 108 / 0.45);
+  border-radius: 0.3rem;
+  color: #ffb3ba;
+  background: rgb(255 93 108 / 0.12);
+  font: 750 10px/1 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  touch-action: manipulation;
+}
+
+.lt-live-chart-tap:disabled {
+  opacity: 0.4;
+}
+
+.lt-live-chart-error {
+  margin: 0;
+  padding: 0.4rem 0.65rem;
+  color: #ffb3ba;
+  font-size: 0.75rem;
+}
+
+.lt-live-chart-empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1rem;
+  text-align: center;
+  color: #9fb0aa;
+}
+
+.lt-live-chart-empty > .material-symbols-outlined {
+  font-size: 36px;
+  color: #4f5d59;
+}
+
+.lt-live-chart-empty p {
+  max-width: 24rem;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.lt-live-chart-empty small {
+  color: #66746f;
+  font-size: 0.7rem;
+}
+
+.lt-live-chart-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.lt-live-chart-scroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.6rem 0.8rem 45vh;
+  font-size: calc(1rem * var(--lt-chart-font-scale));
+}
+
+.lt-chart-section {
+  margin-bottom: 1.1em;
+  padding-left: 0.55em;
+  border-left: 3px solid transparent;
+  transition: border-color 160ms ease;
+}
+
+.lt-chart-section.is-current {
+  border-left-color: var(--lt-chart-accent);
+}
+
+.lt-chart-section-label {
+  margin: 0 0 0.3em;
+  color: #7f928c;
+  font: 750 0.72em/1.2 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.lt-chart-section.is-current .lt-chart-section-label {
+  color: var(--lt-chart-accent);
+}
+
+.lt-chart-section.is-unlinked .lt-chart-section-label::after {
+  content: " ·";
+  color: #4f5d59;
+}
+
+.lt-chart-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin: 0 0 0.3em;
+  padding: 0.05em 0.3em;
+  border-radius: 0.3em;
+  color: #c9d6d2;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    opacity 160ms ease;
+}
+
+.lt-chart-segment {
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lt-chart-chord {
+  min-height: 1.15em;
+  padding-right: 0.45em;
+  color: #f6a14c;
+  font: 750 0.86em/1.15 Inter, sans-serif;
+  white-space: pre;
+}
+
+.lt-chart-lyric {
+  font: 500 1.05em/1.3 Inter, sans-serif;
+  white-space: pre;
+}
+
+.lt-chart-line.is-chords-only .lt-chart-chord {
+  padding-right: 1.1em;
+}
+
+.lt-chart-line.is-past {
+  opacity: 0.45;
+}
+
+.lt-chart-line.is-current {
+  color: #ffffff;
+  background: rgb(87 241 219 / 0.1);
+  box-shadow: inset 3px 0 var(--lt-chart-accent);
+}
+
+.lt-chart-line.is-current .lt-chart-lyric {
+  font-weight: 700;
+}
+
+.lt-chart-comment {
+  margin: 0 0 0.3em;
+  color: #8fa29c;
+  font: italic 500 0.85em/1.3 Inter, sans-serif;
+}
+
+/* Editor */
+.lt-chart-editor {
+  width: min(64rem, calc(100vw - 2rem));
+}
+
+.lt-chart-editor-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 1rem;
+  min-height: 0;
+}
+
+.lt-chart-editor-text,
+.lt-chart-editor-links {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.lt-chart-editor-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.lt-chart-editor-text textarea {
+  min-height: 22rem;
+  resize: vertical;
+  padding: 0.6rem;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 0.35rem;
+  color: #e9f1ee;
+  background: #0b0d0c;
+  font: 0.82rem/1.45 "JetBrains Mono", Consolas, monospace;
+  white-space: pre;
+}
+
+.lt-chart-editor-text small,
+.lt-chart-editor-hint {
+  color: #7f928c;
+  font-size: 0.72rem;
+}
+
+.lt-chart-editor-links ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  overflow-y: auto;
+}
+
+.lt-chart-editor-links li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.lt-chart-editor-marker {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+
+.lt-chart-editor-links select {
+  min-width: 0;
+  min-height: 2rem;
+}
+
+.lt-chart-editor-times {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid rgb(255 93 108 / 0.35);
+  border-radius: 999px;
+  color: #ffb3ba;
+  background: transparent;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.lt-chart-editor-times.is-auto {
+  border-color: rgb(255 255 255 / 0.12);
+  color: #7f928c;
+}
+
+.lt-chart-editor-times .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.lt-chart-editor-remove {
+  margin-right: auto;
+}
+
+@media (max-width: 820px), (max-height: 500px) {
+  .lt-live-chart {
+    border-radius: 0.35rem;
+  }
+
+  .lt-live-chart-toolbar {
+    padding: 0.15rem 0.2rem 0.15rem 0.45rem;
+  }
+
+  .lt-live-chart-heading small {
+    display: none;
+  }
+
+  .lt-live-chart-scroller {
+    padding: 0.35rem 0.5rem 45vh;
+  }
+
+  .lt-chart-editor-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lt-chart-editor-text textarea {
+    min-height: 12rem;
+  }
+}

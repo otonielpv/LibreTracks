@@ -12,7 +12,6 @@ const VIEW_MODES: Array<{ mode: ViewMode; icon: string; labelKey: string }> = [
   { mode: "daw", icon: "view_timeline", labelKey: "liveView.openDaw" },
   { mode: "compact", icon: "view_module", labelKey: "liveView.openCompact" },
   { mode: "live", icon: "stadium", labelKey: "liveView.open" },
-  { mode: "chart", icon: "description", labelKey: "liveView.openChart" },
 ];
 
 export function ViewModeSwitcher({ value, onChange }: ViewModeSwitcherProps) {

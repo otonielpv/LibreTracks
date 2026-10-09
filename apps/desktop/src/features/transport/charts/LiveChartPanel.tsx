@@ -1,0 +1,449 @@
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type CSSProperties,
+} from "react";
+import { useTranslation } from "react-i18next";
+
+import {
+  getEffectiveBpmAt,
+  regionEffectiveKey,
+  type SongChart,
+  type SongRegionSummary,
+  type SongView,
+} from "@libretracks/shared/models";
+
+import { ChartEditorModal } from "./ChartEditorModal";
+import { parseChordPro, transposeChart, type ChartLine } from "./chordChart";
+import { keyPrefersFlats } from "./chordNotation";
+import {
+  applyLineRecording,
+  autoLinkChart,
+  chartMarkersForRegion,
+  recordLineTap,
+  type LineRecording,
+} from "./chartSync";
+import { CHART_FILE_ACCEPT, chordProFromFile } from "./importChart";
+import { useChartPlayback } from "./useChartPlayback";
+import "./LiveChartPanel.css";
+
+const FONT_SCALE_KEY = "lt.liveChart.fontScale";
+const SHOW_CHORDS_KEY = "lt.liveChart.showChords";
+const FONT_SCALES = [0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2];
+/** After the user scrolls by hand the lyrics stop following for this long. */
+const MANUAL_SCROLL_HOLD_MS = 4000;
+
+function readStored<T>(key: string, fallback: T, parse: (value: string) => T | null): T {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return parse(raw) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function store(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Private mode or blocked storage: the preference just does not stick.
+  }
+}
+
+type LiveChartPanelProps = {
+  song: SongView;
+  /** The song whose lyrics are shown (the one selected in the live view). */
+  region: SongRegionSummary | null;
+  positionSecondsRef: { readonly current: number };
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  onChartChange: (regionId: string, chart: SongChart | null) => Promise<void>;
+};
+
+function ChartLineView({
+  line,
+  showChords,
+  state,
+  lineKey,
+}: {
+  line: ChartLine;
+  showChords: boolean;
+  state: "current" | "past" | "upcoming";
+  lineKey: string;
+}) {
+  if (line.kind === "comment") {
+    return (
+      <p className={`lt-chart-comment is-${state}`} data-line-key={lineKey}>
+        {line.text}
+      </p>
+    );
+  }
+  const hasChords = showChords && line.segments.some((segment) => segment.chord);
+  const hasText = line.segments.some((segment) => segment.text.trim());
+  return (
+    <p className={`lt-chart-line is-${state}${hasText ? "" : " is-chords-only"}`} data-line-key={lineKey}>
+      {line.segments.map((segment, index) => (
+        <span className="lt-chart-segment" key={index}>
+          {hasChords ? <span className="lt-chart-chord">{segment.chord ?? " "}</span> : null}
+          {hasText || !hasChords ? <span className="lt-chart-lyric">{segment.text || " "}</span> : null}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+export const LiveChartPanel = memo(function LiveChartPanel({
+  song,
+  region,
+  positionSecondsRef,
+  expanded,
+  onToggleExpanded,
+  onChartChange,
+}: LiveChartPanelProps) {
+  const { t } = useTranslation();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const manualScrollAtRef = useRef(0);
+  const [fontScale, setFontScale] = useState(() =>
+    readStored(FONT_SCALE_KEY, 1, (value) => {
+      const parsed = Number(value);
+      return FONT_SCALES.includes(parsed) ? parsed : null;
+    }),
+  );
+  const [showChords, setShowChords] = useState(() =>
+    readStored(SHOW_CHORDS_KEY, true, (value) => value === "true"),
+  );
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [recording, setRecording] = useState<LineRecording | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const chart = region?.chart ?? null;
+  const markers = useMemo(
+    () => chartMarkersForRegion(song.sectionMarkers, region),
+    [song.sectionMarkers, region],
+  );
+  const doc = useMemo(() => {
+    if (!chart || !region) return null;
+    const effectiveKey = regionEffectiveKey(region);
+    return transposeChart(parseChordPro(chart.text), region.transposeSemitones, keyPrefersFlats(effectiveKey));
+  }, [chart, region]);
+  const links = useMemo(
+    () => (chart ? (recording ? applyLineRecording(chart.links, recording) : chart.links) : []),
+    [chart, recording],
+  );
+  const { playback } = useChartPlayback(
+    song,
+    doc,
+    links,
+    markers,
+    region?.endSeconds ?? 0,
+    positionSecondsRef,
+  );
+
+  // A new song: whatever was being recorded belonged to the previous one.
+  useEffect(() => {
+    setRecording(null);
+    setError(null);
+  }, [region?.id]);
+
+  // Follow the current line, unless the user is reading elsewhere.
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller || playback.section === null) return;
+    if (performance.now() - manualScrollAtRef.current < MANUAL_SCROLL_HOLD_MS) return;
+    const key = playback.line === null ? `${playback.section}-head` : `${playback.section}-${playback.line}`;
+    const target = scroller.querySelector<HTMLElement>(`[data-line-key="${key}"]`);
+    if (!target) return;
+    const top = Math.max(0, target.offsetTop - scroller.clientHeight * 0.18);
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (typeof scroller.scrollTo === "function") {
+      scroller.scrollTo({ top, behavior: reduceMotion ? "auto" : "smooth" });
+    } else {
+      scroller.scrollTop = top;
+    }
+  }, [playback.section, playback.line, fontScale, showChords]);
+
+  const markManualScroll = () => {
+    manualScrollAtRef.current = performance.now();
+  };
+
+  const changeFont = (step: 1 | -1) => {
+    const index = FONT_SCALES.indexOf(fontScale);
+    const next = FONT_SCALES[Math.min(FONT_SCALES.length - 1, Math.max(0, index + step))];
+    setFontScale(next);
+    store(FONT_SCALE_KEY, String(next));
+  };
+
+  const toggleChords = () => {
+    setShowChords((current) => {
+      store(SHOW_CHORDS_KEY, String(!current));
+      return !current;
+    });
+  };
+
+  const save = useCallback(
+    async (next: SongChart | null) => {
+      if (!region) return;
+      setBusy(true);
+      try {
+        await onChartChange(region.id, next);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onChartChange, region],
+  );
+
+  // Stable: useDismissOnBack re-registers on every new callback and that
+  // reorders the back stack.
+  const closeEditor = useCallback(() => setEditorOpen(false), []);
+  const saveFromEditor = useCallback(
+    async (next: SongChart | null) => {
+      await save(next);
+      setEditorOpen(false);
+    },
+    [save],
+  );
+
+  const errorMessage = (cause: unknown) => {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    if (message === "chart-pdf-no-text") return t("liveChart.pdfNoText");
+    if (message.startsWith("chart-file-too-large:")) {
+      return t("liveChart.fileTooLarge", { size: message.split(":")[1] });
+    }
+    return t("liveChart.importFailed", { error: message });
+  };
+
+  const importFile = async (file: File) => {
+    if (!region) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const text = await chordProFromFile(file);
+      const parsed = parseChordPro(text);
+      await onChartChange(region.id, { text, links: autoLinkChart(parsed, markers) });
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) return;
+    // Cleared once read, so picking the same file again still fires `change`.
+    void importFile(file).finally(() => {
+      input.value = "";
+    });
+  };
+
+  const startRecording = () => setRecording(new Map());
+  const stopRecording = () => {
+    const recorded = recording;
+    setRecording(null);
+    if (!chart || !recorded || recorded.size === 0) return;
+    void save({ ...chart, links: applyLineRecording(chart.links, recorded) });
+  };
+  const tapNextLine = () => {
+    if (!recording || !doc || playback.markerId === null || playback.markerStartSeconds === null) return;
+    if (playback.section === null || playback.line === null) return;
+    const secondsPerBeat = 60 / Math.max(1, getEffectiveBpmAt(song, playback.markerStartSeconds));
+    const beat = (positionSecondsRef.current - playback.markerStartSeconds) / secondsPerBeat;
+    setRecording(
+      recordLineTap(recording, playback.markerId, beat, doc.sections[playback.section].lines.length),
+    );
+  };
+
+  const nextLabel =
+    doc && playback.nextSection !== null ? doc.sections[playback.nextSection]?.label : null;
+  const linkedSections = useMemo(() => new Set(links.map((link) => link.section)), [links]);
+
+  return (
+    <section
+      className={`lt-live-chart${expanded ? " is-expanded" : ""}`}
+      aria-label={t("liveChart.title")}
+      style={{ "--lt-chart-font-scale": fontScale } as CSSProperties}
+    >
+      <div className="lt-live-chart-toolbar">
+        <div className="lt-live-chart-heading">
+          <small>{t("liveChart.title")}</small>
+          <strong>{doc?.title || region?.name || "—"}</strong>
+        </div>
+        {nextLabel ? (
+          <span className="lt-live-chart-next" title={t("liveChart.upNext")}>
+            <span className="material-symbols-outlined" aria-hidden="true">east</span>
+            {nextLabel}
+          </span>
+        ) : null}
+        <div className="lt-live-chart-tools lt-bottom-controls">
+          {doc ? (
+            <>
+              <button type="button" className="lt-icon-button" onClick={() => changeFont(-1)} aria-label={t("liveChart.smaller")} title={t("liveChart.smaller")}>
+                <span className="material-symbols-outlined" aria-hidden="true">text_decrease</span>
+              </button>
+              <button type="button" className="lt-icon-button" onClick={() => changeFont(1)} aria-label={t("liveChart.bigger")} title={t("liveChart.bigger")}>
+                <span className="material-symbols-outlined" aria-hidden="true">text_increase</span>
+              </button>
+              <button
+                type="button"
+                className={`lt-icon-button${showChords ? " is-active" : ""}`}
+                aria-pressed={showChords}
+                onClick={toggleChords}
+                aria-label={t("liveChart.showChords")}
+                title={t("liveChart.showChords")}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">music_note</span>
+              </button>
+              <button
+                type="button"
+                className={`lt-icon-button${recording ? " is-recording" : ""}`}
+                aria-pressed={recording !== null}
+                onClick={recording ? stopRecording : startRecording}
+                aria-label={recording ? t("liveChart.stopRecording") : t("liveChart.recordTimes")}
+                title={recording ? t("liveChart.stopRecording") : t("liveChart.recordTimes")}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  {recording ? "stop_circle" : "radio_button_checked"}
+                </span>
+              </button>
+            </>
+          ) : null}
+          {region ? (
+            <button
+              type="button"
+              className="lt-icon-button"
+              onClick={() => setEditorOpen(true)}
+              aria-label={t("liveChart.edit")}
+              title={t("liveChart.edit")}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">edit_note</span>
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className={`lt-icon-button${expanded ? " is-active" : ""}`}
+            aria-pressed={expanded}
+            onClick={onToggleExpanded}
+            aria-label={expanded ? t("liveChart.collapse") : t("liveChart.expand")}
+            title={expanded ? t("liveChart.collapse") : t("liveChart.expand")}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">
+              {expanded ? "close_fullscreen" : "open_in_full"}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {recording ? (
+        <div className="lt-live-chart-recorder">
+          <span>{t("liveChart.recordingHint")}</span>
+          <button
+            type="button"
+            className="lt-live-chart-tap"
+            onClick={tapNextLine}
+            disabled={playback.line === null}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">keyboard_double_arrow_down</span>
+            {t("liveChart.nextLine")}
+          </button>
+        </div>
+      ) : null}
+
+      {error ? <p className="lt-live-chart-error" role="alert">{error}</p> : null}
+
+      {!region ? (
+        <div className="lt-live-chart-empty">
+          <p>{t("liveChart.noSong")}</p>
+        </div>
+      ) : !doc ? (
+        <div className="lt-live-chart-empty">
+          <span className="material-symbols-outlined" aria-hidden="true">lyrics</span>
+          <p>{t("liveChart.empty", { song: region.name })}</p>
+          <div className="lt-live-chart-empty-actions">
+            <button type="button" className="lt-live-chart-action is-primary" disabled={busy} onClick={() => fileInputRef.current?.click()}>
+              <span className="material-symbols-outlined" aria-hidden="true">upload_file</span>
+              {t("liveChart.importFile")}
+            </button>
+            <button type="button" className="lt-live-chart-action" disabled={busy} onClick={() => setEditorOpen(true)}>
+              <span className="material-symbols-outlined" aria-hidden="true">edit_note</span>
+              {t("liveChart.pasteText")}
+            </button>
+          </div>
+          <small>{t("liveChart.formats")}</small>
+        </div>
+      ) : (
+        <div
+          ref={scrollerRef}
+          className="lt-live-chart-scroller"
+          onWheel={markManualScroll}
+          onTouchStart={markManualScroll}
+          onPointerDown={markManualScroll}
+          data-testid="live-chart-scroller"
+        >
+          {doc.sections.map((section, sectionIndex) => {
+            const isCurrent = playback.section === sectionIndex;
+            return (
+              <div
+                key={sectionIndex}
+                className={`lt-chart-section${isCurrent ? " is-current" : ""}${linkedSections.has(sectionIndex) ? "" : " is-unlinked"}`}
+              >
+                {section.label ? (
+                  <h3 className="lt-chart-section-label" data-line-key={`${sectionIndex}-head`}>
+                    {section.label}
+                  </h3>
+                ) : (
+                  <span data-line-key={`${sectionIndex}-head`} />
+                )}
+                {section.lines.map((line, lineIndex) => (
+                  <ChartLineView
+                    key={lineIndex}
+                    line={line}
+                    showChords={showChords}
+                    lineKey={`${sectionIndex}-${lineIndex}`}
+                    state={
+                      !isCurrent || playback.line === null
+                        ? "upcoming"
+                        : lineIndex === playback.line
+                          ? "current"
+                          : lineIndex < playback.line
+                            ? "past"
+                            : "upcoming"
+                    }
+                  />
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={CHART_FILE_ACCEPT}
+        hidden
+        onChange={handleFile}
+        data-testid="live-chart-file-input"
+      />
+
+      {editorOpen && region ? (
+        <ChartEditorModal
+          region={region}
+          markers={markers}
+          chart={chart}
+          onSave={saveFromEditor}
+          onClose={closeEditor}
+        />
+      ) : null}
+    </section>
+  );
+});

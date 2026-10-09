@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
@@ -86,6 +86,7 @@ describe("LivePerformanceView", () => {
         onViewModeChange={vi.fn()}
         onMarkerAction={vi.fn()}
         onSongAction={onSongAction}
+        onChartChange={vi.fn()}
         onToggleVamp={vi.fn()}
         onCancelPendingJump={vi.fn()}
         onGlobalJumpModeChange={vi.fn()}
@@ -152,6 +153,7 @@ describe("LivePerformanceView", () => {
         onViewModeChange={vi.fn()}
         onMarkerAction={vi.fn()}
         onSongAction={vi.fn()}
+        onChartChange={vi.fn()}
         onToggleVamp={vi.fn()}
         onCancelPendingJump={vi.fn()}
         onGlobalJumpModeChange={vi.fn()}
@@ -201,6 +203,7 @@ describe("LivePerformanceView", () => {
         onViewModeChange={vi.fn()}
         onMarkerAction={vi.fn()}
         onSongAction={vi.fn()}
+        onChartChange={vi.fn()}
         onToggleVamp={vi.fn()}
         onCancelPendingJump={vi.fn()}
         onGlobalJumpModeChange={vi.fn()}
@@ -220,12 +223,12 @@ describe("LivePerformanceView", () => {
     expect(countdown?.parentElement?.className).toBe("lt-live-cue-name-line");
   });
 
-  it("reorders setlist songs by their grip, in start order", () => {
-    const onReorderSong = vi.fn();
-    const renderSetlist = (withReorder: boolean) => (
+  it("imports lyrics for the song shown, from the live view", async () => {
+    window.localStorage.clear();
+    const onChartChange = vi.fn(async () => {});
+    render(
       <LivePerformanceView
-        // Desordenadas a propósito: la setlist se pinta por inicio.
-        song={{ ...song, regions: [song.regions[1], song.regions[0]] }}
+        song={song}
         positionSecondsRef={{ current: 10 }}
         settings={DEFAULT_APP_SETTINGS}
         pendingMarkerId={null}
@@ -234,7 +237,41 @@ describe("LivePerformanceView", () => {
         onViewModeChange={vi.fn()}
         onMarkerAction={vi.fn()}
         onSongAction={vi.fn()}
-        onReorderSong={withReorder ? onReorderSong : undefined}
+        onChartChange={onChartChange}
+        onToggleVamp={vi.fn()}
+        onCancelPendingJump={vi.fn()}
+        onGlobalJumpModeChange={vi.fn()}
+        onGlobalJumpBarsChange={vi.fn()}
+        onSongJumpTriggerChange={vi.fn()}
+        onSongJumpBarsChange={vi.fn()}
+        onSongTransitionModeChange={vi.fn()}
+        onVampModeChange={vi.fn()}
+        onVampBarsChange={vi.fn()}
+      />,
+    );
+    const sheet = "Verso 1\nUna linea";
+    const file = new File([sheet], "letra.txt", { type: "text/plain" });
+    Object.defineProperty(file, "text", { value: async () => sheet });
+    await act(async () => {
+      fireEvent.change(screen.getByTestId("live-chart-file-input"), { target: { files: [file] } });
+    });
+    expect(onChartChange).toHaveBeenCalledWith("first", expect.objectContaining({ text: expect.stringContaining("Una linea") }));
+  });
+
+  it("hides and shows the lyrics panel from the header, and remembers it", () => {
+    window.localStorage.clear();
+    const view = () => (
+      <LivePerformanceView
+        song={song}
+        positionSecondsRef={{ current: 10 }}
+        settings={DEFAULT_APP_SETTINGS}
+        pendingMarkerId={null}
+        pendingMarkerName={null}
+        activeVamp={null}
+        onViewModeChange={vi.fn()}
+        onMarkerAction={vi.fn()}
+        onSongAction={vi.fn()}
+        onChartChange={vi.fn()}
         onToggleVamp={vi.fn()}
         onCancelPendingJump={vi.fn()}
         onGlobalJumpModeChange={vi.fn()}
@@ -246,14 +283,51 @@ describe("LivePerformanceView", () => {
         onVampBarsChange={vi.fn()}
       />
     );
-    const { rerender } = render(renderSetlist(true));
+    const { container, unmount } = render(view());
+    expect(container.querySelector(".lt-live-chart")).not.toBeNull();
+    expect(container.querySelector(".lt-live-view.has-chart")).not.toBeNull();
 
-    fireEvent.keyDown(screen.getByRole("button", { name: "Reorder Primera" }), {
-      key: "ArrowDown",
-    });
-    expect(onReorderSong).toHaveBeenCalledWith("first", 1);
+    fireEvent.click(screen.getByRole("button", { name: "liveChart.toggle" }));
+    expect(container.querySelector(".lt-live-chart")).toBeNull();
+    expect(container.querySelector(".lt-live-view.has-chart")).toBeNull();
 
-    rerender(renderSetlist(false));
+    // Reopening the view keeps it hidden.
+    unmount();
+    const again = render(view());
+    expect(again.container.querySelector(".lt-live-chart")).toBeNull();
+    window.localStorage.clear();
+  });
+
+  it("keeps the setlist in the header, in start order, with no reorder grips", () => {
+    render(
+      <LivePerformanceView
+        // Desordenadas a propósito: la setlist se pinta por inicio.
+        song={{ ...song, regions: [song.regions[1], song.regions[0]] }}
+        positionSecondsRef={{ current: 10 }}
+        settings={DEFAULT_APP_SETTINGS}
+        pendingMarkerId={null}
+        pendingMarkerName={null}
+        activeVamp={null}
+        onViewModeChange={vi.fn()}
+        onMarkerAction={vi.fn()}
+        onSongAction={vi.fn()}
+        onChartChange={vi.fn()}
+        onToggleVamp={vi.fn()}
+        onCancelPendingJump={vi.fn()}
+        onGlobalJumpModeChange={vi.fn()}
+        onGlobalJumpBarsChange={vi.fn()}
+        onSongJumpTriggerChange={vi.fn()}
+        onSongJumpBarsChange={vi.fn()}
+        onSongTransitionModeChange={vi.fn()}
+        onVampModeChange={vi.fn()}
+        onVampBarsChange={vi.fn()}
+      />,
+    );
+
+    const header = screen.getByRole("banner");
+    const songs = header.querySelectorAll(".lt-live-region-select");
+    expect([...songs].map((button) => button.textContent)).toEqual(["1Primera", "2Segunda"]);
     expect(screen.queryByRole("button", { name: "Reorder Primera" })).toBeNull();
+    expect(header.querySelector("[role='progressbar']")).not.toBeNull();
   });
 });

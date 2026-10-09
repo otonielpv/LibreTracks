@@ -1,8 +1,9 @@
-import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { PdfPageText } from "./pdfTextLines";
 
 /**
- * pdf.js, loaded the first time a chart is opened: ~400 KB of library plus a
- * 1.4 MB worker that nobody who never uses charts should pay for at startup.
+ * pdf.js, loaded the first time a PDF is imported: ~400 KB of library plus a
+ * 1.4 MB worker that nobody who never imports a chart should pay for at
+ * startup. Only its TEXT extraction is used — the PDF is never drawn.
  *
  * The LEGACY build because the desktop floor is Safari 13 (macOS WebView) and
  * the modern build uses syntax and APIs that WebKit lacks.
@@ -28,16 +29,28 @@ function loadPdfJs(): Promise<PdfJs> {
   return pdfjsPromise;
 }
 
-export type ChartDocument = PDFDocumentProxy;
-
-/** Parses a PDF. The caller owns the document and must `destroy()` it. */
-export async function openChartDocument(bytes: Uint8Array): Promise<ChartDocument> {
+/** The positioned text of every page. */
+export async function extractPdfText(bytes: Uint8Array): Promise<PdfPageText[]> {
   const pdfjs = await loadPdfJs();
-  return pdfjs.getDocument({
-    data: bytes,
-    // Fonts the PDF does not embed are drawn with system fonts; fetching the
-    // standard ones from a CDN would fail offline on stage.
-    disableFontFace: false,
-    isEvalSupported: false,
-  }).promise;
+  const document = await pdfjs.getDocument({ data: bytes, isEvalSupported: false }).promise;
+  try {
+    const pages: PdfPageText[] = [];
+    for (let index = 1; index <= document.numPages; index += 1) {
+      const page = await document.getPage(index);
+      const viewport = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      pages.push({
+        width: viewport.width,
+        height: viewport.height,
+        items: content.items.flatMap((item) => {
+          if (!("str" in item) || !item.str) return [];
+          const [, , , d, x, y] = item.transform as number[];
+          return [{ str: item.str, x, y, width: item.width, size: Math.abs(d) || item.height }];
+        }),
+      });
+    }
+    return pages;
+  } finally {
+    void document.destroy();
+  }
 }
