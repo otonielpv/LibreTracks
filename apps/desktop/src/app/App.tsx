@@ -11,6 +11,7 @@ import { useUpdateCheck } from "../features/updates/useUpdateCheck";
 import { TelemetryController } from "../features/telemetry/TelemetryController";
 import { TourOverlay } from "../features/tutorial/TourOverlay";
 import { DialogHost } from "../shared/dialog/DialogHost";
+import { dismissBootSplash } from "./bootSplash";
 import {
   dispatchUiZoomStatus,
   getUiZoom,
@@ -77,6 +78,13 @@ export function App() {
   // then swallows the next input — right after every Alt + wheel track resize.
   // See ../features/transport/keyboard/altMenuGuard.
   useEffect(() => installAltMenuGuard(), []);
+  // La interfaz ya ha pintado su primer fotograma: fuera la pantalla de carga
+  // estática de index.html. El rAF espera a ese pintado para no destapar un
+  // hueco vacío.
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => dismissBootSplash());
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   // Interface zoom: apply the persisted scale on start, and wire the standard
   // Cmd/Ctrl +/-/0 shortcuts so small screens (e.g. a 13" MacBook) can shrink

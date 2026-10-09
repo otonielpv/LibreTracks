@@ -11,8 +11,63 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <title>LibreTracks Desktop</title>
+    <!-- Pantalla de carga. Va aqui, en linea y sin JS ni fuentes, porque es lo
+         primero que el WebView puede pintar: antes de que cargue el bundle de
+         React. Sin ella la ventana se veia en negro hasta que montaba la app.
+         Mismo fondo que `body` en styles.css y que `backgroundColor` de la
+         ventana en tauri.conf.json, para que no haya ni un fotograma de otro
+         color. La retira `dismissBootSplash` (src/app/bootSplash.ts). -->
+    <style>
+      #lt-boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background:
+          radial-gradient(circle at 8% 10%, rgb(87 241 219 / 0.08), transparent 22%),
+          radial-gradient(circle at 92% 0%, rgb(255 226 171 / 0.06), transparent 24%),
+          #131313;
+        color: #e5e2e1;
+        font: 600 22px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+        letter-spacing: 0.02em;
+        transition: opacity 180ms ease-out;
+      }
+      #lt-boot-splash.is-leaving {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #lt-boot-splash .lt-boot-track {
+        position: relative;
+        width: 140px;
+        height: 3px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgb(255 255 255 / 0.08);
+      }
+      #lt-boot-splash .lt-boot-track::after {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 40%;
+        border-radius: inherit;
+        background: #57f1db;
+        animation: lt-boot-slide 1.1s ease-in-out infinite;
+      }
+      @keyframes lt-boot-slide {
+        from { transform: translateX(-100%); }
+        to { transform: translateX(250%); }
+      }
+    </style>
   </head>
-  <body>
+  <body style="margin: 0; background: #131313">
+    <div id="lt-boot-splash" role="status" aria-label="LibreTracks">
+      <span>LibreTracks</span>
+      <span class="lt-boot-track"></span>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

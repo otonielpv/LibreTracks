@@ -21,6 +21,18 @@ describe("App launch", () => {
     expect(rootChildCount).toBeGreaterThan(0);
   });
 
+  // index.html paints a static loading screen so the window is never black
+  // while the bundle loads (and the audio device opens on its own thread). It
+  // must get out of the way once React is up, or it would cover the app.
+  it("retires the boot splash once the app is up", async () => {
+    await AppPage.waitUntilBooted();
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => document.getElementById("lt-boot-splash") === null),
+      { timeout: 5000, timeoutMsg: "the boot splash is still covering the app" },
+    );
+  });
+
   it("reports the LibreTracks document title", async () => {
     const title = await browser.getTitle();
     // index.html sets "LibreTracks Desktop"; assert it names the product

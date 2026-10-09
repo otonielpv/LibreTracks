@@ -242,82 +242,29 @@ pub fn run() {
             // The worker parks while the song has no MIDI clips, so starting
             // it on every platform costs nothing when unused.
             state.start_midi_runtime();
-            let initial_device = runtime_settings.selected_output_device_id.clone();
-            let apply_result = state.audio.apply_settings(runtime_settings);
-            // Desktop: a failure to apply the initial audio settings is fatal.
-            // Mobile: tolerate an unavailable output so Android can recover its
-            // route and the first iOS smoke build can boot with the no-link engine.
+            // Desktop: abrir el dispositivo de audio tarda segundos (DirectSound
+            // 2,5-7 s) y `setup` corre en el hilo del bucle de eventos, DESPUES
+            // de crear la ventana: mientras tanto la ventana existe pero nadie
+            // la puede pintar y se queda en negro. Va a un hilo; la interfaz
+            // carga y enseña su pantalla de carga mientras tanto, y cualquier
+            // comando que necesite el motor espera a su cerrojo. Abrirlo fuera
+            // del hilo principal ya pasa hoy: `update_audio_settings` es async.
+            // Movil: igual que siempre, en linea.
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            apply_result.map_err(|error| std::io::Error::other(error.to_string()))?;
-            #[cfg(any(target_os = "android", target_os = "ios"))]
-            if let Err(error) = apply_result {
-                eprintln!(
-                    "[libretracks-audio] mobile: initial audio settings not applied: {error}"
-                );
-            }
-            // If apply_settings nulled out the saved output device (because
-            // the device couldn't be opened — see apply_settings_with_stream_rebuild
-            // in audio/engine.rs), persist the cleaned-up settings to disk so
-            // the next launch doesn't hit the same failure and we don't keep
-            // showing a stale device name to the user.
-            if let Ok(after) = state.audio.current_settings() {
-                if initial_device.is_some() && after.selected_output_device_id.is_none() {
-                    if let Err(e) = infra::settings::save_app_settings(&app.handle(), &after) {
-                        if audio::engine::audio_debug_logging_enabled() {
-                            eprintln!(
-                                "[libretracks-settings] could not persist cleaned-up \
-                                 audio settings after fallback to default device: {e}"
-                            );
+            {
+                let handle = app.handle().clone();
+                std::thread::Builder::new()
+                    .name("lt-startup-audio".into())
+                    .spawn(move || {
+                        if let Err(error) = start_audio_and_midi(&handle, runtime_settings) {
+                            report_fatal_startup_error(&handle, &error);
                         }
-                    }
-                    // Also update the in-memory AppSettingsStore so commands
-                    // that read it (e.g. get_settings) reflect the fallback.
-                    let store = app.state::<AppSettingsStore>();
-                    let _ = store.set(after);
-                }
+                    })
+                    .map_err(std::io::Error::other)?;
             }
-            // Virtual ports and the iOS network session first, so a saved
-            // selection of "LibreTracks In"/"Out" finds its port below.
-            if let Ok(settings) = state.audio.current_settings() {
-                midi::apply_platform_settings(&settings);
-            }
-            state
-                .midi
-                .restart(
-                    app.handle().clone(),
-                    state.audio.command_sender(),
-                    state
-                        .audio
-                        .current_settings()
-                        .ok()
-                        .and_then(|settings| settings.selected_midi_device),
-                )
-                .unwrap_or_else(|error| {
-                    if audio::engine::audio_debug_logging_enabled() {
-                        eprintln!("[libretracks-midi] startup warning: {error}");
-                    }
-                });
-            // Reopen the output port too, so a saved show device is live before
-            // the user presses play. A missing device is a warning, never fatal.
-            state
-                .midi_output
-                .restart(
-                    state
-                        .audio
-                        .current_settings()
-                        .ok()
-                        .and_then(|settings| settings.selected_midi_output_device),
-                )
-                .unwrap_or_else(|error| {
-                    if audio::engine::audio_debug_logging_enabled() {
-                        eprintln!("[libretracks-midi] output startup warning: {error}");
-                    }
-                });
-            // Hot-plug: reopen selected MIDI ports when their device comes
-            // back (plan mobile-midi, paso 04).
-            midi::watch::init(app.handle());
-            // Android: BLE MIDI pedals are only published while held open.
-            midi::bluetooth::reopen_remembered(app.handle());
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            start_audio_and_midi(app.handle(), runtime_settings)
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
             remote::initialize_remote(app)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
 
@@ -609,6 +556,116 @@ pub fn run() {
                 save_session_on_exit(app);
             }
         });
+}
+
+/// Abre el dispositivo de audio con los ajustes guardados y levanta el MIDI.
+/// Es lo lento del arranque: en escritorio corre en un hilo propio (ver la
+/// llamada en `setup`). Un error aqui es fatal en escritorio.
+fn start_audio_and_midi(
+    app: &tauri::AppHandle,
+    runtime_settings: infra::settings::AppSettings,
+) -> Result<(), String> {
+    let state = app.state::<DesktopState>();
+    let initial_device = runtime_settings.selected_output_device_id.clone();
+    let apply_result = state.audio.apply_settings(runtime_settings);
+    // Desktop: a failure to apply the initial audio settings is fatal.
+    // Mobile: tolerate an unavailable output so Android can recover its
+    // route and the first iOS smoke build can boot with the no-link engine.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    apply_result.map_err(|error| error.to_string())?;
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    if let Err(error) = apply_result {
+        eprintln!(
+            "[libretracks-audio] mobile: initial audio settings not applied: {error}"
+        );
+    }
+    // If apply_settings nulled out the saved output device (because
+    // the device couldn't be opened — see apply_settings_with_stream_rebuild
+    // in audio/engine.rs), persist the cleaned-up settings to disk so
+    // the next launch doesn't hit the same failure and we don't keep
+    // showing a stale device name to the user.
+    if let Ok(after) = state.audio.current_settings() {
+        if initial_device.is_some() && after.selected_output_device_id.is_none() {
+            if let Err(e) = infra::settings::save_app_settings(app, &after) {
+                if audio::engine::audio_debug_logging_enabled() {
+                    eprintln!(
+                        "[libretracks-settings] could not persist cleaned-up \
+                         audio settings after fallback to default device: {e}"
+                    );
+                }
+            }
+            // Also update the in-memory AppSettingsStore so commands
+            // that read it (e.g. get_settings) reflect the fallback.
+            let store = app.state::<AppSettingsStore>();
+            let _ = store.set(after.clone());
+            // On desktop the UI may already be up and showing the saved
+            // device (audio starts on its own thread): tell it about the
+            // fallback, the same way save_settings does.
+            let _ = tauri::Emitter::emit(app, "settings:updated", after);
+        }
+    }
+    // Virtual ports and the iOS network session first, so a saved
+    // selection of "LibreTracks In"/"Out" finds its port below.
+    if let Ok(settings) = state.audio.current_settings() {
+        midi::apply_platform_settings(&settings);
+    }
+    state
+        .midi
+        .restart(
+            app.clone(),
+            state.audio.command_sender(),
+            state
+                .audio
+                .current_settings()
+                .ok()
+                .and_then(|settings| settings.selected_midi_device),
+        )
+        .unwrap_or_else(|error| {
+            if audio::engine::audio_debug_logging_enabled() {
+                eprintln!("[libretracks-midi] startup warning: {error}");
+            }
+        });
+    // Reopen the output port too, so a saved show device is live before
+    // the user presses play. A missing device is a warning, never fatal.
+    state
+        .midi_output
+        .restart(
+            state
+                .audio
+                .current_settings()
+                .ok()
+                .and_then(|settings| settings.selected_midi_output_device),
+        )
+        .unwrap_or_else(|error| {
+            if audio::engine::audio_debug_logging_enabled() {
+                eprintln!("[libretracks-midi] output startup warning: {error}");
+            }
+        });
+    // Hot-plug: reopen selected MIDI ports when their device comes
+    // back (plan mobile-midi, paso 04).
+    midi::watch::init(app);
+    // Android: BLE MIDI pedals are only published while held open.
+    midi::bluetooth::reopen_remembered(app);
+    Ok(())
+}
+
+/// El arranque del audio fallo en su hilo: ya no hay un `setup` al que
+/// devolverle el error, asi que se dice en un dialogo y se cierra, en vez de
+/// dejar una ventana viva sin motor.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn report_fatal_startup_error(app: &tauri::AppHandle, error: &str) {
+    eprintln!("[libretracks-audio] startup failed: {error}");
+    rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title("LibreTracks")
+        .set_description(format!(
+            "No se pudo iniciar el audio / Could not start audio:
+
+{error}"
+        ))
+        .set_buttons(rfd::MessageButtons::Ok)
+        .show();
+    app.exit(1);
 }
 
 /// Best-effort flush of the loaded session during app shutdown.
