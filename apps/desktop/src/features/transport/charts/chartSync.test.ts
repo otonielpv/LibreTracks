@@ -5,6 +5,7 @@ import type { SectionMarkerSummary } from "@libretracks/shared/models";
 import { parseChordPro } from "./chordChart";
 import {
   autoLinkChart,
+  buildPerformanceBlocks,
   chartLinkFor,
   chartMarkersForRegion,
   applyLineRecording,
@@ -165,5 +166,49 @@ describe("recording line times", () => {
       { markerId: "v1", section: 1 },
       { markerId: "c1", section: 2, lineBeats: [0, 6] },
     ]);
+  });
+});
+
+describe("lyrics in playing order", () => {
+  const markers = [
+    marker("intro", 0, "intro", { name: "Intro" }),
+    marker("verse", 8, "verse", { name: "Estrofa" }),
+    marker("chorus", 24, "chorus", { name: "Coro" }),
+    marker("intro~2", 40, "intro", { name: "Intro" }),
+    marker("end", 48, "ending", { name: "Final" }),
+  ];
+  const links = [
+    { markerId: "intro", section: 0 },
+    { markerId: "verse", section: 1 },
+    { markerId: "chorus", section: 2 },
+  ];
+
+  it("follows the timeline, so the intro that comes back sits below the chorus", () => {
+    const blocks = buildPerformanceBlocks(doc, links, markers, "chorus", null);
+    expect(blocks.map((b) => [b.label, b.section])).toEqual([
+      ["Intro", 0],
+      ["Estrofa", 1],
+      ["Coro", 2],
+      ["Intro", 0],
+      // A part the sheet has no words for keeps its place, without lines.
+      ["Final", null],
+    ]);
+    expect(new Set(blocks.map((b) => b.key)).size).toBe(blocks.length);
+  });
+
+  it("puts a scheduled jump right after the block playing", () => {
+    const blocks = buildPerformanceBlocks(doc, links, markers, "verse", "chorus");
+    expect(blocks.map((b) => `${b.queued ? "→" : ""}${b.label}`)).toEqual([
+      "Intro", "Estrofa", "→Coro", "→Intro", "→Final",
+    ]);
+    // Jumping back: the repeated part shows again below, not up the page.
+    const back = buildPerformanceBlocks(doc, links, markers, "chorus", "verse");
+    expect(back.map((b) => `${b.queued ? "→" : ""}${b.label}`)).toEqual([
+      "Intro", "Estrofa", "Coro", "→Estrofa", "→Coro", "→Intro", "→Final",
+    ]);
+  });
+
+  it("ignores a jump to another song", () => {
+    expect(buildPerformanceBlocks(doc, links, markers, "verse", "other-song").some((b) => b.queued)).toBe(false);
   });
 });

@@ -2039,6 +2039,7 @@ const en = {
     noPendingJump: "No jump is currently queued",
   },
   liveChart: {
+    jump: "Jump",
     toggleLabel: "Lyrics",
     hide: "Hide lyrics and chords",
     title: "Lyrics & chords",

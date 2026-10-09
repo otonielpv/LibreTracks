@@ -24,6 +24,7 @@ import { keyPrefersFlats } from "./chordNotation";
 import {
   applyLineRecording,
   autoLinkChart,
+  buildPerformanceBlocks,
   chartMarkersForRegion,
   recordLineTap,
   type LineRecording,
@@ -61,6 +62,8 @@ type LiveChartPanelProps = {
   /** The song whose lyrics are shown (the one selected in the live view). */
   region: SongRegionSummary | null;
   positionSecondsRef: { readonly current: number };
+  /** A scheduled jump (marker or song id): its target shows next. */
+  pendingMarkerId: string | null;
   expanded: boolean;
   onToggleExpanded: () => void;
   /** Hide the lyrics panel (the header button shows it again). */
@@ -111,6 +114,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   song,
   region,
   positionSecondsRef,
+  pendingMarkerId,
   expanded,
   onToggleExpanded,
   onClose,
@@ -157,6 +161,12 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     positionSecondsRef,
   );
 
+  const blocks = useMemo(
+    () => (doc ? buildPerformanceBlocks(doc, links, markers, playback.markerId, pendingMarkerId) : []),
+    [doc, links, markers, playback.markerId, pendingMarkerId],
+  );
+  const currentBlock = blocks.findIndex((block) => !block.queued && block.markerId === playback.markerId);
+
   // A new song: whatever was being recorded belonged to the previous one.
   useEffect(() => {
     setRecording(null);
@@ -166,9 +176,9 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   // Follow the current line, unless the user is reading elsewhere.
   useEffect(() => {
     const scroller = scrollerRef.current;
-    if (!scroller || playback.section === null) return;
+    if (!scroller || currentBlock < 0) return;
     if (performance.now() - manualScrollAtRef.current < MANUAL_SCROLL_HOLD_MS) return;
-    const key = playback.line === null ? `${playback.section}-head` : `${playback.section}-${playback.line}`;
+    const key = playback.line === null ? `${currentBlock}-head` : `${currentBlock}-${playback.line}`;
     const target = scroller.querySelector<HTMLElement>(`[data-line-key="${key}"]`);
     if (!target) return;
     // From the on-screen positions, not offsetTop: offsetTop is measured
@@ -182,7 +192,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     } else {
       scroller.scrollTop = top;
     }
-  }, [playback.section, playback.line, fontScale, showChords]);
+  }, [currentBlock, playback.line, fontScale, showChords]);
 
   const markManualScroll = () => {
     manualScrollAtRef.current = performance.now();
@@ -277,9 +287,8 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     );
   };
 
-  const nextLabel =
-    doc && playback.nextSection !== null ? doc.sections[playback.nextSection]?.label : null;
-  const linkedSections = useMemo(() => new Set(links.map((link) => link.section)), [links]);
+  const nextBlock = currentBlock >= 0 ? blocks[currentBlock + 1] ?? null : null;
+  const nextLabel = nextBlock?.label ?? null;
 
   return (
     <section
@@ -412,29 +421,31 @@ export const LiveChartPanel = memo(function LiveChartPanel({
           onPointerDown={markManualScroll}
           data-testid="live-chart-scroller"
         >
-          {doc.sections.map((section, sectionIndex) => {
-            const isCurrent = playback.section === sectionIndex;
+          {blocks.map((block, blockIndex) => {
+            const isCurrent = blockIndex === currentBlock;
+            const section = block.section === null ? null : doc.sections[block.section];
+            const sheetLabel = section?.label && section.label.toLowerCase() !== block.label.toLowerCase() ? section.label : null;
             return (
               <div
-                key={sectionIndex}
-                className={`lt-chart-section${isCurrent ? " is-current" : ""}${linkedSections.has(sectionIndex) ? "" : " is-unlinked"}`}
+                key={block.key}
+                className={`lt-chart-section${isCurrent ? " is-current" : ""}${blockIndex < currentBlock ? " is-past" : ""}${block.queued ? " is-queued" : ""}${section ? "" : " is-unlinked"}`}
               >
-                {section.label ? (
-                  <h3 className="lt-chart-section-label" data-line-key={`${sectionIndex}-head`}>
-                    {section.label}
-                  </h3>
-                ) : (
-                  <span data-line-key={`${sectionIndex}-head`} />
-                )}
-                {section.lines.map((line, lineIndex) => (
+                <h3 className="lt-chart-section-label" data-line-key={`${blockIndex}-head`}>
+                  {block.queued && blockIndex > 0 && !blocks[blockIndex - 1].queued ? (
+                    <em className="lt-chart-jump-badge">{t("liveChart.jump")}</em>
+                  ) : null}
+                  {block.label}
+                  {sheetLabel ? <small>{sheetLabel}</small> : null}
+                </h3>
+                {section?.lines.map((line, lineIndex) => (
                   <ChartLineView
                     key={lineIndex}
                     line={line}
                     showChords={showChords}
-                    lineKey={`${sectionIndex}-${lineIndex}`}
+                    lineKey={`${blockIndex}-${lineIndex}`}
                     state={
                       !isCurrent || playback.line === null
-                        ? "upcoming"
+                        ? blockIndex < currentBlock ? "past" : "upcoming"
                         : lineIndex === playback.line
                           ? "current"
                           : lineIndex < playback.line

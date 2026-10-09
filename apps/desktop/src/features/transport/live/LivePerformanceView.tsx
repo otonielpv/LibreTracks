@@ -577,6 +577,7 @@ function LivePerformanceViewComponent({
           song={song}
           region={selectedRegion}
           positionSecondsRef={positionSecondsRef}
+          pendingMarkerId={pendingMarkerId}
           expanded={chartExpanded}
           onToggleExpanded={toggleChartExpanded}
           onClose={toggleChartOpen}

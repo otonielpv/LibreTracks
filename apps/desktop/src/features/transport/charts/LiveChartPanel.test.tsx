@@ -63,13 +63,18 @@ const linked: SongChart = {
   ],
 };
 
-function renderPanel(target: SongRegionSummary, position: { current: number }) {
+function renderPanel(
+  target: SongRegionSummary,
+  position: { current: number },
+  pendingMarkerId: string | null = null,
+) {
   const onChartChange = vi.fn(async () => {});
   const utils = render(
     <LiveChartPanel
       song={songView(target)}
       region={target}
       positionSecondsRef={position}
+      pendingMarkerId={pendingMarkerId}
       expanded={false}
       onToggleExpanded={vi.fn()}
       onClose={vi.fn()}
@@ -95,9 +100,10 @@ describe("LiveChartPanel", () => {
     const { container } = renderPanel(region(linked), { current: 12 });
     expect(lineTexts(container, ".lt-chart-line.is-current")).toEqual(["Segunda línea"]);
     expect(lineTexts(container, ".lt-chart-line.is-past")).toEqual(["Primera línea"]);
-    expect(container.querySelector(".lt-chart-section.is-current .lt-chart-section-label")?.textContent).toBe("Verso 1");
+    // The block is named like the marker; the sheet's own name goes beside it.
+    expect(container.querySelector(".lt-chart-section.is-current .lt-chart-section-label")?.textContent).toBe("EstrofaVerso 1");
     // What comes next is announced.
-    expect(screen.getByTitle("liveChart.upNext").textContent).toContain("Coro 1");
+    expect(screen.getByTitle("liveChart.upNext").textContent).toContain("Estribillo");
   });
 
   it("scrolls so the current line sits near the top of the panel", () => {
@@ -136,6 +142,22 @@ describe("LiveChartPanel", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("shows a scheduled jump right after the part playing", () => {
+    // Playing the chorus with a jump back to the verse scheduled.
+    const { container } = renderPanel(region(linked), { current: 25 }, "verse");
+    const labels = [...container.querySelectorAll(".lt-chart-section")].map((node) => ({
+      label: node.querySelector(".lt-chart-section-label")?.textContent,
+      queued: node.classList.contains("is-queued"),
+    }));
+    expect(labels).toEqual([
+      { label: "EstrofaVerso 1", queued: false },
+      { label: "EstribilloCoro 1", queued: false },
+      { label: "liveChart.jumpEstrofaVerso 1", queued: true },
+      { label: "EstribilloCoro 1", queued: true },
+    ]);
+    expect(screen.getByTitle("liveChart.upNext").textContent).toContain("Estrofa");
   });
 
   it("shows the chords in the key the song is played in", () => {

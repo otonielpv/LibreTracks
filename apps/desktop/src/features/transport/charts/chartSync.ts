@@ -248,3 +248,52 @@ export function applyLineRecording(links: readonly ChartLink[], recording: LineR
     return beats && beats.length > 1 ? { ...link, lineBeats: [...beats] } : link;
   });
 }
+
+/** One block of the lyrics as the song plays them: a marker and the sheet
+ * section it shows (none for a part the sheet has no words for). */
+export type PerformanceBlock = {
+  /** Unique within the list (a jump preview repeats a marker). */
+  key: string;
+  markerId: string;
+  /** The marker's name: what the band calls this part. */
+  label: string;
+  section: number | null;
+  /** Shown because a jump to it is scheduled, not because it comes next. */
+  queued: boolean;
+};
+
+/**
+ * The lyrics in the order the song plays them — the order of its markers on
+ * the timeline (an applied arrangement included), not the order of the
+ * sheet. A chorus that plays three times shows three times, and the intro
+ * that comes back after it shows BELOW it: reading only ever goes down.
+ *
+ * With a jump scheduled to a marker of this song, that marker's block and
+ * what follows it are shown right after the block playing, so the next thing
+ * on screen is what will actually sound.
+ */
+export function buildPerformanceBlocks(
+  doc: ChartDoc,
+  links: readonly ChartLink[],
+  markers: readonly SectionMarkerSummary[],
+  currentMarkerId: string | null,
+  pendingMarkerId: string | null,
+): PerformanceBlock[] {
+  const block = (marker: SectionMarkerSummary, queued: boolean): PerformanceBlock => {
+    const link = chartLinkFor(links, marker.id);
+    return {
+      key: `${queued ? "jump:" : ""}${marker.id}`,
+      markerId: marker.id,
+      label: marker.name,
+      section: link && link.section < doc.sections.length ? link.section : null,
+      queued,
+    };
+  };
+  const current = markers.findIndex((marker) => marker.id === currentMarkerId);
+  const target = pendingMarkerId ? markers.findIndex((marker) => marker.id === pendingMarkerId) : -1;
+  if (current < 0 || target < 0) return markers.map((marker) => block(marker, false));
+  return [
+    ...markers.slice(0, current + 1).map((marker) => block(marker, false)),
+    ...markers.slice(target).map((marker) => block(marker, true)),
+  ];
+}

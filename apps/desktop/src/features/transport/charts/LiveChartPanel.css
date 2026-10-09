@@ -233,9 +233,33 @@
   color: var(--lt-chart-accent);
 }
 
-.lt-chart-section.is-unlinked .lt-chart-section-label::after {
-  content: " ·";
-  color: #4f5d59;
+.lt-chart-section-label small {
+  margin-left: 0.5em;
+  color: #5d6b67;
+  font-size: 0.85em;
+  letter-spacing: 0.06em;
+}
+
+.lt-chart-section.is-past {
+  opacity: 0.5;
+}
+
+/* A scheduled jump: the same amber as the queued marker in the live view. */
+.lt-chart-section.is-queued {
+  border-left-color: rgb(244 201 93 / 0.6);
+}
+
+.lt-chart-section.is-queued .lt-chart-section-label {
+  color: #f4c95d;
+}
+
+.lt-chart-jump-badge {
+  margin-right: 0.5em;
+  padding: 0.1em 0.4em;
+  border: 1px solid rgb(244 201 93 / 0.5);
+  border-radius: 2px;
+  color: #f4c95d;
+  font-style: normal;
 }
 
 .lt-chart-line {
