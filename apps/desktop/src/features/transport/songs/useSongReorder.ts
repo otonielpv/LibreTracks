@@ -25,10 +25,15 @@ import {
  *
  * Dos formas de agarrar una canción:
  *
- * - **El asa** (`handleProps`): arrastra al instante con ratón, dedo o lápiz.
- *   Lleva `touch-action: none` en CSS, que es lo que permite arrastrar con el
- *   dedo sin que el navegador se quede el gesto para hacer scroll. Con el
- *   teclado, las flechas la mueven un puesto.
+ * - **El asa** (`handleProps`): arrastra al instante con ratón o lápiz. Con el
+ *   dedo hay que mantenerla un instante (`TOUCH_HOLD_MS`): en el iPhone la
+ *   lista de la vista live queda cerca del borde inferior, donde un
+ *   deslizamiento es el gesto del sistema para cambiar de app, y arrancar al
+ *   instante convertía ese gesto en un reordenado (o al revés). Un dedo que se
+ *   desliza antes de tiempo suelta el asa. Lleva `touch-action: none` en CSS,
+ *   que es lo que permite arrastrar con el dedo sin que el navegador se quede
+ *   el gesto para hacer scroll. Con el teclado, las flechas la mueven un
+ *   puesto.
  * - **La superficie** (`surfaceProps`): la cabecera o el botón de la canción,
  *   sólo con ratón y a partir de unos píxeles, para que un clic siga siendo un
  *   clic. Con el dedo no: ahí el gesto ya es scroll y la pulsación larga ya es
@@ -45,6 +50,10 @@ export const SONG_REORDER_ID_ATTRIBUTE = "data-song-reorder-id";
 export const SONG_REORDER_IGNORE_ATTRIBUTE = "data-no-song-reorder";
 
 const MOUSE_DRAG_THRESHOLD_PX = 5;
+/** Dedo quieto sobre el asa antes de que empiece a reordenar. */
+export const TOUCH_HOLD_MS = 350;
+/** Lo que puede temblar el dedo mientras mantiene sin perder el agarre. */
+const TOUCH_HOLD_SLOP_PX = 8;
 const AUTO_SCROLL_EDGE_PX = 48;
 const AUTO_SCROLL_MAX_STEP_PX = 18;
 /** Si el soltar no llega a cambiar el orden (un error), la vista previa se
@@ -275,7 +284,7 @@ export function useSongReorder({
     (
       event: ReactPointerEvent<HTMLElement>,
       id: string,
-      immediate: boolean,
+      start: "immediate" | "threshold" | "hold",
     ) => {
       if (!enabled || sessionRef.current) return;
       const fromIndex = latestRef.current.itemIds.indexOf(id);
@@ -314,6 +323,11 @@ export function useSongReorder({
             moveEvent.clientX - session.startX,
             moveEvent.clientY - session.startY,
           );
+          if (start === "hold") {
+            // Se deslizó antes de tiempo: no era un agarre, se suelta.
+            if (distance > TOUCH_HOLD_SLOP_PX) finish(false);
+            return;
+          }
           if (distance < MOUSE_DRAG_THRESHOLD_PX) return;
           activate();
         }
@@ -335,18 +349,28 @@ export function useSongReorder({
         if (keyEvent.key === "Escape") finish(false);
       };
 
+      const holdTimer =
+        start === "hold"
+          ? window.setTimeout(() => {
+              activate();
+              // Un toque de vibración donde existe, para saber que ya agarró.
+              navigator.vibrate?.(10);
+            }, TOUCH_HOLD_MS)
+          : null;
+
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onCancel);
       window.addEventListener("keydown", onKey);
       detachRef.current = () => {
+        if (holdTimer !== null) window.clearTimeout(holdTimer);
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         window.removeEventListener("pointercancel", onCancel);
         window.removeEventListener("keydown", onKey);
       };
 
-      if (immediate) activate();
+      if (start === "immediate") activate();
     },
     [autoScrollStep, enabled, finish, renderPreview, startPreview],
   );
@@ -358,7 +382,7 @@ export function useSongReorder({
         // Que no lo vea la cabecera (selección) ni el scroll del contenedor.
         event.stopPropagation();
         event.preventDefault();
-        begin(event, id, true);
+        begin(event, id, event.pointerType === "touch" ? "hold" : "immediate");
       },
       // El asa no es un botón de acción: un clic suelto no hace nada, y que
       // no llegue a la cabecera evita que además la seleccione.
@@ -392,7 +416,7 @@ export function useSongReorder({
         if (target?.closest?.(`input, select, textarea, [${SONG_REORDER_IGNORE_ATTRIBUTE}]`)) {
           return;
         }
-        begin(event, id, false);
+        begin(event, id, "threshold");
       },
     }),
     [begin],

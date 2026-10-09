@@ -851,3 +851,15 @@
   font-style: normal;
   color: rgb(87 241 219 / 0.85);
 }
+
+/* iPhone: la barra de canciones va abajo, y en la franja del indicador de
+   inicio un deslizamiento es el gesto del sistema para cambiar de app. Pegada
+   al borde, reordenar canciones peleaba con ese gesto. El margen seguro la
+   saca de esa franja (el agarre con el dedo, además, pide mantener: ver
+   useSongReorder). */
+.lt-ios .lt-live-view {
+  padding-bottom: max(
+    var(--lt-live-page-padding),
+    calc(var(--lt-safe-area-bottom) + 0.5rem)
+  );
+}

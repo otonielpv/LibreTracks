@@ -1,11 +1,12 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useRef } from "react";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   moveId,
   resolveReorderAxis,
   SONG_REORDER_ID_ATTRIBUTE,
+  TOUCH_HOLD_MS,
   targetIndexForGap,
   useSongReorder,
 } from "./useSongReorder";
@@ -102,6 +103,13 @@ describe("useSongReorder", () => {
       value: TestPointerEvent,
     });
   });
+  // A fake-timer test must not leave the clock frozen for the rest, nor drop
+  // its pending timers: the drop's setTimeout(0) is what removes the listener
+  // that swallows the click after a drag, and lost it would eat later clicks.
+  afterEach(() => {
+    if (vi.isFakeTimers()) vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
   afterAll(() => {
     Object.defineProperty(window, "PointerEvent", {
       configurable: true,
@@ -115,8 +123,13 @@ describe("useSongReorder", () => {
     layOut(container);
     const touch = { pointerId: 3, pointerType: "touch", button: 0 };
 
+    vi.useFakeTimers();
     act(() => {
       fireEvent.pointerDown(screen.getByTestId("grip-a"), { ...touch, clientX: 50 });
+    });
+    // With a finger the handle grabs after a short hold (see the next tests).
+    act(() => {
+      vi.advanceTimersByTime(TOUCH_HOLD_MS);
     });
     // Recién agarrada: fantasma en su sitio y copia flotante.
     expect(screen.getByTestId("row-a").classList.contains("lt-reorder-ghost")).toBe(true);
@@ -140,6 +153,26 @@ describe("useSongReorder", () => {
     expect(lift()).toBeNull();
   });
 
+  // iPhone: the live setlist sits near the bottom edge, where a swipe is the
+  // system gesture to switch apps. Grabbing on contact turned that swipe into
+  // a reorder; a finger that slides before the hold lets go instead.
+  it("a finger that slides before the hold does not reorder", () => {
+    vi.useFakeTimers();
+    const onReorder = vi.fn();
+    const { container } = render(<Harness ids={["a", "b", "c"]} onReorder={onReorder} />);
+    layOut(container);
+    const touch = { pointerId: 3, pointerType: "touch", button: 0 };
+
+    act(() => {
+      fireEvent.pointerDown(screen.getByTestId("grip-a"), { ...touch, clientX: 50 });
+      fireEvent.pointerMove(window, { ...touch, clientX: 300 });
+      vi.advanceTimersByTime(TOUCH_HOLD_MS);
+      fireEvent.pointerUp(window, { ...touch, clientX: 300 });
+    });
+    expect(onReorder).not.toHaveBeenCalled();
+    expect(lift()).toBeNull();
+  });
+
   it("keeps the preview until the new order renders, then lets go at once", () => {
     const { container, rerender } = render(
       <Harness ids={["a", "b", "c"]} onReorder={vi.fn()} />,
@@ -147,11 +180,17 @@ describe("useSongReorder", () => {
     layOut(container);
     const touch = { pointerId: 3, pointerType: "touch", button: 0 };
 
+    vi.useFakeTimers();
     act(() => {
       fireEvent.pointerDown(screen.getByTestId("grip-a"), { ...touch, clientX: 50 });
+      vi.advanceTimersByTime(TOUCH_HOLD_MS);
       fireEvent.pointerMove(window, { ...touch, clientX: 300 });
       fireEvent.pointerUp(window, { ...touch, clientX: 300 });
     });
+    // Only the drop's setTimeout(0): the 250 ms fallback that would drop the
+    // preview is exactly what this test checks has not happened yet.
+    vi.advanceTimersByTime(1);
+    vi.useRealTimers();
     // Guardando: la lista sigue enseñando el resultado.
     expect(screen.getByTestId("row-b").style.transform).not.toBe("");
 

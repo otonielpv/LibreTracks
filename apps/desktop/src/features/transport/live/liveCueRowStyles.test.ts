@@ -45,4 +45,9 @@ describe("colores de las marcas en la vista Live", () => {
     const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
     expect(code).not.toContain("color-mix(");
   });
+
+  it("en el iPhone la vista sale de la franja del indicador de inicio", () => {
+    // Pegada al borde, reordenar canciones peleaba con el gesto de cambiar de app.
+    expect(rule(".lt-ios .lt-live-view")).toContain("var(--lt-safe-area-bottom)");
+  });
 });
