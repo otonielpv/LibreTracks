@@ -343,7 +343,7 @@ export function FolderLibraryPanel({
     >
       <div className="lt-library-panel-header">
         <div>
-          <span className="lt-library-panel-eyebrow">{t("library.eyebrow")}</span>
+          <span className="lt-library-panel-eyebrow">{t("library.folders.eyebrow")}</span>
           <h2>{t("library.folders.title")}</h2>
         </div>
         <button

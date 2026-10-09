@@ -1879,6 +1879,7 @@ const es = {
     },
     folders: {
       title: "Carpetas",
+      eyebrow: "Biblioteca",
       panelAria: "Biblioteca de carpetas",
       addPlace: "Añadir carpeta",
       search: "Buscar en las carpetas abiertas",

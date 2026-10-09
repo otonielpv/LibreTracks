@@ -1850,6 +1850,7 @@ const en = {
     },
     folders: {
       title: "Folders",
+      eyebrow: "Library",
       panelAria: "Folder library",
       addPlace: "Add folder",
       search: "Search the open folders",
