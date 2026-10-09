@@ -55,6 +55,24 @@ describe("auto-linking markers to the sheet", () => {
     ]);
   });
 
+  it("reads along: a chorus after the instrumental gets the chorus written after it", () => {
+    // The sheet writes each part once, in order, with the last chorus in a
+    // new key; the song repeats parts and goes back to the intro.
+    const sheet = parseChordPro(
+      ["{section: Intro}", "[B]", "{section: Verso}", "a", "{section: Coro}", "b",
+        "{section: Solo}", "[Bm]", "{section: Inter}", "[Bm]", "{section: Coro}", "[C#m]c"].join("\n"),
+    );
+    const song = [
+      marker("i1", 0, "intro"), marker("v1", 1, "verse", { variant: 2 }), marker("c1", 2, "chorus"),
+      marker("i2", 3, "intro"), marker("v2", 4, "verse", { variant: 2 }), marker("c2", 5, "chorus"),
+      marker("solo", 6, "solo"), marker("inst", 7, "instrumental"), marker("c3", 8, "chorus"),
+      marker("i3", 9, "intro"), marker("end", 10, "ending"),
+    ];
+    expect(autoLinkChart(sheet, song).map((link) => `${link.markerId}:${link.section}`)).toEqual([
+      "i1:0", "v1:1", "c1:2", "i2:0", "v2:1", "c2:2", "solo:3", "inst:4", "c3:5", "i3:0",
+    ]);
+  });
+
   it("uses the marker's number when it has one, and understands custom names", () => {
     const links = autoLinkChart(doc, [
       marker("v2", 0, "verse", { variant: 2 }),

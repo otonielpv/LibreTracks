@@ -94,10 +94,15 @@ function rowsOf(items: readonly PdfTextItem[]): Row[] {
 
 export function pdfTextToSourceLines(pages: readonly PdfPageText[]): SourceLine[] {
   const dots = usesDotSpaces(pages);
-  const clean = (text: string) => (dots ? text.replace(/\./g, " ") : text);
+  // NFC: some generators store "ú" as "u" + a combining accent, one
+  // character more, which shifts every chord placed after it.
+  const clean = (text: string) => {
+    const composed = text.normalize("NFC");
+    return dots ? composed.replace(/\./g, " ") : composed;
+  };
 
-  const columns: Row[][] = [];
-  for (const page of pages) {
+  const columns: Array<{ page: number; rows: Row[] }> = [];
+  for (const [pageIndex, page] of pages.entries()) {
     const items = page.items
       .map((item) => ({ ...item, str: clean(item.str) }))
       .filter((item) => item.str.trim());
@@ -109,18 +114,27 @@ export function pdfTextToSourceLines(pages: readonly PdfPageText[]): SourceLine[
       const column = gutters.filter((gutter) => item.x >= gutter).length;
       buckets[column].push(item);
     }
-    for (const bucket of buckets) if (bucket.length > 0) columns.push(rowsOf(bucket));
+    for (const bucket of buckets) {
+      // A lone symbol on its own row is an icon printed by a web page
+      // ("×", "•"), not part of the song.
+      const rows = rowsOf(bucket).filter((row) => {
+        const text = row.items.map((item) => item.str).join("").trim();
+        return !(text.length === 1 && !/[\p{L}\p{N}|/%-]/u.test(text));
+      });
+      if (rows.length > 0) columns.push({ page: pageIndex, rows });
+    }
   }
 
   const spacing = median(
-    columns.flatMap((rows) => rows.slice(1).map((row, index) => rows[index].y - row.y)).filter((gap) => gap > 0),
+    columns.flatMap(({ rows }) => rows.slice(1).map((row, index) => rows[index].y - row.y)).filter((gap) => gap > 0),
   );
   const lines: SourceLine[] = [];
-  for (const rows of columns) {
+  for (const { page, rows } of columns) {
     rows.forEach((row, index) => {
       const gap = index > 0 ? rows[index - 1].y - row.y : 0;
       lines.push({
         fragments: row.items.map((item) => ({ text: item.str, x: item.x, width: item.width })),
+        page,
         size: row.size,
         // A new column or page starts a new block too.
         breakBefore: index === 0 || (spacing > 0 && gap > spacing * 1.5),

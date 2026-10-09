@@ -14,7 +14,10 @@ export type ChartSegment = { chord: string | null; text: string };
 
 export type ChartLine =
   | { kind: "lyrics"; segments: ChartSegment[] }
-  | { kind: "comment"; text: string };
+  | { kind: "comment"; text: string }
+  /** Kept character for character in a fixed-width font: guitar tablature,
+   * melody notes ("D-C#-A"), chord grids. Never transposed. */
+  | { kind: "tab"; text: string };
 
 export type ChartSection = {
   label: string;
@@ -46,7 +49,7 @@ const SECTION_WORDS: Array<[RegExp, MarkerKind]> = [
   [/^(?:refr[aá]n|refrain)/i, "refrain"],
   [/^(?:puente|bridge)/i, "bridge"],
   [/^(?:instrumental)/i, "instrumental"],
-  [/^(?:interludio|interlude)/i, "interlude"],
+  [/^(?:interludio|interlude|inter)\b/i, "interlude"],
   [/^(?:solo)/i, "solo"],
   [/^(?:outro|coda|ending|final|fin)\b/i, "outro"],
   [/^(?:tag)\b/i, "tag"],
@@ -72,8 +75,8 @@ export function parseSectionHeader(raw: string): SectionHeader | null {
     .replace(/[ ]/g, " ")
     .trim()
     .replace(/^[[({]\s*/, "")
-    .replace(/\s*[\])}]\s*:?$/, "")
-    .replace(/\s*:$/, "")
+    .replace(/\s*[\])}]\s*[:;.]?$/, "")
+    .replace(/\s*[:;.]$/, "")
     .trim();
   if (!text || text.length > 32) return null;
   for (const [pattern, kind] of SECTION_WORDS) {
@@ -156,15 +159,29 @@ export function parseChordPro(source: string): ChartDoc {
   };
   const target = () => current ?? open("");
 
+  let inTab = false;
   for (const rawLine of source.replace(/\r\n?/g, "\n").split("\n")) {
     const line = rawLine.replace(/\s+$/, "");
+    const directive = /^\s*\{\s*([a-z_]+)\s*(?::\s*(.*?))?\s*\}\s*$/i.exec(line);
+    const directiveName = directive?.[1].toLowerCase() ?? "";
+    if (inTab) {
+      if (directiveName === "end_of_tab" || directiveName === "eot" || directiveName === "end_of_grid" || directiveName === "eog") {
+        inTab = false;
+      } else if (line.trim()) {
+        target().lines.push({ kind: "tab", text: line });
+      }
+      continue;
+    }
     if (!line.trim()) continue;
     if (line.trimStart().startsWith("#")) continue;
 
-    const directive = /^\s*\{\s*([a-z_]+)\s*(?::\s*(.*?))?\s*\}\s*$/i.exec(line);
     if (directive) {
-      const name = directive[1].toLowerCase();
+      const name = directiveName;
       const value = (directive[2] ?? "").trim();
+      if (name === "start_of_tab" || name === "sot" || name === "start_of_grid" || name === "sog") {
+        inTab = true;
+        continue;
+      }
       if (name === "title" || name === "t") doc.title = value || doc.title;
       else if (name === "subtitle" || name === "st" || name === "artist") doc.artist = value || doc.artist;
       else if (name === "key") doc.key = value || doc.key;
@@ -203,11 +220,16 @@ export function serializeChordPro(doc: ChartDoc): string {
   for (const chartSection of doc.sections) {
     if (out.length > 0) out.push("");
     if (chartSection.label) out.push(`{section: ${chartSection.label}}`);
-    for (const line of chartSection.lines) {
-      out.push(
-        line.kind === "comment" ? `{comment: ${line.text}}` : serializeLyricLine(line.segments),
-      );
-    }
+    chartSection.lines.forEach((line, index) => {
+      if (line.kind === "tab") {
+        // Consecutive tab lines share one {start_of_tab} block.
+        if (chartSection.lines[index - 1]?.kind !== "tab") out.push("{start_of_tab}");
+        out.push(line.text);
+        if (chartSection.lines[index + 1]?.kind !== "tab") out.push("{end_of_tab}");
+        return;
+      }
+      out.push(line.kind === "comment" ? `{comment: ${line.text}}` : serializeLyricLine(line.segments));
+    });
   }
   return `${out.join("\n")}\n`;
 }

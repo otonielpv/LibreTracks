@@ -86,6 +86,13 @@ function ChartLineView({
       </p>
     );
   }
+  if (line.kind === "tab") {
+    return (
+      <pre className={`lt-chart-tab is-${state}`} data-line-key={lineKey}>
+        {line.text}
+      </pre>
+    );
+  }
   const hasChords = showChords && line.segments.some((segment) => segment.chord);
   const hasText = line.segments.some((segment) => segment.text.trim());
   return (

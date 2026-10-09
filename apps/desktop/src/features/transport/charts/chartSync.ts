@@ -65,36 +65,45 @@ function markerMeaning(marker: SectionMarkerSummary): { family: string | null; n
 /**
  * Links each marker of a song to the chart section it most likely shows.
  *
- * By meaning first: the n-th "Estrofa" marker gets the n-th verse of the sheet
- * (or the verse with its number, "Estrofa 2" → "Verso 2"), and when the song
- * has more choruses than the sheet writes out, the extra ones reuse the last.
+ * Markers and sheet are walked in step, the way a musician reads along: each
+ * marker takes the next section of its kind after the one the previous marker
+ * took (so a chorus that comes back after the instrumental gets the chorus
+ * written after the instrumental, which may be in another key). When the song
+ * goes back — a second intro, a verse the sheet only writes once — it takes
+ * the most recent section of that kind. A marker with a number ("Estrofa 2")
+ * goes to the section with that number if the sheet has one.
+ *
  * If nothing could be matched by meaning — custom markers with arbitrary
  * names — markers and sections are paired in order.
  */
 export function autoLinkChart(doc: ChartDoc, markers: readonly SectionMarkerSummary[]): ChartLink[] {
   const originals = markers.filter((marker) => !marker.id.includes("~"));
-  const sectionsByFamily = new Map<string, number[]>();
-  doc.sections.forEach((section, index) => {
-    const key = family(section.kind);
-    if (!key) return;
-    sectionsByFamily.set(key, [...(sectionsByFamily.get(key) ?? []), index]);
-  });
-
-  const seen = new Map<string, number>();
+  const families = doc.sections.map((section) => family(section.kind));
   const links: ChartLink[] = [];
+  let cursor = 0;
   for (const marker of originals) {
     const meaning = markerMeaning(marker);
     if (!meaning.family) continue;
-    const candidates = sectionsByFamily.get(meaning.family);
-    if (!candidates || candidates.length === 0) continue;
-    const occurrence = seen.get(meaning.family) ?? 0;
-    seen.set(meaning.family, occurrence + 1);
-    const numbered =
-      meaning.number !== null
-        ? candidates.find((index) => doc.sections[index].number === meaning.number)
-        : undefined;
-    const section = numbered ?? candidates[Math.min(occurrence, candidates.length - 1)];
+    const matches = (index: number) => families[index] === meaning.family;
+    let section = -1;
+    if (meaning.number !== null) {
+      section = doc.sections.findIndex(
+        (candidate, index) => matches(index) && candidate.number === meaning.number,
+      );
+    }
+    if (section < 0) {
+      for (let index = cursor; index < doc.sections.length && section < 0; index += 1) {
+        if (matches(index)) section = index;
+      }
+    }
+    if (section < 0) {
+      for (let index = Math.min(cursor, doc.sections.length) - 1; index >= 0 && section < 0; index -= 1) {
+        if (matches(index)) section = index;
+      }
+    }
+    if (section < 0) continue;
     links.push({ markerId: marker.id, section });
+    cursor = section + 1;
   }
   if (links.length > 0) return links;
 

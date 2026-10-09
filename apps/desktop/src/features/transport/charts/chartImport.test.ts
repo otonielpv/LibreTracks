@@ -129,10 +129,94 @@ describe("ChordPro", () => {
     expect(parseChordPro(serializeChordPro(doc))).toEqual(doc);
   });
 
+  it("keeps tab blocks through a save and load, untransposed", () => {
+    const doc = parseChordPro("{section: Solo}\n{start_of_tab}\nE--3--\nB--5--\n{end_of_tab}\n[C]fin");
+    expect(doc.sections[0].lines.map((line) => line.kind)).toEqual(["tab", "tab", "lyrics"]);
+    expect(parseChordPro(serializeChordPro(doc))).toEqual(doc);
+    expect(transposeChart(doc, 2).sections[0].lines[0]).toEqual({ kind: "tab", text: "E--3--" });
+  });
+
   it("transposes every chord and the key", () => {
     const doc = transposeChart(parseChordPro("{key: C}\n[C]Uno [G/B]dos"), 2);
     expect(doc.key).toBe("D");
     const line = doc.sections[0].lines[0];
     expect(line.kind === "lyrics" && line.segments.map((s) => s.chord)).toEqual(["D", "A/C#"]);
+  });
+});
+
+describe("sheets from the web", () => {
+  it("splits a header with a note, and starts the unlabelled verse after the intro", () => {
+    const doc = sheet(
+      [
+        "INTRO; SON NOTAS PARA TOCAR:",
+        "B - B - C# - D",
+        "DC#-A-DC#-A//B",
+        "",
+        "Bm        G",
+        "Una línea de la estrofa",
+        "Coro:",
+        "D         A",
+        "Otra línea del coro",
+      ].join("\n"),
+    );
+    expect(doc.sections.map((section) => [section.label, section.kind])).toEqual([
+      ["Intro", "intro"],
+      ["Verso", "verse"],
+      ["Coro", "chorus"],
+    ]);
+    expect(doc.sections[0].lines).toEqual([
+      { kind: "comment", text: "Son notas para tocar" },
+      { kind: "lyrics", segments: [
+        { chord: "B", text: " " }, { chord: "B", text: " " }, { chord: "C#", text: " " }, { chord: "D", text: "" },
+      ] },
+      { kind: "tab", text: "DC#-A-DC#-A//B" },
+    ]);
+  });
+
+  it("keeps guitar tablature verbatim and does not take it for lyrics", () => {
+    const doc = sheet(["SOLO:", "E-----------------", "D-14/16-16-14-12--", "G----12-12--------"].join("\n"));
+    expect(doc.sections).toHaveLength(1);
+    expect(doc.sections[0].lines.map((line) => line.kind)).toEqual(["tab", "tab", "tab"]);
+  });
+
+  it("does not split a labelled verse that opens with a line of chords", () => {
+    const doc = sheet(["VERSO", "Am   G", "", "Letra"].join("\n"));
+    expect(doc.sections).toHaveLength(1);
+  });
+
+  it("places a chord on the character it is drawn over, despite float drift", () => {
+    // 4.12 pt per character; the chord sits a hundredth to the right of "a".
+    const doc = analyzeSongSheet([
+      { fragments: [{ text: "G", x: 131.227, width: 4.12 }], size: 7, breakBefore: true },
+      { fragments: [{ text: "de mi adoración", x: 110.607, width: 61.8 }], size: 7, breakBefore: false },
+    ]);
+    const line = doc.sections[0].lines[0];
+    expect(line.kind === "lyrics" && line.segments).toEqual([
+      { chord: null, text: "de mi " },
+      { chord: "G", text: "adoración" },
+    ]);
+  });
+
+  it("drops a web page's icons, e-mail and a trailing page of notes", () => {
+    const page = (n: number, text: string, size = 7) => ({
+      fragments: [{ text, x: 36, width: text.length * 4 }],
+      size,
+      page: n,
+      breakBefore: false,
+    });
+    const doc = analyzeSongSheet([
+      page(0, "×", 10),
+      page(0, "Mi Canción", 13),
+      page(0, "Mi Banda", 9),
+      page(0, "Coro:"),
+      page(0, "D        A"),
+      page(0, "Letra del coro"),
+      page(1, "MI GRUPO FAVORITO #1"),
+      page(1, "alguien@example.com"),
+      page(1, "cualquier error me avisan"),
+    ]);
+    expect(doc).toMatchObject({ title: "Mi Canción", artist: "Mi Banda" });
+    const text = serializeChordPro(doc);
+    expect(text).not.toMatch(/×|example|avisan|FAVORITO/);
   });
 });
