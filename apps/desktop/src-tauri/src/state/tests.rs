@@ -4666,6 +4666,35 @@ fn automation_mix_bumps_mix_revision_but_not_project_revision() {
     }
 }
 
+/// Song fades are an edit like any other (undo, autosave) and can never be
+/// longer than the song: a fade in longer than the song would never reach full
+/// level.
+#[test]
+fn song_region_fades_are_stored_capped_and_validated() {
+    let mut session = session_with_song_dir("song-fades-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+    let revision = session.snapshot().project_revision;
+
+    session
+        .update_song_region_fades("region_1", 3.0, 40.0, &audio)
+        .expect("fades should be stored");
+
+    let song = session.engine.song().expect("song should be loaded");
+    assert_eq!(song.regions[0].master.fade_in_seconds, 3.0);
+    assert_eq!(
+        song.regions[0].master.fade_out_seconds, 12.0,
+        "a fade is capped at the song's 12 s"
+    );
+    assert!(session.snapshot().project_revision > revision, "fades are an edit");
+
+    assert!(session
+        .update_song_region_fades("region_1", -1.0, 0.0, &audio)
+        .is_err());
+    assert!(session
+        .update_song_region_fades("region_1", f64::NAN, 0.0, &audio)
+        .is_err());
+}
+
 /// Commit path (pointer-up): must bump revision and send exactly one realtime command.
 #[test]
 fn commit_track_mix_bumps_revision_and_sends_one_realtime_command() {

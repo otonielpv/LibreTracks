@@ -275,6 +275,35 @@ TEST_CASE("parse SetSongTimelineWindow keeps region master_gain") {
     CHECK(l.regions[0].master_gain == doctest::Approx(1.0f));
 }
 
+// Song fades ride along with the master gain through all three region parsers
+// (SetSongRegions, SetSongTimelineWindow, UpsertSongTracks). A parser that drops
+// them silently turns the song's fades off on that path.
+TEST_CASE("every region parser keeps the song fades") {
+    const char* region = R"({"id":"reg1","name":"A","start_frame":0,"end_frame":480000,
+                             "master_gain":0.8,"fade_in_frames":4800,"fade_out_frames":9600})";
+    auto check = [](const auto& regions) {
+        REQUIRE(regions.size() == 1);
+        CHECK(regions[0].fade_in_frames == 4800);
+        CHECK(regions[0].fade_out_frames == 9600);
+    };
+    const std::string tail = R"(,"markers":[],"bpm":128.0,"beats_per_bar":4,"beat_unit":4,
+                                "tempo_markers":[],"time_signature_markers":[]})";
+
+    auto regions_cmd = command_from_json(
+        std::string(R"({"type":"SetSongRegions","song_id":"s","regions":[)") + region + "]}");
+    check(std::get<CmdSetSongRegions>(regions_cmd).regions);
+
+    auto window_cmd = command_from_json(
+        std::string(R"({"type":"SetSongTimelineWindow","song_id":"s","clips":[],"regions":[)")
+        + region + "]" + tail);
+    check(std::get<CmdSetSongTimelineWindow>(window_cmd).regions);
+
+    auto upsert_cmd = command_from_json(
+        std::string(R"({"type":"UpsertSongTracks","song_id":"s","tracks":[],"sources":[],"regions":[)")
+        + region + "]" + tail);
+    check(std::get<CmdUpsertSongTracks>(upsert_cmd).regions);
+}
+
 TEST_CASE("parse SetTrackGain") {
     auto cmd = command_from_json(R"({"type":"SetTrackGain","track_id":"t1","gain":0.75})");
     REQUIRE(std::holds_alternative<CmdSetTrackGain>(cmd));

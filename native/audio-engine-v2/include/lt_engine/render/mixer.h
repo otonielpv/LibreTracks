@@ -472,8 +472,6 @@ private:
                                             int output_offset,
                                             const Session* session,
                                             Frame timeline_frame) noexcept;
-    // master_gain of whichever region contains `timeline_frame` (1.0 if none).
-    float region_master_gain_at(const Session* session, Frame timeline_frame) const noexcept;
     // Updates the per-region meters from the final output bus (post master
     // fade), so the bar reflects what the song actually sends to the device.
     void update_region_meters(float** output_channels,

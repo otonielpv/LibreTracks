@@ -3033,6 +3033,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         region.warp_enabled = update.warp_enabled;
                         region.warp_source_bpm = update.warp_source_bpm;
                         region.master_gain = update.master_gain;
+                        region.fade_in_frames = update.fade_in_frames;
+                        region.fade_out_frames = update.fade_out_frames;
                         song.regions.push_back(std::move(region));
                     }
                     changed = true;
@@ -3300,6 +3302,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         region.warp_enabled = update.warp_enabled;
                         region.warp_source_bpm = update.warp_source_bpm;
                         region.master_gain = update.master_gain;
+                        region.fade_in_frames = update.fade_in_frames;
+                        region.fade_out_frames = update.fade_out_frames;
                         song.regions.push_back(std::move(region));
                     }
 
@@ -3460,6 +3464,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     region.warp_enabled = update.warp_enabled;
                     region.warp_source_bpm = update.warp_source_bpm;
                     region.master_gain = update.master_gain;
+                    region.fade_in_frames = update.fade_in_frames;
+                    region.fade_out_frames = update.fade_out_frames;
                     song.regions.push_back(std::move(region));
                 }
 

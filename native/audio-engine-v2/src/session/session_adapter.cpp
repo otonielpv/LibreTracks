@@ -1,6 +1,7 @@
 #include <lt_engine/session/session_adapter.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <unordered_set>
@@ -334,6 +335,14 @@ Result<Session> session_from_project_json(const std::string& project_json,
                     if (jr.contains("master") && jr.at("master").is_object()) {
                         const auto& master = jr.at("master");
                         region.master_gain = master.value("gain", 1.0f);
+                        // Song fades live next to the gain (SongMaster). Absent
+                        // in projects that predate them: no fade.
+                        region.fade_in_frames = seconds_to_frames(
+                            std::max(0.0, value_any<double>(master, "fade_in_seconds", "fadeInSeconds", 0.0)),
+                            engine_sample_rate);
+                        region.fade_out_frames = seconds_to_frames(
+                            std::max(0.0, value_any<double>(master, "fade_out_seconds", "fadeOutSeconds", 0.0)),
+                            engine_sample_rate);
                     }
                     // Only add the region if end_frame > start_frame (otherwise it is malformed
                     // and would never match in resolve_region_transpose).

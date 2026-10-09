@@ -767,7 +767,10 @@ mod tests {
     #[test]
     fn rejects_negative_region_master_gain() {
         let mut song = valid_song();
-        song.regions[0].master = SongMaster { gain: -0.5 };
+        song.regions[0].master = SongMaster {
+            gain: -0.5,
+            ..SongMaster::default()
+        };
         assert!(matches!(
             validate_song(&song),
             Err(DomainError::InvalidRegionMasterGain { region_id, .. }) if region_id == "r1"
@@ -779,6 +782,7 @@ mod tests {
         let mut song = valid_song();
         song.regions[0].master = SongMaster {
             gain: f64::INFINITY,
+            ..SongMaster::default()
         };
         assert!(matches!(
             validate_song(&song),

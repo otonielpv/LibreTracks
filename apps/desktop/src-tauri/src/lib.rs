@@ -454,6 +454,7 @@ pub fn run() {
             commands::timeline::update_song_region_warp,
             commands::timeline::update_live_region_master_gain,
             commands::timeline::update_song_region_master_gain,
+            commands::timeline::update_song_region_fades,
             commands::timeline::delete_song_region,
             commands::timeline::split_song_region,
             commands::timeline::upsert_midi_clip,

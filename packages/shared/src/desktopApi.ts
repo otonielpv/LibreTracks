@@ -1801,6 +1801,22 @@ export async function updateLiveRegionMasterGain(
 }
 
 /**
+ * Set a song's fade in / fade out, in seconds (0 = none). Each is capped at the
+ * song's length. Records undo and returns the new snapshot.
+ */
+export async function updateSongRegionFades(
+  regionId: string,
+  fadeInSeconds: number,
+  fadeOutSeconds: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_song_region_fades", {
+    regionId,
+    fadeInSeconds,
+    fadeOutSeconds,
+  });
+}
+
+/**
  * Commit the master fader gain for a song region. `masterGain` is a linear
  * multiplier: 1.0 means unity, 0.0 means silent. Must be finite and >= 0.
  */

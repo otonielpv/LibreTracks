@@ -433,6 +433,8 @@ pub struct DroppedArrangementBlocksSummary {
 #[serde(rename_all = "camelCase")]
 pub struct SongMasterSummary {
     pub gain: f64,
+    pub fade_in_seconds: f64,
+    pub fade_out_seconds: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1216,6 +1218,8 @@ pub(crate) fn region_to_summary(song: &Song, region: &SongRegion) -> SongRegionS
         warp_source_bpm: region.warp_source_bpm,
         master: SongMasterSummary {
             gain: region.master.gain,
+            fade_in_seconds: region.master.fade_in_seconds,
+            fade_out_seconds: region.master.fade_out_seconds,
         },
         compact_column_width_rem: region.compact_column_width_rem,
         structure: region

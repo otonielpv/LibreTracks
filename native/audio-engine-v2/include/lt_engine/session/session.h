@@ -236,6 +236,13 @@ struct Region {
     // Per-song master fader. The mixer multiplies the post-mix bus by this
     // value while the playhead lies inside the region. Defaults to unity.
     float master_gain = 1.0f;
+
+    // Song fade in / fade out, in timeline frames from the region's start and
+    // up to its end. 0 = no fade. Applied with the master gain, so they touch
+    // the tracks only, never the click or the voice guide. See
+    // render/region_envelope.h.
+    Frame fade_in_frames  = 0;
+    Frame fade_out_frames = 0;
 };
 
 // ---------------------------------------------------------------------------

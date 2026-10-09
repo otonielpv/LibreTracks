@@ -218,6 +218,8 @@ EngineCommand command_from_json(const std::string& raw) {
             region.warp_enabled = item.value("warp_enabled", false);
             region.warp_source_bpm = item.value("warp_source_bpm", 0.0);
             region.master_gain = item.value("master_gain", 1.0f);
+            region.fade_in_frames = item.value("fade_in_frames", static_cast<Frame>(0));
+            region.fade_out_frames = item.value("fade_out_frames", static_cast<Frame>(0));
             cmd.regions.push_back(std::move(region));
         }
         return cmd;
@@ -315,6 +317,8 @@ EngineCommand command_from_json(const std::string& raw) {
             region.warp_enabled = item.value("warp_enabled", false);
             region.warp_source_bpm = item.value("warp_source_bpm", 0.0);
             region.master_gain = item.value("master_gain", 1.0f);
+            region.fade_in_frames = item.value("fade_in_frames", static_cast<Frame>(0));
+            region.fade_out_frames = item.value("fade_out_frames", static_cast<Frame>(0));
             cmd.regions.push_back(std::move(region));
         }
         for (const auto& item : j.at("markers")) {
@@ -398,6 +402,8 @@ EngineCommand command_from_json(const std::string& raw) {
                 region.warp_enabled = item.value("warp_enabled", false);
                 region.warp_source_bpm = item.value("warp_source_bpm", 0.0);
                 region.master_gain = item.value("master_gain", 1.0f);
+                region.fade_in_frames = item.value("fade_in_frames", static_cast<Frame>(0));
+                region.fade_out_frames = item.value("fade_out_frames", static_cast<Frame>(0));
                 cmd.regions.push_back(std::move(region));
             }
         }

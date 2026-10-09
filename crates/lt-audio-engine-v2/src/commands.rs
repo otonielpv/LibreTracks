@@ -324,6 +324,11 @@ pub struct RegionUpdate {
     /// with engine snapshots that predate the master fader.
     #[serde(default = "default_region_master_gain")]
     pub master_gain: f32,
+    /// Song fade in / fade out in engine frames (0 = none). See SongMaster.
+    #[serde(default)]
+    pub fade_in_frames: i64,
+    #[serde(default)]
+    pub fade_out_frames: i64,
 }
 
 fn default_region_master_gain() -> f32 {

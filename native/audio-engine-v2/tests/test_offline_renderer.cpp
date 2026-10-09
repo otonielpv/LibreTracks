@@ -414,6 +414,32 @@ TEST_CASE("offline render time-stretches a warped region through Bungee, keeping
 }
 #endif
 
+// A render must sound like playback: the song's fades come from the project JSON
+// (SongMaster) and shape the tracks sample by sample.
+TEST_CASE("offline render applies the song fade in and fade out") {
+    TempDir dir;
+    const std::string a = dir.file("flat.wav");
+    write_float_wav(a, constant_stereo(96000, 0.5f), 2, 48000);
+    const json region = {{"id", "r"}, {"name", "R"}, {"startSeconds", 0.0},
+                         {"endSeconds", 2.0},
+                         {"master", {{"gain", 1.0}, {"fadeInSeconds", 0.5},
+                                     {"fadeOutSeconds", 0.5}}}};
+    const json song = song_json(json::array({track_json("t")}),
+                                json::array({clip_json("c", "t", a, 0.0, 2.0)}),
+                                json::array({region}));
+    auto req = base_request(song, 0.0, 2.0);
+    req.outputs.push_back({dir.file("mix.wav"), {"t"}});
+    REQUIRE(render_offline(req).is_ok());
+    const auto out = read_wav(dir.file("mix.wav"));
+
+    const float full = out.at(48000, 0);
+    REQUIRE(full > 0.1f);
+    CHECK(out.at(0, 0) == doctest::Approx(0.0f).epsilon(0.001));
+    CHECK(out.at(12000, 0) / full == doctest::Approx(0.5f).epsilon(0.01));
+    CHECK(out.at(24000, 0) / full == doctest::Approx(1.0f).epsilon(0.01));
+    CHECK(out.at(84000, 0) / full == doctest::Approx(0.5f).epsilon(0.01));
+}
+
 TEST_CASE("offline render request JSON round trip") {
     const json j = {
         {"project_json", "{}"}, {"sample_rate", 44100}, {"start_seconds", 1.0},

@@ -236,11 +236,28 @@ impl SongStructure {
 #[serde(rename_all = "camelCase")]
 pub struct SongMaster {
     pub gain: f64,
+    /// Song fade in from the region's start, in seconds. 0 = none. Like the
+    /// gain, it shapes the tracks only, never the click or the voice guide.
+    /// Left out of the file when 0, so a session without fades is written
+    /// exactly as before.
+    #[serde(default, skip_serializing_if = "is_zero_seconds")]
+    pub fade_in_seconds: f64,
+    /// Song fade out up to the region's end, in seconds. 0 = none.
+    #[serde(default, skip_serializing_if = "is_zero_seconds")]
+    pub fade_out_seconds: f64,
+}
+
+fn is_zero_seconds(value: &f64) -> bool {
+    *value == 0.0
 }
 
 impl Default for SongMaster {
     fn default() -> Self {
-        Self { gain: 1.0 }
+        Self {
+            gain: 1.0,
+            fade_in_seconds: 0.0,
+            fade_out_seconds: 0.0,
+        }
     }
 }
 
@@ -998,6 +1015,27 @@ impl Song {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // A session without song fades must be written exactly as before, so the
+    // file does not change and an older app reads it untouched; one saved
+    // before the fades existed must load with none.
+    #[test]
+    fn song_master_fades_are_omitted_when_zero_and_default_when_absent() {
+        let plain = serde_json::to_value(SongMaster::default()).unwrap();
+        assert_eq!(plain, serde_json::json!({ "gain": 1.0 }));
+
+        let faded = SongMaster {
+            fade_in_seconds: 2.0,
+            ..SongMaster::default()
+        };
+        let json = serde_json::to_value(&faded).unwrap();
+        assert_eq!(json["fadeInSeconds"], 2.0);
+        assert!(json.get("fadeOutSeconds").is_none());
+
+        let legacy: SongMaster = serde_json::from_str(r#"{ "gain": 0.5 }"#).unwrap();
+        assert_eq!(legacy.fade_in_seconds, 0.0);
+        assert_eq!(legacy.fade_out_seconds, 0.0);
+    }
 
     fn marker(id: &str, start_seconds: f64, digit: Option<u8>) -> Marker {
         Marker {

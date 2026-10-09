@@ -966,6 +966,44 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    /// Song fade in / fade out (they live in the song master, next to its
+    /// gain). Each is capped at the song's length. An edit like any other:
+    /// undo, autosave, `project_revision`.
+    pub fn update_song_region_fades(
+        &mut self,
+        region_id: &str,
+        fade_in_seconds: f64,
+        fade_out_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        for value in [fade_in_seconds, fade_out_seconds] {
+            if !value.is_finite() || value < 0.0 {
+                return Err(DesktopError::AudioCommand(
+                    "song fades must be finite, non-negative numbers".into(),
+                ));
+            }
+        }
+
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let region = song
+            .regions
+            .iter_mut()
+            .find(|region| region.id == region_id)
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+        let length = (region.end_seconds - region.start_seconds).max(0.0);
+        region.master.fade_in_seconds = fade_in_seconds.min(length);
+        region.master.fade_out_seconds = fade_out_seconds.min(length);
+
+        audio.update_live_song_regions(&song)?;
+        self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
+
+        Ok(self.snapshot())
+    }
+
     pub fn update_track_transpose_enabled(
         &mut self,
         track_id: &str,

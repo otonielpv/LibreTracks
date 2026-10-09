@@ -5,6 +5,7 @@
 #include <lt_engine/diagnostics/rt_guard.h>
 #include <lt_engine/diagnostics/callback_budget.h>
 #include <lt_engine/render/fade_processor.h>
+#include <lt_engine/render/region_envelope.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
 #include <algorithm>
@@ -1682,18 +1683,6 @@ void Mixer::trigger_crossfade() noexcept {
     fade_.trigger_crossfade();
 }
 
-float Mixer::region_master_gain_at(const Session* session, Frame timeline_frame) const noexcept {
-    if (!session) return 1.0f;
-    for (const auto& song : session->songs) {
-        for (const auto& region : song.regions) {
-            if (timeline_frame >= region.start_frame
-                && timeline_frame < region.end_frame)
-                return region.master_gain;
-        }
-    }
-    return 1.0f;
-}
-
 void Mixer::apply_region_master_gain_to_tracks(float** output_channels,
                                                int num_channels,
                                                int num_frames,
@@ -1703,15 +1692,20 @@ void Mixer::apply_region_master_gain_to_tracks(float** output_channels,
     if (!session || num_channels <= 0 || num_frames <= 0)
         return;
 
-    const float gain = region_master_gain_at(session, timeline_frame);
-    if (std::abs(gain - 1.0f) <= 0.000001f)
-        return;
-
-    for (int ch = 0; ch < num_channels; ++ch) {
-        if (!output_channels[ch]) continue;
-        float* buf = output_channels[ch] + output_offset;
-        for (int f = 0; f < num_frames; ++f)
-            buf[f] *= gain;
+    // Master gain times the song's fade in/out, per sample (region_envelope.h).
+    // The fades need a per-sample envelope; a block-constant gain would step
+    // audibly. Walked in fixed chunks so the scratch buffer lives on the stack.
+    std::array<float, kRegionEnvelopeChunk> gains{};
+    for (int chunk_start = 0; chunk_start < num_frames; chunk_start += kRegionEnvelopeChunk) {
+        const int count = std::min(kRegionEnvelopeChunk, num_frames - chunk_start);
+        if (fill_region_envelope(*session, timeline_frame + chunk_start, count, gains.data()))
+            continue;
+        for (int ch = 0; ch < num_channels; ++ch) {
+            if (!output_channels[ch]) continue;
+            float* buf = output_channels[ch] + output_offset + chunk_start;
+            for (int f = 0; f < count; ++f)
+                buf[f] *= gains[static_cast<std::size_t>(f)];
+        }
     }
 }
 

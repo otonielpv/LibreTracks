@@ -1012,6 +1012,18 @@ impl AudioController {
                     warp_enabled: region.0.warp_enabled,
                     warp_source_bpm: region.0.warp_source_bpm.unwrap_or(0.0),
                     master_gain: region.0.master.gain as f32,
+                    fade_in_frames: region_fade_frames(
+                        engine,
+                        region.0,
+                        region.1,
+                        region.0.master.fade_in_seconds,
+                    ),
+                    fade_out_frames: region_fade_frames(
+                        engine,
+                        region.0,
+                        region.1,
+                        region.0.master.fade_out_seconds,
+                    ),
                 })
                 .collect();
             engine.send_command(&EngineCommand::SetSongRegions {
@@ -1111,6 +1123,18 @@ impl AudioController {
                     warp_enabled: region.0.warp_enabled,
                     warp_source_bpm: region.0.warp_source_bpm.unwrap_or(0.0),
                     master_gain: region.0.master.gain as f32,
+                    fade_in_frames: region_fade_frames(
+                        engine,
+                        region.0,
+                        region.1,
+                        region.0.master.fade_in_seconds,
+                    ),
+                    fade_out_frames: region_fade_frames(
+                        engine,
+                        region.0,
+                        region.1,
+                        region.0.master.fade_out_seconds,
+                    ),
                 })
                 .collect();
             let markers = song
@@ -1281,6 +1305,18 @@ impl AudioController {
                     warp_enabled: region.0.warp_enabled,
                     warp_source_bpm: region.0.warp_source_bpm.unwrap_or(0.0),
                     master_gain: region.0.master.gain as f32,
+                    fade_in_frames: region_fade_frames(
+                        engine,
+                        region.0,
+                        region.1,
+                        region.0.master.fade_in_seconds,
+                    ),
+                    fade_out_frames: region_fade_frames(
+                        engine,
+                        region.0,
+                        region.1,
+                        region.0.master.fade_out_seconds,
+                    ),
                 })
                 .collect();
             let markers = song
@@ -3412,6 +3448,28 @@ fn marker_category_token(category: MarkerCategory) -> String {
         MarkerCategory::Section => "section".to_string(),
         MarkerCategory::Cue => "cue".to_string(),
     }
+}
+
+/// A song fade, in engine frames. The fade is set in the song's own seconds;
+/// with warp the runtime region is stretched, so the fade is stretched by the
+/// same ratio to keep covering the same music. Non-finite or negative = none.
+fn region_fade_frames(
+    engine: &Engine,
+    region: &libretracks_core::SongRegion,
+    runtime_region: &libretracks_core::SongRegion,
+    fade_seconds: f64,
+) -> i64 {
+    if !fade_seconds.is_finite() || fade_seconds <= 0.0 {
+        return 0;
+    }
+    let length = region.end_seconds - region.start_seconds;
+    let runtime_length = runtime_region.end_seconds - runtime_region.start_seconds;
+    let ratio = if length > 0.0 && runtime_length > 0.0 {
+        runtime_length / length
+    } else {
+        1.0
+    };
+    seconds_to_frame_for_engine(engine, fade_seconds.min(length.max(0.0)) * ratio)
 }
 
 fn seconds_to_frame_for_engine(engine: &Engine, seconds: f64) -> i64 {

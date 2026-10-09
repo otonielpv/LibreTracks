@@ -186,6 +186,8 @@ struct CmdSetSongRegions {
         bool        warp_enabled = false;
         double      warp_source_bpm = 0.0;
         float       master_gain = 1.0f;
+        Frame       fade_in_frames = 0;
+        Frame       fade_out_frames = 0;
     };
     Id song_id;
     std::vector<RegionUpdate> regions;

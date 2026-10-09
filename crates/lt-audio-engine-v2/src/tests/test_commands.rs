@@ -349,6 +349,8 @@ fn set_song_timeline_window_round_trip() {
             warp_enabled: true,
             warp_source_bpm: 100.0,
             master_gain: 1.0,
+            fade_in_frames: 0,
+            fade_out_frames: 0,
         }],
         markers: vec![MarkerUpdate {
             id: "section_a".into(),
@@ -751,6 +753,8 @@ fn set_song_regions_round_trips_region_updates() {
             warp_enabled: false,
             warp_source_bpm: 0.0,
             master_gain: 1.0,
+            fade_in_frames: 4_800,
+            fade_out_frames: 9_600,
         }],
     };
     assert_eq!(round_trip_type(&cmd), "SetSongRegions");
@@ -760,6 +764,8 @@ fn set_song_regions_round_trips_region_updates() {
             assert_eq!(regions.len(), 1);
             assert_eq!(regions[0].id, "r1");
             assert_eq!(regions[0].transpose_semitones, 3);
+            assert_eq!(regions[0].fade_in_frames, 4_800);
+            assert_eq!(regions[0].fade_out_frames, 9_600);
         }
         other => panic!("expected SetSongRegions, got {other:?}"),
     }

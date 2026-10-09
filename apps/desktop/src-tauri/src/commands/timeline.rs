@@ -578,6 +578,23 @@ pub fn update_song_region_master_gain(
 }
 
 #[tauri::command(async)]
+pub fn update_song_region_fades(
+    region_id: String,
+    fade_in_seconds: f64,
+    fade_out_seconds: f64,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_song_region_fades(&region_id, fade_in_seconds, fade_out_seconds, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command(async)]
 pub fn delete_song_region(
     region_id: String,
     state: State<'_, DesktopState>,

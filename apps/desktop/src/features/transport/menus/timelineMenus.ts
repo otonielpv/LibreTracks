@@ -22,6 +22,7 @@ import {
   promptDialog,
 } from "../../../shared/dialog/dialogService";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
+import { songFadeMenuActions } from "../songs/songFades";
 import {
   parseBpmDraft,
   parseTimeSignatureDraft,
@@ -683,6 +684,18 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
                 name: region.name,
               }),
             );
+          });
+        },
+      },
+      {
+        label: `${t("transport.menu.songFades")} ▸`,
+        onSelect: () => {
+          const next = bumpContextMenuPosition();
+          d.setContextMenu({
+            x: next.x,
+            y: next.y,
+            title: t("transport.menu.songFades"),
+            actions: songFadeMenuActions(region, d),
           });
         },
       },

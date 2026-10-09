@@ -5,6 +5,7 @@
 #include <lt_engine/pitch/voice_priming.h>
 #include <lt_engine/render/mix_math.h>
 #include <lt_engine/render/pitch_resolution.h>
+#include <lt_engine/render/region_envelope.h>
 #include <lt_engine/session/session.h>
 #include <lt_engine/session/session_adapter.h>
 #include <lt_engine/sources/audio_decoder.h>
@@ -20,6 +21,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdarg>
@@ -494,15 +496,6 @@ std::pair<float, float> effective_gain_pan(const Song& song, const Track& track)
     return {gain, pan};
 }
 
-// Mixer::region_master_gain_at.
-float region_master_gain_at(const Session& session, Frame timeline_frame) noexcept {
-    for (const auto& song : session.songs)
-        for (const auto& region : song.regions)
-            if (timeline_frame >= region.start_frame && timeline_frame < region.end_frame)
-                return region.master_gain;
-    return 1.0f;
-}
-
 const Source* find_source(const Session& session, const Id& id) {
     for (const auto& source : session.sources)
         if (source.id == id) return &source;
@@ -632,14 +625,22 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
             const bool left_only = peak_l > 1.0e-7f && peak_r <= 1.0e-7f;
             const bool right_only = peak_r > 1.0e-7f && peak_l <= 1.0e-7f;
             const bool mono_downmix = apply_mixer && track.mono_downmix;
-            const float gain = apply_mixer
-                ? track_gain * region_master_gain_at(ctx.session, timeline_frame)
-                : 1.0f;
             const float left_gain = pan_left_gain(track_pan);
             const float right_gain = pan_right_gain(track_pan);
             float* out_l = acc_l + (timeline_frame - ctx.range_start);
             float* out_r = acc_r + (timeline_frame - ctx.range_start);
+            // Song master gain and fades, per sample: the same envelope the
+            // mixer applies (region_envelope.h), so a render sounds like playback.
+            std::array<float, kRegionEnvelopeChunk> envelope{};
             for (int f = 0; f < n; ++f) {
+                if (f % kRegionEnvelopeChunk == 0) {
+                    fill_region_envelope(ctx.session, timeline_frame + f,
+                                         std::min(kRegionEnvelopeChunk, n - f),
+                                         envelope.data());
+                }
+                const float gain = apply_mixer
+                    ? track_gain * envelope[static_cast<std::size_t>(f % kRegionEnvelopeChunk)]
+                    : 1.0f;
                 float src_l = s.bus_l[static_cast<std::size_t>(f)];
                 float src_r = s.bus_r[static_cast<std::size_t>(f)];
                 if (mono_downmix) {

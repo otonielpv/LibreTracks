@@ -224,6 +224,11 @@ export type SongMasterSummary = {
   /** Linear gain multiplier applied by the mixer to the post-mix bus while the
    * playhead lies inside this region. 1.0 means unity. */
   gain: number;
+  /** Song fade in from the region's start / fade out up to its end, in
+   * seconds. 0 = none. Like the gain, they shape the tracks only. Optional for
+   * snapshots from before song fades existed. */
+  fadeInSeconds?: number;
+  fadeOutSeconds?: number;
 };
 
 /** Fallback width (rem) for a compact-view song column, used only when the
