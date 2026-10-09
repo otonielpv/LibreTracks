@@ -1879,6 +1879,9 @@ const es = {
       dragHintFolderSong: "Suelta en el timeline para crear una canción con esta carpeta",
       importingFolder: "Importando «{{name}}»…",
       inThisSession: "En esta sesión ({{count}})",
+      addFolderAsSong: "Añadir «{{name}}» como canción en el cursor",
+      addSelection: "Añadir al timeline ({{count}})",
+      clearSelection: "Quitar la selección",
     },
     assetListAria: "Assets de la biblioteca",
     emptyFolder:

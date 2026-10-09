@@ -1851,6 +1851,9 @@ const en = {
       dragHintFolderSong: "Drop on the timeline to create a song from this folder",
       importingFolder: "Importing “{{name}}”…",
       inThisSession: "In this session ({{count}})",
+      addFolderAsSong: "Add “{{name}}” as a song at the playhead",
+      addSelection: "Add to timeline ({{count}})",
+      clearSelection: "Clear selection",
     },
     assetListAria: "Library assets",
     emptyFolder:

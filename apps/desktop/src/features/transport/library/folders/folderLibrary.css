@@ -173,6 +173,19 @@
   opacity: 1;
 }
 
+.lt-folder-library-icon.is-visible {
+  opacity: 1;
+}
+
+/* Touch: what is selected goes onto the timeline at the playhead. */
+.lt-folder-library-actionbar {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  border-top: 1px solid rgb(87 241 219 / 0.16);
+  background: #101312;
+}
+
 .lt-folder-library-icon:hover {
   background: rgb(255 255 255 / 0.06);
   color: #57f1db;
@@ -235,4 +248,33 @@
   flex: 1 1 auto;
   border-right: 0;
   background: transparent;
+}
+
+/* The nested classic panel is not a sidebar of its own: the mobile rules that
+   narrow the library (.lt-android) or lay it over the whole workspace in
+   portrait (.lt-mobile) must not reach it, or it would cover the places.
+   Three classes deep so it outranks both. */
+.lt-folder-library .lt-folder-library-session-body > .lt-library-panel {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  width: auto;
+  max-width: none;
+}
+
+/* Touch: same widths as the classic library on a phone. */
+.lt-android .lt-folder-library {
+  width: 15.5rem;
+}
+
+@media (orientation: portrait) {
+  .lt-mobile .lt-folder-library {
+    position: absolute;
+    inset: 0;
+    /* Above the sticky track headers (z-index 30), like the classic one. */
+    z-index: 50;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
 }

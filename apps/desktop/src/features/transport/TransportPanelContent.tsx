@@ -6609,6 +6609,7 @@ export function TransportPanelContent() {
         mergeLibraryAssets: (assets) => libraryDragDropDeps().mergeLibraryAssets(assets),
         setStatus: (message) => libraryDragDropDeps().setStatus(message),
         t: (key, options) => libraryDragDropDeps().t(key, options),
+        getPlayheadSeconds: () => displayPositionSecondsRef.current,
       }),
     [libraryDragDrop],
   );

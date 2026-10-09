@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   getSettings,
-  isMobileApp,
+  isAndroidApp,
   isTauriApp,
   listenToSettingsUpdated,
   saveSettings,
@@ -11,8 +11,8 @@ import {
 import { addPlace, removePlace } from "./libraryPlaces";
 
 export type LibrarySettings = {
-  /** Which library the sidebar shows. Mobile stays on the classic one until
-   * the folder library exists there (plan next-release, steps 11–12). */
+  /** Which library the sidebar shows. Android stays on the classic one until
+   * it can browse folders (plan next-release, step 12). */
   mode: AppSettings["libraryMode"];
   places: string[];
   addPlace: (path: string) => Promise<void>;
@@ -72,7 +72,7 @@ export function useLibrarySettings(): LibrarySettings {
   }, []);
 
   return {
-    mode: isMobileApp ? "classic" : mode,
+    mode: isAndroidApp ? "classic" : mode,
     setMode: saveMode,
     places,
     addPlace: (path) => savePlaces((current) => addPlace(current, path)),

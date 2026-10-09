@@ -13,6 +13,8 @@ export type BrowserDropDeps = {
   mergeLibraryAssets: (assets: LibraryAssetSummary[]) => void;
   setStatus: (message: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
+  /** Where "add to timeline" lands on touch, where there is no drag. */
+  getPlayheadSeconds: () => number;
 };
 
 /**
@@ -26,33 +28,21 @@ export type BrowserDropDeps = {
  * can treat the gesture as cancelled.
  */
 export function createBrowserDrop(deps: BrowserDropDeps) {
-  function dropPathsAt(paths: string[], clientX: number, clientY: number): boolean {
-    if (!paths.length) return false;
-    const drop = deps.dragDrop().resolveTimelineDropFromClientPoint(clientX, clientY);
-    if (!drop.isOverTimeline) return false;
+  function placePaths(paths: string[], seconds: number, trackId: string | null) {
     deps
       .dragDrop()
-      .handleNativeExternalTimelineDrop(
-        classifyDroppedPaths(paths),
-        drop.dropSeconds,
-        drop.targetTrackId,
-      );
-    return true;
+      .handleNativeExternalTimelineDrop(classifyDroppedPaths(paths), seconds, trackId);
   }
 
-  function dropFolderAt(args: {
+  function placeFolder(args: {
     folderName: string;
     audioPaths: string[];
-    clientX: number;
-    clientY: number;
-    ctrlKey: boolean;
-    metaKey: boolean;
-  }): boolean {
-    const drop = deps.dragDrop().resolveTimelineDropFromClientPoint(args.clientX, args.clientY);
-    if (!drop.isOverTimeline) return false;
+    seconds: number;
+    layout: "horizontal" | "vertical";
+  }) {
     if (!deps.hasSession()) {
       deps.setStatus(deps.t("transport.status.importRequiresSession"));
-      return true;
+      return;
     }
     void deps.runAction(async () => {
       deps.setStatus(deps.t("library.folders.importingFolder", { name: args.folderName }));
@@ -71,14 +61,55 @@ export function createBrowserDrop(deps: BrowserDropDeps) {
           durationSeconds: asset.durationSeconds,
         })),
         folderName: args.folderName,
-        timelineStartSeconds: drop.dropSeconds,
-        layout: resolveFolderDropLayout(args.ctrlKey, args.metaKey),
+        timelineStartSeconds: args.seconds,
+        layout: args.layout,
       });
+    });
+  }
+
+  function dropPathsAt(paths: string[], clientX: number, clientY: number): boolean {
+    if (!paths.length) return false;
+    const drop = deps.dragDrop().resolveTimelineDropFromClientPoint(clientX, clientY);
+    if (!drop.isOverTimeline) return false;
+    placePaths(paths, drop.dropSeconds, drop.targetTrackId);
+    return true;
+  }
+
+  function dropFolderAt(args: {
+    folderName: string;
+    audioPaths: string[];
+    clientX: number;
+    clientY: number;
+    ctrlKey: boolean;
+    metaKey: boolean;
+  }): boolean {
+    const drop = deps.dragDrop().resolveTimelineDropFromClientPoint(args.clientX, args.clientY);
+    if (!drop.isOverTimeline) return false;
+    placeFolder({
+      folderName: args.folderName,
+      audioPaths: args.audioPaths,
+      seconds: drop.dropSeconds,
+      layout: resolveFolderDropLayout(args.ctrlKey, args.metaKey),
     });
     return true;
   }
 
-  return { dropPathsAt, dropFolderAt };
+  /** Touch: no drag, so the selection lands at the playhead on new tracks. */
+  function addPathsAtPlayhead(paths: string[]) {
+    if (paths.length) placePaths(paths, deps.getPlayheadSeconds(), null);
+  }
+
+  /** Touch: a folder becomes a song starting at the playhead. */
+  function addFolderAtPlayhead(folderName: string, audioPaths: string[]) {
+    placeFolder({
+      folderName,
+      audioPaths,
+      seconds: deps.getPlayheadSeconds(),
+      layout: resolveFolderDropLayout(false, false),
+    });
+  }
+
+  return { dropPathsAt, dropFolderAt, addPathsAtPlayhead, addFolderAtPlayhead };
 }
 
 export type BrowserDrop = ReturnType<typeof createBrowserDrop>;

@@ -28,6 +28,7 @@ function setup(overTimeline: boolean) {
     mergeLibraryAssets: vi.fn(),
     setStatus: vi.fn(),
     t: (key: string) => key,
+    getPlayheadSeconds: () => 7,
   } as unknown as BrowserDropDeps;
   return { drop: createBrowserDrop(deps), dragDrop, deps };
 }
@@ -43,6 +44,17 @@ describe("folder library drops", () => {
       { kind: "audio", audioPaths: ["D:/Stems/Drums.wav"] },
       42,
       "t1",
+    );
+  });
+
+  // Touch has no drag: the selection lands at the playhead, on new tracks.
+  it("adds the selection at the playhead on touch", () => {
+    const { drop, dragDrop } = setup(true);
+    drop.addPathsAtPlayhead(["/Documents/Stems/Drums.wav"]);
+    expect(dragDrop.handleNativeExternalTimelineDrop).toHaveBeenCalledWith(
+      { kind: "audio", audioPaths: ["/Documents/Stems/Drums.wav"] },
+      7,
+      null,
     );
   });
 

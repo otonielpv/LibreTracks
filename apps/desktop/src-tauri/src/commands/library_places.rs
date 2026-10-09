@@ -154,12 +154,33 @@ pub fn list_library_dir(path: String) -> Result<Vec<LibraryDirEntry>, String> {
 }
 
 /// Ask the user for a folder to add to the library. `None` = cancelled.
-#[tauri::command(async)]
-pub fn pick_library_place() -> Result<Option<String>, String> {
-    let picked = crate::platform::file_dialog::FileDialog::new()
-        .set_title("Añadir carpeta a la biblioteca")
-        .pick_folder();
-    Ok(picked.map(|path| path.to_string_lossy().into_owned()))
+///
+/// iOS: the same picker sessions use. It keeps a security-scoped bookmark of
+/// the folder and reopens access to it at every launch (IosFolderPickerPlugin
+/// `restoreBookmarks`), so the folder can be listed with `std::fs` and its
+/// audio imported by reference after a restart. Android has no folder picker
+/// here yet (plan next-release, step 12): it keeps the classic library.
+#[tauri::command]
+pub async fn pick_library_place(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    #[cfg(target_os = "ios")]
+    {
+        libretracks_ios_folder_picker::pick_folder(app).await
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        let _ = app;
+        Ok(None)
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let _ = app;
+        let picked = crate::platform::file_dialog::FileDialog::new()
+            .set_title("Añadir carpeta a la biblioteca")
+            .pick_folder();
+        Ok(picked.map(|path| path.to_string_lossy().into_owned()))
+    }
 }
 
 #[cfg(test)]

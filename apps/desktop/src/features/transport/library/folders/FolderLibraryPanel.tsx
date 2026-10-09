@@ -10,7 +10,12 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { DRAG_THRESHOLD_PX } from "../../constants";
-import { listLibraryDir, pickLibraryPlace, type LibraryDirEntry } from "../../desktopApi";
+import {
+  isMobileApp,
+  listLibraryDir,
+  pickLibraryPlace,
+  type LibraryDirEntry,
+} from "../../desktopApi";
 import { clientToZoomedCoords } from "../../../../shared/uiZoom";
 import type { BrowserDrop } from "./browserDrop";
 import { audioPathsOf, filterEntries, placeLabel } from "./libraryPlaces";
@@ -100,6 +105,19 @@ export function FolderLibraryPanel({
     });
   };
 
+  /** The audio of a folder: from its listing when open, else read it now. */
+  const folderAudio = useCallback(
+    async (path: string) => {
+      const listing = tree.listings.get(path);
+      const entries =
+        listing?.status === "ready"
+          ? listing.entries
+          : await listLibraryDir(path).catch(() => [] as LibraryDirEntry[]);
+      return audioPathsOf(entries);
+    },
+    [tree.listings],
+  );
+
   // Window-level listeners while a row is pressed: the drag leaves the panel.
   useEffect(() => {
     if (!drag) return;
@@ -126,16 +144,10 @@ export function FolderLibraryPanel({
         return;
       }
       const { clientX, clientY, ctrlKey, metaKey } = event;
-      // The folder's audio: from the listing when it is open, else read now.
-      const listing = tree.listings.get(item.path);
-      const entriesPromise =
-        listing?.status === "ready"
-          ? Promise.resolve(listing.entries)
-          : listLibraryDir(item.path).catch(() => [] as LibraryDirEntry[]);
-      void entriesPromise.then((entries) => {
+      void folderAudio(item.path).then((audioPaths) => {
         browserDrop.dropFolderAt({
           folderName: item.name,
-          audioPaths: audioPathsOf(entries),
+          audioPaths,
           clientX,
           clientY,
           ctrlKey,
@@ -158,10 +170,18 @@ export function FolderLibraryPanel({
     };
     // Re-bind only when a press starts or ends, not on every move.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drag !== null, browserDrop, tree.listings]);
+  }, [drag !== null, browserDrop, folderAudio]);
+
+  const addFolderAsSong = (path: string, name: string) => {
+    void folderAudio(path).then((audioPaths) =>
+      browserDrop.addFolderAtPlayhead(name, audioPaths),
+    );
+  };
 
   const startPress = (event: ReactPointerEvent, item: DragItem) => {
-    if (event.button !== 0) return;
+    // Touch has no drag (it fights the list's scrolling): tap and the action
+    // bar instead, as in the classic library.
+    if (isMobileApp || event.button !== 0) return;
     setDrag({
       item,
       originX: event.clientX,
@@ -172,7 +192,17 @@ export function FolderLibraryPanel({
     });
   };
 
+  const tapFile = (entry: LibraryDirEntry) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(entry.path)) next.delete(entry.path);
+      else next.add(entry.path);
+      return next;
+    });
+  };
+
   const pressFile = (event: ReactPointerEvent, entry: LibraryDirEntry) => {
+    if (isMobileApp) return;
     // Ctrl/Cmd adds to the selection; a plain press on an unselected file
     // selects just it. Dragging a selected file drags the whole selection.
     let nextSelected: ReadonlySet<string> = selected;
@@ -255,6 +285,7 @@ export function FolderLibraryPanel({
               {isOpen ? "folder_open" : "folder"}
             </span>
             <span className="lt-folder-library-name">{entry.name}</span>
+            {isMobileApp ? addSongButton(entry.path, entry.name) : null}
           </div>
           {isOpen ? <div role="group">{renderListing(entry.path, depth + 1)}</div> : null}
         </div>
@@ -269,6 +300,7 @@ export function FolderLibraryPanel({
         style={{ ...indent, paddingLeft: `${depth * 0.9 + 1.6}rem` }}
         title={entry.name}
         onPointerDown={(event) => pressFile(event, entry)}
+        onClick={isMobileApp ? () => tapFile(entry) : undefined}
       >
         <span className="material-symbols-outlined" aria-hidden="true">
           {ENTRY_ICONS[entry.kind]}
@@ -277,6 +309,22 @@ export function FolderLibraryPanel({
       </div>
     );
   };
+
+  // Touch only: on desktop a folder is dragged onto the timeline instead.
+  const addSongButton = (path: string, name: string) => (
+    <button
+      type="button"
+      className="lt-folder-library-icon is-visible"
+      aria-label={t("library.folders.addFolderAsSong", { name })}
+      title={t("library.folders.addFolderAsSong", { name })}
+      onClick={(event) => {
+        event.stopPropagation();
+        addFolderAsSong(path, name);
+      }}
+    >
+      <span className="material-symbols-outlined">playlist_add</span>
+    </button>
+  );
 
   const ghostPosition = useMemo(() => {
     if (!drag?.dragging) return null;
@@ -338,6 +386,7 @@ export function FolderLibraryPanel({
                     </span>
                     <span className="lt-folder-library-name">{placeLabel(place)}</span>
                   </button>
+                  {isMobileApp ? addSongButton(place, placeLabel(place)) : null}
                   <button
                     type="button"
                     className="lt-folder-library-icon"
@@ -363,6 +412,30 @@ export function FolderLibraryPanel({
           })
         )}
       </div>
+
+      {isMobileApp && selected.size > 0 ? (
+        <div className="lt-folder-library-actionbar" role="toolbar">
+          <button
+            type="button"
+            className="lt-folder-library-add"
+            onClick={() => {
+              browserDrop.addPathsAtPlayhead([...selected]);
+              setSelected(new Set());
+            }}
+          >
+            <span className="material-symbols-outlined">add_to_queue</span>
+            {t("library.folders.addSelection", { count: selected.size })}
+          </button>
+          <button
+            type="button"
+            className="lt-folder-library-icon is-visible"
+            aria-label={t("library.folders.clearSelection")}
+            onClick={() => setSelected(new Set())}
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+      ) : null}
 
       <section className={`lt-folder-library-session${sessionOpen ? " is-open" : ""}`}>
         <button

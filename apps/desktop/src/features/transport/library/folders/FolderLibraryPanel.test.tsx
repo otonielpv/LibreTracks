@@ -22,7 +22,12 @@ function settings(places: string[]): LibrarySettings {
   };
 }
 
-const browserDrop = { dropPathsAt: vi.fn(), dropFolderAt: vi.fn() };
+const browserDrop = {
+  dropPathsAt: vi.fn(),
+  dropFolderAt: vi.fn(),
+  addPathsAtPlayhead: vi.fn(),
+  addFolderAtPlayhead: vi.fn(),
+};
 
 function renderPanel(places: string[]) {
   const value = settings(places);
