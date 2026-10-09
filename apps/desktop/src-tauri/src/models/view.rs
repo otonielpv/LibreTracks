@@ -335,6 +335,8 @@ pub struct SongRegionSummary {
     pub master: SongMasterSummary,
     /// Persisted compact-view column width in rem; `None` = use the default.
     pub compact_column_width_rem: Option<f64>,
+    /// Partitura PDF de la canción y sus puntos por marca; `None` sin partitura.
+    pub chart: Option<libretracks_core::SongChart>,
     /// Lo que pinta el editor de arreglos. No lleva la instantánea del
     /// original, que puede ser grande: sólo secciones y arreglos.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1224,6 +1226,7 @@ pub(crate) fn region_to_summary(song: &Song, region: &SongRegion) -> SongRegionS
             fade_out_seconds: region.master.fade_out_seconds,
         },
         compact_column_width_rem: region.compact_column_width_rem,
+        chart: region.chart.clone(),
         structure: region
             .structure
             .as_ref()
@@ -1595,6 +1598,7 @@ mod tests {
             key: None,
             master: SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         }
     }

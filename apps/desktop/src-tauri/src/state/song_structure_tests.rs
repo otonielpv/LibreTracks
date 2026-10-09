@@ -34,6 +34,7 @@ pub(crate) fn region(id: &str, start: f64, end: f64) -> SongRegion {
         warp_source_bpm: None,
         master: SongMaster::default(),
         compact_column_width_rem: None,
+        chart: None,
         structure: None,
     }
 }

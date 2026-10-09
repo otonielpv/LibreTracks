@@ -108,6 +108,83 @@ pub struct SongRegion {
     /// versión vieja lo ignora y ve el timeline lineal que el arreglo escribió.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub structure: Option<SongStructure>,
+    /// Partitura de la canción (PDF de acordes/letra) y dónde empieza cada
+    /// sección dentro de ella. `None` —y lo que deserializan las sesiones de
+    /// antes— es una canción sin partitura. Se omite al guardar, así que una
+    /// versión vieja abre la sesión igual.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chart: Option<SongChart>,
+}
+
+/// PDF asociado a una canción y los puntos que lo sincronizan con ella.
+///
+/// El PDF se referencia por ruta, como el audio importado: no se copia a la
+/// sesión. Sólo viaja dentro de un `.ltpkg`/`.ltset` al exportar.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SongChart {
+    pub file_path: String,
+    /// Un punto por marca de sección como mucho. Van anclados a la MARCA y no a
+    /// un tiempo para que sobrevivan a mover la marca y a los arreglos: una
+    /// repetición `"{id}~{n}"` resuelve al punto de `id`.
+    #[serde(default)]
+    pub anchors: Vec<ChartAnchor>,
+}
+
+impl SongChart {
+    /// Mayor tamaño de PDF aceptado. Una partitura ronda los cientos de KB; el
+    /// tope sólo evita meter por error un libro escaneado en la sesión.
+    pub const MAX_BYTES: usize = 25 * 1024 * 1024;
+
+    /// El punto de una marca. Una repetición creada por un arreglo
+    /// (`"{id}~{n}"`) usa el de su marca original.
+    pub fn anchor_for(&self, marker_id: &str) -> Option<&ChartAnchor> {
+        let base = chart_anchor_marker_id(marker_id);
+        self.anchors.iter().find(|anchor| anchor.marker_id == base)
+    }
+
+    /// Pone (o mueve) el punto de una marca. `y` se recorta a la página.
+    pub fn set_anchor(&mut self, marker_id: &str, page: u32, y: f64) {
+        let marker_id = chart_anchor_marker_id(marker_id).to_string();
+        let y = if y.is_finite() { y.clamp(0.0, 1.0) } else { 0.0 };
+        match self.anchors.iter_mut().find(|anchor| anchor.marker_id == marker_id) {
+            Some(anchor) => {
+                anchor.page = page;
+                anchor.y = y;
+            }
+            None => self.anchors.push(ChartAnchor { marker_id, page, y }),
+        }
+    }
+
+    pub fn remove_anchor(&mut self, marker_id: &str) {
+        let base = chart_anchor_marker_id(marker_id);
+        self.anchors.retain(|anchor| anchor.marker_id != base);
+    }
+}
+
+/// El id de marca con el que se guarda un punto: sin el sufijo `~n` que los
+/// arreglos ponen a las repeticiones.
+pub fn chart_anchor_marker_id(marker_id: &str) -> &str {
+    marker_id.split('~').next().unwrap_or(marker_id)
+}
+
+/// Si unos bytes son un PDF: la cabecera `%PDF-` puede ir precedida de basura,
+/// y los lectores la buscan en el primer KB.
+pub fn looks_like_pdf(bytes: &[u8]) -> bool {
+    let head = &bytes[..bytes.len().min(1024)];
+    head.windows(5).any(|window| window == b"%PDF-")
+}
+
+/// Dónde empieza una sección dentro del PDF.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartAnchor {
+    pub marker_id: String,
+    /// Página, empezando en 0.
+    pub page: u32,
+    /// Altura dentro de la página, de 0 (arriba) a 1 (abajo). Fracción y no
+    /// píxeles para que valga a cualquier tamaño de pantalla.
+    pub y: f64,
 }
 
 /// Original de una canción y los arreglos construidos a partir de él.

@@ -58,6 +58,7 @@ use crate::infra::settings::AppSettings;
 /// here. See docs/REDESIGN_state_rs_module_split.md.
 mod arrangement;
 mod audio_prep;
+mod charts;
 mod automation_runtime;
 mod cue_follow;
 mod external_import;
@@ -4450,5 +4451,7 @@ pub(super) fn copy_project_audio_files(
 mod tests;
 #[cfg(test)]
 mod video_tests;
+#[cfg(test)]
+mod charts_tests;
 #[cfg(test)]
 mod midi_song_ops_tests;

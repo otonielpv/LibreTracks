@@ -663,6 +663,7 @@ mod tests {
             key: None,
             master: SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         }
     }

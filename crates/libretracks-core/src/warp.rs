@@ -253,6 +253,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         }
     }
@@ -396,6 +397,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         };
         s.regions.push(r.clone());
@@ -420,6 +422,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         });
 
@@ -445,6 +448,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         });
         s
@@ -512,6 +516,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         });
 
@@ -541,6 +546,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         });
 
@@ -568,6 +574,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         });
         assert!((warp_timeline_seconds_at(&s, 10.0) - 10.0).abs() < 1e-9);
@@ -589,6 +596,7 @@ mod tests {
             key: None,
             master: crate::model::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         });
 

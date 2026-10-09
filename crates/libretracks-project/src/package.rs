@@ -1195,6 +1195,7 @@ pub fn merge_extracted_song_package(
         warp_source_bpm: None,
         master: libretracks_core::SongMaster::default(),
         compact_column_width_rem: None,
+        chart: None,
         structure: manifest
             .structure
             .clone()
@@ -1403,6 +1404,7 @@ mod tests {
             warp_source_bpm: None,
             master: SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         }
     }

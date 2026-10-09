@@ -505,6 +505,7 @@ impl DesktopSession {
                 warp_source_bpm: None,
                 master: libretracks_core::SongMaster::default(),
                 compact_column_width_rem: None,
+                chart: None,
                 structure: None,
             });
         } else {
@@ -523,6 +524,7 @@ impl DesktopSession {
                     warp_source_bpm: None,
                     master: libretracks_core::SongMaster::default(),
                     compact_column_width_rem: None,
+                    chart: None,
                     structure: None,
                 });
             }

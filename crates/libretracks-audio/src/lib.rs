@@ -1091,6 +1091,7 @@ mod tests {
                 key: None,
                 master: libretracks_core::SongMaster::default(),
                 compact_column_width_rem: None,
+                chart: None,
                 structure: None,
             }],
             tracks: vec![
@@ -1272,6 +1273,7 @@ mod tests {
                     key: None,
                     master: libretracks_core::SongMaster::default(),
                     compact_column_width_rem: None,
+                    chart: None,
                     structure: None,
                 },
                 SongRegion {
@@ -1285,6 +1287,7 @@ mod tests {
                     key: None,
                     master: libretracks_core::SongMaster::default(),
                     compact_column_width_rem: None,
+                    chart: None,
                     structure: None,
                 },
                 SongRegion {
@@ -1298,6 +1301,7 @@ mod tests {
                     key: None,
                     master: libretracks_core::SongMaster::default(),
                     compact_column_width_rem: None,
+                    chart: None,
                     structure: None,
                 },
             ],

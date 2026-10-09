@@ -138,6 +138,7 @@ fn region_with(structure: Option<SongStructure>) -> SongRegion {
         warp_source_bpm: None,
         master: SongMaster::default(),
         compact_column_width_rem: None,
+        chart: None,
         structure,
     }
 }

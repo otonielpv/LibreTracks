@@ -1374,6 +1374,7 @@ mod tests {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         }
     }

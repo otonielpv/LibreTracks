@@ -260,6 +260,7 @@ pub fn import_wav_song(
             warp_source_bpm: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         }],
         tracks: imported_files

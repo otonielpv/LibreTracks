@@ -81,6 +81,7 @@ fn demo_song() -> Song {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         }],
         tracks: vec![Track {
@@ -150,6 +151,7 @@ fn demo_song_with_varispeed_region() -> Song {
         key: None,
         master: libretracks_core::SongMaster::default(),
         compact_column_width_rem: None,
+        chart: None,
         structure: None,
     }];
     // Keep the clip inside the varispeed region ([5, 20]) so the song
@@ -248,6 +250,7 @@ fn demo_song_with_region_changes_and_sections() -> Song {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         },
         SongRegion {
@@ -261,6 +264,7 @@ fn demo_song_with_region_changes_and_sections() -> Song {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         },
         SongRegion {
@@ -274,6 +278,7 @@ fn demo_song_with_region_changes_and_sections() -> Song {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         },
     ];
@@ -398,6 +403,7 @@ fn hierarchy_song() -> Song {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         }],
         tracks: vec![
@@ -991,6 +997,7 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         }],
         tracks: vec![
@@ -1487,6 +1494,7 @@ fn varispeed_expansion_next_to_another_song_returns_descriptive_overlap_error() 
         key: None,
         master: libretracks_core::SongMaster::default(),
         compact_column_width_rem: None,
+        chart: None,
         structure: None,
     });
     let mut session = session_with_song_dir("transpose-overlap-demo", song);
@@ -3860,6 +3868,7 @@ fn reconcile_regions_and_clips_keeps_a_clip_from_crossing_into_the_next_song() {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         },
         SongRegion {
@@ -3873,6 +3882,7 @@ fn reconcile_regions_and_clips_keeps_a_clip_from_crossing_into_the_next_song() {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         },
     ];
@@ -4069,6 +4079,7 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         },
         SongRegion {
@@ -4082,6 +4093,7 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         },
         SongRegion {
@@ -4095,6 +4107,7 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
             key: None,
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
+            chart: None,
             structure: None,
         },
     ];
