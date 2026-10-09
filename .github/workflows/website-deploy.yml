@@ -1,0 +1,32 @@
+name: Deploy website
+
+# The website (apps/website, Cloudflare Pages) is deployed on purpose, not on
+# every push to main:
+#
+# - with every release tag: the `notify-website` job of release.yml calls the
+#   same deploy hook once the release is published;
+# - by hand: run this workflow from the Actions tab.
+#
+# For this to be the only road, automatic production deployments must be OFF
+# in the Cloudflare Pages project (Settings → Builds & deployments → Branch
+# control). The deploy hook keeps working with them off.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Trigger Cloudflare Pages build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Deploy Hook to Cloudflare
+        env:
+          DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "::error::The CLOUDFLARE_DEPLOY_HOOK secret is not set."
+            exit 1
+          fi
+          curl --fail --silent --show-error -X POST "$DEPLOY_HOOK"
