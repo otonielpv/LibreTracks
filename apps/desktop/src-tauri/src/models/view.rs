@@ -37,6 +37,9 @@ pub struct TransportSnapshot {
     pub sources: SourceReadinessSummary,
     pub last_drift_sample: Option<TransportDriftSummary>,
     pub project_revision: u64,
+    /// See `DesktopSession::mix_revision`: bumps when automation changes the
+    /// mix, so the UI knows to refetch the tracks' mute/solo/volume/pan.
+    pub mix_revision: u64,
     pub song_dir: Option<String>,
     pub song_file_path: Option<String>,
     pub is_native_runtime: bool,

@@ -149,6 +149,7 @@ function shouldPublishPlaybackSnapshot(
   return (
     current.playbackState !== next.playbackState ||
     current.projectRevision !== next.projectRevision ||
+    current.mixRevision !== next.mixRevision ||
     current.songDir !== next.songDir ||
     current.songFilePath !== next.songFilePath ||
     current.isNativeRuntime !== next.isNativeRuntime ||

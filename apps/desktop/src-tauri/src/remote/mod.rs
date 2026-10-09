@@ -97,7 +97,7 @@ fn resolve_remote_static_dir(app: &App) -> Option<PathBuf> {
 async fn run_remote_sync_poller(app: AppHandle, handle: RemoteServerHandle) {
     let mut interval = tokio::time::interval(Duration::from_millis(90));
     let mut last_snapshot_json = String::new();
-    let mut last_song_revision = u64::MAX;
+    let mut last_song_revision = (u64::MAX, u64::MAX);
     let mut last_song_json = String::new();
     let mut last_settings_json = String::new();
 
@@ -132,7 +132,10 @@ async fn run_remote_sync_poller(app: AppHandle, handle: RemoteServerHandle) {
             last_snapshot_json = snapshot_json;
         }
 
-        if snapshot.project_revision != last_song_revision {
+        // `mix_revision` too: an automation cue changes mute/solo/volume/pan
+        // without an edit, and the phone kept showing the pre-cue buttons.
+        let song_revision = (snapshot.project_revision, snapshot.mix_revision);
+        if song_revision != last_song_revision {
             // The remote control UI (phone) never renders waveform peaks —
             // it only needs track/clip/region metadata for play/stop/jump
             // controls. Sending the ~27 MB peaks payload on every revision
@@ -146,7 +149,7 @@ async fn run_remote_sync_poller(app: AppHandle, handle: RemoteServerHandle) {
                     last_song_json = song_json;
                 }
             }
-            last_song_revision = snapshot.project_revision;
+            last_song_revision = song_revision;
         }
     }
 }

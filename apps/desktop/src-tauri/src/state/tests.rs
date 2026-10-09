@@ -4612,6 +4612,60 @@ fn automation_track_mix_is_reflected_in_the_model() {
     );
 }
 
+/// Field report: muting a track by hand and then letting an automation cue
+/// un-mute it left the red M lit. The model was right (see the tests above) but
+/// nothing told the UI: automation must not bump `project_revision` (it is not
+/// an edit — no autosave, no undo), and that counter was the only thing the
+/// frontend refetched the song on. `mix_revision` is the signal it watches now.
+#[test]
+fn automation_mix_bumps_mix_revision_but_not_project_revision() {
+    let mut session = session_with_song_dir("automation-mix-revision-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+    let before = session.snapshot();
+
+    session
+        .apply_automation_action(
+            &crate::audio::automation::AutomationAction::SetTrackMute {
+                track_id: "track_1".into(),
+                muted: false,
+            },
+            &audio,
+        )
+        .expect("automation un-mute should succeed");
+
+    let after = session.snapshot();
+    assert!(
+        after.mix_revision > before.mix_revision,
+        "automation mute must tell the UI the mix changed"
+    );
+    assert_eq!(
+        after.project_revision, before.project_revision,
+        "automation is playback state, not an edit: no autosave, no undo"
+    );
+
+    for action in [
+        crate::audio::automation::AutomationAction::SetTrackSolo {
+            track_id: "track_1".into(),
+            solo: true,
+        },
+        crate::audio::automation::AutomationAction::SetTrackMix {
+            track_id: "track_1".into(),
+            volume: Some(0.5),
+            pan: None,
+            ramp_seconds: None,
+        },
+    ] {
+        let revision = session.snapshot().mix_revision;
+        session
+            .apply_automation_action(&action, &audio)
+            .expect("automation action should succeed");
+        assert!(
+            session.snapshot().mix_revision > revision,
+            "{action:?} must bump mix_revision"
+        );
+    }
+}
+
 /// Commit path (pointer-up): must bump revision and send exactly one realtime command.
 #[test]
 fn commit_track_mix_bumps_revision_and_sends_one_realtime_command() {

@@ -465,6 +465,7 @@ import { useAutoSave } from "./hooks/useAutoSave";
 import { useDragListeners } from "./hooks/useDragListeners";
 import { usePlaybackUiDiagnostics } from "./hooks/usePlaybackUiDiagnostics";
 import { useSongViewLoader } from "./hooks/useSongViewLoader";
+import { useAutomationMixSync } from "./hooks/useAutomationMixSync";
 import { useWindowTitle } from "./hooks/useWindowTitle";
 import { useSongStore } from "./songStore";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
@@ -3268,6 +3269,7 @@ export function TransportPanelContent() {
   useAudioMeters();
   useClearSelectionOnOutsideClick();
   useRegionMeters();
+  useAutomationMixSync();
 
   // Backend waveform-ready events -> merge peaks into the waveform cache.
   useEffect(() => {

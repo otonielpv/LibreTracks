@@ -122,6 +122,15 @@ describe("useTransportStore", () => {
       expect(get().playback).toBe(next);
     });
 
+    // Automation changes the mix without an edit; if the gate drops this
+    // snapshot the UI never refetches and the red M stays lit.
+    it("publishes when the mix revision changes", () => {
+      get().setPlaybackState(makeSnapshot({ mixRevision: 1 }));
+      const next = makeSnapshot({ mixRevision: 2 });
+      get().setPlaybackState(next);
+      expect(get().playback).toBe(next);
+    });
+
     it("publishes when a pending marker jump appears", () => {
       get().setPlaybackState(makeSnapshot());
       const withJump = makeSnapshot({

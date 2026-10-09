@@ -932,6 +932,11 @@ export type TransportSnapshot = {
   sources?: SourceReadinessSummary;
   lastDriftSample?: TransportDriftSample | null;
   projectRevision: number;
+  /** Bumps when automation changes a track's mute/solo/volume/pan. Not a
+   * `projectRevision`: automation is playback state, not an edit, but the UI
+   * must refetch the mix or it keeps showing the buttons from before the cue.
+   * Optional for snapshots from older backends and the browser demo. */
+  mixRevision?: number;
   songDir?: string | null;
   songFilePath?: string | null;
   isNativeRuntime: boolean;

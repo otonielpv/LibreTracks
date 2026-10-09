@@ -428,6 +428,11 @@ pub struct DesktopSession {
     /// In-progress controller sweeps from `ControlCurve` events.
     pub(super) active_midi_curves: Vec<ActiveMidiCurve>,
     pub(super) project_revision: u64,
+    /// Bumped when automation changes a track's mute/solo/volume/pan in the
+    /// model. Separate from `project_revision` on purpose: automation is
+    /// playback state, not an edit (no autosave, no undo), but the UI still
+    /// has to refetch the mix or it keeps showing the pre-automation buttons.
+    pub(super) mix_revision: u64,
     pub(super) undo_stack: Vec<Song>,
     pub(super) redo_stack: Vec<Song>,
     pub(super) live_history_anchor: Option<Song>,
@@ -569,6 +574,7 @@ impl Default for DesktopSession {
             active_midi_notes: Vec::new(),
             active_midi_curves: Vec::new(),
             project_revision: 0,
+            mix_revision: 0,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             live_history_anchor: None,
@@ -3236,6 +3242,7 @@ impl DesktopSession {
                 .clone()
                 .map(|sample| transport_drift_summary_to_view(source_song.as_ref(), sample)),
             project_revision: self.project_revision,
+            mix_revision: self.mix_revision,
             song_dir: self
                 .song_dir
                 .as_ref()

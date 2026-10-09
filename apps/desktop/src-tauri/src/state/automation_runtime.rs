@@ -536,6 +536,12 @@ impl DesktopSession {
         }
     }
 
+    /// Tell the UI the mix in the model changed under it (see
+    /// `DesktopSession::mix_revision`).
+    pub(super) fn bump_mix_revision(&mut self) {
+        self.mix_revision = self.mix_revision.wrapping_add(1);
+    }
+
     /// Apply a single non-jump job action immediately (mute/solo/mix/scene).
     pub(super) fn apply_automation_action(
         &mut self,
@@ -546,10 +552,12 @@ impl DesktopSession {
             AutomationAction::SetTrackMute { track_id, muted } => {
                 audio.update_live_track_mix(track_id, None, None, Some(*muted), None, None)?;
                 self.mirror_track_mix_into_model(track_id, None, None, Some(*muted), None);
+                self.bump_mix_revision();
             }
             AutomationAction::SetTrackSolo { track_id, solo } => {
                 audio.update_live_track_mix(track_id, None, None, None, Some(*solo), None)?;
                 self.mirror_track_mix_into_model(track_id, None, None, None, Some(*solo));
+                self.bump_mix_revision();
             }
             AutomationAction::SetTrackMix {
                 track_id,
@@ -578,6 +586,7 @@ impl DesktopSession {
                 } else {
                     audio.update_live_track_mix(track_id, *volume, *pan, None, None, None)?;
                     self.mirror_track_mix_into_model(track_id, *volume, *pan, None, None);
+                    self.bump_mix_revision();
                 }
             }
             AutomationAction::ApplyScene {
@@ -651,9 +660,15 @@ impl DesktopSession {
             // fader the ramp moved reads correctly the moment the user grabs it.
             self.mirror_track_mix_into_model(&track_id, volume, pan, None, None);
         }
-        // Drop ramps that have reached their end.
+        // Drop ramps that have reached their end. The UI hears about a ramp
+        // only when it lands (not per tick): refetching the mix every 250 ms
+        // poll would be wasted work for a fader nobody is looking at mid-fade.
+        let ramps_before = self.active_mix_ramps.len();
         self.active_mix_ramps
             .retain(|ramp| position - ramp.start_position_seconds < ramp.duration_seconds);
+        if self.active_mix_ramps.len() != ramps_before {
+            self.bump_mix_revision();
+        }
         Ok(())
     }
 
@@ -792,6 +807,7 @@ impl DesktopSession {
                 .retain(|existing| existing.track_id != ramp.track_id);
         }
         self.active_mix_ramps.extend(new_ramps);
+        self.bump_mix_revision();
 
         Ok(())
     }
