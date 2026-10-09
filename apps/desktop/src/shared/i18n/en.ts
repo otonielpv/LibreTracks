@@ -2044,7 +2044,6 @@ const en = {
     hide: "Hide lyrics and chords",
     title: "Lyrics & chords",
     toggle: "Show or hide lyrics and chords",
-    upNext: "Next section",
     smaller: "Smaller text",
     bigger: "Bigger text",
     showChords: "Show chords",

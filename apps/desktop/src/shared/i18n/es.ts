@@ -2073,7 +2073,6 @@ const es = {
     hide: "Ocultar letra y acordes",
     title: "Letra y acordes",
     toggle: "Mostrar u ocultar letra y acordes",
-    upNext: "Siguiente sección",
     smaller: "Letra más pequeña",
     bigger: "Letra más grande",
     showChords: "Mostrar acordes",

@@ -301,8 +301,6 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     );
   };
 
-  const nextBlock = currentBlock >= 0 ? blocks[currentBlock + 1] ?? null : null;
-  const nextLabel = nextBlock?.label ?? null;
 
   return (
     <section
@@ -315,12 +313,6 @@ export const LiveChartPanel = memo(function LiveChartPanel({
           <small>{t("liveChart.title")}</small>
           <strong>{doc?.title || region?.name || "—"}</strong>
         </div>
-        {nextLabel ? (
-          <span className="lt-live-chart-next" title={t("liveChart.upNext")}>
-            <span className="material-symbols-outlined" aria-hidden="true">east</span>
-            {nextLabel}
-          </span>
-        ) : null}
         <div className="lt-live-chart-tools lt-bottom-controls">
           {doc ? (
             <>

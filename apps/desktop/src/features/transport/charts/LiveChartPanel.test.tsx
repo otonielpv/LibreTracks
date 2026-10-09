@@ -102,8 +102,8 @@ describe("LiveChartPanel", () => {
     expect(lineTexts(container, ".lt-chart-line.is-past")).toEqual(["Primera línea"]);
     // The block is named like the marker; the sheet's own name goes beside it.
     expect(container.querySelector(".lt-chart-section.is-current .lt-chart-section-label")?.textContent).toBe("EstrofaVerso 1");
-    // What comes next is announced.
-    expect(screen.getByTitle("liveChart.upNext").textContent).toContain("Estribillo");
+    // No "up next" chip: the lyrics below already show it.
+    expect(screen.queryByTitle("liveChart.upNext")).toBeNull();
   });
 
   it("scrolls so the current line sits near the top of the panel", () => {
@@ -157,7 +157,8 @@ describe("LiveChartPanel", () => {
       { label: "liveChart.jumpEstrofaVerso 1", queued: true },
       { label: "EstribilloCoro 1", queued: true },
     ]);
-    expect(screen.getByTitle("liveChart.upNext").textContent).toContain("Estrofa");
+    // No "up next" chip: the lyrics below already show it.
+    expect(screen.queryByTitle("liveChart.upNext")).toBeNull();
   });
 
   it("shows the chords in the key the song is played in", () => {

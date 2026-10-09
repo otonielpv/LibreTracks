@@ -46,26 +46,6 @@
   white-space: nowrap;
 }
 
-.lt-live-chart-next {
-  flex: 0 1 auto;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  overflow: hidden;
-  padding: 0.2rem 0.45rem;
-  border: 1px solid rgb(244 201 93 / 0.35);
-  border-radius: 999px;
-  color: #f4c95d;
-  font: 700 0.68rem/1 "Space Grotesk", sans-serif;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.lt-live-chart-next .material-symbols-outlined {
-  font-size: 14px;
-}
-
 .lt-live-chart-tools {
   flex: 0 0 auto;
   display: flex;
@@ -521,8 +501,10 @@
     padding: 0.15rem 0.2rem 0.15rem 0.45rem;
   }
 
-  .lt-live-chart-heading small {
-    display: none;
+  /* The song's name is in the live header already; on a phone the panel's
+     row is for its buttons. */
+  .lt-live-chart-heading {
+    visibility: hidden;
   }
 
   .lt-live-chart-scroller {

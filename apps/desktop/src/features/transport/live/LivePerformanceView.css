@@ -440,6 +440,16 @@
    nombre (ver el comentario en LivePerformanceView.tsx sobre por que no va al
    final de la fila). Hereda tamano y caja de `.lt-live-cue-name-line em`; aqui
    solo cambia el color, porque no es un aviso sino un reloj. */
+.lt-live-countdown-short {
+  display: none;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.lt-live-countdown-short .material-symbols-outlined {
+  font-size: 11px;
+}
+
 .lt-live-cue-name-line em.is-countdown {
   border-style: solid;
   border-color: rgb(217 186 95 / 0.5);
@@ -785,6 +795,15 @@
     min-height: 1.3rem;
     padding-inline: 0.25rem;
     font-size: 7px;
+  }
+
+  /* On a phone the countdown is a clock and the time, so the name fits. */
+  .lt-live-countdown-long {
+    display: none;
+  }
+
+  .lt-live-countdown-short {
+    display: inline-flex;
   }
 
   .lt-live-cue-grid {

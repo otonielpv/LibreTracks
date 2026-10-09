@@ -533,7 +533,13 @@ function LivePerformanceViewComponent({
                         vistazo junto al nombre, que es como se usa en directo. */}
                     {isNext && selectedPlayback.secondsToNextGroup !== null ? (
                       <em className="is-countdown">
-                        {t("liveView.nextIn", { time: formatLiveClock(selectedPlayback.secondsToNextGroup) })}
+                        <span className="lt-live-countdown-long">
+                          {t("liveView.nextIn", { time: formatLiveClock(selectedPlayback.secondsToNextGroup) })}
+                        </span>
+                        <span className="lt-live-countdown-short" aria-hidden="true">
+                          <span className="material-symbols-outlined">timer</span>
+                          {formatLiveClock(selectedPlayback.secondsToNextGroup)}
+                        </span>
                       </em>
                     ) : null}
                     {isVampAnchor ? (
