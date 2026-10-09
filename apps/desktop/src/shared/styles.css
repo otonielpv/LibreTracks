@@ -4618,6 +4618,9 @@ html.lt-ios body {
 
 .lt-track-meter {
   display: flex;
+  /* Stereo: two channels (L, R) of ~4.5px with a 1px gap, like Ableton's
+     track-header meters. At the 8px header heights each side is 3.5px. */
+  gap: 1px;
   width: 10px;
   flex: 0 0 10px;
   align-self: stretch;
@@ -7792,8 +7795,9 @@ html.lt-ios body {
    next to the fader. The .lt-track-meter rules (gradient, channel,
    peak, clip) live up near the DAW track-header section. */
 .lt-compact-mixer-fader-wrap .lt-track-meter {
-  width: 0.4rem;
-  flex: 0 0 0.4rem;
+  /* Two stereo channels: 0.4rem left each side too thin to read. */
+  width: 0.6rem;
+  flex: 0 0 0.6rem;
 }
 
 /* Vertical fader: rotate the native <input type=range> with writing-mode
