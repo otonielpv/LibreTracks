@@ -5386,7 +5386,6 @@ html.lt-ios body {
   text-transform: uppercase;
 }
 
-.lt-bottom-controls button:hover,
 .lt-bottom-controls button.is-active {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.06)),
@@ -5397,6 +5396,22 @@ html.lt-ios body {
     0 0 18px rgba(87, 241, 219, 0.16);
 }
 
+/* El hover luce IGUAL que encendido, asi que solo donde hay puntero que pasa
+   por encima. En tactil el :hover se queda pegado al ultimo boton tocado hasta
+   tocar otra cosa: al apagar el seguimiento del playhead en el movil el boton
+   seguia pareciendo encendido. */
+@media (hover: hover) {
+  .lt-bottom-controls button:hover {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.06)),
+      rgba(47, 46, 46, 0.92);
+    color: #57f1db;
+    box-shadow:
+      0 0 0 1px rgba(87, 241, 219, 0.18),
+      0 0 18px rgba(87, 241, 219, 0.16);
+  }
+}
+
 .lt-bottom-controls .lt-vamp-button {
   min-width: 4.6rem;
   border-radius: 2px;
@@ -5405,13 +5420,23 @@ html.lt-ios body {
   box-shadow: inset 0 0 0 1px rgba(255, 176, 76, 0.18);
 }
 
-.lt-bottom-controls .lt-vamp-button:hover,
 .lt-bottom-controls .lt-vamp-button.is-active {
   background: linear-gradient(135deg, #6b3f16, #2f2218);
   color: #fff0d8;
   box-shadow:
     inset 0 0 0 1px rgba(255, 176, 76, 0.48),
     0 0 16px rgba(255, 176, 76, 0.22);
+}
+
+/* Mismo motivo que arriba: en tactil el VAMP apagado parecia encendido. */
+@media (hover: hover) {
+  .lt-bottom-controls .lt-vamp-button:hover {
+    background: linear-gradient(135deg, #6b3f16, #2f2218);
+    color: #fff0d8;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 176, 76, 0.48),
+      0 0 16px rgba(255, 176, 76, 0.22);
+  }
 }
 
 .lt-control-group {
