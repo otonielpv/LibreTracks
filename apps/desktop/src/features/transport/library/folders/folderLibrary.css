@@ -269,6 +269,29 @@
   z-index: auto;
   width: auto;
   max-width: none;
+  /* A flex child does not shrink below its content by default: the nested
+     panel overflowed the column and cut «Importar audio» and the folder
+     names on the right. */
+  flex: 1 1 0;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* The folder library already says it is the library: the nested panel keeps
+   its title (the E2E and the tour look for it) but drops the repeated
+   eyebrow, and its header is tighter. */
+.lt-folder-library .lt-folder-library-session-body .lt-library-panel-eyebrow {
+  display: none;
+}
+
+.lt-folder-library .lt-folder-library-session-body .lt-library-panel-header {
+  padding: 0.6rem 0.75rem;
+  gap: 0.5rem;
+}
+
+.lt-folder-library .lt-folder-library-session-body .lt-library-panel-header h2 {
+  font-size: 1rem;
 }
 
 /* Touch: same widths as the classic library on a phone. */
