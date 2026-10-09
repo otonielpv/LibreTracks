@@ -26,6 +26,7 @@ import { DiagnosticsSettingsTab } from "./DiagnosticsSettingsTab";
 import { MulticoreAudioField } from "./MulticoreAudioField";
 import { SessionStorageVolumeField } from "./SessionStorageVolumeField";
 import { UpdateCheckField } from "./UpdateCheckField";
+import { LibraryModeField } from "../library/folders/LibraryModeField";
 import { ShortcutsSettingsTab } from "./ShortcutsSettingsTab";
 import { VideoSettingsTab } from "./VideoSettingsTab";
 import {
@@ -935,6 +936,8 @@ export function SettingsPanel({
                         ))}
                       </select>
                     </label>
+
+                    <LibraryModeField />
 
                     <InterfaceZoomField />
 

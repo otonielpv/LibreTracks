@@ -449,6 +449,10 @@ function buildInitialState(): DesktopApiMockState {
       songJumpBars: 4,
       songTransitionMode: "instant",
       fadeOutStopSeconds: 5,
+      // The jsdom suites exercise the classic library; the folder library has
+      // its own tests.
+      libraryMode: "classic",
+      libraryPlaces: [],
       vampMode: "section",
       vampBars: 4,
       pauseAtSongEnd: false,

@@ -387,6 +387,9 @@ const en = {
         "Each new track takes a colour from the palette, cycling through it in order, so you can tell them apart at a glance. Turn it off if you prefer colouring by hand. It never repaints tracks you already have.",
       importMergeMatchingTracks: "Merge tracks with the same name on import",
       pauseAtSongEnd: "Pause at the end of each song",
+      classicLibrary: "Use the classic library",
+      classicLibraryHint:
+        "The library shows only the audio imported into the session, with its own folders, instead of the folders of your disk.",
       fadeOutStopSeconds: "“Fade out and stop” length (s)",
       fadeOutStopSecondsHint:
         "How long the song takes to fade when you press “Fade out and stop”. Pressing it again during the fade stops at once.",
@@ -1831,6 +1834,24 @@ const en = {
     markersCount: "{{count}} markers",
   },
   library: {
+    folders: {
+      title: "Folders",
+      panelAria: "Folder library",
+      addPlace: "Add folder",
+      search: "Search the open folders",
+      intro:
+        "Add a folder of your disk with your multitracks or samples and drag the audio onto the timeline. Drag a whole folder to create a song named after it.",
+      loading: "Loading…",
+      empty: "No audio in this folder",
+      noMatches: "Nothing matches the search",
+      unavailable: "Folder not available (was it moved, or the drive disconnected?)",
+      refresh: "Refresh",
+      removePlace: "Remove from library",
+      folderHint: "Click to open. Drag it onto the timeline to create a song named after it.",
+      dragHintFolderSong: "Drop on the timeline to create a song from this folder",
+      importingFolder: "Importing “{{name}}”…",
+      inThisSession: "In this session ({{count}})",
+    },
     assetListAria: "Library assets",
     emptyFolder:
       "Drop assets here to keep this folder ready for the next song.",

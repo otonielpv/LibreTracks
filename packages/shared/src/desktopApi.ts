@@ -1472,6 +1472,24 @@ export async function stopTransport(): Promise<TransportSnapshot> {
  * `fadeOutStopSeconds`, then stop. Calling it again during the fade stops at
  * once. A no-op unless playing.
  */
+export type LibraryDirEntry = {
+  name: string;
+  path: string;
+  kind: "folder" | "audio" | "video" | "package";
+};
+
+/** One level of a disk folder for the folder library: subfolders first, then
+ * the files the app can use. Rejects when the folder is gone. */
+export async function listLibraryDir(path: string): Promise<LibraryDirEntry[]> {
+  return invokeCommand<LibraryDirEntry[]>("list_library_dir", { path });
+}
+
+/** Ask the user for a disk folder to add to the folder library. `null` =
+ * cancelled. */
+export async function pickLibraryPlace(): Promise<string | null> {
+  return invokeCommand<string | null>("pick_library_place");
+}
+
 export async function fadeOutAndStop(): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("fade_out_and_stop");
 }

@@ -467,6 +467,7 @@ import { usePlaybackUiDiagnostics } from "./hooks/usePlaybackUiDiagnostics";
 import { useSongViewLoader } from "./hooks/useSongViewLoader";
 import { useAutomationMixSync } from "./hooks/useAutomationMixSync";
 import { cameraXAfterStoppedJump } from "./timeline/revealPlayheadOnJump";
+import { createBrowserDrop } from "./library/folders/browserDrop";
 import { useWindowTitle } from "./hooks/useWindowTitle";
 import { useSongStore } from "./songStore";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
@@ -6592,6 +6593,26 @@ export function TransportPanelContent() {
     handleDomExternalDropPreviewChange,
   } = libraryDragDrop;
 
+  const libraryDragDropDeps = () => {
+    const value = libraryDragDropDepsRef.current;
+    if (!value) throw new Error("library drag-drop deps are not ready");
+    return value;
+  };
+  // Drops from the folder library (disk folders). Getters, so the factory is
+  // built once and still reads the live session and drag-drop factory.
+  const browserDrop = useMemo(
+    () =>
+      createBrowserDrop({
+        dragDrop: () => libraryDragDrop,
+        hasSession: () => Boolean(playbackSongDirRef.current),
+        runAction: (action) => libraryDragDropDeps().runAction(action),
+        mergeLibraryAssets: (assets) => libraryDragDropDeps().mergeLibraryAssets(assets),
+        setStatus: (message) => libraryDragDropDeps().setStatus(message),
+        t: (key, options) => libraryDragDropDeps().t(key, options),
+      }),
+    [libraryDragDrop],
+  );
+
   // `dropLibraryFolder` nace de la factoria de arrastre, que se construye justo
   // arriba, asi que las dependencias de colocacion se rellenan aqui y no junto
   // al `useMemo` que las consume.
@@ -7147,6 +7168,7 @@ export function TransportPanelContent() {
                   );
                 }}
                 onAddFolderToTimeline={handleAddLibraryFolderToTimeline}
+                browserDrop={browserDrop}
               />
               {shouldShowEmptyState ? (
                 isMobileApp ? (

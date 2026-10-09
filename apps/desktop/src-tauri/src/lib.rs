@@ -297,6 +297,8 @@ pub fn run() {
             commands::system::send_midi_test_note,
             commands::transport::get_transport_snapshot,
             commands::transport::fade_out_and_stop,
+            commands::library_places::list_library_dir,
+            commands::library_places::pick_library_place,
             commands::settings::get_settings,
             commands::settings::save_settings,
             commands::settings::update_audio_settings,

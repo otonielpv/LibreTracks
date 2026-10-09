@@ -96,6 +96,10 @@ fn default_song_jump_bars() -> u32 {
 /// for its own end-of-song fade.
 pub const DEFAULT_FADE_OUT_STOP_SECONDS: f64 = 5.0;
 
+fn default_library_mode() -> String {
+    "folders".into()
+}
+
 fn default_fade_out_stop_seconds() -> f64 {
     DEFAULT_FADE_OUT_STOP_SECONDS
 }
@@ -302,6 +306,15 @@ pub struct AppSettings {
     pub song_jump_bars: u32,
     #[serde(default = "default_song_transition_mode")]
     pub song_transition_mode: String,
+    /// Which library the sidebar shows: "folders" (browse folders of the
+    /// user's disk, the default) or "classic" (the session's imported assets
+    /// with virtual folders, as before).
+    #[serde(default = "default_library_mode")]
+    pub library_mode: String,
+    /// Disk folders added to the folder library ("places"). Global, not per
+    /// session: the same sample folders serve every session.
+    #[serde(default)]
+    pub library_places: Vec<String>,
     /// Duration of the «Fade out y parar» live action, in seconds.
     #[serde(default = "default_fade_out_stop_seconds")]
     pub fade_out_stop_seconds: f64,
@@ -456,6 +469,8 @@ impl Default for AppSettings {
             song_jump_bars: default_song_jump_bars(),
             song_transition_mode: default_song_transition_mode(),
             fade_out_stop_seconds: default_fade_out_stop_seconds(),
+            library_mode: default_library_mode(),
+            library_places: Vec::new(),
             vamp_mode: default_vamp_mode(),
             vamp_bars: default_vamp_bars(),
             pause_at_song_end: false,

@@ -384,6 +384,9 @@ const es = {
         "Cada pista nueva toma un color de la paleta, recorriéndola en orden, para distinguirlas de un vistazo. Desactívalo si prefieres colorearlas a mano. No repinta las pistas que ya tienes.",
       importMergeMatchingTracks: "Unir pistas con el mismo nombre al importar",
       pauseAtSongEnd: "Pausar al terminar cada canción",
+      classicLibrary: "Usar la biblioteca clásica",
+      classicLibraryHint:
+        "La biblioteca muestra solo el audio importado a la sesión, con carpetas propias, en lugar de las carpetas de tu disco.",
       fadeOutStopSeconds: "Duración de «Fade out y parar» (s)",
       fadeOutStopSecondsHint:
         "Lo que tarda en apagarse la canción al pulsar «Fade out y parar». Pulsarlo otra vez durante el fade para en seco.",
@@ -1859,6 +1862,24 @@ const es = {
     markersCount: "{{count}} marcas",
   },
   library: {
+    folders: {
+      title: "Carpetas",
+      panelAria: "Biblioteca de carpetas",
+      addPlace: "Añadir carpeta",
+      search: "Buscar en las carpetas abiertas",
+      intro:
+        "Añade una carpeta de tu disco con tus multitracks o samples y arrastra los audios al timeline. Arrastra una carpeta entera para crear una canción con su nombre.",
+      loading: "Cargando…",
+      empty: "Sin audio en esta carpeta",
+      noMatches: "Nada coincide con la búsqueda",
+      unavailable: "Carpeta no disponible (¿se movió o se desconectó el disco?)",
+      refresh: "Actualizar",
+      removePlace: "Quitar de la biblioteca",
+      folderHint: "Pulsa para abrir. Arrástrala al timeline para crear una canción con su nombre.",
+      dragHintFolderSong: "Suelta en el timeline para crear una canción con esta carpeta",
+      importingFolder: "Importando «{{name}}»…",
+      inThisSession: "En esta sesión ({{count}})",
+    },
     assetListAria: "Assets de la biblioteca",
     emptyFolder:
       "Suelta assets aqui para dejar esta carpeta lista para la siguiente cancion.",

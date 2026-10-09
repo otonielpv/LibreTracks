@@ -1,0 +1,29 @@
+import { useTranslation } from "react-i18next";
+
+import { isMobileApp } from "../../desktopApi";
+import { useLibrarySettings } from "./useLibrarySettings";
+
+/**
+ * Settings → General: go back to the classic library (the session's imported
+ * assets with virtual folders) for whoever prefers it. Desktop only: mobile
+ * has only the classic library for now.
+ */
+export function LibraryModeField() {
+  const { t } = useTranslation();
+  const { mode, setMode } = useLibrarySettings();
+  if (isMobileApp) return null;
+
+  return (
+    <label className="lt-settings-toggle">
+      <input
+        type="checkbox"
+        checked={mode === "classic"}
+        onChange={(event) => void setMode(event.target.checked ? "classic" : "folders")}
+      />
+      <span className="lt-settings-toggle-copy">
+        <span>{t("transport.settingsModal.classicLibrary")}</span>
+        <small>{t("transport.settingsModal.classicLibraryHint")}</small>
+      </span>
+    </label>
+  );
+}

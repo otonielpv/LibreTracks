@@ -3,6 +3,9 @@ import { useTranslation } from "react-i18next";
 import type { LibraryImportProgressEvent } from "../desktopApi";
 import { libraryAssetFileName } from "../helpers";
 import { LibrarySidebarPanel } from "../library/LibrarySidebarPanel";
+import type { BrowserDrop } from "../library/folders/browserDrop";
+import { FolderLibraryPanel } from "../library/folders/FolderLibraryPanel";
+import { useLibrarySettings } from "../library/folders/useLibrarySettings";
 import type { PendingLibraryAssetSummary } from "../library/pendingAudioImports";
 import type { InternalLibraryPointerDrag, SidebarTab } from "../types";
 
@@ -36,6 +39,8 @@ type LibraryPanelProps = {
     folderPath: string | null,
     assets: PendingLibraryAssetSummary[],
   ) => void;
+  /** Drops from the folder library (disk folders) onto the timeline. */
+  browserDrop: BrowserDrop;
 };
 
 export function LibraryPanel({
@@ -58,8 +63,10 @@ export function LibraryPanel({
   onDeleteRequested,
   onAddSelectionToTimeline,
   onAddFolderToTimeline,
+  browserDrop,
 }: LibraryPanelProps) {
   const { t } = useTranslation();
+  const librarySettings = useLibrarySettings();
   const dragTargetFolderPath =
     internalLibraryPointerDrag?.hover?.kind === "library-folder"
       ? internalLibraryPointerDrag.hover.folderPath
@@ -91,29 +98,44 @@ export function LibraryPanel({
   const isFolderTarget =
     internalLibraryPointerDrag?.hover?.kind === "library-folder";
 
+  // The classic library: on its own in classic mode, folded under the places
+  // as "In this session" in folder mode.
+  const classicPanel = () => (
+    <LibrarySidebarPanel
+      assets={assets}
+      folders={folders}
+      isLoading={isLoading}
+      isImporting={isImporting}
+      importProgress={importProgress}
+      deletingFilePath={deletingFilePath}
+      canImport={canImport}
+      dragTargetFolderPath={dragTargetFolderPath}
+      onLocateAsset={onLocateAsset}
+      onPointerDragStart={onPointerDragStart}
+      onImport={onImport}
+      onCreateFolder={onCreateFolder}
+      onMoveAssetsToFolder={onMoveAssetsToFolder}
+      onRenameFolder={onRenameFolder}
+      onDeleteFolder={onDeleteFolder}
+      onDeleteRequested={onDeleteRequested}
+      onAddSelectionToTimeline={onAddSelectionToTimeline}
+      onAddFolderToTimeline={onAddFolderToTimeline}
+    />
+  );
+
   return (
     <>
       {activeSidebarTab === "library" ? (
-        <LibrarySidebarPanel
-          assets={assets}
-          folders={folders}
-          isLoading={isLoading}
-          isImporting={isImporting}
-          importProgress={importProgress}
-          deletingFilePath={deletingFilePath}
-          canImport={canImport}
-          dragTargetFolderPath={dragTargetFolderPath}
-          onLocateAsset={onLocateAsset}
-          onPointerDragStart={onPointerDragStart}
-          onImport={onImport}
-          onCreateFolder={onCreateFolder}
-          onMoveAssetsToFolder={onMoveAssetsToFolder}
-          onRenameFolder={onRenameFolder}
-          onDeleteFolder={onDeleteFolder}
-          onDeleteRequested={onDeleteRequested}
-          onAddSelectionToTimeline={onAddSelectionToTimeline}
-          onAddFolderToTimeline={onAddFolderToTimeline}
-        />
+        librarySettings.mode === "folders" ? (
+          <FolderLibraryPanel
+            settings={librarySettings}
+            browserDrop={browserDrop}
+            sessionAssetCount={assets.length}
+            sessionPanel={classicPanel()}
+          />
+        ) : (
+          classicPanel()
+        )
       ) : null}
       {internalLibraryPointerDrag?.isDragging ? (
         <div
