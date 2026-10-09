@@ -275,7 +275,13 @@
   border: 1px solid rgb(255 255 255 / 0.08);
   border-radius: 0.38rem;
   color: #d9e3df;
-  background: #0d100f;
+  /* El color de la marca tiñe la fila entera, no solo la franja: se distingue
+     un coro de un verso de un vistazo y desde lejos. Un degradado oscuro y
+     translucido va ENCIMA del color solido, el mismo truco que las tarjetas
+     del remoto: sin color-mix(), que Safari 15 (macOS 12) no entiende. */
+  background:
+    linear-gradient(90deg, rgb(13 16 15 / 0.7), rgb(13 16 15 / 0.86) 60%),
+    var(--lt-live-marker-color);
   text-align: left;
   touch-action: manipulation;
 }
@@ -284,29 +290,39 @@
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
-  width: 3px;
+  width: 6px;
   background: var(--lt-live-marker-color);
 }
 
 .lt-live-cue-row:hover,
 .lt-live-cue-row:focus-visible {
   border-color: rgb(87 241 219 / 0.3);
-  background: #121817;
+  background:
+    linear-gradient(90deg, rgb(13 16 15 / 0.6), rgb(13 16 15 / 0.8) 60%),
+    var(--lt-live-marker-color);
 }
 
+/* Los estados se leen por el BORDE y el brillo, no por el fondo: el fondo ya
+   es el color de la marca y pintarlo de turquesa o ambar lo taparia. */
 .lt-live-cue-row.is-active {
   border-color: #57f1db;
-  background: rgb(19 61 55 / 0.48);
-  box-shadow: inset 0 0 0 1px rgb(87 241 219 / 0.18);
+  background:
+    linear-gradient(90deg, rgb(13 16 15 / 0.42), rgb(13 16 15 / 0.66) 60%),
+    var(--lt-live-marker-color);
+  box-shadow:
+    inset 0 0 0 1px rgb(87 241 219 / 0.5),
+    0 0 12px rgb(87 241 219 / 0.22);
 }
 
 .lt-live-cue-row.is-next {
-  border-color: rgb(244 201 93 / 0.45);
+  border-color: rgb(244 201 93 / 0.6);
 }
 
 .lt-live-cue-row.is-pending {
   border-color: #f4c95d;
-  background: rgb(70 54 13 / 0.38);
+  box-shadow:
+    inset 0 0 0 1px rgb(244 201 93 / 0.5),
+    0 0 12px rgb(244 201 93 / 0.2);
 }
 
 .lt-live-cue-row.is-vamp {
@@ -319,6 +335,10 @@
 
 .lt-live-cue-row.is-cue {
   border-style: dashed;
+  /* Un aviso no es una seccion: tinte mas apagado para que no compita. */
+  background:
+    linear-gradient(90deg, rgb(13 16 15 / 0.82), rgb(13 16 15 / 0.92) 60%),
+    var(--lt-live-marker-color);
 }
 
 .lt-live-cue-index {
