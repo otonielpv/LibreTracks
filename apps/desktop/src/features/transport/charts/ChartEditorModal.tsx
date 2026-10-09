@@ -113,7 +113,8 @@ export function ChartEditorModal({ region, markers, chart, onSave, onClose }: Ch
           <div className="lt-chart-editor-text">
             <div className="lt-chart-editor-row">
               <span className="lt-settings-field-label">{t("liveChart.textLabel")}</span>
-              <button type="button" className="lt-secondary-button" onClick={() => fileInputRef.current?.click()}>
+              <button type="button" className="lt-chart-editor-button" onClick={() => fileInputRef.current?.click()}>
+                <span className="material-symbols-outlined" aria-hidden="true">upload_file</span>
                 {t("liveChart.importFile")}
               </button>
             </div>
@@ -132,10 +133,11 @@ export function ChartEditorModal({ region, markers, chart, onSave, onClose }: Ch
               <span className="lt-settings-field-label">{t("liveChart.syncLabel")}</span>
               <button
                 type="button"
-                className="lt-secondary-button"
+                className="lt-chart-editor-button"
                 disabled={doc.sections.length === 0 || originals.length === 0}
                 onClick={() => setLinks(autoLinkChart(doc, markers))}
               >
+                <span className="material-symbols-outlined" aria-hidden="true">auto_fix_high</span>
                 {t("liveChart.autoLink")}
               </button>
             </div>
@@ -180,7 +182,7 @@ export function ChartEditorModal({ region, markers, chart, onSave, onClose }: Ch
           {error ? <p className="lt-render-warning" role="alert">{error}</p> : null}
         </div>
 
-        <div className="lt-inline-actions lt-export-modal-actions">
+        <div className="lt-inline-actions lt-chart-editor-actions">
           {chart ? (
             <button type="button" className="lt-secondary-button lt-chart-editor-remove" disabled={saving} onClick={() => void save(null)}>
               {t("liveChart.remove")}

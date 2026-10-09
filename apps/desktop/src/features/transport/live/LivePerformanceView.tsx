@@ -35,6 +35,11 @@ import {
   useLiveProgressBars,
 } from "./useLiveProgressBars";
 import { LiveChartPanel } from "../charts/LiveChartPanel";
+import { SongReorderHandle } from "../songs/SongReorderHandle";
+import {
+  SONG_REORDER_ID_ATTRIBUTE,
+  useSongReorder,
+} from "../songs/useSongReorder";
 import type { ViewMode } from "../uiStore";
 import { ViewModeSwitcher } from "../timeline/ViewModeSwitcher";
 import "./LivePerformanceView.css";
@@ -49,6 +54,9 @@ type LivePerformanceViewProps = {
   onViewModeChange: (mode: ViewMode) => void;
   onMarkerAction: (marker: SectionMarkerSummary) => void;
   onSongAction: (region: SongRegionSummary) => void;
+  /** Drag a setlist song to another position; `targetIndex` is its final
+   * position in start order (0 = first). */
+  onReorderSong?: (regionId: string, targetIndex: number) => void;
   /** Replace a song's lyrics and chords (`null` removes them). */
   onChartChange: (regionId: string, chart: SongChart | null) => Promise<void>;
   onToggleVamp: () => void;
@@ -148,6 +156,7 @@ function LivePerformanceViewComponent({
   onViewModeChange,
   onMarkerAction,
   onSongAction,
+  onReorderSong,
   onChartChange,
   onToggleVamp,
   onCancelPendingJump,
@@ -182,6 +191,16 @@ function LivePerformanceViewComponent({
   );
   const rowRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const songChipRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const setlistRef = useRef<HTMLElement | null>(null);
+  const sortedRegionIds = useMemo(
+    () => sortedRegions.map((region) => region.id),
+    [sortedRegions],
+  );
+  const songReorder = useSongReorder({
+    itemIds: sortedRegionIds,
+    containerRef: setlistRef,
+    onReorder: onReorderSong,
+  });
   const [chartOpen, setChartOpen] = useState(() => readChartOpen());
   const [chartExpanded, setChartExpanded] = useState(false);
   const toggleChartOpen = () => {
@@ -337,18 +356,30 @@ function LivePerformanceViewComponent({
             })}
           </small>
         </div>
-        <nav className="lt-live-region-buttons" aria-label={t("liveView.setlist")}>
+        <nav
+          className="lt-live-region-buttons"
+          aria-label={t("liveView.setlist")}
+          ref={(node) => { setlistRef.current = node; }}
+        >
           {sortedRegions.map((region, index) => (
             <div
-              className={`lt-live-region-row${region.id === selectedRegion?.id ? " is-selected" : ""}${region.id === currentRegion?.id ? " is-playing" : ""}${region.id === pendingMarkerId ? " is-queued" : ""}`}
+              className={`lt-live-region-row${region.id === selectedRegion?.id ? " is-selected" : ""}${region.id === currentRegion?.id ? " is-playing" : ""}${region.id === pendingMarkerId ? " is-queued" : ""}${songReorder.enabled ? " has-reorder" : ""}`}
               key={region.id}
               ref={(node) => { songChipRefs.current[region.id] = node; }}
+              {...{ [SONG_REORDER_ID_ATTRIBUTE]: region.id }}
             >
+              {songReorder.enabled ? (
+                <SongReorderHandle
+                  name={region.name}
+                  handleProps={songReorder.handleProps(region.id)}
+                />
+              ) : null}
               <button
                 type="button"
                 className="lt-live-region-select"
                 aria-label={t("liveView.selectSong", { name: region.name })}
                 onClick={() => setSelectedRegionId(region.id)}
+                {...songReorder.surfaceProps(region.id)}
               >
                 <span>{index + 1}</span>{region.name}
                 {appliedArrangementName(region) ? (
@@ -374,13 +405,14 @@ function LivePerformanceViewComponent({
         <div className="lt-live-header-tools lt-bottom-controls">
           <button
             type="button"
-            className={`lt-icon-button lt-live-chart-toggle${chartOpen ? " is-active" : ""}`}
+            className={`lt-live-chart-toggle${chartOpen ? " is-active" : ""}`}
             aria-pressed={chartOpen}
             aria-label={t("liveChart.toggle")}
             title={t("liveChart.toggle")}
             onClick={toggleChartOpen}
           >
             <span className="material-symbols-outlined" aria-hidden="true">lyrics</span>
+            <span>{t("liveChart.toggleLabel")}</span>
           </button>
         </div>
       </header>
@@ -547,6 +579,7 @@ function LivePerformanceViewComponent({
           positionSecondsRef={positionSecondsRef}
           expanded={chartExpanded}
           onToggleExpanded={toggleChartExpanded}
+          onClose={toggleChartOpen}
           onChartChange={onChartChange}
         />
       ) : null}

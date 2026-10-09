@@ -63,6 +63,8 @@ type LiveChartPanelProps = {
   positionSecondsRef: { readonly current: number };
   expanded: boolean;
   onToggleExpanded: () => void;
+  /** Hide the lyrics panel (the header button shows it again). */
+  onClose: () => void;
   onChartChange: (regionId: string, chart: SongChart | null) => Promise<void>;
 };
 
@@ -104,6 +106,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   positionSecondsRef,
   expanded,
   onToggleExpanded,
+  onClose,
   onChartChange,
 }: LiveChartPanelProps) {
   const { t } = useTranslation();
@@ -339,6 +342,15 @@ export const LiveChartPanel = memo(function LiveChartPanel({
             <span className="material-symbols-outlined" aria-hidden="true">
               {expanded ? "close_fullscreen" : "open_in_full"}
             </span>
+          </button>
+          <button
+            type="button"
+            className="lt-icon-button"
+            onClick={onClose}
+            aria-label={t("liveChart.hide")}
+            title={t("liveChart.hide")}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">close</span>
           </button>
         </div>
       </div>

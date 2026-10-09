@@ -8020,6 +8020,7 @@ export function TransportPanelContent() {
                       onViewModeChange={setViewMode}
                       onMarkerAction={(marker) => void runAction(() => handleMarkerPrimaryAction(marker))}
                       onSongAction={(region) => handleCompactPlaySong(region.id, region.name)}
+                      onReorderSong={(id, index) => runAction(async () => applyPlaybackSnapshot(await reorderSongRegion(id, index)))}
                       onChartChange={(regionId, chart) => runAction(async () => applyPlaybackSnapshot(await setSongRegionChart(regionId, chart)))}
                       onToggleVamp={() => void runAction(async () => {
                         await toggleTimelineVamp();

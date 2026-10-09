@@ -291,6 +291,12 @@ describe("LivePerformanceView", () => {
     expect(container.querySelector(".lt-live-chart")).toBeNull();
     expect(container.querySelector(".lt-live-view.has-chart")).toBeNull();
 
+    // And back, then closed from the panel's own button.
+    fireEvent.click(screen.getByRole("button", { name: "liveChart.toggle" }));
+    expect(container.querySelector(".lt-live-chart")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "liveChart.hide" }));
+    expect(container.querySelector(".lt-live-chart")).toBeNull();
+
     // Reopening the view keeps it hidden.
     unmount();
     const again = render(view());
@@ -298,8 +304,9 @@ describe("LivePerformanceView", () => {
     window.localStorage.clear();
   });
 
-  it("keeps the setlist in the header, in start order, with no reorder grips", () => {
-    render(
+  it("keeps the setlist in the header, in start order, reorderable by its grips", () => {
+    const onReorderSong = vi.fn();
+    const renderSetlist = (withReorder: boolean) => (
       <LivePerformanceView
         // Desordenadas a propósito: la setlist se pinta por inicio.
         song={{ ...song, regions: [song.regions[1], song.regions[0]] }}
@@ -311,6 +318,7 @@ describe("LivePerformanceView", () => {
         onViewModeChange={vi.fn()}
         onMarkerAction={vi.fn()}
         onSongAction={vi.fn()}
+        onReorderSong={withReorder ? onReorderSong : undefined}
         onChartChange={vi.fn()}
         onToggleVamp={vi.fn()}
         onCancelPendingJump={vi.fn()}
@@ -321,13 +329,21 @@ describe("LivePerformanceView", () => {
         onSongTransitionModeChange={vi.fn()}
         onVampModeChange={vi.fn()}
         onVampBarsChange={vi.fn()}
-      />,
+      />
     );
+    const { rerender } = render(renderSetlist(true));
 
     const header = screen.getByRole("banner");
     const songs = header.querySelectorAll(".lt-live-region-select");
     expect([...songs].map((button) => button.textContent)).toEqual(["1Primera", "2Segunda"]);
-    expect(screen.queryByRole("button", { name: "Reorder Primera" })).toBeNull();
     expect(header.querySelector("[role='progressbar']")).not.toBeNull();
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Reorder Primera" }), {
+      key: "ArrowDown",
+    });
+    expect(onReorderSong).toHaveBeenCalledWith("first", 1);
+
+    rerender(renderSetlist(false));
+    expect(screen.queryByRole("button", { name: "Reorder Primera" })).toBeNull();
   });
 });

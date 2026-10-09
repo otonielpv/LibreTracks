@@ -574,6 +574,17 @@
   flex: 0 0 auto;
 }
 
+.lt-live-header-tools .lt-live-chart-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2rem;
+}
+
+.lt-live-header-tools .lt-live-chart-toggle .material-symbols-outlined {
+  font-size: 17px;
+}
+
 .lt-live-region-buttons::-webkit-scrollbar {
   display: none;
 }

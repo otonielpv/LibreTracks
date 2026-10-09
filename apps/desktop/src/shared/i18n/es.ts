@@ -2068,6 +2068,8 @@ const es = {
     noPendingJump: "No hay ningun salto programado",
   },
   liveChart: {
+    toggleLabel: "Letra",
+    hide: "Ocultar letra y acordes",
     title: "Letra y acordes",
     toggle: "Mostrar u ocultar letra y acordes",
     upNext: "Siguiente sección",

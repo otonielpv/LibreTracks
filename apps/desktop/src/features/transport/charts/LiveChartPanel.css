@@ -294,16 +294,28 @@
   font: italic 500 0.85em/1.3 Inter, sans-serif;
 }
 
-/* Editor */
+/* Editor: same frame as the other modals (fixed header and buttons, a body
+   that scrolls), LibreTracks fields and buttons. */
 .lt-chart-editor {
   width: min(64rem, calc(100vw - 2rem));
+  max-width: none;
+  overflow: hidden;
 }
 
 .lt-chart-editor-body {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  align-items: start;
   gap: 1rem;
   min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.lt-chart-editor-actions {
+  flex: 0 0 auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgb(255 255 255 / 0.06);
 }
 
 .lt-chart-editor-text,
@@ -311,7 +323,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.55rem;
 }
 
 .lt-chart-editor-row {
@@ -321,22 +333,53 @@
   gap: 0.5rem;
 }
 
+.lt-chart-editor-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.24);
+  background: rgb(87 241 219 / 0.1);
+  color: #57f1db;
+  padding: 0.5rem 0.75rem;
+  font: 700 0.75rem/1 "Space Grotesk", sans-serif;
+  white-space: nowrap;
+}
+
+.lt-chart-editor-button .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.lt-chart-editor-button:hover:not(:disabled) {
+  border-color: rgb(87 241 219 / 0.45);
+}
+
+.lt-chart-editor-button:disabled {
+  opacity: 0.4;
+}
+
 .lt-chart-editor-text textarea {
   min-height: 22rem;
   resize: vertical;
-  padding: 0.6rem;
-  border: 1px solid rgb(255 255 255 / 0.12);
-  border-radius: 0.35rem;
-  color: #e9f1ee;
-  background: #0b0d0c;
-  font: 0.82rem/1.45 "JetBrains Mono", Consolas, monospace;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  border-radius: 2px;
+  color: #f3f0ef;
+  background: rgb(28 31 32 / 0.98);
+  font: 0.82rem/1.45 "JetBrains Mono", ui-monospace, monospace;
   white-space: pre;
+}
+
+.lt-chart-editor-text textarea:focus,
+.lt-chart-editor-links select:focus {
+  outline: none;
+  border-color: rgb(87 241 219 / 0.5);
 }
 
 .lt-chart-editor-text small,
 .lt-chart-editor-hint {
-  color: #7f928c;
-  font-size: 0.72rem;
+  color: rgb(229 226 225 / 0.55);
+  font: 500 0.72rem/1.4 "Space Grotesk", sans-serif;
 }
 
 .lt-chart-editor-links ul {
@@ -345,45 +388,52 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  overflow-y: auto;
+  gap: 0.4rem;
 }
 
 .lt-chart-editor-links li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) auto;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.45rem;
 }
 
 .lt-chart-editor-marker {
   overflow: hidden;
+  color: #f3f0ef;
+  font: 700 0.8rem/1.2 "Space Grotesk", sans-serif;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.82rem;
 }
 
+/* Same as `.lt-settings-field select`, a size smaller: one row per marker. */
 .lt-chart-editor-links select {
   min-width: 0;
-  min-height: 2rem;
+  width: 100%;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.45rem 0.6rem;
+  font: 600 0.8rem/1.2 "Space Grotesk", sans-serif;
 }
 
 .lt-chart-editor-times {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
-  padding: 0.15rem 0.4rem;
+  padding: 0.2rem 0.45rem;
   border: 1px solid rgb(255 93 108 / 0.35);
-  border-radius: 999px;
+  border-radius: 2px;
   color: #ffb3ba;
   background: transparent;
-  font-size: 0.68rem;
+  font: 700 0.66rem/1 "Space Grotesk", sans-serif;
   white-space: nowrap;
 }
 
 .lt-chart-editor-times.is-auto {
-  border-color: rgb(255 255 255 / 0.12);
-  color: #7f928c;
+  border-color: rgb(255 255 255 / 0.1);
+  color: rgb(229 226 225 / 0.55);
 }
 
 .lt-chart-editor-times .material-symbols-outlined {

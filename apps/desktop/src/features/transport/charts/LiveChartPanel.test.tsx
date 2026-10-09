@@ -72,6 +72,7 @@ function renderPanel(target: SongRegionSummary, position: { current: number }) {
       positionSecondsRef={position}
       expanded={false}
       onToggleExpanded={vi.fn()}
+      onClose={vi.fn()}
       onChartChange={onChartChange}
     />,
   );

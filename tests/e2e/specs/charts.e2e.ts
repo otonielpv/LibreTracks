@@ -135,6 +135,21 @@ describe("Lyrics and chords in the live view", () => {
     await browser.saveScreenshot(path.join(tmpdir(), "lt-e2e-live-chart.png"));
   });
 
+  it("opens the editor with its buttons below the scrolling form", async () => {
+    await (await $(".lt-live-chart button[aria-label='Editar letra y sincronía'], .lt-live-chart button[aria-label='Edit lyrics and sync']")).click();
+    const dialog = await $(".lt-chart-editor");
+    await dialog.waitForDisplayed();
+    const layout = await browser.execute(() => {
+      const body = document.querySelector(".lt-chart-editor-body")!.getBoundingClientRect();
+      const actions = document.querySelector(".lt-chart-editor-actions")!.getBoundingClientRect();
+      return { bodyBottom: body.bottom, actionsTop: actions.top };
+    });
+    expect(layout.actionsTop).toBeGreaterThanOrEqual(layout.bodyBottom - 1);
+    await browser.saveScreenshot(path.join(tmpdir(), "lt-e2e-chart-editor.png"));
+    await (await $(".lt-chart-editor-actions .lt-secondary-button:not(.lt-chart-editor-remove)")).click();
+    await dialog.waitForExist({ reverse: true });
+  });
+
   it("hides the lyrics panel from the header", async () => {
     await (await $(".lt-live-chart-toggle")).click();
     await browser.waitUntil(async () => !(await $(".lt-live-chart").isExisting()), {
