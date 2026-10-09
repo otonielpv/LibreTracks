@@ -842,6 +842,77 @@ export async function updateSongRegionKey(
   });
 }
 
+function bytesToBase64(bytes: Uint8Array): string {
+  // In slices: `String.fromCharCode(...bytes)` overflows the call stack on a
+  // few hundred KB.
+  let binary = "";
+  const slice = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += slice) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + slice));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+/** Copies a PDF into the session (`charts/`) and assigns it to the song.
+ * Replacing a chart drops its anchors. Base64 because Android's IPC cannot
+ * carry a raw byte body. */
+export async function setSongRegionChart(
+  regionId: string,
+  fileName: string,
+  bytes: Uint8Array,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("set_song_region_chart", {
+    regionId,
+    fileName,
+    bytesBase64: bytesToBase64(bytes),
+  });
+}
+
+export async function clearSongRegionChart(regionId: string): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("clear_song_region_chart", { regionId });
+}
+
+/** Sets where a section starts in the song chart. A repeat id (`id~n`) is
+ * stored on its original marker. */
+export async function setSongChartAnchor(
+  regionId: string,
+  markerId: string,
+  page: number,
+  y: number,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("set_song_chart_anchor", {
+    regionId,
+    markerId,
+    page,
+    y,
+  });
+}
+
+export async function removeSongChartAnchor(
+  regionId: string,
+  markerId: string,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("remove_song_chart_anchor", {
+    regionId,
+    markerId,
+  });
+}
+
+export async function readSongRegionChart(regionId: string): Promise<Uint8Array> {
+  return base64ToBytes(
+    await invokeCommand<string>("read_song_region_chart", { regionId }),
+  );
+}
+
 /**
  * Persists the width (in rem) of a song's column in the compact view.
  * Pure view state — it never affects playback. Pass `null` to restore the

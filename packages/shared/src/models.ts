@@ -281,10 +281,28 @@ export type SongRegionSummary = {
    * use the view's default. Pure view state persisted with the project so a
    * layout the user arranged survives reopening the session. */
   compactColumnWidthRem: number | null;
+  /** PDF chart of the song and where each section starts in it. Absent or
+   * `null` = no chart. Mirrors Rust `SongChart`. */
+  chart?: SongChart | null;
   /** Original captured and arrangements of the song (reorder, repeat and drop
    * sections). Absent when no original has been captured. Mirrors Rust
    * `SongStructureSummary`; the original snapshot itself never reaches the UI. */
   structure?: SongStructureSummary;
+};
+
+/** Where a section starts inside the song chart: page (0-based) and height
+ * within it, 0 = top, 1 = bottom. Anchored to the ORIGINAL marker id; a repeat
+ * `"{id}~{n}"` created by an arrangement resolves to the anchor of `id`. */
+export type ChartAnchor = {
+  markerId: string;
+  page: number;
+  y: number;
+};
+
+export type SongChart = {
+  /** Relative to the session folder (`charts/<name>.pdf`). */
+  filePath: string;
+  anchors: ChartAnchor[];
 };
 
 /** One section of a song's captured original, as the arrangement editor

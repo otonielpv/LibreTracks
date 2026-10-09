@@ -196,6 +196,7 @@ import { settlePerfCommits } from "./perf/perfMetrics";
 import { useRenderCounter } from "./perf/useRenderCounter";
 import { CompactView } from "./compact/CompactView";
 import { LivePerformanceView } from "./live/LivePerformanceView";
+import { ChartView } from "./charts/ChartView";
 import { BusyOverlay } from "./shell/BusyOverlay";
 import { MissingMidiWarningModal } from "./shell/MissingMidiWarningModal";
 import { StructureGuardDialog } from "./structure/StructureGuardDialog";
@@ -7374,7 +7375,7 @@ export function TransportPanelContent() {
                     mix={multiTrackMix}
                     audioRoutingOptions={audioRoutingOptions}
                   />
-                  {viewMode !== "live" ? (
+                  {viewMode !== "live" && viewMode !== "chart" ? (
                   <TimelineToolbar
                     snapEnabled={snapEnabled}
                     subdivisionPerBeat={timelineGrid.subdivisionPerBeat}
@@ -8034,6 +8035,16 @@ export function TransportPanelContent() {
                       onSongTransitionModeChange={handleSongTransitionModeChange}
                       onVampModeChange={handleVampModeChange}
                       onVampBarsChange={handleVampBarsChange}
+                    />
+                  ) : null}
+
+                  {viewMode === "chart" && song ? (
+                    <ChartView
+                      song={song}
+                      positionSecondsRef={displayPositionSecondsRef}
+                      onViewModeChange={setViewMode}
+                      onSnapshot={applyPlaybackSnapshot}
+                      run={runAction}
                     />
                   ) : null}
                 </section>

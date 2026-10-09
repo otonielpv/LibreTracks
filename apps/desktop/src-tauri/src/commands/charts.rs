@@ -9,13 +9,20 @@ use crate::state::DesktopState;
 /// Copia un PDF elegido por el usuario a la sesión y lo asigna a la canción.
 /// Los bytes vienen del selector del WebView (`<input type="file">`), el mismo
 /// en escritorio, Android e iOS.
+///
+/// En base64 y no como cuerpo binario: en Android el IPC va por el puente de
+/// cadenas y `InvokeBody::Raw` nunca llega (ver `stage_imported_audio_chunk`).
 #[tauri::command(async)]
 pub fn set_song_region_chart(
     region_id: String,
     file_name: String,
-    bytes: Vec<u8>,
+    bytes_base64: String,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(bytes_base64.as_bytes())
+        .map_err(|error| format!("set_song_region_chart: bad base64: {error}"))?;
     let mut session = state
         .session
         .lock()
@@ -71,14 +78,15 @@ pub fn remove_song_chart_anchor(
         .map_err(|error| error.to_string())
 }
 
-/// Los bytes del PDF de una canción, en binario (sin pasar por JSON). La ruta
-/// se resuelve bajo el lock y el fichero se lee FUERA de él: leer disco con la
-/// sesión bloqueada congela la UI.
+/// Los bytes del PDF de una canción, en base64 por la misma razón que al
+/// guardarlo. La ruta se resuelve bajo el lock y el fichero se lee FUERA de
+/// él: leer disco con la sesión bloqueada congela la UI.
 #[tauri::command(async)]
 pub fn read_song_region_chart(
     region_id: String,
     state: State<'_, DesktopState>,
-) -> Result<tauri::ipc::Response, String> {
+) -> Result<String, String> {
+    use base64::Engine as _;
     let path = {
         let session = state
             .session
@@ -89,6 +97,6 @@ pub fn read_song_region_chart(
             .map_err(|error| error.to_string())?
     };
     std::fs::read(&path)
-        .map(tauri::ipc::Response::new)
+        .map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes))
         .map_err(|error| format!("chart unreadable: {}: {error}", path.display()))
 }

@@ -1,0 +1,249 @@
+.lt-chart-view {
+  --lt-chart-surface: #151817;
+  --lt-chart-border: rgb(186 202 197 / 0.13);
+  --lt-chart-accent: #57f1db;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #e9f1ee;
+  background: #090b0a;
+}
+
+.lt-chart-header {
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 2.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  border-bottom: 1px solid var(--lt-chart-border);
+  background: #202020;
+}
+
+.lt-chart-heading {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.lt-chart-heading strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+}
+
+.lt-chart-current-section {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--lt-chart-anchor-color);
+  color: var(--lt-chart-anchor-color);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lt-chart-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.lt-chart-edit-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.35rem 0.75rem;
+  border-bottom: 1px solid var(--lt-chart-border);
+  background: var(--lt-chart-surface);
+}
+
+.lt-chart-hint {
+  flex: 0 0 auto;
+  color: #9fb0aa;
+  font-size: 0.8rem;
+}
+
+.lt-chart-section-chips {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.lt-chart-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  border: 1px solid rgb(186 202 197 / 0.25);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.lt-chart-chip .material-symbols-outlined {
+  font-size: 16px;
+  color: var(--lt-chart-anchor-color);
+}
+
+.lt-chart-chip.is-selected {
+  border-color: var(--lt-chart-anchor-color);
+  background: rgb(255 255 255 / 0.08);
+  box-shadow: inset 0 0 0 1px var(--lt-chart-anchor-color);
+}
+
+.lt-chart-text-button,
+.lt-chart-primary-button {
+  flex: 0 0 auto;
+  min-height: 2rem;
+  padding: 0 0.8rem;
+  border-radius: 0.4rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.lt-chart-text-button {
+  border: 1px solid rgb(186 202 197 / 0.25);
+  background: transparent;
+  color: inherit;
+}
+
+.lt-chart-primary-button {
+  border: 0;
+  background: var(--lt-chart-accent);
+  color: #062b25;
+  font-weight: 600;
+}
+
+.lt-chart-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lt-chart-empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1rem;
+  text-align: center;
+  color: #9fb0aa;
+}
+
+.lt-chart-empty > .material-symbols-outlined {
+  font-size: 40px;
+  color: #5d6b67;
+}
+
+.lt-chart-empty p {
+  margin: 0;
+  max-width: 28rem;
+}
+
+.lt-chart-scroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  background: #3a3d3c;
+}
+
+.lt-chart-content {
+  position: relative;
+  width: 100%;
+}
+
+.lt-chart-scroller[data-editing] .lt-chart-content {
+  cursor: crosshair;
+}
+
+.lt-chart-page {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: #fff;
+}
+
+.lt-chart-page-canvas {
+  display: block;
+}
+
+.lt-chart-anchor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px dashed var(--lt-chart-anchor-color);
+  pointer-events: none;
+}
+
+.lt-chart-anchor span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translateY(-50%);
+  padding: 0.05rem 0.45rem;
+  border-radius: 0 0.3rem 0.3rem 0;
+  background: var(--lt-chart-anchor-color);
+  color: #111;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.lt-chart-anchor.is-current {
+  border-top-style: solid;
+}
+
+/* Not editing, the current anchor is only a discreet guide on the page edge:
+   a full line across would cover the chords the musician is reading. */
+.lt-chart-scroller:not([data-editing]) .lt-chart-anchor.is-current {
+  right: auto;
+  width: 0.6rem;
+  border-top-width: 4px;
+}
+
+.lt-chart-scroller:not([data-editing]) .lt-chart-anchor.is-current span {
+  display: none;
+}
+
+/* Landscape phone: every pixel of height goes to the page. */
+@media (max-height: 500px) {
+  .lt-chart-header {
+    min-height: 2.2rem;
+    padding-block: 0.1rem;
+  }
+
+  .lt-chart-edit-bar {
+    padding-block: 0.2rem;
+  }
+
+  .lt-chart-hint {
+    display: none;
+  }
+}

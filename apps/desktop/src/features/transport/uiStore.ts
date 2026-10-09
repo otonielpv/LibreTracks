@@ -12,7 +12,7 @@ export type SongTransitionMode = "instant" | "fade_out";
 export type VampMode = "section" | "bars";
 
 /** Top-level view mode: linear DAW, song-grid Compact, or stage-ready Live. */
-export type ViewMode = "daw" | "compact" | "live";
+export type ViewMode = "daw" | "compact" | "live" | "chart";
 
 export const TIMELINE_DEFAULT_ZOOM_LEVEL = 7;
 export const TIMELINE_DEFAULT_TRACK_HEIGHT = 76;
@@ -40,8 +40,20 @@ const CLEAR_RULER_MARKERS = {
   selectedTimeSignatureMarkerId: null as string | null,
 };
 
+/** Order of the view-mode toggle (Tab / Shift+Tab). */
+const VIEW_MODE_CYCLE: readonly ViewMode[] = ["daw", "compact", "live", "chart"];
+
 function recordViewMode(viewMode: ViewMode): void {
+  // The telemetry backend only accepts the events its D1 CHECK constraint
+  // lists; the chart view needs a migration there before it can be counted.
+  if (viewMode === "chart") return;
   recordProductEvent(`feature_${viewMode}_view`);
+}
+
+function cycleViewMode(current: ViewMode, step: 1 | -1): ViewMode {
+  const index = VIEW_MODE_CYCLE.indexOf(current);
+  const length = VIEW_MODE_CYCLE.length;
+  return VIEW_MODE_CYCLE[(index + step + length) % length];
 }
 
 type TimelineUIState = {
@@ -152,24 +164,14 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     },
     toggleViewMode: () => {
       set((state) => {
-        const viewMode: ViewMode =
-          state.viewMode === "daw"
-            ? "compact"
-            : state.viewMode === "compact"
-              ? "live"
-              : "daw";
+        const viewMode = cycleViewMode(state.viewMode, 1);
         recordViewMode(viewMode);
         return { viewMode };
       });
     },
     toggleViewModeBackward: () => {
       set((state) => {
-        const viewMode: ViewMode =
-          state.viewMode === "daw"
-            ? "live"
-            : state.viewMode === "live"
-              ? "compact"
-              : "daw";
+        const viewMode = cycleViewMode(state.viewMode, -1);
         recordViewMode(viewMode);
         return { viewMode };
       });
