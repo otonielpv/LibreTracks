@@ -41,6 +41,8 @@ describe("colores de las marcas en la vista Live", () => {
   });
 
   it("no usa color-mix(), que Safari 15 no soporta", () => {
-    expect(css).not.toContain("color-mix(");
+    // Sin comentarios: el propio CSS explica por qué no lo usa.
+    const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(code).not.toContain("color-mix(");
   });
 });
