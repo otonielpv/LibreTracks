@@ -148,9 +148,55 @@ fn is_hidden(_entry: &std::fs::DirEntry) -> bool {
     false
 }
 
+/// Android: a folder of a picked SAF tree. The kind comes from the MIME type
+/// the provider reports, falling back to the name's extension.
+#[cfg(target_os = "android")]
+fn list_tree_entries(folder_uri: &str) -> Result<Vec<LibraryDirEntry>, String> {
+    let mut entries: Vec<LibraryDirEntry> =
+        crate::platform::android_library_tree::list_library_tree(folder_uri)?
+            .into_iter()
+            .filter(|child| !child.name.starts_with('.'))
+            .filter_map(|child| {
+                let kind = if child.mime == "vnd.android.document/directory" {
+                    LibraryDirEntryKind::Folder
+                } else if child.mime.starts_with("audio/") {
+                    LibraryDirEntryKind::Audio
+                } else if child.mime.starts_with("video/") {
+                    LibraryDirEntryKind::Video
+                } else {
+                    entry_kind(Path::new(&child.name), false)?
+                };
+                Some(LibraryDirEntry {
+                    name: child.name,
+                    path: child.uri,
+                    kind,
+                })
+            })
+            .collect();
+    entries.sort_by(compare_entries);
+    Ok(entries)
+}
+
 #[tauri::command(async)]
 pub fn list_library_dir(path: String) -> Result<Vec<LibraryDirEntry>, String> {
+    #[cfg(target_os = "android")]
+    if path.starts_with("content://") {
+        return list_tree_entries(&path);
+    }
     list_dir_entries(Path::new(&path))
+}
+
+/// The user removed a place. Android: give back its persistable permission,
+/// so they do not pile up (the system caps how many an app may hold).
+/// Elsewhere there is nothing to release.
+#[tauri::command(async)]
+pub fn forget_library_place(path: String) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    if path.starts_with("content://") {
+        return crate::platform::android_library_tree::release_library_tree(&path);
+    }
+    let _ = path;
+    Ok(())
 }
 
 /// Ask the user for a folder to add to the library. `None` = cancelled.
@@ -158,8 +204,9 @@ pub fn list_library_dir(path: String) -> Result<Vec<LibraryDirEntry>, String> {
 /// iOS: the same picker sessions use. It keeps a security-scoped bookmark of
 /// the folder and reopens access to it at every launch (IosFolderPickerPlugin
 /// `restoreBookmarks`), so the folder can be listed with `std::fs` and its
-/// audio imported by reference after a restart. Android has no folder picker
-/// here yet (plan next-release, step 12): it keeps the classic library.
+/// audio imported by reference after a restart. Android: the SAF folder
+/// picker, with a persistable permission on the whole tree (see
+/// platform/android_library_tree.rs).
 #[tauri::command]
 pub async fn pick_library_place(app: tauri::AppHandle) -> Result<Option<String>, String> {
     #[cfg(target_os = "ios")]
@@ -170,7 +217,11 @@ pub async fn pick_library_place(app: tauri::AppHandle) -> Result<Option<String>,
     #[cfg(target_os = "android")]
     {
         let _ = app;
-        Ok(None)
+        // The picker blocks until the user answers; keep it off the async
+        // runtime's threads.
+        tauri::async_runtime::spawn_blocking(crate::platform::android_library_tree::pick_library_tree)
+            .await
+            .map_err(|error| format!("folder picker worker failed: {error}"))?
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

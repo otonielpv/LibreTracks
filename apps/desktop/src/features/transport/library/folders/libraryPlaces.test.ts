@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { LibraryDirEntry } from "../../desktopApi";
+import { classifyDroppedPaths } from "../dragDrop";
 import { addPlace, audioPathsOf, filterEntries, placeLabel, removePlace } from "./libraryPlaces";
 
 const entry = (name: string, kind: LibraryDirEntry["kind"] = "audio"): LibraryDirEntry => ({
@@ -24,6 +25,22 @@ describe("library places", () => {
     expect(placeLabel("D:\\Music\\Stems\\")).toBe("Stems");
     expect(placeLabel("/Users/me/Stems")).toBe("Stems");
     expect(placeLabel("D:\\")).toBe("D:\\");
+  });
+
+  // Android hands over SAF tree URIs, not paths.
+  it("labels an Android folder by its decoded name", () => {
+    expect(
+      placeLabel(
+        "content://com.android.externalstorage.documents/tree/primary%3AMusic%2FStems",
+      ),
+    ).toBe("Stems");
+  });
+
+  it("recognises audio inside an Android tree by the document's extension", () => {
+    const uri =
+      "content://com.android.externalstorage.documents/tree/primary%3AMusic%2FStems" +
+      "/document/primary%3AMusic%2FStems%2FDrums.wav";
+    expect(classifyDroppedPaths([uri])).toEqual({ kind: "audio", audioPaths: [uri] });
   });
 
   it("searches without case or accents", () => {

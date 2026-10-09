@@ -43,6 +43,9 @@
     public void pickPersistableAudioDocuments();
     public void pickVideoDocuments();
     public void createDocument(java.lang.String);
+    public void pickLibraryTree();
+    public java.lang.String[] listLibraryTree(java.lang.String);
+    public void releaseLibraryTree(java.lang.String);
 }
 
 # MidiBridge: el transporte MIDI de Android (src/midi/transport/android.rs).

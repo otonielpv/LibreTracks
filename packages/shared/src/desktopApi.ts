@@ -1490,6 +1490,12 @@ export async function pickLibraryPlace(): Promise<string | null> {
   return invokeCommand<string | null>("pick_library_place");
 }
 
+/** A place was removed from the folder library. Android releases the
+ * persistable permission of its tree; elsewhere this does nothing. */
+export async function forgetLibraryPlace(path: string): Promise<void> {
+  return invokeCommand<void>("forget_library_place", { path });
+}
+
 export async function fadeOutAndStop(): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("fade_out_and_stop");
 }

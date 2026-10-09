@@ -1,4 +1,5 @@
 import type { LibraryDirEntry } from "../../desktopApi";
+import { libraryAssetFileName } from "../../helpers";
 
 /** Paths compare without case or trailing separators: "D:\\Stems\\" and
  * "d:/stems" are the same folder on Windows and macOS, the platforms that
@@ -23,8 +24,10 @@ export function removePlace(places: string[], path: string): string[] {
 }
 
 /** What a place is called in the list: its folder name ("Stems"), or the
- * whole path for a drive root ("D:\\"). */
+ * whole path for a drive root ("D:\\"). An Android tree URI is decoded the
+ * same way track names are. */
 export function placeLabel(path: string): string {
+  if (/^content:\/\//i.test(path)) return libraryAssetFileName(path);
   const trimmed = path.replace(/[\\/]+$/, "");
   const name = trimmed.split(/[\\/]/).at(-1);
   return name && !/^[A-Za-z]:$/.test(name) ? name : path;

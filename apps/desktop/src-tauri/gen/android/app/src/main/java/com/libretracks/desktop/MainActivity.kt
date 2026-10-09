@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
+import android.provider.DocumentsContract
 import android.util.Log
 import android.view.WindowManager
 import android.webkit.MimeTypeMap
@@ -300,6 +301,25 @@ class MainActivity : TauriActivity() {
       deliverCreatedDocument(uri)
       return
     }
+    if (requestCode == REQUEST_PICK_LIBRARY_TREE) {
+      val tree = if (resultCode == RESULT_OK) data?.data else null
+      var taken = ""
+      if (tree != null) {
+        // Sin permiso persistible el lugar dejaria de leerse al reiniciar:
+        // mejor no devolverlo.
+        try {
+          contentResolver.takePersistableUriPermission(
+            tree,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION
+          )
+          taken = tree.toString()
+        } catch (error: SecurityException) {
+          Log.w("LTTree", "sin permiso persistible para $tree: ${error.message}")
+        }
+      }
+      deliverLibraryTree(taken)
+      return
+    }
     if (requestCode != REQUEST_PICK_PERSISTABLE_AUDIO) {
       super.onActivityResult(requestCode, resultCode, data)
       return
@@ -339,6 +359,84 @@ class MainActivity : TauriActivity() {
   }
 
   private external fun nativeOnAudioDocumentsPicked(uris: Array<String>)
+
+  // ── Carpetas de la biblioteca (plan next-release, paso 12) ───────────────
+  //
+  // La biblioteca de carpetas guarda carpetas del usuario ("lugares") para
+  // navegar por ellas. Android no da rutas: da un ARBOL del Storage Access
+  // Framework. ACTION_OPEN_DOCUMENT_TREE con permiso persistible sobre el
+  // arbol: un permiso por lugar, que cubre la lectura de todo lo que cuelga de
+  // el (nunca uno por fichero: Android limita cuantos guarda una app).
+  fun pickLibraryTree() {
+    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+      addFlags(
+        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+          Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+      )
+    }
+    try {
+      startActivityForResult(intent, REQUEST_PICK_LIBRARY_TREE)
+    } catch (error: Exception) {
+      Log.e("LTTree", "no se pudo abrir el selector de carpetas", error)
+      deliverLibraryTree("")
+    }
+  }
+
+  /** Hijos de una carpeta de un arbol elegido, en plano:
+   *  [nombre, uri, mime, nombre, uri, mime, ...]. Un nivel, sin recorrer. */
+  fun listLibraryTree(folderUri: String): Array<String> {
+    val uri = Uri.parse(folderUri)
+    val out = mutableListOf<String>()
+    try {
+      // La raiz del arbol no lleva id de documento propio; una subcarpeta si.
+      val documentId =
+        if (DocumentsContract.isDocumentUri(this, uri)) DocumentsContract.getDocumentId(uri)
+        else DocumentsContract.getTreeDocumentId(uri)
+      val children = DocumentsContract.buildChildDocumentsUriUsingTree(uri, documentId)
+      val projection = arrayOf(
+        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+        DocumentsContract.Document.COLUMN_MIME_TYPE,
+      )
+      contentResolver.query(children, projection, null, null, null)?.use { cursor ->
+        while (cursor.moveToNext()) {
+          val childId = cursor.getString(0) ?: continue
+          val name = cursor.getString(1) ?: continue
+          out.add(name)
+          out.add(DocumentsContract.buildDocumentUriUsingTree(uri, childId).toString())
+          out.add(cursor.getString(2) ?: "")
+        }
+      }
+    } catch (error: Exception) {
+      // Rust lo trata como "carpeta no disponible" (se desmonto la microSD,
+      // se revoco el permiso...): mejor eso que tumbar la app.
+      Log.w("LTTree", "no se pudo listar $folderUri: ${error.message}")
+      return arrayOf("!error", error.message ?: "", "")
+    }
+    return out.toTypedArray()
+  }
+
+  /** Quitar un lugar: suelta su permiso persistible para no acumularlos. */
+  fun releaseLibraryTree(treeUri: String) {
+    try {
+      contentResolver.releasePersistableUriPermission(
+        Uri.parse(treeUri),
+        Intent.FLAG_GRANT_READ_URI_PERMISSION
+      )
+    } catch (error: Exception) {
+      Log.w("LTTree", "no se pudo soltar el permiso de $treeUri: ${error.message}")
+    }
+  }
+
+  private fun deliverLibraryTree(uri: String) {
+    try {
+      nativeOnLibraryTreePicked(uri)
+    } catch (error: UnsatisfiedLinkError) {
+      Log.e("LTTree", "libreria nativa no cargada", error)
+    }
+  }
+
+  private external fun nativeOnLibraryTreePicked(uri: String)
 
   override fun onDestroy() {
     storageVolumeReceiver?.let { receiver ->
@@ -381,6 +479,7 @@ class MainActivity : TauriActivity() {
   companion object {
     private const val REQUEST_PICK_PERSISTABLE_AUDIO = 0x4C54
     private const val REQUEST_CREATE_DOCUMENT = 0x4C55
+    private const val REQUEST_PICK_LIBRARY_TREE = 0x4C56
     // Tiene que coincidir con UNKNOWN_MIME en android_create_document.rs.
     private const val UNKNOWN_MIME = "!unknown-mime"
   }

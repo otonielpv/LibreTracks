@@ -1,17 +1,14 @@
 import { useTranslation } from "react-i18next";
 
-import { isAndroidApp } from "../../desktopApi";
 import { useLibrarySettings } from "./useLibrarySettings";
 
 /**
  * Settings → General: go back to the classic library (the session's imported
- * assets with virtual folders) for whoever prefers it. Not on Android, which
- * has only the classic library for now.
+ * assets with virtual folders) for whoever prefers it.
  */
 export function LibraryModeField() {
   const { t } = useTranslation();
   const { mode, setMode } = useLibrarySettings();
-  if (isAndroidApp) return null;
 
   return (
     <label className="lt-settings-toggle">

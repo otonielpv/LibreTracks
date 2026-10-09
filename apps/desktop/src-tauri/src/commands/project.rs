@@ -2300,11 +2300,7 @@ pub async fn import_audio_files_from_paths(
 
     let song_dir_for_prepare = song_dir.clone();
     let outcome = tauri::async_runtime::spawn_blocking(move || {
-        crate::state::import_audio_files_from_paths_to_library(
-            &song_dir,
-            current_song.as_ref(),
-            &files,
-        )
+        import_paths_or_tree_uris(&song_dir, current_song.as_ref(), &files)
     })
     .await
     .map_err(|error| crate::infra::error_log::log_command_err("import_audio_files_from_paths", error))?
@@ -2316,6 +2312,36 @@ pub async fn import_audio_files_from_paths(
     prepare_library_assets(&state, &song_dir_for_prepare, &outcome.assets);
 
     Ok(outcome)
+}
+
+/// Import by path. Android: the folder library hands over `content://` URIs of
+/// documents inside a picked SAF tree (there are no paths there); those go to
+/// the by-reference URI importer Android already uses, which reads them through
+/// the tree's persistable permission. Real paths take the usual road.
+fn import_paths_or_tree_uris(
+    song_dir: &std::path::Path,
+    song: Option<&libretracks_core::Song>,
+    files: &[AudioFilePathImportPayload],
+) -> Result<crate::models::LibraryImportResult, DesktopError> {
+    #[cfg(target_os = "android")]
+    {
+        let (uris, paths): (Vec<_>, Vec<_>) = files
+            .iter()
+            .cloned()
+            .partition(|file| file.source_path.starts_with("content://"));
+        if !uris.is_empty() {
+            let mut outcome =
+                crate::state::import_referenced_audio_uris_to_library(song_dir, song, &uris)?;
+            if !paths.is_empty() {
+                let more =
+                    crate::state::import_audio_files_from_paths_to_library(song_dir, song, &paths)?;
+                outcome.assets.extend(more.assets);
+                outcome.skipped.extend(more.skipped);
+            }
+            return Ok(outcome);
+        }
+    }
+    crate::state::import_audio_files_from_paths_to_library(song_dir, song, files)
 }
 
 /// Android: consume files staged by `stage_imported_audio_chunk` — they are

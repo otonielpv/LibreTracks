@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  forgetLibraryPlace,
   getSettings,
-  isAndroidApp,
   isTauriApp,
   listenToSettingsUpdated,
   saveSettings,
@@ -11,8 +11,7 @@ import {
 import { addPlace, removePlace } from "./libraryPlaces";
 
 export type LibrarySettings = {
-  /** Which library the sidebar shows. Android stays on the classic one until
-   * it can browse folders (plan next-release, step 12). */
+  /** Which library the sidebar shows. */
   mode: AppSettings["libraryMode"];
   places: string[];
   addPlace: (path: string) => Promise<void>;
@@ -72,10 +71,14 @@ export function useLibrarySettings(): LibrarySettings {
   }, []);
 
   return {
-    mode: isAndroidApp ? "classic" : mode,
+    mode,
     setMode: saveMode,
     places,
     addPlace: (path) => savePlaces((current) => addPlace(current, path)),
-    removePlace: (path) => savePlaces((current) => removePlace(current, path)),
+    removePlace: async (path) => {
+      await savePlaces((current) => removePlace(current, path));
+      // Android: give the tree's persistable permission back.
+      await forgetLibraryPlace(path).catch(() => undefined);
+    },
   };
 }
