@@ -41,6 +41,8 @@ import {
   sleep,
   tap,
   touch,
+  uiNodes,
+  uiTap,
   viewport,
   waitFor,
 } from "../lib/device.ts";
@@ -158,6 +160,31 @@ const inv = (cmd: string, args: Record<string, unknown> = {}) =>
     cmd,
     args,
   );
+
+/**
+ * Walks Android's folder picker (DocumentsUI) from the device's storage root
+ * down `dirs` and grants access to the last one.
+ */
+async function pickSafFolder(dirs: string[]) {
+  await sleep(2500);
+  const has = (label: string) => uiNodes().some((n) => n.text === label || n.desc === label);
+  if (!has(dirs[0])) {
+    await uiTap("Show roots");
+    const root = uiNodes().find((n) => /sdk_gphone|Android SDK|Internal storage|Almacenamiento interno/i.test(n.text));
+    if (!root) throw new Error("saf: no storage root in the drawer");
+    adb(`shell input tap ${Math.round(root.x)} ${Math.round(root.y)}`);
+    await sleep(1500);
+  }
+  for (const dir of dirs) await uiTap(dir);
+  // "Use this folder" / "Usar esta carpeta", then the access prompt.
+  const use = uiNodes().find((n) => /use this folder|usar esta carpeta/i.test(n.text));
+  if (!use) throw new Error("saf: no 'use this folder' button");
+  adb(`shell input tap ${Math.round(use.x)} ${Math.round(use.y)}`);
+  await sleep(1500);
+  const allow = uiNodes().find((n) => /^(allow|permitir)$/i.test(n.text));
+  if (allow) adb(`shell input tap ${Math.round(allow.x)} ${Math.round(allow.y)}`);
+  await sleep(2000);
+}
 
 const steps: Record<string, () => Promise<void>> = {
   /** Spanish UI and no telemetry prompt, through the app's own settings. */
@@ -307,7 +334,41 @@ const steps: Record<string, () => Promise<void>> = {
   async panels() {
     await tap(tour("side-nav-library"));
     await sleep(900);
-    await shot("library");
+    // "Your folders" needs a folder picked through Android's own picker
+    // (SAF). Push one first: adb push <stems> "/sdcard/Music/Multitracks/<song>/".
+    if (!(await rectOf(".lt-folder-library-place"))) {
+      await tap(".lt-library-panel-header .lt-folder-library-add");
+      await pickSafFolder(["Music", "Multitracks"]);
+      await waitFor(".lt-folder-library-place", { timeout: 15_000 });
+    }
+    if (!(await rectOf(".lt-folder-library-place[aria-expanded=true]"))) {
+      await tap(".lt-folder-library-place-toggle");
+      await sleep(1500);
+    }
+    if (!(await rectOf(".lt-folder-library-row.is-file"))) {
+      await tap(".lt-folder-library-row.is-folder", { nth: 0 });
+      await sleep(1500);
+    }
+    await tap(".lt-folder-library-row.is-file", { nth: 0 });
+    await tap(".lt-folder-library-row.is-file", { nth: 1 });
+    await sleep(600);
+    await annotatedShot("library", [
+      { selector: ".lt-library-panel-header .lt-folder-library-add", n: 1 },
+      { selector: ".lt-folder-library-search", n: 2 },
+      { selector: ".lt-folder-library-row.is-place", n: 3 },
+      { selector: ".lt-folder-library-row.is-folder .lt-folder-library-icon", nth: 0, n: 4, pad: 2 },
+      { selector: ".lt-folder-library-row.is-file.is-selected", nth: 0, n: 5 },
+      { selector: ".lt-folder-library-actionbar .lt-folder-library-add", n: 6, badge: "corner" },
+      // At the bottom edge of the screen: a badge below it would be cut off.
+      { selector: ".lt-folder-library-session-toggle", n: 7, badge: "corner" },
+    ], { crop: { selector: ".lt-folder-library", margin: 0 } });
+    await tap(".lt-folder-library-actionbar .lt-folder-library-icon");
+    // The accordion: "In this session" open takes the whole library.
+    await tap(".lt-folder-library-session-toggle");
+    await sleep(1200);
+    await shot("library-session", { selector: ".lt-folder-library", margin: 0 });
+    await tap(".lt-folder-library-session-toggle");
+    await sleep(600);
     // The library is a docked panel, not an overlay: Back would leave the
     // session instead of closing it. Its own button toggles it shut.
     await tap(tour("side-nav-library"));
