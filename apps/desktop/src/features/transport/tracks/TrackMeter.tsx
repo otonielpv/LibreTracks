@@ -14,6 +14,7 @@ import {
   stepMeterDb,
 } from "@libretracks/shared/meterBallistics";
 
+import { useSongStore } from "../songStore";
 import { useTransportStore, type TrackMeterState } from "../store";
 
 const EMPTY_METER: TrackMeterState = {
@@ -39,8 +40,15 @@ type ChannelElements = {
 
 /** Raw peaks per channel, left then right. Each side gets its own bar; a mono
  * source panned centre arrives as two equal peaks. Until stereo meters, the
- * header showed `Math.max` of both and hid where the signal sat. */
-export function channelPeaks(meter: TrackMeterState): [number, number] {
+ * header showed `Math.max` of both and hid where the signal sat.
+ *
+ * A track converted to mono shows ONE bar, like Ableton: its channels carry
+ * the same signal, so the bar takes the louder side. */
+export function channelPeaks(meter: TrackMeterState, mono = false): [number, number] {
+  if (mono) {
+    const peak = Math.max(meter.leftPeak, meter.rightPeak);
+    return [peak, peak];
+  }
   return [meter.leftPeak, meter.rightPeak];
 }
 
@@ -157,6 +165,12 @@ type TrackMeterProps = {
 };
 
 function TrackMeterComponent({ trackId }: TrackMeterProps) {
+  // «Convertir a mono» de la pista: un solo canal en el medidor.
+  const mono = useSongStore(
+    (state) => state.song?.tracks.find((track) => track.id === trackId)?.monoDownmix === true,
+  );
+  const monoRef = useRef(mono);
+  monoRef.current = mono;
   // Styles are written through refs, never setState: this animates at 60 fps
   // for every visible track while playing.
   const elementsRef = useRef<ChannelElements[]>(
@@ -220,7 +234,7 @@ function TrackMeterComponent({ trackId }: TrackMeterProps) {
     };
 
     const updateMeterTarget = (meter: TrackMeterState | undefined) => {
-      const peaks = channelPeaks(meter ?? EMPTY_METER);
+      const peaks = channelPeaks(meter ?? EMPTY_METER, monoRef.current);
       const now = performance.now();
       animation.channels.forEach((channel, index) => {
         setChannelTarget(channel, peaks[index], now);
@@ -230,6 +244,7 @@ function TrackMeterComponent({ trackId }: TrackMeterProps) {
 
     const currentPeaks = channelPeaks(
       useTransportStore.getState().meters[trackId] ?? EMPTY_METER,
+      monoRef.current,
     );
     animation.channels.forEach((channel, index) => {
       channel.currentDb = peakToMeterDb(currentPeaks[index]);
@@ -258,13 +273,14 @@ function TrackMeterComponent({ trackId }: TrackMeterProps) {
       animation.channels = Array.from({ length: CHANNEL_COUNT }, idleChannel);
       applyAll(0);
     };
-  }, [trackId]);
+    // Re-seat the bars when the track switches between mono and stereo.
+  }, [trackId, mono]);
 
   const idleMeterStyle = meterStyleFromDb(peakToMeterDb(0));
 
   return (
-    <div className="lt-track-meter" aria-hidden="true">
-      {elementsRef.current.map((channelElements, index) => (
+    <div className={`lt-track-meter${mono ? " is-mono" : ""}`} aria-hidden="true">
+      {elementsRef.current.slice(0, mono ? 1 : CHANNEL_COUNT).map((channelElements, index) => (
         <div className="lt-track-meter-channel" key={index}>
           <div
             className="lt-track-meter-bar"

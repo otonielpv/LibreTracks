@@ -1,6 +1,7 @@
 import { act, render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { useSongStore } from "../songStore";
 import { useTransportStore } from "../store";
 import { TrackMeter, channelPeaks } from "./TrackMeter";
 
@@ -22,6 +23,19 @@ describe("channelPeaks", () => {
 describe("TrackMeter", () => {
   beforeEach(() => {
     useTransportStore.setState({ meters: {} });
+    useSongStore.setState({ song: null });
+  });
+
+  // «Convertir a mono»: one bar, back to two when the track returns to stereo.
+  it("shows one channel for a track converted to mono", () => {
+    const songWith = (monoDownmix: boolean) =>
+      ({ tracks: [{ id: "drums", monoDownmix }] }) as never;
+    useSongStore.setState({ song: songWith(true) });
+    const { container } = render(<TrackMeter trackId="drums" />);
+    expect(channels(container)).toHaveLength(1);
+
+    act(() => useSongStore.setState({ song: songWith(false) }));
+    expect(channels(container)).toHaveLength(2);
   });
 
   it("draws one bar per channel", () => {
