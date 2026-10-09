@@ -49,6 +49,7 @@ import { describeAutomationCue } from "./describeAutomationCue";
 import { useAutomationCueHotspots } from "./useAutomationCueHotspots";
 import { useFollowerX } from "./useFollowerX";
 import { regionHotspotBounds } from "./regionHotspotBounds";
+import { SongFadeHandles } from "../songs/SongFadeHandles";
 import { useRegionDrag } from "./useRegionDrag";
 import { MidiClipHotspots, MidiDropGuide } from "../midi/MidiClipHotspots";
 import { VideoClipHotspots } from "../video/VideoClipHotspots";
@@ -939,6 +940,7 @@ export function TimelineCanvasPane({
                     onPointerUp={endRegionResize}
                     onPointerCancel={endRegionResize}
                   />
+                  <SongFadeHandles region={region} pixelsPerSecond={pixelsPerSecond} />
                 </button>
               );
             })}

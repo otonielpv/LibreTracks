@@ -1,0 +1,56 @@
+/* Song fade handles on the ruler band (SongFadeHandles.tsx). Like the corners
+   of a clip in Ableton: a small square at each top corner, dragged inwards. */
+
+.lt-song-fade-ramps {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.lt-song-fade-ramps polygon {
+  fill: rgb(0 0 0 / 0.38);
+  stroke: rgb(255 226 171 / 0.75);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.lt-song-fade-handle {
+  position: absolute;
+  top: 0;
+  z-index: 4;
+  width: 8px;
+  height: 8px;
+  /* Inset from the edge so it does not sit on the resize handle (6px). */
+  margin: 0 6px;
+  border-radius: 1px;
+  background: #ffe2ab;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.55);
+  cursor: ew-resize;
+  opacity: 0;
+  transition: opacity 80ms ease-out;
+  touch-action: none;
+}
+
+.lt-song-fade-handle.is-in {
+  transform: translateX(-4px);
+}
+
+.lt-song-fade-handle.is-out {
+  transform: translateX(4px);
+}
+
+/* Visible on hover, on the selected song, or when there is a fade to adjust. */
+.lt-region-hotspot:hover .lt-song-fade-handle,
+.lt-region-hotspot.is-selected .lt-song-fade-handle,
+.lt-song-fade-handle.has-fade {
+  opacity: 1;
+}
+
+/* Touch: a finger needs more than 8px. */
+.lt-mobile .lt-song-fade-handle {
+  width: 14px;
+  height: 14px;
+}
