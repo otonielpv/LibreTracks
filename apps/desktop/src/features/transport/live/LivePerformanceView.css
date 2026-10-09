@@ -273,7 +273,7 @@
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
   /* Keep the matrix geometry stable when AVISO/AHORA/countdown lines change.
      Compact layouts restore automatic rows below so content can still grow. */
-  grid-auto-rows: 3.8rem;
+  grid-auto-rows: minmax(3.8rem, auto);
   align-content: start;
   gap: 0.42rem;
   padding: 0.3rem 0.55rem 0.55rem;
@@ -377,11 +377,16 @@
 .lt-live-cue-name-line {
   min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.3rem;
 }
 
+/* The name comes first: in a narrow column the badges (now, next in…,
+   queued) drop under it instead of squeezing it to "V…". */
 .lt-live-cue-name-line strong {
+  flex: 0 1 auto;
+  min-width: min(100%, 6rem);
   overflow: hidden;
   font: 720 0.76rem/1.1 Inter, sans-serif;
   text-overflow: ellipsis;
