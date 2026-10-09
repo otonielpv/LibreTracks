@@ -75,19 +75,21 @@ using *Tap*.
    the last.
 2. **Stop** (Shift+Space): stops playback and takes the cursor back to the
    start of the session.
-3. **Play** (Space) from the cursor position.
-4. **Pause** (Space): stops playback and leaves the cursor where it is, to
+3. **Fade out and stop**: fades out the song that is playing, then stops.
+   See [below](#fade-out-and-stop).
+4. **Play** (Space) from the cursor position.
+5. **Pause** (Space): stops playback and leaves the cursor where it is, to
    carry on from there.
-5. **Click**: turns the metronome on or off.
-6. **Metronome settings**: output, volume, sounds, accent and subdivision.
+6. **Click**: turns the metronome on or off.
+7. **Metronome settings**: output, volume, sounds, accent and subdivision.
    See [Audio outputs and metronome](/docs/audio-routing-metronome/).
-7. **Guide**: turns the voice guide on or off; it announces each section
+8. **Guide**: turns the voice guide on or off; it announces each section
    before it arrives.
-8. **Voice guide settings**. See [Voice guide](/docs/voice-guide/).
-9. **Pads**: turns the ambient pad on or off.
-10. **Pads settings**: key, volume, fades and your own pads. See
+9. **Voice guide settings**. See [Voice guide](/docs/voice-guide/).
+10. **Pads**: turns the ambient pad on or off.
+11. **Pads settings**: key, volume, fades and your own pads. See
     [Ambient pads](/docs/ambient-pads/).
-11. **Next**: jumps to the next song in the session. When the jump happens
+12. **Next**: jumps to the next song in the session. When the jump happens
     (immediately, at the end of the song, after a few bars…) is set by the
     *Song Jump* setting in the toolbar. From the last song it goes back to the
     first.
@@ -102,6 +104,25 @@ panel without going to Settings:
   poster="/guide/desktop-en/metronome-settings.webp"
   caption="The arrow next to “Click” opens the metronome settings."
 />
+
+### Fade out and stop
+
+To end a song live without a hard cut. While it plays, press **Fade out and
+stop**: the song fades out and, when the fade ends, the transport stops. The
+button stays **amber** while the fade lasts.
+
+- **Pressing it again** during the fade stops at once: it is the emergency
+  exit.
+- Only the **tracks** fade. The click and the voice guide stay at their level
+  until it stops.
+- Pressing **Stop** or **Pause** during the fade cancels it; when you play
+  again, the song is back at its normal level.
+- The length is set in
+  [Settings › General](/docs/interface/settings/#general) (5 seconds by
+  default).
+- It can also be triggered by a **keyboard shortcut** (unassigned out of the
+  box: give it one in Settings › Shortcuts), a **MIDI pedal** (MIDI learn) and
+  the [Remote](/docs/remote-control/).
 
 ## Readouts and resource meter
 

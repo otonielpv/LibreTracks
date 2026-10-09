@@ -14,8 +14,8 @@ without a session open.
 
 <Legend>
 
-1. **Library**: opens or closes the panel with the session's audio. See
-   [below](#the-library).
+1. **Library**: opens or closes the panel with your folders and the session's
+   audio. See [below](#the-library).
 2. **Remote**: shows the QR code and the address to control LibreTracks from a
    phone or tablet. See [below](#remote).
 3. **Settings**: audio, interface, video, shortcuts, MIDI and diagnostics. See
@@ -26,9 +26,46 @@ without a session open.
 
 ## The Library
 
-The Library keeps all the audio you have brought into the session, whether it
-is used on the timeline or not. From here you import it, sort it into folders
-and drag it onto the tracks.
+The Library has two parts: at the top, **your folders on disk**, to find audio
+and bring it to the timeline; below them, **In this session**, with all the
+audio you have already brought into the session.
+
+### Your folders
+
+![The folder library](/guide/desktop-en/library-folders.png)
+
+<Legend>
+
+1. **Add folder**: pick a folder on your disk (your multitracks, your
+   samples…). It stays saved for all your sessions.
+2. **Search**: filters by name what you have expanded, ignoring case and
+   accents (*bateria* finds *Batería*).
+3. **A folder you added**. Click to expand it. On hover, **Refresh** (reads it
+   again, if you added files) and the **X**, which removes it from the Library
+   without deleting anything on disk.
+4. **In this session**: the audio already in the session. See
+   [below](#in-this-session).
+
+</Legend>
+
+- **Drag an audio file** onto the timeline to use it: it is imported and placed
+  where you drop it. With <kbd>Ctrl</kbd>+click you pick several and drag them
+  together.
+- **Drag a folder** onto the timeline and a song is created with its name, each
+  audio file on its own track. See
+  [A whole folder, as a song](/docs/tasks/library/#a-whole-folder-as-a-song).
+- Folders are read **when you expand them**, one at a time, so the size of the
+  disk does not matter.
+
+If you prefer the old Library, with only the session's audio, turn on **Use
+the classic library** in
+[Settings › General](/docs/interface/settings/#general).
+
+### In this session
+
+Here is all the audio you have brought into the session, whether it is used on
+the timeline or not. From here you import it, sort it into virtual folders and
+drag it onto the tracks. Click **In this session** to collapse or expand it.
 
 ![The Library panel](/guide/desktop-en/library-panel.png)
 
@@ -54,6 +91,19 @@ drag them together. <kbd>Del</kbd> removes the selection from the Library.
 Importing does not copy the audio (the session uses it from where it is), and
 removing it from the Library **does not delete your original file**. More in
 [Library and audio](/docs/tasks/library/).
+
+### Organise by song
+
+![The "Organise by song" button](/guide/desktop-en/library-organize.png)
+
+The wand button on **Unfiled** (1) tidies up the loose audio in one go: it
+creates **one folder per song**, named after it, and moves into it the audio
+that song uses on the timeline.
+
+- If the folder already exists, it is reused.
+- Audio used by no song, or by several (a shared click, for example), stays in
+  *Unfiled*, and the message tells you how many.
+- It only shows when there is audio in *Unfiled*.
 
 ### Right-click on a file
 

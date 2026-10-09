@@ -1308,10 +1308,13 @@ describe("user guide screenshots", function () {
         cmd,
         args,
       );
+    // The stored locale may not be the one this run shows (the frontend
+    // reads it once, at load), and saving settings applies it: pin it.
     const original = (await invoke("get_settings")) as Record<string, unknown>;
+    const locale = UI_LANG === "en" ? "en" : original.locale;
     try {
       await invoke("save_settings", {
-        settings: { ...original, libraryMode: "folders", libraryPlaces: [path.join(workDir, "audio")] },
+        settings: { ...original, locale, libraryMode: "folders", libraryPlaces: [path.join(workDir, "audio")] },
       });
       await browser.pause(800);
       await AppPage.openLibrary();
@@ -1364,7 +1367,7 @@ describe("user guide screenshots", function () {
       }
       await AppPage.resetShell();
     } finally {
-      await invoke("save_settings", { settings: original });
+      await invoke("save_settings", { settings: { ...original, locale } });
     }
 
     // Song fades: give the first song a fade in and out, then show its band

@@ -78,8 +78,11 @@ They can all be changed in **Settings › Shortcuts** (see
 | <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>-</kbd> / <kbd>Ctrl</kbd>+<kbd>0</kbd> | Enlarge, shrink or reset the interface |
 | <kbd>B</kbd> | Video: instant black |
 
-The video actions *fade to black*, *idle screen* and *turn output on* have no
-default key; assign them yourself if you use them.
+**Fade out and stop** (fade the song out and stop; see
+[Fade out and stop](/docs/interface/main-screen/#fade-out-and-stop)) and the
+video actions *fade to black*, *idle screen* and *turn output on* have no
+default key, so they don't fire by accident on stage; assign them yourself if
+you use them.
 
 If you schedule the wrong jump, press <kbd>Esc</kbd> straight away.
 

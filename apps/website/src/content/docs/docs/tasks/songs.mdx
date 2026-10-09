@@ -5,6 +5,7 @@ sidebar:
   order: 2
 ---
 
+import Legend from "../../../../components/guide/Legend.astro";
 import Clip from "../../../../components/guide/Clip.astro";
 
 A LibreTracks session is a **setlist**: several songs one after another on the
@@ -99,6 +100,39 @@ its menu (right-click):
   transposing changes the speed, so the song gets longer or shorter, and the
   following ones shift so they don't overlap.
 - **Change Original BPM**: the tempo the audio was recorded at, used by warp.
+- **Song Fades ▸**: fade in and fade out. See
+  [below](#fade-in-and-fade-out).
+
+## Fade in and fade out
+
+Each song can **come in and go out with a fade** without putting one on every
+clip. It only affects the tracks: the click and the voice guide play at their
+level from the first bar.
+
+![A song's fade corners in the ruler](/guide/desktop-en/song-fade-handles.png)
+
+<Legend>
+
+1. **Fade in**: drag the top-left corner of the song to the right. The ramp is
+   drawn over the song's bar.
+2. **Fade out**: drag the top-right corner to the left.
+
+</Legend>
+
+The corners show when you hover over the song, when it is selected or when it
+already has a fade. If you'd rather type the seconds, right-click the song ›
+**Song Fades**:
+
+![The "Song Fades" menu](/guide/desktop-en/menu-song-fades.png)
+
+- The fade goes **by position**, like a clip's: if you jump into the middle of
+  the song it plays at full level; if you start from its beginning, it comes in
+  with the fade.
+- **0** removes the fade. Neither can be longer than the song.
+- It travels with the song when you export it (`.ltpkg`) and sounds the same
+  when you [render](#exporting-rendering-and-deleting).
+- To end a song **live** at any moment, use
+  [Fade out and stop](/docs/interface/main-screen/#fade-out-and-stop).
 
 ## Reordering the setlist
 
@@ -106,7 +140,9 @@ its menu (right-click):
 - In **Compact View** and **Live View**, drag the song by its **handle** (the
   six dots on its left) to its new place. While you drag you see where it will
   land. With the handle selected, the arrow keys move it one place at a time.
-  The song moves whole, with its audio, markers and tempo, and the gaps
+  On a phone, **hold your finger** on the handle for a moment before dragging
+  (you'll feel a vibration where the phone has one): that way a quick swipe
+  doesn't reorder by mistake. The song moves whole, with its audio, markers and tempo, and the gaps
   between songs are kept.
 
 ## Going from one song to the next live

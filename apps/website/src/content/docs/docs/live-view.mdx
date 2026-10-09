@@ -39,11 +39,11 @@ These are the same settings as [Live control](/docs/live-control-flow/): changin
 
 ### Live markers
 
-Every marker in the selected song is a large numbered button, in the colour you gave it on the timeline, with its time from the start of the song. Tapping it schedules the jump using the configured mode. On top of that:
+Every marker in the selected song is a large numbered button, **tinted with the marker's colour** (the one you see on the timeline), so you tell a chorus from a verse at a glance, with its time from the start of the song. Cues get a dimmer tint and a dashed border. Tapping it schedules the jump using the configured mode. On top of that:
 
-- The marker currently playing is highlighted as `Now` and carries its own progress bar.
+- The marker currently playing is highlighted as `Now`, with a turquoise border, and carries its own progress bar.
 - The next one shows a `Next in m:ss` countdown.
-- A jump already scheduled is marked `Queued`, and `Cancel jump` calls it off as long as it hasn't fired.
+- A jump already scheduled is marked `Queued`, with an amber border, and `Cancel jump` calls it off as long as it hasn't fired.
 - Cue markers appear as `Cue` next to the section they fall in, so you read the instruction without hunting for it.
 - With the vamp active, the marker being repeated carries its own `VAMP` badge.
 - The list scrolls itself to keep the playing marker in view.
@@ -55,7 +55,13 @@ The setlist column shows the current song with its progress and the time remaini
 To change the order of the setlist, drag a song by its **handle** (the six
 dots on its left): the others move aside to show you where it will land. The
 song moves whole, with its audio, markers and tempo. It is the only thing you
-can edit from Live View.
+can edit from Live View. On a phone, **hold your finger** on the handle for a
+moment before dragging: that way it doesn't clash with the system gesture for
+switching apps (on the iPhone the setlist also sits above the home bar).
+
+To end the playing song with a fade, use **Fade out and stop** in the
+transport bar at the top. See
+[Fade out and stop](/docs/interface/main-screen/#fade-out-and-stop).
 
 ## On Phone And Tablet
 

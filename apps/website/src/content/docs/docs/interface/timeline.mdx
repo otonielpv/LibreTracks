@@ -55,7 +55,8 @@ elapsed time. Click the ruler, away from the markers, to move the cursor.
    track changes key when you transpose. Turn it off on the click or the guide
    so they do not go out of tune. See [the T button](/docs/pitch-and-warp/).
 7. **Pan**: left/right. *C* is center; double-click to go back to the center.
-8. Track level **meter**.
+8. Track level **meter**, with one bar per channel: left and right. See
+   [below](#the-meter).
 
 </Legend>
 
@@ -63,6 +64,19 @@ With several tracks selected (<kbd>Ctrl</kbd>+click or <kbd>Shift</kbd>+click on
 the headers), touching any of these controls changes it on all of them. Volume
 and pan move by the same proportion on all of them, so the balance of the mix
 is kept.
+
+### The meter
+
+![A track's stereo meter while it plays](/guide/desktop-en/track-meter-stereo.png)
+
+The meter has **two bars**, one per channel, so you see at a glance where the
+track sits: with the pan to the left, the left bar rises higher. If the signal
+clips, the top of **the channel that clips** lights up red, and a small white
+line holds the highest peak for a moment.
+
+If you make the track **mono** (right-click the track › *Sum to mono*), the
+meter becomes **a single bar**, and goes back to two with *Back to stereo*. The
+same goes for the mixer of the [Compact View](/docs/compact-view/).
 
 To change a track's height, drag its bottom edge. With <kbd>Alt</kbd> you change
 all of them at once, and a double-click goes back to the normal height.
@@ -95,6 +109,9 @@ The folder's **M**, **S** and volume controls affect all of its tracks.
   songs at the cursor position.
 - **Change Original BPM**: the tempo the audio was recorded at, used by
   [warp](/docs/pitch-and-warp/).
+- **Song Fades ▸**: the song's fade in and fade out, in seconds. You can also
+  set them by dragging the corners of the song in the ruler. See
+  [Fade in and fade out](/docs/tasks/songs/#fade-in-and-fade-out).
 - **Export Song**: saves it as an `.ltpkg` to take to another session.
 - **Render audio…**: exports its mix to WAV, whole or track by track.
 - **Delete Song** (<kbd>Del</kbd>).
