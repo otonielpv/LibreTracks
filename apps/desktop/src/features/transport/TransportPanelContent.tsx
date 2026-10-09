@@ -466,6 +466,7 @@ import { useDragListeners } from "./hooks/useDragListeners";
 import { usePlaybackUiDiagnostics } from "./hooks/usePlaybackUiDiagnostics";
 import { useSongViewLoader } from "./hooks/useSongViewLoader";
 import { useAutomationMixSync } from "./hooks/useAutomationMixSync";
+import { cameraXAfterStoppedJump } from "./timeline/revealPlayheadOnJump";
 import { useWindowTitle } from "./hooks/useWindowTitle";
 import { useSongStore } from "./songStore";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
@@ -3934,6 +3935,20 @@ export function TransportPanelContent() {
     setStatus,
     t,
     handleSelectedRegionTransposeChange,
+    revealPlayheadAfterStoppedJump: (positionSeconds) => {
+      const nextCameraX = cameraXAfterStoppedJump({
+        followEnabled: followPlayheadEnabledRef.current,
+        viewMode: viewModeRef.current,
+        playheadSeconds: positionSeconds,
+        cameraX: cameraXRef.current,
+        pixelsPerSecond: livePixelsPerSecondRef.current,
+        viewportWidth: laneViewportWidthRef.current,
+        durationSeconds: songRef.current?.durationSeconds ?? 0,
+        contentEndSeconds: timelineContentEndSecondsRef.current,
+        followMode: appSettingsRef.current.timelinePlayheadFollowMode,
+      });
+      if (nextCameraX !== null) updateCameraX(nextCameraX);
+    },
   });
 
   // Per-song play button in the compact view: routes through the same

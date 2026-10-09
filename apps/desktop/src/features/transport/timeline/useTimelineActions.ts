@@ -20,6 +20,9 @@ type UseTimelineActionsProps = {
   setStatus: (status: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
   handleSelectedRegionTransposeChange: (semitones: number) => void;
+  /** Bring the view to the playhead after a jump made while stopped (follow
+   * mode only runs from the playback loop). */
+  revealPlayheadAfterStoppedJump?: (positionSeconds: number) => void;
 };
 
 export function useTimelineActions({
@@ -34,6 +37,7 @@ export function useTimelineActions({
   setStatus,
   t,
   handleSelectedRegionTransposeChange,
+  revealPlayheadAfterStoppedJump,
 }: UseTimelineActionsProps) {
   async function scheduleMarkerJumpWithGlobalMode(
     markerId: string,
@@ -76,6 +80,9 @@ export function useTimelineActions({
     const transition = appSettings.songTransitionMode;
     const nextSnapshot = await scheduleRegionJump(regionId);
     applyPlaybackSnapshot(nextSnapshot);
+    if (nextSnapshot.playbackState !== "playing") {
+      revealPlayheadAfterStoppedJump?.(nextSnapshot.positionSeconds);
+    }
 
     if (trigger === "region_end" && !nextSnapshot.pendingMarkerJump) {
       setStatus(t("transport.status.noSongRegionAtCursor"));
