@@ -6,7 +6,6 @@ import {
   moveId,
   resolveReorderAxis,
   SONG_REORDER_ID_ATTRIBUTE,
-  TOUCH_HOLD_MS,
   targetIndexForGap,
   useSongReorder,
 } from "./useSongReorder";
@@ -123,13 +122,8 @@ describe("useSongReorder", () => {
     layOut(container);
     const touch = { pointerId: 3, pointerType: "touch", button: 0 };
 
-    vi.useFakeTimers();
     act(() => {
       fireEvent.pointerDown(screen.getByTestId("grip-a"), { ...touch, clientX: 50 });
-    });
-    // With a finger the handle grabs after a short hold (see the next tests).
-    act(() => {
-      vi.advanceTimersByTime(TOUCH_HOLD_MS);
     });
     // Recién agarrada: fantasma en su sitio y copia flotante.
     expect(screen.getByTestId("row-a").classList.contains("lt-reorder-ghost")).toBe(true);
@@ -153,11 +147,9 @@ describe("useSongReorder", () => {
     expect(lift()).toBeNull();
   });
 
-  // iPhone: the live setlist sits near the bottom edge, where a swipe is the
-  // system gesture to switch apps. Grabbing on contact turned that swipe into
-  // a reorder; a finger that slides before the hold lets go instead.
-  it("a finger that slides before the hold does not reorder", () => {
-    vi.useFakeTimers();
+  // The song lists are at the top now: a finger on the grip drags at once,
+  // with no hold first.
+  it("a finger drags from the grip right away", () => {
     const onReorder = vi.fn();
     const { container } = render(<Harness ids={["a", "b", "c"]} onReorder={onReorder} />);
     layOut(container);
@@ -165,12 +157,13 @@ describe("useSongReorder", () => {
 
     act(() => {
       fireEvent.pointerDown(screen.getByTestId("grip-a"), { ...touch, clientX: 50 });
+    });
+    expect(lift()).not.toBeNull();
+    act(() => {
       fireEvent.pointerMove(window, { ...touch, clientX: 300 });
-      vi.advanceTimersByTime(TOUCH_HOLD_MS);
       fireEvent.pointerUp(window, { ...touch, clientX: 300 });
     });
-    expect(onReorder).not.toHaveBeenCalled();
-    expect(lift()).toBeNull();
+    expect(onReorder).toHaveBeenCalledWith("a", 2);
   });
 
   it("keeps the preview until the new order renders, then lets go at once", () => {
@@ -183,7 +176,6 @@ describe("useSongReorder", () => {
     vi.useFakeTimers();
     act(() => {
       fireEvent.pointerDown(screen.getByTestId("grip-a"), { ...touch, clientX: 50 });
-      vi.advanceTimersByTime(TOUCH_HOLD_MS);
       fireEvent.pointerMove(window, { ...touch, clientX: 300 });
       fireEvent.pointerUp(window, { ...touch, clientX: 300 });
     });
