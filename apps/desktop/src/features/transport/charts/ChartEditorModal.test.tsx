@@ -31,8 +31,10 @@ const markers: SectionMarkerSummary[] = [
   { id: "chorus", name: "Coro", startSeconds: 120, kind: "chorus" },
 ];
 
+const TEXT = ["{section: Verso 1}", "uno", "dos", "tres", "cuatro", "{section: Coro 1}", "[G]coro"].join("\n");
+
 const chart: SongChart = {
-  text: "{section: Verso 1}\nuno\ndos\ntres\ncuatro\n{section: Coro 1}\n[G]coro",
+  text: TEXT,
   links: [
     { markerId: "verse", section: 0 },
     { markerId: "chorus", section: 1 },
@@ -52,49 +54,69 @@ function renderEditor(initial: SongChart = chart) {
       onClose={vi.fn()}
     />,
   );
-  return { onSave };
+  const textarea = screen.getByRole("textbox", { name: "liveChart.textLabel" }) as HTMLTextAreaElement;
+  return { onSave, textarea };
 }
 
-const timeInput = (line: number) =>
-  screen.getByRole("textbox", { name: `liveChart.lineTime:${line}` }) as HTMLInputElement;
+async function saveAndRead(onSave: ReturnType<typeof vi.fn>): Promise<SongChart> {
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "liveChart.save" }));
+  });
+  return (onSave.mock.calls[0] as unknown as [SongChart])[0];
+}
 
-describe("ChartEditorModal line times", () => {
-  it("shows when each line changes, in song time, from the even spread by default", () => {
-    renderEditor();
-    fireEvent.click(screen.getAllByRole("button", { name: /liveChart.autoTimes/ })[0]);
-    // 20 s and four lines: a line every 5 s, counted from the song start.
-    expect([1, 2, 3, 4].map((line) => timeInput(line).value)).toEqual(["0:00.0", "0:05.0", "0:10.0", "0:15.0"]);
-    // The first line always starts with the marker.
-    expect(timeInput(1).disabled).toBe(true);
+describe("ChartEditorModal line times in the text", () => {
+  it("shows each line's change time on its left, in song time", () => {
+    const { textarea } = renderEditor();
+    expect(textarea.value.split("\n")).toEqual([
+      "{section: Verso 1}",
+      // 20 s and four lines: a line every 5 s.
+      "[0:00.0] uno",
+      "[0:05.0] dos",
+      "[0:10.0] tres",
+      "[0:15.0] cuatro",
+      "{section: Coro 1}",
+      "[0:20.0] [G]coro",
+    ]);
   });
 
   it("shows recorded times when there are some", () => {
-    renderEditor({ ...chart, links: [{ markerId: "verse", section: 0, lineBeats: [0, 2, 6, 30] }, chart.links[1]] });
-    fireEvent.click(screen.getAllByRole("button", { name: /liveChart.recordedTimes/ })[0]);
-    expect([1, 2, 3, 4].map((line) => timeInput(line).value)).toEqual(["0:00.0", "0:01.0", "0:03.0", "0:15.0"]);
-  });
-
-  it("saves a typed time in beats from the marker", async () => {
-    const { onSave } = renderEditor();
-    fireEvent.click(screen.getAllByRole("button", { name: /liveChart.autoTimes/ })[0]);
-    fireEvent.change(timeInput(2), { target: { value: "0:07.5" } });
-    fireEvent.blur(timeInput(2));
-    expect(timeInput(2).value).toBe("0:07.5");
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "liveChart.save" }));
+    const { textarea } = renderEditor({
+      ...chart,
+      links: [{ markerId: "verse", section: 0, lineBeats: [0, 2, 6, 30] }, chart.links[1]],
     });
-    const saved = (onSave.mock.calls[0] as unknown as [SongChart])[0];
-    // 7.5 s → 15 beats; the untouched lines keep their spread times.
-    expect(saved.links[0]).toEqual({ markerId: "verse", section: 0, lineBeats: [0, 15, 20, 30] });
+    expect(textarea.value).toContain("[0:01.0] dos");
+    expect(textarea.value).toContain("[0:03.0] tres");
   });
 
-  it("does not let a line cross the next one", () => {
-    renderEditor();
-    fireEvent.click(screen.getAllByRole("button", { name: /liveChart.autoTimes/ })[0]);
-    fireEvent.change(timeInput(2), { target: { value: "0:12" } });
-    fireEvent.blur(timeInput(2));
-    // Line 3 is at 0:10.0: line 2 stops just before it.
-    expect(timeInput(2).value).toBe("0:09.9");
+  it("saves a time edited in the text, in beats, and the lyrics without times", async () => {
+    const { onSave, textarea } = renderEditor();
+    fireEvent.change(textarea, { target: { value: textarea.value.replace("[0:05.0] dos", "[0:07.5] dos") } });
+    const saved = await saveAndRead(onSave);
+    expect(saved.text).toBe(TEXT);
+    expect(saved.links).toEqual([
+      // 7.5 s → 15 beats; the other lines keep the times they showed.
+      { markerId: "verse", section: 0, lineBeats: [0, 15, 20, 30] },
+      // Untouched: still the even spread.
+      { markerId: "chorus", section: 1 },
+    ]);
+  });
+
+  it("saves nothing new when no time was changed", async () => {
+    const { onSave } = renderEditor();
+    const saved = await saveAndRead(onSave);
+    expect(saved).toEqual(chart);
+  });
+
+  it("links a chart typed from scratch on save, and keeps the times typed in it", async () => {
+    const { onSave, textarea } = renderEditor({ text: "", links: [] });
+    fireEvent.change(textarea, {
+      target: { value: ["{section: Verso 1}", "[0:00] uno", "[0:12] dos", "{section: Coro 1}", "coro"].join("\n") },
+    });
+    const saved = await saveAndRead(onSave);
+    expect(saved.links).toEqual([
+      { markerId: "verse", section: 0, lineBeats: [0, 24] },
+      { markerId: "chorus", section: 1 },
+    ]);
   });
 });

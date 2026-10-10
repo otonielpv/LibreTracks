@@ -9,15 +9,16 @@ import type {
 } from "@libretracks/shared/models";
 
 import { useDismissOnBack } from "../mobile/backNavigation";
-import { parseChordPro, type ChartLine } from "@libretracks/shared/charts/chordChart";
+import { parseChordPro } from "@libretracks/shared/charts/chordChart";
+import { autoLinkChart, chartLinkFor } from "@libretracks/shared/charts/chartSync";
 import {
-  autoLinkChart,
-  chartLinkFor,
-  formatLineTime,
-  lineStartSeconds,
-  moveLineStart,
-  parseLineTime,
-} from "@libretracks/shared/charts/chartSync";
+  addChartTimes,
+  applyChartTimes,
+  chartLineTimeFor,
+  lineTimeKey,
+  takeChartTimes,
+  type ChartTiming,
+} from "@libretracks/shared/charts/chartTimes";
 import { CHART_FILE_ACCEPT, chordProFromFile } from "./importChart";
 
 type ChartEditorModalProps = {
@@ -34,14 +35,12 @@ type ChartEditorModalProps = {
 /**
  * Lyrics and chords of one song: the ChordPro text (imported from a file or
  * pasted, and fixable by hand) and which section each marker shows.
+ *
+ * Each lyric line carries, on its left, the song time it changes at —
+ * `[0:31.4] [C]Quien rompe…` — so moving a line is editing text. The times
+ * are added when the editor opens and taken out on save: the stored ChordPro
+ * stays clean and the times go to the marker links, in beats.
  */
-/** What a line shows in the times list: its words, or its chords. */
-function linePreview(line: ChartLine): string {
-  if (line.kind !== "lyrics") return line.text;
-  const words = line.segments.map((segment) => segment.text).join("").trim();
-  return words || line.segments.map((segment) => segment.chord ?? "").filter(Boolean).join("  ");
-}
-
 export function ChartEditorModal({
   region,
   markers,
@@ -52,14 +51,26 @@ export function ChartEditorModal({
 }: ChartEditorModalProps) {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [text, setText] = useState(chart?.text ?? "");
+  const timing = useMemo<ChartTiming>(
+    () => ({
+      markers,
+      songStartSeconds: region.startSeconds,
+      songEndSeconds: region.endSeconds,
+      secondsPerBeatAt,
+    }),
+    [markers, region.startSeconds, region.endSeconds, secondsPerBeatAt],
+  );
+  const withTimes = (source: string, sourceLinks: readonly ChartLink[]) =>
+    addChartTimes(source, chartLineTimeFor(parseChordPro(source), sourceLinks, timing));
+
+  const [text, setText] = useState(() => (chart ? withTimes(chart.text, chart.links) : ""));
   const [links, setLinks] = useState<ChartLink[]>(chart?.links ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [openTimes, setOpenTimes] = useState<string | null>(null);
   useDismissOnBack(onClose);
 
-  const doc = useMemo(() => parseChordPro(text), [text]);
+  const taken = useMemo(() => takeChartTimes(text), [text]);
+  const doc = useMemo(() => parseChordPro(taken.text), [taken.text]);
   const originals = useMemo(() => markers.filter((marker) => !marker.id.includes("~")), [markers]);
 
   const setLink = (markerId: string, value: string) => {
@@ -73,39 +84,20 @@ export function ChartEditorModal({
     });
   };
 
-  /** Where each line of a marker's section starts, in seconds from the
-   * marker: recorded or typed times where there are some, the even spread
-   * elsewhere — exactly what the live view will do. */
-  const timingFor = (marker: SectionMarkerSummary, link: ChartLink) => {
-    const index = markers.findIndex((candidate) => candidate.id === marker.id);
-    const next = markers.slice(index + 1).find((candidate) => candidate.startSeconds > marker.startSeconds);
-    const sectionSeconds = Math.max(0, (next?.startSeconds ?? region.endSeconds) - marker.startSeconds);
-    const secondsPerBeat = secondsPerBeatAt(marker.startSeconds);
-    const lines = doc.sections[link.section]?.lines ?? [];
-    return {
-      lines,
-      sectionSeconds,
-      secondsPerBeat,
-      starts: lineStartSeconds(lines.length, sectionSeconds, secondsPerBeat, link.lineBeats),
-      // Times are shown as song time, like the live view's clock.
-      offset: marker.startSeconds - region.startSeconds,
-    };
-  };
-
-  const setLineTime = (marker: SectionMarkerSummary, link: ChartLink, index: number, text: string) => {
-    const timing = timingFor(marker, link);
-    const parsed = parseLineTime(text);
-    if (parsed === null) return;
-    const starts = moveLineStart(timing.starts, index, parsed - timing.offset, timing.sectionSeconds);
-    const lineBeats = starts.map((start) => Math.round((start / timing.secondsPerBeat) * 100) / 100);
-    setLinks((current) =>
-      current.map((candidate) => (candidate.markerId === link.markerId ? { ...candidate, lineBeats } : candidate)),
-    );
-  };
-
+  /** Back to the even spread: the section's links lose their times and the
+   * text shows the spread times for it (what is typed elsewhere stays). */
   const resetTimes = (markerId: string) => {
-    setLinks((current) =>
-      current.map((link) => (link.markerId === markerId ? { markerId: link.markerId, section: link.section } : link)),
+    const link = links.find((candidate) => candidate.markerId === markerId);
+    if (!link) return;
+    const next = links.map((candidate) =>
+      candidate.section === link.section ? { markerId: candidate.markerId, section: candidate.section } : candidate,
+    );
+    const spread = chartLineTimeFor(doc, next, timing);
+    setLinks(next);
+    setText(
+      addChartTimes(taken.text, (section, line) =>
+        section === link.section ? spread(section, line) : (taken.times.get(lineTimeKey(section, line)) ?? null),
+      ),
     );
   };
 
@@ -119,8 +111,9 @@ export function ChartEditorModal({
       const converted = await chordProFromFile(file).finally(() => {
         input.value = "";
       });
-      setText(converted);
-      setLinks(autoLinkChart(parseChordPro(converted), markers));
+      const linked = autoLinkChart(parseChordPro(converted), markers);
+      setLinks(linked);
+      setText(withTimes(converted, linked));
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setError(
@@ -145,6 +138,12 @@ export function ChartEditorModal({
   };
 
   const validLinks = links.filter((link) => link.section < doc.sections.length);
+  /** What gets saved: a chart typed from scratch has no links yet, and the
+   * times written in it need markers to belong to. */
+  const linksToSave = () => {
+    const base = validLinks.length === 0 && originals.length > 0 ? autoLinkChart(doc, markers) : validLinks;
+    return applyChartTimes(doc, base, timing, taken.times);
+  };
 
   return (
     <div className="lt-modal-backdrop" onClick={saving ? undefined : onClose}>
@@ -218,58 +217,18 @@ export function ChartEditorModal({
                         ))}
                       </select>
                       {link ? (
-                        <button
-                          type="button"
-                          className={`lt-chart-editor-times${recorded ? "" : " is-auto"}${openTimes === marker.id ? " is-open" : ""}`}
-                          aria-expanded={openTimes === marker.id}
-                          onClick={() => setOpenTimes((current) => (current === marker.id ? null : marker.id))}
-                        >
-                          {recorded ? t("liveChart.recordedTimes") : t("liveChart.autoTimes")}
-                          <span className="material-symbols-outlined" aria-hidden="true">
-                            {openTimes === marker.id ? "expand_less" : "schedule"}
-                          </span>
-                        </button>
+                        recorded ? (
+                          <button type="button" className="lt-chart-editor-times" onClick={() => resetTimes(marker.id)} title={t("liveChart.resetTimes")}>
+                            {t("liveChart.recordedTimes")}
+                            <span className="material-symbols-outlined" aria-hidden="true">restart_alt</span>
+                          </button>
+                        ) : (
+                          <span className="lt-chart-editor-times is-auto">{t("liveChart.autoTimes")}</span>
+                        )
                       ) : (
                         // Keeps the third column on rows without lyrics.
                         <span aria-hidden="true" />
                       )}
-                      {link && openTimes === marker.id ? (() => {
-                        const timing = timingFor(marker, link);
-                        return (
-                          <div className="lt-chart-editor-lines">
-                            <div className="lt-chart-editor-lines-head">
-                              <small>{t("liveChart.timesHelp")}</small>
-                              {recorded ? (
-                                <button type="button" className="lt-chart-editor-button" onClick={() => resetTimes(marker.id)}>
-                                  <span className="material-symbols-outlined" aria-hidden="true">restart_alt</span>
-                                  {t("liveChart.resetTimes")}
-                                </button>
-                              ) : null}
-                            </div>
-                            <ol>
-                              {timing.lines.map((line, index) => {
-                                const value = formatLineTime(timing.offset + timing.starts[index]);
-                                return (
-                                  <li key={`${index}-${value}`}>
-                                    <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      defaultValue={value}
-                                      disabled={index === 0}
-                                      aria-label={t("liveChart.lineTime", { line: index + 1 })}
-                                      onBlur={(event) => setLineTime(marker, link, index, event.target.value)}
-                                      onKeyDown={(event) => {
-                                        if (event.key === "Enter") event.currentTarget.blur();
-                                      }}
-                                    />
-                                    <span className="lt-chart-editor-line-text">{linePreview(line)}</span>
-                                  </li>
-                                );
-                              })}
-                            </ol>
-                          </div>
-                        );
-                      })() : null}
                     </li>
                   );
                 })}
@@ -291,8 +250,13 @@ export function ChartEditorModal({
           <button
             type="button"
             className="is-primary"
-            disabled={saving || !text.trim()}
-            onClick={() => void save({ text, links: validLinks })}
+            disabled={saving || !taken.text.trim()}
+            onClick={() =>
+              void save({
+                text: taken.text,
+                links: linksToSave(),
+              })
+            }
           >
             {t("liveChart.save")}
           </button>

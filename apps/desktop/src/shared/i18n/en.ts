@@ -2041,8 +2041,6 @@ const en = {
     noPendingJump: "No jump is currently queued",
   },
   liveChart: {
-    timesHelp: "Song time at which each line changes (m:ss.d). The first one starts with the marker.",
-    lineTime: "Time of line {{line}}",
     jump: "Jump",
     toggleLabel: "Lyrics",
     hide: "Hide lyrics and chords",
@@ -2070,7 +2068,7 @@ const en = {
     editorTitle: "Lyrics & chords",
     textLabel: "Text (ChordPro)",
     textPlaceholder: "{section: Verse 1}\n[C]Amazing grace how [F]sweet the sound",
-    textHelp: "Each section starts with {section: Name}; chords go in brackets right before their syllable: [Am]lyric.",
+    textHelp: "Each section starts with {section: Name} and chords go in brackets right before their syllable: [Am]lyric. The time on the left, [m:ss.d], is when each line changes: edit it, or delete it to spread the lines evenly.",
     syncLabel: "Which section plays at each marker",
     autoLink: "Link automatically",
     noMarkers: "This song has no section markers. Add markers (Verse, Chorus…) so the lyrics follow the song.",

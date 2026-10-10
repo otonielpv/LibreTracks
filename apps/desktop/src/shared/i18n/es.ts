@@ -2070,8 +2070,6 @@ const es = {
     noPendingJump: "No hay ningun salto programado",
   },
   liveChart: {
-    timesHelp: "Tiempo de la canción en que cambia cada línea (m:ss.d). La primera empieza con la marca.",
-    lineTime: "Tiempo de la línea {{line}}",
     jump: "Salto",
     toggleLabel: "Letra",
     hide: "Ocultar letra y acordes",
@@ -2099,7 +2097,7 @@ const es = {
     editorTitle: "Letra y acordes",
     textLabel: "Texto (ChordPro)",
     textPlaceholder: "{section: Verso 1}\n[C]Quien rompe el poder del pe[F]cado",
-    textHelp: "Cada sección empieza con {section: Nombre}; los acordes van entre corchetes justo antes de la sílaba: [Am]letra.",
+    textHelp: "Cada sección empieza con {section: Nombre} y los acordes van entre corchetes justo antes de la sílaba: [Am]letra. El tiempo de la izquierda, [m:ss.d], es cuándo cambia cada línea: cámbialo, o bórralo para repartir las líneas solas.",
     syncLabel: "Qué sección suena en cada marca",
     autoLink: "Enlazar automáticamente",
     noMarkers: "Esta canción no tiene marcas de sección. Crea marcas (Estrofa, Coro…) para que la letra siga a la canción.",

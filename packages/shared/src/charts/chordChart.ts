@@ -150,6 +150,21 @@ export function parseLyricLine(line: string): ChartSegment[] {
 
 /** Reads ChordPro, including the dialects other apps write. */
 export function parseChordPro(source: string): ChartDoc {
+  return readChordPro(source);
+}
+
+/** Where a lyric line of the source text lands in the parsed document. */
+export type LyricLinePlace = { raw: number; section: number; line: number };
+
+/** `parseChordPro`, also saying which raw line of `source` became which
+ * section/line — so the editor can put a line's change time next to it. */
+export function parseChordProWithPlaces(source: string): { doc: ChartDoc; places: LyricLinePlace[] } {
+  const places: LyricLinePlace[] = [];
+  const doc = readChordPro(source, (place) => places.push(place));
+  return { doc, places };
+}
+
+function readChordPro(source: string, onLyricLine?: (place: LyricLinePlace) => void): ChartDoc {
   const doc: ChartDoc = { title: null, artist: null, key: null, sections: [] };
   let current: ChartSection | null = null;
   const open = (label: string) => {
@@ -160,7 +175,9 @@ export function parseChordPro(source: string): ChartDoc {
   const target = () => current ?? open("");
 
   let inTab = false;
-  for (const rawLine of source.replace(/\r\n?/g, "\n").split("\n")) {
+  const rawLines = source.replace(/\r\n?/g, "\n").split("\n");
+  for (let raw = 0; raw < rawLines.length; raw += 1) {
+    const rawLine = rawLines[raw];
     const line = rawLine.replace(/\s+$/, "");
     const directive = /^\s*\{\s*([a-z_]+)\s*(?::\s*(.*?))?\s*\}\s*$/i.exec(line);
     const directiveName = directive?.[1].toLowerCase() ?? "";
@@ -202,7 +219,9 @@ export function parseChordPro(source: string): ChartDoc {
       open(line.trim().replace(/:$/, ""));
       continue;
     }
-    target().lines.push({ kind: "lyrics", segments: parseLyricLine(line) });
+    const into = target();
+    into.lines.push({ kind: "lyrics", segments: parseLyricLine(line) });
+    onLyricLine?.({ raw, section: doc.sections.indexOf(into), line: into.lines.length - 1 });
   }
   return doc;
 }
