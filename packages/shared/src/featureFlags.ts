@@ -9,4 +9,8 @@ export const FEATURE_FLAGS = {
   /** Lyrics & chords in the live view and the remote (PDF/ChordPro import,
    * sync with markers). Hidden in 1.14.0; planned for 1.15.0. */
   lyrics: true,
+  /** Network sessions: LibreTracks apps joining a host LibreTracks over the
+   * LAN with roles (viewer / control / edit). Plan in
+   * docs/plans/network-sessions. In development; no release planned yet. */
+  networkSessions: false,
 } as const;

@@ -31,7 +31,9 @@ features that are built but hidden (no UI at all while their flag is
 turned on here, together with the guard test next to it
 (`featureFlags.test.ts`), in the release commit. Commits of a hidden feature
 do NOT go in the release notes. As of 1.14.0: `lyrics` (lyrics & chords in
-Live and the remote) is off, planned for 1.15.0.
+Live and the remote) is off, planned for 1.15.0. `networkSessions`
+(LibreTracks apps joining a host over the LAN, `docs/plans/network-sessions`)
+is off and in development, no release planned yet.
 
 ## 2. Commit pending work (optional)
 

@@ -8,4 +8,11 @@ describe("feature flags", () => {
   it("lyrics stay hidden until the release that brings them", () => {
     expect(FEATURE_FLAGS.lyrics).toBe(true);
   });
+
+  // Network sessions are in development (docs/plans/network-sessions).
+  // Turning the flag on is a release decision: update this expectation in
+  // the same commit that does it.
+  it("network sessions stay hidden until the release that brings them", () => {
+    expect(FEATURE_FLAGS.networkSessions).toBe(false);
+  });
 });
