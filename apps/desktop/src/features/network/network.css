@@ -179,7 +179,8 @@
   font-size: 0.85rem;
 }
 
-/* Host settings: name full width, the two PINs side by side. */
+/* Host settings: name full width, the two PINs side by side. Each
+   .lt-settings-field is already a card, so the form itself is not one. */
 .lt-network-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

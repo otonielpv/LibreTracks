@@ -81,6 +81,133 @@ input[type="range"] {
   -webkit-touch-callout: none;
 }
 
+/* ── Base de los campos de formulario ──────────────────────────────────
+   Muchos campos (números de automatización, MIDI, render, vídeo, nombres,
+   PIN, letra…) no tenían regla propia y salían con el aspecto del sistema:
+   fondo blanco o gris claro, esquinas redondeadas y otra tipografía, que
+   desentonaba con todo lo demás. Esta es la base, con el mismo lenguaje que
+   el select de ajustes (borde turquesa tenue, fondo casi negro, Space
+   Grotesk, 2px).
+
+   Todo va dentro de :where(), que tiene especificidad CERO: cualquier campo
+   que ya tenga su estilo (el BPM, los escalones del toolbar, los compases del
+   Live, el buscador de la biblioteca…) gana siempre y no cambia. Solo se
+   visten los que no tenían nada. No hay apariencia personalizada en los
+   select (la flecha es la del sistema, ya oscura por color-scheme): quitarla
+   aquí dejaría sin flecha a los select que pintan su propio fondo. */
+:where(
+    input:not([type]),
+    input[type="text"],
+    input[type="number"],
+    input[type="password"],
+    input[type="search"],
+    input[type="url"],
+    input[type="email"],
+    input[type="tel"],
+    textarea,
+    select
+  ) {
+  box-sizing: border-box;
+  max-width: 100%;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  border-radius: 2px;
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.55rem 0.7rem;
+  font: 600 0.9rem/1.25 "Space Grotesk", sans-serif;
+  outline: none;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+:where(textarea) {
+  font: 500 0.9rem/1.45 "Space Grotesk", sans-serif;
+  resize: vertical;
+}
+
+:where(
+    input:not([type]),
+    input[type="text"],
+    input[type="number"],
+    input[type="password"],
+    input[type="search"],
+    input[type="url"],
+    input[type="email"],
+    input[type="tel"],
+    textarea,
+    select
+  ):hover:not(:disabled) {
+  border-color: rgb(87 241 219 / 0.32);
+}
+
+:where(
+    input:not([type]),
+    input[type="text"],
+    input[type="number"],
+    input[type="password"],
+    input[type="search"],
+    input[type="url"],
+    input[type="email"],
+    input[type="tel"],
+    textarea,
+    select
+  ):focus-visible {
+  border-color: rgb(87 241 219 / 0.62);
+  box-shadow: 0 0 0 2px rgb(87 241 219 / 0.14);
+}
+
+:where(
+    input:not([type]),
+    input[type="text"],
+    input[type="number"],
+    input[type="password"],
+    input[type="search"],
+    input[type="url"],
+    input[type="email"],
+    input[type="tel"],
+    textarea,
+    select
+  ):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+:where(input, textarea)::placeholder {
+  color: rgb(186 202 197 / 0.42);
+}
+
+/* Las opciones del desplegable heredan el fondo oscuro donde el sistema lo
+   permite (Windows/Linux; en Android e iOS manda el selector nativo). */
+:where(select) option {
+  background: #1c1f20;
+  color: #f3f0ef;
+}
+
+/* En los formularios de ajustes, los campos miden lo mismo que sus select
+   (`.lt-settings-field select`), para que un texto al lado de un desplegable
+   quede a la misma altura. */
+:where(.lt-settings-field)
+  :where(
+    input:not([type]),
+    input[type="text"],
+    input[type="number"],
+    input[type="password"],
+    input[type="search"],
+    input[type="url"],
+    textarea
+  ) {
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.92rem;
+}
+
+/* Casillas, radios y faders sin estilo propio: el acento de la app en vez
+   del azul del sistema. */
+:where(input[type="checkbox"], input[type="radio"], input[type="range"]) {
+  accent-color: #57f1db;
+}
+
 .lt-app-shell {
   width: 100vw;
   height: 100vh;

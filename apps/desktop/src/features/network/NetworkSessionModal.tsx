@@ -467,7 +467,7 @@ function HostSettingsForm({
 
   return (
     <form
-      className="lt-network-card lt-network-form"
+      className="lt-network-form"
       onSubmit={(event) => {
         event.preventDefault();
         onSave(draft);
