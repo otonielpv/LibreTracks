@@ -972,10 +972,12 @@
   grid-row: 1;
 }
 
+/* The handle sits in the top corner, beside the number: in the middle of
+   the card it caught the finger that meant to scroll the row. */
 .lt-structure-editor.is-row .lt-structure-handle {
   grid-column: 2;
-  grid-row: 1 / span 3;
-  align-self: center;
+  grid-row: 1;
+  align-self: start;
   margin-left: 0;
 }
 
@@ -994,10 +996,13 @@
   grid-row: 3;
 }
 
-/* The "insert here" line, upright between two cards. */
+/* The "insert here" line, upright between two cards. Only its "+" (at the
+   foot of the line) answers a tap: the middle of the row is for scrolling. */
 .lt-structure-editor.is-row .lt-structure-gap {
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-end;
+  padding-bottom: 0.3rem;
+  pointer-events: none;
   width: 36px;
   height: auto;
   min-height: 6.5rem;
@@ -1021,6 +1026,7 @@
 .lt-structure-editor.is-row .lt-structure-gap .material-symbols-outlined {
   position: relative;
   margin-right: 0;
+  pointer-events: auto;
 }
 
 .lt-structure-editor.is-row .lt-structure-item.is-end {
@@ -1034,4 +1040,44 @@
   height: 100%;
   padding: 0.5rem;
   text-align: center;
+}
+
+/* A phone in landscape: everything fits the height, no vertical scroll. The
+   "applied" pill goes beside the picker, the gesture hint gives way (the
+   total bars stay), and the cards are a little shorter. */
+.lt-structure-mobile.is-row .lt-structure-mobile-picker {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  column-gap: 0.6rem;
+}
+
+/* Level with the 44px select, not with its label above it. */
+.lt-structure-mobile.is-row .lt-structure-mobile-applied {
+  align-self: end;
+  margin-bottom: 0.55rem;
+}
+
+@media (max-height: 500px) {
+  .lt-structure-editor.is-row .lt-structure-hint {
+    display: none;
+  }
+
+  .lt-structure-editor.is-row .lt-structure-caption {
+    justify-content: space-between;
+    margin-bottom: 0.2rem;
+  }
+
+  .lt-structure-editor.is-row .lt-structure-strip {
+    padding-block: 0.25rem;
+  }
+
+  .lt-structure-editor.is-row .lt-structure-block,
+  .lt-structure-editor.is-row .lt-structure-gap,
+  .lt-structure-editor.is-row .lt-structure-add-row {
+    min-height: 5.25rem;
+  }
+
+  .lt-structure-editor.is-row .lt-structure-block {
+    padding-block: 0.35rem;
+  }
 }

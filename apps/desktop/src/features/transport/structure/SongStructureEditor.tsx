@@ -137,7 +137,7 @@ export function SongStructureEditor({
           <strong>{t("transport.structure.strip")}</strong>
           {/* Supr y Ctrl+D no existen en una pantalla táctil: en móvil se
               explican los gestos. */}
-          <span>
+          <span className="lt-structure-hint">
             {t(
               layout === "horizontal"
                 ? "transport.structure.stripHint"

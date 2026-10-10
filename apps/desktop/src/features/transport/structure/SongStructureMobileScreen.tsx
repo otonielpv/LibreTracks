@@ -307,7 +307,7 @@ export function SongStructureMobileScreen({
 
   return (
     <div
-      className={`lt-structure-mobile ${wide ? "is-wide" : ""}`}
+      className={`lt-structure-mobile ${wide ? "is-wide" : "is-row"}`}
       role="dialog"
       aria-label={t("transport.structure.panelTitle", { song: region.name })}
     >
