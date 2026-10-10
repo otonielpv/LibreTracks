@@ -10,6 +10,7 @@ import { installGlobalErrorHandlers } from "./shared/errorLogging";
 import { isIOSApp, isMobileApp } from "./features/transport/desktopApi";
 import "./shared/styles.css";
 import { getZoomedRectScale } from "./shared/zoomedRects";
+import { bootGuestMirrorMode } from "./features/network/guestMirrorBoot";
 
 installGlobalErrorHandlers();
 
@@ -63,10 +64,14 @@ if (isMobileApp) {
   }, 1500);
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  </React.StrictMode>,
-);
+// Network sessions: decide mirror mode (this device following a host) before
+// anything loads, so no screen ever starts against the wrong session.
+void bootGuestMirrorMode().finally(() => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    </React.StrictMode>,
+  );
+});

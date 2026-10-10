@@ -38,6 +38,10 @@ import {
 } from "@libretracks/shared/charts/chartSync";
 import { CHART_FILE_ACCEPT, chordProFromFile } from "./importChart";
 import { useChartPlayback } from "./useChartPlayback";
+import { isGuestMirrorMode } from "../desktopApi";
+import { personalChordShift } from "@libretracks/shared/charts/personalChords";
+import { PersonalChordsBar } from "../../network/PersonalChordsBar";
+import { usePersonalChords } from "../../network/usePersonalChords";
 import "./LiveChartPanel.css";
 
 const FONT_SCALE_KEY = "lt.liveChart.fontScale";
@@ -174,19 +178,27 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     () => chartMarkersForRegion(song.sectionMarkers, region),
     [song.sectionMarkers, region],
   );
+  // Network-session guest: this musician's own capo / key / spelling for the
+  // host's song, on top of whatever the props ask for.
+  const guestChords = isGuestMirrorMode();
+  const personal = usePersonalChords(guestChords ? (region?.id ?? null) : null);
+  const [personalOpen, setPersonalOpen] = useState(false);
+  const shift = extraSemitones + (guestChords ? personalChordShift(personal.prefs) : 0);
+  const spelling: AccidentalPreference =
+    guestChords && accidentals === "auto" ? personal.accidentals : accidentals;
   const doc = useMemo(() => {
     if (!chart || !region) return null;
     const effectiveKey = regionEffectiveKey(region);
     const flats =
-      extraSemitones === 0 && accidentals === "auto"
+      shift === 0 && spelling === "auto"
         ? keyPrefersFlats(effectiveKey)
-        : personalPrefersFlats(effectiveKey, extraSemitones, accidentals);
+        : personalPrefersFlats(effectiveKey, shift, spelling);
     return transposeChart(
       parseChordPro(chart.text),
-      region.transposeSemitones + extraSemitones,
+      region.transposeSemitones + shift,
       flats,
     );
-  }, [chart, region, extraSemitones, accidentals]);
+  }, [chart, region, shift, spelling]);
   const links = useMemo(
     () => (chart ? (recording ? applyLineRecording(chart.links, recording) : chart.links) : []),
     [chart, recording],
@@ -367,6 +379,18 @@ export const LiveChartPanel = memo(function LiveChartPanel({
         <div className="lt-live-chart-tools lt-bottom-controls">
           {doc ? (
             <>
+              {guestChords ? (
+                <button
+                  type="button"
+                  className={`lt-icon-button${personalOpen ? " is-active" : ""}`}
+                  aria-pressed={personalOpen}
+                  onClick={() => setPersonalOpen((open) => !open)}
+                  aria-label={t("networkSession.guest.chords")}
+                  title={t("networkSession.guest.chords")}
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">tune</span>
+                </button>
+              ) : null}
               <button type="button" className="lt-icon-button" onClick={() => changeFont(-1)} aria-label={t("liveChart.smaller")} title={t("liveChart.smaller")}>
                 <span className="material-symbols-outlined" aria-hidden="true">text_decrease</span>
               </button>
@@ -433,6 +457,15 @@ export const LiveChartPanel = memo(function LiveChartPanel({
           </button>
         </div>
       </div>
+
+      {guestChords && personalOpen && doc ? (
+        <PersonalChordsBar
+          prefs={personal.prefs}
+          accidentals={personal.accidentals}
+          onPrefsChange={personal.setPrefs}
+          onAccidentalsChange={personal.setAccidentals}
+        />
+      ) : null}
 
       {recording ? (
         <div className="lt-live-chart-recorder">

@@ -34,6 +34,15 @@ export function formatTransportError(
   const raw = error instanceof Error ? error.message : String(error);
   const lower = raw.toLocaleLowerCase();
 
+  // Network-session guest (mirror mode): the host refused, or the action
+  // needs the host's files or devices. See desktopApi.invokeCommand.
+  if (raw.startsWith("guest:")) {
+    const code = raw.slice("guest:".length);
+    return t(`networkSession.guestErrors.${code}`, {
+      defaultValue: t("networkSession.guestErrors.generic"),
+    });
+  }
+
   const durationOverlap = raw.match(DURATION_OVERLAP_PATTERN);
   if (durationOverlap) {
     return t("transport.errors.regionDurationOverlap", {

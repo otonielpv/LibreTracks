@@ -12,6 +12,9 @@ pub mod discovery;
 pub mod guest;
 pub mod host;
 pub mod lifecycle;
+pub mod proxy;
+#[rustfmt::skip]
+pub mod proxy_dispatch;
 
 use std::sync::Mutex;
 

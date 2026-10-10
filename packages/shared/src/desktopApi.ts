@@ -1,3 +1,5 @@
+import { GUEST_MIRRORED_EVENTS } from "./guestCommandTable";
+import { guestRouteFor } from "./guestRouting";
 import type {
   AppSettings,
   AudioDeviceStatusEvent,
@@ -110,9 +112,41 @@ export function setIpcObserver(observer: IpcObserver | null) {
   ipcObserver = observer;
 }
 
+// --- Network sessions, guest mirror mode (docs/plans/network-sessions) ---
+//
+// A device that joined a host runs this same UI against the HOST's session:
+// session commands go to the host (which checks the guest's role), the ones
+// about this device stay here, and the session events come relayed from the
+// host under a prefix. Decided once at boot (main.tsx), before anything
+// loads, and the app reloads to enter or leave it, so no screen ever mixes
+// the two sessions.
+let guestMirrorMode = false;
+
+export function setGuestMirrorMode(on: boolean) {
+  guestMirrorMode = on;
+}
+
+export function isGuestMirrorMode() {
+  return guestMirrorMode;
+}
+
+/** The event name to listen to for a session event in the current mode. */
+export function sessionEventName(name: string) {
+  return guestMirrorMode && GUEST_MIRRORED_EVENTS.has(name) ? `link-mirror://${name}` : name;
+}
+
 /** Exported for feature APIs that live in their own module (networkApi). */
 export async function invokeCommand<T>(command: string, args?: Record<string, unknown>) {
   const { invoke } = await import("@tauri-apps/api/core");
+  if (guestMirrorMode) {
+    const route = guestRouteFor(command);
+    if (route === "blocked") {
+      throw new Error("guest:notAvailable");
+    }
+    if (route === "host") {
+      return invoke<T>("link_proxy_invoke", { command, args: args ?? {} });
+    }
+  }
   // Only read the clock when someone is listening: an unobserved call pays a
   // single null check.
   const startedAt = ipcObserver ? performance.now() : 0;
@@ -152,7 +186,7 @@ export async function listenToTransportLifecycle(
   handler: (event: TransportLifecycleEvent) => void,
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<TransportLifecycleEvent>("transport:lifecycle", (event) => {
+  return listen<TransportLifecycleEvent>(sessionEventName("transport:lifecycle"), (event) => {
     handler(event.payload);
   });
 }
@@ -201,7 +235,7 @@ export async function listenToAudioMeters(
   handler: (levels: AudioMeterLevel[]) => void,
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<AudioMeterLevel[]>("audio:meters", (event) => {
+  return listen<AudioMeterLevel[]>(sessionEventName("audio:meters"), (event) => {
     handler(event.payload);
   });
 }
@@ -246,7 +280,7 @@ export async function listenToRegionMeters(
   handler: (levels: RegionMeterLevel[]) => void,
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<RegionMeterLevel[]>("audio:region_meters", (event) => {
+  return listen<RegionMeterLevel[]>(sessionEventName("audio:region_meters"), (event) => {
     handler(event.payload);
   });
 }
@@ -276,7 +310,7 @@ export async function listenToProjectLoadProgress(
   handler: (event: ProjectLoadProgressEvent) => void,
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<ProjectLoadProgressEvent>("project:load-progress", (event) => {
+  return listen<ProjectLoadProgressEvent>(sessionEventName("project:load-progress"), (event) => {
     handler(event.payload);
   });
 }
@@ -285,7 +319,7 @@ async function listenToProjectLoadComplete(
   handler: (event: ProjectLoadCompleteEvent) => void,
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<ProjectLoadCompleteEvent>("project:load-complete", (event) => {
+  return listen<ProjectLoadCompleteEvent>(sessionEventName("project:load-complete"), (event) => {
     handler(event.payload);
   });
 }
@@ -303,7 +337,7 @@ export async function listenToWaveformReady(
   handler: (event: WaveformReadyEvent) => void,
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<WaveformReadyEvent>("waveform:ready", (event) => {
+  return listen<WaveformReadyEvent>(sessionEventName("waveform:ready"), (event) => {
     handler(event.payload);
   });
 }
@@ -315,7 +349,7 @@ export async function listenToWaveformProgress(
   handler: (event: WaveformProgressEvent) => void,
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<WaveformProgressEvent>("waveform:progress", (event) => {
+  return listen<WaveformProgressEvent>(sessionEventName("waveform:progress"), (event) => {
     handler(event.payload);
   });
 }
@@ -324,7 +358,7 @@ export async function listenToSettingsUpdated(
   handler: (settings: AppSettings) => void,
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<AppSettings>("settings:updated", (event) => {
+  return listen<AppSettings>(sessionEventName("settings:updated"), (event) => {
     handler(event.payload);
   });
 }
@@ -2679,7 +2713,7 @@ export async function listenToVideoThumbnailsReady(
   handler: (event: { filePath: string }) => void,
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<{ filePath: string }>("video:thumbnails-ready", (event) => {
+  return listen<{ filePath: string }>(sessionEventName("video:thumbnails-ready"), (event) => {
     handler(event.payload);
   });
 }

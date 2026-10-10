@@ -207,7 +207,7 @@ async fn controller_command_reaches_the_app_and_gets_its_result() {
         .unwrap();
     assert_eq!(incoming.command, LinkCommand::Play);
     assert_eq!(incoming.device_id, "c");
-    incoming.reply.send(Ok(())).unwrap();
+    incoming.reply.send(Ok(Value::Null)).unwrap();
     let result = control.next_of("commandResult").await.unwrap();
     assert_eq!(result["requestId"], 9);
     assert_eq!(result["ok"], true);
@@ -225,7 +225,10 @@ async fn app_rejection_reaches_the_guest() {
         .await;
     let incoming = runtime.commands.recv().await.unwrap();
     assert_eq!(incoming.base_revision, Some(1));
-    incoming.reply.send(Err(CommandRejection::Stale)).unwrap();
+    incoming
+        .reply
+        .send(Err(CommandRejection::Stale.into()))
+        .unwrap();
     let result = editor.next_of("commandResult").await.unwrap();
     assert_eq!(result["reason"], "stale");
 }

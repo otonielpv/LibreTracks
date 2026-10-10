@@ -3,10 +3,7 @@ import { useEffect } from "react";
 import {
   getGuestSnapshot,
   getHostStatus,
-  listenToGuestLiveSettings,
-  listenToGuestSong,
   listenToGuestStatus,
-  listenToGuestTransport,
   listenToHostStatus,
 } from "@libretracks/shared/networkApi";
 import { isTauriApp } from "@libretracks/shared/desktopApi";
@@ -35,9 +32,6 @@ export function useNetworkSessionEvents() {
 
     keep(listenToHostStatus(store.setHost));
     keep(listenToGuestStatus(store.setGuest));
-    keep(listenToGuestSong(store.setGuestSong));
-    keep(listenToGuestTransport(store.setGuestTransport));
-    keep(listenToGuestLiveSettings(store.setGuestLiveSettings));
 
     void getHostStatus()
       .then((host) => {

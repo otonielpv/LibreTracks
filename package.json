@@ -9,6 +9,7 @@
     "packages/*"
   ],
   "scripts": {
+    "gen:link-proxy": "node ./scripts/generate-link-proxy.mjs",
     "dev:desktop": "npm --prefix apps/desktop run dev --",
     "dev:desktop:native": "node ./scripts/desktop-native.mjs dev",
     "dev:desktop:engine-v2": "node ./scripts/desktop-native.mjs dev",

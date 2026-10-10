@@ -32,11 +32,15 @@ pub const HOST_STATUS_EVENT: &str = "link://host";
 pub struct ActiveHost {
     pub handle: HostHandle,
     tasks: Vec<tauri::async_runtime::JoinHandle<()>>,
+    app: AppHandle,
+    /// Listeners relaying the host's app events to the guests (mirror mode).
+    relays: Vec<tauri::EventId>,
 }
 
 impl ActiveHost {
     fn shutdown(self) {
         self.handle.stop();
+        super::proxy::stop_relaying(&self.app, self.relays);
         for task in self.tasks {
             task.abort();
         }
@@ -257,7 +261,13 @@ async fn start_on(app: &AppHandle, preferred_port: Option<u16>) -> Result<HostSt
     {
         let link = app.state::<LinkState>();
         let mut host = link.host.lock().map_err(|_| "state poisoned")?;
-        if let Some(previous) = host.replace(ActiveHost { handle, tasks }) {
+        let relays = super::proxy::relay_events(app, &handle);
+        if let Some(previous) = host.replace(ActiveHost {
+            handle,
+            tasks,
+            app: app.clone(),
+            relays,
+        }) {
             previous.shutdown();
         }
     }
@@ -398,8 +408,29 @@ async fn apply_commands(
     mut commands: tokio::sync::mpsc::Receiver<IncomingCommand>,
 ) {
     while let Some(incoming) = commands.recv().await {
-        let result = apply(&app, &incoming);
-        let _ = incoming.reply.send(result);
+        match incoming {
+            // Mirror mode: a desktop command from a guest running the full
+            // UI. Concurrent, as the host's own UI runs them: a slow read (a
+            // waveform window) must not hold back a play.
+            IncomingCommand {
+                command: LinkCommand::Invoke { command, args },
+                grants,
+                reply,
+                ..
+            } => {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let result = super::proxy::handle_invoke(&app, grants, &command, args).await;
+                    let _ = reply.send(result);
+                });
+            }
+            incoming => {
+                let result = apply(&app, &incoming)
+                    .map(|_| serde_json::Value::Null)
+                    .map_err(Into::into);
+                let _ = incoming.reply.send(result);
+            }
+        }
     }
 }
 
@@ -602,6 +633,7 @@ fn apply(app: &AppHandle, incoming: &IncomingCommand) -> Result<(), CommandRejec
                     .map_err(invalid)?
             }
         }
+        LinkCommand::Invoke { .. } => return Err(CommandRejection::Invalid),
         LinkCommand::SetMetronome { enabled, volume } => {
             apply_settings_change(app, &mut session, &state, |settings| {
                 if let Some(enabled) = enabled {

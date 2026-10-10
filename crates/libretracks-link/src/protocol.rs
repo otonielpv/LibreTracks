@@ -118,6 +118,20 @@ pub enum ServerMessage {
         ok: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<CommandRejection>,
+        /// What the command returned (an `invoke` of a desktop command).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<Value>,
+        /// The command's own error text, for `failed`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    /// An event the host's app emitted (`transport:lifecycle`,
+    /// `waveform:ready`, …), relayed so a guest running the full UI in
+    /// mirror mode sees what the host's own UI sees.
+    Event {
+        name: String,
+        payload: Value,
+        host_monotonic_ms: u64,
     },
 }
 
@@ -142,6 +156,11 @@ pub enum CommandRejection {
     Stale,
     /// The host could not apply it (unknown id, bad value).
     Invalid,
+    /// The command ran and returned an error (its text is in `message`).
+    Failed,
+    /// Not something a guest can do on the host at all (import audio, open
+    /// sessions, the host's devices).
+    NotAvailable,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -251,6 +270,16 @@ pub enum LinkCommand {
         enabled: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         volume: Option<f64>,
+    },
+
+    // --- mirror mode ---
+    /// Run a desktop command on the host, as the guest's own UI asked for
+    /// it. The host decides per command which role it needs (or refuses
+    /// it); see apps/desktop/src-tauri/src/link/proxy.rs.
+    Invoke {
+        command: String,
+        #[serde(default)]
+        args: Value,
     },
 }
 
@@ -453,6 +482,8 @@ mod tests {
                 request_id: 3,
                 ok: false,
                 reason: Some(CommandRejection::Stale),
+                value: None,
+                message: None,
             },
             json!({ "type": "commandResult", "requestId": 3, "ok": false, "reason": "stale" }),
         );

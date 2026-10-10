@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-import { saveProject, type TransportSnapshot } from "../desktopApi";
+import { isGuestMirrorMode, saveProject, type TransportSnapshot } from "../desktopApi";
 import { useTransportStore } from "../store";
 
 /**
@@ -85,7 +85,10 @@ export function useAutoSave({
   depsRef.current = { applyPlaybackSnapshot, setStatus, formatErrorStatus, t };
 
   useEffect(() => {
-    if (!enabled) {
+    // A network-session guest shows the HOST's session: saving it is the
+    // host's job (save_project is not available to guests), and trying every
+    // tick would only fill the status line with refusals.
+    if (!enabled || isGuestMirrorMode()) {
       return;
     }
 

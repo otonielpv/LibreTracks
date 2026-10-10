@@ -2,7 +2,7 @@
 
 use std::net::{IpAddr, Ipv4Addr};
 
-use serde_json::json;
+use serde_json::{json, Value};
 
 use super::*;
 use crate::permissions::Role;
@@ -168,8 +168,8 @@ async fn command_round_trip_and_local_permission_check() {
         .unwrap()
         .unwrap();
     assert_eq!(incoming.command, LinkCommand::Play);
-    incoming.reply.send(Ok(())).unwrap();
-    assert_eq!(send.await.unwrap(), Ok(()));
+    incoming.reply.send(Ok(Value::Null)).unwrap();
+    assert_eq!(send.await.unwrap(), Ok(Value::Null));
 
     // An editor-only command is refused locally, without a round trip.
     let refused = guest
@@ -334,4 +334,85 @@ async fn kick_is_final_for_the_guest() {
         },
     )
     .await;
+}
+
+#[tokio::test]
+async fn invoke_returns_the_hosts_value_and_its_error_text() {
+    let mut host = host().await;
+    let mut guest = join_ok(guest_config(host.handle.port(), "mirror"));
+    until_state(&mut guest, GuestState::Connected).await;
+
+    let handle = guest.handle.clone();
+    let read = tokio::spawn(async move {
+        handle
+            .send_command(
+                LinkCommand::Invoke {
+                    command: "get_song_view".into(),
+                    args: json!({ "includeWaveforms": false }),
+                },
+                None,
+            )
+            .await
+    });
+    let incoming = host.commands.recv().await.unwrap();
+    assert!(matches!(incoming.command, LinkCommand::Invoke { .. }));
+    incoming
+        .reply
+        .send(Ok(json!({ "title": "Directo" })))
+        .unwrap();
+    assert_eq!(read.await.unwrap(), Ok(json!({ "title": "Directo" })));
+
+    let handle = guest.handle.clone();
+    let fails = tokio::spawn(async move {
+        handle
+            .send_command(
+                LinkCommand::Invoke {
+                    command: "move_clip".into(),
+                    args: json!({}),
+                },
+                None,
+            )
+            .await
+    });
+    let incoming = host.commands.recv().await.unwrap();
+    incoming
+        .reply
+        .send(Err(crate::server::CommandFailure {
+            reason: CommandRejection::Failed,
+            message: Some("clip not found".into()),
+        }))
+        .unwrap();
+    assert_eq!(
+        fails.await.unwrap(),
+        Err(CommandError::Failed("clip not found".into()))
+    );
+}
+
+#[tokio::test]
+async fn host_events_reach_the_guest_in_order() {
+    let host = host().await;
+    let mut guest = join_ok(guest_config(host.handle.port(), "ev"));
+    until_state(&mut guest, GuestState::Connected).await;
+    // Give the writer time to subscribe before publishing.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    host.handle
+        .publish_event("transport:lifecycle", &json!({ "kind": "play" }));
+    host.handle
+        .publish_event("waveform:ready", &json!({ "id": 1 }));
+    let first = next_event(&mut guest, |event| {
+        matches!(event, GuestEvent::Event { .. })
+    })
+    .await;
+    let second = next_event(&mut guest, |event| {
+        matches!(event, GuestEvent::Event { .. })
+    })
+    .await;
+    let names: Vec<String> = [first, second]
+        .into_iter()
+        .map(|event| match event {
+            GuestEvent::Event { name, .. } => name,
+            _ => unreachable!(),
+        })
+        .collect();
+    assert_eq!(names, vec!["transport:lifecycle", "waveform:ready"]);
 }

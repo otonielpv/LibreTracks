@@ -5,6 +5,7 @@ const es = {
     description:
       "Conecta varios LibreTracks en la misma Wi-Fi: uno hospeda y el resto lo sigue con su propia app.",
     sideNav: "Red",
+    sideNavGuest: "Invitado",
     tabs: { host: "Hospedar", join: "Unirse" },
     roles: { viewer: "Lector", controller: "Control", editor: "Edición" },
     latency: "{{ms}} ms",
@@ -128,6 +129,16 @@ const es = {
       allowHint: "Windows pedirá confirmación de administrador.",
       applying: "Pidiendo permiso a Windows...",
       done: "Listo. Los demás dispositivos ya pueden unirse.",
+    },
+    guestErrors: {
+      forbidden: "Tu rol en la sesión de red no permite hacer esto. Pídele al anfitrión otro rol.",
+      notAvailable: "No disponible al seguir a un anfitrión: hazlo en el dispositivo que hospeda.",
+      notConnected: "Sin conexión con el anfitrión. Reconectando…",
+      disconnected: "Se perdió la conexión con el anfitrión antes de que respondiera.",
+      timedOut: "El anfitrión no ha respondido a tiempo.",
+      stale: "El anfitrión cambió esto mientras lo editabas. Vuelve a intentarlo.",
+      invalid: "El anfitrión no pudo hacerlo.",
+      generic: "El anfitrión no pudo hacerlo.",
     },
     badge: {
       hosting: "Anfitrión · {{count}}",

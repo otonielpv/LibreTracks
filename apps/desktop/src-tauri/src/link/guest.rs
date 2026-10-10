@@ -291,6 +291,29 @@ async fn relay(
             }
         };
         match event {
+            GuestEvent::Event {
+                name,
+                payload,
+                host_monotonic_ms,
+            } => {
+                // Mirror mode: the host's app event, under a prefixed name so
+                // it never mixes with this device's own (idle) engine events.
+                let payload = if name == "transport:lifecycle" {
+                    with_guest(&app, |guest| {
+                        rewrite_lifecycle(
+                            payload.clone(),
+                            host_monotonic_ms,
+                            guest.handle.now_ms(),
+                            guest.handle.host_offset_ms(),
+                            unix_ms(),
+                        )
+                    })
+                    .unwrap_or(payload)
+                } else {
+                    payload
+                };
+                let _ = app.emit(&format!("{MIRROR_EVENT_PREFIX}{name}"), payload);
+            }
             GuestEvent::State(state) => {
                 let (name, reason, expected) = state_name(&state);
                 with_guest(&app, |guest| {
@@ -357,15 +380,61 @@ async fn relay(
     }
 }
 
+/// Prefix of the host's app events re-emitted on a guest (mirror mode).
+pub const MIRROR_EVENT_PREFIX: &str = "link-mirror://";
+
+/// Prefix of the errors a guest's UI translates (`guest:forbidden`, …).
+/// A command that ran on the host and failed returns the host's own error
+/// text instead, exactly as if it had failed locally.
+pub const GUEST_ERROR_PREFIX: &str = "guest:";
+
+/// A host's `transport:lifecycle` re-anchored for this device: the UI
+/// extrapolates the playhead from `anchorPositionSeconds` at
+/// `emittedAtUnixMs` on ITS clock, so both are moved to now on this device,
+/// across the network delay and the clock offset.
+pub fn rewrite_lifecycle(
+    mut payload: Value,
+    host_instant_ms: u64,
+    guest_now_ms: f64,
+    offset_ms: Option<f64>,
+    guest_unix_ms: u64,
+) -> Value {
+    let snapshot = &payload["snapshot"];
+    let running = snapshot["playbackState"] == "playing"
+        && snapshot["transportClock"]["running"]
+            .as_bool()
+            .unwrap_or(false);
+    let rate = snapshot["transportClock"]["playbackRate"]
+        .as_f64()
+        .unwrap_or(1.0);
+    if let Some(anchor) = payload["anchorPositionSeconds"].as_f64() {
+        let offset = offset_ms.unwrap_or(host_instant_ms as f64 - guest_now_ms);
+        let moved = extrapolate_position(
+            anchor,
+            host_instant_ms as f64,
+            rate,
+            running,
+            guest_now_ms,
+            offset,
+        );
+        payload["anchorPositionSeconds"] = Value::from(moved);
+    }
+    payload["emittedAtUnixMs"] = Value::from(guest_unix_ms);
+    payload
+}
+
 /// Error codes the UI translates.
-pub fn command_error_code(error: CommandError) -> &'static str {
+pub fn command_error_code(error: &CommandError) -> String {
     match error {
-        CommandError::NotConnected => "notConnected",
-        CommandError::Disconnected => "disconnected",
-        CommandError::TimedOut => "timedOut",
-        CommandError::Rejected(CommandRejection::Forbidden) => "forbidden",
-        CommandError::Rejected(CommandRejection::Stale) => "stale",
-        CommandError::Rejected(CommandRejection::Invalid) => "invalid",
+        CommandError::NotConnected => "notConnected".into(),
+        CommandError::Disconnected => "disconnected".into(),
+        CommandError::TimedOut => "timedOut".into(),
+        CommandError::Rejected(CommandRejection::Forbidden) => "forbidden".into(),
+        CommandError::Rejected(CommandRejection::Stale) => "stale".into(),
+        CommandError::Rejected(CommandRejection::Invalid) => "invalid".into(),
+        CommandError::Rejected(CommandRejection::Failed) => "invalid".into(),
+        CommandError::Rejected(CommandRejection::NotAvailable) => "notAvailable".into(),
+        CommandError::Failed(message) => message.clone(),
     }
 }
 
@@ -373,13 +442,28 @@ pub async fn send_command(
     app: &AppHandle,
     command: LinkCommand,
     base_revision: Option<u64>,
-) -> Result<(), String> {
+) -> Result<Value, String> {
     let handle =
         with_guest(app, |guest| guest.handle.clone()).ok_or_else(|| "notConnected".to_string())?;
     handle
         .send_command(command, base_revision)
         .await
-        .map_err(|error| command_error_code(error).to_string())
+        .map_err(|error| command_error_code(&error))
+}
+
+/// Mirror mode: run one of the desktop UI's commands on the host. The
+/// host's own error text comes back as is; refusals come back as
+/// `guest:<code>` so the UI can say why in the user's language.
+pub async fn proxy_invoke(app: &AppHandle, command: String, args: Value) -> Result<Value, String> {
+    let handle = with_guest(app, |guest| guest.handle.clone())
+        .ok_or_else(|| format!("{GUEST_ERROR_PREFIX}notConnected"))?;
+    handle
+        .send_command(LinkCommand::Invoke { command, args }, None)
+        .await
+        .map_err(|error| match error {
+            CommandError::Failed(message) => message,
+            other => format!("{GUEST_ERROR_PREFIX}{}", command_error_code(&other)),
+        })
 }
 
 #[cfg(test)]
@@ -428,12 +512,43 @@ mod tests {
     #[test]
     fn command_errors_have_stable_codes() {
         assert_eq!(
-            command_error_code(CommandError::NotConnected),
+            command_error_code(&CommandError::NotConnected),
             "notConnected"
         );
         assert_eq!(
-            command_error_code(CommandError::Rejected(CommandRejection::Stale)),
+            command_error_code(&CommandError::Rejected(CommandRejection::Stale)),
             "stale"
         );
+        assert_eq!(
+            command_error_code(&CommandError::Failed("clip not found".into())),
+            "clip not found"
+        );
+    }
+
+    #[test]
+    fn lifecycle_is_reanchored_to_this_device() {
+        let payload = json!({
+            "kind": "play",
+            "snapshot": playing(10.0, 1.0),
+            "anchorPositionSeconds": 10.0,
+            "emittedAtUnixMs": 1u64,
+        });
+        // Host stamped it at host-ms 5_000; now it is guest-ms 2_250 and the
+        // host is 3_000 ms ahead: 250 ms later on the host clock.
+        let moved = rewrite_lifecycle(payload, 5_000, 2_250.0, Some(3_000.0), 777);
+        assert!((moved["anchorPositionSeconds"].as_f64().unwrap() - 10.25).abs() < 1e-9);
+        assert_eq!(moved["emittedAtUnixMs"], 777);
+        assert_eq!(moved["kind"], "play");
+    }
+
+    #[test]
+    fn a_stopped_lifecycle_keeps_its_position() {
+        let payload = json!({
+            "snapshot": { "playbackState": "stopped", "transportClock": { "running": false } },
+            "anchorPositionSeconds": 42.0,
+            "emittedAtUnixMs": 1u64,
+        });
+        let moved = rewrite_lifecycle(payload, 0, 99_999.0, Some(0.0), 5);
+        assert_eq!(moved["anchorPositionSeconds"], 42.0);
     }
 }

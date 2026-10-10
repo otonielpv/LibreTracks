@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { TourLauncherButton } from "../../tutorial/TourLauncherButton";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
+import { networkNavState } from "../../network/networkNavState";
 import { useNetworkSessionStore } from "../../network/networkSessionStore";
 import { isMobileApp } from "../desktopApi";
 import type { SidebarTab } from "../types";
@@ -39,6 +40,9 @@ export function SideNav({
   const { t } = useTranslation();
   const isNetworkModalOpen = useNetworkSessionStore((state) => state.isModalOpen);
   const openNetworkModal = useNetworkSessionStore((state) => state.openModal);
+  const networkHost = useNetworkSessionStore((state) => state.host);
+  const networkGuest = useNetworkSessionStore((state) => state.guest);
+  const networkState = networkNavState(networkHost, networkGuest);
 
   return (
     <aside
@@ -111,12 +115,20 @@ export function SideNav({
       {FEATURE_FLAGS.networkSessions ? (
         <button
           type="button"
-          className={isNetworkModalOpen ? "is-active" : ""}
+          className={`lt-network-nav${isNetworkModalOpen ? " is-active" : ""}`}
           aria-label={t("networkSession.title")}
           onClick={openNetworkModal}
         >
           <span className="material-symbols-outlined">hub</span>
-          {t("networkSession.sideNav")}
+          {networkGuest.joined && networkGuest.state === "connected"
+            ? t("networkSession.sideNavGuest")
+            : t("networkSession.sideNav")}
+          {networkState ? (
+            <span
+              className={`lt-network-nav-dot${networkState === "ok" ? "" : ` is-${networkState}`}`}
+              aria-hidden="true"
+            />
+          ) : null}
         </button>
       ) : null}
       <button

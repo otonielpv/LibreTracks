@@ -64,6 +64,9 @@ pub fn required_permission(command: &LinkCommand) -> Permission {
         | LinkCommand::CancelJump
         | LinkCommand::SetJumpSettings { .. }
         | LinkCommand::ReorderSong { .. } => Permission::Control,
+        // The host checks the real role per desktop command; at this level
+        // every guest may ask (a viewer still reads the song through it).
+        LinkCommand::Invoke { .. } => Permission::View,
         LinkCommand::SetSongChart { .. }
         | LinkCommand::SetSongTranspose { .. }
         | LinkCommand::SetTrackMix { .. }

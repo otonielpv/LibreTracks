@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   cancelAppClose,
   exitApp,
+  isGuestMirrorMode,
   isMobileApp,
   isTauriApp,
   listenToAppCloseRequested,
@@ -39,7 +40,9 @@ export function AppCloseGuard() {
     if (runningRef.current) return;
     runningRef.current = true;
 
-    if (!useSongStore.getState().song) {
+    // A network-session guest shows the host's session, which the host saves:
+    // there is nothing of this device's to save on the way out.
+    if (!useSongStore.getState().song || isGuestMirrorMode()) {
       quit();
       return;
     }

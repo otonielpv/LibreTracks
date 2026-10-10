@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
+use serde_json::Value;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_tungstenite::tungstenite::Message;
@@ -69,10 +70,31 @@ impl HostConfig {
             max_guests: DEFAULT_MAX_GUESTS,
             hello_timeout: Duration::from_secs(2),
             heartbeat: Duration::from_secs(1),
-            command_timeout: Duration::from_secs(2),
+            // Generous: an `invoke` can be a whole song view with peaks.
+            command_timeout: Duration::from_secs(30),
         }
     }
 }
+
+/// Why a command did not go through, as the guest will see it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommandFailure {
+    pub reason: CommandRejection,
+    pub message: Option<String>,
+}
+
+impl From<CommandRejection> for CommandFailure {
+    fn from(reason: CommandRejection) -> Self {
+        Self {
+            reason,
+            message: None,
+        }
+    }
+}
+
+/// What the app answers for a command: the command's return value (Null
+/// for the typed commands) or why it failed.
+pub type CommandReply = Result<Value, CommandFailure>;
 
 /// A command a guest is allowed to send, for the app to apply.
 #[derive(Debug)]
@@ -82,7 +104,7 @@ pub struct IncomingCommand {
     pub grants: Grants,
     pub base_revision: Option<u64>,
     pub command: LinkCommand,
-    pub reply: oneshot::Sender<Result<(), CommandRejection>>,
+    pub reply: oneshot::Sender<CommandReply>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -137,6 +159,9 @@ struct Shared {
     trusted_tx: watch::Sender<Vec<TrustedDevice>>,
     commands_tx: mpsc::Sender<IncomingCommand>,
     shutdown_tx: watch::Sender<bool>,
+    /// Relayed app events, in order. A guest that falls this far behind
+    /// skips the oldest (it will catch up from the next snapshot).
+    events_tx: tokio::sync::broadcast::Sender<Arc<str>>,
 }
 
 #[derive(Clone)]
@@ -218,6 +243,7 @@ pub async fn start_host(config: HostConfig) -> std::io::Result<HostRuntime> {
         trusted_tx: watch::channel(trusted).0,
         commands_tx,
         shutdown_tx,
+        events_tx: tokio::sync::broadcast::channel(512).0,
     });
 
     tokio::spawn(accept_loop(listener, shared.clone()));
@@ -306,6 +332,30 @@ impl HostHandle {
             settings,
         }) {
             self.shared.live_settings_tx.send_replace(Some(text));
+        }
+    }
+
+    /// Relay an app event to every guest (mirror mode). Serialized once.
+    pub fn publish_event<T: Serialize>(&self, name: &str, payload: &T) {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Out<'a, T> {
+            #[serde(rename = "type")]
+            kind: &'static str,
+            name: &'a str,
+            payload: &'a T,
+            host_monotonic_ms: u64,
+        }
+        if self.shared.events_tx.receiver_count() == 0 {
+            return;
+        }
+        if let Some(text) = to_text(&Out {
+            kind: "event",
+            name,
+            payload,
+            host_monotonic_ms: self.now_ms(),
+        }) {
+            let _ = self.shared.events_tx.send(text);
         }
     }
 
@@ -700,20 +750,14 @@ fn handle_command(
     base_revision: Option<u64>,
     command: LinkCommand,
 ) {
-    let reply_with = |result: Result<(), CommandRejection>| {
-        let message = ServerMessage::CommandResult {
-            request_id,
-            ok: result.is_ok(),
-            reason: result.err(),
-        };
-        to_text(&message).map(Control::Send)
-    };
+    let reply_with =
+        |result: CommandReply| to_text(&result_message(request_id, result)).map(Control::Send);
 
     let Some((grants, device_name)) = shared.current_grants(device_id, conn_id) else {
         return;
     };
     if !is_allowed(&grants, &command) {
-        if let Some(message) = reply_with(Err(CommandRejection::Forbidden)) {
+        if let Some(message) = reply_with(Err(CommandRejection::Forbidden.into())) {
             let _ = control.try_send(message);
         }
         return;
@@ -733,22 +777,36 @@ fn handle_command(
     let timeout = shared.command_timeout;
     tokio::spawn(async move {
         let result = if commands_tx.send(incoming).await.is_err() {
-            Err(CommandRejection::Invalid)
+            Err(CommandRejection::Invalid.into())
         } else {
             match tokio::time::timeout(timeout, reply_rx).await {
                 Ok(Ok(result)) => result,
-                _ => Err(CommandRejection::Invalid),
+                _ => Err(CommandRejection::Invalid.into()),
             }
         };
-        let message = ServerMessage::CommandResult {
-            request_id,
-            ok: result.is_ok(),
-            reason: result.err(),
-        };
-        if let Some(text) = to_text(&message) {
+        if let Some(text) = to_text(&result_message(request_id, result)) {
             let _ = control.send(Control::Send(text)).await;
         }
     });
+}
+
+fn result_message(request_id: u64, result: CommandReply) -> ServerMessage {
+    match result {
+        Ok(value) => ServerMessage::CommandResult {
+            request_id,
+            ok: true,
+            reason: None,
+            value: (!value.is_null()).then_some(value),
+            message: None,
+        },
+        Err(failure) => ServerMessage::CommandResult {
+            request_id,
+            ok: false,
+            reason: Some(failure.reason),
+            value: None,
+            message: failure.message,
+        },
+    }
 }
 
 async fn run_writer(
@@ -763,6 +821,7 @@ async fn run_writer(
     let mut live = shared.live_settings_tx.subscribe();
     let mut peers = shared.peers_tx.subscribe();
     let mut shutdown = shared.shutdown_tx.subscribe();
+    let mut events = shared.events_tx.subscribe();
     let mut heartbeat = tokio::time::interval(shared.heartbeat);
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
@@ -818,6 +877,11 @@ async fn run_writer(
                 let text = peers.borrow_and_update().clone();
                 if is_editor(&shared) { text } else { None }
             }
+            event = events.recv() => match event {
+                Ok(text) => Some(text),
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => None,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+            },
             _ = heartbeat.tick() => {
                 if last_sent.elapsed() >= shared.heartbeat {
                     transport.borrow().clone()

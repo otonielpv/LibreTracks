@@ -5,6 +5,7 @@ const en = {
     description:
       "Connect several LibreTracks on the same Wi-Fi: one hosts and the others follow it from their own app.",
     sideNav: "Network",
+    sideNavGuest: "Guest",
     tabs: { host: "Host", join: "Join" },
     roles: { viewer: "Viewer", controller: "Control", editor: "Edit" },
     latency: "{{ms}} ms",
@@ -128,6 +129,16 @@ const en = {
       allowHint: "Windows will ask for administrator confirmation.",
       applying: "Asking Windows for permission...",
       done: "Done. Other devices can join now.",
+    },
+    guestErrors: {
+      forbidden: "Your role in the network session does not allow this. Ask the host for another role.",
+      notAvailable: "Not available while following a host: do it on the hosting device.",
+      notConnected: "Not connected to the host. Reconnecting…",
+      disconnected: "The connection to the host dropped before it answered.",
+      timedOut: "The host did not answer in time.",
+      stale: "The host changed this while you were editing. Try again.",
+      invalid: "The host could not do it.",
+      generic: "The host could not do it.",
     },
     badge: {
       hosting: "Host · {{count}}",

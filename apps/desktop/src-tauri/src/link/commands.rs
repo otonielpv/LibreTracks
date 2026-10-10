@@ -141,8 +141,18 @@ pub async fn link_guest_command(
     app: AppHandle,
     command: LinkCommand,
     base_revision: Option<u64>,
-) -> Result<(), String> {
+) -> Result<serde_json::Value, String> {
     guest::send_command(&app, command, base_revision).await
+}
+
+/// Mirror mode: the guest UI's desktop command, run on the host.
+#[tauri::command]
+pub async fn link_proxy_invoke(
+    app: AppHandle,
+    command: String,
+    args: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    guest::proxy_invoke(&app, command, args.unwrap_or(serde_json::Value::Null)).await
 }
 
 /// Start looking for hosts (the «Join» tab is open). Returns what is already

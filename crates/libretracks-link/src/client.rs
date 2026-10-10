@@ -60,7 +60,8 @@ impl GuestConfig {
             ping_interval: Duration::from_millis(CLOCK_PING_INTERVAL_MS),
             silence_timeout: Duration::from_secs(3),
             connect_timeout: Duration::from_secs(3),
-            command_timeout: Duration::from_secs(2),
+            // Generous: an `invoke` can be a whole song view with peaks.
+            command_timeout: Duration::from_secs(30),
         }
     }
 }
@@ -106,14 +107,22 @@ pub enum GuestEvent {
     Song(Value),
     LiveSettings(Value),
     Peers(Vec<PeerInfo>),
+    /// An app event relayed by the host (mirror mode).
+    Event {
+        name: String,
+        payload: Value,
+        host_monotonic_ms: u64,
+    },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommandError {
     NotConnected,
     Disconnected,
     TimedOut,
     Rejected(CommandRejection),
+    /// The command ran on the host and returned this error.
+    Failed(String),
 }
 
 /// Reconnection delays: grow, then stay at the cap.
@@ -152,7 +161,7 @@ impl Default for Backoff {
 struct Outgoing {
     command: LinkCommand,
     base_revision: Option<u64>,
-    reply: oneshot::Sender<Result<(), CommandError>>,
+    reply: oneshot::Sender<Result<Value, CommandError>>,
 }
 
 struct ClientShared {
@@ -210,7 +219,7 @@ impl GuestHandle {
         &self,
         command: LinkCommand,
         base_revision: Option<u64>,
-    ) -> Result<(), CommandError> {
+    ) -> Result<Value, CommandError> {
         if self.state() != GuestState::Connected {
             return Err(CommandError::NotConnected);
         }
@@ -430,7 +439,7 @@ async fn connect_and_serve(
         .await;
     set_state(shared, events, GuestState::Connected).await;
 
-    let mut pending: HashMap<u64, oneshot::Sender<Result<(), CommandError>>> = HashMap::new();
+    let mut pending: HashMap<u64, oneshot::Sender<Result<Value, CommandError>>> = HashMap::new();
     let mut next_request = 1u64;
     let mut ping = tokio::time::interval(config.ping_interval);
     ping.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -471,15 +480,23 @@ async fn connect_and_serve(
                             clock.add(ClockSample { t0: t0 as f64, t1: t1 as f64, t2: t2 as f64, t3 });
                         }
                     }
-                    ServerMessage::CommandResult { request_id, ok, reason } => {
+                    ServerMessage::CommandResult { request_id, ok, reason, value, message } => {
                         if let Some(reply) = pending.remove(&request_id) {
                             let result = if ok {
-                                Ok(())
+                                Ok(value.unwrap_or(Value::Null))
                             } else {
-                                Err(CommandError::Rejected(reason.unwrap_or(CommandRejection::Invalid)))
+                                match reason.unwrap_or(CommandRejection::Invalid) {
+                                    CommandRejection::Failed => Err(CommandError::Failed(
+                                        message.unwrap_or_default(),
+                                    )),
+                                    other => Err(CommandError::Rejected(other)),
+                                }
                             };
                             let _ = reply.send(result);
                         }
+                    }
+                    ServerMessage::Event { name, payload, host_monotonic_ms } => {
+                        let _ = events.send(GuestEvent::Event { name, payload, host_monotonic_ms }).await;
                     }
                     ServerMessage::Rejected { reason, expected_protocol } => {
                         break Ended::Rejected(reason, expected_protocol);
