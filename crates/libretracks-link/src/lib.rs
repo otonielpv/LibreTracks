@@ -10,12 +10,19 @@
 //! Permissions are checked on the host for every incoming command
 //! ([`permissions::is_allowed`]); the guest UI hiding buttons is a courtesy.
 
+pub mod net;
+pub mod pairing;
 pub mod permissions;
 pub mod protocol;
+pub mod server;
 pub mod version;
 
+pub use pairing::TrustedDevice;
 pub use permissions::{is_allowed, required_permission, Grants, Permission, Role};
 pub use protocol::{
     ClientMessage, CommandRejection, LinkCommand, PeerInfo, RejectReason, ServerMessage,
+};
+pub use server::{
+    random_hex, start_host, GuestSummary, HostConfig, HostHandle, HostRuntime, IncomingCommand,
 };
 pub use version::{negotiate, Incompatible, PROTOCOL_VERSION};

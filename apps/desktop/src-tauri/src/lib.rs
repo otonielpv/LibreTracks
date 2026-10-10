@@ -9,6 +9,7 @@ mod audio;
 mod commands;
 mod external_project;
 mod infra;
+mod link;
 mod models;
 mod platform;
 mod session_feed;
@@ -269,6 +270,7 @@ pub fn run() {
             // Before the remote: it subscribes to the feed. Idle (no session
             // lock) until someone subscribes, so on mobile it costs nothing.
             session_feed::initialize_session_feed(app);
+            link::initialize_link(app);
             remote::initialize_remote(app)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
 
@@ -287,6 +289,14 @@ pub fn run() {
             commands::app_close::exit_app,
             commands::app_close::cancel_app_close,
             commands::system::get_telemetry_platform,
+            link::commands::link_get_settings,
+            link::commands::link_save_settings,
+            link::commands::link_start_hosting,
+            link::commands::link_stop_hosting,
+            link::commands::link_host_status,
+            link::commands::link_set_guest_role,
+            link::commands::link_kick_guest,
+            link::commands::link_revoke_trusted,
             commands::system::get_remote_server_info,
             commands::system::get_remote_firewall_status,
             commands::system::allow_remote_through_firewall,

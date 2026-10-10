@@ -159,14 +159,10 @@ impl<A: Serialize, S: Serialize, V: Serialize> FeedTracker<A, S, V> {
 pub type SessionFeedFrame = FeedFrame<AppSettings, TransportSnapshot, Option<SongView>>;
 
 /// Managed state: subscribe to follow the session.
-// On mobile nothing subscribes yet: the remote is desktop-only and hosting a
-// network session arrives with step 02 of docs/plans/network-sessions.
-#[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
 pub struct SessionFeed {
     tx: watch::Sender<Arc<SessionFeedFrame>>,
 }
 
-#[cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
 impl SessionFeed {
     pub fn subscribe(&self) -> watch::Receiver<Arc<SessionFeedFrame>> {
         self.tx.subscribe()

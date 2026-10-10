@@ -49,7 +49,13 @@ pub enum ClientMessage {
         command: LinkCommand,
     },
     /// NTP-style clock sample; `t0` is the guest's monotonic ms at send.
-    ClockPing { t0: u64 },
+    /// `rttMs` is the guest's latest round-trip estimate, so the host can
+    /// show each guest's latency.
+    ClockPing {
+        t0: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rtt_ms: Option<u32>,
+    },
 }
 
 /// Host → guest.
@@ -63,6 +69,10 @@ pub enum ServerMessage {
     Welcome {
         protocol_version: u32,
         session_id: String,
+        /// Stable id of the host install (unlike `sessionId`, which changes
+        /// every time hosting starts). Guests key their tokens by it.
+        #[serde(default)]
+        host_id: String,
         host_name: String,
         grants: Grants,
         /// Present when the guest asked to be remembered.
@@ -345,8 +355,11 @@ mod tests {
     #[test]
     fn clock_ping_round_trips() {
         round_trip_client(
-            ClientMessage::ClockPing { t0: 99 },
-            json!({ "type": "clockPing", "t0": 99 }),
+            ClientMessage::ClockPing {
+                t0: 99,
+                rtt_ms: Some(12),
+            },
+            json!({ "type": "clockPing", "t0": 99, "rttMs": 12 }),
         );
     }
 
@@ -356,6 +369,7 @@ mod tests {
             ServerMessage::Welcome {
                 protocol_version: 1,
                 session_id: "s".into(),
+                host_id: "h".into(),
                 host_name: "PC".into(),
                 grants: Grants { role: Role::Editor },
                 token: Some("tok".into()),
@@ -365,6 +379,7 @@ mod tests {
                 "type": "welcome",
                 "protocolVersion": 1,
                 "sessionId": "s",
+                "hostId": "h",
                 "hostName": "PC",
                 "grants": { "role": "editor" },
                 "token": "tok",

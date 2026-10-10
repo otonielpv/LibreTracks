@@ -2573,8 +2573,13 @@ dependencies = [
 name = "libretracks-link"
 version = "0.0.1"
 dependencies = [
+ "futures-util",
+ "getrandom 0.2.17",
  "serde",
  "serde_json",
+ "sha2",
+ "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]
