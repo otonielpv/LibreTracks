@@ -5330,6 +5330,32 @@ html.lt-ios body {
   background: rgb(255 226 171 / 0.55);
 }
 
+/* Phone/tablet: the band is 18px tall and the resize strip and the fade
+   corner sat on the same few pixels, so a finger hit whichever it liked.
+   Two steps instead: the handles of a song only answer once it is selected
+   (a tap on an unselected song selects it), and they get separate zones: the
+   resize strip reaches OUT past the edge, the fade corner sits IN from it
+   (songFades.css). */
+.lt-mobile .lt-region-hotspot:not(.is-selected) .lt-region-resize-handle {
+  pointer-events: none;
+}
+
+.lt-mobile .lt-region-resize-handle {
+  width: 18px;
+  /* Only the 4px inside the band are painted; the rest is reach. */
+  background-clip: content-box;
+}
+
+.lt-mobile .lt-region-resize-handle.is-start {
+  left: -14px;
+  padding-left: 14px;
+}
+
+.lt-mobile .lt-region-resize-handle.is-end {
+  right: -14px;
+  padding-right: 14px;
+}
+
 .lt-marker-hotspot:focus-visible {
   outline: 1px solid rgb(255 226 171 / 0.88);
   outline-offset: 1px;

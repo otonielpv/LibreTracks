@@ -56,8 +56,22 @@
   }
 }
 
-/* Touch: a finger needs more than 8px. */
+/* Touch: a finger needs more than 8px, and its own zone. The corner sits
+   12px in from the edge, clear of the resize strip (which reaches out past
+   the edge, see .lt-region-resize-handle in styles.css), with an invisible
+   hit area around it; and it only answers on the selected song. */
 .lt-mobile .lt-song-fade-handle {
   width: 14px;
   height: 14px;
+  margin: 0 12px;
+}
+
+.lt-mobile .lt-song-fade-handle::after {
+  content: "";
+  position: absolute;
+  inset: -8px -6px;
+}
+
+.lt-mobile .lt-region-hotspot:not(.is-selected) .lt-song-fade-handle {
+  pointer-events: none;
 }

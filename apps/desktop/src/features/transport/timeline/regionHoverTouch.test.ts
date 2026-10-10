@@ -41,4 +41,18 @@ describe("hover de la banda de canción en táctil", () => {
     expect(sheets["styles.css"]).toMatch(/\.lt-region-hotspot\.is-selected \.lt-region-resize-handle/);
     expect(sheets["songFades.css"]).toMatch(/\.lt-region-hotspot\.is-selected \.lt-song-fade-handle/);
   });
+
+  it("en táctil los tiradores sólo responden en la canción seleccionada", () => {
+    expect(sheets["styles.css"]).toMatch(
+      /\.lt-mobile \.lt-region-hotspot:not\(\.is-selected\) \.lt-region-resize-handle \{\s*pointer-events: none;/,
+    );
+    expect(sheets["songFades.css"]).toMatch(
+      /\.lt-mobile \.lt-region-hotspot:not\(\.is-selected\) \.lt-song-fade-handle \{\s*pointer-events: none;/,
+    );
+  });
+
+  it("en táctil redimensionar sale hacia fuera y el fade se mete hacia dentro", () => {
+    expect(sheets["styles.css"]).toMatch(/\.lt-mobile \.lt-region-resize-handle\.is-start \{\s*left: -14px;/);
+    expect(sheets["songFades.css"]).toMatch(/\.lt-mobile \.lt-song-fade-handle \{[^}]*margin: 0 12px;/);
+  });
 });
