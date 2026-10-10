@@ -438,3 +438,10 @@
 .lt-network-nav-dot.is-error {
   background: #ff6b6b;
 }
+
+/* Phones and tablets: the topbar has no room for the pill and it ended up
+   over the toolbar. The side-nav «Red» button already shows the state (dot
+   and «Invitado») and opens the same panel. */
+.lt-mobile .lt-network-badge {
+  display: none;
+}
