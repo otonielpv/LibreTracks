@@ -22,6 +22,8 @@ const browserDrop = {
   dropFolderAt: vi.fn(),
   addPathsAtPlayhead: vi.fn(),
   addFolderAtPlayhead: vi.fn(),
+  previewAt: vi.fn(),
+  clearPreview: vi.fn(),
 };
 
 function renderPanel() {

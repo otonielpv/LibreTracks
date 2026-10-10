@@ -27,6 +27,8 @@ const browserDrop = {
   dropFolderAt: vi.fn(),
   addPathsAtPlayhead: vi.fn(),
   addFolderAtPlayhead: vi.fn(),
+  previewAt: vi.fn(),
+  clearPreview: vi.fn(),
 };
 
 function renderPanel(places: string[]) {
@@ -117,6 +119,14 @@ describe("FolderLibraryPanel", () => {
     await waitFor(() =>
       expect(browserDrop.dropPathsAt).toHaveBeenCalledWith(["D:/Stems/Click.wav"], 300, 200),
     );
+    // While dragging, the timeline showed where it would land; the drop
+    // cleared it.
+    expect(browserDrop.previewAt).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "files", paths: ["D:/Stems/Click.wav"] }),
+      300,
+      200,
+    );
+    expect(browserDrop.clearPreview).toHaveBeenCalled();
   });
 
   it("removes a place", () => {

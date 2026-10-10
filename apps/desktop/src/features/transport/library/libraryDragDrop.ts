@@ -62,6 +62,7 @@ import {
   classifyDroppedPaths,
   resolveFolderDropLayout,
   type DroppedFileClassification,
+  type ExternalDropKind,
   type ExternalDropPreview,
   type NativeDroppedPathClassification,
 } from "./dragDrop";
@@ -2075,6 +2076,34 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     });
   }
 
+  /**
+   * The guide line and badge at a screen point, for drags that are not the
+   * browser's own (the folder library drags with pointer events). Same look
+   * as files dragged in from the OS file manager, since they drop the same
+   * way. Clears it and returns false when the point is off the timeline.
+   */
+  function previewDropAtClientPoint(clientX: number, clientY: number, kind: ExternalDropKind): boolean {
+    const drop = resolveTimelineDropFromClientPoint(clientX, clientY);
+    if (!drop.isOverTimeline) {
+      deps().setExternalDropPreview(null);
+      return false;
+    }
+    deps().setExternalDropPreview({
+      kind,
+      seconds: drop.dropSeconds,
+      previewLeftPx: drop.previewLeftPx ?? undefined,
+      previewClientX: drop.previewClientX ?? undefined,
+      rawSeconds: drop.rawSeconds ?? undefined,
+      snappedSeconds: drop.snappedSeconds ?? undefined,
+      snapApplied: drop.snapApplied,
+    });
+    return true;
+  }
+
+  function clearDropPreview() {
+    deps().setExternalDropPreview(null);
+  }
+
   function handleNativeFileDrop(args: {
     paths: string[];
     position: { x: number; y: number };
@@ -2262,6 +2291,8 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     handleNativeFileDragOver,
     handleNativeFileDrop,
     handleDomExternalDropPreviewChange,
+    previewDropAtClientPoint,
+    clearDropPreview,
   };
 }
 

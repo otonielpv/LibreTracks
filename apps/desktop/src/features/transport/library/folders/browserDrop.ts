@@ -6,7 +6,11 @@ import type { LibraryDragDrop } from "../libraryDragDrop";
 export type BrowserDropDeps = {
   dragDrop: () => Pick<
     LibraryDragDrop,
-    "resolveTimelineDropFromClientPoint" | "handleNativeExternalTimelineDrop" | "dropLibraryFolder"
+    | "resolveTimelineDropFromClientPoint"
+    | "handleNativeExternalTimelineDrop"
+    | "dropLibraryFolder"
+    | "previewDropAtClientPoint"
+    | "clearDropPreview"
   >;
   hasSession: () => boolean;
   runAction: (action: () => Promise<void>) => Promise<unknown>;
@@ -94,6 +98,18 @@ export function createBrowserDrop(deps: BrowserDropDeps) {
     return true;
   }
 
+  /** While dragging: where it would land, drawn on the timeline (the guide
+   * line and badge of a drop from the file manager). A folder is a song of
+   * audio. */
+  function previewAt(item: { kind: "files"; paths: string[] } | { kind: "folder" }, clientX: number, clientY: number) {
+    const kind = item.kind === "folder" ? "audio" : classifyDroppedPaths(item.paths).kind;
+    deps.dragDrop().previewDropAtClientPoint(clientX, clientY, kind);
+  }
+
+  function clearPreview() {
+    deps.dragDrop().clearDropPreview();
+  }
+
   /** Touch: no drag, so the selection lands at the playhead on new tracks. */
   function addPathsAtPlayhead(paths: string[]) {
     if (paths.length) placePaths(paths, deps.getPlayheadSeconds(), null);
@@ -109,7 +125,7 @@ export function createBrowserDrop(deps: BrowserDropDeps) {
     });
   }
 
-  return { dropPathsAt, dropFolderAt, addPathsAtPlayhead, addFolderAtPlayhead };
+  return { dropPathsAt, dropFolderAt, addPathsAtPlayhead, addFolderAtPlayhead, previewAt, clearPreview };
 }
 
 export type BrowserDrop = ReturnType<typeof createBrowserDrop>;

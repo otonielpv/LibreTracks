@@ -20,6 +20,8 @@ function setup(overTimeline: boolean) {
     })),
     handleNativeExternalTimelineDrop: vi.fn(),
     dropLibraryFolder: vi.fn(async () => {}),
+    previewDropAtClientPoint: vi.fn(() => overTimeline),
+    clearDropPreview: vi.fn(),
   };
   const deps = {
     dragDrop: () => dragDrop,
@@ -86,5 +88,19 @@ describe("folder library drops", () => {
       timelineStartSeconds: 42,
       layout: "vertical",
     });
+  });
+
+  // While dragging, the timeline draws where it would land, labelled by what
+  // is being dragged (a folder is a song of audio).
+  it("asks the timeline to show where a drag would land, and clears it", () => {
+    const { drop, dragDrop } = setup(true);
+    drop.previewAt({ kind: "files", paths: ["D:/Stems/Drums.wav"] }, 10, 20);
+    expect(dragDrop.previewDropAtClientPoint).toHaveBeenLastCalledWith(10, 20, "audio");
+    drop.previewAt({ kind: "files", paths: ["D:/Video/Letras.mp4"] }, 11, 21);
+    expect(dragDrop.previewDropAtClientPoint).toHaveBeenLastCalledWith(11, 21, "video");
+    drop.previewAt({ kind: "folder" }, 12, 22);
+    expect(dragDrop.previewDropAtClientPoint).toHaveBeenLastCalledWith(12, 22, "audio");
+    drop.clearPreview();
+    expect(dragDrop.clearDropPreview).toHaveBeenCalled();
   });
 });

@@ -131,17 +131,21 @@ export function FolderLibraryPanel({
       const current = dragRef.current;
       if (!current) return;
       const moved = Math.hypot(event.clientX - current.originX, event.clientY - current.originY);
+      const dragging = current.dragging || moved >= DRAG_THRESHOLD_PX;
       setDrag({
         ...current,
-        dragging: current.dragging || moved >= DRAG_THRESHOLD_PX,
+        dragging,
         x: event.clientX,
         y: event.clientY,
       });
+      // Show on the timeline where it would land.
+      if (dragging) browserDrop.previewAt(current.item, event.clientX, event.clientY);
     };
 
     const handleUp = (event: PointerEvent) => {
       const current = dragRef.current;
       setDrag(null);
+      browserDrop.clearPreview();
       if (!current?.dragging) return;
       const { item } = current;
       if (item.kind === "files") {
@@ -162,7 +166,10 @@ export function FolderLibraryPanel({
     };
 
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDrag(null);
+      if (event.key === "Escape") {
+        setDrag(null);
+        browserDrop.clearPreview();
+      }
     };
 
     window.addEventListener("pointermove", handleMove);
