@@ -42,11 +42,18 @@
   transform: translateX(4px);
 }
 
-/* Visible on hover, on the selected song, or when there is a fade to adjust. */
-.lt-region-hotspot:hover .lt-song-fade-handle,
+/* Visible on the selected song or when there is a fade to adjust; on hover
+   only with a real pointer (see `.lt-region-hotspot:hover` in styles.css:
+   on iOS a hover that reveals the handles made selecting take two taps). */
 .lt-region-hotspot.is-selected .lt-song-fade-handle,
 .lt-song-fade-handle.has-fade {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .lt-region-hotspot:hover .lt-song-fade-handle {
+    opacity: 1;
+  }
 }
 
 /* Touch: a finger needs more than 8px. */

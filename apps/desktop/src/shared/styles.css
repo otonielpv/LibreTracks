@@ -5267,10 +5267,24 @@ html.lt-ios body {
   z-index: 2;
 }
 
-.lt-region-hotspot.is-selected,
-.lt-region-hotspot:hover {
+.lt-region-hotspot.is-selected {
   background: rgb(255 226 171 / 0.16);
   box-shadow: inset 0 0 0 1px rgb(255 226 171 / 0.36);
+}
+
+/* Hover only with a pointer that hovers. On touch, iOS spends the first tap
+   on :hover when it reveals something inside (the resize and fade handles),
+   and selecting a song took two taps. Same fix as the bottom controls. */
+@media (hover: hover) {
+  .lt-region-hotspot:hover {
+    background: rgb(255 226 171 / 0.16);
+    box-shadow: inset 0 0 0 1px rgb(255 226 171 / 0.36);
+  }
+
+  .lt-region-hotspot:hover .lt-region-resize-handle {
+    opacity: 1;
+    background: rgb(255 226 171 / 0.55);
+  }
 }
 
 .lt-region-hotspot:focus-visible {
@@ -5310,7 +5324,6 @@ html.lt-ios body {
 .lt-region-resize-handle.is-start { left: -3px; }
 .lt-region-resize-handle.is-end   { right: -3px; }
 
-.lt-region-hotspot:hover .lt-region-resize-handle,
 .lt-region-hotspot.is-selected .lt-region-resize-handle,
 .lt-region-resize-handle.is-active {
   opacity: 1;
