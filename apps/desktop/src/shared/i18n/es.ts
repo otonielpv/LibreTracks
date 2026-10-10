@@ -70,6 +70,15 @@ const es = {
       invalid: "El anfitrión no pudo aplicar el cambio.",
       generic: "No se pudo completar: {{detail}}",
     },
+    guest: {
+      leave: "Salir",
+      waiting: "Esperando a que el anfitrión tenga una canción abierta…",
+      chords: "Acordes en este dispositivo",
+      capo: "Capo",
+      transpose: "Tono",
+      accidentals: "Alteraciones",
+      accidental: { auto: "Auto", sharps: "♯", flats: "♭" },
+    },
     badge: {
       hosting: "Anfitrión · {{count}}",
       guest: "Invitado · {{role}}",

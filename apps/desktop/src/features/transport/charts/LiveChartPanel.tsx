@@ -22,6 +22,10 @@ import { ChartEditorModal } from "./ChartEditorModal";
 import { parseChordPro, transposeChart, type ChartLine } from "@libretracks/shared/charts/chordChart";
 import { keyPrefersFlats, parseNoteRun } from "@libretracks/shared/charts/chordNotation";
 import {
+  personalPrefersFlats,
+  type AccidentalPreference,
+} from "@libretracks/shared/charts/personalChords";
+import {
   advancePlayHistory,
   applyLineRecording,
   autoLinkChart,
@@ -72,6 +76,13 @@ type LiveChartPanelProps = {
   /** Hide the lyrics panel (the header button shows it again). */
   onClose: () => void;
   onChartChange: (regionId: string, chart: SongChart | null) => Promise<void>;
+  /** False hides every way to change the chart (edit, import, record line
+   * times): a network-session guest without the edit role only reads. */
+  canEdit?: boolean;
+  /** This device's own shift on top of the song's (capo, personal
+   * transpose). Only how the chords are drawn; the song is not touched. */
+  extraSemitones?: number;
+  accidentals?: AccidentalPreference;
 };
 
 function ChartLineView({
@@ -136,6 +147,9 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   onToggleExpanded,
   onClose,
   onChartChange,
+  canEdit = true,
+  extraSemitones = 0,
+  accidentals = "auto",
 }: LiveChartPanelProps) {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -163,8 +177,16 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   const doc = useMemo(() => {
     if (!chart || !region) return null;
     const effectiveKey = regionEffectiveKey(region);
-    return transposeChart(parseChordPro(chart.text), region.transposeSemitones, keyPrefersFlats(effectiveKey));
-  }, [chart, region]);
+    const flats =
+      extraSemitones === 0 && accidentals === "auto"
+        ? keyPrefersFlats(effectiveKey)
+        : personalPrefersFlats(effectiveKey, extraSemitones, accidentals);
+    return transposeChart(
+      parseChordPro(chart.text),
+      region.transposeSemitones + extraSemitones,
+      flats,
+    );
+  }, [chart, region, extraSemitones, accidentals]);
   const links = useMemo(
     () => (chart ? (recording ? applyLineRecording(chart.links, recording) : chart.links) : []),
     [chart, recording],
@@ -361,6 +383,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
               >
                 <span className="material-symbols-outlined" aria-hidden="true">music_note</span>
               </button>
+              {canEdit ? (
               <button
                 type="button"
                 className={`lt-icon-button${recording ? " is-recording" : ""}`}
@@ -373,9 +396,10 @@ export const LiveChartPanel = memo(function LiveChartPanel({
                   {recording ? "stop_circle" : "radio_button_checked"}
                 </span>
               </button>
+              ) : null}
             </>
           ) : null}
-          {region ? (
+          {region && canEdit ? (
             <button
               type="button"
               className="lt-icon-button"
@@ -435,6 +459,8 @@ export const LiveChartPanel = memo(function LiveChartPanel({
         <div className="lt-live-chart-empty">
           <span className="material-symbols-outlined" aria-hidden="true">lyrics</span>
           <p>{t("liveChart.empty", { song: region.name })}</p>
+          {canEdit ? (
+          <>
           <div className="lt-live-chart-empty-actions">
             <button type="button" className="lt-live-chart-action is-primary" disabled={busy} onClick={() => fileInputRef.current?.click()}>
               <span className="material-symbols-outlined" aria-hidden="true">upload_file</span>
@@ -446,6 +472,8 @@ export const LiveChartPanel = memo(function LiveChartPanel({
             </button>
           </div>
           <small>{t("liveChart.formats")}</small>
+          </>
+          ) : null}
         </div>
       ) : (
         <div
@@ -504,7 +532,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
         data-testid="live-chart-file-input"
       />
 
-      {editorOpen && region ? (
+      {editorOpen && region && canEdit ? (
         <ChartEditorModal
           region={region}
           markers={markers}

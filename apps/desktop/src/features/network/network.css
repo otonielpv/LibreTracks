@@ -126,3 +126,102 @@
   background: rgba(255, 92, 92, 0.16);
   color: #ffb0b0;
 }
+
+/* Guest screen: the host's live view over the whole app, under the modals
+   (.lt-modal-backdrop is z-index 60) so the network modal still opens. */
+.lt-guest-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  background: #131313;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+}
+
+.lt-guest-screen > .lt-live-view {
+  flex: 1;
+  min-height: 0;
+}
+
+.lt-guest-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lt-guest-leave,
+.lt-guest-host {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  cursor: pointer;
+}
+
+.lt-guest-host > span:last-child {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.1;
+}
+
+.lt-guest-host small {
+  opacity: 0.7;
+}
+
+.lt-guest-chords {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lt-guest-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lt-guest-stepper-label {
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.lt-guest-stepper button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+}
+
+.lt-guest-stepper output {
+  min-width: 2ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-guest-banner {
+  padding: 6px 12px;
+  text-align: center;
+  background: rgba(255, 196, 0, 0.18);
+}
+
+.lt-guest-banner.is-error {
+  background: rgba(255, 92, 92, 0.22);
+}
+
+.lt-guest-waiting {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 16px;
+}

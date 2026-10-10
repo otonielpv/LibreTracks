@@ -43,16 +43,41 @@ import {
 } from "../songs/useSongReorder";
 import type { ViewMode } from "../uiStore";
 import { ViewModeSwitcher } from "../timeline/ViewModeSwitcher";
+import type { AccidentalPreference } from "@libretracks/shared/charts/personalChords";
 import "./LivePerformanceView.css";
+
+/** The settings the live view reads: the jump modes. A network-session guest
+ * only has the host's copy of these, not a whole `AppSettings`. */
+export type LiveViewSettings = Pick<
+  AppSettings,
+  | "globalJumpMode"
+  | "globalJumpBars"
+  | "songJumpTrigger"
+  | "songJumpBars"
+  | "songTransitionMode"
+  | "vampMode"
+  | "vampBars"
+>;
 
 type LivePerformanceViewProps = {
   song: SongView;
   positionSecondsRef: { readonly current: number };
-  settings: AppSettings;
+  settings: LiveViewSettings;
   pendingMarkerId: string | null;
   pendingMarkerName: string | null;
   activeVamp: ActiveVampSummary | null;
-  onViewModeChange: (mode: ViewMode) => void;
+  /** Absent when the view is not part of the editor (network-session guest
+   * screen): then `headerStart` takes the view switcher's place. */
+  onViewModeChange?: (mode: ViewMode) => void;
+  headerStart?: ReactNode;
+  /** False: read only. No jump settings, no song or marker actions, no vamp
+   * and no cancel (a network-session viewer). Default true. */
+  canControl?: boolean;
+  /** False hides the lyrics editing tools. Default true. */
+  canEditChart?: boolean;
+  /** This device's own chord shift and spelling (network-session guests). */
+  chartExtraSemitones?: number;
+  chartAccidentals?: AccidentalPreference;
   onMarkerAction: (marker: SectionMarkerSummary) => void;
   onSongAction: (region: SongRegionSummary) => void;
   /** Drag a setlist song to another position; `targetIndex` is its final
@@ -155,6 +180,11 @@ function LivePerformanceViewComponent({
   pendingMarkerName,
   activeVamp,
   onViewModeChange,
+  headerStart,
+  canControl = true,
+  canEditChart = true,
+  chartExtraSemitones = 0,
+  chartAccidentals = "auto",
   onMarkerAction,
   onSongAction,
   onReorderSong,
@@ -333,7 +363,9 @@ function LivePerformanceViewComponent({
       aria-label={t("liveView.title")}
     >
       <header className="lt-live-header">
-        <ViewModeSwitcher value="live" onChange={onViewModeChange} />
+        {headerStart ?? (onViewModeChange ? (
+          <ViewModeSwitcher value="live" onChange={onViewModeChange} />
+        ) : null)}
         <div className="lt-live-heading">
           <span className="material-symbols-outlined" aria-hidden="true">stadium</span>
           <div><small>{t("liveView.title")}</small><strong>{currentRegion?.name ?? song.title}</strong></div>
@@ -395,6 +427,7 @@ function LivePerformanceViewComponent({
                   <em className="lt-live-region-queued">{t("liveView.queued")}</em>
                 ) : null}
               </button>
+              {canControl ? (
               <button
                 type="button"
                 className="lt-live-region-play"
@@ -403,6 +436,7 @@ function LivePerformanceViewComponent({
               >
                 <span className="material-symbols-outlined" aria-hidden="true">play_arrow</span>
               </button>
+              ) : null}
             </div>
           ))}
         </nav>
@@ -423,6 +457,7 @@ function LivePerformanceViewComponent({
         ) : null}
       </header>
 
+      {canControl ? (
       <section className="lt-live-settings" aria-label={t("liveView.performanceSettings")}>
         <SettingCard
           label={t("liveView.markerJump")}
@@ -479,6 +514,7 @@ function LivePerformanceViewComponent({
           )}
         />
       </section>
+      ) : null}
 
       <section className="lt-live-cue-panel" aria-labelledby="lt-live-cue-title">
         <div className="lt-live-section-title">
@@ -492,6 +528,7 @@ function LivePerformanceViewComponent({
               {" · "}
               {groups.length} {t("liveView.markers")}
             </span>
+            {canControl ? (
             <button
               type="button"
               className="lt-live-cancel"
@@ -502,6 +539,7 @@ function LivePerformanceViewComponent({
               <span className="material-symbols-outlined" aria-hidden="true">cancel_schedule_send</span>
               <span>{t("liveView.cancelJump")}</span>
             </button>
+            ) : null}
           </div>
         </div>
         <div className="lt-live-cue-grid">
@@ -518,9 +556,10 @@ function LivePerformanceViewComponent({
                 type="button"
                 key={group.id}
                 ref={(node) => { rowRefs.current[group.id] = node; }}
-                className={`lt-live-cue-row${isActive ? " is-active" : ""}${isNext ? " is-next" : ""}${isPending ? " is-pending" : ""}${isPast ? " is-past" : ""}${isVampAnchor ? " is-vamp" : ""}${group.category === "cue" ? " is-cue" : ""}`}
+                aria-disabled={canControl ? undefined : true}
+                className={`lt-live-cue-row${canControl ? "" : " is-readonly"}${isActive ? " is-active" : ""}${isNext ? " is-next" : ""}${isPending ? " is-pending" : ""}${isPast ? " is-past" : ""}${isVampAnchor ? " is-vamp" : ""}${group.category === "cue" ? " is-cue" : ""}`}
                 style={{ "--lt-live-marker-color": markerColor(group.primary) } as CSSProperties}
-                onClick={() => onMarkerAction(group.primary)}
+                onClick={canControl ? () => onMarkerAction(group.primary) : undefined}
               >
                 <span className="lt-live-cue-index">{String(index + 1).padStart(2, "0")}</span>
                 <span className="lt-live-cue-copy">
@@ -594,6 +633,9 @@ function LivePerformanceViewComponent({
           onToggleExpanded={toggleChartExpanded}
           onClose={toggleChartOpen}
           onChartChange={onChartChange}
+          canEdit={canEditChart}
+          extraSemitones={chartExtraSemitones}
+          accidentals={chartAccidentals}
         />
       ) : null}
 

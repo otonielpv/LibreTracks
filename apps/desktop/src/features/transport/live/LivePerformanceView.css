@@ -885,3 +885,8 @@
   color: rgb(87 241 219 / 0.85);
 }
 
+
+/* Network-session viewer: the cue rows only show where the song is. */
+.lt-live-cue-row.is-readonly {
+  cursor: default;
+}

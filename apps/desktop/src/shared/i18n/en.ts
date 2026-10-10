@@ -70,6 +70,15 @@ const en = {
       invalid: "The host could not apply the change.",
       generic: "Could not complete: {{detail}}",
     },
+    guest: {
+      leave: "Leave",
+      waiting: "Waiting for the host to open a song…",
+      chords: "Chords on this device",
+      capo: "Capo",
+      transpose: "Key",
+      accidentals: "Accidentals",
+      accidental: { auto: "Auto", sharps: "♯", flats: "♭" },
+    },
     badge: {
       hosting: "Host · {{count}}",
       guest: "Guest · {{role}}",

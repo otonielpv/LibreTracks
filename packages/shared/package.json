@@ -14,6 +14,7 @@
     "./charts/chordNotation": "./src/charts/chordNotation.ts",
     "./charts/chordChart": "./src/charts/chordChart.ts",
     "./charts/chartSync": "./src/charts/chartSync.ts",
+    "./charts/personalChords": "./src/charts/personalChords.ts",
     "./featureFlags": "./src/featureFlags.ts",
     "./networkApi": "./src/networkApi.ts",
     "./networkRoles": "./src/networkRoles.ts",
