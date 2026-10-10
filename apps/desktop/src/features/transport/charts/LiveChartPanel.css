@@ -439,11 +439,17 @@
   gap: 0.4rem;
 }
 
+/* Fixed columns on every row: with an "auto" last column, a marker without
+   lyrics (no times badge) got a wider, shifted select than the rest. */
 .lt-chart-editor-links li {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) auto;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) 8.5rem;
   align-items: center;
   gap: 0.45rem;
+}
+
+.lt-chart-editor-times {
+  justify-self: start;
 }
 
 .lt-chart-editor-marker {

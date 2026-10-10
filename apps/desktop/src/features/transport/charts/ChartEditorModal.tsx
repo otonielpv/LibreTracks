@@ -172,7 +172,10 @@ export function ChartEditorModal({ region, markers, chart, onSave, onClose }: Ch
                         ) : (
                           <span className="lt-chart-editor-times is-auto">{t("liveChart.autoTimes")}</span>
                         )
-                      ) : null}
+                      ) : (
+                        // Keeps the third column on rows without lyrics.
+                        <span aria-hidden="true" />
+                      )}
                     </li>
                   );
                 })}
