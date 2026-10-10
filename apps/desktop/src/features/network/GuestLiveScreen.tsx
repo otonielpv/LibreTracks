@@ -1,8 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
   leaveHost,
+  roleAllows,
+  sendGuestCommand,
   type NetworkGuestStatus,
   type NetworkLiveSettings,
 } from "@libretracks/shared/networkApi";
@@ -19,12 +21,11 @@ import {
 } from "@libretracks/shared/models";
 
 import { LivePerformanceView, type LiveViewSettings } from "../transport/live/LivePerformanceView";
+import { createGuestCommandHandlers } from "./guestCommandHandlers";
 import { guestPositionAt, regionAt, useGuestPlayheadRef } from "./guestPlayhead";
 import { useNetworkSessionStore } from "./networkSessionStore";
 import { usePersonalChords } from "./usePersonalChords";
 
-const noop = () => {};
-const noopAsync = async () => {};
 
 /** The host's jump settings over the defaults: an older host, or one that
  * has not published yet, still gives the view every field it reads. */
@@ -55,6 +56,7 @@ export function GuestLiveScreen() {
         pendingMarkerId={transport?.snapshot.pendingMarkerJump?.targetMarkerId ?? null}
         pendingMarkerName={transport?.snapshot.pendingMarkerJump?.targetMarkerName ?? null}
         activeVamp={transport?.snapshot.activeVamp ?? null}
+        playbackState={transport?.snapshot.playbackState ?? null}
       />
     </div>
   );
@@ -71,6 +73,7 @@ type ContentProps = {
   pendingMarkerId: string | null;
   pendingMarkerName: string | null;
   activeVamp: ActiveVampSummary | null;
+  playbackState: string | null;
 };
 
 function GuestLiveContent({
@@ -82,9 +85,35 @@ function GuestLiveContent({
   pendingMarkerId,
   pendingMarkerName,
   activeVamp,
+  playbackState,
 }: ContentProps) {
   const { t } = useTranslation();
   const openModal = useNetworkSessionStore((state) => state.openModal);
+  const [commandError, setCommandError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!commandError) return;
+    const timer = window.setTimeout(() => setCommandError(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [commandError]);
+
+  // Built once; reads the store through getters so it never goes stale.
+  const handlers = useMemo(
+    () =>
+      createGuestCommandHandlers({
+        send: sendGuestCommand,
+        getRole: () => useNetworkSessionStore.getState().guest.role,
+        getSettings: () => liveSettingsOf(useNetworkSessionStore.getState().guestLiveSettings),
+        getSong: () => useNetworkSessionStore.getState().guestSong,
+        getPlaybackState: () =>
+          useNetworkSessionStore.getState().guestTransport?.snapshot.playbackState ?? null,
+        getPendingMarkerId: () =>
+          useNetworkSessionStore.getState().guestTransport?.snapshot.pendingMarkerJump
+            ?.targetMarkerId ?? null,
+        onError: setCommandError,
+      }),
+    [],
+  );
+  const canControl = guest.state === "connected" && roleAllows(guest.role, "play");
   const currentRegion = useMemo(() => regionAt(song, anchorSeconds), [song, anchorSeconds]);
   const chords = usePersonalChords(currentRegion?.id ?? null);
   const shift = personalChordShift(chords.prefs);
@@ -116,6 +145,22 @@ function GuestLiveContent({
           </small>
         </span>
       </button>
+      {canControl ? (
+        <span className="lt-guest-transport" role="group" aria-label={t("networkSession.guest.transport")}>
+          {playbackState === "playing" ? (
+            <button type="button" aria-label={t("networkSession.guest.pause")} onClick={handlers.pause}>
+              <span className="material-symbols-outlined" aria-hidden="true">pause</span>
+            </button>
+          ) : (
+            <button type="button" aria-label={t("networkSession.guest.play")} onClick={handlers.play}>
+              <span className="material-symbols-outlined" aria-hidden="true">play_arrow</span>
+            </button>
+          )}
+          <button type="button" aria-label={t("networkSession.guest.stop")} onClick={handlers.stop}>
+            <span className="material-symbols-outlined" aria-hidden="true">stop</span>
+          </button>
+        </span>
+      ) : null}
       {currentRegion ? (
         <div className="lt-guest-chords" role="group" aria-label={t("networkSession.guest.chords")}>
           <Stepper
@@ -160,6 +205,13 @@ function GuestLiveContent({
           {t(`networkSession.state.${guest.state}`)}
         </div>
       ) : null}
+      {commandError ? (
+        <div className="lt-guest-banner is-error" role="alert">
+          {t(`networkSession.errors.${commandError}`, {
+            defaultValue: t("networkSession.errors.generic", { detail: commandError }),
+          })}
+        </div>
+      ) : null}
       {song ? (
         <LivePerformanceView
           song={song}
@@ -169,22 +221,23 @@ function GuestLiveContent({
           pendingMarkerName={pendingMarkerName}
           activeVamp={activeVamp}
           headerStart={header}
-          canControl={false}
+          canControl={canControl}
           canEditChart={false}
           chartExtraSemitones={shift}
           chartAccidentals={chords.accidentals}
-          onMarkerAction={noop}
-          onSongAction={noop}
-          onChartChange={noopAsync}
-          onToggleVamp={noop}
-          onCancelPendingJump={noop}
-          onGlobalJumpModeChange={noop}
-          onGlobalJumpBarsChange={noop}
-          onSongJumpTriggerChange={noop}
-          onSongJumpBarsChange={noop}
-          onSongTransitionModeChange={noop}
-          onVampModeChange={noop}
-          onVampBarsChange={noop}
+          onMarkerAction={handlers.onMarkerAction}
+          onSongAction={handlers.onSongAction}
+          onReorderSong={canControl ? handlers.onReorderSong : undefined}
+          onChartChange={handlers.onChartChange}
+          onToggleVamp={handlers.onToggleVamp}
+          onCancelPendingJump={handlers.onCancelPendingJump}
+          onGlobalJumpModeChange={handlers.onGlobalJumpModeChange}
+          onGlobalJumpBarsChange={handlers.onGlobalJumpBarsChange}
+          onSongJumpTriggerChange={handlers.onSongJumpTriggerChange}
+          onSongJumpBarsChange={handlers.onSongJumpBarsChange}
+          onSongTransitionModeChange={handlers.onSongTransitionModeChange}
+          onVampModeChange={handlers.onVampModeChange}
+          onVampBarsChange={handlers.onVampBarsChange}
         />
       ) : (
         <div className="lt-guest-waiting">

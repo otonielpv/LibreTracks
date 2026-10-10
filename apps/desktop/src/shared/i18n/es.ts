@@ -71,6 +71,10 @@ const es = {
       generic: "No se pudo completar: {{detail}}",
     },
     guest: {
+      transport: "Transporte del anfitrión",
+      play: "Reproducir",
+      pause: "Pausa",
+      stop: "Parar",
       leave: "Salir",
       waiting: "Esperando a que el anfitrión tenga una canción abierta…",
       chords: "Acordes en este dispositivo",

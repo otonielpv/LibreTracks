@@ -71,6 +71,10 @@ const en = {
       generic: "Could not complete: {{detail}}",
     },
     guest: {
+      transport: "Host transport",
+      play: "Play",
+      pause: "Pause",
+      stop: "Stop",
       leave: "Leave",
       waiting: "Waiting for the host to open a song…",
       chords: "Chords on this device",

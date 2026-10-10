@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SongRegionSummary, SongView, TransportSnapshot } from "@libretracks/shared/models";
@@ -12,7 +12,10 @@ vi.mock("@libretracks/shared/featureFlags", () => ({ FEATURE_FLAGS: flags }));
 const invoke = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-const network = vi.hoisted(() => ({ leaveHost: vi.fn(async () => undefined) }));
+const network = vi.hoisted(() => ({
+  leaveHost: vi.fn(async () => undefined),
+  sendGuestCommand: vi.fn(async () => undefined),
+}));
 vi.mock("@libretracks/shared/networkApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@libretracks/shared/networkApi")>();
   return { ...actual, ...network };
@@ -100,6 +103,7 @@ beforeEach(async () => {
   window.localStorage.removeItem("lt.liveChart.showChords");
   invoke.mockClear();
   network.leaveHost.mockClear();
+  network.sendGuestCommand.mockClear();
   useNetworkSessionStore.setState({
     ...INITIAL_NETWORK_SESSION_STATE,
     guest: {
@@ -183,5 +187,75 @@ describe("GuestLiveScreen as viewer", () => {
     useNetworkSessionStore.setState({ guestSong: null });
     render(<GuestLiveScreen />);
     expect(screen.getByText(/Esperando a que el anfitrión/)).toBeTruthy();
+  });
+});
+
+describe("GuestLiveScreen as controller", () => {
+  beforeEach(() => {
+    useNetworkSessionStore.setState({
+      guest: { ...useNetworkSessionStore.getState().guest, role: "controller" },
+    });
+  });
+
+  it("a marker becomes a jump on the host, with the host's settings", async () => {
+    useNetworkSessionStore.setState({
+      guestLiveSettings: {
+        globalJumpMode: "next_marker",
+        globalJumpBars: 4,
+        songJumpTrigger: "immediate",
+        songJumpBars: 4,
+        songTransitionMode: "instant",
+        vampMode: "section",
+        vampBars: 4,
+      },
+    });
+    render(<GuestLiveScreen />);
+    fireEvent.click(document.querySelector(".lt-live-cue-row") as HTMLElement);
+    await waitFor(() =>
+      expect(network.sendGuestCommand).toHaveBeenCalledWith(
+        { cmd: "jumpToMarker", markerId: "verse", trigger: "next_marker", bars: 4 },
+        undefined,
+      ),
+    );
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("has the host's transport and the jump settings", async () => {
+    render(<GuestLiveScreen />);
+    expect(document.querySelector(".lt-live-settings")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Pausa" }));
+    fireEvent.click(screen.getByRole("button", { name: "Parar" }));
+    await waitFor(() => expect(network.sendGuestCommand).toHaveBeenCalledTimes(2));
+    expect(network.sendGuestCommand.mock.calls.map((call) => call[0])).toEqual([
+      { cmd: "pause" },
+      { cmd: "stop" },
+    ]);
+  });
+
+  it("loses the controls at once when the host lowers the role", () => {
+    render(<GuestLiveScreen />);
+    expect(screen.getByRole("button", { name: "Parar" })).toBeTruthy();
+    act(() =>
+      useNetworkSessionStore.setState({
+        guest: { ...useNetworkSessionStore.getState().guest, role: "viewer" },
+      }),
+    );
+    expect(screen.queryByRole("button", { name: "Parar" })).toBeNull();
+    expect(document.querySelector(".lt-live-settings")).toBeNull();
+  });
+
+  it("shows the host's refusal", async () => {
+    network.sendGuestCommand.mockRejectedValueOnce("forbidden" as never);
+    render(<GuestLiveScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "Parar" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Tu rol no permite hacer esto.");
+  });
+
+  it("no controls while the connection is lost", () => {
+    useNetworkSessionStore.setState({
+      guest: { ...useNetworkSessionStore.getState().guest, state: "lost" },
+    });
+    render(<GuestLiveScreen />);
+    expect(screen.queryByRole("button", { name: "Parar" })).toBeNull();
   });
 });
