@@ -26,6 +26,7 @@ import {
   applyLineRecording,
   autoLinkChart,
   buildPerformanceBlocks,
+  chartLinkMarkerId,
   type PlayHistory,
   chartMarkersForRegion,
   recordLineTap,
@@ -177,6 +178,16 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     positionSecondsRef,
   );
 
+  // While recording, the line moves only with the taps: the time-based spread
+  // would advance on its own and fight the person tapping.
+  const currentLine = useMemo(() => {
+    if (!recording || playback.line === null || playback.markerId === null || playback.section === null || !doc) {
+      return playback.line;
+    }
+    const taps = recording.get(chartLinkMarkerId(playback.markerId))?.length ?? 1;
+    return Math.min(taps - 1, doc.sections[playback.section].lines.length - 1);
+  }, [recording, playback.line, playback.markerId, playback.section, doc]);
+
   // What has played in this song, in the order it played: after a jump the
   // lyrics go on below it instead of scrolling back up the timeline.
   const historyRef = useRef<{ regionId: string | null; history: PlayHistory }>({ regionId: null, history: [] });
@@ -205,7 +216,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     const scroller = scrollerRef.current;
     if (!scroller || currentBlock < 0) return;
     if (performance.now() - manualScrollAtRef.current < MANUAL_SCROLL_HOLD_MS) return;
-    const key = playback.line === null ? `${currentBlock}-head` : `${currentBlock}-${playback.line}`;
+    const key = currentLine === null ? `${currentBlock}-head` : `${currentBlock}-${currentLine}`;
     const target = scroller.querySelector<HTMLElement>(`[data-line-key="${key}"]`);
     if (!target) return;
     // From the on-screen positions, not offsetTop: offsetTop is measured
@@ -219,7 +230,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     } else {
       scroller.scrollTop = top;
     }
-  }, [currentBlock, playback.line, fontScale, showChords]);
+  }, [currentBlock, currentLine, fontScale, showChords]);
 
   const markManualScroll = () => {
     manualScrollAtRef.current = performance.now();
@@ -401,7 +412,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
             type="button"
             className="lt-live-chart-tap"
             onClick={tapNextLine}
-            disabled={playback.line === null}
+            disabled={currentLine === null}
           >
             <span className="material-symbols-outlined" aria-hidden="true">keyboard_double_arrow_down</span>
             {t("liveChart.nextLine")}
@@ -463,11 +474,11 @@ export const LiveChartPanel = memo(function LiveChartPanel({
                     showChords={showChords}
                     lineKey={`${blockIndex}-${lineIndex}`}
                     state={
-                      !isCurrent || playback.line === null
+                      !isCurrent || currentLine === null
                         ? blockIndex < currentBlock ? "past" : "upcoming"
-                        : lineIndex === playback.line
+                        : lineIndex === currentLine
                           ? "current"
-                          : lineIndex < playback.line
+                          : lineIndex < currentLine
                             ? "past"
                             : "upcoming"
                     }

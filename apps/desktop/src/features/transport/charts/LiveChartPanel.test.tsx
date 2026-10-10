@@ -252,6 +252,25 @@ describe("LiveChartPanel", () => {
     ]);
   });
 
+  it("while recording, the lines move only with the taps", () => {
+    vi.useFakeTimers();
+    try {
+      const position = { current: 1 };
+      const { container } = renderPanel(region(linked), position);
+      fireEvent.click(screen.getByRole("button", { name: "liveChart.recordTimes" }));
+      // 12 s into the verse: the even spread would be on the second line.
+      position.current = 12;
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
+      expect(lineTexts(container, ".lt-chart-line.is-current")).toEqual(["Primera línea"]);
+      fireEvent.click(screen.getByRole("button", { name: /liveChart.nextLine/ }));
+      expect(lineTexts(container, ".lt-chart-line.is-current")).toEqual(["Segunda línea"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("records when each line starts and saves it in beats", async () => {
     const position = { current: 0 };
     const { onChartChange } = renderPanel(region(linked), position);
