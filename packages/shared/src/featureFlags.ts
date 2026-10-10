@@ -8,5 +8,5 @@
 export const FEATURE_FLAGS = {
   /** Lyrics & chords in the live view and the remote (PDF/ChordPro import,
    * sync with markers). Hidden in 1.14.0; planned for 1.15.0. */
-  lyrics: false,
+  lyrics: true,
 } as const;
