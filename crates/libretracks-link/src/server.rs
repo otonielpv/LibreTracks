@@ -483,7 +483,18 @@ impl Shared {
                 })
                 .collect(),
         };
-        self.peers_tx.send_replace(to_text(&peers));
+        // Only when the list itself changed: this also runs on every guest's
+        // new round-trip time (about once a second each), which the peers
+        // list does not carry, and resending it then woke every guest's UI
+        // for nothing.
+        let text = to_text(&peers);
+        self.peers_tx.send_if_modified(|current| {
+            let changed = *current != text;
+            if changed {
+                *current = text;
+            }
+            changed
+        });
         self.guests_tx.send_replace(list);
     }
 

@@ -23,11 +23,17 @@ pub const GUEST_SONG_EVENT: &str = "link://guest-song";
 pub const GUEST_TRANSPORT_EVENT: &str = "link://guest-transport";
 pub const GUEST_LIVE_SETTINGS_EVENT: &str = "link://guest-live-settings";
 
+/// Field the host adds to each pushed song view: `[projectRevision,
+/// mixRevision]` it was read at. Never reaches the UI.
+pub const SONG_REVISION_FIELD: &str = "linkRevision";
+
 pub struct ActiveGuest {
     handle: GuestHandle,
     task: tauri::async_runtime::JoinHandle<()>,
     status: GuestStatus,
+    /// Last song view the host pushed, without the revision tag.
     song: Option<Value>,
+    song_revision: Option<(u64, u64)>,
     transport: Option<GuestTransport>,
     live_settings: Option<Value>,
 }
@@ -215,6 +221,7 @@ pub fn join_host(
         task,
         status: status.clone(),
         song: None,
+        song_revision: None,
         transport: None,
         live_settings: None,
     });
@@ -346,7 +353,11 @@ async fn relay(
                 emit_status(&app);
             }
             GuestEvent::Song(song) => {
-                with_guest(&app, |guest| guest.song = Some(song.clone()));
+                let (song, revision) = untag_song(song);
+                with_guest(&app, |guest| {
+                    guest.song = Some(song.clone());
+                    guest.song_revision = revision;
+                });
                 let _ = app.emit(GUEST_SONG_EVENT, song);
             }
             GuestEvent::LiveSettings(settings) => {
@@ -469,8 +480,28 @@ pub async fn proxy_invoke(app: &AppHandle, command: String, args: Value) -> Resu
         }
     }
 
+    // Same for the song view the UI refetches after every revision bump (and
+    // twice after a warp or key change): the host already pushed it, tagged
+    // with its revision. Only used when that is the revision the UI saw;
+    // otherwise (the push is still on its way) ask the host as before.
+    if command == "get_song_view" && args["includeWaveforms"] != Value::Bool(true) {
+        if let Some(Some(song)) = with_guest(app, |guest| {
+            let wanted = guest
+                .transport
+                .as_ref()
+                .and_then(|t| snapshot_revision(&t.snapshot));
+            (wanted.is_some() && wanted == guest.song_revision)
+                .then(|| guest.song.clone())
+                .flatten()
+        }) {
+            return Ok(song);
+        }
+    }
+
     let handle = with_guest(app, |guest| guest.handle.clone())
         .ok_or_else(|| format!("{GUEST_ERROR_PREFIX}notConnected"))?;
+    let started = std::time::Instant::now();
+    let logged_command = command.clone();
     let value = handle
         .send_command(LinkCommand::Invoke { command, args }, None)
         .await
@@ -478,6 +509,11 @@ pub async fn proxy_invoke(app: &AppHandle, command: String, args: Value) -> Resu
             CommandError::Failed(message) => message,
             other => format!("{GUEST_ERROR_PREFIX}{}", command_error_code(&other)),
         })?;
+    // Diagnosis of slow round trips on real devices (adb logcat / Console).
+    let elapsed = started.elapsed().as_millis();
+    if elapsed >= 300 {
+        eprintln!("[libretracks-link] {logged_command} took {elapsed} ms on the host");
+    }
 
     // Most session commands answer with the transport snapshot they left
     // behind (play, seek, a jump…): keep it, so the next poll does not hand
@@ -491,6 +527,35 @@ pub async fn proxy_invoke(app: &AppHandle, command: String, args: Value) -> Resu
         with_guest(app, |guest| guest.transport = Some(transport));
     }
     Ok(value)
+}
+
+/// Host side: the song view as pushed, with the revision it was read at.
+pub fn tag_song<T: Serialize>(song: &T, revision: Option<(u64, u64)>) -> Value {
+    let mut value = serde_json::to_value(song).unwrap_or(Value::Null);
+    if let (Value::Object(map), Some((project, mix))) = (&mut value, revision) {
+        map.insert(
+            SONG_REVISION_FIELD.into(),
+            serde_json::json!([project, mix]),
+        );
+    }
+    value
+}
+
+/// Guest side: the song view as the UI expects it, and its revision when the
+/// host tagged it (an older host does not).
+pub fn untag_song(mut song: Value) -> (Value, Option<(u64, u64)>) {
+    let revision = song
+        .as_object_mut()
+        .and_then(|map| map.remove(SONG_REVISION_FIELD))
+        .and_then(|tag| Some((tag[0].as_u64()?, tag[1].as_u64()?)));
+    (song, revision)
+}
+
+fn snapshot_revision(snapshot: &Value) -> Option<(u64, u64)> {
+    Some((
+        snapshot["projectRevision"].as_u64()?,
+        snapshot["mixRevision"].as_u64()?,
+    ))
 }
 
 fn is_transport_snapshot(value: &Value) -> bool {
@@ -634,6 +699,26 @@ mod tests {
             emitted_at_unix_ms: 0,
         };
         assert_eq!(local_snapshot(&transport, 99_000)["positionSeconds"], 42.0);
+    }
+
+    #[test]
+    fn pushed_song_carries_its_revision_and_the_ui_never_sees_it() {
+        let tagged = tag_song(&json!({ "title": "Song" }), Some((12, 3)));
+        assert_eq!(tagged[SONG_REVISION_FIELD], json!([12, 3]));
+        let (song, revision) = untag_song(tagged);
+        assert_eq!(song, json!({ "title": "Song" }));
+        assert_eq!(revision, Some((12, 3)));
+        // An older host: no tag, so the guest keeps asking it.
+        assert_eq!(untag_song(json!({ "title": "Song" })).1, None);
+        // No song loaded on the host.
+        assert_eq!(
+            untag_song(tag_song(&Value::Null, Some((1, 0)))),
+            (Value::Null, None)
+        );
+        assert_eq!(
+            snapshot_revision(&json!({ "projectRevision": 12, "mixRevision": 3 })),
+            Some((12, 3))
+        );
     }
 
     #[test]
