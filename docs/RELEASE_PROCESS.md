@@ -33,7 +33,9 @@ turned on here, together with the guard test next to it
 do NOT go in the release notes. As of 1.14.0: `lyrics` (lyrics & chords in
 Live and the remote) is off, planned for 1.15.0. `networkSessions`
 (LibreTracks apps joining a host over the LAN, `docs/plans/network-sessions`)
-is off and in development, no release planned yet.
+is in development, no release planned yet. It is TEMPORARILY on (so E2E and
+manual testing can see it): turn it back off, with its test, before cutting a
+release that should not ship it.
 
 ## 2. Commit pending work (optional)
 

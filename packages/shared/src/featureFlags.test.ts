@@ -13,6 +13,6 @@ describe("feature flags", () => {
   // Turning the flag on is a release decision: update this expectation in
   // the same commit that does it.
   it("network sessions stay hidden until the release that brings them", () => {
-    expect(FEATURE_FLAGS.networkSessions).toBe(false);
+    expect(FEATURE_FLAGS.networkSessions).toBe(true);
   });
 });

@@ -12,5 +12,5 @@ export const FEATURE_FLAGS = {
   /** Network sessions: LibreTracks apps joining a host LibreTracks over the
    * LAN with roles (viewer / control / edit). Plan in
    * docs/plans/network-sessions. In development; no release planned yet. */
-  networkSessions: false,
+  networkSessions: true,
 } as const;
