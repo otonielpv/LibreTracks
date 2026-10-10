@@ -83,6 +83,23 @@ const es = {
       accidentals: "Alteraciones",
       accidental: { auto: "Auto", sharps: "♯", flats: "♭" },
     },
+    mix: {
+      title: "Mezcla",
+      songKey: "Tono",
+      keyDown: "Bajar un semitono la canción",
+      keyUp: "Subir un semitono la canción",
+      songMaster: "Master de la canción",
+      metronome: "Metrónomo",
+      metronomeVolume: "Volumen del metrónomo",
+      mute: "Silenciar {{name}}",
+      solo: "Solo de {{name}}",
+    },
+    edit: {
+      staleQuestion:
+        "El anfitrión ha cambiado esta canción mientras editabas. ¿Sustituir su versión por la tuya, o seguir editando?",
+      overwrite: "Usar la mía",
+      keepEditing: "Seguir editando",
+    },
     badge: {
       hosting: "Anfitrión · {{count}}",
       guest: "Invitado · {{role}}",

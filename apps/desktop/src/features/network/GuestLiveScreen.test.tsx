@@ -14,7 +14,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
 const network = vi.hoisted(() => ({
   leaveHost: vi.fn(async () => undefined),
-  sendGuestCommand: vi.fn(async () => undefined),
+  sendGuestCommand: vi.fn(async (..._args: unknown[]) => undefined),
 }));
 vi.mock("@libretracks/shared/networkApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@libretracks/shared/networkApi")>();
@@ -257,5 +257,76 @@ describe("GuestLiveScreen as controller", () => {
     });
     render(<GuestLiveScreen />);
     expect(screen.queryByRole("button", { name: "Parar" })).toBeNull();
+  });
+});
+
+describe("GuestLiveScreen as editor", () => {
+  beforeEach(() => {
+    useNetworkSessionStore.setState({
+      guest: { ...useNetworkSessionStore.getState().guest, role: "editor" },
+      guestSong: {
+        ...song,
+        tracks: [
+          {
+            id: "drums",
+            name: "Batería",
+            kind: "audio",
+            depth: 0,
+            hasChildren: false,
+            volume: 1,
+            pan: 0,
+            muted: false,
+            solo: false,
+            audioTo: "master",
+            transposeEnabled: true,
+          },
+        ],
+      } as SongView,
+    });
+  });
+
+  it("opens the mix and mutes a track on the host", async () => {
+    render(<GuestLiveScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "Mezcla" }));
+    fireEvent.click(screen.getByRole("button", { name: "Silenciar Batería" }));
+    await waitFor(() =>
+      expect(network.sendGuestCommand).toHaveBeenCalledWith(
+        { cmd: "setTrackMix", trackId: "drums", muted: true, live: false },
+        undefined,
+      ),
+    );
+  });
+
+  it("a fader streams live values and commits the one it rests on", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<GuestLiveScreen />);
+      fireEvent.click(screen.getByRole("button", { name: "Mezcla" }));
+      const fader = screen.getByRole("slider", { name: "Batería" });
+      fireEvent.change(fader, { target: { value: "0.5" } });
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+      const commands = network.sendGuestCommand.mock.calls.map((call) => call[0] as { cmd: string; live?: boolean });
+      expect(commands.filter((command) => command.cmd === "setTrackMix").map((command) => command.live)).toEqual([
+        true,
+        false,
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("the lyrics editor is available", () => {
+    render(<GuestLiveScreen />);
+    expect(screen.getByRole("button", { name: /Editar letra|Edit/ })).toBeTruthy();
+  });
+
+  it("a viewer has no mix button", () => {
+    useNetworkSessionStore.setState({
+      guest: { ...useNetworkSessionStore.getState().guest, role: "viewer" },
+    });
+    render(<GuestLiveScreen />);
+    expect(screen.queryByRole("button", { name: "Mezcla" })).toBeNull();
   });
 });

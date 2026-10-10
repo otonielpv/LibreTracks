@@ -61,7 +61,8 @@ pub struct HostStatus {
     pub trusted: Vec<TrustedDeviceView>,
 }
 
-/// Only what the live view paints; never the whole `AppSettings` (device,
+/// Only what the guest screen paints: the live view's jump modes and, for
+/// editors' mix panel, the metronome. Never the whole `AppSettings` (device,
 /// paths, MIDI mappings are none of a guest's business).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,6 +74,9 @@ pub struct LiveSettings {
     pub song_transition_mode: String,
     pub vamp_mode: String,
     pub vamp_bars: u32,
+    pub metronome_enabled: bool,
+    /// Linear gain on the +20 dB aux fader scale, as the host stores it.
+    pub metronome_volume: f64,
 }
 
 impl From<&AppSettings> for LiveSettings {
@@ -85,6 +89,8 @@ impl From<&AppSettings> for LiveSettings {
             song_transition_mode: settings.song_transition_mode.clone(),
             vamp_mode: settings.vamp_mode.clone(),
             vamp_bars: settings.vamp_bars,
+            metronome_enabled: settings.metronome_enabled,
+            metronome_volume: settings.metronome_volume,
         }
     }
 }
@@ -589,11 +595,12 @@ mod tests {
     }
 
     #[test]
-    fn live_settings_carry_only_the_jump_fields() {
+    fn live_settings_carry_only_jump_and_metronome_fields() {
         let settings = AppSettings::default();
         let live = serde_json::to_value(LiveSettings::from(&settings)).unwrap();
         let keys: Vec<_> = live.as_object().unwrap().keys().cloned().collect();
-        assert_eq!(keys.len(), 7);
+        assert_eq!(keys.len(), 9);
+        assert!(live.get("metronomeEnabled").is_some());
         assert!(live.get("globalJumpMode").is_some());
         assert!(live.get("vampBars").is_some());
     }

@@ -82,7 +82,8 @@ export type NetworkGuestTransport = {
   emittedAtUnixMs: number;
 };
 
-/** The host's jump settings, as its live view uses them. */
+/** The host's jump settings, as its live view uses them, plus the metronome
+ * for editors' mix panel. */
 export type NetworkLiveSettings = {
   globalJumpMode: string;
   globalJumpBars: number;
@@ -91,6 +92,9 @@ export type NetworkLiveSettings = {
   songTransitionMode: string;
   vampMode: string;
   vampBars: number;
+  metronomeEnabled?: boolean;
+  /** Linear gain on the aux fader scale. */
+  metronomeVolume?: number;
 };
 
 export type NetworkGuestSnapshot = {
@@ -118,7 +122,9 @@ export type NetworkCommand =
     }
   | { cmd: "toggleVamp"; mode: string; bars?: number }
   | { cmd: "cancelJump" }
-  | ({ cmd: "setJumpSettings" } & Partial<NetworkLiveSettings>)
+  | ({ cmd: "setJumpSettings" } & Partial<
+      Omit<NetworkLiveSettings, "metronomeEnabled" | "metronomeVolume">
+    >)
   | { cmd: "reorderSong"; regionId: string; targetIndex: number }
   | { cmd: "setSongChart"; regionId: string; chart: unknown | null }
   | { cmd: "setSongTranspose"; regionId: string; semitones: number }

@@ -83,6 +83,23 @@ const en = {
       accidentals: "Accidentals",
       accidental: { auto: "Auto", sharps: "♯", flats: "♭" },
     },
+    mix: {
+      title: "Mix",
+      songKey: "Key",
+      keyDown: "Lower the song a semitone",
+      keyUp: "Raise the song a semitone",
+      songMaster: "Song master",
+      metronome: "Metronome",
+      metronomeVolume: "Metronome volume",
+      mute: "Mute {{name}}",
+      solo: "Solo {{name}}",
+    },
+    edit: {
+      staleQuestion:
+        "The host changed this song while you were editing. Replace its version with yours, or keep editing?",
+      overwrite: "Use mine",
+      keepEditing: "Keep editing",
+    },
     badge: {
       hosting: "Host · {{count}}",
       guest: "Guest · {{role}}",

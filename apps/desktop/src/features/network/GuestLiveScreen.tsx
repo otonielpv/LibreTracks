@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -22,6 +22,7 @@ import {
 
 import { LivePerformanceView, type LiveViewSettings } from "../transport/live/LivePerformanceView";
 import { createGuestCommandHandlers } from "./guestCommandHandlers";
+import { GuestMixPanel } from "./GuestMixPanel";
 import { guestPositionAt, regionAt, useGuestPlayheadRef } from "./guestPlayhead";
 import { useNetworkSessionStore } from "./networkSessionStore";
 import { usePersonalChords } from "./usePersonalChords";
@@ -90,6 +91,18 @@ function GuestLiveContent({
   const { t } = useTranslation();
   const openModal = useNetworkSessionStore((state) => state.openModal);
   const [commandError, setCommandError] = useState<string | null>(null);
+  const [mixOpen, setMixOpen] = useState(false);
+  // The «host changed this song» question, as the resolver of a promise so
+  // the edit flow reads straight (ask, then act).
+  const [overwriteQuestion, setOverwriteQuestion] = useState<
+    ((overwrite: boolean) => void) | null
+  >(null);
+  const errorText = (code: string) =>
+    t(`networkSession.errors.${code}`, {
+      defaultValue: t("networkSession.errors.generic", { detail: code }),
+    });
+  const errorTextRef = useRef(errorText);
+  errorTextRef.current = errorText;
   useEffect(() => {
     if (!commandError) return;
     const timer = window.setTimeout(() => setCommandError(null), 4000);
@@ -110,10 +123,15 @@ function GuestLiveContent({
           useNetworkSessionStore.getState().guestTransport?.snapshot.pendingMarkerJump
             ?.targetMarkerId ?? null,
         onError: setCommandError,
+        confirmOverwrite: () =>
+          new Promise<boolean>((resolve) => setOverwriteQuestion(() => resolve)),
+        errorText: (code) => errorTextRef.current(code),
       }),
     [],
   );
   const canControl = guest.state === "connected" && roleAllows(guest.role, "play");
+  const canEdit = guest.state === "connected" && roleAllows(guest.role, "setSongChart");
+  const liveSettings = useNetworkSessionStore((state) => state.guestLiveSettings);
   const currentRegion = useMemo(() => regionAt(song, anchorSeconds), [song, anchorSeconds]);
   const chords = usePersonalChords(currentRegion?.id ?? null);
   const shift = personalChordShift(chords.prefs);
@@ -160,6 +178,19 @@ function GuestLiveContent({
             <span className="material-symbols-outlined" aria-hidden="true">stop</span>
           </button>
         </span>
+      ) : null}
+      {canEdit ? (
+        <button
+          type="button"
+          className={`lt-guest-leave${mixOpen ? " is-active" : ""}`}
+          aria-pressed={mixOpen}
+          onClick={() => setMixOpen((open) => !open)}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            tune
+          </span>
+          {t("networkSession.mix.title")}
+        </button>
       ) : null}
       {currentRegion ? (
         <div className="lt-guest-chords" role="group" aria-label={t("networkSession.guest.chords")}>
@@ -222,7 +253,7 @@ function GuestLiveContent({
           activeVamp={activeVamp}
           headerStart={header}
           canControl={canControl}
-          canEditChart={false}
+          canEditChart={canEdit}
           chartExtraSemitones={shift}
           chartAccidentals={chords.accidentals}
           onMarkerAction={handlers.onMarkerAction}
@@ -245,6 +276,47 @@ function GuestLiveContent({
           <p>{t("networkSession.guest.waiting")}</p>
         </div>
       )}
+      {canEdit && mixOpen && song ? (
+        <GuestMixPanel
+          song={song}
+          region={currentRegion}
+          metronomeEnabled={liveSettings?.metronomeEnabled ?? false}
+          metronomeVolume={liveSettings?.metronomeVolume ?? 1}
+          handlers={handlers}
+          onClose={() => setMixOpen(false)}
+        />
+      ) : null}
+      {overwriteQuestion ? (
+        <div className="lt-modal-backdrop">
+          <section className="lt-settings-modal" role="alertdialog" aria-modal="true">
+            <div className="lt-settings-modal-body">
+              <p>{t("networkSession.edit.staleQuestion")}</p>
+              <div className="lt-network-actions">
+                <button
+                  type="button"
+                  className="lt-primary-button"
+                  onClick={() => {
+                    overwriteQuestion(true);
+                    setOverwriteQuestion(null);
+                  }}
+                >
+                  {t("networkSession.edit.overwrite")}
+                </button>
+                <button
+                  type="button"
+                  className="lt-secondary-button"
+                  onClick={() => {
+                    overwriteQuestion(false);
+                    setOverwriteQuestion(null);
+                  }}
+                >
+                  {t("networkSession.edit.keepEditing")}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </>
   );
 }

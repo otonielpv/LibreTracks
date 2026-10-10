@@ -31,6 +31,11 @@ export type GuestCommandDeps = {
   getPlaybackState: () => string | null;
   getPendingMarkerId: () => string | null;
   onError: (code: string) => void;
+  /** The host changed the song while the guest edited: overwrite it with
+   * the guest's version? Resolves false to keep editing. */
+  confirmOverwrite: () => Promise<boolean>;
+  /** Localized text for an error code, shown in the editor that stays open. */
+  errorText: (code: string) => string;
 };
 
 function errorCode(error: unknown) {
@@ -107,12 +112,45 @@ export function createGuestCommandHandlers(deps: GuestCommandDeps) {
     onReorderSong: (regionId: string, targetIndex: number) =>
       void run({ cmd: "reorderSong", regionId, targetIndex }),
 
-    /** Editor only; the base revision lets the host refuse a stale edit. */
+    /** Editor only. The base revision lets the host refuse an edit made on
+     * a version it has since changed; then the guest chooses to overwrite
+     * (resend against the host's current revision) or keep editing (the
+     * editor stays open with the text, because this throws). */
     onChartChange: async (regionId: string, chart: SongChart | null) => {
-      if (!roleAllows(deps.getRole(), "setSongChart")) return;
-      const revision = deps.getSong()?.projectRevision;
-      await deps.send({ cmd: "setSongChart", regionId, chart }, revision);
+      if (!roleAllows(deps.getRole(), "setSongChart")) {
+        throw new Error(deps.errorText("forbidden"));
+      }
+      const command: NetworkCommand = { cmd: "setSongChart", regionId, chart };
+      try {
+        await deps.send(command, deps.getSong()?.projectRevision);
+      } catch (error) {
+        const code = errorCode(error);
+        if (code !== "stale" || !(await deps.confirmOverwrite())) {
+          throw new Error(deps.errorText(code));
+        }
+        try {
+          await deps.send(command, deps.getSong()?.projectRevision);
+        } catch (retryError) {
+          throw new Error(deps.errorText(errorCode(retryError)));
+        }
+      }
     },
+
+    // --- mix and song key (editor) ---
+    setTrackMix: (
+      trackId: string,
+      patch: { volume?: number; pan?: number; muted?: boolean; solo?: boolean },
+      live: boolean,
+    ) => void run({ cmd: "setTrackMix", trackId, ...patch, live }),
+    setSongMasterGain: (regionId: string, masterGain: number, live: boolean) =>
+      void run({ cmd: "setSongMasterGain", regionId, masterGain, live }),
+    setMetronome: (patch: { enabled?: boolean; volume?: number }) =>
+      void run({ cmd: "setMetronome", ...patch }),
+    setSongTranspose: (regionId: string, semitones: number) =>
+      void run(
+        { cmd: "setSongTranspose", regionId, semitones },
+        deps.getSong()?.projectRevision,
+      ),
 
     onGlobalJumpModeChange: (globalJumpMode: string) => setJumpSettings({ globalJumpMode }),
     onGlobalJumpBarsChange: (globalJumpBars: number) => setJumpSettings({ globalJumpBars }),
