@@ -79,6 +79,7 @@ import {
   useLiveMusicalContext,
 } from "./liveWidgets";
 import { LyricsWidget } from "./lyricsWidget";
+import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import {
   DEFAULT_METRONOME_WIDGET_HEIGHT,
   DEFAULT_PADS_WIDGET_HEIGHT,
@@ -3030,6 +3031,11 @@ function readRemotePositionSeconds() {
 }
 
 function LyricsWidgetHost() {
+  if (!FEATURE_FLAGS.lyrics) return <></>;
+  return <LyricsWidgetLive />;
+}
+
+function LyricsWidgetLive() {
   const songView = useRemoteSyncStore((state) => state.songView);
   const pendingMarkerId = useRemoteSyncStore(
     (state) => state.snapshot?.pendingMarkerJump?.targetMarkerId ?? null,
@@ -4020,7 +4026,8 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   nextMarker: { labelKey: "widgetNextMarker", Component: NextMarkerWidgetHost, defaultW: 4, defaultH: 4 },
   nextSong: { labelKey: "widgetNextSong", Component: NextSongWidgetHost, defaultW: 4, defaultH: 4 },
   currentKey: { labelKey: "widgetKey", Component: CurrentKeyWidgetHost, defaultW: 4, defaultH: 4 },
-  lyrics: { labelKey: "widgetLyrics", Component: LyricsWidgetHost, defaultW: 12, defaultH: 20 },
+  // Behind a flag: off, the palette does not offer it (see featureFlags).
+  lyrics: { labelKey: "widgetLyrics", Component: LyricsWidgetHost, defaultW: 12, defaultH: 20, palette: FEATURE_FLAGS.lyrics },
   progressMarker: { labelKey: "widgetProgressMarker", Component: ProgressToMarkerWidgetHost, defaultW: 4, defaultH: 4 },
   progressSong: { labelKey: "widgetProgressSong", Component: ProgressToSongWidgetHost, defaultW: 4, defaultH: 4 },
   countdownMarkerBars: { labelKey: "widgetCountdownMarker", Component: CountdownMarkerBarsHost, defaultW: 4, defaultH: 4 },

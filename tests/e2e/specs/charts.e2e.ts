@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import AppPage from "../pageobjects/app.page.js";
 import { removeWorkDir } from "../utils/workdir.js";
+import { FEATURE_FLAGS } from "../../../packages/shared/src/featureFlags.js";
 
 /**
  * Lyrics and chords in the REAL WebView: what the unit tests cannot show is
@@ -62,7 +63,8 @@ async function regions(): Promise<ChartRegion[]> {
   return view?.regions ?? [];
 }
 
-describe("Lyrics and chords in the live view", () => {
+// Lyrics ship behind a compile-time flag: with it off the app has no lyrics UI.
+(FEATURE_FLAGS.lyrics ? describe : describe.skip)("Lyrics and chords in the live view", () => {
   let workDir = "";
   let verseId = "";
   let chorusId = "";

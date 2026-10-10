@@ -6,6 +6,10 @@ import {
   type SongRegionSummary,
   type SongView,
 } from "@libretracks/shared/models";
+// Lyrics ship behind a compile-time flag; these tests drive it.
+const flags = vi.hoisted(() => ({ lyrics: true }));
+vi.mock("@libretracks/shared/featureFlags", () => ({ FEATURE_FLAGS: flags }));
+
 import { LivePerformanceView } from "./LivePerformanceView";
 
 vi.mock("react-i18next", () => ({
@@ -256,6 +260,41 @@ describe("LivePerformanceView", () => {
       fireEvent.change(screen.getByTestId("live-chart-file-input"), { target: { files: [file] } });
     });
     expect(onChartChange).toHaveBeenCalledWith("first", expect.objectContaining({ text: expect.stringContaining("Una linea") }));
+  });
+
+  it("with the lyrics flag off, the live view is the markers alone", () => {
+    flags.lyrics = false;
+    try {
+      window.localStorage.clear();
+      const { container } = render(
+        <LivePerformanceView
+          song={song}
+          positionSecondsRef={{ current: 10 }}
+          settings={DEFAULT_APP_SETTINGS}
+          pendingMarkerId={null}
+          pendingMarkerName={null}
+          activeVamp={null}
+          onViewModeChange={vi.fn()}
+          onMarkerAction={vi.fn()}
+          onSongAction={vi.fn()}
+          onChartChange={vi.fn()}
+          onToggleVamp={vi.fn()}
+          onCancelPendingJump={vi.fn()}
+          onGlobalJumpModeChange={vi.fn()}
+          onGlobalJumpBarsChange={vi.fn()}
+          onSongJumpTriggerChange={vi.fn()}
+          onSongJumpBarsChange={vi.fn()}
+          onSongTransitionModeChange={vi.fn()}
+          onVampModeChange={vi.fn()}
+          onVampBarsChange={vi.fn()}
+        />,
+      );
+      expect(screen.queryByRole("button", { name: "liveChart.toggle" })).toBeNull();
+      expect(container.querySelector(".lt-live-chart")).toBeNull();
+      expect(container.querySelector(".lt-live-view.has-chart")).toBeNull();
+    } finally {
+      flags.lyrics = true;
+    }
   });
 
   it("hides and shows the lyrics panel from the header, and remembers it", () => {

@@ -25,6 +25,14 @@ release notes already covered commits made before the actual tag commit.
 The tag is the source of truth: anything in `git log <prev-tag>..HEAD`
 is fair game for the new release notes.
 
+**Features behind a flag.** `packages/shared/src/featureFlags.ts` lists
+features that are built but hidden (no UI at all while their flag is
+`false`). Check it every release: a feature planned for this version is
+turned on here, together with the guard test next to it
+(`featureFlags.test.ts`), in the release commit. Commits of a hidden feature
+do NOT go in the release notes. As of 1.14.0: `lyrics` (lyrics & chords in
+Live and the remote) is off, planned for 1.15.0.
+
 ## 2. Commit pending work (optional)
 
 If there's uncommitted work that belongs in this release, commit it first

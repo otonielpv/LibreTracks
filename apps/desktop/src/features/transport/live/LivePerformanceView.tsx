@@ -34,6 +34,7 @@ import {
   calculateLiveProgress,
   useLiveProgressBars,
 } from "./useLiveProgressBars";
+import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { LiveChartPanel } from "../charts/LiveChartPanel";
 import { SongReorderHandle } from "../songs/SongReorderHandle";
 import {
@@ -201,7 +202,10 @@ function LivePerformanceViewComponent({
     containerRef: setlistRef,
     onReorder: onReorderSong,
   });
-  const [chartOpen, setChartOpen] = useState(() => readChartOpen());
+  // Lyrics ship behind a flag (see featureFlags): off, the live view is the
+  // markers alone, as before the feature existed.
+  const [chartOpenSetting, setChartOpen] = useState(() => readChartOpen());
+  const chartOpen = FEATURE_FLAGS.lyrics && chartOpenSetting;
   const [chartExpanded, setChartExpanded] = useState(false);
   const toggleChartOpen = () => {
     setChartOpen((current) => {
@@ -402,6 +406,7 @@ function LivePerformanceViewComponent({
             </div>
           ))}
         </nav>
+        {FEATURE_FLAGS.lyrics ? (
         <div className="lt-live-header-tools lt-bottom-controls">
           <button
             type="button"
@@ -415,6 +420,7 @@ function LivePerformanceViewComponent({
             <span>{t("liveChart.toggleLabel")}</span>
           </button>
         </div>
+        ) : null}
       </header>
 
       <section className="lt-live-settings" aria-label={t("liveView.performanceSettings")}>
