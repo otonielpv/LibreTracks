@@ -27,6 +27,10 @@ struct State {
     advertising: bool,
     #[cfg(not(target_os = "ios"))]
     mdns: Option<libretracks_link::discovery::MdnsDiscovery>,
+    /// Unicast sweep of the /24 (every platform; the only way that works on
+    /// iOS where multicast and broadcast need an Apple entitlement).
+    probe_responder: Option<libretracks_link::probe::ProbeResponder>,
+    probe_sweeper: Option<libretracks_link::probe::ProbeSweeper>,
 }
 
 static STATE: OnceLock<Mutex<State>> = OnceLock::new();
@@ -40,6 +44,8 @@ fn state() -> &'static Mutex<State> {
             advertising: false,
             #[cfg(not(target_os = "ios"))]
             mdns: None,
+            probe_responder: None,
+            probe_sweeper: None,
         })
     })
 }
@@ -79,6 +85,10 @@ pub fn advertise(ad: &Advertisement) {
     };
     state.advertising = true;
     update_multicast_lock(&state);
+    match libretracks_link::probe::ProbeResponder::start(ad) {
+        Ok(responder) => state.probe_responder = Some(responder),
+        Err(error) => eprintln!("[libretracks-link] probe responder: {error}"),
+    }
     #[cfg(target_os = "ios")]
     {
         let txt: serde_json::Map<String, Value> = ad
@@ -109,6 +119,7 @@ pub fn stop_advertising() {
         return;
     }
     state.advertising = false;
+    state.probe_responder = None;
     update_multicast_lock(&state);
     #[cfg(target_os = "ios")]
     crate::platform::ios_link::stop_advertising();
@@ -128,6 +139,10 @@ pub fn start_browsing() -> Vec<DiscoveredHost> {
     state.browsing = true;
     state.registry.clear();
     update_multicast_lock(&state);
+    match libretracks_link::probe::ProbeSweeper::start(std::sync::Arc::new(apply)) {
+        Ok(sweeper) => state.probe_sweeper = Some(sweeper),
+        Err(error) => eprintln!("[libretracks-link] probe sweep: {error}"),
+    }
     #[cfg(target_os = "ios")]
     crate::platform::ios_link::browse(libretracks_link::discovery::SERVICE_TYPE_BARE);
     #[cfg(not(target_os = "ios"))]
@@ -147,6 +162,7 @@ pub fn stop_browsing() {
         return;
     }
     state.browsing = false;
+    state.probe_sweeper = None;
     state.registry.clear();
     update_multicast_lock(&state);
     #[cfg(target_os = "ios")]

@@ -448,7 +448,12 @@ export async function getSongView(
   options?: { includeWaveforms?: boolean },
 ): Promise<SongView | null> {
   const args = {
-    includeWaveforms: options?.includeWaveforms ?? true,
+    // A network-session guest never asks for the peaks inline: with a real
+    // session that is tens of MB in one message over the Wi-Fi (36 MB on the
+    // first test, which a phone could not take). The timeline then fetches
+    // them in small batches (useSongWaveforms), as it already does for any
+    // clip whose peaks are missing.
+    includeWaveforms: guestMirrorMode ? false : (options?.includeWaveforms ?? true),
   };
   const maxAttempts = 6;
 

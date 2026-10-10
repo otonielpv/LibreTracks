@@ -16,6 +16,7 @@ pub mod discovery;
 pub mod net;
 pub mod pairing;
 pub mod permissions;
+pub mod probe;
 pub mod protocol;
 pub mod server;
 pub mod version;
