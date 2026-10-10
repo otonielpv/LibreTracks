@@ -241,7 +241,13 @@ impl GuestHandle {
     }
 }
 
-pub fn join(config: GuestConfig) -> GuestRuntime {
+/// Start joining. Must be called from inside a Tokio runtime: the connection
+/// lives in a task. Outside one this returns an error instead of panicking
+/// (a sync Tauri command runs on the IPC thread with no runtime, and a panic
+/// there aborts the whole app on Android).
+pub fn join(config: GuestConfig) -> Result<GuestRuntime, String> {
+    let runtime = tokio::runtime::Handle::try_current()
+        .map_err(|_| "no async runtime to run the connection".to_string())?;
     let (events_tx, events) = mpsc::channel(256);
     let (commands_tx, commands_rx) = mpsc::channel(64);
     let (shutdown, _) = watch::channel(false);
@@ -257,8 +263,8 @@ pub fn join(config: GuestConfig) -> GuestRuntime {
         shutdown: shutdown.clone(),
         command_timeout: config.command_timeout,
     };
-    tokio::spawn(run(config, shared, events_tx, commands_rx, shutdown));
-    GuestRuntime { handle, events }
+    runtime.spawn(run(config, shared, events_tx, commands_rx, shutdown));
+    Ok(GuestRuntime { handle, events })
 }
 
 enum Ended {

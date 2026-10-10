@@ -28,6 +28,7 @@ const en = {
       stop: "Stop hosting",
       suspended:
         "Paused: the app is in the background. It reopens by itself when you come back and the others reconnect.",
+      idle: "Press «Host» and the other devices on this Wi-Fi can find you and join.",
       leaveFirst: "Leave the session you joined before hosting.",
       addresses: "Address to join",
       noNetwork: "No network: connect this device to a Wi-Fi.",

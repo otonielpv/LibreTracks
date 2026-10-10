@@ -28,6 +28,7 @@ const es = {
       stop: "Dejar de hospedar",
       suspended:
         "En pausa: la app está en segundo plano. Al volver se reabre sola y los demás se reconectan.",
+      idle: "Pulsa «Hospedar» y los demás dispositivos de esta Wi-Fi podrán encontrarte y unirse.",
       leaveFirst: "Sal de la sesión a la que estás unido para poder hospedar.",
       addresses: "Dirección para unirse",
       noNetwork: "Sin red: conecta este dispositivo a una Wi-Fi.",

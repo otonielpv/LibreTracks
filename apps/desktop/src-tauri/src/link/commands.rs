@@ -107,8 +107,10 @@ pub fn link_revoke_trusted(app: AppHandle, device_id: String) -> bool {
     revoked
 }
 
+/// Async on purpose: the connection is a Tokio task, and a sync command runs
+/// on the IPC thread outside the runtime (that crashed the app on Android).
 #[tauri::command]
-pub fn link_join(
+pub async fn link_join(
     app: AppHandle,
     target: String,
     pin: Option<String>,

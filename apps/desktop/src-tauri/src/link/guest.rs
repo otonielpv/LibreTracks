@@ -201,7 +201,7 @@ pub fn join_host(
         }
     };
 
-    let runtime = join(guest_config);
+    let runtime = join(guest_config)?;
     let handle = runtime.handle.clone();
     let task = tauri::async_runtime::spawn(relay(app.clone(), address.clone(), runtime.events));
     let status = GuestStatus {

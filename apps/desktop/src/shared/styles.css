@@ -11203,6 +11203,26 @@ html.lt-ios body {
   flex-direction: column;
 }
 
+/* En móvil/tablet los botones del rail crecen para repartirse el alto
+   (`.lt-mobile .lt-side-nav button { flex: 1 1 auto }`), pero el de GUÍA no
+   es hijo directo del rail: va dentro de este envoltorio, que no crecía, y
+   quedaba con otro espaciado que los demás. El envoltorio ocupa su parte del
+   rail y el botón llena el envoltorio. */
+.lt-mobile .lt-tour-launcher {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.lt-mobile .lt-tour-launcher > button {
+  flex: 1 1 auto;
+}
+
+@media (orientation: portrait) {
+  .lt-mobile .lt-tour-launcher {
+    flex: 1 0 3rem;
+  }
+}
+
 .lt-tour-menu {
   position: fixed;
   /* Por portal, en la misma capa superior que la guía. Algunos lienzos y

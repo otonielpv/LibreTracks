@@ -10,6 +10,7 @@
 //! Permissions are checked on the host for every incoming command
 //! ([`permissions::is_allowed`]); the guest UI hiding buttons is a courtesy.
 
+pub mod beacon;
 pub mod client;
 pub mod discovery;
 pub mod net;

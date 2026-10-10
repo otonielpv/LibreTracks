@@ -36,6 +36,15 @@ fn guest_config(port: u16, device_id: &str) -> GuestConfig {
     }
 }
 
+fn join_ok(config: GuestConfig) -> GuestRuntime {
+    join(config).expect("inside a runtime")
+}
+
+#[test]
+fn joining_outside_a_runtime_is_an_error_not_a_panic() {
+    assert!(join(guest_config(1, "x")).is_err());
+}
+
 async fn next_event(
     runtime: &mut GuestRuntime,
     mut matches: impl FnMut(&GuestEvent) -> bool,
@@ -73,7 +82,7 @@ async fn joins_and_receives_the_session() {
     host.handle.publish_song(&json!({ "regions": ["a"] }));
     host.handle
         .publish_transport(&json!({ "playbackState": "playing" }));
-    let mut guest = join(guest_config(host.handle.port(), "g"));
+    let mut guest = join_ok(guest_config(host.handle.port(), "g"));
 
     let welcome = next_event(&mut guest, |event| {
         matches!(event, GuestEvent::Welcome { .. })
@@ -104,7 +113,7 @@ async fn joins_and_receives_the_session() {
 #[tokio::test]
 async fn clock_offset_and_round_trip_appear() {
     let host = host().await;
-    let guest = join(guest_config(host.handle.port(), "c"));
+    let guest = join_ok(guest_config(host.handle.port(), "c"));
     tokio::time::timeout(WAIT, async {
         while guest.handle.host_offset_ms().is_none() {
             tokio::time::sleep(Duration::from_millis(20)).await;
@@ -118,7 +127,7 @@ async fn clock_offset_and_round_trip_appear() {
 #[tokio::test]
 async fn bad_pin_is_final() {
     let host = host().await;
-    let mut guest = join(GuestConfig {
+    let mut guest = join_ok(GuestConfig {
         pin: Some("0000".into()),
         ..guest_config(host.handle.port(), "b")
     });
@@ -146,7 +155,7 @@ async fn bad_pin_is_final() {
 #[tokio::test]
 async fn command_round_trip_and_local_permission_check() {
     let mut host = host().await;
-    let mut guest = join(GuestConfig {
+    let mut guest = join_ok(GuestConfig {
         pin: Some("1111".into()),
         ..guest_config(host.handle.port(), "ctl")
     });
@@ -184,7 +193,7 @@ async fn command_round_trip_and_local_permission_check() {
 async fn reconnects_with_its_token_after_the_host_restarts() {
     let host = host().await;
     let port = host.handle.port();
-    let mut guest = join(GuestConfig {
+    let mut guest = join_ok(GuestConfig {
         pin: Some("2222".into()),
         remember: true,
         ..guest_config(port, "ipad")
@@ -221,7 +230,7 @@ async fn reconnects_with_its_token_after_the_host_restarts() {
 #[tokio::test]
 async fn pending_command_fails_when_the_connection_drops() {
     let mut host = host().await;
-    let mut guest = join(GuestConfig {
+    let mut guest = join_ok(GuestConfig {
         pin: Some("1111".into()),
         ..guest_config(host.handle.port(), "drop")
     });
@@ -268,7 +277,7 @@ async fn mute_host() -> u16 {
 #[tokio::test]
 async fn silent_host_counts_as_lost() {
     let port = mute_host().await;
-    let mut guest = join(GuestConfig {
+    let mut guest = join_ok(GuestConfig {
         silence_timeout: Duration::from_millis(300),
         ..guest_config(port, "quiet")
     });
@@ -286,7 +295,7 @@ async fn a_live_host_is_not_silent() {
     })
     .await
     .unwrap();
-    let mut guest = join(GuestConfig {
+    let mut guest = join_ok(GuestConfig {
         silence_timeout: Duration::from_millis(300),
         ..guest_config(host.handle.port(), "alive")
     });
@@ -298,7 +307,7 @@ async fn a_live_host_is_not_silent() {
 #[tokio::test]
 async fn leaving_closes_and_the_host_forgets_the_guest() {
     let host = host().await;
-    let mut guest = join(guest_config(host.handle.port(), "bye"));
+    let mut guest = join_ok(guest_config(host.handle.port(), "bye"));
     until_state(&mut guest, GuestState::Connected).await;
     guest.handle.leave();
     until_state(&mut guest, GuestState::Closed).await;
@@ -314,7 +323,7 @@ async fn leaving_closes_and_the_host_forgets_the_guest() {
 #[tokio::test]
 async fn kick_is_final_for_the_guest() {
     let host = host().await;
-    let mut guest = join(guest_config(host.handle.port(), "k"));
+    let mut guest = join_ok(guest_config(host.handle.port(), "k"));
     until_state(&mut guest, GuestState::Connected).await;
     host.handle.kick("k");
     until_state(

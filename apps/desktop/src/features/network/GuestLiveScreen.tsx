@@ -294,7 +294,7 @@ function GuestLiveContent({
               <div className="lt-network-actions">
                 <button
                   type="button"
-                  className="lt-primary-button"
+                  className="lt-network-button is-primary"
                   onClick={() => {
                     overwriteQuestion(true);
                     setOverwriteQuestion(null);
@@ -304,7 +304,7 @@ function GuestLiveContent({
                 </button>
                 <button
                   type="button"
-                  className="lt-secondary-button"
+                  className="lt-network-button"
                   onClick={() => {
                     overwriteQuestion(false);
                     setOverwriteQuestion(null);

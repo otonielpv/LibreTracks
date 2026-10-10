@@ -190,28 +190,47 @@ pub use mdns_backend::MdnsDiscovery;
 #[cfg(feature = "mdns")]
 mod mdns_backend {
     use std::collections::HashMap;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 
     use super::{parse_record, Advertisement, DiscoveryEvent, SERVICE_TYPE};
+    use crate::beacon::{BeaconListener, BeaconSender};
 
-    /// mDNS through the `mdns-sd` daemon (its own thread, no async runtime).
+    /// LAN discovery for desktop and Android: mDNS through the `mdns-sd`
+    /// daemon (its own thread, no async runtime) plus the UDP broadcast
+    /// beacon (`beacon.rs`), which gets through where routers drop
+    /// multicast between Wi-Fi and Ethernet. Either may fail to start on a
+    /// given machine; the other still works.
     pub struct MdnsDiscovery {
-        daemon: ServiceDaemon,
+        daemon: Option<ServiceDaemon>,
         advertised: Mutex<Option<String>>,
+        beacon_sender: Mutex<Option<BeaconSender>>,
+        beacon_listener: Mutex<Option<BeaconListener>>,
     }
 
     impl MdnsDiscovery {
         pub fn new() -> Result<Self, String> {
+            let daemon = match ServiceDaemon::new() {
+                Ok(daemon) => Some(daemon),
+                Err(error) => {
+                    eprintln!("[libretracks-link] mDNS unavailable, beacon only: {error}");
+                    None
+                }
+            };
             Ok(Self {
-                daemon: ServiceDaemon::new().map_err(|error| error.to_string())?,
+                daemon,
                 advertised: Mutex::new(None),
+                beacon_sender: Mutex::new(None),
+                beacon_listener: Mutex::new(None),
             })
         }
 
-        pub fn advertise(&self, ad: &Advertisement) -> Result<(), String> {
-            self.stop_advertising();
+        fn register_mdns(
+            &self,
+            daemon: &ServiceDaemon,
+            ad: &Advertisement,
+        ) -> Result<String, String> {
             let host_label: String = ad
                 .host_id
                 .chars()
@@ -232,80 +251,154 @@ mod mdns_backend {
             // Wi-Fi changes.
             .enable_addr_auto();
             let fullname = info.get_fullname().to_string();
-            self.daemon
-                .register(info)
-                .map_err(|error| error.to_string())?;
-            if let Ok(mut advertised) = self.advertised.lock() {
-                *advertised = Some(fullname);
+            daemon.register(info).map_err(|error| error.to_string())?;
+            Ok(fullname)
+        }
+
+        /// Ok when at least one of the two ways is announcing.
+        pub fn advertise(&self, ad: &Advertisement) -> Result<(), String> {
+            self.stop_advertising();
+            let mut errors = Vec::new();
+            let mut working = 0;
+
+            match BeaconSender::start(ad) {
+                Ok(sender) => {
+                    working += 1;
+                    if let Ok(mut slot) = self.beacon_sender.lock() {
+                        *slot = Some(sender);
+                    }
+                }
+                Err(error) => errors.push(format!("beacon: {error}")),
             }
-            Ok(())
+            if let Some(daemon) = &self.daemon {
+                match self.register_mdns(daemon, ad) {
+                    Ok(fullname) => {
+                        working += 1;
+                        if let Ok(mut advertised) = self.advertised.lock() {
+                            *advertised = Some(fullname);
+                        }
+                    }
+                    Err(error) => errors.push(format!("mdns: {error}")),
+                }
+            }
+            if !errors.is_empty() {
+                eprintln!("[libretracks-link] advertising: {}", errors.join("; "));
+            }
+            if working > 0 {
+                Ok(())
+            } else {
+                Err(errors.join("; "))
+            }
         }
 
         pub fn stop_advertising(&self) {
+            if let Ok(mut sender) = self.beacon_sender.lock() {
+                sender.take();
+            }
             let previous = self
                 .advertised
                 .lock()
                 .ok()
                 .and_then(|mut advertised| advertised.take());
-            if let Some(fullname) = previous {
-                let _ = self.daemon.unregister(&fullname);
+            if let (Some(fullname), Some(daemon)) = (previous, &self.daemon) {
+                let _ = daemon.unregister(&fullname);
             }
         }
 
-        /// Start browsing; events arrive on `on_event` from the daemon's
-        /// receiver thread until `stop_browsing`.
+        /// Start browsing; events arrive on `on_event` from background
+        /// threads until `stop_browsing`. Ok when at least one way listens.
         pub fn browse(
             &self,
-            on_event: impl Fn(DiscoveryEvent) + Send + 'static,
+            on_event: impl Fn(DiscoveryEvent) + Send + Sync + 'static,
         ) -> Result<(), String> {
-            let receiver = self
-                .daemon
-                .browse(SERVICE_TYPE)
-                .map_err(|error| error.to_string())?;
-            std::thread::Builder::new()
-                .name("lt-link-browse".into())
-                .spawn(move || {
-                    while let Ok(event) = receiver.recv() {
-                        match event {
-                            ServiceEvent::ServiceResolved(resolved) => {
-                                let ips: Vec<std::net::IpAddr> = resolved
-                                    .addresses
-                                    .iter()
-                                    .map(|scoped| scoped.to_ip_addr())
-                                    .collect();
-                                let host = parse_record(
-                                    |key| resolved.get_property_val_str(key).map(str::to_string),
-                                    &ips,
-                                    resolved.port,
-                                );
-                                if let Some(host) = host {
-                                    on_event(DiscoveryEvent::Found {
-                                        key: resolved.fullname.clone(),
-                                        host,
-                                    });
-                                }
-                            }
-                            ServiceEvent::ServiceRemoved(_, fullname) => {
-                                on_event(DiscoveryEvent::Lost { key: fullname });
-                            }
-                            ServiceEvent::SearchStopped(_) => return,
-                            _ => {}
+            let on_event: Arc<dyn Fn(DiscoveryEvent) + Send + Sync> = Arc::new(on_event);
+            let mut errors = Vec::new();
+            let mut working = 0;
+
+            match BeaconListener::start(on_event.clone()) {
+                Ok(listener) => {
+                    working += 1;
+                    if let Ok(mut slot) = self.beacon_listener.lock() {
+                        *slot = Some(listener);
+                    }
+                }
+                Err(error) => errors.push(format!("beacon: {error}")),
+            }
+            if let Some(daemon) = &self.daemon {
+                match daemon.browse(SERVICE_TYPE) {
+                    Ok(receiver) => {
+                        let on_event = on_event.clone();
+                        let spawned = std::thread::Builder::new()
+                            .name("lt-link-browse".into())
+                            .spawn(move || browse_loop(receiver, on_event));
+                        match spawned {
+                            Ok(_) => working += 1,
+                            Err(error) => errors.push(format!("mdns thread: {error}")),
                         }
                     }
-                })
-                .map_err(|error| error.to_string())?;
-            Ok(())
+                    Err(error) => errors.push(format!("mdns: {error}")),
+                }
+            }
+            if !errors.is_empty() {
+                eprintln!("[libretracks-link] browsing: {}", errors.join("; "));
+            }
+            if working > 0 {
+                Ok(())
+            } else {
+                Err(errors.join("; "))
+            }
         }
 
         pub fn stop_browsing(&self) {
-            let _ = self.daemon.stop_browse(SERVICE_TYPE);
+            if let Ok(mut listener) = self.beacon_listener.lock() {
+                listener.take();
+            }
+            if let Some(daemon) = &self.daemon {
+                let _ = daemon.stop_browse(SERVICE_TYPE);
+            }
+        }
+    }
+
+    fn browse_loop(
+        receiver: mdns_sd::Receiver<ServiceEvent>,
+        on_event: Arc<dyn Fn(DiscoveryEvent) + Send + Sync>,
+    ) {
+        while let Ok(event) = receiver.recv() {
+            match event {
+                ServiceEvent::ServiceResolved(resolved) => {
+                    let ips: Vec<std::net::IpAddr> = resolved
+                        .addresses
+                        .iter()
+                        .map(|scoped| scoped.to_ip_addr())
+                        .collect();
+                    let host = parse_record(
+                        |key| resolved.get_property_val_str(key).map(str::to_string),
+                        &ips,
+                        resolved.port,
+                    );
+                    if let Some(host) = host {
+                        on_event(DiscoveryEvent::Found {
+                            key: resolved.fullname.clone(),
+                            host,
+                        });
+                    }
+                }
+                ServiceEvent::ServiceRemoved(_, fullname) => {
+                    on_event(DiscoveryEvent::Lost { key: fullname });
+                }
+                ServiceEvent::SearchStopped(_) => return,
+                _ => {}
+            }
         }
     }
 
     impl Drop for MdnsDiscovery {
         fn drop(&mut self) {
             self.stop_advertising();
-            let _ = self.daemon.shutdown();
+            self.stop_browsing();
+            if let Some(daemon) = &self.daemon {
+                let _ = daemon.shutdown();
+            }
         }
     }
 }
