@@ -151,14 +151,60 @@ describe("LiveChartPanel", () => {
       label: node.querySelector(".lt-chart-section-label")?.textContent,
       queued: node.classList.contains("is-queued"),
     }));
+    // Playback started in the chorus: that is all that has played so far.
     expect(labels).toEqual([
-      { label: "EstrofaVerso 1", queued: false },
       { label: "EstribilloCoro 1", queued: false },
       { label: "liveChart.jumpEstrofaVerso 1", queued: true },
       { label: "EstribilloCoro 1", queued: true },
     ]);
     // No "up next" chip: the lyrics below already show it.
     expect(screen.queryByTitle("liveChart.upNext")).toBeNull();
+  });
+
+  it("after a jump lands, the lyrics go on below it instead of scrolling back up", () => {
+    vi.useFakeTimers();
+    try {
+      const position = { current: 25 };
+      const onChartChange = vi.fn(async () => {});
+      const view = (pending: string | null) => (
+        <LiveChartPanel
+          song={songView(region(linked))}
+          region={region(linked)}
+          positionSecondsRef={position}
+          pendingMarkerId={pending}
+          expanded={false}
+          onToggleExpanded={vi.fn()}
+          onClose={vi.fn()}
+          onChartChange={onChartChange}
+        />
+      );
+      // Chorus playing, a jump back to the verse scheduled: it shows below.
+      const { container, rerender } = render(view("verse"));
+      const sections = () =>
+        [...container.querySelectorAll(".lt-chart-section")].map((node) => ({
+          label: node.querySelector(".lt-chart-section-label")?.textContent?.replace("liveChart.jump", "→"),
+          current: node.classList.contains("is-current"),
+        }));
+      expect(sections()).toEqual([
+        { label: "EstribilloCoro 1", current: true },
+        { label: "→EstrofaVerso 1", current: false },
+        { label: "EstribilloCoro 1", current: false },
+      ]);
+
+      // The jump lands: the playhead is in the verse now, nothing pending.
+      position.current = 1;
+      rerender(view(null));
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
+      expect(sections()).toEqual([
+        { label: "EstribilloCoro 1", current: false },
+        { label: "EstrofaVerso 1", current: true },
+        { label: "EstribilloCoro 1", current: false },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows the chords in the key the song is played in", () => {

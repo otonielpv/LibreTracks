@@ -252,7 +252,7 @@ export function applyLineRecording(links: readonly ChartLink[], recording: LineR
 /** One block of the lyrics as the song plays them: a marker and the sheet
  * section it shows (none for a part the sheet has no words for). */
 export type PerformanceBlock = {
-  /** Unique within the list (a jump preview repeats a marker). */
+  /** Its place in the played sequence: stable while it stays on screen. */
   key: string;
   markerId: string;
   /** The marker's name: what the band calls this part. */
@@ -262,38 +262,71 @@ export type PerformanceBlock = {
   queued: boolean;
 };
 
+/** What has played, in the order it played: one entry per section marker
+ * reached, numbered so each keeps its place (and its key) on screen. */
+export type PlayHistory = ReadonlyArray<{ seq: number; markerId: string }>;
+
+/** Played blocks kept above the current one: enough to see where you came
+ * from, not a list that grows all night. */
+export const PLAY_HISTORY_LIMIT = 6;
+
 /**
- * The lyrics in the order the song plays them — the order of its markers on
- * the timeline (an applied arrangement included), not the order of the
- * sheet. A chorus that plays three times shows three times, and the intro
- * that comes back after it shows BELOW it: reading only ever goes down.
+ * The history after the playhead reaches `markerId`: the same if it is still
+ * in the same part, one more entry if it moved on — by playing, by a jump, by
+ * a seek. `null` (before the first marker) leaves it as it is.
+ */
+export function advancePlayHistory(history: PlayHistory, markerId: string | null): PlayHistory {
+  if (markerId === null) return history;
+  const last = history[history.length - 1];
+  if (last?.markerId === markerId) return history;
+  const next = [...history, { seq: last ? last.seq + 1 : 0, markerId }];
+  return next.length > PLAY_HISTORY_LIMIT + 1 ? next.slice(next.length - PLAY_HISTORY_LIMIT - 1) : next;
+}
+
+/**
+ * The lyrics as the performer lives them: what has played, in the order it
+ * played, then what comes next. Reading only ever goes down — a chorus that
+ * plays three times shows three times, the intro that comes back shows BELOW
+ * the chorus, and after a jump the song goes on below the jump instead of
+ * scrolling back to where the target sits on the timeline.
  *
- * With a jump scheduled to a marker of this song, that marker's block and
- * what follows it are shown right after the block playing, so the next thing
- * on screen is what will actually sound.
+ * What comes next is the markers after the current one on the timeline (an
+ * applied arrangement included) or, with a jump to a marker of this song
+ * scheduled, that marker and what follows it.
+ *
+ * Keys follow the position in that sequence, so the preview of a jump and
+ * the block it becomes once the jump happens are the same element: nothing
+ * moves on screen when it lands.
  */
 export function buildPerformanceBlocks(
   doc: ChartDoc,
   links: readonly ChartLink[],
   markers: readonly SectionMarkerSummary[],
-  currentMarkerId: string | null,
+  history: PlayHistory,
   pendingMarkerId: string | null,
-): PerformanceBlock[] {
-  const block = (marker: SectionMarkerSummary, queued: boolean): PerformanceBlock => {
+): { blocks: PerformanceBlock[]; current: number } {
+  const block = (marker: SectionMarkerSummary, key: string, queued: boolean): PerformanceBlock => {
     const link = chartLinkFor(links, marker.id);
     return {
-      key: `${queued ? "jump:" : ""}${marker.id}`,
+      key,
       markerId: marker.id,
       label: marker.name,
       section: link && link.section < doc.sections.length ? link.section : null,
       queued,
     };
   };
-  const current = markers.findIndex((marker) => marker.id === currentMarkerId);
-  const target = pendingMarkerId ? markers.findIndex((marker) => marker.id === pendingMarkerId) : -1;
-  if (current < 0 || target < 0) return markers.map((marker) => block(marker, false));
-  return [
-    ...markers.slice(0, current + 1).map((marker) => block(marker, false)),
-    ...markers.slice(target).map((marker) => block(marker, true)),
-  ];
+  const byId = new Map(markers.map((marker, index) => [marker.id, index]));
+  const played = history.filter((entry) => byId.has(entry.markerId));
+  const last = played[played.length - 1];
+  if (!last) {
+    return { blocks: markers.map((marker, index) => block(marker, `s${index}`, false)), current: -1 };
+  }
+  const blocks = played.map((entry) => block(markers[byId.get(entry.markerId)!], `s${entry.seq}`, false));
+  const target = pendingMarkerId !== null ? byId.get(pendingMarkerId) : undefined;
+  const queued = target !== undefined;
+  const from = queued ? target : byId.get(last.markerId)! + 1;
+  markers.slice(from).forEach((marker, index) => {
+    blocks.push(block(marker, `s${last.seq + 1 + index}`, queued));
+  });
+  return { blocks, current: played.length - 1 };
 }

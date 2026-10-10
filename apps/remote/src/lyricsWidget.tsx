@@ -16,7 +16,9 @@ import {
 } from "@libretracks/shared/charts/chordChart";
 import { keyPrefersFlats, parseNoteRun } from "@libretracks/shared/charts/chordNotation";
 import {
+  advancePlayHistory,
   buildPerformanceBlocks,
+  type PlayHistory,
   NO_CHART_PLAYBACK,
   resolveChartPlayback,
   type ChartPlayback,
@@ -219,14 +221,22 @@ export const LyricsWidget = memo(function LyricsWidget({
     () => lyricsMarkersFor(songView?.sectionMarkers ?? [], region),
     [songView?.sectionMarkers, region],
   );
-  const blocks = useMemo(
+  // What has played in this song, in the order it played (see the desktop
+  // panel): after a jump the lyrics go on below it.
+  const historyRef = useRef<{ regionId: string | null; history: PlayHistory }>({ regionId: null, history: [] });
+  const history = useMemo(() => {
+    const kept = historyRef.current.regionId === state.regionId ? historyRef.current.history : [];
+    const next = advancePlayHistory(kept, state.playback.markerId);
+    historyRef.current = { regionId: state.regionId, history: next };
+    return next;
+  }, [state.regionId, state.playback.markerId]);
+  const { blocks, current: currentBlock } = useMemo(
     () =>
       doc && region?.chart
-        ? buildPerformanceBlocks(doc, region.chart.links, markers, state.playback.markerId, pendingMarkerId)
-        : [],
-    [doc, region?.chart, markers, state.playback.markerId, pendingMarkerId],
+        ? buildPerformanceBlocks(doc, region.chart.links, markers, history, pendingMarkerId)
+        : { blocks: [], current: -1 },
+    [doc, region?.chart, markers, history, pendingMarkerId],
   );
-  const currentBlock = blocks.findIndex((block) => !block.queued && block.markerId === state.playback.markerId);
 
   useEffect(() => {
     const scroller = scrollerRef.current;

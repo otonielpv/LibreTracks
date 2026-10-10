@@ -22,9 +22,11 @@ import { ChartEditorModal } from "./ChartEditorModal";
 import { parseChordPro, transposeChart, type ChartLine } from "@libretracks/shared/charts/chordChart";
 import { keyPrefersFlats, parseNoteRun } from "@libretracks/shared/charts/chordNotation";
 import {
+  advancePlayHistory,
   applyLineRecording,
   autoLinkChart,
   buildPerformanceBlocks,
+  type PlayHistory,
   chartMarkersForRegion,
   recordLineTap,
   type LineRecording,
@@ -175,11 +177,22 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     positionSecondsRef,
   );
 
-  const blocks = useMemo(
-    () => (doc ? buildPerformanceBlocks(doc, links, markers, playback.markerId, pendingMarkerId) : []),
-    [doc, links, markers, playback.markerId, pendingMarkerId],
+  // What has played in this song, in the order it played: after a jump the
+  // lyrics go on below it instead of scrolling back up the timeline.
+  const historyRef = useRef<{ regionId: string | null; history: PlayHistory }>({ regionId: null, history: [] });
+  const history = useMemo(() => {
+    const kept = historyRef.current.regionId === (region?.id ?? null) ? historyRef.current.history : [];
+    const next = advancePlayHistory(kept, playback.markerId);
+    historyRef.current = { regionId: region?.id ?? null, history: next };
+    return next;
+  }, [region?.id, playback.markerId]);
+  const { blocks, current: currentBlock } = useMemo(
+    () =>
+      doc
+        ? buildPerformanceBlocks(doc, links, markers, history, pendingMarkerId)
+        : { blocks: [], current: -1 },
+    [doc, links, markers, history, pendingMarkerId],
   );
-  const currentBlock = blocks.findIndex((block) => !block.queued && block.markerId === playback.markerId);
 
   // A new song: whatever was being recorded belonged to the previous one.
   useEffect(() => {

@@ -4,8 +4,11 @@ import type { SectionMarkerSummary } from "../models";
 
 import { parseChordPro } from "./chordChart";
 import {
+  advancePlayHistory,
   autoLinkChart,
   buildPerformanceBlocks,
+  PLAY_HISTORY_LIMIT,
+  type PlayHistory,
   chartLinkFor,
   chartMarkersForRegion,
   applyLineRecording,
@@ -182,10 +185,19 @@ describe("lyrics in playing order", () => {
     { markerId: "verse", section: 1 },
     { markerId: "chorus", section: 2 },
   ];
+  const play = (...ids: string[]) => ids.reduce<PlayHistory>((history, id) => advancePlayHistory(history, id), []);
+  const labels = (result: { blocks: { label: string; queued: boolean }[] }) =>
+    result.blocks.map((b) => `${b.queued ? "→" : ""}${b.label}`);
+
+  it("before the song starts, shows it in timeline order", () => {
+    const result = buildPerformanceBlocks(doc, links, markers, [], null);
+    expect(result.current).toBe(-1);
+    expect(labels(result)).toEqual(["Intro", "Estrofa", "Coro", "Intro", "Final"]);
+  });
 
   it("follows the timeline, so the intro that comes back sits below the chorus", () => {
-    const blocks = buildPerformanceBlocks(doc, links, markers, "chorus", null);
-    expect(blocks.map((b) => [b.label, b.section])).toEqual([
+    const result = buildPerformanceBlocks(doc, links, markers, play("intro", "verse", "chorus"), null);
+    expect(result.blocks.map((b) => [b.label, b.section])).toEqual([
       ["Intro", 0],
       ["Estrofa", 1],
       ["Coro", 2],
@@ -193,22 +205,37 @@ describe("lyrics in playing order", () => {
       // A part the sheet has no words for keeps its place, without lines.
       ["Final", null],
     ]);
-    expect(new Set(blocks.map((b) => b.key)).size).toBe(blocks.length);
+    expect(result.current).toBe(2);
+    expect(new Set(result.blocks.map((b) => b.key)).size).toBe(result.blocks.length);
   });
 
   it("puts a scheduled jump right after the block playing", () => {
-    const blocks = buildPerformanceBlocks(doc, links, markers, "verse", "chorus");
-    expect(blocks.map((b) => `${b.queued ? "→" : ""}${b.label}`)).toEqual([
-      "Intro", "Estrofa", "→Coro", "→Intro", "→Final",
-    ]);
-    // Jumping back: the repeated part shows again below, not up the page.
-    const back = buildPerformanceBlocks(doc, links, markers, "chorus", "verse");
-    expect(back.map((b) => `${b.queued ? "→" : ""}${b.label}`)).toEqual([
-      "Intro", "Estrofa", "Coro", "→Estrofa", "→Coro", "→Intro", "→Final",
-    ]);
+    const result = buildPerformanceBlocks(doc, links, markers, play("intro", "verse", "chorus"), "verse");
+    expect(labels(result)).toEqual(["Intro", "Estrofa", "Coro", "→Estrofa", "→Coro", "→Intro", "→Final"]);
+  });
+
+  it("once the jump lands, the song goes on below it: the preview becomes the current block", () => {
+    const before = buildPerformanceBlocks(doc, links, markers, play("intro", "verse", "chorus"), "verse");
+    const after = buildPerformanceBlocks(doc, links, markers, play("intro", "verse", "chorus", "verse"), null);
+    expect(labels(after)).toEqual(["Intro", "Estrofa", "Coro", "Estrofa", "Coro", "Intro", "Final"]);
+    expect(after.current).toBe(3);
+    // Same keys, same order: the block on screen does not move.
+    expect(after.blocks.map((b) => b.key)).toEqual(before.blocks.map((b) => b.key));
+  });
+
+  it("keeps only the last parts played above the current one", () => {
+    let history: PlayHistory = [];
+    for (let round = 0; round < 5; round += 1) {
+      history = advancePlayHistory(history, "verse");
+      history = advancePlayHistory(history, "chorus");
+    }
+    expect(history).toHaveLength(PLAY_HISTORY_LIMIT + 1);
+    expect(advancePlayHistory(history, "chorus")).toBe(history);
+    expect(advancePlayHistory(history, null)).toBe(history);
   });
 
   it("ignores a jump to another song", () => {
-    expect(buildPerformanceBlocks(doc, links, markers, "verse", "other-song").some((b) => b.queued)).toBe(false);
+    const result = buildPerformanceBlocks(doc, links, markers, play("verse"), "other-song");
+    expect(result.blocks.some((b) => b.queued)).toBe(false);
   });
 });
