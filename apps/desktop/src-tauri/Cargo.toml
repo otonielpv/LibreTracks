@@ -32,7 +32,6 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 rayon = "1.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 tauri = { version = "2", features = [] }
 thiserror = "2"
 tokio = { version = "1", features = ["sync", "time", "fs"] }
@@ -60,6 +59,11 @@ path = "../../../crates/libretracks-link"
 # iOS, which uses the system's Bonjour (raw multicast needs an entitlement).
 [target.'cfg(not(target_os = "ios"))'.dependencies]
 libretracks-link = { path = "../../../crates/libretracks-link", features = ["mdns"] }
+# Not on iOS: sysinfo reaches `libc::mach_task_self`/`mach_host_self`, which
+# libc >= 0.2.189 only declares for macOS, so it stops compiling for iOS as
+# soon as any dependency pulls a newer libc (mdns-sd did, 2026-10-10). On iOS
+# the resource meter reads the few numbers it shows with its own calls.
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 libretracks-remote = { path = "../../../crates/libretracks-remote" }

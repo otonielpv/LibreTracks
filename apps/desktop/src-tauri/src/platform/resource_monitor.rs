@@ -28,8 +28,10 @@ use std::collections::HashSet;
 use std::sync::Mutex;
 use std::time::Instant;
 
-// ProcessesToUpdate solo lo usa el muestreo de escritorio.
-#[cfg_attr(any(target_os = "android", target_os = "ios"), allow(unused_imports))]
+// ProcessesToUpdate solo lo usa el muestreo de escritorio. En iOS no hay
+// sysinfo (ver Cargo.toml): lo poco que se mide allí va con llamadas propias.
+#[cfg(not(target_os = "ios"))]
+#[cfg_attr(target_os = "android", allow(unused_imports))]
 use sysinfo::{
     CpuRefreshKind, MemoryRefreshKind, Pid, ProcessRefreshKind, ProcessesToUpdate, RefreshKind,
     System,
@@ -38,7 +40,9 @@ use sysinfo::{
 use crate::models::SystemResourceSnapshot;
 
 struct MonitorInner {
+    #[cfg(not(target_os = "ios"))]
     system: System,
+    #[cfg(not(target_os = "ios"))]
     pid: Option<Pid>,
     /// Cumulative disk counters from the previous sample, plus the instant we
     /// read them, so the next sample can derive a bytes/sec rate.
@@ -70,6 +74,14 @@ pub struct ResourceMonitor {
 }
 
 impl Default for ResourceMonitor {
+    #[cfg(target_os = "ios")]
+    fn default() -> Self {
+        ResourceMonitor {
+            inner: Mutex::new(MonitorInner { last_cpu: None }),
+        }
+    }
+
+    #[cfg(not(target_os = "ios"))]
     fn default() -> Self {
         // Only the pieces we report — keeps construction and refresh cheap.
         // Processes carry CPU + memory + disk so we can aggregate our whole
@@ -248,15 +260,14 @@ impl ResourceMonitor {
 mod mobile {
     use std::time::Instant;
 
+    #[cfg(target_os = "android")]
     use sysinfo::MemoryRefreshKind;
 
     use super::{CpuBaseline, MonitorInner};
     use crate::models::SystemResourceSnapshot;
 
     pub(super) fn sample(inner: &mut MonitorInner) -> SystemResourceSnapshot {
-        inner
-            .system
-            .refresh_memory_specifics(MemoryRefreshKind::nothing().with_ram());
+        let (system_memory_used_bytes, system_memory_total_bytes) = system_memory(inner);
 
         // CPU de la app: tiempo de CPU acumulado (todos los hilos) entre dos
         // muestras, normalizado a la máquina entera como en escritorio.
@@ -288,8 +299,8 @@ mod mobile {
             // Ni CPU del sistema ni disco: en Android no son legibles y en iOS
             // no hay API pública de disco por proceso. La UI móvil no los pinta.
             system_cpu_percent: 0.0,
-            system_memory_used_bytes: inner.system.used_memory(),
-            system_memory_total_bytes: inner.system.total_memory(),
+            system_memory_used_bytes,
+            system_memory_total_bytes,
             disk_read_bytes_per_sec: 0,
             disk_write_bytes_per_sec: 0,
             audio_load_percent: 0.0,
@@ -297,6 +308,41 @@ mod mobile {
             audio_engine_active: false,
             available_memory_bytes: available_memory_bytes(),
         }
+    }
+
+    #[cfg(target_os = "android")]
+    fn system_memory(inner: &mut MonitorInner) -> (u64, u64) {
+        inner
+            .system
+            .refresh_memory_specifics(MemoryRefreshKind::nothing().with_ram());
+        (inner.system.used_memory(), inner.system.total_memory())
+    }
+
+    /// iOS: total RAM from `hw.memsize`; "used" is total minus what the
+    /// system still lets THIS app allocate (`os_proc_available_memory`). iOS
+    /// has no public system-wide used figure, and from the app's side that
+    /// is the number that matters: when it reaches the total, iOS kills the
+    /// app.
+    #[cfg(target_os = "ios")]
+    fn system_memory(_inner: &mut MonitorInner) -> (u64, u64) {
+        let mut total: u64 = 0;
+        let mut size = std::mem::size_of::<u64>();
+        // SAFETY: the name is a NUL-terminated literal and the out buffer is
+        // a u64 whose size goes in `size`.
+        let ok = unsafe {
+            libc::sysctlbyname(
+                c"hw.memsize".as_ptr(),
+                &mut total as *mut u64 as *mut libc::c_void,
+                &mut size,
+                std::ptr::null_mut(),
+                0,
+            )
+        } == 0;
+        if !ok || total == 0 {
+            return (0, 0);
+        }
+        let available = available_memory_bytes().min(total);
+        (total - available, total)
     }
 
     fn process_cpu_seconds() -> Option<f64> {
@@ -330,6 +376,11 @@ mod mobile {
     /// que enseña Xcode. sysinfo no la da (en iOS no ve procesos).
     #[cfg(target_os = "ios")]
     fn process_memory_bytes(_inner: &mut MonitorInner) -> u64 {
+        extern "C" {
+            // What the C macro `mach_task_self()` reads. libc >= 0.2.189
+            // only declares it for macOS, so it is declared here.
+            static mach_task_self_: libc::mach_port_t;
+        }
         /// `task_vm_info_data_t` hasta `phys_footprint` (TASK_VM_INFO_REV1_COUNT).
         /// El kernel rellena solo los campos que caben en `count`.
         #[repr(C)]
@@ -349,11 +400,11 @@ mod mobile {
         let mut count = (std::mem::size_of::<TaskVmInfoRev1>()
             / std::mem::size_of::<libc::natural_t>())
             as libc::mach_msg_type_number_t;
-        // SAFETY: el buffer mide exactamente `count` natural_t.
-        #[allow(deprecated)]
+        // SAFETY: el buffer mide exactamente `count` natural_t, y
+        // `mach_task_self_` lo inicializa el sistema antes de `main`.
         let result = unsafe {
             libc::task_info(
-                libc::mach_task_self(),
+                mach_task_self_,
                 TASK_VM_INFO,
                 &mut info as *mut TaskVmInfoRev1 as libc::task_info_t,
                 &mut count,
