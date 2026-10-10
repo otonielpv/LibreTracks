@@ -524,6 +524,15 @@
   align-items: start;
 }
 
+/* A phone in landscape: a narrower palette, so the list keeps most of the
+   width. */
+@media (max-height: 500px) {
+  .lt-structure-mobile.is-wide .lt-structure-mobile-split {
+    grid-template-columns: minmax(11rem, 0.8fr) 2fr;
+    gap: 0.6rem;
+  }
+}
+
 .lt-structure-editor.is-vertical .lt-structure-caption {
   flex-wrap: wrap;
 }

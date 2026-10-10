@@ -28,8 +28,10 @@ import "./structure.css";
 /** How long "Removed «Verse» · Undo" stays on screen. */
 export const UNDO_TOAST_MS = 4000;
 
-/** Landscape tablet: palette on the left, list on the right, no sheet. */
-const WIDE_QUERY = "(min-width: 900px) and (orientation: landscape)";
+/** Landscape — phone or tablet: palette on the left, list on the right, no
+ * sheet. It used to need 900px, which left phones (always landscape in this
+ * app, ~844px wide) with a stacked list and a sheet covering it. */
+export const WIDE_QUERY = "(orientation: landscape)";
 
 function useWideLayout(): boolean {
   const query = () =>
