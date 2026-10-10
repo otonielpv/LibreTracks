@@ -36,4 +36,10 @@ describe("estilos del editor de arreglos", () => {
   it("los botones primarios usan el degradado de la app", () => {
     expect(css).toContain("background: linear-gradient(to bottom, #57f1db, #2dd4bf)");
   });
+
+  it("en la tablet la lista ocupa todo el ancho (no queda una rejilla de paleta)", () => {
+    // Sin paleta lateral, una rejilla de dos columnas dejaba la lista en el
+    // tercio izquierdo de la pantalla.
+    expect(css).not.toMatch(/\.lt-structure-mobile\.is-wide \.lt-structure-mobile-split\s*\{/);
+  });
 });

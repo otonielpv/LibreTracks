@@ -517,12 +517,6 @@
   min-width: 0;
 }
 
-.lt-structure-mobile.is-wide .lt-structure-mobile-split {
-  display: grid;
-  grid-template-columns: minmax(14rem, 1fr) 2fr;
-  gap: 1rem;
-  align-items: start;
-}
 
 .lt-structure-editor.is-vertical .lt-structure-caption {
   flex-wrap: wrap;
@@ -646,11 +640,6 @@
   gap: 0.5rem;
 }
 
-.lt-structure-mobile.is-wide .lt-structure-tap-palette {
-  border: 1px solid rgb(255 255 255 / 0.08);
-  border-radius: 2px;
-  background: #161616;
-}
 
 .lt-structure-touch {
   min-width: 44px;
