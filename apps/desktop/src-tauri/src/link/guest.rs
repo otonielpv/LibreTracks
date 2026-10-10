@@ -455,15 +455,80 @@ pub async fn send_command(
 /// host's own error text comes back as is; refusals come back as
 /// `guest:<code>` so the UI can say why in the user's language.
 pub async fn proxy_invoke(app: &AppHandle, command: String, args: Value) -> Result<Value, String> {
+    // The UI polls the transport four times a second. Answered here, from the
+    // snapshot the host pushes every 90 ms moved forward to now: the playhead
+    // no longer waits behind the host's session lock (a warp or key change
+    // holds it for a while, and the guest's playhead froze, then jumped), and
+    // the host is spared those requests exactly when it is busiest.
+    if command == "get_transport_snapshot" {
+        let now = unix_ms();
+        if let Some(Some(snapshot)) = with_guest(app, |guest| {
+            guest.transport.as_ref().map(|t| local_snapshot(t, now))
+        }) {
+            return Ok(snapshot);
+        }
+    }
+
     let handle = with_guest(app, |guest| guest.handle.clone())
         .ok_or_else(|| format!("{GUEST_ERROR_PREFIX}notConnected"))?;
-    handle
+    let value = handle
         .send_command(LinkCommand::Invoke { command, args }, None)
         .await
         .map_err(|error| match error {
             CommandError::Failed(message) => message,
             other => format!("{GUEST_ERROR_PREFIX}{}", command_error_code(&other)),
-        })
+        })?;
+
+    // Most session commands answer with the transport snapshot they left
+    // behind (play, seek, a jump…): keep it, so the next poll does not hand
+    // back the state from before the command for a moment.
+    if is_transport_snapshot(&value) {
+        let transport = GuestTransport {
+            anchor_position_seconds: snapshot_anchor(&value),
+            snapshot: value.clone(),
+            emitted_at_unix_ms: unix_ms(),
+        };
+        with_guest(app, |guest| guest.transport = Some(transport));
+    }
+    Ok(value)
+}
+
+fn is_transport_snapshot(value: &Value) -> bool {
+    value.get("playbackState").is_some() && value.get("transportClock").is_some()
+}
+
+fn snapshot_running(snapshot: &Value) -> bool {
+    snapshot["playbackState"] == "playing"
+        && snapshot["transportClock"]["running"]
+            .as_bool()
+            .unwrap_or(false)
+}
+
+/// Where a snapshot says the playhead was when it was taken.
+fn snapshot_anchor(snapshot: &Value) -> f64 {
+    if snapshot_running(snapshot) {
+        snapshot["transportClock"]["anchorPositionSeconds"].as_f64()
+    } else {
+        snapshot["positionSeconds"].as_f64()
+    }
+    .unwrap_or(0.0)
+}
+
+/// The cached host snapshot as of `now_unix_ms` on this device: when playing,
+/// the position moves on at the playback rate from where the host was when
+/// it arrived (already corrected for the network and the clock offset).
+pub fn local_snapshot(transport: &GuestTransport, now_unix_ms: u64) -> Value {
+    let mut snapshot = transport.snapshot.clone();
+    if snapshot_running(&snapshot) {
+        let rate = snapshot["transportClock"]["playbackRate"]
+            .as_f64()
+            .unwrap_or(1.0);
+        let elapsed = now_unix_ms.saturating_sub(transport.emitted_at_unix_ms) as f64 / 1000.0;
+        let position = transport.anchor_position_seconds + elapsed * rate;
+        snapshot["positionSeconds"] = Value::from(position);
+        snapshot["transportClock"]["anchorPositionSeconds"] = Value::from(position);
+    }
+    snapshot
 }
 
 #[cfg(test)]
@@ -523,6 +588,59 @@ mod tests {
             command_error_code(&CommandError::Failed("clip not found".into())),
             "clip not found"
         );
+    }
+
+    #[test]
+    fn the_cached_snapshot_moves_on_while_playing() {
+        let transport = GuestTransport {
+            snapshot: playing(10.0, 1.0),
+            anchor_position_seconds: 10.25,
+            emitted_at_unix_ms: 1_000,
+        };
+        let now = local_snapshot(&transport, 1_500);
+        assert!((now["positionSeconds"].as_f64().unwrap() - 10.75).abs() < 1e-9);
+        assert!(
+            (now["transportClock"]["anchorPositionSeconds"]
+                .as_f64()
+                .unwrap()
+                - 10.75)
+                .abs()
+                < 1e-9
+        );
+        // Half speed (warp): half as far.
+        let slow = GuestTransport {
+            snapshot: playing(10.0, 0.5),
+            ..transport.clone()
+        };
+        assert!(
+            (local_snapshot(&slow, 2_000)["positionSeconds"]
+                .as_f64()
+                .unwrap()
+                - 10.75)
+                .abs()
+                < 1e-9
+        );
+    }
+
+    #[test]
+    fn a_stopped_cached_snapshot_stays_put() {
+        let transport = GuestTransport {
+            snapshot: json!({
+                "playbackState": "stopped",
+                "positionSeconds": 42.0,
+                "transportClock": { "running": false, "anchorPositionSeconds": 1.0 }
+            }),
+            anchor_position_seconds: 42.0,
+            emitted_at_unix_ms: 0,
+        };
+        assert_eq!(local_snapshot(&transport, 99_000)["positionSeconds"], 42.0);
+    }
+
+    #[test]
+    fn command_results_are_recognised_as_snapshots() {
+        assert!(is_transport_snapshot(&playing(1.0, 1.0)));
+        assert!(!is_transport_snapshot(&json!({ "title": "song view" })));
+        assert_eq!(snapshot_anchor(&playing(7.0, 1.0)), 7.0);
     }
 
     #[test]
