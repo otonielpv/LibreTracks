@@ -5,6 +5,7 @@ members = [
     "crates/libretracks-project",
     "crates/libretracks-audio",
     "crates/libretracks-remote",
+    "crates/libretracks-link",
     "crates/libretracks-cloud",
     "crates/libretracks-video",
     "crates/lt-audio-engine-v2",

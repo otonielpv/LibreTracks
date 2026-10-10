@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
 
 use libretracks_audio::{JumpTrigger, TransitionType};
 use libretracks_remote::{
@@ -10,6 +10,7 @@ use crate::{
     commands::events::emit_transport_lifecycle_event,
     commands::transport::{parse_jump_trigger, parse_transition_type, parse_vamp_mode},
     infra::settings::{save_app_settings, AppSettings, AppSettingsStore},
+    session_feed::SessionFeed,
     state::DesktopState,
 };
 
@@ -39,7 +40,7 @@ pub fn initialize_remote(app: &App) -> Result<(), String> {
         runtime.command_rx,
         handle.clone(),
     ));
-    tauri::async_runtime::spawn(run_remote_sync_poller(app_handle, handle));
+    tauri::async_runtime::spawn(run_remote_sync_forwarder(app_handle, handle));
 
     Ok(())
 }
@@ -94,62 +95,36 @@ fn resolve_remote_static_dir(app: &App) -> Option<PathBuf> {
     None
 }
 
-async fn run_remote_sync_poller(app: AppHandle, handle: RemoteServerHandle) {
-    let mut interval = tokio::time::interval(Duration::from_millis(90));
-    let mut last_snapshot_json = String::new();
-    let mut last_song_revision = (u64::MAX, u64::MAX);
-    let mut last_song_json = String::new();
-    let mut last_settings_json = String::new();
+/// Forwards the shared session feed to the remote's clients. The reading
+/// itself (session lock, 90 ms, change detection) lives in `session_feed`, so
+/// the remote and the network sessions never poll the session twice.
+async fn run_remote_sync_forwarder(app: AppHandle, handle: RemoteServerHandle) {
+    let mut feed = app.state::<SessionFeed>().subscribe();
+    let (mut settings_seq, mut snapshot_seq, mut song_seq) = (0, 0, 0);
 
     loop {
-        interval.tick().await;
-        let state = app.state::<DesktopState>();
-        let settings_store = app.state::<AppSettingsStore>();
-        if let Ok(settings) = settings_store.current() {
-            if let Ok(settings_json) = serde_json::to_string(&settings) {
-                if settings_json != last_settings_json {
-                    handle.publish_settings(&settings);
-                    last_settings_json = settings_json;
-                }
+        let frame = feed.borrow_and_update().clone();
+        if frame.settings_seq != settings_seq {
+            settings_seq = frame.settings_seq;
+            if let Some(settings) = &frame.settings {
+                handle.publish_settings(settings.as_ref());
             }
         }
-        let mut session = match state.session.lock() {
-            Ok(session) => session,
-            Err(_) => continue,
-        };
-
-        let snapshot = match session.snapshot_with_sync(&state.audio) {
-            Ok(snapshot) => snapshot,
-            Err(_) => continue,
-        };
-        let snapshot_json = match serde_json::to_string(&snapshot) {
-            Ok(json) => json,
-            Err(_) => continue,
-        };
-
-        if snapshot_json != last_snapshot_json {
-            handle.publish_transport_snapshot(&snapshot);
-            last_snapshot_json = snapshot_json;
+        if frame.snapshot_seq != snapshot_seq {
+            snapshot_seq = frame.snapshot_seq;
+            if let Some(snapshot) = &frame.snapshot {
+                handle.publish_transport_snapshot(snapshot.as_ref());
+            }
+        }
+        if frame.song_seq != song_seq {
+            song_seq = frame.song_seq;
+            if let Some(song_view) = &frame.song {
+                handle.publish_song_view(song_view.as_ref());
+            }
         }
 
-        // `mix_revision` too: an automation cue changes mute/solo/volume/pan
-        // without an edit, and the phone kept showing the pre-cue buttons.
-        let song_revision = (snapshot.project_revision, snapshot.mix_revision);
-        if song_revision != last_song_revision {
-            // The remote control UI (phone) never renders waveform peaks —
-            // it only needs track/clip/region metadata for play/stop/jump
-            // controls. Sending the ~27 MB peaks payload on every revision
-            // bump (which fires on every track add, transpose, mute, ...)
-            // holds the session lock for ~700 ms and blocks foreground UI
-            // operations.
-            let song_view = session.song_view_with_options(false).ok().flatten();
-            if let Ok(song_json) = serde_json::to_string(&song_view) {
-                if song_json != last_song_json {
-                    handle.publish_song_view(&song_view);
-                    last_song_json = song_json;
-                }
-            }
-            last_song_revision = song_revision;
+        if feed.changed().await.is_err() {
+            return;
         }
     }
 }

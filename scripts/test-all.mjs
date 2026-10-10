@@ -53,6 +53,8 @@ const suites = [
       "libretracks-audio",
       "-p",
       "libretracks-remote",
+      "-p",
+      "libretracks-link",
     ],
   },
   {

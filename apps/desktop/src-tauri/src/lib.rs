@@ -11,6 +11,7 @@ mod external_project;
 mod infra;
 mod models;
 mod platform;
+mod session_feed;
 mod state;
 mod video;
 
@@ -265,6 +266,9 @@ pub fn run() {
             #[cfg(any(target_os = "android", target_os = "ios"))]
             start_audio_and_midi(app.handle(), runtime_settings)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
+            // Before the remote: it subscribes to the feed. Idle (no session
+            // lock) until someone subscribes, so on mobile it costs nothing.
+            session_feed::initialize_session_feed(app);
             remote::initialize_remote(app)
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
 

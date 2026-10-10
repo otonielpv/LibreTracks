@@ -1,0 +1,13 @@
+[package]
+name = "libretracks-link"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Network sessions between LibreTracks apps (docs/plans/network-sessions).
+# Not the remote: that is crates/libretracks-remote and stays independent.
+# No Tauri, no audio engine, no platform cfg: it builds and tests everywhere.
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

@@ -47,6 +47,10 @@ tauri-plugin-fs = "2.5.1"
 [dependencies.libretracks-core]
 path = "../../../crates/libretracks-core"
 
+# Network sessions between LibreTracks apps (every platform; not the remote).
+[dependencies.libretracks-link]
+path = "../../../crates/libretracks-link"
+
 # Desktop-only dependencies. Mobile builds exclude:
 # - libretracks-remote: the app IS the device on mobile; no remote-control server.
 # - rfd: desktop-style native file dialogs don't exist on Android/iOS (see

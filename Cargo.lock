@@ -2530,6 +2530,7 @@ dependencies = [
  "libretracks-cloud",
  "libretracks-core",
  "libretracks-ios-folder-picker",
+ "libretracks-link",
  "libretracks-project",
  "libretracks-remote",
  "libretracks-video",
@@ -2566,6 +2567,14 @@ dependencies = [
  "serde",
  "tauri",
  "tauri-plugin",
+]
+
+[[package]]
+name = "libretracks-link"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
