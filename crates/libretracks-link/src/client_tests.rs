@@ -416,3 +416,33 @@ async fn host_events_reach_the_guest_in_order() {
         .collect();
     assert_eq!(names, vec!["transport:lifecycle", "waveform:ready"]);
 }
+
+#[tokio::test]
+async fn a_song_view_with_waveforms_tens_of_megabytes_gets_through() {
+    let mut host = host().await;
+    let mut guest = join_ok(guest_config(host.handle.port(), "big"));
+    until_state(&mut guest, GuestState::Connected).await;
+    let handle = guest.handle.clone();
+    let read = tokio::spawn(async move {
+        handle
+            .send_command(
+                LinkCommand::Invoke {
+                    command: "get_song_view".into(),
+                    args: json!({ "includeWaveforms": true }),
+                },
+                None,
+            )
+            .await
+    });
+    let incoming = host.commands.recv().await.unwrap();
+    // 24 MB: over tungstenite's 16 MiB default frame limit.
+    let peaks = "7".repeat(24 << 20);
+    incoming.reply.send(Ok(json!({ "peaks": peaks }))).unwrap();
+    let value = tokio::time::timeout(Duration::from_secs(30), read)
+        .await
+        .unwrap()
+        .unwrap()
+        .expect("delivered");
+    assert_eq!(value["peaks"].as_str().map(str::len), Some(24 << 20));
+    assert_eq!(guest.handle.state(), GuestState::Connected);
+}

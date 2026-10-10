@@ -539,7 +539,9 @@ async fn read_hello(ws: &mut WsStream, timeout: Duration) -> Option<ClientMessag
 }
 
 async fn handle_connection(stream: TcpStream, addr: SocketAddr, shared: Arc<Shared>) {
-    let Ok(mut ws) = tokio_tungstenite::accept_async(stream).await else {
+    let Ok(mut ws) =
+        tokio_tungstenite::accept_async_with_config(stream, Some(crate::websocket_config())).await
+    else {
         return;
     };
 

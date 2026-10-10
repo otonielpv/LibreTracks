@@ -5,7 +5,12 @@
 
 /// Bump when a message or command changes shape in a way an older peer
 /// cannot read. Adding an optional field does not need a bump.
-pub const PROTOCOL_VERSION: u32 = 1;
+///
+/// - 1: typed commands, transport/song/live-settings mirroring.
+/// - 2: mirror mode, `invoke` of desktop commands and relayed app events.
+///   A v1 host would silently drop `invoke`, so a v2 guest must be told to
+///   update it instead.
+pub const PROTOCOL_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Incompatible {

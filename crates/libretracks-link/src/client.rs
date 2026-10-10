@@ -21,7 +21,7 @@ use libretracks_core::net_clock::{ClockEstimator, ClockSample, CLOCK_PING_INTERV
 use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot, watch};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tokio_tungstenite::{connect_async_with_config, tungstenite::Message};
 
 use crate::permissions::{is_allowed, Grants};
 use crate::protocol::{
@@ -365,7 +365,10 @@ async fn connect_and_serve(
     let lost = Ended::Lost {
         was_connected: false,
     };
-    let connect = tokio::time::timeout(config.connect_timeout, connect_async(&config.url));
+    let connect = tokio::time::timeout(
+        config.connect_timeout,
+        connect_async_with_config(&config.url, Some(crate::websocket_config()), false),
+    );
     let socket = tokio::select! {
         result = connect => match result {
             Ok(Ok((socket, _))) => socket,
