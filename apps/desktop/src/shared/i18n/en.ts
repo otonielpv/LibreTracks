@@ -2041,6 +2041,8 @@ const en = {
     noPendingJump: "No jump is currently queued",
   },
   liveChart: {
+    timesHelp: "Song time at which each line changes (m:ss.d). The first one starts with the marker.",
+    lineTime: "Time of line {{line}}",
     jump: "Jump",
     toggleLabel: "Lyrics",
     hide: "Hide lyrics and chords",
@@ -2076,7 +2078,7 @@ const en = {
     noLyrics: "— No lyrics —",
     untitledSection: "Section {{number}}",
     autoTimes: "Spread evenly",
-    recordedTimes: "Recorded times",
+    recordedTimes: "Custom times",
     resetTimes: "Back to spreading evenly",
     remove: "Remove lyrics",
     cancel: "Cancel",

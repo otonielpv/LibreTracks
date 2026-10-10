@@ -7,6 +7,9 @@ import {
   advancePlayHistory,
   autoLinkChart,
   buildPerformanceBlocks,
+  formatLineTime,
+  moveLineStart,
+  parseLineTime,
   PLAY_HISTORY_LIMIT,
   type PlayHistory,
   chartLinkFor,
@@ -237,5 +240,26 @@ describe("lyrics in playing order", () => {
   it("ignores a jump to another song", () => {
     const result = buildPerformanceBlocks(doc, links, markers, play("verse"), "other-song");
     expect(result.blocks.some((b) => b.queued)).toBe(false);
+  });
+});
+
+describe("line change times in the editor", () => {
+  it("formats and reads m:ss.d", () => {
+    expect(formatLineTime(0)).toBe("0:00.0");
+    expect(formatLineTime(72.55)).toBe("1:12.6");
+    expect(formatLineTime(59.96)).toBe("1:00.0");
+    expect(parseLineTime("1:12.5")).toBe(72.5);
+    expect(parseLineTime("1:12,5")).toBe(72.5);
+    expect(parseLineTime("12")).toBe(12);
+    expect(parseLineTime("0:75")).toBeNull();
+    expect(parseLineTime("abc")).toBeNull();
+  });
+
+  it("moves a line without crossing its neighbours, and never the first", () => {
+    const starts = [0, 4, 8, 12];
+    expect(moveLineStart(starts, 2, 6, 16)).toEqual([0, 4, 6, 12]);
+    expect(moveLineStart(starts, 2, 2, 16)[2]).toBeCloseTo(4.1);
+    expect(moveLineStart(starts, 3, 99, 16)[3]).toBeCloseTo(15.9);
+    expect(moveLineStart(starts, 0, 3, 16)).toEqual(starts);
   });
 });

@@ -330,3 +330,45 @@ export function buildPerformanceBlocks(
   });
   return { blocks, current: played.length - 1 };
 }
+
+/** A line change time as the editor shows it: `m:ss.d` (song time). */
+export function formatLineTime(seconds: number): string {
+  const tenths = Math.round(Math.max(0, seconds) * 10);
+  const minutes = Math.floor(tenths / 600);
+  const rest = (tenths - minutes * 600) / 10;
+  return `${minutes}:${rest.toFixed(1).padStart(4, "0")}`;
+}
+
+/** Reads `m:ss.d`, `m:ss`, `ss.d` or `ss` (a comma works as the decimal
+ * point too). `null` if it is not a time. */
+export function parseLineTime(text: string): number | null {
+  const clean = text.trim().replace(",", ".");
+  const match = /^(?:(\d+):)?(\d+(?:\.\d+)?)$/.exec(clean);
+  if (!match) return null;
+  const minutes = match[1] ? Number(match[1]) : 0;
+  const seconds = Number(match[2]);
+  if (match[1] && seconds >= 60) return null;
+  return minutes * 60 + seconds;
+}
+
+/** Smallest gap kept between two line changes. */
+const MIN_LINE_GAP_SECONDS = 0.1;
+
+/**
+ * Line starts (seconds from the marker) with line `index` moved to `seconds`,
+ * kept between its neighbours so lines never cross. The first line always
+ * starts at the marker.
+ */
+export function moveLineStart(
+  starts: readonly number[],
+  index: number,
+  seconds: number,
+  sectionSeconds: number,
+): number[] {
+  const next = [...starts];
+  if (index <= 0 || index >= next.length || !Number.isFinite(seconds)) return next;
+  const low = next[index - 1] + MIN_LINE_GAP_SECONDS;
+  const high = (index + 1 < next.length ? next[index + 1] : sectionSeconds) - MIN_LINE_GAP_SECONDS;
+  next[index] = Math.min(Math.max(seconds, low), Math.max(low, high));
+  return next;
+}

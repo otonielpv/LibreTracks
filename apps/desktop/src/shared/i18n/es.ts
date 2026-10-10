@@ -2070,6 +2070,8 @@ const es = {
     noPendingJump: "No hay ningun salto programado",
   },
   liveChart: {
+    timesHelp: "Tiempo de la canción en que cambia cada línea (m:ss.d). La primera empieza con la marca.",
+    lineTime: "Tiempo de la línea {{line}}",
     jump: "Salto",
     toggleLabel: "Letra",
     hide: "Ocultar letra y acordes",
@@ -2105,7 +2107,7 @@ const es = {
     noLyrics: "— Sin letra —",
     untitledSection: "Sección {{number}}",
     autoTimes: "Reparto automático",
-    recordedTimes: "Tiempos grabados",
+    recordedTimes: "Tiempos personalizados",
     resetTimes: "Volver al reparto automático",
     remove: "Quitar letra",
     cancel: "Cancelar",

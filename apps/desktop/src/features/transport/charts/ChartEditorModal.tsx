@@ -9,8 +9,15 @@ import type {
 } from "@libretracks/shared/models";
 
 import { useDismissOnBack } from "../mobile/backNavigation";
-import { parseChordPro } from "@libretracks/shared/charts/chordChart";
-import { autoLinkChart, chartLinkFor } from "@libretracks/shared/charts/chartSync";
+import { parseChordPro, type ChartLine } from "@libretracks/shared/charts/chordChart";
+import {
+  autoLinkChart,
+  chartLinkFor,
+  formatLineTime,
+  lineStartSeconds,
+  moveLineStart,
+  parseLineTime,
+} from "@libretracks/shared/charts/chartSync";
 import { CHART_FILE_ACCEPT, chordProFromFile } from "./importChart";
 
 type ChartEditorModalProps = {
@@ -18,6 +25,8 @@ type ChartEditorModalProps = {
   /** The song's section markers, in order (repeats included). */
   markers: readonly SectionMarkerSummary[];
   chart: SongChart | null;
+  /** Seconds per beat at a song position: line times are stored in beats. */
+  secondsPerBeatAt: (seconds: number) => number;
   onSave: (chart: SongChart | null) => Promise<void>;
   onClose: () => void;
 };
@@ -26,13 +35,28 @@ type ChartEditorModalProps = {
  * Lyrics and chords of one song: the ChordPro text (imported from a file or
  * pasted, and fixable by hand) and which section each marker shows.
  */
-export function ChartEditorModal({ region, markers, chart, onSave, onClose }: ChartEditorModalProps) {
+/** What a line shows in the times list: its words, or its chords. */
+function linePreview(line: ChartLine): string {
+  if (line.kind !== "lyrics") return line.text;
+  const words = line.segments.map((segment) => segment.text).join("").trim();
+  return words || line.segments.map((segment) => segment.chord ?? "").filter(Boolean).join("  ");
+}
+
+export function ChartEditorModal({
+  region,
+  markers,
+  chart,
+  secondsPerBeatAt,
+  onSave,
+  onClose,
+}: ChartEditorModalProps) {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [text, setText] = useState(chart?.text ?? "");
   const [links, setLinks] = useState<ChartLink[]>(chart?.links ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openTimes, setOpenTimes] = useState<string | null>(null);
   useDismissOnBack(onClose);
 
   const doc = useMemo(() => parseChordPro(text), [text]);
@@ -47,6 +71,36 @@ export function ChartEditorModal({ region, markers, chart, onSave, onClose }: Ch
       // Recorded times were for the old section's lines.
       return [...rest, { markerId, section, ...(previous?.section === section && previous.lineBeats ? { lineBeats: previous.lineBeats } : {}) }];
     });
+  };
+
+  /** Where each line of a marker's section starts, in seconds from the
+   * marker: recorded or typed times where there are some, the even spread
+   * elsewhere — exactly what the live view will do. */
+  const timingFor = (marker: SectionMarkerSummary, link: ChartLink) => {
+    const index = markers.findIndex((candidate) => candidate.id === marker.id);
+    const next = markers.slice(index + 1).find((candidate) => candidate.startSeconds > marker.startSeconds);
+    const sectionSeconds = Math.max(0, (next?.startSeconds ?? region.endSeconds) - marker.startSeconds);
+    const secondsPerBeat = secondsPerBeatAt(marker.startSeconds);
+    const lines = doc.sections[link.section]?.lines ?? [];
+    return {
+      lines,
+      sectionSeconds,
+      secondsPerBeat,
+      starts: lineStartSeconds(lines.length, sectionSeconds, secondsPerBeat, link.lineBeats),
+      // Times are shown as song time, like the live view's clock.
+      offset: marker.startSeconds - region.startSeconds,
+    };
+  };
+
+  const setLineTime = (marker: SectionMarkerSummary, link: ChartLink, index: number, text: string) => {
+    const timing = timingFor(marker, link);
+    const parsed = parseLineTime(text);
+    if (parsed === null) return;
+    const starts = moveLineStart(timing.starts, index, parsed - timing.offset, timing.sectionSeconds);
+    const lineBeats = starts.map((start) => Math.round((start / timing.secondsPerBeat) * 100) / 100);
+    setLinks((current) =>
+      current.map((candidate) => (candidate.markerId === link.markerId ? { ...candidate, lineBeats } : candidate)),
+    );
   };
 
   const resetTimes = (markerId: string) => {
@@ -164,18 +218,58 @@ export function ChartEditorModal({ region, markers, chart, onSave, onClose }: Ch
                         ))}
                       </select>
                       {link ? (
-                        recorded ? (
-                          <button type="button" className="lt-chart-editor-times" onClick={() => resetTimes(marker.id)} title={t("liveChart.resetTimes")}>
-                            {t("liveChart.recordedTimes")}
-                            <span className="material-symbols-outlined" aria-hidden="true">restart_alt</span>
-                          </button>
-                        ) : (
-                          <span className="lt-chart-editor-times is-auto">{t("liveChart.autoTimes")}</span>
-                        )
+                        <button
+                          type="button"
+                          className={`lt-chart-editor-times${recorded ? "" : " is-auto"}${openTimes === marker.id ? " is-open" : ""}`}
+                          aria-expanded={openTimes === marker.id}
+                          onClick={() => setOpenTimes((current) => (current === marker.id ? null : marker.id))}
+                        >
+                          {recorded ? t("liveChart.recordedTimes") : t("liveChart.autoTimes")}
+                          <span className="material-symbols-outlined" aria-hidden="true">
+                            {openTimes === marker.id ? "expand_less" : "schedule"}
+                          </span>
+                        </button>
                       ) : (
                         // Keeps the third column on rows without lyrics.
                         <span aria-hidden="true" />
                       )}
+                      {link && openTimes === marker.id ? (() => {
+                        const timing = timingFor(marker, link);
+                        return (
+                          <div className="lt-chart-editor-lines">
+                            <div className="lt-chart-editor-lines-head">
+                              <small>{t("liveChart.timesHelp")}</small>
+                              {recorded ? (
+                                <button type="button" className="lt-chart-editor-button" onClick={() => resetTimes(marker.id)}>
+                                  <span className="material-symbols-outlined" aria-hidden="true">restart_alt</span>
+                                  {t("liveChart.resetTimes")}
+                                </button>
+                              ) : null}
+                            </div>
+                            <ol>
+                              {timing.lines.map((line, index) => {
+                                const value = formatLineTime(timing.offset + timing.starts[index]);
+                                return (
+                                  <li key={`${index}-${value}`}>
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      defaultValue={value}
+                                      disabled={index === 0}
+                                      aria-label={t("liveChart.lineTime", { line: index + 1 })}
+                                      onBlur={(event) => setLineTime(marker, link, index, event.target.value)}
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Enter") event.currentTarget.blur();
+                                      }}
+                                    />
+                                    <span className="lt-chart-editor-line-text">{linePreview(line)}</span>
+                                  </li>
+                                );
+                              })}
+                            </ol>
+                          </div>
+                        );
+                      })() : null}
                     </li>
                   );
                 })}

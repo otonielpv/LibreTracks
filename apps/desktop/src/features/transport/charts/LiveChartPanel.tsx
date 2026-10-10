@@ -263,6 +263,11 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     [onChartChange, region],
   );
 
+  const secondsPerBeatAt = useCallback(
+    (seconds: number) => 60 / Math.max(1, getEffectiveBpmAt(song, seconds)),
+    [song],
+  );
+
   // Stable: useDismissOnBack re-registers on every new callback and that
   // reorders the back stack.
   const closeEditor = useCallback(() => setEditorOpen(false), []);
@@ -504,6 +509,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
           region={region}
           markers={markers}
           chart={chart}
+          secondsPerBeatAt={secondsPerBeatAt}
           onSave={saveFromEditor}
           onClose={closeEditor}
         />
