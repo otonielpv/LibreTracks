@@ -5550,3 +5550,185 @@ button {
 .region-chip em.region-chip-arrangement {
   color: #57f1db;
 }
+
+/* Lyrics & chords widget: the desktop live view's lyrics panel, read-only. */
+.lyrics-widget {
+  --lyrics-font-scale: 1;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.lyrics-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.35rem 0.35rem;
+}
+
+.lyrics-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lyrics-toolbar button {
+  flex: 0 0 auto;
+  min-width: 2.2rem;
+  min-height: 2rem;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.05);
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+}
+
+.lyrics-toolbar button.is-active {
+  border-color: rgb(87 241 219 / 0.45);
+  color: #57f1db;
+}
+
+.lyrics-empty {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  text-align: center;
+  opacity: 0.7;
+}
+
+.lyrics-scroller {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.3rem 0.6rem 45vh;
+  font-size: calc(1rem * var(--lyrics-font-scale));
+}
+
+.lyrics-block {
+  margin-bottom: 1em;
+  padding-left: 0.5em;
+  border-left: 3px solid transparent;
+}
+
+.lyrics-block.is-current {
+  border-left-color: #57f1db;
+}
+
+.lyrics-block.is-past {
+  opacity: 0.5;
+}
+
+.lyrics-block.is-queued {
+  border-left-color: rgb(244 201 93 / 0.6);
+}
+
+.lyrics-block-label {
+  margin: 0 0 0.3em;
+  color: #7f928c;
+  font-size: 0.72em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.lyrics-block.is-current .lyrics-block-label {
+  color: #57f1db;
+}
+
+.lyrics-block.is-queued .lyrics-block-label,
+.lyrics-jump-badge {
+  color: #f4c95d;
+}
+
+.lyrics-jump-badge {
+  margin-right: 0.5em;
+  padding: 0.1em 0.4em;
+  border: 1px solid rgb(244 201 93 / 0.5);
+  border-radius: 2px;
+  font-style: normal;
+}
+
+.lyrics-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin: 0 0 0.3em;
+  padding: 0.05em 0.3em;
+  border-radius: 0.3em;
+}
+
+.lyrics-segment {
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lyrics-chord {
+  min-height: 1.15em;
+  padding-right: 0.45em;
+  color: #f6a14c;
+  font-size: 0.86em;
+  font-weight: 750;
+  white-space: pre;
+}
+
+.lyrics-text {
+  font-size: 1.05em;
+  line-height: 1.3;
+  white-space: pre;
+}
+
+.lyrics-line.is-chords-only,
+.lyrics-notes {
+  gap: 0.2em 1.1em;
+}
+
+.lyrics-line.is-chords-only .lyrics-chord,
+.lyrics-notes .lyrics-chord {
+  min-height: 0;
+  padding-right: 0;
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+.lyrics-notes-bar {
+  opacity: 0.5;
+}
+
+.lyrics-line.is-past,
+.lyrics-comment.is-past,
+.lyrics-tab.is-past {
+  opacity: 0.45;
+}
+
+.lyrics-line.is-current {
+  background: rgb(87 241 219 / 0.1);
+  box-shadow: inset 3px 0 #57f1db;
+}
+
+.lyrics-line.is-current .lyrics-text {
+  font-weight: 700;
+}
+
+.lyrics-comment {
+  margin: 0 0 0.3em;
+  font-style: italic;
+  opacity: 0.75;
+}
+
+.lyrics-tab {
+  margin: 0;
+  overflow-x: auto;
+  font: 500 0.9em/1.3 ui-monospace, monospace;
+  white-space: pre;
+}

@@ -78,6 +78,7 @@ import {
   ProgressToSongWidget,
   useLiveMusicalContext,
 } from "./liveWidgets";
+import { LyricsWidget } from "./lyricsWidget";
 import {
   DEFAULT_METRONOME_WIDGET_HEIGHT,
   DEFAULT_PADS_WIDGET_HEIGHT,
@@ -3023,6 +3024,25 @@ function MixerStrip({
  * by the mixer's "active song only" filter so toggling between songs
  * updates the visible strips without spinning a per-frame React render.
  */
+/** Live position read on demand: the lyrics poll it, React never sees it. */
+function readRemotePositionSeconds() {
+  return resolveLivePosition(useRemoteSyncStore.getState().visualAnchor);
+}
+
+function LyricsWidgetHost() {
+  const songView = useRemoteSyncStore((state) => state.songView);
+  const pendingMarkerId = useRemoteSyncStore(
+    (state) => state.snapshot?.pendingMarkerJump?.targetMarkerId ?? null,
+  );
+  return (
+    <LyricsWidget
+      songView={songView}
+      getPositionSeconds={readRemotePositionSeconds}
+      pendingMarkerId={pendingMarkerId}
+    />
+  );
+}
+
 function useActiveRegionId(): string | null {
   const songView = useRemoteSyncStore((state) => state.songView);
   const [activeRegionId, setActiveRegionId] = useState<string | null>(null);
@@ -4000,6 +4020,7 @@ const WIDGET_REGISTRY: Record<WidgetType, WidgetDefinition> = {
   nextMarker: { labelKey: "widgetNextMarker", Component: NextMarkerWidgetHost, defaultW: 4, defaultH: 4 },
   nextSong: { labelKey: "widgetNextSong", Component: NextSongWidgetHost, defaultW: 4, defaultH: 4 },
   currentKey: { labelKey: "widgetKey", Component: CurrentKeyWidgetHost, defaultW: 4, defaultH: 4 },
+  lyrics: { labelKey: "widgetLyrics", Component: LyricsWidgetHost, defaultW: 12, defaultH: 20 },
   progressMarker: { labelKey: "widgetProgressMarker", Component: ProgressToMarkerWidgetHost, defaultW: 4, defaultH: 4 },
   progressSong: { labelKey: "widgetProgressSong", Component: ProgressToSongWidgetHost, defaultW: 4, defaultH: 4 },
   countdownMarkerBars: { labelKey: "widgetCountdownMarker", Component: CountdownMarkerBarsHost, defaultW: 4, defaultH: 4 },
@@ -4041,6 +4062,7 @@ const WIDGET_CATEGORY: Record<WidgetType, WidgetCategory> = {
   countdownSongTime: "live",
   songHeader: "songs",
   clipList: "songs",
+  lyrics: "songs",
   mixer: "mixer",
   mixerSongFilter: "mixer",
   mixerSongMaster: "mixer",
@@ -4109,6 +4131,7 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
     case "mixerSongMaster": return { w: 24, h: 5 };
     case "mixerFaders": return { w: 24, h: 26 };
     case "songHeader": case "clipList": return { w: 24, h: 14 };
+    case "lyrics": return { w: 24, h: 18 };
     case "pads": return { w: 24, h: DEFAULT_PADS_WIDGET_HEIGHT };
     case "metronomeSettings": return { w: 24, h: DEFAULT_METRONOME_WIDGET_HEIGHT };
     case "voiceGuideSettings": return { w: 24, h: 14 };
