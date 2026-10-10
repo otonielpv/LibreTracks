@@ -19,8 +19,8 @@ import {
 } from "@libretracks/shared/models";
 
 import { ChartEditorModal } from "./ChartEditorModal";
-import { parseChordPro, transposeChart, type ChartLine } from "./chordChart";
-import { keyPrefersFlats, parseNoteRun } from "./chordNotation";
+import { parseChordPro, transposeChart, type ChartLine } from "@libretracks/shared/charts/chordChart";
+import { keyPrefersFlats, parseNoteRun } from "@libretracks/shared/charts/chordNotation";
 import {
   applyLineRecording,
   autoLinkChart,
@@ -28,7 +28,7 @@ import {
   chartMarkersForRegion,
   recordLineTap,
   type LineRecording,
-} from "./chartSync";
+} from "@libretracks/shared/charts/chartSync";
 import { CHART_FILE_ACCEPT, chordProFromFile } from "./importChart";
 import { useChartPlayback } from "./useChartPlayback";
 import "./LiveChartPanel.css";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { SectionMarkerSummary } from "@libretracks/shared/models";
+import type { SectionMarkerSummary } from "../models";
 
 import { parseChordPro } from "./chordChart";
 import {

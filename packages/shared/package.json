@@ -10,7 +10,10 @@
     "./timelineMath": "./src/timelineMath.ts",
     "./meterBallistics": "./src/meterBallistics.ts",
     "./faderScale": "./src/faderScale.ts",
-    "./playbackClock": "./src/playbackClock.ts"
+    "./playbackClock": "./src/playbackClock.ts",
+    "./charts/chordNotation": "./src/charts/chordNotation.ts",
+    "./charts/chordChart": "./src/charts/chordChart.ts",
+    "./charts/chartSync": "./src/charts/chartSync.ts"
   },
   "scripts": {
     "lint": "tsc -p tsconfig.json --noEmit",

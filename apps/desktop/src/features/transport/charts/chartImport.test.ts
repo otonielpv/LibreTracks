@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { analyzeSongSheet, chordProFromText, looksLikeChordPro, textToSourceLines } from "./chartImport";
-import { parseChordPro, parseSectionHeader, serializeChordPro, transposeChart } from "./chordChart";
+import { parseChordPro, parseSectionHeader, serializeChordPro, transposeChart } from "@libretracks/shared/charts/chordChart";
 
 const sheet = (text: string) => analyzeSongSheet(textToSourceLines(text));
 const firstLine = (text: string, section = 0) => {

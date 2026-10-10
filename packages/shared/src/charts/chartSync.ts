@@ -4,7 +4,7 @@ import {
   type MarkerKind,
   type SectionMarkerSummary,
   type SongRegionSummary,
-} from "@libretracks/shared/models";
+} from "../models";
 
 import { parseSectionHeader, type ChartDoc } from "./chordChart";
 

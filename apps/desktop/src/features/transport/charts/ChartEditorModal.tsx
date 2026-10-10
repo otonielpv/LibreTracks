@@ -9,8 +9,8 @@ import type {
 } from "@libretracks/shared/models";
 
 import { useDismissOnBack } from "../mobile/backNavigation";
-import { parseChordPro } from "./chordChart";
-import { autoLinkChart, chartLinkFor } from "./chartSync";
+import { parseChordPro } from "@libretracks/shared/charts/chordChart";
+import { autoLinkChart, chartLinkFor } from "@libretracks/shared/charts/chartSync";
 import { CHART_FILE_ACCEPT, chordProFromFile } from "./importChart";
 
 type ChartEditorModalProps = {

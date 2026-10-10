@@ -7,8 +7,8 @@ import {
   type SongView,
 } from "@libretracks/shared/models";
 
-import type { ChartDoc } from "./chordChart";
-import { NO_CHART_PLAYBACK, resolveChartPlayback, type ChartPlayback } from "./chartSync";
+import type { ChartDoc } from "@libretracks/shared/charts/chordChart";
+import { NO_CHART_PLAYBACK, resolveChartPlayback, type ChartPlayback } from "@libretracks/shared/charts/chartSync";
 
 const POLL_MS = 100;
 

@@ -1,4 +1,4 @@
-import type { MarkerKind } from "@libretracks/shared/models";
+import type { MarkerKind } from "../models";
 
 import { transposeChord, transposeNoteRun } from "./chordNotation";
 
