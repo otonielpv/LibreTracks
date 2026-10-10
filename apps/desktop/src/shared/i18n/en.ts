@@ -26,6 +26,8 @@ const en = {
       saveSettings: "Save changes",
       start: "Host",
       stop: "Stop hosting",
+      suspended:
+        "Paused: the app is in the background. It reopens by itself when you come back and the others reconnect.",
       leaveFirst: "Leave the session you joined before hosting.",
       addresses: "Address to join",
       noNetwork: "No network: connect this device to a Wi-Fi.",
@@ -100,8 +102,35 @@ const en = {
       overwrite: "Use mine",
       keepEditing: "Keep editing",
     },
+    discovery: {
+      title: "Hosts on this network",
+      searching: "Looking for hosts on the Wi-Fi…",
+      join: "Join",
+      pinBadge: "PIN for Control/Edit",
+      needsUpdate: "Incompatible version: update LibreTracks",
+      manual: "Or type the address",
+      notFoundTitle: "Host not showing up?",
+      notFoundSameWifi: "Both devices must be on the same Wi-Fi (not a guest network that isolates devices, as some venues have).",
+      notFoundIos: "On iPhone/iPad: Settings → LibreTracks → turn on «Local Network».",
+      notFoundFirewall: "If the host is a Windows PC, allow LibreTracks in the firewall from its «Host» tab.",
+      notFoundManual: "You can always type the address the host shows.",
+    },
+    firewall: {
+      title: "Windows is blocking the network session",
+      blocked:
+        "The firewall allows LibreTracks on {{allowed}} networks, but you are on a {{active}} network right now. Other devices cannot join or find this computer until you allow it.",
+      noRule:
+        "The Windows firewall has no rule letting LibreTracks receive connections on this network ({{active}}). Other devices cannot join.",
+      unknown:
+        "The Windows firewall could not be checked. If the others cannot join, allow access from here.",
+      allow: "Allow in the firewall",
+      allowHint: "Windows will ask for administrator confirmation.",
+      applying: "Asking Windows for permission...",
+      done: "Done. Other devices can join now.",
+    },
     badge: {
       hosting: "Host · {{count}}",
+      suspended: "Host paused",
       guest: "Guest · {{role}}",
       connecting: "Connecting…",
       lost: "Connection lost",

@@ -113,12 +113,13 @@ pub fn link_join(
     target: String,
     pin: Option<String>,
     remember: bool,
+    host_id: Option<String>,
 ) -> Result<guest::GuestStatus, String> {
     let hosting = host::with_handle(&app, |_| ()).is_some();
     if hosting {
         return Err("hosting".into());
     }
-    guest::join_host(&app, &target, pin, remember)
+    guest::join_host(&app, &target, pin, remember, host_id)
 }
 
 #[tauri::command]
@@ -140,4 +141,16 @@ pub async fn link_guest_command(
     base_revision: Option<u64>,
 ) -> Result<(), String> {
     guest::send_command(&app, command, base_revision).await
+}
+
+/// Start looking for hosts (the «Join» tab is open). Returns what is already
+/// known; changes arrive on `link://discovered`.
+#[tauri::command]
+pub fn link_start_discovery() -> Vec<libretracks_link::discovery::DiscoveredHost> {
+    super::discovery::start_browsing()
+}
+
+#[tauri::command]
+pub fn link_stop_discovery() {
+    super::discovery::stop_browsing();
 }

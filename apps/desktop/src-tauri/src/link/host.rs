@@ -7,13 +7,17 @@ use std::net::IpAddr;
 use libretracks_audio::{JumpTrigger, TransitionType};
 use libretracks_core::SongChart;
 use libretracks_link::{
-    net::local_ip, start_host, CommandRejection, GuestSummary, HostConfig, HostHandle,
-    IncomingCommand, LinkCommand, Role, TrustedDevice,
+    discovery::Advertisement, net::local_ip, start_host, CommandRejection, GuestSummary,
+    HostConfig, HostHandle, IncomingCommand, LinkCommand, Role, TrustedDevice,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
-use super::{config, LinkState};
+use super::{
+    config, discovery,
+    lifecycle::{on_visibility, HostPhase, LifecycleAction, SUSPENDS_IN_BACKGROUND},
+    LinkState,
+};
 use crate::{
     commands::events::emit_transport_lifecycle_event,
     commands::transport::{parse_jump_trigger, parse_transition_type, parse_vamp_mode},
@@ -51,6 +55,9 @@ pub struct TrustedDeviceView {
 #[serde(rename_all = "camelCase")]
 pub struct HostStatus {
     pub hosting: bool,
+    /// Closed for the moment because the app is in the background (iOS);
+    /// it reopens on its own when the app comes back.
+    pub suspended: bool,
     pub host_name: String,
     pub port: u16,
     /// `ip:port` other devices can type, best guess first.
@@ -141,8 +148,13 @@ pub fn status(app: &AppHandle) -> HostStatus {
             .lock()
             .map(|config| trusted_view(config.trusted.clone()))
             .unwrap_or_default();
+        let suspended = matches!(
+            link.phase.lock().map(|phase| *phase),
+            Ok(HostPhase::Suspended { .. })
+        );
         return HostStatus {
             hosting: false,
+            suspended,
             host_name,
             port: 0,
             addresses: Vec::new(),
@@ -156,6 +168,7 @@ pub fn status(app: &AppHandle) -> HostStatus {
     let ip = local_ip();
     HostStatus {
         hosting: true,
+        suspended: false,
         host_name: handle.host_name().to_string(),
         port,
         addresses: ip.iter().map(|ip| format!("{ip}:{port}")).collect(),
@@ -181,6 +194,12 @@ fn set_was_hosting(app: &AppHandle, was_hosting: bool) {
 }
 
 pub async fn start(app: &AppHandle) -> Result<HostStatus, String> {
+    start_on(app, None).await
+}
+
+/// Start hosting, on `preferred_port` when coming back from the background
+/// (so the guests' retries find the host where it was).
+async fn start_on(app: &AppHandle, preferred_port: Option<u16>) -> Result<HostStatus, String> {
     if app
         .state::<LinkState>()
         .guest
@@ -200,16 +219,28 @@ pub async fn start(app: &AppHandle) -> Result<HostStatus, String> {
         return Ok(status(app));
     }
 
-    let host_config = {
+    let (host_config, advertisement) = {
         let link = app.state::<LinkState>();
         let config = link.config.lock().map_err(|_| "state poisoned")?;
-        HostConfig {
+        let advertisement = Advertisement {
+            host_id: config.device_id.clone(),
+            name: config.device_name.clone(),
+            port: 0,
+            app_version: app.package_info().version.to_string(),
+            requires_pin: !config.control_pin.trim().is_empty()
+                || !config.edit_pin.trim().is_empty(),
+        };
+        let mut host_config = HostConfig {
             host_id: config.device_id.clone(),
             control_pin: config::NetworkSessionConfig::pin(&config.control_pin),
             edit_pin: config::NetworkSessionConfig::pin(&config.edit_pin),
             trusted: config.trusted.clone(),
             ..HostConfig::new(config.device_name.clone())
+        };
+        if let Some(port) = preferred_port {
+            host_config.preferred_port = port;
         }
+        (host_config, advertisement)
     };
     let runtime = start_host(host_config)
         .await
@@ -230,12 +261,25 @@ pub async fn start(app: &AppHandle) -> Result<HostStatus, String> {
             previous.shutdown();
         }
     }
+    let port = runtime.handle.port();
+    set_phase(app, HostPhase::Hosting { port });
+    discovery::advertise(&Advertisement {
+        port,
+        ..advertisement
+    });
+    super::keep_awake("link-host", true);
     set_was_hosting(app, true);
     emit_status(app);
     Ok(status(app))
 }
 
-pub fn stop(app: &AppHandle) {
+fn set_phase(app: &AppHandle, phase: HostPhase) {
+    if let Ok(mut current) = app.state::<LinkState>().phase.lock() {
+        *current = phase;
+    }
+}
+
+fn shut_down_server(app: &AppHandle) {
     let active = app
         .state::<LinkState>()
         .host
@@ -245,8 +289,47 @@ pub fn stop(app: &AppHandle) {
     if let Some(active) = active {
         active.shutdown();
     }
+    discovery::stop_advertising();
+}
+
+pub fn stop(app: &AppHandle) {
+    shut_down_server(app);
+    set_phase(app, HostPhase::Stopped);
+    super::keep_awake("link-host", false);
     set_was_hosting(app, false);
     emit_status(app);
+}
+
+/// The app went to the background or came back (paso 03): close in order
+/// where the OS would freeze the sockets anyway, and reopen on the same port.
+pub fn visibility_changed(app: &AppHandle, hidden: bool) {
+    let phase = app
+        .state::<LinkState>()
+        .phase
+        .lock()
+        .map(|phase| *phase)
+        .unwrap_or(HostPhase::Stopped);
+    let (next, action) = on_visibility(phase, hidden, SUSPENDS_IN_BACKGROUND);
+    set_phase(app, next);
+    match action {
+        LifecycleAction::None => {}
+        LifecycleAction::Suspend => {
+            // Not `stop`: `was_hosting` and the keep-awake stay as they are,
+            // this is a pause the user did not ask for.
+            shut_down_server(app);
+            emit_status(app);
+        }
+        LifecycleAction::Resume { port } => {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = start_on(&app, Some(port)).await {
+                    eprintln!("[libretracks-link] could not resume hosting: {error}");
+                    set_phase(&app, HostPhase::Stopped);
+                    emit_status(&app);
+                }
+            });
+        }
+    }
 }
 
 pub fn with_handle<T>(app: &AppHandle, f: impl FnOnce(&HostHandle) -> T) -> Option<T> {

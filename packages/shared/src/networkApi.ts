@@ -40,12 +40,28 @@ export type NetworkTrustedDevice = {
 
 export type NetworkHostStatus = {
   hosting: boolean;
+  /** Closed for now because the app is in the background (iOS); it reopens
+   * on its own when the app comes back. */
+  suspended?: boolean;
   hostName: string;
   port: number;
   addresses: string[];
   joinUrl: string | null;
   guests: NetworkGuestSummary[];
   trusted: NetworkTrustedDevice[];
+};
+
+/** A host found on the LAN (DNS-SD / Bonjour). */
+export type NetworkDiscoveredHost = {
+  hostId: string;
+  name: string;
+  /** `ip:port`, the one to use first. */
+  addresses: string[];
+  protocol: number;
+  appVersion: string;
+  requiresPin: boolean;
+  /** False: this app and that host cannot talk (one needs updating). */
+  compatible: boolean;
 };
 
 export type NetworkPeer = {
@@ -185,8 +201,20 @@ export function revokeTrustedDevice(deviceId: string) {
   return invokeCommand<boolean>("link_revoke_trusted", { deviceId });
 }
 
-export function joinHost(target: string, pin: string | null, remember: boolean) {
-  return invokeCommand<NetworkGuestStatus>("link_join", { target, pin, remember });
+/** `hostId`: known when joining from the discovered list, so a remembered
+ * device is recognised even if the host's address changed. */
+export function joinHost(
+  target: string,
+  pin: string | null,
+  remember: boolean,
+  hostId?: string,
+) {
+  return invokeCommand<NetworkGuestStatus>("link_join", {
+    target,
+    pin,
+    remember,
+    hostId: hostId ?? null,
+  });
 }
 
 export function leaveHost() {
@@ -227,4 +255,17 @@ export function listenToGuestTransport(handler: (transport: NetworkGuestTranspor
 
 export function listenToGuestLiveSettings(handler: (settings: NetworkLiveSettings) => void) {
   return listenTo("link://guest-live-settings", handler);
+}
+
+/** Start looking for hosts; returns those already known. */
+export function startDiscovery() {
+  return invokeCommand<NetworkDiscoveredHost[]>("link_start_discovery");
+}
+
+export function stopDiscovery() {
+  return invokeCommand<void>("link_stop_discovery");
+}
+
+export function listenToDiscoveredHosts(handler: (hosts: NetworkDiscoveredHost[]) => void) {
+  return listenTo("link://discovered", handler);
 }

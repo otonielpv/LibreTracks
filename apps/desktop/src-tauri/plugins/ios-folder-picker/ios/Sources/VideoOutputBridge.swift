@@ -135,7 +135,6 @@ final class VideoOutputController {
   private var started = false
   private var suspended = false
   private var keepAwake = false
-  private var idleTimerBefore = false
 
   private init() {
     blackLayer.backgroundColor = UIColor.black.cgColor
@@ -475,17 +474,14 @@ final class VideoOutputController {
 
   // MARK: Sleep
 
-  /// Paso 06 §4: no auto-lock while the output shows the session's video;
-  /// the value before is restored, never left off by accident.
+  /// Paso 06 §4: no auto-lock while the output shows the session's video.
+  /// Through the shared registry (NetworkSessionBridge.swift): network
+  /// sessions keep the screen on too, and neither may switch it off under
+  /// the other.
   func setKeepAwake(_ on: Bool) {
     guard on != keepAwake else { return }
     keepAwake = on
-    if on {
-      idleTimerBefore = UIApplication.shared.isIdleTimerDisabled
-      UIApplication.shared.isIdleTimerDisabled = true
-    } else {
-      UIApplication.shared.isIdleTimerDisabled = idleTimerBefore
-    }
+    KeepAwakeRegistry.shared.set("video", on)
   }
 }
 

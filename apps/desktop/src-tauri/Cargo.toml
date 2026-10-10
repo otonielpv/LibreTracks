@@ -56,6 +56,11 @@ path = "../../../crates/libretracks-link"
 # - rfd: desktop-style native file dialogs don't exist on Android/iOS (see
 #   src/file_dialog.rs for the stub; mobile flows will use tauri-plugin-dialog).
 # - tauri-plugin-single-instance: no hay segundo proceso que reenviar en movil.
+# Network-session discovery: mDNS through the mdns-sd daemon everywhere but
+# iOS, which uses the system's Bonjour (raw multicast needs an entitlement).
+[target.'cfg(not(target_os = "ios"))'.dependencies]
+libretracks-link = { path = "../../../crates/libretracks-link", features = ["mdns"] }
+
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 libretracks-remote = { path = "../../../crates/libretracks-remote" }
 rfd = "0.15"

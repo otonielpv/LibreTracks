@@ -22,7 +22,15 @@ import { describeFirewallProfiles } from "../remoteFirewall";
  * bien puesta, no renderiza nada. El botón es la única vía que saca el UAC;
  * nada aquí eleva por su cuenta.
  */
-export function RemoteFirewallNotice() {
+/**
+ * `textKeys`: where the wording comes from. The rule is per program, so the
+ * same check and fix serve the network-session host (`networkSession.firewall`),
+ * which only needs its own words ("los demás dispositivos" instead of "el
+ * móvil"). The profile names stay shared.
+ */
+export function RemoteFirewallNotice({
+  textKeys = "remoteAccess.firewall",
+}: { textKeys?: string } = {}) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<RemoteFirewallStatus | null>(null);
   const [applying, setApplying] = useState(false);
@@ -62,7 +70,7 @@ export function RemoteFirewallNotice() {
       if (!next.covered) {
         // La regla se creó pero sigue sin cubrir: mejor decirlo que enseñar un
         // "listo" que el usuario desmentirá en cuanto lo pruebe.
-        setError(t("remoteAccess.firewall.unknown"));
+        setError(t(`${textKeys}.unknown`));
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -83,11 +91,11 @@ export function RemoteFirewallNotice() {
 
   let message: string;
   if (!status.known) {
-    message = t("remoteAccess.firewall.unknown");
+    message = t(`${textKeys}.unknown`);
   } else if (status.allowedProfiles.length === 0) {
-    message = t("remoteAccess.firewall.noRule", { active });
+    message = t(`${textKeys}.noRule`, { active });
   } else {
-    message = t("remoteAccess.firewall.blocked", { active, allowed });
+    message = t(`${textKeys}.blocked`, { active, allowed });
   }
 
   return (
@@ -97,7 +105,7 @@ export function RemoteFirewallNotice() {
           <span className="material-symbols-outlined" aria-hidden="true">
             check_circle
           </span>
-          {t("remoteAccess.firewall.done")}
+          {t(`${textKeys}.done`)}
         </p>
       ) : (
         <>
@@ -105,16 +113,16 @@ export function RemoteFirewallNotice() {
             <span className="material-symbols-outlined" aria-hidden="true">
               shield
             </span>
-            {t("remoteAccess.firewall.title")}
+            {t(`${textKeys}.title`)}
           </strong>
           <p>{message}</p>
           {error ? <p className="lt-remote-firewall-error">{error}</p> : null}
           <button type="button" onClick={() => void handleAllow()} disabled={applying}>
             {applying
-              ? t("remoteAccess.firewall.applying")
-              : t("remoteAccess.firewall.allow")}
+              ? t(`${textKeys}.applying`)
+              : t(`${textKeys}.allow`)}
           </button>
-          <small>{t("remoteAccess.firewall.allowHint")}</small>
+          <small>{t(`${textKeys}.allowHint`)}</small>
         </>
       )}
     </aside>

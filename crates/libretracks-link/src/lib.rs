@@ -11,6 +11,7 @@
 //! ([`permissions::is_allowed`]); the guest UI hiding buttons is a courtesy.
 
 pub mod client;
+pub mod discovery;
 pub mod net;
 pub mod pairing;
 pub mod permissions;

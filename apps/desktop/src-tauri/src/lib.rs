@@ -301,6 +301,8 @@ pub fn run() {
             link::commands::link_leave,
             link::commands::link_guest_snapshot,
             link::commands::link_guest_command,
+            link::commands::link_start_discovery,
+            link::commands::link_stop_discovery,
             commands::system::get_remote_server_info,
             commands::system::get_remote_firewall_status,
             commands::system::allow_remote_through_firewall,

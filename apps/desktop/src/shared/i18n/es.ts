@@ -26,6 +26,8 @@ const es = {
       saveSettings: "Guardar cambios",
       start: "Hospedar",
       stop: "Dejar de hospedar",
+      suspended:
+        "En pausa: la app está en segundo plano. Al volver se reabre sola y los demás se reconectan.",
       leaveFirst: "Sal de la sesión a la que estás unido para poder hospedar.",
       addresses: "Dirección para unirse",
       noNetwork: "Sin red: conecta este dispositivo a una Wi-Fi.",
@@ -100,8 +102,35 @@ const es = {
       overwrite: "Usar la mía",
       keepEditing: "Seguir editando",
     },
+    discovery: {
+      title: "Anfitriones en esta red",
+      searching: "Buscando anfitriones en la Wi-Fi…",
+      join: "Unirse",
+      pinBadge: "PIN para Control/Edición",
+      needsUpdate: "Versión incompatible: actualiza LibreTracks",
+      manual: "O escribe la dirección",
+      notFoundTitle: "¿No aparece el anfitrión?",
+      notFoundSameWifi: "Los dos dispositivos tienen que estar en la misma Wi-Fi (no vale la de invitados de algunos locales, que aísla a los dispositivos).",
+      notFoundIos: "En iPhone/iPad: Ajustes → LibreTracks → activa «Red local».",
+      notFoundFirewall: "Si el anfitrión es un Windows, permite LibreTracks en el cortafuegos desde su pestaña «Hospedar».",
+      notFoundManual: "Siempre puedes escribir la dirección que muestra el anfitrión.",
+    },
+    firewall: {
+      title: "Windows está bloqueando la sesión de red",
+      blocked:
+        "El cortafuegos permite LibreTracks en la red {{allowed}}, pero ahora mismo estás en una red {{active}}. Los demás dispositivos no podrán unirse ni encontrar este equipo hasta que lo permitas.",
+      noRule:
+        "El cortafuegos de Windows no tiene ninguna regla que deje a LibreTracks recibir conexiones en esta red ({{active}}). Los demás dispositivos no podrán unirse.",
+      unknown:
+        "No se ha podido comprobar el cortafuegos de Windows. Si los demás no pueden unirse, permite el acceso desde aquí.",
+      allow: "Permitir en el cortafuegos",
+      allowHint: "Windows pedirá confirmación de administrador.",
+      applying: "Pidiendo permiso a Windows...",
+      done: "Listo. Los demás dispositivos ya pueden unirse.",
+    },
     badge: {
       hosting: "Anfitrión · {{count}}",
+      suspended: "Anfitrión en pausa",
       guest: "Invitado · {{role}}",
       connecting: "Conectando…",
       lost: "Conexión perdida",

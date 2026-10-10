@@ -17,7 +17,9 @@ import {
 } from "@libretracks/shared/networkApi";
 
 import { useDismissOnBack } from "../transport/mobile/backNavigation";
+import { RemoteFirewallNotice } from "../transport/panels/RemoteFirewallNotice";
 import { useNetworkSessionStore } from "./networkSessionStore";
+import { useHostDiscovery } from "./useHostDiscovery";
 import "./network.css";
 
 type Tab = "host" | "join";
@@ -44,6 +46,7 @@ export function NetworkSessionModal() {
   const [target, setTarget] = useState("");
   const [pin, setPin] = useState("");
   const [remember, setRemember] = useState(true);
+  const discovery = useHostDiscovery(isOpen && tab === "join" && !guest.joined);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -144,6 +147,15 @@ export function NetworkSessionModal() {
 
           {tab === "host" ? (
             <section className="lt-network-panel" role="tabpanel">
+              {/* Before anything else, as in the remote panel: hosting is
+                  pointless if Windows drops every connection. Renders
+                  nothing when there is nothing to fix or off Windows. */}
+              <RemoteFirewallNotice textKeys="networkSession.firewall" />
+              {host?.suspended ? (
+                <p className="lt-settings-field-hint" role="status">
+                  {t("networkSession.host.suspended")}
+                </p>
+              ) : null}
               {settings ? (
                 <HostSettingsForm
                   settings={settings}
@@ -300,6 +312,64 @@ export function NetworkSessionModal() {
                   </button>
                 </div>
               ) : (
+                <>
+                <section className="lt-network-discovery" aria-label={t("networkSession.discovery.title")}>
+                  <h3 className="lt-network-heading">{t("networkSession.discovery.title")}</h3>
+                  {discovery.hosts.length === 0 ? (
+                    <p className="lt-settings-field-hint lt-network-searching">
+                      {t("networkSession.discovery.searching")}
+                    </p>
+                  ) : (
+                    <ul className="lt-network-list">
+                      {discovery.hosts.map((found) => (
+                        <li key={found.hostId} className="lt-network-row">
+                          <span className="lt-network-row-name">
+                            {found.name}
+                            <small>
+                              {found.addresses[0]}
+                              {found.requiresPin ? ` · ${t("networkSession.discovery.pinBadge")}` : ""}
+                            </small>
+                            {!found.compatible ? (
+                              <small className="lt-network-warning">
+                                {t("networkSession.discovery.needsUpdate")}
+                              </small>
+                            ) : null}
+                          </span>
+                          <button
+                            type="button"
+                            className="lt-primary-button"
+                            disabled={busy || hosting || !found.compatible}
+                            aria-label={`${t("networkSession.discovery.join")}: ${found.name}`}
+                            onClick={() =>
+                              void run(() =>
+                                joinHost(
+                                  found.addresses[0],
+                                  pin.trim() || null,
+                                  remember,
+                                  found.hostId,
+                                ),
+                              )
+                            }
+                          >
+                            {t("networkSession.discovery.join")}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {discovery.showNotFoundHints ? (
+                    <div className="lt-network-hints" role="note">
+                      <strong>{t("networkSession.discovery.notFoundTitle")}</strong>
+                      <ul>
+                        <li>{t("networkSession.discovery.notFoundSameWifi")}</li>
+                        <li>{t("networkSession.discovery.notFoundIos")}</li>
+                        <li>{t("networkSession.discovery.notFoundFirewall")}</li>
+                        <li>{t("networkSession.discovery.notFoundManual")}</li>
+                      </ul>
+                    </div>
+                  ) : null}
+                </section>
+                <h3 className="lt-network-heading">{t("networkSession.discovery.manual")}</h3>
                 <form
                   className="lt-settings-section-grid"
                   onSubmit={(event) => {
@@ -355,6 +425,7 @@ export function NetworkSessionModal() {
                     ) : null}
                   </div>
                 </form>
+                </>
               )}
             </section>
           )}

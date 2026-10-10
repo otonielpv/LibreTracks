@@ -350,3 +350,40 @@
 .lt-guest-leave.is-active {
   background: rgba(87, 241, 219, 0.2);
 }
+
+.lt-network-discovery {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lt-network-searching::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: rgb(87 241 219);
+  animation: lt-network-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes lt-network-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+.lt-network-warning {
+  color: #ffc400;
+}
+
+.lt-network-hints {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 196, 0, 0.1);
+}
+
+.lt-network-hints ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}

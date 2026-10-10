@@ -40,7 +40,11 @@
   <key>NSBluetoothAlwaysUsageDescription</key>
   <string>LibreTracks uses Bluetooth to connect wireless MIDI pedals and controllers, so you can start songs and jump between sections from a foot switch.</string>
   <key>NSLocalNetworkUsageDescription</key>
-  <string>LibreTracks uses the local network to send and receive MIDI over Wi-Fi with a computer or another device (network MIDI session), for example to drive lights or lyrics from your show.</string>
+  <string>LibreTracks uses the local network to connect with other LibreTracks devices in a network session (follow the host's song, markers and lyrics, or host one), and to send and receive MIDI over Wi-Fi with a computer or another device, for example to drive lights or lyrics from your show.</string>
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_libretracks-link._tcp</string>
+  </array>
   <key>UISupportedInterfaceOrientations</key>
   <array>
     <string>UIInterfaceOrientationLandscapeLeft</string>

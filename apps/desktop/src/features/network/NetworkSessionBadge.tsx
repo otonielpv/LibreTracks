@@ -22,6 +22,9 @@ export function NetworkSessionBadge() {
   let tone = "is-ok";
   if (host?.hosting) {
     label = t("networkSession.badge.hosting", { count: host.guests.length });
+  } else if (host?.suspended) {
+    label = t("networkSession.badge.suspended");
+    tone = "is-pending";
   } else if (guest.joined) {
     if (guest.state === "connected") {
       label = t("networkSession.badge.guest", {

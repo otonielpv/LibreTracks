@@ -173,6 +173,7 @@ pub fn join_host(
     target: &str,
     pin: Option<String>,
     remember: bool,
+    host_id: Option<String>,
 ) -> Result<GuestStatus, String> {
     let (url, address) =
         parse_join_target(target, DEFAULT_LINK_PORT).ok_or_else(|| "invalidAddress".to_string())?;
@@ -181,10 +182,13 @@ pub fn join_host(
     let link = app.state::<LinkState>();
     let guest_config = {
         let config = link.config.lock().map_err(|_| "state poisoned")?;
-        let token = config
-            .host_ids_by_address
-            .get(&address)
-            .and_then(|host_id| config.host_tokens.get(host_id))
+        // By the host's id when discovery told us who it is (its address may
+        // have changed since), else by the address it answered at before.
+        let known_host_id = host_id
+            .filter(|id| !id.is_empty())
+            .or_else(|| config.host_ids_by_address.get(&address).cloned());
+        let token = known_host_id
+            .and_then(|host_id| config.host_tokens.get(&host_id))
             .cloned();
         GuestConfig {
             device_name: config.device_name.clone(),
@@ -214,6 +218,7 @@ pub fn join_host(
         transport: None,
         live_settings: None,
     });
+    super::keep_awake("link-guest", true);
     emit_status(app);
     Ok(status)
 }
@@ -222,6 +227,7 @@ pub fn leave(app: &AppHandle) {
     let link = app.state::<LinkState>();
     let previous = link.guest.lock().ok().and_then(|mut guest| guest.take());
     if let Some(previous) = previous {
+        super::keep_awake("link-guest", false);
         previous.handle.leave();
         previous.task.abort();
         let _ = app.emit(

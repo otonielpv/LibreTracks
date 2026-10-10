@@ -47,6 +47,8 @@ pub mod ios_container;
 pub mod windows_firewall;
 
 #[cfg(target_os = "ios")]
+pub mod ios_link;
+#[cfg(target_os = "ios")]
 pub mod ios_token_store;
 #[cfg(target_os = "ios")]
 pub mod ios_video;
@@ -63,6 +65,8 @@ pub mod android_create_document;
 pub mod android_library_tree;
 #[cfg(target_os = "android")]
 pub mod android_memory;
+#[cfg(target_os = "android")]
+pub mod android_multicast;
 #[cfg(target_os = "android")]
 pub mod android_persistable_pick;
 #[cfg(target_os = "android")]
