@@ -8,6 +8,7 @@
 
 pub mod commands;
 pub mod config;
+pub mod guest;
 pub mod host;
 
 use std::sync::Mutex;
@@ -19,6 +20,8 @@ use config::NetworkSessionConfig;
 pub struct LinkState {
     pub config: Mutex<NetworkSessionConfig>,
     pub host: Mutex<Option<host::ActiveHost>>,
+    /// A device is host or guest, never both at once.
+    pub guest: Mutex<Option<guest::ActiveGuest>>,
 }
 
 pub fn initialize_link(app: &App) {
@@ -27,6 +30,7 @@ pub fn initialize_link(app: &App) {
     app.manage(LinkState {
         config: Mutex::new(config),
         host: Mutex::new(None),
+        guest: Mutex::new(None),
     });
     if resume_hosting {
         let handle = app.handle().clone();

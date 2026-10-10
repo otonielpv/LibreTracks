@@ -3,6 +3,7 @@ pub mod midi_port_names;
 pub mod midi_schedule;
 pub mod midi_wire;
 pub mod model;
+pub mod net_clock;
 pub mod song_structure;
 pub mod validation;
 pub mod video_schedule;

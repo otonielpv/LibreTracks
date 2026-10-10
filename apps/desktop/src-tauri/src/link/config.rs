@@ -29,6 +29,9 @@ pub struct NetworkSessionConfig {
     pub trusted: Vec<TrustedDevice>,
     /// Guest side: token per host id, from a `welcome` with remember.
     pub host_tokens: HashMap<String, String>,
+    /// Guest side: which host id answered at each `host:port`, so the token
+    /// can be sent before the host has said who it is.
+    pub host_ids_by_address: HashMap<String, String>,
 }
 
 impl NetworkSessionConfig {

@@ -177,6 +177,15 @@ fn set_was_hosting(app: &AppHandle, was_hosting: bool) {
 pub async fn start(app: &AppHandle) -> Result<HostStatus, String> {
     if app
         .state::<LinkState>()
+        .guest
+        .lock()
+        .map(|guest| guest.is_some())
+        .unwrap_or(false)
+    {
+        return Err("joinedAsGuest".into());
+    }
+    if app
+        .state::<LinkState>()
         .host
         .lock()
         .map(|host| host.is_some())

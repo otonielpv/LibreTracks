@@ -1,11 +1,11 @@
 //! Tauri commands of network sessions. The UI calling them lives behind
 //! `FEATURE_FLAGS.networkSessions`.
 
-use libretracks_link::{Grants, Role};
+use libretracks_link::{Grants, LinkCommand, Role};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
-use super::{config, host, LinkState};
+use super::{config, guest, host, LinkState};
 
 /// What the settings form edits. Tokens and trusted hashes stay out.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,4 +105,39 @@ pub fn link_revoke_trusted(app: AppHandle, device_id: String) -> bool {
         config::save(&app, &config);
     }
     revoked
+}
+
+#[tauri::command]
+pub fn link_join(
+    app: AppHandle,
+    target: String,
+    pin: Option<String>,
+    remember: bool,
+) -> Result<guest::GuestStatus, String> {
+    let hosting = host::with_handle(&app, |_| ()).is_some();
+    if hosting {
+        return Err("hosting".into());
+    }
+    guest::join_host(&app, &target, pin, remember)
+}
+
+#[tauri::command]
+pub fn link_leave(app: AppHandle) {
+    guest::leave(&app);
+}
+
+/// Everything the guest screen needs when it mounts: the events it missed
+/// before it was listening.
+#[tauri::command]
+pub fn link_guest_snapshot(app: AppHandle) -> guest::GuestSnapshot {
+    guest::snapshot(&app)
+}
+
+#[tauri::command]
+pub async fn link_guest_command(
+    app: AppHandle,
+    command: LinkCommand,
+    base_revision: Option<u64>,
+) -> Result<(), String> {
+    guest::send_command(&app, command, base_revision).await
 }
