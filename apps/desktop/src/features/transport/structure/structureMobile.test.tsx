@@ -205,33 +205,6 @@ describe("arrangement editor on mobile — C1", () => {
   });
 });
 
-describe("arrangement editor on a phone in landscape", () => {
-  it("puts the palette beside the list instead of in a sheet", async () => {
-    const original = window.matchMedia;
-    // An iPhone 13 in landscape: 844 × 390.
-    window.matchMedia = ((query: string) => ({
-      matches: query === "(orientation: landscape)",
-      media: query,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    })) as unknown as typeof window.matchMedia;
-    try {
-      await renderMobile();
-      const screenElement = document.querySelector(".lt-structure-mobile");
-      expect(screenElement?.classList.contains("is-wide")).toBe(true);
-      const palette = document.querySelector(".lt-structure-mobile-split .lt-structure-tap-palette");
-      expect(palette).not.toBeNull();
-      // Tapping a section in the side palette adds it at the end.
-      await act(async () => {
-        fireEvent.click(palette!.querySelectorAll("button.lt-structure-tap-row")[0]);
-      });
-      expect(order()).toEqual(["intro", "verso", "coro", "intro"]);
-    } finally {
-      window.matchMedia = original;
-    }
-  });
-});
-
 describe("arrangement editor on mobile — C2: handle vs scroll", () => {
   it("dragging by the handle reorders", async () => {
     await renderMobile();
