@@ -111,26 +111,27 @@ async function renderMobile() {
   });
 }
 
-/** Lay the rows out vertically (jsdom has no layout): 50 px each. */
+/** Lay the cards out side by side (jsdom has no layout): 150 px each, as the
+ * phone's row of cards. */
 function mockRowGeometry() {
   const items = Array.from(document.querySelectorAll<HTMLElement>("[data-block-id]"));
   items.forEach((item, index) => {
     item.getBoundingClientRect = () =>
-      ({ top: index * 50, bottom: index * 50 + 50, left: 0, right: 300, width: 300, height: 50, x: 0, y: index * 50 }) as DOMRect;
+      ({ top: 0, bottom: 110, left: index * 150, right: index * 150 + 150, width: 150, height: 110, x: index * 150, y: 0 }) as DOMRect;
   });
 }
 
 describe("arrangement editor on mobile — C1", () => {
-  it("swiping a block left removes it and the toast undoes it", async () => {
+  it("swiping a card up removes it and the toast undoes it", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     await renderMobile();
     const row = rowOf("b2");
 
     await act(async () => {
-      pointer(row, "pointerdown", { pointerId: 1, clientX: 250, clientY: 70 });
-      pointer(window, "pointermove", { pointerId: 1, clientX: 200, clientY: 72 });
-      pointer(window, "pointermove", { pointerId: 1, clientX: 250 - SWIPE_REMOVE_PX - 20, clientY: 72 });
-      pointer(window, "pointerup", { pointerId: 1, clientX: 250 - SWIPE_REMOVE_PX - 20, clientY: 72 });
+      pointer(row, "pointerdown", { pointerId: 1, clientX: 220, clientY: 200 });
+      pointer(window, "pointermove", { pointerId: 1, clientX: 222, clientY: 150 });
+      pointer(window, "pointermove", { pointerId: 1, clientX: 222, clientY: 200 - SWIPE_REMOVE_PX - 20 });
+      pointer(window, "pointerup", { pointerId: 1, clientX: 222, clientY: 200 - SWIPE_REMOVE_PX - 20 });
     });
 
     expect(order()).toEqual(["intro", "coro"]);
@@ -146,9 +147,9 @@ describe("arrangement editor on mobile — C1", () => {
 
     // And by itself the toast goes away after 4 s.
     await act(async () => {
-      pointer(rowOf("b1"), "pointerdown", { pointerId: 2, clientX: 250, clientY: 20 });
-      pointer(window, "pointermove", { pointerId: 2, clientX: 100, clientY: 20 });
-      pointer(window, "pointerup", { pointerId: 2, clientX: 100, clientY: 20 });
+      pointer(rowOf("b1"), "pointerdown", { pointerId: 2, clientX: 60, clientY: 200 });
+      pointer(window, "pointermove", { pointerId: 2, clientX: 60, clientY: 50 });
+      pointer(window, "pointerup", { pointerId: 2, clientX: 60, clientY: 50 });
     });
     expect(screen.getByRole("status")).toBeTruthy();
     await act(async () => {
@@ -158,12 +159,12 @@ describe("arrangement editor on mobile — C1", () => {
     vi.useRealTimers();
   });
 
-  it("a short swipe snaps back and removes nothing", async () => {
+  it("a short swipe up snaps back and removes nothing", async () => {
     await renderMobile();
     await act(async () => {
-      pointer(rowOf("b2"), "pointerdown", { pointerId: 1, clientX: 250, clientY: 70 });
-      pointer(window, "pointermove", { pointerId: 1, clientX: 220, clientY: 70 });
-      pointer(window, "pointerup", { pointerId: 1, clientX: 220, clientY: 70 });
+      pointer(rowOf("b2"), "pointerdown", { pointerId: 1, clientX: 220, clientY: 200 });
+      pointer(window, "pointermove", { pointerId: 1, clientX: 220, clientY: 170 });
+      pointer(window, "pointerup", { pointerId: 1, clientX: 220, clientY: 170 });
     });
     expect(order()).toEqual(["intro", "verso", "coro"]);
   });
@@ -205,6 +206,19 @@ describe("arrangement editor on mobile — C1", () => {
   });
 });
 
+describe("arrangement editor on a phone: a row of cards", () => {
+  it("lays the sections side by side, with an insert line before each and Add at the end", async () => {
+    await renderMobile();
+    expect(document.querySelector(".lt-structure-editor.is-row")).not.toBeNull();
+    const items = [...document.querySelectorAll(".lt-structure-strip > li")];
+    // Three cards, each with its "+" line before it, then the Add card.
+    expect(items).toHaveLength(4);
+    expect(items.slice(0, 3).every((item) => item.querySelector(".lt-structure-gap"))).toBe(true);
+    expect(items[3].classList.contains("is-end")).toBe(true);
+    expect(within(items[3] as HTMLElement).getByRole("button", { name: en.transport.structure.addSection })).toBeTruthy();
+  });
+});
+
 describe("arrangement editor on mobile — C2: handle vs scroll", () => {
   it("dragging by the handle reorders", async () => {
     await renderMobile();
@@ -213,26 +227,27 @@ describe("arrangement editor on mobile — C2: handle vs scroll", () => {
       '[data-block-id="b1"] .lt-structure-handle',
     ) as HTMLElement;
 
+    // Sideways now: the cards sit in a row.
     await act(async () => {
-      pointer(handle, "pointerdown", { pointerId: 1, clientX: 280, clientY: 25 });
-      pointer(window, "pointermove", { pointerId: 1, clientX: 280, clientY: 60 });
-      pointer(window, "pointermove", { pointerId: 1, clientX: 280, clientY: 140 });
-      pointer(window, "pointerup", { pointerId: 1, clientX: 280, clientY: 140 });
+      pointer(handle, "pointerdown", { pointerId: 1, clientX: 130, clientY: 50 });
+      pointer(window, "pointermove", { pointerId: 1, clientX: 200, clientY: 50 });
+      pointer(window, "pointermove", { pointerId: 1, clientX: 430, clientY: 50 });
+      pointer(window, "pointerup", { pointerId: 1, clientX: 430, clientY: 50 });
     });
 
     expect(order()).toEqual(["verso", "coro", "intro"]);
   });
 
-  it("dragging anywhere else on the row scrolls and does not reorder", async () => {
+  it("sliding a card sideways scrolls the row: it neither reorders nor removes", async () => {
     await renderMobile();
     mockRowGeometry();
     await act(async () => {
-      pointer(rowOf("b1"), "pointerdown", { pointerId: 1, clientX: 120, clientY: 25 });
-      pointer(window, "pointermove", { pointerId: 1, clientX: 121, clientY: 60 });
-      pointer(window, "pointermove", { pointerId: 1, clientX: 122, clientY: 140 });
+      pointer(rowOf("b1"), "pointerdown", { pointerId: 1, clientX: 60, clientY: 50 });
+      pointer(window, "pointermove", { pointerId: 1, clientX: 20, clientY: 51 });
+      pointer(window, "pointermove", { pointerId: 1, clientX: -120, clientY: 52 });
       // Ends with a plain pointerup (a real browser would usually cancel the
       // pointer once it starts panning): even then it must not reorder.
-      pointer(window, "pointerup", { pointerId: 1, clientX: 122, clientY: 140 });
+      pointer(window, "pointerup", { pointerId: 1, clientX: -120, clientY: 52 });
     });
     expect(order()).toEqual(["intro", "verso", "coro"]);
     expect(screen.queryByRole("menu")).toBeNull();
@@ -372,7 +387,7 @@ describe("arrangement editor on mobile — insert between sections", () => {
 
   it("explains the touch gestures, not Delete and Ctrl+D", async () => {
     await renderMobile();
-    expect(screen.getByText(en.transport.structure.stripHintTouch)).toBeTruthy();
+    expect(screen.getByText(en.transport.structure.stripHintRow)).toBeTruthy();
     expect(screen.queryByText(en.transport.structure.stripHint)).toBeNull();
   });
 });

@@ -174,8 +174,10 @@ function SheetItem({
 
 /**
  * Arrangement editor on phones and tablets: a full screen with the blocks as
- * a vertical list. Drag by the handle to reorder, swipe left to remove (with
- * undo), long-press for Duplicate/Remove, "Add section" for the palette.
+ * a row of cards that scrolls sideways (phones are always landscape here; a
+ * landscape tablet keeps the palette beside a vertical list). Drag by the
+ * handle to reorder, swipe up to remove (with undo), long-press for
+ * Duplicate/Remove, the "+" lines between cards to insert there.
  * Android's back button closes the topmost thing, and closing with unapplied
  * changes asks. Applying closes the screen so the result shows on the
  * timeline.
@@ -367,7 +369,7 @@ export function SongStructureMobileScreen({
                   sections={structure.sections}
                   draft={draft}
                   selectedBlockId={selectedBlockId}
-                  layout="vertical"
+                  layout={wide ? "vertical" : "row"}
                   showPalette={false}
                   handleOnly
                   renderGap={
@@ -386,8 +388,25 @@ export function SongStructureMobileScreen({
                           </button>
                         )
                   }
+                  renderEnd={
+                    wide
+                      ? undefined
+                      : () => (
+                          <button
+                            type="button"
+                            className="lt-structure-add-row"
+                            onClick={() => openInsert(draft.blocks.length)}
+                          >
+                            <span className="material-symbols-outlined" aria-hidden="true">
+                              add
+                            </span>
+                            {t("transport.structure.addSection")}
+                          </button>
+                        )
+                  }
                   wrapBlock={(block, row) => (
                     <SwipeableRow
+                      axis={wide ? "x" : "y"}
                       onRemove={() => removeWithUndo(block.id)}
                       onLongPress={() => setMenuBlockId(block.id)}
                     >
@@ -395,20 +414,6 @@ export function SongStructureMobileScreen({
                     </SwipeableRow>
                   )}
                 />
-                {!wide ? (
-                  // In the flow, after the last block: a floating button sat on
-                  // top of the last block's drag handle.
-                  <button
-                    type="button"
-                    className="lt-structure-add-row"
-                    onClick={() => openInsert(draft.blocks.length)}
-                  >
-                    <span className="material-symbols-outlined" aria-hidden="true">
-                      add
-                    </span>
-                    {t("transport.structure.addSection")}
-                  </button>
-                ) : null}
               </div>
             </div>
           </>

@@ -23,8 +23,9 @@ export type SongStructureEditorProps = {
   sections: StructureSectionSummary[];
   draft: ArrangementDraft;
   selectedBlockId: string | null;
-  /** Desktop: a horizontal strip. Mobile: a vertical list, one row per block. */
-  layout: "horizontal" | "vertical";
+  /** Desktop: a horizontal strip. Mobile: a row of cards that scrolls
+   * sideways ("row"), or a vertical list, one row per block. */
+  layout: "horizontal" | "vertical" | "row";
   /** Mobile puts the palette in a bottom sheet. */
   showPalette?: boolean;
   /** Mobile: only the handle starts a drag, so dragging the rest of a row
@@ -35,6 +36,8 @@ export type SongStructureEditorProps = {
   /** Mobile: something to put in the gap BEFORE block `index` (the "insert
    * here" line). It lives inside the block's row so it moves with it. */
   renderGap?: (index: number) => ReactNode;
+  /** Mobile: the last item of the list (the "add section" card). */
+  renderEnd?: () => ReactNode;
 };
 
 /**
@@ -51,6 +54,7 @@ export function SongStructureEditor({
   handleOnly = false,
   wrapBlock,
   renderGap,
+  renderEnd,
 }: SongStructureEditorProps) {
   const { t } = useTranslation();
   const listRef = useRef<HTMLOListElement | null>(null);
@@ -60,7 +64,7 @@ export function SongStructureEditor({
   );
 
   const { onBlockPointerDown, onPalettePointerDown } = useBlockReorder({
-    axis: layout === "horizontal" ? "x" : "y",
+    axis: layout === "vertical" ? "y" : "x",
     listRef,
     onMove: (blockId, toIndex) => updateDraft((d) => moveBlock(d, blockId, toIndex)),
     onTap: (blockId) => selectBlock(blockId),
@@ -137,7 +141,9 @@ export function SongStructureEditor({
             {t(
               layout === "horizontal"
                 ? "transport.structure.stripHint"
-                : "transport.structure.stripHintTouch",
+                : layout === "row"
+                  ? "transport.structure.stripHintRow"
+                  : "transport.structure.stripHintTouch",
             )}
           </span>
           <span className="lt-structure-total">
@@ -194,6 +200,7 @@ export function SongStructureEditor({
               </li>
             );
           })}
+          {renderEnd ? <li className="lt-structure-item is-end">{renderEnd()}</li> : null}
         </ol>
       </div>
     </div>

@@ -1037,6 +1037,8 @@ const en = {
       paletteHint: "Click to add at the end. Drag to insert where you drop.",
       strip: "Order",
       stripHint: "Drag to reorder. Delete removes, Ctrl+D duplicates.",
+      stripHintRow:
+        "Swipe the row to scroll it. Drag by the handle to reorder, swipe a section up to remove it and press and hold to duplicate.",
       stripHintTouch:
         "Drag by the handle to reorder. Swipe left to remove, long-press to duplicate.",
       insertAt: "Insert at position {{n}}",

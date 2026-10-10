@@ -1062,6 +1062,8 @@ const es = {
       paletteHint: "Clic para añadir al final. Arrastra para insertar donde sueltes.",
       strip: "Orden",
       stripHint: "Arrastra para reordenar. Supr quita, Ctrl+D duplica.",
+      stripHintRow:
+        "Desliza la fila para recorrerla. Arrastra por el asa para reordenar, desliza una sección hacia arriba para quitarla y mantén pulsado para duplicar.",
       stripHintTouch:
         "Arrastra por el asa para reordenar. Desliza a la izquierda para quitar y mantén pulsado para duplicar.",
       insertAt: "Insertar en la posición {{n}}",

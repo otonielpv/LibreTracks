@@ -925,3 +925,113 @@
   background: linear-gradient(to bottom, #57f1db, #2dd4bf);
   color: #003731;
 }
+
+/* ── Row of cards (phone in landscape) ───────────────────────────────────
+   The blocks sit side by side and the row scrolls sideways, so the width of
+   a landscape screen holds the arrangement. Between cards, a vertical "+"
+   line inserts there; at the end, the "add section" card. */
+
+.lt-structure-editor.is-row .lt-structure-strip {
+  gap: 0;
+  align-items: stretch;
+  padding: 0.4rem 0.3rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  border: 0;
+}
+
+.lt-structure-editor.is-row .lt-structure-item {
+  display: flex;
+  align-items: stretch;
+}
+
+.lt-structure-editor.is-row .lt-structure-swipe {
+  /* Sideways travel scrolls the row; a swipe up removes the card. */
+  touch-action: pan-x;
+}
+
+.lt-structure-editor.is-row .lt-structure-block {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr auto;
+  align-items: start;
+  width: 8.5rem;
+  height: 100%;
+  min-height: 6.5rem;
+  padding: 0.5rem 0.4rem 0.5rem 0.6rem;
+  font-size: 0.95rem;
+  cursor: default;
+  touch-action: pan-x;
+}
+
+.lt-structure-editor.is-row .lt-structure-block-index {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.lt-structure-editor.is-row .lt-structure-handle {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+  margin-left: 0;
+}
+
+.lt-structure-editor.is-row .lt-structure-block-name {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: center;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-structure-editor.is-row .lt-structure-block-bars {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+/* The "insert here" line, upright between two cards. */
+.lt-structure-editor.is-row .lt-structure-gap {
+  flex-direction: column;
+  justify-content: center;
+  width: 36px;
+  height: auto;
+  min-height: 6.5rem;
+}
+
+.lt-structure-editor.is-row .lt-structure-gap::before {
+  content: "";
+  position: absolute;
+  top: 0.4rem;
+  bottom: 0.4rem;
+  width: 1px;
+  height: auto;
+  flex: none;
+  background: linear-gradient(to bottom, transparent, rgb(87 241 219 / 0.35) 12%, rgb(87 241 219 / 0.35) 88%, transparent);
+}
+
+.lt-structure-editor.is-row .lt-structure-gap {
+  position: relative;
+}
+
+.lt-structure-editor.is-row .lt-structure-gap .material-symbols-outlined {
+  position: relative;
+  margin-right: 0;
+}
+
+.lt-structure-editor.is-row .lt-structure-item.is-end {
+  padding-left: 0.4rem;
+}
+
+.lt-structure-editor.is-row .lt-structure-add-row {
+  flex-direction: column;
+  width: 7.5rem;
+  min-height: 6.5rem;
+  height: 100%;
+  padding: 0.5rem;
+  text-align: center;
+}

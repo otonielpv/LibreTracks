@@ -1,8 +1,8 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
-/** Travel that decides between a horizontal swipe and a vertical scroll. */
+/** Travel that decides between a swipe and a scroll. */
 const DIRECTION_PX = 10;
-/** A swipe further left than this removes the row. */
+/** A swipe further than this (left, or up in a row of cards) removes it. */
 export const SWIPE_REMOVE_PX = 80;
 /** Press held this long without moving opens the row menu. */
 export const LONG_PRESS_MS = 500;
@@ -22,10 +22,14 @@ export function SwipeableRow({
   children,
   onRemove,
   onLongPress,
+  axis = "x",
 }: {
   children: ReactNode;
   onRemove: () => void;
   onLongPress: () => void;
+  /** "x": swipe left to remove, vertical travel scrolls (a vertical list).
+   * "y": swipe up to remove, sideways travel scrolls (a row of cards). */
+  axis?: "x" | "y";
 }) {
   const rowRef = useRef<HTMLDivElement | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -37,7 +41,7 @@ export function SwipeableRow({
     const pointerId = event.pointerId;
     const start = { x: event.clientX, y: event.clientY };
     let mode: "pending" | "swipe" | "scroll" | "done" = "pending";
-    let dx = 0;
+    let travel = 0;
     const row = rowRef.current;
     const timer = window.setTimeout(() => {
       if (mode === "pending") {
@@ -47,22 +51,31 @@ export function SwipeableRow({
     }, LONG_PRESS_MS);
 
     const setOffset = (offset: number) => {
-      if (row) row.style.transform = offset === 0 ? "" : `translate3d(${offset}px, 0, 0)`;
+      if (!row) return;
+      row.style.transform =
+        offset === 0
+          ? ""
+          : axis === "x"
+            ? `translate3d(${offset}px, 0, 0)`
+            : `translate3d(0, ${offset}px, 0)`;
     };
     const move = (next: PointerEvent) => {
       if (next.pointerId !== pointerId) return;
-      dx = next.clientX - start.x;
+      const dx = next.clientX - start.x;
       const dy = next.clientY - start.y;
+      const along = axis === "x" ? dx : dy;
+      const across = axis === "x" ? dy : dx;
+      travel = along;
       if (mode === "pending") {
-        if (Math.abs(dx) > DIRECTION_PX && Math.abs(dx) > Math.abs(dy)) {
+        if (Math.abs(along) > DIRECTION_PX && Math.abs(along) > Math.abs(across)) {
           mode = "swipe";
           window.clearTimeout(timer);
-        } else if (Math.abs(dy) > DIRECTION_PX) {
+        } else if (Math.abs(across) > DIRECTION_PX) {
           mode = "scroll";
           window.clearTimeout(timer);
         }
       }
-      if (mode === "swipe") setOffset(Math.min(0, dx));
+      if (mode === "swipe") setOffset(Math.min(0, along));
     };
     const finish = (removed: boolean) => {
       window.clearTimeout(timer);
@@ -72,9 +85,9 @@ export function SwipeableRow({
     };
     const up = (next: PointerEvent) => {
       if (next.pointerId !== pointerId) return;
-      finish(mode === "swipe" && dx <= -SWIPE_REMOVE_PX);
+      finish(mode === "swipe" && travel <= -SWIPE_REMOVE_PX);
     };
-    // The browser took the gesture over (a vertical scroll): nothing to do.
+    // The browser took the gesture over (a scroll): nothing to do.
     const cancel = (next: PointerEvent) => {
       if (next.pointerId !== pointerId) return;
       finish(false);
@@ -97,7 +110,7 @@ export function SwipeableRow({
   return (
     <div
       ref={rowRef}
-      className="lt-structure-swipe"
+      className={`lt-structure-swipe is-axis-${axis}`}
       onPointerDown={onPointerDown}
       onContextMenu={(event) => event.preventDefault()}
     >
