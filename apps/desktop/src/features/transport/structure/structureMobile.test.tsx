@@ -219,6 +219,35 @@ describe("arrangement editor on a phone: a row of cards", () => {
   });
 });
 
+describe("arrangement editor on a landscape tablet", () => {
+  it("is a vertical list with the + lines between sections, and no side palette", async () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query === "(min-width: 900px) and (orientation: landscape)",
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      await renderMobile();
+      expect(document.querySelector(".lt-structure-editor.is-vertical")).not.toBeNull();
+      expect(document.querySelector(".lt-structure-mobile-split .lt-structure-tap-palette")).toBeNull();
+      expect(document.querySelectorAll(".lt-structure-gap")).toHaveLength(3);
+      // A "+" line opens the sheet to insert right there.
+      await act(async () => {
+        fireEvent.click(document.querySelectorAll(".lt-structure-gap")[1]);
+      });
+      const sheet = document.querySelector(".lt-structure-app-sheet") as HTMLElement;
+      await act(async () => {
+        fireEvent.click(sheet.querySelectorAll("button.lt-structure-tap-row")[2]);
+      });
+      expect(order()).toEqual(["intro", "coro", "verso", "coro"]);
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+});
+
 describe("arrangement editor on mobile — C2: handle vs scroll", () => {
   it("dragging by the handle reorders", async () => {
     await renderMobile();
