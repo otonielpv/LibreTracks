@@ -23,6 +23,10 @@ import {
 } from "../features/transport/uiStore";
 import { App as AppComponent } from "../app/App";
 import { useTourStore } from "../features/tutorial/tourStore";
+import {
+  INITIAL_NETWORK_SESSION_STATE,
+  useNetworkSessionStore,
+} from "../features/network/networkSessionStore";
 import { useCloudStore } from "../features/transport/cloud/cloudStore";
 import { useRenderStore } from "../features/transport/render/renderStore";
 import { INITIAL_VIDEO_STATE, useVideoStore } from "../features/transport/video/videoStore";
@@ -361,6 +365,7 @@ beforeEach(async () => {
   // El modal de renderizar se abre desde un store; sin cerrarlo, una prueba
   // que lo abra lo dejaria abierto encima de la siguiente.
   useRenderStore.setState({ target: null });
+  useNetworkSessionStore.setState(INITIAL_NETWORK_SESSION_STATE);
   // Video selection and library, and the canvas thumbnail/preview registry.
   useVideoStore.setState(INITIAL_VIDEO_STATE);
   resetVideoCanvasState();

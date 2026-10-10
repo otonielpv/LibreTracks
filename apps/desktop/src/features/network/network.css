@@ -1,0 +1,128 @@
+/* Network sessions (docs/plans/network-sessions). Reuses the settings modal
+   look; only what is specific to this feature is here. No color-mix: macOS
+   12's Safari 15 does not have it (see project memory on Catalina CSS). */
+
+.lt-network-modal .lt-settings-tablist {
+  margin-bottom: 12px;
+}
+
+.lt-network-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.lt-network-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lt-network-error {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 92, 92, 0.12);
+  color: #ff8a8a;
+}
+
+.lt-network-address {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.lt-network-address > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lt-network-qr {
+  width: 132px;
+  height: 132px;
+  border-radius: 8px;
+  background: #fff;
+  image-rendering: pixelated;
+}
+
+.lt-network-address-value {
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  user-select: all;
+}
+
+.lt-network-heading {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+}
+
+.lt-network-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lt-network-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.lt-network-row-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+}
+
+.lt-network-row-name small {
+  opacity: 0.65;
+}
+
+.lt-network-joined {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.lt-network-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lt-network-badge .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.lt-network-badge.is-pending {
+  border-color: rgba(255, 196, 0, 0.5);
+}
+
+.lt-network-badge.is-error {
+  border-color: rgba(255, 92, 92, 0.6);
+  background: rgba(255, 92, 92, 0.16);
+  color: #ffb0b0;
+}

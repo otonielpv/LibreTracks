@@ -280,6 +280,7 @@ import { useVideoFeature } from "./video/useVideoFeature";
 import { VideoSetupLayer } from "./video/VideoSetupLayer";
 import { MixSceneModal } from "./panels/MixSceneModal";
 import { RemotePanel } from "./panels/RemotePanel";
+import { NetworkSessionRoot } from "../network/NetworkSessionRoot";
 import { MobileLanding } from "./compact/MobileLanding";
 import { TOUR_TARGETS } from "../tutorial/tourTargets";
 import {
@@ -8127,6 +8128,7 @@ export function TransportPanelContent() {
               onClose={() => setIsRemoteModalOpen(false)}
               remoteServerInfo={remoteServerInfo}
             />
+            <NetworkSessionRoot />
 
             {isMobileSessionsModalOpen ? (
               <div

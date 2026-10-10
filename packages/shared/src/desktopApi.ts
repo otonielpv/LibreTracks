@@ -110,7 +110,8 @@ export function setIpcObserver(observer: IpcObserver | null) {
   ipcObserver = observer;
 }
 
-async function invokeCommand<T>(command: string, args?: Record<string, unknown>) {
+/** Exported for feature APIs that live in their own module (networkApi). */
+export async function invokeCommand<T>(command: string, args?: Record<string, unknown>) {
   const { invoke } = await import("@tauri-apps/api/core");
   // Only read the clock when someone is listening: an unobserved call pays a
   // single null check.

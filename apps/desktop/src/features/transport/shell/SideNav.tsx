@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { TourLauncherButton } from "../../tutorial/TourLauncherButton";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
+import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
+import { useNetworkSessionStore } from "../../network/networkSessionStore";
 import { isMobileApp } from "../desktopApi";
 import type { SidebarTab } from "../types";
 
@@ -35,6 +37,8 @@ export function SideNav({
   isFileActionsOpen = false,
 }: SideNavProps) {
   const { t } = useTranslation();
+  const isNetworkModalOpen = useNetworkSessionStore((state) => state.isModalOpen);
+  const openNetworkModal = useNetworkSessionStore((state) => state.openModal);
 
   return (
     <aside
@@ -104,6 +108,17 @@ export function SideNav({
           {t("transport.shell.remote")}
         </button>
       )}
+      {FEATURE_FLAGS.networkSessions ? (
+        <button
+          type="button"
+          className={isNetworkModalOpen ? "is-active" : ""}
+          aria-label={t("networkSession.title")}
+          onClick={openNetworkModal}
+        >
+          <span className="material-symbols-outlined">hub</span>
+          {t("networkSession.sideNav")}
+        </button>
+      ) : null}
       <button
         type="button"
         className={isSettingsModalOpen ? "is-active" : ""}

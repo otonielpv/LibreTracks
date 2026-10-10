@@ -22,6 +22,7 @@ import {
 } from "../tempo/tempoFieldInput";
 import { AudioDeviceStatusBadge } from "../AudioDeviceStatusBadge";
 import { MidiDeviceStatusBadge } from "../MidiDeviceStatusBadge";
+import { NetworkSessionBadge } from "../../network/NetworkSessionBadge";
 import { requestAppClose } from "../../appClose/appCloseService";
 import { FadeStopButton } from "./FadeStopButton";
 
@@ -805,6 +806,7 @@ export function TimelineTopbar({
           <div className="lt-device-status-slot">
             <AudioDeviceStatusBadge />
             <MidiDeviceStatusBadge />
+            <NetworkSessionBadge />
             {isMobileApp ? null : <VideoOutputBadge />}
           </div>
         </div>
