@@ -376,6 +376,10 @@
 
 .lt-live-cue-name-line {
   min-width: 0;
+  /* Tall enough for a badge, with or without one: a row whose marker is
+     playing (AHORA) or next (countdown) must not be taller than the rest, or
+     the whole grid row it sits in grows with it. */
+  min-height: 1.15rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -800,6 +804,17 @@
   /* On a phone the countdown is a clock and the time, so the name fits. */
   .lt-live-countdown-long {
     display: none;
+  }
+
+  /* Name and badge on one line: a badge dropping below made the rows of the
+     playing and next markers taller than the others. */
+  .lt-live-cue-name-line {
+    flex-wrap: nowrap;
+  }
+
+  .lt-live-cue-name-line strong {
+    flex: 0 1 auto;
+    min-width: 2.5rem;
   }
 
   .lt-live-countdown-short {
