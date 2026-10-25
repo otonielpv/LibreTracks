@@ -2691,6 +2691,13 @@ const es = {
       routeAria: "Ruta de {{name}}: {{route}}",
       settings: "Ajustes MIDI…",
     },
+    video: {
+      add: "+ Vídeo",
+      addTitle: "Añadir vídeos en el playhead o al inicio de la sección",
+      atPlayhead: "En el playhead",
+      atSection: "Al inicio de la sección",
+      trackTitle: "Pista de vídeo {{name}}",
+    },
     arrangement: {
       list: "Arreglos",
       sectionsCount: "{{count}} secciones",

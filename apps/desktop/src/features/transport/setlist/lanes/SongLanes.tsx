@@ -24,7 +24,7 @@ import {
 } from "@libretracks/shared/models";
 
 import type { CompactMixerHandlers } from "../../compact/CompactMixer";
-import { isMobileApp } from "../../desktopApi";
+import { isMobileApp, pickLibraryFiles } from "../../desktopApi";
 import {
   cancelGatedFrame,
   markFrameActivity,
@@ -44,12 +44,16 @@ import type { SetlistLayoutClass } from "../useSetlistLayout";
 import { audioLaneType } from "./AudioLane";
 import { AutomationLane } from "./AutomationLane";
 import { midiLaneType } from "./MidiLane";
+import { videoLaneType } from "./VideoLane";
+import { classifyDroppedPaths } from "../../library/dragDrop";
+import type { VideoLaneBindings } from "../../video/VideoClipHotspots";
+import { useVideoStore } from "../../video/videoStore";
 import { automationRowIndex, sectionAt } from "./automationLaneModel";
 import { createLaneClipHandlers, type LaneClipHandlerDeps } from "./laneClipHandlers";
 import type { SongLaneType } from "./laneTypes";
 import { clearLanePreviews, useClipGestures } from "./useClipGestures";
 
-export const DEFAULT_LANE_TYPES: SongLaneType[] = [midiLaneType, audioLaneType];
+export const DEFAULT_LANE_TYPES: SongLaneType[] = [midiLaneType, videoLaneType, audioLaneType];
 
 type SongLanesProps = {
   song: SongView;
@@ -70,6 +74,8 @@ type SongLanesProps = {
   onSnapshotApplied: (snapshot: TransportSnapshot) => void;
   /** Lane kinds; steps 12-15 add theirs. */
   laneTypes?: SongLaneType[];
+  /** The video feature's lane bindings (useVideoFeature, once per panel). */
+  videoLanes?: VideoLaneBindings;
 };
 
 const MIN_TICK_SPACING_PX = 44;
@@ -98,6 +104,7 @@ function SongLanesComponent({
   runAction,
   onSnapshotApplied,
   laneTypes = DEFAULT_LANE_TYPES,
+  videoLanes,
 }: SongLanesProps) {
   const { t } = useTranslation();
   useFrameGateWake();
@@ -111,6 +118,7 @@ function SongLanesComponent({
   const setZoom = useSetlistStore((state) => state.setLanesZoom);
   const setScrollPx = useSetlistStore((state) => state.setLanesScrollPx);
   const selectedClipIds = useTimelineUIStore((state) => state.selectedClipIds);
+  const selectedVideoClipIds = useVideoStore((state) => state.selectedVideoClipIds);
   const touchMenu = useTouchContextMenu();
 
   useLayoutEffect(() => {
@@ -169,6 +177,7 @@ function SongLanesComponent({
     onClipPointerDown,
     onClipContextMenu,
     menus,
+    video: videoLanes,
   });
 
   const onClipContextMenu = (event: ReactMouseEvent<HTMLElement>, clip: ClipSummary) => {
@@ -276,6 +285,33 @@ function SongLanesComponent({
       ]),
     );
   };
+  // «+ Video»: the DAW's import (with its «extract the audio?» question) at
+  // the playhead or the start of its section, on the selected video track,
+  // else the song's first one, else a new one. A phone picks from its gallery.
+  const canAddVideo = Boolean(videoLanes && !videoLanes.readOnly);
+  const addVideoAt = (seconds: number) => {
+    if (!videoLanes) return;
+    const videoTrackIds = tracks.filter((track) => track.kind === "video").map((track) => track.id);
+    const selected = useTimelineUIStore.getState().selectedTrackIds.find((id) => videoTrackIds.includes(id));
+    const placement = { seconds, trackId: selected ?? videoTrackIds[0] ?? null };
+    if (isMobileApp) {
+      videoLanes.handlers.addVideosFromDevice(placement, "gallery");
+      return;
+    }
+    void pickLibraryFiles().then((paths) => {
+      const classification = classifyDroppedPaths(paths);
+      const videos = ("videoPaths" in classification ? classification.videoPaths : undefined) ?? [];
+      if (videos.length) videoLanes.handlers.importVideoPaths(videos, placement);
+    });
+  };
+  const openAddVideoMenu = (event: ReactMouseEvent<HTMLElement>) => {
+    const playhead = scale.clampSeconds(positionSecondsRef.current);
+    const sectionStart = sectionAt(song, region, playhead)?.startSeconds ?? region.startSeconds;
+    menus.openMenu(event, t("setlistView.video.add"), [
+      { label: t("setlistView.video.atPlayhead"), onSelect: () => addVideoAt(playhead) },
+      { label: t("setlistView.video.atSection"), onSelect: () => addVideoAt(sectionStart) },
+    ]);
+  };
   const addCueAtSectionStart = () => {
     const playhead = scale.clampSeconds(positionSecondsRef.current);
     menus.createAutomationCueAt(sectionAt(song, region, playhead)?.startSeconds ?? region.startSeconds);
@@ -337,7 +373,9 @@ function SongLanesComponent({
     if (clip) onClipContextMenu(event, clip);
   };
 
-  const hasSelection = selectedClipIds.length > 0;
+  // Split, duplicate and delete are the DAW's shortcut actions, which act on
+  // the video selection as well as the audio one.
+  const hasSelection = selectedClipIds.length > 0 || selectedVideoClipIds.length > 0;
   const toolbar = (
     <div className="lt-setlist-lanes-toolbar" role="toolbar" aria-label={t("setlistView.lanes.toolbar")}>
       <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.lanes.zoomOut")} title={t("setlistView.lanes.zoomOut")} disabled={zoom <= LANES_MIN_ZOOM} onClick={() => changeZoom(1 / ZOOM_STEP)}>
@@ -376,6 +414,18 @@ function SongLanesComponent({
         >
           <span className="material-symbols-outlined" aria-hidden="true">piano</span>
           {t("setlistView.midi.add")}
+        </button>
+      ) : null}
+      {canAddVideo ? (
+        <button
+          type="button"
+          className="lt-setlist-settings-button"
+          aria-haspopup="menu"
+          title={t("setlistView.video.addTitle")}
+          onClick={openAddVideoMenu}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">movie</span>
+          {t("setlistView.video.add")}
         </button>
       ) : null}
       <span className="lt-setlist-lanes-toolbar-gap" />

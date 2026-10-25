@@ -2660,6 +2660,13 @@ const en = {
       routeAria: "Routing of {{name}}: {{route}}",
       settings: "MIDI settings…",
     },
+    video: {
+      add: "+ Video",
+      addTitle: "Add videos at the playhead or at the start of the section",
+      atPlayhead: "At the playhead",
+      atSection: "At the section start",
+      trackTitle: "Video track {{name}}",
+    },
     arrangement: {
       list: "Arrangements",
       sectionsCount: "{{count}} sections",

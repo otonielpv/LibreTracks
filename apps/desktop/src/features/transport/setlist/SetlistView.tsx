@@ -12,6 +12,7 @@ import { SongMap } from "./SongMap";
 import { SongOverviewStrip } from "./SongOverviewStrip";
 import { SetlistMixer } from "./SetlistMixer";
 import { MIXER_HEIGHT_VAR, useMixerResize } from "./useMixerResize";
+import type { VideoLaneBindings } from "../video/VideoClipHotspots";
 import { SectionScrubEditor } from "./SectionScrubEditor";
 import { SetlistAutomationPanel } from "./SetlistAutomationPanel";
 import { SetlistEditButton, SetlistEditDrawer } from "./SetlistEditDrawer";
@@ -46,6 +47,8 @@ export type SetlistViewProps = SongViewBindings & {
   dragPreview?: SetlistDragPreview;
   /** Tests force the size class; otherwise it is measured. */
   layoutClass?: SetlistLayoutClass;
+  /** The video feature's lane bindings (useVideoFeature, once per panel). */
+  videoLanes?: VideoLaneBindings;
 };
 
 /** A named, empty slot the later steps fill without stepping on each other. */
@@ -86,6 +89,7 @@ function Zone({
  */
 function SetlistViewComponent({
   layoutClass,
+  videoLanes,
   menus,
   rulerMarkers,
   runShortcutAction,
@@ -225,6 +229,7 @@ function SetlistViewComponent({
         runShortcutAction={runShortcutAction}
         onSeek={performance.onSeek}
         onRulerMenuAt={sectionHandlers.openMenuAt}
+        videoLanes={videoLanes}
         runAction={runAction}
         onSnapshotApplied={onSnapshotApplied}
       />

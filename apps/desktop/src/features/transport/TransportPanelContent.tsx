@@ -7652,7 +7652,7 @@ export function TransportPanelContent() {
                   {viewMode === "setlist" && songBindings && performanceBindings ? (
                     <SetlistView {...songBindings} performance={performanceBindings}
                       menus={timelineMenus} onOpenInDaw={songViewHandlers.openInDaw}
-                      dragPreview={compactDragPreview} />
+                      dragPreview={compactDragPreview} videoLanes={video.lanes} />
                   ) : null}
 
                   {viewMode === "live" && performanceBindings ? (

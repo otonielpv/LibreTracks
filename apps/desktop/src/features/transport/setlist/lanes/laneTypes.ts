@@ -12,6 +12,7 @@ import type {
 } from "@libretracks/shared/models";
 
 import type { TimelineMenus } from "../../menus/timelineMenus";
+import type { VideoLaneBindings } from "../../video/VideoClipHotspots";
 import type { SetlistLayoutClass } from "../useSetlistLayout";
 import type { SongTimeScale } from "../songTimeScale";
 import type { ClipGestureMode } from "./useClipGestures";
@@ -34,6 +35,8 @@ export type SongLaneRenderProps = {
   onClipContextMenu: (event: ReactMouseEvent<HTMLElement>, clip: ClipSummary) => void;
   /** The DAW's menus: lanes of other kinds (MIDI…) act through them. */
   menus: TimelineMenus;
+  /** The video feature's handlers (absent outside the panel). */
+  video?: VideoLaneBindings;
 };
 
 /**
