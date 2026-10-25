@@ -61,6 +61,8 @@ const BUDGETS: Record<string, number> = {
   // pone techo en 900; arranca más bajo porque la holgura de abajo exige
   // menos de 600 líneas de margen.
   "setlist/SetlistView.tsx": 700,
+  // El editor de carriles de UNA canción (paso 11 de docs/plans/setlist-view).
+  "setlist/lanes/SongLanes.tsx": 700,
 };
 
 const transportDir = dirname(fileURLToPath(import.meta.url));

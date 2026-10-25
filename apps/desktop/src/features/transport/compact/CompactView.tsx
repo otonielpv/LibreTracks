@@ -93,6 +93,7 @@ type CompactViewProps = Omit<
   | "onSectionContextMenu"
   | "onCommitMarkerPosition"
   | "rulerMarkers"
+  | "runShortcutAction"
   | "structureHandlers"
   | "onResizeSong"
   | "onMoveSong"

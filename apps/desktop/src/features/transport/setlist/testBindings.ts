@@ -86,6 +86,7 @@ export function testSetlistProps(song: Partial<SongView> = {}) {
     onSectionContextMenu: noop,
     onCommitMarkerPosition: noop,
     rulerMarkers: {} as RulerMarkerHandlers,
+    runShortcutAction: noop,
     structureHandlers: {} as StructureHandlers,
     onResizeSong: noop,
     onMoveSong: noop,

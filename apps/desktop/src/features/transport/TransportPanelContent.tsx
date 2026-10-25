@@ -6551,7 +6551,7 @@ export function TransportPanelContent() {
     onAddAudioToSong: songViewHandlers.addAudioToSong,
     onSongContextMenu: handleRegionContextMenu,
     onSectionContextMenu: handleMarkerContextMenu,
-    onCommitMarkerPosition: handleMarkerMoveCommit, rulerMarkers, structureHandlers,
+    onCommitMarkerPosition: handleMarkerMoveCommit, rulerMarkers, structureHandlers, runShortcutAction,
     onResizeSong: songViewHandlers.resizeSong, onMoveSong: songViewHandlers.moveSong,
     runAction, setStatus,
     onSelectedRegionTransposeChange: handleSelectedRegionTransposeChange,

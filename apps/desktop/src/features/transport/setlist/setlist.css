@@ -1419,3 +1419,238 @@ html.lt-mobile .lt-setlist-track-row {
   height: auto;
   align-self: stretch;
 }
+
+/* ---- Carriles de la canción (paso 11) ---- */
+
+.lt-setlist-lanes {
+  --lt-setlist-lane-header: 9rem;
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.35rem;
+  overflow: hidden;
+}
+
+.lt-setlist-lanes.is-short {
+  --lt-setlist-lane-header: 6.5rem;
+}
+
+.lt-setlist-lanes.is-names-collapsed {
+  --lt-setlist-lane-header: 1.6rem;
+}
+
+.lt-setlist-lanes.is-names-collapsed .lt-setlist-lane-name,
+.lt-setlist-lanes.is-names-collapsed .lt-setlist-lane-toggle {
+  display: none;
+}
+
+.lt-setlist-lanes-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.lt-setlist-lanes-toolbar-gap {
+  flex: 1 1 auto;
+}
+
+.lt-setlist-lanes-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.lt-setlist-lane-row {
+  display: flex;
+  min-height: 2rem;
+  border-bottom: 1px solid var(--lt-setlist-border);
+}
+
+.lt-setlist-lane-row.is-ruler {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 2.2rem;
+  background: var(--lt-setlist-surface);
+}
+
+.lt-setlist-lane-header {
+  flex: 0 0 var(--lt-setlist-lane-header);
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0 0.35rem;
+  border-left: 3px solid var(--lt-track-color, transparent);
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-lane-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-lane-toggle {
+  min-width: 1.6rem;
+  min-height: 1.5rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--lt-setlist-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lt-setlist-lane-toggle.is-active {
+  border-color: var(--lt-setlist-accent);
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-lane-cell {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-lanes-ruler {
+  cursor: pointer;
+}
+
+.lt-setlist-lanes-tick {
+  position: absolute;
+  bottom: 0;
+  height: 40%;
+  padding-left: 3px;
+  border-left: 1px solid var(--lt-setlist-border);
+  font-size: 0.68rem;
+  color: var(--lt-setlist-text-muted);
+  pointer-events: none;
+}
+
+.lt-setlist-lanes-section {
+  --lt-setlist-block-color: #7c8a86;
+  position: absolute;
+  top: 0;
+  padding: 0 0.3rem;
+  border-left: 2px solid var(--lt-setlist-block-color);
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 40%, transparent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.lt-setlist-lane {
+  position: absolute;
+  inset: 0;
+}
+
+.lt-setlist-lane.is-drop-target {
+  background: rgb(87 241 219 / 0.08);
+}
+
+.lt-setlist-lane-clip {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  min-width: 2px;
+  border: 1px solid color-mix(in srgb, var(--lt-track-color, #7c8a86) 70%, transparent);
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--lt-track-color, #7c8a86) 30%, #111514);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  will-change: transform;
+}
+
+.lt-setlist-lane-clip.is-selected {
+  border-color: #f2c45a;
+  box-shadow: inset 0 0 0 1px #f2c45a;
+}
+
+.lt-setlist-lane-clip-wave {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.lt-setlist-lane-clip-name {
+  position: absolute;
+  top: 1px;
+  left: 0.3rem;
+  right: 0.3rem;
+  overflow: hidden;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.lt-setlist-lane-trim {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.lt-setlist-lane-trim.is-start {
+  left: 0;
+}
+
+.lt-setlist-lane-trim.is-end {
+  right: 0;
+}
+
+.lt-setlist-lanes-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  margin-left: -1px;
+  z-index: 4;
+  background: var(--lt-setlist-accent);
+  visibility: hidden;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Móvil: bordes de recorte de 44 px (sólo con el clip seleccionado). */
+html.lt-mobile .lt-setlist-lane-trim {
+  display: none;
+  width: 22px;
+}
+
+html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim {
+  display: block;
+}
+
+html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-start {
+  left: -11px;
+}
+
+html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
+  right: -11px;
+}
+
+.lt-setlist-lanes.is-short .lt-setlist-lanes-toolbar {
+  justify-content: space-around;
+  padding-bottom: var(--lt-safe-area-bottom, 0px);
+}

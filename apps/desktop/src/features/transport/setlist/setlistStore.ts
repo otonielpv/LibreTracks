@@ -10,7 +10,11 @@ export type SetlistEditMode =
   | "song"
   | "sections"
   | "arrangement"
-  | "tracks";
+  | "tracks"
+  | "lanes";
+
+export const LANES_MIN_ZOOM = 1;
+export const LANES_MAX_ZOOM = 16;
 
 export type SetlistState = {
   bottomTab: SetlistBottomTab;
@@ -18,8 +22,14 @@ export type SetlistState = {
   editMode: SetlistEditMode;
   /** Height the user dragged the mixer to; `null` = the layout's default. */
   mixerHeightPx: number | null;
-  /** `medium`: the mixer folded to its bar (Master, Click, Guide). */
+  /** `medium`: the mixer folded to its bar (Master). */
   mixerCollapsed: boolean;
+  /** Edit → Lanes: 1 fits the song in the width, up to 16. Not the DAW's
+   * camera: that one stays where it was. */
+  lanesZoom: number;
+  /** Edit → Lanes: horizontal scroll inside the song, in px (clamped by the
+   * time scale). */
+  lanesScrollPx: number;
 };
 
 export const INITIAL_SETLIST_STATE: SetlistState = {
@@ -28,6 +38,8 @@ export const INITIAL_SETLIST_STATE: SetlistState = {
   editMode: null,
   mixerHeightPx: null,
   mixerCollapsed: false,
+  lanesZoom: 1,
+  lanesScrollPx: 0,
 };
 
 type SetlistActions = {
@@ -36,6 +48,8 @@ type SetlistActions = {
   setEditMode: (mode: SetlistEditMode) => void;
   setMixerHeightPx: (heightPx: number | null) => void;
   setMixerCollapsed: (collapsed: boolean) => void;
+  setLanesZoom: (zoom: number) => void;
+  setLanesScrollPx: (scrollPx: number) => void;
 };
 
 /**
@@ -69,5 +83,8 @@ export const useSetlistStore = create<SetlistState & SetlistActions>()(
     setEditMode: (editMode) => set({ editMode }),
     setMixerHeightPx: (mixerHeightPx) => set({ mixerHeightPx }),
     setMixerCollapsed: (mixerCollapsed) => set({ mixerCollapsed }),
+    setLanesZoom: (lanesZoom) =>
+      set({ lanesZoom: Math.max(LANES_MIN_ZOOM, Math.min(LANES_MAX_ZOOM, lanesZoom)) }),
+    setLanesScrollPx: (lanesScrollPx) => set({ lanesScrollPx: Math.max(0, lanesScrollPx) }),
   }),
 );

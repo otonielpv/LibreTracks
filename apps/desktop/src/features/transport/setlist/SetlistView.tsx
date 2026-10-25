@@ -22,6 +22,7 @@ import {
   SetlistArrangementToolbar,
 } from "./SetlistArrangement";
 import { SongSectionEditLayer } from "./SongSectionEditLayer";
+import { SongLanes } from "./lanes/SongLanes";
 import { createSectionEditHandlers, type SectionEditDeps } from "./sectionEditHandlers";
 import { useTimelineUIStore } from "../uiStore";
 import { resolveSetlistSongId } from "./songMapModel";
@@ -80,6 +81,7 @@ function SetlistViewComponent({
   layoutClass,
   menus,
   rulerMarkers,
+  runShortcutAction,
   structureHandlers,
   clipsByRegion,
   onMoveClipToTrack,
@@ -192,6 +194,24 @@ function SetlistViewComponent({
         onAddAudioToSong={onAddAudioToSong}
       />
     ) : null;
+  const lanes =
+    shownRegion !== null ? (
+      <SongLanes
+        song={performance.song}
+        region={shownRegion}
+        tracks={tracks}
+        waveformSummaries={waveformSummaries}
+        positionSecondsRef={performance.positionSecondsRef}
+        layout={layout}
+        menus={menus}
+        mixerHandlers={mixerHandlers}
+        runShortcutAction={runShortcutAction}
+        onSeek={performance.onSeek}
+        onRulerMenuAt={sectionHandlers.openMenuAt}
+        runAction={runAction}
+        onSnapshotApplied={onSnapshotApplied}
+      />
+    ) : null;
   // Editing acts on the project selection (the toolbar's selected-song
   // handlers), so entering edit mode selects the song the view shows.
   useEffect(() => {
@@ -238,6 +258,16 @@ function SetlistViewComponent({
               content: shownRegion ? (
                 <SetlistArrangementToolbar region={shownRegion} handlers={structureHandlers} layout={layout} />
               ) : null,
+            },
+            {
+              mode: "lanes",
+              labelKey: "setlistView.edit.modes.lanes",
+              content:
+                layout === "short" ? (
+                  lanes
+                ) : (
+                  <p className="lt-setlist-sections-hint">{t("setlistView.lanes.hint")}</p>
+                ),
             },
             {
               mode: "tracks",
@@ -294,7 +324,7 @@ function SetlistViewComponent({
           onPointerDown={beginMixerResize}
         />
       ) : null}
-      {editMode === "tracks" && layout !== "short" ? trackList : editMode === "arrangement" &&
+      {editMode === "lanes" && layout !== "short" ? lanes : editMode === "tracks" && layout !== "short" ? trackList : editMode === "arrangement" &&
         layout !== "short" &&
         shownRegion ? (
         <SetlistArrangementEditor region={shownRegion} handlers={structureHandlers} layout={layout} />

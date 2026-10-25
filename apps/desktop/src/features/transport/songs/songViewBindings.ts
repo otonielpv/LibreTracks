@@ -12,6 +12,7 @@ import type {
 } from "@libretracks/shared/models";
 
 import type { CompactMixerHandlers } from "../compact/CompactMixer";
+import type { ShortcutActionId } from "../keyboard/actions";
 import type { RulerMarkerHandlers } from "../rulerMarkers/rulerMarkerHandlers";
 import type { MetronomeDeviceHandlers } from "../settings/metronomeDeviceHandlers";
 import type { StructureHandlers } from "../structure/structureHandlers";
@@ -93,6 +94,9 @@ export type SongViewBindings = {
   ) => void;
   /** The arrangement editor's handlers (structure/structureHandlers). */
   structureHandlers: StructureHandlers;
+  /** The DAW's shortcut dispatcher (split, duplicate, delete… on the
+   * project selection), for buttons that do what a shortcut does. */
+  runShortcutAction: (action: ShortcutActionId) => void;
   /** The DAW ruler's marker group actions (move, duplicate, delete, menu). */
   rulerMarkers: RulerMarkerHandlers;
   /** Moves a marker to an exact position: the same commit as dragging its
