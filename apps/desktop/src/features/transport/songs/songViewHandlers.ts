@@ -14,8 +14,10 @@ import {
   createLibraryFolder,
   importAudioFilesFromBytes,
   importAudioFilesFromPaths,
+  isMobileApp,
   isTauriApp,
   moveLibraryAsset,
+  pickLibraryFiles,
   moveSongRegion,
   playTransport,
   reorderSongRegion,
@@ -63,6 +65,9 @@ export type SongViewHandlerDeps = {
   scheduleSongJump: (regionId: string, regionName: string) => Promise<unknown>;
   toggleVamp: () => Promise<unknown>;
   markerPrimaryAction: (marker: SectionMarkerSummary) => Promise<void>;
+  /** The library's own «import audio» (system picker; on phones it also
+   * places the files at the playhead). */
+  importLibraryFromDialog: () => Promise<void>;
 };
 
 export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
@@ -159,43 +164,88 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
       );
       return;
     }
-    const dropSeconds = region.startSeconds;
     void deps.runAction(async () => {
       const nativePayloads = isTauriApp
         ? resolveNativeAudioImportPayloads(accepted)
         : null;
-      const importResult = nativePayloads
-        ? await importAudioFilesFromPaths(nativePayloads)
-        : await importAudioFilesFromBytes(
-            await Promise.all(
-              accepted.map(async (file) => ({
-                fileName: file.name,
-                bytes: new Uint8Array(await file.arrayBuffer()),
-              })),
+      await placeImportIntoSong(
+        region,
+        nativePayloads
+          ? await importAudioFilesFromPaths(nativePayloads)
+          : await importAudioFilesFromBytes(
+              await Promise.all(
+                accepted.map(async (file) => ({
+                  fileName: file.name,
+                  bytes: new Uint8Array(await file.arrayBuffer()),
+                })),
+              ),
             ),
-          );
-      const importedAssets = importResult.assets;
-      // A file the decoder cannot read no longer sinks the whole drop, so
-      // the skipped ones have to be named or they vanish silently.
-      if (importResult.skipped.length) {
-        setStatus(skippedImportsMessage(importResult.skipped, t));
-      }
-      deps.mergeLibraryAssets(importedAssets);
-      await deps.refreshLibraryState({ preserveAssets: importedAssets });
-      if (importedAssets.length === 0) return;
-      await assignAssetsToSongFolder(region.name, importedAssets);
-      deps.applyPlaybackSnapshot(
-        await createClipsWithAutoTracks(
-          importedAssets.map((asset) => ({
-            filePath: asset.filePath,
-            timelineStartSeconds: dropSeconds,
+      );
+    });
+  }
+
+  /** What an import produced, into the song: the song's library folder and
+   * one auto-track + clip per file at the song's start. */
+  async function placeImportIntoSong(
+    region: SongRegionSummary,
+    importResult: Awaited<ReturnType<typeof importAudioFilesFromPaths>>,
+  ) {
+    const deps = getDeps();
+    const { t, setStatus } = deps;
+    const dropSeconds = region.startSeconds;
+    const importedAssets = importResult.assets;
+    // A file the decoder cannot read no longer sinks the whole drop, so
+    // the skipped ones have to be named or they vanish silently.
+    if (importResult.skipped.length) {
+      setStatus(skippedImportsMessage(importResult.skipped, t));
+    }
+    deps.mergeLibraryAssets(importedAssets);
+    await deps.refreshLibraryState({ preserveAssets: importedAssets });
+    if (importedAssets.length === 0) return;
+    await assignAssetsToSongFolder(region.name, importedAssets);
+    deps.applyPlaybackSnapshot(
+      await createClipsWithAutoTracks(
+        importedAssets.map((asset) => ({
+          filePath: asset.filePath,
+          timelineStartSeconds: dropSeconds,
+        })),
+      ),
+    );
+    setStatus(
+      importedAssets.length === 1
+        ? t("transport.status.clipAdded", { name: importedAssets[0].fileName })
+        : t("transport.status.clipsAdded", { count: importedAssets.length }),
+    );
+  }
+
+  /**
+   * «Add audio…» of a song. Desktop: the library's file picker, then the same
+   * import and placement as dropping the files on the song. Phones: the
+   * library's native import, which references the originals and places the
+   * files at the playhead, so the playhead goes to the song's start first.
+   */
+  function addAudioToSong(regionId: string) {
+    const deps = getDeps();
+    const region = findRegion(regionId);
+    if (!region) return;
+    if (isMobileApp) {
+      void deps.runAction(async () => {
+        if (!deps.isPlaying()) await deps.seek(region.startSeconds);
+        await deps.importLibraryFromDialog();
+      });
+      return;
+    }
+    void deps.runAction(async () => {
+      const paths = await pickLibraryFiles();
+      if (paths.length === 0) return;
+      await placeImportIntoSong(
+        region,
+        await importAudioFilesFromPaths(
+          paths.map((sourcePath) => ({
+            sourcePath,
+            fileName: sourcePath.split(/[\\/]/).pop() ?? sourcePath,
           })),
         ),
-      );
-      setStatus(
-        importedAssets.length === 1
-          ? t("transport.status.clipAdded", { name: importedAssets[0].fileName })
-          : t("transport.status.clipsAdded", { count: importedAssets.length }),
       );
     });
   }
@@ -359,6 +409,7 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
     importSongPackageFromDialog,
     importSongPackageFromOsFile,
     playSong,
+    addAudioToSong,
     cueSong,
     seekTo,
     resizeSong,

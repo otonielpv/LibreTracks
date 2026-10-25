@@ -112,6 +112,8 @@ export type SongViewBindings = {
   onSelectedRegionTempoChange: (region: SongRegionSummary, nextBpm: number) => void;
   /** End of the timeline workspace: the cap a typed position is clamped to. */
   workspaceEndSeconds: number;
+  /** «Add audio…» of a song: the library's picker, placed in the song. */
+  onAddAudioToSong: (regionId: string) => void;
   /** Stopped: put the playhead at the song's start, without playing. */
   onCueSong: (regionId: string) => void;
   /** The DAW's own song menu (rename with library-folder sync, key,

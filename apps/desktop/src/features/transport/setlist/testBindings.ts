@@ -81,6 +81,7 @@ export function testSetlistProps(song: Partial<SongView> = {}) {
     onDeleteClip: noop,
     onPlaySong: noop,
     onCueSong: noop,
+    onAddAudioToSong: noop,
     onSongContextMenu: noop,
     onSectionContextMenu: noop,
     onCommitMarkerPosition: noop,

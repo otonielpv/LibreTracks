@@ -6284,6 +6284,7 @@ export function TransportPanelContent() {
     scheduleSongJump: scheduleRegionJumpWithOptions,
     toggleVamp: toggleTimelineVamp,
     markerPrimaryAction: handleMarkerPrimaryAction,
+    importLibraryFromDialog: handleImportLibraryFromDialog,
   };
 
   // Barra tactil de la seleccion (docs/plans/mobile-daw, paso 2). Se instancia
@@ -6547,6 +6548,7 @@ export function TransportPanelContent() {
     onDeleteClip: handleCompactDeleteClip,
     onPlaySong: songViewHandlers.playSong,
     onCueSong: songViewHandlers.cueSong,
+    onAddAudioToSong: songViewHandlers.addAudioToSong,
     onSongContextMenu: handleRegionContextMenu,
     onSectionContextMenu: handleMarkerContextMenu,
     onCommitMarkerPosition: handleMarkerMoveCommit, rulerMarkers, structureHandlers,

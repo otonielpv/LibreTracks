@@ -1265,3 +1265,127 @@ html.lt-mobile .lt-setlist-edit-button {
 .lt-setlist-arrangement-tools .lt-structure-toolbar {
   flex-wrap: wrap;
 }
+
+/* ---- Pistas y audio (paso 10) ---- */
+
+.lt-setlist-tracks {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.4rem;
+}
+
+.lt-setlist-tracks-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.lt-setlist-tracks-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lt-setlist-tracks-empty {
+  margin: 0.5rem 0;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-track-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(8rem, 1fr) auto minmax(0, 2fr);
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0.15rem 0.4rem;
+  border-left: 3px solid var(--lt-track-color);
+  border-radius: 0.3rem;
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-track-row.is-selected {
+  outline: 1px solid var(--lt-setlist-accent);
+}
+
+.lt-setlist-tracks.is-short .lt-setlist-track-row {
+  grid-template-columns: auto auto minmax(0, 1fr);
+}
+
+.lt-setlist-tracks.is-short .lt-setlist-track-clips {
+  grid-column: 1 / -1;
+}
+
+.lt-setlist-track-grip {
+  cursor: grab;
+  color: var(--lt-setlist-text-muted);
+  touch-action: none;
+}
+
+.lt-setlist-track-fold {
+  border: 0;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  cursor: pointer;
+}
+
+.lt-setlist-track-name {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.lt-setlist-track-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-track-swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--lt-track-color, #7c8a86);
+}
+
+.lt-setlist-track-kind,
+.lt-setlist-track-hidden,
+.lt-setlist-track-route {
+  font-size: 0.72rem;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-track-clips {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.lt-setlist-track-clip {
+  max-width: 14rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.3rem;
+  background: var(--lt-setlist-bg);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: grab;
+}
+
+html.lt-mobile .lt-setlist-track-row {
+  min-height: 2.75rem;
+}

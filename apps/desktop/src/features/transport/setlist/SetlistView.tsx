@@ -15,6 +15,7 @@ import { MIXER_HEIGHT_VAR, useMixerResize } from "./useMixerResize";
 import { SetlistEditButton, SetlistEditDrawer } from "./SetlistEditDrawer";
 import { SetlistSongSettings } from "./SetlistSongSettings";
 import { SetlistSectionsPanel } from "./SetlistSectionsPanel";
+import { SetlistTrackList } from "./SetlistTrackList";
 import {
   SetlistArrangementEditor,
   SetlistArrangementPicker,
@@ -79,6 +80,10 @@ function SetlistViewComponent({
   menus,
   rulerMarkers,
   structureHandlers,
+  clipsByRegion,
+  onMoveClipToTrack,
+  onDeleteClip,
+  onAddAudioToSong,
   onSetSongKey,
   onResizeSong,
   onMoveSong,
@@ -165,6 +170,29 @@ function SetlistViewComponent({
       <SongSectionEditLayer song={performance.song} region={shownRegion} handlers={sectionHandlers} />
     ) : null;
 
+  const trackList =
+    shownRegion !== null ? (
+      <SetlistTrackList
+        song={performance.song}
+        region={shownRegion}
+        menus={menus}
+        layout={layout}
+        tracks={tracks}
+        clipsByRegion={clipsByRegion}
+        audioRoutingOptions={audioRoutingOptions}
+        selectedTrackIds={selectedTrackIds}
+        onTrackSelect={onTrackSelect}
+        onTrackDragStart={onTrackDragStart}
+        onTrackContextMenu={onTrackContextMenu}
+        collapsedFolders={collapsedFolders}
+        onToggleFolder={onToggleFolder}
+        onDropOsFilesIntoSong={onDropOsFilesIntoSong}
+        onDropLibraryAssetsIntoSong={onDropLibraryAssetsIntoSong}
+        onMoveClipToTrack={onMoveClipToTrack}
+        onDeleteClip={onDeleteClip}
+        onAddAudioToSong={onAddAudioToSong}
+      />
+    ) : null;
   // Editing acts on the project selection (the toolbar's selected-song
   // handlers), so entering edit mode selects the song the view shows.
   useEffect(() => {
@@ -213,6 +241,16 @@ function SetlistViewComponent({
               ) : null,
             },
             {
+              mode: "tracks",
+              labelKey: "setlistView.edit.modes.tracks",
+              content:
+                layout === "short" ? (
+                  trackList
+                ) : (
+                  <p className="lt-setlist-sections-hint">{t("setlistView.tracks.hint")}</p>
+                ),
+            },
+            {
               mode: "sections",
               labelKey: "setlistView.edit.modes.sections",
               content: shownRegion ? (
@@ -257,6 +295,7 @@ function SetlistViewComponent({
           onPointerDown={beginMixerResize}
         />
       ) : null}
+      {editMode === "tracks" && layout !== "short" ? trackList : (
       <SetlistMixer
         song={performance.song}
         region={shownRegion}
@@ -281,6 +320,7 @@ function SetlistViewComponent({
         onMidiLearnTarget={onMidiLearnTarget}
         multiTrackMix={multiTrackMix}
       />
+      )}
     </Zone>
   );
   const overview = (

@@ -88,6 +88,7 @@ export function computeActiveSongTrackIds(
 type CompactViewProps = Omit<
   SongViewBindings,
   | "onCueSong"
+  | "onAddAudioToSong"
   | "onSongContextMenu"
   | "onSectionContextMenu"
   | "onCommitMarkerPosition"

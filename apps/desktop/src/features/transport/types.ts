@@ -187,8 +187,9 @@ export type TrackDragState = {
    * vertical track-row pipeline (translate3d on Y, drop indicator on
    * lt-track-lane-row/lt-track-header-row). "compact" routes them
    * through the horizontal mixer pipeline (translate3d on X, drop
-   * indicator on lt-compact-mixer-strip). */
-  originSurface: "daw" | "compact";
+   * indicator on lt-compact-mixer-strip). "setlist" is the Setlist view's
+   * track list: rows measured from the DOM like the mixer, on Y. */
+  originSurface: "daw" | "compact" | "setlist";
 } | null;
 
 export type TimelinePanState = {

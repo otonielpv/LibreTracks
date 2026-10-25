@@ -72,6 +72,7 @@ function setup(overrides: Partial<SongViewHandlerDeps> = {}) {
     scheduleSongJump: vi.fn(async () => undefined),
     toggleVamp: vi.fn(async () => undefined),
     markerPrimaryAction: vi.fn(async () => undefined),
+    importLibraryFromDialog: vi.fn(async () => undefined),
     ...overrides,
   };
   return { deps, handlers: createSongViewHandlers(() => deps) };

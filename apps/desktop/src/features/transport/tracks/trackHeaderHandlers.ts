@@ -215,8 +215,15 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
     const compactStrip = event.currentTarget.closest(
       ".lt-compact-mixer-strip",
     ) as HTMLDivElement | null;
-    const originSurface: "daw" | "compact" = compactStrip ? "compact" : "daw";
-    const scaleElement = compactStrip ?? headerElement ?? event.currentTarget;
+    const setlistRow = event.currentTarget.closest(
+      ".lt-setlist-track-row",
+    ) as HTMLDivElement | null;
+    const originSurface: "daw" | "compact" | "setlist" = compactStrip
+      ? "compact"
+      : setlistRow
+        ? "setlist"
+        : "daw";
+    const scaleElement = compactStrip ?? setlistRow ?? headerElement ?? event.currentTarget;
     const scaleBounds = scaleElement.getBoundingClientRect();
     trackDragRef.current = {
       trackId,
@@ -231,7 +238,9 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
       rowElement:
         originSurface === "compact"
           ? compactStrip
-          : (event.currentTarget.closest(
+          : originSurface === "setlist"
+            ? setlistRow
+            : (event.currentTarget.closest(
               ".lt-track-header-row",
             ) as HTMLDivElement | null),
       headerElement,
