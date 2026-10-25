@@ -317,6 +317,7 @@ export function PadsControls({
         options={routeOptions}
         ariaLabel={t("pads.output", { defaultValue: "Salida" })}
         onChange={(value) => onPadChange({ padOutput: value })}
+        size={layout === "panel" ? "large" : "default"}
       />
     </div>
   );

@@ -1869,7 +1869,6 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 }
 
 .lt-pads-controls.is-panel .lt-pads-select,
-.lt-pads-controls.is-panel .lt-audio-route-combobox,
 .lt-pads-controls.is-panel .lt-pads-manage-btn {
   min-height: 2.5rem;
   font-size: 0.92rem;
@@ -2023,4 +2022,291 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   color: var(--lt-setlist-text-muted);
   font-size: 0.9rem;
   text-align: center;
+}
+
+/* Salida de los pads: el combobox a tamaño de control, como el select de
+   pack (el de cabecera de pista mide 22px con letra de 10px). */
+.lt-audio-route-combobox.is-large {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.lt-audio-route-combobox.is-large .lt-audio-route-trigger {
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  border-color: rgb(87 241 219 / 0.32);
+  border-radius: 3px;
+  background: #0a0a0a;
+  font-size: 0.92rem;
+}
+
+.lt-audio-route-combobox.is-large .lt-audio-route-trigger-caret {
+  font-size: 0.85rem;
+}
+
+.lt-audio-route-list.is-large {
+  max-height: 16rem;
+}
+
+.lt-audio-route-list.is-large .lt-audio-route-option {
+  padding: 0.6rem 0.85rem;
+  font-size: 0.92rem;
+}
+
+/* ---- Arreglo, cuarta ronda (2026-10-25) ---- */
+
+/* En la consola: la paleta arriba y la tira de bloques llenando el resto,
+   con bloques grandes que se leen desde lejos. La tira sigue en una fila
+   (el reordenado es por el eje x). */
+.lt-setlist-arrangement {
+  display: flex;
+  flex-direction: column;
+  padding: 0.6rem 0.75rem;
+}
+
+.lt-setlist-arrangement .lt-structure-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.lt-setlist-arrangement .lt-structure-caption {
+  font-size: 0.85rem;
+}
+
+.lt-setlist-arrangement .lt-structure-caption strong {
+  font-size: 0.9rem;
+}
+
+.lt-setlist-arrangement .lt-structure-chips {
+  gap: 0.5rem;
+  max-height: 9rem;
+}
+
+.lt-setlist-arrangement .lt-structure-chip {
+  padding: 0.6rem 0.95rem;
+  font-size: 0.95rem;
+  border-left-width: 5px;
+  border-radius: 0.4rem;
+}
+
+.lt-setlist-arrangement .lt-structure-strip-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lt-setlist-arrangement .lt-structure-strip {
+  flex: 1 1 auto;
+  min-height: 6rem;
+  max-height: 14rem;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  border-radius: 0.5rem;
+}
+
+.lt-setlist-arrangement .lt-structure-item {
+  display: flex;
+}
+
+.lt-setlist-arrangement .lt-structure-block {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: 8.5rem;
+  padding: 0.6rem 0.9rem;
+  border-left-width: 6px;
+  border-radius: 0.45rem;
+  font-size: 1rem;
+}
+
+.lt-setlist-arrangement .lt-structure-block-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.lt-setlist-arrangement .lt-structure-block-index,
+.lt-setlist-arrangement .lt-structure-block-bars {
+  font-size: 0.85rem;
+}
+
+.lt-setlist-arrangement .lt-structure-empty {
+  margin: auto;
+  font-size: 0.95rem;
+}
+
+/* En el cajón: los arreglos como tarjetas, acciones del elegido y Aplicar
+   grande abajo del todo. */
+.lt-setlist-arrangement-tools {
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0.9rem;
+}
+
+.lt-setlist-arrangement-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.lt-setlist-arrangement-head h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-arrangement-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lt-setlist-arrangement-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.6rem;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lt-setlist-arrangement-card:hover {
+  border-color: rgb(255 255 255 / 0.22);
+}
+
+.lt-setlist-arrangement-card.is-selected {
+  border-color: var(--lt-setlist-accent);
+  box-shadow: inset 0 0 0 1px var(--lt-setlist-accent);
+}
+
+.lt-setlist-arrangement-card:focus-visible {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: 2px;
+}
+
+.lt-setlist-arrangement-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lt-setlist-arrangement-card-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.lt-setlist-arrangement-card-badge {
+  flex: 0 0 auto;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgb(87 241 219 / 0.16);
+  color: #57f1db;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lt-setlist-arrangement-sequence {
+  display: flex;
+  gap: 2px;
+  height: 0.7rem;
+  overflow: hidden;
+  border-radius: 3px;
+}
+
+.lt-setlist-arrangement-segment {
+  flex: 1 1 0;
+  min-width: 3px;
+}
+
+.lt-setlist-arrangement-card-meta {
+  font-size: 0.8rem;
+  color: var(--lt-setlist-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-setlist-arrangement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.lt-setlist-arrangement-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.25rem;
+  padding: 0 0.8rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.45rem;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.lt-setlist-arrangement-action .material-symbols-outlined {
+  font-size: 1.15rem;
+}
+
+.lt-setlist-arrangement-action:hover:not(:disabled) {
+  border-color: rgb(255 255 255 / 0.25);
+}
+
+.lt-setlist-arrangement-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.lt-setlist-arrangement-action.is-danger:not(:disabled) {
+  color: #ff9b8f;
+}
+
+.lt-setlist-arrangement-footer {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+  padding-top: 0.6rem;
+  background: var(--lt-setlist-surface);
+}
+
+.lt-setlist-arrangement-footer .lt-structure-dirty {
+  text-align: center;
+}
+
+.lt-setlist-arrangement-footer button.is-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 3rem;
+  font-size: 1rem;
+  font-weight: 700;
 }

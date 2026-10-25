@@ -2624,6 +2624,10 @@ const en = {
       empty: "This song has no clips yet.",
       hint: "The song's lanes take the mixer's place: drag a clip to move it, its edges to trim it.",
     },
+    arrangement: {
+      list: "Arrangements",
+      sectionsCount: "{{count}} sections",
+    },
     tabs: {
       label: "Setlist view sections",
       song: "Song",

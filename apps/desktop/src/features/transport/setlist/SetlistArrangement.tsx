@@ -1,14 +1,28 @@
 import { memo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import type { SongRegionSummary } from "@libretracks/shared/models";
+import type {
+  ArrangementBlockSummary,
+  SongRegionSummary,
+  StructureSectionSummary,
+} from "@libretracks/shared/models";
 
-import { ArrangementSelect } from "../structure/ArrangementSelect";
 import { SongStructureEditor } from "../structure/SongStructureEditor";
 import { StructureCapture, StructureWarnings } from "../structure/StructureSections";
-import { closeStructureEditor, openStructureEditor } from "../structure/structureEditor";
+import {
+  closeStructureEditor,
+  formatBars,
+  openStructureEditor,
+  sectionColor,
+  sectionLabel,
+  selectionOf,
+} from "../structure/structureEditor";
 import type { StructureHandlers } from "../structure/structureHandlers";
 import { ORIGINAL_SELECTION, useStructureStore } from "../structure/structureStore";
-import { confirmDiscardChanges, useArrangementActions } from "../structure/useArrangementActions";
+import {
+  confirmDiscardChanges,
+  useArrangementActions,
+  type ArrangementActions,
+} from "../structure/useArrangementActions";
 import { setEditLeaveGuard } from "./setlistStore";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 
@@ -102,6 +116,98 @@ function SetlistArrangementEditorComponent({ region, handlers, layout }: Setlist
 
 export const SetlistArrangementEditor = memo(SetlistArrangementEditorComponent);
 
+/** The song's sections in an arrangement's order, as coloured segments as
+ * long as their bars: the card's picture of the arrangement. */
+function ArrangementSequence({
+  blocks,
+  sections,
+}: {
+  blocks: ArrangementBlockSummary[];
+  sections: StructureSectionSummary[];
+}) {
+  const { t } = useTranslation();
+  const byId = new Map(sections.map((section) => [section.markerId, section]));
+  return (
+    <span className="lt-setlist-arrangement-sequence" aria-hidden="true">
+      {blocks.map((block) => {
+        const section = byId.get(block.sectionMarkerId);
+        if (!section) return null;
+        return (
+          <span
+            key={block.id}
+            className="lt-setlist-arrangement-segment"
+            style={{ flexGrow: Math.max(section.bars, 1), background: sectionColor(section) }}
+            title={sectionLabel(section, t)}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
+/**
+ * The saved arrangements as cards (the original first), in place of the
+ * panel's select: each shows its order, length and whether it is the one on
+ * the timeline. Picking one loads it as the working copy, like the select.
+ */
+function ArrangementCards({ actions }: { actions: ArrangementActions }) {
+  const { t, structure, draft, appliedId } = actions;
+  if (!structure || !draft) return null;
+  const selected = selectionOf(draft);
+  const barsById = new Map(structure.sections.map((section) => [section.markerId, section.bars]));
+  const barsOf = (blocks: ArrangementBlockSummary[]) =>
+    blocks.reduce((total, block) => total + (barsById.get(block.sectionMarkerId) ?? 0), 0);
+  const original = structure.sections.map((section) => ({
+    id: section.markerId,
+    sectionMarkerId: section.markerId,
+  }));
+  const cards = [
+    { id: ORIGINAL_SELECTION, name: t("transport.structure.original"), blocks: original, applied: appliedId === null },
+    // A brand-new arrangement that was never saved: only the working copy.
+    ...(draft.arrangementId === null && !draft.isOriginal
+      ? [{ id: "", name: draft.name, blocks: draft.blocks, applied: false }]
+      : []),
+    ...structure.arrangements.map((arrangement) => ({
+      id: arrangement.id,
+      name: arrangement.name,
+      blocks: arrangement.blocks,
+      applied: arrangement.id === appliedId,
+    })),
+  ];
+  return (
+    <ul className="lt-setlist-arrangement-cards" aria-label={t("transport.structure.selector")}>
+      {cards.map((card) => {
+        const isSelected = card.id === selected;
+        // The selected card shows the working copy, unapplied changes included.
+        const blocks = isSelected ? draft.blocks : card.blocks;
+        return (
+          <li key={card.id || "draft"}>
+            <button
+              type="button"
+              className={`lt-setlist-arrangement-card${isSelected ? " is-selected" : ""}${card.applied ? " is-applied" : ""}`}
+              aria-pressed={isSelected}
+              onClick={() => void actions.switchTo(card.id)}
+            >
+              <span className="lt-setlist-arrangement-card-head">
+                <span className="lt-setlist-arrangement-card-name">{card.name}</span>
+                {card.applied ? (
+                  <span className="lt-setlist-arrangement-card-badge">{t("transport.structure.appliedBadge")}</span>
+                ) : null}
+              </span>
+              <ArrangementSequence blocks={blocks} sections={structure.sections} />
+              <span className="lt-setlist-arrangement-card-meta">
+                {t("setlistView.arrangement.sectionsCount", { count: blocks.length })}
+                {" · "}
+                {formatBars(barsOf(blocks), t)}
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /**
  * Edit → Arrangement in the drawer: the panel's own toolbar (picker, new,
  * rename, delete, recapture) and Apply, all from useArrangementActions. In
@@ -119,22 +225,39 @@ function SetlistArrangementToolbarComponent({ region, handlers, layout }: Setlis
         <StructureCapture regionId={regionId} handlers={handlers} />
       ) : draft ? (
         <>
-          <div className="lt-structure-toolbar">
-            <ArrangementSelect actions={actions} />
-            <button type="button" onClick={() => void actions.createNew()}>
+          <header className="lt-setlist-arrangement-head">
+            <h3>{t("setlistView.arrangement.list")}</h3>
+            <button type="button" className="lt-setlist-arrangement-action" onClick={() => void actions.createNew()}>
+              <span className="material-symbols-outlined" aria-hidden="true">add</span>
               {t("transport.structure.newArrangement")}
             </button>
-            <button type="button" disabled={draft.isOriginal} onClick={() => void actions.rename()}>
+          </header>
+          <ArrangementCards actions={actions} />
+          <div className="lt-setlist-arrangement-actions">
+            <button
+              type="button"
+              className="lt-setlist-arrangement-action"
+              disabled={draft.isOriginal}
+              onClick={() => void actions.rename()}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">edit</span>
               {t("transport.structure.rename")}
             </button>
             <button
               type="button"
+              className="lt-setlist-arrangement-action is-danger"
               disabled={!draft.arrangementId || draft.isOriginal}
               onClick={() => void actions.remove()}
             >
+              <span className="material-symbols-outlined" aria-hidden="true">delete</span>
               {t("transport.structure.delete")}
             </button>
-            <button type="button" onClick={() => void actions.recaptureOriginal()}>
+            <button
+              type="button"
+              className="lt-setlist-arrangement-action"
+              onClick={() => void actions.recaptureOriginal()}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">restart_alt</span>
               {t("transport.structure.recapture")}
             </button>
           </div>
@@ -147,7 +270,7 @@ function SetlistArrangementToolbarComponent({ region, handlers, layout }: Setlis
               handleOnly
             />
           ) : null}
-          <footer className="lt-structure-footer">
+          <footer className="lt-structure-footer lt-setlist-arrangement-footer">
             {dirty ? (
               <span className="lt-structure-dirty">{t("transport.structure.unappliedChanges")}</span>
             ) : null}
@@ -157,6 +280,7 @@ function SetlistArrangementToolbarComponent({ region, handlers, layout }: Setlis
               disabled={draft.blocks.length === 0 || (draftIsApplied && !dirty)}
               onClick={() => void actions.apply()}
             >
+              <span className="material-symbols-outlined" aria-hidden="true">check</span>
               {t("transport.structure.apply")}
             </button>
           </footer>

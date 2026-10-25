@@ -2655,6 +2655,10 @@ const es = {
       empty: "Esta canción aún no tiene clips.",
       hint: "Los carriles de la canción ocupan el sitio del mezclador: arrastra un clip para moverlo, sus bordes para recortarlo.",
     },
+    arrangement: {
+      list: "Arreglos",
+      sectionsCount: "{{count}} secciones",
+    },
     tabs: {
       label: "Secciones de la vista Setlist",
       song: "Canción",

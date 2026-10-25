@@ -154,9 +154,7 @@ describe("Edit → Arrangement", () => {
       await requestEditMode("arrangement");
     });
     await act(async () => {
-      fireEvent.change(screen.getAllByRole("combobox", { name: /transport.structure.selector/ }).at(-1)!, {
-        target: { value: "corto" },
-      });
+      fireEvent.click(screen.getByRole("button", { name: /Corto/ }));
     });
     expect(useStructureStore.getState().draft?.arrangementId).toBe("corto");
     const draft = useStructureStore.getState().draft!;
@@ -169,5 +167,44 @@ describe("Edit → Arrangement", () => {
       expect.objectContaining({ id: "corto" }),
       true,
     );
+  });
+
+  it("the drawer lists the arrangements as cards: original first, the applied one marked", async () => {
+    const { container } = render(<SetlistView {...props()} layoutClass="wide" />);
+    await act(async () => {
+      await requestEditMode("arrangement");
+    });
+    const cards = Array.from(container.querySelectorAll<HTMLElement>(".lt-setlist-arrangement-card"));
+    expect(cards.map((card) => card.querySelector(".lt-setlist-arrangement-card-name")?.textContent)).toEqual([
+      "transport.structure.original",
+      "Corto",
+    ]);
+    // Nothing applied: the original is the one on the timeline.
+    expect(cards[0].querySelector(".lt-setlist-arrangement-card-badge")).not.toBeNull();
+    expect(cards[1].querySelector(".lt-setlist-arrangement-card-badge")).toBeNull();
+    // The working copy starts on the original.
+    expect(cards[0].getAttribute("aria-pressed")).toBe("true");
+    // Each card draws its order: the original has both sections, Corto only Coro.
+    expect(cards[0].querySelectorAll(".lt-setlist-arrangement-segment")).toHaveLength(2);
+    expect(cards[1].querySelectorAll(".lt-setlist-arrangement-segment")).toHaveLength(1);
+    // The panel's select is not repeated in the drawer.
+    expect(container.querySelector(".lt-setlist-arrangement-tools select")).toBeNull();
+  });
+
+  it("the selected card shows the working copy, unapplied changes included", async () => {
+    const { container } = render(<SetlistView {...props()} layoutClass="wide" />);
+    await act(async () => {
+      await requestEditMode("arrangement");
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Corto/ }));
+    });
+    const draft = useStructureStore.getState().draft!;
+    act(() => updateDraft((current) => duplicateBlock(current, draft.blocks[0].id)));
+    const corto = Array.from(container.querySelectorAll<HTMLElement>(".lt-setlist-arrangement-card")).find(
+      (card) => card.textContent?.includes("Corto"),
+    )!;
+    expect(corto.getAttribute("aria-pressed")).toBe("true");
+    expect(corto.querySelectorAll(".lt-setlist-arrangement-segment")).toHaveLength(2);
   });
 });
