@@ -130,6 +130,71 @@ pub enum AutomationAction {
         )]
         fade_out_seconds: Option<f64>,
     },
+    /// Change the click's settings from a cue. Every field is optional: `None`
+    /// leaves that setting as it is, so a cue can just switch the click off
+    /// without also pinning its sounds. Volumes and pitches are deliberately
+    /// not here — those are mixed by ear, not scripted per song.
+    SetMetronome {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        enabled: Option<bool>,
+        #[serde(
+            rename = "accentEnabled",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        accent_enabled: Option<bool>,
+        /// Index into the metronome sound presets.
+        #[serde(
+            rename = "accentPreset",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        accent_preset: Option<i32>,
+        #[serde(
+            rename = "beatPreset",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        beat_preset: Option<i32>,
+        /// 1 = off, 2 = eighths, 3 = triplets, 4 = sixteenths.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subdivision: Option<i32>,
+        #[serde(
+            rename = "subdivisionPreset",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        subdivision_preset: Option<i32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output: Option<String>,
+    },
+    /// Change the voice guide's settings from a cue. Same `None` = unchanged
+    /// rule as [`AutomationAction::SetMetronome`]; the volume stays out.
+    SetVoiceGuide {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        enabled: Option<bool>,
+        /// Voice bank language ("es", "en").
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        language: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output: Option<String>,
+        #[serde(rename = "leadBars", default, skip_serializing_if = "Option::is_none")]
+        lead_bars: Option<i32>,
+        #[serde(
+            rename = "countInEnabled",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        count_in_enabled: Option<bool>,
+        /// The global count style. A song that overrides it
+        /// (`SongRegion.voice_guide_count_style`) still wins.
+        #[serde(
+            rename = "countStyle",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        count_style: Option<crate::VoiceGuideCountStyle>,
+    },
     Wait {
         #[serde(rename = "durationSeconds")]
         duration_seconds: f64,

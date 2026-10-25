@@ -3860,6 +3860,13 @@ pub(super) fn automation_target_source_seconds(
     }
 }
 
+/// Sounds of `lt::SoundPreset` (and `METRONOME_SOUND_PRESETS` in the shared
+/// models): sine … clickTrack. A cue naming one past the end would play nothing.
+const METRONOME_SOUND_PRESET_COUNT: i32 = 8;
+
+/// Voice banks shipped under `resources/voices`.
+const VOICE_GUIDE_LANGUAGES: [&str; 2] = ["es", "en"];
+
 pub(super) fn validate_automation_cue(
     song: &Song,
     automation: &AutomationDocument,
@@ -4009,6 +4016,87 @@ pub(super) fn validate_automation_cue(
                             )));
                         }
                     }
+                }
+            }
+            AutomationAction::SetMetronome {
+                enabled,
+                accent_enabled,
+                accent_preset,
+                beat_preset,
+                subdivision,
+                subdivision_preset,
+                output,
+            } => {
+                if enabled.is_none()
+                    && accent_enabled.is_none()
+                    && accent_preset.is_none()
+                    && beat_preset.is_none()
+                    && subdivision.is_none()
+                    && subdivision_preset.is_none()
+                    && output.is_none()
+                {
+                    return Err(DesktopError::AudioCommand(
+                        "automation click action must change at least one setting".into(),
+                    ));
+                }
+                for (preset, label) in [
+                    (accent_preset, "accent"),
+                    (beat_preset, "beat"),
+                    (subdivision_preset, "subdivision"),
+                ] {
+                    if preset.is_some_and(|p| !(0..METRONOME_SOUND_PRESET_COUNT).contains(&p)) {
+                        return Err(DesktopError::AudioCommand(format!(
+                            "automation click {label} sound is not a known preset"
+                        )));
+                    }
+                }
+                if subdivision.is_some_and(|s| !(1..=4).contains(&s)) {
+                    return Err(DesktopError::AudioCommand(
+                        "automation click subdivision must be between 1 and 4".into(),
+                    ));
+                }
+                if output.as_ref().is_some_and(|o| o.trim().is_empty()) {
+                    return Err(DesktopError::AudioCommand(
+                        "automation click output must not be empty".into(),
+                    ));
+                }
+            }
+            AutomationAction::SetVoiceGuide {
+                enabled,
+                language,
+                output,
+                lead_bars,
+                count_in_enabled,
+                count_style,
+            } => {
+                if enabled.is_none()
+                    && language.is_none()
+                    && output.is_none()
+                    && lead_bars.is_none()
+                    && count_in_enabled.is_none()
+                    && count_style.is_none()
+                {
+                    return Err(DesktopError::AudioCommand(
+                        "automation voice guide action must change at least one setting".into(),
+                    ));
+                }
+                if language
+                    .as_deref()
+                    .is_some_and(|lang| !VOICE_GUIDE_LANGUAGES.contains(&lang))
+                {
+                    return Err(DesktopError::AudioCommand(
+                        "automation voice guide language is not available".into(),
+                    ));
+                }
+                if lead_bars.is_some_and(|bars| !(1..=2).contains(&bars)) {
+                    return Err(DesktopError::AudioCommand(
+                        "automation voice guide lead-in must be 1 or 2 bars".into(),
+                    ));
+                }
+                if output.as_ref().is_some_and(|o| o.trim().is_empty()) {
+                    return Err(DesktopError::AudioCommand(
+                        "automation voice guide output must not be empty".into(),
+                    ));
                 }
             }
             AutomationAction::Wait { duration_seconds } => {

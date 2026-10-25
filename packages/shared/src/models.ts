@@ -493,6 +493,31 @@ export type AutomationActionSummary =
       /** Soft-exit seconds when this cue turns the pad off / swaps key (0/undefined = fast). */
       fadeOutSeconds?: number | null;
     }
+  /** Click settings a cue changes. Every field is optional: absent = left as
+   * it is. Volumes and pitches are not automatable. */
+  | {
+      type: "setMetronome";
+      enabled?: boolean | null;
+      accentEnabled?: boolean | null;
+      /** Index into METRONOME_SOUND_PRESETS. */
+      accentPreset?: number | null;
+      beatPreset?: number | null;
+      /** One of METRONOME_SUBDIVISIONS (1 = off). */
+      subdivision?: number | null;
+      subdivisionPreset?: number | null;
+      output?: string | null;
+    }
+  /** Voice-guide settings a cue changes; same absent = unchanged rule. A
+   * song's own count style still overrides `countStyle`. */
+  | {
+      type: "setVoiceGuide";
+      enabled?: boolean | null;
+      language?: string | null;
+      output?: string | null;
+      leadBars?: number | null;
+      countInEnabled?: boolean | null;
+      countStyle?: VoiceGuideCountStyle | null;
+    }
   | { type: "wait"; durationSeconds: number };
 
 export type AutomationCueSummary = {

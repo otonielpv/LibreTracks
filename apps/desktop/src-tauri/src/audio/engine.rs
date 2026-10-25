@@ -1627,6 +1627,70 @@ impl AudioController {
         })
     }
 
+    /// Apply a click change from an automation cue. `edit` patches a copy of
+    /// the current settings; the full config then goes to the engine live, as
+    /// the popover does, so a cue never reopens the device mid-song.
+    pub fn set_metronome_automation_realtime(
+        &self,
+        edit: impl FnOnce(&mut AppSettings),
+    ) -> Result<(), DesktopError> {
+        let previous = self.current_settings()?;
+        let mut settings = previous.clone();
+        edit(&mut settings);
+        if settings == previous {
+            return Ok(());
+        }
+        self.set_metronome_sound_realtime(&settings)?;
+        self.commit_automation_settings(settings)
+    }
+
+    /// Apply a voice-guide change from an automation cue. Same contract as
+    /// [`Self::set_metronome_automation_realtime`]; a new language (or a guide
+    /// switched on, whose bank may never have been decoded) loads its clips
+    /// before the config is pushed, so the first announcement already speaks it.
+    pub fn set_voice_guide_automation_realtime(
+        &self,
+        edit: impl FnOnce(&mut AppSettings),
+    ) -> Result<(), DesktopError> {
+        let previous = self.current_settings()?;
+        let mut settings = previous.clone();
+        edit(&mut settings);
+        if settings == previous {
+            return Ok(());
+        }
+        let needs_bank = settings.voice_guide_language != previous.voice_guide_language
+            || (settings.voice_guide_enabled && !previous.voice_guide_enabled);
+        if needs_bank {
+            let voices_dir = self.app_handle.lock().ok().and_then(|slot| {
+                slot.as_ref()
+                    .and_then(crate::commands::settings::voice_guide_voices_dir)
+            });
+            if let Some(voices_dir) = voices_dir {
+                self.load_voice_guide_bank(&voices_dir, &settings.voice_guide_language)?;
+            }
+        }
+        self.set_voice_guide_config_realtime(&settings)?;
+        self.commit_automation_settings(settings)
+    }
+
+    /// Settings a cue changed behind the UI's back: keep the engine's copy and
+    /// the app's settings store in step (a MIDI "toggle click" right after must
+    /// toggle from the cue's state) and tell every UI. Not written to disk — a
+    /// cue shapes the show, the user's saved defaults stay theirs.
+    fn commit_automation_settings(&self, settings: AppSettings) -> Result<(), DesktopError> {
+        self.replace_settings(settings.clone())?;
+        if let Ok(slot) = self.app_handle.lock() {
+            if let Some(store) = slot
+                .as_ref()
+                .and_then(|app| app.try_state::<crate::infra::settings::AppSettingsStore>())
+            {
+                let _ = store.set(settings.clone());
+            }
+        }
+        self.emit_settings_updated(&settings);
+        Ok(())
+    }
+
     /// Push the ambient-pad config (enabled/volume/route/key/pad_id) to the
     /// engine live, without reopening the device. Mirrors the metronome path.
     pub fn set_pad_config_realtime(&self, settings: &AppSettings) -> Result<(), DesktopError> {

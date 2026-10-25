@@ -263,6 +263,36 @@ pub enum AutomationActionSummary {
         #[serde(rename = "fadeOutSeconds", skip_serializing_if = "Option::is_none")]
         fade_out_seconds: Option<f64>,
     },
+    SetMetronome {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        enabled: Option<bool>,
+        #[serde(rename = "accentEnabled", skip_serializing_if = "Option::is_none")]
+        accent_enabled: Option<bool>,
+        #[serde(rename = "accentPreset", skip_serializing_if = "Option::is_none")]
+        accent_preset: Option<i32>,
+        #[serde(rename = "beatPreset", skip_serializing_if = "Option::is_none")]
+        beat_preset: Option<i32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        subdivision: Option<i32>,
+        #[serde(rename = "subdivisionPreset", skip_serializing_if = "Option::is_none")]
+        subdivision_preset: Option<i32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        output: Option<String>,
+    },
+    SetVoiceGuide {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        enabled: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        language: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        output: Option<String>,
+        #[serde(rename = "leadBars", skip_serializing_if = "Option::is_none")]
+        lead_bars: Option<i32>,
+        #[serde(rename = "countInEnabled", skip_serializing_if = "Option::is_none")]
+        count_in_enabled: Option<bool>,
+        #[serde(rename = "countStyle", skip_serializing_if = "Option::is_none")]
+        count_style: Option<libretracks_core::VoiceGuideCountStyle>,
+    },
     Wait {
         #[serde(rename = "durationSeconds")]
         duration_seconds: f64,
@@ -961,6 +991,38 @@ pub(crate) fn automation_action_to_summary(
             output: output.clone(),
             fade_in_seconds: *fade_in_seconds,
             fade_out_seconds: *fade_out_seconds,
+        },
+        AutomationAction::SetMetronome {
+            enabled,
+            accent_enabled,
+            accent_preset,
+            beat_preset,
+            subdivision,
+            subdivision_preset,
+            output,
+        } => AutomationActionSummary::SetMetronome {
+            enabled: *enabled,
+            accent_enabled: *accent_enabled,
+            accent_preset: *accent_preset,
+            beat_preset: *beat_preset,
+            subdivision: *subdivision,
+            subdivision_preset: *subdivision_preset,
+            output: output.clone(),
+        },
+        AutomationAction::SetVoiceGuide {
+            enabled,
+            language,
+            output,
+            lead_bars,
+            count_in_enabled,
+            count_style,
+        } => AutomationActionSummary::SetVoiceGuide {
+            enabled: *enabled,
+            language: language.clone(),
+            output: output.clone(),
+            lead_bars: *lead_bars,
+            count_in_enabled: *count_in_enabled,
+            count_style: *count_style,
         },
         AutomationAction::Wait { duration_seconds } => AutomationActionSummary::Wait {
             duration_seconds: *duration_seconds,

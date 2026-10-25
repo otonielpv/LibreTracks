@@ -24,6 +24,12 @@ import {
   type TrackSongGroup,
 } from "./trackSongGroups";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import {
+  MetronomeActionEditor,
+  VoiceGuideActionEditor,
+  isValidMetronomeAction,
+  isValidVoiceGuideAction,
+} from "./ClickGuideActionEditors";
 
 /**
  * What the modal is operating on. `cueId`/`name` are present when editing an
@@ -59,6 +65,8 @@ const ACTION_LABEL_KEYS: Record<AutomationActionSummary["type"], string> = {
   setTrackMix: "transport.automation.actionMix",
   applyScene: "transport.automation.actionScene",
   setPad: "transport.automation.actionPad",
+  setMetronome: "transport.automation.actionMetronome",
+  setVoiceGuide: "transport.automation.actionVoiceGuide",
   wait: "transport.automation.actionWait",
 };
 
@@ -125,6 +133,13 @@ function makeAction(
         volume: appSettings.padVolume,
         output: appSettings.padOutput,
       };
+    // Seeded with the switch flipped from how it is now: the usual cue is
+    // "click off for the intro" / "guide on from here", and the rest stays
+    // "unchanged" until the user picks it.
+    case "setMetronome":
+      return { type: "setMetronome", enabled: !appSettings.metronomeEnabled };
+    case "setVoiceGuide":
+      return { type: "setVoiceGuide", enabled: !appSettings.voiceGuideEnabled };
     case "wait":
       return { type: "wait", durationSeconds: 1 };
   }
@@ -337,6 +352,8 @@ export function AutomationCueModal({
                   "setTrackMix",
                   "applyScene",
                   "setPad",
+                  "setMetronome",
+                  "setVoiceGuide",
                   "wait",
                 ] as AutomationActionSummary["type"][]
               ).map((type) => (
@@ -436,6 +453,10 @@ function validateActions(actions: AutomationActionSummary[]): boolean {
           Number.isInteger(action.padKey) && action.padKey >= 0 && action.padKey <= 11 &&
           Number.isFinite(action.volume) && action.volume >= 0 && action.volume <= 10 &&
           action.output.trim() !== "";
+      case "setMetronome":
+        return isValidMetronomeAction(action);
+      case "setVoiceGuide":
+        return isValidVoiceGuideAction(action);
       case "wait":
         return Number.isFinite(action.durationSeconds) &&
           action.durationSeconds >= 0;
@@ -810,6 +831,28 @@ function ActionEditor({
           onChange={onChange}
         />
       </div>
+    );
+  }
+
+  if (action.type === "setMetronome") {
+    return (
+      <MetronomeActionEditor
+        action={action}
+        routeOptions={padRouteOptions}
+        t={t}
+        onChange={onChange}
+      />
+    );
+  }
+
+  if (action.type === "setVoiceGuide") {
+    return (
+      <VoiceGuideActionEditor
+        action={action}
+        routeOptions={padRouteOptions}
+        t={t}
+        onChange={onChange}
+      />
     );
   }
 

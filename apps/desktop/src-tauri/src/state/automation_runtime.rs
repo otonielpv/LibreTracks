@@ -695,6 +695,68 @@ impl DesktopSession {
                     fade_out_seconds.unwrap_or(0.0),
                 )?;
             }
+            AutomationAction::SetMetronome {
+                enabled,
+                accent_enabled,
+                accent_preset,
+                beat_preset,
+                subdivision,
+                subdivision_preset,
+                output,
+            } => {
+                audio.set_metronome_automation_realtime(|settings| {
+                    if let Some(enabled) = enabled {
+                        settings.metronome_enabled = *enabled;
+                    }
+                    if let Some(accent_enabled) = accent_enabled {
+                        settings.metronome_accent_enabled = *accent_enabled;
+                    }
+                    if let Some(preset) = accent_preset {
+                        settings.metronome_accent_preset = *preset;
+                    }
+                    if let Some(preset) = beat_preset {
+                        settings.metronome_beat_preset = *preset;
+                    }
+                    if let Some(subdivision) = subdivision {
+                        settings.metronome_subdivision = *subdivision;
+                    }
+                    if let Some(preset) = subdivision_preset {
+                        settings.metronome_subdivision_preset = *preset;
+                    }
+                    if let Some(output) = output {
+                        settings.metronome_output = output.clone();
+                    }
+                })?;
+            }
+            AutomationAction::SetVoiceGuide {
+                enabled,
+                language,
+                output,
+                lead_bars,
+                count_in_enabled,
+                count_style,
+            } => {
+                audio.set_voice_guide_automation_realtime(|settings| {
+                    if let Some(enabled) = enabled {
+                        settings.voice_guide_enabled = *enabled;
+                    }
+                    if let Some(language) = language {
+                        settings.voice_guide_language = language.clone();
+                    }
+                    if let Some(output) = output {
+                        settings.voice_guide_output = output.clone();
+                    }
+                    if let Some(lead_bars) = lead_bars {
+                        settings.voice_guide_lead_bars = *lead_bars;
+                    }
+                    if let Some(count_in_enabled) = count_in_enabled {
+                        settings.voice_guide_count_in_enabled = *count_in_enabled;
+                    }
+                    if let Some(count_style) = count_style {
+                        settings.voice_guide_count_style = *count_style;
+                    }
+                })?;
+            }
             // Jump and Wait are handled by the scheduler/executor, not here.
             AutomationAction::Jump { .. } | AutomationAction::Wait { .. } => {}
         }

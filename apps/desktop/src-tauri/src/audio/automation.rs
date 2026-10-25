@@ -374,6 +374,47 @@ mod tests {
     }
 
     #[test]
+    fn click_and_guide_actions_keep_only_the_fields_they_change() {
+        let cue: AutomationCue = serde_json::from_str(
+            r#"{ "id":"c","name":"n","atSeconds":1.0,"enabled":true,"actions":[
+                 { "type":"setMetronome","enabled":false,"accentPreset":2,"subdivision":null },
+                 { "type":"setVoiceGuide","language":"en","countStyle":"halfThenFull" }
+               ] }"#,
+        )
+        .expect("parses click and guide actions");
+        assert_eq!(
+            cue.actions[0],
+            AutomationAction::SetMetronome {
+                enabled: Some(false),
+                accent_enabled: None,
+                accent_preset: Some(2),
+                beat_preset: None,
+                subdivision: None,
+                subdivision_preset: None,
+                output: None,
+            }
+        );
+        assert_eq!(
+            cue.actions[1],
+            AutomationAction::SetVoiceGuide {
+                enabled: None,
+                language: Some("en".into()),
+                output: None,
+                lead_bars: None,
+                count_in_enabled: None,
+                count_style: Some(libretracks_core::VoiceGuideCountStyle::HalfThenFull),
+            }
+        );
+
+        // Unchanged settings are left out of the file, not written as null.
+        let json = serde_json::to_string(&cue).unwrap();
+        assert!(json.contains("\"accentPreset\":2"));
+        assert!(json.contains("\"countStyle\":\"halfThenFull\""));
+        assert!(!json.contains("beatPreset"));
+        assert!(!json.contains("null"));
+    }
+
+    #[test]
     fn missing_automation_file_loads_empty_document() {
         let dir = tempfile::tempdir().expect("temp dir");
         let loaded = load_automation(dir.path()).expect("load missing automation");

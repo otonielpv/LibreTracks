@@ -1,6 +1,9 @@
 import type { AutomationCueSummary, SongView } from "../desktopApi";
 import { formatGainDb } from "@libretracks/shared/faderScale";
+import { METRONOME_SOUND_PRESETS } from "@libretracks/shared/models";
 import { trackDisplayName } from "../panels/trackSongGroups";
+import { VOICE_GUIDE_LANGUAGE_OPTIONS } from "../panels/ClickGuideActionEditors";
+import { voiceGuideCountStyleLabel } from "../songs/songCountStyle";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -32,6 +35,13 @@ export function describeAutomationCue(
     }
     return `${jumpTarget.seconds.toFixed(2)}s`;
   };
+
+  const onOff = (on: boolean) =>
+    t(on ? "transport.automation.cueOn" : "transport.automation.cueOff");
+  const field = (labelKey: string, value: string) =>
+    `${t(`transport.settingsModal.${labelKey}`)}: ${value}`;
+  const joinChanges = (changes: Array<string | null>) =>
+    changes.filter((change): change is string => change !== null).join(" · ");
 
   const lines = (cue.actions ?? []).map((action) => {
     switch (action.type) {
@@ -81,6 +91,58 @@ export function describeAutomationCue(
           volume: formatGainDb(action.volume),
           output: action.output,
         });
+      case "setMetronome": {
+        const preset = (index: number) =>
+          t(`transport.settingsModal.metronomePreset.${METRONOME_SOUND_PRESETS[index] ?? ""}`, {
+            defaultValue: METRONOME_SOUND_PRESETS[index] ?? String(index),
+          });
+        const changes = [
+          action.enabled != null ? onOff(action.enabled) : null,
+          action.accentEnabled != null
+            ? field("metronomeAccentEnabled", onOff(action.accentEnabled))
+            : null,
+          action.accentPreset != null
+            ? field("metronomeAccentSound", preset(action.accentPreset))
+            : null,
+          action.beatPreset != null
+            ? field("metronomeBeatSound", preset(action.beatPreset))
+            : null,
+          action.subdivision != null
+            ? field(
+                "metronomeSubdivision",
+                t(`transport.settingsModal.metronomeSubdivisionOption.${action.subdivision}`, {
+                  defaultValue: action.subdivision === 1 ? "Off" : `1/${action.subdivision}`,
+                }),
+              )
+            : null,
+          action.subdivisionPreset != null
+            ? field("metronomeSubdivisionSound", preset(action.subdivisionPreset))
+            : null,
+          action.output != null ? field("metronomeOutput", action.output) : null,
+        ];
+        return t("transport.automation.cueMetronome", { changes: joinChanges(changes) });
+      }
+      case "setVoiceGuide": {
+        const changes = [
+          action.enabled != null ? onOff(action.enabled) : null,
+          action.language != null
+            ? field(
+                "voiceGuideLanguage",
+                VOICE_GUIDE_LANGUAGE_OPTIONS.find((o) => o.value === action.language)?.label ??
+                  action.language,
+              )
+            : null,
+          action.countInEnabled != null
+            ? `${t("transport.automation.voiceGuideCountIn")}: ${onOff(action.countInEnabled)}`
+            : null,
+          action.countStyle != null
+            ? field("voiceGuideCountStyle", voiceGuideCountStyleLabel(t, action.countStyle))
+            : null,
+          action.leadBars != null ? field("voiceGuideLeadBars", String(action.leadBars)) : null,
+          action.output != null ? field("voiceGuideOutput", action.output) : null,
+        ];
+        return t("transport.automation.cueVoiceGuide", { changes: joinChanges(changes) });
+      }
       case "wait":
         return t("transport.automation.cueWait", {
           seconds: action.durationSeconds,

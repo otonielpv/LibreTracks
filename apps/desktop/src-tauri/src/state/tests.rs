@@ -6407,3 +6407,159 @@ fn resizing_a_song_keeps_its_key_changes_where_they_sound() {
     let region = song.regions.iter().find(|r| r.id == "region_3").unwrap();
     assert_eq!(region.key_changes[0].offset_seconds, 1.0);
 }
+
+fn click_guide_cue(
+    action: crate::audio::automation::AutomationAction,
+) -> crate::audio::automation::AutomationCue {
+    crate::audio::automation::AutomationCue {
+        id: "cue_click".into(),
+        name: "Click".into(),
+        at_seconds: 1.0,
+        enabled: true,
+        max_runs: None,
+        actions: vec![action],
+    }
+}
+
+/// A click cue changes only what it names: switching the click on for the
+/// chorus must not also reset the sounds the user picked by hand.
+#[test]
+fn automation_metronome_patches_only_the_named_settings() {
+    use crate::audio::automation::AutomationAction;
+
+    let mut session = session_with_song_dir("automation-metronome-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+    let mut before = audio.current_settings().expect("settings");
+    before.metronome_enabled = false;
+    before.metronome_accent_preset = 3;
+    before.metronome_accent_pitch = 5.0;
+    before.metronome_volume = 0.4;
+    audio
+        .replace_settings(before.clone())
+        .expect("seed settings");
+
+    session
+        .apply_automation_action(
+            &AutomationAction::SetMetronome {
+                enabled: Some(true),
+                accent_enabled: Some(false),
+                accent_preset: None,
+                beat_preset: Some(6),
+                subdivision: Some(3),
+                subdivision_preset: None,
+                output: None,
+            },
+            &audio,
+        )
+        .expect("click cue should apply");
+
+    let after = audio.current_settings().expect("settings");
+    assert!(after.metronome_enabled);
+    assert!(!after.metronome_accent_enabled);
+    assert_eq!(after.metronome_beat_preset, 6);
+    assert_eq!(after.metronome_subdivision, 3);
+    assert_eq!(after.metronome_accent_preset, 3, "unset field stays");
+    assert_eq!(
+        after.metronome_accent_pitch, 5.0,
+        "pitch is not automatable"
+    );
+    assert_eq!(after.metronome_volume, 0.4, "volume is not automatable");
+    assert_eq!(after.metronome_output, before.metronome_output);
+}
+
+#[test]
+fn automation_voice_guide_patches_only_the_named_settings() {
+    use crate::audio::automation::AutomationAction;
+    use libretracks_core::VoiceGuideCountStyle;
+
+    let mut session = session_with_song_dir("automation-voice-guide-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+    let mut before = audio.current_settings().expect("settings");
+    before.voice_guide_volume = 0.7;
+    before.voice_guide_lead_bars = 2;
+    audio
+        .replace_settings(before.clone())
+        .expect("seed settings");
+
+    session
+        .apply_automation_action(
+            &AutomationAction::SetVoiceGuide {
+                enabled: Some(true),
+                language: Some("en".into()),
+                output: None,
+                lead_bars: None,
+                count_in_enabled: Some(true),
+                count_style: Some(VoiceGuideCountStyle::HalfTime),
+            },
+            &audio,
+        )
+        .expect("voice guide cue should apply");
+
+    let after = audio.current_settings().expect("settings");
+    assert!(after.voice_guide_enabled);
+    assert_eq!(after.voice_guide_language, "en");
+    assert!(after.voice_guide_count_in_enabled);
+    assert_eq!(
+        after.voice_guide_count_style,
+        VoiceGuideCountStyle::HalfTime
+    );
+    assert_eq!(after.voice_guide_lead_bars, 2, "unset field stays");
+    assert_eq!(after.voice_guide_volume, 0.7, "volume is not automatable");
+    assert_eq!(after.voice_guide_output, before.voice_guide_output);
+}
+
+#[test]
+fn automation_click_and_guide_cues_are_validated() {
+    use crate::audio::automation::AutomationAction;
+
+    let song = demo_song();
+    let automation = AutomationDocument::default();
+    let validate = |action: AutomationAction| {
+        super::validate_automation_cue(&song, &automation, &click_guide_cue(action))
+    };
+    let metronome =
+        |accent_preset: Option<i32>, subdivision: Option<i32>| AutomationAction::SetMetronome {
+            enabled: None,
+            accent_enabled: None,
+            accent_preset,
+            beat_preset: None,
+            subdivision,
+            subdivision_preset: None,
+            output: None,
+        };
+    let voice = |language: Option<&str>, lead_bars: Option<i32>| AutomationAction::SetVoiceGuide {
+        enabled: Some(true),
+        language: language.map(str::to_string),
+        output: None,
+        lead_bars,
+        count_in_enabled: None,
+        count_style: None,
+    };
+
+    assert!(
+        validate(metronome(None, None)).is_err(),
+        "a cue that changes nothing"
+    );
+    assert!(validate(metronome(Some(7), Some(4))).is_ok());
+    assert!(validate(metronome(Some(8), None)).is_err(), "unknown sound");
+    assert!(
+        validate(metronome(None, Some(5))).is_err(),
+        "unknown subdivision"
+    );
+
+    assert!(validate(voice(Some("es"), Some(1))).is_ok());
+    assert!(validate(voice(Some("fr"), None)).is_err(), "no French bank");
+    assert!(
+        validate(voice(None, Some(3))).is_err(),
+        "lead-in is 1 or 2 bars"
+    );
+    assert!(validate(AutomationAction::SetVoiceGuide {
+        enabled: None,
+        language: None,
+        output: None,
+        lead_bars: None,
+        count_in_enabled: None,
+        count_style: None,
+    })
+    .is_err());
+}
