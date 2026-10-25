@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { memo, useEffect, useMemo, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { TimelineMenus } from "../menus/timelineMenus";
@@ -14,6 +14,10 @@ import { SetlistMixer } from "./SetlistMixer";
 import { MIXER_HEIGHT_VAR, useMixerResize } from "./useMixerResize";
 import { SetlistEditButton, SetlistEditDrawer } from "./SetlistEditDrawer";
 import { SetlistSongSettings } from "./SetlistSongSettings";
+import { SetlistSectionsPanel } from "./SetlistSectionsPanel";
+import { SongSectionEditLayer } from "./SongSectionEditLayer";
+import { createSectionEditHandlers, type SectionEditDeps } from "./sectionEditHandlers";
+import { useTimelineUIStore } from "../uiStore";
 import { resolveSetlistSongId } from "./songMapModel";
 import { useSetlistStore, type SetlistShortTab } from "./setlistStore";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
@@ -68,6 +72,7 @@ const SHORT_TABS: Array<{ tab: SetlistShortTab; labelKey: string }> = [
 function SetlistViewComponent({
   layoutClass,
   menus,
+  rulerMarkers,
   onSetSongKey,
   onResizeSong,
   onMoveSong,
@@ -132,6 +137,28 @@ function SetlistViewComponent({
   );
   lastShownRegionIdRef.current = shownRegionId;
   const shownRegion = regions.find((region) => region.id === shownRegionId) ?? null;
+  // Section editing (Edit → Sections): created once, fed through a ref.
+  const sectionDepsRef = useRef<SectionEditDeps | null>(null);
+  sectionDepsRef.current = {
+    t,
+    getSong: () => performance.song,
+    getRegion: () => shownRegion,
+    getPlayheadSeconds: () => performance.positionSecondsRef.current,
+    getSnapEnabled: () => useTimelineUIStore.getState().snapEnabled,
+    menus,
+    rulerMarkers,
+    onSectionContextMenu,
+  };
+  const sectionHandlers = useMemo(
+    () => createSectionEditHandlers(() => sectionDepsRef.current as SectionEditDeps),
+    [],
+  );
+  const editingSections = editMode === "sections" && shownRegion !== null;
+  const sectionLayer =
+    editingSections && shownRegion ? (
+      <SongSectionEditLayer song={performance.song} region={shownRegion} handlers={sectionHandlers} />
+    ) : null;
+
   // Editing acts on the project selection (the toolbar's selected-song
   // handlers), so entering edit mode selects the song the view shows.
   useEffect(() => {
@@ -169,6 +196,33 @@ function SetlistViewComponent({
                   onSelectedRegionWarpToggle={onSelectedRegionWarpToggle}
                   onSelectedRegionTempoChange={onSelectedRegionTempoChange}
                   workspaceEndSeconds={workspaceEndSeconds}
+                />
+              ) : null,
+            },
+            {
+              mode: "sections",
+              labelKey: "setlistView.edit.modes.sections",
+              content: shownRegion ? (
+                <SetlistSectionsPanel
+                  song={performance.song}
+                  region={shownRegion}
+                  handlers={sectionHandlers}
+                  layout={layout}
+                  waveform={
+                    layout === "short" ? (
+                      <div className="lt-setlist-sections-strip">
+                        <SongOverviewStrip
+                          region={shownRegion}
+                          clips={performance.song.clips}
+                          sectionMarkers={performance.song.sectionMarkers}
+                          waveformSummaries={waveformSummaries}
+                          positionSecondsRef={performance.positionSecondsRef}
+                          layout={layout}
+                        />
+                        {sectionLayer}
+                      </div>
+                    ) : undefined
+                  }
                 />
               ) : null,
             },
@@ -229,6 +283,7 @@ function SetlistViewComponent({
           onSeek={editMode === null ? performance.onSeek : undefined}
         />
       ) : null}
+      {layout !== "short" ? sectionLayer : null}
     </Zone>
   );
   const map = (

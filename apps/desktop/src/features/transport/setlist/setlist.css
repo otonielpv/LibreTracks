@@ -1079,3 +1079,151 @@ html.lt-mobile .lt-setlist-settings-input,
 html.lt-mobile .lt-setlist-edit-button {
   min-height: 2.75rem;
 }
+
+/* ---- Editar secciones (paso 08) ---- */
+
+.lt-setlist-section-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  cursor: copy;
+}
+
+.lt-setlist-section-handle {
+  --lt-setlist-block-color: #7c8a86;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  margin-left: -8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: ew-resize;
+  touch-action: none;
+  will-change: transform;
+}
+
+.lt-setlist-section-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--lt-setlist-block-color);
+}
+
+.lt-setlist-section-flag {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  max-width: 9rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0 0.3rem 0.3rem 0;
+  background: var(--lt-setlist-block-color);
+  color: #0b0d0c;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.lt-setlist-section-handle.is-selected .lt-setlist-section-flag {
+  outline: 2px solid #f2c45a;
+}
+
+/* Móvil: zona de agarre de 44 px; la onda no arrastra (hace scroll). */
+.lt-setlist-section-layer.is-touch {
+  cursor: default;
+}
+
+.lt-setlist-section-layer.is-touch .lt-setlist-section-handle {
+  width: 44px;
+  margin-left: -22px;
+}
+
+.lt-setlist-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 100%;
+}
+
+.lt-setlist-sections-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.lt-setlist-sections.is-short .lt-setlist-sections-bar {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  padding: 0.4rem 0 calc(0.4rem + var(--lt-safe-area-bottom, 0px));
+  background: var(--lt-setlist-surface);
+}
+
+.lt-setlist-sections-strip {
+  position: relative;
+  height: 9rem;
+  border-radius: 0.45rem;
+  background: var(--lt-setlist-bg);
+}
+
+.lt-setlist-sections-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-sections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lt-setlist-sections-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.3rem;
+  border-radius: 0.35rem;
+}
+
+.lt-setlist-sections-item.is-selected {
+  background: rgb(242 196 90 / 0.14);
+}
+
+.lt-setlist-sections-swatch {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+}
+
+.lt-setlist-sections-name {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.3rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lt-setlist-sections-position {
+  font-size: 0.75rem;
+  color: var(--lt-setlist-text-muted);
+  font-variant-numeric: tabular-nums;
+}

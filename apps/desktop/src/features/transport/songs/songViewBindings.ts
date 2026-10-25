@@ -12,6 +12,7 @@ import type {
 } from "@libretracks/shared/models";
 
 import type { CompactMixerHandlers } from "../compact/CompactMixer";
+import type { RulerMarkerHandlers } from "../rulerMarkers/rulerMarkerHandlers";
 import type { MetronomeDeviceHandlers } from "../settings/metronomeDeviceHandlers";
 import type { MultiTrackMixActions } from "../tracks/MultiTrackMixControls";
 import type { CompactClipEntry } from "../compact/CompactView";
@@ -89,6 +90,8 @@ export type SongViewBindings = {
     event: ReactMouseEvent<HTMLElement>,
     markerId: string,
   ) => void;
+  /** The DAW ruler's marker group actions (move, duplicate, delete, menu). */
+  rulerMarkers: RulerMarkerHandlers;
   /** Moves a marker to an exact position: the same commit as dragging its
    * flag in the DAW (the section menu's «Position…» editor uses it). */
   onCommitMarkerPosition: (markerId: string, startSeconds: number) => void;

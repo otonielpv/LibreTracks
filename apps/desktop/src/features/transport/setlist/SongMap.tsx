@@ -18,7 +18,7 @@ import type {
 import { useTransportStore } from "../store";
 import { formatBars } from "../structure/structureEditor";
 import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
-import { useSetlistStore } from "./setlistStore";
+import { useTimelineUIStore } from "../uiStore";
 import {
   barSecondsAtFor,
   blockIdForMarker,
@@ -73,8 +73,9 @@ function SongMapComponent({
   const { t } = useTranslation();
   const fillRef = useRef<HTMLSpanElement | null>(null);
   const touchMenu = useTouchContextMenu();
-  const setSelectedSectionId = useSetlistStore((state) => state.setSelectedSectionId);
-  const selectedSectionId = useSetlistStore((state) => state.selectedSectionId);
+  // The project's marker selection, the same one the DAW ruler uses.
+  const selectSection = useTimelineUIStore((state) => state.selectSection);
+  const selectedSectionId = useTimelineUIStore((state) => state.selectedSectionId);
   const { blocks, notches } = useMemo(
     () =>
       buildSongMapBlocks(region, song.sectionMarkers, barSecondsAtFor(song), {
@@ -103,7 +104,7 @@ function SongMapComponent({
   const activate = (block: SongMapBlock) => {
     if (editing) {
       // Editing: tapping only selects, so nothing jumps by accident.
-      setSelectedSectionId(block.marker?.id ?? null);
+      selectSection(block.marker?.id ?? null);
       return;
     }
     if (block.id === pendingBlockId) {
@@ -111,7 +112,6 @@ function SongMapComponent({
       return;
     }
     if (block.marker) {
-      setSelectedSectionId(block.marker.id);
       onMarkerAction(block.marker);
       return;
     }
@@ -126,7 +126,6 @@ function SongMapComponent({
     if (!block.marker) return;
     event.preventDefault();
     event.stopPropagation();
-    setSelectedSectionId(block.marker.id);
     onSectionContextMenu(event, block.marker.id);
   };
 

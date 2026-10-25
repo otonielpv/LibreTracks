@@ -6,6 +6,7 @@ import type { SectionMarkerSummary, SongView } from "@libretracks/shared/models"
 import type { TimelineMenus } from "../menus/timelineMenus";
 import { useSongStore } from "../songStore";
 import { INITIAL_STRUCTURE_STATE, useStructureStore } from "../structure/structureStore";
+import { useTimelineUIStore } from "../uiStore";
 import { SetlistView } from "./SetlistView";
 import { INITIAL_SETLIST_STATE, useSetlistStore } from "./setlistStore";
 import { parseClockInput } from "./SetlistSongSettings";
@@ -84,7 +85,7 @@ describe("Edit mode", () => {
     expect(useSetlistStore.getState().editMode).toBe("song");
     fireEvent.click(coro());
     expect(onMarkerAction).toHaveBeenCalledTimes(1);
-    expect(useSetlistStore.getState().selectedSectionId).toBe("Coro");
+    expect(useTimelineUIStore.getState().selectedSectionId).toBe("Coro");
     expect(coro().classList.contains("is-selected")).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "setlistView.edit.done" }));

@@ -1,5 +1,6 @@
 import { DEFAULT_APP_SETTINGS, type SongView } from "@libretracks/shared/models";
 
+import type { RulerMarkerHandlers } from "../rulerMarkers/rulerMarkerHandlers";
 import type { MetronomeDeviceHandlers } from "../settings/metronomeDeviceHandlers";
 
 import type { TimelineMenus } from "../menus/timelineMenus";
@@ -82,6 +83,7 @@ export function testSetlistProps(song: Partial<SongView> = {}) {
     onSongContextMenu: noop,
     onSectionContextMenu: noop,
     onCommitMarkerPosition: noop,
+    rulerMarkers: {} as RulerMarkerHandlers,
     onResizeSong: noop,
     onMoveSong: noop,
     runAction: async (action: () => Promise<void>) => {

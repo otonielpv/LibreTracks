@@ -6549,7 +6549,7 @@ export function TransportPanelContent() {
     onCueSong: songViewHandlers.cueSong,
     onSongContextMenu: handleRegionContextMenu,
     onSectionContextMenu: handleMarkerContextMenu,
-    onCommitMarkerPosition: handleMarkerMoveCommit,
+    onCommitMarkerPosition: handleMarkerMoveCommit, rulerMarkers,
     onResizeSong: songViewHandlers.resizeSong, onMoveSong: songViewHandlers.moveSong,
     runAction, setStatus,
     onSelectedRegionTransposeChange: handleSelectedRegionTransposeChange,
