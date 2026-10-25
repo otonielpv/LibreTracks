@@ -43,10 +43,13 @@ function SetlistSectionsPanelComponent({ song, region, handlers, layout, wavefor
 
   const bar = (
     <div className="lt-setlist-sections-bar" role="toolbar" aria-label={t("setlistView.sections.actions")}>
-      <button type="button" className="lt-setlist-settings-button" onClick={handlers.createAtPlayhead}>
-        <span className="material-symbols-outlined" aria-hidden="true">add</span>
-        {t("setlistView.sections.addAtPlayhead")}
-      </button>
+      {/* On the phone the scrub editor has its own «+» at its line. */}
+      {layout === "short" ? null : (
+        <button type="button" className="lt-setlist-settings-button" onClick={handlers.createAtPlayhead}>
+          <span className="material-symbols-outlined" aria-hidden="true">add</span>
+          {t("setlistView.sections.addAtPlayhead")}
+        </button>
+      )}
       <button
         type="button"
         className="lt-setlist-settings-button"
@@ -103,7 +106,9 @@ function SetlistSectionsPanelComponent({ song, region, handlers, layout, wavefor
           </li>
         ))}
       </ul>
-      {layout === "short" ? bar : null}
+      {/* On the phone the scrub editor brings its own bar (a sticky one here
+          covered it). */}
+      {layout === "short" && !waveform ? bar : null}
     </div>
   );
 }

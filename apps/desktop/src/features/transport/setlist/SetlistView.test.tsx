@@ -49,6 +49,17 @@ describe("SetlistView skeleton", () => {
     expect(zones(container)).toEqual(["songs", "mixer"]);
   });
 
+  // The iPhone report: the faders were too short. «Enlarge» hides the song
+  // row so the console takes the whole view; it comes back with the same button.
+  it("short: enlarging the console hides the songs, and shrinking brings them back", () => {
+    const { container } = render(<SetlistView {...testSetlistProps()} layoutClass="short" />);
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.enlarge" }));
+    expect(zones(container)).toEqual(["mixer"]);
+    expect(container.querySelector(".lt-setlist-view.is-mixer-expanded")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.shrink" }));
+    expect(zones(container)).toEqual(["songs", "mixer"]);
+  });
+
   it.each(["wide", "medium"] as const)("%s shows songs, band and console together", (layoutClass) => {
     const { container } = render(<SetlistView {...testSetlistProps()} layoutClass={layoutClass} />);
     expect(zones(container)).toEqual(["songs", "overview", "mixer"]);

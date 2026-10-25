@@ -14,7 +14,7 @@ const song = {
   sectionMarkers: [
     { id: "v", name: "Verso", kind: "verse", startSeconds: 8 },
     { id: "c", name: "Coro", kind: "chorus", startSeconds: 24 },
-    { id: "a", name: "Todos", kind: "cue", startSeconds: 30 },
+    { id: "a", name: "Todos", kind: "all_in", startSeconds: 30 },
     { id: "x", name: "Otra canción", kind: "verse", startSeconds: 120 },
   ],
   automationCues: [cue("late", 40), cue("other", 150), cue("early", 10)],

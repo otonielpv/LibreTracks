@@ -12,6 +12,7 @@ import { SongMap } from "./SongMap";
 import { SongOverviewStrip } from "./SongOverviewStrip";
 import { SetlistMixer } from "./SetlistMixer";
 import { MIXER_HEIGHT_VAR, useMixerResize } from "./useMixerResize";
+import { SectionScrubEditor } from "./SectionScrubEditor";
 import { SetlistAutomationPanel } from "./SetlistAutomationPanel";
 import { SetlistEditButton, SetlistEditDrawer } from "./SetlistEditDrawer";
 import { SetlistSongSettings } from "./SetlistSongSettings";
@@ -143,6 +144,7 @@ function SetlistViewComponent({
   const editMode = useSetlistStore((state) => state.editMode);
   const mixerCollapsed = useSetlistStore((state) => state.mixerCollapsed);
   const shortPane = useSetlistStore((state) => state.shortPane);
+  const mixerExpanded = useSetlistStore((state) => state.mixerExpanded);
   const setShortPane = useSetlistStore((state) => state.setShortPane);
   // The song the map, overview and mixer are about (00 §5 "Selección").
   const lastShownRegionIdRef = useRef<string | null>(null);
@@ -279,18 +281,17 @@ function SetlistViewComponent({
                   handlers={sectionHandlers}
                   layout={layout}
                   waveform={
+                    // The phone edits like Playback: the waveform zoomed to a
+                    // few bars, swiped under a fixed line.
                     layout === "short" ? (
-                      <div className="lt-setlist-sections-strip">
-                        <SongOverviewStrip
-                          region={shownRegion}
-                          clips={performance.song.clips}
-                          sectionMarkers={performance.song.sectionMarkers}
-                          waveformSummaries={waveformSummaries}
-                          positionSecondsRef={performance.positionSecondsRef}
-                          layout={layout}
-                        />
-                        {sectionLayer}
-                      </div>
+                      <SectionScrubEditor
+                        song={performance.song}
+                        region={shownRegion}
+                        waveformSummaries={waveformSummaries}
+                        positionSecondsRef={performance.positionSecondsRef}
+                        onSeek={performance.onSeek}
+                        handlers={sectionHandlers}
+                      />
                     ) : undefined
                   }
                 />
@@ -401,7 +402,9 @@ function SetlistViewComponent({
             waveformSummaries={waveformSummaries}
             positionSecondsRef={performance.positionSecondsRef}
             layout={layout}
-            onSeek={editMode === null ? performance.onSeek : undefined}
+            // Editing too: the handles take their own pointer, the rest of
+            // the waveform moves the playhead (the iPhone report).
+            onSeek={performance.onSeek}
             onContextMenuAt={sectionHandlers.openMenuAt}
             onDoubleClickAt={editMode !== null ? sectionHandlers.createAt : undefined}
           />
@@ -480,6 +483,8 @@ function SetlistViewComponent({
       ref={rootRef}
       className={`lt-setlist-view is-${layout}${editMode ? " is-editing" : ""}${
         mixerCollapsed && layout === "medium" ? " is-mixer-collapsed" : ""
+      }${
+        layout === "short" && shortPane === "mixer" && mixerExpanded && editMode === null ? " is-mixer-expanded" : ""
       }`}
       data-setlist-layout={layout}
       aria-label={t("setlistView.title")}
@@ -500,7 +505,8 @@ function SetlistViewComponent({
           phone, as Playback on an iPhone, the waveform and the console take
           turns under the songs. */}
       <>
-          {songs}
+          {/* Phone, console enlarged: the song row steps aside. */}
+          {layout === "short" && shortPane === "mixer" && mixerExpanded && editMode === null ? null : songs}
           {layout !== "short" || shortPane === "song" ? overview : null}
           {layout !== "short" || shortPane === "mixer" ? <div className="lt-setlist-bottom">{mixer}</div> : null}
           {/* Full-height side panel next to the band and the console. */}

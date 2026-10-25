@@ -27,6 +27,9 @@ export type SetlistState = {
    * the height. */
   mixerCollapsed: boolean;
   shortPane: SetlistShortPane;
+  /** `short`: the console takes the whole view (the song row hides) so the
+   * faders have travel. */
+  mixerExpanded: boolean;
   /** Edit → Lanes: 1 fits the song in the width, up to 16. Not the DAW's
    * camera: that one stays where it was. */
   lanesZoom: number;
@@ -41,6 +44,7 @@ export const INITIAL_SETLIST_STATE: SetlistState = {
   mixerHeightPx: null,
   mixerCollapsed: false,
   shortPane: "mixer",
+  mixerExpanded: false,
   lanesZoom: 1,
   lanesScrollPx: 0,
 };
@@ -51,6 +55,7 @@ type SetlistActions = {
   setMixerHeightPx: (heightPx: number | null) => void;
   setMixerCollapsed: (collapsed: boolean) => void;
   setShortPane: (pane: SetlistShortPane) => void;
+  setMixerExpanded: (expanded: boolean) => void;
   setLanesZoom: (zoom: number) => void;
   setLanesScrollPx: (scrollPx: number) => void;
 };
@@ -86,6 +91,7 @@ export const useSetlistStore = create<SetlistState & SetlistActions>()(
     setMixerHeightPx: (mixerHeightPx) => set({ mixerHeightPx }),
     setMixerCollapsed: (mixerCollapsed) => set({ mixerCollapsed }),
     setShortPane: (shortPane) => set({ shortPane }),
+    setMixerExpanded: (mixerExpanded) => set({ mixerExpanded }),
     setLanesZoom: (lanesZoom) =>
       set({ lanesZoom: Math.max(LANES_MIN_ZOOM, Math.min(LANES_MAX_ZOOM, lanesZoom)) }),
     setLanesScrollPx: (lanesScrollPx) => set({ lanesScrollPx: Math.max(0, lanesScrollPx) }),

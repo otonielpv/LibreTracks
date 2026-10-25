@@ -2535,6 +2535,8 @@ const en = {
       label: "Waveform of {{name}}",
     },
     mixer: {
+      enlarge: "Enlarge the mixer (hides the songs)",
+      shrink: "Show the songs again",
       label: "Mixer",
       tabs: { tracks: "Tracks", pads: "Pads" },
       click: "Click",
@@ -2584,6 +2586,13 @@ const en = {
       actionsSection: "Actions",
     },
     sections: {
+      barLabel: "Bar {{bar}}",
+      prevBar: "Previous bar",
+      nextBar: "Next bar",
+      addHere: "Section here",
+      moveLeft: "Move the section one bar left",
+      moveRight: "Move the section one bar right",
+      scrubHint: "Swipe the waveform to reach a bar",
       layer: "Sections of {{name}} over the waveform",
       handle: "Section {{name}}",
       actions: "Section actions",

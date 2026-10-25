@@ -137,6 +137,8 @@ function SetlistMixerComponent({
   const bottomTab = useSetlistStore((state) => state.bottomTab);
   const setBottomTab = useSetlistStore((state) => state.setBottomTab);
   const collapsed = useSetlistStore((state) => state.mixerCollapsed);
+  const expanded = useSetlistStore((state) => state.mixerExpanded);
+  const setExpanded = useSetlistStore((state) => state.setMixerExpanded);
   const setCollapsed = useSetlistStore((state) => state.setMixerCollapsed);
   const [showAllTracks, setShowAllTracks] = useState(false);
   const [hintDismissed, setHintDismissed] = useState(readHintDismissed);
@@ -184,9 +186,9 @@ function SetlistMixerComponent({
     />
   ) : null;
 
-  const tabs: Array<{ tab: SetlistBottomTab; label: string }> = [
-    { tab: "tracks", label: t("setlistView.mixer.tabs.tracks") },
-    { tab: "pads", label: t("setlistView.mixer.tabs.pads") },
+  const tabs: Array<{ tab: SetlistBottomTab; label: string; icon: string }> = [
+    { tab: "tracks", label: t("setlistView.mixer.tabs.tracks"), icon: "graphic_eq" },
+    { tab: "pads", label: t("setlistView.mixer.tabs.pads"), icon: "piano" },
   ];
   const tab: SetlistBottomTab = bottomTab;
   // Medium folds the console to its Master bar to give the waveform the
@@ -222,9 +224,13 @@ function SetlistMixerComponent({
               role="tab"
               aria-selected={tab === entry.tab}
               className={`lt-setlist-tab${tab === entry.tab ? " is-active" : ""}`}
+              title={entry.label}
               onClick={() => setBottomTab(entry.tab)}
             >
-              {entry.label}
+              {layout === "short" ? (
+                <span className="material-symbols-outlined" aria-hidden="true">{entry.icon}</span>
+              ) : null}
+              <span className="lt-setlist-mixer-action-label">{entry.label}</span>
             </button>
           ))}
         </div>
@@ -265,6 +271,20 @@ function SetlistMixerComponent({
             <span className="lt-setlist-mixer-action-label">{t("setlistView.mixer.scenes")}</span>
           </button>
         ) : null}
+        {layout === "short" ? (
+          <button
+            type="button"
+            className={`lt-setlist-mixer-action${expanded ? " is-active" : ""}`}
+            aria-pressed={expanded}
+            aria-label={t(expanded ? "setlistView.mixer.shrink" : "setlistView.mixer.enlarge")}
+            title={t(expanded ? "setlistView.mixer.shrink" : "setlistView.mixer.enlarge")}
+            onClick={() => setExpanded(!expanded)}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">
+              {expanded ? "close_fullscreen" : "open_in_full"}
+            </span>
+          </button>
+        ) : null}
         {foldable ? (
           <button
             type="button"
@@ -278,6 +298,7 @@ function SetlistMixerComponent({
           </button>
         ) : null}
       </div>
+      <div className="lt-setlist-mixer-body">
       {!hintDismissed && tab === "tracks" && layout !== "short" ? (
         <p className="lt-setlist-mixer-hint" role="note">
           <span>{t("setlistView.mixer.sharedTracksHint")}</span>
@@ -332,6 +353,7 @@ function SetlistMixerComponent({
           auxHandlers={auxHandlers}
         />
       ) : null}
+      </div>
     </div>
   );
 }

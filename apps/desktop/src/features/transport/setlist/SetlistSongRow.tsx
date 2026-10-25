@@ -273,7 +273,8 @@ function SetlistSongRowComponent({
             onClick={() => void handleAddSong()}
           >
             <span className="material-symbols-outlined" aria-hidden="true">add</span>
-            {isVertical ? null : <span>{t("setlistView.songs.newSong")}</span>}
+            {/* The phone keeps the icon: the label would push the songs off. */}
+            {isVertical || layout === "short" ? null : <span>{t("setlistView.songs.newSong")}</span>}
           </button>
           {FEATURE_FLAGS.songTemplates ? (
             <NewSongTemplateMenu onCreate={(template) => void handleAddSong(template)} />
@@ -294,7 +295,7 @@ function SetlistSongRowComponent({
               onClick={openLevelSongs}
             >
               <span className="material-symbols-outlined" aria-hidden="true">equalizer</span>
-              {isVertical ? null : <span>{t("setlistView.songs.levelSongs")}</span>}
+              {isVertical || layout === "short" ? null : <span>{t("setlistView.songs.levelSongs")}</span>}
             </button>
           ) : null}
         </div>

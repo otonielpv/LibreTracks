@@ -105,4 +105,33 @@ describe("App / Setlist view", () => {
       ]);
     });
   });
+
+  // Step 12, C1: the DAW's cue modal opens over the Setlist view.
+  it("Edit → Automation → New opens the DAW's cue modal in the Setlist view", async () => {
+    await openSetlist();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: textMatcher(en.setlistView.edit.button) }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: textMatcher(en.setlistView.edit.modes.automation) }));
+    });
+    const panel = document.querySelector<HTMLElement>(".lt-setlist-automation")!;
+    await act(async () => {
+      fireEvent.click(within(panel).getByRole("button", { name: textMatcher(en.setlistView.automation.add) }));
+    });
+    expect(
+      await screen.findByRole("dialog", { name: textMatcher(en.transport.automation.modalNewTitle) }),
+    ).toBeTruthy();
+    expect(screen.getByRole("main", { name: textMatcher(en.setlistView.title) })).toBeTruthy();
+  });
+
+  // Step 12, C5: the console's «Scenes» opens the DAW's scenes manager.
+  it("the console's Scenes button opens the mix scenes manager", async () => {
+    await openSetlist();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: textMatcher(en.setlistView.mixer.scenes) }));
+    });
+    expect(await screen.findByRole("dialog", { name: /./ })).toBeTruthy();
+    expect(document.getElementById("lt-scene-modal-title")).not.toBeNull();
+  });
 });

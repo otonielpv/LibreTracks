@@ -7,10 +7,13 @@ import type {
 import { selectWaveformLod } from "../Renderer/WaveformTileCache";
 
 /**
- * The song's overview waveform, Playback-style: for each time bucket of the
- * song, the LOUDEST peak of the audio clips covering it. The maximum, not the
- * sum: with 30 tracks a sum saturates everywhere. It is the material, not
- * the mix, so track volume and mute do not count.
+ * The song's overview waveform, Playback-style: the shape of the song (a
+ * quiet intro, a full chorus). For each time bucket, every clip adds its
+ * MEAN level there (not its peak), and the whole song is then scaled so its
+ * loudest bucket is 1. The loudest peak of any clip, which this used to be,
+ * drew a solid brick: a click track or any stem with transients reaches full
+ * scale in every bucket. It is the material, not the mix, so track volume
+ * and mute do not count.
  *
  * Reads the waveform summaries the DAW already fetched (the panel's
  * `waveformCache`, fed by hooks/useSongWaveforms); asks the backend for
@@ -55,18 +58,23 @@ export function buildSongOverviewPeaks(
       const s1 = clip.sourceStartSeconds + (t1 - clipStart) * sourcePerTimeline;
       const i0 = Math.max(0, Math.floor(s0 * bucketsPerSourceSecond));
       const i1 = Math.min(lod.bucketCount, Math.max(i0 + 1, Math.ceil(s1 * bucketsPerSourceSecond)));
-      let peak = out[bucket];
+      let total = 0;
       for (let index = i0; index < i1; index += 1) {
-        peak = Math.max(
-          peak,
+        total += Math.max(
           Math.abs(lod.minPeaks[index] ?? 0),
           Math.abs(lod.maxPeaks[index] ?? 0),
           Math.abs(lod.minPeaksRight[index] ?? 0),
           Math.abs(lod.maxPeaksRight[index] ?? 0),
         );
       }
-      out[bucket] = Math.min(1, peak);
+      // Weighted by how much of the bucket the clip covers.
+      out[bucket] += (total / (i1 - i0)) * ((t1 - t0) / bucketSeconds);
     }
+  }
+  let loudest = 0;
+  for (const value of out) loudest = Math.max(loudest, value);
+  if (loudest > 0) {
+    for (let bucket = 0; bucket < count; bucket += 1) out[bucket] /= loudest;
   }
   return out;
 }

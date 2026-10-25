@@ -63,9 +63,12 @@
   grid-template-rows: auto minmax(0, 1fr);
   --lt-setlist-gap: 0.3rem;
   --lt-setlist-pad: 0.3rem;
-  padding-left: calc(var(--lt-setlist-pad) + var(--lt-safe-area-left, 0px));
-  padding-right: calc(var(--lt-setlist-pad) + var(--lt-safe-area-right, 0px));
-  padding-bottom: calc(var(--lt-setlist-pad) + var(--lt-safe-area-bottom, 0px));
+  /* La izquierda NO suma la zona segura: la barra lateral de la app ya la
+     lleva en su ancho (en el iPhone 13 salía una franja negra de ~47 pt).
+     Derecha y abajo: la mayor de las dos, no la suma. */
+  padding-left: var(--lt-setlist-pad);
+  padding-right: max(var(--lt-setlist-pad), var(--lt-safe-area-right, 0px));
+  padding-bottom: max(var(--lt-setlist-pad), var(--lt-safe-area-bottom, 0px));
 }
 
 /* Consola plegada (medium y teléfono): la onda se queda el alto. */
@@ -2393,39 +2396,77 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   grid-auto-rows: 2.75rem;
 }
 
-/* Editar en el teléfono: una sola fila (atrás, título, modos con icono). */
+/* Editar en el teléfono: «atrás» y los modos en una columna a la DERECHA
+   (con scroll; más cómoda con el pulgar, pedido del usuario) y el editor con
+   todo el alto a su izquierda. El título queda para los lectores de pantalla. */
 .lt-setlist-drawer.is-short {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* Columna de ancho fijo: «volver» y los modos comparten el mismo centro. */
+  grid-template-columns: minmax(0, 1fr) 3.5rem;
   grid-template-rows: auto minmax(0, 1fr);
 }
 
 .lt-setlist-drawer.is-short > .lt-setlist-drawer-header {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0;
   min-width: 0;
-  padding-top: 0.3rem;
-  padding-bottom: 0.3rem;
-}
-
-.lt-setlist-drawer.is-short .lt-setlist-drawer-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.95rem;
-}
-
-.lt-setlist-drawer.is-short > .lt-setlist-drawer-modes {
-  display: flex;
-  grid-template-columns: none;
-  gap: 0.25rem;
-  padding: 0.3rem;
+  padding: 0.3rem 0 0.25rem;
   border-bottom: 0;
 }
 
+/* «Volver» del mismo tamaño y en la misma línea que los modos. */
+.lt-setlist-drawer.is-short .lt-setlist-drawer-close {
+  box-sizing: border-box;
+  width: 2.75rem;
+  min-width: 2.75rem;
+  height: 2.75rem;
+  margin: 0;
+  padding: 0;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-drawer-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.lt-setlist-drawer.is-short > .lt-setlist-drawer-modes {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  grid-template-columns: none;
+  gap: 0.25rem;
+  min-height: 0;
+  /* La regla general le da 8 px de margen: desalineaba «volver». */
+  margin: 0;
+  padding: 0 0 0.3rem;
+  border-bottom: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.lt-setlist-drawer.is-short > .lt-setlist-drawer-modes::-webkit-scrollbar {
+  display: none;
+}
+
 .lt-setlist-drawer.is-short .lt-setlist-drawer-tab {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 2.75rem;
   min-width: 2.75rem;
   min-height: 2.75rem;
-  padding: 0 0.5rem;
+  padding: 0;
 }
 
 .lt-setlist-drawer.is-short .lt-setlist-drawer-tab-label {
@@ -2438,7 +2479,11 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 }
 
 .lt-setlist-drawer.is-short > .lt-setlist-drawer-body {
-  grid-column: 1 / -1;
+  grid-column: 1;
+  grid-row: 1 / -1;
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--lt-setlist-border);
 }
 
 /* Teléfono: la tarjeta en una línea (nombre y tono). */
@@ -2718,4 +2763,250 @@ html.lt-mobile .lt-setlist-mixer.is-medium .lt-compact-mixer-strip-toggles .lt-c
 .lt-setlist-automation-what {
   font-size: 0.8rem;
   color: var(--lt-setlist-text-muted);
+}
+
+/* Teléfono (iPhone 13): la fila de canciones y la cabecera de la consola
+   ocupaban casi la mitad del alto; ahora lo justo para tocarlas. */
+.lt-setlist-view.is-short .lt-setlist-zone.is-songs {
+  padding: 0.15rem 0.25rem;
+}
+
+.lt-setlist-song-tile.is-short {
+  min-height: 2.5rem;
+  padding-top: 0.1rem;
+  padding-bottom: 0.1rem;
+}
+
+.lt-setlist-add-song.is-short {
+  min-height: 2.5rem;
+  width: auto;
+}
+
+html.lt-mobile .lt-setlist-songs.is-short .lt-setlist-song-button,
+html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
+  min-height: 2.5rem;
+  min-width: 2.5rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-zone.is-songs > .lt-setlist-edit-button,
+.lt-setlist-view.is-short .lt-setlist-pane-toggle {
+  height: 2.5rem;
+  padding: 0 0.6rem;
+  font-size: 0.9rem;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-mixer-header {
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-mixer-action,
+.lt-setlist-mixer.is-short .lt-setlist-mixer-fold,
+.lt-setlist-mixer.is-short .lt-setlist-tab {
+  min-height: 2.25rem;
+  font-size: 0.9rem;
+}
+
+/* ---- Editar secciones en el teléfono, como Playback ---- */
+
+.lt-setlist-scrub {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 0;
+}
+
+/* La onda ampliada se desliza bajo una línea fija en el centro. */
+.lt-setlist-scrub-viewport {
+  position: relative;
+  height: clamp(5.5rem, 30vh, 12rem);
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: var(--lt-setlist-bg);
+  touch-action: none;
+  cursor: grab;
+}
+
+.lt-setlist-scrub-layer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  will-change: transform;
+}
+
+.lt-setlist-scrub-ruler {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1.3rem;
+  border-bottom: 1px solid var(--lt-setlist-border);
+}
+
+.lt-setlist-scrub-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  padding-left: 0.2rem;
+  border-left: 1px solid rgb(186 202 197 / 0.25);
+  color: var(--lt-setlist-text-muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3rem;
+}
+
+.lt-setlist-scrub-canvas {
+  position: absolute;
+  top: 2.9rem;
+  left: 0;
+  width: 100%;
+  height: calc(100% - 2.9rem);
+}
+
+/* Burbuja de sección: tocar selecciona; mantener abre su menú. */
+.lt-setlist-scrub-section {
+  position: absolute;
+  top: 1.4rem;
+  min-height: 1.4rem;
+  max-width: 10rem;
+  padding: 0 0.45rem;
+  border: 0;
+  border-left: 2px solid var(--lt-setlist-block-color);
+  border-radius: 0 0.35rem 0.35rem 0;
+  background: var(--lt-setlist-block-color);
+  color: #0b0d0c;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lt-setlist-scrub-section::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: -2px;
+  width: 2px;
+  height: 20rem;
+  background: var(--lt-setlist-block-color);
+  pointer-events: none;
+}
+
+.lt-setlist-scrub-section.is-selected {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: 1px;
+}
+
+.lt-setlist-scrub-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--lt-setlist-accent);
+  pointer-events: none;
+}
+
+.lt-setlist-scrub-bar {
+  position: absolute;
+  bottom: 0.3rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: rgb(19 19 19 / 0.92);
+  color: var(--lt-setlist-accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.lt-setlist-settings-button.is-primary {
+  border-color: var(--lt-setlist-accent);
+  color: var(--lt-setlist-accent);
+}
+
+/* Teléfono muy bajo (iPhone 13: ~255 px para la vista): M/S/T caben en la
+   columna junto al fader. */
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip-toggles .lt-compact-mixer-toggle {
+  min-height: 1.6rem;
+  height: 1.6rem;
+}
+
+.lt-setlist-scrub-bar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Teléfono: la cabecera de la consola es un raíl de iconos a la izquierda;
+   el alto entero queda para las tiras. */
+.lt-setlist-mixer-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: inherit;
+}
+
+/* El raíl de la consola, a la derecha como el de Editar. */
+.lt-setlist-mixer.is-short {
+  flex-direction: row-reverse;
+}
+
+/* Una sola columna con scroll vertical: más ancho para las tiras. */
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 2.5rem;
+  grid-auto-rows: 2.5rem;
+  align-content: start;
+  gap: 0.25rem;
+  padding: 0.25rem 0.15rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header::-webkit-scrollbar {
+  display: none;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-mixer-tabs {
+  display: contents;
+}
+
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-tab,
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-mixer-action {
+  min-width: 0;
+  min-height: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-tab .material-symbols-outlined,
+.lt-setlist-mixer.is-short .lt-setlist-mixer-action .material-symbols-outlined {
+  font-size: 1.25rem;
+}
+
+.lt-setlist-mixer:not(.is-short) .lt-setlist-tab .lt-setlist-mixer-action-label {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+}
+
+/* Consola ampliada en el teléfono: sin la fila de canciones, todo el alto. */
+.lt-setlist-view.is-short.is-mixer-expanded {
+  grid-template-rows: minmax(0, 1fr);
 }

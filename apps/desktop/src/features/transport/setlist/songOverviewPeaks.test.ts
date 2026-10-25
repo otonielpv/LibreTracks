@@ -53,7 +53,7 @@ describe("buildSongOverviewPeaks", () => {
     expect(round(peaks)).toEqual(ramp);
   });
 
-  it("overlapping clips: the maximum wins, not the sum", () => {
+  it("overlapping clips add up, scaled so the loudest bucket is 1", () => {
     const flat = new Array(10).fill(0.5);
     const peaks = buildSongOverviewPeaks(
       [clip("a"), clip("b")],
@@ -61,7 +61,31 @@ describe("buildSongOverviewPeaks", () => {
       { startSeconds: 0, endSeconds: 10 },
       10,
     );
-    expect(round(peaks)).toEqual([0.5, 0.5, 0.5, 0.5, 0.5, 0.6, 0.7, 0.8, 0.9, 1]);
+    // ramp + 0.5 = 0.6 … 1.5, divided by 1.5.
+    expect(round(peaks)).toEqual([0.4, 0.47, 0.53, 0.6, 0.67, 0.73, 0.8, 0.87, 0.93, 1]);
+  });
+
+  // The iPhone report (2026-10-25): a full-scale click track made the whole
+  // overview a solid brick. The song's shape must still show through it.
+  it("a constant full-scale track (the click) does not flatten the song's shape", () => {
+    const click = new Array(10).fill(1);
+    const quietThenLoud = [0.05, 0.05, 0.05, 0.05, 0.05, 0.9, 0.9, 0.9, 0.9, 0.9];
+    const stems = ["s1", "s2", "s3", "s4"];
+    const peaks = buildSongOverviewPeaks(
+      [clip("click"), ...stems.map((id) => clip(id))],
+      { click: summary("click", click), ...Object.fromEntries(stems.map((id) => [id, summary(id, quietThenLoud)])) },
+      { startSeconds: 0, endSeconds: 10 },
+      10,
+    );
+    expect(peaks[9]).toBeCloseTo(1);
+    expect(peaks[0]).toBeLessThan(0.4);
+  });
+
+  it("the level inside a bucket is its mean, not its loudest transient", () => {
+    // Two source buckets per song bucket: a hit (1) and silence (0).
+    const hits = [1, 0, 1, 0, 1, 0, 0.2, 0, 0.2, 0];
+    const peaks = buildSongOverviewPeaks([clip("a")], { a: summary("a", hits) }, { startSeconds: 0, endSeconds: 10 }, 5);
+    expect(round(peaks)).toEqual([1, 1, 1, 0.2, 0.2]);
   });
 
   it("a trimmed clip respects its source window and timeline place", () => {
@@ -73,7 +97,8 @@ describe("buildSongOverviewPeaks", () => {
       durationSeconds: 2,
     });
     const peaks = buildSongOverviewPeaks([trimmed], { a: summary("a", ramp) }, { startSeconds: 0, endSeconds: 10 }, 10);
-    expect(round(peaks)).toEqual([0, 0, 0.7, 0.8, 0, 0, 0, 0, 0, 0]);
+    // 0.7 and 0.8, scaled to the loudest (0.8).
+    expect(round(peaks)).toEqual([0, 0, 0.88, 1, 0, 0, 0, 0, 0, 0]);
   });
 
   it("a clip without a summary yet contributes 0", () => {

@@ -2566,6 +2566,8 @@ const es = {
       label: "Onda de {{name}}",
     },
     mixer: {
+      enlarge: "Ampliar el mezclador (oculta las canciones)",
+      shrink: "Volver a mostrar las canciones",
       label: "Mezclador",
       tabs: { tracks: "Pistas", pads: "Pads" },
       click: "Click",
@@ -2615,6 +2617,13 @@ const es = {
       actionsSection: "Acciones",
     },
     sections: {
+      barLabel: "Compás {{bar}}",
+      prevBar: "Compás anterior",
+      nextBar: "Compás siguiente",
+      addHere: "Sección aquí",
+      moveLeft: "Mover la sección un compás a la izquierda",
+      moveRight: "Mover la sección un compás a la derecha",
+      scrubHint: "Desliza la onda para ir a un compás",
       layer: "Secciones de {{name}} sobre la onda",
       handle: "Sección {{name}}",
       actions: "Acciones de secciones",
