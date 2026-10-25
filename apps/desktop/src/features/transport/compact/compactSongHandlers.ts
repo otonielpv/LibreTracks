@@ -13,11 +13,10 @@ import type {
  * confirm/prompt if the action is destructive or needs a value, then run the
  * IPC through `runAction` and publish the returned snapshot.
  *
- * Deliberately NOT in this module: the import/drop handlers and
- * handleCompactPlaySong. Those depend on `handleDroppedSongPackagePath` and
- * `scheduleRegionJumpWithOptions`, which are resolved through hoisting and a
- * hook instantiated further down the component body. Extracting them means
- * untangling that ordering first — see the slice notes.
+ * Deliberately NOT in this module: the import/drop handlers and playing a
+ * song. Those depend on `handleDroppedSongPackagePath` and
+ * `scheduleRegionJumpWithOptions`, which are born further down the component
+ * body, so they live in ../songs/songViewHandlers behind a deps getter.
  */
 export type CompactSongHandlerDeps = {
   getSong: () => SongView | null;

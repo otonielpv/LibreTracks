@@ -24,7 +24,6 @@ import {
 
 import {
   CompactMixer,
-  type CompactMixerHandlers,
 } from "./CompactMixer";
 import { CompactSongHeader } from "./CompactSongHeader";
 import { columnDensityClass, useColumnResize } from "./useColumnResize";
@@ -33,6 +32,7 @@ import {
   useSongReorder,
 } from "../songs/useSongReorder";
 import type { SongReorderHandleProps } from "../songs/SongReorderHandle";
+import type { SongViewBindings } from "../songs/songViewBindings";
 import { isMobileApp } from "../desktopApi";
 import { LIBRARY_ASSET_DRAG_MIME } from "../library/dragDrop";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
@@ -46,8 +46,6 @@ import {
   createEmptySong,
   regionEffectiveKey,
   type SongRegionSummary,
-  type TrackSummary,
-  type TransportSnapshot,
 } from "../desktopApi";
 
 export type CompactClipEntry = {
@@ -72,7 +70,7 @@ export type CompactClipEntry = {
  * Deliberately keyed on the region id, NOT on the playhead position: the
  * panel keeps the 60fps position in a ref on purpose, so a seconds-based
  * derivation silently freezes at whatever value the last unrelated render
- * happened to see. See CompactViewProps.activeRegionId.
+ * happened to see. See SongViewBindings.activeRegionId.
  */
 export function computeActiveSongTrackIds(
   activeRegionId: string | null,
@@ -86,143 +84,16 @@ export function computeActiveSongTrackIds(
   return ids;
 }
 
-type CompactViewProps = {
-  regions: SongRegionSummary[];
-  tracks: TrackSummary[];
-  /** Id of the song region the playhead is currently inside, or null when
-   * it sits between songs. The parent resolves this (in syncLivePosition)
-   * and re-renders only when the playhead crosses a song boundary — the
-   * raw position is intentionally kept out of React state so the 60fps
-   * playhead never re-renders this view. Drives both the active-song
-   * highlight and the mixer's "solo cancion activa" filter. */
-  activeRegionId: string | null;
-  /** Id of the song that has an armed jump. Section-marker jumps do not
-   * match a region id, so no song column is highlighted for those. */
-  pendingRegionId: string | null;
-  /** region_id → flat list of clips inside that song, in the same vertical
-   * order tracks appear in the DAW header pane. Each entry carries the clip
-   * filename and its track's name so the cell can label both without a
-   * separate label column. */
-  clipsByRegion: Record<string, CompactClipEntry[]>;
-  /** Audio routing options for the mixer's audio_to selector — same list
-   * the DAW track header uses. */
-  audioRoutingOptions: Array<{ value: string; label: string }>;
-  /** Mixer handlers — the very same callbacks the DAW track header uses. */
-  mixerHandlers: CompactMixerHandlers;
-  /** Right-click on a mixer strip routes to the parent's existing track
-   * context-menu handler (the same one wired to the DAW track header),
-   * so the seven actions there are reused without duplication. */
-  onTrackContextMenu: (
-    event: ReactMouseEvent<HTMLDivElement>,
-    trackId: string,
-  ) => void;
-  /** Track ids currently selected at the project level. Drives the
-   * `is-selected` class on each mixer strip and feeds the drag
-   * pipeline so multi-selection drag works the same way the DAW
-   * track header does. */
-  selectedTrackIds: string[];
-  /** Click on a strip handle (name/parent band) → selection. Same
-   * Ctrl/Shift modifiers as the DAW header. */
-  onTrackSelect: (
-    trackId: string,
-    trackName: string,
-    event: ReactMouseEvent<HTMLDivElement>,
-  ) => void;
-  /** Pointer-down on a strip handle starts a track-reorder drag. The
-   * parent owns the move / drop pipeline (shared with the DAW). */
-  onTrackDragStart: (
-    event: ReactMouseEvent<HTMLDivElement>,
-    trackId: string,
-  ) => void;
-  /** Id of the currently-selected song region, or null when nothing
-   * is selected. Mirrors the project selection so the compact header
-   * can paint `is-selected` consistently with the DAW. */
-  selectedRegionId: string | null;
-  /** Click on a song header selects that region project-wide. The
-   * toolbar's Transpose/Warp/Master groups bind to this selection. */
-  onSelectRegion: (regionId: string) => void;
+type CompactViewProps = SongViewBindings & {
   /** Controls the "Solo cancion activa" filter inside CompactMixer.
    * Owned by the project-wide parent so the toggle UI can live in
    * the TimelineToolbar without lifting more wiring than necessary. */
   compactMixerFilterActiveSong: boolean;
-  /** Folder track ids the user has folded. Shared with the DAW track
-   * header so folding a folder in either view folds it in both. */
-  collapsedFolders: Set<string>;
-  /** Fold / unfold a folder — the DAW header's own handler, which also
-   * persists the flag to the song. */
-  onToggleFolder: (trackId: string) => void;
-  /** Fired when the user wants to commit the master gain for a region. */
-  onMasterGainChange: (regionId: string, gain: number) => void;
-  onMasterGainCommit: (regionId: string) => void;
-  /** Fired when the user drops one or more files (from the OS file
-   * explorer) into a song's clip stack. The parent translates each File
-   * into an auto-track + clip via createClipsWithAutoTracks. The drop
-   * landing position is the song's start. */
-  onDropOsFilesIntoSong: (regionId: string, files: File[]) => void;
-  /** Fired when the user drags a library asset onto a song column. The
-   * payload mirrors the LibrarySidebarPanel drag payload (file path +
-   * cached duration). The parent translates this into createClipsWithAutoTracks
-   * using the resolved file paths. */
-  onDropLibraryAssetsIntoSong: (
-    regionId: string,
-    payload: Array<{ filePath: string; durationSeconds?: number }>,
-  ) => void;
-  /** Fired from the per-clip context menu in the song column. */
-  onMoveClipToTrack: (clipId: string, targetTrackId: string) => void;
-  onDeleteClip: (clipId: string) => void;
-  /** Fired from the per-column play button. Honours the project's global
-   * song-jump configuration (trigger + transition mode) — same path the
-   * Shift+digit keyboard shortcut uses. */
-  onPlaySong: (regionId: string, regionName: string) => void;
-  /** Fired from the song-column right-click menu. Renames the song
-   * region; the prompt UI lives in the parent. */
-  onRenameSong: (regionId: string) => void;
-  /** Fired from the song-column right-click menu. Sets the BPM at the
-   * song's start by inserting (or replacing) a tempo marker — never
-   * touches the global project BPM, so reordering songs never silently
-   * changes which tempo applies to which section. */
-  onSetSongBpm: (regionId: string) => void;
-  /** Fired from the song-column right-click menu. Deletes the song and
-   * everything that lives inside its range (clips + tempo markers).
-   * The confirm prompt lives in the parent so the destructive-action
-   * copy can stay consistent with the DAW version of this action. */
-  onDeleteSong: (regionId: string) => void;
-  /** Fired from the song-column right-click menu. Exports the song as a
-   * LibreTracks package (.ltpkg). Reuses the exact same backend command
-   * the DAW's right-click "Exportar Cancion" uses, so the file dialog
-   * and output format are identical between views. */
-  onExportSong: (regionId: string) => void;
   /** Fired when the user finishes dragging a song column's resize handle
    * (or double-clicks it, which sends `null` to restore the default width).
    * Fires once per gesture, on release — never during the drag, which is
    * rendered locally. The parent persists it on the region. */
   onSongColumnWidthChange: (regionId: string, widthRem: number | null) => void;
-  /** Dragging a song column to another position of the strip. `targetIndex`
-   * is the song's final position in `regions` (0 = first). Optional so the
-   * view still renders where reordering isn't wired. */
-  onReorderSong?: (regionId: string, targetIndex: number) => void;
-  /** Fired from the song-column right-click menu's "Nota" submenu. Sets the
-   * song's original key (`null` clears it). Reuses the same backend command
-   * (`update_song_region_key`) the DAW context menu uses, so the effective-key
-   * badge stays consistent between views and updates with the transpose. */
-  onSetSongKey: (regionId: string, key: string | null) => void;
-  /** Effective BPM at each song's start_seconds, computed by the parent so
-   * the column reads "what tempo plays here" without re-doing the marker
-   * resolution at render time. Empty / missing values fall back to the
-   * project's global bpm via the visible badge. */
-  bpmByRegion: Record<string, number>;
-  /** Fired after a successful createEmptySong so the snapshot is applied
-   * by whoever owns runAction / applyPlaybackSnapshot upstream. */
-  onSnapshotApplied: (snapshot: TransportSnapshot) => void;
-  /** Opens the OS file dialog filtered to .ltpkg and imports the chosen
-   * package as a new song appended at the end of the project. The dialog
-   * + insert-position math lives in the parent so we keep a single
-   * source of truth for "where does a new song land". */
-  onImportSongPackageFromDialog: () => void;
-  /** Fired when the user drops a .ltpkg file from the OS file explorer
-   * anywhere over the song strip. The parent appends it as a new song at
-   * the end of the project, mirroring the DAW timeline behaviour. */
-  onImportSongPackageFromOsFile: (file: File) => void;
   /** Live drag-over preview driven by the parent's native + library
    * drag pipelines (HTML5 dragover doesn't fire reliably under Tauri,
    * so the per-column dataTransfer-based detection was unreliable).

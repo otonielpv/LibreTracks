@@ -12,42 +12,27 @@ import { flushSync } from "react-dom";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useTranslation } from "react-i18next";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
-import { open } from "@tauri-apps/plugin-dialog";
 import { confirmDialog, promptDialog } from "../../shared/dialog/dialogService";
 import {
-  DEFAULT_APP_SETTINGS,
   buildSongTempoRegions,
   getEffectiveBpmAt,
-  getPrimarySongRegion,
   getSongBaseBpm,
   getSongBaseTimeSignature,
   getSongTempoRegionAtPosition,
   getSongRegionAtPosition,
   normalizeAppSettings,
   type AppSettings,
-  type AudioBackendKind,
   type AudioDeviceDescriptor,
-  type AudioMeterLevel,
   type AutomationActionSummary,
-  type AutomationCueSummary,
-  type AutomationJumpTargetSummary,
   type MixSceneSummary,
   type ClipSummary,
   type JumpTriggerLabel,
-  type LibraryAssetSummary,
-  type LibraryImportProgressEvent,
-  type MarkerKind,
-  type MidiBinding,
   type PendingJumpSummary,
   type PitchPrepareSummary,
   type RemoteServerInfo,
   type SectionMarkerSummary,
-  type SongRegionSummary,
   type SongView,
   type SourceReadinessSummary,
-  type TempoMarkerSummary,
-  type TimeSignatureMarkerSummary,
-  type TrackKind,
   type TrackSummary,
   type TransportSnapshot,
   type WaveformSummaryDto,
@@ -57,55 +42,32 @@ import {
   positionToGain,
 } from "@libretracks/shared/faderScale";
 import {
-  assignSectionMarkerDigit,
   cancelMarkerJump,
-  createAudioTracksWithClips,
-  createClipsBatch,
-  createClipsWithAutoTracks,
   moveClipToTrack,
   createLibraryFolder,
-  createSectionMarker,
-  createSongRegion,
   createTrack,
   deleteClip,
   deleteLibraryAsset,
   deleteLibraryFolder,
-  deleteSectionMarker,
   removeMissingFile,
   deleteSongRegion,
-  deleteSongTempoMarker,
-  deleteSongTimeSignatureMarker,
-  deleteAutomationCue,
-  deleteMidiClip,
-  deleteTrack,
   duplicateClips,
   exportRegionAsPackage,
   exportRegionAsPackageAt,
   listenToSessionExportProgress,
   getAudioOutputDevices,
-  getLibraryAssets,
   getLibraryFolders,
-  getLibraryWaveformSummaries,
   getMidiInputs,
   getMidiOutputs,
   sendMidiTestNote,
   getRemoteServerInfo,
   getSongView,
-  getWaveformSummaries,
   importLibraryAssetsFromDialog,
-  pickLibraryFiles,
-  importAudioFilesFromBytes,
-  importAudioFilesFromPaths,
-  importStagedAudioFiles,
-  importSongPackageFromPathWithProgress,
-  importExternalProjectFromPathWithProgress,
   isMobileApp,
   isTauriApp,
-  listenToMidiRawMessage,
   listenToProjectLoadProgress,
   listenToSettingsUpdated,
   listenToWaveformReady,
-  moveClip,
   moveClipLive,
   moveClipsBatch,
   moveClipsLiveBatch,
@@ -117,9 +79,7 @@ import {
   prewarmTimelineSeek,
   renameLibraryFolder,
   reportUiRenderMetric,
-  resolveMissingFile,
   saveSettings,
-  scheduleMarkerJump,
   seekTransport,
   setMetronomeEnabledRealtime,
   setMetronomeVolumeRealtime,
@@ -130,25 +90,16 @@ import {
   setPadVolumeRealtime,
   setPadConfigRealtime,
   loadPadKey,
-  getPadsCatalog,
-  downloadPad,
-  deletePad,
-  listenToPadDownloadProgress,
   splitClip,
   splitClips,
   splitSongRegion,
-  setSectionMarkerKind,
-  setSectionMarkerColor,
   stopTransport,
   updateClipColor,
   updateAudioSettings,
   updateSectionMarker,
   updateLiveRegionMasterGain,
   moveSongRegion,
-  reorderSongRegion,
-  setSongRegionChart,
   updateSongRegion,
-  updateSongRegionMasterGain,
   updateSongRegionTranspose,
   updateSongRegionWarp,
   setSongRegionTempo,
@@ -167,25 +118,14 @@ import {
   upsertAutomationCue,
   upsertMixScene,
   deleteMixScene,
-  addAutomationTrack,
-  removeAutomationTrack,
   setAutomationTrackPosition,
   formatTransposeSemitones,
   listSessionTemplates,
-  SONG_KEY_OPTIONS,
 } from "./desktopApi";
 import type { SessionTemplateSummary } from "./desktopApi";
 import { getSystemLanguage } from "../../shared/i18n";
 import { formatTransportError } from "./errors/formatTransportError";
 import { recordPlaybackTransition, recordProductEvent } from "../telemetry/telemetry";
-import {
-  markerColor,
-  markerKindCategory,
-  markerKindColor,
-  markerKindLabel,
-  markerKindVariants,
-  availableCueKinds,
-} from "./markerKinds";
 import { TimelineCanvasPane } from "./timeline/TimelineCanvasPane";
 import { HorizontalScrollbar } from "./timeline/HorizontalScrollbar";
 import {
@@ -217,16 +157,12 @@ import { MobileDawOverlays } from "./mobile/MobileDawOverlays";
 import { useMobileSelectionBar } from "./mobile/useMobileSelectionBar";
 import { resolveMobileTrackHeightChange } from "./mobile/mobileTrackHeights";
 import { touchContextPosition } from "./timeline/touchContextPosition";
-import { buildClipSnapAnchors, findSnappedGroupDelta } from "./timeline/clipSnapping";
+import { buildClipSnapAnchors } from "./timeline/clipSnapping";
 import {
   createSeekCoalescer,
   type CoalescedSeek,
 } from "./timeline/seekCoalescer";
 import { createKeyedLatestWinsStreams } from "./latestWinsStream";
-import {
-  clampGroupRowDelta,
-  resolveMemberTargetTrackId,
-} from "./timeline/clipVerticalDrag";
 import { snapToTimelineGrid, useTimelineGrid } from "./timeline/useTimelineGrid";
 import {
   BASE_PIXELS_PER_SECOND,
@@ -234,34 +170,20 @@ import {
   clientXToLocalX,
   getElementScaleX,
   getElementScaleY,
-  getCumulativeMusicalPosition,
   getFollowPlayheadCameraX,
   getMaxCameraX,
   getTimelineWorkspaceEndSeconds,
-  getZoomLevelDelta,
-  nextDownbeatAfter,
-  screenXToSeconds,
-  secondsToScreenX,
-  TIMELINE_ZOOM_MULTIPLIER,
   zoomCameraAtViewportX,
 } from "./timeline/timelineMath";
 import { useTransportStore, type OptimisticMixState } from "./store";
 import {
-  createPendingAudioImports,
-  createPendingAudioImportsFromPaths,
-  mergeLibraryAssetsByFilePath,
   mergePendingClipsByTrack,
-  nextPaint,
-  toAutomationTrack,
   toPendingLibraryAsset,
-  toPendingTrack,
-  AUTOMATION_TRACK_ID,
-  type PendingAudioImport,
   type PendingLibraryAssetSummary,
   type TimelineClipSummary,
   type TimelineTrackSummary,
 } from "./library/pendingAudioImports";
-import { TIMELINE_DEFAULT_TRACK_HEIGHT, useTimelineUIStore } from "./uiStore";
+import { useTimelineUIStore } from "./uiStore";
 import { SideNav } from "./shell/SideNav";
 import { SettingsPanel } from "./panels/SettingsPanel";
 import {
@@ -296,7 +218,6 @@ import {
   removeRecentSession,
   type RecentSessionEntry,
 } from "./recentSessions";
-import { pickFilesViaWebView, stageFileForImport } from "./library/mobileFilePicker";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { useAudioMeters } from "./hooks/useAudioMeters";
 import { useRegionMeters } from "./hooks/useRegionMeters";
@@ -305,7 +226,6 @@ import { useSettingsState } from "./hooks/useSettingsState";
 import { useMidiCapabilities } from "./hooks/useMidiCapabilities";
 import {
   UI_ZOOM_STATUS_EVENT,
-  clientToZoomedCoords,
   getUiZoom,
 } from "../../shared/uiZoom";
 import { useTransportLifecycle } from "./hooks/useTransportLifecycle";
@@ -328,56 +248,37 @@ import { useTimelineRangeSelection } from "./timeline/useTimelineRangeSelection"
 import { useTimelineKeyboardShortcuts } from "./timeline/TimelineKeyboardShortcuts";
 import { useShortcutHint } from "./keyboard/shortcutHint";
 import {
-  buildTimelineDropPreviewGeometry,
-  classifyDroppedPaths,
-  isAcceptedDroppedFileName,
-  type DroppedFileClassification,
   type ExternalDropKind,
   type ExternalDropPreview,
-  type NativeDroppedPathClassification,
 } from "./library/dragDrop";
 import type {
   ClipDragMember,
   ClipDragState,
-  ClipSnapAnchor,
-  ContextMenuAction,
   ContextMenuState,
   InternalLibraryPointerDrag,
   LibraryAssetDragPayload,
   LibraryClipPreviewState,
   LibraryDragAutoScrollState,
   LibraryDragHoverState,
-  LibraryDropLayout,
   LiveClipMoveState,
   LiveTrackMixRequestState,
-  MidiLearnCommand,
   MidiLearnCommandRow,
-  MidiLearnFeedback,
-  NativeClientPointCandidate,
   NativeDropCandidateDebug,
   NativeDropCoordinateMode,
-  NativeDropDebugRect,
-  NativeDroppedFile,
   OptimisticClipOperation,
   PlayheadDragState,
   SettingsTab,
   SidebarTab,
-  TimelineDropGeometry,
   TimelinePanState,
   TimelineRangeSelection,
   TrackDragState,
-  TrackDropState,
   TransportAnchorMeta,
 } from "./types";
 import {
-  CLIP_SNAP_RADIUS_PX,
   DEFAULT_TIMELINE_VIEWPORT_WIDTH,
   densityFromHeight,
-  DRAG_THRESHOLD_PX,
-  DOM_EXTERNAL_DROP_PREVIEW_TTL_MS,
   HARDWARE_OUTPUT_CHANNEL_COUNT,
   TRACK_HEADER_WIDTH,
-  LIBRARY_DRAG_MAX_SCROLL_SPEED_PX,
   LIVE_TRACK_MIX_MIN_INTERVAL_MS,
   LIVE_ZOOM_COMMIT_DEBOUNCE_MS,
   MIDI_LEARN_COMMANDS,
@@ -400,38 +301,22 @@ import { snapshotAgeSeconds } from "./snapshotRoundTrip";
 import {
   buildAudioRoutingOptions,
   buildMemoizedClipsByTrack,
-  buildVisibleTracks,
   clamp,
   clipDisplayName,
-  describeNativeDropElement,
   filterOutputChannelsForOutputCount,
   findClip,
-  findMidiMappingKeyForMessage,
-  findPreviousFolderTrack,
-  findSection,
   findTrack,
   formatBpmDraft,
   formatClock,
-  formatMidiBinding,
   formatMusicalPosition,
-  getNativeCandidatePointerDelta,
   humanizeLibraryTrackName,
   isAudioDeviceVisibleForBackend,
   isInteractiveTimelineTarget,
-  isTimelineZoomTarget,
-  isTrackDescendant,
-  isTrackInfoScrollTarget,
   lanePointerToClip,
   compactClipName,
-  libraryAssetFileName,
   mergeOptimisticClipsByTrack,
-  nativeClientPointCandidates,
   normalizeEnabledOutputChannelsForOutputCount,
-  resolveNativeAudioImportPayloads,
   rulerClientXToSeconds,
-  selectNativeDropCandidate,
-  toClientPointFromNativePosition,
-  toNativeDropDebugRect,
   trackChildrenCount,
   waitForUiPaint,
 } from "./helpers";
@@ -439,10 +324,6 @@ import { createSettingsHandlers } from "./settings/settingsHandlers";
 import { createMetronomeDeviceHandlers } from "./settings/metronomeDeviceHandlers";
 import { visibleSettingsTabs } from "./settings/visibleSettingsTabs";
 import { createLibraryHandlers } from "./library/libraryHandlers";
-import {
-  runAudioImportPipeline,
-  skippedImportsMessage,
-} from "./library/importPipeline";
 import {
   createLibraryDragDrop,
   type LibraryDragDropDeps,
@@ -467,6 +348,14 @@ import { mergeSongView } from "./songs/mergeSongView";
 import { createTrackHeaderHandlers } from "./tracks/trackHeaderHandlers";
 import { useTrackHeights } from "./tracks/useTrackHeights";
 import { createCompactSongHandlers } from "./compact/compactSongHandlers";
+import {
+  createSongViewHandlers,
+  type SongViewHandlerDeps,
+} from "./songs/songViewHandlers";
+import type {
+  PerformanceBindings,
+  SongViewBindings,
+} from "./songs/songViewBindings";
 import { createMarkerMoveHandlers } from "./timeline/markerMoveHandlers";
 import { createRulerMarkerHandlers } from "./rulerMarkers/rulerMarkerHandlers";
 import { useLibraryState } from "./hooks/useLibraryState";
@@ -3460,46 +3349,44 @@ export function TransportPanelContent() {
     [],
   );
 
-  // Master gain handlers follow the track-volume pattern: during drag the
-  // slider writes an optimistic value to the store (so the thumb tracks the
-  // pointer with no IPC delay) and streams realtime updates to the engine;
-  // on pointer-up we commit (writes model, records undo, returns snapshot).
+  // Song-level actions shared by Compacta, Live and Setlist (play a song, drop
+  // audio into it, import a .ltpkg, master gain, reorder, chart, vamp…). See
+  // ./songs/songViewHandlers. Created once; its deps are refreshed on every
+  // render further down, next to libraryPlacementDepsRef.
+  const songViewHandlersDepsRef = useRef<SongViewHandlerDeps | null>(null);
+  const songViewHandlers = useMemo(
+    () =>
+      createSongViewHandlers(() => {
+        const value = songViewHandlersDepsRef.current;
+        if (!value) {
+          throw new Error("song view handlers invoked before first render commit");
+        }
+        return value;
+      }),
+    [],
+  );
+  const {
+    assignAssetsToSongFolder,
+    runSongPackageImport: runCompactSongPackageImport,
+  } = songViewHandlers;
+
+  // The toolbar's master gain is the selected song's: same optimistic drag +
+  // single commit as the song views (./songs/songViewHandlers).
+  const selectedRegionIdForMaster = selectedRegion?.id ?? null;
   const handleSelectedRegionMasterGainChange = useCallback(
     (nextMasterGain: number) => {
-      if (!selectedRegion) return;
-      const clamped = Math.max(0, Math.min(2, nextMasterGain));
-      const targetRegionId = selectedRegion.id;
-      useTransportStore
-        .getState()
-        .setOptimisticRegionMaster(targetRegionId, clamped);
-      void liveRegionMasterGainStream(targetRegionId, clamped).catch(() => {
-        // Realtime stream is best-effort; commit on pointer-up will
-        // reconcile the truth.
-      });
+      if (!selectedRegionIdForMaster) return;
+      songViewHandlers.changeRegionMasterGain(
+        selectedRegionIdForMaster,
+        nextMasterGain,
+      );
     },
-    [selectedRegion],
+    [selectedRegionIdForMaster, songViewHandlers],
   );
-
   const handleSelectedRegionMasterGainCommit = useCallback(() => {
-    if (!selectedRegion) return;
-    const targetRegionId = selectedRegion.id;
-    const optimistic =
-      useTransportStore.getState().optimisticRegionMaster[targetRegionId];
-    if (optimistic === undefined) return;
-    void runAction(async () => {
-      try {
-        const nextSnapshot = await updateSongRegionMasterGain(
-          targetRegionId,
-          optimistic,
-        );
-        applyPlaybackSnapshot(nextSnapshot);
-      } finally {
-        useTransportStore
-          .getState()
-          .setOptimisticRegionMaster(targetRegionId, null);
-      }
-    });
-  }, [applyPlaybackSnapshot, runAction, selectedRegion]);
+    if (!selectedRegionIdForMaster) return;
+    songViewHandlers.commitRegionMasterGain(selectedRegionIdForMaster);
+  }, [selectedRegionIdForMaster, songViewHandlers]);
 
   // Effective timeline BPM at the start of the selected region — the warp
   // panel uses this both for display (× ratio) and as the default source
@@ -3578,102 +3465,6 @@ export function TransportPanelContent() {
     return byRegion;
   }, [song]);
 
-  // The compact view needs a per-region master-gain commit that knows its
-  // region id directly (the toolbar version reads selectedRegion from
-  // context). We adapt the existing handlers to accept an explicit id.
-  const handleCompactMasterGainChange = useCallback(
-    (regionId: string, gain: number) => {
-      const clamped = Math.max(0, Math.min(2, gain));
-      useTransportStore
-        .getState()
-        .setOptimisticRegionMaster(regionId, clamped);
-      void liveRegionMasterGainStream(regionId, clamped).catch(() => {
-        // best-effort; commit reconciles
-      });
-    },
-    [],
-  );
-
-  const handleCompactMasterGainCommit = useCallback(
-    (regionId: string) => {
-      const optimistic =
-        useTransportStore.getState().optimisticRegionMaster[regionId];
-      if (optimistic === undefined) return;
-      void runAction(async () => {
-        try {
-          const nextSnapshot = await updateSongRegionMasterGain(
-            regionId,
-            optimistic,
-          );
-          applyPlaybackSnapshot(nextSnapshot);
-        } finally {
-          useTransportStore
-            .getState()
-            .setOptimisticRegionMaster(regionId, null);
-        }
-      });
-    },
-    [applyPlaybackSnapshot, runAction],
-  );
-
-  // Drop handlers for the compact view's song columns. Two flavours:
-  //
-  //  - OS file drag: the user dragged audio files from Explorer / Finder
-  //    straight into a song column. We run them through the same import
-  //    pipeline the DAW uses (resolveNativeAudioImportPayloads → backend
-  //    importAudioFiles*), then send the resulting library paths to
-  //    createClipsWithAutoTracks so each file lands on its own auto-track.
-  //
-  //  - Library asset drag: the LibrarySidebarPanel emits the same payload
-  //    the DAW timeline already consumes. Each entry already carries a
-  //    file_path inside the project folder, so we skip the import step
-  //    and go straight to createClipsWithAutoTracks.
-  //
-  // In both cases the new clip lands at the song's start_seconds. The
-  // backend extends the region if the clip is longer than the existing
-  // placeholder (step 4.4) and prunes the auto-track later if the user
-  // moves the clip off it.
-  // Library auto-organisation for the compact view: a song's name
-  // doubles as a Library folder name. When audios are imported by
-  // dropping them onto a song column, we make sure that folder exists
-  // and we move the *newly-imported* assets into it. Assets that
-  // already lived in another folder are respected — the user's manual
-  // organisation wins. Empty song name = skip (we don't create a
-  // folder for "").
-  const assignAssetsToSongFolder = useCallback(
-    async (songName: string, assets: LibraryAssetSummary[]) => {
-      const folderName = songName.trim();
-      if (!folderName || assets.length === 0) return assets;
-      // 1) Ensure the folder. createLibraryFolder is idempotent (the
-      //    backend just adds it to the manifest if missing and returns
-      //    the full folder list).
-      try {
-        await createLibraryFolder(folderName);
-      } catch {
-        // If creation fails (already exists / name collision), keep
-        // going — the move below will still place the assets.
-      }
-      // 2) Move only the assets that were freshly created with no
-      //    folder assignment yet. moveLibraryAsset returns the full
-      //    updated asset list every time, so we just keep the last
-      //    response as the canonical state.
-      let latest: LibraryAssetSummary[] = assets;
-      for (const asset of assets) {
-        if (asset.folderPath && asset.folderPath.trim().length > 0) {
-          continue;
-        }
-        try {
-          latest = await moveLibraryAsset(asset.filePath, folderName);
-        } catch {
-          // Per-asset failure shouldn't abort the whole batch.
-        }
-      }
-      mergeLibraryAssets(latest);
-      await refreshLibraryState({ preserveAssets: latest });
-      return latest;
-    },
-    [mergeLibraryAssets, refreshLibraryState],
-  );
 
   // Compact-view song/clip context-menu handlers + the library-folder rename
   // sync. See ./compact/compactSongHandlers. Reactive state is read through
@@ -3733,90 +3524,6 @@ export function TransportPanelContent() {
     ],
   );
 
-  const handleCompactDropOsFilesIntoSong = useCallback(
-    (regionId: string, files: File[]) => {
-      const region = song?.regions.find((r) => r.id === regionId);
-      if (!region) return;
-      // Reject unsupported file types up front. Mixed drops (some
-      // valid + some invalid) are also refused outright rather than
-      // silently importing the valid subset, because the user just
-      // dragged a batch and "some imported, some skipped" hides
-      // failures. Status: see status.unsupportedDropRejected i18n.
-      const accepted = files.filter((file) =>
-        isAcceptedDroppedFileName(file.name),
-      );
-      const hasUnsupported = accepted.length !== files.length;
-      // .ltpkg dropped onto a column is also invalid — packages go to
-      // the strip, not into an existing song. Treat as unsupported.
-      const hasPackage = accepted.some((file) =>
-        file.name.toLowerCase().endsWith(".ltpkg"),
-      );
-      if (hasUnsupported || hasPackage || accepted.length === 0) {
-        setStatus(
-          t("transport.status.unsupportedDrop", {
-            defaultValue: "Tipo de archivo no admitido",
-          }),
-        );
-        return;
-      }
-      const dropSeconds = region.startSeconds;
-      void runAction(async () => {
-        const nativePayloads = isTauriApp
-          ? resolveNativeAudioImportPayloads(accepted)
-          : null;
-        const importResult = nativePayloads
-          ? await importAudioFilesFromPaths(nativePayloads)
-          : await importAudioFilesFromBytes(
-              await Promise.all(
-                accepted.map(async (file) => ({
-                  fileName: file.name,
-                  bytes: new Uint8Array(await file.arrayBuffer()),
-                })),
-              ),
-            );
-        const importedAssets = importResult.assets;
-        // A file the decoder cannot read no longer sinks the whole drop, so
-        // the ones it did skip have to be named or they vanish silently.
-        if (importResult.skipped.length) {
-          setStatus(skippedImportsMessage(importResult.skipped, t));
-        }
-        mergeLibraryAssets(importedAssets);
-        await refreshLibraryState({ preserveAssets: importedAssets });
-        if (importedAssets.length === 0) return;
-        // Auto-place the freshly imported assets in the song's Library
-        // folder (creating it if needed). Assets that already had a
-        // folder are respected.
-        await assignAssetsToSongFolder(region.name, importedAssets);
-        const snapshot = await createClipsWithAutoTracks(
-          importedAssets.map((asset) => ({
-            filePath: asset.filePath,
-            timelineStartSeconds: dropSeconds,
-          })),
-        );
-        applyPlaybackSnapshot(snapshot);
-        setStatus(
-          importedAssets.length === 1
-            ? t("transport.status.clipAdded", {
-                name: importedAssets[0].fileName,
-              })
-            : t("transport.status.clipsAdded", {
-                count: importedAssets.length,
-              }),
-        );
-      });
-    },
-    [
-      applyPlaybackSnapshot,
-      assignAssetsToSongFolder,
-      mergeLibraryAssets,
-      refreshLibraryState,
-      runAction,
-      setStatus,
-      song,
-      t,
-    ],
-  );
-
   // Android: bulk "take these to the timeline". Touch can't pointer-drag
   // from the library across panels, so the library's selection action bar
   // (and the post-import prompt) call this instead: every asset lands on
@@ -3841,88 +3548,6 @@ export function TransportPanelContent() {
   const handleAddLibraryAssetsAtPlayhead = libraryPlacement.addAssetsAtPlayhead;
   const handleCompactDropLibraryAssetsIntoSong = libraryPlacement.addAssetsToSong;
   const handleAddLibraryFolderToTimeline = libraryPlacement.addFolderToTimeline;
-
-  // Imports a .ltpkg as a new song appended at the end of the project.
-  // The previous logic was "lastEnd + one bar at the project's global
-  // BPM", which broke as soon as the last region's end didn't fall on a
-  // downbeat (because the user trimmed the region, or because a tempo
-  // marker changed the grid mid-song). The correct anchor is the first
-  // real downbeat at or after `lastEnd`, computed from the project's
-  // tempo regions — that way the imported song always starts on a bar
-  // line regardless of how the previous song ended.
-  //
-  // The first song in an empty project still anchors at 0 (no leading
-  // silence), same rule as create_empty_song.
-  const runCompactSongPackageImport = useCallback(
-    async (packagePath: string) => {
-      const currentSong = song;
-      if (!currentSong) return;
-      const lastEnd = currentSong.regions.reduce(
-        (acc, region) => Math.max(acc, region.endSeconds),
-        0,
-      );
-      const isFirstSong = currentSong.regions.length === 0;
-      const insertAt = isFirstSong
-        ? 0
-        : nextDownbeatAfter(
-            lastEnd,
-            getSongBaseBpm(currentSong),
-            getSongBaseTimeSignature(currentSong),
-            buildSongTempoRegions(currentSong),
-          );
-      await handleDroppedSongPackagePath(packagePath, insertAt);
-    },
-    // handleDroppedSongPackagePath is a function declaration in this
-    // component body — included for exhaustive-deps even though its
-    // identity is stable across renders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [song],
-  );
-
-  // File-dialog entry point for "Importar canción…" in the compact view.
-  // Opens the same .ltpkg picker the DAW context-menu export uses, then
-  // appends the chosen package at the end of the project.
-  //
-  // Non-blocking: NO `busy: true`. The package import (decompression +
-  // structure persist) runs off the session lock and reports progress through
-  // the load-progress events; raising the blocking shell overlay here would
-  // freeze the whole UI behind a "Descomprimiendo…" screen for the duration of
-  // a large package, which is exactly what we want to avoid. Mirrors
-  // handleImportSongClick (the file-menu entry point).
-  const handleCompactImportSongPackageFromDialog = useCallback(() => {
-    void runAction(async () => {
-      const picked = await open({
-        multiple: false,
-        directory: false,
-        filters: [{ name: "LibreTracks Package", extensions: ["ltpkg"] }],
-      });
-      const path = typeof picked === "string" ? picked : null;
-      if (!path) return;
-      await runCompactSongPackageImport(path);
-    });
-  }, [runAction, runCompactSongPackageImport]);
-
-  // OS-drag of a .ltpkg dropped anywhere over the compact song strip.
-  // When running under Tauri we can resolve the absolute path; in the
-  // browser fallback we'd have no path to feed import_song_package, so
-  // we silently no-op there.
-  //
-  // Non-blocking (no `busy: true`) for the same reason as
-  // handleCompactImportSongPackageFromDialog — the import runs off the session
-  // lock and must not raise the freezing shell overlay.
-  const handleCompactImportSongPackageFromOsFile = useCallback(
-    (file: File) => {
-      void runAction(async () => {
-        const payloads = isTauriApp
-          ? resolveNativeAudioImportPayloads([file])
-          : null;
-        const nativePath = payloads?.[0]?.sourcePath;
-        if (!nativePath) return;
-        await runCompactSongPackageImport(nativePath);
-      });
-    },
-    [runAction, runCompactSongPackageImport],
-  );
 
   const {
     handleSaveProjectClick,
@@ -3991,55 +3616,6 @@ export function TransportPanelContent() {
       if (nextCameraX !== null) updateCameraX(nextCameraX);
     },
   });
-
-  // Per-song play button in the compact view: routes through the same
-  // scheduleRegionJumpWithOptions path the Shift+digit keyboard shortcut
-  // uses, so the user gets exactly the global "song jump" behaviour
-  // (immediate / after-bars / region-end + instant / fade-out transition)
-  // configured from the toolbar.
-  const handleCompactPlaySong = useCallback(
-    (regionId: string, regionName: string) => {
-      void runAction(async () => {
-        // If the transport is already running, route through the
-        // shared scheduler so the song-jump respects the global
-        // transition mode (immediate / next marker / region end / etc.)
-        // configured in the toolbar — same path the Shift+digit
-        // shortcut takes.
-        //
-        // If the transport is NOT running yet, scheduling a jump
-        // would just queue it and the user wouldn't hear anything.
-        // Instead, jump the playhead to the song's start and start
-        // playback. This matches the natural expectation of "I
-        // clicked play on this song, please play it".
-        if (playbackState === "playing") {
-          await scheduleRegionJumpWithOptions(regionId, regionName);
-          return;
-        }
-        const targetRegion = songRef.current?.regions.find(
-          (region) => region.id === regionId,
-        );
-        if (!targetRegion) return;
-        await performSeek(targetRegion.startSeconds);
-        const nextSnapshot = await playTransport();
-        applyPlaybackSnapshot(nextSnapshot);
-        setStatus(
-          t("transport.status.songStarted", {
-            name: regionName,
-            defaultValue: `Reproduciendo ${regionName}`,
-          }),
-        );
-      });
-    },
-    [
-      applyPlaybackSnapshot,
-      performSeek,
-      playbackState,
-      runAction,
-      scheduleRegionJumpWithOptions,
-      setStatus,
-      t,
-    ],
-  );
 
   // Warn once when the configured MIDI device is absent at boot.
   useEffect(() => {
@@ -6225,6 +5801,25 @@ export function TransportPanelContent() {
       t,
     ],
   );
+  // The song views' mixer drives the same handlers as the DAW header.
+  const songMixerHandlers = useMemo(
+    () => ({
+      onToggleMute: handleTrackHeaderMuteToggle,
+      onToggleSolo: handleTrackHeaderSoloToggle,
+      onToggleTranspose: handleTrackHeaderTransposeToggle,
+      onVolumeChange: handleTrackHeaderVolumeChange,
+      onCommitVolume: handleTrackHeaderVolumeCommit,
+      onPanChange: handleTrackHeaderPanChange,
+      onCommitPan: handleTrackHeaderPanCommit,
+      onAudioToChange: handleTrackHeaderAudioToChange,
+    }),
+    [
+      handleTrackHeaderAudioToChange, handleTrackHeaderMuteToggle,
+      handleTrackHeaderPanChange, handleTrackHeaderPanCommit,
+      handleTrackHeaderSoloToggle, handleTrackHeaderTransposeToggle,
+      handleTrackHeaderVolumeChange, handleTrackHeaderVolumeCommit,
+    ],
+  );
 
   // Pulsacion sobre el fondo del timeline. Las reglas -y el reparto distinto
   // entre raton y dedo- viven en ./timeline/timelineBackgroundSeek.
@@ -6674,6 +6269,22 @@ export function TransportPanelContent() {
     setStatus,
     dropFolder: dropLibraryFolder,
   };
+  songViewHandlersDepsRef.current = {
+    t,
+    getSong: () => songRef.current,
+    runAction,
+    applyPlaybackSnapshot,
+    setStatus,
+    mergeLibraryAssets,
+    refreshLibraryState,
+    streamRegionMasterGain: liveRegionMasterGainStream,
+    importSongPackageAt: handleDroppedSongPackagePath,
+    isPlaying: () => playbackState === "playing",
+    seek: performSeek,
+    scheduleSongJump: scheduleRegionJumpWithOptions,
+    toggleVamp: toggleTimelineVamp,
+    markerPrimaryAction: handleMarkerPrimaryAction,
+  };
 
   // Barra tactil de la seleccion (docs/plans/mobile-daw, paso 2). Se instancia
   // aqui y no junto a `timelineMenus` porque necesita
@@ -6900,6 +6511,58 @@ export function TransportPanelContent() {
     isMobile: isMobileApp,
     midiAvailable: midiCapabilities?.available ?? false,
   });
+
+  // What every song view receives (./songs/songViewBindings). Plain objects:
+  // the views are memo and the spread compares field by field, so each field
+  // must be stable; the container's identity does not matter.
+  const songBindings: SongViewBindings | null = song ? {
+    regions: song.regions, tracks: song.tracks,
+    activeRegionId: activeSongRegionId || null,
+    pendingRegionId: pendingMarkerJump?.targetMarkerId ?? null,
+    clipsByRegion, audioRoutingOptions, mixerHandlers: songMixerHandlers,
+    onTrackContextMenu: handleTrackHeaderContextMenu,
+    onMasterGainChange: songViewHandlers.changeRegionMasterGain,
+    onMasterGainCommit: songViewHandlers.commitRegionMasterGain,
+    onDropOsFilesIntoSong: songViewHandlers.dropOsFilesIntoSong,
+    onDropLibraryAssetsIntoSong: handleCompactDropLibraryAssetsIntoSong,
+    onMoveClipToTrack: handleCompactMoveClipToTrack,
+    onDeleteClip: handleCompactDeleteClip,
+    onPlaySong: songViewHandlers.playSong,
+    onRenameSong: handleCompactRenameSong,
+    onSetSongBpm: handleCompactSetSongBpm,
+    onDeleteSong: handleCompactDeleteSong,
+    onExportSong: handleCompactExportSong,
+    onSetSongKey: handleCompactSetSongKey,
+    onReorderSong: songViewHandlers.reorderSong,
+    bpmByRegion, onSnapshotApplied: applyPlaybackSnapshot,
+    onImportSongPackageFromDialog: songViewHandlers.importSongPackageFromDialog,
+    onImportSongPackageFromOsFile: songViewHandlers.importSongPackageFromOsFile,
+    selectedTrackIds, onTrackSelect: handleTrackHeaderSelect,
+    onTrackDragStart: handleTrackHeaderDragStart,
+    selectedRegionId, onSelectRegion: setSelectedRegionId,
+    collapsedFolders, onToggleFolder: handleTrackHeaderFolderToggle,
+  } : null;
+  const performanceBindings: PerformanceBindings | null = song ? {
+    song, positionSecondsRef: displayPositionSecondsRef, settings: appSettings,
+    pendingMarkerId: pendingMarkerJump?.targetMarkerId ?? null,
+    pendingMarkerName: pendingMarkerJump?.targetMarkerName ?? null,
+    activeVamp,
+    onMarkerAction: songViewHandlers.markerAction,
+    onSongAction: songViewHandlers.songAction,
+    onReorderSong: songViewHandlers.reorderSong,
+    onChartChange: songViewHandlers.setSongChart,
+    onToggleVamp: songViewHandlers.toggleVamp,
+    onCancelPendingJump: songViewHandlers.cancelPendingJump,
+    onGlobalJumpModeChange: handleGlobalJumpModeChange,
+    onGlobalJumpBarsChange: handleGlobalJumpBarsChange,
+    onSongJumpTriggerChange: handleSongJumpTriggerChange,
+    onSongJumpBarsChange: handleSongJumpBarsChange,
+    onSongTransitionModeChange: handleSongTransitionModeChange,
+    onVampModeChange: handleVampModeChange,
+    onVampBarsChange: handleVampBarsChange,
+    vampBetweenSongs: appSettings.vampBetweenSongs,
+    onVampBetweenSongsChange: handleVampBetweenSongsChange,
+  } : null;
 
   return (
     <Profiler id="transport-panel" onRender={handlePanelRender}>
@@ -8010,92 +7673,19 @@ export function TransportPanelContent() {
                       toggles view mode (toolbar button or Tab key). The
                       backend snapshot powering both views is the same; the
                       two components are pure projections of song state. */}
-                  {viewMode === "compact" && song ? (
+                  {viewMode === "compact" && songBindings ? (
                     <CompactView
-                      regions={song.regions}
-                      tracks={song.tracks}
-                      activeRegionId={activeSongRegionId || null}
-                      pendingRegionId={pendingMarkerJump?.targetMarkerId ?? null}
-                      clipsByRegion={clipsByRegion}
-                      audioRoutingOptions={audioRoutingOptions}
-                      mixerHandlers={{
-                        onToggleMute: handleTrackHeaderMuteToggle,
-                        onToggleSolo: handleTrackHeaderSoloToggle,
-                        onToggleTranspose: handleTrackHeaderTransposeToggle,
-                        onVolumeChange: handleTrackHeaderVolumeChange,
-                        onCommitVolume: handleTrackHeaderVolumeCommit,
-                        onPanChange: handleTrackHeaderPanChange,
-                        onCommitPan: handleTrackHeaderPanCommit,
-                        onAudioToChange: handleTrackHeaderAudioToChange,
-                      }}
-                      onTrackContextMenu={handleTrackHeaderContextMenu}
-                      onMasterGainChange={handleCompactMasterGainChange}
-                      onMasterGainCommit={handleCompactMasterGainCommit}
-                      onDropOsFilesIntoSong={handleCompactDropOsFilesIntoSong}
-                      onDropLibraryAssetsIntoSong={
-                        handleCompactDropLibraryAssetsIntoSong
-                      }
-                      onMoveClipToTrack={handleCompactMoveClipToTrack}
-                      onDeleteClip={handleCompactDeleteClip}
-                      onPlaySong={handleCompactPlaySong}
-                      onRenameSong={handleCompactRenameSong}
-                      onSetSongBpm={handleCompactSetSongBpm}
-                      onDeleteSong={handleCompactDeleteSong}
-                      onExportSong={handleCompactExportSong}
-                      onSetSongKey={handleCompactSetSongKey}
+                      {...songBindings}
                       onSongColumnWidthChange={handleCompactColumnWidth}
-                      onReorderSong={(id, index) => runAction(async () => applyPlaybackSnapshot(await reorderSongRegion(id, index)))}
-                      bpmByRegion={bpmByRegion}
-                      onSnapshotApplied={applyPlaybackSnapshot}
-                      onImportSongPackageFromDialog={
-                        handleCompactImportSongPackageFromDialog
-                      }
-                      onImportSongPackageFromOsFile={
-                        handleCompactImportSongPackageFromOsFile
-                      }
                       dragPreview={compactDragPreview}
-                      selectedTrackIds={selectedTrackIds}
-                      onTrackSelect={handleTrackHeaderSelect}
-                      onTrackDragStart={handleTrackHeaderDragStart}
-                      selectedRegionId={selectedRegionId}
-                      onSelectRegion={setSelectedRegionId}
-                      compactMixerFilterActiveSong={
-                        compactMixerFilterActiveSong
-                      }
-                      collapsedFolders={collapsedFolders}
-                      onToggleFolder={handleTrackHeaderFolderToggle}
+                      compactMixerFilterActiveSong={compactMixerFilterActiveSong}
                     />
                   ) : null}
 
-                  {viewMode === "live" && song ? (
+                  {viewMode === "live" && performanceBindings ? (
                     <LivePerformanceView
-                      song={song}
-                      positionSecondsRef={displayPositionSecondsRef}
-                      settings={appSettings}
-                      pendingMarkerId={pendingMarkerJump?.targetMarkerId ?? null}
-                      pendingMarkerName={pendingMarkerJump?.targetMarkerName ?? null}
-                      activeVamp={activeVamp}
+                      {...performanceBindings}
                       onViewModeChange={setViewMode}
-                      onMarkerAction={(marker) => void runAction(() => handleMarkerPrimaryAction(marker))}
-                      onSongAction={(region) => handleCompactPlaySong(region.id, region.name)}
-                      onReorderSong={(id, index) => runAction(async () => applyPlaybackSnapshot(await reorderSongRegion(id, index)))}
-                      onChartChange={(regionId, chart) => runAction(async () => applyPlaybackSnapshot(await setSongRegionChart(regionId, chart)))}
-                      onToggleVamp={() => void runAction(async () => {
-                        await toggleTimelineVamp();
-                      })}
-                      onCancelPendingJump={() => void runAction(async () => {
-                        applyPlaybackSnapshot(await cancelMarkerJump());
-                        setStatus(t("transport.status.jumpCancelled"));
-                      })}
-                      onGlobalJumpModeChange={handleGlobalJumpModeChange}
-                      onGlobalJumpBarsChange={handleGlobalJumpBarsChange}
-                      onSongJumpTriggerChange={handleSongJumpTriggerChange}
-                      onSongJumpBarsChange={handleSongJumpBarsChange}
-                      onSongTransitionModeChange={handleSongTransitionModeChange}
-                      onVampModeChange={handleVampModeChange}
-                      onVampBarsChange={handleVampBarsChange}
-                      vampBetweenSongs={appSettings.vampBetweenSongs}
-                      onVampBetweenSongsChange={handleVampBetweenSongsChange}
                     />
                   ) : null}
                 </section>
