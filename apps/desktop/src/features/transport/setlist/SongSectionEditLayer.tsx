@@ -34,11 +34,15 @@ const DRAG_THRESHOLD_PX = 3;
 const PREVIEW_FALLBACK_MS = 400;
 
 /**
- * The handles of the song's sections over its waveform (Edit → Sections).
- * Positions come from the view's one time scale (percent of the song). A
- * drag is previewed locally by moving the handles with a transform; on
- * release ONE commit moves the whole group. Touch: only the handle drags (the
- * waveform keeps scrolling), a long-press on it opens its menu.
+ * The handles of the song's sections and cues over its waveform, while
+ * editing. Dragging a section's handle moves its start, which is what changes
+ * the length of the sections on both sides; the handle at the end changes the
+ * song's end (the last section's length). Positions come from the view's one
+ * time scale (percent of the song). A drag is previewed locally with a
+ * transform; on release ONE commit. The layer itself lets clicks through to
+ * the waveform (double click creates, right click opens the ruler menu); only
+ * the handles take the pointer. Touch: only a handle drags, a long-press on it
+ * opens its menu.
  */
 function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEditLayerProps) {
   const { t } = useTranslation();
@@ -60,11 +64,10 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
     endSeconds: region.endSeconds,
     widthPx: 100,
   });
-  const sections = song.sectionMarkers.filter(
+  // Sections and cues ("avisos") alike: both are section markers.
+  const markers = song.sectionMarkers.filter(
     (marker) =>
-      markerCategory(marker) === "section" &&
-      marker.startSeconds >= region.startSeconds &&
-      marker.startSeconds < region.endSeconds,
+      marker.startSeconds >= region.startSeconds && marker.startSeconds < region.endSeconds,
   );
 
   // A new snapshot puts every handle where the model says: drop any preview.
@@ -149,18 +152,41 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
     window.addEventListener("pointercancel", finish);
   };
 
-  const handleDoubleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+  /** The song-end handle: previewed with a transform, one resize on release. */
+  const handleEndPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    event.stopPropagation();
     const layer = layerRef.current;
-    if (!layer || (event.target as Element).closest("[data-section-handle]")) return;
-    const rect = layer.getBoundingClientRect();
-    const widthPx = layer.offsetWidth || rect.width;
-    const zoom = rect.width > 0 ? widthPx / rect.width : 1;
-    const scale = createSongTimeScale({
-      startSeconds: region.startSeconds,
-      endSeconds: region.endSeconds,
-      widthPx,
-    });
-    handlers.createAt(scale.pxToSeconds((event.clientX - rect.left) * zoom));
+    const element = event.currentTarget;
+    if (!layer) return;
+    const widthPx = layer.offsetWidth || layer.getBoundingClientRect().width;
+    const pxPerSecond = widthPx / Math.max(1e-6, region.endSeconds - region.startSeconds);
+    const pointerId = event.pointerId;
+    const startX = event.clientX;
+    let moved = false;
+    let dx = 0;
+    const onMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
+      dx = moveEvent.clientX - startX;
+      if (!moved && Math.abs(dx) < DRAG_THRESHOLD_PX) return;
+      moved = true;
+      element.style.setProperty("transform", `translate3d(${dx}px, 0, 0)`);
+    };
+    const finish = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== pointerId) return;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      const committed =
+        moved && upEvent.type === "pointerup" && pxPerSecond > 0
+          ? handlers.resizeSongEnd(region.endSeconds + dx / pxPerSecond)
+          : false;
+      if (!committed) element.style.removeProperty("transform");
+      else previewTimerRef.current = window.setTimeout(clearPreview, PREVIEW_FALLBACK_MS);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
   };
 
   return (
@@ -168,17 +194,16 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
       ref={layerRef}
       className={`lt-setlist-section-layer${isMobileApp ? " is-touch" : ""}`}
       aria-label={t("setlistView.sections.layer", { name: region.name })}
-      onDoubleClick={handleDoubleClick}
       onPointerDownCapture={isMobileApp ? touchMenu.begin : undefined}
       onPointerMoveCapture={isMobileApp ? touchMenu.move : undefined}
       onPointerUpCapture={isMobileApp ? touchMenu.cancel : undefined}
       onPointerCancelCapture={isMobileApp ? touchMenu.cancel : undefined}
     >
-      {sections.map((marker) => (
+      {markers.map((marker) => (
         <button
           key={marker.id}
           type="button"
-          className={`lt-setlist-section-handle${selectedIds.has(marker.id) ? " is-selected" : ""}`}
+          className={`lt-setlist-section-handle is-${markerCategory(marker)}${selectedIds.has(marker.id) ? " is-selected" : ""}`}
           data-section-handle={marker.id}
           style={
             {
@@ -198,6 +223,14 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
           <span className="lt-setlist-section-flag">{marker.name}</span>
         </button>
       ))}
+      <button
+        type="button"
+        className="lt-setlist-section-handle is-song-end"
+        data-section-handle="song-end"
+        style={{ left: "100%" }}
+        aria-label={t("setlistView.sections.songEnd", { name: region.name })}
+        onPointerDown={handleEndPointerDown}
+      />
     </div>
   );
 }

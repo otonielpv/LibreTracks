@@ -165,27 +165,15 @@ describe("Setlist mixer tracks", () => {
 });
 
 describe("Setlist console strips", () => {
-  it("ends with Click, Guide and then the song Master", () => {
+  it("ends with the song Master; Click and Guide stay in the top bar", () => {
     const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="wide" />);
     const order = Array.from(container.querySelectorAll("[data-console-strip]")).map((element) =>
       element.getAttribute("data-console-strip"),
     );
-    expect(order).toEqual(["setlistView.mixer.click", "setlistView.mixer.guide", "setlistView.mixer.master"]);
+    expect(order).toEqual(["setlistView.mixer.master"]);
+    expect(screen.queryByRole("tab", { name: "setlistView.mixer.tabs.click" })).toBeNull();
     const console = container.querySelector(".lt-setlist-console")!;
     expect(console.lastElementChild?.getAttribute("data-console-strip")).toBe("setlistView.mixer.master");
-  });
-
-  it("Click and Guide use the handlers of the DAW's popovers", () => {
-    const base = props({ selectedRegionId: "a" });
-    render(<SetlistView {...base} layoutClass="wide" />);
-    const click = screen.getByRole("slider", { name: "transport.settingsModal.metronomeVolume" });
-    fireEvent.keyDown(click, { key: "ArrowDown" });
-    fireEvent.keyUp(click, { key: "ArrowDown" });
-    expect(base.auxHandlers.handleMetronomeVolumeDraftChange).toHaveBeenCalled();
-    expect(base.auxHandlers.commitMetronomeVolumeDraft).toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.guideToggle" }));
-    expect(base.auxHandlers.handleVoiceGuideEnabledChange).toHaveBeenCalledWith(true);
   });
 
   it("the Master strip drives the region master-gain handlers", () => {
@@ -204,12 +192,6 @@ describe("Setlist console strips", () => {
     fireEvent.keyUp(master, { key: "ArrowDown" });
     expect(onMasterGainChange).toHaveBeenCalledWith("b", expect.any(Number));
     expect(onMasterGainCommit).toHaveBeenCalledWith("b");
-  });
-
-  it("the Click/Guide tab shows the DAW popovers' controls", () => {
-    render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="wide" />);
-    fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.clickSettings" }));
-    expect(screen.getByText("transport.settingsModal.metronomeAccentSound")).toBeTruthy();
   });
 
   it("the Pads tab shows the pad controls with the catalog", async () => {
@@ -261,12 +243,12 @@ describe("Setlist mixer hint and sizes", () => {
     expect(useSetlistStore.getState().mixerHeightPx).toBe(600);
   });
 
-  it("medium: the mixer folds to a bar with Click, Guide and Master", () => {
+  it("medium: the mixer folds to a bar with the Master", () => {
     const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="medium" />);
     fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.collapse" }));
     const mixer = container.querySelector(".lt-setlist-mixer.is-collapsed")!;
     expect(stripNames(container)).toEqual([]);
-    expect(within(mixer as HTMLElement).getAllByText(/setlistView.mixer.(click|guide|master)$/)).toHaveLength(3);
+    expect(within(mixer as HTMLElement).getAllByText("setlistView.mixer.master")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.expand" }));
     expect(stripNames(container)).toEqual(["Batería", "Voz A"]);
   });

@@ -32,14 +32,6 @@
   background: var(--lt-setlist-surface);
 }
 
-.lt-setlist-song-band {
-  min-width: 0;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 0.25rem;
-}
-
 .lt-setlist-bottom {
   position: relative;
   min-width: 0;
@@ -58,25 +50,11 @@
   flex: 0 0 min(24rem, 32%);
 }
 
-/* medium: igual pero más apretada; mapa y onda en una sola banda y el cajón
-   es una hoja que sube desde abajo y tapa el mezclador. */
+/* medium: igual pero más apretada; el cajón es una hoja que sube desde abajo
+   y tapa el mezclador. */
 .lt-setlist-view.is-medium {
   grid-template-rows: auto minmax(5rem, 1fr) minmax(8rem, 1fr);
   --lt-setlist-gap: 0.35rem;
-}
-
-.lt-setlist-view.is-medium .lt-setlist-song-band {
-  grid-template-rows: minmax(0, 1fr);
-}
-
-.lt-setlist-view.is-medium .lt-setlist-song-band > .lt-setlist-zone {
-  grid-area: 1 / 1;
-}
-
-.lt-setlist-view.is-medium .lt-setlist-song-band > .lt-setlist-zone.is-map {
-  z-index: 1;
-  background: transparent;
-  border-color: transparent;
 }
 
 .lt-setlist-view.is-medium .lt-setlist-zone.is-drawer {
@@ -408,86 +386,106 @@ html.lt-mobile .lt-setlist-add-song-button {
   min-height: 2.75rem;
 }
 
-/* ---- Mapa de la canción (paso 04) ---- */
+/* ---- Banda de la canción: onda + secciones (pasos 04-05) ----
+   Una sola banda: la onda abajo, los bloques de sección encima (tintados y
+   alineados por la misma escala), y una franja de nombres arriba que es lo
+   único que recibe clics (salta a la sección). El resto deja pasar el clic a
+   la onda (seek). La fila de acciones va debajo. */
 
-.lt-setlist-zone.is-map {
-  display: flex;
+.lt-setlist-zone.is-overview {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: "band" "actions";
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-zone.is-overview > .lt-setlist-overview {
+  grid-area: band;
   min-height: 0;
 }
 
+.lt-setlist-zone.is-overview .lt-setlist-overview-canvas {
+  top: var(--lt-setlist-label-height);
+  height: calc(100% - var(--lt-setlist-label-height));
+}
+
+.lt-setlist-view {
+  --lt-setlist-label-height: 1.6rem;
+}
+
 .lt-setlist-map {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  padding: 0.35rem;
+  display: contents;
 }
 
 .lt-setlist-map-blocks {
+  grid-area: band;
   position: relative;
-  display: flex;
-  gap: 2px;
-  min-height: 4rem;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior: contain;
-}
-
-.lt-setlist-map.is-medium .lt-setlist-map-blocks {
-  min-height: 3rem;
-}
-
-.lt-setlist-map.is-short .lt-setlist-map-blocks {
-  min-height: 2.75rem;
+  z-index: 1;
+  min-height: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .lt-setlist-map-block {
   --lt-setlist-block-color: #7c8a86;
-  position: relative;
-  flex: var(--lt-setlist-block-grow, 1) 0 0;
-  min-width: 4.5rem;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 0.1rem;
-  padding: 0.25rem 0.45rem;
-  border: 1px solid transparent;
-  border-radius: 0.45rem;
-  background: color-mix(in srgb, var(--lt-setlist-block-color) 32%, #111514);
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-left: 2px solid var(--lt-setlist-block-color);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 14%, transparent);
   color: var(--lt-setlist-text);
   font: inherit;
   text-align: left;
-  cursor: pointer;
+  pointer-events: none;
   overflow: hidden;
 }
 
-.lt-setlist-map-block::before {
-  content: "";
+.lt-setlist-map-label {
   position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: var(--lt-setlist-block-color);
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--lt-setlist-label-height);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.4rem;
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 45%, #111514);
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 .lt-setlist-map-block.is-start,
 .lt-setlist-map-block.is-song {
+  background: transparent;
+}
+
+.lt-setlist-map-block.is-start .lt-setlist-map-label,
+.lt-setlist-map-block.is-song .lt-setlist-map-label {
   background: var(--lt-setlist-surface-raised);
 }
 
 .lt-setlist-map-block.is-active {
-  border-color: var(--lt-setlist-text);
-  background: color-mix(in srgb, var(--lt-setlist-block-color) 55%, #111514);
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 26%, transparent);
 }
 
-.lt-setlist-map-block.is-next {
-  border-style: dotted;
-  border-color: var(--lt-setlist-text-muted);
+.lt-setlist-map-block.is-active .lt-setlist-map-label {
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 70%, #111514);
 }
 
-.lt-setlist-map-block.is-pending {
-  border: 2px dashed #f2c45a;
+.lt-setlist-map-block.is-next .lt-setlist-map-label {
+  box-shadow: inset 0 -2px 0 var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-map-block.is-pending .lt-setlist-map-label {
+  box-shadow: inset 0 0 0 2px #f2c45a;
 }
 
 .lt-setlist-map-block.is-looping {
@@ -548,6 +546,8 @@ html.lt-mobile .lt-setlist-add-song-button {
 }
 
 .lt-setlist-map-actions {
+  grid-area: actions;
+  padding: 0.25rem 0.35rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -588,18 +588,8 @@ html.lt-mobile .lt-setlist-add-song-button {
   color: var(--lt-setlist-text-muted);
 }
 
-html.lt-mobile .lt-setlist-map-block {
-  min-height: 2.75rem;
-}
 
 /* ---- Onda de la canción (paso 05) ---- */
-
-.lt-setlist-zone.is-overview {
-  position: relative;
-  display: flex;
-  min-height: 0;
-  overflow: hidden;
-}
 
 .lt-setlist-overview {
   position: relative;
@@ -646,31 +636,10 @@ html.lt-mobile .lt-setlist-map-block {
 
 /* medium: los bloques del mapa encima de la onda, alineados con ella por la
    misma escala de tiempo (posiciones absolutas en %). */
-.lt-setlist-map.is-overlay .lt-setlist-map-blocks {
-  min-height: 100%;
-  overflow: visible;
-}
 
-.lt-setlist-map.is-overlay .lt-setlist-map-block {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  min-width: 0;
-  background: color-mix(in srgb, var(--lt-setlist-block-color) 22%, transparent);
-}
 
-.lt-setlist-map.is-overlay .lt-setlist-map-block.is-active {
-  background: color-mix(in srgb, var(--lt-setlist-block-color) 38%, transparent);
-}
 
-.lt-setlist-view.is-medium .lt-setlist-song-band > .lt-setlist-zone.is-map {
-  pointer-events: none;
-}
 
-.lt-setlist-view.is-medium .lt-setlist-song-band > .lt-setlist-zone.is-map .lt-setlist-map-block,
-.lt-setlist-view.is-medium .lt-setlist-song-band > .lt-setlist-zone.is-map .lt-setlist-map-actions {
-  pointer-events: auto;
-}
 
 /* ---- Mezclador (paso 06) ---- */
 
@@ -1083,10 +1052,16 @@ html.lt-mobile .lt-setlist-edit-button {
 /* ---- Editar secciones (paso 08) ---- */
 
 .lt-setlist-section-layer {
+  grid-area: band;
+  position: relative;
+  z-index: 2;
+  min-height: 0;
+  pointer-events: none;
+}
+
+.lt-setlist-sections-strip > .lt-setlist-section-layer {
   position: absolute;
   inset: 0;
-  z-index: 2;
-  cursor: copy;
 }
 
 .lt-setlist-section-handle {
@@ -1102,6 +1077,7 @@ html.lt-mobile .lt-setlist-edit-button {
   cursor: ew-resize;
   touch-action: none;
   will-change: transform;
+  pointer-events: auto;
 }
 
 .lt-setlist-section-handle::before {
@@ -1388,4 +1364,58 @@ html.lt-mobile .lt-setlist-edit-button {
 
 html.lt-mobile .lt-setlist-track-row {
   min-height: 2.75rem;
+}
+
+/* ---- Correcciones tras la primera prueba (2026-10-25) ---- */
+
+/* Avisos (cues): asa con bandera abajo, para no tapar los nombres. */
+.lt-setlist-section-handle.is-cue .lt-setlist-section-flag {
+  top: auto;
+  bottom: 0;
+  border-radius: 0.3rem 0.3rem 0.3rem 0;
+  background: #f2c45a;
+}
+
+.lt-setlist-section-handle.is-cue::before {
+  background: #f2c45a;
+  opacity: 0.8;
+}
+
+/* El final de la canción: alarga o acorta la última sección. */
+.lt-setlist-section-handle.is-song-end {
+  margin-left: -16px;
+}
+
+.lt-setlist-section-handle.is-song-end::before {
+  width: 4px;
+  margin-left: -2px;
+  background: var(--lt-setlist-text);
+}
+
+/* El mezclador de Compacta trae «flex: 0 0 16rem» (allí es su alto); en la
+   consola horizontal eso era un ANCHO fijo. Aquí ocupa todo lo que queda. */
+.lt-setlist-console-tracks > .lt-compact-mixer {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border-top: 0;
+  background: transparent;
+}
+
+/* El fader de consola tiene «height: 100%»; dentro de la tira del master su
+   padre no tenía alto definido y el fader medía 0 px (no se movía). */
+.lt-setlist-console-strip {
+  align-self: stretch;
+}
+
+.lt-setlist-console-strip-fader {
+  flex: 1 1 0;
+  min-height: 6rem;
+  align-items: stretch;
+}
+
+.lt-setlist-console-strip-fader > .lt-compact-mixer-fader {
+  height: auto;
+  align-self: stretch;
 }

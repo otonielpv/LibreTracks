@@ -140,15 +140,9 @@ export type SongViewBindings = {
   bpmByRegion: Record<string, number>;
   /** The app settings (click, guide and pad state for the console). */
   appSettings: AppSettings;
-  /** The click / guide / pad handlers the DAW's popovers use (one stable
-   * object from settings/metronomeDeviceHandlers). */
+  /** The pad handlers the DAW's pads popover uses (one stable object from
+   * settings/metronomeDeviceHandlers). */
   auxHandlers: MetronomeDeviceHandlers;
-  /** The click's output route (from settings/settingsHandlers). */
-  onMetronomeOutputChange: (value: string) => void;
-  /** The click volume while its fader is being dragged. */
-  metronomeVolumeDraft: number;
-  midiLearnMode: string | null;
-  onMidiLearnTarget: (command: string) => void;
   /** Mix of the whole track selection, the DAW's (tracks/MultiTrackMixControls). */
   multiTrackMix: MultiTrackMixActions;
   /** Publishes a snapshot returned by a command the view ran itself. */

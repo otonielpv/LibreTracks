@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -40,6 +41,11 @@ type SongOverviewStripProps = {
   /** Seek to a point of the song; the panel's coalesced seek. Absent (or
    * while editing) the strip is read-only. */
   onSeek?: (seconds: number) => void;
+  /** Right click / long press on the waveform at `seconds` (the DAW's ruler
+   * menu: create a section or a cue, a tempo or meter change…). */
+  onContextMenuAt?: (event: ReactMouseEvent<HTMLElement>, seconds: number) => void;
+  /** Double click at `seconds` (edit mode: a new section there). */
+  onDoubleClickAt?: (seconds: number) => void;
 };
 
 const MAX_PIXEL_RATIO = 2;
@@ -70,6 +76,8 @@ function SongOverviewStripComponent({
   positionSecondsRef,
   layout,
   onSeek,
+  onContextMenuAt,
+  onDoubleClickAt,
 }: SongOverviewStripProps) {
   const { t } = useTranslation();
   useFrameGateWake();
@@ -241,6 +249,16 @@ function SongOverviewStripComponent({
       role="img"
       aria-label={t("setlistView.overview.label", { name: region.name })}
       onPointerDown={handlePointerDown}
+      onContextMenu={
+        onContextMenuAt
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onContextMenuAt(event, secondsAt(event.clientX));
+            }
+          : undefined
+      }
+      onDoubleClick={onDoubleClickAt ? (event) => onDoubleClickAt(secondsAt(event.clientX)) : undefined}
     >
       <canvas ref={canvasRef} className="lt-setlist-overview-canvas" aria-hidden="true" />
       <div ref={playheadRef} className="lt-setlist-overview-playhead" aria-hidden="true" />

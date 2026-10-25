@@ -61,6 +61,8 @@ function setup(overrides: Partial<SectionEditDeps> = {}) {
       groupMenu: vi.fn(() => []),
     },
     onSectionContextMenu: vi.fn(),
+    onResizeSong: vi.fn(),
+    workspaceEndSeconds: 3600,
     ...overrides,
   };
   const handlers = createSectionEditHandlers(() => deps);
@@ -202,11 +204,42 @@ describe("Section handles: select, menu, create", () => {
     expect(deps.menus.openMenu).toHaveBeenCalled();
   });
 
-  it("double click on the waveform creates a marker there, on the bar", () => {
+  it("createAt puts a marker on the bar; openMenuAt opens the ruler menu there", () => {
     const { deps, handlers } = setup();
-    const { layer } = renderLayer(handlers);
-    fireEvent.doubleClick(layer, { clientX: 333 });
+    handlers.createAt(33.3);
     expect(deps.menus.createTypedMarker).toHaveBeenCalledWith(34, null, null);
+    handlers.openMenuAt({ clientX: 0, clientY: 0 } as never, 61.2);
+    expect(deps.menus.rulerContextMenu).toHaveBeenLastCalledWith(62, null);
+    expect(deps.menus.openMenu).toHaveBeenCalledWith(expect.anything(), "transport.menu.createMarker", []);
+  });
+
+  it("cues are handles too and move with the same single commit", () => {
+    const cueSong = {
+      ...song,
+      sectionMarkers: [...song.sectionMarkers, { id: "Aviso", name: "Aviso", startSeconds: 60, kind: "custom", categoryOverride: "cue" }],
+    } as unknown as SongView;
+    const { deps, handlers } = setup({ getSong: () => cueSong });
+    const view = render(<SongSectionEditLayer song={cueSong} region={region} handlers={handlers} />);
+    const layer = view.container.querySelector<HTMLElement>(".lt-setlist-section-layer")!;
+    Object.defineProperty(layer, "offsetWidth", { configurable: true, value: 1000 });
+    const cue = handle("Aviso");
+    expect(cue.classList.contains("is-cue")).toBe(true);
+    drag(cue, 600, 640);
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 640 });
+    expect(deps.rulerMarkers.moveGroup).toHaveBeenCalledWith([{ kind: "section", id: "Aviso" }], 4);
+  });
+
+  it("the song-end handle changes the song's end (the last section's length) once", () => {
+    const onResizeSong = vi.fn();
+    const { handlers } = setup({ onResizeSong, workspaceEndSeconds: 3600 });
+    renderLayer(handlers);
+    const end = screen.getByRole("button", { name: "setlistView.sections.songEnd:Canción" });
+    drag(end, 1000, 1033);
+    expect(onResizeSong).not.toHaveBeenCalled();
+    expect(end.style.transform).toBe("translate3d(33px, 0, 0)");
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 1033 });
+    // 103.3 s, on the bar at 104 s.
+    expect(onResizeSong).toHaveBeenCalledWith("r", 0, 104);
   });
 
   it("«+ at the playhead» opens the DAW ruler menu at the bar of the playhead", () => {

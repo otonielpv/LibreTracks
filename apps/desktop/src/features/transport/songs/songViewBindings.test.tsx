@@ -120,10 +120,6 @@ const stableFields = {
   waveformSummaries: {},
   appSettings: DEFAULT_APP_SETTINGS,
   auxHandlers: {} as MetronomeDeviceHandlers,
-  metronomeVolumeDraft: 1,
-  onMetronomeOutputChange: noop,
-  midiLearnMode: null,
-  onMidiLearnTarget: noop,
   multiTrackMix: {
     setVolume: noop,
     commitVolume: noop,

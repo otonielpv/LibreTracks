@@ -105,10 +105,6 @@ type CompactViewProps = Omit<
   | "waveformSummaries"
   | "appSettings"
   | "auxHandlers"
-  | "metronomeVolumeDraft"
-  | "onMetronomeOutputChange"
-  | "midiLearnMode"
-  | "onMidiLearnTarget"
   | "multiTrackMix"
 > & {
   /** Controls the "Solo cancion activa" filter inside CompactMixer.

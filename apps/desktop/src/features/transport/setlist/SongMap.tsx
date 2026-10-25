@@ -96,14 +96,13 @@ function SongMapComponent({
     : null;
   const nextBlock = blocks.find((block) => block.id === nextId) ?? null;
   const isEmpty = blocks.length === 1 && blocks[0].kind === "song";
-  // Percent positions through the view's one time scale: in `medium` the
-  // blocks sit over the waveform and must line up with it exactly.
+  // The blocks sit over the song's waveform and must line up with it
+  // exactly: percent positions through the view's one time scale.
   const percent = createSongTimeScale({
     startSeconds: region.startSeconds,
     endSeconds: region.endSeconds,
     widthPx: 100,
   });
-  const overlay = layout === "medium";
 
   const activate = (block: SongMapBlock) => {
     if (editing) {
@@ -134,7 +133,7 @@ function SongMapComponent({
   };
 
   return (
-    <div className={`lt-setlist-map is-${layout}${overlay ? " is-overlay" : ""}${editing ? " is-editing" : ""}`}>
+    <div className={`lt-setlist-map is-${layout}${editing ? " is-editing" : ""}`}>
       <div
         className="lt-setlist-map-blocks"
         role="list"
@@ -176,14 +175,9 @@ function SongMapComponent({
               data-block-id={block.id}
               style={
                 {
-                  "--lt-setlist-block-grow": block.widthFraction,
                   "--lt-setlist-block-color": block.color ?? undefined,
-                  ...(overlay
-                    ? {
-                        left: `${percent.secondsToPx(block.startSeconds)}%`,
-                        width: `${percent.secondsToPx(block.endSeconds) - percent.secondsToPx(block.startSeconds)}%`,
-                      }
-                    : null),
+                  left: `${percent.secondsToPx(block.startSeconds)}%`,
+                  width: `${percent.secondsToPx(block.endSeconds) - percent.secondsToPx(block.startSeconds)}%`,
                 } as CSSProperties
               }
               aria-current={isActive ? "true" : undefined}
@@ -191,16 +185,20 @@ function SongMapComponent({
               onClick={() => activate(block)}
               onContextMenu={(event) => openMenu(event, block)}
             >
-              {block.digit !== null ? (
-                <span className="lt-setlist-map-digit">{block.digit}</span>
-              ) : null}
-              <span className="lt-setlist-map-name">{block.label}</span>
-              {layout !== "short" ? (
-                <span className="lt-setlist-map-bars">{formatBars(block.bars, t)}</span>
-              ) : null}
-              {block.id === pendingBlockId ? (
-                <span className="lt-setlist-map-flag">{t("setlistView.map.pending")}</span>
-              ) : null}
+              {/* The label strip is the only part that takes clicks: the rest
+                  of the block lets them through to the waveform (seek). */}
+              <span className="lt-setlist-map-label">
+                {block.digit !== null ? (
+                  <span className="lt-setlist-map-digit">{block.digit}</span>
+                ) : null}
+                <span className="lt-setlist-map-name">{block.label}</span>
+                {layout !== "short" ? (
+                  <span className="lt-setlist-map-bars">{formatBars(block.bars, t)}</span>
+                ) : null}
+                {block.id === pendingBlockId ? (
+                  <span className="lt-setlist-map-flag">{t("setlistView.map.pending")}</span>
+                ) : null}
+              </span>
               {isActive ? (
                 <span className="lt-setlist-map-progress" aria-hidden="true">
                   <span ref={fillRef} className="lt-setlist-map-progress-fill" />
@@ -209,7 +207,8 @@ function SongMapComponent({
             </button>
           );
         })}
-        {notches.map((notch) => (
+        {/* Lone cues; while editing, the edit layer draws them as handles. */}
+        {editing ? null : notches.map((notch) => (
           <span
             key={notch.marker.id}
             className="lt-setlist-map-notch"

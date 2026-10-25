@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 /** Tabs of the bottom console in `wide`/`medium`. */
-export type SetlistBottomTab = "tracks" | "click" | "pads";
+export type SetlistBottomTab = "tracks" | "pads";
 /** Right-hand tabs of the `short` layout (phone in landscape). */
 export type SetlistShortTab = "song" | "mix" | "pads";
 /** Which edit drawer is open; `null` = performance (not editing). */

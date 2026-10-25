@@ -29,7 +29,8 @@ import { useSetlistStore, type SetlistShortTab } from "./setlistStore";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
 import "./setlist.css";
 
-export type SetlistZone = "songs" | "map" | "overview" | "mixer" | "drawer";
+/** "overview" is the song band: the waveform with the sections on it. */
+export type SetlistZone = "songs" | "overview" | "mixer" | "drawer";
 
 export type SetlistViewProps = SongViewBindings & {
   performance: PerformanceBindings;
@@ -105,10 +106,6 @@ function SetlistViewComponent({
   onMasterGainCommit,
   appSettings,
   auxHandlers,
-  metronomeVolumeDraft,
-  onMetronomeOutputChange,
-  midiLearnMode,
-  onMidiLearnTarget,
   multiTrackMix,
   performance,
   dragPreview,
@@ -159,14 +156,16 @@ function SetlistViewComponent({
     menus,
     rulerMarkers,
     onSectionContextMenu,
+    onResizeSong,
+    workspaceEndSeconds,
   };
   const sectionHandlers = useMemo(
     () => createSectionEditHandlers(() => sectionDepsRef.current as SectionEditDeps),
     [],
   );
-  const editingSections = editMode === "sections" && shownRegion !== null;
+  // Editing in any mode, the sections and cues are handles on the waveform.
   const sectionLayer =
-    editingSections && shownRegion ? (
+    editMode !== null && shownRegion ? (
       <SongSectionEditLayer song={performance.song} region={shownRegion} handlers={sectionHandlers} />
     ) : null;
 
@@ -295,7 +294,11 @@ function SetlistViewComponent({
           onPointerDown={beginMixerResize}
         />
       ) : null}
-      {editMode === "tracks" && layout !== "short" ? trackList : (
+      {editMode === "tracks" && layout !== "short" ? trackList : editMode === "arrangement" &&
+        layout !== "short" &&
+        shownRegion ? (
+        <SetlistArrangementEditor region={shownRegion} handlers={structureHandlers} layout={layout} />
+      ) : (
       <SetlistMixer
         song={performance.song}
         region={shownRegion}
@@ -314,56 +317,51 @@ function SetlistViewComponent({
         onMasterGainCommit={onMasterGainCommit}
         appSettings={appSettings}
         auxHandlers={auxHandlers}
-        metronomeVolumeDraft={metronomeVolumeDraft}
-        onMetronomeOutputChange={onMetronomeOutputChange}
-        midiLearnMode={midiLearnMode}
-        onMidiLearnTarget={onMidiLearnTarget}
         multiTrackMix={multiTrackMix}
       />
       )}
     </Zone>
   );
+  // The song band: the waveform, the sections on it (tap the label strip to
+  // jump) and, while editing, the section and cue handles. Right click on the
+  // waveform opens the DAW ruler menu at that point.
   const overview = (
     <Zone name="overview">
       {shownRegion ? (
-        <SongOverviewStrip
-          region={shownRegion}
-          clips={performance.song.clips}
-          sectionMarkers={performance.song.sectionMarkers}
-          waveformSummaries={waveformSummaries}
-          positionSecondsRef={performance.positionSecondsRef}
-          layout={layout}
-          onSeek={editMode === null ? performance.onSeek : undefined}
-        />
-      ) : null}
-      {layout !== "short" ? sectionLayer : null}
-    </Zone>
-  );
-  const map = (
-    <Zone name="map">
-      {shownRegion && editMode === "arrangement" && layout !== "short" ? (
-        <SetlistArrangementEditor region={shownRegion} handlers={structureHandlers} layout={layout} />
-      ) : shownRegion ? (
-        <SongMap
-          song={performance.song}
-          region={shownRegion}
-          layout={layout}
-          positionSecondsRef={performance.positionSecondsRef}
-          pendingMarkerId={performance.pendingMarkerId}
-          activeVamp={performance.activeVamp}
-          onMarkerAction={performance.onMarkerAction}
-          onCancelPendingJump={performance.onCancelPendingJump}
-          onToggleVamp={performance.onToggleVamp}
-          onCueSong={onCueSong}
-          onPlaySong={onPlaySong}
-          onSectionContextMenu={onSectionContextMenu}
-          editing={editMode !== null}
-          arrangementPicker={
-            editMode === null ? (
-              <SetlistArrangementPicker region={shownRegion} handlers={structureHandlers} />
-            ) : null
-          }
-        />
+        <>
+          <SongOverviewStrip
+            region={shownRegion}
+            clips={performance.song.clips}
+            sectionMarkers={performance.song.sectionMarkers}
+            waveformSummaries={waveformSummaries}
+            positionSecondsRef={performance.positionSecondsRef}
+            layout={layout}
+            onSeek={editMode === null ? performance.onSeek : undefined}
+            onContextMenuAt={sectionHandlers.openMenuAt}
+            onDoubleClickAt={editMode !== null ? sectionHandlers.createAt : undefined}
+          />
+          <SongMap
+            song={performance.song}
+            region={shownRegion}
+            layout={layout}
+            positionSecondsRef={performance.positionSecondsRef}
+            pendingMarkerId={performance.pendingMarkerId}
+            activeVamp={performance.activeVamp}
+            onMarkerAction={performance.onMarkerAction}
+            onCancelPendingJump={performance.onCancelPendingJump}
+            onToggleVamp={performance.onToggleVamp}
+            onCueSong={onCueSong}
+            onPlaySong={onPlaySong}
+            onSectionContextMenu={onSectionContextMenu}
+            editing={editMode !== null}
+            arrangementPicker={
+              editMode === null ? (
+                <SetlistArrangementPicker region={shownRegion} handlers={structureHandlers} />
+              ) : null
+            }
+          />
+          {layout !== "short" || editMode === null ? sectionLayer : null}
+        </>
       ) : null}
     </Zone>
   );
@@ -441,10 +439,7 @@ function SetlistViewComponent({
               <SetlistEditButton />
             </div>
             {shortTab === "song" ? (
-              <div className="lt-setlist-song-band">
-                {map}
-                {overview}
-              </div>
+              overview
             ) : (
               mixer(shortTab === "pads")
             )}
@@ -454,10 +449,7 @@ function SetlistViewComponent({
       ) : (
         <>
           {songs}
-          <div className="lt-setlist-song-band">
-            {map}
-            {overview}
-          </div>
+          {overview}
           <div className="lt-setlist-bottom">
             {mixer(false)}
             {drawer}

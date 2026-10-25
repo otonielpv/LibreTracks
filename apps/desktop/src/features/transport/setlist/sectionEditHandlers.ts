@@ -6,6 +6,13 @@ import type { RulerMarkerHandlers } from "../rulerMarkers/rulerMarkerHandlers";
 import { groupContaining, handleRulerMarkerClick } from "../rulerMarkers/rulerMarkerSelection";
 import { requestStructureEdit } from "../structure/structureGuard";
 import { selectedRulerMarkers, useTimelineUIStore } from "../uiStore";
+import {
+  buildSongTempoRegions,
+  getSongBaseBpm,
+  getSongBaseTimeSignature,
+} from "@libretracks/shared/models";
+import { clampRegionResizeEdge, regionResizeBounds } from "../timeline/regionResize";
+import { snapToTimelineBar } from "../timeline/timelineMath";
 import { placeSectionSeconds } from "./sectionEditModel";
 
 /**
@@ -27,6 +34,9 @@ export type SectionEditDeps = {
   menus: Pick<TimelineMenus, "openMenu" | "rulerContextMenu" | "createTypedMarker">;
   rulerMarkers: Pick<RulerMarkerHandlers, "moveGroup" | "duplicate" | "remove" | "groupMenu">;
   onSectionContextMenu: (event: ReactMouseEvent<HTMLElement>, markerId: string) => void;
+  /** The DAW region band's commit for new song edges. */
+  onResizeSong: (regionId: string, startSeconds: number, endSeconds: number) => void;
+  workspaceEndSeconds: number;
 };
 
 const sectionRef = (id: string): RulerMarkerRef => ({ kind: "section", id });
@@ -40,21 +50,54 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
       : null;
   };
 
-  /** «+ Section at the playhead»: the DAW ruler menu at that point (create
-   * a typed marker, a cue, a tempo or meter change…), opened at the button. */
+  /** The DAW ruler menu at a point of the song (create a section or a cue,
+   * a tempo or meter change…): right click on the waveform. */
+  function openMenuAt(event: ReactMouseEvent<HTMLElement>, seconds: number) {
+    const deps = getDeps();
+    const target = place(seconds);
+    if (target === null || !requestStructureEdit([target])) return;
+    deps.menus.openMenu(
+      event,
+      deps.t("transport.menu.createMarker"),
+      deps.menus.rulerContextMenu(target, null),
+    );
+  }
+
+  /** «+ Section at the playhead»: the same menu, at the playhead's bar (or
+   * the song start when the playhead is elsewhere), opened at the button. */
   function createAtPlayhead(event: ReactMouseEvent<HTMLElement>) {
     const deps = getDeps();
     const region = deps.getRegion();
     if (!region) return;
     const playhead = deps.getPlayheadSeconds();
     const inside = playhead >= region.startSeconds && playhead < region.endSeconds;
-    const seconds = place(inside ? playhead : region.startSeconds);
-    if (seconds === null || !requestStructureEdit([seconds])) return;
-    deps.menus.openMenu(
-      event,
-      deps.t("transport.menu.createMarker"),
-      deps.menus.rulerContextMenu(seconds, null),
-    );
+    openMenuAt(event, inside ? playhead : region.startSeconds);
+  }
+
+  /**
+   * The handle at the song's end: the length of its last section. Same walls
+   * and audio floor as dragging the region's edge in the DAW
+   * (timeline/regionResize), snapped to the bar when snapping is on.
+   */
+  function resizeSongEnd(endSeconds: number) {
+    const deps = getDeps();
+    const region = deps.getRegion();
+    if (!region) return false;
+    const song = deps.getSong();
+    const snapped = deps.getSnapEnabled()
+      ? snapToTimelineBar(
+          endSeconds,
+          getSongBaseBpm(song),
+          getSongBaseTimeSignature(song),
+          buildSongTempoRegions(song),
+        )
+      : endSeconds;
+    const bounds = regionResizeBounds(song.regions, region, song.clips, deps.workspaceEndSeconds);
+    const next = clampRegionResizeEdge("end", snapped, bounds);
+    if (Math.abs(next - region.endSeconds) < 1e-6) return false;
+    if (!requestStructureEdit([region.startSeconds])) return false;
+    deps.onResizeSong(region.id, region.startSeconds, next);
+    return true;
   }
 
   /** Double click / tap on the waveform: a marker there, on the bar. */
@@ -133,6 +176,8 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
   }
 
   return {
+    openMenuAt,
+    resizeSongEnd,
     createAtPlayhead,
     createAt,
     commitMove,

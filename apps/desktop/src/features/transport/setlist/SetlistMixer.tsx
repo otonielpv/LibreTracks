@@ -2,10 +2,8 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SongRegionSummary, SongView } from "@libretracks/shared/models";
 import {
-  AUX_FADER_SCALE,
   TRACK_FADER_SCALE,
   formatDb,
-  formatGainDb,
   gainToPosition,
   positionToDb,
   positionToGain,
@@ -13,10 +11,8 @@ import {
 } from "@libretracks/shared/faderScale";
 
 import { CompactMixer } from "../compact/CompactMixer";
-import { MetronomeControls } from "../panels/MetronomePopover";
 import { PadManagerModal } from "../panels/PadManagerModal";
 import { PadsControls, usePadsCatalog } from "../panels/PadsPopover";
-import { VoiceGuideControls } from "../panels/VoiceGuidePopover";
 import type { SongViewBindings } from "../songs/songViewBindings";
 import { useTransportStore } from "../store";
 import { SongMasterMeter } from "../tracks/TrackMeter";
@@ -41,10 +37,6 @@ export type SetlistMixerProps = Pick<
   | "onMasterGainCommit"
   | "appSettings"
   | "auxHandlers"
-  | "metronomeVolumeDraft"
-  | "onMetronomeOutputChange"
-  | "midiLearnMode"
-  | "onMidiLearnTarget"
   | "multiTrackMix"
 > & {
   song: SongView;
@@ -74,7 +66,6 @@ function writeHintDismissed() {
   }
 }
 
-const formatAux = (position: number) => `${formatGainDb(positionToGain(position, AUX_FADER_SCALE))} dB`;
 const formatMaster = (position: number) =>
   `${formatDb(positionToDb(position, TRACK_FADER_SCALE))} dB`;
 
@@ -112,11 +103,12 @@ function SetlistPadsPanel({
 }
 
 /**
- * The Setlist console, Playback-style: the selected song's tracks, then
- * Click, Guide and the song Master at the right end (the view's only master
- * fader outside Edit → Song). Every control drives the DAW's own handlers:
- * the track strips are CompactMixer, Click/Guide/Pads the bodies of the DAW
- * popovers, the master the region master-gain handlers.
+ * The Setlist console, Playback-style: the selected song's tracks across the
+ * whole width and the song Master at the right end (the view's only master
+ * fader outside Edit → Song). Click and voice guide stay in the top bar,
+ * where the app already has them. Every control drives the DAW's own
+ * handlers: the track strips are CompactMixer, the pads the body of the
+ * DAW's pads popover, the master the region master-gain handlers.
  */
 function SetlistMixerComponent({
   tracks,
@@ -132,10 +124,6 @@ function SetlistMixerComponent({
   onMasterGainCommit,
   appSettings,
   auxHandlers,
-  metronomeVolumeDraft,
-  onMetronomeOutputChange,
-  midiLearnMode,
-  onMidiLearnTarget,
   multiTrackMix,
   song,
   region,
@@ -180,74 +168,6 @@ function SetlistMixerComponent({
   }
 
   const masterGain = optimisticMaster ?? region?.master?.gain ?? 1;
-  const clickStrip = (
-    <SetlistConsoleStrip
-      name={t("setlistView.mixer.click")}
-      position={gainToPosition(metronomeVolumeDraft, AUX_FADER_SCALE)}
-      ariaLabel={t("transport.settingsModal.metronomeVolume")}
-      formatValue={formatAux}
-      onChange={(position) =>
-        auxHandlers.handleMetronomeVolumeDraftChange(positionToGain(position, AUX_FADER_SCALE))
-      }
-      onCommit={() => auxHandlers.commitMetronomeVolumeDraft(metronomeVolumeDraft)}
-      onDoubleClick={() => auxHandlers.commitMetronomeVolumeDraft(1)}
-      toggles={
-        <>
-          <button
-            type="button"
-            className={`lt-setlist-console-toggle${appSettings.metronomeEnabled ? " is-active" : ""}`}
-            aria-pressed={appSettings.metronomeEnabled}
-            aria-label={t("setlistView.mixer.clickToggle")}
-            onClick={() => auxHandlers.handleMetronomeEnabledChange(!appSettings.metronomeEnabled)}
-          >
-            {t("setlistView.mixer.on")}
-          </button>
-          <button
-            type="button"
-            className="lt-setlist-console-toggle"
-            aria-label={t("setlistView.mixer.clickSettings")}
-            onClick={() => setBottomTab("click")}
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">tune</span>
-          </button>
-        </>
-      }
-    />
-  );
-  const guideStrip = (
-    <SetlistConsoleStrip
-      name={t("setlistView.mixer.guide")}
-      position={gainToPosition(appSettings.voiceGuideVolume, AUX_FADER_SCALE)}
-      ariaLabel={t("transport.settingsModal.voiceGuideVolume", { defaultValue: "Volumen" })}
-      formatValue={formatAux}
-      onChange={(position) =>
-        auxHandlers.handleVoiceGuideVolumeDraftChange(positionToGain(position, AUX_FADER_SCALE))
-      }
-      onCommit={() => auxHandlers.commitVoiceGuideVolumeDraft(appSettings.voiceGuideVolume)}
-      onDoubleClick={() => auxHandlers.commitVoiceGuideVolumeDraft(1)}
-      toggles={
-        <>
-          <button
-            type="button"
-            className={`lt-setlist-console-toggle${appSettings.voiceGuideEnabled ? " is-active" : ""}`}
-            aria-pressed={appSettings.voiceGuideEnabled}
-            aria-label={t("setlistView.mixer.guideToggle")}
-            onClick={() => auxHandlers.handleVoiceGuideEnabledChange(!appSettings.voiceGuideEnabled)}
-          >
-            {t("setlistView.mixer.on")}
-          </button>
-          <button
-            type="button"
-            className="lt-setlist-console-toggle"
-            aria-label={t("setlistView.mixer.guideSettings")}
-            onClick={() => setBottomTab("click")}
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">tune</span>
-          </button>
-        </>
-      }
-    />
-  );
   const masterStrip = region ? (
     <SetlistConsoleStrip
       variant="master"
@@ -276,19 +196,14 @@ function SetlistMixerComponent({
 
   const tabs: Array<{ tab: SetlistBottomTab; label: string }> = [
     { tab: "tracks", label: t("setlistView.mixer.tabs.tracks") },
-    { tab: "click", label: t("setlistView.mixer.tabs.click") },
     ...(layout === "short" ? [] : [{ tab: "pads" as const, label: t("setlistView.mixer.tabs.pads") }]),
   ];
-  const tab: SetlistBottomTab = layout === "short" && bottomTab === "pads" ? "tracks" : bottomTab;
+  const tab: SetlistBottomTab = layout === "short" ? "tracks" : bottomTab;
 
   if (layout === "medium" && collapsed) {
     return (
       <div className={`lt-setlist-mixer is-${layout} is-collapsed`}>
-        <div className="lt-setlist-console is-bar">
-          {clickStrip}
-          {guideStrip}
-          {masterStrip}
-        </div>
+        <div className="lt-setlist-console is-bar">{masterStrip}</div>
         <button
           type="button"
           className="lt-setlist-mixer-fold"
@@ -386,38 +301,7 @@ function SetlistMixerComponent({
               onToggleFolder={onToggleFolder}
             />
           </div>
-          <div className="lt-setlist-console-aux">
-            {clickStrip}
-            {guideStrip}
-          </div>
           {masterStrip}
-        </div>
-      ) : null}
-      {tab === "click" ? (
-        <div className="lt-setlist-mixer-panel is-click">
-          <section className="lt-pads-controls-host">
-            <MetronomeControls
-              settings={appSettings}
-              routeOptions={audioRoutingOptions}
-              volumeDraft={metronomeVolumeDraft}
-              midiLearnMode={midiLearnMode}
-              onEnabledChange={auxHandlers.handleMetronomeEnabledChange}
-              onOutputChange={onMetronomeOutputChange}
-              onVolumeDraftChange={auxHandlers.handleMetronomeVolumeDraftChange}
-              onCommitVolume={auxHandlers.commitMetronomeVolumeDraft}
-              onSoundChange={auxHandlers.handleMetronomeSoundChange}
-              onMidiLearnTarget={onMidiLearnTarget}
-            />
-          </section>
-          <section className="lt-pads-controls-host">
-            <VoiceGuideControls
-              settings={appSettings}
-              routeOptions={audioRoutingOptions}
-              onChange={auxHandlers.handleVoiceGuideChange}
-              onVolumeDraftChange={auxHandlers.handleVoiceGuideVolumeDraftChange}
-              onCommitVolume={auxHandlers.commitVoiceGuideVolumeDraft}
-            />
-          </section>
         </div>
       ) : null}
       {tab === "pads" ? (
