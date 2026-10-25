@@ -2655,6 +2655,12 @@ const es = {
       empty: "Esta canción aún no tiene clips.",
       hint: "Los carriles de la canción ocupan el sitio del mezclador: arrastra un clip para moverlo, sus bordes para recortarlo.",
     },
+    pane: {
+      song: "Onda",
+      mixer: "Mezcla",
+      showSongTitle: "Ver la onda y las secciones de la canción",
+      showMixerTitle: "Volver al mezclador",
+    },
     arrangement: {
       list: "Arreglos",
       sectionsCount: "{{count}} secciones",

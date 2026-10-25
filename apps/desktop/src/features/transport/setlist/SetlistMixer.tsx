@@ -44,8 +44,6 @@ export type SetlistMixerProps = Pick<
   /** The song the console mixes (D4: the selected one). */
   region: SongRegionSummary | null;
   layout: SetlistLayoutClass;
-  /** `short`: the right column's own «Pads» tab shows only the pads. */
-  padsOnly?: boolean;
 };
 
 const SHARED_TRACKS_HINT_KEY = "lt.setlistView.sharedTracksHintDismissed";
@@ -131,7 +129,6 @@ function SetlistMixerComponent({
   song,
   region,
   layout,
-  padsOnly = false,
 }: SetlistMixerProps) {
   const { t } = useTranslation();
   const bottomTab = useSetlistStore((state) => state.bottomTab);
@@ -157,18 +154,6 @@ function SetlistMixerComponent({
       .map((id) => byId.get(id))
       .filter((track): track is NonNullable<typeof track> => Boolean(track));
   }, [selectedTrackIds, tracks]);
-
-  if (padsOnly) {
-    return (
-      <div className={`lt-setlist-mixer is-${layout}`}>
-        <SetlistPadsPanel
-          appSettings={appSettings}
-          audioRoutingOptions={audioRoutingOptions}
-          auxHandlers={auxHandlers}
-        />
-      </div>
-    );
-  }
 
   const masterGain = optimisticMaster ?? region?.master?.gain ?? 1;
   const masterStrip = region ? (
@@ -198,11 +183,14 @@ function SetlistMixerComponent({
 
   const tabs: Array<{ tab: SetlistBottomTab; label: string }> = [
     { tab: "tracks", label: t("setlistView.mixer.tabs.tracks") },
-    ...(layout === "short" ? [] : [{ tab: "pads" as const, label: t("setlistView.mixer.tabs.pads") }]),
+    { tab: "pads", label: t("setlistView.mixer.tabs.pads") },
   ];
-  const tab: SetlistBottomTab = layout === "short" ? "tracks" : bottomTab;
+  const tab: SetlistBottomTab = bottomTab;
+  // Medium folds the console to its Master bar to give the waveform the
+  // height; wide resizes it, and the phone swaps it with the waveform.
+  const foldable = layout === "medium";
 
-  if (layout === "medium" && collapsed) {
+  if (foldable && collapsed) {
     return (
       <div className={`lt-setlist-mixer is-${layout} is-collapsed`}>
         <div className="lt-setlist-console is-bar">{masterStrip}</div>
@@ -242,10 +230,11 @@ function SetlistMixerComponent({
             type="button"
             className="lt-setlist-mixer-action"
             title={t("setlistView.mixer.addAudioTitle")}
+            aria-label={t("setlistView.tracks.addAudio")}
             onClick={() => onAddAudioToSong(region.id)}
           >
             <span className="material-symbols-outlined" aria-hidden="true">library_music</span>
-            {t("setlistView.tracks.addAudio")}
+            <span className="lt-setlist-mixer-action-label">{t("setlistView.tracks.addAudio")}</span>
           </button>
         ) : null}
         {tab === "tracks" ? (
@@ -253,16 +242,19 @@ function SetlistMixerComponent({
             type="button"
             className={`lt-setlist-mixer-action${showAllTracks ? " is-active" : ""}`}
             aria-pressed={showAllTracks}
+            aria-label={t("setlistView.mixer.allTracks")}
+            title={t("setlistView.mixer.allTracks")}
             onClick={() => setShowAllTracks((value) => !value)}
           >
-            {t("setlistView.mixer.allTracks")}
+            <span className="material-symbols-outlined" aria-hidden="true">view_week</span>
+            <span className="lt-setlist-mixer-action-label">{t("setlistView.mixer.allTracks")}</span>
           </button>
         ) : null}
         {/* Mix scenes arrive with automation (step 12). */}
         <button type="button" className="lt-setlist-mixer-action" hidden>
           {t("setlistView.mixer.scenes")}
         </button>
-        {layout === "medium" ? (
+        {foldable ? (
           <button
             type="button"
             className="lt-setlist-mixer-fold"
@@ -275,7 +267,7 @@ function SetlistMixerComponent({
           </button>
         ) : null}
       </div>
-      {!hintDismissed && tab === "tracks" ? (
+      {!hintDismissed && tab === "tracks" && layout !== "short" ? (
         <p className="lt-setlist-mixer-hint" role="note">
           <span>{t("setlistView.mixer.sharedTracksHint")}</span>
           <button

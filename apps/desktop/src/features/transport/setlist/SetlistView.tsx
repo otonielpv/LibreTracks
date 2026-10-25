@@ -27,7 +27,7 @@ import { createSectionEditHandlers, type SectionEditDeps } from "./sectionEditHa
 import { useTimelineUIStore } from "../uiStore";
 import { resolveSetlistSongId } from "./songMapModel";
 import { SONG_DROP_CLASS, songDropHandlers } from "./songDrop";
-import { useSetlistStore, type SetlistShortTab } from "./setlistStore";
+import { useSetlistStore } from "./setlistStore";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
 import "./setlist.css";
 
@@ -72,12 +72,6 @@ function Zone({
     </section>
   );
 }
-
-const SHORT_TABS: Array<{ tab: SetlistShortTab; labelKey: string }> = [
-  { tab: "song", labelKey: "setlistView.tabs.song" },
-  { tab: "mix", labelKey: "setlistView.tabs.mix" },
-  { tab: "pads", labelKey: "setlistView.tabs.pads" },
-];
 
 /**
  * The Setlist view, Playback-style (docs/plans/setlist-view): a row of song
@@ -146,8 +140,9 @@ function SetlistViewComponent({
   const rootRef = useRef<HTMLElement | null>(null);
   const layout = useSetlistLayout(rootRef, layoutClass);
   const editMode = useSetlistStore((state) => state.editMode);
-  const shortTab = useSetlistStore((state) => state.shortTab);
-  const setShortTab = useSetlistStore((state) => state.setShortTab);
+  const mixerCollapsed = useSetlistStore((state) => state.mixerCollapsed);
+  const shortPane = useSetlistStore((state) => state.shortPane);
+  const setShortPane = useSetlistStore((state) => state.setShortPane);
   // The song the map, overview and mixer are about (00 §5 "Selección").
   const lastShownRegionIdRef = useRef<string | null>(null);
   const shownRegionId = resolveSetlistSongId(
@@ -337,7 +332,7 @@ function SetlistViewComponent({
   const mixerZoneRef = useRef<HTMLElement | null>(null);
   const mixerHeightPx = useSetlistStore((state) => state.mixerHeightPx);
   const beginMixerResize = useMixerResize(rootRef, mixerZoneRef);
-  const mixer = (padsOnly: boolean) => (
+  const mixer = (
     <Zone name="mixer" zoneRef={mixerZoneRef} drop={songDrop}>
       {layout === "wide" ? (
         <div
@@ -357,7 +352,6 @@ function SetlistViewComponent({
         song={performance.song}
         region={shownRegion}
         layout={layout}
-        padsOnly={padsOnly}
         tracks={tracks}
         audioRoutingOptions={audioRoutingOptions}
         mixerHandlers={mixerHandlers}
@@ -447,14 +441,30 @@ function SetlistViewComponent({
         onImportSongPackageFromOsFile={onImportSongPackageFromOsFile}
         editing={editMode !== null}
       />
-      {layout !== "short" ? <SetlistEditButton /> : null}
+      {layout === "short" ? (
+        <button
+          type="button"
+          className={`lt-setlist-pane-toggle${shortPane === "song" ? " is-active" : ""}`}
+          aria-pressed={shortPane === "song"}
+          title={t(shortPane === "song" ? "setlistView.pane.showMixerTitle" : "setlistView.pane.showSongTitle")}
+          onClick={() => setShortPane(shortPane === "song" ? "mixer" : "song")}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            {shortPane === "song" ? "tune" : "graphic_eq"}
+          </span>
+          {t(shortPane === "song" ? "setlistView.pane.mixer" : "setlistView.pane.song")}
+        </button>
+      ) : null}
+      <SetlistEditButton />
     </Zone>
   );
 
   return (
     <main
       ref={rootRef}
-      className={`lt-setlist-view is-${layout}${editMode ? " is-editing" : ""}`}
+      className={`lt-setlist-view is-${layout}${editMode ? " is-editing" : ""}${
+        mixerCollapsed && layout === "medium" ? " is-mixer-collapsed" : ""
+      }`}
       data-setlist-layout={layout}
       aria-label={t("setlistView.title")}
       style={
@@ -470,46 +480,16 @@ function SetlistViewComponent({
         workspaceEndSeconds={workspaceEndSeconds}
         onCommit={onCommitMarkerPosition}
       />
-      {layout === "short" ? (
-        <>
+      {/* Playback's order: songs, the song's waveform, the console. On the
+          phone, as Playback on an iPhone, the waveform and the console take
+          turns under the songs. */}
+      <>
           {songs}
-          <div className="lt-setlist-short-main">
-            <div
-              className="lt-setlist-tabs"
-              role="tablist"
-              aria-label={t("setlistView.tabs.label")}
-            >
-              {SHORT_TABS.map(({ tab, labelKey }) => (
-                <button
-                  key={tab}
-                  type="button"
-                  role="tab"
-                  className={`lt-setlist-tab${shortTab === tab ? " is-active" : ""}`}
-                  aria-selected={shortTab === tab}
-                  onClick={() => setShortTab(tab)}
-                >
-                  {t(labelKey)}
-                </button>
-              ))}
-              <SetlistEditButton />
-            </div>
-            {shortTab === "song" ? (
-              overview
-            ) : (
-              mixer(shortTab === "pads")
-            )}
-          </div>
-          {drawer}
-        </>
-      ) : (
-        <>
-          {songs}
-          {overview}
-          <div className="lt-setlist-bottom">{mixer(false)}</div>
+          {layout !== "short" || shortPane === "song" ? overview : null}
+          {layout !== "short" || shortPane === "mixer" ? <div className="lt-setlist-bottom">{mixer}</div> : null}
           {/* Full-height side panel next to the band and the console. */}
           {drawer}
-        </>
-      )}
+      </>
     </main>
   );
 }

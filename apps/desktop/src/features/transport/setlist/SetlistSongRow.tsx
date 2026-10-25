@@ -198,7 +198,8 @@ function SetlistSongRowComponent({
   const transitionIcon = transitionMode === "fade_out" ? "trending_down" : "arrow_forward";
   const transitionLabel =
     transitionMode === "fade_out" ? t("liveView.fadeOut") : t("liveView.cleanCut");
-  const isVertical = layout === "short";
+  // Playback's strip at every size; `short` only makes the cards compact.
+  const isVertical = false;
 
   return (
     <div

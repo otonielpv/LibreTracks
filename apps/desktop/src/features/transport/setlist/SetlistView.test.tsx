@@ -31,16 +31,28 @@ describe("SetlistView skeleton", () => {
     },
   );
 
-  it("short never shows the song band and the mixer at once: they are tabs", () => {
+  // Playback on an iPhone: songs on top and, under them, the console or the
+  // song's waveform, never both.
+  it("short: songs and the console; «Waveform» swaps the console for the song band", () => {
     const { container } = render(
       <SetlistView {...testSetlistProps()} layoutClass="short" />,
     );
-    expect(zones(container)).toEqual(["songs", "overview"]);
-
-    const mixTab = screen.getByRole("tab", { name: "setlistView.tabs.mix" });
-    fireEvent.click(mixTab);
     expect(zones(container)).toEqual(["songs", "mixer"]);
-    expect(mixTab.getAttribute("aria-selected")).toBe("true");
+
+    const toggle = screen.getByRole("button", { name: "setlistView.pane.song" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(toggle);
+    expect(zones(container)).toEqual(["songs", "overview"]);
+    const back = screen.getByRole("button", { name: "setlistView.pane.mixer" });
+    expect(back.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(back);
+    expect(zones(container)).toEqual(["songs", "mixer"]);
+  });
+
+  it.each(["wide", "medium"] as const)("%s shows songs, band and console together", (layoutClass) => {
+    const { container } = render(<SetlistView {...testSetlistProps()} layoutClass={layoutClass} />);
+    expect(zones(container)).toEqual(["songs", "overview", "mixer"]);
+    expect(screen.queryByRole("button", { name: "setlistView.pane.song" })).toBeNull();
   });
 
   it.each(["wide", "medium", "short"] as const)(

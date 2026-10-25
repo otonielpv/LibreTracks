@@ -2624,6 +2624,12 @@ const en = {
       empty: "This song has no clips yet.",
       hint: "The song's lanes take the mixer's place: drag a clip to move it, its edges to trim it.",
     },
+    pane: {
+      song: "Waveform",
+      mixer: "Mixer",
+      showSongTitle: "Show the song's waveform and sections",
+      showMixerTitle: "Back to the mixer",
+    },
     arrangement: {
       list: "Arrangements",
       sectionsCount: "{{count}} sections",

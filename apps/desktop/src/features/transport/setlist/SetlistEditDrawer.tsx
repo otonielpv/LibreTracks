@@ -151,7 +151,7 @@ function SetlistEditDrawerComponent({ layout, songName, modes }: SetlistEditDraw
               onKeyDown={onTabKeyDown}
             >
               <span className="material-symbols-outlined" aria-hidden="true">{entry.icon}</span>
-              <span>{t(entry.labelKey)}</span>
+              <span className="lt-setlist-drawer-tab-label">{t(entry.labelKey)}</span>
             </button>
           );
         })}

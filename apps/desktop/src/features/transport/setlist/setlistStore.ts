@@ -2,8 +2,9 @@ import { create } from "zustand";
 
 /** Tabs of the bottom console in `wide`/`medium`. */
 export type SetlistBottomTab = "tracks" | "pads";
-/** Right-hand tabs of the `short` layout (phone in landscape). */
-export type SetlistShortTab = "song" | "mix" | "pads";
+/** `short` (phone), like Playback on an iPhone: under the songs, either the
+ * console or the song's waveform, never both. */
+export type SetlistShortPane = "mixer" | "song";
 /** Which edit drawer is open; `null` = performance (not editing). */
 export type SetlistEditMode =
   | null
@@ -18,12 +19,13 @@ export const LANES_MAX_ZOOM = 16;
 
 export type SetlistState = {
   bottomTab: SetlistBottomTab;
-  shortTab: SetlistShortTab;
   editMode: SetlistEditMode;
   /** Height the user dragged the mixer to; `null` = the layout's default. */
   mixerHeightPx: number | null;
-  /** `medium`: the mixer folded to its bar (Master). */
+  /** `medium`: the mixer folded to its bar (Master), so the waveform gets
+   * the height. */
   mixerCollapsed: boolean;
+  shortPane: SetlistShortPane;
   /** Edit → Lanes: 1 fits the song in the width, up to 16. Not the DAW's
    * camera: that one stays where it was. */
   lanesZoom: number;
@@ -34,20 +36,20 @@ export type SetlistState = {
 
 export const INITIAL_SETLIST_STATE: SetlistState = {
   bottomTab: "tracks",
-  shortTab: "song",
   editMode: null,
   mixerHeightPx: null,
   mixerCollapsed: false,
+  shortPane: "mixer",
   lanesZoom: 1,
   lanesScrollPx: 0,
 };
 
 type SetlistActions = {
   setBottomTab: (tab: SetlistBottomTab) => void;
-  setShortTab: (tab: SetlistShortTab) => void;
   setEditMode: (mode: SetlistEditMode) => void;
   setMixerHeightPx: (heightPx: number | null) => void;
   setMixerCollapsed: (collapsed: boolean) => void;
+  setShortPane: (pane: SetlistShortPane) => void;
   setLanesZoom: (zoom: number) => void;
   setLanesScrollPx: (scrollPx: number) => void;
 };
@@ -79,10 +81,10 @@ export const useSetlistStore = create<SetlistState & SetlistActions>()(
   (set) => ({
     ...INITIAL_SETLIST_STATE,
     setBottomTab: (bottomTab) => set({ bottomTab }),
-    setShortTab: (shortTab) => set({ shortTab }),
     setEditMode: (editMode) => set({ editMode }),
     setMixerHeightPx: (mixerHeightPx) => set({ mixerHeightPx }),
     setMixerCollapsed: (mixerCollapsed) => set({ mixerCollapsed }),
+    setShortPane: (shortPane) => set({ shortPane }),
     setLanesZoom: (lanesZoom) =>
       set({ lanesZoom: Math.max(LANES_MIN_ZOOM, Math.min(LANES_MAX_ZOOM, lanesZoom)) }),
     setLanesScrollPx: (lanesScrollPx) => set({ lanesScrollPx: Math.max(0, lanesScrollPx) }),

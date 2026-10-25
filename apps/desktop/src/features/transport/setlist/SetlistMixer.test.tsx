@@ -255,14 +255,22 @@ describe("Setlist mixer hint and sizes", () => {
     expect(stripNames(container)).toEqual(["Batería", "Voz A"]);
   });
 
-  it("short: the mixer lives in the Mix tab and the pads in their own tab", async () => {
+  // Playback on an iPhone: the console is the phone's main screen, with the
+  // same Tracks/Pads tabs as the bigger layouts.
+  it("short: the console shows first, with its own Pads tab", async () => {
     const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="short" />);
-    expect(stripNames(container)).toEqual([]);
-    fireEvent.click(screen.getByRole("tab", { name: "setlistView.tabs.mix" }));
     expect(stripNames(container)).toEqual(["Batería", "Voz A"]);
-    expect(screen.queryByRole("tab", { name: "setlistView.mixer.tabs.pads" })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: "setlistView.tabs.pads" }));
+    fireEvent.click(screen.getByRole("tab", { name: "setlistView.mixer.tabs.pads" }));
     expect(await screen.findByRole("checkbox", { name: "pads.enable" })).toBeTruthy();
+  });
+
+  it("short: no shared-tracks note (it would take half the console) and no fold", () => {
+    const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="short" />);
+    expect(container.querySelector(".lt-setlist-mixer-hint")).toBeNull();
+    expect(screen.queryByRole("button", { name: "setlistView.mixer.collapse" })).toBeNull();
+    // Header actions keep their names for screen readers (icon-only on screen).
+    expect(screen.getByRole("button", { name: "setlistView.tracks.addAudio" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "setlistView.mixer.allTracks" })).toBeTruthy();
   });
 });
 

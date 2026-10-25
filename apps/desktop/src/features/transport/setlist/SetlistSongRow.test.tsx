@@ -90,9 +90,10 @@ describe("SetlistSongRow content", () => {
     },
   );
 
-  it("short: number, name and key in a vertical list", () => {
+  // Playback's strip on the phone too: a horizontal row of compact cards.
+  it("short: number, name and key in a horizontal row", () => {
     const { container } = render(<SetlistSongRow {...rowProps({ layout: "short" })} />);
-    expect(container.querySelector(".lt-setlist-songs.is-vertical")).not.toBeNull();
+    expect(container.querySelector(".lt-setlist-songs.is-horizontal")).not.toBeNull();
     const first = within(tiles(container)[0]);
     expect(first.getByText("1")).toBeTruthy();
     expect(first.getByText("Alfa")).toBeTruthy();

@@ -14,6 +14,7 @@
   --lt-setlist-pad: clamp(0.5rem, 1vw, 0.85rem);
   flex: 1 1 auto;
   min-height: 0;
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
   display: grid;
@@ -50,29 +51,26 @@
 /* medium: igual pero más apretada; el cajón es una hoja que sube desde abajo
    y tapa el mezclador. */
 .lt-setlist-view.is-medium {
-  grid-template-rows: auto minmax(5rem, 1fr) minmax(8rem, 1fr);
+  grid-template-rows: auto minmax(5rem, 0.6fr) minmax(10rem, 1.8fr);
   --lt-setlist-gap: 0.35rem;
 }
 
 
-/* short: teléfono en horizontal. Lista de canciones a la izquierda, pestañas
-   a la derecha. Respeta la zona segura del notch. */
+/* short: teléfono en horizontal. El mismo orden que Playback (canciones,
+   onda, consola), más apretado. Respeta la zona segura del notch. */
 .lt-setlist-view.is-short {
-  grid-template-columns: minmax(9rem, 30%) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-  --lt-setlist-gap: 0.35rem;
-  --lt-setlist-pad: 0.35rem;
+  /* Canciones arriba y debajo la consola o la onda (se turnan). */
+  grid-template-rows: auto minmax(0, 1fr);
+  --lt-setlist-gap: 0.3rem;
+  --lt-setlist-pad: 0.3rem;
   padding-left: calc(var(--lt-setlist-pad) + var(--lt-safe-area-left, 0px));
   padding-right: calc(var(--lt-setlist-pad) + var(--lt-safe-area-right, 0px));
   padding-bottom: calc(var(--lt-setlist-pad) + var(--lt-safe-area-bottom, 0px));
 }
 
-.lt-setlist-short-main {
-  min-width: 0;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: var(--lt-setlist-gap);
+/* Consola plegada (medium y teléfono): la onda se queda el alto. */
+.lt-setlist-view.is-mixer-collapsed {
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .lt-setlist-view.is-short .lt-setlist-zone.is-drawer {
@@ -627,7 +625,8 @@ html.lt-mobile .lt-setlist-add-song-button {
 /* ---- Mezclador (paso 06) ---- */
 
 .lt-setlist-view.is-wide {
-  grid-template-rows: auto minmax(7rem, 1fr) var(--lt-setlist-mixer-height, minmax(12rem, 1.4fr));
+  /* La onda es una banda (como en Playback); la consola se lleva el resto. */
+  grid-template-rows: auto minmax(6rem, 0.55fr) var(--lt-setlist-mixer-height, minmax(14rem, 2fr));
 }
 
 .lt-setlist-zone.is-mixer {
@@ -1945,7 +1944,9 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   white-space: normal;
-  overflow-wrap: anywhere;
+  /* Corta entre palabras, nunca dentro de una («Ocea ns»). */
+  overflow-wrap: normal;
+  word-break: normal;
   line-height: 1.2;
 }
 
@@ -2309,4 +2310,282 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   min-height: 3rem;
   font-size: 1rem;
   font-weight: 700;
+}
+
+/* ---- Teléfono apilado como Playback (2026-10-25) ---- */
+
+/* Canciones: una fila de tarjetas de una línea, con scroll horizontal. */
+.lt-setlist-songs.is-short {
+  gap: 0.3rem;
+}
+
+.lt-setlist-song-tile.is-short {
+  min-width: 12.5rem;
+  max-width: 16rem;
+  min-height: 2.75rem;
+  padding: 0.25rem 0.4rem;
+}
+
+.lt-setlist-song-tile.is-short .lt-setlist-song-name {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  font-size: 0.85rem;
+}
+
+.lt-setlist-songs.is-short .lt-setlist-transition {
+  min-width: 1.5rem;
+  padding: 0;
+}
+
+.lt-setlist-view.is-short .lt-setlist-zone.is-songs > .lt-setlist-edit-button {
+  height: 2.75rem;
+  margin: 0 0.2rem;
+  padding: 0 0.7rem;
+}
+
+/* Consola: botones de cabecera sólo con icono y tiras sin pan ni salida
+   (siguen en el menú de la pista) para que el fader tenga recorrido. */
+.lt-setlist-mixer.is-short .lt-setlist-mixer-action-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-mixer-header {
+  gap: 0.3rem;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-mixer-action,
+.lt-setlist-mixer.is-short .lt-setlist-mixer-fold,
+.lt-setlist-mixer.is-short .lt-setlist-tab {
+  min-height: 2.5rem;
+  min-width: 2.75rem;
+  padding-top: 0;
+  padding-bottom: 0;
+  justify-content: center;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-pan-wrap,
+.lt-setlist-mixer.is-short .lt-compact-mixer-audio-to {
+  display: none;
+}
+
+/* Pads en el teléfono: la tonalidad primero (lo que se toca en directo) y el
+   resto en dos columnas, con scroll. */
+.lt-setlist-mixer.is-short .lt-pads-controls.is-panel {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.lt-setlist-mixer.is-short .lt-pads-panel-group.is-keys {
+  grid-column: 1 / -1;
+  order: -1;
+}
+
+.lt-setlist-mixer.is-short .lt-pads-controls.is-panel .lt-pads-key-grid {
+  grid-auto-rows: 2.75rem;
+}
+
+/* Editar en el teléfono: una sola fila (atrás, título, modos con icono). */
+.lt-setlist-drawer.is-short {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.lt-setlist-drawer.is-short > .lt-setlist-drawer-header {
+  min-width: 0;
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-drawer-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+}
+
+.lt-setlist-drawer.is-short > .lt-setlist-drawer-modes {
+  display: flex;
+  grid-template-columns: none;
+  gap: 0.25rem;
+  padding: 0.3rem;
+  border-bottom: 0;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-drawer-tab {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-drawer-tab-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.lt-setlist-drawer.is-short > .lt-setlist-drawer-body {
+  grid-column: 1 / -1;
+}
+
+/* Teléfono: la tarjeta en una línea (nombre y tono). */
+.lt-setlist-song-tile.is-short .lt-setlist-song-main {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.lt-setlist-song-tile.is-short .lt-setlist-song-meta {
+  flex: 0 0 auto;
+}
+
+/* Teléfono: «Bucle» y «Siguiente» flotan en la esquina de la onda en vez de
+   ocupar una fila; la onda se queda todo el alto de su zona. */
+.lt-setlist-view.is-short .lt-setlist-zone.is-overview {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "band";
+}
+
+.lt-setlist-view.is-short .lt-setlist-map-actions {
+  grid-area: band;
+  align-self: end;
+  justify-self: end;
+  z-index: 3;
+  flex-wrap: nowrap;
+  padding: 0.25rem;
+  pointer-events: none;
+}
+
+.lt-setlist-view.is-short .lt-setlist-map-action {
+  flex: 0 0 auto;
+  pointer-events: auto;
+  background: rgb(19 19 19 / 0.92);
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-fader-scale,
+html.lt-mobile .lt-setlist-mixer.is-medium .lt-compact-mixer-fader-scale {
+  display: none;
+}
+
+.lt-setlist-transition {
+  min-height: 2.75rem;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-sections > .lt-setlist-sections-hint {
+  display: none;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip-name {
+  min-height: 0;
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
+}
+
+/* Tira del teléfono como en Playback de iPhone: nombre arriba y, debajo, M/S/T
+   en columna junto al fader, que se queda todo el alto. También en tableta
+   (táctil); en escritorio la tira normal, que una ventana baja se pliega. */
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip,
+html.lt-mobile .lt-setlist-mixer.is-medium .lt-compact-mixer-strip {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  column-gap: 0.3rem;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip > *,
+html.lt-mobile .lt-setlist-mixer.is-medium .lt-compact-mixer-strip > * {
+  grid-column: 1 / -1;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip > .lt-compact-mixer-strip-toggles,
+html.lt-mobile .lt-setlist-mixer.is-medium .lt-compact-mixer-strip > .lt-compact-mixer-strip-toggles {
+  grid-column: 1;
+  grid-row: 2;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip > .lt-compact-mixer-fader-wrap,
+html.lt-mobile .lt-setlist-mixer.is-medium .lt-compact-mixer-strip > .lt-compact-mixer-fader-wrap {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip-toggles .lt-compact-mixer-toggle,
+html.lt-mobile .lt-setlist-mixer.is-medium .lt-compact-mixer-strip-toggles .lt-compact-mixer-toggle {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 2rem;
+  max-width: 2rem;
+  min-height: 1.85rem;
+}
+
+/* Botón «Onda / Mezcla» del teléfono, junto a Editar. */
+.lt-setlist-pane-toggle {
+  flex: 0 0 auto;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: 2.75rem;
+  margin-left: 0.2rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 999px;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lt-setlist-pane-toggle.is-active {
+  border-color: var(--lt-setlist-accent);
+  color: var(--lt-setlist-accent);
+}
+
+/* Tableta: tarjetas algo más anchas para que el nombre quepa. */
+.lt-setlist-song-tile.is-medium {
+  min-width: 14rem;
+}
+
+/* Editando, el nombre de cada sección lo lleva su asa: las etiquetas del mapa
+   se pisaban con ellas. */
+.lt-setlist-view.is-editing .lt-setlist-map-label {
+  visibility: hidden;
+}
+
+/* «Bucle» y «Siguiente» flotan en la esquina de la onda en todos los
+   tamaños: una fila para uno o dos botones restaba alto a la onda. */
+.lt-setlist-zone.is-overview {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "band";
+}
+
+.lt-setlist-map-actions {
+  grid-area: band;
+  align-self: end;
+  justify-self: end;
+  z-index: 3;
+  flex-wrap: nowrap;
+  padding: 0.3rem;
+  pointer-events: none;
+}
+
+.lt-setlist-map-action {
+  pointer-events: auto;
+  background: rgb(19 19 19 / 0.92);
 }
