@@ -6522,6 +6522,14 @@ export function TransportPanelContent() {
     setSelectedRegionId(region.id);
     openMenu(event, region.name, songRegionContextMenu(region));
   }, [clearSelection, openMenu, setSelectedRegionId, setSelectedTimelineRange, songRegionContextMenu]);
+  // The section menu: the DAW ruler and the Setlist song map open the same.
+  const handleMarkerContextMenu = useCallback((event: ReactMouseEvent<HTMLElement>, sectionId: string) => {
+    const section = songRef.current?.sectionMarkers.find((candidate) => candidate.id === sectionId);
+    if (!section) return;
+    setSelectedRegionId(null);
+    selectSection(section.id);
+    openMenu(event, section.name, sectionContextMenu(section));
+  }, [openMenu, sectionContextMenu, selectSection, setSelectedRegionId]);
 
   // What every song view receives (./songs/songViewBindings). Plain objects:
   // the views are memo and the spread compares field by field, so each field
@@ -6541,6 +6549,9 @@ export function TransportPanelContent() {
     onPlaySong: songViewHandlers.playSong,
     onCueSong: songViewHandlers.cueSong,
     onSongContextMenu: handleRegionContextMenu,
+    onSectionContextMenu: handleMarkerContextMenu,
+    onCommitMarkerPosition: handleMarkerMoveCommit,
+    workspaceEndSeconds: workspaceDurationSeconds,
     onRenameSong: handleCompactRenameSong,
     onSetSongBpm: handleCompactSetSongBpm,
     onDeleteSong: handleCompactDeleteSong,
@@ -7414,22 +7425,7 @@ export function TransportPanelContent() {
                               await handleMarkerPrimaryAction(section);
                             });
                           }}
-                          onMarkerContextMenu={(event, sectionId) => {
-                            const section = song?.sectionMarkers.find(
-                              (candidate) => candidate.id === sectionId,
-                            );
-                            if (!section) {
-                              return;
-                            }
-
-                            setSelectedRegionId(null);
-                            selectSection(section.id);
-                            openMenu(
-                              event,
-                              section.name,
-                              sectionContextMenu(section),
-                            );
-                          }}
+                          onMarkerContextMenu={handleMarkerContextMenu}
                           onTempoMarkerContextMenu={(event, markerId) => {
                             const marker = song?.tempoMarkers.find(
                               (candidate) => candidate.id === markerId,

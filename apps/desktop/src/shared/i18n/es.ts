@@ -2554,6 +2554,13 @@ const es = {
       transitionTitle: "Transición entre canciones: {{mode}}",
       transitionMenu: "Transición entre canciones",
     },
+    map: {
+      label: "Secciones de {{name}}",
+      loop: "Bucle",
+      next: "Siguiente: {{name}}",
+      pending: "Salto",
+      noSections: "Esta canción no tiene secciones. Añádelas en Editar.",
+    },
     tabs: {
       label: "Secciones de la vista Setlist",
       song: "Canción",

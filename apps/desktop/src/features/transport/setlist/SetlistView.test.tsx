@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useTimelineUIStore } from "../uiStore";
 import { SetlistView } from "./SetlistView";
 import { INITIAL_SETLIST_STATE, useSetlistStore } from "./setlistStore";
 import { testSetlistProps } from "./testBindings";
@@ -53,4 +54,15 @@ describe("SetlistView skeleton", () => {
       expect(zones(container)).toContain("drawer");
     },
   );
+
+  it("opens the section menu's «Position…» editor outside the DAW", () => {
+    const props = testSetlistProps({
+      sectionMarkers: [{ id: "m1", name: "Coro", startSeconds: 10 }],
+    } as never);
+    render(<SetlistView {...props} layoutClass="wide" />);
+    expect(screen.queryByText("markerPosition.bar")).toBeNull();
+    act(() => useTimelineUIStore.getState().setMarkerPositionEditorId("m1"));
+    expect(screen.getByText("markerPosition.bar")).toBeTruthy();
+    act(() => useTimelineUIStore.getState().setMarkerPositionEditorId(null));
+  });
 });

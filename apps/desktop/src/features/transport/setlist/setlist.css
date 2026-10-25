@@ -410,3 +410,187 @@ html.lt-mobile .lt-setlist-add-song-button {
   min-width: 2.75rem;
   min-height: 2.75rem;
 }
+
+/* ---- Mapa de la canción (paso 04) ---- */
+
+.lt-setlist-zone.is-map {
+  display: flex;
+  min-height: 0;
+}
+
+.lt-setlist-map {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.35rem;
+}
+
+.lt-setlist-map-blocks {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  min-height: 4rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+}
+
+.lt-setlist-map.is-medium .lt-setlist-map-blocks {
+  min-height: 3rem;
+}
+
+.lt-setlist-map.is-short .lt-setlist-map-blocks {
+  min-height: 2.75rem;
+}
+
+.lt-setlist-map-block {
+  --lt-setlist-block-color: #7c8a86;
+  position: relative;
+  flex: var(--lt-setlist-block-grow, 1) 0 0;
+  min-width: 4.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 0.1rem;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 32%, #111514);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.lt-setlist-map-block::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--lt-setlist-block-color);
+}
+
+.lt-setlist-map-block.is-start,
+.lt-setlist-map-block.is-song {
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-map-block.is-active {
+  border-color: var(--lt-setlist-text);
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 55%, #111514);
+}
+
+.lt-setlist-map-block.is-next {
+  border-style: dotted;
+  border-color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-map-block.is-pending {
+  border: 2px dashed #f2c45a;
+}
+
+.lt-setlist-map-block.is-looping {
+  box-shadow: inset 0 0 0 2px var(--lt-setlist-accent);
+}
+
+.lt-setlist-map-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-map-bars,
+.lt-setlist-map-flag {
+  font-size: 0.72rem;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-map-flag {
+  color: #f2c45a;
+}
+
+.lt-setlist-map-digit {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-map-progress {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: rgb(255 255 255 / 0.12);
+}
+
+.lt-setlist-map-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--lt-setlist-text);
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.lt-setlist-map-notch {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #f2c45a;
+  pointer-events: none;
+}
+
+.lt-setlist-map-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.lt-setlist-map-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 999px;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lt-setlist-map-action.is-active {
+  border-color: var(--lt-setlist-accent);
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-map.is-short .lt-setlist-map-action {
+  min-height: 2.75rem;
+  flex: 1 1 0;
+  justify-content: center;
+}
+
+.lt-setlist-map-hint {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--lt-setlist-text-muted);
+}
+
+html.lt-mobile .lt-setlist-map-block {
+  min-height: 2.75rem;
+}

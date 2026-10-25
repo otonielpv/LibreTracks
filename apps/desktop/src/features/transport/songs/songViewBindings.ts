@@ -79,6 +79,18 @@ export type SongViewBindings = {
   /** Honours the global song-jump configuration (trigger + transition),
    * the same path as the Shift+digit shortcut. */
   onPlaySong: (regionId: string, regionName: string) => void;
+  /** The DAW's section-marker menu (rename, kind, colour, digit, delete,
+   * jump…), the same function as the DAW ruler's. Like in the DAW it
+   * clears the song selection and selects the section. */
+  onSectionContextMenu: (
+    event: ReactMouseEvent<HTMLElement>,
+    markerId: string,
+  ) => void;
+  /** Moves a marker to an exact position: the same commit as dragging its
+   * flag in the DAW (the section menu's «Position…» editor uses it). */
+  onCommitMarkerPosition: (markerId: string, startSeconds: number) => void;
+  /** End of the timeline workspace: the cap a typed position is clamped to. */
+  workspaceEndSeconds: number;
   /** Stopped: put the playhead at the song's start, without playing. */
   onCueSong: (regionId: string) => void;
   /** The DAW's own song menu (rename with library-folder sync, key,

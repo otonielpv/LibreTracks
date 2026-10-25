@@ -2,11 +2,14 @@ import { memo, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { TimelineMenus } from "../menus/timelineMenus";
+import { MarkerPositionEditor } from "../timeline/MarkerPositionEditor";
 import type {
   PerformanceBindings,
   SongViewBindings,
 } from "../songs/songViewBindings";
 import { SetlistSongRow, type SetlistDragPreview } from "./SetlistSongRow";
+import { SongMap } from "./SongMap";
+import { resolveSetlistSongId } from "./songMapModel";
 import { useSetlistStore, type SetlistShortTab } from "./setlistStore";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
 import "./setlist.css";
@@ -62,6 +65,9 @@ function SetlistViewComponent({
   onCueSong,
   onPlaySong,
   onSongContextMenu,
+  onSectionContextMenu,
+  onCommitMarkerPosition,
+  workspaceEndSeconds,
   onReorderSong,
   onDropOsFilesIntoSong,
   onDropLibraryAssetsIntoSong,
@@ -75,7 +81,37 @@ function SetlistViewComponent({
   const editMode = useSetlistStore((state) => state.editMode);
   const shortTab = useSetlistStore((state) => state.shortTab);
   const setShortTab = useSetlistStore((state) => state.setShortTab);
+  // The song the map, overview and mixer are about (00 §5 "Selección").
+  const lastShownRegionIdRef = useRef<string | null>(null);
+  const shownRegionId = resolveSetlistSongId(
+    regions,
+    selectedRegionId,
+    lastShownRegionIdRef.current,
+    activeRegionId,
+  );
+  lastShownRegionIdRef.current = shownRegionId;
+  const shownRegion = regions.find((region) => region.id === shownRegionId) ?? null;
   const drawer = editMode !== null ? <Zone name="drawer" /> : null;
+  const map = (
+    <Zone name="map">
+      {shownRegion ? (
+        <SongMap
+          song={performance.song}
+          region={shownRegion}
+          layout={layout}
+          positionSecondsRef={performance.positionSecondsRef}
+          pendingMarkerId={performance.pendingMarkerId}
+          activeVamp={performance.activeVamp}
+          onMarkerAction={performance.onMarkerAction}
+          onCancelPendingJump={performance.onCancelPendingJump}
+          onToggleVamp={performance.onToggleVamp}
+          onCueSong={onCueSong}
+          onPlaySong={onPlaySong}
+          onSectionContextMenu={onSectionContextMenu}
+        />
+      ) : null}
+    </Zone>
+  );
   const songs = (
     <Zone name="songs">
       <SetlistSongRow
@@ -112,6 +148,13 @@ function SetlistViewComponent({
       data-setlist-layout={layout}
       aria-label={t("setlistView.title")}
     >
+      {/* The section menu's «Position…» opens this; in the DAW it lives in
+          MobileDawOverlays, which only renders there. */}
+      <MarkerPositionEditor
+        song={performance.song}
+        workspaceEndSeconds={workspaceEndSeconds}
+        onCommit={onCommitMarkerPosition}
+      />
       {layout === "short" ? (
         <>
           {songs}
@@ -136,7 +179,7 @@ function SetlistViewComponent({
             </div>
             {shortTab === "song" ? (
               <div className="lt-setlist-song-band">
-                <Zone name="map" />
+                {map}
                 <Zone name="overview" />
               </div>
             ) : (
@@ -149,7 +192,7 @@ function SetlistViewComponent({
         <>
           {songs}
           <div className="lt-setlist-song-band">
-            <Zone name="map" />
+            {map}
             <Zone name="overview" />
           </div>
           <div className="lt-setlist-bottom">

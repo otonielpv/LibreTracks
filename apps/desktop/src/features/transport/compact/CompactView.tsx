@@ -84,8 +84,15 @@ export function computeActiveSongTrackIds(
   return ids;
 }
 
-// Compacta keeps its own song menu and has no "cue" gesture.
-type CompactViewProps = Omit<SongViewBindings, "onCueSong" | "onSongContextMenu"> & {
+// Compacta keeps its own song menu, shows no sections and has no "cue".
+type CompactViewProps = Omit<
+  SongViewBindings,
+  | "onCueSong"
+  | "onSongContextMenu"
+  | "onSectionContextMenu"
+  | "onCommitMarkerPosition"
+  | "workspaceEndSeconds"
+> & {
   /** Controls the "Solo cancion activa" filter inside CompactMixer.
    * Owned by the project-wide parent so the toggle UI can live in
    * the TimelineToolbar without lifting more wiring than necessary. */

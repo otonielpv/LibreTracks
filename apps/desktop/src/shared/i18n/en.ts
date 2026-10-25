@@ -2523,6 +2523,13 @@ const en = {
       transitionTitle: "Transition between songs: {{mode}}",
       transitionMenu: "Transition between songs",
     },
+    map: {
+      label: "Sections of {{name}}",
+      loop: "Loop",
+      next: "Next: {{name}}",
+      pending: "Jump",
+      noSections: "This song has no sections. Add them in Edit.",
+    },
     tabs: {
       label: "Setlist view sections",
       song: "Song",
