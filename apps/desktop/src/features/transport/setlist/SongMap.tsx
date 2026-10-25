@@ -42,6 +42,8 @@ type SongMapProps = Pick<
   Pick<SongViewBindings, "onCueSong" | "onPlaySong" | "onSectionContextMenu"> & {
     region: SongRegionSummary;
     layout: SetlistLayoutClass;
+    /** Edit mode: a tap selects the section instead of jumping. */
+    editing?: boolean;
   };
 
 const VAMP_MATCH_SECONDS = 0.05;
@@ -66,11 +68,13 @@ function SongMapComponent({
   onCueSong,
   onPlaySong,
   onSectionContextMenu,
+  editing = false,
 }: SongMapProps) {
   const { t } = useTranslation();
   const fillRef = useRef<HTMLSpanElement | null>(null);
   const touchMenu = useTouchContextMenu();
   const setSelectedSectionId = useSetlistStore((state) => state.setSelectedSectionId);
+  const selectedSectionId = useSetlistStore((state) => state.selectedSectionId);
   const { blocks, notches } = useMemo(
     () =>
       buildSongMapBlocks(region, song.sectionMarkers, barSecondsAtFor(song), {
@@ -97,6 +101,11 @@ function SongMapComponent({
   const overlay = layout === "medium";
 
   const activate = (block: SongMapBlock) => {
+    if (editing) {
+      // Editing: tapping only selects, so nothing jumps by accident.
+      setSelectedSectionId(block.marker?.id ?? null);
+      return;
+    }
     if (block.id === pendingBlockId) {
       onCancelPendingJump();
       return;
@@ -122,7 +131,7 @@ function SongMapComponent({
   };
 
   return (
-    <div className={`lt-setlist-map is-${layout}${overlay ? " is-overlay" : ""}`}>
+    <div className={`lt-setlist-map is-${layout}${overlay ? " is-overlay" : ""}${editing ? " is-editing" : ""}`}>
       <div
         className="lt-setlist-map-blocks"
         role="list"
@@ -151,6 +160,7 @@ function SongMapComponent({
             block.id === nextId ? "is-next" : "",
             block.id === pendingBlockId ? "is-pending" : "",
             block.id === loopingBlockId ? "is-looping" : "",
+            editing && block.marker && block.marker.id === selectedSectionId ? "is-selected" : "",
           ]
             .filter(Boolean)
             .join(" ");

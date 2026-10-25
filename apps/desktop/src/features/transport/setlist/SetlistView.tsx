@@ -1,4 +1,4 @@
-import { memo, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { memo, useEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { TimelineMenus } from "../menus/timelineMenus";
@@ -12,6 +12,8 @@ import { SongMap } from "./SongMap";
 import { SongOverviewStrip } from "./SongOverviewStrip";
 import { SetlistMixer } from "./SetlistMixer";
 import { MIXER_HEIGHT_VAR, useMixerResize } from "./useMixerResize";
+import { SetlistEditButton, SetlistEditDrawer } from "./SetlistEditDrawer";
+import { SetlistSongSettings } from "./SetlistSongSettings";
 import { resolveSetlistSongId } from "./songMapModel";
 import { useSetlistStore, type SetlistShortTab } from "./setlistStore";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
@@ -65,6 +67,15 @@ const SHORT_TABS: Array<{ tab: SetlistShortTab; labelKey: string }> = [
  */
 function SetlistViewComponent({
   layoutClass,
+  menus,
+  onSetSongKey,
+  onResizeSong,
+  onMoveSong,
+  runAction,
+  setStatus,
+  onSelectedRegionTransposeChange,
+  onSelectedRegionWarpToggle,
+  onSelectedRegionTempoChange,
   tracks,
   audioRoutingOptions,
   mixerHandlers,
@@ -121,7 +132,50 @@ function SetlistViewComponent({
   );
   lastShownRegionIdRef.current = shownRegionId;
   const shownRegion = regions.find((region) => region.id === shownRegionId) ?? null;
-  const drawer = editMode !== null ? <Zone name="drawer" /> : null;
+  // Editing acts on the project selection (the toolbar's selected-song
+  // handlers), so entering edit mode selects the song the view shows.
+  useEffect(() => {
+    if (editMode !== null && shownRegionId && shownRegionId !== selectedRegionId) {
+      onSelectRegion(shownRegionId);
+    }
+  }, [editMode, onSelectRegion, selectedRegionId, shownRegionId]);
+  const drawer =
+    editMode !== null ? (
+      <Zone name="drawer">
+        <SetlistEditDrawer
+          layout={layout}
+          songName={shownRegion?.name ?? null}
+          modes={[
+            {
+              mode: "song",
+              labelKey: "setlistView.edit.modes.song",
+              content: shownRegion ? (
+                <SetlistSongSettings
+                  song={performance.song}
+                  region={shownRegion}
+                  menus={menus}
+                  regions={regions}
+                  bpmByRegion={bpmByRegion}
+                  appSettings={appSettings}
+                  onSetSongKey={onSetSongKey}
+                  onMasterGainChange={onMasterGainChange}
+                  onMasterGainCommit={onMasterGainCommit}
+                  onResizeSong={onResizeSong}
+                  onMoveSong={onMoveSong}
+                  runAction={runAction}
+                  setStatus={setStatus}
+                  onSnapshotApplied={onSnapshotApplied}
+                  onSelectedRegionTransposeChange={onSelectedRegionTransposeChange}
+                  onSelectedRegionWarpToggle={onSelectedRegionWarpToggle}
+                  onSelectedRegionTempoChange={onSelectedRegionTempoChange}
+                  workspaceEndSeconds={workspaceEndSeconds}
+                />
+              ) : null,
+            },
+          ]}
+        />
+      </Zone>
+    ) : null;
   const mixerZoneRef = useRef<HTMLElement | null>(null);
   const mixerHeightPx = useSetlistStore((state) => state.mixerHeightPx);
   const beginMixerResize = useMixerResize(rootRef, mixerZoneRef);
@@ -193,6 +247,7 @@ function SetlistViewComponent({
           onCueSong={onCueSong}
           onPlaySong={onPlaySong}
           onSectionContextMenu={onSectionContextMenu}
+          editing={editMode !== null}
         />
       ) : null}
     </Zone>
@@ -222,7 +277,9 @@ function SetlistViewComponent({
         onSnapshotApplied={onSnapshotApplied}
         onImportSongPackageFromDialog={onImportSongPackageFromDialog}
         onImportSongPackageFromOsFile={onImportSongPackageFromOsFile}
+        editing={editMode !== null}
       />
+      {layout !== "short" ? <SetlistEditButton /> : null}
     </Zone>
   );
 
@@ -266,6 +323,7 @@ function SetlistViewComponent({
                   {t(labelKey)}
                 </button>
               ))}
+              <SetlistEditButton />
             </div>
             {shortTab === "song" ? (
               <div className="lt-setlist-song-band">

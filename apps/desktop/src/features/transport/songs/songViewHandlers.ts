@@ -16,9 +16,11 @@ import {
   importAudioFilesFromPaths,
   isTauriApp,
   moveLibraryAsset,
+  moveSongRegion,
   playTransport,
   reorderSongRegion,
   setSongRegionChart,
+  updateSongRegion,
   updateSongRegionMasterGain,
 } from "../desktopApi";
 import { resolveNativeAudioImportPayloads } from "../helpers";
@@ -281,6 +283,29 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
     void deps.runAction(() => deps.seek(seconds));
   }
 
+  /** New edges for a song (dragged in the DAW, typed in Setlist). Same
+   * command as a rename, so the snapshot/event flow matches other region
+   * edits. */
+  function resizeSong(regionId: string, startSeconds: number, endSeconds: number) {
+    const deps = getDeps();
+    const region = findRegion(regionId);
+    if (!region) return;
+    void deps.runAction(async () =>
+      deps.applyPlaybackSnapshot(
+        await updateSongRegion(regionId, region.name, startSeconds, endSeconds),
+      ),
+    );
+  }
+
+  /** Translates the whole song — region, clips and every marker inside —
+   * by `deltaSeconds` in one atomic snapshot and one undo entry. */
+  function moveSong(regionId: string, deltaSeconds: number) {
+    const deps = getDeps();
+    void deps.runAction(async () =>
+      deps.applyPlaybackSnapshot(await moveSongRegion(regionId, deltaSeconds)),
+    );
+  }
+
   function reorderSong(regionId: string, targetIndex: number) {
     const deps = getDeps();
     void deps.runAction(async () =>
@@ -336,6 +361,8 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
     playSong,
     cueSong,
     seekTo,
+    resizeSong,
+    moveSong,
     reorderSong,
     setSongChart,
     toggleVamp,

@@ -39,8 +39,9 @@ const BUDGETS: Record<string, number> = {
   // El monolito. Objetivo: que baje, nunca que suba. Bajado de 8500 tras
   // sacar los handlers de canción a songs/songViewHandlers.ts y agrupar las
   // props de las vistas en songs/songViewBindings.ts (paso 01 de
-  // docs/plans/setlist-view).
-  "TransportPanelContent.tsx": 8094,
+  // docs/plans/setlist-view), y a 8066 tras llevar los commits de recorte y
+  // movimiento de canción a la misma factory (paso 07).
+  "TransportPanelContent.tsx": 8066,
   "library/libraryDragDrop.ts": 2300,
   // Bajado de 2000 tras extraer timeline/useRegionDrag.ts (paso 02 de
   // docs/plans/ui-performance), y de 1700 tras sacar

@@ -98,7 +98,6 @@ import {
   updateAudioSettings,
   updateSectionMarker,
   updateLiveRegionMasterGain,
-  moveSongRegion,
   updateSongRegion,
   updateSongRegionTranspose,
   updateSongRegionWarp,
@@ -6551,6 +6550,11 @@ export function TransportPanelContent() {
     onSongContextMenu: handleRegionContextMenu,
     onSectionContextMenu: handleMarkerContextMenu,
     onCommitMarkerPosition: handleMarkerMoveCommit,
+    onResizeSong: songViewHandlers.resizeSong, onMoveSong: songViewHandlers.moveSong,
+    runAction, setStatus,
+    onSelectedRegionTransposeChange: handleSelectedRegionTransposeChange,
+    onSelectedRegionWarpToggle: handleSelectedRegionWarpToggle,
+    onSelectedRegionTempoChange: handleSelectedRegionTempoChange,
     workspaceEndSeconds: workspaceDurationSeconds,
     onRenameSong: handleCompactRenameSong,
     onSetSongBpm: handleCompactSetSongBpm,
@@ -7532,43 +7536,8 @@ export function TransportPanelContent() {
                               },
                             ]);
                           }}
-                          onRegionResizeCommit={(
-                            regionId,
-                            startSeconds,
-                            endSeconds,
-                          ) => {
-                            const region = song?.regions.find(
-                              (candidate) => candidate.id === regionId,
-                            );
-                            if (!region) return;
-                            // Commit through the same code path as the inline
-                            // rename modal so the snapshot/event flow stays
-                            // identical to other region edits.
-                            void runAction(async () => {
-                              const nextSnapshot = await updateSongRegion(
-                                regionId,
-                                region.name,
-                                startSeconds,
-                                endSeconds,
-                              );
-                              applyPlaybackSnapshot(nextSnapshot);
-                            });
-                          }}
-                          onRegionMoveCommit={(regionId, deltaSeconds) => {
-                            // Translates the entire song — region + clips +
-                            // every marker inside it — by `deltaSeconds`.
-                            // Goes through a dedicated backend command so
-                            // the move is one atomic snapshot / one undo
-                            // entry, instead of N independent region/
-                            // marker/clip updates.
-                            void runAction(async () => {
-                              const nextSnapshot = await moveSongRegion(
-                                regionId,
-                                deltaSeconds,
-                              );
-                              applyPlaybackSnapshot(nextSnapshot);
-                            });
-                          }}
+                          onRegionResizeCommit={songViewHandlers.resizeSong}
+                          onRegionMoveCommit={songViewHandlers.moveSong}
                           onMarkerMoveCommit={handleMarkerMoveCommit}
                           onRulerMarkersMoveCommit={rulerMarkers.moveGroup}
                           onRulerMarkersContextMenu={(event, markers) =>

@@ -95,6 +95,15 @@ const stableFields = {
   onSongContextMenu: noop,
   onSectionContextMenu: noop,
   onCommitMarkerPosition: noop,
+  onResizeSong: noop,
+  onMoveSong: noop,
+  runAction: async (action: () => Promise<void>) => {
+    await action();
+  },
+  setStatus: noop,
+  onSelectedRegionTransposeChange: noop,
+  onSelectedRegionWarpToggle: noop,
+  onSelectedRegionTempoChange: noop,
   workspaceEndSeconds: 600,
   onRenameSong: noop,
   onSetSongBpm: noop,

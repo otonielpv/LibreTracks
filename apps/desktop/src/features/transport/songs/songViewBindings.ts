@@ -92,6 +92,18 @@ export type SongViewBindings = {
   /** Moves a marker to an exact position: the same commit as dragging its
    * flag in the DAW (the section menu's «Position…» editor uses it). */
   onCommitMarkerPosition: (markerId: string, startSeconds: number) => void;
+  /** New edges for a song; the DAW region band's commit. */
+  onResizeSong: (regionId: string, startSeconds: number, endSeconds: number) => void;
+  /** Moves the whole song by `deltaSeconds`; the DAW region band's move. */
+  onMoveSong: (regionId: string, deltaSeconds: number) => void;
+  /** The panel's action runner (status on error) and status line: a view
+   * that runs a command itself goes through them (00 §5). */
+  runAction: (action: () => Promise<void>, options?: { busy?: boolean }) => Promise<void>;
+  setStatus: (message: string) => void;
+  /** The toolbar's handlers for the SELECTED song (transpose, warp, tempo). */
+  onSelectedRegionTransposeChange: (nextTransposeSemitones: number) => void;
+  onSelectedRegionWarpToggle: (nextEnabled: boolean) => void;
+  onSelectedRegionTempoChange: (region: SongRegionSummary, nextBpm: number) => void;
   /** End of the timeline workspace: the cap a typed position is clamped to. */
   workspaceEndSeconds: number;
   /** Stopped: put the playhead at the song's start, without playing. */

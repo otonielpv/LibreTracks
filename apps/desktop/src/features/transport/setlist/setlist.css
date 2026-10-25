@@ -883,3 +883,199 @@ html.lt-mobile .lt-setlist-map-block {
 .lt-setlist-mixer.is-short .lt-setlist-console-strip.is-master {
   width: 4.75rem;
 }
+
+/* ---- Modo Edición y ajustes de canción (paso 07) ---- */
+
+.lt-setlist-zone.is-songs > .lt-setlist-edit-button {
+  align-self: center;
+  margin-right: 0.45rem;
+}
+
+.lt-setlist-edit-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2.25rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 999px;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lt-setlist-edit-button.is-active {
+  border-color: #f2c45a;
+  background: rgb(242 196 90 / 0.16);
+  color: #f2d68a;
+}
+
+.lt-setlist-tabs > .lt-setlist-edit-button {
+  margin-left: auto;
+  min-height: 2.75rem;
+}
+
+/* En edición: «…» siempre visible y «+» destacado. */
+.lt-setlist-songs.is-editing .lt-setlist-song-actions {
+  opacity: 1;
+}
+
+.lt-setlist-songs.is-editing .lt-setlist-add-song {
+  border-color: #f2c45a;
+  border-style: solid;
+}
+
+.lt-setlist-map.is-editing .lt-setlist-map-block.is-selected {
+  outline: 2px solid #f2c45a;
+  outline-offset: -2px;
+}
+
+.lt-setlist-zone.is-drawer {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-drawer {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lt-setlist-drawer-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--lt-setlist-border);
+}
+
+.lt-setlist-drawer-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-drawer-modes {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-drawer-modes {
+  margin-left: 0.5rem;
+}
+
+.lt-setlist-drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.55rem;
+}
+
+.lt-setlist-view.is-wide .lt-setlist-zone.is-drawer {
+  flex: 0 0 clamp(22rem, 30%, 26rem);
+}
+
+.lt-setlist-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lt-setlist-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.lt-setlist-settings-section h3,
+.lt-setlist-settings-section h4 {
+  margin: 0;
+}
+
+.lt-setlist-settings-section h4 {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-settings-field {
+  display: grid;
+  grid-template-columns: minmax(6rem, 34%) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lt-setlist-settings-label {
+  font-size: 0.82rem;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-settings-control,
+.lt-setlist-settings-row,
+.lt-setlist-settings-choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.lt-setlist-settings-input {
+  min-width: 0;
+  flex: 1 1 5rem;
+  min-height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.35rem;
+  background: var(--lt-setlist-bg);
+  color: var(--lt-setlist-text);
+  font: inherit;
+}
+
+.lt-setlist-settings-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.4rem;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lt-setlist-settings-button.is-active {
+  border-color: var(--lt-setlist-accent);
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-settings-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.lt-setlist-settings-value,
+.lt-setlist-settings-unit {
+  min-width: 2rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+html.lt-mobile .lt-setlist-settings-button,
+html.lt-mobile .lt-setlist-settings-input,
+html.lt-mobile .lt-setlist-edit-button {
+  min-height: 2.75rem;
+}

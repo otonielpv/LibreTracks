@@ -13,6 +13,7 @@ import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import type { AppSettings } from "@libretracks/shared/models";
 
 import { createEmptySong, isMobileApp } from "../desktopApi";
+import { openLevelSongs } from "../levelSongs/levelSongsStore";
 import { SongGapVampToggle } from "../live/SongGapVampToggle";
 import { useLiveProgressBars } from "../live/useLiveProgressBars";
 import type { SongViewBindings } from "../songs/songViewBindings";
@@ -54,6 +55,8 @@ type SetlistSongRowProps = Pick<
   onTransitionModeChange: (mode: AppSettings["songTransitionMode"]) => void;
   vampBetweenSongs?: boolean;
   onVampBetweenSongsChange?: (enabled: boolean) => void;
+  /** Edit mode: menus always visible, «+» highlighted, «Level songs». */
+  editing?: boolean;
 };
 
 const NO_FILL = { current: null };
@@ -99,6 +102,7 @@ function SetlistSongRowComponent({
   onTransitionModeChange,
   vampBetweenSongs,
   onVampBetweenSongsChange,
+  editing = false,
 }: SetlistSongRowProps) {
   const { t } = useTranslation();
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -199,7 +203,7 @@ function SetlistSongRowComponent({
   return (
     <div
       ref={listRef}
-      className={`lt-setlist-songs is-${layout}${isVertical ? " is-vertical" : " is-horizontal"}${dragPreview?.isPackage ? " is-package-drag" : ""}`}
+      className={`lt-setlist-songs is-${layout}${isVertical ? " is-vertical" : " is-horizontal"}${dragPreview?.isPackage ? " is-package-drag" : ""}${editing ? " is-editing" : ""}`}
       role="list"
       aria-label={t("setlistView.songs.label")}
       onDragOver={(event) => event.preventDefault()}
@@ -282,6 +286,16 @@ function SetlistSongRowComponent({
           >
             <span className="material-symbols-outlined" aria-hidden="true">folder_open</span>
           </button>
+          {editing ? (
+            <button
+              type="button"
+              className="lt-setlist-add-song-button"
+              onClick={openLevelSongs}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">equalizer</span>
+              {isVertical ? null : <span>{t("setlistView.songs.levelSongs")}</span>}
+            </button>
+          ) : null}
         </div>
       </div>
       {transitionMenuOpen ? (
