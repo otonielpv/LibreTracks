@@ -48,7 +48,7 @@ import "./LivePerformanceView.css";
 
 export type { LiveViewSettings };
 
-type LivePerformanceViewProps = PerformanceBindings & {
+type LivePerformanceViewProps = Omit<PerformanceBindings, "onSeek"> & {
   /** Absent when the view is not part of the editor (network-session guest
    * screen): then `headerStart` takes the view switcher's place. */
   onViewModeChange?: (mode: ViewMode) => void;

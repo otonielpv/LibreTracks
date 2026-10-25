@@ -2530,6 +2530,9 @@ const en = {
       pending: "Jump",
       noSections: "This song has no sections. Add them in Edit.",
     },
+    overview: {
+      label: "Waveform of {{name}}",
+    },
     tabs: {
       label: "Setlist view sections",
       song: "Song",

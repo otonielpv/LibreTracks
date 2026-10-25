@@ -25,6 +25,7 @@ import {
   buildSongMapBlocks,
   type SongMapBlock,
 } from "./songMapModel";
+import { createSongTimeScale } from "./songTimeScale";
 import { useSongMapPlayback } from "./useSongMapPlayback";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 
@@ -86,6 +87,14 @@ function SongMapComponent({
     : null;
   const nextBlock = blocks.find((block) => block.id === nextId) ?? null;
   const isEmpty = blocks.length === 1 && blocks[0].kind === "song";
+  // Percent positions through the view's one time scale: in `medium` the
+  // blocks sit over the waveform and must line up with it exactly.
+  const percent = createSongTimeScale({
+    startSeconds: region.startSeconds,
+    endSeconds: region.endSeconds,
+    widthPx: 100,
+  });
+  const overlay = layout === "medium";
 
   const activate = (block: SongMapBlock) => {
     if (block.id === pendingBlockId) {
@@ -113,7 +122,7 @@ function SongMapComponent({
   };
 
   return (
-    <div className={`lt-setlist-map is-${layout}`}>
+    <div className={`lt-setlist-map is-${layout}${overlay ? " is-overlay" : ""}`}>
       <div
         className="lt-setlist-map-blocks"
         role="list"
@@ -156,6 +165,12 @@ function SongMapComponent({
                 {
                   "--lt-setlist-block-grow": block.widthFraction,
                   "--lt-setlist-block-color": block.color ?? undefined,
+                  ...(overlay
+                    ? {
+                        left: `${percent.secondsToPx(block.startSeconds)}%`,
+                        width: `${percent.secondsToPx(block.endSeconds) - percent.secondsToPx(block.startSeconds)}%`,
+                      }
+                    : null),
                 } as CSSProperties
               }
               aria-current={isActive ? "true" : undefined}
@@ -185,7 +200,7 @@ function SongMapComponent({
           <span
             key={notch.marker.id}
             className="lt-setlist-map-notch"
-            style={{ left: `${notch.fraction * 100}%` }}
+            style={{ left: `${percent.secondsToPx(notch.marker.startSeconds)}%` }}
             title={notch.marker.name}
             aria-hidden="true"
           />

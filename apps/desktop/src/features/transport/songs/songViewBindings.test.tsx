@@ -100,6 +100,7 @@ const stableFields = {
   onSetSongKey: noop,
   onReorderSong: noop,
   bpmByRegion: {},
+  waveformSummaries: {},
   onSnapshotApplied: noop,
   onImportSongPackageFromDialog: noop,
   onImportSongPackageFromOsFile: noop,

@@ -274,6 +274,13 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
     void deps.runAction(() => deps.seek(region.startSeconds));
   }
 
+  /** A tap or a scrub on a song view's waveform. `seek` is the panel's
+   * coalesced performSeek, so a scrub burst becomes one engine seek. */
+  function seekTo(seconds: number) {
+    const deps = getDeps();
+    void deps.runAction(() => deps.seek(seconds));
+  }
+
   function reorderSong(regionId: string, targetIndex: number) {
     const deps = getDeps();
     void deps.runAction(async () =>
@@ -328,6 +335,7 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
     importSongPackageFromOsFile,
     playSong,
     cueSong,
+    seekTo,
     reorderSong,
     setSongChart,
     toggleVamp,

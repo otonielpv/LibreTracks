@@ -202,6 +202,27 @@ describe("playSong", () => {
   });
 });
 
+describe("cueSong and seekTo", () => {
+  it("cue seeks to the song start only while stopped", async () => {
+    const stopped = setup();
+    stopped.handlers.cueSong("r2");
+    await flush();
+    expect(stopped.deps.seek).toHaveBeenCalledWith(40);
+
+    const sounding = setup({ isPlaying: () => true });
+    sounding.handlers.cueSong("r2");
+    await flush();
+    expect(sounding.deps.seek).not.toHaveBeenCalled();
+  });
+
+  it("seekTo goes through the panel's (coalesced) seek", async () => {
+    const { deps, handlers } = setup();
+    handlers.seekTo(12.5);
+    await flush();
+    expect(deps.seek).toHaveBeenCalledWith(12.5);
+  });
+});
+
 describe("one-line actions", () => {
   it("reorder, chart, cancel, vamp and marker go through runAction", async () => {
     const { deps, handlers } = setup();

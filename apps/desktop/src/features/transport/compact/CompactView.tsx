@@ -92,6 +92,7 @@ type CompactViewProps = Omit<
   | "onSectionContextMenu"
   | "onCommitMarkerPosition"
   | "workspaceEndSeconds"
+  | "waveformSummaries"
 > & {
   /** Controls the "Solo cancion activa" filter inside CompactMixer.
    * Owned by the project-wide parent so the toggle UI can live in

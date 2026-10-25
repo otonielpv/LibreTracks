@@ -594,3 +594,83 @@ html.lt-mobile .lt-setlist-add-song-button {
 html.lt-mobile .lt-setlist-map-block {
   min-height: 2.75rem;
 }
+
+/* ---- Onda de la canción (paso 05) ---- */
+
+.lt-setlist-zone.is-overview {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-overview {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  min-height: 3rem;
+  touch-action: none;
+}
+
+.lt-setlist-overview.is-wide {
+  min-height: 5rem;
+}
+
+.lt-setlist-overview.is-short {
+  min-height: 3rem;
+  /* Tocar hace seek; deslizar no hace scrub, así que el gesto puede ser scroll. */
+  touch-action: pan-y;
+}
+
+.lt-setlist-overview.is-seekable {
+  cursor: pointer;
+}
+
+.lt-setlist-overview-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.lt-setlist-overview-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--lt-setlist-accent);
+  visibility: hidden;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* medium: los bloques del mapa encima de la onda, alineados con ella por la
+   misma escala de tiempo (posiciones absolutas en %). */
+.lt-setlist-map.is-overlay .lt-setlist-map-blocks {
+  min-height: 100%;
+  overflow: visible;
+}
+
+.lt-setlist-map.is-overlay .lt-setlist-map-block {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 0;
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 22%, transparent);
+}
+
+.lt-setlist-map.is-overlay .lt-setlist-map-block.is-active {
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 38%, transparent);
+}
+
+.lt-setlist-view.is-medium .lt-setlist-song-band > .lt-setlist-zone.is-map {
+  pointer-events: none;
+}
+
+.lt-setlist-view.is-medium .lt-setlist-song-band > .lt-setlist-zone.is-map .lt-setlist-map-block,
+.lt-setlist-view.is-medium .lt-setlist-song-band > .lt-setlist-zone.is-map .lt-setlist-map-actions {
+  pointer-events: auto;
+}

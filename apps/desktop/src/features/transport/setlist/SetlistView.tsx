@@ -9,6 +9,7 @@ import type {
 } from "../songs/songViewBindings";
 import { SetlistSongRow, type SetlistDragPreview } from "./SetlistSongRow";
 import { SongMap } from "./SongMap";
+import { SongOverviewStrip } from "./SongOverviewStrip";
 import { resolveSetlistSongId } from "./songMapModel";
 import { useSetlistStore, type SetlistShortTab } from "./setlistStore";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
@@ -69,6 +70,7 @@ function SetlistViewComponent({
   onCommitMarkerPosition,
   workspaceEndSeconds,
   onReorderSong,
+  waveformSummaries,
   onDropOsFilesIntoSong,
   onDropLibraryAssetsIntoSong,
   onSnapshotApplied,
@@ -92,6 +94,21 @@ function SetlistViewComponent({
   lastShownRegionIdRef.current = shownRegionId;
   const shownRegion = regions.find((region) => region.id === shownRegionId) ?? null;
   const drawer = editMode !== null ? <Zone name="drawer" /> : null;
+  const overview = (
+    <Zone name="overview">
+      {shownRegion ? (
+        <SongOverviewStrip
+          region={shownRegion}
+          clips={performance.song.clips}
+          sectionMarkers={performance.song.sectionMarkers}
+          waveformSummaries={waveformSummaries}
+          positionSecondsRef={performance.positionSecondsRef}
+          layout={layout}
+          onSeek={editMode === null ? performance.onSeek : undefined}
+        />
+      ) : null}
+    </Zone>
+  );
   const map = (
     <Zone name="map">
       {shownRegion ? (
@@ -180,7 +197,7 @@ function SetlistViewComponent({
             {shortTab === "song" ? (
               <div className="lt-setlist-song-band">
                 {map}
-                <Zone name="overview" />
+                {overview}
               </div>
             ) : (
               <Zone name="mixer" />
@@ -193,7 +210,7 @@ function SetlistViewComponent({
           {songs}
           <div className="lt-setlist-song-band">
             {map}
-            <Zone name="overview" />
+            {overview}
           </div>
           <div className="lt-setlist-bottom">
             <Zone name="mixer" />

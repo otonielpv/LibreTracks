@@ -2561,6 +2561,9 @@ const es = {
       pending: "Salto",
       noSections: "Esta canción no tiene secciones. Añádelas en Editar.",
     },
+    overview: {
+      label: "Onda de {{name}}",
+    },
     tabs: {
       label: "Secciones de la vista Setlist",
       song: "Canción",

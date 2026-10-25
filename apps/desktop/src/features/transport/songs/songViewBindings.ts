@@ -8,6 +8,7 @@ import type {
   SongView,
   TrackSummary,
   TransportSnapshot,
+  WaveformSummaryDto,
 } from "@libretracks/shared/models";
 
 import type { CompactMixerHandlers } from "../compact/CompactMixer";
@@ -111,6 +112,8 @@ export type SongViewBindings = {
   /** `targetIndex` is the song's final position in `regions` (0 = first).
    * Optional so a view still renders where reordering isn't wired. */
   onReorderSong?: (regionId: string, targetIndex: number) => void;
+  /** The waveform summaries the DAW already fetched, by waveform key. */
+  waveformSummaries: Record<string, WaveformSummaryDto>;
   /** Effective BPM at each song's start. */
   bpmByRegion: Record<string, number>;
   /** Publishes a snapshot returned by a command the view ran itself. */
@@ -155,6 +158,8 @@ export type PerformanceBindings = {
   onChartChange: (regionId: string, chart: SongChart | null) => Promise<void>;
   onToggleVamp: () => void;
   onCancelPendingJump: () => void;
+  /** Seek to a timeline point: the panel's coalesced seek (performSeek). */
+  onSeek: (seconds: number) => void;
   onGlobalJumpModeChange: (mode: AppSettings["globalJumpMode"]) => void;
   onGlobalJumpBarsChange: (bars: number) => void;
   onSongJumpTriggerChange: (trigger: AppSettings["songJumpTrigger"]) => void;
