@@ -2513,6 +2513,16 @@ const en = {
   },
   setlistView: {
     title: "Setlist view",
+    songs: {
+      label: "Setlist songs",
+      tileLabel: "{{index}}. {{name}}",
+      play: "Play {{name}}",
+      menu: "{{name}} options",
+      newSong: "New song",
+      importPackage: "Import song (.ltpkg)",
+      transitionTitle: "Transition between songs: {{mode}}",
+      transitionMenu: "Transition between songs",
+    },
     tabs: {
       label: "Setlist view sections",
       song: "Song",

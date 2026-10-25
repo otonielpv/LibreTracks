@@ -2544,6 +2544,16 @@ const es = {
   },
   setlistView: {
     title: "Vista Setlist",
+    songs: {
+      label: "Canciones del setlist",
+      tileLabel: "{{index}}. {{name}}",
+      play: "Reproducir {{name}}",
+      menu: "Opciones de {{name}}",
+      newSong: "Nueva canción",
+      importPackage: "Importar canción (.ltpkg)",
+      transitionTitle: "Transición entre canciones: {{mode}}",
+      transitionMenu: "Transición entre canciones",
+    },
     tabs: {
       label: "Secciones de la vista Setlist",
       song: "Canción",

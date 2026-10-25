@@ -264,6 +264,16 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
     });
   }
 
+  /** A song card tapped while stopped: the playhead goes to the song's
+   * start so the next Play starts it. Sounding, nothing moves. */
+  function cueSong(regionId: string) {
+    const deps = getDeps();
+    if (deps.isPlaying()) return;
+    const region = findRegion(regionId);
+    if (!region) return;
+    void deps.runAction(() => deps.seek(region.startSeconds));
+  }
+
   function reorderSong(regionId: string, targetIndex: number) {
     const deps = getDeps();
     void deps.runAction(async () =>
@@ -317,6 +327,7 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
     importSongPackageFromDialog,
     importSongPackageFromOsFile,
     playSong,
+    cueSong,
     reorderSong,
     setSongChart,
     toggleVamp,

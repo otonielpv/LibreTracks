@@ -137,3 +137,276 @@
   color: var(--lt-setlist-text);
   border-color: var(--lt-setlist-accent);
 }
+
+/* ---- Fila del setlist (paso 03) ---- */
+
+.lt-setlist-zone.is-songs {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-songs {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+  padding: 0.45rem;
+  overscroll-behavior: contain;
+}
+
+.lt-setlist-songs.is-horizontal {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.lt-setlist-songs.is-vertical {
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.lt-setlist-songs.is-package-drag {
+  outline: 2px dashed var(--lt-setlist-accent);
+  outline-offset: -2px;
+}
+
+.lt-setlist-song-item {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.lt-setlist-song-tile {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  width: 13rem;
+  min-height: 3.75rem;
+  padding: 0.45rem 0.5rem 0.55rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.55rem;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+}
+
+.lt-setlist-song-tile:has(.lt-setlist-song-grip) {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+}
+
+.lt-setlist-song-tile.is-medium {
+  width: 10.5rem;
+}
+
+.lt-setlist-song-tile.is-short {
+  width: 100%;
+  min-height: 2.75rem;
+  padding-block: 0.3rem;
+}
+
+.lt-setlist-song-tile.is-selected {
+  border-color: var(--lt-setlist-accent);
+  box-shadow: inset 0 0 0 1px var(--lt-setlist-accent);
+}
+
+.lt-setlist-song-tile.is-playing {
+  background: rgb(87 241 219 / 0.1);
+}
+
+.lt-setlist-song-tile.is-queued {
+  border-style: dashed;
+  border-color: #f2c45a;
+}
+
+.lt-setlist-song-tile.is-drop-target {
+  outline: 2px dashed var(--lt-setlist-accent);
+  outline-offset: -3px;
+}
+
+.lt-setlist-song-tile:focus-visible {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: 2px;
+}
+
+.lt-setlist-song-index {
+  min-width: 1.4rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--lt-setlist-text-muted);
+  text-align: center;
+}
+
+.lt-setlist-song-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.lt-setlist-song-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-song-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--lt-setlist-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-setlist-song-key {
+  color: var(--lt-setlist-accent);
+  font-weight: 700;
+}
+
+/* medium: el BPM pasa a la segunda línea, con la duración. */
+.lt-setlist-song-tile.is-medium .lt-setlist-song-meta {
+  flex-direction: column;
+}
+
+.lt-setlist-song-tile .lt-structure-badge {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.lt-setlist-song-actions {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.lt-setlist-song-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  cursor: pointer;
+}
+
+.lt-setlist-song-button:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.lt-setlist-song-progress {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: rgb(255 255 255 / 0.08);
+}
+
+.lt-setlist-song-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--lt-setlist-accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.lt-setlist-transition {
+  align-self: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.2rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lt-setlist-text-muted);
+  cursor: pointer;
+}
+
+.lt-setlist-transition .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.lt-setlist-transition.has-vamp {
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-transition-menu {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.4rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.5rem;
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-transition-menu > button {
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.lt-setlist-transition-menu > button.is-active {
+  border-color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-add-song {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 3.75rem;
+  padding: 0 0.4rem;
+  border: 1px dashed var(--lt-setlist-border);
+  border-radius: 0.55rem;
+}
+
+.lt-setlist-add-song.is-short {
+  min-height: 2.75rem;
+  width: 100%;
+}
+
+.lt-setlist-add-song-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2.25rem;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lt-setlist-add-song-button:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+/* Móvil: objetivos de 44 px. */
+html.lt-mobile .lt-setlist-song-button,
+html.lt-mobile .lt-setlist-add-song-button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+}

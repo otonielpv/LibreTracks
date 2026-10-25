@@ -902,7 +902,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     deps().setInternalLibraryPointerDrag(next);
   }
 
-  // Returns the region id of the compact song column under the given
+  // Returns the region id of the compact song column (or Setlist card) under the given
   // viewport coordinates, or null if the point is over the compact
   // strip but not on a specific column (e.g. action buttons / empty
   // gutter), or undefined when the point isn't on the compact view at
@@ -917,14 +917,14 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       | null;
     if (!element) return { hit: false };
     const column = element.closest(
-      ".lt-compact-song-column[data-region-id]",
+      ".lt-compact-song-column[data-region-id], .lt-setlist-song-tile[data-region-id]",
     ) as HTMLElement | null;
     if (column) {
       return { hit: true, regionId: column.getAttribute("data-region-id") };
     }
     // Anywhere over the song strip counts as "on the compact view" so
     // package drags can show the ghost column even outside a song.
-    const strip = element.closest(".lt-compact-songs");
+    const strip = element.closest(".lt-compact-songs, .lt-setlist-songs");
     if (strip) return { hit: true, regionId: null };
     return { hit: false };
   }
@@ -1189,7 +1189,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       event.clientY,
     ) as HTMLElement | null;
     const compactColumn = elementAtPointer?.closest(
-      ".lt-compact-song-column[data-region-id]",
+      ".lt-compact-song-column[data-region-id], .lt-setlist-song-tile[data-region-id]",
     ) as HTMLElement | null;
     if (compactColumn) {
       const regionId = compactColumn.getAttribute("data-region-id");

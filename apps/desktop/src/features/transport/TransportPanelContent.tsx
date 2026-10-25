@@ -6513,6 +6513,16 @@ export function TransportPanelContent() {
     midiAvailable: midiCapabilities?.available ?? false,
   });
 
+  // The song menu: the DAW's region band and the Setlist cards open the same.
+  const handleRegionContextMenu = useCallback((event: ReactMouseEvent<HTMLElement>, regionId: string) => {
+    const region = songRef.current?.regions.find((candidate) => candidate.id === regionId);
+    if (!region) return;
+    clearSelection();
+    setSelectedTimelineRange(null);
+    setSelectedRegionId(region.id);
+    openMenu(event, region.name, songRegionContextMenu(region));
+  }, [clearSelection, openMenu, setSelectedRegionId, setSelectedTimelineRange, songRegionContextMenu]);
+
   // What every song view receives (./songs/songViewBindings). Plain objects:
   // the views are memo and the spread compares field by field, so each field
   // must be stable; the container's identity does not matter.
@@ -6529,6 +6539,8 @@ export function TransportPanelContent() {
     onMoveClipToTrack: handleCompactMoveClipToTrack,
     onDeleteClip: handleCompactDeleteClip,
     onPlaySong: songViewHandlers.playSong,
+    onCueSong: songViewHandlers.cueSong,
+    onSongContextMenu: handleRegionContextMenu,
     onRenameSong: handleCompactRenameSong,
     onSetSongBpm: handleCompactSetSongBpm,
     onDeleteSong: handleCompactDeleteSong,
@@ -7455,23 +7467,7 @@ export function TransportPanelContent() {
                               timeSignatureMarkerContextMenu(marker),
                             );
                           }}
-                          onRegionContextMenu={(event, regionId) => {
-                            const region = song?.regions.find(
-                              (candidate) => candidate.id === regionId,
-                            );
-                            if (!region) {
-                              return;
-                            }
-
-                            clearSelection();
-                            setSelectedTimelineRange(null);
-                            setSelectedRegionId(region.id);
-                            openMenu(
-                              event,
-                              region.name,
-                              songRegionContextMenu(region),
-                            );
-                          }}
+                          onRegionContextMenu={handleRegionContextMenu}
                           onAutomationCueContextMenu={(event, cueId) => {
                             const cue = song?.automationCues?.find(
                               (candidate) => candidate.id === cueId,
@@ -7685,7 +7681,8 @@ export function TransportPanelContent() {
 
                   {viewMode === "setlist" && songBindings && performanceBindings ? (
                     <SetlistView {...songBindings} performance={performanceBindings}
-                      menus={timelineMenus} onOpenInDaw={songViewHandlers.openInDaw} />
+                      menus={timelineMenus} onOpenInDaw={songViewHandlers.openInDaw}
+                      dragPreview={compactDragPreview} />
                   ) : null}
 
                   {viewMode === "live" && performanceBindings ? (

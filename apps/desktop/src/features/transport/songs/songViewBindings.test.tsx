@@ -88,6 +88,8 @@ const stableFields = {
   onMoveClipToTrack: noop,
   onDeleteClip: noop,
   onPlaySong: noop,
+  onCueSong: noop,
+  onSongContextMenu: noop,
   onRenameSong: noop,
   onSetSongBpm: noop,
   onDeleteSong: noop,

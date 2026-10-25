@@ -79,6 +79,15 @@ export type SongViewBindings = {
   /** Honours the global song-jump configuration (trigger + transition),
    * the same path as the Shift+digit shortcut. */
   onPlaySong: (regionId: string, regionName: string) => void;
+  /** Stopped: put the playhead at the song's start, without playing. */
+  onCueSong: (regionId: string) => void;
+  /** The DAW's own song menu (rename with library-folder sync, key,
+   * analyse, render, arrangement, fades, count style, split…). The same
+   * function the DAW timeline's region band uses. */
+  onSongContextMenu: (
+    event: ReactMouseEvent<HTMLElement>,
+    regionId: string,
+  ) => void;
   onRenameSong: (regionId: string) => void;
   /** Sets the BPM at the song's start with a tempo marker; never touches
    * the project's global BPM. */
