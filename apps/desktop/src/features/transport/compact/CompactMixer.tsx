@@ -11,6 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { CompactMidiStrip, type CompactMidiStripHandlers } from "./CompactMidiStrip";
 
 import {
   TRACK_FADER_SCALE,
@@ -84,6 +85,9 @@ type CompactMixerProps = {
   /** Fold / unfold a folder. Same handler the DAW header uses, so the
    * collapsed flag is persisted to the song by one implementation. */
   onToggleFolder: (trackId: string) => void;
+  /** When given, MIDI tracks get their own strip (on/off and routing, no
+   * fader). Without it they keep the audio strip, as before (Compacta). */
+  midiStrip?: CompactMidiStripHandlers;
 } & CompactMixerProps_DragSelection;
 
 /** Default colour applied to a track strip when track.color is null, the
@@ -213,6 +217,7 @@ function CompactMixerComponent({
   filterActiveSong,
   collapsedFolders,
   onToggleFolder,
+  midiStrip,
 }: CompactMixerProps) {
   const trackReorderMode = useTimelineUIStore(
     (state) => state.trackReorderMode,
@@ -262,7 +267,17 @@ function CompactMixerComponent({
       ? trackRowSegments(layout, rowWindow)
       : null;
 
-  const renderStrip = (track: TrackSummary) => (
+  const renderStrip = (track: TrackSummary) =>
+    midiStrip && track.kind === "midi" ? (
+      <CompactMidiStrip
+        key={track.id}
+        track={track}
+        handlers={midiStrip}
+        isSelected={selectedTrackIds.includes(track.id)}
+        onContextMenu={onTrackContextMenu}
+        onSelect={onTrackSelect}
+      />
+    ) : (
           <CompactMixerStrip
             key={track.id}
             track={track}

@@ -4943,6 +4943,7 @@ export function TransportPanelContent() {
       toggleMidiTrackEnabled: midiHandlers.handleToggleMidiEnabled,
       deleteMidiClip: midiHandlers.handleDeleteMidiClip,
       moveMidiClip: midiHandlers.moveClip,
+      openSettingsTab: (tab) => { setIsRemoteModalOpen(false); setActiveSettingsTab(tab); setIsSettingsModalOpen(true); },
       setIsMixSceneModalOpen,
       clearSelection,
       selectTrack,

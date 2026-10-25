@@ -79,6 +79,7 @@ import type {
   ContextMenuAction,
   ContextMenuState,
   TimelineRangeSelection,
+  SettingsTab,
 } from "../types";
 import type { AutomationCueDraft } from "../panels/AutomationCueModal";
 import type { MidiClipDraft } from "../panels/MidiClipModal";
@@ -181,7 +182,9 @@ export type TimelineMenuDeps = {
   openMidiRouteEditor: (trackId: string) => void;
   toggleMidiTrackEnabled: (trackId: string) => void;
   deleteMidiClip: (clipId: string) => Promise<unknown>;
-  moveMidiClip: (clipId: string, timelineStartSeconds: number) => void;
+  moveMidiClip: (clipId: string, timelineStartSeconds: number, targetTrackId?: string | null) => void;
+  /** Opens Settings on a tab (Setlist's «MIDI settings…»). */
+  openSettingsTab: (tab: SettingsTab) => void;
   /** Video clip edits (absent on mobile, where video is read-only). */
   videoHandlers?: import("../video/videoClipHandlers").VideoClipHandlers;
   /** Extra clip-menu entries other video steps add (e.g. extract audio). */
@@ -861,6 +864,10 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     openMixScenes,
   } = createAutomationMenus(getDeps);
   const {
+    moveMidiClip,
+    openMidiRouteEditor,
+    toggleMidiTrackEnabled,
+    openMidiSettings,
     createMidiClipAt,
     editMidiClip,
     midiClipContextMenu,
@@ -1233,6 +1240,10 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     midiLaneContextMenu,
     openMidiClipMenu,
     midiClipCallbacks,
+    moveMidiClip,
+    openMidiRouteEditor,
+    toggleMidiTrackEnabled,
+    openMidiSettings,
     keyChangeCallbacks: createKeyChangeCallbacks(getDeps),
     openVideoClipMenu,
     rulerContextMenu,

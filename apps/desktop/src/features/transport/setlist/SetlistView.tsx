@@ -345,6 +345,10 @@ function SetlistViewComponent({
         />
       </Zone>
     ) : null;
+  const midiStrip = useMemo(
+    () => ({ onToggleEnabled: menus.toggleMidiTrackEnabled, onEditRoute: menus.openMidiRouteEditor }),
+    [menus],
+  );
   const mixerZoneRef = useRef<HTMLElement | null>(null);
   const mixerHeightPx = useSetlistStore((state) => state.mixerHeightPx);
   const beginMixerResize = useMixerResize(rootRef, mixerZoneRef);
@@ -384,6 +388,7 @@ function SetlistViewComponent({
         multiTrackMix={multiTrackMix}
         onAddAudioToSong={onAddAudioToSong}
         onOpenScenes={menus.openMixScenes}
+        midiStrip={midiStrip}
       />
       )}
     </Zone>

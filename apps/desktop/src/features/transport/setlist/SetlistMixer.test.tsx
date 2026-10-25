@@ -274,3 +274,36 @@ describe("Setlist mixer hint and sizes", () => {
   });
 });
 
+describe("Setlist mixer: MIDI tracks", () => {
+  // Step 13, C4: the strip's on/off and routing are the same commands as the
+  // lane header (the DAW's MIDI handlers, through the menus).
+  it("a MIDI track gets a strip without fader: on/off and routing", () => {
+    const midi = { ...track("lights", "Luces"), kind: "midi", midiPort: "IAC", midiChannel: 2 } as TrackSummary;
+    const menus = {
+      toggleMidiTrackEnabled: vi.fn(),
+      openMidiRouteEditor: vi.fn(),
+      openMixScenes: vi.fn(),
+    };
+    const base = props({
+      tracks: [...tracks, midi],
+      menus,
+      selectedRegionId: "a",
+    });
+    const midiSong = {
+      ...base.performance.song,
+      tracks: [...tracks, midi],
+      midiClips: [{ id: "m", trackId: "lights", timelineStartSeconds: 5, name: "PC", events: [] }],
+    } as unknown as SongView;
+    const { container } = render(
+      <SetlistView {...base} performance={{ ...base.performance, song: midiSong }} layoutClass="wide" />,
+    );
+    const strip = container.querySelector<HTMLElement>('.lt-compact-mixer-strip.is-midi[data-track-id="lights"]')!;
+    expect(strip).not.toBeNull();
+    expect(strip.querySelector(".lt-compact-mixer-fader")).toBeNull();
+    fireEvent.click(within(strip).getByRole("button", { name: "transport.midi.disableTrack" }));
+    expect(menus.toggleMidiTrackEnabled).toHaveBeenCalledWith("lights");
+    fireEvent.click(within(strip).getByRole("button", { name: /setlistView.midi.routeAria/ }));
+    expect(menus.openMidiRouteEditor).toHaveBeenCalledWith("lights");
+  });
+});
+

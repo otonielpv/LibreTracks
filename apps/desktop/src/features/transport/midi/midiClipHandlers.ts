@@ -204,8 +204,13 @@ export function createMidiClipHandlers(deps: MidiClipHandlerDeps) {
       .catch(() => setStatus(translate("transport.midi.statusClipTestFailed")));
   };
 
-  const moveClip = (clipId: string, timelineStartSeconds: number) => {
-    void handleMoveMidiClip(clipId, timelineStartSeconds);
+  /** `targetTrackId`: dropped on another MIDI track (Setlist's lanes). */
+  const moveClip = (
+    clipId: string,
+    timelineStartSeconds: number,
+    targetTrackId: string | null = null,
+  ) => {
+    void handleMoveMidiClip(clipId, timelineStartSeconds, targetTrackId);
   };
 
   return {

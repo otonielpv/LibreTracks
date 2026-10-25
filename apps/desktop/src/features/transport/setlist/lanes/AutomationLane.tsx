@@ -14,7 +14,7 @@ import type { TimelineMenus } from "../../menus/timelineMenus";
 import { describeAutomationCue } from "../../timeline/describeAutomationCue";
 import { useTimelineUIStore } from "../../uiStore";
 import type { SongTimeScale } from "../songTimeScale";
-import { resolveCueDrag, songAutomationCues } from "./automationLaneModel";
+import { resolvePointDrag, songAutomationCues } from "./automationLaneModel";
 import { LANE_PREVIEW_FALLBACK_MS } from "./useClipGestures";
 
 /** Row height of the automation lane, in px. */
@@ -103,7 +103,7 @@ function AutomationLaneComponent({ song, region, scale, menus, positionSecondsRe
       const dx = moveEvent.clientX - startX;
       if (!moved && Math.abs(dx) < DRAG_THRESHOLD_PX) return;
       moved = true;
-      target = resolveCueDrag({
+      target = resolvePointDrag({
         song,
         region,
         originSeconds: cue.atSeconds,

@@ -2680,6 +2680,17 @@ const es = {
       empty: "Sin automatismos en esta canción.",
       add: "Nuevo",
     },
+    midi: {
+      add: "+ MIDI",
+      addTitle: "Crear un clip MIDI en el playhead o al inicio de la sección",
+      atPlayhead: "{{name}}: en el playhead",
+      atSection: "{{name}}: al inicio de la sección",
+      laneAria: "Carril MIDI de {{name}}",
+      defaultPort: "Salida general",
+      channel: "Canal {{channel}}",
+      routeAria: "Ruta de {{name}}: {{route}}",
+      settings: "Ajustes MIDI…",
+    },
     arrangement: {
       list: "Arreglos",
       sectionsCount: "{{count}} secciones",

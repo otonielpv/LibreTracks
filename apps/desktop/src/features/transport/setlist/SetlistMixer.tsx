@@ -10,6 +10,7 @@ import {
   snapPositionToUnity,
 } from "@libretracks/shared/faderScale";
 
+import type { CompactMidiStripHandlers } from "../compact/CompactMidiStrip";
 import { CompactMixer } from "../compact/CompactMixer";
 import { PadManagerModal } from "../panels/PadManagerModal";
 import { PadsControls, usePadsCatalog } from "../panels/PadsPopover";
@@ -42,6 +43,8 @@ export type SetlistMixerProps = Pick<
 > & {
   /** The mix scenes manager (the DAW's MixSceneModal). */
   onOpenScenes: () => void;
+  /** MIDI tracks: on/off and routing, the DAW's commands. */
+  midiStrip: CompactMidiStripHandlers;
   song: SongView;
   /** The song the console mixes (D4: the selected one). */
   region: SongRegionSummary | null;
@@ -129,6 +132,7 @@ function SetlistMixerComponent({
   multiTrackMix,
   onAddAudioToSong,
   onOpenScenes,
+  midiStrip,
   song,
   region,
   layout,
@@ -341,6 +345,7 @@ function SetlistMixerComponent({
               filterActiveSong={!showAllTracks}
               collapsedFolders={collapsedFolders}
               onToggleFolder={onToggleFolder}
+              midiStrip={midiStrip}
             />
           </div>
           {masterStrip}

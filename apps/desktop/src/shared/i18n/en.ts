@@ -2649,6 +2649,17 @@ const en = {
       empty: "No automation cues in this song.",
       add: "New",
     },
+    midi: {
+      add: "+ MIDI",
+      addTitle: "Create a MIDI clip at the playhead or at the start of the section",
+      atPlayhead: "{{name}}: at the playhead",
+      atSection: "{{name}}: at the section start",
+      laneAria: "MIDI lane of {{name}}",
+      defaultPort: "Default output",
+      channel: "Channel {{channel}}",
+      routeAria: "Routing of {{name}}: {{route}}",
+      settings: "MIDI settings…",
+    },
     arrangement: {
       list: "Arrangements",
       sectionsCount: "{{count}} sections",

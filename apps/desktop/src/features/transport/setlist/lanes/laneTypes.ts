@@ -11,6 +11,7 @@ import type {
   WaveformSummaryDto,
 } from "@libretracks/shared/models";
 
+import type { TimelineMenus } from "../../menus/timelineMenus";
 import type { SetlistLayoutClass } from "../useSetlistLayout";
 import type { SongTimeScale } from "../songTimeScale";
 import type { ClipGestureMode } from "./useClipGestures";
@@ -31,6 +32,8 @@ export type SongLaneRenderProps = {
     mode: ClipGestureMode,
   ) => void;
   onClipContextMenu: (event: ReactMouseEvent<HTMLElement>, clip: ClipSummary) => void;
+  /** The DAW's menus: lanes of other kinds (MIDI…) act through them. */
+  menus: TimelineMenus;
 };
 
 /**
@@ -45,4 +48,10 @@ export type SongLaneType = {
   /** Whether this lane draws `track`. The first type that accepts wins. */
   accepts: (track: TrackSummary) => boolean;
   render: (props: SongLaneRenderProps) => ReactNode;
+  /** The row's header, when this kind has its own controls (MIDI: on/off
+   * and routing). Default: name with mute and solo. */
+  renderHeader?: (props: SongLaneRenderProps) => ReactNode;
+  /** Whether a track with nothing in the song still gets a row (MIDI: to
+   * create its first clip there). */
+  showEmpty?: boolean;
 };

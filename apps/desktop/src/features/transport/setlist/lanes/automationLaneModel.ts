@@ -40,7 +40,7 @@ export function sectionAt(
   return found;
 }
 
-export type CueDragInput = {
+export type PointDragInput = {
   song: SongView;
   region: SongBounds;
   originSeconds: number;
@@ -50,10 +50,11 @@ export type CueDragInput = {
 };
 
 /**
- * Where a dragged cue lands: on the grid the user sees when snap is on (the
+ * Where a dragged point in time (an automation cue, a MIDI clip) lands: on
+ * the grid the user sees when snap is on (the
  * DAW's rule for its ruler flags and clips), and always inside the song.
  */
-export function resolveCueDrag(input: CueDragInput): number {
+export function resolvePointDrag(input: PointDragInput): number {
   const { song, region, originSeconds, rawDeltaSeconds, pxPerSecond } = input;
   let target = originSeconds + rawDeltaSeconds;
   if (input.snapEnabled) {

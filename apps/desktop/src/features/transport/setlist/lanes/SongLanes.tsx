@@ -43,12 +43,13 @@ import { computeSongTrackContent } from "../songTrackContent";
 import type { SetlistLayoutClass } from "../useSetlistLayout";
 import { audioLaneType } from "./AudioLane";
 import { AutomationLane } from "./AutomationLane";
+import { midiLaneType } from "./MidiLane";
 import { automationRowIndex, sectionAt } from "./automationLaneModel";
 import { createLaneClipHandlers, type LaneClipHandlerDeps } from "./laneClipHandlers";
 import type { SongLaneType } from "./laneTypes";
 import { clearLanePreviews, useClipGestures } from "./useClipGestures";
 
-export const DEFAULT_LANE_TYPES: SongLaneType[] = [audioLaneType];
+export const DEFAULT_LANE_TYPES: SongLaneType[] = [midiLaneType, audioLaneType];
 
 type SongLanesProps = {
   song: SongView;
@@ -136,9 +137,11 @@ function SongLanesComponent({
   const rows = useMemo(() => {
     const content = computeSongTrackContent(song, region);
     return tracks
-      .filter((track) => content.trackIds.has(track.id))
       .map((track) => ({ track, type: laneTypes.find((type) => type.accepts(track)) ?? null }))
-      .filter((row): row is { track: TrackSummary; type: SongLaneType } => row.type !== null);
+      .filter(
+        (row): row is { track: TrackSummary; type: SongLaneType } =>
+          row.type !== null && (content.trackIds.has(row.track.id) || row.type.showEmpty === true),
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [laneTypes, region.endSeconds, region.startSeconds, song.clips, song.midiClips, song.videoClips, tracks]);
 
@@ -154,6 +157,19 @@ function SongLanesComponent({
   });
   // A new snapshot puts every clip where the model says: drop any preview.
   useLayoutEffect(() => clearLanePreviews(rootRef.current), [song.clips]);
+
+  const laneProps = (track: TrackSummary) => ({
+    track,
+    song,
+    region,
+    scale,
+    layout,
+    waveformSummaries,
+    editable: true,
+    onClipPointerDown,
+    onClipContextMenu,
+    menus,
+  });
 
   const onClipContextMenu = (event: ReactMouseEvent<HTMLElement>, clip: ClipSummary) => {
     event.preventDefault();
@@ -239,6 +255,27 @@ function SongLanesComponent({
         positionSecondsRef={positionSecondsRef}
       />
     ) : null;
+  // «+ MIDI»: a clip at the playhead or at the start of its section, on the
+  // MIDI track picked in the menu (the DAW's create, then its modal).
+  const midiTracks = tracks.filter((track) => track.kind === "midi");
+  const openAddMidiMenu = (event: ReactMouseEvent<HTMLElement>) => {
+    const playhead = scale.clampSeconds(positionSecondsRef.current);
+    const sectionStart = sectionAt(song, region, playhead)?.startSeconds ?? region.startSeconds;
+    menus.openMenu(
+      event,
+      t("setlistView.midi.add"),
+      midiTracks.flatMap((track) => [
+        {
+          label: t("setlistView.midi.atPlayhead", { name: track.name }),
+          onSelect: () => menus.createMidiClipAt(track.id, playhead),
+        },
+        {
+          label: t("setlistView.midi.atSection", { name: track.name }),
+          onSelect: () => menus.createMidiClipAt(track.id, sectionStart),
+        },
+      ]),
+    );
+  };
   const addCueAtSectionStart = () => {
     const playhead = scale.clampSeconds(positionSecondsRef.current);
     menus.createAutomationCueAt(sectionAt(song, region, playhead)?.startSeconds ?? region.startSeconds);
@@ -329,6 +366,18 @@ function SongLanesComponent({
           {t("transport.automation.addTrack")}
         </button>
       )}
+      {midiTracks.length > 0 ? (
+        <button
+          type="button"
+          className="lt-setlist-settings-button"
+          aria-haspopup="menu"
+          title={t("setlistView.midi.addTitle")}
+          onClick={openAddMidiMenu}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">piano</span>
+          {t("setlistView.midi.add")}
+        </button>
+      ) : null}
       <span className="lt-setlist-lanes-toolbar-gap" />
       <button type="button" className="lt-setlist-settings-button" disabled={!hasSelection} aria-label={t("setlistView.lanes.split")} title={t("setlistView.lanes.split")} onClick={() => runShortcutAction("edit.splitClip")}>
         <span className="material-symbols-outlined" aria-hidden="true">content_cut</span>
@@ -420,6 +469,8 @@ function SongLanesComponent({
             style={{ height: `${type.rowHeight}px`, "--lt-track-color": track.color ?? undefined } as CSSProperties}
           >
             <div className="lt-setlist-lane-header" title={track.name}>
+              {type.renderHeader ? type.renderHeader(laneProps(track)) : (
+              <>
               <span className="lt-setlist-track-swatch" aria-hidden="true" />
               <strong className="lt-setlist-lane-name">{track.name}</strong>
               <button
@@ -442,19 +493,11 @@ function SongLanesComponent({
               >
                 S
               </button>
+              </>
+              )}
             </div>
             <div className="lt-setlist-lane-cell">
-              {type.render({
-                track,
-                song,
-                region,
-                scale,
-                layout,
-                waveformSummaries,
-                editable: true,
-                onClipPointerDown,
-                onClipContextMenu,
-              })}
+              {type.render(laneProps(track))}
             </div>
           </div>
           {automationIndex === index + 1 ? automationRow : null}

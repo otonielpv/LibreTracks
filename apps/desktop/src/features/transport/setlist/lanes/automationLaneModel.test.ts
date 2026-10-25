@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AutomationCueSummary, SongView } from "@libretracks/shared/models";
 
-import { automationRowIndex, resolveCueDrag, sectionAt, songAutomationCues } from "./automationLaneModel";
+import { automationRowIndex, resolvePointDrag, sectionAt, songAutomationCues } from "./automationLaneModel";
 
 const cue = (id: string, atSeconds: number) =>
   ({ id, name: id, atSeconds, enabled: true, actions: [] }) as AutomationCueSummary;
@@ -36,11 +36,11 @@ describe("automation lane model", () => {
   it("a drag snaps to the visible grid and stays inside the song", () => {
     // 120 BPM 4/4 at 10 px/s: the grid is a beat (0.5 s) or coarser.
     const base = { song, region, pxPerSecond: 10, snapEnabled: true };
-    const snapped = resolveCueDrag({ ...base, originSeconds: 10, rawDeltaSeconds: 2.3 });
+    const snapped = resolvePointDrag({ ...base, originSeconds: 10, rawDeltaSeconds: 2.3 });
     expect(snapped % 0.5).toBeCloseTo(0, 6);
-    expect(resolveCueDrag({ ...base, snapEnabled: false, originSeconds: 10, rawDeltaSeconds: 2.3 })).toBeCloseTo(12.3);
-    expect(resolveCueDrag({ ...base, originSeconds: 10, rawDeltaSeconds: -50 })).toBe(0);
-    expect(resolveCueDrag({ ...base, snapEnabled: false, originSeconds: 90, rawDeltaSeconds: 50 })).toBeCloseTo(99.95);
+    expect(resolvePointDrag({ ...base, snapEnabled: false, originSeconds: 10, rawDeltaSeconds: 2.3 })).toBeCloseTo(12.3);
+    expect(resolvePointDrag({ ...base, originSeconds: 10, rawDeltaSeconds: -50 })).toBe(0);
+    expect(resolvePointDrag({ ...base, snapEnabled: false, originSeconds: 90, rawDeltaSeconds: 50 })).toBeCloseTo(99.95);
   });
 
   it("the row sits after its track, after the closest one above when that has no audio here", () => {
