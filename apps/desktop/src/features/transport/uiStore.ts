@@ -13,7 +13,15 @@ export type SongTransitionMode = "instant" | "fade_out";
 export type VampMode = "section" | "bars";
 
 /** Top-level view mode: linear DAW, song-grid Compact, or stage-ready Live. */
-export type ViewMode = "daw" | "compact" | "live";
+export type ViewMode = "daw" | "setlist" | "compact" | "live";
+
+/** Tab order of the views; Shift+Tab walks it backwards. */
+export const VIEW_MODE_CYCLE: readonly ViewMode[] = [
+  "daw",
+  "setlist",
+  "compact",
+  "live",
+];
 
 export const TIMELINE_DEFAULT_ZOOM_LEVEL = 7;
 export const TIMELINE_DEFAULT_TRACK_HEIGHT = 76;
@@ -115,7 +123,17 @@ function storeTrackHeight(trackHeight: number): void {
 }
 
 function recordViewMode(viewMode: ViewMode): void {
+  // `feature_setlist_view` is not in the closed list of the telemetry table
+  // (D1 CHECK) nor in the website Functions yet: it would be rejected. Step 19
+  // of docs/plans/setlist-view adds the migration and starts emitting it.
+  if (viewMode === "setlist") return;
   recordProductEvent(`feature_${viewMode}_view`);
+}
+
+function stepViewMode(current: ViewMode, step: 1 | -1): ViewMode {
+  const index = VIEW_MODE_CYCLE.indexOf(current);
+  const length = VIEW_MODE_CYCLE.length;
+  return VIEW_MODE_CYCLE[(index + step + length) % length];
 }
 
 type TimelineUIState = {
@@ -240,24 +258,14 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     },
     toggleViewMode: () => {
       set((state) => {
-        const viewMode: ViewMode =
-          state.viewMode === "daw"
-            ? "compact"
-            : state.viewMode === "compact"
-              ? "live"
-              : "daw";
+        const viewMode = stepViewMode(state.viewMode, 1);
         recordViewMode(viewMode);
         return { viewMode };
       });
     },
     toggleViewModeBackward: () => {
       set((state) => {
-        const viewMode: ViewMode =
-          state.viewMode === "daw"
-            ? "live"
-            : state.viewMode === "live"
-              ? "compact"
-              : "daw";
+        const viewMode = stepViewMode(state.viewMode, -1);
         recordViewMode(viewMode);
         return { viewMode };
       });

@@ -55,6 +55,11 @@ const BUDGETS: Record<string, number> = {
   "panels/SettingsPanel.tsx": 1300,
   "timeline/TimelineToolbar.tsx": 1250,
   "compact/CompactView.tsx": 1150,
+  // La raíz de la vista Setlist sólo reparte zonas por clase de tamaño; la
+  // lógica va en sus piezas (docs/plans/setlist-view, regla 4). El plan le
+  // pone techo en 900; arranca más bajo porque la holgura de abajo exige
+  // menos de 600 líneas de margen.
+  "setlist/SetlistView.tsx": 700,
 };
 
 const transportDir = dirname(fileURLToPath(import.meta.url));

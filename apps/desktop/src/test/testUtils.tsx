@@ -38,6 +38,10 @@ import {
 } from "../features/transport/structure/structureStore";
 import { resetVideoCanvasState } from "../features/transport/video/videoCanvasState";
 import { useTrackRowWindowStore } from "../features/transport/tracks/useTrackRowWindow";
+import {
+  INITIAL_SETLIST_STATE,
+  useSetlistStore,
+} from "../features/transport/setlist/setlistStore";
 import { emitWaveformReadyForTest, resetTestDesktopApiMock, testDesktopApiMock } from "../app/testDesktopApiMock";
 
 export type MockWebviewDragDropEvent =
@@ -389,6 +393,8 @@ beforeEach(async () => {
     focusedTrackId: null,
     onRowsMounted: null,
   });
+  // Vista Setlist: pestañas, cajón de edición y alto del mezclador.
+  useSetlistStore.setState(INITIAL_SETLIST_STATE);
   vi.clearAllMocks();
   vi.restoreAllMocks();
   await i18n.changeLanguage("en");

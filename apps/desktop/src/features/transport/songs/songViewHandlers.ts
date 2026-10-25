@@ -302,6 +302,12 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
     playSong(region.id, region.name);
   }
 
+  /** Setlist's "Open in the DAW" shortcut. Wired in step 17 of
+   * docs/plans/setlist-view; a no-op until then. */
+  function openInDaw(regionId: string) {
+    void regionId;
+  }
+
   return {
     changeRegionMasterGain,
     commitRegionMasterGain,
@@ -317,6 +323,7 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
     cancelPendingJump,
     markerAction,
     songAction,
+    openInDaw,
   };
 }
 

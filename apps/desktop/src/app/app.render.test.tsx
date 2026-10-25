@@ -84,12 +84,15 @@ describe("App / app.render", () => {
     expect(container.querySelector(".lt-ruler-canvas-layer")).toBeTruthy();
   });
 
-  it("cycles DAW, Compact and Live views with Tab", async () => {
+  it("cycles DAW, Setlist, Compact and Live views with Tab", async () => {
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
       value: vi.fn(),
     });
     const { container } = await renderApp();
+
+    fireEvent.keyDown(window, { code: "Tab", key: "Tab" });
+    expect(container.querySelector(".lt-setlist-view")).toBeTruthy();
 
     fireEvent.keyDown(window, { code: "Tab", key: "Tab" });
     expect(container.querySelector(".lt-compact-view")).toBeTruthy();
@@ -103,7 +106,7 @@ describe("App / app.render", () => {
     expect(container.querySelector(".lt-ruler-canvas-layer")).toBeTruthy();
   });
 
-  it("cycles Live, Compact and DAW views with Shift+Tab", async () => {
+  it("cycles Live, Compact, Setlist and DAW views with Shift+Tab", async () => {
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
       value: vi.fn(),
@@ -125,6 +128,13 @@ describe("App / app.render", () => {
       shiftKey: true,
     });
     expect(container.querySelector(".lt-compact-view")).toBeTruthy();
+
+    fireEvent.keyDown(window, {
+      code: "Tab",
+      key: "Tab",
+      shiftKey: true,
+    });
+    expect(container.querySelector(".lt-setlist-view")).toBeTruthy();
 
     fireEvent.keyDown(window, {
       code: "Tab",

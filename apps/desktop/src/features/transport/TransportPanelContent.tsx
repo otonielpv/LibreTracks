@@ -348,6 +348,7 @@ import { mergeSongView } from "./songs/mergeSongView";
 import { createTrackHeaderHandlers } from "./tracks/trackHeaderHandlers";
 import { useTrackHeights } from "./tracks/useTrackHeights";
 import { createCompactSongHandlers } from "./compact/compactSongHandlers";
+import { SetlistView } from "./setlist/SetlistView";
 import {
   createSongViewHandlers,
   type SongViewHandlerDeps,
@@ -7680,6 +7681,11 @@ export function TransportPanelContent() {
                       dragPreview={compactDragPreview}
                       compactMixerFilterActiveSong={compactMixerFilterActiveSong}
                     />
+                  ) : null}
+
+                  {viewMode === "setlist" && songBindings && performanceBindings ? (
+                    <SetlistView {...songBindings} performance={performanceBindings}
+                      menus={timelineMenus} onOpenInDaw={songViewHandlers.openInDaw} />
                   ) : null}
 
                   {viewMode === "live" && performanceBindings ? (

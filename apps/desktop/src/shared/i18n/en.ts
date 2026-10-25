@@ -2467,6 +2467,7 @@ const en = {
     live: "Live",
     open: "Open Live View",
     openDaw: "Open DAW view",
+    openSetlist: "Open Setlist view",
     openCompact: "Open Compact view",
     performanceSettings: "Performance settings",
     immediate: "Immediate",
@@ -2509,6 +2510,15 @@ const en = {
     cancelNamedJump: "Cancel jump to {{name}}",
     cancelJump: "Cancel jump",
     noPendingJump: "No jump is currently queued",
+  },
+  setlistView: {
+    title: "Setlist view",
+    tabs: {
+      label: "Setlist view sections",
+      song: "Song",
+      mix: "Mix",
+      pads: "Pads",
+    },
   },
   liveChart: {
     jump: "Jump",

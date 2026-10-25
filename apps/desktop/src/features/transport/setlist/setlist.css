@@ -1,0 +1,139 @@
+/* Vista Setlist (docs/plans/setlist-view). Tres maquetas según el tamaño
+   del área de la vista: wide, medium y short (00-DISENO.md §4). Nada de
+   sombras ni blur caros: corre también en teléfonos de gama baja. */
+
+.lt-setlist-view {
+  --lt-setlist-bg: #090b0a;
+  --lt-setlist-surface: #151817;
+  --lt-setlist-surface-raised: #1c201f;
+  --lt-setlist-border: rgb(186 202 197 / 0.13);
+  --lt-setlist-text: #e9f1ee;
+  --lt-setlist-text-muted: rgb(233 241 238 / 0.62);
+  --lt-setlist-accent: #57f1db;
+  --lt-setlist-gap: 0.5rem;
+  --lt-setlist-pad: clamp(0.5rem, 1vw, 0.85rem);
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  gap: var(--lt-setlist-gap);
+  padding: var(--lt-setlist-pad);
+  overflow: hidden;
+  color: var(--lt-setlist-text);
+  background: var(--lt-setlist-bg);
+}
+
+.lt-setlist-zone {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.55rem;
+  background: var(--lt-setlist-surface);
+}
+
+.lt-setlist-song-band {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.25rem;
+}
+
+.lt-setlist-bottom {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  gap: var(--lt-setlist-gap);
+}
+
+.lt-setlist-bottom > .lt-setlist-zone.is-mixer {
+  flex: 1 1 auto;
+}
+
+/* wide: fila de canciones, mapa, onda y consola; el cajón empuja. */
+.lt-setlist-view.is-wide {
+  grid-template-rows: auto minmax(7rem, 1fr) minmax(12rem, 1.4fr);
+}
+
+.lt-setlist-view.is-wide .lt-setlist-zone.is-drawer {
+  flex: 0 0 min(24rem, 32%);
+}
+
+/* medium: igual pero más apretada; mapa y onda en una sola banda y el cajón
+   es una hoja que sube desde abajo y tapa el mezclador. */
+.lt-setlist-view.is-medium {
+  grid-template-rows: auto minmax(5rem, 1fr) minmax(8rem, 1fr);
+  --lt-setlist-gap: 0.35rem;
+}
+
+.lt-setlist-view.is-medium .lt-setlist-song-band {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.lt-setlist-view.is-medium .lt-setlist-song-band > .lt-setlist-zone {
+  grid-area: 1 / 1;
+}
+
+.lt-setlist-view.is-medium .lt-setlist-song-band > .lt-setlist-zone.is-map {
+  z-index: 1;
+  background: transparent;
+  border-color: transparent;
+}
+
+.lt-setlist-view.is-medium .lt-setlist-zone.is-drawer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+/* short: teléfono en horizontal. Lista de canciones a la izquierda, pestañas
+   a la derecha. Respeta la zona segura del notch. */
+.lt-setlist-view.is-short {
+  grid-template-columns: minmax(9rem, 30%) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  --lt-setlist-gap: 0.35rem;
+  --lt-setlist-pad: 0.35rem;
+  padding-left: calc(var(--lt-setlist-pad) + var(--lt-safe-area-left, 0px));
+  padding-right: calc(var(--lt-setlist-pad) + var(--lt-safe-area-right, 0px));
+  padding-bottom: calc(var(--lt-setlist-pad) + var(--lt-safe-area-bottom, 0px));
+}
+
+.lt-setlist-short-main {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--lt-setlist-gap);
+}
+
+.lt-setlist-view.is-short .lt-setlist-zone.is-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border-radius: 0;
+  padding: var(--lt-safe-area-top, 0px) var(--lt-safe-area-right, 0px)
+    var(--lt-safe-area-bottom, 0px) var(--lt-safe-area-left, 0px);
+}
+
+.lt-setlist-tabs {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.lt-setlist-tab {
+  min-height: 2.75rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.45rem;
+  color: var(--lt-setlist-text-muted);
+  background: var(--lt-setlist-surface);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lt-setlist-tab.is-active {
+  color: var(--lt-setlist-text);
+  border-color: var(--lt-setlist-accent);
+}

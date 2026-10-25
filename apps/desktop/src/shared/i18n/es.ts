@@ -2498,6 +2498,7 @@ const es = {
     live: "Live",
     open: "Abrir vista Live",
     openDaw: "Abrir vista DAW",
+    openSetlist: "Abrir vista Setlist",
     openCompact: "Abrir vista compacta",
     performanceSettings: "Configuracion de directo",
     immediate: "Inmediato",
@@ -2540,6 +2541,15 @@ const es = {
     cancelNamedJump: "Cancelar salto a {{name}}",
     cancelJump: "Cancelar salto",
     noPendingJump: "No hay ningun salto programado",
+  },
+  setlistView: {
+    title: "Vista Setlist",
+    tabs: {
+      label: "Secciones de la vista Setlist",
+      song: "Canción",
+      mix: "Mezcla",
+      pads: "Pads",
+    },
   },
   liveChart: {
     jump: "Salto",

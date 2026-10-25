@@ -52,7 +52,9 @@ describe("useTimelineUIStore", () => {
   });
 
   describe("view mode", () => {
-    it("cycles the keyboard toggle through DAW, Compact and Live", () => {
+    it("cycles the keyboard toggle through DAW, Setlist, Compact and Live", () => {
+      get().toggleViewMode();
+      expect(get().viewMode).toBe("setlist");
       get().toggleViewMode();
       expect(get().viewMode).toBe("compact");
       get().toggleViewMode();
@@ -65,17 +67,28 @@ describe("useTimelineUIStore", () => {
       expect(recordProductEvent).toHaveBeenCalledWith("feature_daw_view");
     });
 
-    it("cycles backward through DAW, Live and Compact", () => {
+    it("cycles backward through DAW, Live, Compact and Setlist", () => {
       get().toggleViewModeBackward();
       expect(get().viewMode).toBe("live");
       get().toggleViewModeBackward();
       expect(get().viewMode).toBe("compact");
+      get().toggleViewModeBackward();
+      expect(get().viewMode).toBe("setlist");
       get().toggleViewModeBackward();
       expect(get().viewMode).toBe("daw");
 
       expect(recordProductEvent).toHaveBeenCalledWith("feature_live_view");
       expect(recordProductEvent).toHaveBeenCalledWith("feature_compact_view");
       expect(recordProductEvent).toHaveBeenCalledWith("feature_daw_view");
+    });
+
+    it("does not emit a telemetry event for the setlist view yet", () => {
+      get().setViewMode("setlist");
+      get().toggleViewModeBackward();
+      get().toggleViewMode();
+
+      expect(get().viewMode).toBe("setlist");
+      expect(recordProductEvent).not.toHaveBeenCalledWith("feature_setlist_view");
     });
 
     it("records use of the live performance view", () => {
