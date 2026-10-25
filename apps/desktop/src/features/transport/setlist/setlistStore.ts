@@ -44,6 +44,23 @@ type SetlistActions = {
  * DAW and Compacta already share. Reset in src/test/testUtils.tsx (a store outlives
  * the component).
  */
+/** A mode that must be asked before it is left (Edit → Arrangement with
+ * unapplied changes). One at a time: only the active mode registers. */
+let editLeaveGuard: (() => Promise<boolean>) | null = null;
+
+export function setEditLeaveGuard(guard: (() => Promise<boolean>) | null) {
+  editLeaveGuard = guard;
+}
+
+/** Changes the edit mode (or leaves edit with `null`), asking the active
+ * mode first. Every way out goes through here: tabs, Edit/Done, Esc, back. */
+export async function requestEditMode(next: SetlistEditMode): Promise<void> {
+  const current = useSetlistStore.getState().editMode;
+  if (current === next) return;
+  if (editLeaveGuard && !(await editLeaveGuard())) return;
+  useSetlistStore.getState().setEditMode(next);
+}
+
 export const useSetlistStore = create<SetlistState & SetlistActions>()(
   (set) => ({
     ...INITIAL_SETLIST_STATE,

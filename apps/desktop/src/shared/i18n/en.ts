@@ -2542,7 +2542,7 @@ const en = {
       title: "Edit",
       heading: "{{name}} · Edit",
       close: "Leave edit mode",
-      modes: { label: "Edit modes", song: "Song", sections: "Sections" },
+      modes: { label: "Edit modes", song: "Song", sections: "Sections", arrangement: "Arrangement" },
       songSettings: "{{name}} settings",
       keySection: "Key",
       key: "Original key",

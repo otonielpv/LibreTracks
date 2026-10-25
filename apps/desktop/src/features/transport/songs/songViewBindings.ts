@@ -14,6 +14,7 @@ import type {
 import type { CompactMixerHandlers } from "../compact/CompactMixer";
 import type { RulerMarkerHandlers } from "../rulerMarkers/rulerMarkerHandlers";
 import type { MetronomeDeviceHandlers } from "../settings/metronomeDeviceHandlers";
+import type { StructureHandlers } from "../structure/structureHandlers";
 import type { MultiTrackMixActions } from "../tracks/MultiTrackMixControls";
 import type { CompactClipEntry } from "../compact/CompactView";
 
@@ -90,6 +91,8 @@ export type SongViewBindings = {
     event: ReactMouseEvent<HTMLElement>,
     markerId: string,
   ) => void;
+  /** The arrangement editor's handlers (structure/structureHandlers). */
+  structureHandlers: StructureHandlers;
   /** The DAW ruler's marker group actions (move, duplicate, delete, menu). */
   rulerMarkers: RulerMarkerHandlers;
   /** Moves a marker to an exact position: the same commit as dragging its

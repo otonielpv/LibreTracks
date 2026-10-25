@@ -1227,3 +1227,41 @@ html.lt-mobile .lt-setlist-edit-button {
   color: var(--lt-setlist-text-muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- Arreglo (paso 09) ---- */
+
+.lt-setlist-arrangement-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 999px;
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-arrangement-picker select {
+  border: 0;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  font: inherit;
+}
+
+.lt-setlist-arrangement {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.35rem;
+}
+
+.lt-setlist-arrangement-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.lt-setlist-arrangement-tools .lt-structure-toolbar {
+  flex-wrap: wrap;
+}

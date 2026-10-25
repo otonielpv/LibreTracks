@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useDismissOnBack } from "../mobile/backNavigation";
-import { useSetlistStore, type SetlistEditMode } from "./setlistStore";
+import { requestEditMode, useSetlistStore, type SetlistEditMode } from "./setlistStore";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 
 export type SetlistEditModeEntry = {
@@ -35,8 +35,7 @@ function modalIsOpen() {
 function SetlistEditDrawerComponent({ layout, songName, modes }: SetlistEditDrawerProps) {
   const { t } = useTranslation();
   const editMode = useSetlistStore((state) => state.editMode);
-  const setEditMode = useSetlistStore((state) => state.setEditMode);
-  const close = useCallback(() => setEditMode(null), [setEditMode]);
+  const close = useCallback(() => void requestEditMode(null), []);
   useDismissOnBack(close, editMode !== null);
 
   useEffect(() => {
@@ -75,7 +74,7 @@ function SetlistEditDrawerComponent({ layout, songName, modes }: SetlistEditDraw
               role="tab"
               aria-selected={entry.mode === active?.mode}
               className={`lt-setlist-tab${entry.mode === active?.mode ? " is-active" : ""}`}
-              onClick={() => setEditMode(entry.mode)}
+              onClick={() => void requestEditMode(entry.mode)}
             >
               {t(entry.labelKey)}
             </button>
@@ -103,14 +102,13 @@ export const SetlistEditDrawer = memo(SetlistEditDrawerComponent);
 export function SetlistEditButton() {
   const { t } = useTranslation();
   const editMode = useSetlistStore((state) => state.editMode);
-  const setEditMode = useSetlistStore((state) => state.setEditMode);
   const editing = editMode !== null;
   return (
     <button
       type="button"
       className={`lt-setlist-edit-button${editing ? " is-active" : ""}`}
       aria-pressed={editing}
-      onClick={() => setEditMode(editing ? null : "song")}
+      onClick={() => void requestEditMode(editing ? null : "song")}
     >
       <span className="material-symbols-outlined" aria-hidden="true">edit</span>
       <span>{editing ? t("setlistView.edit.done") : t("setlistView.edit.button")}</span>

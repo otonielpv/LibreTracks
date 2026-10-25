@@ -2573,7 +2573,7 @@ const es = {
       title: "Editar",
       heading: "{{name}} · Editar",
       close: "Salir de la edición",
-      modes: { label: "Modos de edición", song: "Canción", sections: "Secciones" },
+      modes: { label: "Modos de edición", song: "Canción", sections: "Secciones", arrangement: "Arreglo" },
       songSettings: "Ajustes de {{name}}",
       keySection: "Tono",
       key: "Tono original",

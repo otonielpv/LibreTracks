@@ -7,6 +7,7 @@ import { CompactView } from "../compact/CompactView";
 import { DEFAULT_APP_SETTINGS } from "@libretracks/shared/models";
 
 import type { RulerMarkerHandlers } from "../rulerMarkers/rulerMarkerHandlers";
+import type { StructureHandlers } from "../structure/structureHandlers";
 import type { MetronomeDeviceHandlers } from "../settings/metronomeDeviceHandlers";
 import type { SongViewBindings } from "./songViewBindings";
 
@@ -97,6 +98,7 @@ const stableFields = {
   onSectionContextMenu: noop,
   onCommitMarkerPosition: noop,
   rulerMarkers: {} as RulerMarkerHandlers,
+  structureHandlers: {} as StructureHandlers,
   onResizeSong: noop,
   onMoveSong: noop,
   runAction: async (action: () => Promise<void>) => {

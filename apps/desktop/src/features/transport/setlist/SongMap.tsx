@@ -4,6 +4,7 @@ import {
   useRef,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
@@ -44,6 +45,8 @@ type SongMapProps = Pick<
     layout: SetlistLayoutClass;
     /** Edit mode: a tap selects the section instead of jumping. */
     editing?: boolean;
+    /** The arrangement picker, next to the loop button. */
+    arrangementPicker?: ReactNode;
   };
 
 const VAMP_MATCH_SECONDS = 0.05;
@@ -69,6 +72,7 @@ function SongMapComponent({
   onPlaySong,
   onSectionContextMenu,
   editing = false,
+  arrangementPicker,
 }: SongMapProps) {
   const { t } = useTranslation();
   const fillRef = useRef<HTMLSpanElement | null>(null);
@@ -216,6 +220,7 @@ function SongMapComponent({
         ))}
       </div>
       <div className="lt-setlist-map-actions">
+        {arrangementPicker}
         <button
           type="button"
           className={`lt-setlist-map-action${activeVamp ? " is-active" : ""}`}

@@ -15,6 +15,11 @@ import { MIXER_HEIGHT_VAR, useMixerResize } from "./useMixerResize";
 import { SetlistEditButton, SetlistEditDrawer } from "./SetlistEditDrawer";
 import { SetlistSongSettings } from "./SetlistSongSettings";
 import { SetlistSectionsPanel } from "./SetlistSectionsPanel";
+import {
+  SetlistArrangementEditor,
+  SetlistArrangementPicker,
+  SetlistArrangementToolbar,
+} from "./SetlistArrangement";
 import { SongSectionEditLayer } from "./SongSectionEditLayer";
 import { createSectionEditHandlers, type SectionEditDeps } from "./sectionEditHandlers";
 import { useTimelineUIStore } from "../uiStore";
@@ -73,6 +78,7 @@ function SetlistViewComponent({
   layoutClass,
   menus,
   rulerMarkers,
+  structureHandlers,
   onSetSongKey,
   onResizeSong,
   onMoveSong,
@@ -200,6 +206,13 @@ function SetlistViewComponent({
               ) : null,
             },
             {
+              mode: "arrangement",
+              labelKey: "setlistView.edit.modes.arrangement",
+              content: shownRegion ? (
+                <SetlistArrangementToolbar region={shownRegion} handlers={structureHandlers} layout={layout} />
+              ) : null,
+            },
+            {
               mode: "sections",
               labelKey: "setlistView.edit.modes.sections",
               content: shownRegion ? (
@@ -288,7 +301,9 @@ function SetlistViewComponent({
   );
   const map = (
     <Zone name="map">
-      {shownRegion ? (
+      {shownRegion && editMode === "arrangement" && layout !== "short" ? (
+        <SetlistArrangementEditor region={shownRegion} handlers={structureHandlers} layout={layout} />
+      ) : shownRegion ? (
         <SongMap
           song={performance.song}
           region={shownRegion}
@@ -303,6 +318,11 @@ function SetlistViewComponent({
           onPlaySong={onPlaySong}
           onSectionContextMenu={onSectionContextMenu}
           editing={editMode !== null}
+          arrangementPicker={
+            editMode === null ? (
+              <SetlistArrangementPicker region={shownRegion} handlers={structureHandlers} />
+            ) : null
+          }
         />
       ) : null}
     </Zone>
