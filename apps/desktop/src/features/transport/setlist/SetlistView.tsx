@@ -12,6 +12,7 @@ import { SongMap } from "./SongMap";
 import { SongOverviewStrip } from "./SongOverviewStrip";
 import { SetlistMixer } from "./SetlistMixer";
 import { MIXER_HEIGHT_VAR, useMixerResize } from "./useMixerResize";
+import { SetlistAutomationPanel } from "./SetlistAutomationPanel";
 import { SetlistEditButton, SetlistEditDrawer } from "./SetlistEditDrawer";
 import { SetlistSongSettings } from "./SetlistSongSettings";
 import { SetlistSectionsPanel } from "./SetlistSectionsPanel";
@@ -315,6 +316,20 @@ function SetlistViewComponent({
                 ),
             },
             {
+              mode: "automation",
+              icon: "bolt",
+              labelKey: "setlistView.edit.modes.automation",
+              content: shownRegion ? (
+                <SetlistAutomationPanel
+                  song={performance.song}
+                  region={shownRegion}
+                  layout={layout}
+                  menus={menus}
+                  positionSecondsRef={performance.positionSecondsRef}
+                />
+              ) : null,
+            },
+            {
               mode: "lanes",
               icon: "view_timeline",
               labelKey: "setlistView.edit.modes.lanes",
@@ -343,7 +358,7 @@ function SetlistViewComponent({
           onPointerDown={beginMixerResize}
         />
       ) : null}
-      {editMode === "lanes" && layout !== "short" ? lanes : editMode === "tracks" && layout !== "short" ? trackList : editMode === "arrangement" &&
+      {(editMode === "lanes" || editMode === "automation") && layout !== "short" ? lanes : editMode === "tracks" && layout !== "short" ? trackList : editMode === "arrangement" &&
         layout !== "short" &&
         shownRegion ? (
         <SetlistArrangementEditor region={shownRegion} handlers={structureHandlers} layout={layout} />
@@ -367,6 +382,7 @@ function SetlistViewComponent({
         auxHandlers={auxHandlers}
         multiTrackMix={multiTrackMix}
         onAddAudioToSong={onAddAudioToSong}
+        onOpenScenes={menus.openMixScenes}
       />
       )}
     </Zone>

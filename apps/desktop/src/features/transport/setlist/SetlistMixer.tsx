@@ -40,6 +40,8 @@ export type SetlistMixerProps = Pick<
   | "multiTrackMix"
   | "onAddAudioToSong"
 > & {
+  /** The mix scenes manager (the DAW's MixSceneModal). */
+  onOpenScenes: () => void;
   song: SongView;
   /** The song the console mixes (D4: the selected one). */
   region: SongRegionSummary | null;
@@ -126,6 +128,7 @@ function SetlistMixerComponent({
   auxHandlers,
   multiTrackMix,
   onAddAudioToSong,
+  onOpenScenes,
   song,
   region,
   layout,
@@ -250,10 +253,18 @@ function SetlistMixerComponent({
             <span className="lt-setlist-mixer-action-label">{t("setlistView.mixer.allTracks")}</span>
           </button>
         ) : null}
-        {/* Mix scenes arrive with automation (step 12). */}
-        <button type="button" className="lt-setlist-mixer-action" hidden>
-          {t("setlistView.mixer.scenes")}
-        </button>
+        {tab === "tracks" ? (
+          <button
+            type="button"
+            className="lt-setlist-mixer-action"
+            aria-label={t("setlistView.mixer.scenes")}
+            title={t("setlistView.automation.scenesTitle")}
+            onClick={onOpenScenes}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">tune</span>
+            <span className="lt-setlist-mixer-action-label">{t("setlistView.mixer.scenes")}</span>
+          </button>
+        ) : null}
         {foldable ? (
           <button
             type="button"

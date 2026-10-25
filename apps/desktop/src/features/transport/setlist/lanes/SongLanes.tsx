@@ -1,4 +1,5 @@
 import {
+  Fragment,
   memo,
   useEffect,
   useLayoutEffect,
@@ -41,6 +42,8 @@ import { createSongTimeScale } from "../songTimeScale";
 import { computeSongTrackContent } from "../songTrackContent";
 import type { SetlistLayoutClass } from "../useSetlistLayout";
 import { audioLaneType } from "./AudioLane";
+import { AutomationLane } from "./AutomationLane";
+import { automationRowIndex, sectionAt } from "./automationLaneModel";
 import { createLaneClipHandlers, type LaneClipHandlerDeps } from "./laneClipHandlers";
 import type { SongLaneType } from "./laneTypes";
 import { clearLanePreviews, useClipGestures } from "./useClipGestures";
@@ -217,6 +220,30 @@ function SongLanesComponent({
         Math.max(1e-6, ((region.endSeconds - region.startSeconds) / Math.max(1, ticks.length)) * scale.pxPerSecond),
     ),
   );
+  // The DAW's synthetic automation track, in its place among the rows.
+  const automationIndex = song.automationTrack
+    ? automationRowIndex(
+        rows.map((row) => row.track.id),
+        tracks.map((track) => track.id),
+        song.automationTrack.afterTrackId,
+      )
+    : -1;
+  const automationRow =
+    automationIndex >= 0 ? (
+      <AutomationLane
+        key="automation"
+        song={song}
+        region={region}
+        scale={scale}
+        menus={menus}
+        positionSecondsRef={positionSecondsRef}
+      />
+    ) : null;
+  const addCueAtSectionStart = () => {
+    const playhead = scale.clampSeconds(positionSecondsRef.current);
+    menus.createAutomationCueAt(sectionAt(song, region, playhead)?.startSeconds ?? region.startSeconds);
+  };
+
   const sections = song.sectionMarkers.filter(
     (marker) =>
       markerCategory(marker) === "section" &&
@@ -287,6 +314,21 @@ function SongLanesComponent({
         <span className="material-symbols-outlined" aria-hidden="true">my_location</span>
         {t("setlistView.lanes.goToPlayhead")}
       </button>
+      {song.automationTrack ? (
+        <button type="button" className="lt-setlist-settings-button" title={t("setlistView.automation.addAtSectionTitle")} onClick={addCueAtSectionStart}>
+          <span className="material-symbols-outlined" aria-hidden="true">bolt</span>
+          {t("setlistView.automation.addAtSection")}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="lt-setlist-settings-button"
+          onClick={() => void menus.handleAddAutomationTrack(rows.at(-1)?.track.id ?? null)}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">bolt</span>
+          {t("transport.automation.addTrack")}
+        </button>
+      )}
       <span className="lt-setlist-lanes-toolbar-gap" />
       <button type="button" className="lt-setlist-settings-button" disabled={!hasSelection} aria-label={t("setlistView.lanes.split")} title={t("setlistView.lanes.split")} onClick={() => runShortcutAction("edit.splitClip")}>
         <span className="material-symbols-outlined" aria-hidden="true">content_cut</span>
@@ -369,10 +411,11 @@ function SongLanesComponent({
             ))}
           </div>
         </div>
-        {rows.length === 0 ? <p className="lt-setlist-tracks-empty">{t("setlistView.lanes.empty")}</p> : null}
-        {rows.map(({ track, type }) => (
+        {rows.length === 0 && !automationRow ? <p className="lt-setlist-tracks-empty">{t("setlistView.lanes.empty")}</p> : null}
+        {automationIndex === 0 ? automationRow : null}
+        {rows.map(({ track, type }, index) => (
+          <Fragment key={track.id}>
           <div
-            key={track.id}
             className="lt-setlist-lane-row"
             style={{ height: `${type.rowHeight}px`, "--lt-track-color": track.color ?? undefined } as CSSProperties}
           >
@@ -414,6 +457,8 @@ function SongLanesComponent({
               })}
             </div>
           </div>
+          {automationIndex === index + 1 ? automationRow : null}
+          </Fragment>
         ))}
         <div ref={playheadRef} className="lt-setlist-lanes-playhead" aria-hidden="true" />
       </div>

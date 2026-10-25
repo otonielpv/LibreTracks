@@ -2589,3 +2589,133 @@ html.lt-mobile .lt-setlist-mixer.is-medium .lt-compact-mixer-strip-toggles .lt-c
   pointer-events: auto;
   background: rgb(19 19 19 / 0.92);
 }
+
+/* ---- Automatismos (paso 12) ---- */
+
+.lt-setlist-lane-row.is-automation {
+  background: rgb(255 210 122 / 0.04);
+}
+
+.lt-setlist-lane-row.is-automation.is-disabled .lt-setlist-automation-cell {
+  opacity: 0.45;
+}
+
+.lt-setlist-lane-toggle .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.lt-setlist-automation-cell {
+  cursor: copy;
+}
+
+/* El rombo en su tiempo y el nombre a su derecha; arrastrable. */
+.lt-setlist-cue {
+  position: absolute;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 12rem;
+  min-height: 2rem;
+  padding: 0 0.35rem 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  font: inherit;
+  font-size: 0.78rem;
+  transform-origin: left center;
+  translate: -0.45rem -50%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.lt-setlist-cue-diamond {
+  flex: 0 0 auto;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 1px solid rgb(0 0 0 / 0.5);
+  background: #ffd27a;
+  transform: rotate(45deg);
+}
+
+.lt-setlist-cue.is-off .lt-setlist-cue-diamond,
+.lt-setlist-automation-item.is-off .lt-setlist-cue-diamond {
+  background: transparent;
+  border-color: #ffd27a;
+}
+
+.lt-setlist-cue-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-cue:focus-visible {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: 2px;
+}
+
+/* Lista de automatismos del cajón. */
+.lt-setlist-automation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+}
+
+.lt-setlist-automation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lt-setlist-automation-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.5rem 0.35rem 0.8rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.5rem;
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-automation-main {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0.2rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lt-setlist-automation-when {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.lt-setlist-automation-section {
+  font-size: 0.75rem;
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-automation-name,
+.lt-setlist-automation-what {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-automation-what {
+  font-size: 0.8rem;
+  color: var(--lt-setlist-text-muted);
+}

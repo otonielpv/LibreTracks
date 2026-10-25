@@ -12,7 +12,8 @@ export type SetlistEditMode =
   | "sections"
   | "arrangement"
   | "tracks"
-  | "lanes";
+  | "lanes"
+  | "automation";
 
 export const LANES_MIN_ZOOM = 1;
 export const LANES_MAX_ZOOM = 16;
