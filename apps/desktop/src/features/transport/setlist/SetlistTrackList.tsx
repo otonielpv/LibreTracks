@@ -3,7 +3,6 @@ import {
   useMemo,
   useState,
   type CSSProperties,
-  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -11,10 +10,10 @@ import { useTranslation } from "react-i18next";
 import type { SongRegionSummary, SongView, TrackSummary } from "@libretracks/shared/models";
 
 import { resolveMixerRows } from "../compact/CompactMixer";
-import { LIBRARY_ASSET_DRAG_MIME } from "../library/dragDrop";
 import type { TimelineMenus } from "../menus/timelineMenus";
 import type { SongViewBindings } from "../songs/songViewBindings";
 import { AUTOMATION_TRACK_ID } from "../library/pendingAudioImports";
+import { SONG_DROP_CLASS, songDropHandlers } from "./songDrop";
 import { computeSongTrackContent } from "./songTrackContent";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 
@@ -100,29 +99,7 @@ function SetlistTrackListComponent({
     audioRoutingOptions.find((option) => option.value === value)?.label ?? value;
   const audioTracks = tracks.filter((track) => track.kind === "audio");
 
-  const handleDrop = (event: ReactDragEvent<HTMLElement>) => {
-    event.preventDefault();
-    const types = Array.from(event.dataTransfer.types ?? []);
-    if (types.includes(LIBRARY_ASSET_DRAG_MIME)) {
-      try {
-        const payload = JSON.parse(event.dataTransfer.getData(LIBRARY_ASSET_DRAG_MIME)) as Array<{
-          file_path: string;
-          durationSeconds?: number;
-        }>;
-        if (payload.length > 0) {
-          onDropLibraryAssetsIntoSong(
-            region.id,
-            payload.map((item) => ({ filePath: item.file_path, durationSeconds: item.durationSeconds })),
-          );
-        }
-      } catch {
-        // Malformed payload: ignore the drop.
-      }
-      return;
-    }
-    const files = Array.from(event.dataTransfer.files ?? []);
-    if (files.length > 0) onDropOsFilesIntoSong(region.id, files);
-  };
+  const dropHandlers = songDropHandlers(region.id, { onDropOsFilesIntoSong, onDropLibraryAssetsIntoSong });
 
   const beginClipDrag = (event: ReactPointerEvent<HTMLElement>, clipId: string, fromTrackId: string) => {
     if (event.button !== 0) return;
@@ -160,10 +137,10 @@ function SetlistTrackListComponent({
 
   return (
     <div
-      className={`lt-setlist-tracks is-${layout}`}
+      className={`lt-setlist-tracks ${SONG_DROP_CLASS} is-${layout}`}
       data-region-id={region.id}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={handleDrop}
+      onDragOver={dropHandlers.onDragOver}
+      onDrop={dropHandlers.onDrop}
     >
       <div className="lt-setlist-tracks-toolbar">
         <button type="button" className="lt-setlist-settings-button" onClick={() => onAddAudioToSong(region.id)}>

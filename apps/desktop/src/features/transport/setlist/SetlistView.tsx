@@ -26,6 +26,7 @@ import { SongLanes } from "./lanes/SongLanes";
 import { createSectionEditHandlers, type SectionEditDeps } from "./sectionEditHandlers";
 import { useTimelineUIStore } from "../uiStore";
 import { resolveSetlistSongId } from "./songMapModel";
+import { SONG_DROP_CLASS, songDropHandlers } from "./songDrop";
 import { useSetlistStore, type SetlistShortTab } from "./setlistStore";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
 import "./setlist.css";
@@ -50,13 +51,23 @@ function Zone({
   name,
   children,
   zoneRef,
+  drop,
 }: {
   name: SetlistZone;
   children?: ReactNode;
   zoneRef?: RefObject<HTMLElement | null>;
+  /** Makes the zone a "drop audio into this song" target. */
+  drop?: { regionId: string; active: boolean; handlers: ReturnType<typeof songDropHandlers> };
 }) {
   return (
-    <section ref={zoneRef} className={`lt-setlist-zone is-${name}`} data-setlist-zone={name}>
+    <section
+      ref={zoneRef}
+      className={`lt-setlist-zone is-${name}${drop ? ` ${SONG_DROP_CLASS}` : ""}${drop?.active ? " is-drop-target" : ""}`}
+      data-setlist-zone={name}
+      data-region-id={drop?.regionId}
+      onDragOver={drop?.handlers.onDragOver}
+      onDrop={drop?.handlers.onDrop}
+    >
       {children}
     </section>
   );
@@ -147,6 +158,14 @@ function SetlistViewComponent({
   );
   lastShownRegionIdRef.current = shownRegionId;
   const shownRegion = regions.find((region) => region.id === shownRegionId) ?? null;
+  // The band and the console take audio for the song they show.
+  const songDrop = shownRegion
+    ? {
+        regionId: shownRegion.id,
+        active: !dragPreview?.isPackage && dragPreview?.targetRegionId === shownRegion.id,
+        handlers: songDropHandlers(shownRegion.id, { onDropOsFilesIntoSong, onDropLibraryAssetsIntoSong }),
+      }
+    : undefined;
   // Section editing (Edit → Sections): created once, fed through a ref.
   const sectionDepsRef = useRef<SectionEditDeps | null>(null);
   sectionDepsRef.current = {
@@ -319,7 +338,7 @@ function SetlistViewComponent({
   const mixerHeightPx = useSetlistStore((state) => state.mixerHeightPx);
   const beginMixerResize = useMixerResize(rootRef, mixerZoneRef);
   const mixer = (padsOnly: boolean) => (
-    <Zone name="mixer" zoneRef={mixerZoneRef}>
+    <Zone name="mixer" zoneRef={mixerZoneRef} drop={songDrop}>
       {layout === "wide" ? (
         <div
           className="lt-setlist-mixer-resize"
@@ -353,6 +372,7 @@ function SetlistViewComponent({
         appSettings={appSettings}
         auxHandlers={auxHandlers}
         multiTrackMix={multiTrackMix}
+        onAddAudioToSong={onAddAudioToSong}
       />
       )}
     </Zone>
@@ -361,7 +381,7 @@ function SetlistViewComponent({
   // jump) and, while editing, the section and cue handles. Right click on the
   // waveform opens the DAW ruler menu at that point.
   const overview = (
-    <Zone name="overview">
+    <Zone name="overview" drop={songDrop}>
       {shownRegion ? (
         <>
           <SongOverviewStrip

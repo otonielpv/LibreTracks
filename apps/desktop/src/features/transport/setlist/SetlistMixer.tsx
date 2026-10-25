@@ -38,6 +38,7 @@ export type SetlistMixerProps = Pick<
   | "appSettings"
   | "auxHandlers"
   | "multiTrackMix"
+  | "onAddAudioToSong"
 > & {
   song: SongView;
   /** The song the console mixes (D4: the selected one). */
@@ -126,6 +127,7 @@ function SetlistMixerComponent({
   appSettings,
   auxHandlers,
   multiTrackMix,
+  onAddAudioToSong,
   song,
   region,
   layout,
@@ -235,6 +237,17 @@ function SetlistMixerComponent({
             </button>
           ))}
         </div>
+        {tab === "tracks" && region ? (
+          <button
+            type="button"
+            className="lt-setlist-mixer-action"
+            title={t("setlistView.mixer.addAudioTitle")}
+            onClick={() => onAddAudioToSong(region.id)}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">library_music</span>
+            {t("setlistView.tracks.addAudio")}
+          </button>
+        ) : null}
         {tab === "tracks" ? (
           <button
             type="button"
@@ -285,6 +298,9 @@ function SetlistMixerComponent({
             mix={multiTrackMix}
           />
         </div>
+      ) : null}
+      {tab === "tracks" && songTrackIds?.size === 0 && !showAllTracks ? (
+        <p className="lt-setlist-mixer-empty">{t("setlistView.mixer.emptySong")}</p>
       ) : null}
       {tab === "tracks" ? (
         <div className="lt-setlist-console">

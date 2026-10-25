@@ -2547,6 +2547,8 @@ const en = {
       guideSettings: "Voice guide settings",
       masterTitle: "Song master: lowers or raises its tracks. It does not affect the click or the voice guide.",
       masterAria: "{{name}} master",
+      addAudioTitle: "Add audio to this song. You can also drop files or library audio on the waveform or the mixer.",
+      emptySong: "This song has no audio yet. Drop files or library audio here or on the waveform, or press “Add audio…”.",
       allTracks: "All tracks",
       scenes: "Scenes",
       collapse: "Fold the mixer",

@@ -917,7 +917,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       | null;
     if (!element) return { hit: false };
     const column = element.closest(
-      ".lt-compact-song-column[data-region-id], .lt-setlist-song-tile[data-region-id], .lt-setlist-tracks[data-region-id]",
+      ".lt-compact-song-column[data-region-id], .lt-setlist-song-drop[data-region-id]",
     ) as HTMLElement | null;
     if (column) {
       return { hit: true, regionId: column.getAttribute("data-region-id") };
@@ -1189,7 +1189,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       event.clientY,
     ) as HTMLElement | null;
     const compactColumn = elementAtPointer?.closest(
-      ".lt-compact-song-column[data-region-id], .lt-setlist-song-tile[data-region-id], .lt-setlist-tracks[data-region-id]",
+      ".lt-compact-song-column[data-region-id], .lt-setlist-song-drop[data-region-id]",
     ) as HTMLElement | null;
     if (compactColumn) {
       const regionId = compactColumn.getAttribute("data-region-id");

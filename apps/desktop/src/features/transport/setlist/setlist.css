@@ -1998,3 +1998,29 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
     animation: none;
   }
 }
+
+/* Soltar audio en la canción mostrada: la onda o la consola se resaltan. */
+.lt-setlist-zone.lt-setlist-song-drop {
+  position: relative;
+}
+
+.lt-setlist-zone.lt-setlist-song-drop.is-drop-target::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 2px dashed var(--lt-setlist-accent);
+  border-radius: 0.5rem;
+  background: rgb(242 196 90 / 0.08);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.lt-setlist-mixer-empty {
+  margin: 0.5rem 0.75rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px dashed var(--lt-setlist-border);
+  border-radius: 0.5rem;
+  color: var(--lt-setlist-text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}

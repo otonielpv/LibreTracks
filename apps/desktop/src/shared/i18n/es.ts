@@ -2578,6 +2578,8 @@ const es = {
       guideSettings: "Ajustes de la voz guía",
       masterTitle: "Master de la canción: baja o sube sus pistas. No afecta al click ni a la voz guía.",
       masterAria: "Master de {{name}}",
+      addAudioTitle: "Añadir audio a esta canción. También puedes soltar archivos o audios de la biblioteca sobre la onda o el mezclador.",
+      emptySong: "Esta canción aún no tiene audio. Suelta archivos o audios de la biblioteca aquí o sobre la onda, o pulsa «Añadir audio…».",
       allTracks: "Todas las pistas",
       scenes: "Escenas",
       collapse: "Plegar el mezclador",

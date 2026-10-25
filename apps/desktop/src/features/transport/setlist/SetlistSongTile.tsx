@@ -2,19 +2,18 @@ import {
   memo,
   useCallback,
   useMemo,
-  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type RefObject,
 } from "react";
 import { useTranslation } from "react-i18next";
 
 import { regionEffectiveKey, type SongRegionSummary } from "../desktopApi";
-import { LIBRARY_ASSET_DRAG_MIME } from "../library/dragDrop";
 import { formatLiveClock } from "../live/liveMarkerModel";
 import { SongReorderHandle, type SongReorderHandleProps } from "../songs/SongReorderHandle";
 import { SONG_REORDER_ID_ATTRIBUTE } from "../songs/useSongReorder";
 import { ArrangementBadge } from "../structure/ArrangementBadge";
 import type { SongViewBindings } from "../songs/songViewBindings";
+import { SONG_DROP_CLASS, songDropHandlers } from "./songDrop";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 
 /** The stable callbacks every tile shares (created once by the row). */
@@ -86,41 +85,18 @@ function SetlistSongTileComponent({
     [actions, regionId],
   );
 
-  const handleDrop = useCallback(
-    (event: ReactDragEvent<HTMLElement>) => {
-      event.preventDefault();
-      const types = Array.from(event.dataTransfer.types ?? []);
-      if (types.includes(LIBRARY_ASSET_DRAG_MIME)) {
-        try {
-          const payload = JSON.parse(
-            event.dataTransfer.getData(LIBRARY_ASSET_DRAG_MIME),
-          ) as Array<{ file_path: string; durationSeconds?: number }>;
-          if (payload.length > 0) {
-            actions.onDropLibraryAssetsIntoSong(
-              regionId,
-              payload.map((item) => ({
-                filePath: item.file_path,
-                durationSeconds: item.durationSeconds,
-              })),
-            );
-          }
-        } catch {
-          // Malformed payload: ignore the drop.
-        }
-        return;
-      }
-      const files = Array.from(event.dataTransfer.files ?? []);
-      // A .ltpkg is a new song: the row imports it, not this card.
-      if (files.length > 0 && !files.some((file) => /\.ltpkg$/i.test(file.name))) {
-        event.stopPropagation();
-        actions.onDropOsFilesIntoSong(regionId, files);
-      }
-    },
+  const dropHandlers = useMemo(
+    () =>
+      songDropHandlers(regionId, {
+        onDropOsFilesIntoSong: actions.onDropOsFilesIntoSong,
+        onDropLibraryAssetsIntoSong: actions.onDropLibraryAssetsIntoSong,
+      }),
     [actions, regionId],
   );
 
   const className = [
     "lt-setlist-song-tile",
+    SONG_DROP_CLASS,
     `is-${layout}`,
     isSelected ? "is-selected" : "",
     isActive ? "is-playing" : "",
@@ -151,11 +127,8 @@ function SetlistSongTileComponent({
         }
       }}
       onContextMenu={openMenu}
-      onDragOver={(event) => {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "copy";
-      }}
-      onDrop={handleDrop}
+      onDragOver={dropHandlers.onDragOver}
+      onDrop={dropHandlers.onDrop}
       onPointerDown={surfaceProps?.onPointerDown}
     >
       {handleProps ? (
