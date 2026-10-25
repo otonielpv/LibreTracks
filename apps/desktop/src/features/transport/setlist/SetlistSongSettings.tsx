@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type ReactNode } from "react";
+import { memo, useEffect, useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   SONG_KEY_OPTIONS,
@@ -68,12 +68,31 @@ function ActionButton({ action, children }: { action: ContextMenuAction | null; 
   );
 }
 
+/** A labelled row: the label names the whole group of controls next to it
+ * (screen readers announce it on entering any of them). */
 function Field({ label, children }: { label: string; children: ReactNode }) {
+  const labelId = useId();
   return (
-    <div className="lt-setlist-settings-field">
-      <span className="lt-setlist-settings-label">{label}</span>
+    <div className="lt-setlist-settings-field" role="group" aria-labelledby={labelId}>
+      <span id={labelId} className="lt-setlist-settings-label">
+        {label}
+      </span>
       <div className="lt-setlist-settings-control">{children}</div>
     </div>
+  );
+}
+
+/** One card of the form, with its heading. */
+function SettingsSection({ icon, title, children }: { icon: string; title: string; children: ReactNode }) {
+  const headingId = useId();
+  return (
+    <section className="lt-setlist-settings-section" aria-labelledby={headingId}>
+      <h3 id={headingId} className="lt-setlist-settings-heading">
+        <span className="material-symbols-outlined" aria-hidden="true">{icon}</span>
+        {title}
+      </h3>
+      {children}
+    </section>
   );
 }
 
@@ -225,15 +244,13 @@ function SetlistSongSettingsComponent({
 
   return (
     <div className="lt-setlist-settings" aria-label={t("setlistView.edit.songSettings", { name: region.name })}>
-      <section className="lt-setlist-settings-section">
-        <h3>{region.name}</h3>
+      <section className="lt-setlist-settings-section is-plain">
         <div className="lt-setlist-settings-row">
           <ActionButton action={entry("transport.menu.renameSong")} />
         </div>
       </section>
 
-      <section className="lt-setlist-settings-section">
-        <h4>{t("setlistView.edit.keySection")}</h4>
+      <SettingsSection icon="music_note" title={t("setlistView.edit.keySection")}>
         <Field label={t("setlistView.edit.key")}>
           <select
             className="lt-setlist-settings-input"
@@ -254,6 +271,7 @@ function SetlistSongSettingsComponent({
             type="button"
             className="lt-setlist-settings-button"
             aria-label={t("timelineToolbar.regionTransposeDownAria")}
+            title={t("timelineToolbar.regionTransposeDownAria")}
             onClick={() => onSelectedRegionTransposeChange(Math.max(-12, region.transposeSemitones - 1))}
           >
             −
@@ -263,6 +281,7 @@ function SetlistSongSettingsComponent({
             type="button"
             className="lt-setlist-settings-button"
             aria-label={t("timelineToolbar.regionTransposeUpAria")}
+            title={t("timelineToolbar.regionTransposeUpAria")}
             onClick={() => onSelectedRegionTransposeChange(Math.min(12, region.transposeSemitones + 1))}
           >
             +
@@ -271,10 +290,9 @@ function SetlistSongSettingsComponent({
         <div className="lt-setlist-settings-row">
           <ActionButton action={entry("transport.keyChanges.addAtCursor")} />
         </div>
-      </section>
+      </SettingsSection>
 
-      <section className="lt-setlist-settings-section">
-        <h4>{t("setlistView.edit.tempoSection")}</h4>
+      <SettingsSection icon="speed" title={t("setlistView.edit.tempoSection")}>
         <Field label={t("setlistView.edit.warp")}>
           <button
             type="button"
@@ -295,10 +313,9 @@ function SetlistSongSettingsComponent({
         <div className="lt-setlist-settings-row">
           <ActionButton action={entry("transport.menu.changeRegionWarpSourceBpm")} />
         </div>
-      </section>
+      </SettingsSection>
 
-      <section className="lt-setlist-settings-section">
-        <h4>{t("setlistView.edit.levelSection")}</h4>
+      <SettingsSection icon="volume_up" title={t("setlistView.edit.levelSection")}>
         <Field label={t("setlistView.mixer.master")}>
           <input
             type="range"
@@ -335,10 +352,9 @@ function SetlistSongSettingsComponent({
             ))}
           </div>
         </Field>
-      </section>
+      </SettingsSection>
 
-      <section className="lt-setlist-settings-section">
-        <h4>{t("setlistView.edit.boundsSection")}</h4>
+      <SettingsSection icon="straighten" title={t("setlistView.edit.boundsSection")}>
         <EdgeField
           label={t("setlistView.edit.start")}
           seconds={region.startSeconds}
@@ -367,17 +383,16 @@ function SetlistSongSettingsComponent({
             <span className="lt-setlist-settings-unit">{t("setlistView.edit.bars")}</span>
           </Field>
         ) : null}
-      </section>
+      </SettingsSection>
 
-      <section className="lt-setlist-settings-section">
-        <h4>{t("setlistView.edit.actionsSection")}</h4>
+      <SettingsSection icon="more_horiz" title={t("setlistView.edit.actionsSection")}>
         <div className="lt-setlist-settings-row">
           <ActionButton action={entry("transport.menu.analyzeSong")} />
           <ActionButton action={entry("transport.menu.renderSong")} />
           <ActionButton action={entry("transport.menu.exportSong")} />
           <ActionButton action={entry("transport.menu.deleteSong")} />
         </div>
-      </section>
+      </SettingsSection>
     </div>
   );
 }

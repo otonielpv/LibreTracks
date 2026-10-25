@@ -95,6 +95,7 @@ function SetlistSectionsPanelComponent({ song, region, handlers, layout, wavefor
               type="button"
               className="lt-setlist-song-button"
               aria-label={t("setlistView.sections.menu", { name: marker.name })}
+              title={t("setlistView.sections.menu", { name: marker.name })}
               onClick={(event) => handlers.openMenu(event, marker.id)}
             >
               <span className="material-symbols-outlined" aria-hidden="true">more_horiz</span>

@@ -228,6 +228,7 @@ function SetlistViewComponent({
           modes={[
             {
               mode: "song",
+              icon: "tune",
               labelKey: "setlistView.edit.modes.song",
               content: shownRegion ? (
                 <SetlistSongSettings
@@ -253,34 +254,8 @@ function SetlistViewComponent({
               ) : null,
             },
             {
-              mode: "arrangement",
-              labelKey: "setlistView.edit.modes.arrangement",
-              content: shownRegion ? (
-                <SetlistArrangementToolbar region={shownRegion} handlers={structureHandlers} layout={layout} />
-              ) : null,
-            },
-            {
-              mode: "lanes",
-              labelKey: "setlistView.edit.modes.lanes",
-              content:
-                layout === "short" ? (
-                  lanes
-                ) : (
-                  <p className="lt-setlist-sections-hint">{t("setlistView.lanes.hint")}</p>
-                ),
-            },
-            {
-              mode: "tracks",
-              labelKey: "setlistView.edit.modes.tracks",
-              content:
-                layout === "short" ? (
-                  trackList
-                ) : (
-                  <p className="lt-setlist-sections-hint">{t("setlistView.tracks.hint")}</p>
-                ),
-            },
-            {
               mode: "sections",
+              icon: "view_week",
               labelKey: "setlistView.edit.modes.sections",
               content: shownRegion ? (
                 <SetlistSectionsPanel
@@ -305,6 +280,36 @@ function SetlistViewComponent({
                   }
                 />
               ) : null,
+            },
+            {
+              mode: "arrangement",
+              icon: "account_tree",
+              labelKey: "setlistView.edit.modes.arrangement",
+              content: shownRegion ? (
+                <SetlistArrangementToolbar region={shownRegion} handlers={structureHandlers} layout={layout} />
+              ) : null,
+            },
+            {
+              mode: "tracks",
+              icon: "queue_music",
+              labelKey: "setlistView.edit.modes.tracks",
+              content:
+                layout === "short" ? (
+                  trackList
+                ) : (
+                  <p className="lt-setlist-sections-hint">{t("setlistView.tracks.hint")}</p>
+                ),
+            },
+            {
+              mode: "lanes",
+              icon: "view_timeline",
+              labelKey: "setlistView.edit.modes.lanes",
+              content:
+                layout === "short" ? (
+                  lanes
+                ) : (
+                  <p className="lt-setlist-sections-hint">{t("setlistView.lanes.hint")}</p>
+                ),
             },
           ]}
         />
@@ -480,10 +485,9 @@ function SetlistViewComponent({
         <>
           {songs}
           {overview}
-          <div className="lt-setlist-bottom">
-            {mixer(false)}
-            {drawer}
-          </div>
+          <div className="lt-setlist-bottom">{mixer(false)}</div>
+          {/* Full-height side panel next to the band and the console. */}
+          {drawer}
         </>
       )}
     </main>

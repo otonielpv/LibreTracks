@@ -139,6 +139,7 @@ function SetlistSongTileComponent({
       tabIndex={0}
       aria-pressed={isSelected}
       aria-label={t("setlistView.songs.tileLabel", { index: index + 1, name: region.name })}
+      title={t("setlistView.songs.tileLabel", { index: index + 1, name: region.name })}
       onClick={() => actions.onActivate(regionId)}
       onDoubleClick={() => actions.onPlaySong(regionId, region.name)}
       onKeyDown={(event) => {

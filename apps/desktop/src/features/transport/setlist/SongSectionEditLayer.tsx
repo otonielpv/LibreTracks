@@ -212,6 +212,7 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
             } as CSSProperties
           }
           aria-label={t("setlistView.sections.handle", { name: marker.name })}
+          title={t("setlistView.sections.handle", { name: marker.name })}
           aria-pressed={selectedIds.has(marker.id)}
           onPointerDown={(event) => handlePointerDown(event, marker.id)}
           onContextMenu={(event) => {
@@ -229,6 +230,7 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
         data-section-handle="song-end"
         style={{ left: "100%" }}
         aria-label={t("setlistView.sections.songEnd", { name: region.name })}
+        title={t("setlistView.sections.songEnd", { name: region.name })}
         onPointerDown={handleEndPointerDown}
       />
     </div>

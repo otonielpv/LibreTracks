@@ -97,6 +97,22 @@ describe("SongMap blocks", () => {
   });
 });
 
+describe("SongMap cues", () => {
+  it("a cue at the same point as a section is still shown on the band", () => {
+    const cue = { id: "aviso", name: "Entra coro", startSeconds: 20, kind: "custom", categoryOverride: "cue" } as SectionMarkerSummary;
+    const { container } = render(<SongMap {...mapProps({ song: { ...song, sectionMarkers: [...markers, cue] } })} />);
+    const label = container.querySelector<HTMLElement>(".lt-setlist-map-cue")!;
+    expect(label.textContent).toContain("Entra coro");
+    expect(parseFloat(label.style.left)).toBeCloseTo(100 / 3, 6);
+  });
+
+  it("while editing, the cues are left to the edit layer's handles", () => {
+    const cue = { id: "aviso", name: "Entra coro", startSeconds: 20, kind: "custom", categoryOverride: "cue" } as SectionMarkerSummary;
+    const { container } = render(<SongMap {...mapProps({ editing: true, song: { ...song, sectionMarkers: [...markers, cue] } })} />);
+    expect(container.querySelector(".lt-setlist-map-cue")).toBeNull();
+  });
+});
+
 describe("SongMap gestures", () => {
   it("a click on a block schedules the jump with the Live primary action", () => {
     const props = mapProps();

@@ -1,4 +1,12 @@
-import { memo, useCallback, useEffect, type ReactNode } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import { useDismissOnBack } from "../mobile/backNavigation";
@@ -8,6 +16,8 @@ import type { SetlistLayoutClass } from "./useSetlistLayout";
 export type SetlistEditModeEntry = {
   mode: Exclude<SetlistEditMode, null>;
   labelKey: string;
+  /** Material Symbols icon of the mode's tab. */
+  icon: string;
   content: ReactNode;
 };
 
@@ -28,12 +38,22 @@ function modalIsOpen() {
 }
 
 /**
- * The Edit drawer (Playback's «Edit»): a side panel in `wide`, a bottom sheet
- * in `medium` and a full screen in `short`, with one tab per edit mode. Esc
- * leaves edit mode unless a modal is open; Android «back» closes it.
+ * The Edit panel (Playback's «Edit»): a full-height side panel in `wide` and
+ * `medium` (like Ableton's inspector, the song band and the console stay in
+ * view) and a full screen in `short`, with one tab per edit mode.
+ *
+ * Accessible as a dialog: labelled by its heading, focus goes into it when
+ * it opens, the tabs are a real tablist (arrow keys, Home/End) tied to their
+ * tabpanel, Esc leaves edit mode unless a modal is open, and Android «back»
+ * closes it.
  */
 function SetlistEditDrawerComponent({ layout, songName, modes }: SetlistEditDrawerProps) {
   const { t } = useTranslation();
+  const baseId = useId();
+  const headingId = `${baseId}-heading`;
+  const panelId = `${baseId}-panel`;
+  const rootRef = useRef<HTMLElement | null>(null);
+  const tabRefs = useRef(new Map<string, HTMLButtonElement>());
   const editMode = useSetlistStore((state) => state.editMode);
   const close = useCallback(() => void requestEditMode(null), []);
   useDismissOnBack(close, editMode !== null);
@@ -48,51 +68,103 @@ function SetlistEditDrawerComponent({ layout, songName, modes }: SetlistEditDraw
     return () => window.removeEventListener("keydown", onKey);
   }, [close, editMode]);
 
+  // Focus into the panel when it opens (not on every mode change).
+  useEffect(() => {
+    rootRef.current?.focus({ preventScroll: true });
+  }, []);
+
   const active = modes.find((entry) => entry.mode === editMode) ?? modes[0] ?? null;
 
+  const onTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const index = modes.findIndex((entry) => entry.mode === active?.mode);
+    const target =
+      event.key === "ArrowRight" || event.key === "ArrowDown"
+        ? (index + 1) % modes.length
+        : event.key === "ArrowLeft" || event.key === "ArrowUp"
+          ? (index - 1 + modes.length) % modes.length
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? modes.length - 1
+              : -1;
+    if (target < 0) return;
+    event.preventDefault();
+    const next = modes[target];
+    void requestEditMode(next.mode).then(() => tabRefs.current.get(next.mode)?.focus());
+  };
+
   return (
-    <div className={`lt-setlist-drawer is-${layout}`} role="dialog" aria-label={t("setlistView.edit.title")}>
+    <section
+      ref={rootRef}
+      className={`lt-setlist-drawer is-${layout}`}
+      role="dialog"
+      aria-labelledby={headingId}
+      tabIndex={-1}
+    >
       <header className="lt-setlist-drawer-header">
         {layout === "short" ? (
           <button
             type="button"
-            className="lt-setlist-settings-button"
+            className="lt-setlist-drawer-close"
             aria-label={t("setlistView.edit.close")}
+            title={t("setlistView.edit.close")}
             onClick={close}
           >
-            <span className="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+            <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
           </button>
         ) : null}
-        <strong className="lt-setlist-drawer-title">
-          {songName ? t("setlistView.edit.heading", { name: songName }) : t("setlistView.edit.title")}
-        </strong>
-        <div className="lt-setlist-drawer-modes" role="tablist" aria-label={t("setlistView.edit.modes.label")}>
-          {modes.map((entry) => (
-            <button
-              key={entry.mode}
-              type="button"
-              role="tab"
-              aria-selected={entry.mode === active?.mode}
-              className={`lt-setlist-tab${entry.mode === active?.mode ? " is-active" : ""}`}
-              onClick={() => void requestEditMode(entry.mode)}
-            >
-              {t(entry.labelKey)}
-            </button>
-          ))}
-        </div>
+        <h2 id={headingId} className="lt-setlist-drawer-title">
+          <span className="material-symbols-outlined" aria-hidden="true">edit</span>
+          <span>{songName ? t("setlistView.edit.heading", { name: songName }) : t("setlistView.edit.title")}</span>
+        </h2>
         {layout !== "short" ? (
           <button
             type="button"
-            className="lt-setlist-settings-button"
+            className="lt-setlist-drawer-close"
             aria-label={t("setlistView.edit.close")}
+            title={t("setlistView.edit.close")}
             onClick={close}
           >
             <span className="material-symbols-outlined" aria-hidden="true">close</span>
           </button>
         ) : null}
       </header>
-      <div className="lt-setlist-drawer-body">{active?.content}</div>
-    </div>
+      <div className="lt-setlist-drawer-modes" role="tablist" aria-label={t("setlistView.edit.modes.label")}>
+        {modes.map((entry) => {
+          const selected = entry.mode === active?.mode;
+          return (
+            <button
+              key={entry.mode}
+              ref={(element) => {
+                if (element) tabRefs.current.set(entry.mode, element);
+                else tabRefs.current.delete(entry.mode);
+              }}
+              type="button"
+              role="tab"
+              id={`${baseId}-tab-${entry.mode}`}
+              aria-selected={selected}
+              aria-controls={panelId}
+              tabIndex={selected ? 0 : -1}
+              className={`lt-setlist-drawer-tab${selected ? " is-active" : ""}`}
+              title={t(entry.labelKey)}
+              onClick={() => void requestEditMode(entry.mode)}
+              onKeyDown={onTabKeyDown}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">{entry.icon}</span>
+              <span>{t(entry.labelKey)}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div
+        id={panelId}
+        className="lt-setlist-drawer-body"
+        role="tabpanel"
+        aria-labelledby={active ? `${baseId}-tab-${active.mode}` : undefined}
+      >
+        {active?.content}
+      </div>
+    </section>
   );
 }
 
@@ -103,15 +175,17 @@ export function SetlistEditButton() {
   const { t } = useTranslation();
   const editMode = useSetlistStore((state) => state.editMode);
   const editing = editMode !== null;
+  const label = editing ? t("setlistView.edit.done") : t("setlistView.edit.button");
   return (
     <button
       type="button"
       className={`lt-setlist-edit-button${editing ? " is-active" : ""}`}
       aria-pressed={editing}
+      title={editing ? t("setlistView.edit.doneTitle") : t("setlistView.edit.buttonTitle")}
       onClick={() => void requestEditMode(editing ? null : "song")}
     >
-      <span className="material-symbols-outlined" aria-hidden="true">edit</span>
-      <span>{editing ? t("setlistView.edit.done") : t("setlistView.edit.button")}</span>
+      <span className="material-symbols-outlined" aria-hidden="true">{editing ? "check" : "edit"}</span>
+      <span>{label}</span>
     </button>
   );
 }

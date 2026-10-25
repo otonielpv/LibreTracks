@@ -88,7 +88,9 @@ function props(overrides: Record<string, unknown> = {}) {
 }
 
 const stripNames = (container: HTMLElement) =>
-  Array.from(container.querySelectorAll(".lt-compact-mixer-strip-name-text")).map(
+  Array.from(
+    container.querySelectorAll(".lt-compact-mixer-strip:not(.lt-setlist-master-strip) .lt-compact-mixer-strip-name-text"),
+  ).map(
     (element) => element.textContent,
   );
 

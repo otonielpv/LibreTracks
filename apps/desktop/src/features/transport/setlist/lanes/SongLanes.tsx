@@ -276,11 +276,11 @@ function SongLanesComponent({
   const hasSelection = selectedClipIds.length > 0;
   const toolbar = (
     <div className="lt-setlist-lanes-toolbar" role="toolbar" aria-label={t("setlistView.lanes.toolbar")}>
-      <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.lanes.zoomOut")} disabled={zoom <= LANES_MIN_ZOOM} onClick={() => changeZoom(1 / ZOOM_STEP)}>
+      <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.lanes.zoomOut")} title={t("setlistView.lanes.zoomOut")} disabled={zoom <= LANES_MIN_ZOOM} onClick={() => changeZoom(1 / ZOOM_STEP)}>
         −
       </button>
       <output className="lt-setlist-settings-value" aria-label={t("setlistView.lanes.zoom")}>{`${Math.round(zoom * 10) / 10}×`}</output>
-      <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.lanes.zoomIn")} disabled={zoom >= LANES_MAX_ZOOM} onClick={() => changeZoom(ZOOM_STEP)}>
+      <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.lanes.zoomIn")} title={t("setlistView.lanes.zoomIn")} disabled={zoom >= LANES_MAX_ZOOM} onClick={() => changeZoom(ZOOM_STEP)}>
         +
       </button>
       <button type="button" className="lt-setlist-settings-button" onClick={goToPlayhead}>
@@ -323,6 +323,7 @@ function SongLanesComponent({
                 className="lt-setlist-settings-button"
                 aria-pressed={namesCollapsed}
                 aria-label={t("setlistView.lanes.collapseNames")}
+                title={t("setlistView.lanes.collapseNames")}
                 onClick={() => setNamesCollapsed((value) => !value)}
               >
                 <span className="material-symbols-outlined" aria-hidden="true">
@@ -383,6 +384,7 @@ function SongLanesComponent({
                 className={`lt-setlist-lane-toggle${track.muted ? " is-active" : ""}`}
                 aria-pressed={track.muted}
                 aria-label={t("setlistView.lanes.mute", { name: track.name })}
+                title={t("setlistView.lanes.mute", { name: track.name })}
                 onClick={() => mixerHandlers.onToggleMute(track.id)}
               >
                 M
@@ -392,6 +394,7 @@ function SongLanesComponent({
                 className={`lt-setlist-lane-toggle${track.solo ? " is-active" : ""}`}
                 aria-pressed={track.solo}
                 aria-label={t("setlistView.lanes.solo", { name: track.name })}
+                title={t("setlistView.lanes.solo", { name: track.name })}
                 onClick={() => mixerHandlers.onToggleSolo(track.id)}
               >
                 S

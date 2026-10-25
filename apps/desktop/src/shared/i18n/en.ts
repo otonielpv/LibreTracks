@@ -2538,6 +2538,8 @@ const en = {
       label: "Mixer",
       edit: {
       button: "Edit",
+      buttonTitle: "Edit the song: settings, sections and cues, arrangement, tracks and lanes",
+      doneTitle: "Finish editing and go back to performance mode",
       done: "Done",
       title: "Edit",
       heading: "{{name}} · Edit",

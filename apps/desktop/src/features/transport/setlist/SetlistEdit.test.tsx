@@ -121,7 +121,8 @@ describe("Edit mode", () => {
       // Full screen with a back button.
       expect(within(drawer as HTMLElement).getAllByRole("button", { name: "setlistView.edit.close" })).toHaveLength(1);
     } else {
-      expect(container.querySelector(".lt-setlist-bottom [data-setlist-zone='drawer']")).not.toBeNull();
+      // A full-height side panel beside the band and the console.
+      expect(container.querySelector(".lt-setlist-view > [data-setlist-zone='drawer']")).not.toBeNull();
     }
   });
 

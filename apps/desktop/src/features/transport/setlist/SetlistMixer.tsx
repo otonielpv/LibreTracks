@@ -170,7 +170,6 @@ function SetlistMixerComponent({
   const masterGain = optimisticMaster ?? region?.master?.gain ?? 1;
   const masterStrip = region ? (
     <SetlistConsoleStrip
-      variant="master"
       name={t("setlistView.mixer.master")}
       title={t("setlistView.mixer.masterTitle")}
       position={gainToPosition(masterGain, TRACK_FADER_SCALE)}
@@ -190,7 +189,7 @@ function SetlistMixerComponent({
         onMasterGainChange(region.id, 1);
         onMasterGainCommit(region.id);
       }}
-      meter={<SongMasterMeter regionId={region.id} className="lt-setlist-console-meter" />}
+      meter={<SongMasterMeter regionId={region.id} orientation="vertical" />}
     />
   ) : null;
 
@@ -209,6 +208,7 @@ function SetlistMixerComponent({
           className="lt-setlist-mixer-fold"
           aria-expanded={false}
           aria-label={t("setlistView.mixer.expand")}
+          title={t("setlistView.mixer.expand")}
           onClick={() => setCollapsed(false)}
         >
           <span className="material-symbols-outlined" aria-hidden="true">expand_less</span>
@@ -254,6 +254,7 @@ function SetlistMixerComponent({
             className="lt-setlist-mixer-fold"
             aria-expanded
             aria-label={t("setlistView.mixer.collapse")}
+            title={t("setlistView.mixer.collapse")}
             onClick={() => setCollapsed(true)}
           >
             <span className="material-symbols-outlined" aria-hidden="true">expand_more</span>

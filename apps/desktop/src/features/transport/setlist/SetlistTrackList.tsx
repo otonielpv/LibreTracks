@@ -206,6 +206,7 @@ function SetlistTrackListComponent({
                 className="lt-setlist-track-grip material-symbols-outlined"
                 role="button"
                 aria-label={t("setlistView.tracks.reorder", { name: track.name })}
+                title={t("setlistView.tracks.reorder", { name: track.name })}
                 onMouseDown={(event) => onTrackDragStart(event, track.id)}
               >
                 drag_indicator
@@ -216,6 +217,7 @@ function SetlistTrackListComponent({
                   className="lt-setlist-track-fold"
                   aria-expanded={!collapsedFolders.has(track.id)}
                   aria-label={t("setlistView.tracks.fold", { name: track.name })}
+                  title={t("setlistView.tracks.fold", { name: track.name })}
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={() => onToggleFolder(track.id)}
                 >

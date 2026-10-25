@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
-import type { SongRegionSummary } from "@libretracks/shared/models";
+import { markerCategory, type SongRegionSummary } from "@libretracks/shared/models";
 
 import { isMobileApp } from "../desktopApi";
 import { openSongAnalysis } from "../songAnalysis/songAnalysisStore";
@@ -80,7 +80,7 @@ function SongMapComponent({
   // The project's marker selection, the same one the DAW ruler uses.
   const selectSection = useTimelineUIStore((state) => state.selectSection);
   const selectedSectionId = useTimelineUIStore((state) => state.selectedSectionId);
-  const { blocks, notches } = useMemo(
+  const { blocks } = useMemo(
     () =>
       buildSongMapBlocks(region, song.sectionMarkers, barSecondsAtFor(song), {
         start: t("transport.structure.implicitStart"),
@@ -95,6 +95,12 @@ function SongMapComponent({
       )?.id ?? null)
     : null;
   const nextBlock = blocks.find((block) => block.id === nextId) ?? null;
+  const cues = song.sectionMarkers.filter(
+    (marker) =>
+      markerCategory(marker) === "cue" &&
+      marker.startSeconds >= region.startSeconds &&
+      marker.startSeconds < region.endSeconds,
+  );
   const isEmpty = blocks.length === 1 && blocks[0].kind === "song";
   // The blocks sit over the song's waveform and must line up with it
   // exactly: percent positions through the view's one time scale.
@@ -207,16 +213,22 @@ function SongMapComponent({
             </button>
           );
         })}
-        {/* Lone cues; while editing, the edit layer draws them as handles. */}
-        {editing ? null : notches.map((notch) => (
-          <span
-            key={notch.marker.id}
-            className="lt-setlist-map-notch"
-            style={{ left: `${percent.secondsToPx(notch.marker.startSeconds)}%` }}
-            title={notch.marker.name}
-            aria-hidden="true"
-          />
-        ))}
+        {/* Every cue ("aviso"), also the ones folded into a section at the
+            same point: a label at the bottom of the band. While editing, the
+            edit layer draws them as handles instead. */}
+        {editing
+          ? null
+          : cues.map((cue) => (
+              <span
+                key={cue.id}
+                className="lt-setlist-map-cue"
+                style={{ left: `${percent.secondsToPx(cue.startSeconds)}%` }}
+                title={cue.name}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">notifications</span>
+                <span className="lt-setlist-map-cue-name">{cue.name}</span>
+              </span>
+            ))}
       </div>
       <div className="lt-setlist-map-actions">
         {arrangementPicker}

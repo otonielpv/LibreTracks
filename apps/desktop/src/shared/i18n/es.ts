@@ -2569,6 +2569,8 @@ const es = {
       label: "Mezclador",
       edit: {
       button: "Editar",
+      buttonTitle: "Editar la canción: ajustes, secciones y avisos, arreglo, pistas y carriles",
+      doneTitle: "Terminar de editar y volver al modo directo",
       done: "Hecho",
       title: "Editar",
       heading: "{{name}} · Editar",
