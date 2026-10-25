@@ -13,8 +13,13 @@ vi.mock("../../desktopApi", async (importOriginal) => {
   };
 });
 
-function setup(overTimeline: boolean) {
+function setup(overTimeline: boolean, songUnderPointer: string | null = null) {
   const dragDrop = {
+    resolveCompactRegionAtPoint: vi.fn(() =>
+      songUnderPointer ? { hit: true as const, regionId: songUnderPointer } : { hit: false as const },
+    ),
+    dropPathsIntoSong: vi.fn(() => true),
+    addLibraryAssetsToSong: vi.fn(),
     resolveTimelineDropFromClientPoint: vi.fn(() => ({
       isOverTimeline: overTimeline,
       dropSeconds: 42,
@@ -136,12 +141,56 @@ describe("folder library drops", () => {
   it("asks the timeline to show where a drag would land, and clears it", () => {
     const { drop, dragDrop } = setup(true);
     drop.previewAt({ kind: "files", paths: ["D:/Stems/Drums.wav"] }, 10, 20);
-    expect(dragDrop.previewDropAtClientPoint).toHaveBeenLastCalledWith(10, 20, "audio");
+    expect(dragDrop.previewDropAtClientPoint).toHaveBeenLastCalledWith(10, 20, "audio", 1);
     drop.previewAt({ kind: "files", paths: ["D:/Video/Letras.mp4"] }, 11, 21);
-    expect(dragDrop.previewDropAtClientPoint).toHaveBeenLastCalledWith(11, 21, "video");
+    expect(dragDrop.previewDropAtClientPoint).toHaveBeenLastCalledWith(11, 21, "video", 1);
     drop.previewAt({ kind: "folder" }, 12, 22);
-    expect(dragDrop.previewDropAtClientPoint).toHaveBeenLastCalledWith(12, 22, "audio");
+    expect(dragDrop.previewDropAtClientPoint).toHaveBeenLastCalledWith(12, 22, "audio", 1);
     drop.clearPreview();
     expect(dragDrop.clearDropPreview).toHaveBeenCalled();
+  });
+
+  // Compacta and Setlist: the song under the pointer takes the files, like a
+  // drop from the file manager there (the timeline is not even looked at).
+  it("drops disk files into the song under the pointer", () => {
+    const { drop, dragDrop } = setup(false, "song-2");
+    expect(drop.dropPathsAt(["D:/Stems/Bass.wav"], 10, 20)).toBe(true);
+    expect(dragDrop.dropPathsIntoSong).toHaveBeenCalledWith("song-2", {
+      kind: "audio",
+      audioPaths: ["D:/Stems/Bass.wav"],
+    });
+    expect(dragDrop.resolveTimelineDropFromClientPoint).not.toHaveBeenCalled();
+    expect(dragDrop.handleNativeExternalTimelineDrop).not.toHaveBeenCalled();
+  });
+
+  it("a disk folder dropped on a song adds its audio to that song", async () => {
+    listLibraryFolderAudio.mockResolvedValue({ paths: ["D:/Oceans/Media/Drums.wav"], truncated: false });
+    importAudioFilesFromPaths.mockResolvedValue({
+      assets: [{ filePath: "audio/Drums.wav", durationSeconds: 12 }],
+      skipped: [],
+    });
+    const { drop, dragDrop } = setup(false, "song-2");
+    expect(
+      drop.dropFolderAt({
+        folderPath: "D:/Oceans",
+        folderName: "Oceans",
+        clientX: 10,
+        clientY: 20,
+        ctrlKey: false,
+        metaKey: false,
+      }),
+    ).toBe(true);
+    await vi.waitFor(() =>
+      expect(dragDrop.addLibraryAssetsToSong).toHaveBeenCalledWith("song-2", [
+        { filePath: "audio/Drums.wav", durationSeconds: 12 },
+      ]),
+    );
+    expect(dragDrop.dropLibraryFolder).not.toHaveBeenCalled();
+  });
+
+  it("the preview counts the dragged files for the song's placeholders", () => {
+    const { drop, dragDrop } = setup(false);
+    drop.previewAt({ kind: "files", paths: ["a.wav", "b.wav"] }, 10, 20);
+    expect(dragDrop.previewDropAtClientPoint).toHaveBeenCalledWith(10, 20, "audio", 2);
   });
 });

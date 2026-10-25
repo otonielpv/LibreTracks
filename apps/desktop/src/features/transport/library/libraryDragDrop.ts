@@ -50,6 +50,7 @@ import {
   skippedImportsMessage,
 } from "./importPipeline";
 import { placeLibraryFolderOnTimeline } from "./libraryFolderDrop";
+import { dropPathsIntoSong as dropPathsIntoSongWith } from "./songPathDrop";
 import {
   divertVideoPaths,
   routeCompactDroppedVideos,
@@ -1940,6 +1941,13 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     handleDroppedAudioPaths(classification.audioPaths, dropSeconds);
   }
 
+  function dropPathsIntoSong(
+    regionId: string | null,
+    classification: ReturnType<typeof classifyDroppedPaths>,
+  ): boolean {
+    return dropPathsIntoSongWith(deps(), regionId, classification, reportSkippedImports);
+  }
+
   function handleNativeFileDragOver(args: {
     paths?: string[];
     position: { x: number; y: number };
@@ -2082,7 +2090,21 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
    * as files dragged in from the OS file manager, since they drop the same
    * way. Clears it and returns false when the point is off the timeline.
    */
-  function previewDropAtClientPoint(clientX: number, clientY: number, kind: ExternalDropKind): boolean {
+  function previewDropAtClientPoint(
+    clientX: number,
+    clientY: number,
+    kind: ExternalDropKind,
+    count = 1,
+  ): boolean {
+    const songHit = resolveCompactRegionAtPoint(clientX, clientY);
+    if (songHit.hit) {
+      deps().setExternalDropPreview(null);
+      deps().setCompactDragPreview(
+        songHit.regionId ? { targetRegionId: songHit.regionId, count, isPackage: false } : null,
+      );
+      return songHit.regionId !== null;
+    }
+    deps().setCompactDragPreview((current) => (current === null ? current : null));
     const drop = resolveTimelineDropFromClientPoint(clientX, clientY);
     if (!drop.isOverTimeline) {
       deps().setExternalDropPreview(null);
@@ -2102,6 +2124,16 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
 
   function clearDropPreview() {
     deps().setExternalDropPreview(null);
+    deps().setCompactDragPreview((current) => (current === null ? current : null));
+  }
+
+  /** Assets already in the library, into a song (start of the song, new
+   * tracks): what a library drop on a song of Compacta or Setlist does. */
+  function addLibraryAssetsToSong(
+    regionId: string,
+    payload: Array<{ filePath: string; durationSeconds: number }>,
+  ) {
+    deps().handleCompactDropLibraryAssetsIntoSong(regionId, payload);
   }
 
   function handleNativeFileDrop(args: {
@@ -2147,49 +2179,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
         );
         return;
       }
-      if (classification.kind === "audio" && compactHit.regionId) {
-        // Route native paths straight through the same importer the
-        // OS-File handler uses, but without round-tripping through a
-        // synthetic File (which wouldn't carry the .path needed by
-        // resolveNativeAudioImportPayloads under Tauri).
-        const regionId = compactHit.regionId;
-        const region = deps().song?.regions.find((r) => r.id === regionId);
-        if (!region) return;
-        const dropSeconds = region.startSeconds;
-        void deps().runAction(async () => {
-          const payloads = classification.audioPaths.map((path) => ({
-            fileName: path.split(/[\\/]/).pop() ?? path,
-            sourcePath: path,
-          }));
-          const { assets: importedAssets, skipped } =
-            await importAudioFilesFromPaths(payloads);
-          reportSkippedImports(skipped);
-          deps().mergeLibraryAssets(importedAssets);
-          await deps().refreshLibraryState({ preserveAssets: importedAssets });
-          if (importedAssets.length === 0) return;
-          // Auto-organise: drop the freshly imported assets into the
-          // song's Library folder (creating it if needed).
-          await deps().assignAssetsToSongFolder(region.name, importedAssets);
-          const snapshot = await createClipsWithAutoTracks(
-            importedAssets.map((asset) => ({
-              filePath: asset.filePath,
-              timelineStartSeconds: dropSeconds,
-            })),
-          );
-          deps().applyPlaybackSnapshot(snapshot);
-          deps().setStatus(
-            importedAssets.length === 1
-              ? deps().t("transport.status.clipAdded", {
-                  name: importedAssets[0].fileName,
-                })
-              : deps().t("transport.status.clipsAdded", {
-                  count: importedAssets.length,
-                }),
-          );
-        });
-        return;
-      }
-      if (routeCompactDroppedVideos(deps(), classification, deps().song, compactHit.regionId)) return;
+      if (dropPathsIntoSong(compactHit.regionId, classification)) return;
       if (classification.kind === "external") {
         // A Reaper/Ableton project dropped on the compact strip imports as a
         // song appended to the setlist (the drop position has no meaning on the
@@ -2293,6 +2283,8 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     handleDomExternalDropPreviewChange,
     previewDropAtClientPoint,
     clearDropPreview,
+    dropPathsIntoSong,
+    addLibraryAssetsToSong,
   };
 }
 
