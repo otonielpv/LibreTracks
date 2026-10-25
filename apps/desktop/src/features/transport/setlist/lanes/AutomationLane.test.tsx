@@ -109,7 +109,7 @@ function props(song: SongView, menuMock = menus(), overrides: Partial<LanesProps
 const diamond = (container: HTMLElement, id: string) =>
   container.querySelector<HTMLElement>(`[data-lane-cue-id="${id}"]`)!;
 const rowKinds = (container: HTMLElement) =>
-  Array.from(container.querySelectorAll<HTMLElement>(".lt-setlist-lane-row:not(.is-ruler)")).map(
+  Array.from(container.querySelectorAll<HTMLElement>(".lt-setlist-lane-row:not(.is-ruler):not(.is-tempo)")).map(
     (row) => row.querySelector<HTMLElement>("[data-lane-track-id]")?.dataset.laneTrackId ?? row.dataset.laneKind,
   );
 

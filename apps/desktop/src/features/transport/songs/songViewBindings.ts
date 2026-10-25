@@ -155,6 +155,9 @@ export type SongViewBindings = {
   onImportSongPackageFromDialog: () => void;
   /** `.ltpkg` dropped from the OS anywhere over the song strip. */
   onImportSongPackageFromOsFile: (file: File) => void;
+  /** The top bar's tap tempo (tempo/tapTempoHandler): the tempo in force at
+   * the playhead. */
+  onTapTempo: () => void;
 };
 
 /** The settings a live view reads: the jump modes. A network-session guest

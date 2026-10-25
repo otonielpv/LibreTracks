@@ -119,6 +119,7 @@ export function testSetlistProps(song: Partial<SongView> = {}) {
     onSnapshotApplied: noop,
     onImportSongPackageFromDialog: noop,
     onImportSongPackageFromOsFile: noop,
+    onTapTempo: noop,
   };
   const performance: PerformanceBindings = {
     song: fullSong,

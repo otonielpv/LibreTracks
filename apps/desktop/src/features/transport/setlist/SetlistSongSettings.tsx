@@ -39,6 +39,7 @@ type SetlistSongSettingsProps = Pick<
   | "onSelectedRegionTransposeChange"
   | "onSelectedRegionWarpToggle"
   | "onSelectedRegionTempoChange"
+  | "onTapTempo"
   | "workspaceEndSeconds"
 > & {
   song: SongView;
@@ -187,6 +188,7 @@ function SetlistSongSettingsComponent({
   onSelectedRegionTransposeChange,
   onSelectedRegionWarpToggle,
   onSelectedRegionTempoChange,
+  onTapTempo,
   workspaceEndSeconds,
 }: SetlistSongSettingsProps) {
   const { t } = useTranslation();
@@ -311,6 +313,17 @@ function SetlistSongSettingsComponent({
           onChange={(bpm) => onSelectedRegionTempoChange(region, bpm)}
         />
         <div className="lt-setlist-settings-row">
+          {/* The top bar's tap tempo: taps set the tempo in force at the
+              playhead, which editing keeps inside this song. */}
+          <button
+            type="button"
+            className="lt-setlist-settings-button lt-setlist-tap-tempo"
+            title={t("setlistView.tempo.tapTitle")}
+            onClick={onTapTempo}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">touch_app</span>
+            {t("setlistView.tempo.tap")}
+          </button>
           <ActionButton action={entry("transport.menu.changeRegionWarpSourceBpm")} />
         </div>
       </SettingsSection>

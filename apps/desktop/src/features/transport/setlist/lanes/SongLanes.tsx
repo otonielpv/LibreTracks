@@ -43,6 +43,7 @@ import { computeSongTrackContent } from "../songTrackContent";
 import type { SetlistLayoutClass } from "../useSetlistLayout";
 import { audioLaneType } from "./AudioLane";
 import { AutomationLane } from "./AutomationLane";
+import { TempoLane } from "./TempoLane";
 import { midiLaneType } from "./MidiLane";
 import { videoLaneType } from "./VideoLane";
 import { classifyDroppedPaths } from "../../library/dragDrop";
@@ -389,6 +390,23 @@ function SongLanesComponent({
         <span className="material-symbols-outlined" aria-hidden="true">my_location</span>
         {t("setlistView.lanes.goToPlayhead")}
       </button>
+      <button
+        type="button"
+        className="lt-setlist-settings-button"
+        title={t("setlistView.tempo.addTempoTitle")}
+        onClick={() => void menus.changeTimelineBpmAt(scale.clampSeconds(positionSecondsRef.current))}
+      >
+        <span className="material-symbols-outlined" aria-hidden="true">speed</span>
+        {t("setlistView.tempo.addTempo")}
+      </button>
+      <button
+        type="button"
+        className="lt-setlist-settings-button"
+        title={t("setlistView.tempo.addMeterTitle")}
+        onClick={() => void menus.createTimeSignatureMarkerAt(scale.clampSeconds(positionSecondsRef.current))}
+      >
+        {t("setlistView.tempo.addMeter")}
+      </button>
       {song.automationTrack ? (
         <button type="button" className="lt-setlist-settings-button" title={t("setlistView.automation.addAtSectionTitle")} onClick={addCueAtSectionStart}>
           <span className="material-symbols-outlined" aria-hidden="true">bolt</span>
@@ -510,6 +528,7 @@ function SongLanesComponent({
             ))}
           </div>
         </div>
+        <TempoLane song={song} region={region} scale={scale} menus={menus} />
         {rows.length === 0 && !automationRow ? <p className="lt-setlist-tracks-empty">{t("setlistView.lanes.empty")}</p> : null}
         {automationIndex === 0 ? automationRow : null}
         {rows.map(({ track, type }, index) => (

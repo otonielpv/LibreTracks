@@ -141,6 +141,7 @@ function SetlistViewComponent({
   onSnapshotApplied,
   onImportSongPackageFromDialog,
   onImportSongPackageFromOsFile,
+  onTapTempo,
 }: SetlistViewProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLElement | null>(null);
@@ -271,6 +272,15 @@ function SetlistViewComponent({
                   onSelectedRegionTransposeChange={onSelectedRegionTransposeChange}
                   onSelectedRegionWarpToggle={onSelectedRegionWarpToggle}
                   onSelectedRegionTempoChange={onSelectedRegionTempoChange}
+                  onTapTempo={() => {
+                    // Taps set the tempo at the playhead: bring it into this
+                    // song first, or another song's tempo would change.
+                    const position = performance.positionSecondsRef.current;
+                    if (position < shownRegion.startSeconds || position >= shownRegion.endSeconds) {
+                      performance.onSeek(shownRegion.startSeconds);
+                    }
+                    onTapTempo();
+                  }}
                   workspaceEndSeconds={workspaceEndSeconds}
                 />
               ) : null,

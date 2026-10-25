@@ -2698,6 +2698,17 @@ const es = {
       atSection: "Al inicio de la sección",
       trackTitle: "Pista de vídeo {{name}}",
     },
+    tempo: {
+      lane: "Tempo",
+      markerAria: "Marca de tempo {{label}}",
+      meterAria: "Cambio de compás {{signature}}",
+      addTempo: "+ Tempo",
+      addTempoTitle: "Nueva marca de tempo en el playhead",
+      addMeter: "+ Compás",
+      addMeterTitle: "Nuevo cambio de compás en el playhead",
+      tap: "Tap",
+      tapTitle: "Toca al ritmo para fijar el tempo en el playhead",
+    },
     arrangement: {
       list: "Arreglos",
       sectionsCount: "{{count}} secciones",

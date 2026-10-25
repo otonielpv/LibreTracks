@@ -6568,7 +6568,7 @@ export function TransportPanelContent() {
     bpmByRegion, waveformSummaries: waveformCache, onSnapshotApplied: applyPlaybackSnapshot,
     appSettings, auxHandlers: metronomeDeviceHandlers, multiTrackMix,
     onImportSongPackageFromDialog: songViewHandlers.importSongPackageFromDialog,
-    onImportSongPackageFromOsFile: songViewHandlers.importSongPackageFromOsFile,
+    onImportSongPackageFromOsFile: songViewHandlers.importSongPackageFromOsFile, onTapTempo: handleTapTempo,
     selectedTrackIds, onTrackSelect: handleTrackHeaderSelect,
     onTrackDragStart: handleTrackHeaderDragStart,
     selectedRegionId, onSelectRegion: setSelectedRegionId,

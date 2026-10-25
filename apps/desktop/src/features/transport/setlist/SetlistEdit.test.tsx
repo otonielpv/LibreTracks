@@ -199,6 +199,32 @@ describe("Edit → Song", () => {
   });
 });
 
+// Step 15, C3: the top bar's tap tempo, kept inside the edited song.
+describe("Edit → Song tap tempo", () => {
+  it("Tap is the DAW's tap tempo; the playhead is first brought into the song", () => {
+    const onTapTempo = vi.fn();
+    const base = props({ onTapTempo });
+    const onSeek = vi.fn();
+    const positionSecondsRef = { current: 10 };
+    render(
+      <SetlistView
+        {...base}
+        performance={{ ...base.performance, onSeek, positionSecondsRef }}
+        layoutClass="wide"
+      />,
+    );
+    enterEdit();
+    fireEvent.click(screen.getByRole("button", { name: /setlistView.tempo.tap$/ }));
+    // The playhead (10 s) is in Alfa, the edited song is Beta (64 s).
+    expect(onSeek).toHaveBeenCalledWith(64);
+    expect(onTapTempo).toHaveBeenCalledTimes(1);
+    positionSecondsRef.current = 70;
+    fireEvent.click(screen.getByRole("button", { name: /setlistView.tempo.tap$/ }));
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    expect(onTapTempo).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("Edit → Song bounds", () => {
   it("an end typed before the start is pushed back like dragging the edge in the DAW", () => {
     const onResizeSong = vi.fn();

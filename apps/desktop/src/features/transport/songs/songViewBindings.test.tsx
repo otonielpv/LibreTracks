@@ -132,6 +132,7 @@ const stableFields = {
   onSnapshotApplied: noop,
   onImportSongPackageFromDialog: noop,
   onImportSongPackageFromOsFile: noop,
+  onTapTempo: noop,
 } satisfies SongViewBindings;
 
 /** Re-renders itself on demand, building a NEW bindings object each time

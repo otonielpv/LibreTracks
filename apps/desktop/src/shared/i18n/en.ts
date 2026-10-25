@@ -2667,6 +2667,17 @@ const en = {
       atSection: "At the section start",
       trackTitle: "Video track {{name}}",
     },
+    tempo: {
+      lane: "Tempo",
+      markerAria: "Tempo marker {{label}}",
+      meterAria: "Meter change {{signature}}",
+      addTempo: "+ Tempo",
+      addTempoTitle: "New tempo marker at the playhead",
+      addMeter: "+ Meter",
+      addMeterTitle: "New meter change at the playhead",
+      tap: "Tap",
+      tapTitle: "Tap along to set the tempo at the playhead",
+    },
     arrangement: {
       list: "Arrangements",
       sectionsCount: "{{count}} sections",

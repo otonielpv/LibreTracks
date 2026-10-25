@@ -3240,3 +3240,65 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
 html.lt-mobile .lt-setlist-video-clip.is-selected .lt-setlist-lane-trim {
   display: block;
 }
+
+/* ---- Tempo y compás (paso 15) ---- */
+
+.lt-setlist-lane-row.is-tempo {
+  background: rgb(87 241 219 / 0.03);
+}
+
+.lt-setlist-tempo-cell {
+  cursor: context-menu;
+}
+
+.lt-setlist-tempo-curve {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.lt-setlist-tempo-curve path {
+  fill: none;
+  stroke: var(--lt-setlist-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.lt-setlist-tempo-marker,
+.lt-setlist-meter-marker {
+  position: absolute;
+  top: 1px;
+  padding: 0 0.3rem;
+  border: 0;
+  border-left: 2px solid var(--lt-setlist-accent);
+  border-radius: 0 0.25rem 0.25rem 0;
+  background: rgb(19 19 19 / 0.85);
+  color: var(--lt-setlist-accent);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lt-setlist-tempo-marker.is-base {
+  border-left-color: var(--lt-setlist-text-muted);
+  color: var(--lt-setlist-text-muted);
+  cursor: default;
+}
+
+.lt-setlist-meter-marker {
+  top: auto;
+  bottom: 1px;
+  border-left-color: #f2c45a;
+  color: #f2c45a;
+}
+
+html.lt-mobile .lt-setlist-tempo-marker,
+html.lt-mobile .lt-setlist-meter-marker {
+  min-height: 1.6rem;
+  line-height: 1.6rem;
+}
