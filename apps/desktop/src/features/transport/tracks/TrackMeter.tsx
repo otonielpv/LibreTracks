@@ -349,7 +349,9 @@ function SongMasterMeterComponent({
       source="region"
       id={regionId}
       orientation={orientation}
-      className={`lt-track-meter lt-song-master-meter ${className}`.trim()}
+      // lt-song-master-meter is the horizontal in-slot look (full width, no
+      // flex). On a vertical strip it squeezed the fader next to it to 0 px.
+      className={`lt-track-meter${orientation === "horizontal" ? " lt-song-master-meter" : ""} ${className}`.trim()}
     />
   );
 }

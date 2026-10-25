@@ -319,7 +319,7 @@ function SetlistSongSettingsComponent({
         <Field label={t("setlistView.mixer.master")}>
           <input
             type="range"
-            className="lt-fader is-master"
+            className="lt-fader is-volume lt-setlist-master-fader"
             min={0}
             max={2}
             step={0.01}

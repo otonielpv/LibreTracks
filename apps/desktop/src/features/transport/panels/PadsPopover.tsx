@@ -92,6 +92,9 @@ type PadsControlsProps = {
   onVolumeDraftChange: (volume: number) => void;
   onCommitVolume: (volume: number) => void;
   onOpenManager: () => void;
+  /** "panel": the Setlist console's Pads tab, three columns that fill it.
+   * Default: the DAW popover's single column. */
+  layout?: "popover" | "panel";
 };
 
 /** The pad controls without the popover around them: the DAW's popover
@@ -106,6 +109,7 @@ export function PadsControls({
   onVolumeDraftChange,
   onCommitVolume,
   onOpenManager,
+  layout = "popover",
 }: PadsControlsProps) {
   const { t } = useTranslation();
   // A pad counts as usable in the picker/grid once it has at least one key. User
@@ -129,6 +133,202 @@ export function PadsControls({
 
   const faderPosition = gainToPosition(settings.padVolume, AUX_FADER_SCALE);
   const volumeLabel = formatGainDb(settings.padVolume);
+
+  // Each control once; the popover stacks them, the panel groups them.
+  const enableToggle = (
+    <label className="lt-pads-toggle">
+      <input
+        type="checkbox"
+        checked={settings.padEnabled}
+        onChange={(event) => onToggleEnabled(event.target.checked)}
+      />
+      <span>{t("pads.enable", { defaultValue: "Activar pad" })}</span>
+    </label>
+  );
+  const packField = (
+    <div className="lt-pads-field">
+      <span className="lt-pads-field-label">
+        {t("pads.pack", { defaultValue: "Pack" })}
+      </span>
+      <select
+        className="lt-pads-select"
+        value={settings.padId}
+        onChange={(event) => onPadChange({ padId: event.target.value })}
+      >
+        {settings.padId === "" && (
+          <option value="">
+            {t("pads.choosePack", { defaultValue: "Elegir pack…" })}
+          </option>
+        )}
+        {installedPads.map((pad) => (
+          <option key={pad.id} value={pad.id}>
+            {pad.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+  const followToggle = (
+    <label className="lt-pads-toggle lt-pads-follow-toggle">
+      <input
+        type="checkbox"
+        checked={settings.padFollowSongKey}
+        onChange={(event) =>
+          onPadChange({ padFollowSongKey: event.target.checked })
+        }
+      />
+      <span>
+        {t("pads.followSongKey", {
+          defaultValue: "Seguir tonalidad de la canción",
+        })}
+      </span>
+    </label>
+  );
+  const keyField = (
+    <div className="lt-pads-field">
+      <span className="lt-pads-field-label">
+        {t("pads.key", { defaultValue: "Tonalidad" })}
+        {settings.padFollowSongKey && (
+          <span className="lt-pads-follow-hint">
+            {t("pads.followingSong", { defaultValue: "sigue la canción" })}
+          </span>
+        )}
+      </span>
+      <div className="lt-pads-key-grid" role="group">
+        {KEY_LABELS.map((label, index) => {
+          const present = keyPresent(index);
+          return (
+            <button
+              key={label}
+              type="button"
+              className={
+                settings.padKey === index
+                  ? "lt-pads-key is-active"
+                  : present
+                    ? "lt-pads-key"
+                    : "lt-pads-key is-missing"
+              }
+              aria-pressed={settings.padKey === index}
+              // A key is disabled when the selected pad doesn't include it
+              // (chiefly for partial user pads), and while following the
+              // song key (the grid then reflects the tonic read-only).
+              disabled={settings.padFollowSongKey || !present}
+              title={
+                present
+                  ? undefined
+                  : t("pads.keyMissing", {
+                      defaultValue: "Esta tonalidad no está en el pad",
+                    })
+              }
+              onClick={() => onPadChange({ padKey: index })}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      {settings.padFollowSongKey && !keyPresent(settings.padKey) && (
+        <p className="lt-pads-key-missing-hint">
+          {t("pads.followMissing", {
+            defaultValue:
+              "El pad no tiene esta tonalidad de la canción, así que enmudece aquí.",
+          })}
+        </p>
+      )}
+    </div>
+  );
+  const volumeField = (
+    <div className="lt-pads-field">
+      <span className="lt-pads-field-label">
+        {t("pads.volume", { defaultValue: "Volumen" })}
+        <span className="lt-pads-volume-value">{volumeLabel} dB</span>
+      </span>
+      <input
+        type="range"
+        className="lt-pads-fader lt-fader is-volume"
+        min={0}
+        max={1}
+        step={0.001}
+        value={faderPosition}
+        aria-label={t("pads.volume", { defaultValue: "Volumen" })}
+        onChange={(event) =>
+          onVolumeDraftChange(
+            positionToGain(Number(event.target.value), AUX_FADER_SCALE),
+          )
+        }
+        onPointerUp={(event) =>
+          onCommitVolume(
+            positionToGain(
+              Number(event.currentTarget.value),
+              AUX_FADER_SCALE,
+            ),
+          )
+        }
+        onBlur={(event) =>
+          onCommitVolume(
+            positionToGain(
+              Number(event.currentTarget.value),
+              AUX_FADER_SCALE,
+            ),
+          )
+        }
+      />
+    </div>
+  );
+  const fadeInField = (
+    <PadFadeField
+      kind="in"
+      seconds={settings.padFadeInSeconds}
+      onChange={(padFadeInSeconds) => onPadChange({ padFadeInSeconds })}
+      t={t}
+    />
+  );
+  const fadeOutField = (
+    <PadFadeField
+      kind="out"
+      seconds={settings.padFadeOutSeconds}
+      onChange={(padFadeOutSeconds) => onPadChange({ padFadeOutSeconds })}
+      t={t}
+    />
+  );
+  const stopToggle = (
+    <label className="lt-pads-toggle">
+      <input
+        type="checkbox"
+        checked={settings.padStopWithTransport}
+        onChange={(event) =>
+          onPadChange({ padStopWithTransport: event.target.checked })
+        }
+      />
+      <span>
+        {t("pads.stopWithTransport", {
+          defaultValue: "Detener con la reproducción",
+        })}
+      </span>
+    </label>
+  );
+  const outputField = (
+    <div className="lt-pads-field">
+      <span className="lt-pads-field-label">
+        {t("pads.output", { defaultValue: "Salida" })}
+      </span>
+      <AudioRouteCombobox
+        value={settings.padOutput}
+        options={routeOptions}
+        ariaLabel={t("pads.output", { defaultValue: "Salida" })}
+        onChange={(value) => onPadChange({ padOutput: value })}
+      />
+    </div>
+  );
+  const managerButton = (
+    <button
+      type="button"
+      className="lt-pads-manage-btn"
+      onClick={onOpenManager}
+    >
+      {t("pads.managePads", { defaultValue: "Gestor de pads…" })}
+    </button>
+  );
 
   return (
     <>
@@ -154,191 +354,39 @@ export function PadsControls({
           </button>
         </div>
       ) : (
+        layout === "panel" ? (
+          <div className="lt-pads-controls is-panel">
+            <section className="lt-pads-panel-group" aria-label={t("pads.title", { defaultValue: "Pads de ambiente" })}>
+              {enableToggle}
+              {packField}
+              {followToggle}
+              {managerButton}
+            </section>
+            <section className="lt-pads-panel-group is-keys" aria-label={t("pads.key", { defaultValue: "Tonalidad" })}>
+              {keyField}
+            </section>
+            <section className="lt-pads-panel-group" aria-label={t("pads.volume", { defaultValue: "Volumen" })}>
+              {volumeField}
+              {outputField}
+              {fadeInField}
+              {fadeOutField}
+              {stopToggle}
+            </section>
+          </div>
+        ) : (
         <div className="lt-pads-controls">
-          <label className="lt-pads-toggle">
-            <input
-              type="checkbox"
-              checked={settings.padEnabled}
-              onChange={(event) => onToggleEnabled(event.target.checked)}
-            />
-            <span>{t("pads.enable", { defaultValue: "Activar pad" })}</span>
-          </label>
-
-          <div className="lt-pads-field">
-            <span className="lt-pads-field-label">
-              {t("pads.pack", { defaultValue: "Pack" })}
-            </span>
-            <select
-              className="lt-pads-select"
-              value={settings.padId}
-              onChange={(event) => onPadChange({ padId: event.target.value })}
-            >
-              {settings.padId === "" && (
-                <option value="">
-                  {t("pads.choosePack", { defaultValue: "Elegir pack…" })}
-                </option>
-              )}
-              {installedPads.map((pad) => (
-                <option key={pad.id} value={pad.id}>
-                  {pad.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <label className="lt-pads-toggle lt-pads-follow-toggle">
-            <input
-              type="checkbox"
-              checked={settings.padFollowSongKey}
-              onChange={(event) =>
-                onPadChange({ padFollowSongKey: event.target.checked })
-              }
-            />
-            <span>
-              {t("pads.followSongKey", {
-                defaultValue: "Seguir tonalidad de la canción",
-              })}
-            </span>
-          </label>
-
-          <div className="lt-pads-field">
-            <span className="lt-pads-field-label">
-              {t("pads.key", { defaultValue: "Tonalidad" })}
-              {settings.padFollowSongKey && (
-                <span className="lt-pads-follow-hint">
-                  {t("pads.followingSong", { defaultValue: "sigue la canción" })}
-                </span>
-              )}
-            </span>
-            <div className="lt-pads-key-grid" role="group">
-              {KEY_LABELS.map((label, index) => {
-                const present = keyPresent(index);
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    className={
-                      settings.padKey === index
-                        ? "lt-pads-key is-active"
-                        : present
-                          ? "lt-pads-key"
-                          : "lt-pads-key is-missing"
-                    }
-                    aria-pressed={settings.padKey === index}
-                    // A key is disabled when the selected pad doesn't include it
-                    // (chiefly for partial user pads), and while following the
-                    // song key (the grid then reflects the tonic read-only).
-                    disabled={settings.padFollowSongKey || !present}
-                    title={
-                      present
-                        ? undefined
-                        : t("pads.keyMissing", {
-                            defaultValue: "Esta tonalidad no está en el pad",
-                          })
-                    }
-                    onClick={() => onPadChange({ padKey: index })}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-            {settings.padFollowSongKey && !keyPresent(settings.padKey) && (
-              <p className="lt-pads-key-missing-hint">
-                {t("pads.followMissing", {
-                  defaultValue:
-                    "El pad no tiene esta tonalidad de la canción, así que enmudece aquí.",
-                })}
-              </p>
-            )}
-          </div>
-
-          <div className="lt-pads-field">
-            <span className="lt-pads-field-label">
-              {t("pads.volume", { defaultValue: "Volumen" })}
-              <span className="lt-pads-volume-value">{volumeLabel} dB</span>
-            </span>
-            <input
-              type="range"
-              className="lt-pads-fader lt-fader is-volume"
-              min={0}
-              max={1}
-              step={0.001}
-              value={faderPosition}
-              aria-label={t("pads.volume", { defaultValue: "Volumen" })}
-              onChange={(event) =>
-                onVolumeDraftChange(
-                  positionToGain(Number(event.target.value), AUX_FADER_SCALE),
-                )
-              }
-              onPointerUp={(event) =>
-                onCommitVolume(
-                  positionToGain(
-                    Number(event.currentTarget.value),
-                    AUX_FADER_SCALE,
-                  ),
-                )
-              }
-              onBlur={(event) =>
-                onCommitVolume(
-                  positionToGain(
-                    Number(event.currentTarget.value),
-                    AUX_FADER_SCALE,
-                  ),
-                )
-              }
-            />
-          </div>
-
-          <PadFadeField
-            kind="in"
-            seconds={settings.padFadeInSeconds}
-            onChange={(padFadeInSeconds) => onPadChange({ padFadeInSeconds })}
-            t={t}
-          />
-
-          <PadFadeField
-            kind="out"
-            seconds={settings.padFadeOutSeconds}
-            onChange={(padFadeOutSeconds) => onPadChange({ padFadeOutSeconds })}
-            t={t}
-          />
-
-          <label className="lt-pads-toggle">
-            <input
-              type="checkbox"
-              checked={settings.padStopWithTransport}
-              onChange={(event) =>
-                onPadChange({ padStopWithTransport: event.target.checked })
-              }
-            />
-            <span>
-              {t("pads.stopWithTransport", {
-                defaultValue: "Detener con la reproducción",
-              })}
-            </span>
-          </label>
-
-          <div className="lt-pads-field">
-            <span className="lt-pads-field-label">
-              {t("pads.output", { defaultValue: "Salida" })}
-            </span>
-            <AudioRouteCombobox
-              value={settings.padOutput}
-              options={routeOptions}
-              ariaLabel={t("pads.output", { defaultValue: "Salida" })}
-              onChange={(value) => onPadChange({ padOutput: value })}
-            />
-          </div>
-
-          <button
-            type="button"
-            className="lt-pads-manage-btn"
-            onClick={onOpenManager}
-          >
-            {t("pads.managePads", { defaultValue: "Gestor de pads…" })}
-          </button>
+          {enableToggle}
+          {packField}
+          {followToggle}
+          {keyField}
+          {volumeField}
+          {fadeInField}
+          {fadeOutField}
+          {stopToggle}
+          {outputField}
+          {managerButton}
         </div>
+        )
       )}
     </>
   );

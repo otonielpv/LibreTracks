@@ -208,6 +208,25 @@ describe("SetlistSongRow reorder", () => {
     });
     expect(props.onReorderSong).toHaveBeenCalledWith("a", 2);
   });
+
+  it("dragging the card itself with the mouse reorders, like Compacta's song headers", () => {
+    const props = rowProps();
+    const { container } = render(<SetlistSongRow {...props} />);
+    container
+      .querySelectorAll<HTMLElement>(`[${SONG_REORDER_ID_ATTRIBUTE}]`)
+      .forEach((element, index) => {
+        element.getBoundingClientRect = () =>
+          ({ left: index * 110, top: 0, width: 100, height: 40, right: index * 110 + 100, bottom: 40 }) as DOMRect;
+      });
+    const mouse = { pointerId: 5, pointerType: "mouse", button: 0 };
+    act(() => {
+      fireEvent.pointerDown(tile(container, "c"), { ...mouse, clientX: 250 });
+      fireEvent.pointerMove(window, { ...mouse, clientX: 120 });
+      fireEvent.pointerMove(window, { ...mouse, clientX: 20 });
+      fireEvent.pointerUp(window, { ...mouse, clientX: 20 });
+    });
+    expect(props.onReorderSong).toHaveBeenCalledWith("c", 0);
+  });
 });
 
 describe("SetlistSongRow rendering cost", () => {

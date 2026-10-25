@@ -741,13 +741,11 @@ html.lt-mobile .lt-setlist-add-song-button {
 
 
 
-.lt-setlist-console.is-bar 
 .lt-setlist-mixer.is-collapsed {
   flex-direction: row;
   align-items: stretch;
 }
 
-.lt-setlist-mixer.is-collapsed 
 .lt-setlist-mixer-panel {
   flex: 1 1 auto;
   min-height: 0;
@@ -762,8 +760,6 @@ html.lt-mobile .lt-setlist-add-song-button {
   min-width: 0;
 }
 
-.lt-setlist-mixer.is-short 
-.lt-setlist-mixer.is-short 
 /* ---- Modo Edición y ajustes de canción (paso 07) ---- */
 
 .lt-setlist-zone.is-songs > .lt-setlist-edit-button {
@@ -1829,40 +1825,176 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   pointer-events: auto;
 }
 
-/* Pads: ocupa el panel, en columnas, en vez de la columna del popover. */
+/* ---- Tercera ronda (2026-10-25) ---- */
+
+/* Pads: tres columnas (sonido, tonalidad, mezcla) que llenan el panel. */
 .lt-setlist-mixer-panel.is-pads {
-  display: block;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  padding: 0.5rem 0.75rem;
+  padding: 0.5rem 0.25rem;
+  font-size: 0.95rem;
 }
 
-.lt-setlist-mixer-panel.is-pads .lt-pads-controls {
+.lt-pads-controls.is-panel {
+  flex: 1 1 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-  gap: 0.75rem 1.5rem;
-  align-items: start;
+  grid-template-columns: minmax(14rem, 1fr) minmax(18rem, 1.6fr) minmax(14rem, 1fr);
+  gap: 0.75rem;
+  align-items: stretch;
+  min-height: 100%;
 }
 
-.lt-setlist-mixer-panel.is-pads .lt-pads-field:has(.lt-pads-key-grid) {
-  grid-column: span 2;
+.lt-pads-panel-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.6rem;
+  background: var(--lt-setlist-surface-raised);
 }
 
-.lt-setlist-mixer-panel.is-pads .lt-pads-key-grid {
-  grid-template-columns: repeat(12, minmax(2.25rem, 1fr));
+.lt-pads-controls.is-panel .lt-pads-toggle,
+.lt-pads-controls.is-panel .lt-pads-field-label {
+  font-size: 0.92rem;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
-.lt-setlist-mixer-panel.is-pads .lt-pads-key {
+.lt-pads-controls.is-panel .lt-pads-toggle input {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.lt-pads-controls.is-panel .lt-pads-select,
+.lt-pads-controls.is-panel .lt-audio-route-combobox,
+.lt-pads-controls.is-panel .lt-pads-manage-btn {
   min-height: 2.5rem;
+  font-size: 0.92rem;
 }
 
-.lt-setlist-mixer-panel.is-pads .lt-pads-manage-btn {
-  justify-self: start;
+.lt-pads-controls.is-panel .lt-pads-manage-btn {
+  margin-top: auto;
 }
 
-.lt-setlist-mixer.is-short .lt-setlist-mixer-panel.is-pads .lt-pads-field:has(.lt-pads-key-grid) {
-  grid-column: auto;
+.lt-pads-panel-group.is-keys .lt-pads-field {
+  flex: 1 1 auto;
 }
 
-.lt-setlist-mixer.is-short .lt-setlist-mixer-panel.is-pads .lt-pads-key-grid {
-  grid-template-columns: repeat(6, minmax(2.75rem, 1fr));
+.lt-pads-controls.is-panel .lt-pads-key-grid {
+  flex: 1 1 auto;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-auto-rows: minmax(2.75rem, 1fr);
+  gap: 0.4rem;
+}
+
+.lt-pads-controls.is-panel .lt-pads-key {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.lt-pads-controls.is-panel input[type="range"] {
+  width: 100%;
+}
+
+@container (max-width: 46rem) {
+  .lt-pads-controls.is-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .lt-pads-panel-group.is-keys {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+}
+
+@container (max-width: 30rem) {
+  .lt-pads-controls.is-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.lt-setlist-mixer {
+  container-type: inline-size;
+}
+
+/* Botón Editar: una píldora normal en la fila de canciones. */
+.lt-setlist-zone.is-songs > .lt-setlist-edit-button {
+  flex: 0 0 auto;
+  align-self: center;
+  height: 2.5rem;
+  margin: 0 0.6rem 0 0.25rem;
+  white-space: nowrap;
+}
+
+/* Tarjeta de canción: el nombre no se corta (hasta dos líneas) y la
+   tarjeta crece con él. */
+.lt-setlist-song-tile {
+  width: auto;
+  min-width: 13rem;
+  max-width: 22rem;
+}
+
+.lt-setlist-song-tile.is-short {
+  max-width: none;
+}
+
+.lt-setlist-song-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+
+/* Pestañas de Editar: cinco que caben siempre, icono encima del nombre. */
+.lt-setlist-drawer-modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
+  overflow-x: visible;
+}
+
+.lt-setlist-drawer-tab {
+  flex-direction: column;
+  gap: 0.15rem;
+  min-height: 3.25rem;
+  padding: 0.3rem 0.25rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.lt-setlist-drawer-tab .material-symbols-outlined {
+  font-size: 1.3rem;
+}
+
+/* El master del formulario: un fader horizontal que ocupa la fila. */
+.lt-setlist-settings-section .lt-setlist-master-fader {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 8rem;
+}
+
+/* Salto programado: la sección destino parpadea hasta que se cumple. */
+@keyframes lt-setlist-pending-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.lt-setlist-map-block.is-pending {
+  animation: lt-setlist-pending-blink 0.9s ease-in-out infinite;
+  background: rgb(242 196 90 / 0.22);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-setlist-map-block.is-pending {
+    animation: none;
+  }
 }

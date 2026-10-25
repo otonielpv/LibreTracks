@@ -92,6 +92,7 @@ function SetlistPadsPanel({
         onVolumeDraftChange={auxHandlers.handlePadVolumeDraftChange}
         onCommitVolume={auxHandlers.commitPadVolumeDraft}
         onOpenManager={() => setManagerOpen(true)}
+        layout="panel"
       />
       <PadManagerModal
         open={managerOpen}
