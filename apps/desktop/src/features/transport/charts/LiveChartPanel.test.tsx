@@ -292,6 +292,27 @@ describe("LiveChartPanel", () => {
     });
   });
 
+  // Setlist's Edit → Lyrics opens the panel with its editor; Live never asks.
+  it("opens with the chart editor only when asked to (startEditing)", () => {
+    const { unmount } = renderPanel(region(null), { current: 0 });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    unmount();
+    render(
+      <LiveChartPanel
+        song={songView(region(null))}
+        region={region(null)}
+        positionSecondsRef={{ current: 0 }}
+        pendingMarkerId={null}
+        expanded={false}
+        onToggleExpanded={vi.fn()}
+        onClose={vi.fn()}
+        onChartChange={vi.fn(async () => {})}
+        startEditing
+      />,
+    );
+    expect(screen.getByRole("dialog", { name: "liveChart.editorTitle" })).toBeTruthy();
+  });
+
   it("offers import and typing when the song has no lyrics", () => {
     renderPanel(region(null), { current: 0 });
     expect(screen.getByRole("button", { name: "liveChart.importFile" })).toBeTruthy();

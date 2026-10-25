@@ -13,7 +13,9 @@ import { SongOverviewStrip } from "./SongOverviewStrip";
 import { SetlistMixer } from "./SetlistMixer";
 import { MIXER_HEIGHT_VAR, useMixerResize } from "./useMixerResize";
 import type { VideoLaneBindings } from "../video/VideoClipHotspots";
+import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { SectionScrubEditor } from "./SectionScrubEditor";
+import { SetlistLyrics } from "./SetlistLyrics";
 import { SetlistAutomationPanel } from "./SetlistAutomationPanel";
 import { SetlistEditButton, SetlistEditDrawer } from "./SetlistEditDrawer";
 import { SetlistSongSettings } from "./SetlistSongSettings";
@@ -30,12 +32,12 @@ import { createSectionEditHandlers, type SectionEditDeps } from "./sectionEditHa
 import { useTimelineUIStore } from "../uiStore";
 import { resolveSetlistSongId } from "./songMapModel";
 import { SONG_DROP_CLASS, songDropHandlers } from "./songDrop";
-import { useSetlistStore } from "./setlistStore";
+import { requestEditMode, useSetlistStore } from "./setlistStore";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
 import "./setlist.css";
 
 /** "overview" is the song band: the waveform with the sections on it. */
-export type SetlistZone = "songs" | "overview" | "mixer" | "drawer";
+export type SetlistZone = "songs" | "overview" | "mixer" | "drawer" | "lyrics";
 
 export type SetlistViewProps = SongViewBindings & {
   performance: PerformanceBindings;
@@ -150,6 +152,11 @@ function SetlistViewComponent({
   const mixerCollapsed = useSetlistStore((state) => state.mixerCollapsed);
   const shortPane = useSetlistStore((state) => state.shortPane);
   const mixerExpanded = useSetlistStore((state) => state.mixerExpanded);
+  const lyricsOpenSetting = useSetlistStore((state) => state.lyricsOpen);
+  const setLyricsOpen = useSetlistStore((state) => state.setLyricsOpen);
+  // Lyrics ship behind the same flag as Live's.
+  const lyricsOpen = FEATURE_FLAGS.lyrics && lyricsOpenSetting && layout !== "short";
+  const lyricsPane = FEATURE_FLAGS.lyrics && layout === "short" && shortPane === "lyrics";
   const setShortPane = useSetlistStore((state) => state.setShortPane);
   // The song the map, overview and mixer are about (00 §5 "Selección").
   const lastShownRegionIdRef = useRef<string | null>(null);
@@ -345,6 +352,23 @@ function SetlistViewComponent({
                 />
               ) : null,
             },
+            ...(FEATURE_FLAGS.lyrics
+              ? [
+                  {
+                    mode: "lyrics" as const,
+                    icon: "lyrics",
+                    labelKey: "setlistView.edit.modes.lyrics",
+                    content: (
+                      <SetlistLyrics
+                        performance={performance}
+                        region={shownRegion}
+                        onClose={() => void requestEditMode(null)}
+                        startEditing
+                      />
+                    ),
+                  },
+                ]
+              : []),
             {
               mode: "lanes",
               icon: "view_timeline",
@@ -494,7 +518,28 @@ function SetlistViewComponent({
           {t(shortPane === "song" ? "setlistView.pane.mixer" : "setlistView.pane.song")}
         </button>
       ) : null}
+      {FEATURE_FLAGS.lyrics ? (
+        <button
+          type="button"
+          className={`lt-setlist-pane-toggle${lyricsOpen || lyricsPane ? " is-active" : ""}`}
+          aria-pressed={lyricsOpen || lyricsPane}
+          title={t("setlistView.lyrics.toggleTitle")}
+          onClick={() => {
+            if (layout === "short") setShortPane(lyricsPane ? "mixer" : "lyrics");
+            else setLyricsOpen(!lyricsOpenSetting);
+          }}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">lyrics</span>
+          {t("setlistView.lyrics.button")}
+        </button>
+      ) : null}
       <SetlistEditButton />
+    </Zone>
+  );
+  const closeLyrics = () => (layout === "short" ? setShortPane("mixer") : setLyricsOpen(false));
+  const lyrics = (
+    <Zone name="lyrics">
+      <SetlistLyrics performance={performance} region={shownRegion} onClose={closeLyrics} />
     </Zone>
   );
 
@@ -503,6 +548,7 @@ function SetlistViewComponent({
       ref={rootRef}
       className={`lt-setlist-view is-${layout}${editMode ? " is-editing" : ""}${
         mixerCollapsed && layout === "medium" ? " is-mixer-collapsed" : ""
+      }${lyricsOpen ? " has-lyrics" : ""
       }${
         layout === "short" && shortPane === "mixer" && mixerExpanded && editMode === null ? " is-mixer-expanded" : ""
       }`}
@@ -527,7 +573,20 @@ function SetlistViewComponent({
       <>
           {/* Phone, console enlarged: the song row steps aside. */}
           {layout === "short" && shortPane === "mixer" && mixerExpanded && editMode === null ? null : songs}
-          {layout !== "short" || shortPane === "song" ? overview : null}
+          {lyricsPane ? lyrics : null}
+          {layout === "wide" && lyricsOpen ? (
+            // wide: the lyrics beside the band, at its height (the user's
+            // call for Live); the console stays below.
+            <div className="lt-setlist-band-row">
+              {overview}
+              {lyrics}
+            </div>
+          ) : layout === "medium" && lyricsOpen ? (
+            // medium: the lyrics take the band's place.
+            lyrics
+          ) : layout !== "short" || shortPane === "song" ? (
+            overview
+          ) : null}
           {layout !== "short" || shortPane === "mixer" ? <div className="lt-setlist-bottom">{mixer}</div> : null}
           {/* Full-height side panel next to the band and the console. */}
           {drawer}

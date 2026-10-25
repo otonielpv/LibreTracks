@@ -2599,7 +2599,7 @@ const es = {
       title: "Editar",
       heading: "{{name}} · Editar",
       close: "Salir de la edición",
-      modes: { label: "Modos de edición", song: "Canción", sections: "Secciones", arrangement: "Arreglo", tracks: "Pistas", lanes: "Carriles", automation: "Automatismos" },
+      modes: { label: "Modos de edición", song: "Canción", sections: "Secciones", arrangement: "Arreglo", tracks: "Pistas", lanes: "Carriles", automation: "Automatismos", lyrics: "Letra" },
       songSettings: "Ajustes de {{name}}",
       keySection: "Tono",
       key: "Tono original",
@@ -2708,6 +2708,10 @@ const es = {
       addMeterTitle: "Nuevo cambio de compás en el playhead",
       tap: "Tap",
       tapTitle: "Toca al ritmo para fijar el tempo en el playhead",
+    },
+    lyrics: {
+      button: "Letra",
+      toggleTitle: "Mostrar u ocultar la letra y los acordes de la canción",
     },
     arrangement: {
       list: "Arreglos",

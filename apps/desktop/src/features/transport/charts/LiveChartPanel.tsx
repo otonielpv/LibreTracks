@@ -87,6 +87,9 @@ type LiveChartPanelProps = {
    * transpose). Only how the chords are drawn; the song is not touched. */
   extraSemitones?: number;
   accidentals?: AccidentalPreference;
+  /** Open with the chart editor showing (Setlist's Edit → Lyrics). Live
+   * leaves it off. */
+  startEditing?: boolean;
 };
 
 function ChartLineView({
@@ -154,6 +157,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   canEdit = true,
   extraSemitones = 0,
   accidentals = "auto",
+  startEditing = false,
 }: LiveChartPanelProps) {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -168,7 +172,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   const [showChords, setShowChords] = useState(() =>
     readStored(SHOW_CHORDS_KEY, true, (value) => value === "true"),
   );
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(startEditing);
   const [recording, setRecording] = useState<LineRecording | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

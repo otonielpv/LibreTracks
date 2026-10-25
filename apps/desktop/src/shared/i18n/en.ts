@@ -2568,7 +2568,7 @@ const en = {
       title: "Edit",
       heading: "{{name}} · Edit",
       close: "Leave edit mode",
-      modes: { label: "Edit modes", song: "Song", sections: "Sections", arrangement: "Arrangement", tracks: "Tracks", lanes: "Lanes", automation: "Automation" },
+      modes: { label: "Edit modes", song: "Song", sections: "Sections", arrangement: "Arrangement", tracks: "Tracks", lanes: "Lanes", automation: "Automation", lyrics: "Lyrics" },
       songSettings: "{{name}} settings",
       keySection: "Key",
       key: "Original key",
@@ -2677,6 +2677,10 @@ const en = {
       addMeterTitle: "New meter change at the playhead",
       tap: "Tap",
       tapTitle: "Tap along to set the tempo at the playhead",
+    },
+    lyrics: {
+      button: "Lyrics",
+      toggleTitle: "Show or hide the song's lyrics and chords",
     },
     arrangement: {
       list: "Arrangements",

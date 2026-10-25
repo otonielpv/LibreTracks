@@ -3156,9 +3156,12 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   color: #57f1db;
 }
 
-/* Seis modos de Editar en una fila (Automatismos llegó en el paso 12). */
+/* Todos los modos de Editar en una fila, sean seis o siete (Letra con su
+   flag). */
 .lt-setlist-drawer:not(.is-short) .lt-setlist-drawer-modes {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 0.25rem;
 }
 
@@ -3301,4 +3304,43 @@ html.lt-mobile .lt-setlist-tempo-marker,
 html.lt-mobile .lt-setlist-meter-marker {
   min-height: 1.6rem;
   line-height: 1.6rem;
+}
+
+/* ---- Letra (paso 16) ---- */
+
+/* wide: la letra a la derecha de la banda, a su altura; la banda gana un
+   poco de alto mientras está abierta. */
+.lt-setlist-view.is-wide.has-lyrics {
+  grid-template-rows: auto minmax(11rem, 0.9fr) var(--lt-setlist-mixer-height, minmax(14rem, 1.6fr));
+}
+
+.lt-setlist-band-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 34%);
+  gap: var(--lt-setlist-gap);
+  min-height: 0;
+}
+
+.lt-setlist-zone.is-lyrics {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-lyrics {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.lt-setlist-lyrics > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.lt-setlist-drawer-body .lt-setlist-lyrics {
+  height: 100%;
 }

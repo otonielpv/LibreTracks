@@ -4,7 +4,7 @@ import { create } from "zustand";
 export type SetlistBottomTab = "tracks" | "pads";
 /** `short` (phone), like Playback on an iPhone: under the songs, either the
  * console or the song's waveform, never both. */
-export type SetlistShortPane = "mixer" | "song";
+export type SetlistShortPane = "mixer" | "song" | "lyrics";
 /** Which edit drawer is open; `null` = performance (not editing). */
 export type SetlistEditMode =
   | null
@@ -13,7 +13,8 @@ export type SetlistEditMode =
   | "arrangement"
   | "tracks"
   | "lanes"
-  | "automation";
+  | "automation"
+  | "lyrics";
 
 export const LANES_MIN_ZOOM = 1;
 export const LANES_MAX_ZOOM = 16;
@@ -30,6 +31,9 @@ export type SetlistState = {
   /** `short`: the console takes the whole view (the song row hides) so the
    * faders have travel. */
   mixerExpanded: boolean;
+  /** wide/medium: the lyrics panel is shown (beside the band, or instead of
+   * it). The phone uses `shortPane: "lyrics"`. */
+  lyricsOpen: boolean;
   /** Edit → Lanes: 1 fits the song in the width, up to 16. Not the DAW's
    * camera: that one stays where it was. */
   lanesZoom: number;
@@ -45,6 +49,7 @@ export const INITIAL_SETLIST_STATE: SetlistState = {
   mixerCollapsed: false,
   shortPane: "mixer",
   mixerExpanded: false,
+  lyricsOpen: false,
   lanesZoom: 1,
   lanesScrollPx: 0,
 };
@@ -56,6 +61,7 @@ type SetlistActions = {
   setMixerCollapsed: (collapsed: boolean) => void;
   setShortPane: (pane: SetlistShortPane) => void;
   setMixerExpanded: (expanded: boolean) => void;
+  setLyricsOpen: (open: boolean) => void;
   setLanesZoom: (zoom: number) => void;
   setLanesScrollPx: (scrollPx: number) => void;
 };
@@ -92,6 +98,7 @@ export const useSetlistStore = create<SetlistState & SetlistActions>()(
     setMixerCollapsed: (mixerCollapsed) => set({ mixerCollapsed }),
     setShortPane: (shortPane) => set({ shortPane }),
     setMixerExpanded: (mixerExpanded) => set({ mixerExpanded }),
+    setLyricsOpen: (lyricsOpen) => set({ lyricsOpen }),
     setLanesZoom: (lanesZoom) =>
       set({ lanesZoom: Math.max(LANES_MIN_ZOOM, Math.min(LANES_MAX_ZOOM, lanesZoom)) }),
     setLanesScrollPx: (lanesScrollPx) => set({ lanesScrollPx: Math.max(0, lanesScrollPx) }),
