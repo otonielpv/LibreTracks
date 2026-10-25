@@ -334,6 +334,7 @@ beforeEach(async () => {
   useSongStore.setState({ song: null });
   useTimelineUIStore.setState({
     cameraX: 0,
+    returnViewMode: null,
     zoomLevel: TIMELINE_DEFAULT_ZOOM_LEVEL,
     trackHeight: TIMELINE_DEFAULT_TRACK_HEIGHT,
     selectedTrackIds: [],

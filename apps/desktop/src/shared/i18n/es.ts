@@ -2713,6 +2713,12 @@ const es = {
       button: "Letra",
       toggleTitle: "Mostrar u ocultar la letra y los acordes de la canción",
     },
+    daw: {
+      open: "Abrir en la DAW",
+      openTitle: "Abrir esta canción en la DAW, encuadrada",
+      back: "Volver a Setlist",
+      backTitle: "Volver a la vista Setlist con la misma canción",
+    },
     arrangement: {
       list: "Arreglos",
       sectionsCount: "{{count}} secciones",

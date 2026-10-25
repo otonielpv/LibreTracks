@@ -68,6 +68,8 @@ function setup(overrides: Partial<SongViewHandlerDeps> = {}) {
     streamRegionMasterGain: vi.fn(async () => undefined),
     importSongPackageAt: vi.fn(async () => undefined),
     isPlaying: () => false,
+    getLaneViewportWidth: () => 1000,
+    selectRegion: vi.fn(),
     seek: vi.fn(async () => undefined),
     scheduleSongJump: vi.fn(async () => undefined),
     toggleVamp: vi.fn(async () => undefined),

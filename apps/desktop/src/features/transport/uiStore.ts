@@ -177,6 +177,10 @@ type TimelineUIState = {
    */
   areaSelectMode: boolean;
   viewMode: ViewMode;
+  /** Where «‹ Back» in the DAW goes (Setlist's «Open in the DAW»). Any other
+   * change of view clears it. */
+  returnViewMode: ViewMode | null;
+  setReturnViewMode: (mode: ViewMode | null) => void;
   setViewMode: (mode: ViewMode) => void;
   toggleViewMode: () => void;
   toggleViewModeBackward: () => void;
@@ -252,22 +256,24 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     missingMediaOpen: false,
     areaSelectMode: false,
     viewMode: DEFAULT_VIEW_MODE,
+    returnViewMode: null,
+    setReturnViewMode: (returnViewMode) => set({ returnViewMode }),
     setViewMode: (viewMode) => {
       recordViewMode(viewMode);
-      set({ viewMode });
+      set({ viewMode, returnViewMode: null });
     },
     toggleViewMode: () => {
       set((state) => {
         const viewMode = stepViewMode(state.viewMode, 1);
         recordViewMode(viewMode);
-        return { viewMode };
+        return { viewMode, returnViewMode: null };
       });
     },
     toggleViewModeBackward: () => {
       set((state) => {
         const viewMode = stepViewMode(state.viewMode, -1);
         recordViewMode(viewMode);
-        return { viewMode };
+        return { viewMode, returnViewMode: null };
       });
     },
     setCameraX: (cameraX) => {

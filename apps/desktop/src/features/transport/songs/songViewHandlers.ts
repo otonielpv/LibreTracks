@@ -29,6 +29,7 @@ import { resolveNativeAudioImportPayloads } from "../helpers";
 import { isAcceptedDroppedFileName } from "../library/dragDrop";
 import { skippedImportsMessage } from "../library/importPipeline";
 import { resolveFolderSongAnchorSeconds } from "../library/libraryPlacement";
+import { openInDaw as openSongInDaw } from "../setlist/openInDaw";
 import { useTransportStore } from "../store";
 
 /**
@@ -68,6 +69,10 @@ export type SongViewHandlerDeps = {
   /** The library's own «import audio» (system picker; on phones it also
    * places the files at the playhead). */
   importLibraryFromDialog: () => Promise<void>;
+  /** The DAW's last measured lane width (its `laneViewportWidthRef`). */
+  getLaneViewportWidth: () => number;
+  /** The project's song selection. */
+  selectRegion: (regionId: string) => void;
 };
 
 export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
@@ -396,8 +401,14 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
 
   /** Setlist's "Open in the DAW" shortcut. Wired in step 17 of
    * docs/plans/setlist-view; a no-op until then. */
+  /** Setlist's «Open in the DAW»: the song selected and framed there. */
   function openInDaw(regionId: string) {
-    void regionId;
+    const deps = getDeps();
+    openSongInDaw(regionId, {
+      getRegion: findRegion,
+      getLaneViewportWidth: deps.getLaneViewportWidth,
+      selectRegion: deps.selectRegion,
+    });
   }
 
   return {

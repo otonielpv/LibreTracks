@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { memo, useEffect, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { TimelineMenus } from "../menus/timelineMenus";
@@ -91,6 +91,7 @@ function Zone({
  */
 function SetlistViewComponent({
   layoutClass,
+  onOpenInDaw,
   videoLanes,
   menus,
   rulerMarkers,
@@ -238,6 +239,7 @@ function SetlistViewComponent({
         onSeek={performance.onSeek}
         onRulerMenuAt={sectionHandlers.openMenuAt}
         videoLanes={videoLanes}
+        onOpenInDaw={() => onOpenInDaw(shownRegion.id)}
         runAction={runAction}
         onSnapshotApplied={onSnapshotApplied}
       />
@@ -279,6 +281,7 @@ function SetlistViewComponent({
                   onSelectedRegionTransposeChange={onSelectedRegionTransposeChange}
                   onSelectedRegionWarpToggle={onSelectedRegionWarpToggle}
                   onSelectedRegionTempoChange={onSelectedRegionTempoChange}
+                  onOpenInDaw={() => onOpenInDaw(shownRegion.id)}
                   onTapTempo={() => {
                     // Taps set the tempo at the playhead: bring it into this
                     // song first, or another song's tempo would change.
@@ -477,6 +480,19 @@ function SetlistViewComponent({
       ) : null}
     </Zone>
   );
+  // The DAW's song menu, with «Open in the DAW» first (step 17).
+  const openSongMenu = (event: ReactMouseEvent<HTMLElement>, regionId: string) => {
+    const region = regions.find((candidate) => candidate.id === regionId);
+    if (!region || !menus.songRegionContextMenu) {
+      onSongContextMenu(event, regionId);
+      return;
+    }
+    onSelectRegion(regionId);
+    menus.openMenu(event, region.name, [
+      { label: t("setlistView.daw.open"), onSelect: () => onOpenInDaw(regionId) },
+      ...menus.songRegionContextMenu(region),
+    ]);
+  };
   const songs = (
     <Zone name="songs">
       <SetlistSongRow
@@ -495,7 +511,7 @@ function SetlistViewComponent({
         onSelectRegion={onSelectRegion}
         onCueSong={onCueSong}
         onPlaySong={onPlaySong}
-        onSongContextMenu={onSongContextMenu}
+        onSongContextMenu={openSongMenu}
         onReorderSong={onReorderSong}
         onDropOsFilesIntoSong={onDropOsFilesIntoSong}
         onDropLibraryAssetsIntoSong={onDropLibraryAssetsIntoSong}

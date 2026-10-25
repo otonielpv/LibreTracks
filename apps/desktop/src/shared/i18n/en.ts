@@ -2682,6 +2682,12 @@ const en = {
       button: "Lyrics",
       toggleTitle: "Show or hide the song's lyrics and chords",
     },
+    daw: {
+      open: "Open in the DAW",
+      openTitle: "Open this song in the DAW, framed",
+      back: "Back to Setlist",
+      backTitle: "Back to the Setlist view on the same song",
+    },
     arrangement: {
       list: "Arrangements",
       sectionsCount: "{{count}} sections",

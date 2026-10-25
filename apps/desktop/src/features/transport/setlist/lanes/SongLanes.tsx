@@ -77,6 +77,8 @@ type SongLanesProps = {
   laneTypes?: SongLaneType[];
   /** The video feature's lane bindings (useVideoFeature, once per panel). */
   videoLanes?: VideoLaneBindings;
+  /** The same song in the DAW (step 17). */
+  onOpenInDaw?: () => void;
 };
 
 const MIN_TICK_SPACING_PX = 44;
@@ -106,6 +108,7 @@ function SongLanesComponent({
   onSnapshotApplied,
   laneTypes = DEFAULT_LANE_TYPES,
   videoLanes,
+  onOpenInDaw,
 }: SongLanesProps) {
   const { t } = useTranslation();
   useFrameGateWake();
@@ -447,6 +450,12 @@ function SongLanesComponent({
         </button>
       ) : null}
       <span className="lt-setlist-lanes-toolbar-gap" />
+      {onOpenInDaw ? (
+        <button type="button" className="lt-setlist-settings-button" title={t("setlistView.daw.openTitle")} onClick={onOpenInDaw}>
+          <span className="material-symbols-outlined" aria-hidden="true">open_in_new</span>
+          {t("setlistView.daw.open")}
+        </button>
+      ) : null}
       <button type="button" className="lt-setlist-settings-button" disabled={!hasSelection} aria-label={t("setlistView.lanes.split")} title={t("setlistView.lanes.split")} onClick={() => runShortcutAction("edit.splitClip")}>
         <span className="material-symbols-outlined" aria-hidden="true">content_cut</span>
       </button>

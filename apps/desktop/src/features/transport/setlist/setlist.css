@@ -3344,3 +3344,23 @@ html.lt-mobile .lt-setlist-meter-marker {
 .lt-setlist-drawer-body .lt-setlist-lyrics {
   height: 100%;
 }
+
+/* ---- Puente a la DAW (paso 17) ---- */
+
+.lt-return-to-setlist {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  height: 1.9rem;
+  margin-left: 0.4rem;
+  padding: 0 0.6rem 0 0.3rem;
+  border: 1px solid #57f1db;
+  border-radius: 999px;
+  background: rgb(87 241 219 / 0.12);
+  color: #57f1db;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}

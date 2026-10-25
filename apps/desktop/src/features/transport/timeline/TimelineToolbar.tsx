@@ -18,6 +18,7 @@ import type {
 import { ViewModeSwitcher } from "./ViewModeSwitcher";
 import { SongMasterMeter } from "../tracks/TrackMeter";
 import { isMobileApp } from "../desktopApi";
+import { ReturnToSetlistChip } from "../setlist/ReturnToSetlistChip";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { SongGapVampToggle } from "../live/SongGapVampToggle";
 import { RegionTempoControl } from "./RegionTempoControl";
@@ -406,6 +407,7 @@ export function TimelineToolbar({
       <div className="lt-timeline-meta">
         <div className="lt-timeline-controls lt-bottom-controls">
           <ViewModeSwitcher value={viewMode} onChange={onViewModeChange} />
+          <ReturnToSetlistChip />
 
           {viewMode === "compact" ? (
             <button

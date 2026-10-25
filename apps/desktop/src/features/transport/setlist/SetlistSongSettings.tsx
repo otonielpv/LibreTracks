@@ -23,7 +23,7 @@ import { clampRegionResizeEdge, regionResizeBounds } from "../timeline/regionRes
 import type { ContextMenuAction } from "../types";
 import { barSecondsAtFor } from "./songMapModel";
 
-type SetlistSongSettingsProps = Pick<
+type SetlistSongSettingsProps = { onOpenInDaw: () => void } & Pick<
   SongViewBindings,
   | "regions"
   | "bpmByRegion"
@@ -189,6 +189,7 @@ function SetlistSongSettingsComponent({
   onSelectedRegionWarpToggle,
   onSelectedRegionTempoChange,
   onTapTempo,
+  onOpenInDaw,
   workspaceEndSeconds,
 }: SetlistSongSettingsProps) {
   const { t } = useTranslation();
@@ -249,6 +250,15 @@ function SetlistSongSettingsComponent({
       <section className="lt-setlist-settings-section is-plain">
         <div className="lt-setlist-settings-row">
           <ActionButton action={entry("transport.menu.renameSong")} />
+          <button
+            type="button"
+            className="lt-setlist-settings-button"
+            title={t("setlistView.daw.openTitle")}
+            onClick={onOpenInDaw}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">open_in_new</span>
+            {t("setlistView.daw.open")}
+          </button>
         </div>
       </section>
 

@@ -6286,6 +6286,7 @@ export function TransportPanelContent() {
     toggleVamp: toggleTimelineVamp,
     markerPrimaryAction: handleMarkerPrimaryAction,
     importLibraryFromDialog: handleImportLibraryFromDialog,
+    getLaneViewportWidth: () => laneViewportWidthRef.current, selectRegion: setSelectedRegionId,
   };
 
   // Barra tactil de la seleccion (docs/plans/mobile-daw, paso 2). Se instancia
