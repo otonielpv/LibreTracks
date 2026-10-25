@@ -2533,6 +2533,28 @@ const en = {
     overview: {
       label: "Waveform of {{name}}",
     },
+    mixer: {
+      label: "Mixer",
+      tabs: { tracks: "Tracks", click: "Click & guide", pads: "Pads" },
+      click: "Click",
+      guide: "Guide",
+      master: "Master",
+      on: "On",
+      clickToggle: "Turn the click on",
+      guideToggle: "Turn the voice guide on",
+      clickSettings: "Click settings",
+      guideSettings: "Voice guide settings",
+      masterTitle: "Song master: lowers or raises its tracks. It does not affect the click or the voice guide.",
+      masterAria: "{{name}} master",
+      allTracks: "All tracks",
+      scenes: "Scenes",
+      collapse: "Fold the mixer",
+      expand: "Unfold the mixer",
+      resize: "Change the mixer height",
+      sharedTracksHint:
+        "Tracks are shared between songs: if a track is in several songs, its volume changes in all of them.",
+      gotIt: "Got it",
+    },
     tabs: {
       label: "Setlist view sections",
       song: "Song",

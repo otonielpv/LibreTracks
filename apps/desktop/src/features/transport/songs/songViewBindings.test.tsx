@@ -4,6 +4,9 @@ import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { CompactView } from "../compact/CompactView";
+import { DEFAULT_APP_SETTINGS } from "@libretracks/shared/models";
+
+import type { MetronomeDeviceHandlers } from "../settings/metronomeDeviceHandlers";
 import type { SongViewBindings } from "./songViewBindings";
 
 vi.mock("react-i18next", () => ({
@@ -101,6 +104,20 @@ const stableFields = {
   onReorderSong: noop,
   bpmByRegion: {},
   waveformSummaries: {},
+  appSettings: DEFAULT_APP_SETTINGS,
+  auxHandlers: {} as MetronomeDeviceHandlers,
+  metronomeVolumeDraft: 1,
+  onMetronomeOutputChange: noop,
+  midiLearnMode: null,
+  onMidiLearnTarget: noop,
+  multiTrackMix: {
+    setVolume: noop,
+    commitVolume: noop,
+    setPan: noop,
+    commitPan: noop,
+    setAudioTo: noop,
+    toggleTranspose: noop,
+  },
   onSnapshotApplied: noop,
   onImportSongPackageFromDialog: noop,
   onImportSongPackageFromOsFile: noop,

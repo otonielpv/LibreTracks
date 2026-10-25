@@ -1,4 +1,4 @@
-import { memo, useRef, type ReactNode } from "react";
+import { memo, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { TimelineMenus } from "../menus/timelineMenus";
@@ -10,6 +10,8 @@ import type {
 import { SetlistSongRow, type SetlistDragPreview } from "./SetlistSongRow";
 import { SongMap } from "./SongMap";
 import { SongOverviewStrip } from "./SongOverviewStrip";
+import { SetlistMixer } from "./SetlistMixer";
+import { MIXER_HEIGHT_VAR, useMixerResize } from "./useMixerResize";
 import { resolveSetlistSongId } from "./songMapModel";
 import { useSetlistStore, type SetlistShortTab } from "./setlistStore";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
@@ -30,9 +32,17 @@ export type SetlistViewProps = SongViewBindings & {
 };
 
 /** A named, empty slot the later steps fill without stepping on each other. */
-function Zone({ name, children }: { name: SetlistZone; children?: ReactNode }) {
+function Zone({
+  name,
+  children,
+  zoneRef,
+}: {
+  name: SetlistZone;
+  children?: ReactNode;
+  zoneRef?: RefObject<HTMLElement | null>;
+}) {
   return (
-    <section className={`lt-setlist-zone is-${name}`} data-setlist-zone={name}>
+    <section ref={zoneRef} className={`lt-setlist-zone is-${name}`} data-setlist-zone={name}>
       {children}
     </section>
   );
@@ -55,6 +65,24 @@ const SHORT_TABS: Array<{ tab: SetlistShortTab; labelKey: string }> = [
  */
 function SetlistViewComponent({
   layoutClass,
+  tracks,
+  audioRoutingOptions,
+  mixerHandlers,
+  onTrackContextMenu,
+  selectedTrackIds,
+  onTrackSelect,
+  onTrackDragStart,
+  collapsedFolders,
+  onToggleFolder,
+  onMasterGainChange,
+  onMasterGainCommit,
+  appSettings,
+  auxHandlers,
+  metronomeVolumeDraft,
+  onMetronomeOutputChange,
+  midiLearnMode,
+  onMidiLearnTarget,
+  multiTrackMix,
   performance,
   dragPreview,
   regions,
@@ -94,6 +122,46 @@ function SetlistViewComponent({
   lastShownRegionIdRef.current = shownRegionId;
   const shownRegion = regions.find((region) => region.id === shownRegionId) ?? null;
   const drawer = editMode !== null ? <Zone name="drawer" /> : null;
+  const mixerZoneRef = useRef<HTMLElement | null>(null);
+  const mixerHeightPx = useSetlistStore((state) => state.mixerHeightPx);
+  const beginMixerResize = useMixerResize(rootRef, mixerZoneRef);
+  const mixer = (padsOnly: boolean) => (
+    <Zone name="mixer" zoneRef={mixerZoneRef}>
+      {layout === "wide" ? (
+        <div
+          className="lt-setlist-mixer-resize"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={t("setlistView.mixer.resize")}
+          onPointerDown={beginMixerResize}
+        />
+      ) : null}
+      <SetlistMixer
+        song={performance.song}
+        region={shownRegion}
+        layout={layout}
+        padsOnly={padsOnly}
+        tracks={tracks}
+        audioRoutingOptions={audioRoutingOptions}
+        mixerHandlers={mixerHandlers}
+        onTrackContextMenu={onTrackContextMenu}
+        selectedTrackIds={selectedTrackIds}
+        onTrackSelect={onTrackSelect}
+        onTrackDragStart={onTrackDragStart}
+        collapsedFolders={collapsedFolders}
+        onToggleFolder={onToggleFolder}
+        onMasterGainChange={onMasterGainChange}
+        onMasterGainCommit={onMasterGainCommit}
+        appSettings={appSettings}
+        auxHandlers={auxHandlers}
+        metronomeVolumeDraft={metronomeVolumeDraft}
+        onMetronomeOutputChange={onMetronomeOutputChange}
+        midiLearnMode={midiLearnMode}
+        onMidiLearnTarget={onMidiLearnTarget}
+        multiTrackMix={multiTrackMix}
+      />
+    </Zone>
+  );
   const overview = (
     <Zone name="overview">
       {shownRegion ? (
@@ -164,6 +232,11 @@ function SetlistViewComponent({
       className={`lt-setlist-view is-${layout}${editMode ? " is-editing" : ""}`}
       data-setlist-layout={layout}
       aria-label={t("setlistView.title")}
+      style={
+        layout === "wide" && mixerHeightPx !== null
+          ? ({ [MIXER_HEIGHT_VAR]: `${mixerHeightPx}px` } as CSSProperties)
+          : undefined
+      }
     >
       {/* The section menu's «Position…» opens this; in the DAW it lives in
           MobileDawOverlays, which only renders there. */}
@@ -200,7 +273,7 @@ function SetlistViewComponent({
                 {overview}
               </div>
             ) : (
-              <Zone name="mixer" />
+              mixer(shortTab === "pads")
             )}
           </div>
           {drawer}
@@ -213,7 +286,7 @@ function SetlistViewComponent({
             {overview}
           </div>
           <div className="lt-setlist-bottom">
-            <Zone name="mixer" />
+            {mixer(false)}
             {drawer}
           </div>
         </>

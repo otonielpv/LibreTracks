@@ -93,6 +93,13 @@ type CompactViewProps = Omit<
   | "onCommitMarkerPosition"
   | "workspaceEndSeconds"
   | "waveformSummaries"
+  | "appSettings"
+  | "auxHandlers"
+  | "metronomeVolumeDraft"
+  | "onMetronomeOutputChange"
+  | "midiLearnMode"
+  | "onMidiLearnTarget"
+  | "multiTrackMix"
 > & {
   /** Controls the "Solo cancion activa" filter inside CompactMixer.
    * Owned by the project-wide parent so the toggle UI can live in

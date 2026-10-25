@@ -846,6 +846,8 @@ type CompactVerticalFaderProps = {
   onCommit: () => void;
   onDoubleClick: () => void;
   ariaLabel: string;
+  /** Tooltip text for a position; defaults to the track fader's dB. */
+  formatValue?: (position: number) => string;
 };
 
 function CompactVerticalFaderComponent({
@@ -854,6 +856,7 @@ function CompactVerticalFaderComponent({
   onCommit,
   onDoubleClick,
   ariaLabel,
+  formatValue = formatVolume,
 }: CompactVerticalFaderProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
@@ -1004,14 +1007,16 @@ function CompactVerticalFaderComponent({
           className="lt-compact-mixer-fader-tooltip"
           style={{ bottom: `${fillPct}%` }}
         >
-          {formatVolume(value)}
+          {formatValue(value)}
         </div>
       ) : null}
     </div>
   );
 }
 
-const CompactVerticalFader = memo(CompactVerticalFaderComponent);
+/** The console fader, exported for the Setlist console's Click, Guide and
+ * Master strips so every strip of the app shares one fader. */
+export const CompactVerticalFader = memo(CompactVerticalFaderComponent);
 
 function effectiveBool(
   optimistic: boolean | undefined,

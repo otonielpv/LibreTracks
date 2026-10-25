@@ -52,11 +52,8 @@
   flex: 1 1 auto;
 }
 
-/* wide: fila de canciones, mapa, onda y consola; el cajón empuja. */
-.lt-setlist-view.is-wide {
-  grid-template-rows: auto minmax(7rem, 1fr) minmax(12rem, 1.4fr);
-}
-
+/* wide: fila de canciones, mapa, onda y consola (su alto, más abajo); el
+   cajón empuja. */
 .lt-setlist-view.is-wide .lt-setlist-zone.is-drawer {
   flex: 0 0 min(24rem, 32%);
 }
@@ -673,4 +670,216 @@ html.lt-mobile .lt-setlist-map-block {
 .lt-setlist-view.is-medium .lt-setlist-song-band > .lt-setlist-zone.is-map .lt-setlist-map-block,
 .lt-setlist-view.is-medium .lt-setlist-song-band > .lt-setlist-zone.is-map .lt-setlist-map-actions {
   pointer-events: auto;
+}
+
+/* ---- Mezclador (paso 06) ---- */
+
+.lt-setlist-view.is-wide {
+  grid-template-rows: auto minmax(7rem, 1fr) var(--lt-setlist-mixer-height, minmax(12rem, 1.4fr));
+}
+
+.lt-setlist-zone.is-mixer {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-mixer-resize {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 6px;
+  z-index: 2;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.lt-setlist-mixer-resize:hover {
+  background: rgb(87 241 219 / 0.25);
+}
+
+.lt-setlist-mixer {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.4rem;
+}
+
+.lt-setlist-mixer-header {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.lt-setlist-mixer-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-right: auto;
+}
+
+.lt-setlist-mixer .lt-setlist-tab {
+  min-height: 2rem;
+}
+
+.lt-setlist-mixer-action,
+.lt-setlist-mixer-fold {
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 999px;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lt-setlist-mixer-action.is-active {
+  border-color: var(--lt-setlist-accent);
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-mixer-fold {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.4rem;
+}
+
+.lt-setlist-mixer-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.4rem;
+  background: rgb(242 196 90 / 0.12);
+  color: #f2d68a;
+  font-size: 0.8rem;
+}
+
+.lt-setlist-console {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 0.35rem;
+}
+
+.lt-setlist-console-tracks {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.lt-setlist-console-tracks > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lt-setlist-console-aux {
+  display: flex;
+  gap: 0.25rem;
+  padding-left: 0.35rem;
+  border-left: 1px solid var(--lt-setlist-border);
+}
+
+.lt-setlist-console-strip {
+  flex: 0 0 auto;
+  width: 4.5rem;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.2rem;
+  border-radius: 0.4rem;
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-console-strip.is-master {
+  width: 6rem;
+  border: 1px solid var(--lt-setlist-accent);
+}
+
+.lt-setlist-console-strip-name {
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.lt-setlist-console-strip-toggles {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.lt-setlist-console-toggle {
+  min-width: 1.9rem;
+  min-height: 1.6rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--lt-setlist-text-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.lt-setlist-console-toggle.is-active {
+  border-color: var(--lt-setlist-accent);
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-console-toggle .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.lt-setlist-console-strip-fader {
+  flex: 1 1 auto;
+  min-height: 4rem;
+  display: flex;
+  gap: 0.2rem;
+}
+
+.lt-setlist-console-strip-value {
+  font-size: 0.68rem;
+  color: var(--lt-setlist-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-setlist-console.is-bar .lt-setlist-console-strip {
+  flex-direction: row;
+  width: auto;
+}
+
+.lt-setlist-mixer.is-collapsed {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.lt-setlist-mixer.is-collapsed .lt-setlist-console-strip-fader {
+  min-height: 2.5rem;
+  min-width: 5rem;
+}
+
+.lt-setlist-mixer-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 1rem;
+  overflow: auto;
+  padding: 0.25rem;
+}
+
+.lt-setlist-mixer-panel > section {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-console-strip {
+  width: 3.75rem;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-console-strip.is-master {
+  width: 4.75rem;
 }

@@ -2564,6 +2564,28 @@ const es = {
     overview: {
       label: "Onda de {{name}}",
     },
+    mixer: {
+      label: "Mezclador",
+      tabs: { tracks: "Pistas", click: "Click y guía", pads: "Pads" },
+      click: "Click",
+      guide: "Guía",
+      master: "Master",
+      on: "On",
+      clickToggle: "Activar click",
+      guideToggle: "Activar voz guía",
+      clickSettings: "Ajustes del click",
+      guideSettings: "Ajustes de la voz guía",
+      masterTitle: "Master de la canción: baja o sube sus pistas. No afecta al click ni a la voz guía.",
+      masterAria: "Master de {{name}}",
+      allTracks: "Todas las pistas",
+      scenes: "Escenas",
+      collapse: "Plegar el mezclador",
+      expand: "Desplegar el mezclador",
+      resize: "Cambiar el alto del mezclador",
+      sharedTracksHint:
+        "Las pistas se comparten entre canciones: si una pista está en varias canciones, su volumen cambia en todas.",
+      gotIt: "Entendido",
+    },
     tabs: {
       label: "Secciones de la vista Setlist",
       song: "Canción",

@@ -20,6 +20,8 @@ export type SetlistState = {
   selectedSectionId: string | null;
   /** Height the user dragged the mixer to; `null` = the layout's default. */
   mixerHeightPx: number | null;
+  /** `medium`: the mixer folded to its bar (Master, Click, Guide). */
+  mixerCollapsed: boolean;
 };
 
 export const INITIAL_SETLIST_STATE: SetlistState = {
@@ -28,6 +30,7 @@ export const INITIAL_SETLIST_STATE: SetlistState = {
   editMode: null,
   selectedSectionId: null,
   mixerHeightPx: null,
+  mixerCollapsed: false,
 };
 
 type SetlistActions = {
@@ -36,6 +39,7 @@ type SetlistActions = {
   setEditMode: (mode: SetlistEditMode) => void;
   setSelectedSectionId: (sectionId: string | null) => void;
   setMixerHeightPx: (heightPx: number | null) => void;
+  setMixerCollapsed: (collapsed: boolean) => void;
 };
 
 /**
@@ -52,5 +56,6 @@ export const useSetlistStore = create<SetlistState & SetlistActions>()(
     setEditMode: (editMode) => set({ editMode }),
     setSelectedSectionId: (selectedSectionId) => set({ selectedSectionId }),
     setMixerHeightPx: (mixerHeightPx) => set({ mixerHeightPx }),
+    setMixerCollapsed: (mixerCollapsed) => set({ mixerCollapsed }),
   }),
 );

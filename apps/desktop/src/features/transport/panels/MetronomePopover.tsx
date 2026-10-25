@@ -33,30 +33,26 @@ type Props = {
   onMidiLearnTarget: (command: string) => void;
 };
 
-function MetronomePopoverImpl({
-  open,
-  anchorRef,
+type ControlsProps = Omit<Props, "open" | "anchorRef" | "onClose">;
+
+/** The metronome's controls without the popover around them: the DAW's
+ * popover wraps them, and the Setlist console shows them inline. */
+export function MetronomeControls({
   settings,
   routeOptions,
   volumeDraft,
   midiLearnMode,
-  onClose,
   onEnabledChange,
   onOutputChange,
   onVolumeDraftChange,
   onCommitVolume,
   onSoundChange,
   onMidiLearnTarget,
-}: Props) {
+}: ControlsProps) {
   const { t } = useTranslation();
 
   return (
-    <PopoverShell
-      open={open}
-      anchorRef={anchorRef}
-      ariaLabel={t("transport.shell.metronome", { defaultValue: "Metrónomo" })}
-      onClose={onClose}
-    >
+    <>
       <header className="lt-pads-popover-header">
         <span className="material-symbols-outlined" aria-hidden="true">
           music_note
@@ -380,9 +376,29 @@ function MetronomePopoverImpl({
                 }
               />
             </div>
-          </>
-        ) : null}
-      </div>
+        </>
+      ) : null}
+    </div>
+    </>
+  );
+}
+
+function MetronomePopoverImpl({
+  open,
+  anchorRef,
+  onClose,
+  ...controls
+}: Props) {
+  const { t } = useTranslation();
+
+  return (
+    <PopoverShell
+      open={open}
+      anchorRef={anchorRef}
+      ariaLabel={t("transport.shell.metronome", { defaultValue: "Metrónomo" })}
+      onClose={onClose}
+    >
+      <MetronomeControls {...controls} />
     </PopoverShell>
   );
 }

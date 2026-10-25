@@ -59,27 +59,55 @@ const KEY_LABELS = [
   "B",
 ];
 
-function PadsPopoverImpl({
-  open,
-  anchorRef,
+/** The pad catalog (installed packs and their keys), loaded on demand. Shared
+ * by the DAW's popover and the Setlist console's Pads tab. */
+export function usePadsCatalog() {
+  const [catalog, setCatalog] = useState<PadCatalogEntry[] | null>(null);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const refreshCatalog = useCallback(async () => {
+    setLoadingCatalog(true);
+    try {
+      const result = await getPadsCatalog();
+      setCatalog(result.pads);
+      setOffline(result.offline);
+    } catch {
+      setCatalog([]);
+      setOffline(true);
+    } finally {
+      setLoadingCatalog(false);
+    }
+  }, []);
+
+  return { catalog, loadingCatalog, offline, refreshCatalog };
+}
+
+type PadsControlsProps = {
+  settings: AppSettings;
+  routeOptions: RouteOption[];
+  catalog: PadCatalogEntry[] | null;
+  loadingCatalog: boolean;
+  onToggleEnabled: (next: boolean) => void;
+  onPadChange: (patch: Partial<AppSettings>) => void;
+  onVolumeDraftChange: (volume: number) => void;
+  onCommitVolume: (volume: number) => void;
+  onOpenManager: () => void;
+};
+
+/** The pad controls without the popover around them: the DAW's popover
+ * wraps them, and the Setlist console's Pads tab shows them inline. */
+export function PadsControls({
   settings,
   routeOptions,
-  onClose,
+  catalog,
+  loadingCatalog,
   onToggleEnabled,
   onPadChange,
   onVolumeDraftChange,
   onCommitVolume,
-}: Props) {
-  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
-  useDismissOnBack(onClose, open);
+  onOpenManager,
+}: PadsControlsProps) {
   const { t } = useTranslation();
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const [anchor, setAnchor] = useState<PopoverAnchor | null>(null);
-  const [catalog, setCatalog] = useState<PadCatalogEntry[] | null>(null);
-  const [loadingCatalog, setLoadingCatalog] = useState(false);
-  const [offline, setOffline] = useState(false);
-  const [managerOpen, setManagerOpen] = useState(false);
-
   // A pad counts as usable in the picker/grid once it has at least one key. User
   // pads may be partial; the key grid disables the tonalities they lack.
   const usablePads = useMemo(
@@ -99,128 +127,11 @@ function PadsPopoverImpl({
     [activePad],
   );
 
-  const refreshCatalog = useCallback(async () => {
-    setLoadingCatalog(true);
-    try {
-      const result = await getPadsCatalog();
-      setCatalog(result.pads);
-      setOffline(result.offline);
-    } catch {
-      setCatalog([]);
-      setOffline(true);
-    } finally {
-      setLoadingCatalog(false);
-    }
-  }, []);
-
-  // Anchor the portalled panel under the trigger; reposition on scroll/resize.
-  // The pads trigger sits far right in the topbar, so clamp the left edge to
-  // keep the panel within the viewport instead of clipping off the right side.
-  const updateAnchor = useCallback(() => {
-    const rect = anchorRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const width = panelRef.current?.offsetWidth ?? 300;
-    const height = panelRef.current?.scrollHeight ?? 520;
-    setAnchor(
-      calculatePopoverAnchor(
-        rect,
-        width,
-        height,
-        window.innerWidth,
-        window.innerHeight,
-      ),
-    );
-  }, [anchorRef]);
-
-  useLayoutEffect(() => {
-    if (open && anchor) updateAnchor();
-  }, [open, anchor?.placement, updateAnchor]);
-
-  useEffect(() => {
-    if (!open) return;
-    updateAnchor();
-    void refreshCatalog();
-    const handlePointer = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      // The routing combobox portals its listbox to <body>, i.e. OUTSIDE our
-      // panel. Without this guard, clicking a route option counts as an
-      // outside click and closes the popover before the option's click can
-      // commit — so the route never changes. Treat clicks inside any portalled
-      // route dropdown as inside the popover.
-      const el = target instanceof Element ? target : (target as Node).parentElement;
-      if (el?.closest(".lt-audio-route-list, .lt-audio-route-combobox")) {
-        return;
-      }
-      // The trigger is a split control (main toggle + caret). The caret sits
-      // outside anchorRef, so treat OUR OWN split wrapper as "inside" — else
-      // clicking the caret to close would close-then-reopen (a flicker). Only
-      // ours, though: clicking a sibling popover's trigger must still close this
-      // one (otherwise opening metronome/guide leaves pads open).
-      const ownSplit = anchorRef.current?.closest(".lt-topbar-split") ?? null;
-      const clickedSplit = el?.closest(".lt-topbar-split") ?? null;
-      if (clickedSplit && clickedSplit === ownSplit) {
-        return;
-      }
-      if (
-        !panelRef.current?.contains(target) &&
-        !anchorRef.current?.contains(target)
-      ) {
-        onClose();
-      }
-    };
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    const reposition = () => updateAnchor();
-    window.addEventListener("mousedown", handlePointer);
-    window.addEventListener("keydown", handleKey);
-    window.addEventListener("scroll", reposition, true);
-    window.addEventListener("resize", reposition);
-    return () => {
-      window.removeEventListener("mousedown", handlePointer);
-      window.removeEventListener("keydown", handleKey);
-      window.removeEventListener("scroll", reposition, true);
-      window.removeEventListener("resize", reposition);
-    };
-  }, [open, updateAnchor, refreshCatalog, anchorRef, onClose]);
-
-  // Opening the manager closes the popover: the modal is a full-screen overlay,
-  // and leaving the popover (and its portalled route dropdown) mounted on top
-  // would obscure the manager and eat clicks. Downloading, deleting and creating
-  // pads all live in the manager now — the popover only picks/plays a pad.
-  const openManager = useCallback(() => {
-    setManagerOpen(true);
-    onClose();
-  }, [onClose]);
-
   const faderPosition = gainToPosition(settings.padVolume, AUX_FADER_SCALE);
   const volumeLabel = formatGainDb(settings.padVolume);
 
-  // The popover panel (only rendered while open + anchored). The manager modal
-  // below renders regardless, since opening it closes the popover.
-  const body = open && anchor ? (
-    <div
-      ref={panelRef}
-      className="lt-pads-popover"
-      role="dialog"
-      aria-label={t("pads.title", { defaultValue: "Ambient pads" })}
-      data-placement={anchor.placement}
-      style={{
-        position: "fixed",
-        top: `${anchor.top}px`,
-        left: `${anchor.left}px`,
-        maxHeight: `${anchor.maxHeight}px`,
-      }}
-      onClick={(event) => event.stopPropagation()}
-    >
-      <header className="lt-pads-popover-header">
-        <span className="material-symbols-outlined" aria-hidden="true">
-          graphic_eq
-        </span>
-        <h3>{t("pads.title", { defaultValue: "Pads de ambiente" })}</h3>
-      </header>
-
+  return (
+    <>
       {!hasInstalled ? (
         <div className="lt-pads-empty">
           <p className="lt-pads-empty-text">
@@ -237,7 +148,7 @@ function PadsPopoverImpl({
           <button
             type="button"
             className="lt-pads-manage-btn"
-            onClick={openManager}
+            onClick={onOpenManager}
           >
             {t("pads.managePads", { defaultValue: "Gestor de pads…" })}
           </button>
@@ -423,12 +334,151 @@ function PadsPopoverImpl({
           <button
             type="button"
             className="lt-pads-manage-btn"
-            onClick={openManager}
+            onClick={onOpenManager}
           >
             {t("pads.managePads", { defaultValue: "Gestor de pads…" })}
           </button>
         </div>
       )}
+    </>
+  );
+}
+
+function PadsPopoverImpl({
+  open,
+  anchorRef,
+  settings,
+  routeOptions,
+  onClose,
+  onToggleEnabled,
+  onPadChange,
+  onVolumeDraftChange,
+  onCommitVolume,
+}: Props) {
+  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
+  useDismissOnBack(onClose, open);
+  const { t } = useTranslation();
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [anchor, setAnchor] = useState<PopoverAnchor | null>(null);
+  const { catalog, loadingCatalog, refreshCatalog } = usePadsCatalog();
+  const [managerOpen, setManagerOpen] = useState(false);
+
+  // Anchor the portalled panel under the trigger; reposition on scroll/resize.
+  // The pads trigger sits far right in the topbar, so clamp the left edge to
+  // keep the panel within the viewport instead of clipping off the right side.
+  const updateAnchor = useCallback(() => {
+    const rect = anchorRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = panelRef.current?.offsetWidth ?? 300;
+    const height = panelRef.current?.scrollHeight ?? 520;
+    setAnchor(
+      calculatePopoverAnchor(
+        rect,
+        width,
+        height,
+        window.innerWidth,
+        window.innerHeight,
+      ),
+    );
+  }, [anchorRef]);
+
+  useLayoutEffect(() => {
+    if (open && anchor) updateAnchor();
+  }, [open, anchor?.placement, updateAnchor]);
+
+  useEffect(() => {
+    if (!open) return;
+    updateAnchor();
+    void refreshCatalog();
+    const handlePointer = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      // The routing combobox portals its listbox to <body>, i.e. OUTSIDE our
+      // panel. Without this guard, clicking a route option counts as an
+      // outside click and closes the popover before the option's click can
+      // commit — so the route never changes. Treat clicks inside any portalled
+      // route dropdown as inside the popover.
+      const el = target instanceof Element ? target : (target as Node).parentElement;
+      if (el?.closest(".lt-audio-route-list, .lt-audio-route-combobox")) {
+        return;
+      }
+      // The trigger is a split control (main toggle + caret). The caret sits
+      // outside anchorRef, so treat OUR OWN split wrapper as "inside" — else
+      // clicking the caret to close would close-then-reopen (a flicker). Only
+      // ours, though: clicking a sibling popover's trigger must still close this
+      // one (otherwise opening metronome/guide leaves pads open).
+      const ownSplit = anchorRef.current?.closest(".lt-topbar-split") ?? null;
+      const clickedSplit = el?.closest(".lt-topbar-split") ?? null;
+      if (clickedSplit && clickedSplit === ownSplit) {
+        return;
+      }
+      if (
+        !panelRef.current?.contains(target) &&
+        !anchorRef.current?.contains(target)
+      ) {
+        onClose();
+      }
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    const reposition = () => updateAnchor();
+    window.addEventListener("mousedown", handlePointer);
+    window.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      window.removeEventListener("mousedown", handlePointer);
+      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [open, updateAnchor, refreshCatalog, anchorRef, onClose]);
+
+  // Opening the manager closes the popover: the modal is a full-screen overlay,
+  // and leaving the popover (and its portalled route dropdown) mounted on top
+  // would obscure the manager and eat clicks. Downloading, deleting and creating
+  // pads all live in the manager now — the popover only picks/plays a pad.
+  const openManager = useCallback(() => {
+    setManagerOpen(true);
+    onClose();
+  }, [onClose]);
+
+  // The popover panel (only rendered while open + anchored). The manager modal
+  // below renders regardless, since opening it closes the popover.
+  const body = open && anchor ? (
+    <div
+      ref={panelRef}
+      className="lt-pads-popover"
+      role="dialog"
+      aria-label={t("pads.title", { defaultValue: "Ambient pads" })}
+      data-placement={anchor.placement}
+      style={{
+        position: "fixed",
+        top: `${anchor.top}px`,
+        left: `${anchor.left}px`,
+        maxHeight: `${anchor.maxHeight}px`,
+      }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <header className="lt-pads-popover-header">
+        <span className="material-symbols-outlined" aria-hidden="true">
+          graphic_eq
+        </span>
+        <h3>{t("pads.title", { defaultValue: "Pads de ambiente" })}</h3>
+      </header>
+
+      <PadsControls
+        settings={settings}
+        routeOptions={routeOptions}
+        catalog={catalog}
+        loadingCatalog={loadingCatalog}
+        onToggleEnabled={onToggleEnabled}
+        onPadChange={onPadChange}
+        onVolumeDraftChange={onVolumeDraftChange}
+        onCommitVolume={onCommitVolume}
+        onOpenManager={openManager}
+      />
     </div>
   ) : null;
 

@@ -1,0 +1,284 @@
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { SongView, TrackSummary } from "@libretracks/shared/models";
+
+import type { MetronomeDeviceHandlers } from "../settings/metronomeDeviceHandlers";
+import { SetlistView } from "./SetlistView";
+import { INITIAL_SETLIST_STATE, useSetlistStore } from "./setlistStore";
+import { testRegion, testSetlistProps } from "./testBindings";
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: Record<string, unknown>) =>
+      options?.name ? `${key}:${String(options.name)}` : key,
+  }),
+}));
+
+vi.mock("../tracks/TrackMeter", () => ({
+  SongMasterMeter: () => null,
+  TrackMeter: () => null,
+}));
+
+vi.mock("../structure/ArrangementBadge", () => ({
+  ArrangementBadge: () => null,
+}));
+
+vi.mock("../desktopApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../desktopApi")>()),
+  isMobileApp: false,
+  getPadsCatalog: vi.fn(async () => ({
+    offline: false,
+    pads: [{ id: "warm", name: "Warm", keysPresent: 12, keysPresentMask: new Array(12).fill(true) }],
+  })),
+}));
+
+const track = (id: string, name: string): TrackSummary =>
+  ({
+    id,
+    name,
+    kind: "audio",
+    depth: 0,
+    hasChildren: false,
+    volume: 1,
+    pan: 0,
+    muted: false,
+    solo: false,
+    audioTo: "master",
+    transposeEnabled: true,
+  }) as TrackSummary;
+
+const regions = [
+  testRegion("a", { name: "Alfa", startSeconds: 0, endSeconds: 100 }),
+  testRegion("b", { name: "Beta", startSeconds: 100, endSeconds: 200 }),
+];
+const tracks = [track("shared", "Batería"), track("onlyA", "Voz A"), track("onlyB", "Voz B")];
+const clip = (trackId: string, timelineStartSeconds: number) => ({
+  id: `${trackId}-${timelineStartSeconds}`,
+  trackId,
+  timelineStartSeconds,
+  durationSeconds: 50,
+});
+const songParts = {
+  regions,
+  tracks,
+  clips: [clip("shared", 0), clip("onlyA", 10), clip("shared", 110), clip("onlyB", 120)],
+} as unknown as Partial<SongView>;
+
+function auxHandlers() {
+  return {
+    handleMetronomeVolumeDraftChange: vi.fn(),
+    commitMetronomeVolumeDraft: vi.fn(),
+    handleMetronomeEnabledChange: vi.fn(),
+    handleMetronomeSoundChange: vi.fn(),
+    handleVoiceGuideChange: vi.fn(),
+    handleVoiceGuideVolumeDraftChange: vi.fn(),
+    commitVoiceGuideVolumeDraft: vi.fn(),
+    handleVoiceGuideEnabledChange: vi.fn(),
+    handlePadChange: vi.fn(),
+    handlePadVolumeDraftChange: vi.fn(),
+    commitPadVolumeDraft: vi.fn(),
+    handlePadEnabledChange: vi.fn(),
+  } as unknown as MetronomeDeviceHandlers;
+}
+
+function props(overrides: Record<string, unknown> = {}) {
+  const base = testSetlistProps(songParts);
+  return { ...base, tracks, auxHandlers: auxHandlers(), ...overrides };
+}
+
+const stripNames = (container: HTMLElement) =>
+  Array.from(container.querySelectorAll(".lt-compact-mixer-strip-name-text")).map(
+    (element) => element.textContent,
+  );
+
+const originalPointerEvent = window.PointerEvent;
+beforeAll(() => {
+  class TestPointerEvent extends MouseEvent {
+    readonly pointerId: number;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+    }
+  }
+  Object.defineProperty(window, "PointerEvent", { configurable: true, value: TestPointerEvent });
+});
+afterAll(() => {
+  Object.defineProperty(window, "PointerEvent", { configurable: true, value: originalPointerEvent });
+});
+
+beforeEach(() => {
+  useSetlistStore.setState(INITIAL_SETLIST_STATE);
+  window.localStorage.clear();
+});
+afterEach(() => vi.restoreAllMocks());
+
+describe("Setlist mixer tracks", () => {
+  it("shows the selected song's tracks and follows the selection, not the playhead", () => {
+    const base = props({ selectedRegionId: "a", activeRegionId: "a" });
+    const { container, rerender } = render(<SetlistView {...base} layoutClass="wide" />);
+    expect(stripNames(container)).toEqual(["Batería", "Voz A"]);
+
+    // The playhead crosses into B: the console keeps mixing A.
+    rerender(<SetlistView {...base} activeRegionId="b" layoutClass="wide" />);
+    expect(stripNames(container)).toEqual(["Batería", "Voz A"]);
+
+    rerender(<SetlistView {...base} selectedRegionId="b" activeRegionId="b" layoutClass="wide" />);
+    expect(stripNames(container)).toEqual(["Batería", "Voz B"]);
+  });
+
+  it("«All tracks» lifts the song filter", () => {
+    const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="wide" />);
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.allTracks" }));
+    expect(stripNames(container)).toEqual(["Batería", "Voz A", "Voz B"]);
+  });
+
+  it("a fader drives the DAW's mixer handlers and the strip menu is the DAW's", () => {
+    const base = props({ selectedRegionId: "a" });
+    const onVolumeChange = vi.fn();
+    const onCommitVolume = vi.fn();
+    const onTrackContextMenu = vi.fn();
+    render(
+      <SetlistView
+        {...base}
+        mixerHandlers={{ ...base.mixerHandlers, onVolumeChange, onCommitVolume }}
+        onTrackContextMenu={onTrackContextMenu}
+        layoutClass="wide"
+      />,
+    );
+    const fader = screen.getByRole("slider", { name: "Volume Batería" });
+    fireEvent.keyDown(fader, { key: "ArrowUp" });
+    fireEvent.keyUp(fader, { key: "ArrowUp" });
+    expect(onVolumeChange).toHaveBeenCalledWith("shared", expect.any(Number));
+    expect(onCommitVolume).toHaveBeenCalledWith("shared");
+
+    fireEvent.contextMenu(fader.closest(".lt-compact-mixer-strip")!);
+    expect(onTrackContextMenu).toHaveBeenCalledWith(expect.anything(), "shared");
+  });
+
+  it("with several tracks selected, offers the DAW's selection mix controls", () => {
+    const { container } = render(
+      <SetlistView {...props({ selectedRegionId: "a", selectedTrackIds: ["shared", "onlyA"] })} layoutClass="wide" />,
+    );
+    expect(container.querySelector(".lt-setlist-mixer-selection")).not.toBeNull();
+  });
+});
+
+describe("Setlist console strips", () => {
+  it("ends with Click, Guide and then the song Master", () => {
+    const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="wide" />);
+    const order = Array.from(container.querySelectorAll("[data-console-strip]")).map((element) =>
+      element.getAttribute("data-console-strip"),
+    );
+    expect(order).toEqual(["setlistView.mixer.click", "setlistView.mixer.guide", "setlistView.mixer.master"]);
+    const console = container.querySelector(".lt-setlist-console")!;
+    expect(console.lastElementChild?.getAttribute("data-console-strip")).toBe("setlistView.mixer.master");
+  });
+
+  it("Click and Guide use the handlers of the DAW's popovers", () => {
+    const base = props({ selectedRegionId: "a" });
+    render(<SetlistView {...base} layoutClass="wide" />);
+    const click = screen.getByRole("slider", { name: "transport.settingsModal.metronomeVolume" });
+    fireEvent.keyDown(click, { key: "ArrowDown" });
+    fireEvent.keyUp(click, { key: "ArrowDown" });
+    expect(base.auxHandlers.handleMetronomeVolumeDraftChange).toHaveBeenCalled();
+    expect(base.auxHandlers.commitMetronomeVolumeDraft).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.guideToggle" }));
+    expect(base.auxHandlers.handleVoiceGuideEnabledChange).toHaveBeenCalledWith(true);
+  });
+
+  it("the Master strip drives the region master-gain handlers", () => {
+    const onMasterGainChange = vi.fn();
+    const onMasterGainCommit = vi.fn();
+    render(
+      <SetlistView
+        {...props({ selectedRegionId: "b" })}
+        onMasterGainChange={onMasterGainChange}
+        onMasterGainCommit={onMasterGainCommit}
+        layoutClass="wide"
+      />,
+    );
+    const master = screen.getByRole("slider", { name: "setlistView.mixer.masterAria:Beta" });
+    fireEvent.keyDown(master, { key: "ArrowDown" });
+    fireEvent.keyUp(master, { key: "ArrowDown" });
+    expect(onMasterGainChange).toHaveBeenCalledWith("b", expect.any(Number));
+    expect(onMasterGainCommit).toHaveBeenCalledWith("b");
+  });
+
+  it("the Click/Guide tab shows the DAW popovers' controls", () => {
+    render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="wide" />);
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.clickSettings" }));
+    expect(screen.getByText("transport.settingsModal.metronomeAccentSound")).toBeTruthy();
+  });
+
+  it("the Pads tab shows the pad controls with the catalog", async () => {
+    const base = props({ selectedRegionId: "a" });
+    render(<SetlistView {...base} layoutClass="wide" />);
+    fireEvent.click(screen.getByRole("tab", { name: "setlistView.mixer.tabs.pads" }));
+    const toggle = await screen.findByRole("checkbox", { name: "pads.enable" });
+    fireEvent.click(toggle);
+    expect(base.auxHandlers.handlePadEnabledChange).toHaveBeenCalledWith(true);
+  });
+});
+
+describe("Setlist mixer hint and sizes", () => {
+  it("the shared-tracks hint shows once and is remembered", () => {
+    const { unmount } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="wide" />);
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.gotIt" }));
+    expect(screen.queryByText("setlistView.mixer.sharedTracksHint")).toBeNull();
+    unmount();
+    render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="wide" />);
+    expect(screen.queryByText("setlistView.mixer.sharedTracksHint")).toBeNull();
+  });
+
+  it("survives a localStorage that throws", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="wide" />);
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.gotIt" }));
+    expect(screen.queryByText("setlistView.mixer.sharedTracksHint")).toBeNull();
+  });
+
+  it("wide: the top edge resizes the mixer and the height is committed once", () => {
+    const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="wide" />);
+    const root = container.querySelector<HTMLElement>(".lt-setlist-view")!;
+    const zone = container.querySelector<HTMLElement>("[data-setlist-zone='mixer']")!;
+    root.getBoundingClientRect = () => ({ height: 1000, top: 0, left: 0, width: 1400 }) as DOMRect;
+    zone.getBoundingClientRect = () => ({ height: 300, top: 700, left: 0, width: 1400 }) as DOMRect;
+    const handle = screen.getByRole("separator", { name: "setlistView.mixer.resize" });
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientY: 700 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 600 });
+    expect(root.style.getPropertyValue("--lt-setlist-mixer-height")).toBe("400px");
+    expect(useSetlistStore.getState().mixerHeightPx).toBeNull();
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientY: 100 });
+    // Clamped to 60 % of the view.
+    expect(useSetlistStore.getState().mixerHeightPx).toBe(600);
+  });
+
+  it("medium: the mixer folds to a bar with Click, Guide and Master", () => {
+    const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="medium" />);
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.collapse" }));
+    const mixer = container.querySelector(".lt-setlist-mixer.is-collapsed")!;
+    expect(stripNames(container)).toEqual([]);
+    expect(within(mixer as HTMLElement).getAllByText(/setlistView.mixer.(click|guide|master)$/)).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.expand" }));
+    expect(stripNames(container)).toEqual(["Batería", "Voz A"]);
+  });
+
+  it("short: the mixer lives in the Mix tab and the pads in their own tab", async () => {
+    const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="short" />);
+    expect(stripNames(container)).toEqual([]);
+    fireEvent.click(screen.getByRole("tab", { name: "setlistView.tabs.mix" }));
+    expect(stripNames(container)).toEqual(["Batería", "Voz A"]);
+    expect(screen.queryByRole("tab", { name: "setlistView.mixer.tabs.pads" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "setlistView.tabs.pads" }));
+    expect(await screen.findByRole("checkbox", { name: "pads.enable" })).toBeTruthy();
+  });
+});
+

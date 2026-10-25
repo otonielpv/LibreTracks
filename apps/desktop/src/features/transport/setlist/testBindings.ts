@@ -1,4 +1,6 @@
-import type { SongView } from "@libretracks/shared/models";
+import { DEFAULT_APP_SETTINGS, type SongView } from "@libretracks/shared/models";
+
+import type { MetronomeDeviceHandlers } from "../settings/metronomeDeviceHandlers";
 
 import type { TimelineMenus } from "../menus/timelineMenus";
 import type {
@@ -89,6 +91,20 @@ export function testSetlistProps(song: Partial<SongView> = {}) {
     onReorderSong: noop,
     bpmByRegion: {},
     waveformSummaries: {},
+    appSettings: DEFAULT_APP_SETTINGS,
+    auxHandlers: {} as MetronomeDeviceHandlers,
+    metronomeVolumeDraft: 1,
+    onMetronomeOutputChange: noop,
+    midiLearnMode: null,
+    onMidiLearnTarget: noop,
+    multiTrackMix: {
+      setVolume: noop,
+      commitVolume: noop,
+      setPan: noop,
+      commitPan: noop,
+      setAudioTo: noop,
+      toggleTranspose: noop,
+    },
     onSnapshotApplied: noop,
     onImportSongPackageFromDialog: noop,
     onImportSongPackageFromOsFile: noop,

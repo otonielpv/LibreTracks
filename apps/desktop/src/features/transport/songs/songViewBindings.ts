@@ -12,6 +12,8 @@ import type {
 } from "@libretracks/shared/models";
 
 import type { CompactMixerHandlers } from "../compact/CompactMixer";
+import type { MetronomeDeviceHandlers } from "../settings/metronomeDeviceHandlers";
+import type { MultiTrackMixActions } from "../tracks/MultiTrackMixControls";
 import type { CompactClipEntry } from "../compact/CompactView";
 
 /**
@@ -116,6 +118,19 @@ export type SongViewBindings = {
   waveformSummaries: Record<string, WaveformSummaryDto>;
   /** Effective BPM at each song's start. */
   bpmByRegion: Record<string, number>;
+  /** The app settings (click, guide and pad state for the console). */
+  appSettings: AppSettings;
+  /** The click / guide / pad handlers the DAW's popovers use (one stable
+   * object from settings/metronomeDeviceHandlers). */
+  auxHandlers: MetronomeDeviceHandlers;
+  /** The click's output route (from settings/settingsHandlers). */
+  onMetronomeOutputChange: (value: string) => void;
+  /** The click volume while its fader is being dragged. */
+  metronomeVolumeDraft: number;
+  midiLearnMode: string | null;
+  onMidiLearnTarget: (command: string) => void;
+  /** Mix of the whole track selection, the DAW's (tracks/MultiTrackMixControls). */
+  multiTrackMix: MultiTrackMixActions;
   /** Publishes a snapshot returned by a command the view ran itself. */
   onSnapshotApplied: (snapshot: TransportSnapshot) => void;
   /** `.ltpkg` picker; the package lands as a new song at the end. */

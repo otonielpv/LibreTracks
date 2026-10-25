@@ -29,16 +29,17 @@ type Props = {
   onCommitVolume: (volume: number) => void;
 };
 
-function VoiceGuidePopoverImpl({
-  open,
-  anchorRef,
+type ControlsProps = Omit<Props, "open" | "anchorRef" | "onClose">;
+
+/** The voice guide's controls without the popover around them: the DAW's
+ * popover wraps them, and the Setlist console shows them inline. */
+export function VoiceGuideControls({
   settings,
   routeOptions,
-  onClose,
   onChange,
   onVolumeDraftChange,
   onCommitVolume,
-}: Props) {
+}: ControlsProps) {
   const { t } = useTranslation();
 
   // Voice guide can route to the local monitor; mirror the ordering the old
@@ -55,14 +56,7 @@ function VoiceGuidePopoverImpl({
   );
 
   return (
-    <PopoverShell
-      open={open}
-      anchorRef={anchorRef}
-      ariaLabel={t("transport.settingsModal.voiceGuide", {
-        defaultValue: "Voice guide",
-      })}
-      onClose={onClose}
-    >
+    <>
       <header className="lt-pads-popover-header">
         <span className="material-symbols-outlined" aria-hidden="true">
           campaign
@@ -232,9 +226,31 @@ function VoiceGuidePopoverImpl({
                 }
               />
             </div>
-          </>
-        ) : null}
-      </div>
+        </>
+      ) : null}
+    </div>
+    </>
+  );
+}
+
+function VoiceGuidePopoverImpl({
+  open,
+  anchorRef,
+  onClose,
+  ...controls
+}: Props) {
+  const { t } = useTranslation();
+
+  return (
+    <PopoverShell
+      open={open}
+      anchorRef={anchorRef}
+      ariaLabel={t("transport.settingsModal.voiceGuide", {
+        defaultValue: "Voice guide",
+      })}
+      onClose={onClose}
+    >
+      <VoiceGuideControls {...controls} />
     </PopoverShell>
   );
 }
