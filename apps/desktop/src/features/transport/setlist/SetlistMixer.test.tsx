@@ -250,6 +250,27 @@ describe("Setlist mixer hint and sizes", () => {
     expect(useSetlistStore.getState().mixerHeightPx).toBe(600);
   });
 
+  // The desktop report: the mixer resized, the song row did not.
+  it("wide: the song row's bottom edge resizes it (cards wrap); a double click goes back to automatic", () => {
+    const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="wide" />);
+    const root = container.querySelector<HTMLElement>(".lt-setlist-view")!;
+    const zone = container.querySelector<HTMLElement>("[data-setlist-zone='songs']")!;
+    root.getBoundingClientRect = () => ({ height: 1000, top: 0, left: 0, width: 1400 }) as DOMRect;
+    zone.getBoundingClientRect = () => ({ height: 90, top: 0, left: 0, width: 1400 }) as DOMRect;
+    const handle = screen.getByRole("separator", { name: "setlistView.songs.resize" });
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientY: 90 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 200 });
+    expect(root.style.getPropertyValue("--lt-setlist-songs-height")).toBe("200px");
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 900 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientY: 900 });
+    // Clamped to half the view.
+    expect(useSetlistStore.getState().songsHeightPx).toBe(500);
+    expect(root.classList.contains("has-songs-height")).toBe(true);
+    fireEvent.doubleClick(handle);
+    expect(useSetlistStore.getState().songsHeightPx).toBeNull();
+    expect(root.classList.contains("has-songs-height")).toBe(false);
+  });
+
   it("medium: the mixer folds to a bar with the Master", () => {
     const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="medium" />);
     fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.collapse" }));

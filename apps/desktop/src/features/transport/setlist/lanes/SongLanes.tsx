@@ -24,7 +24,7 @@ import {
 } from "@libretracks/shared/models";
 
 import type { CompactMixerHandlers } from "../../compact/CompactMixer";
-import { isMobileApp, pickLibraryFiles } from "../../desktopApi";
+import { isMobileApp } from "../../desktopApi";
 import {
   cancelGatedFrame,
   markFrameActivity,
@@ -46,9 +46,9 @@ import { AutomationLane } from "./AutomationLane";
 import { TempoLane } from "./TempoLane";
 import { midiLaneType } from "./MidiLane";
 import { videoLaneType } from "./VideoLane";
-import { classifyDroppedPaths } from "../../library/dragDrop";
 import type { VideoLaneBindings } from "../../video/VideoClipHotspots";
 import { useVideoStore } from "../../video/videoStore";
+import { addVideoAt as addVideo } from "../addVideo";
 import { automationRowIndex, sectionAt } from "./automationLaneModel";
 import { createLaneClipHandlers, type LaneClipHandlerDeps } from "./laneClipHandlers";
 import type { SongLaneType } from "./laneTypes";
@@ -294,19 +294,7 @@ function SongLanesComponent({
   // else the song's first one, else a new one. A phone picks from its gallery.
   const canAddVideo = Boolean(videoLanes && !videoLanes.readOnly);
   const addVideoAt = (seconds: number) => {
-    if (!videoLanes) return;
-    const videoTrackIds = tracks.filter((track) => track.kind === "video").map((track) => track.id);
-    const selected = useTimelineUIStore.getState().selectedTrackIds.find((id) => videoTrackIds.includes(id));
-    const placement = { seconds, trackId: selected ?? videoTrackIds[0] ?? null };
-    if (isMobileApp) {
-      videoLanes.handlers.addVideosFromDevice(placement, "gallery");
-      return;
-    }
-    void pickLibraryFiles().then((paths) => {
-      const classification = classifyDroppedPaths(paths);
-      const videos = ("videoPaths" in classification ? classification.videoPaths : undefined) ?? [];
-      if (videos.length) videoLanes.handlers.importVideoPaths(videos, placement);
-    });
+    if (videoLanes) addVideo(videoLanes, tracks, seconds);
   };
   const openAddVideoMenu = (event: ReactMouseEvent<HTMLElement>) => {
     const playhead = scale.clampSeconds(positionSecondsRef.current);

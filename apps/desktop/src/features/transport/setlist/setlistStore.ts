@@ -15,6 +15,7 @@ export type SetlistEditMode =
   | "lanes"
   | "automation"
   | "midi"
+  | "video"
   | "lyrics";
 
 export const LANES_MIN_ZOOM = 1;
@@ -25,6 +26,8 @@ export type SetlistState = {
   editMode: SetlistEditMode;
   /** Height the user dragged the mixer to; `null` = the layout's default. */
   mixerHeightPx: number | null;
+  /** `wide`: the song row's height dragged by hand (null = automatic). */
+  songsHeightPx: number | null;
   /** `medium`: the mixer folded to its bar (Master), so the waveform gets
    * the height. */
   mixerCollapsed: boolean;
@@ -52,6 +55,7 @@ export const INITIAL_SETLIST_STATE: SetlistState = {
   bottomTab: "tracks",
   editMode: null,
   mixerHeightPx: null,
+  songsHeightPx: null,
   mixerCollapsed: false,
   shortPane: "mixer",
   mixerExpanded: false,
@@ -66,6 +70,7 @@ type SetlistActions = {
   setBottomTab: (tab: SetlistBottomTab) => void;
   setEditMode: (mode: SetlistEditMode) => void;
   setMixerHeightPx: (heightPx: number | null) => void;
+  setSongsHeightPx: (heightPx: number | null) => void;
   setMixerCollapsed: (collapsed: boolean) => void;
   setShortPane: (pane: SetlistShortPane) => void;
   setMixerExpanded: (expanded: boolean) => void;
@@ -105,6 +110,7 @@ export const useSetlistStore = create<SetlistState & SetlistActions>()(
     setBottomTab: (bottomTab) => set({ bottomTab }),
     setEditMode: (editMode) => set({ editMode }),
     setMixerHeightPx: (mixerHeightPx) => set({ mixerHeightPx }),
+    setSongsHeightPx: (songsHeightPx) => set({ songsHeightPx }),
     setMixerCollapsed: (mixerCollapsed) => set({ mixerCollapsed }),
     setShortPane: (shortPane) => set({ shortPane }),
     setMixerExpanded: (mixerExpanded) => set({ mixerExpanded }),

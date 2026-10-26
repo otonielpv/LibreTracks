@@ -12,13 +12,13 @@ import { SongMap } from "./SongMap";
 import { SongOverviewStrip } from "./SongOverviewStrip";
 import { SetlistMixer } from "./SetlistMixer";
 import { MIXER_HEIGHT_VAR, useMixerResize } from "./useMixerResize";
+import { SONGS_HEIGHT_VAR, useSongsRowResize } from "./useSongsRowResize";
 import type { VideoLaneBindings } from "../video/VideoClipHotspots";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { OverviewZoom } from "./OverviewZoom";
 import { SectionScrubEditor } from "./SectionScrubEditor";
 import { SetlistLyrics } from "./SetlistLyrics";
-import { SetlistAutomationPanel } from "./SetlistAutomationPanel";
-import { SetlistMidiPanel } from "./SetlistMidiPanel";
+import { waveformEditModes } from "./waveformEditModes";
 import { WaveDock } from "./WaveDock";
 import { SetlistEditButton, SetlistEditDrawer } from "./SetlistEditDrawer";
 import { SetlistSongSettings } from "./SetlistSongSettings";
@@ -345,41 +345,18 @@ function SetlistViewComponent({
                   <p className="lt-setlist-sections-hint">{t("setlistView.tracks.hint")}</p>
                 ),
             },
-            {
-              mode: "automation",
-              icon: "bolt",
-              labelKey: "setlistView.edit.modes.automation",
-              content: shownRegion ? (
-                <SetlistAutomationPanel
-                  song={performance.song}
-                  region={shownRegion}
-                  layout={layout}
-                  menus={menus}
-                  positionSecondsRef={performance.positionSecondsRef}
-                  waveformSummaries={waveformSummaries}
-                  onSeek={performance.onSeek}
-                  runShortcutAction={runShortcutAction}
-                />
-              ) : null,
-            },
-            {
-              mode: "midi",
-              icon: "piano",
-              labelKey: "setlistView.edit.modes.midi",
-              content: shownRegion ? (
-                <SetlistMidiPanel
-                  song={performance.song}
-                  region={shownRegion}
-                  tracks={tracks}
-                  layout={layout}
-                  menus={menus}
-                  positionSecondsRef={performance.positionSecondsRef}
-                  waveformSummaries={waveformSummaries}
-                  onSeek={performance.onSeek}
-                  runShortcutAction={runShortcutAction}
-                />
-              ) : null,
-            },
+            ...waveformEditModes({
+              song: performance.song,
+              region: shownRegion,
+              tracks,
+              layout,
+              menus,
+              positionSecondsRef: performance.positionSecondsRef,
+              waveformSummaries,
+              onSeek: performance.onSeek,
+              runShortcutAction,
+              video: videoLanes,
+            }),
             ...(FEATURE_FLAGS.lyrics
               ? [
                   {
@@ -418,6 +395,9 @@ function SetlistViewComponent({
   const mixerZoneRef = useRef<HTMLElement | null>(null);
   const mixerHeightPx = useSetlistStore((state) => state.mixerHeightPx);
   const beginMixerResize = useMixerResize(rootRef, mixerZoneRef);
+  const songsZoneRef = useRef<HTMLElement | null>(null);
+  const songsHeightPx = useSetlistStore((state) => state.songsHeightPx);
+  const songsResize = useSongsRowResize(rootRef, songsZoneRef);
   const paneButtons = (
     <>
       {layout === "short" ? (
@@ -591,7 +571,18 @@ function SetlistViewComponent({
     ]);
   };
   const songs = (
-    <Zone name="songs">
+    <Zone name="songs" zoneRef={songsZoneRef}>
+      {layout === "wide" ? (
+        <div
+          className="lt-setlist-songs-resize"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={t("setlistView.songs.resize")}
+          title={t("setlistView.songs.resizeTitle")}
+          onPointerDown={songsResize.begin}
+          onDoubleClick={songsResize.reset}
+        />
+      ) : null}
       <SetlistSongRow
         layout={layout}
         regions={regions}
@@ -633,15 +624,18 @@ function SetlistViewComponent({
       ref={rootRef}
       className={`lt-setlist-view is-${layout}${editMode ? " is-editing" : ""}${
         mixerCollapsed && layout === "medium" ? " is-mixer-collapsed" : ""
-      }${lyricsOpen ? " has-lyrics" : ""
+      }${lyricsOpen ? " has-lyrics" : ""}${layout === "wide" && songsHeightPx !== null ? " has-songs-height" : ""
       }${
         layout === "short" && shortPane === "mixer" && mixerExpanded && editMode === null ? " is-mixer-expanded" : ""
       }`}
       data-setlist-layout={layout}
       aria-label={t("setlistView.title")}
       style={
-        layout === "wide" && mixerHeightPx !== null
-          ? ({ [MIXER_HEIGHT_VAR]: `${mixerHeightPx}px` } as CSSProperties)
+        layout === "wide"
+          ? ({
+              ...(mixerHeightPx !== null ? { [MIXER_HEIGHT_VAR]: `${mixerHeightPx}px` } : null),
+              ...(songsHeightPx !== null ? { [SONGS_HEIGHT_VAR]: `${songsHeightPx}px` } : null),
+            } as CSSProperties)
           : undefined
       }
     >

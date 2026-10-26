@@ -2515,6 +2515,8 @@ const en = {
   setlistView: {
     title: "Setlist view",
     songs: {
+      resize: "Song row height",
+      resizeTitle: "Drag to change the height; double click for the automatic one",
       label: "Setlist songs",
       tileLabel: "{{index}}. {{name}}",
       play: "Play {{name}}",
@@ -2576,7 +2578,7 @@ const en = {
       title: "Edit",
       heading: "{{name}} · Edit",
       close: "Leave edit mode",
-      modes: { label: "Edit modes", song: "Song", sections: "Sections", arrangement: "Arrangement", tracks: "Tracks", lanes: "Lanes", automation: "Automation", midi: "MIDI", lyrics: "Lyrics" },
+      modes: { label: "Edit modes", song: "Song", sections: "Sections", arrangement: "Arrangement", tracks: "Tracks", lanes: "Lanes", automation: "Automation", midi: "MIDI", video: "Video", lyrics: "Lyrics" },
       songSettings: "{{name}} settings",
       keySection: "Key",
       key: "Original key",
@@ -2684,6 +2686,12 @@ const en = {
       settings: "MIDI settings…",
     },
     video: {
+      tracks: "Video tracks",
+      addHere: "Add a video at the line",
+      addShort: "Video",
+      empty: "No videos in this song.",
+      list: "The song's videos",
+      unavailable: "Video is not available in this build.",
       add: "+ Video",
       addTitle: "Add videos at the playhead or at the start of the section",
       atPlayhead: "At the playhead",

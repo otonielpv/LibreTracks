@@ -4038,3 +4038,71 @@ button.lt-setlist-track-chip-name {
 .lt-setlist-scrub-timing.is-key {
   color: #c9a7ff;
 }
+
+/* Vídeo sobre la onda del editor: una barra por clip, de su duración. */
+.lt-setlist-scrub-video {
+  position: absolute;
+  top: calc(1.5rem + var(--lt-video-row, 0) * 1.8rem);
+  z-index: 2;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 1.6rem;
+  padding: 0 0.35rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 138 101 / 0.8);
+  border-radius: 0.25rem;
+  background: rgb(255 138 101 / 0.22);
+  color: #ffd2c2;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lt-setlist-scrub-video.is-missing {
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+.lt-setlist-scrub-video .material-symbols-outlined {
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+}
+
+.lt-setlist-video-icon {
+  color: #ff8a65;
+}
+
+/* ---- Fila de canciones redimensionable (wide): asa abajo; más alta, las
+   tarjetas pasan a varias filas. ---- */
+.lt-setlist-view.is-wide > .lt-setlist-zone.is-songs {
+  position: relative;
+}
+
+.lt-setlist-songs-resize {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 6px;
+  z-index: 2;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.lt-setlist-songs-resize:hover {
+  background: rgb(87 241 219 / 0.25);
+}
+
+.lt-setlist-view.is-wide.has-songs-height > .lt-setlist-zone.is-songs {
+  height: var(--lt-setlist-songs-height);
+}
+
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-songs.is-horizontal {
+  flex-wrap: wrap;
+  align-content: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+}

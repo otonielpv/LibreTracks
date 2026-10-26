@@ -2546,6 +2546,8 @@ const es = {
   setlistView: {
     title: "Vista Setlist",
     songs: {
+      resize: "Alto de la fila de canciones",
+      resizeTitle: "Arrastra para cambiar el alto; doble clic para volver al automático",
       label: "Canciones del setlist",
       tileLabel: "{{index}}. {{name}}",
       play: "Reproducir {{name}}",
@@ -2607,7 +2609,7 @@ const es = {
       title: "Editar",
       heading: "{{name}} · Editar",
       close: "Salir de la edición",
-      modes: { label: "Modos de edición", song: "Canción", sections: "Secciones", arrangement: "Arreglo", tracks: "Pistas", lanes: "Carriles", automation: "Automatismos", midi: "MIDI", lyrics: "Letra" },
+      modes: { label: "Modos de edición", song: "Canción", sections: "Secciones", arrangement: "Arreglo", tracks: "Pistas", lanes: "Carriles", automation: "Automatismos", midi: "MIDI", video: "Vídeo", lyrics: "Letra" },
       songSettings: "Ajustes de {{name}}",
       keySection: "Tono",
       key: "Tono original",
@@ -2715,6 +2717,12 @@ const es = {
       settings: "Ajustes MIDI…",
     },
     video: {
+      tracks: "Pistas de vídeo",
+      addHere: "Añadir un vídeo en la línea",
+      addShort: "Vídeo",
+      empty: "Sin vídeos en esta canción.",
+      list: "Vídeos de la canción",
+      unavailable: "El vídeo no está disponible en esta versión.",
       add: "+ Vídeo",
       addTitle: "Añadir vídeos en el playhead o al inicio de la sección",
       atPlayhead: "En el playhead",
