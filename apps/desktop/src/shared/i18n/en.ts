@@ -2726,6 +2726,8 @@ const en = {
       pause: "Pause",
     },
     arrangement: {
+      moveLeft: "Move section earlier",
+      moveRight: "Move section later",
       list: "Arrangements",
       sectionsCount: "{{count}} sections",
     },

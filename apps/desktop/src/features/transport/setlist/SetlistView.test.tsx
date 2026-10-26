@@ -118,4 +118,17 @@ describe("SetlistView skeleton", () => {
     expect(rulerContextMenu).toHaveBeenCalledWith(expect.any(Number), null);
     expect(openMenu).toHaveBeenCalledWith(expect.anything(), "transport.menu.createMarker", []);
   });
+
+  it("short: editing marks keeps the primary waveform and its handles, not a second scrub view", () => {
+    const { container } = render(<SetlistView {...testSetlistProps()} layoutClass="short" />);
+    act(() => useSetlistStore.getState().setShortPane("mixer"));
+    act(() => useSetlistStore.getState().setEditMode("sections"));
+    expect(zones(container)).toEqual(["songs", "overview", "drawer"]);
+    expect(container.querySelector(".lt-setlist-view.is-wave-editing")).not.toBeNull();
+    expect(container.querySelector("[data-setlist-zone='overview'] .lt-setlist-section-layer")).not.toBeNull();
+    expect(container.querySelector(".lt-setlist-scrub-view")).toBeNull();
+    expect(screen.getByRole("button", { name: "setlistView.sections.add" })).toBeTruthy();
+    act(() => useSetlistStore.getState().setEditMode(null));
+    expect(zones(container)).toEqual(["songs", "mixer"]);
+  });
 });

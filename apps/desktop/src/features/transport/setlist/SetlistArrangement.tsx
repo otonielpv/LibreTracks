@@ -1,9 +1,11 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   ArrangementBlockSummary,
   SongRegionSummary,
+  SongView,
   StructureSectionSummary,
+  WaveformSummaryDto,
 } from "@libretracks/shared/models";
 
 import { SongStructureEditor } from "../structure/SongStructureEditor";
@@ -11,11 +13,17 @@ import { formatTransportError } from "../errors/formatTransportError";
 import { StructureCapture, StructureWarnings } from "../structure/StructureSections";
 import {
   closeStructureEditor,
+  addBlock,
+  insertBlock,
+  duplicateBlock,
   formatBars,
   openStructureEditor,
   sectionColor,
   sectionLabel,
   selectionOf,
+  selectBlock,
+  removeBlock,
+  updateDraft,
 } from "../structure/structureEditor";
 import type { StructureHandlers } from "../structure/structureHandlers";
 import { ORIGINAL_SELECTION, useStructureStore } from "../structure/structureStore";
@@ -26,6 +34,8 @@ import {
 } from "../structure/useArrangementActions";
 import { requestEditMode, setEditLeaveGuard } from "./setlistStore";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
+import { SongOverviewStrip } from "./SongOverviewStrip";
+import type { TimelineMenus } from "../menus/timelineMenus";
 
 /**
  * The arrangement picker of the map's header, OUTSIDE edit mode (Playback
@@ -98,18 +108,87 @@ type SetlistArrangementProps = {
 };
 
 /** The block strip, in the map's place while editing the arrangement. */
-function SetlistArrangementEditorComponent({ region, handlers, layout }: SetlistArrangementProps) {
-  useEmbeddedArrangementEditor(region);
+function SetlistArrangementEditorComponent({ region, handlers, layout, song, waveformSummaries, menus }: SetlistArrangementProps & {
+  song: SongView;
+  waveformSummaries: Readonly<Record<string, WaveformSummaryDto>>;
+  menus: Pick<TimelineMenus, "openMenu">;
+}) {
+  const { t } = useTranslation();
   const actions = useArrangementActions(handlers);
+  const hiddenPosition = useRef({ current: Number.NEGATIVE_INFINITY }).current;
   if (!actions.structure || !actions.draft) return null;
+  const structure = actions.structure;
+  const sections = new Map(structure.sections.map((section) => [section.markerId, section]));
+  const spans = new Map<string, { startSeconds: number; endSeconds: number }>();
+  if (structure.appliedArrangementId) {
+    let cursor = region.startSeconds;
+    const applied = structure.arrangements.find((arrangement) => arrangement.id === structure.appliedArrangementId);
+    for (const block of applied?.blocks ?? []) {
+      const section = sections.get(block.sectionMarkerId);
+      if (!section) continue;
+      const endSeconds = cursor + section.endSeconds - section.startSeconds;
+      if (!spans.has(section.markerId)) spans.set(section.markerId, { startSeconds: cursor, endSeconds });
+      cursor = endSeconds;
+    }
+  } else {
+    for (const section of structure.sections) spans.set(section.markerId, section);
+  }
+  const insertButton = (index: number) => (
+    <button
+      type="button"
+      className="lt-setlist-arrangement-insert"
+      data-insert-index={index}
+      aria-label={t("transport.structure.insertHere")}
+      title={t("transport.structure.insertHere")}
+      aria-haspopup="menu"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        const beforeId = actions.draft?.blocks[index]?.id;
+        menus.openMenu(event, t("transport.structure.insertHere"), structure.sections.map((section) => ({
+          label: sectionLabel(section, t),
+          swatch: sectionColor(section),
+          onSelect: () => {
+            updateDraft((current) => {
+              if (current !== actions.draft) return current;
+              const at = beforeId ? current.blocks.findIndex((block) => block.id === beforeId) : current.blocks.length;
+              return at < 0 ? current : insertBlock(current, at, section.markerId);
+            });
+          },
+        })));
+      }}
+    >
+      <span className="material-symbols-outlined" aria-hidden="true">add</span>
+    </button>
+  );
   return (
-    <div className={`lt-setlist-arrangement is-${layout}`}>
+    <div className={`lt-setlist-arrangement is-waveform is-${layout}`}>
       <SongStructureEditor
-        sections={actions.structure.sections}
+        sections={structure.sections}
         draft={actions.draft}
         selectedBlockId={actions.selectedBlockId}
         layout={layout === "short" ? "row" : "horizontal"}
-        handleOnly={layout === "short"}
+        handleOnly
+        showPalette={false}
+        renderGap={insertButton}
+        renderEnd={() => insertButton(actions.draft!.blocks.length)}
+        blockStyle={(block) => ({ flex: `${Math.max(0.001, (sections.get(block.sectionMarkerId)?.endSeconds ?? 0) - (sections.get(block.sectionMarkerId)?.startSeconds ?? 0))} 0 0` })}
+        wrapBlock={(block, row) => {
+          const section = sections.get(block.sectionMarkerId);
+          const span = spans.get(block.sectionMarkerId);
+          return (
+            <div className="lt-setlist-arrangement-wave-block">
+              {section ? <SongOverviewStrip
+                region={{ ...region, ...(span ?? section) }}
+                clips={span ? song.clips : []}
+                sectionMarkers={[]}
+                waveformSummaries={waveformSummaries}
+                positionSecondsRef={hiddenPosition}
+                layout={layout}
+              /> : null}
+              {row}
+            </div>
+          );
+        }}
       />
     </div>
   );
@@ -151,61 +230,36 @@ function ArrangementSequence({
  * panel's select: each shows its order, length and whether it is the one on
  * the timeline. Picking one loads it as the working copy, like the select.
  */
-function ArrangementCards({ actions }: { actions: ArrangementActions }) {
+function ArrangementSelector({ actions }: { actions: ArrangementActions }) {
   const { t, structure, draft, appliedId } = actions;
   if (!structure || !draft) return null;
   const selected = selectionOf(draft);
   const barsById = new Map(structure.sections.map((section) => [section.markerId, section.bars]));
-  const barsOf = (blocks: ArrangementBlockSummary[]) =>
-    blocks.reduce((total, block) => total + (barsById.get(block.sectionMarkerId) ?? 0), 0);
-  const original = structure.sections.map((section) => ({
-    id: section.markerId,
-    sectionMarkerId: section.markerId,
-  }));
-  const cards = [
-    { id: ORIGINAL_SELECTION, name: t("transport.structure.original"), blocks: original, applied: appliedId === null },
-    // A brand-new arrangement that was never saved: only the working copy.
+  const bars = draft.blocks.reduce((total, block) => total + (barsById.get(block.sectionMarkerId) ?? 0), 0);
+  const options = [
+    { id: ORIGINAL_SELECTION, name: t("transport.structure.original") },
     ...(draft.arrangementId === null && !draft.isOriginal
-      ? [{ id: "", name: draft.name, blocks: draft.blocks, applied: false }]
+      ? [{ id: "", name: draft.name }]
       : []),
     ...structure.arrangements.map((arrangement) => ({
       id: arrangement.id,
       name: arrangement.name,
-      blocks: arrangement.blocks,
-      applied: arrangement.id === appliedId,
     })),
   ];
   return (
-    <ul className="lt-setlist-arrangement-cards" aria-label={t("transport.structure.selector")}>
-      {cards.map((card) => {
-        const isSelected = card.id === selected;
-        // The selected card shows the working copy, unapplied changes included.
-        const blocks = isSelected ? draft.blocks : card.blocks;
-        return (
-          <li key={card.id || "draft"}>
-            <button
-              type="button"
-              className={`lt-setlist-arrangement-card${isSelected ? " is-selected" : ""}${card.applied ? " is-applied" : ""}`}
-              aria-pressed={isSelected}
-              onClick={() => void actions.switchTo(card.id)}
-            >
-              <span className="lt-setlist-arrangement-card-head">
-                <span className="lt-setlist-arrangement-card-name">{card.name}</span>
-                {card.applied ? (
-                  <span className="lt-setlist-arrangement-card-badge">{t("transport.structure.appliedBadge")}</span>
-                ) : null}
-              </span>
-              <ArrangementSequence blocks={blocks} sections={structure.sections} />
-              <span className="lt-setlist-arrangement-card-meta">
-                {t("setlistView.arrangement.sectionsCount", { count: blocks.length })}
-                {" · "}
-                {formatBars(barsOf(blocks), t)}
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+    <div className="lt-setlist-arrangement-selector">
+      <select value={selected} aria-label={t("transport.structure.selector")} onChange={(event) => void actions.switchTo(event.target.value)}>
+        {options.map((option) => (
+          <option key={option.id || "draft"} value={option.id}>
+            {option.name}{(option.id === ORIGINAL_SELECTION ? appliedId === null : option.id === appliedId) ? ` (${t("transport.structure.appliedBadge")})` : ""}
+          </option>
+        ))}
+      </select>
+      <ArrangementSequence blocks={draft.blocks} sections={structure.sections} />
+      <span className="lt-setlist-arrangement-card-meta">
+        {t("setlistView.arrangement.sectionsCount", { count: draft.blocks.length })}{" · "}{formatBars(bars, t)}
+      </span>
+    </div>
   );
 }
 
@@ -218,6 +272,15 @@ function SetlistArrangementToolbarComponent({ region, handlers, layout }: Setlis
   useEmbeddedArrangementEditor(region);
   const actions = useArrangementActions(handlers);
   const { t, regionId, structure, draft, dirty, draftIsApplied } = actions;
+  const selectedIndex = draft?.blocks.findIndex((block) => block.id === actions.selectedBlockId) ?? -1;
+  const editSelected = (operation: "duplicate" | "remove") => {
+    if (!draft || selectedIndex < 0) return;
+    const block = draft.blocks[selectedIndex];
+    updateDraft((current) => operation === "duplicate" ? duplicateBlock(current, block.id)
+      : removeBlock(current, block.id));
+    const blocks = useStructureStore.getState().draft?.blocks ?? [];
+    selectBlock(blocks[Math.min(selectedIndex, blocks.length - 1)]?.id ?? null);
+  };
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const apply = async () => {
@@ -250,8 +313,14 @@ function SetlistArrangementToolbarComponent({ region, handlers, layout }: Setlis
               {t("transport.structure.newArrangement")}
             </button>
           </header>
-          <ArrangementCards actions={actions} />
+          <ArrangementSelector actions={actions} />
           <div className="lt-setlist-arrangement-actions">
+            <select value="" aria-label={t("transport.structure.addSection")} onChange={(event) => {
+              if (event.target.value) updateDraft((current) => addBlock(current, event.target.value));
+            }}>
+              <option value="" disabled>{t("transport.structure.addSection")}</option>
+              {structure.sections.map((section) => <option key={section.markerId} value={section.markerId}>{sectionLabel(section, t)}</option>)}
+            </select>
             <button
               type="button"
               className="lt-setlist-arrangement-action"
@@ -279,15 +348,17 @@ function SetlistArrangementToolbarComponent({ region, handlers, layout }: Setlis
               {t("transport.structure.recapture")}
             </button>
           </div>
-          {layout === "short" ? (
-            <SongStructureEditor
-              sections={structure.sections}
-              draft={draft}
-              selectedBlockId={actions.selectedBlockId}
-              layout="row"
-              handleOnly
-            />
-          ) : null}
+          <div className="lt-setlist-arrangement-actions" role="toolbar" aria-label={t("transport.structure.strip")}>
+            {(["duplicate", "remove"] as const).map((operation) => {
+              const label = t(operation === "duplicate" ? "setlistView.sections.duplicate" : "setlistView.sections.delete");
+              return <button key={operation} type="button" className="lt-setlist-arrangement-action"
+                aria-label={label} title={label}
+                disabled={selectedIndex < 0}
+                onClick={() => editSelected(operation)}>
+                <span className="material-symbols-outlined" aria-hidden="true">{operation === "duplicate" ? "content_copy" : "delete"}</span>
+              </button>;
+            })}
+          </div>
           <footer className="lt-structure-footer lt-setlist-arrangement-footer">
             {error ? <p className="lt-setlist-arrangement-error" role="alert">{error}</p> : null}
             {dirty ? (

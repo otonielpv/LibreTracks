@@ -9,15 +9,33 @@ import { describe, expect, it } from "vitest";
  * desbordamiento no se puede medir en un test: se fija la regla que lo evita.
  */
 const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "structure.css"), "utf8");
+const setlistCss = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../setlist/setlist.css"), "utf8");
 
-function rule(selector: string): string {
+function rule(selector: string, source = css): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]+)\\}`).exec(css);
+  const match = new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]+)\\}`).exec(source);
   expect(match, `falta la regla ${selector}`).toBeTruthy();
   return match?.[1] ?? "";
 }
 
 describe("estilos del editor de arreglos", () => {
+  it("la onda del arreglo usa todo el alto sin el tope de las tarjetas", () => {
+    expect(rule(".lt-setlist-arrangement.is-waveform .lt-structure-strip", setlistCss)).toContain("max-height: none");
+    const canvas = rule(".lt-setlist-arrangement.is-waveform .lt-setlist-overview-canvas", setlistCss);
+    expect(canvas).toContain("height: 100%");
+    expect(canvas).toContain("top: 0");
+  });
+
+  it("los nombres quedan arriba y el color cubre todo el bloque sin tapar la onda", () => {
+    expect(rule(".lt-setlist-arrangement.is-waveform .lt-structure-block", setlistCss)).toContain("justify-content: flex-start");
+    expect(rule(".lt-setlist-arrangement.is-waveform .lt-structure-block-name", setlistCss)).toContain("white-space: normal");
+    const tint = rule(".lt-setlist-arrangement.is-waveform .lt-structure-block::before", setlistCss);
+    expect(tint).toContain("inset: 0");
+    expect(tint).toContain("background: var(--lt-structure-color)");
+    expect(tint).toContain("opacity: 0.24");
+    expect(rule(".lt-setlist-arrangement-insert", setlistCss)).toContain("top: 50%");
+  });
+
   it("la columna del editor no crece con la tira de bloques", () => {
     // Sin esto la tira ensanchaba el editor más que el panel: la paleta se
     // salía por la derecha sin scroll y el final de la tira quedaba cortado.

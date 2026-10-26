@@ -113,6 +113,10 @@ describe("Edit → Arrangement", () => {
       await requestEditMode("arrangement");
     });
     expect(container.querySelector(`.lt-structure-editor.${editorClass}`)).not.toBeNull();
+    expect(container.querySelector("[data-setlist-zone='overview'] .lt-structure-editor")).not.toBeNull();
+    expect(container.querySelector("[data-setlist-zone='drawer'] .lt-structure-editor")).toBeNull();
+    expect(container.querySelector("[data-setlist-zone='mixer']")).toBeNull();
+    expect(container.querySelectorAll(".lt-setlist-arrangement-wave-block canvas")).toHaveLength(2);
     // Embedded: the app's own panel stays hidden.
     expect(useStructureStore.getState().editorHost).toBe("embedded");
   });
@@ -154,7 +158,7 @@ describe("Edit → Arrangement", () => {
       await requestEditMode("arrangement");
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Corto/ }));
+      fireEvent.change(screen.getByRole("combobox", { name: "transport.structure.selector" }), { target: { value: "corto" } });
     });
     expect(useStructureStore.getState().draft?.arrangementId).toBe("corto");
     const draft = useStructureStore.getState().draft!;
@@ -194,42 +198,113 @@ describe("Edit → Arrangement", () => {
     expect(useSetlistStore.getState().editMode).toBeNull();
   });
 
-  it("the drawer lists the arrangements as cards: original first, the applied one marked", async () => {
+  it("the drawer selects an arrangement from a dropdown and previews only that arrangement", async () => {
     const { container } = render(<SetlistView {...props()} layoutClass="wide" />);
     await act(async () => {
       await requestEditMode("arrangement");
     });
-    const cards = Array.from(container.querySelectorAll<HTMLElement>(".lt-setlist-arrangement-card"));
-    expect(cards.map((card) => card.querySelector(".lt-setlist-arrangement-card-name")?.textContent)).toEqual([
-      "transport.structure.original",
-      "Corto",
+    const select = screen.getByRole("combobox", { name: "transport.structure.selector" });
+    expect(Array.from(select.querySelectorAll("option")).map((option) => option.textContent)).toEqual([
+      "transport.structure.original (transport.structure.appliedBadge)", "Corto",
     ]);
-    // Nothing applied: the original is the one on the timeline.
-    expect(cards[0].querySelector(".lt-setlist-arrangement-card-badge")).not.toBeNull();
-    expect(cards[1].querySelector(".lt-setlist-arrangement-card-badge")).toBeNull();
-    // The working copy starts on the original.
-    expect(cards[0].getAttribute("aria-pressed")).toBe("true");
-    // Each card draws its order: the original has both sections, Corto only Coro.
-    expect(cards[0].querySelectorAll(".lt-setlist-arrangement-segment")).toHaveLength(2);
-    expect(cards[1].querySelectorAll(".lt-setlist-arrangement-segment")).toHaveLength(1);
-    // The panel's select is not repeated in the drawer.
-    expect(container.querySelector(".lt-setlist-arrangement-tools select")).toBeNull();
+    expect(container.querySelectorAll(".lt-setlist-arrangement-sequence")).toHaveLength(1);
+    expect(container.querySelectorAll(".lt-setlist-arrangement-segment")).toHaveLength(2);
+    await act(async () => fireEvent.change(select, { target: { value: "corto" } }));
+    expect(container.querySelectorAll(".lt-setlist-arrangement-segment")).toHaveLength(1);
   });
 
-  it("the selected card shows the working copy, unapplied changes included", async () => {
+  it("the selected preview shows the working copy, unapplied changes included", async () => {
     const { container } = render(<SetlistView {...props()} layoutClass="wide" />);
     await act(async () => {
       await requestEditMode("arrangement");
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Corto/ }));
+      fireEvent.change(screen.getByRole("combobox", { name: "transport.structure.selector" }), { target: { value: "corto" } });
     });
     const draft = useStructureStore.getState().draft!;
     act(() => updateDraft((current) => duplicateBlock(current, draft.blocks[0].id)));
-    const corto = Array.from(container.querySelectorAll<HTMLElement>(".lt-setlist-arrangement-card")).find(
-      (card) => card.textContent?.includes("Corto"),
-    )!;
-    expect(corto.getAttribute("aria-pressed")).toBe("true");
-    expect(corto.querySelectorAll(".lt-setlist-arrangement-segment")).toHaveLength(2);
+    expect(screen.getByRole("combobox", { name: "transport.structure.selector" })).toHaveProperty("value", "corto");
+    expect(container.querySelectorAll(".lt-setlist-arrangement-segment")).toHaveLength(2);
+  });
+
+  it("edits the selected waveform section with the inspector actions", async () => {
+    const { container } = render(<SetlistView {...props()} layoutClass="short" />);
+    await act(async () => { await requestEditMode("arrangement"); });
+    fireEvent.click(container.querySelector(".lt-setlist-arrangement-wave-block .lt-structure-block")!);
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.sections.duplicate" }));
+    expect(useStructureStore.getState().draft?.blocks.map((block) => block.sectionMarkerId)).toEqual(["Verso", "Verso", "Coro"]);
+    expect(useStructureStore.getState().draft?.isOriginal).toBe(false);
+    expect(screen.queryByRole("button", { name: "setlistView.arrangement.moveRight" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "setlistView.arrangement.moveLeft" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.sections.delete" }));
+    expect(useStructureStore.getState().draft?.blocks).toHaveLength(2);
+    fireEvent.change(screen.getByRole("combobox", { name: "transport.structure.addSection" }), { target: { value: "Coro" } });
+    expect(useStructureStore.getState().draft?.blocks.map((block) => block.sectionMarkerId)).toEqual(["Verso", "Coro", "Coro"]);
+  });
+
+  it.each(["wide", "short"] as const)("%s inserts sections at each waveform boundary without applying", async (layoutClass) => {
+    const base = props();
+    const openMenu = vi.fn();
+    const { container } = render(<SetlistView {...base} menus={{ ...base.menus, openMenu }} layoutClass={layoutClass} />);
+    await act(async () => { await requestEditMode("arrangement"); });
+    const insert = (index: number, sectionIndex: number) => {
+      fireEvent.click(container.querySelector(`[data-insert-index='${index}']`)!);
+      const actions = openMenu.mock.lastCall![2] as Parameters<typeof base.menus.openMenu>[2];
+      expect(actions.map((action) => action.label)).toEqual(["Verso", "Coro"]);
+      act(() => { void actions[sectionIndex].onSelect?.(); });
+    };
+    expect(container.querySelectorAll(".lt-setlist-arrangement-insert")).toHaveLength(3);
+    insert(1, 1);
+    expect(useStructureStore.getState().draft?.blocks.map((block) => block.sectionMarkerId)).toEqual(["Verso", "Coro", "Coro"]);
+    insert(0, 1);
+    expect(useStructureStore.getState().draft?.blocks[0].sectionMarkerId).toBe("Coro");
+    insert(4, 0);
+    expect(useStructureStore.getState().draft?.blocks.at(-1)?.sectionMarkerId).toBe("Verso");
+    expect(base.structureHandlers.saveArrangement).not.toHaveBeenCalled();
+    expect(base.structureHandlers.applyArrangement).not.toHaveBeenCalled();
+  });
+
+  it.each(["wide", "short"] as const)("%s reorders by the handle, not by swiping the waveform", async (layoutClass) => {
+    const { container } = render(<SetlistView {...props()} layoutClass={layoutClass} />);
+    await act(async () => { await requestEditMode("arrangement"); });
+    const items = Array.from(container.querySelectorAll<HTMLElement>(".lt-setlist-arrangement .lt-structure-item[data-block-id]"));
+    items.forEach((item, index) => {
+      item.getBoundingClientRect = () => ({ x: index * 150, y: 0, left: index * 150, right: (index + 1) * 150, top: 0, bottom: 200, width: 150, height: 200 }) as DOMRect;
+    });
+    const pointer = (target: Element | Window, type: string, clientX: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY: 100 });
+      Object.defineProperties(event, { pointerId: { value: 1 }, pointerType: { value: "touch" } });
+      fireEvent(target, event);
+    };
+    const before = useStructureStore.getState().draft;
+    pointer(items[0].querySelector(".lt-structure-block")!, "pointerdown", 50);
+    pointer(window, "pointermove", 290);
+    pointer(window, "pointerup", 290);
+    expect(useStructureStore.getState().draft).toBe(before);
+
+    const handle = items[0].querySelector("button.lt-structure-handle")!;
+    pointer(handle, "pointerdown", 50);
+    pointer(window, "pointermove", 290);
+    expect(useStructureStore.getState().draft).toBe(before);
+    pointer(window, "pointercancel", 290);
+    expect(useStructureStore.getState().draft).toBe(before);
+    expect(document.querySelector(".lt-drag-lift")).toBeNull();
+
+    pointer(handle, "pointerdown", 50);
+    pointer(window, "pointermove", 290);
+    pointer(window, "pointerup", 290);
+    const after = useStructureStore.getState().draft!;
+    expect(after.blocks.map((block) => block.sectionMarkerId)).toEqual(["Coro", "Verso"]);
+    expect(useStructureStore.getState().selectedBlockId).toBe(after.blocks[1].id);
+  });
+
+  it("the reorder handle is keyboard-accessible", async () => {
+    const { container } = render(<SetlistView {...props()} layoutClass="short" />);
+    await act(async () => { await requestEditMode("arrangement"); });
+    fireEvent.keyDown(container.querySelector("button.lt-structure-handle")!, { key: "ArrowRight" });
+    expect(useStructureStore.getState().draft?.blocks.map((block) => block.sectionMarkerId)).toEqual(["Coro", "Verso"]);
+    const handles = container.querySelectorAll("button.lt-structure-handle");
+    fireEvent.keyDown(handles[1], { key: "Home" });
+    expect(useStructureStore.getState().draft?.blocks.map((block) => block.sectionMarkerId)).toEqual(["Verso", "Coro"]);
   });
 });

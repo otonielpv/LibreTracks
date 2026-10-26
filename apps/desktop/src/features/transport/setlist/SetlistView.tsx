@@ -16,7 +16,6 @@ import { SONGS_HEIGHT_VAR, useSongsRowResize } from "./useSongsRowResize";
 import type { VideoLaneBindings } from "../video/VideoClipHotspots";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { OverviewZoom } from "./OverviewZoom";
-import { SectionScrubEditor } from "./SectionScrubEditor";
 import { SetlistLyrics } from "./SetlistLyrics";
 import { waveformEditModes } from "./waveformEditModes";
 import { WaveDock } from "./WaveDock";
@@ -153,14 +152,15 @@ function SetlistViewComponent({
   const rootRef = useRef<HTMLElement | null>(null);
   const layout = useSetlistLayout(rootRef, layoutClass);
   const editMode = useSetlistStore((state) => state.editMode);
+  const waveEditing = editMode === "sections" || editMode === "arrangement";
   const mixerCollapsed = useSetlistStore((state) => state.mixerCollapsed);
   const shortPane = useSetlistStore((state) => state.shortPane);
   const mixerExpanded = useSetlistStore((state) => state.mixerExpanded);
   const lyricsOpenSetting = useSetlistStore((state) => state.lyricsOpen);
   const setLyricsOpen = useSetlistStore((state) => state.setLyricsOpen);
   // Lyrics ship behind the same flag as Live's.
-  const lyricsOpen = FEATURE_FLAGS.lyrics && lyricsOpenSetting && layout !== "short";
-  const lyricsPane = FEATURE_FLAGS.lyrics && layout === "short" && shortPane === "lyrics";
+  const lyricsOpen = !waveEditing && FEATURE_FLAGS.lyrics && lyricsOpenSetting && layout !== "short";
+  const lyricsPane = !waveEditing && FEATURE_FLAGS.lyrics && layout === "short" && shortPane === "lyrics";
   const setShortPane = useSetlistStore((state) => state.setShortPane);
   // The song the map, overview and mixer are about (00 §5 "Selección").
   const lastShownRegionIdRef = useRef<string | null>(null);
@@ -200,7 +200,7 @@ function SetlistViewComponent({
   );
   // Editing in any mode, the sections and cues are handles on the waveform.
   const sectionLayer =
-    editMode !== null && shownRegion ? (
+    editMode !== null && editMode !== "arrangement" && shownRegion ? (
       <SongSectionEditLayer song={performance.song} region={shownRegion} handlers={sectionHandlers} />
     ) : null;
 
@@ -308,21 +308,6 @@ function SetlistViewComponent({
                   region={shownRegion}
                   handlers={sectionHandlers}
                   layout={layout}
-                  waveform={
-                    // The phone edits like Playback: the waveform zoomed to a
-                    // few bars, swiped under a fixed line.
-                    layout === "short" ? (
-                      <SectionScrubEditor
-                        song={performance.song}
-                        region={shownRegion}
-                        waveformSummaries={waveformSummaries}
-                        positionSecondsRef={performance.positionSecondsRef}
-                        onSeek={performance.onSeek}
-                        runShortcutAction={runShortcutAction}
-                        handlers={sectionHandlers}
-                      />
-                    ) : undefined
-                  }
                 />
               ) : null,
             },
@@ -450,11 +435,7 @@ function SetlistViewComponent({
           onPointerDown={beginMixerResize}
         />
       ) : null}
-      {(editMode === "lanes" || editMode === "automation") && layout !== "short" ? lanes : editMode === "tracks" && layout !== "short" ? trackList : editMode === "arrangement" &&
-        layout !== "short" &&
-        shownRegion ? (
-        <SetlistArrangementEditor region={shownRegion} handlers={structureHandlers} layout={layout} />
-      ) : (
+      {(editMode === "lanes" || editMode === "automation") && layout !== "short" ? lanes : editMode === "tracks" && layout !== "short" ? trackList : (
       <SetlistMixer
         song={performance.song}
         region={shownRegion}
@@ -488,7 +469,10 @@ function SetlistViewComponent({
     <Zone name="overview" drop={songDrop}>
       {shownRegion ? (
         <>
-          <OverviewZoom
+          {editMode === "arrangement" ? (
+            <SetlistArrangementEditor region={shownRegion} handlers={structureHandlers} layout={layout}
+              song={performance.song} waveformSummaries={waveformSummaries} menus={menus} />
+          ) : <OverviewZoom
             startSeconds={shownRegion.startSeconds}
             endSeconds={shownRegion.endSeconds}
             positionSecondsRef={performance.positionSecondsRef}
@@ -552,8 +536,8 @@ function SetlistViewComponent({
                   ) : null
                 }
               />
-              {layout !== "short" || editMode === null ? sectionLayer : null}
-          </OverviewZoom>
+                {sectionLayer}
+              </OverviewZoom>}
         </>
       ) : null}
     </Zone>
@@ -623,7 +607,7 @@ function SetlistViewComponent({
   return (
     <main
       ref={rootRef}
-      className={`lt-setlist-view is-${layout}${editMode ? " is-editing" : ""}${
+      className={`lt-setlist-view is-${layout}${editMode ? " is-editing" : ""}${waveEditing ? " is-wave-editing" : ""}${
         mixerCollapsed && layout === "medium" ? " is-mixer-collapsed" : ""
       }${lyricsOpen ? " has-lyrics" : ""}${layout === "wide" && songsHeightPx !== null ? " has-songs-height" : ""
       }${
@@ -672,10 +656,10 @@ function SetlistViewComponent({
           ) : layout === "medium" && lyricsOpen ? (
             // medium: the lyrics take the band's place.
             lyrics
-          ) : layout !== "short" || shortPane === "song" ? (
+          ) : waveEditing || layout !== "short" || shortPane === "song" ? (
             overview
           ) : null}
-          {layout !== "short" || shortPane === "mixer" ? <div className="lt-setlist-bottom">{mixer}</div> : null}
+          {!waveEditing && (layout !== "short" || shortPane === "mixer") ? <div className="lt-setlist-bottom">{mixer}</div> : null}
           {/* Full-height side panel next to the band and the console. */}
           {drawer}
       </>

@@ -2757,6 +2757,8 @@ const es = {
       pause: "Pausa",
     },
     arrangement: {
+      moveLeft: "Mover la sección antes",
+      moveRight: "Mover la sección después",
       list: "Arreglos",
       sectionsCount: "{{count}} secciones",
     },
