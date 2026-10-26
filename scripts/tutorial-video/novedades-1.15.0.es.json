@@ -12,7 +12,7 @@
   "scenes": [
     {
       "id": "01-intro",
-      "text": "Libre Tracks uno punto quince punto cero trae la letra y los acordes en la vista Live, Analizar canción, cambios de nota, rampas de tempo, y más."
+      "text": "Libre Tracks uno punto quince punto cero llega con Analizar canción, que te prepara cada canción él solo, además de la letra y los acordes en la vista Live, cambios de nota, rampas de tempo, y más."
     },
     {
       "id": "02-letra",
@@ -24,7 +24,7 @@
     },
     {
       "id": "04-analizar",
-      "text": "Y llega Analizar canción. Haz clic derecho sobre la canción, y elige Analizar canción. Libre Tracks elige solo la pista de click, las pistas para la nota, y la pista de guía."
+      "text": "Y llega la gran novedad: Analizar canción. Esta canción no tiene ni una marca. Libre Tracks la prepara por ti: te coloca automáticamente todas las marcas de sección, la nota y sus cambios, el tempo y el compás. Lo que antes eran minutos escuchando y marcando a mano, ahora son segundos. Haz clic derecho sobre la canción, y elige Analizar canción."
     },
     {
       "id": "04b-voz",
@@ -32,7 +32,11 @@
     },
     {
       "id": "05-revisar",
-      "text": "Pulsa Analizar. Lee el tempo y el compás del click, la nota y sus cambios, y escucha la voz guía para colocar cada marca. Revisa la propuesta, y pulsa Aplicar."
+      "text": "Pulsa Analizar. Libre Tracks lee el click, escucha la armonía y la voz guía, y te propone cada marca. Revísalo, y pulsa Aplicar."
+    },
+    {
+      "id": "05b-resultado",
+      "text": "Y listo: de una canción sin una sola marca, a una canción preparada para el directo, con sus secciones, su tempo y su nota en su sitio, en unos segundos."
     },
     {
       "id": "06-nota",

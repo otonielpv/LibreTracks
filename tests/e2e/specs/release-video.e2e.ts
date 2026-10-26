@@ -40,7 +40,7 @@ const session = golden ? path.join(workDir, path.basename(golden)) : "";
 const only = (process.env.LT_TUTORIAL_SCENES ?? "").split(",").filter(Boolean);
 const loopback = path.join(repoRoot, "scripts", "tutorial-video", "loopback.py");
 const TITLES = {
-  intro: ["Novedades de LibreTracks 1.15.0", "Letra y acordes, Analizar canción, cambios de nota y rampas de tempo"],
+  intro: ["Novedades de LibreTracks 1.15.0", "Analizar canción, letra y acordes, cambios de nota y rampas de tempo"],
   mobile: ["También en el móvil", "Android e iOS · Seleccionar por área"],
   end: ["LibreTracks 1.15.0", "Gratis en libretracks.com"],
   fixes: "Y además, correcciones",
@@ -444,13 +444,28 @@ describe("release video (desktop scenes)", function () {
       await done();
     }
 
-    // 04 — right-click the song → Analizar canción, the setup.
+    // 04 — the song with no markers at all (taken off in the work copy, so
+    // the analysis visibly fills the ruler), then right-click → Analizar
+    // canción, the setup.
     const modal = ".lt-song-analysis-modal";
+    {
+      const view = await AppPage.songView();
+      const inSong = (view?.sectionMarkers ?? []).filter(
+        (m) => m.startSeconds >= song.startSeconds - 0.01 && m.startSeconds < song.endSeconds,
+      );
+      for (const marker of inSong) await AppPage.deleteSectionMarker(marker.id);
+      await browser.pause(1200);
+      console.log(`[release-video] 04-analizar: ${inSong.length} markers taken off the song`);
+    }
     {
       const { rec, done } = scene("04-analizar");
       await fitSong();
       await invoke("seek_transport", { positionSeconds: song.startSeconds + 60 });
       const band = await songBand();
+      // The empty ruler first: this is what the analysis starts from.
+      await rec.zoomTo({ x: band.x, y: band.y - 20, w: Math.min(band.w, 1400), h: 240 }, { margin: 20, maxZoom: 1.8 });
+      await rec.hold(Math.max(3, (durations["04-analizar"] ?? 20) - 9));
+      await rec.zoomOut(600);
       await rec.rightClick({ x: band.x + Math.min(band.w, 1400) * 0.25, y: band.y + band.h / 2 });
       await rec.hold(1);
       await rec.click(await tagByText(".lt-context-menu button", L("Analizar canción"), "rv-analyze"), 1200);
@@ -498,6 +513,24 @@ describe("release video (desktop scenes)", function () {
       await rec.hold(1);
       if (await rectOf(modal)) await rec.click(`${modal} .lt-export-modal-actions .is-primary`, 800);
       await rec.zoomOut(500);
+      await done();
+    }
+
+    // 05b — the result: the same ruler, now with every section, the tempo and
+    // the key in place.
+    {
+      const { rec, done } = scene("05b-resultado");
+      await fitSong();
+      const band = await songBand();
+      await rec.zoomTo({ x: band.x, y: band.y - 20, w: Math.min(band.w, 1400), h: 240 }, { margin: 20, maxZoom: 1.8 });
+      const marks = await onRuler(".lt-marker-hotspot", 180);
+      await rec.hold(1.5);
+      for (const mark of marks.slice(0, 6)) {
+        await rec.moveTo(mark, 500);
+        await rec.hold(0.5);
+      }
+      await rec.hold(1.5);
+      await rec.zoomOut(600);
       await done();
     }
 
