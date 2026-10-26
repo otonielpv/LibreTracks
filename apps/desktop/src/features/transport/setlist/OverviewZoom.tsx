@@ -151,7 +151,17 @@ export function OverviewZoom({
 
   // Touch gestures, before the waveform's own pointer handling.
   const pointersRef = useRef(new Map<number, number>());
-  const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
+  // A pinch scales the layer with a transform (no relayout per frame: laying
+  // the blocks out again at every step made every section label and edge
+  // shiver). The real width is set once, when the fingers lift.
+  const pinchRef = useRef<{
+    distance: number;
+    zoom: number;
+    offset: number;
+    anchor0: number;
+    target: number;
+    visualOffset: number;
+  } | null>(null);
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== "touch" || isControl(event.target)) return;
     event.stopPropagation();
@@ -162,7 +172,14 @@ export function OverviewZoom({
     if (pointers.size === 2) {
       // The second finger: the first one's listeners run the pinch.
       const [a, b] = [...pointers.values()];
-      pinchRef.current = { distance: Math.abs(a - b), zoom: zoomRef.current };
+      pinchRef.current = {
+        distance: Math.abs(a - b),
+        zoom: zoomRef.current,
+        offset: offsetRef.current,
+        anchor0: (a + b) / 2 - viewport.getBoundingClientRect().left,
+        target: zoomRef.current,
+        visualOffset: offsetRef.current,
+      };
       return;
     }
     if (pointers.size > 2) return;
@@ -181,7 +198,20 @@ export function OverviewZoom({
         if (xs.length === 2 && pinch.distance > 0) {
           const distance = Math.abs(xs[0] - xs[1]);
           const anchorX = (xs[0] + xs[1]) / 2 - rect.left;
-          zoomAround(pinch.zoom * (distance / pinch.distance), anchorX);
+          const width = viewport.clientWidth;
+          const target = Math.max(1, Math.min(OVERVIEW_MAX_ZOOM, pinch.zoom * (distance / pinch.distance)));
+          // The song's moment under the fingers when they landed stays under
+          // them, wherever they go.
+          const content = (pinch.offset + pinch.anchor0) / (width * pinch.zoom);
+          const offset = Math.max(0, Math.min(width * target - width, content * width * target - anchorX));
+          pinch.target = target;
+          pinch.visualOffset = offset;
+          layerRef.current?.style.setProperty(
+            "transform",
+            `translate3d(${-offset}px, 0, 0) scaleX(${target / pinch.zoom})`,
+          );
+          manualRef.current = { position: positionSecondsRef.current };
+          markFrameActivity();
         }
         return;
       }
@@ -202,7 +232,17 @@ export function OverviewZoom({
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
       gestureRef.current = false;
+      const pinch = pinchRef.current;
       pinchRef.current = null;
+      if (pinch && pinch.target !== pinch.zoom) {
+        // Commit: the real width, which lays out exactly where the scaled
+        // layer was, so nothing jumps.
+        zoomRef.current = pinch.target;
+        pendingZoomRef.current = pinch.target;
+        layerRef.current?.style.setProperty("width", `${pinch.target * 100}%`);
+        applyOffset(pinch.target <= 1 ? 0 : pinch.visualOffset);
+        markFrameActivity();
+      }
       if (!moved && upEvent.type === "pointerup" && onSeek) {
         // A tap: the moment under the finger, through the (moved) layer.
         const layer = layerRef.current;

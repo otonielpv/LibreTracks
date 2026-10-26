@@ -40,11 +40,14 @@ describe("SetlistView skeleton", () => {
     expect(zones(container)).toEqual(["songs", "mixer"]);
 
     const toggle = screen.getByRole("button", { name: "setlistView.pane.song" });
-    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    // A way to the other view, never lit: lit, «Mix» looked like the view you were in.
+    expect(toggle.getAttribute("aria-pressed")).toBeNull();
+    expect(toggle.classList.contains("is-active")).toBe(false);
     fireEvent.click(toggle);
     expect(zones(container)).toEqual(["songs", "overview"]);
     const back = screen.getByRole("button", { name: "setlistView.pane.mixer" });
-    expect(back.getAttribute("aria-pressed")).toBe("true");
+    expect(back.getAttribute("aria-pressed")).toBeNull();
+    expect(back.classList.contains("is-active")).toBe(false);
     fireEvent.click(back);
     expect(zones(container)).toEqual(["songs", "mixer"]);
   });

@@ -165,6 +165,35 @@ describe("Edit modes on the phone", () => {
     expect(container.querySelector(".lt-setlist-zone.is-songs .lt-setlist-pane-toggle")).toBeNull();
   });
 
+  // The iPhone report: the key change showed nowhere, and the lyrics' expand
+  // button did nothing.
+  it("a key change shows on the song's card and on the band", () => {
+    const keyed = { ...region, key: "D", keyChanges: [{ id: "k1", startSeconds: 20, key: "E" }] };
+    const base = testSetlistProps({ regions: [keyed] } as Partial<SongView>);
+    const { container } = render(<SetlistView {...base} layoutClass="wide" />);
+    const card = container.querySelector(".lt-setlist-song-key")!;
+    expect(card.textContent).toBe("D → E");
+    act(() => useSetlistStore.getState().setEditMode(null));
+    expect(container.querySelector(".lt-setlist-map-key")?.textContent).toContain("E");
+  });
+
+  it("the lyrics' expand button covers the window and goes back", async () => {
+    const { SetlistLyrics } = await import("./SetlistLyrics");
+    const { container } = render(
+      <SetlistLyrics
+        performance={testSetlistProps({ regions: [region] } as Partial<SongView>).performance}
+        region={region}
+        onClose={vi.fn()}
+      />,
+    );
+    const root = container.querySelector(".lt-setlist-lyrics")!;
+    expect(root.classList.contains("is-expanded")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "liveChart.expand" }));
+    expect(root.classList.contains("is-expanded")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "liveChart.collapse" }));
+    expect(root.classList.contains("is-expanded")).toBe(false);
+  });
+
   it("wide keeps Lanes", () => {
     const base = testSetlistProps({ regions: [region] } as Partial<SongView>);
     render(<SetlistView {...base} layoutClass="wide" />);
@@ -231,9 +260,15 @@ describe("band zoom", () => {
     fireEvent.pointerDown(viewport, { ...touch, pointerId: 3, clientX: 150 });
     fireEvent.pointerDown(viewport, { ...touch, pointerId: 4, clientX: 250 });
     fireEvent.pointerMove(window, { ...touch, pointerId: 4, clientX: 350 });
-    expect(layer.style.width).toBe("800%");
+    // While the fingers are down it only scales (no relayout per frame: the
+    // sections' labels shivered); the real width lands on release.
+    expect(layer.style.width).toBe("400%");
+    expect(layer.style.transform).toContain("scaleX(2)");
     fireEvent.pointerUp(window, { ...touch, pointerId: 3 });
+    expect(layer.style.width).toBe("400%");
     fireEvent.pointerUp(window, { ...touch, pointerId: 4 });
+    expect(layer.style.width).toBe("800%");
+    expect(layer.style.transform).not.toContain("scaleX");
     expect(onSeek).toHaveBeenCalledTimes(1);
     Object.defineProperty(window, "PointerEvent", { configurable: true, value: original });
     vi.unstubAllGlobals();

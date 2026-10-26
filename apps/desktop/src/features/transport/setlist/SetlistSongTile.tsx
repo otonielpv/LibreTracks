@@ -8,6 +8,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { regionEffectiveKey, type SongRegionSummary } from "../desktopApi";
+import { KeySequenceLabel } from "../keyChanges/SoundingKeyLabel";
 import { formatLiveClock } from "../live/liveMarkerModel";
 import { SongReorderHandle, type SongReorderHandleProps } from "../songs/SongReorderHandle";
 import { SONG_REORDER_ID_ATTRIBUTE } from "../songs/useSongReorder";
@@ -144,7 +145,13 @@ function SetlistSongTileComponent({
           {region.name}
         </span>
         <span className="lt-setlist-song-meta">
-          {songKey ? <span className="lt-setlist-song-key">{songKey}</span> : null}
+          {/* Every key of the song, the one sounding lit: a modulation shows
+              here as «D → E» (it used to show only the first key). */}
+          {songKey ? (
+            <span className="lt-setlist-song-key">
+              <KeySequenceLabel region={region} />
+            </span>
+          ) : null}
           {layout !== "short" && bpmLabel ? (
             <span className="lt-setlist-song-bpm">{bpmLabel}</span>
           ) : null}

@@ -403,8 +403,9 @@ function SetlistViewComponent({
       {layout === "short" ? (
         <button
           type="button"
-          className={`lt-setlist-pane-toggle${shortPane === "song" ? " is-active" : ""}`}
-          aria-pressed={shortPane === "song"}
+          // A way to the other view, not a state: it is never lit (lit, «Mix»
+          // read as if the mixer were what you were looking at).
+          className="lt-setlist-pane-toggle"
           title={t(shortPane === "song" ? "setlistView.pane.showMixerTitle" : "setlistView.pane.showSongTitle")}
           onClick={() => setShortPane(shortPane === "song" ? "mixer" : "song")}
         >

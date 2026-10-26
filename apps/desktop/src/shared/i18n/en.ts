@@ -2041,7 +2041,6 @@ const en = {
     recent: "Recent",
   },
   compactView: {
-    stripOptions: "Pan and output of {{name}}",
     renamePrompt: "Rename song",
     renamed: "Song renamed to \"{{name}}\"",
     bpmPrompt: "BPM of \"{{name}}\"",

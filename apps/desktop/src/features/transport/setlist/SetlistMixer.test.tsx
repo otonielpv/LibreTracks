@@ -360,3 +360,25 @@ describe("phone console rail", () => {
     expect(filter.getAttribute("aria-pressed")).toBe("false");
   });
 });
+
+describe("channel strip layout", () => {
+  // The iPhone report: pan and output were unusable behind a button. They are
+  // at the bottom of the strip, as in the compact view, with M/S/T beside the
+  // fader to win height.
+  it("M/S/T beside the fader, pan and output at the bottom, on a phone too", () => {
+    const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="short" />);
+    const strip = container.querySelector<HTMLElement>(".lt-compact-mixer-strip.is-fader-strip")!;
+    const order = Array.from(strip.children).map((child) => child.className.split(" ")[0]);
+    expect(order).toEqual([
+      "lt-compact-mixer-strip-name",
+      "lt-compact-mixer-strip-toggles",
+      "lt-compact-mixer-fader-wrap",
+      "lt-compact-mixer-pan-wrap",
+      "lt-compact-mixer-audio-to",
+    ]);
+    expect(within(strip).getByRole("combobox")).toBeTruthy();
+    expect(within(strip).getByRole("slider", { name: /Pan/ })).toBeTruthy();
+    // No hidden «options» button any more.
+    expect(strip.querySelector(".is-options")).toBeNull();
+  });
+});

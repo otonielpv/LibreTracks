@@ -2069,7 +2069,6 @@ const es = {
     recent: "Recientes",
   },
   compactView: {
-    stripOptions: "Pan y salida de {{name}}",
     renamePrompt: "Renombrar canción",
     renamed: "Canción renombrada como \"{{name}}\"",
     bpmPrompt: "BPM de \"{{name}}\"",

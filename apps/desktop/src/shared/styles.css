@@ -13912,3 +13912,78 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 .lt-mobile .lt-device-status-action {
   min-height: 32px;
 }
+
+/* ── Channel strip: M/S/T en columna junto al fader ──
+   La tira con fader (no la MIDI ni la del Master) pone M/S/T a la izquierda
+   del fader, en vez de una fila encima: gana unos 1.5 rem de alto para el
+   fader, que es lo que se agarra. Abajo, el pan y la salida, a todo el ancho,
+   como siempre. La escala numérica del fader se oculta (la tira es estrecha):
+   las marcas se leen igual y el valor sale al arrastrar. */
+.lt-compact-mixer-strip.is-fader-strip {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+  column-gap: 0.3rem;
+  row-gap: 0;
+  align-content: stretch;
+}
+
+.lt-compact-mixer-strip.is-fader-strip > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-strip-name {
+  grid-row: 1;
+}
+
+.lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-strip-parent {
+  grid-row: 2;
+}
+
+.lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-strip-hidden-count {
+  grid-row: 3;
+}
+
+.lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-strip-toggles {
+  grid-column: 1;
+  grid-row: 4;
+  flex-direction: column;
+  justify-content: flex-start;
+  margin-top: 0.3rem;
+}
+
+.lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-fader-wrap {
+  grid-column: 2;
+  grid-row: 4;
+  margin-top: 0.3rem;
+  min-height: 0;
+}
+
+.lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-pan-wrap {
+  grid-row: 5;
+  margin: 0.3rem 0 0.25rem;
+}
+
+.lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-audio-to {
+  grid-row: 6;
+}
+
+.lt-compact-mixer-strip.is-fader-strip .lt-compact-mixer-strip-toggles .lt-compact-mixer-toggle {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 2rem;
+  max-width: 2rem;
+  height: 1.7rem;
+  min-height: 0;
+  border-top: 1px solid rgba(186, 202, 197, 0.18);
+}
+
+.lt-compact-mixer-strip.is-fader-strip .lt-compact-mixer-fader-scale {
+  display: none;
+}
+
+/* El botón de ocultar el mezclador de la vista compacta (móvil): más bajo. */
+.lt-compact-view > .lt-compact-mixer-toggle {
+  min-height: 1.5rem;
+}

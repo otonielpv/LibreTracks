@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
-import { markerCategory, type SongRegionSummary } from "@libretracks/shared/models";
+import { markerCategory, transposeKey, type SongRegionSummary } from "@libretracks/shared/models";
 
 import { isMobileApp } from "../desktopApi";
 import { openSongAnalysis } from "../songAnalysis/songAnalysisStore";
@@ -224,6 +224,21 @@ function SongMapComponent({
             </button>
           );
         })}
+        {/* Key changes: a lilac mark under the label strip, where the new key
+            starts (the DAW ruler's notches; they showed nowhere here). */}
+        {(region.keyChanges ?? [])
+          .filter((change) => change.startSeconds > region.startSeconds && change.startSeconds < region.endSeconds)
+          .map((change) => (
+            <span
+              key={change.id}
+              className="lt-setlist-map-key"
+              style={{ left: `${percent.secondsToPx(change.startSeconds)}%` }}
+              title={t("transport.keyChanges.summaryTitle")}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">music_note</span>
+              {transposeKey(change.key, region.transposeSemitones) ?? change.key}
+            </span>
+          ))}
         {vampSpan ? (
           <span
             className="lt-setlist-map-vamp"
