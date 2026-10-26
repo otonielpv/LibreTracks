@@ -2370,7 +2370,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 }
 
 .lt-setlist-view.is-editing.is-wave-editing {
-  grid-template-columns: minmax(0, 1fr) min(22rem, 34%);
+  grid-template-columns: minmax(0, 1fr) var(--lt-setlist-drawer-width, min(22rem, 34%));
   grid-template-rows: auto minmax(0, 1fr);
 }
 

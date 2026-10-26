@@ -43,6 +43,12 @@ describe("estilos del editor de arreglos", () => {
     expect(rule(".lt-structure-panel")).toContain("overflow-x: hidden");
   });
 
+  it("secciones y arreglos conservan el ancho común del inspector", () => {
+    expect(rule(".lt-setlist-view.is-editing.is-wave-editing", setlistCss)).toContain(
+      "var(--lt-setlist-drawer-width, min(22rem, 34%))",
+    );
+  });
+
   it("la paleta hace scroll propio en escritorio y ninguno en móvil", () => {
     const chips = rule(".lt-structure-chips");
     expect(chips).toContain("max-height");
