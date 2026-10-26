@@ -3322,12 +3322,6 @@ html.lt-mobile .lt-setlist-meter-marker {
 /* El master no usa la rejilla compacta de las tiras de pista: su valor en
    dB caía en la columna de M/S/T y, al cambiar de ancho (-3.5 → -12.5 dB),
    movía el fader mientras se arrastraba (iPhone 13). */
-.lt-setlist-mixer.is-short .lt-compact-mixer-strip.lt-setlist-master-strip,
-html.lt-mobile .lt-setlist-mixer.is-medium .lt-compact-mixer-strip.lt-setlist-master-strip {
-  display: flex;
-  flex-direction: column;
-}
-
 .lt-setlist-master-value {
   display: block;
   min-width: 4.5em;

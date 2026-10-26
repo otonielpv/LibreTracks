@@ -13990,7 +13990,8 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 
 /* Salida de la tira: un selector bajo y apretado, para dejar el alto al
    fader (en el teléfono sobre todo). */
-.lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-audio-to {
+.lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-audio-to,
+.lt-setlist-master-strip > .lt-compact-mixer-audio-to {
   height: 1.1rem;
   min-height: 0;
   padding: 0 0.9rem 0 0.25rem;
@@ -13998,6 +13999,22 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   line-height: 1;
 }
 
-.lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-pan-wrap {
+.lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-pan-wrap,
+.lt-setlist-master-strip > .lt-compact-mixer-pan-wrap {
   margin: 0.2rem 0 0.2rem;
+}
+
+/* El Master ocupa todo el alto: nombre, valor, fader (lo que sobra) y los
+   huecos invisibles de pan y salida, con la misma altura que las pistas para
+   que los faders queden a la par. */
+.lt-setlist-master-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  row-gap: 0;
+}
+
+.lt-setlist-master-strip > .lt-compact-mixer-fader-wrap {
+  margin-top: 0.3rem;
+  min-height: 0;
 }
