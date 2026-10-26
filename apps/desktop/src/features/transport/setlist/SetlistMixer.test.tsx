@@ -5,6 +5,7 @@ import type { SongView, TrackSummary } from "@libretracks/shared/models";
 
 import type { MetronomeDeviceHandlers } from "../settings/metronomeDeviceHandlers";
 import { SetlistView } from "./SetlistView";
+import { songCardRows } from "./useSongsRowResize";
 import { INITIAL_SETLIST_STATE, useSetlistStore } from "./setlistStore";
 import { testRegion, testSetlistProps } from "./testBindings";
 
@@ -380,5 +381,21 @@ describe("channel strip layout", () => {
     expect(within(strip).getByRole("slider", { name: /Pan/ })).toBeTruthy();
     // No hidden «options» button any more.
     expect(strip.querySelector(".is-options")).toBeNull();
+  });
+});
+
+describe("song cards in a resized row", () => {
+  // The desktop report: cards did not follow the row (clipped, with a
+  // vertical scroll, or small in a big row).
+  it("as many rows as fit at the minimum card height, the cards filling them exactly", () => {
+    expect(songCardRows(78)).toEqual({ rows: 1, cardHeight: 64 });
+    // 3 rows of 63 px + 2 gaps of 6 px + 14 px of padding = 215.
+    expect(songCardRows(215)).toEqual({ rows: 3, cardHeight: 63 });
+    // Never a card shorter than the text fits in.
+    expect(songCardRows(20).cardHeight).toBeGreaterThanOrEqual(44);
+    for (const height of [64, 100, 150, 220, 330]) {
+      const { rows, cardHeight } = songCardRows(height);
+      expect(rows * cardHeight + (rows - 1) * 6 + 14).toBeLessThanOrEqual(Math.max(height, 58));
+    }
   });
 });

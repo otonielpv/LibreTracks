@@ -4002,11 +4002,40 @@ button.lt-setlist-track-chip-name {
   grid-template-rows: min(var(--lt-setlist-songs-height), 40%) minmax(8rem, 1fr) var(--lt-setlist-mixer-height, minmax(14rem, 1.6fr));
 }
 
+/* Resized row: the cards fill its height (useSongsRowResize sets how tall
+   each one is and whether there is more than one row), flowing down and then
+   across, so there is never vertical scroll or a clipped card; only more
+   songs than fit scroll sideways. */
 .lt-setlist-view.is-wide.has-songs-height .lt-setlist-songs.is-horizontal {
+  flex-direction: column;
   flex-wrap: wrap;
   align-content: flex-start;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-song-item,
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-add-song,
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-transition {
+  height: var(--lt-setlist-card-h, auto);
+  min-height: 0;
+}
+
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-song-tile {
+  height: 100%;
+  min-height: 0;
+}
+
+/* In several rows an arrow between cards means nothing: it would also take a
+   slot of the column. */
+.lt-setlist-view.is-wide[data-song-rows="multi"] .lt-setlist-transition {
+  display: none;
+}
+
+.lt-setlist-view.is-wide.has-songs-height > .lt-setlist-zone.is-songs > .lt-setlist-pane-toggle,
+.lt-setlist-view.is-wide.has-songs-height > .lt-setlist-zone.is-songs > .lt-setlist-edit-button {
+  align-self: flex-start;
+  margin-top: 0.45rem;
 }
 
 /* ---- Letra a pantalla completa (el botón de ampliar no hacía nada: el
@@ -4051,4 +4080,29 @@ button.lt-setlist-track-chip-name {
    texto arriba): con el fader más bajo las etiquetas se pisaban. */
 .lt-setlist-master-strip .lt-compact-mixer-fader-scale {
   display: none;
+}
+
+/* Resized row: a card is as tall as its slot, so its text must fit in it:
+   one-line name (the 2-line clamp made the first card taller than its slot
+   and it overlapped the next), one-line meta, nothing spills. */
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-song-tile {
+  box-sizing: border-box;
+  overflow: hidden;
+  padding-top: 0.2rem;
+  padding-bottom: 0.3rem;
+}
+
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-song-name {
+  display: block;
+  -webkit-line-clamp: unset;
+  white-space: nowrap;
+}
+
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-song-meta {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-songs.is-horizontal {
+  gap: 0.35rem;
 }

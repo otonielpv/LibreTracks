@@ -8,6 +8,23 @@ export const SONGS_MIN_HEIGHT_PX = 64;
 export const SONGS_MAX_HEIGHT_FRACTION = 0.5;
 const STORAGE_KEY = "lt.setlistView.songsHeightPx";
 export const SONGS_HEIGHT_VAR = "--lt-setlist-songs-height";
+export const CARD_HEIGHT_VAR = "--lt-setlist-card-h";
+/** A card is never shorter than this (name + key/BPM line). */
+export const CARD_MIN_HEIGHT_PX = 52;
+const LIST_PADDING_PX = 14;
+const CARD_GAP_PX = 6;
+
+/**
+ * How the song cards fill a row of `listHeightPx`: as many rows as fit at
+ * the minimum card height, and the height each card takes so they fill it
+ * exactly (no vertical scroll, no clipped card: the desktop report).
+ */
+export function songCardRows(listHeightPx: number) {
+  const usable = Math.max(0, listHeightPx - LIST_PADDING_PX);
+  const rows = Math.max(1, Math.floor((usable + CARD_GAP_PX) / (CARD_MIN_HEIGHT_PX + CARD_GAP_PX)));
+  const cardHeight = Math.max(CARD_MIN_HEIGHT_PX - 8, Math.floor((usable - (rows - 1) * CARD_GAP_PX) / rows));
+  return { rows, cardHeight };
+}
 
 export function clampSongsHeight(heightPx: number, viewHeightPx: number) {
   const max = Math.max(SONGS_MIN_HEIGHT_PX, viewHeightPx * SONGS_MAX_HEIGHT_FRACTION);
@@ -44,6 +61,31 @@ export function useSongsRowResize(
   songsRef: RefObject<HTMLElement | null>,
 ) {
   const setSongsHeightPx = useSetlistStore((state) => state.setSongsHeightPx);
+  const songsHeightPx = useSetlistStore((state) => state.songsHeightPx);
+
+  // The cards follow the list's real height (it is capped by the window, so
+  // the dragged value is not enough): rows and card height, live while
+  // dragging and when the window changes.
+  useEffect(() => {
+    const root = rootRef.current;
+    const list = songsRef.current?.querySelector<HTMLElement>(".lt-setlist-songs");
+    if (!root || !list || songsHeightPx === null || typeof ResizeObserver === "undefined") {
+      root?.style.removeProperty(CARD_HEIGHT_VAR);
+      if (root) delete root.dataset.songRows;
+      return;
+    }
+    const apply = () => {
+      const { rows, cardHeight } = songCardRows(list.clientHeight);
+      root.style.setProperty(CARD_HEIGHT_VAR, `${cardHeight}px`);
+      // A data attribute, not a class: React owns the root's className.
+      if (rows > 1) root.dataset.songRows = "multi";
+      else delete root.dataset.songRows;
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [rootRef, songsRef, songsHeightPx]);
 
   useEffect(() => {
     if (useSetlistStore.getState().songsHeightPx !== null) return;
