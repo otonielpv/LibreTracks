@@ -8,6 +8,7 @@ import {
 
 import { createClipsWithAutoTracks } from "../desktopApi";
 import { nextDownbeatAfter } from "../timeline/timelineMath";
+import { extendSongToAudio } from "./extendSongToAudio";
 import type { LibraryAssetDragPayload, LibraryDropLayout } from "../types";
 
 /**
@@ -110,6 +111,12 @@ export function createLibraryPlacementHandlers(
           })),
         ),
       );
+      // An empty song grows to its audio (see extendSongToAudio).
+      const resized = await extendSongToAudio(
+        regionId,
+        payload.map((item) => item.filePath),
+      );
+      if (resized) deps.applyPlaybackSnapshot(resized);
     });
   }
 

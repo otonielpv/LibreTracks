@@ -2,6 +2,7 @@ import type { SkippedImport } from "@libretracks/shared/models";
 
 import { createClipsWithAutoTracks, importAudioFilesFromPaths } from "../desktopApi";
 import type { classifyDroppedPaths } from "./dragDrop";
+import { extendSongToAudio } from "./extendSongToAudio";
 import type { LibraryDragDropDeps } from "./libraryDragDrop";
 import { routeCompactDroppedVideos } from "./videoDropRouting";
 
@@ -43,6 +44,12 @@ export function dropPathsIntoSong(
         })),
       );
       deps.applyPlaybackSnapshot(snapshot);
+      // An empty song grows to its audio (see extendSongToAudio).
+      const resized = await extendSongToAudio(
+        regionId,
+        importedAssets.map((asset) => asset.filePath),
+      );
+      if (resized) deps.applyPlaybackSnapshot(resized);
       deps.setStatus(
         importedAssets.length === 1
           ? deps.t("transport.status.clipAdded", {

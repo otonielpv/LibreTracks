@@ -85,6 +85,7 @@ import {
   LIBRARY_DRAG_MAX_SCROLL_SPEED_PX,
   NATIVE_DND_DEBUG_ENABLED,
 } from "../constants";
+import { dropFolderOverNewSong } from "./folderOverNewSong";
 import type { TimelineGrid } from "../timeline/timelineMath";
 import type {
   InternalLibraryPointerDrag,
@@ -1189,6 +1190,11 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
       event.clientX,
       event.clientY,
     ) as HTMLElement | null;
+    // A library folder over «+ New song» (Setlist) becomes a song.
+    const { folderName, payload: folderPayload } = nextDrag;
+    if (dropFolderOverNewSong(elementAtPointer, folderName, folderPayload, deps().song, dropLibraryFolder, deps().runAction)) {
+      return;
+    }
     const compactColumn = elementAtPointer?.closest(
       ".lt-compact-song-column[data-region-id], .lt-setlist-song-drop[data-region-id]",
     ) as HTMLElement | null;
