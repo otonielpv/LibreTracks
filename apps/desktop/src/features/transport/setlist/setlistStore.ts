@@ -14,6 +14,7 @@ export type SetlistEditMode =
   | "tracks"
   | "lanes"
   | "automation"
+  | "midi"
   | "lyrics";
 
 export const LANES_MIN_ZOOM = 1;
@@ -34,6 +35,8 @@ export type SetlistState = {
   /** wide/medium: the lyrics panel is shown (beside the band, or instead of
    * it). The phone uses `shortPane: "lyrics"`. */
   lyricsOpen: boolean;
+  /** The band's zoom (1 = the whole song; more follows the playhead). */
+  overviewZoom: number;
   /** Edit → Lanes: 1 fits the song in the width, up to 16. Not the DAW's
    * camera: that one stays where it was. */
   lanesZoom: number;
@@ -50,6 +53,7 @@ export const INITIAL_SETLIST_STATE: SetlistState = {
   shortPane: "mixer",
   mixerExpanded: false,
   lyricsOpen: false,
+  overviewZoom: 1,
   lanesZoom: 1,
   lanesScrollPx: 0,
 };
@@ -62,6 +66,7 @@ type SetlistActions = {
   setShortPane: (pane: SetlistShortPane) => void;
   setMixerExpanded: (expanded: boolean) => void;
   setLyricsOpen: (open: boolean) => void;
+  setOverviewZoom: (zoom: number) => void;
   setLanesZoom: (zoom: number) => void;
   setLanesScrollPx: (scrollPx: number) => void;
 };
@@ -99,6 +104,7 @@ export const useSetlistStore = create<SetlistState & SetlistActions>()(
     setShortPane: (shortPane) => set({ shortPane }),
     setMixerExpanded: (mixerExpanded) => set({ mixerExpanded }),
     setLyricsOpen: (lyricsOpen) => set({ lyricsOpen }),
+    setOverviewZoom: (overviewZoom) => set({ overviewZoom: Math.max(1, Math.min(8, overviewZoom)) }),
     setLanesZoom: (lanesZoom) =>
       set({ lanesZoom: Math.max(LANES_MIN_ZOOM, Math.min(LANES_MAX_ZOOM, lanesZoom)) }),
     setLanesScrollPx: (lanesScrollPx) => set({ lanesScrollPx: Math.max(0, lanesScrollPx) }),

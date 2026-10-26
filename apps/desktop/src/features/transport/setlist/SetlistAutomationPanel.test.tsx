@@ -50,7 +50,7 @@ const rows = (container: HTMLElement) => Array.from(container.querySelectorAll<H
 describe("SetlistAutomationPanel", () => {
   it("lists the song's cues in time order with their bar position and section", () => {
     const { container } = render(
-      <SetlistAutomationPanel song={song} region={region} layout="short" menus={menus() as unknown as TimelineMenus} positionSecondsRef={{ current: 0 }} />,
+      <SetlistAutomationPanel song={song} region={region} layout="short" menus={menus() as unknown as TimelineMenus} positionSecondsRef={{ current: 0 }} waveformSummaries={{}} onSeek={vi.fn()} runShortcutAction={vi.fn()} />,
     );
     const items = rows(container);
     expect(items.map((item) => item.querySelector(".lt-setlist-automation-name")?.textContent)).toEqual([
@@ -74,7 +74,7 @@ describe("SetlistAutomationPanel", () => {
   it("every action is the DAW's: create at the playhead or the section start, edit, menu, scenes", () => {
     const menuMock = menus();
     const { container } = render(
-      <SetlistAutomationPanel song={song} region={region} layout="wide" menus={menuMock as unknown as TimelineMenus} positionSecondsRef={{ current: 10 }} />,
+      <SetlistAutomationPanel song={song} region={region} layout="wide" menus={menuMock as unknown as TimelineMenus} positionSecondsRef={{ current: 10 }} waveformSummaries={{}} onSeek={vi.fn()} runShortcutAction={vi.fn()} />,
     );
     fireEvent.click(screen.getByRole("button", { name: /setlistView.automation.add$/ }));
     expect(menuMock.createAutomationCueAt).toHaveBeenLastCalledWith(10);
@@ -87,4 +87,19 @@ describe("SetlistAutomationPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /setlistView.automation.scenes$/ }));
     expect(menuMock.openMixScenes).toHaveBeenCalled();
   });
+
+  // The iPhone report: the list alone gave no idea where the cues go. They
+  // sit on the song's waveform, and tapping one edits it.
+  it("the cues sit on the waveform; tapping one edits it", () => {
+    const menuMock = menus();
+    const { container } = render(
+      <SetlistAutomationPanel song={song} region={region} layout="short" menus={menuMock as unknown as TimelineMenus} positionSecondsRef={{ current: 0 }} waveformSummaries={{}} onSeek={vi.fn()} runShortcutAction={vi.fn()} />,
+    );
+    const marks = Array.from(container.querySelectorAll<HTMLElement>(".lt-setlist-scrub-automation"));
+    expect(marks.map((mark) => mark.textContent)).toEqual(["Cue first", "Cue six", "Cue late"]);
+    expect(marks[1].classList.contains("is-off")).toBe(true);
+    fireEvent.click(marks[2]);
+    expect(menuMock.editAutomationCue).toHaveBeenCalledWith(expect.objectContaining({ id: "late" }));
+  });
 });
+

@@ -3364,3 +3364,166 @@ html.lt-mobile .lt-setlist-meter-marker {
   white-space: nowrap;
   cursor: pointer;
 }
+
+/* El master no usa la rejilla compacta de las tiras de pista: su valor en
+   dB caía en la columna de M/S/T y, al cambiar de ancho (-3.5 → -12.5 dB),
+   movía el fader mientras se arrastraba (iPhone 13). */
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip.lt-setlist-master-strip,
+html.lt-mobile .lt-setlist-mixer.is-medium .lt-compact-mixer-strip.lt-setlist-master-strip {
+  display: flex;
+  flex-direction: column;
+}
+
+.lt-setlist-master-value {
+  display: block;
+  min-width: 4.5em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Derecha: sin la zona segura (la barra de la app ya llega al borde; el
+   hueco se veía vacío en el iPhone). */
+.lt-setlist-view.is-short {
+  padding-right: var(--lt-setlist-pad);
+}
+
+/* ---- Zoom de la banda (iPhone, 2026-10-26) ---- */
+
+.lt-setlist-zoom-viewport {
+  grid-area: band;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Una rejilla de una celda, como la banda: onda, bloques y asas se apilan. */
+.lt-setlist-zoom-layer {
+  display: grid;
+  grid-template-areas: "band";
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  will-change: transform;
+}
+
+.lt-setlist-zoom-controls {
+  grid-area: band;
+  align-self: end;
+  justify-self: start;
+  z-index: 3;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.3rem;
+  pointer-events: none;
+}
+
+.lt-setlist-zoom-controls .lt-setlist-map-action {
+  pointer-events: auto;
+  min-width: 2.25rem;
+  justify-content: center;
+  padding: 0 0.4rem;
+  background: rgb(19 19 19 / 0.92);
+}
+
+.lt-setlist-zoom-controls .lt-setlist-map-action:disabled {
+  opacity: 0.4;
+}
+
+/* Los avisos van abajo a la izquierda en la banda: suben un poco para no
+   quedar debajo de los botones de zoom. */
+.lt-setlist-zoom-layer .lt-setlist-map-cue {
+  bottom: 2.6rem;
+}
+
+/* ---- Onda deslizable común: avisos, automatismos y MIDI (2026-10-26) ---- */
+
+/* Avisos: debajo de las secciones, con su campana. */
+.lt-setlist-scrub-section.is-cue {
+  top: 3rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  border-radius: 0.35rem;
+}
+
+.lt-setlist-scrub-section.is-cue .material-symbols-outlined {
+  font-size: 0.85rem;
+}
+
+.lt-setlist-scrub-automation,
+.lt-setlist-scrub-midi {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 10rem;
+  min-height: 1.6rem;
+  padding: 0 0.4rem 0 0.2rem;
+  border: 0;
+  border-radius: 0.35rem;
+  background: rgb(19 19 19 / 0.88);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  translate: -0.45rem 0;
+  cursor: pointer;
+}
+
+.lt-setlist-scrub-automation {
+  top: 1.5rem;
+  color: #ffd27a;
+}
+
+.lt-setlist-scrub-automation.is-off {
+  opacity: 0.55;
+}
+
+.lt-setlist-scrub-automation::after,
+.lt-setlist-scrub-midi::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0.45rem;
+  width: 1px;
+  height: 20rem;
+  background: currentColor;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.lt-setlist-scrub-midi {
+  top: calc(1.5rem + var(--lt-midi-row, 0) * 1.8rem);
+  color: #c9a8ff;
+}
+
+.lt-setlist-scrub-midi .material-symbols-outlined {
+  font-size: 0.95rem;
+}
+
+.lt-setlist-midi-icon {
+  color: #c9a8ff;
+}
+
+/* Dentro de la capa del zoom la onda va en la misma celda que los bloques
+   (si no, la rejilla le abría una fila aparte debajo). */
+.lt-setlist-zoom-layer > .lt-setlist-overview,
+.lt-setlist-zoom-layer > .lt-setlist-section-layer {
+  grid-area: band;
+}
+
+/* Barra de la onda deslizable: botones de icono más estrechos para que
+   quepan en una fila en el teléfono. */
+.lt-setlist-scrub-bar-row {
+  gap: 0.25rem;
+}
+
+.lt-setlist-scrub-bar-row .lt-setlist-settings-button {
+  min-width: 2.4rem;
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
+}

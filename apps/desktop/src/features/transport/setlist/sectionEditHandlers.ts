@@ -31,7 +31,10 @@ export type SectionEditDeps = {
   getRegion: () => SongRegionSummary | null;
   getPlayheadSeconds: () => number;
   getSnapEnabled: () => boolean;
-  menus: Pick<TimelineMenus, "openMenu" | "rulerContextMenu" | "createTypedMarker">;
+  menus: Pick<
+    TimelineMenus,
+    "openMenu" | "rulerContextMenu" | "createTypedMarker" | "openCreateSectionKindMenu" | "openCreateCueKindMenu"
+  >;
   rulerMarkers: Pick<RulerMarkerHandlers, "moveGroup" | "duplicate" | "remove" | "groupMenu">;
   onSectionContextMenu: (event: ReactMouseEvent<HTMLElement>, markerId: string) => void;
   /** The DAW region band's commit for new song edges. */
@@ -107,6 +110,16 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
     getDeps().menus.createTypedMarker(target, null, null);
   }
 
+  /** «+ Section here» / «+ Cue here»: the DAW's kind list (Verse, Chorus…
+   * or All in, Drums…) at that bar; picking one creates it, named. */
+  function createKindAt(seconds: number, lane: "section" | "cue") {
+    const target = place(seconds);
+    if (target === null || !requestStructureEdit([target])) return;
+    const { menus } = getDeps();
+    if (lane === "section") menus.openCreateSectionKindMenu(target);
+    else menus.openCreateCueKindMenu(target);
+  }
+
   /** One commit when the drag ends: `moveRulerMarkers` for the group. */
   function commitMove(markerIds: readonly string[], deltaSeconds: number) {
     if (markerIds.length === 0 || Math.abs(deltaSeconds) < 1e-6) return false;
@@ -180,6 +193,7 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
     resizeSongEnd,
     createAtPlayhead,
     createAt,
+    createKindAt,
     commitMove,
     select,
     dragGroup,

@@ -52,7 +52,7 @@ const runFrames = () => {
 
 function handlers() {
   return {
-    createAt: vi.fn(),
+    createKindAt: vi.fn(),
     commitMove: vi.fn(() => true),
     select: vi.fn(),
     dragGroup: vi.fn((id: string) => [id]),
@@ -70,6 +70,7 @@ function props(overrides: Partial<Props> = {}): Props {
     waveformSummaries: {},
     positionSecondsRef: { current: 0 },
     onSeek: vi.fn(),
+    runShortcutAction: vi.fn(),
     handlers: handlers(),
     ...overrides,
   };
@@ -145,7 +146,13 @@ describe("SectionScrubEditor (Playback-style section editing)", () => {
     runFrames();
     expect(barLabel(container)).toBe("setlistView.sections.barLabel:6");
     fireEvent.click(screen.getByRole("button", { name: /setlistView.sections.addHere/ }));
-    expect(base.handlers.createAt).toHaveBeenCalledWith(10);
+    expect(base.handlers.createKindAt).toHaveBeenLastCalledWith(10, "section");
+    // The iPhone report: cues («avisos») could not be added here.
+    fireEvent.click(screen.getByRole("button", { name: /setlistView.sections.addCueHere/ }));
+    expect(base.handlers.createKindAt).toHaveBeenLastCalledWith(10, "cue");
+    // …nor played to hear where each mark falls.
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.scrub.play" }));
+    expect(base.runShortcutAction).toHaveBeenCalledWith("transport.playPause");
     fireEvent.click(screen.getByRole("button", { name: "setlistView.sections.nextBar" }));
     expect(base.onSeek).toHaveBeenLastCalledWith(12);
     fireEvent.click(screen.getByRole("button", { name: "setlistView.sections.prevBar" }));

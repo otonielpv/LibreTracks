@@ -52,6 +52,8 @@ function setup(overrides: Partial<SectionEditDeps> = {}) {
     menus: {
       openMenu: vi.fn(),
       rulerContextMenu: vi.fn(() => []),
+      openCreateSectionKindMenu: vi.fn(),
+      openCreateCueKindMenu: vi.fn(),
       createTypedMarker: vi.fn(),
     },
     rulerMarkers: {

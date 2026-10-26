@@ -14,9 +14,11 @@ import { SetlistMixer } from "./SetlistMixer";
 import { MIXER_HEIGHT_VAR, useMixerResize } from "./useMixerResize";
 import type { VideoLaneBindings } from "../video/VideoClipHotspots";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
+import { OverviewZoom } from "./OverviewZoom";
 import { SectionScrubEditor } from "./SectionScrubEditor";
 import { SetlistLyrics } from "./SetlistLyrics";
 import { SetlistAutomationPanel } from "./SetlistAutomationPanel";
+import { SetlistMidiPanel } from "./SetlistMidiPanel";
 import { SetlistEditButton, SetlistEditDrawer } from "./SetlistEditDrawer";
 import { SetlistSongSettings } from "./SetlistSongSettings";
 import { SetlistSectionsPanel } from "./SetlistSectionsPanel";
@@ -315,6 +317,7 @@ function SetlistViewComponent({
                         waveformSummaries={waveformSummaries}
                         positionSecondsRef={performance.positionSecondsRef}
                         onSeek={performance.onSeek}
+                        runShortcutAction={runShortcutAction}
                         handlers={sectionHandlers}
                       />
                     ) : undefined
@@ -352,6 +355,27 @@ function SetlistViewComponent({
                   layout={layout}
                   menus={menus}
                   positionSecondsRef={performance.positionSecondsRef}
+                  waveformSummaries={waveformSummaries}
+                  onSeek={performance.onSeek}
+                  runShortcutAction={runShortcutAction}
+                />
+              ) : null,
+            },
+            {
+              mode: "midi",
+              icon: "piano",
+              labelKey: "setlistView.edit.modes.midi",
+              content: shownRegion ? (
+                <SetlistMidiPanel
+                  song={performance.song}
+                  region={shownRegion}
+                  tracks={tracks}
+                  layout={layout}
+                  menus={menus}
+                  positionSecondsRef={performance.positionSecondsRef}
+                  waveformSummaries={waveformSummaries}
+                  onSeek={performance.onSeek}
+                  runShortcutAction={runShortcutAction}
                 />
               ) : null,
             },
@@ -372,17 +396,16 @@ function SetlistViewComponent({
                   },
                 ]
               : []),
+            ...(layout === "short"
+              ? []
+              : [
             {
-              mode: "lanes",
+              mode: "lanes" as const,
               icon: "view_timeline",
               labelKey: "setlistView.edit.modes.lanes",
-              content:
-                layout === "short" ? (
-                  lanes
-                ) : (
-                  <p className="lt-setlist-sections-hint">{t("setlistView.lanes.hint")}</p>
-                ),
+              content: <p className="lt-setlist-sections-hint">{t("setlistView.lanes.hint")}</p>,
             },
+                ]),
           ]}
         />
       </Zone>
@@ -442,40 +465,70 @@ function SetlistViewComponent({
     <Zone name="overview" drop={songDrop}>
       {shownRegion ? (
         <>
-          <SongOverviewStrip
-            region={shownRegion}
-            clips={performance.song.clips}
-            sectionMarkers={performance.song.sectionMarkers}
-            waveformSummaries={waveformSummaries}
+          <OverviewZoom
+            startSeconds={shownRegion.startSeconds}
+            endSeconds={shownRegion.endSeconds}
             positionSecondsRef={performance.positionSecondsRef}
-            layout={layout}
-            // Editing too: the handles take their own pointer, the rest of
-            // the waveform moves the playhead (the iPhone report).
-            onSeek={performance.onSeek}
-            onContextMenuAt={sectionHandlers.openMenuAt}
-            onDoubleClickAt={editMode !== null ? sectionHandlers.createAt : undefined}
-          />
-          <SongMap
-            song={performance.song}
-            region={shownRegion}
-            layout={layout}
-            positionSecondsRef={performance.positionSecondsRef}
-            pendingMarkerId={performance.pendingMarkerId}
-            activeVamp={performance.activeVamp}
-            onMarkerAction={performance.onMarkerAction}
-            onCancelPendingJump={performance.onCancelPendingJump}
-            onToggleVamp={performance.onToggleVamp}
-            onCueSong={onCueSong}
-            onPlaySong={onPlaySong}
-            onSectionContextMenu={onSectionContextMenu}
-            editing={editMode !== null}
-            arrangementPicker={
-              editMode === null ? (
-                <SetlistArrangementPicker region={shownRegion} handlers={structureHandlers} />
-              ) : null
+            overlay={
+                  <SongMap
+                    part="actions"
+                    song={performance.song}
+                    region={shownRegion}
+                    layout={layout}
+                    positionSecondsRef={performance.positionSecondsRef}
+                    pendingMarkerId={performance.pendingMarkerId}
+                    activeVamp={performance.activeVamp}
+                    onMarkerAction={performance.onMarkerAction}
+                    onCancelPendingJump={performance.onCancelPendingJump}
+                    onToggleVamp={performance.onToggleVamp}
+                    onCueSong={onCueSong}
+                    onPlaySong={onPlaySong}
+                    onSectionContextMenu={onSectionContextMenu}
+                    editing={editMode !== null}
+                    arrangementPicker={
+                      editMode === null ? (
+                        <SetlistArrangementPicker region={shownRegion} handlers={structureHandlers} />
+                      ) : null
+                    }
+                  />
             }
-          />
-          {layout !== "short" || editMode === null ? sectionLayer : null}
+          >
+              <SongOverviewStrip
+                region={shownRegion}
+                clips={performance.song.clips}
+                sectionMarkers={performance.song.sectionMarkers}
+                waveformSummaries={waveformSummaries}
+                positionSecondsRef={performance.positionSecondsRef}
+                layout={layout}
+                // Editing too: the handles take their own pointer, the rest of
+                // the waveform moves the playhead (the iPhone report).
+                onSeek={performance.onSeek}
+                onContextMenuAt={sectionHandlers.openMenuAt}
+                onDoubleClickAt={editMode !== null ? sectionHandlers.createAt : undefined}
+              />
+              <SongMap
+                part="blocks"
+                song={performance.song}
+                region={shownRegion}
+                layout={layout}
+                positionSecondsRef={performance.positionSecondsRef}
+                pendingMarkerId={performance.pendingMarkerId}
+                activeVamp={performance.activeVamp}
+                onMarkerAction={performance.onMarkerAction}
+                onCancelPendingJump={performance.onCancelPendingJump}
+                onToggleVamp={performance.onToggleVamp}
+                onCueSong={onCueSong}
+                onPlaySong={onPlaySong}
+                onSectionContextMenu={onSectionContextMenu}
+                editing={editMode !== null}
+                arrangementPicker={
+                  editMode === null ? (
+                    <SetlistArrangementPicker region={shownRegion} handlers={structureHandlers} />
+                  ) : null
+                }
+              />
+              {layout !== "short" || editMode === null ? sectionLayer : null}
+          </OverviewZoom>
         </>
       ) : null}
     </Zone>

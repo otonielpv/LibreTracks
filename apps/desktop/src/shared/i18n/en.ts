@@ -2532,6 +2532,8 @@ const en = {
       noSections: "This song has no sections. Add them in Edit.",
     },
     overview: {
+      zoomGroup: "Waveform zoom",
+      fit: "Show the whole song",
       label: "Waveform of {{name}}",
     },
     mixer: {
@@ -2568,7 +2570,7 @@ const en = {
       title: "Edit",
       heading: "{{name}} · Edit",
       close: "Leave edit mode",
-      modes: { label: "Edit modes", song: "Song", sections: "Sections", arrangement: "Arrangement", tracks: "Tracks", lanes: "Lanes", automation: "Automation", lyrics: "Lyrics" },
+      modes: { label: "Edit modes", song: "Song", sections: "Sections", arrangement: "Arrangement", tracks: "Tracks", lanes: "Lanes", automation: "Automation", midi: "MIDI", lyrics: "Lyrics" },
       songSettings: "{{name}} settings",
       keySection: "Key",
       key: "Original key",
@@ -2586,6 +2588,9 @@ const en = {
       actionsSection: "Actions",
     },
     sections: {
+      addShort: "Section",
+      addCueShort: "Cue",
+      addCueHere: "Cue here",
       barLabel: "Bar {{bar}}",
       prevBar: "Previous bar",
       nextBar: "Next bar",
@@ -2650,6 +2655,10 @@ const en = {
       add: "New",
     },
     midi: {
+      addHere: "MIDI here",
+      noTracks: "The session has no MIDI tracks.",
+      empty: "No MIDI clips in this song.",
+      list: "MIDI clips",
       add: "+ MIDI",
       addTitle: "Create a MIDI clip at the playhead or at the start of the section",
       atPlayhead: "{{name}}: at the playhead",
@@ -2687,6 +2696,10 @@ const en = {
       openTitle: "Open this song in the DAW, framed",
       back: "Back to Setlist",
       backTitle: "Back to the Setlist view on the same song",
+    },
+    scrub: {
+      play: "Play from the line",
+      pause: "Pause",
     },
     arrangement: {
       list: "Arrangements",

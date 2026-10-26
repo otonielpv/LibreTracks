@@ -2563,6 +2563,8 @@ const es = {
       noSections: "Esta canción no tiene secciones. Añádelas en Editar.",
     },
     overview: {
+      zoomGroup: "Zoom de la onda",
+      fit: "Ver la canción entera",
       label: "Onda de {{name}}",
     },
     mixer: {
@@ -2599,7 +2601,7 @@ const es = {
       title: "Editar",
       heading: "{{name}} · Editar",
       close: "Salir de la edición",
-      modes: { label: "Modos de edición", song: "Canción", sections: "Secciones", arrangement: "Arreglo", tracks: "Pistas", lanes: "Carriles", automation: "Automatismos", lyrics: "Letra" },
+      modes: { label: "Modos de edición", song: "Canción", sections: "Secciones", arrangement: "Arreglo", tracks: "Pistas", lanes: "Carriles", automation: "Automatismos", midi: "MIDI", lyrics: "Letra" },
       songSettings: "Ajustes de {{name}}",
       keySection: "Tono",
       key: "Tono original",
@@ -2617,6 +2619,9 @@ const es = {
       actionsSection: "Acciones",
     },
     sections: {
+      addShort: "Sección",
+      addCueShort: "Aviso",
+      addCueHere: "Aviso aquí",
       barLabel: "Compás {{bar}}",
       prevBar: "Compás anterior",
       nextBar: "Compás siguiente",
@@ -2681,6 +2686,10 @@ const es = {
       add: "Nuevo",
     },
     midi: {
+      addHere: "MIDI aquí",
+      noTracks: "La sesión no tiene pistas MIDI.",
+      empty: "Sin clips MIDI en esta canción.",
+      list: "Clips MIDI",
       add: "+ MIDI",
       addTitle: "Crear un clip MIDI en el playhead o al inicio de la sección",
       atPlayhead: "{{name}}: en el playhead",
@@ -2718,6 +2727,10 @@ const es = {
       openTitle: "Abrir esta canción en la DAW, encuadrada",
       back: "Volver a Setlist",
       backTitle: "Volver a la vista Setlist con la misma canción",
+    },
+    scrub: {
+      play: "Reproducir desde la línea",
+      pause: "Pausa",
     },
     arrangement: {
       list: "Arreglos",

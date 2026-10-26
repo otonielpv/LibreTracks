@@ -47,6 +47,9 @@ type SongMapProps = Pick<
     editing?: boolean;
     /** The arrangement picker, next to the loop button. */
     arrangementPicker?: ReactNode;
+    /** What to draw: the blocks (inside the band's zoom layer), the buttons
+     * (outside it, so they do not slide) or both. */
+    part?: "all" | "blocks" | "actions";
   };
 
 const VAMP_MATCH_SECONDS = 0.05;
@@ -73,6 +76,7 @@ function SongMapComponent({
   onSectionContextMenu,
   editing = false,
   arrangementPicker,
+  part = "all",
 }: SongMapProps) {
   const { t } = useTranslation();
   const fillRef = useRef<HTMLSpanElement | null>(null);
@@ -140,6 +144,7 @@ function SongMapComponent({
 
   return (
     <div className={`lt-setlist-map is-${layout}${editing ? " is-editing" : ""}`}>
+      {part === "actions" ? null : (
       <div
         className="lt-setlist-map-blocks"
         role="list"
@@ -230,6 +235,8 @@ function SongMapComponent({
               </span>
             ))}
       </div>
+      )}
+      {part === "blocks" ? null : (
       <div className="lt-setlist-map-actions">
         {arrangementPicker}
         <button
@@ -270,6 +277,7 @@ function SongMapComponent({
           </span>
         ) : null}
       </div>
+      )}
     </div>
   );
 }
