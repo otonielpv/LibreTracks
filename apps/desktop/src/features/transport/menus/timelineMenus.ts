@@ -447,10 +447,11 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
   // Split a specific song region at the current playhead. Shared by the song
   function songRegionContextMenu(
     region: SongRegionSummary,
+    positionSeconds?: number,
   ): ContextMenuAction[] {
     const d = getDeps();
     const { t } = d;
-    const cursorSeconds = d.displayPositionSecondsRef.current;
+    const cursorSeconds = positionSeconds ?? d.displayPositionSecondsRef.current;
     // Splitting needs the playhead strictly inside this song.
     const canSplitSong =
       cursorSeconds > region.startSeconds && cursorSeconds < region.endSeconds;

@@ -1,4 +1,4 @@
-import { memo, useEffect } from "react";
+import { memo, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   ArrangementBlockSummary,
@@ -7,6 +7,7 @@ import type {
 } from "@libretracks/shared/models";
 
 import { SongStructureEditor } from "../structure/SongStructureEditor";
+import { formatTransportError } from "../errors/formatTransportError";
 import { StructureCapture, StructureWarnings } from "../structure/StructureSections";
 import {
   closeStructureEditor,
@@ -23,7 +24,7 @@ import {
   useArrangementActions,
   type ArrangementActions,
 } from "../structure/useArrangementActions";
-import { setEditLeaveGuard } from "./setlistStore";
+import { requestEditMode, setEditLeaveGuard } from "./setlistStore";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 
 /**
@@ -217,6 +218,23 @@ function SetlistArrangementToolbarComponent({ region, handlers, layout }: Setlis
   useEmbeddedArrangementEditor(region);
   const actions = useArrangementActions(handlers);
   const { t, regionId, structure, draft, dirty, draftIsApplied } = actions;
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const apply = async () => {
+    if (applying) return;
+    setError(null);
+    setApplying(true);
+    try {
+      const result = await actions.apply();
+      if (result.ok) await requestEditMode(null);
+      else if (result.error) setError(formatTransportError(result.error, t as never));
+    } catch (failure) {
+      setError(formatTransportError(failure, t as never));
+    } finally {
+      setApplying(false);
+    }
+  };
+  useEffect(() => setError(null), [regionId, draft?.arrangementId]);
   if (!regionId) return null;
   return (
     <div className={`lt-setlist-arrangement-tools is-${layout}`}>
@@ -271,14 +289,16 @@ function SetlistArrangementToolbarComponent({ region, handlers, layout }: Setlis
             />
           ) : null}
           <footer className="lt-structure-footer lt-setlist-arrangement-footer">
+            {error ? <p className="lt-setlist-arrangement-error" role="alert">{error}</p> : null}
             {dirty ? (
               <span className="lt-structure-dirty">{t("transport.structure.unappliedChanges")}</span>
             ) : null}
             <button
               type="button"
               className={`is-primary ${dirty || !draftIsApplied ? "is-attention" : ""}`}
-              disabled={draft.blocks.length === 0 || (draftIsApplied && !dirty)}
-              onClick={() => void actions.apply()}
+              disabled={applying || draft.blocks.length === 0 || (draftIsApplied && !dirty)}
+              aria-busy={applying}
+              onClick={() => void apply()}
             >
               <span className="material-symbols-outlined" aria-hidden="true">check</span>
               {t("transport.structure.apply")}

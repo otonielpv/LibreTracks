@@ -30,6 +30,7 @@ export type BrowserDropDeps = {
   t: (key: string, options?: Record<string, unknown>) => string;
   /** Where "add to timeline" lands on touch, where there is no drag. */
   getPlayheadSeconds: () => number;
+  isSetlistView: () => boolean;
   /** For the end of the project, where a folder dropped on «+ New song» lands. */
   getSong: () => SongView | null;
 };
@@ -189,10 +190,11 @@ export function createBrowserDrop(deps: BrowserDropDeps) {
 
   /** Touch: a folder becomes a song starting at the playhead. */
   function addFolderAtPlayhead(folderPath: string, folderName: string) {
+    const song = deps.isSetlistView() ? deps.getSong() : null;
     placeFolder({
       folderPath,
       folderName,
-      seconds: deps.getPlayheadSeconds(),
+      seconds: deps.isSetlistView() ? (song ? resolveFolderSongAnchorSeconds(song) : 0) : deps.getPlayheadSeconds(),
       layout: resolveFolderDropLayout(false, false),
     });
   }

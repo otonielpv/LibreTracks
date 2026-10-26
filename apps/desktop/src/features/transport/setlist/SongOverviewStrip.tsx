@@ -106,7 +106,10 @@ function SongOverviewStripComponent({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const playheadRef = useRef<HTMLDivElement | null>(null);
+  const scrubCleanupRef = useRef<(() => void) | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => () => scrubCleanupRef.current?.(), [region.id, onSeek]);
 
   useLayoutEffect(() => {
     const element = rootRef.current;
@@ -276,11 +279,14 @@ function SongOverviewStripComponent({
   };
 
   const scrubEnabled = layout !== "short";
-  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const handlePointerDown = (event: ReactPointerEvent<HTMLElement>, fromPlayhead = false) => {
     if (!onSeek || event.button !== 0) return;
+    if (scrubCleanupRef.current) return;
     event.preventDefault();
-    onSeek(secondsAt(event.clientX));
-    if (!scrubEnabled) return;
+    if (fromPlayhead) event.stopPropagation();
+    else onSeek(secondsAt(event.clientX));
+    if (!scrubEnabled && !fromPlayhead) return;
+    zoomWindow?.setScrubbing?.(true);
     const pointerId = event.pointerId;
     let pending: number | null = null;
     let frame = 0;
@@ -291,18 +297,25 @@ function SongOverviewStripComponent({
     };
     const onMove = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== pointerId) return;
-      // One seek per frame at most; the panel's coalescer keeps the last.
       pending = secondsAt(moveEvent.clientX);
       if (!frame) frame = window.requestAnimationFrame(flush);
     };
-    const onUp = (upEvent: PointerEvent) => {
-      if (upEvent.pointerId !== pointerId) return;
+    const cleanup = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
       if (frame) window.cancelAnimationFrame(frame);
-      flush();
+      pending = null;
+      zoomWindow?.setScrubbing?.(false);
+      scrubCleanupRef.current = null;
     };
+    const onUp = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== pointerId) return;
+      if (frame) window.cancelAnimationFrame(frame);
+      if (upEvent.type === "pointerup") flush();
+      cleanup();
+    };
+    scrubCleanupRef.current = cleanup;
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
@@ -312,9 +325,9 @@ function SongOverviewStripComponent({
     <div
       ref={rootRef}
       className={`lt-setlist-overview is-${layout}${onSeek ? " is-seekable" : ""}`}
-      role="img"
+      role={onSeek ? "group" : "img"}
       aria-label={t("setlistView.overview.label", { name: region.name })}
-      onPointerDown={handlePointerDown}
+      onPointerDown={(event) => handlePointerDown(event)}
       onContextMenu={
         onContextMenuAt
           ? (event) => {
@@ -332,7 +345,28 @@ function SongOverviewStripComponent({
         aria-hidden="true"
         style={range.width < size.width ? { left: `${range.start}px`, width: `${range.width}px` } : undefined}
       />
-      <div ref={playheadRef} className="lt-setlist-overview-playhead" aria-hidden="true" />
+      <div ref={playheadRef} className="lt-setlist-overview-playhead">
+        {layout === "short" && onSeek ? (
+          <button
+            type="button"
+            className="lt-setlist-playhead-handle"
+            aria-label={t("setlistView.overview.movePlayhead")}
+            title={t("setlistView.overview.movePlayhead")}
+            onPointerDown={(event) => handlePointerDown(event, true)}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
+              event.preventDefault();
+              event.stopPropagation();
+              const seconds = event.key === "Home" ? region.startSeconds
+                : event.key === "End" ? region.endSeconds
+                : positionSecondsRef.current + (event.key === "ArrowLeft" ? -1 : 1);
+              onSeek(Math.max(region.startSeconds, Math.min(region.endSeconds, seconds)));
+            }}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">drag_indicator</span>
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

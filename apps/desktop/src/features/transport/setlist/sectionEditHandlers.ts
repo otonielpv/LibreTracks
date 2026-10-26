@@ -82,7 +82,26 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
     if (!region) return;
     const playhead = deps.getPlayheadSeconds();
     const inside = playhead >= region.startSeconds && playhead < region.endSeconds;
-    openMenuAt(event, inside ? playhead : region.startSeconds);
+    openCreateMenuAt(event, inside ? playhead : region.startSeconds);
+  }
+
+  function openCreateMenuAt(event: ReactMouseEvent<HTMLElement>, seconds: number) {
+    const deps = getDeps();
+    const region = deps.getRegion();
+    const target = place(seconds);
+    if (!region || target === null || !requestStructureEdit([target])) return;
+    const ruler = deps.menus.rulerContextMenu(target, null);
+    const timing = [
+      ruler.find((action) => action.label === deps.t("transport.menu.changeTimelineBpm")),
+      ruler.find((action) => action.label === deps.t("transport.menu.createTimeSignatureMarker")),
+      deps.menus.songRegionContextMenu(region, target)
+        .find((action) => action.label.startsWith(deps.t("transport.keyChanges.addAtCursor"))),
+    ].filter((action): action is NonNullable<typeof action> => Boolean(action));
+    deps.menus.openMenu(event, deps.t("setlistView.sections.add"), [
+      { label: deps.t("setlistView.sections.addShort"), onSelect: () => createKindAt(target, "section") },
+      { label: deps.t("setlistView.sections.addCueShort"), onSelect: () => createKindAt(target, "cue") },
+      ...timing,
+    ]);
   }
 
   /**
@@ -211,7 +230,7 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
       ruler.find((action) => action.label === label("transport.menu.changeTimelineBpm")),
       ruler.find((action) => action.label === label("transport.menu.createTimeSignatureMarker")),
       deps.menus
-        .songRegionContextMenu(region)
+        .songRegionContextMenu(region, target)
         .find((action) => action.label.startsWith(label("transport.keyChanges.addAtCursor"))),
     ].filter((action): action is NonNullable<typeof action> => Boolean(action));
     deps.menus.openMenu(event, deps.t("setlistView.sections.timingTitle"), actions);
@@ -239,6 +258,7 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
   }
 
   return {
+    openCreateMenuAt,
     openTimingMenuAt,
     openTimingMarkMenu,
     openMenuAt,

@@ -53,6 +53,7 @@ const runFrames = () => {
 function handlers() {
   return {
     createKindAt: vi.fn(),
+    openCreateMenuAt: vi.fn(),
     commitMove: vi.fn(() => true),
     select: vi.fn(),
     dragGroup: vi.fn((id: string) => [id]),
@@ -147,11 +148,8 @@ describe("SectionScrubEditor (Playback-style section editing)", () => {
     const { container } = render(<SectionScrubEditor {...base} />);
     runFrames();
     expect(barLabel(container)).toBe("setlistView.sections.barLabel:6");
-    fireEvent.click(screen.getByRole("button", { name: /setlistView.sections.addHere/ }));
-    expect(base.handlers.createKindAt).toHaveBeenLastCalledWith(10, "section");
-    // The iPhone report: cues («avisos») could not be added here.
-    fireEvent.click(screen.getByRole("button", { name: /setlistView.sections.addCueHere/ }));
-    expect(base.handlers.createKindAt).toHaveBeenLastCalledWith(10, "cue");
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.sections.add" }));
+    expect(base.handlers.openCreateMenuAt).toHaveBeenLastCalledWith(expect.anything(), 10);
     // …nor played to hear where each mark falls.
     fireEvent.click(screen.getByRole("button", { name: "setlistView.scrub.play" }));
     expect(base.runShortcutAction).toHaveBeenCalledWith("transport.playPause");
@@ -208,7 +206,7 @@ describe("tempo, meter and key on the editor", () => {
     expect(chips.map((chip) => chip.textContent)).toEqual(["speed90 BPM", "straighten6/8", "music_noteD"]);
     fireEvent.click(chips[2]);
     expect(own.openTimingMarkMenu).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ kind: "key", id: "k1" }));
-    fireEvent.click(screen.getByRole("button", { name: "setlistView.sections.timingTitle" }));
-    expect(own.openTimingMenuAt).toHaveBeenCalledWith(expect.anything(), 4);
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.sections.add" }));
+    expect(own.openCreateMenuAt).toHaveBeenCalledWith(expect.anything(), 4);
   });
 });

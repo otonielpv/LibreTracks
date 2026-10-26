@@ -94,7 +94,7 @@ describe.each(DEVICES)("$name", ({ width, height, expected }) => {
     const base = testSetlistProps({ regions } as Partial<SongView>);
     const { container } = render(<SetlistView {...base} selectedRegionId="a" />);
     expect(container.querySelector(".lt-setlist-view")?.getAttribute("data-setlist-layout")).toBe(expected);
-    expect(zones(container)).toEqual(expected === "short" ? ["songs", "mixer"] : ["songs", "overview", "mixer"]);
+    expect(zones(container)).toEqual(expected === "short" ? ["songs", "overview"] : ["songs", "overview", "mixer"]);
   });
 });
 

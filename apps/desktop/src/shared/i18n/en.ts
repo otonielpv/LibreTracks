@@ -2541,6 +2541,7 @@ const en = {
       zoomGroup: "Waveform zoom",
       fit: "Show the whole song",
       label: "Waveform of {{name}}",
+      movePlayhead: "Move the playhead",
     },
     mixer: {
       filter: "Filter the song's tracks",
@@ -2596,6 +2597,7 @@ const en = {
       actionsSection: "Actions",
     },
     sections: {
+      add: "Add",
       timingTitle: "Tempo, meter or key here",
       timingShort: "Tempo",
       addShort: "Section",

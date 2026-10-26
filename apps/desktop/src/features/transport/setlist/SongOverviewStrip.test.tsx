@@ -6,9 +6,10 @@ import type { ClipSummary, WaveformSummaryDto } from "@libretracks/shared/models
 
 import { resetFrameGateForTests } from "../frameGate";
 import { useTransportStore } from "../store";
-import { ZoomWindowContext } from "./OverviewZoom";
+import { OverviewZoom, ZoomWindowContext } from "./OverviewZoom";
 import { drawWindowFor, SongOverviewStrip } from "./SongOverviewStrip";
 import { testRegion } from "./testBindings";
+import { INITIAL_SETLIST_STATE, useSetlistStore } from "./setlistStore";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -101,9 +102,11 @@ const originalPointerEvent = window.PointerEvent;
 beforeAll(() => {
   class TestPointerEvent extends MouseEvent {
     readonly pointerId: number;
+    readonly pointerType: string;
     constructor(type: string, init: PointerEventInit = {}) {
       super(type, init);
       this.pointerId = init.pointerId ?? 0;
+      this.pointerType = init.pointerType ?? "mouse";
     }
   }
   Object.defineProperty(window, "PointerEvent", { configurable: true, value: TestPointerEvent });
@@ -115,6 +118,7 @@ afterAll(() => {
 beforeEach(() => {
   frames = [];
   peaksSpy.calls = 0;
+  useSetlistStore.setState(INITIAL_SETLIST_STATE);
   vi.stubGlobal("ResizeObserver", FakeResizeObserver);
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
     frames.push(callback);
@@ -198,6 +202,80 @@ describe("SongOverviewStrip seek", () => {
     runFrames();
     expect(onSeek).toHaveBeenCalledTimes(1);
     expect(onSeek).toHaveBeenCalledWith(110);
+  });
+
+  it("short: dragging the playhead seeks to the start without panning the zoomed song", () => {
+    useSetlistStore.setState({ overviewZoom: 4 });
+    const onSeek = vi.fn();
+    const positionSecondsRef = { current: 150 };
+    const { container, unmount } = render(
+      <OverviewZoom startSeconds={100} endSeconds={200} positionSecondsRef={positionSecondsRef} onSeek={onSeek}>
+        <SongOverviewStrip {...stripProps({ layout: "short", onSeek, positionSecondsRef })} />
+      </OverviewZoom>,
+    );
+    const root = layOut(container);
+    Object.defineProperty(container.querySelector(".lt-setlist-zoom-viewport"), "clientWidth", { configurable: true, value: 250 });
+    const handle = root.querySelector("button")!;
+    const layer = container.querySelector<HTMLElement>(".lt-setlist-zoom-layer")!;
+    runFrames();
+    const initialTransform = layer.style.transform;
+    expect(initialTransform).toBe("translate3d(-375px, 0, 0)");
+    fireEvent.pointerDown(handle, { pointerType: "touch", button: 0, pointerId: 1, clientX: 550 });
+    fireEvent.pointerDown(root, { pointerType: "touch", button: 0, pointerId: 2, clientX: 550 });
+    fireEvent.pointerMove(window, { pointerType: "touch", pointerId: 2, clientX: 300 });
+    runFrames();
+    expect(onSeek).not.toHaveBeenCalled();
+    fireEvent.pointerMove(window, { pointerType: "touch", pointerId: 1, clientX: 250 });
+    fireEvent.pointerMove(window, { pointerType: "touch", pointerId: 1, clientX: 0 });
+    runFrames();
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    expect(onSeek).toHaveBeenLastCalledWith(100);
+    positionSecondsRef.current = 100;
+    runFrames();
+    expect(layer.style.transform).toBe(initialTransform);
+    fireEvent.pointerUp(window, { pointerType: "touch", pointerId: 1, clientX: 0 });
+    fireEvent.pointerMove(window, { pointerType: "touch", pointerId: 1, clientX: 900 });
+    runFrames();
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it("short: a touch drag on the waveform still pans without seeking", () => {
+    useSetlistStore.setState({ overviewZoom: 4 });
+    const onSeek = vi.fn();
+    const { container } = render(
+      <OverviewZoom startSeconds={100} endSeconds={200} positionSecondsRef={{ current: 150 }} onSeek={onSeek}>
+        <SongOverviewStrip {...stripProps({ layout: "short", onSeek })} />
+      </OverviewZoom>,
+    );
+    const root = layOut(container);
+    Object.defineProperty(container.querySelector(".lt-setlist-zoom-viewport"), "clientWidth", { configurable: true, value: 250 });
+    fireEvent.pointerDown(root, { pointerType: "touch", button: 0, pointerId: 1, clientX: 550 });
+    fireEvent.pointerMove(window, { pointerType: "touch", pointerId: 1, clientX: 250 });
+    fireEvent.pointerUp(window, { pointerType: "touch", pointerId: 1, clientX: 250 });
+    expect(container.querySelector<HTMLElement>(".lt-setlist-zoom-layer")!.style.transform).toBe("translate3d(-300px, 0, 0)");
+    runFrames();
+    expect(onSeek).not.toHaveBeenCalled();
+  });
+
+  it.each(["cancel", "unmount"])("short: %s discards pending playhead moves and removes listeners", (ending) => {
+    const onSeek = vi.fn();
+    const setScrubbing = vi.fn();
+    const { container, unmount } = render(
+      <ZoomWindowContext.Provider value={{ offset: 0, width: WIDTH, setScrubbing }}>
+        <SongOverviewStrip {...stripProps({ layout: "short", onSeek })} />
+      </ZoomWindowContext.Provider>,
+    );
+    const root = layOut(container);
+    fireEvent.pointerDown(root.querySelector("button")!, { button: 0, pointerId: 1, clientX: 550 });
+    expect(setScrubbing).toHaveBeenLastCalledWith(true);
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 250 });
+    if (ending === "cancel") fireEvent.pointerCancel(window, { pointerId: 1 });
+    else unmount();
+    expect(setScrubbing).toHaveBeenLastCalledWith(false);
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 900 });
+    runFrames();
+    expect(onSeek).not.toHaveBeenCalled();
   });
 
   it("without onSeek (editing) the strip is read-only", () => {

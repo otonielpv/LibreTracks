@@ -26,6 +26,7 @@ type SectionScrubEditorProps = {
   handlers: Pick<
     SectionEditHandlers,
     | "createKindAt"
+    | "openCreateMenuAt"
     | "commitMove"
     | "select"
     | "dragGroup"
@@ -161,33 +162,13 @@ function SectionScrubEditorComponent({
           <button
             type="button"
             className="lt-setlist-settings-button is-primary"
-            aria-label={t("setlistView.sections.addHere")}
-            title={t("setlistView.sections.addHere")}
-            onClick={() => handlers.createKindAt(cursorSeconds(), "section")}
+            aria-haspopup="menu"
+            aria-label={t("setlistView.sections.add")}
+            title={t("setlistView.sections.add")}
+            onClick={(event) => handlers.openCreateMenuAt(event, cursorSeconds())}
           >
             <span className="material-symbols-outlined" aria-hidden="true">add</span>
-            {t("setlistView.sections.addShort")}
-          </button>
-          <button
-            type="button"
-            className="lt-setlist-settings-button"
-            aria-label={t("setlistView.sections.addCueHere")}
-            title={t("setlistView.sections.addCueHere")}
-            onClick={() => handlers.createKindAt(cursorSeconds(), "cue")}
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">notifications</span>
-            {t("setlistView.sections.addCueShort")}
-          </button>
-          <button
-            type="button"
-            className="lt-setlist-settings-button"
-            aria-haspopup="menu"
-            aria-label={t("setlistView.sections.timingTitle")}
-            title={t("setlistView.sections.timingTitle")}
-            onClick={(event) => handlers.openTimingMenuAt(event, cursorSeconds())}
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">speed</span>
-            {t("setlistView.sections.timingShort")}
+            {t("setlistView.sections.add")}
           </button>
           <button type="button" className="lt-setlist-settings-button" disabled={!primarySelected} aria-label={t("setlistView.sections.moveLeft")} title={t("setlistView.sections.moveLeft")} onClick={() => nudgeSelected(-1)}>
             <span className="material-symbols-outlined" aria-hidden="true">chevron_left</span>

@@ -284,14 +284,16 @@ describe("Setlist mixer hint and sizes", () => {
 
   // Playback on an iPhone: the console is the phone's main screen, with the
   // same Tracks/Pads tabs as the bigger layouts.
-  it("short: the console shows first, with its own Pads tab", async () => {
+  it("short: switching to the console shows its tracks and Pads tab", async () => {
     const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="short" />);
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.pane.mixer" }));
     expect(stripNames(container)).toEqual(["Batería", "Voz A"]);
     fireEvent.click(screen.getByRole("tab", { name: "setlistView.mixer.tabs.pads" }));
     expect(await screen.findByRole("checkbox", { name: "pads.enable" })).toBeTruthy();
   });
 
   it("short: no shared-tracks note (it would take half the console) and no fold", () => {
+    useSetlistStore.getState().setShortPane("mixer");
     const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="short" />);
     expect(container.querySelector(".lt-setlist-mixer-hint")).toBeNull();
     expect(screen.queryByRole("button", { name: "setlistView.mixer.collapse" })).toBeNull();
@@ -339,6 +341,7 @@ describe("phone console rail", () => {
   // The iPhone report: bare icons said nothing, and opening Pads hid the
   // other buttons until going back to Tracks.
   it("every button carries a word, and the track actions stay in Pads (taking you back to Tracks)", () => {
+    useSetlistStore.getState().setShortPane("mixer");
     const base = props({ selectedRegionId: "a", activeRegionId: "a" });
     const { container } = render(<SetlistView {...base} layoutClass="short" />);
     const rail = container.querySelector<HTMLElement>(".lt-setlist-mixer-header")!;
@@ -367,6 +370,7 @@ describe("channel strip layout", () => {
   // at the bottom of the strip, as in the compact view, with M/S/T beside the
   // fader to win height.
   it("M/S/T beside the fader, pan and output at the bottom, on a phone too", () => {
+    useSetlistStore.getState().setShortPane("mixer");
     const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="short" />);
     const strip = container.querySelector<HTMLElement>(".lt-compact-mixer-strip.is-fader-strip")!;
     const order = Array.from(strip.children).map((child) => child.className.split(" ")[0]);

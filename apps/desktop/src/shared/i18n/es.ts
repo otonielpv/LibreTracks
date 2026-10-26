@@ -2572,6 +2572,7 @@ const es = {
       zoomGroup: "Zoom de la onda",
       fit: "Ver la canción entera",
       label: "Onda de {{name}}",
+      movePlayhead: "Mover el cursor de reproducción",
     },
     mixer: {
       filter: "Filtrar pistas de la canción",
@@ -2627,6 +2628,7 @@ const es = {
       actionsSection: "Acciones",
     },
     sections: {
+      add: "Añadir",
       timingTitle: "Tempo, compás o tono aquí",
       timingShort: "Tempo",
       addShort: "Sección",

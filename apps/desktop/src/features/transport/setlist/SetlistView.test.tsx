@@ -33,28 +33,29 @@ describe("SetlistView skeleton", () => {
 
   // Playback on an iPhone: songs on top and, under them, the console or the
   // song's waveform, never both.
-  it("short: songs and the console; «Waveform» swaps the console for the song band", () => {
+  it("short: opens the waveform by default and can switch to the mixer and back", () => {
     const { container } = render(
       <SetlistView {...testSetlistProps()} layoutClass="short" />,
     );
-    expect(zones(container)).toEqual(["songs", "mixer"]);
+    expect(zones(container)).toEqual(["songs", "overview"]);
 
-    const toggle = screen.getByRole("button", { name: "setlistView.pane.song" });
+    const toggle = screen.getByRole("button", { name: "setlistView.pane.mixer" });
     // A way to the other view, never lit: lit, «Mix» looked like the view you were in.
     expect(toggle.getAttribute("aria-pressed")).toBeNull();
     expect(toggle.classList.contains("is-active")).toBe(false);
     fireEvent.click(toggle);
-    expect(zones(container)).toEqual(["songs", "overview"]);
-    const back = screen.getByRole("button", { name: "setlistView.pane.mixer" });
+    expect(zones(container)).toEqual(["songs", "mixer"]);
+    const back = screen.getByRole("button", { name: "setlistView.pane.song" });
     expect(back.getAttribute("aria-pressed")).toBeNull();
     expect(back.classList.contains("is-active")).toBe(false);
     fireEvent.click(back);
-    expect(zones(container)).toEqual(["songs", "mixer"]);
+    expect(zones(container)).toEqual(["songs", "overview"]);
   });
 
   // The iPhone report: the faders were too short. «Enlarge» hides the song
   // row so the console takes the whole view; it comes back with the same button.
   it("short: enlarging the console hides the songs, and shrinking brings them back", () => {
+    useSetlistStore.getState().setShortPane("mixer");
     const { container } = render(<SetlistView {...testSetlistProps()} layoutClass="short" />);
     fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.enlarge" }));
     expect(zones(container)).toEqual(["mixer"]);

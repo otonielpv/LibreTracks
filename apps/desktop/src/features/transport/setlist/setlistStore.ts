@@ -57,7 +57,7 @@ export const INITIAL_SETLIST_STATE: SetlistState = {
   mixerHeightPx: null,
   songsHeightPx: null,
   mixerCollapsed: false,
-  shortPane: "mixer",
+  shortPane: "song",
   mixerExpanded: false,
   lyricsOpen: false,
   overviewZoom: 1,

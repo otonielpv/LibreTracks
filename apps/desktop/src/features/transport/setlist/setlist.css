@@ -607,6 +607,7 @@ html.lt-mobile .lt-setlist-add-song-button {
 
 .lt-setlist-overview-playhead {
   position: absolute;
+  z-index: 2;
   top: 0;
   bottom: 0;
   left: 0;
@@ -616,6 +617,24 @@ html.lt-mobile .lt-setlist-add-song-button {
   visibility: hidden;
   pointer-events: none;
   will-change: transform;
+}
+
+.lt-setlist-playhead-handle {
+  position: absolute;
+  bottom: 0;
+  left: -21px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: var(--lt-setlist-accent);
+  color: var(--lt-setlist-bg);
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
 }
 
 /* medium: los bloques del mapa encima de la onda, alineados con ella por la
@@ -2306,6 +2325,13 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 
 .lt-setlist-arrangement-footer .lt-structure-dirty {
   text-align: center;
+}
+
+.lt-setlist-arrangement-error {
+  margin: 0;
+  color: #ff9b8f;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
 }
 
 .lt-setlist-arrangement-footer button.is-primary {

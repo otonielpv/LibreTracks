@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createBrowserDrop, type BrowserDropDeps } from "./browserDrop";
 
+beforeEach(() => {
+  document.body.innerHTML = "";
+  document.elementFromPoint = vi.fn(() => null);
+});
+
 const importAudioFilesFromPaths = vi.fn();
 const listLibraryFolderAudio = vi.fn();
 vi.mock("../../desktopApi", async (importOriginal) => {
@@ -39,6 +44,7 @@ function setup(overTimeline: boolean, songUnderPointer: string | null = null) {
     t: (key: string, options?: Record<string, unknown>) =>
       options ? `${key} ${JSON.stringify(options)}` : key,
     getPlayheadSeconds: () => 7,
+    isSetlistView: () => false,
     getSong: () => ({
       bpm: 120,
       timeSignature: "4/4",
@@ -115,6 +121,27 @@ describe("folder library drops", () => {
       timelineStartSeconds: 42,
       layout: "vertical",
     });
+  });
+
+  it.each([false, true])("touch folder add: setlist=%s creates a song at the expected position", async (setlist) => {
+    listLibraryFolderAudio.mockResolvedValue({ paths: ["D:/Song/Drums.wav"], truncated: false });
+    importAudioFilesFromPaths.mockResolvedValue({
+      assets: [{ filePath: "D:/Song/Drums.wav", durationSeconds: 12 }],
+      skipped: [],
+    });
+    const { drop, dragDrop, deps } = setup(false);
+    deps.isSetlistView = () => setlist;
+    drop.addFolderAtPlayhead("D:/Song", "Song");
+    await vi.waitFor(() => expect(dragDrop.dropLibraryFolder).toHaveBeenCalled());
+    expect(dragDrop.dropLibraryFolder).toHaveBeenCalledWith(expect.objectContaining({
+      folderName: "Song",
+      layout: "vertical",
+      timelineStartSeconds: setlist ? expect.any(Number) : 7,
+    }));
+    if (setlist) {
+      const [args] = dragDrop.dropLibraryFolder.mock.calls[0] as unknown as [{ timelineStartSeconds: number }];
+      expect(args.timelineStartSeconds).toBeGreaterThanOrEqual(60);
+    }
   });
 
   it("says so when a folder has no audio, instead of an empty song", async () => {

@@ -181,6 +181,31 @@ describe("Section handles: drag", () => {
 });
 
 describe("Section handles: select, menu, create", () => {
+  it("the Add submenu offers sections, cues, BPM, meter and key at the cursor's bar", () => {
+    const { deps, handlers } = setup();
+    const bpm = { label: "transport.menu.changeTimelineBpm", onSelect: vi.fn() };
+    const meter = { label: "transport.menu.createTimeSignatureMarker", onSelect: vi.fn() };
+    const key = { label: "transport.keyChanges.addAtCursor", onSelect: vi.fn() };
+    vi.mocked(deps.menus.rulerContextMenu).mockReturnValue([bpm, meter]);
+    vi.mocked(deps.menus.songRegionContextMenu).mockReturnValue([key]);
+    handlers.openCreateMenuAt({ clientX: 0, clientY: 0 } as never, 33.3);
+    expect(deps.menus.rulerContextMenu).toHaveBeenCalledWith(34, null);
+    expect(deps.menus.songRegionContextMenu).toHaveBeenCalledWith(region, 34);
+    const actions = vi.mocked(deps.menus.openMenu).mock.calls[0][2];
+    expect(actions.map((action) => action.label)).toEqual([
+      "setlistView.sections.addShort", "setlistView.sections.addCueShort",
+      bpm.label, meter.label, key.label,
+    ]);
+    actions[0].onSelect?.();
+    actions[1].onSelect?.();
+    expect(deps.menus.openCreateSectionKindMenu).toHaveBeenCalledWith(34);
+    expect(deps.menus.openCreateCueKindMenu).toHaveBeenCalledWith(34);
+    actions.slice(2).forEach((action) => action.onSelect?.());
+    expect(bpm.onSelect).toHaveBeenCalledOnce();
+    expect(meter.onSelect).toHaveBeenCalledOnce();
+    expect(key.onSelect).toHaveBeenCalledOnce();
+  });
+
   it("a click selects; Ctrl adds to the selection", () => {
     const { handlers } = setup();
     renderLayer(handlers);
@@ -252,7 +277,10 @@ describe("Section handles: select, menu, create", () => {
     const { deps, handlers } = setup();
     handlers.createAtPlayhead({ clientX: 0, clientY: 0 } as never);
     expect(deps.menus.rulerContextMenu).toHaveBeenCalledWith(34, null);
-    expect(deps.menus.openMenu).toHaveBeenCalledWith(expect.anything(), "transport.menu.createMarker", []);
+    expect(deps.menus.openMenu).toHaveBeenCalledWith(expect.anything(), "setlistView.sections.add", expect.arrayContaining([
+      expect.objectContaining({ label: "setlistView.sections.addShort" }),
+      expect.objectContaining({ label: "setlistView.sections.addCueShort" }),
+    ]));
   });
 
   it("duplicate and delete act on the selection through the batch commands", () => {

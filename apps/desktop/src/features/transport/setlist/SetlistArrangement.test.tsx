@@ -15,7 +15,7 @@ import { testRegion, testSetlistProps } from "./testBindings";
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) =>
-      options?.name ? `${key}:${String(options.name)}` : key,
+      options?.message ? `${key}:${String(options.message)}` : options?.name ? `${key}:${String(options.name)}` : key,
   }),
 }));
 vi.mock("../tracks/TrackMeter", () => ({ SongMasterMeter: () => null, TrackMeter: () => null }));
@@ -167,6 +167,31 @@ describe("Edit → Arrangement", () => {
       expect.objectContaining({ id: "corto" }),
       true,
     );
+    expect(useSetlistStore.getState().editMode).toBeNull();
+  });
+
+  it.each(["wide", "short"] as const)("%s: Apply keeps a failed draft open and shows its error", async (layoutClass) => {
+    const own = handlers();
+    vi.mocked(own.saveArrangement).mockResolvedValue({ ok: false, error: new Error("Cannot apply arrangement") });
+    render(<SetlistView {...props(own)} layoutClass={layoutClass} />);
+    await act(async () => { await requestEditMode("arrangement"); });
+    const draft = useStructureStore.getState().draft!;
+    act(() => updateDraft((current) => duplicateBlock(current, draft.blocks[0].id)));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "transport.structure.apply" }));
+    });
+    expect(own.saveArrangement).toHaveBeenCalledWith("r1", expect.objectContaining({
+      blocks: expect.arrayContaining([expect.objectContaining({ sectionMarkerId: "Verso" })]),
+    }), true);
+    expect(screen.getByRole("alert").textContent).toContain("Cannot apply arrangement");
+    expect(screen.getByRole("alert").closest(".lt-setlist-arrangement-footer")).not.toBeNull();
+    expect(useSetlistStore.getState().editMode).toBe("arrangement");
+    expect(useStructureStore.getState().draft?.blocks).toHaveLength(3);
+    vi.mocked(own.saveArrangement).mockResolvedValue({ ok: true, error: null });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "transport.structure.apply" }));
+    });
+    expect(useSetlistStore.getState().editMode).toBeNull();
   });
 
   it("the drawer lists the arrangements as cards: original first, the applied one marked", async () => {

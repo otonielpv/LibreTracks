@@ -138,6 +138,7 @@ describe("Edit modes on the phone", () => {
   // The iPhone report: Mix / Lyrics / Edit over the waveform's bottom right,
   // as Playback, folding to the side with an arrow.
   it("short, waveform pane: the view buttons sit in a dock over the waveform that folds away", () => {
+    useSetlistStore.getState().setShortPane("mixer");
     const base = testSetlistProps({ regions: [region] } as Partial<SongView>);
     const { container } = render(<SetlistView {...base} layoutClass="short" />);
     const songsZone = () => container.querySelector(".lt-setlist-zone.is-songs")!;

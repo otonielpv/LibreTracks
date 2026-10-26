@@ -45,9 +45,9 @@ function SetlistSectionsPanelComponent({ song, region, handlers, layout, wavefor
     <div className="lt-setlist-sections-bar" role="toolbar" aria-label={t("setlistView.sections.actions")}>
       {/* On the phone the scrub editor has its own «+» at its line. */}
       {layout === "short" ? null : (
-        <button type="button" className="lt-setlist-settings-button" onClick={handlers.createAtPlayhead}>
+        <button type="button" className="lt-setlist-settings-button" aria-haspopup="menu" onClick={handlers.createAtPlayhead}>
           <span className="material-symbols-outlined" aria-hidden="true">add</span>
-          {t("setlistView.sections.addAtPlayhead")}
+          {t("setlistView.sections.add")}
         </button>
       )}
       <button

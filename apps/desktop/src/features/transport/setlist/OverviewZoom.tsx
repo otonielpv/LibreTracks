@@ -16,7 +16,7 @@ export const OVERVIEW_MAX_ZOOM = 32;
  * in place (no renders): the waveform reads it per frame and redraws only
  * the stretch around it, so a 32× zoom keeps full detail without a canvas
  * 32 screens wide. */
-export type ZoomWindow = { offset: number; width: number };
+export type ZoomWindow = { offset: number; width: number; setScrubbing?: (active: boolean) => void };
 export const ZoomWindowContext = createContext<ZoomWindow | null>(null);
 const WHEEL_ZOOM_FACTOR = 1.25;
 
@@ -87,10 +87,15 @@ export function OverviewZoom({
   const offsetRef = useRef(0);
   const manualRef = useRef<{ position: number } | null>(null);
   const gestureRef = useRef(false);
+  const scrubbingRef = useRef(false);
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
   const pendingZoomRef = useRef<number | null>(null);
   const windowRef = useRef<ZoomWindow>({ offset: 0, width: 0 });
+  windowRef.current.setScrubbing = (active) => {
+    scrubbingRef.current = active;
+    if (!active) manualRef.current = { position: positionSecondsRef.current };
+  };
 
   const applyOffset = (offset: number) => {
     const layer = layerRef.current;
@@ -111,7 +116,7 @@ export function OverviewZoom({
         pendingZoomRef.current = null;
       }
       if (manualRef.current && manualRef.current.position !== position) manualRef.current = null;
-      if (viewport && !gestureRef.current && !manualRef.current) {
+      if (viewport && !gestureRef.current && !scrubbingRef.current && !manualRef.current) {
         const duration = Math.max(0.001, endSeconds - startSeconds);
         const fraction = Math.max(0, Math.min(1, (position - startSeconds) / duration));
         // Fractional on purpose: the layer is composited (will-change), so the
@@ -163,6 +168,7 @@ export function OverviewZoom({
     visualOffset: number;
   } | null>(null);
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (scrubbingRef.current) return;
     if (event.pointerType !== "touch" || isControl(event.target)) return;
     event.stopPropagation();
     const viewport = viewportRef.current;

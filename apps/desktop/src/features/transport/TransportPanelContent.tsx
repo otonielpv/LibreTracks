@@ -6255,6 +6255,7 @@ export function TransportPanelContent() {
         t: (key, options) => libraryDragDropDeps().t(key, options),
         getPlayheadSeconds: () => displayPositionSecondsRef.current,
         getSong: () => songRef.current,
+        isSetlistView: () => viewModeRef.current === "setlist",
       }),
     [libraryDragDrop],
   );
