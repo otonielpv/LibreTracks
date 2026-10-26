@@ -2514,6 +2514,7 @@ const en = {
   setlistView: {
     title: "Setlist view",
     songs: {
+      createFromFolder: "Create “{{name}}”",
       resize: "Song row height",
       resizeTitle: "Drag to change the height; double click for the automatic one",
       label: "Setlist songs",

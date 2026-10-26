@@ -6254,6 +6254,7 @@ export function TransportPanelContent() {
         setStatus: (message) => libraryDragDropDeps().setStatus(message),
         t: (key, options) => libraryDragDropDeps().t(key, options),
         getPlayheadSeconds: () => displayPositionSecondsRef.current,
+        getSong: () => songRef.current,
       }),
     [libraryDragDrop],
   );

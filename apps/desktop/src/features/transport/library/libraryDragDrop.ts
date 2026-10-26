@@ -85,7 +85,7 @@ import {
   LIBRARY_DRAG_MAX_SCROLL_SPEED_PX,
   NATIVE_DND_DEBUG_ENABLED,
 } from "../constants";
-import { dropFolderOverNewSong } from "./folderOverNewSong";
+import { dropFolderOverNewSong, previewNewSongDrop } from "./folderOverNewSong";
 import type { TimelineGrid } from "../timeline/timelineMath";
 import type {
   InternalLibraryPointerDrag,
@@ -949,6 +949,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
 
   function clearInternalLibraryPointerDrag() {
     stopInternalLibraryPointerDragListeners();
+    previewNewSongDrop(null, null, deps().t);
     clearLibraryDragPreview();
     clearActiveLibraryDragPayload();
     setInternalLibraryPointerDragState(null);
@@ -1077,6 +1078,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     metaKey: boolean;
   }): InternalLibraryPointerDrag {
     const nextDrag = updateInternalLibraryPointerDragHover(args);
+    previewNewSongDrop(document.elementFromPoint(args.clientX, args.clientY), nextDrag.folderName, deps().t);
 
     // Compact-view drop preview: library items are never .ltpkg, so
     // we always emit isPackage=false and let the per-column handler

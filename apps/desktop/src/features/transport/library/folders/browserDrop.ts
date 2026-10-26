@@ -1,3 +1,5 @@
+import type { SongView } from "@libretracks/shared/models";
+
 import {
   importAudioFilesFromPaths,
   listLibraryFolderAudio,
@@ -5,6 +7,8 @@ import {
 } from "../../desktopApi";
 import { libraryAssetFileName } from "../../helpers";
 import { classifyDroppedPaths, resolveFolderDropLayout } from "../dragDrop";
+import { previewNewSongDrop } from "../folderOverNewSong";
+import { resolveFolderSongAnchorSeconds } from "../libraryPlacement";
 import type { LibraryDragDrop } from "../libraryDragDrop";
 
 export type BrowserDropDeps = {
@@ -26,6 +30,8 @@ export type BrowserDropDeps = {
   t: (key: string, options?: Record<string, unknown>) => string;
   /** Where "add to timeline" lands on touch, where there is no drag. */
   getPlayheadSeconds: () => number;
+  /** For the end of the project, where a folder dropped on «+ New song» lands. */
+  getSong: () => SongView | null;
 };
 
 /**
@@ -125,6 +131,17 @@ export function createBrowserDrop(deps: BrowserDropDeps) {
     ctrlKey: boolean;
     metaKey: boolean;
   }): boolean {
+    // Over «+ New song» (Setlist): the folder becomes a new song at the end.
+    if (document.elementFromPoint(args.clientX, args.clientY)?.closest(".lt-setlist-add-song")) {
+      const song = deps.getSong();
+      placeFolder({
+        folderPath: args.folderPath,
+        folderName: args.folderName,
+        seconds: song ? resolveFolderSongAnchorSeconds(song) : 0,
+        layout: "vertical",
+      });
+      return true;
+    }
     const regionId = songAt(args.clientX, args.clientY);
     if (regionId) {
       placeFolder({ folderPath: args.folderPath, folderName: args.folderName, seconds: 0, layout: "vertical", regionId });
@@ -144,13 +161,24 @@ export function createBrowserDrop(deps: BrowserDropDeps) {
   /** While dragging: where it would land, drawn on the timeline (the guide
    * line and badge of a drop from the file manager). A folder is a song of
    * audio. */
-  function previewAt(item: { kind: "files"; paths: string[] } | { kind: "folder" }, clientX: number, clientY: number) {
+  function previewAt(
+    item: { kind: "files"; paths: string[] } | { kind: "folder"; name?: string },
+    clientX: number,
+    clientY: number,
+  ) {
+    // A folder over «+ New song» says it will create one.
+    previewNewSongDrop(
+      document.elementFromPoint(clientX, clientY),
+      item.kind === "folder" ? (item.name ?? "") : null,
+      deps.t,
+    );
     const kind = item.kind === "folder" ? "audio" : classifyDroppedPaths(item.paths).kind;
     const count = item.kind === "folder" ? 1 : item.paths.length;
     deps.dragDrop().previewDropAtClientPoint(clientX, clientY, kind, count);
   }
 
   function clearPreview() {
+    previewNewSongDrop(null, null, deps.t);
     deps.dragDrop().clearDropPreview();
   }
 

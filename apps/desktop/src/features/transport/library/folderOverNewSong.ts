@@ -34,3 +34,21 @@ export function dropFolderOverNewSong(
   );
   return true;
 }
+
+/**
+ * While a library folder is dragged: the «+ New song» tile under the pointer
+ * says what the drop will do («Create "<folder>"»), on both libraries. Written
+ * to the tile's data attribute (CSS draws it): no state, no render per move.
+ * With no folder (or off the tile) it clears it.
+ */
+export function previewNewSongDrop(
+  element: Element | null | undefined,
+  folderName: string | null | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
+) {
+  const tile = folderName != null ? element?.closest<HTMLElement>(".lt-setlist-add-song") : null;
+  for (const lit of document.querySelectorAll<HTMLElement>(".lt-setlist-add-song[data-drop-label]")) {
+    if (lit !== tile) delete lit.dataset.dropLabel;
+  }
+  if (tile && folderName != null) tile.dataset.dropLabel = t("setlistView.songs.createFromFolder", { name: folderName });
+}

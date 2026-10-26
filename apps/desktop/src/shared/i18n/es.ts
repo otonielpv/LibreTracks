@@ -2545,6 +2545,7 @@ const es = {
   setlistView: {
     title: "Vista Setlist",
     songs: {
+      createFromFolder: "Crear «{{name}}»",
       resize: "Alto de la fila de canciones",
       resizeTitle: "Arrastra para cambiar el alto; doble clic para volver al automático",
       label: "Canciones del setlist",

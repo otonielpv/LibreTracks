@@ -39,6 +39,13 @@ function setup(overTimeline: boolean, songUnderPointer: string | null = null) {
     t: (key: string, options?: Record<string, unknown>) =>
       options ? `${key} ${JSON.stringify(options)}` : key,
     getPlayheadSeconds: () => 7,
+    getSong: () => ({
+      bpm: 120,
+      timeSignature: "4/4",
+      tempoMarkers: [],
+      timeSignatureMarkers: [],
+      regions: [{ id: "r", name: "r", startSeconds: 0, endSeconds: 60 }],
+    }),
   } as unknown as BrowserDropDeps;
   return { drop: createBrowserDrop(deps), dragDrop, deps };
 }
@@ -192,5 +199,54 @@ describe("folder library drops", () => {
     const { drop, dragDrop } = setup(false);
     drop.previewAt({ kind: "files", paths: ["a.wav", "b.wav"] }, 10, 20);
     expect(dragDrop.previewDropAtClientPoint).toHaveBeenCalledWith(10, 20, "audio", 2);
+  });
+});
+
+// The report: a folder dragged from the NEW library onto «+ New song» did
+// nothing (only the classic library's drag worked), and nothing said it would
+// create a song.
+describe("folder library: a folder over «+ New song» (Setlist)", () => {
+  const tileAt = () => {
+    const tile = document.createElement("div");
+    tile.className = "lt-setlist-add-song";
+    document.body.appendChild(tile);
+    document.elementFromPoint = vi.fn(() => tile);
+    return tile;
+  };
+  beforeEach(() => {
+    importAudioFilesFromPaths.mockReset();
+    listLibraryFolderAudio.mockReset();
+    document.body.innerHTML = "";
+  });
+
+  it("creates the song at the end of the project, named after the folder", async () => {
+    tileAt();
+    listLibraryFolderAudio.mockResolvedValue({ paths: ["D:/Gratitud/Click.wav"], truncated: false });
+    importAudioFilesFromPaths.mockResolvedValue({
+      assets: [{ filePath: "D:/Gratitud/Click.wav", durationSeconds: 200 }],
+      skipped: [],
+    });
+    const { drop, dragDrop } = setup(true);
+    expect(
+      drop.dropFolderAt({ folderPath: "D:/Gratitud", folderName: "Gratitud", clientX: 5, clientY: 5, ctrlKey: false, metaKey: false }),
+    ).toBe(true);
+    await vi.waitFor(() => expect(dragDrop.dropLibraryFolder).toHaveBeenCalled());
+    const [args] = dragDrop.dropLibraryFolder.mock.calls[0] as unknown as [{ folderName: string; timelineStartSeconds: number; layout: string }];
+    expect(args.folderName).toBe("Gratitud");
+    expect(args.layout).toBe("vertical");
+    // After the last song (it ends at 60 s), not at the pointer's 42 s.
+    expect(args.timelineStartSeconds).toBeGreaterThanOrEqual(60);
+  });
+
+  it("the tile says what the drop does while the folder is over it, and stops when it leaves", () => {
+    const tile = tileAt();
+    const { drop } = setup(true);
+    drop.previewAt({ kind: "folder", name: "Gratitud" }, 5, 5);
+    expect(tile.dataset.dropLabel).toBe('setlistView.songs.createFromFolder {"name":"Gratitud"}');
+    drop.clearPreview();
+    expect(tile.dataset.dropLabel).toBeUndefined();
+    // Loose files over it: no promise of a new song.
+    drop.previewAt({ kind: "files", paths: ["D:/a.wav"] }, 5, 5);
+    expect(tile.dataset.dropLabel).toBeUndefined();
   });
 });

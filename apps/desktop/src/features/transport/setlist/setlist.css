@@ -4108,3 +4108,31 @@ button.lt-setlist-track-chip-name {
 .lt-setlist-view.is-wide.has-songs-height .lt-setlist-songs.is-horizontal {
   gap: 0.35rem;
 }
+
+/* Una carpeta arrastrada sobre «+ Nueva canción»: la ficha avisa de que la
+   suelta crea una canción (el texto lo pone el arrastre en data-drop-label). */
+.lt-setlist-add-song[data-drop-label] {
+  position: relative;
+  border-style: solid;
+  border-color: var(--lt-setlist-accent);
+  background: rgb(87 241 219 / 0.14);
+}
+
+.lt-setlist-add-song[data-drop-label]::after {
+  content: attr(data-drop-label);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0 0.5rem;
+  border-radius: inherit;
+  background: rgb(14 17 18 / 0.92);
+  color: var(--lt-setlist-accent);
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-align: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
