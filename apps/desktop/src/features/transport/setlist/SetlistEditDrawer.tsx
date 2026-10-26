@@ -158,7 +158,7 @@ function SetlistEditDrawerComponent({ layout, songName, modes }: SetlistEditDraw
       </div>
       <div
         id={panelId}
-        className="lt-setlist-drawer-body"
+        className={`lt-setlist-drawer-body${active?.mode === "sections" ? " is-sections-mode" : ""}`}
         role="tabpanel"
         aria-labelledby={active ? `${baseId}-tab-${active.mode}` : undefined}
       >

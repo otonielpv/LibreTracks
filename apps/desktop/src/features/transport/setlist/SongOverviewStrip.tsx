@@ -59,6 +59,16 @@ const MAX_CANVAS_PX = 16384;
 /** Zoomed in, the canvas covers this many screens around the view: redrawn
  * only when the view nears its edge, about once per screen of travel. */
 const WINDOW_SCREENS = 3;
+const PLAYHEAD_EDGE_BUFFER_PX = 48;
+const PLAYHEAD_MAX_SCROLL_SPEED_PX = 18;
+
+function resolvePlayheadAutoScrollSpeed(distancePx: number) {
+  if (distancePx >= PLAYHEAD_EDGE_BUFFER_PX) return 0;
+  const intensity =
+    (PLAYHEAD_EDGE_BUFFER_PX - Math.max(0, distancePx)) /
+    PLAYHEAD_EDGE_BUFFER_PX;
+  return Math.max(1, intensity * intensity * PLAYHEAD_MAX_SCROLL_SPEED_PX);
+}
 
 /** The stretch of the layer (px) to draw so `view` is well inside it. */
 export function drawWindowFor(
@@ -290,17 +300,61 @@ function SongOverviewStripComponent({
     const pointerId = event.pointerId;
     let pending: number | null = null;
     let frame = 0;
+    let autoScrollFrame: number | null = null;
+    let latestClientX = event.clientX;
+    let ended = false;
     const flush = () => {
       frame = 0;
       if (pending !== null) onSeek(pending);
       pending = null;
     };
+    const stopAutoScroll = () => {
+      if (autoScrollFrame !== null) {
+        window.cancelAnimationFrame(autoScrollFrame);
+        autoScrollFrame = null;
+      }
+    };
+    const tickAutoScroll = () => {
+      autoScrollFrame = null;
+      if (ended || !zoomWindow?.panBy || zoomWindow.left == null || zoomWindow.width <= 0) return;
+      const distanceToLeft = latestClientX - zoomWindow.left;
+      const distanceToRight = zoomWindow.left + zoomWindow.width - latestClientX;
+      const velocity =
+        distanceToLeft < PLAYHEAD_EDGE_BUFFER_PX
+          ? -resolvePlayheadAutoScrollSpeed(distanceToLeft)
+          : distanceToRight < PLAYHEAD_EDGE_BUFFER_PX
+            ? resolvePlayheadAutoScrollSpeed(distanceToRight)
+            : 0;
+      if (!velocity) return;
+
+      const beforeOffset = zoomWindow.offset;
+      const afterOffset = zoomWindow.panBy(velocity);
+      if (Math.abs(afterOffset - beforeOffset) < 0.5) return;
+      pending = secondsAt(latestClientX);
+      if (!frame) frame = window.requestAnimationFrame(flush);
+      autoScrollFrame = window.requestAnimationFrame(tickAutoScroll);
+    };
+    const maybeStartAutoScroll = () => {
+      if (!zoomWindow?.panBy || zoomWindow.left == null || zoomWindow.width <= 0) return;
+      const nearEdge =
+        latestClientX - zoomWindow.left < PLAYHEAD_EDGE_BUFFER_PX ||
+        zoomWindow.left + zoomWindow.width - latestClientX < PLAYHEAD_EDGE_BUFFER_PX;
+      if (nearEdge && autoScrollFrame === null) {
+        autoScrollFrame = window.requestAnimationFrame(tickAutoScroll);
+      } else if (!nearEdge) {
+        stopAutoScroll();
+      }
+    };
     const onMove = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== pointerId) return;
-      pending = secondsAt(moveEvent.clientX);
+      latestClientX = moveEvent.clientX;
+      pending = secondsAt(latestClientX);
       if (!frame) frame = window.requestAnimationFrame(flush);
+      maybeStartAutoScroll();
     };
     const cleanup = () => {
+      ended = true;
+      stopAutoScroll();
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);

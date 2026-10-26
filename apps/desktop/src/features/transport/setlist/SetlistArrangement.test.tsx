@@ -128,6 +128,30 @@ describe("Edit → Arrangement", () => {
     expect(container.querySelector(".lt-structure-panel")).toBeNull();
   });
 
+  it("keeps the wave editor in its two-row layout with a saved song-row height", async () => {
+    useSetlistStore.setState({ ...INITIAL_SETLIST_STATE, songsHeightPx: 180 });
+    const { container } = render(<SetlistView {...props()} layoutClass="wide" />);
+    await act(async () => {
+      await requestEditMode("arrangement");
+    });
+
+    const view = container.querySelector<HTMLElement>(".lt-setlist-view")!;
+    expect(view.classList.contains("has-songs-height")).toBe(true);
+    expect(view.classList.contains("is-wave-editing")).toBe(true);
+    expect(container.querySelector("[data-setlist-zone='mixer']")).toBeNull();
+  });
+
+  it("gives the short sections editor a separate scrolling list and action bar", async () => {
+    const { container } = render(<SetlistView {...props()} layoutClass="short" />);
+    await act(async () => {
+      await requestEditMode("sections");
+    });
+
+    const body = container.querySelector(".lt-setlist-drawer-body.is-sections-mode");
+    expect(body?.querySelector(".lt-setlist-sections.is-short > .lt-setlist-sections-list")).not.toBeNull();
+    expect(body?.querySelector(".lt-setlist-sections.is-short > .lt-setlist-sections-bar")).not.toBeNull();
+  });
+
   it("leaving with unapplied changes asks, and stays when the answer is no", async () => {
     render(<SetlistView {...props()} layoutClass="wide" />);
     await act(async () => {

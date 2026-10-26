@@ -91,9 +91,12 @@ const runFrames = () => {
   });
 };
 
-function layOut(container: HTMLElement) {
+function layOut(container: HTMLElement, getOffset: () => number = () => 0) {
   const root = container.querySelector<HTMLElement>(".lt-setlist-overview")!;
-  root.getBoundingClientRect = () => ({ left: 50, top: 0, width: WIDTH, height: 80, right: 50 + WIDTH, bottom: 80 }) as DOMRect;
+  root.getBoundingClientRect = () => {
+    const left = 50 - getOffset();
+    return { left, top: 0, width: WIDTH, height: 80, right: left + WIDTH, bottom: 80 } as DOMRect;
+  };
   Object.defineProperty(root, "offsetWidth", { configurable: true, value: WIDTH });
   return root;
 }
@@ -204,7 +207,7 @@ describe("SongOverviewStrip seek", () => {
     expect(onSeek).toHaveBeenCalledWith(110);
   });
 
-  it("short: dragging the playhead seeks to the start without panning the zoomed song", () => {
+  it("short: dragging the playhead suspends follow and ignores a second finger", () => {
     useSetlistStore.setState({ overviewZoom: 4 });
     const onSeek = vi.fn();
     const positionSecondsRef = { current: 150 };
@@ -214,26 +217,28 @@ describe("SongOverviewStrip seek", () => {
       </OverviewZoom>,
     );
     const root = layOut(container);
-    Object.defineProperty(container.querySelector(".lt-setlist-zoom-viewport"), "clientWidth", { configurable: true, value: 250 });
+    const viewport = container.querySelector<HTMLElement>(".lt-setlist-zoom-viewport")!;
+    Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 250 });
+    viewport.getBoundingClientRect = () =>
+      ({ left: 50, top: 0, width: 250, height: 80, right: 300, bottom: 80 }) as DOMRect;
     const handle = root.querySelector("button")!;
     const layer = container.querySelector<HTMLElement>(".lt-setlist-zoom-layer")!;
     runFrames();
     const initialTransform = layer.style.transform;
     expect(initialTransform).toBe("translate3d(-375px, 0, 0)");
-    fireEvent.pointerDown(handle, { pointerType: "touch", button: 0, pointerId: 1, clientX: 550 });
-    fireEvent.pointerDown(root, { pointerType: "touch", button: 0, pointerId: 2, clientX: 550 });
-    fireEvent.pointerMove(window, { pointerType: "touch", pointerId: 2, clientX: 300 });
+    fireEvent.pointerDown(handle, { pointerType: "touch", button: 0, pointerId: 1, clientX: 175 });
+    fireEvent.pointerDown(root, { pointerType: "touch", button: 0, pointerId: 2, clientX: 200 });
+    fireEvent.pointerMove(window, { pointerType: "touch", pointerId: 2, clientX: 210 });
     runFrames();
     expect(onSeek).not.toHaveBeenCalled();
-    fireEvent.pointerMove(window, { pointerType: "touch", pointerId: 1, clientX: 250 });
-    fireEvent.pointerMove(window, { pointerType: "touch", pointerId: 1, clientX: 0 });
+    fireEvent.pointerMove(window, { pointerType: "touch", pointerId: 1, clientX: 100 });
     runFrames();
     expect(onSeek).toHaveBeenCalledTimes(1);
-    expect(onSeek).toHaveBeenLastCalledWith(100);
-    positionSecondsRef.current = 100;
+    expect(onSeek).toHaveBeenLastCalledWith(105);
+    positionSecondsRef.current = 105;
     runFrames();
     expect(layer.style.transform).toBe(initialTransform);
-    fireEvent.pointerUp(window, { pointerType: "touch", pointerId: 1, clientX: 0 });
+    fireEvent.pointerUp(window, { pointerType: "touch", pointerId: 1, clientX: 100 });
     fireEvent.pointerMove(window, { pointerType: "touch", pointerId: 1, clientX: 900 });
     runFrames();
     expect(onSeek).toHaveBeenCalledTimes(1);
@@ -256,6 +261,48 @@ describe("SongOverviewStrip seek", () => {
     expect(container.querySelector<HTMLElement>(".lt-setlist-zoom-layer")!.style.transform).toBe("translate3d(-300px, 0, 0)");
     runFrames();
     expect(onSeek).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["left edge", 52, -1],
+    ["right edge", 298, 1],
+  ] as const)("short: dragging the playhead handle auto-scrolls at the %s", (_, edgeX, direction) => {
+    useSetlistStore.setState({ overviewZoom: 4 });
+    const onSeek = vi.fn();
+    const positionSecondsRef = { current: 150 };
+    const { container } = render(
+      <OverviewZoom startSeconds={100} endSeconds={200} positionSecondsRef={positionSecondsRef} onSeek={onSeek}>
+        <SongOverviewStrip {...stripProps({ layout: "short", onSeek, positionSecondsRef })} />
+      </OverviewZoom>,
+    );
+    const viewport = container.querySelector<HTMLElement>(".lt-setlist-zoom-viewport")!;
+    Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 250 });
+    viewport.getBoundingClientRect = () =>
+      ({ left: 50, top: 0, width: 250, height: 80, right: 300, bottom: 80 }) as DOMRect;
+
+    const layer = container.querySelector<HTMLElement>(".lt-setlist-zoom-layer")!;
+    const getOffset = () => {
+      const match = layer.style.transform.match(/translate3d\((-?[\d.]+)px/);
+      return match ? -Number(match[1]) : 0;
+    };
+    const root = layOut(container, getOffset);
+    runFrames();
+    const startOffset = getOffset();
+    expect(startOffset).toBeGreaterThan(0);
+
+    const handle = root.querySelector<HTMLButtonElement>(".lt-setlist-playhead-handle")!;
+    fireEvent.pointerDown(handle, { pointerType: "touch", button: 0, pointerId: 1, clientX: 175 });
+    fireEvent.pointerMove(window, { pointerType: "touch", pointerId: 1, clientX: edgeX });
+    runFrames();
+    const offsetAfterFirstFrame = getOffset();
+    const seekAfterFirstFrame = onSeek.mock.lastCall?.[0] as number;
+    runFrames();
+    const offsetAfterSecondFrame = getOffset();
+    const seekAfterSecondFrame = onSeek.mock.lastCall?.[0] as number;
+
+    expect((offsetAfterSecondFrame - offsetAfterFirstFrame) * direction).toBeGreaterThan(0);
+    expect((seekAfterSecondFrame - seekAfterFirstFrame) * direction).toBeGreaterThan(0);
+    fireEvent.pointerUp(window, { pointerType: "touch", pointerId: 1, clientX: edgeX });
   });
 
   it.each(["cancel", "unmount"])("short: %s discards pending playhead moves and removes listeners", (ending) => {

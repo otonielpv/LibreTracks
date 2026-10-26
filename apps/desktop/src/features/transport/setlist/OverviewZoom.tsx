@@ -16,7 +16,13 @@ export const OVERVIEW_MAX_ZOOM = 32;
  * in place (no renders): the waveform reads it per frame and redraws only
  * the stretch around it, so a 32× zoom keeps full detail without a canvas
  * 32 screens wide. */
-export type ZoomWindow = { offset: number; width: number; setScrubbing?: (active: boolean) => void };
+export type ZoomWindow = {
+  offset: number;
+  width: number;
+  left?: number;
+  setScrubbing?: (active: boolean) => void;
+  panBy?: (deltaPx: number) => number;
+};
 export const ZoomWindowContext = createContext<ZoomWindow | null>(null);
 const WHEEL_ZOOM_FACTOR = 1.25;
 
@@ -103,6 +109,17 @@ export function OverviewZoom({
     windowRef.current.offset = offset;
     layer?.style.setProperty("transform", offset ? `translate3d(${-offset}px, 0, 0)` : "none");
   };
+  windowRef.current.panBy = (deltaPx) => {
+    const viewportWidth = windowRef.current.width;
+    const maxOffset = Math.max(0, viewportWidth * zoomRef.current - viewportWidth);
+    const nextOffset = Math.max(0, Math.min(maxOffset, offsetRef.current + deltaPx));
+    if (Math.abs(nextOffset - offsetRef.current) > 0.01) {
+      applyOffset(nextOffset);
+      manualRef.current = { position: positionSecondsRef.current };
+      markFrameActivity();
+    }
+    return nextOffset;
+  };
 
   useEffect(() => {
     let frameId = 0;
@@ -110,7 +127,10 @@ export function OverviewZoom({
     const frame = () => {
       const viewport = viewportRef.current;
       const position = positionSecondsRef.current;
-      if (viewport) windowRef.current.width = viewport.clientWidth;
+      if (viewport) {
+        windowRef.current.width = viewport.clientWidth;
+        windowRef.current.left = viewport.getBoundingClientRect().left;
+      }
       if (pendingZoomRef.current !== null) {
         setZoom(pendingZoomRef.current);
         pendingZoomRef.current = null;
