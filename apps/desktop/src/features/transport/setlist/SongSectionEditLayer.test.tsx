@@ -55,6 +55,10 @@ function setup(overrides: Partial<SectionEditDeps> = {}) {
       openCreateSectionKindMenu: vi.fn(),
       openCreateCueKindMenu: vi.fn(),
       createTypedMarker: vi.fn(),
+      songRegionContextMenu: vi.fn(() => []),
+      tempoMarkerContextMenu: vi.fn(() => []),
+      timeSignatureMarkerContextMenu: vi.fn(() => []),
+      keyChangeCallbacks: { openMenu: vi.fn(), move: vi.fn() },
     },
     rulerMarkers: {
       moveGroup: vi.fn(),
@@ -280,5 +284,28 @@ describe("Section handles: touch", () => {
     drag(coro, 400, 450, { pointerType: "touch" });
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 450 });
     expect(deps.rulerMarkers.moveGroup).toHaveBeenCalledTimes(1);
+  });
+});
+
+// The phone report: no way to add a tempo, meter or key change mid-song.
+describe("tempo, meter and key on the phone", () => {
+  it("one menu with the DAW's three actions, at the line's bar", () => {
+    const bpm = { label: "transport.menu.changeTimelineBpm", onSelect: vi.fn() };
+    const meter = { label: "transport.menu.createTimeSignatureMarker", onSelect: vi.fn() };
+    const key = { label: "transport.keyChanges.addAtCursor ▸", onSelect: vi.fn() };
+    const { deps, handlers } = setup();
+    const menus = deps.menus as unknown as Record<string, ReturnType<typeof vi.fn>>;
+    menus.rulerContextMenu.mockReturnValue([{ label: "transport.menu.createMarker" }, bpm, meter]);
+    menus.songRegionContextMenu.mockReturnValue([{ label: "other" }, key]);
+    handlers.openTimingMenuAt({ clientX: 1, clientY: 1 } as never, 33.3);
+    // Snap on: the nearest bar, 34 s (2 s bars).
+    expect(menus.rulerContextMenu).toHaveBeenCalledWith(34, null);
+    expect(menus.openMenu).toHaveBeenCalledWith(expect.anything(), "setlistView.sections.timingTitle", [bpm, meter, key]);
+  });
+
+  it("a key mark opens the DAW's key-change menu", () => {
+    const { deps, handlers } = setup();
+    handlers.openTimingMarkMenu({ clientX: 5, clientY: 6 } as never, { kind: "key", id: "k1" });
+    expect(deps.menus.keyChangeCallbacks.openMenu).toHaveBeenCalledWith(5, 6, "r", "k1");
   });
 });

@@ -239,7 +239,7 @@ describe("band zoom", () => {
     vi.unstubAllGlobals();
   });
 
-  it("the buttons zoom in and back; zoomed, the layer follows the playhead", () => {
+  it("zoomed, the layer follows the playhead; the wheel slides it, Ctrl+wheel zooms; no zoom buttons", () => {
     const frames: FrameRequestCallback[] = [];
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
       frames.push(callback);
@@ -248,6 +248,7 @@ describe("band zoom", () => {
     vi.stubGlobal("cancelAnimationFrame", () => {});
     const runFrames = () => act(() => frames.splice(0).forEach((callback) => callback(0)));
     const position = { current: 30 };
+    useSetlistStore.setState({ overviewZoom: 4 });
     const { container } = render(
       <OverviewZoom startSeconds={0} endSeconds={60} positionSecondsRef={position}>
         <div />
@@ -256,9 +257,8 @@ describe("band zoom", () => {
     const viewport = container.querySelector<HTMLElement>(".lt-setlist-zoom-viewport")!;
     Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 400 });
     const layer = container.querySelector<HTMLElement>(".lt-setlist-zoom-layer")!;
-    expect(screen.queryByRole("button", { name: "setlistView.overview.fit" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "setlistView.lanes.zoomIn" }));
-    fireEvent.click(screen.getByRole("button", { name: "setlistView.lanes.zoomIn" }));
+    // The desktop report: the zoom buttons are gone, gestures replace them.
+    expect(screen.queryByRole("button")).toBeNull();
     expect(layer.style.width).toBe("400%");
     runFrames();
     expect(layer.style.transform).toBe("translate3d(-600px, 0, 0)");
@@ -270,7 +270,16 @@ describe("band zoom", () => {
     position.current = 45.01;
     runFrames();
     expect(layer.style.transform).toMatch(/^translate3d\(-1000\.26\d*px, 0, 0\)$/);
-    fireEvent.click(screen.getByRole("button", { name: "setlistView.overview.fit" }));
+    // The desktop report: zoomed in there was no way to move. The wheel
+    // (or a trackpad swipe) slides the song; it stays there while stopped.
+    fireEvent.wheel(viewport, { deltaY: 120 });
+    expect(layer.style.transform).toMatch(/^translate3d\(-1120\.26\d*px, 0, 0\)$/);
+    runFrames();
+    expect(layer.style.transform).toMatch(/^translate3d\(-1120\.26\d*px, 0, 0\)$/);
+    fireEvent.wheel(viewport, { deltaX: -200, deltaY: 10 });
+    expect(layer.style.transform).toMatch(/^translate3d\(-920\.26\d*px, 0, 0\)$/);
+    // Ctrl+wheel out, down to the whole song.
+    for (let step = 0; step < 12; step += 1) fireEvent.wheel(viewport, { deltaY: 100, ctrlKey: true });
     runFrames();
     expect(layer.style.width).toBe("100%");
     expect(layer.style.transform).toBe("none");

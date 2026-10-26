@@ -33,7 +33,15 @@ export type SectionEditDeps = {
   getSnapEnabled: () => boolean;
   menus: Pick<
     TimelineMenus,
-    "openMenu" | "rulerContextMenu" | "createTypedMarker" | "openCreateSectionKindMenu" | "openCreateCueKindMenu"
+    | "openMenu"
+    | "rulerContextMenu"
+    | "createTypedMarker"
+    | "openCreateSectionKindMenu"
+    | "openCreateCueKindMenu"
+    | "songRegionContextMenu"
+    | "tempoMarkerContextMenu"
+    | "timeSignatureMarkerContextMenu"
+    | "keyChangeCallbacks"
   >;
   rulerMarkers: Pick<RulerMarkerHandlers, "moveGroup" | "duplicate" | "remove" | "groupMenu">;
   onSectionContextMenu: (event: ReactMouseEvent<HTMLElement>, markerId: string) => void;
@@ -188,7 +196,51 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
     deps.onSectionContextMenu(event, markerId);
   }
 
+  /** Tempo, meter and key changes at a point of the song, on a phone (no
+   * ruler to right-click): the DAW's own actions, from the ruler menu (tempo,
+   * meter, at the line's bar) and the song menu (a key change, at the
+   * playhead, which the scrub view has just put on the line). */
+  function openTimingMenuAt(event: ReactMouseEvent<HTMLElement>, seconds: number) {
+    const deps = getDeps();
+    const region = deps.getRegion();
+    const target = place(seconds);
+    if (!region || target === null) return;
+    const label = (key: string) => deps.t(key);
+    const ruler = deps.menus.rulerContextMenu(target, null);
+    const actions = [
+      ruler.find((action) => action.label === label("transport.menu.changeTimelineBpm")),
+      ruler.find((action) => action.label === label("transport.menu.createTimeSignatureMarker")),
+      deps.menus
+        .songRegionContextMenu(region)
+        .find((action) => action.label.startsWith(label("transport.keyChanges.addAtCursor"))),
+    ].filter((action): action is NonNullable<typeof action> => Boolean(action));
+    deps.menus.openMenu(event, deps.t("setlistView.sections.timingTitle"), actions);
+  }
+
+  /** A tempo, meter or key mark on the scrub view: its DAW menu. */
+  function openTimingMarkMenu(
+    event: ReactMouseEvent<HTMLElement>,
+    mark: { kind: "tempo" | "meter" | "key"; id: string },
+  ) {
+    const deps = getDeps();
+    const song = deps.getSong();
+    if (mark.kind === "key") {
+      const region = deps.getRegion();
+      if (region) deps.menus.keyChangeCallbacks.openMenu(event.clientX, event.clientY, region.id, mark.id);
+      return;
+    }
+    if (mark.kind === "tempo") {
+      const marker = song.tempoMarkers.find((candidate) => candidate.id === mark.id);
+      if (marker) deps.menus.openMenu(event, `${marker.bpm} BPM`, deps.menus.tempoMarkerContextMenu(marker));
+      return;
+    }
+    const marker = song.timeSignatureMarkers.find((candidate) => candidate.id === mark.id);
+    if (marker) deps.menus.openMenu(event, marker.signature, deps.menus.timeSignatureMarkerContextMenu(marker));
+  }
+
   return {
+    openTimingMenuAt,
+    openTimingMarkMenu,
     openMenuAt,
     resizeSongEnd,
     createAtPlayhead,

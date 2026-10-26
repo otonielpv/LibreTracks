@@ -59,6 +59,8 @@ function handlers() {
     openMenu: vi.fn(),
     duplicateSelection: vi.fn(),
     deleteSelection: vi.fn(),
+    openTimingMenuAt: vi.fn(),
+    openTimingMarkMenu: vi.fn(),
   };
 }
 
@@ -184,5 +186,29 @@ describe("SectionScrubEditor (Playback-style section editing)", () => {
     position.current = 20;
     runFrames();
     expect(layer(container).style.transform).toBe("translate3d(100px, 0, 0)");
+  });
+});
+
+// The phone report: no tempo, meter or key changes from the phone.
+describe("tempo, meter and key on the editor", () => {
+  it("they sit on the waveform (tap = their DAW menu) and «Tempo» adds one at the line", () => {
+    const withTiming = {
+      ...song,
+      tempoMarkers: [{ id: "t1", startSeconds: 12, bpm: 90 }],
+      timeSignatureMarkers: [{ id: "m1", startSeconds: 16, signature: "6/8" }],
+      regions: [{ ...region, keyChanges: [{ id: "k1", startSeconds: 20, key: "D" }] }],
+    } as unknown as SongView;
+    const own = handlers();
+    const { container } = render(
+      <SectionScrubEditor
+        {...props({ song: withTiming, region: withTiming.regions[0], handlers: own, positionSecondsRef: { current: 4 } })}
+      />,
+    );
+    const chips = Array.from(container.querySelectorAll<HTMLElement>(".lt-setlist-scrub-timing"));
+    expect(chips.map((chip) => chip.textContent)).toEqual(["speed90 BPM", "straighten6/8", "music_noteD"]);
+    fireEvent.click(chips[2]);
+    expect(own.openTimingMarkMenu).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ kind: "key", id: "k1" }));
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.sections.timingTitle" }));
+    expect(own.openTimingMenuAt).toHaveBeenCalledWith(expect.anything(), 4);
   });
 });

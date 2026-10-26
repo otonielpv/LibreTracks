@@ -88,6 +88,10 @@ type CompactMixerProps = {
   /** When given, MIDI tracks get their own strip (on/off and routing, no
    * fader). Without it they keep the audio strip, as before (Compacta). */
   midiStrip?: CompactMidiStripHandlers;
+  /** Short strips (the Setlist view on a phone): pan and output fold
+   * behind a fourth button under M/S/T and take the fader's place while
+   * open, so the fader keeps its whole travel. */
+  foldedOptions?: boolean;
 } & CompactMixerProps_DragSelection;
 
 /** Default colour applied to a track strip when track.color is null, the
@@ -218,6 +222,7 @@ function CompactMixerComponent({
   collapsedFolders,
   onToggleFolder,
   midiStrip,
+  foldedOptions = false,
 }: CompactMixerProps) {
   const trackReorderMode = useTimelineUIStore(
     (state) => state.trackReorderMode,
@@ -291,6 +296,7 @@ function CompactMixerComponent({
             isCollapsed={collapsedFolders.has(track.id)}
             hiddenChildCount={hiddenCountByFolderId.get(track.id) ?? 0}
             onToggleFolder={onToggleFolder}
+            foldedOptions={foldedOptions}
           />
   );
 
@@ -392,6 +398,7 @@ type CompactMixerStripProps = {
    * folded so the user knows what unfolding gives back. 0 when expanded. */
   hiddenChildCount: number;
   onToggleFolder: (trackId: string) => void;
+  foldedOptions?: boolean;
 };
 
 // Snap thresholds: when the slider lands within this fraction of the
@@ -431,8 +438,10 @@ function CompactMixerStripComponent({
   isCollapsed,
   hiddenChildCount,
   onToggleFolder,
+  foldedOptions = false,
 }: CompactMixerStripProps) {
   const { t } = useTranslation();
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const isFolder = track.kind === "folder";
   // Mirror the DAW TrackHeaderItem: tracks that live inside a folder
   // get an "Inherited (Folder)" option prepended to their routing
@@ -586,7 +595,7 @@ function CompactMixerStripComponent({
         isFolder ? "is-folder" : ""
       } ${isFolder && isCollapsed ? "is-folded" : ""} ${
         parentInfo ? "is-child" : ""
-      } ${isSelected ? "is-selected" : ""}`}
+      } ${isSelected ? "is-selected" : ""}${foldedOptions && optionsOpen ? " is-options-open" : ""}`}
       data-track-id={track.id}
       style={
         {
@@ -709,6 +718,20 @@ function CompactMixerStripComponent({
         >
           T
         </button>
+        {foldedOptions ? (
+          <button
+            type="button"
+            className={`lt-compact-mixer-toggle is-options ${optionsOpen ? "is-on" : ""}`}
+            aria-pressed={optionsOpen}
+            aria-label={t("compactView.stripOptions", { name: track.name })}
+            title={t("compactView.stripOptions", { name: track.name })}
+            onClick={() => setOptionsOpen((open) => !open)}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">
+              {optionsOpen ? "close" : "tune"}
+            </span>
+          </button>
+        ) : null}
       </div>
 
       {/* Vertical fader + post-fader meter side by side, the way Ableton

@@ -4,9 +4,7 @@ import {
   useRef,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
-  type WheelEvent as ReactWheelEvent,
 } from "react";
-import { useTranslation } from "react-i18next";
 
 import { DRAG_THRESHOLD_PX } from "../constants";
 import { cancelGatedFrame, markFrameActivity, requestGatedFrame, useFrameGateWake } from "../frameGate";
@@ -69,7 +67,8 @@ const isControl = (target: EventTarget | null) =>
  * moves; after a drag by hand it stays where it was left until the playhead
  * moves again. Everything slides by rAF on one layer, with no React render;
  * a pinch writes the zoom at most once per frame. With a mouse: the
- * waveform's click/scrub as before, Ctrl+wheel zooms.
+ * waveform's click/scrub as before, the wheel slides and Ctrl+wheel (or a
+ * trackpad pinch) zooms. No zoom buttons: the gestures replace them.
  */
 export function OverviewZoom({
   startSeconds,
@@ -79,7 +78,6 @@ export function OverviewZoom({
   children,
   overlay,
 }: OverviewZoomProps) {
-  const { t } = useTranslation();
   useFrameGateWake();
   const zoom = useSetlistStore((state) => state.overviewZoom);
   const setZoom = useSetlistStore((state) => state.setOverviewZoom);
@@ -220,22 +218,40 @@ export function OverviewZoom({
     window.addEventListener("pointercancel", onUp);
   };
 
-  const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-    if (!(event.ctrlKey || event.metaKey)) return;
-    event.preventDefault();
-    const rect = viewportRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    zoomAround(zoomRef.current * (event.deltaY < 0 ? WHEEL_ZOOM_FACTOR : 1 / WHEEL_ZOOM_FACTOR), event.clientX - rect.left);
-  };
-
-  const setZoomFromButton = (next: number) => {
+  // Desktop: the wheel (or a trackpad swipe) slides the zoomed song;
+  // Ctrl/⌘ + wheel, which is also what a trackpad pinch sends, zooms around
+  // the pointer. Native and non-passive: React's wheel listener cannot stop
+  // the webview's own page zoom.
+  const wheelRef = useRef<(event: WheelEvent) => void>(() => {});
+  wheelRef.current = (event: WheelEvent) => {
     const viewport = viewportRef.current;
-    manualRef.current = null;
-    if (viewport) zoomAround(next, viewport.clientWidth / 2);
-    manualRef.current = null;
-    setZoom(Math.max(1, Math.min(OVERVIEW_MAX_ZOOM, next)));
-    pendingZoomRef.current = null;
+    if (!viewport) return;
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      zoomAround(
+        zoomRef.current * (event.deltaY < 0 ? WHEEL_ZOOM_FACTOR : 1 / WHEEL_ZOOM_FACTOR),
+        event.clientX - rect.left,
+      );
+      return;
+    }
+    if (zoomRef.current <= 1) return;
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (delta === 0) return;
+    event.preventDefault();
+    const width = viewport.clientWidth;
+    const max = Math.max(0, width * zoomRef.current - width);
+    applyOffset(Math.max(0, Math.min(max, offsetRef.current + delta)));
+    manualRef.current = { position: positionSecondsRef.current };
+    markFrameActivity();
   };
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const listener = (event: WheelEvent) => wheelRef.current(event);
+    viewport.addEventListener("wheel", listener, { passive: false });
+    return () => viewport.removeEventListener("wheel", listener);
+  }, []);
 
   return (
     <>
@@ -243,7 +259,6 @@ export function OverviewZoom({
         ref={viewportRef}
         className="lt-setlist-zoom-viewport"
         onPointerDownCapture={handlePointerDown}
-        onWheel={handleWheel}
       >
         <div
           ref={layerRef}
@@ -255,39 +270,6 @@ export function OverviewZoom({
         </div>
       </div>
       {overlay}
-      <div className="lt-setlist-zoom-controls" role="group" aria-label={t("setlistView.overview.zoomGroup")}>
-        <button
-          type="button"
-          className="lt-setlist-map-action"
-          aria-label={t("setlistView.lanes.zoomOut")}
-          title={t("setlistView.lanes.zoomOut")}
-          disabled={zoom <= 1}
-          onClick={() => setZoomFromButton(zoom / 2)}
-        >
-          <span className="material-symbols-outlined" aria-hidden="true">zoom_out</span>
-        </button>
-        <button
-          type="button"
-          className="lt-setlist-map-action"
-          aria-label={t("setlistView.lanes.zoomIn")}
-          title={t("setlistView.lanes.zoomIn")}
-          disabled={zoom >= OVERVIEW_MAX_ZOOM}
-          onClick={() => setZoomFromButton(zoom * 2)}
-        >
-          <span className="material-symbols-outlined" aria-hidden="true">zoom_in</span>
-        </button>
-        {zoom > 1 ? (
-          <button
-            type="button"
-            className="lt-setlist-map-action"
-            aria-label={t("setlistView.overview.fit")}
-            title={t("setlistView.overview.fit")}
-            onClick={() => setZoomFromButton(1)}
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">fit_screen</span>
-          </button>
-        ) : null}
-      </div>
     </>
   );
 }

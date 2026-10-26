@@ -2041,6 +2041,7 @@ const en = {
     recent: "Recent",
   },
   compactView: {
+    stripOptions: "Pan and output of {{name}}",
     renamePrompt: "Rename song",
     renamed: "Song renamed to \"{{name}}\"",
     bpmPrompt: "BPM of \"{{name}}\"",
@@ -2593,6 +2594,8 @@ const en = {
       actionsSection: "Actions",
     },
     sections: {
+      timingTitle: "Tempo, meter or key here",
+      timingShort: "Tempo",
       addShort: "Section",
       addCueShort: "Cue",
       addCueHere: "Cue here",

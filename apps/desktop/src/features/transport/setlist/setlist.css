@@ -3925,3 +3925,116 @@ button.lt-setlist-track-chip-name {
 .lt-setlist-view-rail .material-symbols-outlined {
   font-size: 1.25rem;
 }
+
+/* ---- Esquinas casi rectas en todas las distribuciones (2026-10-26): en
+   escritorio seguía habiendo píldoras y círculos. ---- */
+.lt-setlist-view .lt-setlist-zone,
+.lt-setlist-view .lt-setlist-song-tile,
+.lt-setlist-view .lt-setlist-add-song,
+.lt-setlist-view .lt-setlist-song-button,
+.lt-setlist-view .lt-setlist-add-song-button,
+.lt-setlist-view .lt-setlist-pane-toggle,
+.lt-setlist-view .lt-setlist-edit-button,
+.lt-setlist-view .lt-setlist-tab,
+.lt-setlist-view .lt-setlist-mixer-action,
+.lt-setlist-view .lt-setlist-mixer-fold,
+.lt-setlist-view .lt-setlist-map-action,
+.lt-setlist-view .lt-setlist-mixer-hint button,
+.lt-setlist-view .lt-setlist-transition,
+.lt-setlist-view .lt-setlist-arrangement-picker,
+.lt-setlist-drawer .lt-setlist-settings-button,
+.lt-setlist-drawer .lt-setlist-drawer-tab,
+.lt-setlist-drawer .lt-setlist-drawer-close,
+.lt-setlist-drawer .lt-setlist-song-button {
+  border-radius: 0.3rem;
+}
+
+.lt-setlist-view .lt-setlist-zone {
+  border-radius: 0.25rem;
+}
+
+/* ---- Pan y salida en el teléfono: un cuarto botón bajo M/S/T los abre en
+   el sitio del fader (que conserva todo su recorrido el resto del tiempo). */
+.lt-setlist-mixer.is-short .lt-compact-mixer-toggle.is-options {
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-toggle.is-options .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip.is-options-open {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip.is-options-open > .lt-compact-mixer-strip-toggles {
+  grid-row: 2 / -1;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip.is-options-open > .lt-compact-mixer-fader-wrap {
+  display: none;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip.is-options-open > .lt-compact-mixer-pan-wrap {
+  display: block;
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+  padding-top: 0.4rem;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip.is-options-open > .lt-compact-mixer-audio-to {
+  display: block;
+  grid-column: 2;
+  grid-row: 3;
+  min-width: 0;
+  width: 100%;
+  min-height: 2rem;
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip.is-options-open .lt-compact-mixer-pan {
+  --lt-fader-cap-w: 18px;
+  --lt-fader-cap-h: 26px;
+  min-height: 2rem;
+}
+
+/* Tempo, compás y tono sobre la onda del editor: abajo, como en la regla. */
+.lt-setlist-scrub-timing {
+  position: absolute;
+  bottom: 0.2rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  min-height: 1.6rem;
+  padding: 0 0.35rem 0 0.2rem;
+  border: 0;
+  border-left: 2px solid currentColor;
+  border-radius: 0 0.25rem 0.25rem 0;
+  background: rgb(19 19 19 / 0.88);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lt-setlist-scrub-timing .material-symbols-outlined {
+  font-size: 0.9rem;
+}
+
+.lt-setlist-scrub-timing.is-tempo {
+  color: #ffb86b;
+}
+
+.lt-setlist-scrub-timing.is-meter {
+  color: #8fd3ff;
+}
+
+.lt-setlist-scrub-timing.is-key {
+  color: #c9a7ff;
+}

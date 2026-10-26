@@ -376,6 +376,7 @@ function SetlistMixerComponent({
               collapsedFolders={collapsedFolders}
               onToggleFolder={onToggleFolder}
               midiStrip={midiStrip}
+              foldedOptions={short}
             />
           </div>
           {masterStrip}

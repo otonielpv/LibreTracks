@@ -2069,6 +2069,7 @@ const es = {
     recent: "Recientes",
   },
   compactView: {
+    stripOptions: "Pan y salida de {{name}}",
     renamePrompt: "Renombrar canción",
     renamed: "Canción renombrada como \"{{name}}\"",
     bpmPrompt: "BPM de \"{{name}}\"",
@@ -2624,6 +2625,8 @@ const es = {
       actionsSection: "Acciones",
     },
     sections: {
+      timingTitle: "Tempo, compás o tono aquí",
+      timingShort: "Tempo",
       addShort: "Sección",
       addCueShort: "Aviso",
       addCueHere: "Aviso aquí",
