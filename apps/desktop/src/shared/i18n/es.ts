@@ -187,6 +187,18 @@ const es = {
     hide: "Ocultar acciones",
     show: "Mostrar acciones",
   },
+  mobileTrackActions: {
+    toolbar: "Selección y movimiento de pistas",
+    selectMultiple: "Seleccionar varias",
+    finishSelecting: "Terminar selección",
+    selectedTracks_one: "{{count}} pista seleccionada",
+    selectedTracks_other: "{{count}} pistas seleccionadas",
+    clearSelection: "Quitar selección de pistas",
+    moveTracks: "Mover pistas",
+    finishMoving: "Terminar movimiento",
+    selectionHint: "Toca pistas para añadirlas o quitarlas de la selección.",
+    reorderHint: "Arrastra el nombre o el asa de una pista para moverla.",
+  },
   mobileEmptyLanes: {
     title: "Aún no hay audio en esta sesión",
     hint: "Añade los audios de la canción y aparecerán aquí como pistas.",

@@ -1,0 +1,58 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { MobileTrackSelectionControls } from "./MobileTrackSelectionControls";
+import { useTimelineUIStore } from "../uiStore";
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+vi.mock("../desktopApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../desktopApi")>()),
+  isMobileApp: true,
+}));
+
+describe("MobileTrackSelectionControls", () => {
+  beforeEach(() => {
+    useTimelineUIStore.setState({
+      selectedTrackIds: [],
+      areaSelectMode: false,
+      trackReorderMode: false,
+      expandedTrackId: null,
+      selectionMixOpen: false,
+    });
+  });
+
+  it("exposes tap-to-add multi-selection and makes it exclusive with moving", () => {
+    render(<MobileTrackSelectionControls />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "mobileTrackActions.selectMultiple",
+      }),
+    );
+    expect(useTimelineUIStore.getState().areaSelectMode).toBe(true);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "timelineToolbar.enableTrackReorder",
+      }),
+    );
+    expect(useTimelineUIStore.getState().areaSelectMode).toBe(false);
+    expect(useTimelineUIStore.getState().trackReorderMode).toBe(true);
+    expect(screen.getByText("mobileTrackActions.reorderHint")).toBeTruthy();
+  });
+
+  it("clears the selected tracks from its visible selection controls", () => {
+    useTimelineUIStore.getState().selectTrack(["one", "two"]);
+    render(<MobileTrackSelectionControls />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "mobileTrackActions.clearSelection",
+      }),
+    );
+    expect(useTimelineUIStore.getState().selectedTrackIds).toEqual([]);
+  });
+});

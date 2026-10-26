@@ -262,6 +262,47 @@ html.lt-mobile .lt-app-shell {
   cursor: grab;
 }
 
+.lt-mobile .lt-mobile-track-tools {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.25rem 0;
+}
+
+.lt-mobile .lt-mobile-track-tools .lt-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 2rem;
+  padding: 0.3rem 0.5rem;
+  white-space: nowrap;
+}
+
+.lt-mobile .lt-mobile-track-tools-count,
+.lt-mobile .lt-mobile-track-tools-hint {
+  color: rgba(225, 233, 231, 0.72);
+  font-size: 0.72rem;
+}
+
+.lt-mobile .lt-mobile-track-tools-hint {
+  flex-basis: 100%;
+}
+
+.lt-mobile .lt-compact-mixer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.lt-mobile .lt-compact-mixer-strips {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+}
+
 .lt-mobile .lt-track-headers-pane {
   -webkit-touch-callout: none;
 }

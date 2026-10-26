@@ -4,7 +4,11 @@ import { useTimelineUIStore } from "../uiStore";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
 /** Mobile-only affordance: scrolling remains the default header gesture. */
-export function MobileTrackReorderToggle() {
+export function MobileTrackReorderToggle({
+  showLabel = false,
+}: {
+  showLabel?: boolean;
+} = {}) {
   const { t } = useTranslation();
   const enabled = useTimelineUIStore((state) => state.trackReorderMode);
   const toggle = useTimelineUIStore((state) => state.toggleTrackReorderMode);
@@ -25,6 +29,13 @@ export function MobileTrackReorderToggle() {
       onClick={toggle}
     >
       <span className="material-symbols-outlined">swap_vert</span>
+      {showLabel
+        ? t(
+            enabled
+              ? "mobileTrackActions.finishMoving"
+              : "mobileTrackActions.moveTracks",
+          )
+        : null}
     </button>
   );
 }

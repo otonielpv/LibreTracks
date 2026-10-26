@@ -124,7 +124,6 @@ function SetlistViewComponent({
   onMasterGainCommit,
   appSettings,
   auxHandlers,
-  multiTrackMix,
   performance,
   dragPreview,
   regions,
@@ -453,7 +452,6 @@ function SetlistViewComponent({
         onMasterGainCommit={onMasterGainCommit}
         appSettings={appSettings}
         auxHandlers={auxHandlers}
-        multiTrackMix={multiTrackMix}
         onAddAudioToSong={onAddAudioToSong}
         onOpenScenes={menus.openMixScenes}
         midiStrip={midiStrip}

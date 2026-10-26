@@ -164,11 +164,12 @@ describe("Setlist mixer tracks", () => {
     expect(onTrackContextMenu).toHaveBeenCalledWith(expect.anything(), "shared");
   });
 
-  it("with several tracks selected, offers the DAW's selection mix controls", () => {
+  it("with several tracks selected, uses the selected strips without a duplicate mix panel", () => {
     const { container } = render(
       <SetlistView {...props({ selectedRegionId: "a", selectedTrackIds: ["shared", "onlyA"] })} layoutClass="wide" />,
     );
-    expect(container.querySelector(".lt-setlist-mixer-selection")).not.toBeNull();
+    expect(container.querySelector(".lt-setlist-mixer-selection")).toBeNull();
+    expect(screen.getByRole("slider", { name: "Volume Batería" })).toBeTruthy();
   });
 });
 

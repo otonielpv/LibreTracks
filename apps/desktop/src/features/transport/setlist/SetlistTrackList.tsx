@@ -16,9 +16,12 @@ import type { SongViewBindings } from "../songs/songViewBindings";
 import { AUTOMATION_TRACK_ID } from "../library/pendingAudioImports";
 import { automationRowIndex } from "./lanes/automationLaneModel";
 import { SONG_DROP_CLASS, songDropHandlers } from "./songDrop";
+import { isMobileApp } from "../desktopApi";
 import { TrackReorderGrip } from "./TrackReorderGrip";
 import { computeSongTrackContent } from "./songTrackContent";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
+import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
+import { MobileTrackSelectionControls } from "../mobile/MobileTrackSelectionControls";
 
 type SetlistTrackListProps = Pick<
   SongViewBindings,
@@ -80,6 +83,11 @@ function SetlistTrackListComponent({
 }: SetlistTrackListProps) {
   const { t } = useTranslation();
   const [expandedTrackId, setExpandedTrackId] = useState<string | null>(null);
+  const touchMenu = useTouchContextMenu({
+    ignoreTarget: (target) =>
+      target instanceof Element &&
+      target.closest(".lt-setlist-track-grip, .lt-setlist-track-clip, button") !== null,
+  });
   const content = useMemo(
     () => computeSongTrackContent(song, region),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -190,6 +198,7 @@ function SetlistTrackListComponent({
           <span className="material-symbols-outlined" aria-hidden="true">add</span>
           {t("setlistView.tracks.addTrack")}
         </button>
+        {isMobileApp ? <MobileTrackSelectionControls /> : null}
       </div>
       <div className="lt-setlist-tracks-list" role="list" aria-label={t("setlistView.tracks.label", { name: region.name })}>
         {rows.length === 0 ? <p className="lt-setlist-tracks-empty">{t("setlistView.tracks.empty")}</p> : null}
@@ -212,6 +221,10 @@ function SetlistTrackListComponent({
                 } as CSSProperties
               }
               onContextMenu={(event) => onTrackContextMenu(event, track.id)}
+              onPointerDownCapture={touchMenu.begin}
+              onPointerMoveCapture={touchMenu.move}
+              onPointerUpCapture={touchMenu.cancel}
+              onPointerCancelCapture={touchMenu.cancel}
             >
               <TrackReorderGrip
                 trackId={track.id}
@@ -236,6 +249,10 @@ function SetlistTrackListComponent({
               <div
                 className="lt-setlist-track-name"
                 onClick={(event) => {
+                  if (touchMenu.consumeTriggered()) {
+                    event.preventDefault();
+                    return;
+                  }
                   onTrackSelect(track.id, track.name, event);
                   if (collapsible) setExpandedTrackId((current) => (current === track.id ? null : track.id));
                 }}

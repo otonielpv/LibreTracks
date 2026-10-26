@@ -27,12 +27,14 @@ import {
 // centred). Computed once — the scale never changes.
 const TRACK_FADER_TICKS = faderTicks(TRACK_FADER_SCALE);
 
-import type { TrackSummary } from "../desktopApi";
+import { isMobileApp, type TrackSummary } from "../desktopApi";
 import { TrackMeter } from "../tracks/TrackMeter";
 import { trackRowSegments } from "../tracks/trackRowWindowing";
 import { useMixerStripWindow } from "./useMixerStripWindow";
 import { useTransportStore, type OptimisticMixState } from "../store";
 import { useTimelineUIStore } from "../uiStore";
+import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
+import { MobileTrackSelectionControls } from "../mobile/MobileTrackSelectionControls";
 
 /**
  * Reusable horizontal-scroll mixer that lays out one vertical channel strip
@@ -222,6 +224,9 @@ function CompactMixerComponent({
   const trackReorderMode = useTimelineUIStore(
     (state) => state.trackReorderMode,
   );
+  const areaSelectMode = useTimelineUIStore(
+    (state) => state.areaSelectMode,
+  );
   // Build a (childTrackId → parent colour / parent name) lookup once so each
   // strip can render its Reaper-style folder cue (a thin coloured ribbon on
   // the left edge + a tiny "↳ Parent" hint under the strip name) without
@@ -276,6 +281,7 @@ function CompactMixerComponent({
         isSelected={selectedTrackIds.includes(track.id)}
         onContextMenu={onTrackContextMenu}
         onSelect={onTrackSelect}
+        onDragStart={onTrackDragStart}
       />
     ) : (
           <CompactMixerStrip
@@ -296,8 +302,9 @@ function CompactMixerComponent({
 
   return (
     <div
-      className={`lt-compact-mixer ${trackReorderMode ? "is-track-reorder-mode" : ""}`}
+      className={`lt-compact-mixer ${trackReorderMode ? "is-track-reorder-mode" : ""} ${areaSelectMode ? "is-area-select-mode" : ""}`}
     >
+      {isMobileApp ? <MobileTrackSelectionControls /> : null}
       <div className="lt-compact-mixer-strips" ref={stripsRef}>
         {segments && geometry
           ? segments.map((segment) =>
@@ -528,6 +535,11 @@ function CompactMixerStripComponent({
   // thumb. Set on pointerdown, cleared on pointerup/cancel.
   const [isPanDragging, setIsPanDragging] = useState(false);
   const lastTouchPointerDownAtRef = useRef(0);
+  const touchMenu = useTouchContextMenu({
+    ignoreTarget: (target) =>
+      target instanceof Element &&
+      target.closest("button, input, select, textarea, [role='slider']") !== null,
+  });
 
   const handleAudioToChange = useCallback(
     (event: ChangeEvent<HTMLSelectElement>) => {
@@ -573,11 +585,15 @@ function CompactMixerStripComponent({
 
   const handleStripClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (touchMenu.consumeTriggered()) {
+        event.preventDefault();
+        return;
+      }
       if (event.button !== 0) return;
       if (!isSelectableTarget(event.target)) return;
       onSelect(track.id, track.name, event);
     },
-    [onSelect, track.id, track.name],
+    [onSelect, touchMenu, track.id, track.name],
   );
 
   return (
@@ -599,7 +615,14 @@ function CompactMixerStripComponent({
       onPointerDown={handleStripPointerDown}
       onMouseDown={handleStripMouseDown}
       onClick={handleStripClick}
-      onContextMenu={(event) => onContextMenu(event, track.id)}
+      onPointerDownCapture={touchMenu.begin}
+      onPointerMoveCapture={touchMenu.move}
+      onPointerUpCapture={touchMenu.cancel}
+      onPointerCancelCapture={touchMenu.cancel}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onContextMenu(event, track.id);
+      }}
     >
       {/* The name + parent-hint band acts as the strip's "handle".
           data-strip-noninteractive opts it into selection / drag-start

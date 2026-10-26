@@ -17,7 +17,6 @@ import { PadsControls, usePadsCatalog } from "../panels/PadsPopover";
 import type { SongViewBindings } from "../songs/songViewBindings";
 import { useTransportStore } from "../store";
 import { SongMasterMeter } from "../tracks/TrackMeter";
-import { MultiTrackMixControls } from "../tracks/MultiTrackMixControls";
 import { SetlistConsoleStrip } from "./SetlistConsoleStrip";
 import { useSetlistStore, type SetlistBottomTab } from "./setlistStore";
 import { computeSongTrackContent } from "./songTrackContent";
@@ -38,7 +37,6 @@ export type SetlistMixerProps = Pick<
   | "onMasterGainCommit"
   | "appSettings"
   | "auxHandlers"
-  | "multiTrackMix"
   | "onAddAudioToSong"
 > & {
   /** The mix scenes manager (the DAW's MixSceneModal). */
@@ -132,7 +130,6 @@ function SetlistMixerComponent({
   onMasterGainCommit,
   appSettings,
   auxHandlers,
-  multiTrackMix,
   onAddAudioToSong,
   onOpenScenes,
   viewButtons,
@@ -160,14 +157,6 @@ function SetlistMixerComponent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [song.clips, song.midiClips, song.videoClips, region?.startSeconds, region?.endSeconds],
   );
-  const selectedTracks = useMemo(() => {
-    if (selectedTrackIds.length < 2) return [];
-    const byId = new Map(tracks.map((track) => [track.id, track]));
-    return selectedTrackIds
-      .map((id) => byId.get(id))
-      .filter((track): track is NonNullable<typeof track> => Boolean(track));
-  }, [selectedTrackIds, tracks]);
-
   const masterGain = optimisticMaster ?? region?.master?.gain ?? 1;
   const masterStrip = region ? (
     <SetlistConsoleStrip
@@ -347,15 +336,6 @@ function SetlistMixerComponent({
             {t("setlistView.mixer.gotIt")}
           </button>
         </p>
-      ) : null}
-      {tab === "tracks" && selectedTracks.length > 1 ? (
-        <div className="lt-setlist-mixer-selection lt-mobile-selection-mix">
-          <MultiTrackMixControls
-            tracks={selectedTracks}
-            routingOptions={audioRoutingOptions}
-            mix={multiTrackMix}
-          />
-        </div>
       ) : null}
       {tab === "tracks" && songTrackIds?.size === 0 && !showAllTracks ? (
         <p className="lt-setlist-mixer-empty">{t("setlistView.mixer.emptySong")}</p>

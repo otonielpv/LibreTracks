@@ -187,6 +187,18 @@ const en = {
     hide: "Hide actions",
     show: "Show actions",
   },
+  mobileTrackActions: {
+    toolbar: "Track selection and movement",
+    selectMultiple: "Select multiple",
+    finishSelecting: "Done selecting",
+    selectedTracks_one: "{{count}} track selected",
+    selectedTracks_other: "{{count}} tracks selected",
+    clearSelection: "Clear track selection",
+    moveTracks: "Move tracks",
+    finishMoving: "Done moving",
+    selectionHint: "Tap tracks to add or remove them from the selection.",
+    reorderHint: "Drag a track name or its handle to move it.",
+  },
   mobileEmptyLanes: {
     title: "No audio in this session yet",
     hint: "Add the song's audio files and they will show up here as tracks.",

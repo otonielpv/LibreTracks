@@ -1,5 +1,5 @@
 import { useTimelineUIStore } from "../uiStore";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import type { SongView, TrackSummary } from "@libretracks/shared/models";
@@ -154,6 +154,48 @@ describe("Edit → Tracks", () => {
     ]);
   });
 
+  it("opens track operations on a mobile long-press", () => {
+    vi.useFakeTimers();
+    const onTrackContextMenu = vi.fn();
+    const onTrackSelect = vi.fn();
+    const base = props({ onTrackContextMenu, onTrackSelect });
+    const original = window.PointerEvent;
+    class TouchPointerEvent extends MouseEvent {
+      readonly pointerId = 1;
+      readonly pointerType = "touch";
+    }
+    Object.defineProperty(window, "PointerEvent", {
+      configurable: true,
+      value: TouchPointerEvent,
+    });
+    try {
+      const { container } = render(
+        <SetlistView {...base} layoutClass="wide" />,
+      );
+      const trackName = within(row(container, "voxA")).getByText("Voz A");
+      fireEvent.pointerDown(trackName, {
+        pointerId: 1,
+        button: 0,
+        clientX: 24,
+        clientY: 24,
+      });
+      act(() => vi.advanceTimersByTime(550));
+      fireEvent.click(trackName);
+
+      expect(onTrackContextMenu).toHaveBeenCalledWith(
+        expect.anything(),
+        "voxA",
+      );
+      expect(onTrackSelect).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(window, "PointerEvent", {
+        configurable: true,
+        value: original,
+      });
+      vi.useRealTimers();
+    }
+  });
+
   it("the grip starts the DAW's track reorder drag; selection is the DAW's", () => {
     const onTrackDragStart = vi.fn();
     const onTrackSelect = vi.fn();
@@ -231,7 +273,7 @@ describe("Edit → Tracks by size", () => {
     fireEvent.pointerDown(screen.getByRole("button", { name: "setlistView.tracks.reorder:Voz A" }), { button: 0 });
     expect(seen).toEqual([true]);
     fireEvent.pointerUp(window);
-    vi.advanceTimersByTime(1);
+    act(() => vi.advanceTimersByTime(1));
     expect(useTimelineUIStore.getState().trackReorderMode).toBe(false);
     fireEvent.pointerDown(
       screen.getByRole("button", { name: "setlistView.tracks.reorder:setlistView.tracks.kind.automation" }),
@@ -242,4 +284,3 @@ describe("Edit → Tracks by size", () => {
     Object.defineProperty(window, "PointerEvent", { configurable: true, value: original });
   });
 });
-
