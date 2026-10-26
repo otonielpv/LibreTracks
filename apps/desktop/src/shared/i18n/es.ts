@@ -2571,6 +2571,8 @@ const es = {
       label: "Onda de {{name}}",
     },
     mixer: {
+      rail: { audio: "Audio", all: "Todas", enlarge: "Ampliar", shrink: "Reducir" },
+      allTracksTitle: "Ver todas las pistas de la sesión, no solo las que suenan en esta canción",
       enlarge: "Ampliar el mezclador (oculta las canciones)",
       shrink: "Volver a mostrar las canciones",
       label: "Mezclador",

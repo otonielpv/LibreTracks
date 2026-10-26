@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { SongRegionSummary, SongView } from "@libretracks/shared/models";
 import {
@@ -43,6 +43,9 @@ export type SetlistMixerProps = Pick<
 > & {
   /** The mix scenes manager (the DAW's MixSceneModal). */
   onOpenScenes: () => void;
+  /** Phone: the view's own buttons (Waveform, Lyrics, Edit) at the top of
+   * the rail, so the song row is all songs. */
+  viewButtons?: ReactNode;
   /** MIDI tracks: on/off and routing, the DAW's commands. */
   midiStrip: CompactMidiStripHandlers;
   song: SongView;
@@ -132,6 +135,7 @@ function SetlistMixerComponent({
   multiTrackMix,
   onAddAudioToSong,
   onOpenScenes,
+  viewButtons,
   midiStrip,
   song,
   region,
@@ -191,13 +195,24 @@ function SetlistMixerComponent({
   ) : null;
 
   const tabs: Array<{ tab: SetlistBottomTab; label: string; icon: string }> = [
-    { tab: "tracks", label: t("setlistView.mixer.tabs.tracks"), icon: "graphic_eq" },
+    { tab: "tracks", label: t("setlistView.mixer.tabs.tracks"), icon: "equalizer" },
     { tab: "pads", label: t("setlistView.mixer.tabs.pads"), icon: "piano" },
   ];
   const tab: SetlistBottomTab = bottomTab;
   // Medium folds the console to its Master bar to give the waveform the
   // height; wide resizes it, and the phone swaps it with the waveform.
   const foldable = layout === "medium";
+  // Phone: the header is a rail of icons on the right. Each one carries a
+  // short word under it (the iPhone report: bare icons said nothing), and the
+  // rail is the same in both tabs; a track action from Pads goes back to
+  // Tracks first, so nothing hides (the same report).
+  const short = layout === "short";
+  const railLabel = (key: string) =>
+    short ? <span className="lt-setlist-rail-label">{t(key)}</span> : null;
+  const tracksAction = (action: () => void) => () => {
+    if (tab !== "tracks") setBottomTab("tracks");
+    action();
+  };
 
   if (foldable && collapsed) {
     return (
@@ -220,6 +235,12 @@ function SetlistMixerComponent({
   return (
     <div className={`lt-setlist-mixer is-${layout}`}>
       <div className="lt-setlist-mixer-header">
+        {viewButtons ? (
+          <>
+            {viewButtons}
+            <span className="lt-setlist-rail-divider" aria-hidden="true" />
+          </>
+        ) : null}
         <div className="lt-setlist-mixer-tabs" role="tablist" aria-label={t("setlistView.mixer.label")}>
           {tabs.map((entry) => (
             <button
@@ -231,39 +252,47 @@ function SetlistMixerComponent({
               title={entry.label}
               onClick={() => setBottomTab(entry.tab)}
             >
-              {layout === "short" ? (
+              {short ? (
                 <span className="material-symbols-outlined" aria-hidden="true">{entry.icon}</span>
               ) : null}
-              <span className="lt-setlist-mixer-action-label">{entry.label}</span>
+              <span className={short ? "lt-setlist-rail-label" : "lt-setlist-mixer-action-label"}>{entry.label}</span>
             </button>
           ))}
         </div>
-        {tab === "tracks" && region ? (
+        {short ? <span className="lt-setlist-rail-divider" aria-hidden="true" /> : null}
+        {(tab === "tracks" || short) && region ? (
           <button
             type="button"
             className="lt-setlist-mixer-action"
             title={t("setlistView.mixer.addAudioTitle")}
             aria-label={t("setlistView.tracks.addAudio")}
-            onClick={() => onAddAudioToSong(region.id)}
+            onClick={tracksAction(() => onAddAudioToSong(region.id))}
           >
             <span className="material-symbols-outlined" aria-hidden="true">library_music</span>
             <span className="lt-setlist-mixer-action-label">{t("setlistView.tracks.addAudio")}</span>
+            {railLabel("setlistView.mixer.rail.audio")}
           </button>
         ) : null}
-        {tab === "tracks" ? (
+        {tab === "tracks" || short ? (
           <button
             type="button"
-            className={`lt-setlist-mixer-action${showAllTracks ? " is-active" : ""}`}
-            aria-pressed={showAllTracks}
+            className={`lt-setlist-mixer-action${showAllTracks && tab === "tracks" ? " is-active" : ""}`}
+            aria-pressed={showAllTracks && tab === "tracks"}
             aria-label={t("setlistView.mixer.allTracks")}
-            title={t("setlistView.mixer.allTracks")}
-            onClick={() => setShowAllTracks((value) => !value)}
+            title={t("setlistView.mixer.allTracksTitle")}
+            onClick={() => {
+              if (tab !== "tracks") {
+                setBottomTab("tracks");
+                setShowAllTracks(true);
+              } else setShowAllTracks((value) => !value);
+            }}
           >
             <span className="material-symbols-outlined" aria-hidden="true">view_week</span>
             <span className="lt-setlist-mixer-action-label">{t("setlistView.mixer.allTracks")}</span>
+            {railLabel("setlistView.mixer.rail.all")}
           </button>
         ) : null}
-        {tab === "tracks" ? (
+        {tab === "tracks" || short ? (
           <button
             type="button"
             className="lt-setlist-mixer-action"
@@ -271,8 +300,9 @@ function SetlistMixerComponent({
             title={t("setlistView.automation.scenesTitle")}
             onClick={onOpenScenes}
           >
-            <span className="material-symbols-outlined" aria-hidden="true">tune</span>
+            <span className="material-symbols-outlined" aria-hidden="true">bookmarks</span>
             <span className="lt-setlist-mixer-action-label">{t("setlistView.mixer.scenes")}</span>
+            {railLabel("setlistView.mixer.scenes")}
           </button>
         ) : null}
         {layout === "short" ? (
@@ -287,6 +317,7 @@ function SetlistMixerComponent({
             <span className="material-symbols-outlined" aria-hidden="true">
               {expanded ? "close_fullscreen" : "open_in_full"}
             </span>
+            {railLabel(expanded ? "setlistView.mixer.rail.shrink" : "setlistView.mixer.rail.enlarge")}
           </button>
         ) : null}
         {foldable ? (

@@ -3804,3 +3804,74 @@ button.lt-setlist-track-chip-name {
     animation: none;
   }
 }
+
+/* ---- Raíl de la consola en el teléfono (2026-10-26): cada icono con su
+   palabra debajo, las pestañas sin aspecto de desactivadas y una raya entre
+   pestañas y acciones. ---- */
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header {
+  grid-template-columns: 3.25rem;
+  grid-auto-rows: auto;
+  gap: 0.2rem;
+}
+
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-tab,
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-mixer-action {
+  width: 3.25rem;
+  height: 2.75rem;
+  flex-direction: column;
+  gap: 0.05rem;
+  color: var(--lt-setlist-text);
+  opacity: 1;
+}
+
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-tab.is-active {
+  border-color: var(--lt-setlist-accent);
+  background: rgb(87 241 219 / 0.16);
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-rail-label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-rail-divider {
+  height: 1px;
+  margin: 0.1rem 0.3rem;
+  background: var(--lt-setlist-border);
+}
+
+/* Botones de vista (Onda, Letra, Editar) arriba del raíl, con el mismo
+   formato: icono y palabra debajo. */
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-pane-toggle,
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-edit-button {
+  width: 3.25rem;
+  height: 2.75rem;
+  min-height: 0;
+  padding: 0;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  border-radius: 0.3rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-pane-toggle .material-symbols-outlined,
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-edit-button .material-symbols-outlined {
+  font-size: 1.25rem;
+}
+
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-pane-toggle,
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-edit-button {
+  margin: 0;
+  justify-self: center;
+}

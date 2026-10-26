@@ -2540,6 +2540,8 @@ const en = {
       label: "Waveform of {{name}}",
     },
     mixer: {
+      rail: { audio: "Audio", all: "All", enlarge: "Enlarge", shrink: "Shrink" },
+      allTracksTitle: "Show every track in the session, not only the ones that play in this song",
       enlarge: "Enlarge the mixer (hides the songs)",
       shrink: "Show the songs again",
       label: "Mixer",

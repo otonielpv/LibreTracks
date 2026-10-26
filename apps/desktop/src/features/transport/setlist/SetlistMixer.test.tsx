@@ -307,3 +307,30 @@ describe("Setlist mixer: MIDI tracks", () => {
   });
 });
 
+
+describe("phone console rail", () => {
+  // The iPhone report: bare icons said nothing, and opening Pads hid the
+  // other buttons until going back to Tracks.
+  it("every button carries a word, and the track actions stay in Pads (taking you back to Tracks)", () => {
+    const base = props({ selectedRegionId: "a", activeRegionId: "a" });
+    const { container } = render(<SetlistView {...base} layoutClass="short" />);
+    const rail = container.querySelector<HTMLElement>(".lt-setlist-mixer-header")!;
+    const words = Array.from(rail.querySelectorAll(".lt-setlist-rail-label")).map((node) => node.textContent);
+    expect(words).toEqual(
+      expect.arrayContaining([
+        "setlistView.mixer.tabs.tracks",
+        "setlistView.mixer.tabs.pads",
+        "setlistView.mixer.rail.audio",
+        "setlistView.mixer.rail.all",
+        "setlistView.mixer.scenes",
+        "setlistView.mixer.rail.enlarge",
+      ]),
+    );
+    fireEvent.click(within(rail).getByRole("tab", { name: /setlistView.mixer.tabs.pads/ }));
+    expect(useSetlistStore.getState().bottomTab).toBe("pads");
+    const all = within(rail).getByRole("button", { name: /setlistView.mixer.allTracks/ });
+    fireEvent.click(all);
+    expect(useSetlistStore.getState().bottomTab).toBe("tracks");
+    expect(all.getAttribute("aria-pressed")).toBe("true");
+  });
+});

@@ -418,47 +418,6 @@ function SetlistViewComponent({
   const mixerZoneRef = useRef<HTMLElement | null>(null);
   const mixerHeightPx = useSetlistStore((state) => state.mixerHeightPx);
   const beginMixerResize = useMixerResize(rootRef, mixerZoneRef);
-  const mixer = (
-    <Zone name="mixer" zoneRef={mixerZoneRef} drop={songDrop}>
-      {layout === "wide" ? (
-        <div
-          className="lt-setlist-mixer-resize"
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label={t("setlistView.mixer.resize")}
-          onPointerDown={beginMixerResize}
-        />
-      ) : null}
-      {(editMode === "lanes" || editMode === "automation") && layout !== "short" ? lanes : editMode === "tracks" && layout !== "short" ? trackList : editMode === "arrangement" &&
-        layout !== "short" &&
-        shownRegion ? (
-        <SetlistArrangementEditor region={shownRegion} handlers={structureHandlers} layout={layout} />
-      ) : (
-      <SetlistMixer
-        song={performance.song}
-        region={shownRegion}
-        layout={layout}
-        tracks={tracks}
-        audioRoutingOptions={audioRoutingOptions}
-        mixerHandlers={mixerHandlers}
-        onTrackContextMenu={onTrackContextMenu}
-        selectedTrackIds={selectedTrackIds}
-        onTrackSelect={onTrackSelect}
-        onTrackDragStart={onTrackDragStart}
-        collapsedFolders={collapsedFolders}
-        onToggleFolder={onToggleFolder}
-        onMasterGainChange={onMasterGainChange}
-        onMasterGainCommit={onMasterGainCommit}
-        appSettings={appSettings}
-        auxHandlers={auxHandlers}
-        multiTrackMix={multiTrackMix}
-        onAddAudioToSong={onAddAudioToSong}
-        onOpenScenes={menus.openMixScenes}
-        midiStrip={midiStrip}
-      />
-      )}
-    </Zone>
-  );
   const paneButtons = (
     <>
       {layout === "short" ? (
@@ -496,6 +455,51 @@ function SetlistViewComponent({
   // Phone, waveform pane: Playback keeps the view buttons in a dock over the
   // bottom right of the waveform, folded away with an arrow.
   const waveDock = layout === "short" && shortPane === "song";
+  // Phone, console pane: the same buttons head the console's rail. The song
+  // row keeps them only off the phone, or beside the lyrics (no rail there).
+  const railButtons = layout === "short" && shortPane === "mixer";
+  const mixer = (
+    <Zone name="mixer" zoneRef={mixerZoneRef} drop={songDrop}>
+      {layout === "wide" ? (
+        <div
+          className="lt-setlist-mixer-resize"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={t("setlistView.mixer.resize")}
+          onPointerDown={beginMixerResize}
+        />
+      ) : null}
+      {(editMode === "lanes" || editMode === "automation") && layout !== "short" ? lanes : editMode === "tracks" && layout !== "short" ? trackList : editMode === "arrangement" &&
+        layout !== "short" &&
+        shownRegion ? (
+        <SetlistArrangementEditor region={shownRegion} handlers={structureHandlers} layout={layout} />
+      ) : (
+      <SetlistMixer
+        song={performance.song}
+        region={shownRegion}
+        layout={layout}
+        tracks={tracks}
+        audioRoutingOptions={audioRoutingOptions}
+        mixerHandlers={mixerHandlers}
+        onTrackContextMenu={onTrackContextMenu}
+        selectedTrackIds={selectedTrackIds}
+        onTrackSelect={onTrackSelect}
+        onTrackDragStart={onTrackDragStart}
+        collapsedFolders={collapsedFolders}
+        onToggleFolder={onToggleFolder}
+        onMasterGainChange={onMasterGainChange}
+        onMasterGainCommit={onMasterGainCommit}
+        appSettings={appSettings}
+        auxHandlers={auxHandlers}
+        multiTrackMix={multiTrackMix}
+        onAddAudioToSong={onAddAudioToSong}
+        onOpenScenes={menus.openMixScenes}
+        midiStrip={midiStrip}
+        viewButtons={railButtons ? paneButtons : undefined}
+      />
+      )}
+    </Zone>
+  );
   // The song band: the waveform, the sections on it (tap the label strip to
   // jump) and, while editing, the section and cue handles. Right click on the
   // waveform opens the DAW ruler menu at that point.
@@ -614,7 +618,7 @@ function SetlistViewComponent({
         editing={editMode !== null}
       />
       {/* Phone, waveform pane: these ride over the waveform instead. */}
-      {waveDock ? null : paneButtons}
+      {waveDock || railButtons ? null : paneButtons}
     </Zone>
   );
   const closeLyrics = () => (layout === "short" ? setShortPane("mixer") : setLyricsOpen(false));

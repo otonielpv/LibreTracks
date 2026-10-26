@@ -141,8 +141,11 @@ describe("Edit modes on the phone", () => {
     const base = testSetlistProps({ regions: [region] } as Partial<SongView>);
     const { container } = render(<SetlistView {...base} layoutClass="short" />);
     const songsZone = () => container.querySelector(".lt-setlist-zone.is-songs")!;
-    // Mixer pane: the buttons stay in the song row.
-    expect(within(songsZone() as HTMLElement).getByRole("button", { name: /setlistView.edit.button/ })).toBeTruthy();
+    // Console pane: they head the console's rail; the song row is all songs.
+    const rail = container.querySelector<HTMLElement>(".lt-setlist-mixer-header")!;
+    expect(within(rail).getByRole("button", { name: /setlistView.edit.button/ })).toBeTruthy();
+    expect(within(rail).getByRole("button", { name: /setlistView.pane.song/ })).toBeTruthy();
+    expect(songsZone().querySelector(".lt-setlist-pane-toggle, .lt-setlist-edit-button")).toBeNull();
     act(() => useSetlistStore.getState().setShortPane("song"));
     const dock = container.querySelector<HTMLElement>(".lt-setlist-wave-dock")!;
     expect(within(dock).getByRole("button", { name: /setlistView.pane.mixer/ })).toBeTruthy();
