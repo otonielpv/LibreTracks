@@ -14004,14 +14004,18 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   margin: 0.2rem 0 0.2rem;
 }
 
-/* El Master ocupa todo el alto: nombre, valor, fader (lo que sobra) y los
-   huecos invisibles de pan y salida, con la misma altura que las pistas para
-   que los faders queden a la par. */
+/* El Master ocupa todo el alto: nombre, valor y el fader, que se lleva lo que
+   sobra. */
 .lt-setlist-master-strip {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
   row-gap: 0;
+}
+
+/* Sin huecos de pan y salida: el fader del Master llega hasta abajo. */
+.lt-setlist-master-strip > .lt-setlist-strip-placeholder {
+  display: none;
 }
 
 .lt-setlist-master-strip > .lt-compact-mixer-fader-wrap {
