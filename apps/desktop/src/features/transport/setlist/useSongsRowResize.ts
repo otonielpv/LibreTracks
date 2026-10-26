@@ -9,21 +9,42 @@ export const SONGS_MAX_HEIGHT_FRACTION = 0.5;
 const STORAGE_KEY = "lt.setlistView.songsHeightPx";
 export const SONGS_HEIGHT_VAR = "--lt-setlist-songs-height";
 export const CARD_HEIGHT_VAR = "--lt-setlist-card-h";
-/** A card is never shorter than this (name + key/BPM line). */
-export const CARD_MIN_HEIGHT_PX = 52;
+/** A card is never shorter than this (name + key/BPM line)… */
+export const CARD_MIN_HEIGHT_PX = 48;
+/** …nor taller than this: past it a row only wastes space. */
+export const CARD_MAX_HEIGHT_PX = 96;
 const LIST_PADDING_PX = 14;
 const CARD_GAP_PX = 6;
 
 /**
- * How the song cards fill a row of `listHeightPx`: as many rows as fit at
- * the minimum card height, and the height each card takes so they fill it
- * exactly (no vertical scroll, no clipped card: the desktop report).
+ * The height of each card when the cards sit in `rows` rows and the user
+ * dragged the row to `preferredHeightPx`: they share it, within the minimum
+ * and maximum, so a row never ends up taller than its cards need (the desktop
+ * report: three songs in a tall row left most of it empty).
  */
-export function songCardRows(listHeightPx: number) {
-  const usable = Math.max(0, listHeightPx - LIST_PADDING_PX);
-  const rows = Math.max(1, Math.floor((usable + CARD_GAP_PX) / (CARD_MIN_HEIGHT_PX + CARD_GAP_PX)));
-  const cardHeight = Math.max(CARD_MIN_HEIGHT_PX - 8, Math.floor((usable - (rows - 1) * CARD_GAP_PX) / rows));
-  return { rows, cardHeight };
+export function songCardHeight(preferredHeightPx: number, rows: number) {
+  const share = (preferredHeightPx - LIST_PADDING_PX - (rows - 1) * CARD_GAP_PX) / Math.max(1, rows);
+  return Math.round(Math.max(CARD_MIN_HEIGHT_PX, Math.min(CARD_MAX_HEIGHT_PX, share)));
+}
+
+/** How many rows the cards flow into (distinct tops of the song cards). */
+function countCardRows(list: HTMLElement) {
+  const tops = new Set<number>();
+  for (const card of list.querySelectorAll<HTMLElement>(".lt-setlist-song-item")) {
+    tops.add(Math.round(card.offsetTop / 4));
+  }
+  return Math.max(1, tops.size);
+}
+
+/** Sizes the cards of `list` for a row dragged to `preferredHeightPx`. */
+function fitSongCards(root: HTMLElement, list: HTMLElement, preferredHeightPx: number) {
+  // Rows depend on the cards' widths only, never on their height: measure,
+  // then size, and it settles in one pass.
+  const rows = countCardRows(list);
+  root.style.setProperty(CARD_HEIGHT_VAR, `${songCardHeight(preferredHeightPx, rows)}px`);
+  // A data attribute, not a class: React owns the root's className.
+  if (rows > 1) root.dataset.songRows = "multi";
+  else delete root.dataset.songRows;
 }
 
 export function clampSongsHeight(heightPx: number, viewHeightPx: number) {
@@ -63,9 +84,8 @@ export function useSongsRowResize(
   const setSongsHeightPx = useSetlistStore((state) => state.setSongsHeightPx);
   const songsHeightPx = useSetlistStore((state) => state.songsHeightPx);
 
-  // The cards follow the list's real height (it is capped by the window, so
-  // the dragged value is not enough): rows and card height, live while
-  // dragging and when the window changes.
+  // The cards follow the list: when the window or the songs change how they
+  // wrap, they are sized again (and while dragging, see `begin`).
   useEffect(() => {
     const root = rootRef.current;
     const list = songsRef.current?.querySelector<HTMLElement>(".lt-setlist-songs");
@@ -74,13 +94,7 @@ export function useSongsRowResize(
       if (root) delete root.dataset.songRows;
       return;
     }
-    const apply = () => {
-      const { rows, cardHeight } = songCardRows(list.clientHeight);
-      root.style.setProperty(CARD_HEIGHT_VAR, `${cardHeight}px`);
-      // A data attribute, not a class: React owns the root's className.
-      if (rows > 1) root.dataset.songRows = "multi";
-      else delete root.dataset.songRows;
-    };
+    const apply = () => fitSongCards(root, list, songsHeightPx);
     apply();
     const observer = new ResizeObserver(apply);
     observer.observe(list);
@@ -109,6 +123,8 @@ export function useSongsRowResize(
         if (moveEvent.pointerId !== pointerId) return;
         current = clampSongsHeight(startHeight + (moveEvent.clientY - startY), viewHeight);
         root.style.setProperty(SONGS_HEIGHT_VAR, `${current}px`);
+        const list = songs.querySelector<HTMLElement>(".lt-setlist-songs");
+        if (list) fitSongCards(root, list, current);
       };
       const onUp = (upEvent: PointerEvent) => {
         if (upEvent.pointerId !== pointerId) return;

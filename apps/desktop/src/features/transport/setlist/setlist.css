@@ -3995,23 +3995,25 @@ button.lt-setlist-track-chip-name {
   background: rgb(87 241 219 / 0.25);
 }
 
-/* The row's height is the grid's: the waveform and the console share the
-   rest, so the waveform grows when the window does. Capped at 40 % of the
-   view so a small window never loses them. */
+/* The song row is as tall as its cards need: they flow left to right and wrap
+   into more rows when the songs do not fit one (useSongsRowResize sizes them:
+   the height dragged is how big each may get, up to a limit), so there is no
+   empty stretch and no vertical scroll. The waveform and the console share
+   the rest. */
 .lt-setlist-view.is-wide.has-songs-height {
-  grid-template-rows: min(var(--lt-setlist-songs-height), 40%) minmax(8rem, 1fr) var(--lt-setlist-mixer-height, minmax(14rem, 1.6fr));
+  grid-template-rows: auto minmax(8rem, 1fr) var(--lt-setlist-mixer-height, minmax(14rem, 1.6fr));
 }
 
-/* Resized row: the cards fill its height (useSongsRowResize sets how tall
-   each one is and whether there is more than one row), flowing down and then
-   across, so there is never vertical scroll or a clipped card; only more
-   songs than fit scroll sideways. */
+.lt-setlist-view.is-wide.has-songs-height > .lt-setlist-zone.is-songs {
+  max-height: 40vh;
+}
+
 .lt-setlist-view.is-wide.has-songs-height .lt-setlist-songs.is-horizontal {
-  flex-direction: column;
+  flex-direction: row;
   flex-wrap: wrap;
   align-content: flex-start;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .lt-setlist-view.is-wide.has-songs-height .lt-setlist-song-item,
