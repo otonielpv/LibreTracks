@@ -41,7 +41,7 @@ export type TimelineBackgroundSeekDeps = {
   restoreConfirmedTransportVisual: () => void;
   updateCameraX: (
     cameraX: number,
-    options?: { commitToStore?: boolean },
+    options?: { commitToStore?: boolean; manualNavigation?: boolean },
   ) => unknown;
   commitSeek: (seconds: number) => void;
   /** Un clic/toque LIMPIO en el fondo también deselecciona pistas y clips, como
@@ -115,6 +115,7 @@ export function createTimelineBackgroundSeek(
 
       deps.updateCameraX(activePan.originCameraX + deltaX, {
         commitToStore: false,
+        manualNavigation: true,
       });
     };
 

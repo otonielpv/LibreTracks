@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { ClipSummary, WaveformSummaryDto } from "@libretracks/shared/models";
 
 import { resetFrameGateForTests } from "../frameGate";
+import { FOLLOW_CAMERA_MANUAL_PAUSE_MS } from "../followCamera";
 import { useTransportStore } from "../store";
 import { OverviewZoom, ZoomWindowContext } from "./OverviewZoom";
 import { drawWindowFor, SongOverviewStrip } from "./SongOverviewStrip";
@@ -131,7 +132,10 @@ beforeEach(() => {
   resetFrameGateForTests();
   useTransportStore.setState({ playback: { playbackState: "playing" } as never });
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("SongOverviewStrip playhead", () => {
   it("moves by rAF with 0 renders, hidden outside the song", () => {
@@ -155,6 +159,52 @@ describe("SongOverviewStrip playhead", () => {
     runFrames();
     expect(playhead.style.transform).toBe("translate3d(500px, 0, 0)");
     expect(renders).toBe(baseline);
+  });
+});
+
+describe("OverviewZoom playhead follow", () => {
+  it("keeps a manual pan while active, then returns to the playhead after inactivity", () => {
+    vi.spyOn(performance, "now").mockReturnValue(0);
+    useSetlistStore.setState({ overviewZoom: 4 });
+    const positionSecondsRef = { current: 150 };
+    const { container } = render(
+      <OverviewZoom
+        startSeconds={100}
+        endSeconds={200}
+        positionSecondsRef={positionSecondsRef}
+      >
+        <div />
+      </OverviewZoom>,
+    );
+    const viewport = container.querySelector<HTMLElement>(
+      ".lt-setlist-zoom-viewport",
+    )!;
+    Object.defineProperty(viewport, "clientWidth", {
+      configurable: true,
+      value: 250,
+    });
+    const layer = container.querySelector<HTMLElement>(
+      ".lt-setlist-zoom-layer",
+    )!;
+    runFrames();
+    expect(layer.style.transform).toBe("translate3d(-375px, 0, 0)");
+
+    vi.mocked(performance.now).mockReturnValue(1_000);
+    fireEvent.wheel(viewport, { deltaY: 120 });
+    expect(layer.style.transform).toBe("translate3d(-495px, 0, 0)");
+
+    positionSecondsRef.current = 160;
+    vi.mocked(performance.now).mockReturnValue(
+      1_000 + FOLLOW_CAMERA_MANUAL_PAUSE_MS - 1,
+    );
+    runFrames();
+    expect(layer.style.transform).toBe("translate3d(-495px, 0, 0)");
+
+    vi.mocked(performance.now).mockReturnValue(
+      1_000 + FOLLOW_CAMERA_MANUAL_PAUSE_MS,
+    );
+    runFrames();
+    expect(layer.style.transform).toBe("translate3d(-475px, 0, 0)");
   });
 });
 

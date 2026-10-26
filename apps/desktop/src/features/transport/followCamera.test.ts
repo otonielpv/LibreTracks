@@ -2,10 +2,20 @@ import { describe, expect, it } from "vitest";
 
 import {
   FOLLOW_CAMERA_LOCK_PX,
+  FOLLOW_CAMERA_MANUAL_PAUSE_MS,
   resolveFollowCameraEaseFactor,
   resolveFollowCameraX,
+  shouldPauseFollowCamera,
   syncTimelineScrollElement,
 } from "./followCamera";
+
+describe("manual follow-camera pause", () => {
+  it("stays paused while the user is active and resumes at the inactivity deadline", () => {
+    const resumeAtMs = 1_000 + FOLLOW_CAMERA_MANUAL_PAUSE_MS;
+    expect(shouldPauseFollowCamera(3_999, resumeAtMs)).toBe(true);
+    expect(shouldPauseFollowCamera(4_000, resumeAtMs)).toBe(false);
+  });
+});
 
 describe("resolveFollowCameraEaseFactor", () => {
   it("uses the base smoothing at a 60fps frame delta", () => {

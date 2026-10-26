@@ -295,7 +295,12 @@ import {
   resolveVisualClockResync,
   resolveVisualPositionAcrossVamp,
 } from "@libretracks/shared/playbackClock";
-import { resolveFollowCameraX, syncTimelineScrollElement } from "./followCamera";
+import {
+  FOLLOW_CAMERA_MANUAL_PAUSE_MS,
+  resolveFollowCameraX,
+  shouldPauseFollowCamera,
+  syncTimelineScrollElement,
+} from "./followCamera";
 import { snapshotAgeSeconds } from "./snapshotRoundTrip";
 import {
   buildAudioRoutingOptions,
@@ -1557,6 +1562,7 @@ export function TransportPanelContent() {
   // the leading edge. Null means "no active follow target" (idle / just enabled)
   // so the first frame snaps rather than gliding from a stale position.
   const followCameraTargetRef = useRef<number | null>(null);
+  const manualFollowPauseUntilMsRef = useRef(0);
   const snapshotRef = useRef<TransportSnapshot | null>(
     useTransportStore.getState().playback,
   );
@@ -4017,7 +4023,7 @@ export function TransportPanelContent() {
       );
 
       syncLivePosition(nextPositionSeconds);
-      maybeFollowPlayhead(nextPositionSeconds, frameDtSeconds);
+      maybeFollowPlayhead(nextPositionSeconds, frameDtSeconds, nowMs);
       animationFrameId = window.requestAnimationFrame(tick);
     };
 
@@ -4447,7 +4453,11 @@ export function TransportPanelContent() {
     }
   }
 
-  function maybeFollowPlayhead(positionSeconds: number, frameDtSeconds: number) {
+  function maybeFollowPlayhead(
+    positionSeconds: number,
+    frameDtSeconds: number,
+    nowMs: number,
+  ) {
     if (
       !followPlayheadEnabledRef.current ||
       viewModeRef.current !== "daw" ||
@@ -4456,6 +4466,12 @@ export function TransportPanelContent() {
       // Not following right now — drop the glide target so the next frame that
       // re-enables follow snaps to the fresh goal instead of easing from here.
       followCameraTargetRef.current = null;
+      return;
+    }
+
+    if (
+      shouldPauseFollowCamera(nowMs, manualFollowPauseUntilMsRef.current)
+    ) {
       return;
     }
 
@@ -4518,6 +4534,7 @@ export function TransportPanelContent() {
       commitToStore?: boolean;
       debounceStoreCommit?: boolean;
       syncScrollElement?: boolean;
+      manualNavigation?: boolean;
     },
   ) {
     const durationSeconds =
@@ -4535,6 +4552,15 @@ export function TransportPanelContent() {
       contentEndSeconds,
     );
 
+    const previousCameraX = cameraXRef.current;
+    if (
+      options?.manualNavigation &&
+      Math.abs(clampedCameraX - previousCameraX) > 0.01
+    ) {
+      manualFollowPauseUntilMsRef.current =
+        performance.now() + FOLLOW_CAMERA_MANUAL_PAUSE_MS;
+      followCameraTargetRef.current = null;
+    }
     cameraXRef.current = clampedCameraX;
     if (options?.commitToStore === false) {
       if (options.debounceStoreCommit === false) {
@@ -5606,6 +5632,7 @@ export function TransportPanelContent() {
       viewportWidth: laneViewportWidth,
       commitToStore: false,
       debounceStoreCommit: false,
+      manualNavigation: true,
     });
 
     const nextView = {
@@ -5653,6 +5680,7 @@ export function TransportPanelContent() {
     updateCameraX(nextView.cameraX, {
       pixelsPerSecond: livePixelsPerSecondRef.current,
       commitToStore: true,
+      manualNavigation: true,
     });
   }
 
@@ -5737,6 +5765,7 @@ export function TransportPanelContent() {
       cameraXRef.current + event.deltaX + (event.shiftKey ? event.deltaY : 0),
       {
         commitToStore: false,
+        manualNavigation: true,
       },
     );
   }
@@ -6317,7 +6346,10 @@ export function TransportPanelContent() {
       getElementScaleX(element.getBoundingClientRect(), element.offsetWidth),
     resolveAutoScrollVelocity: resolveLibraryAutoScrollVelocity,
     previewCameraX: (nextCameraX) =>
-      updateCameraX(nextCameraX, { commitToStore: false }),
+      updateCameraX(nextCameraX, {
+        commitToStore: false,
+        manualNavigation: true,
+      }),
     prewarmPosition: prewarmTimelinePosition,
     clearTimelineSelection: () => clearSelections(),
     areaMarkers: rulerMarkers.area,
@@ -7556,9 +7588,14 @@ export function TransportPanelContent() {
                             updateCameraX(nextCameraX, {
                               commitToStore: false,
                               debounceStoreCommit: false,
+                              manualNavigation: true,
                             })
                           }
-                          onNativeCameraXCommit={commitCameraXToStore}
+                          onNativeCameraXCommit={(nextCameraX) =>
+                            updateCameraX(nextCameraX, {
+                              manualNavigation: true,
+                            })
+                          }
                           onNativeZoomPreview={(
                             nextZoomLevel,
                             anchorViewportX,
@@ -7629,6 +7666,7 @@ export function TransportPanelContent() {
                             onScrollTo={(nextCameraX) => {
                               updateCameraX(nextCameraX, {
                                 commitToStore: false,
+                                manualNavigation: true,
                               });
                             }}
                           />

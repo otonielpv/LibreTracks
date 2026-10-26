@@ -8,6 +8,10 @@ import {
 
 import { DRAG_THRESHOLD_PX } from "../constants";
 import { cancelGatedFrame, markFrameActivity, requestGatedFrame, useFrameGateWake } from "../frameGate";
+import {
+  FOLLOW_CAMERA_MANUAL_PAUSE_MS,
+  shouldPauseFollowCamera,
+} from "../followCamera";
 import { useSetlistStore } from "./setlistStore";
 
 export const OVERVIEW_MAX_ZOOM = 32;
@@ -91,16 +95,20 @@ export function OverviewZoom({
   const layerRef = useRef<HTMLDivElement | null>(null);
   // Where the layer is, and whether a hand put it there.
   const offsetRef = useRef(0);
-  const manualRef = useRef<{ position: number } | null>(null);
+  const manualFollowPauseUntilMsRef = useRef(0);
   const gestureRef = useRef(false);
   const scrubbingRef = useRef(false);
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
   const pendingZoomRef = useRef<number | null>(null);
   const windowRef = useRef<ZoomWindow>({ offset: 0, width: 0 });
+  const pauseFollowAfterManualNavigation = () => {
+    manualFollowPauseUntilMsRef.current =
+      performance.now() + FOLLOW_CAMERA_MANUAL_PAUSE_MS;
+  };
   windowRef.current.setScrubbing = (active) => {
     scrubbingRef.current = active;
-    if (!active) manualRef.current = { position: positionSecondsRef.current };
+    if (!active) pauseFollowAfterManualNavigation();
   };
 
   const applyOffset = (offset: number) => {
@@ -115,7 +123,7 @@ export function OverviewZoom({
     const nextOffset = Math.max(0, Math.min(maxOffset, offsetRef.current + deltaPx));
     if (Math.abs(nextOffset - offsetRef.current) > 0.01) {
       applyOffset(nextOffset);
-      manualRef.current = { position: positionSecondsRef.current };
+      pauseFollowAfterManualNavigation();
       markFrameActivity();
     }
     return nextOffset;
@@ -135,8 +143,15 @@ export function OverviewZoom({
         setZoom(pendingZoomRef.current);
         pendingZoomRef.current = null;
       }
-      if (manualRef.current && manualRef.current.position !== position) manualRef.current = null;
-      if (viewport && !gestureRef.current && !scrubbingRef.current && !manualRef.current) {
+      if (
+        viewport &&
+        !gestureRef.current &&
+        !scrubbingRef.current &&
+        !shouldPauseFollowCamera(
+          performance.now(),
+          manualFollowPauseUntilMsRef.current,
+        )
+      ) {
         const duration = Math.max(0.001, endSeconds - startSeconds);
         const fraction = Math.max(0, Math.min(1, (position - startSeconds) / duration));
         // Fractional on purpose: the layer is composited (will-change), so the
@@ -170,7 +185,7 @@ export function OverviewZoom({
     const layer = layerRef.current;
     layer?.style.setProperty("width", `${clamped * 100}%`);
     applyOffset(clamped <= 1 ? 0 : offset);
-    manualRef.current = { position: positionSecondsRef.current };
+    pauseFollowAfterManualNavigation();
     markFrameActivity();
   };
 
@@ -236,7 +251,7 @@ export function OverviewZoom({
             "transform",
             `translate3d(${-offset}px, 0, 0) scaleX(${target / pinch.zoom})`,
           );
-          manualRef.current = { position: positionSecondsRef.current };
+          pauseFollowAfterManualNavigation();
           markFrameActivity();
         }
         return;
@@ -247,7 +262,7 @@ export function OverviewZoom({
       const width = viewport.clientWidth;
       const max = Math.max(0, width * zoomRef.current - width);
       applyOffset(Math.max(0, Math.min(max, startOffset - dx)));
-      manualRef.current = { position: positionSecondsRef.current };
+      pauseFollowAfterManualNavigation();
       markFrameActivity();
     };
     const onUp = (upEvent: PointerEvent) => {
@@ -308,7 +323,7 @@ export function OverviewZoom({
     const width = viewport.clientWidth;
     const max = Math.max(0, width * zoomRef.current - width);
     applyOffset(Math.max(0, Math.min(max, offsetRef.current + delta)));
-    manualRef.current = { position: positionSecondsRef.current };
+    pauseFollowAfterManualNavigation();
     markFrameActivity();
   };
   useEffect(() => {
