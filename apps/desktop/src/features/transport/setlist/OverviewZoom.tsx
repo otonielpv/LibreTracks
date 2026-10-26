@@ -105,8 +105,11 @@ export function OverviewZoom({
       if (viewport && !gestureRef.current && !manualRef.current) {
         const duration = Math.max(0.001, endSeconds - startSeconds);
         const fraction = Math.max(0, Math.min(1, (position - startSeconds) / duration));
-        const offset = Math.round(followOffset(fraction, viewport.clientWidth, zoomRef.current));
-        if (offset !== last) {
+        // Fractional on purpose: the layer is composited (will-change), so the
+        // GPU slides it sub-pixel. Rounding made it step a whole pixel a few
+        // times a second when zoomed in, which read as low FPS (the iPhone).
+        const offset = followOffset(fraction, viewport.clientWidth, zoomRef.current);
+        if (!(Math.abs(offset - last) < 0.01)) {
           applyOffset(offset);
           last = offset;
           markFrameActivity();

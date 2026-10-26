@@ -41,7 +41,6 @@ function mapProps(overrides: Partial<MapProps> = {}): MapProps {
     activeVamp: null,
     onMarkerAction: vi.fn(),
     onCancelPendingJump: vi.fn(),
-    onToggleVamp: vi.fn(),
     onCueSong: vi.fn(),
     onPlaySong: vi.fn(),
     onSectionContextMenu: vi.fn(),
@@ -81,13 +80,6 @@ describe("SongMap blocks", () => {
     );
     expect(ids).toEqual(["start:r1", "Verso", "Coro", "Puente"]);
     expect(container.querySelector(`.lt-setlist-map.is-${layout}`)).not.toBeNull();
-  });
-
-  it("short offers big Loop and «Next» buttons", () => {
-    const props = mapProps({ layout: "short", positionSecondsRef: { current: 10 } });
-    render(<SongMap {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: /setlistView.map.next:Coro/ }));
-    expect(props.onMarkerAction).toHaveBeenCalledWith(markers[1]);
   });
 
   it("no sections: one block named after the song and a hint", () => {
@@ -148,14 +140,22 @@ describe("SongMap gestures", () => {
     expect(props.onSectionContextMenu).toHaveBeenCalledWith(expect.anything(), "Puente");
   });
 
-  it("the loop button toggles the vamp and shows it while looping", () => {
-    const props = mapProps({ activeVamp: { startSeconds: 20, endSeconds: 40 } });
+  // The iPhone report: looping needed better feedback. The vamp's span is
+  // framed over the waveform with a «Looping» badge; the Loop button is gone
+  // (the vamp lives in the top bar).
+  it("a running vamp is framed over its span, and there is no Loop / Next button", () => {
+    const props = mapProps({ layout: "short", activeVamp: { startSeconds: 20, endSeconds: 40 } });
     const { container } = render(<SongMap {...props} />);
     expect(block(container, "Coro").classList.contains("is-looping")).toBe(true);
-    const loop = screen.getByRole("button", { name: /setlistView.map.loop/ });
-    expect(loop.getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(loop);
-    expect(props.onToggleVamp).toHaveBeenCalled();
+    const frame = container.querySelector<HTMLElement>(".lt-setlist-map-vamp")!;
+    expect(screen.getByRole("status", { name: "setlistView.map.looping" })).toBe(frame);
+    expect(frame.style.width).not.toBe("");
+    expect(screen.queryByRole("button", { name: /setlistView.map.loop|setlistView.map.next/ })).toBeNull();
+  });
+
+  it("no vamp, no frame", () => {
+    const { container } = render(<SongMap {...mapProps()} />);
+    expect(container.querySelector(".lt-setlist-map-vamp")).toBeNull();
   });
 });
 

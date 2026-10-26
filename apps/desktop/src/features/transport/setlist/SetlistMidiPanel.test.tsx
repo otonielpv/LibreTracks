@@ -135,6 +135,24 @@ describe("Edit modes on the phone", () => {
     expect(screen.queryByRole("tab", { name: "setlistView.edit.modes.lanes" })).toBeNull();
   });
 
+  // The iPhone report: Mix / Lyrics / Edit over the waveform's bottom right,
+  // as Playback, folding to the side with an arrow.
+  it("short, waveform pane: the view buttons sit in a dock over the waveform that folds away", () => {
+    const base = testSetlistProps({ regions: [region] } as Partial<SongView>);
+    const { container } = render(<SetlistView {...base} layoutClass="short" />);
+    const songsZone = () => container.querySelector(".lt-setlist-zone.is-songs")!;
+    // Mixer pane: the buttons stay in the song row.
+    expect(within(songsZone() as HTMLElement).getByRole("button", { name: /setlistView.edit.button/ })).toBeTruthy();
+    act(() => useSetlistStore.getState().setShortPane("song"));
+    const dock = container.querySelector<HTMLElement>(".lt-setlist-wave-dock")!;
+    expect(within(dock).getByRole("button", { name: /setlistView.pane.mixer/ })).toBeTruthy();
+    expect(songsZone().querySelector(".lt-setlist-pane-toggle")).toBeNull();
+    fireEvent.click(within(dock).getByRole("button", { name: "setlistView.dock.hide" }));
+    expect(dock.querySelector(".lt-setlist-pane-toggle")).toBeNull();
+    fireEvent.click(within(dock).getByRole("button", { name: "setlistView.dock.show" }));
+    expect(dock.querySelector(".lt-setlist-pane-toggle")).not.toBeNull();
+  });
+
   it("wide keeps Lanes", () => {
     const base = testSetlistProps({ regions: [region] } as Partial<SongView>);
     render(<SetlistView {...base} layoutClass="wide" />);
@@ -235,6 +253,11 @@ describe("band zoom", () => {
     position.current = 45;
     runFrames();
     expect(layer.style.transform).toBe("translate3d(-1000px, 0, 0)");
+    // Sub-pixel steps move it too: rounding made it step a whole pixel a few
+    // times a second when zoomed (the iPhone's «low FPS» follow).
+    position.current = 45.01;
+    runFrames();
+    expect(layer.style.transform).toMatch(/^translate3d\(-1000\.26\d*px, 0, 0\)$/);
     fireEvent.click(screen.getByRole("button", { name: "setlistView.overview.fit" }));
     runFrames();
     expect(layer.style.width).toBe("100%");

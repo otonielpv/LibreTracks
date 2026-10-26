@@ -3685,3 +3685,122 @@ button.lt-setlist-track-chip-name {
 .lt-setlist-drawer.is-short .lt-setlist-scrub-bar-row > * {
   flex: 0 0 auto;
 }
+
+/* ---- Ronda 10 (iPhone, 2026-10-26) ---- */
+
+/* Con el dedo se pellizca: los botones de zoom sobran en táctil y en el
+   teléfono. */
+@media (pointer: coarse) {
+  .lt-setlist-zoom-controls {
+    display: none;
+  }
+}
+
+.lt-setlist-view.is-short .lt-setlist-zoom-controls {
+  display: none;
+}
+
+/* El selector de arreglo pasa a la izquierda: abajo a la derecha va el dock. */
+.lt-setlist-view.is-short .lt-setlist-map-actions {
+  justify-self: start;
+}
+
+/* Dock de botones de vista sobre la onda (como Playback), plegable. */
+.lt-setlist-wave-dock {
+  grid-area: band;
+  align-self: end;
+  justify-self: end;
+  z-index: 4;
+  display: flex;
+  align-items: stretch;
+  gap: 0.2rem;
+  margin: 0.25rem;
+  pointer-events: none;
+}
+
+.lt-setlist-wave-dock > * {
+  pointer-events: auto;
+}
+
+.lt-setlist-wave-dock-buttons {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.lt-setlist-wave-dock .lt-setlist-pane-toggle,
+.lt-setlist-wave-dock .lt-setlist-edit-button {
+  background: rgb(19 19 19 / 0.9);
+}
+
+.lt-setlist-wave-dock-toggle {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.3rem;
+  background: rgb(19 19 19 / 0.9);
+  color: var(--lt-setlist-text);
+  cursor: pointer;
+}
+
+.lt-setlist-wave-dock.is-hidden {
+  margin-right: 0;
+}
+
+.lt-setlist-wave-dock.is-hidden .lt-setlist-wave-dock-toggle {
+  border-right: 0;
+  border-radius: 0.3rem 0 0 0.3rem;
+}
+
+/* Vamp: el tramo que se repite, enmarcado y latiendo sobre la onda. */
+.lt-setlist-map-vamp {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  border: 2px solid var(--lt-setlist-accent);
+  border-radius: 0.2rem;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgb(87 241 219 / 0.14) 0 8px,
+    rgb(87 241 219 / 0.04) 8px 16px
+  );
+  pointer-events: none;
+  animation: lt-setlist-vamp-pulse 1.6s ease-in-out infinite;
+}
+
+.lt-setlist-map-vamp-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.3rem;
+  background: var(--lt-setlist-accent);
+  color: #06201c;
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.lt-setlist-map-vamp-badge .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+@keyframes lt-setlist-vamp-pulse {
+  50% {
+    box-shadow: 0 0 0 2px rgb(87 241 219 / 0.35), inset 0 0 1.25rem rgb(87 241 219 / 0.25);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-setlist-map-vamp {
+    animation: none;
+  }
+}

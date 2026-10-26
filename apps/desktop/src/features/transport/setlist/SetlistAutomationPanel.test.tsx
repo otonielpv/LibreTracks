@@ -162,7 +162,7 @@ describe("snap on the waveform", () => {
     swipe(300, 162.5);
     expect(onSeek).toHaveBeenLastCalledWith(6);
 
-    const toggle = screen.getByRole("button", { name: "setlistView.scrub.snap" });
+    const toggle = screen.getByRole("button", { name: "timelineToolbar.disableSnap" });
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(toggle);
     expect(useTimelineUIStore.getState().snapEnabled).toBe(false);

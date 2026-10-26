@@ -17,6 +17,7 @@ import { DRAG_THRESHOLD_PX } from "../constants";
 import { cancelGatedFrame, markFrameActivity, requestGatedFrame, useFrameGateWake } from "../frameGate";
 import type { ShortcutActionId } from "../keyboard/actions";
 import { useTransportStore } from "../store";
+import { SnapIcon } from "../timeline/SnapIcon";
 import { useTimelineUIStore } from "../uiStore";
 import { barStartsInSong, nearestBarIndex, stepBar } from "./sectionScrubModel";
 import { buildSongOverviewPeaks, songOverviewClipsKey, songOverviewSummariesKey } from "./songOverviewPeaks";
@@ -87,7 +88,7 @@ function SongScrubViewComponent({
   const [visibleBars, setVisibleBars] = useState(DEFAULT_VISIBLE_BARS);
   const playing = useTransportStore((state) => state.playback?.playbackState === "playing");
   const snapEnabled = useTimelineUIStore((state) => state.snapEnabled);
-  const toggleSnap = () => useTimelineUIStore.setState((state) => ({ snapEnabled: !state.snapEnabled }));
+  const toggleSnap = useTimelineUIStore((state) => state.toggleSnapEnabled);
   // A pinch writes the zoom at most once per frame.
   const pendingBarsRef = useRef<number | null>(null);
   const visibleBarsRef = useRef(visibleBars);
@@ -327,15 +328,16 @@ function SongScrubViewComponent({
         </button>
         {actions?.({ cursorSeconds: () => cursorRef.current })}
         <span className="lt-setlist-lanes-toolbar-gap" />
+        {/* The DAW toolbar's own toggle: same magnet, same labels, same store. */}
         <button
           type="button"
           className={`lt-setlist-settings-button${snapEnabled ? " is-active" : ""}`}
           aria-pressed={snapEnabled}
-          aria-label={t("setlistView.scrub.snap")}
-          title={t("setlistView.scrub.snap")}
+          aria-label={t(snapEnabled ? "timelineToolbar.disableSnap" : "timelineToolbar.enableSnap")}
+          title={t(snapEnabled ? "timelineToolbar.disableSnap" : "timelineToolbar.enableSnap")}
           onClick={toggleSnap}
         >
-          <span className="material-symbols-outlined" aria-hidden="true">grid_on</span>
+          <SnapIcon enabled={snapEnabled} size={20} />
         </button>
         <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.lanes.zoomOut")} title={t("setlistView.lanes.zoomOut")} disabled={visibleBars >= MAX_VISIBLE_BARS} onClick={() => setVisibleBars((value) => Math.min(MAX_VISIBLE_BARS, Math.round(value * 2)))}>
           −

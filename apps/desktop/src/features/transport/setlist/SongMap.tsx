@@ -38,14 +38,13 @@ type SongMapProps = Pick<
   | "activeVamp"
   | "onMarkerAction"
   | "onCancelPendingJump"
-  | "onToggleVamp"
 > &
   Pick<SongViewBindings, "onCueSong" | "onPlaySong" | "onSectionContextMenu"> & {
     region: SongRegionSummary;
     layout: SetlistLayoutClass;
     /** Edit mode: a tap selects the section instead of jumping. */
     editing?: boolean;
-    /** The arrangement picker, next to the loop button. */
+    /** The arrangement picker, over the band. */
     arrangementPicker?: ReactNode;
     /** What to draw: the blocks (inside the band's zoom layer), the buttons
      * (outside it, so they do not slide) or both. */
@@ -58,8 +57,9 @@ const VAMP_MATCH_SECONDS = 0.05;
  * The song map, Playback-style: one coloured block per section of the shown
  * song, width proportional to its length, the active one with its own
  * progress. Tapping a block schedules the jump (the same primary action as
- * Live); tapping the pending one cancels it; the loop button vamps the
- * current section. The menu is the DAW's section menu.
+ * Live); tapping the pending one cancels it. While a vamp loops, its span
+ * is drawn over the waveform (a pulsing frame with the loop icon), so it is
+ * obvious what repeats. The menu is the DAW's section menu.
  */
 function SongMapComponent({
   song,
@@ -70,7 +70,6 @@ function SongMapComponent({
   activeVamp,
   onMarkerAction,
   onCancelPendingJump,
-  onToggleVamp,
   onCueSong,
   onPlaySong,
   onSectionContextMenu,
@@ -98,7 +97,14 @@ function SongMapComponent({
         (block) => Math.abs(block.startSeconds - activeVamp.startSeconds) < VAMP_MATCH_SECONDS,
       )?.id ?? null)
     : null;
-  const nextBlock = blocks.find((block) => block.id === nextId) ?? null;
+  // The vamp's span inside this song (it may be a few bars, not a section).
+  const vampSpan =
+    activeVamp && activeVamp.endSeconds > region.startSeconds && activeVamp.startSeconds < region.endSeconds
+      ? {
+          start: Math.max(region.startSeconds, activeVamp.startSeconds),
+          end: Math.min(region.endSeconds, activeVamp.endSeconds),
+        }
+      : null;
   const cues = song.sectionMarkers.filter(
     (marker) =>
       markerCategory(marker) === "cue" &&
@@ -218,6 +224,22 @@ function SongMapComponent({
             </button>
           );
         })}
+        {vampSpan ? (
+          <span
+            className="lt-setlist-map-vamp"
+            role="status"
+            aria-label={t("setlistView.map.looping")}
+            style={{
+              left: `${percent.secondsToPx(vampSpan.start)}%`,
+              width: `${percent.secondsToPx(vampSpan.end) - percent.secondsToPx(vampSpan.start)}%`,
+            }}
+          >
+            <span className="lt-setlist-map-vamp-badge">
+              <span className="material-symbols-outlined" aria-hidden="true">repeat</span>
+              {t("setlistView.map.looping")}
+            </span>
+          </span>
+        ) : null}
         {/* Every cue ("aviso"), also the ones folded into a section at the
             same point: a label at the bottom of the band. While editing, the
             edit layer draws them as handles instead. */}
@@ -239,27 +261,6 @@ function SongMapComponent({
       {part === "blocks" ? null : (
       <div className="lt-setlist-map-actions">
         {arrangementPicker}
-        <button
-          type="button"
-          className={`lt-setlist-map-action${activeVamp ? " is-active" : ""}`}
-          aria-pressed={Boolean(activeVamp)}
-          onClick={onToggleVamp}
-        >
-          <span className="material-symbols-outlined" aria-hidden="true">repeat</span>
-          <span>{t("setlistView.map.loop")}</span>
-        </button>
-        {layout === "short" && nextBlock?.marker ? (
-          <button
-            type="button"
-            className="lt-setlist-map-action"
-            onClick={() => activate(nextBlock)}
-          >
-            <span>{t("setlistView.map.next", { name: nextBlock.label })}</span>
-            <span className="material-symbols-outlined" aria-hidden="true">
-              chevron_right
-            </span>
-          </button>
-        ) : null}
         {isEmpty ? (
           <span className="lt-setlist-map-hint">
             {t("setlistView.map.noSections")}

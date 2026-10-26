@@ -37,6 +37,9 @@ export type SetlistState = {
   lyricsOpen: boolean;
   /** The band's zoom (1 = the whole song; more follows the playhead). */
   overviewZoom: number;
+  /** Phone, waveform pane: the Mix/Lyrics/Edit buttons over the waveform
+   * are folded to the side (Playback's arrow). */
+  waveDockHidden: boolean;
   /** Edit → Lanes: 1 fits the song in the width, up to 16. Not the DAW's
    * camera: that one stays where it was. */
   lanesZoom: number;
@@ -54,6 +57,7 @@ export const INITIAL_SETLIST_STATE: SetlistState = {
   mixerExpanded: false,
   lyricsOpen: false,
   overviewZoom: 1,
+  waveDockHidden: false,
   lanesZoom: 1,
   lanesScrollPx: 0,
 };
@@ -67,6 +71,7 @@ type SetlistActions = {
   setMixerExpanded: (expanded: boolean) => void;
   setLyricsOpen: (open: boolean) => void;
   setOverviewZoom: (zoom: number) => void;
+  setWaveDockHidden: (hidden: boolean) => void;
   setLanesZoom: (zoom: number) => void;
   setLanesScrollPx: (scrollPx: number) => void;
 };
@@ -104,6 +109,7 @@ export const useSetlistStore = create<SetlistState & SetlistActions>()(
     setShortPane: (shortPane) => set({ shortPane }),
     setMixerExpanded: (mixerExpanded) => set({ mixerExpanded }),
     setLyricsOpen: (lyricsOpen) => set({ lyricsOpen }),
+    setWaveDockHidden: (waveDockHidden) => set({ waveDockHidden }),
     setOverviewZoom: (overviewZoom) => set({ overviewZoom: Math.max(1, Math.min(8, overviewZoom)) }),
     setLanesZoom: (lanesZoom) =>
       set({ lanesZoom: Math.max(LANES_MIN_ZOOM, Math.min(LANES_MAX_ZOOM, lanesZoom)) }),

@@ -19,6 +19,7 @@ import { SectionScrubEditor } from "./SectionScrubEditor";
 import { SetlistLyrics } from "./SetlistLyrics";
 import { SetlistAutomationPanel } from "./SetlistAutomationPanel";
 import { SetlistMidiPanel } from "./SetlistMidiPanel";
+import { WaveDock } from "./WaveDock";
 import { SetlistEditButton, SetlistEditDrawer } from "./SetlistEditDrawer";
 import { SetlistSongSettings } from "./SetlistSongSettings";
 import { SetlistSectionsPanel } from "./SetlistSectionsPanel";
@@ -458,6 +459,43 @@ function SetlistViewComponent({
       )}
     </Zone>
   );
+  const paneButtons = (
+    <>
+      {layout === "short" ? (
+        <button
+          type="button"
+          className={`lt-setlist-pane-toggle${shortPane === "song" ? " is-active" : ""}`}
+          aria-pressed={shortPane === "song"}
+          title={t(shortPane === "song" ? "setlistView.pane.showMixerTitle" : "setlistView.pane.showSongTitle")}
+          onClick={() => setShortPane(shortPane === "song" ? "mixer" : "song")}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            {shortPane === "song" ? "tune" : "graphic_eq"}
+          </span>
+          {t(shortPane === "song" ? "setlistView.pane.mixer" : "setlistView.pane.song")}
+        </button>
+      ) : null}
+      {FEATURE_FLAGS.lyrics ? (
+        <button
+          type="button"
+          className={`lt-setlist-pane-toggle${lyricsOpen || lyricsPane ? " is-active" : ""}`}
+          aria-pressed={lyricsOpen || lyricsPane}
+          title={t("setlistView.lyrics.toggleTitle")}
+          onClick={() => {
+            if (layout === "short") setShortPane(lyricsPane ? "mixer" : "lyrics");
+            else setLyricsOpen(!lyricsOpenSetting);
+          }}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">lyrics</span>
+          {t("setlistView.lyrics.button")}
+        </button>
+      ) : null}
+      <SetlistEditButton />
+    </>
+  );
+  // Phone, waveform pane: Playback keeps the view buttons in a dock over the
+  // bottom right of the waveform, folded away with an arrow.
+  const waveDock = layout === "short" && shortPane === "song";
   // The song band: the waveform, the sections on it (tap the label strip to
   // jump) and, while editing, the section and cue handles. Right click on the
   // waveform opens the DAW ruler menu at that point.
@@ -471,6 +509,8 @@ function SetlistViewComponent({
             positionSecondsRef={performance.positionSecondsRef}
             onSeek={performance.onSeek}
             overlay={
+                  <>
+                  {waveDock ? <WaveDock>{paneButtons}</WaveDock> : null}
                   <SongMap
                     part="actions"
                     song={performance.song}
@@ -481,7 +521,6 @@ function SetlistViewComponent({
                     activeVamp={performance.activeVamp}
                     onMarkerAction={performance.onMarkerAction}
                     onCancelPendingJump={performance.onCancelPendingJump}
-                    onToggleVamp={performance.onToggleVamp}
                     onCueSong={onCueSong}
                     onPlaySong={onPlaySong}
                     onSectionContextMenu={onSectionContextMenu}
@@ -492,6 +531,7 @@ function SetlistViewComponent({
                       ) : null
                     }
                   />
+                  </>
             }
           >
               <SongOverviewStrip
@@ -517,7 +557,6 @@ function SetlistViewComponent({
                 activeVamp={performance.activeVamp}
                 onMarkerAction={performance.onMarkerAction}
                 onCancelPendingJump={performance.onCancelPendingJump}
-                onToggleVamp={performance.onToggleVamp}
                 onCueSong={onCueSong}
                 onPlaySong={onPlaySong}
                 onSectionContextMenu={onSectionContextMenu}
@@ -574,36 +613,8 @@ function SetlistViewComponent({
         onImportSongPackageFromOsFile={onImportSongPackageFromOsFile}
         editing={editMode !== null}
       />
-      {layout === "short" ? (
-        <button
-          type="button"
-          className={`lt-setlist-pane-toggle${shortPane === "song" ? " is-active" : ""}`}
-          aria-pressed={shortPane === "song"}
-          title={t(shortPane === "song" ? "setlistView.pane.showMixerTitle" : "setlistView.pane.showSongTitle")}
-          onClick={() => setShortPane(shortPane === "song" ? "mixer" : "song")}
-        >
-          <span className="material-symbols-outlined" aria-hidden="true">
-            {shortPane === "song" ? "tune" : "graphic_eq"}
-          </span>
-          {t(shortPane === "song" ? "setlistView.pane.mixer" : "setlistView.pane.song")}
-        </button>
-      ) : null}
-      {FEATURE_FLAGS.lyrics ? (
-        <button
-          type="button"
-          className={`lt-setlist-pane-toggle${lyricsOpen || lyricsPane ? " is-active" : ""}`}
-          aria-pressed={lyricsOpen || lyricsPane}
-          title={t("setlistView.lyrics.toggleTitle")}
-          onClick={() => {
-            if (layout === "short") setShortPane(lyricsPane ? "mixer" : "lyrics");
-            else setLyricsOpen(!lyricsOpenSetting);
-          }}
-        >
-          <span className="material-symbols-outlined" aria-hidden="true">lyrics</span>
-          {t("setlistView.lyrics.button")}
-        </button>
-      ) : null}
-      <SetlistEditButton />
+      {/* Phone, waveform pane: these ride over the waveform instead. */}
+      {waveDock ? null : paneButtons}
     </Zone>
   );
   const closeLyrics = () => (layout === "short" ? setShortPane("mixer") : setLyricsOpen(false));

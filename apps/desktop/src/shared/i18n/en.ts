@@ -2524,10 +2524,13 @@ const en = {
       levelSongs: "Level songs",
       transitionMenu: "Transition between songs",
     },
+    dock: {
+      show: "Show buttons",
+      hide: "Hide buttons",
+    },
     map: {
+      looping: "Looping",
       label: "Sections of {{name}}",
-      loop: "Loop",
-      next: "Next: {{name}}",
       pending: "Jump",
       noSections: "This song has no sections. Add them in Edit.",
     },
@@ -2703,7 +2706,6 @@ const en = {
       backTitle: "Back to the Setlist view on the same song",
     },
     scrub: {
-      snap: "Snap to grid",
       play: "Play from the line",
       pause: "Pause",
     },

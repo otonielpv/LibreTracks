@@ -2555,10 +2555,13 @@ const es = {
       levelSongs: "Nivelar canciones",
       transitionMenu: "Transición entre canciones",
     },
+    dock: {
+      show: "Mostrar botones",
+      hide: "Ocultar botones",
+    },
     map: {
+      looping: "En bucle",
       label: "Secciones de {{name}}",
-      loop: "Bucle",
-      next: "Siguiente: {{name}}",
       pending: "Salto",
       noSections: "Esta canción no tiene secciones. Añádelas en Editar.",
     },
@@ -2734,7 +2737,6 @@ const es = {
       backTitle: "Volver a la vista Setlist con la misma canción",
     },
     scrub: {
-      snap: "Ajustar a la rejilla",
       play: "Reproducir desde la línea",
       pause: "Pausa",
     },
