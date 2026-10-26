@@ -5,7 +5,7 @@ import type { MidiClipSummary, SongView, TrackSummary } from "@libretracks/share
 
 import { resetFrameGateForTests } from "../frameGate";
 import type { TimelineMenus } from "../menus/timelineMenus";
-import { followOffset, OverviewZoom } from "./OverviewZoom";
+import { anchoredOffset, followOffset, OverviewZoom } from "./OverviewZoom";
 import { SetlistMidiPanel, songMidiClips } from "./SetlistMidiPanel";
 import { SetlistView } from "./SetlistView";
 import { INITIAL_SETLIST_STATE, useSetlistStore } from "./setlistStore";
@@ -47,6 +47,8 @@ function menus(extra: Record<string, unknown> = {}) {
     editMidiClip: vi.fn(),
     openMidiClipMenu: vi.fn(),
     globalTrackListContextMenu: vi.fn(() => [{ label: "transport.midi.addTrack", onSelect: vi.fn() }]),
+    trackContextMenu: vi.fn(() => [{ label: "common.rename" }]),
+    toggleMidiTrackEnabled: vi.fn(),
     ...extra,
   };
 }
@@ -90,20 +92,29 @@ describe("Edit → MIDI", () => {
     expect(within(rows[1]).getByText("PC 3")).toBeTruthy();
   });
 
-  it("«MIDI here» creates at the line on the only MIDI track, or asks which one", () => {
-    const one = menus();
-    const { unmount } = panel([track("lights", "midi")], one);
-    fireEvent.click(screen.getByRole("button", { name: /setlistView.midi.addHere/ }));
-    expect(one.createMidiClipAt).toHaveBeenCalledWith("lights", 12);
-    unmount();
-
+  it("«MIDI here» creates at the line on the track chosen in the row (the first by default)", () => {
     const two = menus();
     panel([track("lights", "midi"), track("propresenter", "midi")], two);
     fireEvent.click(screen.getByRole("button", { name: /setlistView.midi.addHere/ }));
-    const [, , actions] = two.openMenu.mock.calls[0] as [unknown, string, Array<{ label: string; onSelect: () => void }>];
-    expect(actions.map((action) => action.label)).toEqual(["lights", "propresenter"]);
-    actions[1].onSelect();
-    expect(two.createMidiClipAt).toHaveBeenCalledWith("propresenter", 12);
+    expect(two.createMidiClipAt).toHaveBeenLastCalledWith("lights", 12);
+    fireEvent.click(screen.getByRole("radio", { name: "propresenter" }));
+    expect(screen.getByRole("radio", { name: "propresenter" }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: /setlistView.midi.addHere/ }));
+    expect(two.createMidiClipAt).toHaveBeenLastCalledWith("propresenter", 12);
+  });
+
+  // The iPhone report: no way to rename, delete or route a MIDI track here.
+  it("the track row turns a track on/off and opens the DAW's track menu", () => {
+    const menuMock = menus();
+    const off = { ...track("propresenter", "midi"), midiEnabled: false } as TrackSummary;
+    panel([track("lights", "midi"), off], menuMock);
+    fireEvent.click(screen.getByRole("button", { name: "transport.midi.enableTrack" }));
+    expect(menuMock.toggleMidiTrackEnabled).toHaveBeenCalledWith("propresenter");
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.sections.menu:lights" }));
+    expect(menuMock.trackContextMenu).toHaveBeenCalledWith(expect.objectContaining({ id: "lights" }));
+    expect(menuMock.openMenu).toHaveBeenCalledWith(expect.anything(), "lights", [{ label: "common.rename" }]);
+    // «Add MIDI track» stays in the row.
+    expect(screen.getByRole("button", { name: "transport.midi.addTrack" })).toBeTruthy();
   });
 
   it("without MIDI tracks it offers the DAW's «Add MIDI track»", () => {
@@ -138,6 +149,64 @@ describe("band zoom", () => {
     expect(followOffset(0.5, 400, 4)).toBe(600);
     expect(followOffset(0, 400, 4)).toBe(0);
     expect(followOffset(1, 400, 4)).toBe(1200);
+  });
+
+  it("a pinch keeps the moment under the fingers where it was", () => {
+    // 400 px window at 1×, fingers at 100 px: 25 % of the song. At 4× the
+    // layer is 1600 px and its 25 % (400 px) must sit at 100 px.
+    expect(anchoredOffset(0, 100, 400, 1, 4)).toBe(300);
+    expect(anchoredOffset(300, 100, 400, 4, 1)).toBe(0);
+  });
+
+  it("touch: one finger drags the zoomed song, a tap seeks, two fingers zoom", () => {
+    const original = window.PointerEvent;
+    class TestPointerEvent extends MouseEvent {
+      readonly pointerId: number;
+      readonly pointerType: string;
+      constructor(type: string, init: PointerEventInit = {}) {
+        super(type, init);
+        this.pointerId = init.pointerId ?? 0;
+        this.pointerType = init.pointerType ?? "mouse";
+      }
+    }
+    Object.defineProperty(window, "PointerEvent", { configurable: true, value: TestPointerEvent });
+    vi.stubGlobal("requestAnimationFrame", () => 1);
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    useSetlistStore.setState({ overviewZoom: 4 });
+    const onSeek = vi.fn();
+    const { container } = render(
+      <OverviewZoom startSeconds={0} endSeconds={60} positionSecondsRef={{ current: 0 }} onSeek={onSeek}>
+        <div />
+      </OverviewZoom>,
+    );
+    const viewport = container.querySelector<HTMLElement>(".lt-setlist-zoom-viewport")!;
+    const layer = container.querySelector<HTMLElement>(".lt-setlist-zoom-layer")!;
+    Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 400 });
+    viewport.getBoundingClientRect = () => ({ left: 0, width: 400 }) as DOMRect;
+    const touch = { pointerType: "touch" };
+
+    fireEvent.pointerDown(viewport, { ...touch, pointerId: 1, clientX: 300 });
+    fireEvent.pointerMove(window, { ...touch, pointerId: 1, clientX: 100 });
+    expect(layer.style.transform).toBe("translate3d(-200px, 0, 0)");
+    fireEvent.pointerUp(window, { ...touch, pointerId: 1, clientX: 100 });
+    expect(onSeek).not.toHaveBeenCalled();
+
+    // A tap at 200 px with the layer at -200 px: 400 of 1600 px = 15 s.
+    layer.getBoundingClientRect = () => ({ left: -200, width: 1600 }) as DOMRect;
+    fireEvent.pointerDown(viewport, { ...touch, pointerId: 2, clientX: 200 });
+    fireEvent.pointerUp(window, { ...touch, pointerId: 2, clientX: 200 });
+    expect(onSeek).toHaveBeenCalledWith(15);
+
+    // Two fingers 100 px apart spread to 200: 4× → 8×.
+    fireEvent.pointerDown(viewport, { ...touch, pointerId: 3, clientX: 150 });
+    fireEvent.pointerDown(viewport, { ...touch, pointerId: 4, clientX: 250 });
+    fireEvent.pointerMove(window, { ...touch, pointerId: 4, clientX: 350 });
+    expect(layer.style.width).toBe("800%");
+    fireEvent.pointerUp(window, { ...touch, pointerId: 3 });
+    fireEvent.pointerUp(window, { ...touch, pointerId: 4 });
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    Object.defineProperty(window, "PointerEvent", { configurable: true, value: original });
+    vi.unstubAllGlobals();
   });
 
   it("the buttons zoom in and back; zoomed, the layer follows the playhead", () => {

@@ -2645,6 +2645,10 @@ const en = {
       showMixerTitle: "Back to the mixer",
     },
     automation: {
+      track: "Automation track",
+      turnOn: "Turn automation on",
+      turnOff: "Turn automation off",
+      addTrack: "Add automation track",
       addAtPlayhead: "Create an automation cue at the playhead",
       addAtSection: "Cue at the section",
       addAtSectionTitle: "Create an automation cue at the start of the section the playhead is in",
@@ -2655,6 +2659,7 @@ const en = {
       add: "New",
     },
     midi: {
+      tracks: "MIDI tracks",
       addHere: "MIDI here",
       noTracks: "The session has no MIDI tracks.",
       empty: "No MIDI clips in this song.",
@@ -2698,6 +2703,7 @@ const en = {
       backTitle: "Back to the Setlist view on the same song",
     },
     scrub: {
+      snap: "Snap to grid",
       play: "Play from the line",
       pause: "Pause",
     },

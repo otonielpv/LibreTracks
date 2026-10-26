@@ -17,6 +17,7 @@ import { DRAG_THRESHOLD_PX } from "../constants";
 import { cancelGatedFrame, markFrameActivity, requestGatedFrame, useFrameGateWake } from "../frameGate";
 import type { ShortcutActionId } from "../keyboard/actions";
 import { useTransportStore } from "../store";
+import { useTimelineUIStore } from "../uiStore";
 import { barStartsInSong, nearestBarIndex, stepBar } from "./sectionScrubModel";
 import { buildSongOverviewPeaks, songOverviewClipsKey, songOverviewSummariesKey } from "./songOverviewPeaks";
 
@@ -85,6 +86,12 @@ function SongScrubViewComponent({
   const [widthPx, setWidthPx] = useState(0);
   const [visibleBars, setVisibleBars] = useState(DEFAULT_VISIBLE_BARS);
   const playing = useTransportStore((state) => state.playback?.playbackState === "playing");
+  const snapEnabled = useTimelineUIStore((state) => state.snapEnabled);
+  const toggleSnap = () => useTimelineUIStore.setState((state) => ({ snapEnabled: !state.snapEnabled }));
+  // A pinch writes the zoom at most once per frame.
+  const pendingBarsRef = useRef<number | null>(null);
+  const visibleBarsRef = useRef(visibleBars);
+  visibleBarsRef.current = visibleBars;
 
   const bars = useMemo(() => barStartsInSong(song, region), [song, region]);
   const firstBarSeconds = (bars[1] ?? region.endSeconds) - (bars[0] ?? region.startSeconds);
@@ -142,6 +149,10 @@ function SongScrubViewComponent({
   useEffect(() => {
     let frameId = 0;
     const frame = () => {
+      if (pendingBarsRef.current !== null) {
+        setVisibleBars(pendingBarsRef.current);
+        pendingBarsRef.current = null;
+      }
       const position = positionSecondsRef.current;
       if (!panningRef.current && position !== lastPositionRef.current) {
         lastPositionRef.current = position;
@@ -181,25 +192,52 @@ function SongScrubViewComponent({
   }, [canvasWidth, clipsKey, summariesKey, region.startSeconds, region.endSeconds]);
 
   const commitCursor = (seconds: number) => {
-    cursorRef.current = clampToSong(bars[nearestBarIndex(bars, seconds)] ?? seconds);
+    // Snap off (the DAW's own toggle): wherever the line was left.
+    const snapped = snapEnabled ? bars[nearestBarIndex(bars, seconds)] ?? seconds : seconds;
+    cursorRef.current = clampToSong(snapped);
     lastPositionRef.current = cursorRef.current;
     applyCursor();
     onSeek(cursorRef.current);
   };
 
+  // Fingers on the waveform: one swipes, two pinch the zoom (the DAW's
+  // gestures); the zoom stays around the centre line.
+  const pointersRef = useRef(new Map<number, number>());
+  const pinchRef = useRef<{ distance: number; bars: number } | null>(null);
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || pxPerSecond <= 0) return;
-    const pointerId = event.pointerId;
+    const pointers = pointersRef.current;
+    pointers.set(event.pointerId, event.clientX);
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinchRef.current = { distance: Math.abs(a - b), bars: visibleBarsRef.current };
+      return;
+    }
+    if (pointers.size > 2) return;
     const startX = event.clientX;
     const startCursor = cursorRef.current;
     let moved = false;
     const onMove = (moveEvent: PointerEvent) => {
-      if (moveEvent.pointerId !== pointerId) return;
+      if (!pointers.has(moveEvent.pointerId)) return;
+      pointers.set(moveEvent.pointerId, moveEvent.clientX);
+      const pinch = pinchRef.current;
+      if (pinch && pointers.size === 2) {
+        moved = true;
+        panningRef.current = true;
+        const [a, b] = [...pointers.values()];
+        const distance = Math.abs(a - b);
+        if (pinch.distance > 0 && distance > 0) {
+          const next = Math.max(MIN_VISIBLE_BARS, Math.min(MAX_VISIBLE_BARS, (pinch.bars * pinch.distance) / distance));
+          pendingBarsRef.current = next;
+          markFrameActivity();
+        }
+        return;
+      }
       const dx = moveEvent.clientX - startX;
       if (!moved && Math.abs(dx) < DRAG_THRESHOLD_PX) return;
       moved = true;
       panningRef.current = true;
-      cursorRef.current = clampToSong(startCursor - dx / pxPerSecond);
+      cursorRef.current = clampToSong(startCursor - dx / geometryRef.current.pxPerSecond);
       applyCursor();
     };
     const detach = () => {
@@ -208,14 +246,18 @@ function SongScrubViewComponent({
       window.removeEventListener("pointercancel", onCancel);
     };
     const onUp = (upEvent: PointerEvent) => {
-      if (upEvent.pointerId !== pointerId) return;
+      if (!pointers.delete(upEvent.pointerId) || pointers.size > 0) return;
       detach();
+      const pinched = pinchRef.current !== null;
+      pinchRef.current = null;
       panningRef.current = false;
       if (moved) commitCursor(cursorRef.current);
+      else if (pinched) applyCursor();
     };
     const onCancel = (cancelEvent: PointerEvent) => {
-      if (cancelEvent.pointerId !== pointerId) return;
+      if (!pointers.delete(cancelEvent.pointerId) || pointers.size > 0) return;
       detach();
+      pinchRef.current = null;
       panningRef.current = false;
       cursorRef.current = startCursor;
       applyCursor();
@@ -285,10 +327,20 @@ function SongScrubViewComponent({
         </button>
         {actions?.({ cursorSeconds: () => cursorRef.current })}
         <span className="lt-setlist-lanes-toolbar-gap" />
-        <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.lanes.zoomOut")} title={t("setlistView.lanes.zoomOut")} disabled={visibleBars >= MAX_VISIBLE_BARS} onClick={() => setVisibleBars((value) => Math.min(MAX_VISIBLE_BARS, value * 2))}>
+        <button
+          type="button"
+          className={`lt-setlist-settings-button${snapEnabled ? " is-active" : ""}`}
+          aria-pressed={snapEnabled}
+          aria-label={t("setlistView.scrub.snap")}
+          title={t("setlistView.scrub.snap")}
+          onClick={toggleSnap}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">grid_on</span>
+        </button>
+        <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.lanes.zoomOut")} title={t("setlistView.lanes.zoomOut")} disabled={visibleBars >= MAX_VISIBLE_BARS} onClick={() => setVisibleBars((value) => Math.min(MAX_VISIBLE_BARS, Math.round(value * 2)))}>
           −
         </button>
-        <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.lanes.zoomIn")} title={t("setlistView.lanes.zoomIn")} disabled={visibleBars <= MIN_VISIBLE_BARS} onClick={() => setVisibleBars((value) => Math.max(MIN_VISIBLE_BARS, value / 2))}>
+        <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.lanes.zoomIn")} title={t("setlistView.lanes.zoomIn")} disabled={visibleBars <= MIN_VISIBLE_BARS} onClick={() => setVisibleBars((value) => Math.max(MIN_VISIBLE_BARS, Math.round(value / 2)))}>
           +
         </button>
       </div>

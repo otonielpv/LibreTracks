@@ -1,4 +1,5 @@
 import {
+  Fragment,
   memo,
   useMemo,
   useState,
@@ -13,7 +14,9 @@ import { resolveMixerRows } from "../compact/CompactMixer";
 import type { TimelineMenus } from "../menus/timelineMenus";
 import type { SongViewBindings } from "../songs/songViewBindings";
 import { AUTOMATION_TRACK_ID } from "../library/pendingAudioImports";
+import { automationRowIndex } from "./lanes/automationLaneModel";
 import { SONG_DROP_CLASS, songDropHandlers } from "./songDrop";
+import { TrackReorderGrip } from "./TrackReorderGrip";
 import { computeSongTrackContent } from "./songTrackContent";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 
@@ -132,6 +135,36 @@ function SetlistTrackListComponent({
     ]);
   };
 
+  // The automation lane, where the project has it (after its track), with
+  // the same handle: the DAW's drag reorders it too.
+  const automationIndex =
+    content.hasAutomation || song.automationTrack
+      ? automationRowIndex(
+          rows.map((track) => track.id),
+          tracks.map((track) => track.id),
+          song.automationTrack?.afterTrackId,
+        )
+      : -1;
+  const automationRow = (
+    <div
+      role="listitem"
+      className="lt-setlist-track-row is-automation"
+      data-track-id={AUTOMATION_TRACK_ID}
+      data-track-kind="automation"
+      onContextMenu={(event) => onTrackContextMenu(event, AUTOMATION_TRACK_ID)}
+    >
+      <TrackReorderGrip
+        trackId={AUTOMATION_TRACK_ID}
+        label={t("setlistView.tracks.reorder", { name: t("setlistView.tracks.kind.automation") })}
+        onTrackDragStart={onTrackDragStart}
+      />
+      <div className="lt-setlist-track-name">
+        <span className="lt-setlist-track-swatch" aria-hidden="true" />
+        <strong>{t("setlistView.tracks.kind.automation")}</strong>
+      </div>
+    </div>
+  );
+
   const showRoute = layout === "wide";
   const collapsible = layout === "short";
 
@@ -160,13 +193,14 @@ function SetlistTrackListComponent({
       </div>
       <div className="lt-setlist-tracks-list" role="list" aria-label={t("setlistView.tracks.label", { name: region.name })}>
         {rows.length === 0 ? <p className="lt-setlist-tracks-empty">{t("setlistView.tracks.empty")}</p> : null}
-        {rows.map((track: TrackSummary) => {
+        {automationIndex === 0 ? automationRow : null}
+        {rows.map((track: TrackSummary, rowIndex: number) => {
           const clips = clipsByTrack.get(track.id) ?? [];
           const expanded = !collapsible || expandedTrackId === track.id;
           const isFolder = track.kind === "folder";
           return (
+            <Fragment key={track.id}>
             <div
-              key={track.id}
               role="listitem"
               className={`lt-setlist-track-row${selectedTrackIds.includes(track.id) ? " is-selected" : ""}`}
               data-track-id={track.id}
@@ -179,15 +213,11 @@ function SetlistTrackListComponent({
               }
               onContextMenu={(event) => onTrackContextMenu(event, track.id)}
             >
-              <div
-                className="lt-setlist-track-grip material-symbols-outlined"
-                role="button"
-                aria-label={t("setlistView.tracks.reorder", { name: track.name })}
-                title={t("setlistView.tracks.reorder", { name: track.name })}
-                onMouseDown={(event) => onTrackDragStart(event, track.id)}
-              >
-                drag_indicator
-              </div>
+              <TrackReorderGrip
+                trackId={track.id}
+                label={t("setlistView.tracks.reorder", { name: track.name })}
+                onTrackDragStart={onTrackDragStart}
+              />
               {isFolder ? (
                 <button
                   type="button"
@@ -243,22 +273,11 @@ function SetlistTrackListComponent({
                 </div>
               ) : null}
             </div>
+            {automationIndex === rowIndex + 1 ? automationRow : null}
+            </Fragment>
           );
         })}
-        {content.hasAutomation || song.automationTrack ? (
-          <div
-            role="listitem"
-            className="lt-setlist-track-row is-automation"
-            data-track-id={AUTOMATION_TRACK_ID}
-            data-track-kind="automation"
-            onContextMenu={(event) => onTrackContextMenu(event, AUTOMATION_TRACK_ID)}
-          >
-            <div className="lt-setlist-track-name">
-              <span className="lt-setlist-track-swatch" aria-hidden="true" />
-              <strong>{t("setlistView.tracks.kind.automation")}</strong>
-            </div>
-          </div>
-        ) : null}
+
       </div>
     </div>
   );

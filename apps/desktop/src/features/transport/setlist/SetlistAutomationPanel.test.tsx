@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AutomationCueSummary, SongView } from "@libretracks/shared/models";
 
 import type { TimelineMenus } from "../menus/timelineMenus";
+import { useTimelineUIStore } from "../uiStore";
 import { SetlistAutomationPanel } from "./SetlistAutomationPanel";
 import { testRegion } from "./testBindings";
 
@@ -42,8 +43,13 @@ function menus() {
     editAutomationCue: vi.fn(),
     automationCueContextMenu: vi.fn(() => [{ label: "x" }]),
     openMixScenes: vi.fn(),
+    automationTrackContextMenu: vi.fn(() => [{ label: "transport.automation.removeTrack" }]),
+    setAutomationTrackOn: vi.fn(),
+    handleAddAutomationTrack: vi.fn(),
   };
 }
+
+beforeEach(() => useTimelineUIStore.setState({ snapEnabled: true }));
 
 const rows = (container: HTMLElement) => Array.from(container.querySelectorAll<HTMLElement>(".lt-setlist-automation-item"));
 
@@ -100,6 +106,71 @@ describe("SetlistAutomationPanel", () => {
     expect(marks[1].classList.contains("is-off")).toBe(true);
     fireEvent.click(marks[2]);
     expect(menuMock.editAutomationCue).toHaveBeenCalledWith(expect.objectContaining({ id: "late" }));
+  });
+});
+
+const renderPanel = (overrides: Partial<SongView> = {}, onSeek = vi.fn()) => {
+  const menuMock = menus();
+  render(
+    <SetlistAutomationPanel song={{ ...song, ...overrides }} region={region} layout="short" menus={menuMock as unknown as TimelineMenus} positionSecondsRef={{ current: 0 }} waveformSummaries={{}} onSeek={onSeek} runShortcutAction={vi.fn()} />,
+  );
+  return menuMock;
+};
+
+describe("the automation track in the panel", () => {
+  // The iPhone report: no way to turn it off or remove it from here.
+  it("turns it on/off and opens the DAW's track menu (remove, scenes)", () => {
+    const menuMock = renderPanel({ automationTrack: { afterTrackId: null, enabled: false } });
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.automation.turnOn" }));
+    expect(menuMock.setAutomationTrackOn).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.sections.menu:setlistView.automation.track" }));
+    expect(menuMock.openMenu).toHaveBeenCalledWith(expect.anything(), "setlistView.automation.track", [
+      { label: "transport.automation.removeTrack" },
+    ]);
+  });
+
+  it("without one, offers to add it", () => {
+    const menuMock = renderPanel({ automationTrack: null });
+    fireEvent.click(screen.getByRole("button", { name: /setlistView.automation.addTrack/ }));
+    expect(menuMock.handleAddAutomationTrack).toHaveBeenCalledWith(null);
+  });
+});
+
+describe("snap on the waveform", () => {
+  it("the toggle is the DAW's snap: on, a swipe lands on a bar; off, where it was left", () => {
+    const original = window.PointerEvent;
+    class TestPointerEvent extends MouseEvent {
+      readonly pointerId: number;
+      constructor(type: string, init: PointerEventInit = {}) {
+        super(type, init);
+        this.pointerId = init.pointerId ?? 0;
+      }
+    }
+    Object.defineProperty(window, "PointerEvent", { configurable: true, value: TestPointerEvent });
+    const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
+    const onSeek = vi.fn();
+    const { container } = render(
+      <SetlistAutomationPanel song={song} region={region} layout="short" menus={menus() as unknown as TimelineMenus} positionSecondsRef={{ current: 0 }} waveformSummaries={{}} onSeek={onSeek} runShortcutAction={vi.fn()} />,
+    );
+    const viewport = container.querySelector<HTMLElement>(".lt-setlist-scrub-viewport")!;
+    // 8 bars of 2 s across 400 px: 25 px/s. A 137.5 px swipe = 5.5 s.
+    const swipe = (from: number, to: number) => {
+      fireEvent.pointerDown(viewport, { pointerId: 1, clientX: from });
+      fireEvent.pointerMove(window, { pointerId: 1, clientX: to });
+      fireEvent.pointerUp(window, { pointerId: 1, clientX: to });
+    };
+    swipe(300, 162.5);
+    expect(onSeek).toHaveBeenLastCalledWith(6);
+
+    const toggle = screen.getByRole("button", { name: "setlistView.scrub.snap" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(toggle);
+    expect(useTimelineUIStore.getState().snapEnabled).toBe(false);
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    swipe(300, 287.5);
+    expect(onSeek).toHaveBeenLastCalledWith(6.5);
+    width.mockRestore();
+    Object.defineProperty(window, "PointerEvent", { configurable: true, value: original });
   });
 });
 

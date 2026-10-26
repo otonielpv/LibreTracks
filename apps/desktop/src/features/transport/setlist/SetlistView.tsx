@@ -469,6 +469,7 @@ function SetlistViewComponent({
             startSeconds={shownRegion.startSeconds}
             endSeconds={shownRegion.endSeconds}
             positionSecondsRef={performance.positionSecondsRef}
+            onSeek={performance.onSeek}
             overlay={
                   <SongMap
                     part="actions"

@@ -2676,6 +2676,10 @@ const es = {
       showMixerTitle: "Volver al mezclador",
     },
     automation: {
+      track: "Pista de automatización",
+      turnOn: "Activar automatización",
+      turnOff: "Desactivar automatización",
+      addTrack: "Añadir pista de automatización",
       addAtPlayhead: "Crear automatismo en el playhead",
       addAtSection: "Automatismo en la sección",
       addAtSectionTitle: "Crear un automatismo al inicio de la sección donde está el playhead",
@@ -2686,6 +2690,7 @@ const es = {
       add: "Nuevo",
     },
     midi: {
+      tracks: "Pistas MIDI",
       addHere: "MIDI aquí",
       noTracks: "La sesión no tiene pistas MIDI.",
       empty: "Sin clips MIDI en esta canción.",
@@ -2729,6 +2734,7 @@ const es = {
       backTitle: "Volver a la vista Setlist con la misma canción",
     },
     scrub: {
+      snap: "Ajustar a la rejilla",
       play: "Reproducir desde la línea",
       pause: "Pausa",
     },

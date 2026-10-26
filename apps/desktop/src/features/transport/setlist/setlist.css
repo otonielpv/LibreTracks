@@ -3527,3 +3527,161 @@ html.lt-mobile .lt-setlist-mixer.is-medium .lt-compact-mixer-strip.lt-setlist-ma
   padding-left: 0.45rem;
   padding-right: 0.45rem;
 }
+
+/* ---- Gestos de la DAW en la onda (2026-10-26): pellizco y arrastre con un
+   dedo los lleva OverviewZoom; el navegador no debe quedarse el gesto. ---- */
+.lt-setlist-zoom-viewport,
+.lt-setlist-zoom-viewport .lt-setlist-overview.is-short {
+  touch-action: none;
+}
+
+/* ---- Teléfono más denso (iPhone, 2026-10-26): sin hueco abajo, esquinas
+   casi rectas y menos separación entre zonas; la fila de canciones más baja.
+   Abajo solo el margen propio: el indicador de inicio pisa poco y ese hueco
+   se notaba vacío. ---- */
+.lt-setlist-view.is-short {
+  --lt-setlist-gap: 0.15rem;
+  --lt-setlist-pad: 0.15rem;
+  padding-bottom: var(--lt-setlist-pad);
+}
+
+.lt-setlist-view.is-short .lt-setlist-zone,
+.lt-setlist-view.is-short .lt-setlist-scrub-viewport,
+.lt-setlist-drawer.is-short .lt-setlist-scrub-viewport {
+  border-radius: 0.2rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-song-tile {
+  min-height: 2rem;
+  border-radius: 0.2rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-add-song {
+  min-height: 2rem;
+}
+
+html.lt-mobile .lt-setlist-songs.is-short .lt-setlist-song-button,
+html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
+  min-height: 2rem;
+  min-width: 2.25rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-zone.is-songs > .lt-setlist-edit-button,
+.lt-setlist-view.is-short .lt-setlist-pane-toggle {
+  height: 2rem;
+  border-radius: 0.2rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-zone.is-songs {
+  padding: 0.1rem 0.2rem;
+}
+
+/* ---- Fila de pista en MIDI y automatización: elegir, encender, menú ---- */
+.lt-setlist-track-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 0.15rem 0;
+}
+
+.lt-setlist-track-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.lt-setlist-track-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.3rem;
+  background: var(--lt-setlist-surface);
+}
+
+.lt-setlist-track-chip.is-chosen {
+  border-color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-track-chip.is-off .lt-setlist-track-chip-name {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.lt-setlist-track-chip-name {
+  max-width: 10rem;
+  padding: 0 0.55rem;
+  border: 0;
+  background: none;
+  color: var(--lt-setlist-text);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.lt-setlist-track-chip-name {
+  align-self: stretch;
+  cursor: pointer;
+}
+
+.lt-setlist-track-chip-icon {
+  display: inline-grid;
+  place-items: center;
+  align-self: stretch;
+  min-width: 2.25rem;
+  border: 0;
+  border-left: 1px solid var(--lt-setlist-border);
+  background: none;
+  color: var(--lt-setlist-text-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.lt-setlist-track-chip-icon[aria-pressed="true"] {
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-view.is-short .lt-setlist-songs {
+  padding: 0.15rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-transition {
+  min-height: 2rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-edit-button,
+.lt-setlist-view.is-short .lt-setlist-pane-toggle {
+  min-height: 2rem;
+  height: 2rem;
+  border-radius: 0.2rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-map-action,
+.lt-setlist-view.is-short .lt-setlist-song-tile,
+.lt-setlist-view.is-short .lt-setlist-tab,
+.lt-setlist-view.is-short .lt-setlist-mixer-action,
+.lt-setlist-drawer.is-short .lt-setlist-settings-button,
+.lt-setlist-drawer.is-short .lt-setlist-drawer-tab,
+.lt-setlist-drawer.is-short .lt-setlist-drawer-close {
+  border-radius: 0.3rem;
+}
+
+/* Teléfono: los botones del editor en una sola fila que se desliza; al
+   partirse en dos se comían la onda. */
+.lt-setlist-drawer.is-short .lt-setlist-scrub-bar-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-scrub-bar-row::-webkit-scrollbar {
+  display: none;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-scrub-bar-row > * {
+  flex: 0 0 auto;
+}

@@ -1,3 +1,4 @@
+import { useTimelineUIStore } from "../uiStore";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -157,7 +158,7 @@ describe("Edit → Tracks", () => {
     const onTrackDragStart = vi.fn();
     const onTrackSelect = vi.fn();
     const { container } = render(<SetlistView {...props({ onTrackDragStart, onTrackSelect })} layoutClass="wide" />);
-    fireEvent.mouseDown(screen.getByRole("button", { name: "setlistView.tracks.reorder:Voz A" }), { button: 0 });
+    fireEvent.pointerDown(screen.getByRole("button", { name: "setlistView.tracks.reorder:Voz A" }), { button: 0 });
     expect(onTrackDragStart).toHaveBeenCalledWith(expect.anything(), "voxA");
     fireEvent.click(within(row(container, "voxA")).getByText("Voz A"));
     expect(onTrackSelect).toHaveBeenCalledWith("voxA", "Voz A", expect.anything());
@@ -210,4 +211,35 @@ describe("Edit → Tracks by size", () => {
     fireEvent.click(within(row(container, "drums")).getByText("Batería"));
     expect(screen.getByText("drums-a.wav")).toBeTruthy();
   });
+
+  // The iPhone report: the handle did not move tracks with a finger (the
+  // DAW only lets a finger drag in its reorder mode; the handle turns it on
+  // for the drag) and the automation row had no handle.
+  it("a finger on the handle drags in the DAW's reorder mode, the automation row included", () => {
+    class TouchPointerEvent extends MouseEvent {
+      readonly pointerId = 1;
+      readonly pointerType = "touch";
+    }
+    const original = window.PointerEvent;
+    Object.defineProperty(window, "PointerEvent", { configurable: true, value: TouchPointerEvent });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const seen: boolean[] = [];
+    const onTrackDragStart = vi.fn(() => seen.push(useTimelineUIStore.getState().trackReorderMode));
+    const base = props({ onTrackDragStart });
+    const automationSong = { ...base.performance.song, automationTrack: { afterTrackId: "drums", enabled: true } } as SongView;
+    render(<SetlistView {...base} performance={{ ...base.performance, song: automationSong }} layoutClass="wide" />);
+    fireEvent.pointerDown(screen.getByRole("button", { name: "setlistView.tracks.reorder:Voz A" }), { button: 0 });
+    expect(seen).toEqual([true]);
+    fireEvent.pointerUp(window);
+    vi.advanceTimersByTime(1);
+    expect(useTimelineUIStore.getState().trackReorderMode).toBe(false);
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "setlistView.tracks.reorder:setlistView.tracks.kind.automation" }),
+      { button: 0 },
+    );
+    expect(onTrackDragStart).toHaveBeenLastCalledWith(expect.anything(), "__automation__");
+    vi.useRealTimers();
+    Object.defineProperty(window, "PointerEvent", { configurable: true, value: original });
+  });
 });
+

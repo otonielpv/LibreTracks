@@ -1,4 +1,4 @@
-import { memo, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { memo, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import type { MidiClipSummary, SongRegionSummary, SongView, TrackSummary, WaveformSummaryDto } from "@libretracks/shared/models";
 
@@ -21,7 +21,13 @@ type SetlistMidiPanelProps = {
   runShortcutAction: (action: ShortcutActionId) => void;
   menus: Pick<
     TimelineMenus,
-    "openMenu" | "createMidiClipAt" | "editMidiClip" | "openMidiClipMenu" | "globalTrackListContextMenu"
+    | "openMenu"
+    | "createMidiClipAt"
+    | "editMidiClip"
+    | "openMidiClipMenu"
+    | "globalTrackListContextMenu"
+    | "trackContextMenu"
+    | "toggleMidiTrackEnabled"
   >;
 };
 
@@ -37,7 +43,9 @@ export function songMidiClips(song: SongView, region: Pick<SongRegionSummary, "s
  * the line) with each MIDI clip where it fires, so you see which part of
  * the song it lands on, and the list below. Every action is the DAW's:
  * «+ MIDI here» creates on a MIDI track at the line's bar (MidiClipModal),
- * tapping a clip edits it, holding it (or «…») opens its menu.
+ * tapping a clip edits it, holding it (or «…») opens its menu. The row on
+ * top picks the MIDI track «+ MIDI here» writes to, turns it on/off, and its
+ * «…» is the DAW's track menu (rename, port, colour, delete).
  */
 function SetlistMidiPanelComponent({
   song,
@@ -58,20 +66,27 @@ function SetlistMidiPanelComponent({
   // the same moment do not cover each other.
   const rowOf = (id: string) => Math.max(0, midiTracks.findIndex((track) => track.id === id));
 
-  const addAt = (event: ReactMouseEvent<HTMLElement>, seconds: number) => {
-    if (midiTracks.length === 1) {
-      menus.createMidiClipAt(midiTracks[0].id, seconds);
-      return;
-    }
-    menus.openMenu(
-      event,
-      t("setlistView.midi.add"),
-      midiTracks.map((track) => ({ label: track.name, onSelect: () => menus.createMidiClipAt(track.id, seconds) })),
-    );
+  const [chosenId, setChosenId] = useState<string | null>(null);
+  const target = midiTracks.find((track) => track.id === chosenId) ?? midiTracks[0] ?? null;
+
+  const addAt = (seconds: number) => {
+    if (target) menus.createMidiClipAt(target.id, seconds);
   };
   const addMidiTrack = menus
     .globalTrackListContextMenu()
     .find((action) => action.label === t("transport.midi.addTrack"));
+  const addTrackButton = addMidiTrack ? (
+    <button
+      type="button"
+      className={`lt-setlist-settings-button${midiTracks.length === 0 ? " is-primary" : ""}`}
+      aria-label={addMidiTrack.label}
+      title={addMidiTrack.label}
+      onClick={() => void addMidiTrack.onSelect?.()}
+    >
+      <span className="material-symbols-outlined" aria-hidden="true">add</span>
+      {midiTracks.length === 0 ? addMidiTrack.label : null}
+    </button>
+  ) : null;
 
   const chip = (clip: MidiClipSummary, x: number) => (
     <button
@@ -97,14 +112,54 @@ function SetlistMidiPanelComponent({
       {midiTracks.length === 0 ? (
         <div className="lt-setlist-sections-bar">
           <p className="lt-setlist-sections-hint">{t("setlistView.midi.noTracks")}</p>
-          {addMidiTrack ? (
-            <button type="button" className="lt-setlist-settings-button is-primary" onClick={() => void addMidiTrack.onSelect?.()}>
-              <span className="material-symbols-outlined" aria-hidden="true">add</span>
-              {addMidiTrack.label}
-            </button>
-          ) : null}
+          {addTrackButton}
         </div>
       ) : (
+        <>
+        <div className="lt-setlist-track-bar" role="radiogroup" aria-label={t("setlistView.midi.tracks")}>
+          {midiTracks.map((track) => {
+            const on = track.midiEnabled !== false;
+            const chosen = track.id === target?.id;
+            return (
+              <span key={track.id} className={`lt-setlist-track-chip${chosen ? " is-chosen" : ""}${on ? "" : " is-off"}`}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={chosen}
+                  className="lt-setlist-track-chip-name"
+                  title={track.name}
+                  onClick={() => setChosenId(track.id)}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    menus.openMenu(event, track.name, menus.trackContextMenu(track));
+                  }}
+                >
+                  {track.name}
+                </button>
+                <button
+                  type="button"
+                  className="lt-setlist-track-chip-icon material-symbols-outlined"
+                  aria-pressed={on}
+                  aria-label={t(on ? "transport.midi.disableTrack" : "transport.midi.enableTrack")}
+                  title={t(on ? "transport.midi.disableTrack" : "transport.midi.enableTrack")}
+                  onClick={() => menus.toggleMidiTrackEnabled(track.id)}
+                >
+                  {on ? "power_settings_new" : "power_off"}
+                </button>
+                <button
+                  type="button"
+                  className="lt-setlist-track-chip-icon material-symbols-outlined"
+                  aria-label={t("setlistView.sections.menu", { name: track.name })}
+                  title={t("setlistView.sections.menu", { name: track.name })}
+                  onClick={(event) => menus.openMenu(event, track.name, menus.trackContextMenu(track))}
+                >
+                  more_vert
+                </button>
+              </span>
+            );
+          })}
+          {addTrackButton}
+        </div>
         <SongScrubView
           song={song}
           region={region}
@@ -117,14 +172,16 @@ function SetlistMidiPanelComponent({
             <button
               type="button"
               className="lt-setlist-settings-button is-primary"
-              aria-haspopup={midiTracks.length > 1 ? "menu" : undefined}
-              onClick={(event) => addAt(event, cursorSeconds())}
+              aria-label={t("setlistView.midi.addHere")}
+              title={target ? `${t("setlistView.midi.addHere")} (${target.name})` : undefined}
+              onClick={() => addAt(cursorSeconds())}
             >
               <span className="material-symbols-outlined" aria-hidden="true">add</span>
               {t("setlistView.midi.addHere")}
             </button>
           )}
         />
+        </>
       )}
       {midiTracks.length > 0 && clips.length === 0 ? (
         <p className="lt-setlist-sections-hint">{t("setlistView.midi.empty")}</p>
