@@ -18,8 +18,45 @@ import { selectWaveformLod } from "../Renderer/WaveformTileCache";
  * Reads the waveform summaries the DAW already fetched (the panel's
  * `waveformCache`, fed by hooks/useSongWaveforms); asks the backend for
  * nothing. A clip whose summary has not arrived contributes 0 until it does.
+ *
+ * `loudest`: scale by this instead of the span's own loudest bucket, so a
+ * zoomed window (only part of the song, see SongOverviewStrip) keeps the
+ * whole song's scale (songOverviewLoudest); values are capped at 1.
  */
 export function buildSongOverviewPeaks(
+  clips: readonly ClipSummary[],
+  summaries: Readonly<Record<string, WaveformSummaryDto>>,
+  region: Pick<SongRegionSummary, "startSeconds" | "endSeconds">,
+  buckets: number,
+  loudest?: number,
+): Float32Array {
+  const out = songOverviewLevels(clips, summaries, region, buckets);
+  const scale = loudest ?? maxOf(out);
+  if (scale > 0) {
+    for (let bucket = 0; bucket < out.length; bucket += 1) out[bucket] = Math.min(1, out[bucket] / scale);
+  }
+  return out;
+}
+
+/** The loudest bucket of the whole song, unscaled, at `buckets` across it:
+ * the common scale for zoomed windows of it. */
+export function songOverviewLoudest(
+  clips: readonly ClipSummary[],
+  summaries: Readonly<Record<string, WaveformSummaryDto>>,
+  region: Pick<SongRegionSummary, "startSeconds" | "endSeconds">,
+  buckets: number,
+): number {
+  return maxOf(songOverviewLevels(clips, summaries, region, buckets));
+}
+
+function maxOf(values: Float32Array): number {
+  let loudest = 0;
+  for (const value of values) loudest = Math.max(loudest, value);
+  return loudest;
+}
+
+/** Each bucket's summed mean level, unscaled. */
+function songOverviewLevels(
   clips: readonly ClipSummary[],
   summaries: Readonly<Record<string, WaveformSummaryDto>>,
   region: Pick<SongRegionSummary, "startSeconds" | "endSeconds">,
@@ -70,11 +107,6 @@ export function buildSongOverviewPeaks(
       // Weighted by how much of the bucket the clip covers.
       out[bucket] += (total / (i1 - i0)) * ((t1 - t0) / bucketSeconds);
     }
-  }
-  let loudest = 0;
-  for (const value of out) loudest = Math.max(loudest, value);
-  if (loudest > 0) {
-    for (let bucket = 0; bucket < count; bucket += 1) out[bucket] /= loudest;
   }
   return out;
 }

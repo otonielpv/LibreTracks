@@ -276,20 +276,19 @@ function SetlistMixerComponent({
         {tab === "tracks" || short ? (
           <button
             type="button"
-            className={`lt-setlist-mixer-action${showAllTracks && tab === "tracks" ? " is-active" : ""}`}
-            aria-pressed={showAllTracks && tab === "tracks"}
-            aria-label={t("setlistView.mixer.allTracks")}
-            title={t("setlistView.mixer.allTracksTitle")}
-            onClick={() => {
-              if (tab !== "tracks") {
-                setBottomTab("tracks");
-                setShowAllTracks(true);
-              } else setShowAllTracks((value) => !value);
-            }}
+            // The compact view's track filter: same funnel, on = only this
+            // song's tracks (the default), off = every track in the session.
+            className={`lt-setlist-mixer-action${!showAllTracks ? " is-active" : ""}`}
+            aria-pressed={!showAllTracks}
+            aria-label={t("setlistView.mixer.filter")}
+            title={t(showAllTracks ? "timelineToolbar.mixerFilterOff" : "timelineToolbar.mixerFilterOn")}
+            onClick={tracksAction(() => setShowAllTracks((value) => !value))}
           >
-            <span className="material-symbols-outlined" aria-hidden="true">view_week</span>
-            <span className="lt-setlist-mixer-action-label">{t("setlistView.mixer.allTracks")}</span>
-            {railLabel("setlistView.mixer.rail.all")}
+            <span className="material-symbols-outlined" aria-hidden="true">
+              {showAllTracks ? "filter_alt_off" : "filter_alt"}
+            </span>
+            <span className="lt-setlist-mixer-action-label">{t("setlistView.mixer.filter")}</span>
+            {railLabel("setlistView.mixer.rail.filter")}
           </button>
         ) : null}
         {tab === "tracks" || short ? (

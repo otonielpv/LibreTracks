@@ -2571,8 +2571,8 @@ const es = {
       label: "Onda de {{name}}",
     },
     mixer: {
-      rail: { audio: "Audio", all: "Todas", enlarge: "Ampliar", shrink: "Reducir" },
-      allTracksTitle: "Ver todas las pistas de la sesión, no solo las que suenan en esta canción",
+      filter: "Filtrar pistas de la canción",
+      rail: { audio: "Audio", filter: "Filtro", enlarge: "Ampliar", shrink: "Reducir" },
       enlarge: "Ampliar el mezclador (oculta las canciones)",
       shrink: "Volver a mostrar las canciones",
       label: "Mezclador",
@@ -2675,6 +2675,7 @@ const es = {
       hint: "Los carriles de la canción ocupan el sitio del mezclador: arrastra un clip para moverlo, sus bordes para recortarlo.",
     },
     pane: {
+      rail: "Vistas",
       song: "Onda",
       mixer: "Mezcla",
       showSongTitle: "Ver la onda y las secciones de la canción",

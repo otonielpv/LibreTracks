@@ -1,5 +1,6 @@
 import {
   memo,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -23,9 +24,11 @@ import {
   requestGatedFrame,
   useFrameGateWake,
 } from "../frameGate";
+import { ZoomWindowContext } from "./OverviewZoom";
 import {
   buildSongOverviewPeaks,
   songOverviewClipsKey,
+  songOverviewLoudest,
   songOverviewSummariesKey,
 } from "./songOverviewPeaks";
 import { createSongTimeScale } from "./songTimeScale";
@@ -49,7 +52,26 @@ type SongOverviewStripProps = {
 };
 
 const MAX_PIXEL_RATIO = 2;
-const MAX_BUCKETS = 4096;
+const MAX_BUCKETS = 8192;
+/** Buckets for the whole-song scale every zoomed window shares. */
+const SCALE_BUCKETS = 2048;
+const MAX_CANVAS_PX = 16384;
+/** Zoomed in, the canvas covers this many screens around the view: redrawn
+ * only when the view nears its edge, about once per screen of travel. */
+const WINDOW_SCREENS = 3;
+
+/** The stretch of the layer (px) to draw so `view` is well inside it. */
+export function drawWindowFor(
+  view: { offset: number; width: number },
+  layerWidth: number,
+): { start: number; width: number } {
+  if (view.width <= 0 || layerWidth <= view.width * WINDOW_SCREENS) {
+    return { start: 0, width: layerWidth };
+  }
+  const width = view.width * WINDOW_SCREENS;
+  const start = Math.max(0, Math.min(layerWidth - width, view.offset - view.width));
+  return { start, width };
+}
 const WAVE_COLOR = "rgb(186 214 207 / 0.75)";
 const SECTION_COLOR = "rgb(233 241 238 / 0.35)";
 
@@ -107,15 +129,43 @@ function SongOverviewStripComponent({
     MAX_PIXEL_RATIO,
     typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
   );
-  const buckets = Math.min(MAX_BUCKETS, Math.max(1, Math.round(size.width * pixelRatio)));
+  // Inside the band's zoom: only the stretch around what is on screen is
+  // drawn, at full detail (the iPhone asked for more zoom with detail; one
+  // canvas for the whole zoomed song blew past canvas limits and had to be
+  // stretched). Re-rendered when the view nears the stretch's edge.
+  const zoomWindow = useContext(ZoomWindowContext);
+  const [drawRange, setDrawRange] = useState<{ start: number; width: number } | null>(null);
+  const range =
+    drawRange && drawRange.start + drawRange.width <= size.width + 0.5
+      ? drawRange
+      : zoomWindow
+        ? drawWindowFor(zoomWindow, size.width)
+        : { start: 0, width: size.width };
+  const buckets = Math.min(MAX_BUCKETS, Math.max(1, Math.round(range.width * pixelRatio)));
   const clipsKey = songOverviewClipsKey(clips, region);
   const summariesKey = songOverviewSummariesKey(clips, waveformSummaries);
   // Keyed on what the waveform depends on, never on the playhead or on mix
-  // changes: one computation per clip edit or arriving summary.
-  const peaks = useMemo(
-    () => buildSongOverviewPeaks(clips, waveformSummaries, region, buckets),
+  // changes: one computation per clip edit, arriving summary or new stretch.
+  const loudest = useMemo(
+    () => songOverviewLoudest(clips, waveformSummaries, region, SCALE_BUCKETS),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clipsKey, summariesKey, region.startSeconds, region.endSeconds, buckets],
+    [clipsKey, summariesKey, region.startSeconds, region.endSeconds],
+  );
+  const songSeconds = region.endSeconds - region.startSeconds;
+  const windowStartSeconds = size.width > 0 ? region.startSeconds + (range.start / size.width) * songSeconds : region.startSeconds;
+  const windowEndSeconds =
+    size.width > 0 ? region.startSeconds + ((range.start + range.width) / size.width) * songSeconds : region.endSeconds;
+  const peaks = useMemo(
+    () =>
+      buildSongOverviewPeaks(
+        clips,
+        waveformSummaries,
+        { startSeconds: windowStartSeconds, endSeconds: windowEndSeconds },
+        buckets,
+        loudest,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [clipsKey, summariesKey, windowStartSeconds, windowEndSeconds, buckets, loudest],
   );
   const sectionStarts = useMemo(
     () =>
@@ -133,7 +183,10 @@ function SongOverviewStripComponent({
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || size.width <= 0 || size.height <= 0) return;
-    canvas.width = Math.round(size.width * pixelRatio);
+    // Before the zoom has measured its window the stretch can be the whole
+    // zoomed song: skip that frame rather than allocate a giant canvas.
+    if (range.width * pixelRatio > MAX_CANVAS_PX) return;
+    canvas.width = Math.round(range.width * pixelRatio);
     canvas.height = Math.round(size.height * pixelRatio);
     let context: CanvasRenderingContext2D | null = null;
     try {
@@ -143,8 +196,8 @@ function SongOverviewStripComponent({
     }
     if (!context) return;
     const scale = createSongTimeScale({
-      startSeconds: region.startSeconds,
-      endSeconds: region.endSeconds,
+      startSeconds: windowStartSeconds,
+      endSeconds: windowEndSeconds,
       widthPx: canvas.width,
     });
     const mid = canvas.height / 2;
@@ -159,17 +212,30 @@ function SongOverviewStripComponent({
     for (const start of sectionStarts) {
       context.fillRect(Math.round(scale.secondsToPx(start)), 0, Math.max(1, pixelRatio), canvas.height);
     }
-  }, [peaks, pixelRatio, region.endSeconds, region.startSeconds, sectionStarts, size]);
+  }, [peaks, pixelRatio, windowStartSeconds, windowEndSeconds, range.width, sectionStarts, size]);
 
   // The playhead, by rAF. Hidden outside the song.
-  const sourcesRef = useRef({ region, width: size.width, positionSecondsRef });
-  sourcesRef.current = { region, width: size.width, positionSecondsRef };
+  const sourcesRef = useRef({ region, width: size.width, positionSecondsRef, zoomWindow, range });
+  sourcesRef.current = { region, width: size.width, positionSecondsRef, zoomWindow, range };
   useEffect(() => {
     let frameId = 0;
     let lastX = Number.NaN;
     let lastVisible: boolean | null = null;
     const frame = () => {
-      const { region: current, width, positionSecondsRef: ref } = sourcesRef.current;
+      const { region: current, width, positionSecondsRef: ref, zoomWindow: view, range: drawn } = sourcesRef.current;
+      // The view left the drawn stretch (or the zoom changed it): a new one.
+      if (view && width > 0) {
+        const wanted = drawWindowFor(view, width);
+        const outside =
+          view.offset < drawn.start - 0.5 ||
+          view.offset + view.width > drawn.start + drawn.width + 0.5 ||
+          (wanted.width === width && drawn.width !== width) ||
+          (wanted.width !== width && drawn.width === width);
+        if (outside) {
+          setDrawRange(wanted);
+          markFrameActivity();
+        }
+      }
       const element = playheadRef.current;
       const position = ref.current;
       const visible = position >= current.startSeconds && position < current.endSeconds;
@@ -260,7 +326,12 @@ function SongOverviewStripComponent({
       }
       onDoubleClick={onDoubleClickAt ? (event) => onDoubleClickAt(secondsAt(event.clientX)) : undefined}
     >
-      <canvas ref={canvasRef} className="lt-setlist-overview-canvas" aria-hidden="true" />
+      <canvas
+        ref={canvasRef}
+        className="lt-setlist-overview-canvas"
+        aria-hidden="true"
+        style={range.width < size.width ? { left: `${range.start}px`, width: `${range.width}px` } : undefined}
+      />
       <div ref={playheadRef} className="lt-setlist-overview-playhead" aria-hidden="true" />
     </div>
   );

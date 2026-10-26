@@ -618,7 +618,7 @@ function SetlistViewComponent({
         editing={editMode !== null}
       />
       {/* Phone, waveform pane: these ride over the waveform instead. */}
-      {waveDock || railButtons ? null : paneButtons}
+      {waveDock || railButtons || lyricsPane ? null : paneButtons}
     </Zone>
   );
   const closeLyrics = () => (layout === "short" ? setShortPane("mixer") : setLyricsOpen(false));
@@ -658,7 +658,15 @@ function SetlistViewComponent({
       <>
           {/* Phone, console enlarged: the song row steps aside. */}
           {layout === "short" && shortPane === "mixer" && mixerExpanded && editMode === null ? null : songs}
-          {lyricsPane ? lyrics : null}
+          {/* Phone, lyrics pane: a rail of its own on the right, like the console's. */}
+          {lyricsPane ? (
+            <div className="lt-setlist-lyrics-pane">
+              {lyrics}
+              <div className="lt-setlist-view-rail" role="toolbar" aria-label={t("setlistView.pane.rail")}>
+                {paneButtons}
+              </div>
+            </div>
+          ) : null}
           {layout === "wide" && lyricsOpen ? (
             // wide: the lyrics beside the band, at its height (the user's
             // call for Live); the console stays below.

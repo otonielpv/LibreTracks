@@ -1,4 +1,5 @@
 import {
+  createContext,
   useEffect,
   useRef,
   type PointerEvent as ReactPointerEvent,
@@ -11,7 +12,14 @@ import { DRAG_THRESHOLD_PX } from "../constants";
 import { cancelGatedFrame, markFrameActivity, requestGatedFrame, useFrameGateWake } from "../frameGate";
 import { useSetlistStore } from "./setlistStore";
 
-export const OVERVIEW_MAX_ZOOM = 8;
+export const OVERVIEW_MAX_ZOOM = 32;
+
+/** Which part of the zoomed layer is on screen, in px of the layer. Mutated
+ * in place (no renders): the waveform reads it per frame and redraws only
+ * the stretch around it, so a 32× zoom keeps full detail without a canvas
+ * 32 screens wide. */
+export type ZoomWindow = { offset: number; width: number };
+export const ZoomWindowContext = createContext<ZoomWindow | null>(null);
 const WHEEL_ZOOM_FACTOR = 1.25;
 
 /** How far to slide a `zoom`× wide layer so `fraction` of it sits in the
@@ -84,10 +92,12 @@ export function OverviewZoom({
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
   const pendingZoomRef = useRef<number | null>(null);
+  const windowRef = useRef<ZoomWindow>({ offset: 0, width: 0 });
 
   const applyOffset = (offset: number) => {
     const layer = layerRef.current;
     offsetRef.current = offset;
+    windowRef.current.offset = offset;
     layer?.style.setProperty("transform", offset ? `translate3d(${-offset}px, 0, 0)` : "none");
   };
 
@@ -97,6 +107,7 @@ export function OverviewZoom({
     const frame = () => {
       const viewport = viewportRef.current;
       const position = positionSecondsRef.current;
+      if (viewport) windowRef.current.width = viewport.clientWidth;
       if (pendingZoomRef.current !== null) {
         setZoom(pendingZoomRef.current);
         pendingZoomRef.current = null;
@@ -240,7 +251,7 @@ export function OverviewZoom({
           style={{ width: `${zoom * 100}%` }}
           data-zoom={zoom}
         >
-          {children}
+          <ZoomWindowContext.Provider value={windowRef.current}>{children}</ZoomWindowContext.Provider>
         </div>
       </div>
       {overlay}

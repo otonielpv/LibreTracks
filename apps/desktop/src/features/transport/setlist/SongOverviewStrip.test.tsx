@@ -6,7 +6,8 @@ import type { ClipSummary, WaveformSummaryDto } from "@libretracks/shared/models
 
 import { resetFrameGateForTests } from "../frameGate";
 import { useTransportStore } from "../store";
-import { SongOverviewStrip } from "./SongOverviewStrip";
+import { ZoomWindowContext } from "./OverviewZoom";
+import { drawWindowFor, SongOverviewStrip } from "./SongOverviewStrip";
 import { testRegion } from "./testBindings";
 
 vi.mock("react-i18next", () => ({
@@ -204,5 +205,40 @@ describe("SongOverviewStrip seek", () => {
     const root = layOut(container);
     expect(root.classList.contains("is-seekable")).toBe(false);
     fireEvent.pointerDown(root, { button: 0, pointerId: 1, clientX: 400 });
+  });
+});
+
+// The iPhone asked for more zoom with real detail. Zoomed, only the stretch
+// around the view is drawn (3 screens), at full resolution, and a new one
+// when the view leaves it: never one canvas for the whole zoomed song.
+describe("SongOverviewStrip zoomed window", () => {
+  it("draws three screens around the view, clamped to the song", () => {
+    expect(drawWindowFor({ offset: 400, width: 250 }, 1000)).toEqual({ start: 150, width: 750 });
+    expect(drawWindowFor({ offset: 0, width: 250 }, 1000)).toEqual({ start: 0, width: 750 });
+    expect(drawWindowFor({ offset: 750, width: 250 }, 1000)).toEqual({ start: 250, width: 750 });
+    // Not zoomed enough for a window: the whole song.
+    expect(drawWindowFor({ offset: 0, width: 400 }, 1000)).toEqual({ start: 0, width: 1000 });
+  });
+
+  it("the canvas covers the stretch, and moves on when the view leaves it", () => {
+    const view = { offset: 400, width: 250 };
+    const { container } = render(
+      <ZoomWindowContext.Provider value={view}>
+        <SongOverviewStrip {...stripProps()} />
+      </ZoomWindowContext.Provider>,
+    );
+    const canvas = container.querySelector<HTMLCanvasElement>(".lt-setlist-overview-canvas")!;
+    runFrames();
+    expect([canvas.style.left, canvas.style.width]).toEqual(["150px", "750px"]);
+    const calls = peaksSpy.calls;
+    view.offset = 500;
+    runFrames();
+    // Still inside: no new stretch, no new peaks.
+    expect(canvas.style.left).toBe("150px");
+    expect(peaksSpy.calls).toBe(calls);
+    view.offset = 700;
+    runFrames();
+    expect([canvas.style.left, canvas.style.width]).toEqual(["250px", "750px"]);
+    expect(peaksSpy.calls).toBe(calls + 1);
   });
 });

@@ -129,9 +129,14 @@ describe("Setlist mixer tracks", () => {
     expect(stripNames(container)).toEqual(["Batería", "Voz B"]);
   });
 
-  it("«All tracks» lifts the song filter", () => {
+  it("the filter (the compact view's funnel) is on by default; off shows every track", () => {
     const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="wide" />);
-    fireEvent.click(screen.getByRole("button", { name: "setlistView.mixer.allTracks" }));
+    const filter = screen.getByRole("button", { name: "setlistView.mixer.filter" });
+    expect(filter.getAttribute("aria-pressed")).toBe("true");
+    expect(filter.textContent).toContain("filter_alt");
+    fireEvent.click(filter);
+    expect(filter.getAttribute("aria-pressed")).toBe("false");
+    expect(filter.textContent).toContain("filter_alt_off");
     expect(stripNames(container)).toEqual(["Batería", "Voz A", "Voz B"]);
   });
 
@@ -270,7 +275,7 @@ describe("Setlist mixer hint and sizes", () => {
     expect(screen.queryByRole("button", { name: "setlistView.mixer.collapse" })).toBeNull();
     // Header actions keep their names for screen readers (icon-only on screen).
     expect(screen.getByRole("button", { name: "setlistView.tracks.addAudio" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "setlistView.mixer.allTracks" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "setlistView.mixer.filter" })).toBeTruthy();
   });
 });
 
@@ -321,16 +326,16 @@ describe("phone console rail", () => {
         "setlistView.mixer.tabs.tracks",
         "setlistView.mixer.tabs.pads",
         "setlistView.mixer.rail.audio",
-        "setlistView.mixer.rail.all",
+        "setlistView.mixer.rail.filter",
         "setlistView.mixer.scenes",
         "setlistView.mixer.rail.enlarge",
       ]),
     );
     fireEvent.click(within(rail).getByRole("tab", { name: /setlistView.mixer.tabs.pads/ }));
     expect(useSetlistStore.getState().bottomTab).toBe("pads");
-    const all = within(rail).getByRole("button", { name: /setlistView.mixer.allTracks/ });
-    fireEvent.click(all);
+    const filter = within(rail).getByRole("button", { name: /setlistView.mixer.filter/ });
+    fireEvent.click(filter);
     expect(useSetlistStore.getState().bottomTab).toBe("tracks");
-    expect(all.getAttribute("aria-pressed")).toBe("true");
+    expect(filter.getAttribute("aria-pressed")).toBe("false");
   });
 });

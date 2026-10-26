@@ -110,7 +110,7 @@ export const useSetlistStore = create<SetlistState & SetlistActions>()(
     setMixerExpanded: (mixerExpanded) => set({ mixerExpanded }),
     setLyricsOpen: (lyricsOpen) => set({ lyricsOpen }),
     setWaveDockHidden: (waveDockHidden) => set({ waveDockHidden }),
-    setOverviewZoom: (overviewZoom) => set({ overviewZoom: Math.max(1, Math.min(8, overviewZoom)) }),
+    setOverviewZoom: (overviewZoom) => set({ overviewZoom: Math.max(1, Math.min(32, overviewZoom)) }),
     setLanesZoom: (lanesZoom) =>
       set({ lanesZoom: Math.max(LANES_MIN_ZOOM, Math.min(LANES_MAX_ZOOM, lanesZoom)) }),
     setLanesScrollPx: (lanesScrollPx) => set({ lanesScrollPx: Math.max(0, lanesScrollPx) }),

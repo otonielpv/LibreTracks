@@ -156,6 +156,15 @@ describe("Edit modes on the phone", () => {
     expect(dock.querySelector(".lt-setlist-pane-toggle")).not.toBeNull();
   });
 
+  it("short, lyrics pane: the view buttons are a rail beside the lyrics, not in the song row", () => {
+    const base = testSetlistProps({ regions: [region] } as Partial<SongView>);
+    const { container } = render(<SetlistView {...base} layoutClass="short" />);
+    act(() => useSetlistStore.getState().setShortPane("lyrics"));
+    const rail = container.querySelector<HTMLElement>(".lt-setlist-lyrics-pane .lt-setlist-view-rail")!;
+    expect(within(rail).getByRole("button", { name: /setlistView.edit.button/ })).toBeTruthy();
+    expect(container.querySelector(".lt-setlist-zone.is-songs .lt-setlist-pane-toggle")).toBeNull();
+  });
+
   it("wide keeps Lanes", () => {
     const base = testSetlistProps({ regions: [region] } as Partial<SongView>);
     render(<SetlistView {...base} layoutClass="wide" />);

@@ -3875,3 +3875,53 @@ button.lt-setlist-track-chip-name {
   margin: 0;
   justify-self: center;
 }
+
+/* Teléfono, vista de letra: la letra y a su derecha el raíl de vistas
+   (Onda, Letra, Editar), igual que el de la consola. */
+.lt-setlist-lyrics-pane {
+  display: flex;
+  gap: var(--lt-setlist-gap);
+  min-width: 0;
+  min-height: 0;
+}
+
+.lt-setlist-lyrics-pane > .lt-setlist-zone {
+  flex: 1 1 auto;
+}
+
+.lt-setlist-view-rail {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.25rem 0.15rem;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.lt-setlist-view-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.lt-setlist-view.is-short .lt-setlist-view-rail .lt-setlist-pane-toggle,
+.lt-setlist-view.is-short .lt-setlist-view-rail .lt-setlist-edit-button {
+  flex: 0 0 auto;
+  width: 3.25rem;
+  height: 2.75rem;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  border-radius: 0.3rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.lt-setlist-view-rail .material-symbols-outlined {
+  font-size: 1.25rem;
+}

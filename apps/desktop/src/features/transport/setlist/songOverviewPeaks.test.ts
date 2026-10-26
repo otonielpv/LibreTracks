@@ -5,6 +5,7 @@ import type { ClipSummary, WaveformSummaryDto } from "@libretracks/shared/models
 import {
   buildSongOverviewPeaks,
   songOverviewClipsKey,
+  songOverviewLoudest,
   songOverviewSummariesKey,
 } from "./songOverviewPeaks";
 
@@ -128,5 +129,16 @@ describe("overview keys", () => {
 
     const before = songOverviewSummariesKey([clip("a")], {});
     expect(songOverviewSummariesKey([clip("a")], { a: summary("a", ramp) })).not.toBe(before);
+  });
+});
+
+describe("zoomed windows share the song's scale", () => {
+  it("a quiet stretch stays quiet instead of being scaled up to 1", () => {
+    const summaries = { a: summary("a", ramp) };
+    const loudest = songOverviewLoudest([clip("a")], summaries, { startSeconds: 0, endSeconds: 10 }, 10);
+    const quiet = buildSongOverviewPeaks([clip("a")], summaries, { startSeconds: 0, endSeconds: 2 }, 2, loudest);
+    expect(round(quiet)).toEqual([0.1, 0.2]);
+    // Without the shared scale the same stretch would fill the height.
+    expect(round(buildSongOverviewPeaks([clip("a")], summaries, { startSeconds: 0, endSeconds: 2 }, 2))).toEqual([0.5, 1]);
   });
 });
