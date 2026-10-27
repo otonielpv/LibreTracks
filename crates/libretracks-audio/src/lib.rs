@@ -382,10 +382,7 @@ impl AudioEngine {
                     .sorted_markers()
                     .into_iter()
                     .rev()
-                    .find(|marker| {
-                        marker.start_seconds <= self.position_seconds
-                            && category.is_none_or(|category| marker.category() == category)
-                    })
+                    .find(|marker| marker.start_seconds <= self.position_seconds)
                     .map(|marker| marker.start_seconds)
                     .or_else(|| current_region.map(|region| region.start_seconds))
                     .unwrap_or(0.0);
@@ -1623,17 +1620,23 @@ mod tests {
         assert_eq!(super::jump_execute_at(&song, 1.0, &JumpTrigger::NextCue).unwrap(), Some(4.0));
         assert_eq!(super::jump_execute_at(&song, 4.0, &JumpTrigger::NextCue).unwrap(), None);
 
+        let mut next_cue = song.section_markers[1].clone();
+        next_cue.id = "next-cue".into();
+        next_cue.start_seconds = 12.0;
+        song.section_markers.push(next_cue);
+
         let mut engine = AudioEngine::new();
         engine.load_song(song).unwrap();
         engine.seek(5.0).unwrap();
         assert_eq!(engine.toggle_vamp(VampMode::SectionMarker).unwrap(), Some(ActiveVamp {
-            start_seconds: 0.0,
+            start_seconds: 4.0,
             end_seconds: 8.0,
         }));
         engine.toggle_vamp(VampMode::SectionMarker).unwrap();
+        engine.seek(9.0).unwrap();
         let cue_vamp = engine.toggle_vamp(VampMode::Cue).unwrap().unwrap();
-        assert_eq!(cue_vamp.start_seconds, 4.0);
-        assert!(cue_vamp.end_seconds > 8.0);
+        assert_eq!(cue_vamp.start_seconds, 8.0);
+        assert_eq!(cue_vamp.end_seconds, 12.0);
     }
 
     #[test]

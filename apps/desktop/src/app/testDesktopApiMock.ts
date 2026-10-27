@@ -1585,9 +1585,7 @@ export const testDesktopApiMock = {
     }
 
     if (mode !== "bars") {
-      const markers = state.song.sectionMarkers.filter((marker) =>
-        mode === "section" || markerCategory(marker) === (mode === "cue" ? "cue" : "section"),
-      ).sort((left, right) => left.startSeconds - right.startSeconds);
+      const markers = [...state.song.sectionMarkers].sort((left, right) => left.startSeconds - right.startSeconds);
       const currentMarker =
         [...markers]
           .reverse()
@@ -1597,7 +1595,8 @@ export const testDesktopApiMock = {
       const startSeconds = currentMarker?.startSeconds ?? 0;
       const endSeconds =
         markers.find(
-          (marker) => marker.startSeconds > startSeconds,
+          (marker) => marker.startSeconds > startSeconds &&
+            (mode === "section" || markerCategory(marker) === (mode === "cue" ? "cue" : "section")),
         )?.startSeconds ?? state.song.durationSeconds;
       state.activeVamp = { startSeconds, endSeconds };
       return clone(buildSnapshot());

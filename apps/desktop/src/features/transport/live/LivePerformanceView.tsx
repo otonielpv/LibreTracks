@@ -311,15 +311,15 @@ function LivePerformanceViewComponent({
   }, [selectedPlayback.activeGroupId]);
 
   const jumpOptions = [
-    { value: "next_section", label: t("transport.jumpMode.nextSection") },
-    { value: "next_cue", label: t("transport.jumpMode.nextCue") },
+    { value: "next_section", label: t("transport.jumpMode.sectionMarker") },
+    { value: "next_cue", label: t("transport.jumpMode.cueMarker") },
     { value: "immediate", label: t("liveView.immediate") },
     { value: "after_bars", label: t("liveView.afterBars") },
     { value: "next_marker", label: t("liveView.nextMarker") },
   ];
   const songJumpOptions = [
-    { value: "next_section", label: t("transport.jumpMode.nextSection") },
-    { value: "next_cue", label: t("transport.jumpMode.nextCue") },
+    { value: "next_section", label: t("transport.jumpMode.sectionMarker") },
+    { value: "next_cue", label: t("transport.jumpMode.cueMarker") },
     { value: "immediate", label: t("liveView.immediate") },
     { value: "region_end", label: t("liveView.regionEnd") },
     { value: "after_bars", label: t("liveView.afterBars") },
