@@ -11,7 +11,13 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { SongRegionSummary, SongView, WaveformSummaryDto } from "@libretracks/shared/models";
+import {
+  markerCategory,
+  markerColor,
+  type SongRegionSummary,
+  type SongView,
+  type WaveformSummaryDto,
+} from "@libretracks/shared/models";
 
 import { DRAG_THRESHOLD_PX } from "../constants";
 import { cancelGatedFrame, markFrameActivity, requestGatedFrame, useFrameGateWake } from "../frameGate";
@@ -28,6 +34,7 @@ const MIN_VISIBLE_BARS = 2;
 const MAX_VISIBLE_BARS = 64;
 /** Widest canvas we draw; wider content is stretched (iOS canvas limits). */
 const MAX_CANVAS_PX = 8192;
+const WAVEFORM_DETAIL_FACTOR = 2;
 
 /** What the overlay needs to place things on the waveform. */
 export type ScrubGeometry = {
@@ -181,13 +188,15 @@ function SongScrubViewComponent({
     canvas.height = height;
     const context = canvas.getContext?.("2d");
     if (!context) return;
-    const peaks = buildSongOverviewPeaks(song.clips, waveformSummaries, region, canvasWidth);
+    const peakCount = Math.min(MAX_CANVAS_PX * WAVEFORM_DETAIL_FACTOR, canvasWidth * WAVEFORM_DETAIL_FACTOR);
+    const peaks = buildSongOverviewPeaks(song.clips, waveformSummaries, region, peakCount);
     context.clearRect(0, 0, canvasWidth, height);
     context.fillStyle = "rgb(186 202 197 / 0.62)";
     const mid = height / 2;
+    const bucketWidth = canvasWidth / Math.max(1, peaks.length);
     for (let index = 0; index < peaks.length; index += 1) {
       const half = Math.max(0.5, peaks[index] * mid * 0.92);
-      context.fillRect(index, mid - half, 1, half * 2);
+      context.fillRect(index * bucketWidth, mid - half, Math.max(0.5, bucketWidth), half * 2);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasWidth, clipsKey, summariesKey, region.startSeconds, region.endSeconds]);
@@ -304,6 +313,29 @@ function SongScrubViewComponent({
               </span>
             ))}
           </div>
+          {song.sectionMarkers
+            .filter(
+              (marker) =>
+                markerCategory(marker) === "section" &&
+                marker.startSeconds >= region.startSeconds &&
+                marker.startSeconds < region.endSeconds,
+            )
+            .sort((left, right) => left.startSeconds - right.startSeconds)
+            .map((marker) => (
+              <span
+                key={marker.id}
+                className="lt-setlist-scrub-section-guide"
+                role="img"
+                aria-label={marker.name}
+                title={marker.name}
+                style={{
+                  left: `${geometry.xOf(marker.startSeconds)}px`,
+                  "--lt-setlist-block-color": markerColor(marker),
+                } as CSSProperties}
+              >
+                {marker.name}
+              </span>
+            ))}
           <canvas ref={canvasRef} className="lt-setlist-scrub-canvas" aria-hidden="true" />
           {overlay?.(geometry)}
         </div>

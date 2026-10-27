@@ -270,6 +270,7 @@ LibreTracks puede proyectar vídeos (letras, fondos, clips) sincronizados con el
 
 1. Arrastra un vídeo (`.mp4`, `.mov`, `.mkv`, `.webm`…) desde el explorador al timeline o a la biblioteca. Si lo sueltas sobre una pista de audio, se crea una pista de vídeo al lado.
 2. El clip de vídeo se mueve, recorta, divide, duplica y borra como uno de audio, y tiene fundidos de entrada y salida y su propio encaje (clic derecho).
+   En la Vista Setlist, abre `Editar → Vídeo` para ajustar los clips sobre la onda de la canción: arrastra el cuerpo para moverlo, los bordes para recortarlo y los tiradores superiores para cambiar los fundidos. El botón de duplicar está junto a cada clip; el menú conserva las demás acciones.
 3. Si el vídeo trae sonido, LibreTracks pregunta si quieres **extraerlo como pista de audio**: queda en una pista nueva justo debajo, alineada con el vídeo. Puedes marcar "Recordar mi elección", y hacerlo más tarde con clic derecho → `Extraer audio`.
 
 ### Configurar la pantalla
@@ -346,7 +347,7 @@ El móvil o la tablet manda el audio **y** el vídeo: el proyector muestra solo 
 - **Desde el propio dispositivo:** `Añadir vídeo del dispositivo` en el menú de una pista de vídeo, en el `+` de pistas o en la biblioteca. El vídeo **se copia** a la carpeta de la sesión (para que viaje con ella), después de decirte cuánto ocupa.
 - Un vídeo que el móvil no sabe decodificar (por ejemplo ProRes en Android, o HEVC de 10 bits en un móvil sencillo) aparece como **No reproducible en este dispositivo**: no se borra y sigue sonando su audio si lo extrajiste en el ordenador.
 
-**Editar en el timeline:** igual que los clips de audio en el móvil: toca un clip para seleccionarlo y arrástralo (o sus bordes, o las asas de fundido) ya seleccionado. Extraer el audio de un vídeo solo se puede hacer en el ordenador.
+**Editar en el timeline y en la Vista Setlist:** igual que los clips de audio en el móvil: toca un clip para seleccionarlo y arrástralo (o sus bordes, o las asas de fundido) ya seleccionado. En `Editar → Vídeo`, duplicar está junto al clip y el menú muestra el resto de acciones. Extraer el audio de un vídeo solo se puede hacer en el ordenador.
 
 **Gama baja:** algunos móviles solo tienen un decodificador de vídeo. Entonces el indicador dice "Un solo reproductor": los saltos de sección pueden congelar la imagen un instante, pero el audio no se ve afectado.
 

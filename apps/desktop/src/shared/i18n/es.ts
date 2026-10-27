@@ -2738,6 +2738,13 @@ const es = {
       atPlayhead: "En el playhead",
       atSection: "Al inicio de la sección",
       trackTitle: "Pista de vídeo {{name}}",
+      editHint: "Arrastra el clip para moverlo; usa los bordes para recortar y los tiradores superiores para ajustar los fundidos.",
+      moveClip: "Mover {{name}}",
+      trimStart: "Recortar el inicio de {{name}}",
+      trimEnd: "Recortar el final de {{name}}",
+      fadeIn: "Ajustar el fundido de entrada de {{name}}",
+      fadeOut: "Ajustar el fundido de salida de {{name}}",
+      duplicate: "Duplicar {{name}}",
     },
     tempo: {
       lane: "Tempo",

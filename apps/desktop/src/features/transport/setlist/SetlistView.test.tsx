@@ -70,6 +70,17 @@ describe("SetlistView skeleton", () => {
     expect(screen.queryByRole("button", { name: "setlistView.pane.song" })).toBeNull();
   });
 
+  it.each(["automation", "midi", "video"] as const)(
+    "wide keeps the track timeline visible while editing %s",
+    (mode) => {
+      const props = testSetlistProps();
+      props.menus = { globalTrackListContextMenu: () => [] } as never;
+      const { container } = render(<SetlistView {...props} layoutClass="wide" />);
+      act(() => useSetlistStore.getState().setEditMode(mode));
+      expect(container.querySelector("[data-setlist-zone='mixer'] .lt-setlist-lanes")).not.toBeNull();
+    },
+  );
+
   it.each(["wide", "medium", "short"] as const)(
     "%s shows the edit drawer only while editing",
     (layoutClass) => {

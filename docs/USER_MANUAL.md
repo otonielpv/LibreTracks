@@ -270,6 +270,7 @@ LibreTracks can project videos (lyrics, backgrounds, clips) in sync with the aud
 
 1. Drag a video (`.mp4`, `.mov`, `.mkv`, `.webm`…) from your file browser onto the timeline or the library. Dropped on an audio track, a video track is created next to it.
 2. A video clip moves, trims, splits, duplicates and deletes like an audio clip, and has fade in/out and its own fit (right click).
+   In Setlist view, open `Edit → Video` to edit clips on the song waveform: drag the body to move it, the edges to trim, and the top handles to adjust fades. Use the duplicate button beside a clip; its menu keeps the other actions.
 3. If the video has sound, LibreTracks asks whether to **extract it as an audio track**: it goes on a new track right below, lined up with the video. You can tick "Remember my choice", and do it later with right click → `Extract audio`.
 
 ### Setting up the display
@@ -346,7 +347,7 @@ The phone or tablet drives the audio **and** the video: the projector shows only
 - **From the device itself:** `Add video from the device` in a video track's menu, in the tracks `+` menu or in the library. The video is **copied** into the session folder (so it travels with it), after telling you its size.
 - A video the phone cannot decode (ProRes on Android, or 10-bit HEVC on a basic phone) shows as **Not playable on this device**: it is not removed.
 
-**Editing on the timeline:** like audio clips on a phone: tap a clip to select it, then drag it (or its edges, or the fade handles). Extracting a video's audio can only be done on a computer.
+**Editing on the timeline and in Setlist view:** like audio clips on a phone: tap a clip to select it, then drag it (or its edges, or the fade handles). In `Edit → Video`, use the duplicate button beside a clip and its menu for the other actions. Extracting a video's audio can only be done on a computer.
 
 **Low-end phones:** some phones have a single video decoder. The indicator then says "One player": section jumps may freeze the picture for an instant, but the audio is not affected.
 

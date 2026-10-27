@@ -2707,6 +2707,13 @@ const en = {
       atPlayhead: "At the playhead",
       atSection: "At the section start",
       trackTitle: "Video track {{name}}",
+      editHint: "Drag a clip to move it; use its edges to trim and the top handles to adjust fades.",
+      moveClip: "Move {{name}}",
+      trimStart: "Trim the start of {{name}}",
+      trimEnd: "Trim the end of {{name}}",
+      fadeIn: "Adjust the fade-in of {{name}}",
+      fadeOut: "Adjust the fade-out of {{name}}",
+      duplicate: "Duplicate {{name}}",
     },
     tempo: {
       lane: "Tempo",

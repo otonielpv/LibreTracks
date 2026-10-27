@@ -3091,6 +3091,15 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   background: var(--lt-setlist-surface-raised);
 }
 
+.lt-setlist-video-item {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 0.25rem;
+}
+
+.lt-setlist-video-item.is-selected {
+  border-color: var(--lt-setlist-accent);
+}
+
 .lt-setlist-automation-main {
   display: grid;
   gap: 0.15rem;
@@ -3213,6 +3222,38 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
   line-height: 1.3rem;
+}
+
+.lt-setlist-scrub-section-guide {
+  position: absolute;
+  top: 1.42rem;
+  z-index: 1;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.25rem;
+  max-width: 9rem;
+  padding: 0 0.35rem;
+  overflow: hidden;
+  border-left: 2px solid var(--lt-setlist-block-color);
+  background: rgb(9 11 10 / 0.88);
+  color: var(--lt-setlist-block-color);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.lt-setlist-scrub-section-guide::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  bottom: -30rem;
+  left: -2px;
+  width: 2px;
+  background: var(--lt-setlist-block-color);
+  opacity: 0.65;
 }
 
 .lt-setlist-scrub-canvas {
@@ -3832,7 +3873,7 @@ html.lt-mobile .lt-setlist-meter-marker {
 }
 
 .lt-setlist-scrub-automation {
-  top: 1.5rem;
+  top: 3rem;
   color: #ffd27a;
 }
 
@@ -3854,7 +3895,7 @@ html.lt-mobile .lt-setlist-meter-marker {
 }
 
 .lt-setlist-scrub-midi {
-  top: calc(1.5rem + var(--lt-midi-row, 0) * 1.8rem);
+  top: calc(3rem + var(--lt-midi-row, 0) * 1.8rem);
   color: #c9a8ff;
 }
 
@@ -4350,12 +4391,23 @@ button.lt-setlist-track-chip-name {
 /* Vídeo sobre la onda del editor: una barra por clip, de su duración. */
 .lt-setlist-scrub-video {
   position: absolute;
-  top: calc(1.5rem + var(--lt-video-row, 0) * 1.8rem);
+  top: calc(3rem + var(--lt-video-row, 0) * 1.8rem);
   z-index: 2;
   box-sizing: border-box;
-  display: inline-flex;
+  display: block;
+  min-height: 1.6rem;
+  overflow: visible;
+}
+
+.lt-setlist-scrub-video-body {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  display: flex;
   align-items: center;
   gap: 0.25rem;
+  width: 100%;
   min-height: 1.6rem;
   padding: 0 0.35rem;
   overflow: hidden;
@@ -4366,23 +4418,155 @@ button.lt-setlist-track-chip-name {
   font: inherit;
   font-size: 0.72rem;
   font-weight: 700;
+  cursor: grab;
+  touch-action: none;
+}
+
+.lt-setlist-scrub-video-body:focus-visible,
+.lt-setlist-scrub-video-handle:focus-visible {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: 1px;
+}
+
+.lt-setlist-scrub-video.is-selected .lt-setlist-scrub-video-body {
+  border-color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-scrub-video-name {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: pointer;
+}
+
+.lt-setlist-scrub-video-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.lt-setlist-scrub-video-fade.is-in {
+  left: 0;
+  width: var(--lt-video-fade-in, 0px);
+  background: linear-gradient(90deg, transparent, rgb(0 0 0 / 0.42));
+}
+
+.lt-setlist-scrub-video-fade.is-out {
+  right: 0;
+  width: var(--lt-video-fade-out, 0px);
+  background: linear-gradient(90deg, rgb(0 0 0 / 0.42), transparent);
+}
+
+.lt-setlist-scrub-video-handle {
+  position: absolute;
+  z-index: 2;
+  display: none;
+  box-sizing: border-box;
+  width: 10px;
+  min-height: 1.2rem;
+  padding: 0;
+  border: 1px solid rgb(9 11 10 / 0.9);
+  border-radius: 2px;
+  background: #e9f1ee;
+  opacity: 0.92;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.lt-setlist-scrub-video.is-selected .lt-setlist-scrub-video-handle {
+  display: block;
+}
+
+.lt-setlist-scrub-video-handle.is-trim-start {
+  top: 0;
+  bottom: 0;
+  left: -4px;
+}
+
+.lt-setlist-scrub-video-handle.is-trim-end {
+  top: 0;
+  right: -4px;
+  bottom: 0;
+}
+
+.lt-setlist-scrub-video-handle.is-fade-in,
+.lt-setlist-scrub-video-handle.is-fade-out {
+  top: -4px;
+  width: 12px;
+  height: 12px;
+  min-height: 0;
+  border-radius: 50%;
+  background: #57f1db;
+}
+
+.lt-setlist-scrub-video-handle.is-fade-in {
+  left: calc(var(--lt-video-fade-in, 0px) + 2px);
+}
+
+.lt-setlist-scrub-video-handle.is-fade-out {
+  right: calc(var(--lt-video-fade-out, 0px) + 2px);
 }
 
 .lt-setlist-scrub-video.is-missing {
-  border-style: dashed;
-  opacity: 0.6;
+  opacity: 0.65;
 }
 
-.lt-setlist-scrub-video .material-symbols-outlined {
+.lt-setlist-scrub-video.is-missing .lt-setlist-scrub-video-body {
+  border-style: dashed;
+}
+
+.lt-setlist-scrub-video-body .material-symbols-outlined {
+  position: relative;
+  z-index: 1;
   flex: 0 0 auto;
   font-size: 0.95rem;
 }
 
+.lt-setlist-scrub-video-name {
+  position: relative;
+  z-index: 1;
+}
+
+.lt-setlist-scrub-video.is-selected {
+  z-index: 4;
+}
+
+.lt-setlist-video-edit-hint {
+  margin: 0;
+  color: var(--lt-setlist-text-muted);
+  font-size: 0.78rem;
+}
+
 .lt-setlist-video-icon {
   color: #ff8a65;
+}
+
+html.lt-mobile .lt-setlist-scrub-video-handle {
+  width: 22px;
+  min-height: 1.8rem;
+}
+
+html.lt-mobile .lt-setlist-scrub-video-handle.is-trim-start {
+  left: -10px;
+}
+
+html.lt-mobile .lt-setlist-scrub-video-handle.is-trim-end {
+  right: -10px;
+}
+
+html.lt-mobile .lt-setlist-scrub-video-handle.is-fade-in,
+html.lt-mobile .lt-setlist-scrub-video-handle.is-fade-out {
+  top: -7px;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+}
+
+html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
 }
 
 /* ---- Fila de canciones redimensionable (wide): asa abajo; más alta, las

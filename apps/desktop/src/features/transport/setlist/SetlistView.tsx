@@ -487,7 +487,7 @@ function SetlistViewComponent({
           onPointerDown={beginMixerResize}
         />
       ) : null}
-      {(editMode === "lanes" || editMode === "automation") && layout !== "short" ? lanes : editMode === "tracks" && layout !== "short" ? trackList : (
+      {(editMode === "lanes" || editMode === "automation" || editMode === "midi" || editMode === "video") && layout !== "short" ? lanes : editMode === "tracks" && layout !== "short" ? trackList : (
       <SetlistMixer
         song={performance.song}
         region={shownRegion}
