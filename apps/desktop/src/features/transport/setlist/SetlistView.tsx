@@ -508,18 +508,16 @@ function SetlistViewComponent({
         <>
           {editMode === "arrangement" ? (
             layout === "short" ? (
-              <div className="lt-setlist-arrangement-mobile-waveform is-main">
-                <SetlistArrangementEditor
-                  region={shownRegion}
-                  handlers={structureHandlers}
-                  layout={layout}
-                  song={performance.song}
-                  waveformSummaries={waveformSummaries}
-                  menus={menus}
-                  positionSecondsRef={performance.positionSecondsRef}
-                  onSeek={seekInWaveEditor}
-                />
-              </div>
+              <SetlistArrangementEditor
+                region={shownRegion}
+                handlers={structureHandlers}
+                layout={layout}
+                song={performance.song}
+                waveformSummaries={waveformSummaries}
+                menus={menus}
+                positionSecondsRef={performance.positionSecondsRef}
+                onSeek={seekInWaveEditor}
+              />
             ) : (
               <OverviewZoom
                 startSeconds={shownRegion.startSeconds}

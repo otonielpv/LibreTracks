@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SectionMarkerSummary, SongRegionSummary, SongView } from "@libretracks/shared/models";
@@ -197,10 +197,14 @@ describe("Edit → Arrangement", () => {
     fireEvent.click(snap);
     expect(useTimelineUIStore.getState().snapEnabled).toBe(true);
 
-    const waveform = container.querySelector<HTMLElement>(
-      ".lt-setlist-arrangement-mobile-waveform.is-main .lt-setlist-arrangement",
+    const viewport = container.querySelector<HTMLElement>(
+      ".lt-setlist-arrangement-mobile-waveform.is-main",
     )!;
-    const widthBeforeZoom = waveform.style.width;
+    Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 250 });
+    viewport.getBoundingClientRect = () =>
+      ({ left: 0, right: 250, width: 250, top: 0, bottom: 200, height: 200 }) as DOMRect;
+    const layer = viewport.querySelector<HTMLElement>(".lt-setlist-zoom-layer")!;
+    const widthBeforeZoom = layer.style.width;
     expect(screen.queryByRole("button", { name: "setlistView.lanes.zoomIn" })).toBeNull();
     expect(screen.queryByRole("button", { name: "setlistView.lanes.zoomOut" })).toBeNull();
     const pointer = (
@@ -227,12 +231,27 @@ describe("Edit → Arrangement", () => {
     pointer(handle, "pointerdown", 1, 100);
     pointer(blockName, "pointerdown", 2, 200);
     pointer(window, "pointermove", 2, 300);
-    expect(waveform.style.transform).not.toBe("");
+    expect(layer.style.transform).toContain("scaleX");
     pointer(window, "pointerup", 1, 100);
     pointer(window, "pointerup", 2, 300);
-    expect(useSetlistStore.getState().overviewZoom).toBe(2);
-    expect(waveform.style.width).not.toBe(widthBeforeZoom);
-    expect(waveform.style.transform).toBe("");
+    await waitFor(() => expect(useSetlistStore.getState().overviewZoom).toBe(2));
+    expect(layer.style.width).not.toBe(widthBeforeZoom);
+    expect(layer.style.transform).not.toContain("scaleX");
+
+    const overview = viewport.querySelector<HTMLElement>(".lt-setlist-overview.is-short")!;
+    const transformBeforePan = layer.style.transform;
+    pointer(overview, "pointerdown", 3, 250);
+    pointer(window, "pointermove", 3, 100);
+    expect(layer.style.transform).not.toBe(transformBeforePan);
+    pointer(window, "pointerup", 3, 100);
+
+    pointer(overview, "pointerdown", 4, 100);
+    pointer(overview, "pointerdown", 5, 300);
+    pointer(window, "pointermove", 5, 200);
+    pointer(window, "pointerup", 4, 100);
+    pointer(window, "pointerup", 5, 200);
+    await waitFor(() => expect(useSetlistStore.getState().overviewZoom).toBe(1));
+    expect(layer.style.transform).toContain("translate3d");
   });
 
   it("arrangement playhead scrubs continuously across section boundaries", async () => {

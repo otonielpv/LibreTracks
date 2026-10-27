@@ -1,6 +1,7 @@
 import {
   createContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -33,9 +34,14 @@ const WHEEL_ZOOM_FACTOR = 1.25;
 
 /** How far to slide a `zoom`× wide layer so `fraction` of it sits in the
  * middle of a `viewportWidth` window, never past its edges. */
-export function followOffset(fraction: number, viewportWidth: number, zoom: number): number {
-  if (zoom <= 1 || viewportWidth <= 0) return 0;
-  const layerWidth = viewportWidth * zoom;
+export function followOffset(
+  fraction: number,
+  viewportWidth: number,
+  zoom: number,
+  baseLayerWidth = viewportWidth,
+): number {
+  const layerWidth = baseLayerWidth * zoom;
+  if (zoom <= 1 || layerWidth <= viewportWidth || viewportWidth <= 0) return 0;
   const centred = fraction * layerWidth - viewportWidth / 2;
   return Math.max(0, Math.min(layerWidth - viewportWidth, centred));
 }
@@ -48,11 +54,12 @@ export function anchoredOffset(
   viewportWidth: number,
   fromZoom: number,
   toZoom: number,
+  baseLayerWidth = viewportWidth,
 ): number {
   if (viewportWidth <= 0) return 0;
-  const fraction = (offset + anchorX) / (viewportWidth * fromZoom);
-  const next = fraction * viewportWidth * toZoom - anchorX;
-  return Math.max(0, Math.min(viewportWidth * toZoom - viewportWidth, next));
+  const fraction = (offset + anchorX) / (baseLayerWidth * fromZoom);
+  const next = fraction * baseLayerWidth * toZoom - anchorX;
+  return Math.max(0, Math.min(baseLayerWidth * toZoom - viewportWidth, next));
 }
 
 type OverviewZoomProps = {
@@ -68,6 +75,10 @@ type OverviewZoomProps = {
   children: ReactNode;
   /** Outside the layer (they must not slide): loop / next. */
   overlay?: ReactNode;
+  /** Extra layer width at 1×, in rem, for content that must not shrink below its natural width. */
+  minLayerWidthRem?: number;
+  /** Additional class for a specialized viewport. */
+  viewportClassName?: string;
 };
 
 const isControl = (target: EventTarget | null) =>
@@ -91,6 +102,8 @@ export function OverviewZoom({
   tapToSeek = true,
   children,
   overlay,
+  minLayerWidthRem = 0,
+  viewportClassName,
 }: OverviewZoomProps) {
   useFrameGateWake();
   const zoom = useSetlistStore((state) => state.overviewZoom);
@@ -128,9 +141,22 @@ export function OverviewZoom({
     windowRef.current.offset = offset;
     layer?.style.setProperty("transform", offset ? `translate3d(${-offset}px, 0, 0)` : "none");
   };
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const maxOffset = Math.max(
+      0,
+      baseLayerWidth(viewport) * zoomRef.current - viewport.clientWidth,
+    );
+    if (offsetRef.current > maxOffset) applyOffset(maxOffset);
+  }, [minLayerWidthRem, zoom]);
   windowRef.current.panBy = (deltaPx) => {
-    const viewportWidth = windowRef.current.width;
-    const maxOffset = Math.max(0, viewportWidth * zoomRef.current - viewportWidth);
+    const viewport = viewportRef.current;
+    const viewportWidth = viewport?.clientWidth ?? windowRef.current.width;
+    const maxOffset = Math.max(
+      0,
+      (viewport ? baseLayerWidth(viewport) : viewportWidth) * zoomRef.current - viewportWidth,
+    );
     const nextOffset = Math.max(0, Math.min(maxOffset, offsetRef.current + deltaPx));
     if (Math.abs(nextOffset - offsetRef.current) > 0.01) {
       applyOffset(nextOffset);
@@ -169,7 +195,12 @@ export function OverviewZoom({
         // Fractional on purpose: the layer is composited (will-change), so the
         // GPU slides it sub-pixel. Rounding made it step a whole pixel a few
         // times a second when zoomed in, which read as low FPS (the iPhone).
-        const offset = followOffset(fraction, viewport.clientWidth, zoomRef.current);
+        const offset = followOffset(
+          fraction,
+          viewport.clientWidth,
+          zoomRef.current,
+          baseLayerWidth(viewport),
+        );
         if (!(Math.abs(offset - last) < 0.01)) {
           applyOffset(offset);
           last = offset;
@@ -183,7 +214,7 @@ export function OverviewZoom({
     frameId = requestGatedFrame(frame);
     return () => cancelGatedFrame(frameId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endSeconds, isPlaying, positionSecondsRef, startSeconds, zoom]);
+  }, [endSeconds, isPlaying, minLayerWidthRem, positionSecondsRef, startSeconds, zoom]);
 
   const commitWheelZoomPreview = () => {
     const preview = wheelZoomPreviewRef.current;
@@ -194,7 +225,7 @@ export function OverviewZoom({
       wheelZoomTimerRef.current = null;
     }
     zoomRef.current = preview.targetZoom;
-    layerRef.current?.style.setProperty("width", `${preview.targetZoom * 100}%`);
+    layerRef.current?.style.setProperty("width", layerWidthStyle(preview.targetZoom));
     applyOffset(preview.offset);
     setZoom(preview.targetZoom);
     markFrameActivity();
@@ -210,7 +241,14 @@ export function OverviewZoom({
     const baseZoom = preview?.baseZoom ?? zoomRef.current;
     const fromZoom = preview?.targetZoom ?? zoomRef.current;
     const fromOffset = preview?.offset ?? offsetRef.current;
-    const offset = anchoredOffset(fromOffset, anchorX, width, fromZoom, clamped);
+    const offset = anchoredOffset(
+      fromOffset,
+      anchorX,
+      width,
+      fromZoom,
+      clamped,
+      baseLayerWidth(viewport),
+    );
     wheelZoomPreviewRef.current = { baseZoom, targetZoom: clamped, offset };
     const layer = layerRef.current;
     layer?.style.setProperty(
@@ -234,11 +272,22 @@ export function OverviewZoom({
   const pinchRef = useRef<{
     distance: number;
     zoom: number;
+    baseWidth: number;
     offset: number;
     anchor0: number;
     target: number;
     visualOffset: number;
   } | null>(null);
+  const arrangementHandlePointerRef = useRef<number | null>(null);
+  const ignoredCancelPointerRef = useRef<number | null>(null);
+  const baseLayerWidth = (viewport: HTMLElement) => {
+    const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    return Math.max(viewport.clientWidth, minLayerWidthRem * rem);
+  };
+  const layerWidthStyle = (scale: number) =>
+    minLayerWidthRem > 0
+      ? `max(${scale * 100}%, ${minLayerWidthRem * scale}rem)`
+      : `${scale * 100}%`;
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     commitWheelZoomPreview();
     if (pointersRef.current.size === 0) suppressClickRef.current = false;
@@ -246,17 +295,24 @@ export function OverviewZoom({
     const sectionHandle =
       event.target instanceof Element &&
       Boolean(event.target.closest(".lt-setlist-section-handle"));
+    const arrangementHandle =
+      event.target instanceof Element &&
+      Boolean(event.target.closest(".lt-structure-handle, .lt-setlist-arrangement-insert"));
     if (
       event.pointerType !== "touch" ||
-      (isControl(event.target) && !sectionHandle)
+      (isControl(event.target) && !sectionHandle && !arrangementHandle)
     ) {
       return;
     }
     const sectionTap = event.target instanceof Element && Boolean(event.target.closest(".lt-setlist-map-block"));
-    if (!sectionTap && !sectionHandle) event.stopPropagation();
+    if (!sectionTap && !sectionHandle && !arrangementHandle) event.stopPropagation();
     const viewport = viewportRef.current;
     if (!viewport) return;
     const pointers = pointersRef.current;
+    if (pointers.size === 0) arrangementHandlePointerRef.current = null;
+    if (pointers.size === 0 && arrangementHandle) {
+      arrangementHandlePointerRef.current = event.pointerId;
+    }
     pointers.set(event.pointerId, event.clientX);
     if (pointers.size === 2) {
       suppressClickRef.current = true;
@@ -265,11 +321,25 @@ export function OverviewZoom({
       pinchRef.current = {
         distance: Math.abs(a - b),
         zoom: zoomRef.current,
+        baseWidth: baseLayerWidth(viewport),
         offset: offsetRef.current,
         anchor0: (a + b) / 2 - viewport.getBoundingClientRect().left,
         target: zoomRef.current,
         visualOffset: offsetRef.current,
       };
+      if (arrangementHandle || arrangementHandlePointerRef.current !== null) {
+        event.preventDefault();
+        event.stopPropagation();
+        const cancelPointerId = arrangementHandlePointerRef.current;
+        if (cancelPointerId !== null) {
+          ignoredCancelPointerRef.current = cancelPointerId;
+          const cancel = new Event("pointercancel");
+          Object.defineProperty(cancel, "pointerId", { value: cancelPointerId });
+          window.dispatchEvent(cancel);
+          ignoredCancelPointerRef.current = null;
+          arrangementHandlePointerRef.current = null;
+        }
+      }
       return;
     }
     if (pointers.size > 2) return;
@@ -292,8 +362,14 @@ export function OverviewZoom({
           const target = Math.max(1, Math.min(OVERVIEW_MAX_ZOOM, pinch.zoom * (distance / pinch.distance)));
           // The song's moment under the fingers when they landed stays under
           // them, wherever they go.
-          const content = (pinch.offset + pinch.anchor0) / (width * pinch.zoom);
-          const offset = Math.max(0, Math.min(width * target - width, content * width * target - anchorX));
+          const content = (pinch.offset + pinch.anchor0) / (pinch.baseWidth * pinch.zoom);
+          const offset = Math.max(
+            0,
+            Math.min(
+              pinch.baseWidth * target - width,
+              content * pinch.baseWidth * target - anchorX,
+            ),
+          );
           pinch.target = target;
           pinch.visualOffset = offset;
           layerRef.current?.style.setProperty(
@@ -305,20 +381,30 @@ export function OverviewZoom({
         }
         return;
       }
-      if (sectionHandle) return;
+      if (sectionHandle || arrangementHandle) return;
       const dx = moveEvent.clientX - startX;
       if (!moved && Math.abs(dx) < DRAG_THRESHOLD_PX) return;
       moved = true;
       suppressClickRef.current = true;
       const width = viewport.clientWidth;
-      const max = Math.max(0, width * zoomRef.current - width);
+      const max = Math.max(0, baseLayerWidth(viewport) * zoomRef.current - width);
       applyOffset(Math.max(0, Math.min(max, startOffset - dx)));
       pauseFollowAfterManualNavigation();
       markFrameActivity();
     };
     const onUp = (upEvent: PointerEvent) => {
+      if (
+        upEvent.type === "pointercancel" &&
+        ignoredCancelPointerRef.current === upEvent.pointerId
+      ) {
+        ignoredCancelPointerRef.current = null;
+        return;
+      }
       if (!pointers.has(upEvent.pointerId)) return;
       pointers.delete(upEvent.pointerId);
+      if (arrangementHandlePointerRef.current === upEvent.pointerId) {
+        arrangementHandlePointerRef.current = null;
+      }
       if (pointers.size > 0) return;
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
@@ -331,11 +417,25 @@ export function OverviewZoom({
         // layer was, so nothing jumps.
         zoomRef.current = pinch.target;
         pendingZoomRef.current = pinch.target;
-        layerRef.current?.style.setProperty("width", `${pinch.target * 100}%`);
-        applyOffset(pinch.target <= 1 ? 0 : pinch.visualOffset);
+        layerRef.current?.style.setProperty("width", layerWidthStyle(pinch.target));
+        applyOffset(
+          Math.max(
+            0,
+            Math.min(baseLayerWidth(viewport) * pinch.target - viewport.clientWidth, pinch.visualOffset),
+          ),
+        );
         markFrameActivity();
       }
-      if (!moved && !pinch && !sectionTap && !sectionHandle && upEvent.type === "pointerup" && tapToSeek && onSeek) {
+      if (
+        !moved &&
+        !pinch &&
+        !sectionTap &&
+        !sectionHandle &&
+        !arrangementHandle &&
+        upEvent.type === "pointerup" &&
+        tapToSeek &&
+        onSeek
+      ) {
         // A tap: the moment under the finger, through the (moved) layer.
         const layer = layerRef.current;
         const box = layer?.getBoundingClientRect();
@@ -374,7 +474,7 @@ export function OverviewZoom({
     if (delta === 0) return;
     event.preventDefault();
     const width = viewport.clientWidth;
-    const max = Math.max(0, width * zoomRef.current - width);
+    const max = Math.max(0, baseLayerWidth(viewport) * zoomRef.current - width);
     applyOffset(Math.max(0, Math.min(max, offsetRef.current + delta)));
     pauseFollowAfterManualNavigation();
     markFrameActivity();
@@ -396,7 +496,7 @@ export function OverviewZoom({
     <>
       <div
         ref={viewportRef}
-        className="lt-setlist-zoom-viewport"
+        className={`lt-setlist-zoom-viewport${viewportClassName ? ` ${viewportClassName}` : ""}`}
         onPointerDownCapture={handlePointerDown}
         onClickCapture={(event) => {
           if (!suppressClickRef.current) return;
@@ -407,7 +507,7 @@ export function OverviewZoom({
         <div
           ref={layerRef}
           className="lt-setlist-zoom-layer"
-          style={{ width: `${zoom * 100}%` }}
+          style={{ width: layerWidthStyle(zoom) }}
           data-zoom={zoom}
         >
           <ZoomWindowContext.Provider value={windowRef.current}>{children}</ZoomWindowContext.Provider>

@@ -1,11 +1,7 @@
 import {
   memo,
   useEffect,
-  useLayoutEffect,
-  useRef,
   useState,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 import type {
@@ -42,11 +38,10 @@ import {
 } from "../structure/useArrangementActions";
 import { requestEditMode, setEditLeaveGuard } from "./setlistStore";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
-import { OVERVIEW_MAX_ZOOM, ZoomWindowContext } from "./OverviewZoom";
+import { OverviewZoom, ZoomWindowContext } from "./OverviewZoom";
 import { SongOverviewStrip } from "./SongOverviewStrip";
 import { SongBarRuler } from "./SongBarRuler";
 import { SetlistSnapToggle } from "./SetlistSnapToggle";
-import { useSetlistStore } from "./setlistStore";
 import type { TimelineMenus } from "../menus/timelineMenus";
 
 /**
@@ -138,178 +133,6 @@ function SetlistArrangementEditorComponent({
 }) {
   const { t } = useTranslation();
   const actions = useArrangementActions(handlers);
-  const overviewZoom = useSetlistStore((state) => state.overviewZoom);
-  const setOverviewZoom = useSetlistStore((state) => state.setOverviewZoom);
-  const arrangementRef = useRef<HTMLDivElement | null>(null);
-  const touchPointersRef = useRef(new Map<number, number>());
-  const pinchRef = useRef<{
-    startDistance: number;
-    startZoom: number;
-    startScrollLeft: number;
-    anchorFraction: number;
-    contentWidth: number;
-    centerX: number;
-    targetZoom: number;
-    blockCount: number;
-  } | null>(null);
-  const ignoredCancelPointerRef = useRef<number | null>(null);
-  const suppressClickRef = useRef(false);
-  const cleanupPointerListenersRef = useRef<(() => void) | null>(null);
-  const pinchCommitRef = useRef<{
-    targetZoom: number;
-    anchorFraction: number;
-    centerX: number;
-  } | null>(null);
-  useEffect(
-    () => () => {
-      cleanupPointerListenersRef.current?.();
-      arrangementRef.current?.style.removeProperty("transform");
-    },
-    [],
-  );
-  useLayoutEffect(() => {
-    const commit = pinchCommitRef.current;
-    if (!commit || overviewZoom !== commit.targetZoom) return;
-    const arrangement = arrangementRef.current;
-    const viewport = arrangement?.closest<HTMLElement>(
-      ".lt-setlist-arrangement-mobile-waveform.is-main",
-    );
-    if (viewport) {
-      const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-      viewport.scrollLeft = Math.max(
-        0,
-        Math.min(maxScroll, commit.anchorFraction * viewport.scrollWidth - commit.centerX),
-      );
-    }
-    arrangement?.style.removeProperty("transform");
-    pinchCommitRef.current = null;
-  }, [overviewZoom]);
-  const handleTouchPointerDownCapture = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (layout !== "short" || event.pointerType !== "touch") return;
-    const pointers = touchPointersRef.current;
-    if (pointers.size >= 2 && !pointers.has(event.pointerId)) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    pointers.set(event.pointerId, event.clientX);
-    if (!cleanupPointerListenersRef.current) {
-      const onMove = (moveEvent: PointerEvent) => {
-        if (!pointers.has(moveEvent.pointerId)) return;
-        pointers.set(moveEvent.pointerId, moveEvent.clientX);
-        const pinch = pinchRef.current;
-        if (!pinch || pointers.size < 2) return;
-        moveEvent.preventDefault();
-        const [first, second] = [...pointers.values()];
-        const distance = Math.abs(first - second);
-        if (distance <= 0) return;
-        const targetZoom = Math.max(
-          1,
-          Math.min(OVERVIEW_MAX_ZOOM, pinch.startZoom * distance / pinch.startDistance),
-        );
-        pinch.targetZoom = targetZoom;
-        const arrangement = arrangementRef.current;
-        const viewport = arrangement?.closest<HTMLElement>(
-          ".lt-setlist-arrangement-mobile-waveform.is-main",
-        );
-        if (!arrangement || !viewport) return;
-        const bounds = viewport.getBoundingClientRect();
-        pinch.centerX = (first + second) / 2 - bounds.left;
-        const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-        const targetWidth = Math.max(
-          viewport.clientWidth,
-          pinch.blockCount * 9 * rem * targetZoom + 3 * rem,
-        );
-        const scale = targetWidth / pinch.contentWidth;
-        const targetOffset = pinch.anchorFraction * targetWidth - pinch.centerX;
-        const translateX = pinch.startScrollLeft - targetOffset;
-        arrangement.style.setProperty(
-          "transform",
-          `translate3d(${translateX}px, 0, 0) scaleX(${scale})`,
-        );
-      };
-      const onEnd = (endEvent: PointerEvent) => {
-        if (
-          endEvent.type === "pointercancel" &&
-          ignoredCancelPointerRef.current === endEvent.pointerId
-        ) {
-          ignoredCancelPointerRef.current = null;
-          return;
-        }
-        if (!pointers.delete(endEvent.pointerId) || pointers.size > 0) return;
-        const pinch = pinchRef.current;
-        pinchRef.current = null;
-        if (pinch) {
-          suppressClickRef.current = true;
-          if (pinch.targetZoom !== pinch.startZoom) {
-            pinchCommitRef.current = {
-              targetZoom: pinch.targetZoom,
-              anchorFraction: pinch.anchorFraction,
-              centerX: pinch.centerX,
-            };
-            setOverviewZoom(pinch.targetZoom);
-          } else {
-            arrangementRef.current?.style.removeProperty("transform");
-          }
-        }
-        cleanupPointerListenersRef.current?.();
-        pointers.clear();
-      };
-      window.addEventListener("pointermove", onMove, { passive: false });
-      window.addEventListener("pointerup", onEnd);
-      window.addEventListener("pointercancel", onEnd);
-      cleanupPointerListenersRef.current = () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onEnd);
-        window.removeEventListener("pointercancel", onEnd);
-        cleanupPointerListenersRef.current = null;
-      };
-    }
-    if (pointers.size !== 2) return;
-    const [first, second] = [...pointers.values()];
-    const distance = Math.abs(first - second);
-    const arrangement = arrangementRef.current;
-    const viewport = arrangement?.closest<HTMLElement>(
-      ".lt-setlist-arrangement-mobile-waveform.is-main",
-    );
-    if (distance <= 0 || !arrangement || !viewport) return;
-    const bounds = viewport.getBoundingClientRect();
-    const centerX = (first + second) / 2 - bounds.left;
-    const startZoom = useSetlistStore.getState().overviewZoom;
-    const startScrollLeft = viewport.scrollLeft;
-    const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    const contentWidth = Math.max(
-      viewport.scrollWidth,
-      viewport.clientWidth,
-      actions.draft!.blocks.length * 9 * rem * startZoom + 3 * rem,
-    );
-    const firstPointerId = [...pointers.keys()][0];
-    pinchRef.current = {
-      startDistance: distance,
-      startZoom,
-      startScrollLeft,
-      anchorFraction: Math.max(0, Math.min(1, (startScrollLeft + centerX) / contentWidth)),
-      contentWidth,
-      centerX,
-      targetZoom: startZoom,
-      blockCount: actions.draft!.blocks.length,
-    };
-    event.preventDefault();
-    event.stopPropagation();
-    if (firstPointerId !== undefined) {
-      ignoredCancelPointerRef.current = firstPointerId;
-      const cancel = new Event("pointercancel");
-      Object.defineProperty(cancel, "pointerId", { value: firstPointerId });
-      window.dispatchEvent(cancel);
-      ignoredCancelPointerRef.current = null;
-    }
-  };
-  const handleClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (!suppressClickRef.current) return;
-    suppressClickRef.current = false;
-    event.preventDefault();
-    event.stopPropagation();
-  };
   if (!actions.structure || !actions.draft) return null;
   const structure = actions.structure;
   const sections = new Map(structure.sections.map((section) => [section.markerId, section]));
@@ -354,17 +177,9 @@ function SetlistArrangementEditorComponent({
       <span className="material-symbols-outlined" aria-hidden="true">add</span>
     </button>
   );
-  return (
+  const editor = (
     <div
-      ref={arrangementRef}
       className={`lt-setlist-arrangement is-waveform is-${layout}`}
-      onPointerDownCapture={handleTouchPointerDownCapture}
-      onClickCapture={handleClickCapture}
-      style={
-        layout === "short"
-          ? { width: `max(100%, ${actions.draft.blocks.length * 9 * overviewZoom + 3}rem)` }
-          : undefined
-      }
     >
       <SongOverviewStrip
         region={region}
@@ -409,6 +224,20 @@ function SetlistArrangementEditorComponent({
         }}
       />
     </div>
+  );
+  if (layout !== "short") return editor;
+  return (
+    <OverviewZoom
+      startSeconds={region.startSeconds}
+      endSeconds={region.endSeconds}
+      positionSecondsRef={positionSecondsRef}
+      onSeek={onSeek}
+      tapToSeek={false}
+      minLayerWidthRem={actions.draft.blocks.length * 9 + 3}
+      viewportClassName="lt-setlist-arrangement-mobile-waveform is-main"
+    >
+      {editor}
+    </OverviewZoom>
   );
 }
 
