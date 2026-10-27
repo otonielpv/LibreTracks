@@ -5,8 +5,10 @@ import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
 /** Mobile-only affordance: scrolling remains the default header gesture. */
 export function MobileTrackReorderToggle({
+  className = "lt-icon-button",
   showLabel = false,
 }: {
+  className?: string;
   showLabel?: boolean;
 } = {}) {
   const { t } = useTranslation();
@@ -17,11 +19,14 @@ export function MobileTrackReorderToggle({
       ? "timelineToolbar.disableTrackReorder"
       : "timelineToolbar.enableTrackReorder",
   );
+  const visibleLabel = t(
+    enabled ? "mobileTrackActions.finishMoving" : "mobileTrackActions.moveTracks",
+  );
 
   return (
     <button
       type="button"
-      className={`lt-icon-button ${enabled ? "is-active" : ""}`}
+      className={`${className} ${enabled ? "is-active" : ""}`}
       aria-label={label}
       title={label}
       aria-pressed={enabled}
@@ -30,11 +35,7 @@ export function MobileTrackReorderToggle({
     >
       <span className="material-symbols-outlined">swap_vert</span>
       {showLabel
-        ? t(
-            enabled
-              ? "mobileTrackActions.finishMoving"
-              : "mobileTrackActions.moveTracks",
-          )
+        ? <span className="lt-setlist-rail-label">{visibleLabel}</span>
         : null}
     </button>
   );

@@ -26,6 +26,7 @@ import {
   CompactMixer,
 } from "./CompactMixer";
 import { CompactSongHeader } from "./CompactSongHeader";
+import { MobileTrackSelectionControls } from "../mobile/MobileTrackSelectionControls";
 import { columnDensityClass, useColumnResize } from "./useColumnResize";
 import {
   SONG_REORDER_ID_ATTRIBUTE,
@@ -406,19 +407,22 @@ function CompactViewComponent({
           it collapses behind a slim toggle. Wide screens (tablets) default to
           visible; the choice persists. Desktop keeps the mixer always on. */}
       {isMobileApp ? (
-        <button
-          type="button"
-          className="lt-compact-mixer-toggle"
-          aria-expanded={isMixerVisible}
-          onClick={toggleMixerVisible}
-        >
-          <span className="material-symbols-outlined" aria-hidden="true">
-            {isMixerVisible ? "expand_more" : "expand_less"}
-          </span>
-          {isMixerVisible
-            ? t("transport.shell.hideMixer")
-            : t("transport.shell.showMixer")}
-        </button>
+        <div className="lt-compact-mixer-toolbar">
+          <button
+            type="button"
+            className="lt-compact-mixer-toggle"
+            aria-expanded={isMixerVisible}
+            onClick={toggleMixerVisible}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">
+              {isMixerVisible ? "expand_more" : "expand_less"}
+            </span>
+            {isMixerVisible
+              ? t("transport.shell.hideMixer")
+              : t("transport.shell.showMixer")}
+          </button>
+          {isMixerVisible ? <MobileTrackSelectionControls /> : null}
+        </div>
       ) : null}
 
       {/* Bottom zone: global mixer over all tracks. Reusable so the DAW
@@ -839,4 +843,3 @@ function CompactSongColumnComponent({
 }
 
 const CompactSongColumn = memo(CompactSongColumnComponent);
-

@@ -3,14 +3,19 @@ import { useTranslation } from "react-i18next";
 import { useTimelineUIStore } from "../uiStore";
 import { MobileTrackReorderToggle } from "../tracks/MobileTrackReorderToggle";
 
-export function MobileTrackSelectionControls() {
+type MobileTrackSelectionControlsProps = {
+  placement?: "toolbar" | "setlist-rail";
+  showRailLabels?: boolean;
+};
+
+export function MobileTrackSelectionControls({
+  placement = "toolbar",
+  showRailLabels = false,
+}: MobileTrackSelectionControlsProps) {
   const { t } = useTranslation();
   const areaSelectMode = useTimelineUIStore((state) => state.areaSelectMode);
   const selectedTrackCount = useTimelineUIStore(
     (state) => state.selectedTrackIds.length,
-  );
-  const trackReorderMode = useTimelineUIStore(
-    (state) => state.trackReorderMode,
   );
 
   const toggleSelectionMode = () => {
@@ -22,58 +27,83 @@ export function MobileTrackSelectionControls() {
     }
   };
 
-  return (
-    <div
-      className="lt-mobile-track-tools"
-      role="toolbar"
-      aria-label={t("mobileTrackActions.toolbar")}
-    >
+  const buttonClass =
+    placement === "setlist-rail"
+      ? "lt-setlist-mixer-action"
+      : "lt-icon-button";
+  const railLabel = (label: string) =>
+    placement === "setlist-rail" && showRailLabels ? (
+      <span className="lt-setlist-rail-label">{t(label)}</span>
+    ) : null;
+  const controls = (
+    <>
       <button
         type="button"
-        className={`lt-icon-button ${areaSelectMode ? "is-active" : ""}`}
+        className={`${buttonClass} ${areaSelectMode ? "is-active" : ""}`}
+        aria-label={t(
+          areaSelectMode
+            ? "mobileTrackActions.finishSelecting"
+            : "mobileTrackActions.selectMultiple",
+        )}
+        title={t(
+          areaSelectMode
+            ? "mobileTrackActions.finishSelecting"
+            : "mobileTrackActions.selectMultiple",
+        )}
         aria-pressed={areaSelectMode}
         onClick={toggleSelectionMode}
       >
         <span className="material-symbols-outlined" aria-hidden="true">
-          select
+          checklist
         </span>
-        {t(
+        <span className="lt-setlist-mixer-action-label">
+          {t(
+            areaSelectMode
+              ? "mobileTrackActions.finishSelecting"
+              : "mobileTrackActions.selectMultiple",
+          )}
+        </span>
+        {railLabel(
           areaSelectMode
             ? "mobileTrackActions.finishSelecting"
             : "mobileTrackActions.selectMultiple",
         )}
       </button>
       {selectedTrackCount > 0 ? (
-        <>
-          <span className="lt-mobile-track-tools-count">
-            {t("mobileTrackActions.selectedTracks", {
-              count: selectedTrackCount,
-            })}
+        <button
+          type="button"
+          className={buttonClass}
+          aria-label={t("mobileTrackActions.clearSelection")}
+          title={t("mobileTrackActions.clearSelection")}
+          onClick={() => useTimelineUIStore.getState().clearSelection()}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            close
           </span>
-          <button
-            type="button"
-            className="lt-icon-button"
-            aria-label={t("mobileTrackActions.clearSelection")}
-            title={t("mobileTrackActions.clearSelection")}
-            onClick={() => useTimelineUIStore.getState().clearSelection()}
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">
-              close
-            </span>
-          </button>
-        </>
+          <span className="lt-setlist-mixer-action-label">
+            {t("mobileTrackActions.clearSelection")}
+          </span>
+          {railLabel("mobileTrackActions.clearSelection")}
+        </button>
       ) : null}
-      <MobileTrackReorderToggle showLabel />
-      {areaSelectMode ? (
-        <span className="lt-mobile-track-tools-hint" role="status">
-          {t("mobileTrackActions.selectionHint")}
-        </span>
-      ) : null}
-      {trackReorderMode ? (
-        <span className="lt-mobile-track-tools-hint" role="status">
-          {t("mobileTrackActions.reorderHint")}
-        </span>
-      ) : null}
+      <MobileTrackReorderToggle
+        className={buttonClass}
+        showLabel={placement === "setlist-rail" && showRailLabels}
+      />
+    </>
+  );
+
+  if (placement === "setlist-rail") {
+    return controls;
+  }
+
+  return (
+    <div
+      className="lt-mobile-track-tools"
+      role="toolbar"
+      aria-label={t("mobileTrackActions.toolbar")}
+    >
+      {controls}
     </div>
   );
 }

@@ -263,44 +263,68 @@ html.lt-mobile .lt-app-shell {
 }
 
 .lt-mobile .lt-mobile-track-tools {
-  display: flex;
+  display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  padding: 0.25rem 0;
-}
-
-.lt-mobile .lt-mobile-track-tools .lt-icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.3rem;
-  min-height: 2rem;
-  padding: 0.3rem 0.5rem;
-  white-space: nowrap;
-}
-
-.lt-mobile .lt-mobile-track-tools-count,
-.lt-mobile .lt-mobile-track-tools-hint {
-  color: rgba(225, 233, 231, 0.72);
-  font-size: 0.72rem;
-}
-
-.lt-mobile .lt-mobile-track-tools-hint {
-  flex-basis: 100%;
-}
-
-.lt-mobile .lt-compact-mixer {
-  display: flex;
-  flex-direction: column;
   gap: 0.25rem;
 }
 
-.lt-mobile .lt-compact-mixer-strips {
-  flex: 1 1 0;
-  min-height: 0;
-  height: auto;
+.lt-mobile .lt-mobile-track-tools .lt-icon-button {
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0;
+  border: 1px solid rgba(186, 202, 197, 0.18);
+  border-radius: 2px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.12)),
+    #201f1f;
+  color: #e5e2e1;
+}
+
+.lt-mobile .lt-mobile-track-tools .lt-icon-button.is-active {
+  border-color: rgb(87 241 219 / 0.5);
+  background: rgb(87 241 219 / 0.16);
+  color: #57f1db;
+}
+
+.lt-mobile .lt-mobile-track-tools .lt-setlist-mixer-action-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.lt-mobile .lt-compact-mixer-toolbar {
+  display: flex;
+  flex: 0 0 1.5rem;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 1.5rem;
+}
+
+.lt-mobile .lt-compact-mixer-toolbar .lt-compact-mixer-toggle {
+  flex: 1 1 auto;
+  width: auto;
+  height: 1.5rem;
+  min-height: 1.5rem;
+  padding: 0;
+  border-top: 0;
+}
+
+.lt-mobile .lt-compact-mixer-toolbar .lt-mobile-track-tools .lt-icon-button {
+  width: 1.5rem;
+  height: 1.5rem;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+}
+
+.lt-mobile .lt-compact-mixer-toolbar .lt-mobile-track-tools .material-symbols-outlined {
+  font-size: 14px;
 }
 
 .lt-mobile .lt-track-headers-pane {
@@ -14024,9 +14048,27 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   display: none;
 }
 
-/* El botón de ocultar el mezclador de la vista compacta (móvil): más bajo. */
-.lt-compact-view > .lt-compact-mixer-toggle {
+/* La fila de control es baja y comparte espacio con las acciones del mixer. */
+html.lt-mobile .lt-compact-view > .lt-compact-mixer-toolbar {
+  border-top: 1px solid rgb(87 241 219 / 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent), #151515;
+}
+
+html.lt-mobile .lt-compact-view > .lt-compact-mixer-toolbar > .lt-compact-mixer-toggle {
+  width: auto;
+  height: 1.5rem;
   min-height: 1.5rem;
+}
+
+html.lt-mobile .lt-setlist-mixer.is-short > .lt-setlist-mixer-header > .lt-setlist-mixer-action .lt-setlist-rail-label {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+  font-size: 0.58rem;
+  line-height: 1;
 }
 
 /* Salida de la tira: un selector bajo y apretado, para dejar el alto al

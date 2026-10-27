@@ -17,6 +17,8 @@ import { PadsControls, usePadsCatalog } from "../panels/PadsPopover";
 import type { SongViewBindings } from "../songs/songViewBindings";
 import { useTransportStore } from "../store";
 import { SongMasterMeter } from "../tracks/TrackMeter";
+import { isMobileApp } from "../desktopApi";
+import { MobileTrackSelectionControls } from "../mobile/MobileTrackSelectionControls";
 import { SetlistConsoleStrip } from "./SetlistConsoleStrip";
 import { useSetlistStore, type SetlistBottomTab } from "./setlistStore";
 import { computeSongTrackContent } from "./songTrackContent";
@@ -248,6 +250,12 @@ function SetlistMixerComponent({
             </button>
           ))}
         </div>
+        {isMobileApp && tab === "tracks" ? (
+          <MobileTrackSelectionControls
+            placement="setlist-rail"
+            showRailLabels={short}
+          />
+        ) : null}
         {short ? <span className="lt-setlist-rail-divider" aria-hidden="true" /> : null}
         {(tab === "tracks" || short) && region ? (
           <button

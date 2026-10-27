@@ -41,7 +41,11 @@ describe("MobileTrackSelectionControls", () => {
     );
     expect(useTimelineUIStore.getState().areaSelectMode).toBe(false);
     expect(useTimelineUIStore.getState().trackReorderMode).toBe(true);
-    expect(screen.getByText("mobileTrackActions.reorderHint")).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "timelineToolbar.disableTrackReorder",
+      }),
+    ).toBeTruthy();
   });
 
   it("clears the selected tracks from its visible selection controls", () => {
@@ -54,5 +58,19 @@ describe("MobileTrackSelectionControls", () => {
       }),
     );
     expect(useTimelineUIStore.getState().selectedTrackIds).toEqual([]);
+  });
+
+  it("uses the Setlist rail's existing action buttons without a toolbar wrapper", () => {
+    const { container } = render(
+      <MobileTrackSelectionControls placement="setlist-rail" />,
+    );
+
+    expect(container.querySelector(".lt-mobile-track-tools")).toBeNull();
+    expect(container.querySelectorAll(".lt-setlist-mixer-action")).toHaveLength(2);
+    expect(
+      screen.getByRole("button", {
+        name: "mobileTrackActions.selectMultiple",
+      }).querySelector(".material-symbols-outlined")?.textContent,
+    ).toBe("checklist");
   });
 });

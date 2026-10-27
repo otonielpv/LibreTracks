@@ -27,14 +27,13 @@ import {
 // centred). Computed once — the scale never changes.
 const TRACK_FADER_TICKS = faderTicks(TRACK_FADER_SCALE);
 
-import { isMobileApp, type TrackSummary } from "../desktopApi";
+import type { TrackSummary } from "../desktopApi";
 import { TrackMeter } from "../tracks/TrackMeter";
 import { trackRowSegments } from "../tracks/trackRowWindowing";
 import { useMixerStripWindow } from "./useMixerStripWindow";
 import { useTransportStore, type OptimisticMixState } from "../store";
 import { useTimelineUIStore } from "../uiStore";
 import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
-import { MobileTrackSelectionControls } from "../mobile/MobileTrackSelectionControls";
 
 /**
  * Reusable horizontal-scroll mixer that lays out one vertical channel strip
@@ -224,9 +223,6 @@ function CompactMixerComponent({
   const trackReorderMode = useTimelineUIStore(
     (state) => state.trackReorderMode,
   );
-  const areaSelectMode = useTimelineUIStore(
-    (state) => state.areaSelectMode,
-  );
   // Build a (childTrackId → parent colour / parent name) lookup once so each
   // strip can render its Reaper-style folder cue (a thin coloured ribbon on
   // the left edge + a tiny "↳ Parent" hint under the strip name) without
@@ -302,9 +298,8 @@ function CompactMixerComponent({
 
   return (
     <div
-      className={`lt-compact-mixer ${trackReorderMode ? "is-track-reorder-mode" : ""} ${areaSelectMode ? "is-area-select-mode" : ""}`}
+      className={`lt-compact-mixer ${trackReorderMode ? "is-track-reorder-mode" : ""}`}
     >
-      {isMobileApp ? <MobileTrackSelectionControls /> : null}
       <div className="lt-compact-mixer-strips" ref={stripsRef}>
         {segments && geometry
           ? segments.map((segment) =>
