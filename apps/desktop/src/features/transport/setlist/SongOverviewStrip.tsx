@@ -1,3 +1,4 @@
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import {
   memo,
   useContext,
@@ -112,12 +113,14 @@ function SongOverviewStripComponent({
   waveformSummaries,
   positionSecondsRef,
   layout,
-  onSeek,
+  onSeek: seek,
   clickToSeek = false,
   showPlayhead = true,
   onContextMenuAt,
   onDoubleClickAt,
 }: SongOverviewStripProps) {
+  const { canControl } = useNetworkPermissions();
+  const onSeek = canControl ? seek : undefined;
   const { t } = useTranslation();
   useFrameGateWake();
   const rootRef = useRef<HTMLDivElement | null>(null);

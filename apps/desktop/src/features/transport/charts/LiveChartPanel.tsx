@@ -42,6 +42,7 @@ import { isGuestMirrorMode } from "../desktopApi";
 import { personalChordShift } from "@libretracks/shared/charts/personalChords";
 import { PersonalChordsBar } from "../../network/PersonalChordsBar";
 import { usePersonalChords } from "../../network/usePersonalChords";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import "./LiveChartPanel.css";
 
 const FONT_SCALE_KEY = "lt.liveChart.fontScale";
@@ -154,11 +155,13 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   onToggleExpanded,
   onClose,
   onChartChange,
-  canEdit = true,
+  canEdit: allowEdit = true,
   extraSemitones = 0,
   accidentals = "auto",
   startEditing = false,
 }: LiveChartPanelProps) {
+  const permissions = useNetworkPermissions();
+  const canEdit = allowEdit && permissions.canEdit;
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -172,7 +175,13 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   const [showChords, setShowChords] = useState(() =>
     readStored(SHOW_CHORDS_KEY, true, (value) => value === "true"),
   );
-  const [editorOpen, setEditorOpen] = useState(startEditing);
+  const [editorOpen, setEditorOpen] = useState(startEditing && canEdit);
+  useEffect(() => {
+    if (!canEdit) {
+      setEditorOpen(false);
+      setRecording(null);
+    }
+  }, [canEdit]);
   const [recording, setRecording] = useState<LineRecording | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -5,6 +5,7 @@ import { isMobileApp } from "../desktopApi";
 import { useViewportClampedMenu } from "../hooks/useViewportClampedMenu";
 import { useDismissOnBack } from "../mobile/backNavigation";
 import type { ContextMenuState } from "../types";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 type OpenContextMenu = NonNullable<ContextMenuState>;
 
@@ -31,6 +32,7 @@ export function TimelineContextMenus({
   onDismiss,
   onNavigate,
 }: TimelineContextMenusProps) {
+  const { canEdit } = useNetworkPermissions();
   // En Android, atras cierra este overlay en vez de salir de la aplicacion.
   useDismissOnBack(onDismiss, contextMenu !== null);
   const { t } = useTranslation();
@@ -151,7 +153,7 @@ export function TimelineContextMenus({
         <button
           key={action.label}
           type="button"
-          disabled={action.disabled}
+          disabled={action.disabled || !canEdit}
           onClick={() => {
             pendingParentRef.current = contextMenu;
             onDismiss();

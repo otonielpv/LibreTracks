@@ -40,6 +40,10 @@ import {
   mockTrackRowDragGeometry,
   setMockNativeWebviewPosition
 } from "../test/testUtils";
+import {
+  EMPTY_GUEST_STATUS,
+  useNetworkSessionStore,
+} from "../features/network/networkSessionStore";
 
 describe("App / settings", () => {
   it("renders the settings panel from the sidebar button", async () => {
@@ -119,6 +123,9 @@ describe("App / settings", () => {
     updateSpy.mockClear();
     saveSpy.mockClear();
     sharedDesktopApi.setGuestMirrorMode(true);
+    useNetworkSessionStore.getState().setGuest({
+      ...EMPTY_GUEST_STATUS, joined: true, state: "connected", role: "controller",
+    });
 
     try {
       await renderApp();
@@ -132,6 +139,7 @@ describe("App / settings", () => {
       expect(updateSpy).not.toHaveBeenCalled();
     } finally {
       sharedDesktopApi.setGuestMirrorMode(false);
+      useNetworkSessionStore.getState().setGuest(EMPTY_GUEST_STATUS);
     }
   });
 });

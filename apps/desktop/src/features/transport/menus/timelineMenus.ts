@@ -90,6 +90,7 @@ import { colorPickerActions } from "./colorPickerMenu";
 import { clipContextMenuActions } from "./clipMenu";
 import type { ExportSongTarget } from "../panels/ExportSongModal";
 import { openRenderSong } from "../render/renderStore";
+import { isGuestMirrorMode } from "../desktopApi";
 import { openSongAnalysis } from "../songAnalysis/songAnalysisStore";
 import { openStructureEditor } from "../structure/structureEditor";
 import { tempoRampAction } from "../tempo/tempoRampAction";
@@ -548,6 +549,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         label: t("transport.menu.exportSong", {
           defaultValue: "Exportar Cancion",
         }),
+        disabled: isGuestMirrorMode(),
         onSelect: () => {
           d.setExportSongTarget({
             regionId: region.id,
@@ -557,6 +559,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       },
       {
         label: t("transport.menu.renderSong"),
+        disabled: isGuestMirrorMode(),
         onSelect: () => {
           openRenderSong({ regionId: region.id, regionName: region.name });
         },
@@ -565,6 +568,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         ? [
             {
               label: t("transport.menu.analyzeSong"),
+              disabled: isGuestMirrorMode(),
               onSelect: () => {
                 openSongAnalysis({ regionId: region.id, regionName: region.name });
               },

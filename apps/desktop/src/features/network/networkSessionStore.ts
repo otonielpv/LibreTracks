@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { setGuestRole } from "@libretracks/shared/desktopApi";
 
 import type {
   NetworkGuestSnapshot,
@@ -52,6 +53,12 @@ export const useNetworkSessionStore = create<NetworkSessionState>()((set) => ({
   openModal: () => set({ isModalOpen: true }),
   closeModal: () => set({ isModalOpen: false }),
   setHost: (host) => set({ host }),
-  setGuest: (guest) => set({ guest }),
-  applyGuestSnapshot: (snapshot) => set({ guest: snapshot.status }),
+  setGuest: (guest) => {
+    setGuestRole(guest.state === "connected" ? guest.role : null);
+    set({ guest });
+  },
+  applyGuestSnapshot: (snapshot) => {
+    setGuestRole(snapshot.status.state === "connected" ? snapshot.status.role : null);
+    set({ guest: snapshot.status });
+  },
 }));

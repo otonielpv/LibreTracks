@@ -378,6 +378,33 @@ LibreTracks desktop puede publicar una superficie web remota para controlar tran
 
 > Sugerencia de flujo en directo: deja al operador desktop centrado en timeline/arreglo y asigna a una segunda persona los ajustes de mezcla/cues desde el remote.
 
+### Sesiones de red entre dispositivos LibreTracks
+
+`Sesion de red` conecta otra instalacion de LibreTracks al anfitrion; es
+distinta del control web `Remote`. El invitado puede elegir DAW, Setlist,
+Compacta o Live sin cambiar la vista del anfitrion.
+
+| Rol | Acciones sobre el anfitrion |
+| --- | --- |
+| Espectador | Consultar canciones, secciones, letras, mezcla y estado de video. Seleccionar una cancion para verla no dispara un salto. |
+| Controlador | Lo anterior, mas transporte, saltos (incluidos proxima seccion y proximo cue), vamp, orden de canciones, transiciones, pausa al final, vamp entre canciones, duracion del fade-stop y control de salida de video. |
+| Editor | Lo anterior, mas mezcla, metronomo, guia de voz, pads ya instalados, modo de medicion de niveles y edicion de canciones, secciones, arreglos, clips, MIDI y automatizacion. Incluye borrar, deshacer y rehacer. |
+
+Los controles no permitidos se desactivan y se actualizan si el anfitrion cambia
+el rol o se pierde la conexion. El anfitrion tambien valida cada comando.
+Negro, fundido a negro y activar/desactivar la salida de video actuan sobre
+el anfitrion, cuyo estado se refleja en los invitados.
+
+El idioma y las preferencias de navegacion/seguimiento del cursor se guardan
+solo en el dispositivo invitado. Los ajustes de reproduccion autorizados se
+guardan en el anfitrion y se aplican a su motor. Cambiar el sonido del click,
+la guia o los pads no sobrescribe otros ajustes ni las rutas de audio.
+
+Importar, exportar, analizar/renderizar, guardar el proyecto, gestionar archivos
+o instalar pads requiere hacerlo en el anfitrion. Sus dispositivos de audio,
+puertos MIDI, carpetas, rutas auxiliares y configuracion de pantallas tampoco
+se reconfiguran desde el invitado.
+
 ## 7. Solucion de problemas
 
 ### Linux: pantalla blanca al abrir

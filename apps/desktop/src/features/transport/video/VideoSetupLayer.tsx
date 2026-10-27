@@ -6,6 +6,7 @@ import { VideoImportQuestionModal } from "./VideoImportQuestionModal";
 import { VideoSetupWizardMobile } from "./VideoSetupWizardMobile";
 import { WIZARD_STEP_DISPLAY, VideoSetupWizard } from "./VideoSetupWizard";
 import { useVideoStore } from "./videoStore";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 /**
  * Everything the video feature puts over the panel: the non-blocking notice
@@ -14,6 +15,8 @@ import { useVideoStore } from "./videoStore";
  * panel only mounts this; desktop only.
  */
 export function VideoSetupLayer() {
+  const { isGuest } = useNetworkPermissions();
+  if (isGuest) return null;
   // The "bring the videos too?" question is a phone's (plan video-mobile).
   // "Its audio as a track?" is asked on phones too; nothing is decoded
   // there, so no progress to show.

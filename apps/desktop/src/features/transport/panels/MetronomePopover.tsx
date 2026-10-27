@@ -1,5 +1,7 @@
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
+import { NetworkControls } from "../../network/NetworkControls";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 import type { AppSettings } from "@libretracks/shared/models";
 import {
@@ -49,10 +51,11 @@ export function MetronomeControls({
   onSoundChange,
   onMidiLearnTarget,
 }: ControlsProps) {
+  const { isGuest } = useNetworkPermissions();
   const { t } = useTranslation();
 
   return (
-    <>
+    <NetworkControls permission="edit">
       <header className="lt-pads-popover-header">
         <span className="material-symbols-outlined" aria-hidden="true">
           music_note
@@ -89,6 +92,7 @@ export function MetronomeControls({
           <select
             className="lt-pads-select"
             value={settings.metronomeOutput}
+            disabled={isGuest}
             onChange={(event) => onOutputChange(event.target.value)}
           >
             {routeOptions.map((option) => (
@@ -379,7 +383,7 @@ export function MetronomeControls({
         </>
       ) : null}
     </div>
-    </>
+    </NetworkControls>
   );
 }
 

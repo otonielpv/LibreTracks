@@ -1,4 +1,6 @@
 import { Fragment, memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { NetworkControls } from "../../network/NetworkControls";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { useTranslation } from "react-i18next";
 import type { SongRegionSummary, SongView } from "@libretracks/shared/models";
 import {
@@ -140,6 +142,7 @@ function SetlistMixerComponent({
   region,
   layout,
 }: SetlistMixerProps) {
+  const { canEdit, canUseFiles } = useNetworkPermissions();
   const { t } = useTranslation();
   const bottomTab = useSetlistStore((state) => state.bottomTab);
   const setBottomTab = useSetlistStore((state) => state.setBottomTab);
@@ -161,6 +164,7 @@ function SetlistMixerComponent({
   );
   const masterGain = optimisticMaster ?? region?.master?.gain ?? 1;
   const masterStrip = region ? (
+    <NetworkControls permission="edit">
     <SetlistConsoleStrip
       name={t("setlistView.mixer.master")}
       title={t("setlistView.mixer.masterTitle")}
@@ -183,6 +187,7 @@ function SetlistMixerComponent({
       }}
       meter={<SongMasterMeter regionId={region.id} orientation="vertical" />}
     />
+    </NetworkControls>
   ) : null;
 
   const tabs: Array<{ tab: SetlistBottomTab; label: string; icon: string }> = [
@@ -269,6 +274,7 @@ function SetlistMixerComponent({
             className="lt-setlist-mixer-action"
             title={t("setlistView.mixer.addAudioTitle")}
             aria-label={t("setlistView.tracks.addAudio")}
+            disabled={!canUseFiles}
             onClick={tracksAction(() => onAddAudioToSong(region.id))}
           >
             <span className="material-symbols-outlined" aria-hidden="true">library_music</span>
@@ -299,6 +305,7 @@ function SetlistMixerComponent({
             type="button"
             className="lt-setlist-mixer-action"
             aria-label={t("setlistView.mixer.scenes")}
+            disabled={!canEdit}
             title={t("setlistView.automation.scenesTitle")}
             onClick={onOpenScenes}
           >

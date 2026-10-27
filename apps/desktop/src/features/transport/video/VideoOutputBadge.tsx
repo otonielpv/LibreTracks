@@ -14,6 +14,7 @@ import { useSongStore } from "../songStore";
 import { VideoOutputBadgeMobile } from "./VideoOutputBadgeMobile";
 import { runVideoLiveAction } from "./videoLive";
 import { useVideoStore } from "./videoStore";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 /** Keeps `videoStore.outputStatus` in step with the backend's
  * `video:output-status` event. Mounted once, by the badge. */
@@ -58,6 +59,7 @@ export function VideoOutputBadge() {
 }
 
 function VideoOutputBadgeDesktop() {
+  const { isGuest, canControl } = useNetworkPermissions();
   const { t } = useTranslation();
   const status = useVideoStore((state) => state.outputStatus);
   const forcedBlack = useVideoStore((state) => state.forcedBlack);
@@ -137,9 +139,9 @@ function VideoOutputBadgeDesktop() {
         className={`lt-video-output-badge ${tone}${label ? "" : " is-icon"}`}
         title={title}
         aria-label={label ?? title}
-        disabled={!onClick}
+        disabled={!onClick || !canControl || (isGuest && status.state.state === "noDisplay")}
         onClick={onClick}
-        onContextMenu={windowOpen ? menu.open : undefined}
+        onContextMenu={windowOpen && canControl && !isGuest ? menu.open : undefined}
       >
         <span className="material-symbols-outlined" aria-hidden="true">
           {icon}

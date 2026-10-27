@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import type { AppSettings } from "@libretracks/shared/models";
 
 import { createEmptySong, isMobileApp } from "../desktopApi";
@@ -105,6 +106,7 @@ function SetlistSongRowComponent({
   editing = false,
 }: SetlistSongRowProps) {
   const { t } = useTranslation();
+  const { canControl, canUseFiles } = useNetworkPermissions();
   const listRef = useRef<HTMLDivElement | null>(null);
   const progressFillRef = useRef<HTMLSpanElement | null>(null);
   const [transitionMenuOpen, setTransitionMenuOpen] = useState(false);
@@ -112,7 +114,7 @@ function SetlistSongRowComponent({
   const songReorder = useSongReorder({
     itemIds: regionIds,
     containerRef: listRef,
-    onReorder: onReorderSong,
+    onReorder: canControl ? onReorderSong : undefined,
   });
   const touchMenu = useTouchContextMenu();
 
@@ -135,7 +137,7 @@ function SetlistSongRowComponent({
         // every transport change. Sounding, a tap only prepares the song.
         const playing =
           useTransportStore.getState().playback?.playbackState === "playing";
-        if (!playing) onCueSong(regionId);
+        if (!playing && canControl) onCueSong(regionId);
       },
       onPlaySong,
       onSongContextMenu,
@@ -146,6 +148,7 @@ function SetlistSongRowComponent({
     }),
     [
       onCueSong,
+      canControl,
       onDropLibraryAssetsIntoSong,
       onDropOsFilesIntoSong,
       onPlaySong,
@@ -208,7 +211,7 @@ function SetlistSongRowComponent({
       role="list"
       aria-label={t("setlistView.songs.label")}
       onDragOver={(event) => event.preventDefault()}
-      onDrop={handleRowDrop}
+      onDrop={canUseFiles ? handleRowDrop : undefined}
       onPointerDownCapture={isMobileApp ? touchMenu.begin : undefined}
       onPointerMoveCapture={isMobileApp ? touchMenu.move : undefined}
       onPointerUpCapture={isMobileApp ? touchMenu.cancel : undefined}
@@ -231,6 +234,7 @@ function SetlistSongRowComponent({
             <button
               type="button"
               className={`lt-setlist-transition${vampBetweenSongs ? " has-vamp" : ""}`}
+              disabled={!canControl}
               aria-label={t("setlistView.songs.transitionTitle", { mode: transitionLabel })}
               title={t("setlistView.songs.transitionTitle", { mode: transitionLabel })}
               onClick={() => setTransitionMenuOpen((open) => !open)}
@@ -263,7 +267,7 @@ function SetlistSongRowComponent({
           </div>
         </Fragment>
       ))}
-      <div role="listitem" className="lt-setlist-song-item is-add">
+      {canUseFiles ? <div role="listitem" className="lt-setlist-song-item is-add">
         <div className={`lt-setlist-add-song is-${layout}`}>
           <button
             type="button"
@@ -301,8 +305,8 @@ function SetlistSongRowComponent({
             </button>
           ) : null}
         </div>
-      </div>
-      {transitionMenuOpen ? (
+      </div> : null}
+      {transitionMenuOpen && canControl ? (
         <div
           className="lt-setlist-transition-menu"
           role="dialog"

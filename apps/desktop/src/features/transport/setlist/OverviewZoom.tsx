@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import { DRAG_THRESHOLD_PX } from "../constants";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { cancelGatedFrame, markFrameActivity, requestGatedFrame, useFrameGateWake } from "../frameGate";
 import {
   FOLLOW_CAMERA_MANUAL_PAUSE_MS,
@@ -98,13 +99,15 @@ export function OverviewZoom({
   startSeconds,
   endSeconds,
   positionSecondsRef,
-  onSeek,
+  onSeek: seek,
   tapToSeek = true,
   children,
   overlay,
   minLayerWidthRem = 0,
   viewportClassName,
 }: OverviewZoomProps) {
+  const { canControl } = useNetworkPermissions();
+  const onSeek = canControl ? seek : undefined;
   useFrameGateWake();
   const zoom = useSetlistStore((state) => state.overviewZoom);
   const setZoom = useSetlistStore((state) => state.setOverviewZoom);

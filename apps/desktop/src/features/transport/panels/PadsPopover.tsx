@@ -25,6 +25,8 @@ import { getPadsCatalog } from "../desktopApi";
 import { AudioRouteCombobox } from "../tracks/AudioRouteCombobox";
 import { PadManagerModal } from "./PadManagerModal";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { NetworkControls } from "../../network/NetworkControls";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 type RouteOption = { value: string; label: string };
 
@@ -111,6 +113,7 @@ export function PadsControls({
   onOpenManager,
   layout = "popover",
 }: PadsControlsProps) {
+  const { canUseFiles } = useNetworkPermissions();
   const { t } = useTranslation();
   // A pad counts as usable in the picker/grid once it has at least one key. User
   // pads may be partial; the key grid disables the tonalities they lack.
@@ -308,6 +311,7 @@ export function PadsControls({
     </label>
   );
   const outputField = (
+    <NetworkControls permission="files">
     <div className="lt-pads-field">
       <span className="lt-pads-field-label">
         {t("pads.output", { defaultValue: "Salida" })}
@@ -320,11 +324,13 @@ export function PadsControls({
         size={layout === "panel" ? "large" : "default"}
       />
     </div>
+    </NetworkControls>
   );
   const managerButton = (
     <button
       type="button"
       className="lt-pads-manage-btn"
+      disabled={!canUseFiles}
       onClick={onOpenManager}
     >
       {t("pads.managePads", { defaultValue: "Gestor de pads…" })}
@@ -332,7 +338,7 @@ export function PadsControls({
   );
 
   return (
-    <>
+    <NetworkControls permission="edit">
       {!hasInstalled ? (
         <div className="lt-pads-empty">
           <p className="lt-pads-empty-text">
@@ -349,6 +355,7 @@ export function PadsControls({
           <button
             type="button"
             className="lt-pads-manage-btn"
+            disabled={!canUseFiles}
             onClick={onOpenManager}
           >
             {t("pads.managePads", { defaultValue: "Gestor de pads…" })}
@@ -389,7 +396,7 @@ export function PadsControls({
         </div>
         )
       )}
-    </>
+    </NetworkControls>
   );
 }
 

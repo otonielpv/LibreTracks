@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { markerCategory, transposeKey, type SongRegionSummary } from "@libretracks/shared/models";
 
@@ -81,6 +82,7 @@ function SongMapComponent({
   arrangementPicker,
   part = "all",
 }: SongMapProps) {
+  const { canControl, canEdit, canUseFiles } = useNetworkPermissions();
   const { t } = useTranslation();
   const fillRef = useRef<HTMLSpanElement | null>(null);
   const touchMenu = useTouchContextMenu();
@@ -125,6 +127,7 @@ function SongMapComponent({
   });
 
   const activate = (block: SongMapBlock, doubleClick = false) => {
+    if (!canControl) return;
     if (editing) {
       // Editing: tapping only selects, so nothing jumps by accident.
       selectSection(block.marker?.id ?? null);
@@ -147,7 +150,7 @@ function SongMapComponent({
   };
 
   const openMenu = (event: ReactMouseEvent<HTMLElement>, block: SongMapBlock) => {
-    if (!block.marker) return;
+    if (!block.marker || !canEdit) return;
     event.preventDefault();
     event.stopPropagation();
     onSectionContextMenu(event, block.marker.id);
@@ -195,6 +198,7 @@ function SongMapComponent({
               role="listitem"
               className={className}
               data-block-id={block.id}
+              disabled={!canControl}
               style={
                 {
                   "--lt-setlist-block-color": block.color ?? undefined,
@@ -292,6 +296,7 @@ function SongMapComponent({
               <button
                 type="button"
                 className="lt-setlist-map-action"
+                disabled={!canUseFiles}
                 onClick={() =>
                   openSongAnalysis({ regionId: region.id, regionName: region.name })
                 }

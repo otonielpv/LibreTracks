@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 import type { TimelineMenus } from "../menus/timelineMenus";
 import { MarkerPositionEditor } from "../timeline/MarkerPositionEditor";
@@ -152,6 +153,10 @@ function SetlistViewComponent({
   const rootRef = useRef<HTMLElement | null>(null);
   const layout = useSetlistLayout(rootRef, layoutClass);
   const editMode = useSetlistStore((state) => state.editMode);
+  const { canEdit } = useNetworkPermissions();
+  useEffect(() => {
+    if (!canEdit) useSetlistStore.getState().setEditMode(null);
+  }, [canEdit, editMode]);
   const waveEditing = editMode === "sections" || editMode === "arrangement";
   const getGridWidthPx = useCallback(() => {
     const root = rootRef.current;

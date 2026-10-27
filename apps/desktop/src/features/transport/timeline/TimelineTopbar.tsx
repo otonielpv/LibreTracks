@@ -26,6 +26,8 @@ import { NetworkSessionBadge } from "../../network/NetworkSessionBadge";
 import { requestAppClose } from "../../appClose/appCloseService";
 import { FadeStopButton } from "./FadeStopButton";
 import { openLevelSongs } from "../levelSongs/levelSongsStore";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
+import { NetworkControls } from "../../network/NetworkControls";
 
 type TimelineTopbarProps = {
   openTopMenu: "file" | null;
@@ -157,6 +159,7 @@ export function TimelineTopbar({
   onMidiLearnTarget,
 }: TimelineTopbarProps) {
   const { t } = useTranslation();
+  const { canEdit, canUseFiles } = useNetworkPermissions();
   // Narrow selectors: the topbar only needs the base tempo and whether a
   // project is loaded, so unrelated mutations of `song` no longer re-render it.
   const fallbackBpm = useSongStore((state) => getSongBaseBpm(state.song));
@@ -168,7 +171,7 @@ export function TimelineTopbar({
   const isPlaying = playbackState === "playing";
   const isPaused = playbackState === "paused";
   const learnModeActive = midiLearnMode !== null;
-  const canOpenFileMenu = canPersistProject;
+  const canOpenFileMenu = canPersistProject && canUseFiles;
   // Recents live in localStorage; re-read on every FILE-menu open so sessions
   // opened during this run show up without a reload.
   const [recentSessions, setRecentSessions] = useState<RecentSessionEntry[]>(
@@ -490,7 +493,7 @@ export function TimelineTopbar({
             <span>{t("timelineTopbar.bpmLabel")}</span>
             <input
               aria-label={t("timelineTopbar.songBpmAria")}
-              disabled={!hasSong}
+              disabled={!hasSong || !canEdit}
               className="lt-tempo-input"
               // Texto con teclado decimal, no `type="number"`: ese deja meter
               // "e" y, a medias, da un valor vacio que el commit leia como 0.
@@ -523,7 +526,7 @@ export function TimelineTopbar({
             type="button"
             className="lt-tap-tempo-button"
             aria-label={t("timelineTopbar.tapTempo")}
-            disabled={!hasSong && !learnModeActive}
+            disabled={!canEdit || (!hasSong && !learnModeActive)}
             onClick={() => {
               if (learnModeActive) {
                 onMidiLearnTarget("param:tempo");
@@ -541,7 +544,7 @@ export function TimelineTopbar({
             <span>{t("timelineTopbar.timeSignatureLabel")}</span>
             <input
               aria-label={t("timelineTopbar.songTimeSignatureAria")}
-              disabled={!hasSong}
+              disabled={!hasSong || !canEdit}
               type="text"
               value={timeSignatureDraft}
               onChange={(event) =>
@@ -558,7 +561,7 @@ export function TimelineTopbar({
           {/* Deshacer y rehacer, aparte del transporte. Sin teclado eran
               inalcanzables, y pegados a "reproducir" un dedo torpe deshace
               cuando queria sonar. */}
-          <div className="lt-topbar-history">
+          <NetworkControls permission="edit"><div className="lt-topbar-history">
             <button
               type="button"
               aria-label={t("timelineTopbar.undo", { defaultValue: "Deshacer" })}
@@ -579,6 +582,8 @@ export function TimelineTopbar({
             </button>
           </div>
 
+          </NetworkControls>
+          <NetworkControls permission="control">
           <div className="lt-transport-buttons" data-lt-tour={TOUR_TARGETS.topbarTransport}>
             <button
               type="button"
@@ -649,6 +654,7 @@ export function TimelineTopbar({
             >
               <span className="material-symbols-outlined">pause</span>
             </button>
+            <NetworkControls permission="edit">
             <div className="lt-topbar-split" data-lt-tour={TOUR_TARGETS.topbarMetronome}>
               <button
                 type="button"
@@ -779,6 +785,7 @@ export function TimelineTopbar({
                 </span>
               </button>
             </div>
+            </NetworkControls>
             <button
               type="button"
               aria-label={t("timelineTopbar.next")}
@@ -796,6 +803,7 @@ export function TimelineTopbar({
             </button>
           </div>
 
+          </NetworkControls>
           <div className="lt-transport-readout">
             <div className="lt-readout-block">
               <span>{t("timelineTopbar.tempoReadout")}</span>

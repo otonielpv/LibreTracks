@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
+import { NetworkControls } from "../../network/NetworkControls";
 import {
   memo,
   useCallback,
@@ -192,6 +194,7 @@ function CompactViewComponent({
   collapsedFolders,
   onToggleFolder,
 }: CompactViewProps) {
+  const { canControl, canUseFiles } = useNetworkPermissions();
   const { t } = useTranslation();
   const isPackageDragOver = dragPreview?.isPackage === true;
 
@@ -220,9 +223,9 @@ function CompactViewComponent({
     itemIds: regionIds,
     containerRef: songsStripRef,
     onReorder: onReorderSong,
-    disabled: resizingRegionId !== null,
+    disabled: !canControl || resizingRegionId !== null,
   });
-  const canRenderSongReorder = Boolean(onReorderSong) && regionIds.length > 1;
+  const canRenderSongReorder = canControl && Boolean(onReorderSong) && regionIds.length > 1;
 
   // `template` comes from the arrow next to the button; without it the
   // backend applies the default template in Settings, if any.
@@ -374,7 +377,7 @@ function CompactViewComponent({
             </div>
           </div>
         ) : null}
-        <div className="lt-compact-view-song-actions">
+        {canUseFiles ? <div className="lt-compact-view-song-actions">
           <div className="lt-compact-view-add-song-group">
             <button
               type="button"
@@ -402,7 +405,7 @@ function CompactViewComponent({
             </span>
             {t("compactView.importPackage")}
           </button>
-        </div>
+        </div> : null}
       </div>
 
       {/* Android: the mixer band eats most of a phone's landscape height, so
@@ -525,6 +528,7 @@ function CompactSongColumnComponent({
   onWidthChange,
   onResizingChange,
 }: CompactSongColumnProps) {
+  const { canEdit, canUseFiles } = useNetworkPermissions();
   const { t } = useTranslation();
   const clipTouchContextMenu = useTouchContextMenu({
     ignoreTarget: (target) =>
@@ -677,8 +681,8 @@ function CompactSongColumnComponent({
          component tree. */
       data-region-id={region.id}
       {...{ [SONG_REORDER_ID_ATTRIBUTE]: region.id }}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      onDragOver={canUseFiles ? handleDragOver : undefined}
+      onDrop={canUseFiles ? handleDrop : undefined}
       style={
         {
           "--lt-compact-column-width": `${widthRem}rem`,
@@ -723,7 +727,7 @@ function CompactSongColumnComponent({
                   : "lt-compact-clip-entry"
               }
               key={clip.id}
-              onContextMenu={(event) => openContextMenu(event, clip.id)}
+              onContextMenu={canEdit ? (event) => openContextMenu(event, clip.id) : undefined}
               style={
                 clip.trackColor
                   ? ({
@@ -812,6 +816,7 @@ function CompactSongColumnComponent({
       ) : null}
     </div>
     <div className="lt-compact-column-resize-slot">
+      <NetworkControls permission="edit">
       <div
         role="separator"
         aria-orientation="vertical"
@@ -839,6 +844,7 @@ function CompactSongColumnComponent({
           width
         </span>
       </div>
+      </NetworkControls>
     </div>
     </>
   );

@@ -3,6 +3,8 @@ import { Profiler, type ComponentProps } from "react";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ClipSummary, WaveformSummaryDto } from "@libretracks/shared/models";
+import { setGuestMirrorMode } from "@libretracks/shared/desktopApi";
+import { EMPTY_GUEST_STATUS, useNetworkSessionStore } from "../../network/networkSessionStore";
 
 import { resetFrameGateForTests } from "../frameGate";
 import { FOLLOW_CAMERA_MANUAL_PAUSE_MS } from "../followCamera";
@@ -282,6 +284,30 @@ describe("SongOverviewStrip peaks", () => {
 });
 
 describe("SongOverviewStrip seek", () => {
+  it("does not seek for a viewer and restores seeking after promotion", () => {
+    setGuestMirrorMode(true);
+    useNetworkSessionStore.getState().setGuest({
+      ...EMPTY_GUEST_STATUS, joined: true, state: "connected", role: "viewer",
+    });
+    try {
+      const onSeek = vi.fn();
+      const { container } = render(<SongOverviewStrip {...stripProps({ onSeek, clickToSeek: true })} />);
+      const root = layOut(container);
+      fireEvent.pointerDown(root, { button: 0, pointerId: 7, clientX: 350, clientY: 10 });
+      fireEvent.pointerUp(window, { pointerId: 7, clientX: 350, clientY: 10 });
+      expect(onSeek).not.toHaveBeenCalled();
+      act(() => useNetworkSessionStore.getState().setGuest({
+        ...EMPTY_GUEST_STATUS, joined: true, state: "connected", role: "controller",
+      }));
+      fireEvent.pointerDown(root, { button: 0, pointerId: 8, clientX: 350, clientY: 10 });
+      fireEvent.pointerUp(window, { pointerId: 8, clientX: 350, clientY: 10 });
+      expect(onSeek).toHaveBeenCalledWith(130);
+    } finally {
+      setGuestMirrorMode(false);
+      useNetworkSessionStore.getState().setGuest(EMPTY_GUEST_STATUS);
+    }
+  });
+
   it.each(["wide", "medium", "short"] as const)("%s: edit surfaces seek on a stationary click", (layout) => {
     const onSeek = vi.fn();
     const { container } = render(

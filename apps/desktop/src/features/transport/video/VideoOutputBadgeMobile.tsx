@@ -6,6 +6,7 @@ import { useDismissOnBack } from "../mobile/backNavigation";
 import { useSongStore } from "../songStore";
 import { runVideoLiveAction } from "./videoLive";
 import { useVideoStore } from "./videoStore";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 type Appearance = { tone: string; icon: string };
 
@@ -41,6 +42,7 @@ export function mobileBadgeAppearance(
  * with the emergency black first, then the state and the wizard.
  */
 export function VideoOutputBadgeMobile() {
+  const { isGuest, canControl } = useNetworkPermissions();
   const { t } = useTranslation();
   const status = useVideoStore((state) => state.outputStatus);
   const forcedBlack = useVideoStore((state) => state.forcedBlack);
@@ -77,7 +79,7 @@ export function VideoOutputBadgeMobile() {
             type="button"
             className={`lt-video-black-button${forcedBlack ? " is-on" : ""}`}
             aria-pressed={forcedBlack}
-            disabled={!showing}
+            disabled={!showing || !canControl}
             onClick={() => void runVideoLiveAction("black")}
           >
             <span className="material-symbols-outlined" aria-hidden="true">
@@ -99,6 +101,7 @@ export function VideoOutputBadgeMobile() {
           ) : null}
           <button
             type="button"
+            disabled={isGuest}
             onClick={() => {
               setSheetOpen(false);
               openWizard();

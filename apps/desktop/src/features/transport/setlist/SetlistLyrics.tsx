@@ -2,6 +2,7 @@ import { memo, useState } from "react";
 import type { SongRegionSummary } from "@libretracks/shared/models";
 
 import { LiveChartPanel } from "../charts/LiveChartPanel";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import type { PerformanceBindings } from "../songs/songViewBindings";
 
 type SetlistLyricsProps = {
@@ -19,6 +20,7 @@ type SetlistLyricsProps = {
  * Live's `onChartChange` — one definition. Nothing of the panel is rewritten.
  */
 function SetlistLyricsComponent({ performance, region, onClose, startEditing = false }: SetlistLyricsProps) {
+  const { canEdit } = useNetworkPermissions();
   const [expanded, setExpanded] = useState(false);
   return (
     <div className={`lt-setlist-lyrics${expanded ? " is-expanded" : ""}`}>
@@ -32,6 +34,7 @@ function SetlistLyricsComponent({ performance, region, onClose, startEditing = f
         onToggleExpanded={() => setExpanded((value) => !value)}
         onClose={onClose}
         onChartChange={performance.onChartChange}
+        canEdit={canEdit}
         startEditing={startEditing}
       />
     </div>

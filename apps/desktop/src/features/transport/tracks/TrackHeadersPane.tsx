@@ -25,6 +25,7 @@ import { useHeaderAreaSelection } from "../mobile/useAreaSelection";
 import { useRenderCounter } from "../perf/useRenderCounter";
 import { renderTrackRows } from "./trackRowWindowing";
 import { useTrackRowWindow } from "./useTrackRowWindow";
+import { NetworkControls } from "../../network/NetworkControls";
 
 const TRACK_HEADER_CONTROL_SELECTOR =
   "button, input, label, textarea, select, .lt-track-toggle-group, .lt-track-volume, .lt-track-pan";
@@ -205,7 +206,7 @@ export function TrackHeadersPane({
         ) : null}
         <span>Tracks</span>
       </div>
-      <div
+      <NetworkControls permission="edit"><div
         className="lt-track-headers-list"
         aria-hidden={!hasSong}
         ref={headersListRef}
@@ -466,7 +467,7 @@ export function TrackHeadersPane({
             </div>
           </div>
         ))}
-      </div>
+      </div></NetworkControls>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import {
   memo,
   useEffect,
@@ -72,6 +73,7 @@ function SetlistVideoPanelComponent({
   menus,
   video,
 }: SetlistVideoPanelProps) {
+  const { canUseFiles } = useNetworkPermissions();
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const fallbackRef = useRef<number | null>(null);
@@ -386,7 +388,7 @@ function SetlistVideoPanelComponent({
           clips.map((clip) => bar(clip, xOf(clip.timelineStartSeconds), clip.durationSeconds * pxPerSecond, pxPerSecond))
         }
         actions={({ cursorSeconds }) =>
-          readOnly ? null : (
+          readOnly || !canUseFiles ? null : (
             <button
               type="button"
               className="lt-setlist-settings-button is-primary"

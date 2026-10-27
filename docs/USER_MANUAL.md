@@ -378,6 +378,31 @@ LibreTracks desktop can publish a web remote surface for transport and mixer con
 
 > Live workflow suggestion: keep the desktop operator focused on timeline/arrangement and assign cue or mix adjustments to a second person using the remote.
 
+### Network sessions between LibreTracks devices
+
+`Network session` connects another LibreTracks installation to a host; it is
+separate from the `Remote` web controller. Guests can choose DAW, Setlist,
+Compact or Live without changing the host's view.
+
+| Role | Actions on the host |
+| --- | --- |
+| Viewer | Read songs, sections, lyrics, mix and video status. Selecting a song to inspect it does not cue it. |
+| Controller | Viewer access plus transport, jumps (including next section and next cue), vamp, song order, transitions, pause at song end, vamp between songs, fade-stop duration and live video output controls. |
+| Editor | Controller access plus mix, metronome, voice guide, installed pads, meter measurement mode, and editing songs, sections, arrangements, clips, MIDI and automation. Includes delete, undo and redo. |
+
+Unavailable controls are disabled and update when the host changes the role or
+the connection drops. The host also validates every command. Black, fade to
+black and video output toggles operate on the host; guests follow its status.
+
+Language and timeline navigation/playhead-follow preferences are saved only on
+the guest device. Authorized playback settings are saved on the host and applied
+to its engine. Click sound, voice-guide and pad changes do not overwrite unrelated
+settings or audio routes.
+
+Importing, exporting, analysis/rendering, saving the project, managing files or
+installing pads must be done on the host. Its audio devices, MIDI ports, folders,
+auxiliary routes and display setup cannot be reconfigured from the guest.
+
 ## 8. Troubleshooting
 
 ### Linux: blank white screen on launch

@@ -1,3 +1,4 @@
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import {
   memo,
   useCallback,
@@ -65,6 +66,7 @@ function SetlistSongTileComponent({
 }: SetlistSongTileProps) {
   const { t } = useTranslation();
   const regionId = region.id;
+  const { canControl, canEdit, canUseFiles } = useNetworkPermissions();
   const songKey = regionEffectiveKey(region);
   const duration = formatLiveClock(region.endSeconds - region.startSeconds);
   const bpmLabel = bpm !== undefined ? `${Math.round(bpm)} BPM` : null;
@@ -118,18 +120,18 @@ function SetlistSongTileComponent({
       aria-label={t("setlistView.songs.tileLabel", { index: index + 1, name: region.name })}
       title={t("setlistView.songs.tileLabel", { index: index + 1, name: region.name })}
       onClick={() => actions.onActivate(regionId)}
-      onDoubleClick={() => actions.onPlaySong(regionId, region.name)}
+      onDoubleClick={() => canControl && actions.onPlaySong(regionId, region.name)}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter") actions.onPlaySong(regionId, region.name);
+        if (event.key === "Enter" && canControl) actions.onPlaySong(regionId, region.name);
         else if (event.key === " ") {
           event.preventDefault();
           actions.onActivate(regionId);
         }
       }}
-      onContextMenu={openMenu}
-      onDragOver={dropHandlers.onDragOver}
-      onDrop={dropHandlers.onDrop}
+      onContextMenu={canEdit ? openMenu : undefined}
+      onDragOver={canUseFiles ? dropHandlers.onDragOver : undefined}
+      onDrop={canUseFiles ? dropHandlers.onDrop : undefined}
       onPointerDown={surfaceProps?.onPointerDown}
     >
       {handleProps ? (
@@ -165,6 +167,7 @@ function SetlistSongTileComponent({
         <button
           type="button"
           className="lt-setlist-song-button"
+          disabled={!canControl}
           aria-label={t("setlistView.songs.play", { name: region.name })}
           title={t("setlistView.songs.play", { name: region.name })}
           onClick={(event) => {
@@ -180,6 +183,7 @@ function SetlistSongTileComponent({
         <button
           type="button"
           className="lt-setlist-song-button"
+          disabled={!canEdit}
           aria-label={t("setlistView.songs.menu", { name: region.name })}
           title={t("setlistView.songs.menu", { name: region.name })}
           onClick={openMenu}

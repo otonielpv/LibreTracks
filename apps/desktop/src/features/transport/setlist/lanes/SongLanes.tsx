@@ -1,3 +1,4 @@
+import { useNetworkPermissions } from "../../../network/useNetworkPermissions";
 import {
   Fragment,
   memo,
@@ -110,6 +111,7 @@ function SongLanesComponent({
   videoLanes,
   onOpenInDaw,
 }: SongLanesProps) {
+  const { canUseFiles } = useNetworkPermissions();
   const { t } = useTranslation();
   useFrameGateWake();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -292,7 +294,7 @@ function SongLanesComponent({
   // «+ Video»: the DAW's import (with its «extract the audio?» question) at
   // the playhead or the start of its section, on the selected video track,
   // else the song's first one, else a new one. A phone picks from its gallery.
-  const canAddVideo = Boolean(videoLanes && !videoLanes.readOnly);
+  const canAddVideo = canUseFiles && Boolean(videoLanes && !videoLanes.readOnly);
   const addVideoAt = (seconds: number) => {
     if (videoLanes) addVideo(videoLanes, tracks, seconds);
   };

@@ -23,6 +23,7 @@ import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { SongGapVampToggle } from "../live/SongGapVampToggle";
 import { RegionTempoControl } from "./RegionTempoControl";
 import { SnapIcon } from "./SnapIcon";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 type RegionMasterFaderProps = {
   regionId: string;
@@ -332,7 +333,8 @@ export function TimelineToolbar({
       document.removeEventListener("pointerdown", handlePointerDown, true);
     };
   }, [openGroup]);
-  const controlsDisabled = isProjectEmpty && !learnModeActive;
+  const { canControl, canEdit } = useNetworkPermissions();
+  const controlsDisabled = !canControl || (isProjectEmpty && !learnModeActive);
   const jumpSummary =
     globalJumpMode === "after_bars"
       ? `${globalJumpBars} bars`
@@ -363,7 +365,7 @@ export function TimelineToolbar({
   const regionSummary = selectedRegion
     ? `${formatTransposeSemitones(selectedRegion.transposeSemitones)} st`
     : t("timelineToolbar.regionTransposeNoSelection");
-  const regionControlsDisabled = controlsDisabled || !selectedRegion;
+  const regionControlsDisabled = !canEdit || controlsDisabled || !selectedRegion;
 
   const warpEnabled = selectedRegion?.warpEnabled ?? false;
   const warpSourceBpm = selectedRegion?.warpSourceBpm ?? null;
@@ -383,7 +385,7 @@ export function TimelineToolbar({
         })
       : t("timelineToolbar.regionWarpSummaryOff")
     : t("timelineToolbar.regionWarpNoSelection");
-  const warpControlsDisabled = controlsDisabled || !selectedRegion;
+  const warpControlsDisabled = !canEdit || controlsDisabled || !selectedRegion;
 
   // Read the optimistic value (set during drag) if present, otherwise fall
   // back to the snapshot value. This is what lets the thumb track the
@@ -400,7 +402,7 @@ export function TimelineToolbar({
         Number.isFinite(masterGainDb) ? `${masterGainDb.toFixed(1)} dB` : "-∞ dB"
       })`
     : t("timelineToolbar.regionMasterNoSelection");
-  const masterControlsDisabled = controlsDisabled || !selectedRegion;
+  const masterControlsDisabled = !canEdit || controlsDisabled || !selectedRegion;
 
   const handleModeButtonClick = (learnKey: string, commit: () => void) => {
     if (learnModeActive) {
@@ -477,7 +479,7 @@ export function TimelineToolbar({
               }
               aria-pressed={followPlayheadEnabled}
               title={t("timelineToolbar.followPlayheadTitle")}
-              disabled={controlsDisabled}
+              disabled={isProjectEmpty && !learnModeActive}
               onClick={onToggleFollowPlayhead}
             >
               <span className="material-symbols-outlined">my_location</span>

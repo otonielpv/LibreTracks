@@ -1,5 +1,7 @@
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { NetworkControls } from "../../network/NetworkControls";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 import {
   VOICE_GUIDE_COUNT_STYLES,
@@ -40,6 +42,7 @@ export function VoiceGuideControls({
   onVolumeDraftChange,
   onCommitVolume,
 }: ControlsProps) {
+  const { isGuest } = useNetworkPermissions();
   const { t } = useTranslation();
 
   // Voice guide can route to the local monitor; mirror the ordering the old
@@ -56,7 +59,7 @@ export function VoiceGuideControls({
   );
 
   return (
-    <>
+    <NetworkControls permission="edit">
       <header className="lt-pads-popover-header">
         <span className="material-symbols-outlined" aria-hidden="true">
           campaign
@@ -113,6 +116,7 @@ export function VoiceGuideControls({
               <select
                 className="lt-pads-select"
                 value={settings.voiceGuideOutput}
+                disabled={isGuest}
                 onChange={(event) =>
                   onChange({ voiceGuideOutput: event.target.value })
                 }
@@ -229,7 +233,7 @@ export function VoiceGuideControls({
         </>
       ) : null}
     </div>
-    </>
+    </NetworkControls>
   );
 }
 

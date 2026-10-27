@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { appliedArrangementName } from "../structure/arrangementName";
 
 import {
@@ -148,8 +149,8 @@ function LivePerformanceViewComponent({
   activeVamp,
   onViewModeChange,
   headerStart,
-  canControl = true,
-  canEditChart = true,
+  canControl: allowControl = true,
+  canEditChart: allowEditChart = true,
   chartExtraSemitones = 0,
   chartAccidentals = "auto",
   onMarkerAction,
@@ -168,6 +169,9 @@ function LivePerformanceViewComponent({
   onVampBetweenSongsChange,
   onVampBarsChange,
 }: LivePerformanceViewProps) {
+  const permissions = useNetworkPermissions();
+  const canControl = allowControl && permissions.canControl;
+  const canEditChart = allowEditChart && permissions.canEdit;
   const { t } = useTranslation();
   const allGroups = useMemo(
     () => buildLiveMarkerGroups(song.sectionMarkers),

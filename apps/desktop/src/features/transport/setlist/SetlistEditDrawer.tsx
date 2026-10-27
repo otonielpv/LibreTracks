@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 import { useDismissOnBack } from "../mobile/backNavigation";
 import { requestEditMode, useSetlistStore, type SetlistEditMode } from "./setlistStore";
@@ -48,6 +49,7 @@ function modalIsOpen() {
  * closes it.
  */
 function SetlistEditDrawerComponent({ layout, songName, modes }: SetlistEditDrawerProps) {
+  const { canEdit } = useNetworkPermissions();
   const { t } = useTranslation();
   const baseId = useId();
   const headingId = `${baseId}-heading`;
@@ -93,6 +95,7 @@ function SetlistEditDrawerComponent({ layout, songName, modes }: SetlistEditDraw
     void requestEditMode(next.mode).then(() => tabRefs.current.get(next.mode)?.focus());
   };
 
+  if (!canEdit) return null;
   return (
     <section
       ref={rootRef}
@@ -172,6 +175,7 @@ export const SetlistEditDrawer = memo(SetlistEditDrawerComponent);
 
 /** The «Edit» toggle of the view's header. */
 export function SetlistEditButton() {
+  const { canEdit } = useNetworkPermissions();
   const { t } = useTranslation();
   const editMode = useSetlistStore((state) => state.editMode);
   const editing = editMode !== null;
@@ -179,6 +183,7 @@ export function SetlistEditButton() {
   return (
     <button
       type="button"
+      disabled={!canEdit}
       className={`lt-setlist-edit-button${editing ? " is-active" : ""}`}
       aria-pressed={editing}
       title={editing ? t("setlistView.edit.doneTitle") : t("setlistView.edit.buttonTitle")}

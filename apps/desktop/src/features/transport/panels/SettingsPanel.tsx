@@ -27,6 +27,7 @@ import { TelemetrySettingsField } from "../../telemetry/TelemetryController";
 import { DiagnosticsSettingsTab } from "./DiagnosticsSettingsTab";
 import { MulticoreAudioField } from "./MulticoreAudioField";
 import { TrackMeterModeField } from "./TrackMeterModeField";
+import { PlaybackSettingsFields } from "./PlaybackSettingsFields";
 import { SessionStorageVolumeField } from "./SessionStorageVolumeField";
 import { UpdateCheckField } from "./UpdateCheckField";
 import { LibraryModeField } from "../library/folders/LibraryModeField";
@@ -38,6 +39,7 @@ import {
 } from "./MidiSettingsTab";
 import { MidiLearnSettingsTab } from "./MidiLearnSettingsTab";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 type AudioRoutingOption = { value: string; label: string };
 
@@ -130,9 +132,9 @@ type SettingsPanelProps = {
 export function SettingsPanel({
   isOpen,
   onClose,
-  activeTab,
+  activeTab: requestedTab,
   onTabChange,
-  settingsTabs,
+  settingsTabs: allTabs,
   isLoading,
   isSaving,
   appSettings,
@@ -200,6 +202,11 @@ export function SettingsPanel({
   // En Android, atras cierra este overlay en vez de salir de la aplicacion.
   useDismissOnBack(onClose, isOpen);
   const { t } = useTranslation();
+  const { isGuest, canControl, canEdit } = useNetworkPermissions();
+  const settingsTabs = isGuest
+    ? allTabs.filter((tab) => tab.id !== "midi" && tab.id !== "midiLearn" && tab.id !== "video")
+    : allTabs;
+  const activeTab = settingsTabs.some((tab) => tab.id === requestedTab) ? requestedTab : "general";
 
   if (!isOpen) {
     return null;
@@ -277,6 +284,7 @@ export function SettingsPanel({
                   aria-labelledby="lt-settings-tab-audio"
                 >
                   <div className="lt-settings-section-grid">
+                    {!isGuest ? <>
                     {/* Android has exactly one audio backend (Oboe/AAudio), so
                         the "Audio System" selector is noise there — hide it and
                         show only the device / rate / buffer controls. */}
@@ -603,9 +611,10 @@ export function SettingsPanel({
                         onAudioSingleThreadRenderChange
                       }
                     />
+                    </> : null}
                     <TrackMeterModeField
                       mode={appSettings.trackMeterMode}
-                      disabled={isSaving}
+                      disabled={isSaving || !canEdit}
                       onModeChange={onTrackMeterModeChange}
                     />
                   </div>
@@ -754,66 +763,15 @@ export function SettingsPanel({
                       </small>
                     </label>
 
-                    <label className="lt-settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={appSettings.pauseAtSongEnd}
-                        disabled={isLoading || isSaving}
-                        onChange={(event) =>
-                          onPauseAtSongEndChange(event.target.checked)
-                        }
-                      />
-                      <span className="lt-settings-toggle-copy">
-                        <span>
-                          {t("transport.settingsModal.pauseAtSongEnd", {
-                            defaultValue: "Pause at the end of each song",
-                          })}
-                        </span>
-                        <small>
-                          {t("transport.settingsModal.pauseAtSongEndHint", {
-                            defaultValue:
-                              "Playback stops when a song ends instead of rolling straight into the next one. Press Play to start the next song. A song jump you queued still happens.",
-                          })}
-                        </small>
-                      </span>
-                    </label>
+                    <PlaybackSettingsFields
+                      settings={appSettings}
+                      disabled={isLoading || isSaving || !canControl}
+                      onPauseAtSongEndChange={onPauseAtSongEndChange}
+                      onVampBetweenSongsChange={onVampBetweenSongsChange}
+                      onFadeOutStopSecondsChange={onFadeOutStopSecondsChange}
+                    />
 
-                    <label className="lt-settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={appSettings.vampBetweenSongs}
-                        disabled={isLoading || isSaving}
-                        onChange={(event) =>
-                          onVampBetweenSongsChange(event.target.checked)
-                        }
-                      />
-                      <span className="lt-settings-toggle-copy">
-                        <span>{t("transport.settingsModal.vampBetweenSongs")}</span>
-                        <small>{t("transport.settingsModal.vampBetweenSongsHint")}</small>
-                      </span>
-                    </label>
-
-                    <label className="lt-settings-field">
-                      <span className="lt-settings-field-label">
-                        {t("transport.settingsModal.fadeOutStopSeconds")}
-                      </span>
-                      <input
-                        type="number"
-                        min={0.1}
-                        max={30}
-                        step={0.5}
-                        value={appSettings.fadeOutStopSeconds}
-                        disabled={isLoading || isSaving}
-                        onChange={(event) => {
-                          const seconds = Number(event.target.value);
-                          if (Number.isFinite(seconds) && seconds > 0) {
-                            onFadeOutStopSecondsChange(seconds);
-                          }
-                        }}
-                      />
-                      <small>{t("transport.settingsModal.fadeOutStopSecondsHint")}</small>
-                    </label>
-
+                    {!isGuest ? <>
                     <label className="lt-settings-field">
                       <span className="lt-settings-field-label">
                         {t("transport.settingsModal.songTrackLayout")}
@@ -975,10 +933,11 @@ export function SettingsPanel({
                     </label>
 
                     <LibraryModeField />
+                    </> : null}
 
                     <InterfaceZoomField />
 
-                    <SessionStorageVolumeField />
+                    {!isGuest ? <SessionStorageVolumeField /> : null}
 
                     <DecodingCacheField />
 
@@ -1295,4 +1254,3 @@ export function DecodingCacheField() {
     </div>
   );
 }
-

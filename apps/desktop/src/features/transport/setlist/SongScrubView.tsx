@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import {
   markerCategory,
   markerColor,
@@ -92,6 +93,7 @@ function SongScrubViewComponent({
   className,
 }: SongScrubViewProps) {
   const { t } = useTranslation();
+  const { canControl } = useNetworkPermissions();
   useFrameGateWake();
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const layerRef = useRef<HTMLDivElement | null>(null);
@@ -220,7 +222,7 @@ function SongScrubViewComponent({
     cursorRef.current = clampToSong(snapped);
     lastPositionRef.current = cursorRef.current;
     if (updateLayer) applyCursor();
-    onSeek(cursorRef.current);
+    if (canControl) onSeek(cursorRef.current);
   };
 
   // Fingers on the waveform: one swipes, two pinch the zoom (the DAW's
@@ -391,14 +393,15 @@ function SongScrubViewComponent({
           className={`lt-setlist-settings-button${playing ? " is-active" : ""}`}
           aria-label={t(playing ? "setlistView.scrub.pause" : "setlistView.scrub.play")}
           title={t(playing ? "setlistView.scrub.pause" : "setlistView.scrub.play")}
+          disabled={!canControl}
           onClick={() => runShortcutAction("transport.playPause")}
         >
           <span className="material-symbols-outlined" aria-hidden="true">{playing ? "pause" : "play_arrow"}</span>
         </button>
-        <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.sections.prevBar")} title={t("setlistView.sections.prevBar")} onClick={() => stepCursor(-1)}>
+        <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.sections.prevBar")} title={t("setlistView.sections.prevBar")} disabled={!canControl} onClick={() => stepCursor(-1)}>
           <span className="material-symbols-outlined" aria-hidden="true">first_page</span>
         </button>
-        <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.sections.nextBar")} title={t("setlistView.sections.nextBar")} onClick={() => stepCursor(1)}>
+        <button type="button" className="lt-setlist-settings-button" aria-label={t("setlistView.sections.nextBar")} title={t("setlistView.sections.nextBar")} disabled={!canControl} onClick={() => stepCursor(1)}>
           <span className="material-symbols-outlined" aria-hidden="true">last_page</span>
         </button>
         {actions?.({ cursorSeconds: () => cursorRef.current })}

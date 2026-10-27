@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { CompactMidiStrip, type CompactMidiStripHandlers } from "./CompactMidiStrip";
+import { NetworkControls } from "../../network/NetworkControls";
 
 import {
   TRACK_FADER_SCALE,
@@ -400,6 +401,7 @@ function CompactMixerComponent({
   );
 
   return (
+    <NetworkControls permission="edit">
     <div
       className={`lt-compact-mixer ${trackReorderMode ? "is-track-reorder-mode" : ""}`}
     >
@@ -420,6 +422,7 @@ function CompactMixerComponent({
           : visibleTracks.map(renderStrip)}
       </div>
     </div>
+    </NetworkControls>
   );
 }
 

@@ -1,3 +1,4 @@
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import {
   Fragment,
   memo,
@@ -81,6 +82,7 @@ function SetlistTrackListComponent({
   menus,
   layout,
 }: SetlistTrackListProps) {
+  const { canUseFiles } = useNetworkPermissions();
   const { t } = useTranslation();
   const [expandedTrackId, setExpandedTrackId] = useState<string | null>(null);
   const touchMenu = useTouchContextMenu({
@@ -184,7 +186,7 @@ function SetlistTrackListComponent({
       onDrop={dropHandlers.onDrop}
     >
       <div className="lt-setlist-tracks-toolbar">
-        <button type="button" className="lt-setlist-settings-button" onClick={() => onAddAudioToSong(region.id)}>
+        <button type="button" className="lt-setlist-settings-button" disabled={!canUseFiles} onClick={() => onAddAudioToSong(region.id)}>
           <span className="material-symbols-outlined" aria-hidden="true">library_music</span>
           {t("setlistView.tracks.addAudio")}
         </button>

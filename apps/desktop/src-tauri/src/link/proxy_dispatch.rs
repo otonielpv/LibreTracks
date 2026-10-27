@@ -22,6 +22,7 @@ pub enum ProxyAccess {
 pub fn access(command: &str) -> Option<ProxyAccess> {
     match command {
         "get_missing_media"
+        | "get_pads_catalog"
         | "get_project_load_progress_snapshot"
         | "get_settings"
         | "get_song_view"
@@ -32,7 +33,11 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "is_demo_session"
         | "list_video_assets"
         | "prewarm_timeline_seek"
-        | "request_video_thumbnails" => Some(ProxyAccess::View),
+        | "request_video_thumbnails"
+        | "video_live_state"
+        | "video_media_status"
+        | "video_output_status"
+        | "video_sync_stats" => Some(ProxyAccess::View),
         "cancel_marker_jump"
         | "fade_out_and_stop"
         | "pause_transport"
@@ -42,7 +47,9 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "schedule_region_jump"
         | "seek_transport"
         | "stop_transport"
-        | "toggle_vamp" => Some(ProxyAccess::Control),
+        | "toggle_vamp"
+        | "video_live_action"
+        | "video_scrub" => Some(ProxyAccess::Control),
         "add_automation_track"
         | "apply_song_arrangement"
         | "assign_section_marker_digit"
@@ -70,6 +77,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "duplicate_clips"
         | "duplicate_ruler_markers"
         | "duplicate_video_clips"
+        | "load_pad_key"
         | "move_clip"
         | "move_clip_live"
         | "move_clip_to_track"
@@ -151,10 +159,13 @@ pub const EVENTS_TO_RELAY: &[&str] = &[
     "audio:meters",
     "audio:region_meters",
     "video:thumbnails-ready",
+    "video:live-state",
+    "video:output-status",
 ];
 
 pub const PROXIED_COMMANDS: &[&str] = &[
     "get_missing_media",
+    "get_pads_catalog",
     "get_project_load_progress_snapshot",
     "get_settings",
     "get_song_view",
@@ -166,6 +177,10 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "list_video_assets",
     "prewarm_timeline_seek",
     "request_video_thumbnails",
+    "video_live_state",
+    "video_media_status",
+    "video_output_status",
+    "video_sync_stats",
     "cancel_marker_jump",
     "fade_out_and_stop",
     "pause_transport",
@@ -176,6 +191,8 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "seek_transport",
     "stop_transport",
     "toggle_vamp",
+    "video_live_action",
+    "video_scrub",
     "add_automation_track",
     "apply_song_arrangement",
     "assign_section_marker_digit",
@@ -203,6 +220,7 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "duplicate_clips",
     "duplicate_ruler_markers",
     "duplicate_video_clips",
+    "load_pad_key",
     "move_clip",
     "move_clip_live",
     "move_clip_to_track",
@@ -282,6 +300,7 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             .await
             .map_err(|error| error.to_string())?
         }
+        "get_pads_catalog" => into_value_result(crate::commands::pads::get_pads_catalog(app.clone()).await),
         "get_project_load_progress_snapshot" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
@@ -363,6 +382,38 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             .await
             .map_err(|error| error.to_string())?
         }
+        "video_live_state" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value(crate::commands::video::video_live_state(app.clone()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "video_media_status" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value(crate::commands::video::video_media_status(app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "video_output_status" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value(crate::commands::video::video_output_status(app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "video_sync_stats" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value(crate::commands::video::video_sync_stats(app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
         "cancel_marker_jump" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
@@ -439,6 +490,22 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::transport::toggle_vamp(arg(&args, "mode")?, arg(&args, "bars")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "video_live_action" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::video::video_live_action(app.clone(), arg(&args, "action")?))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "video_scrub" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                { crate::commands::video::video_scrub(arg(&args, "positionSeconds")?, app.state()); Ok(Value::Null) }
             })
             .await
             .map_err(|error| error.to_string())?
@@ -659,6 +726,7 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             .await
             .map_err(|error| error.to_string())?
         }
+        "load_pad_key" => into_value_result(crate::commands::pads::load_pad_key(app.clone(), arg(&args, "settings")?, app.state(), app.state()).await),
         "move_clip" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
