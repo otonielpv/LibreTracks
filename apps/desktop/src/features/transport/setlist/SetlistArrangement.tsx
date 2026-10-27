@@ -173,7 +173,25 @@ function SetlistArrangementEditorComponent({
     </button>
   );
   return (
-    <div className={`lt-setlist-arrangement is-waveform is-${layout}`}>
+    <div
+      className={`lt-setlist-arrangement is-waveform is-${layout}`}
+      style={
+        layout === "short"
+          ? { width: `max(100%, ${actions.draft.blocks.length * 9 + 3}rem)` }
+          : undefined
+      }
+    >
+      <SongOverviewStrip
+        region={region}
+        clips={[]}
+        sectionMarkers={[]}
+        waveformSummaries={waveformSummaries}
+        positionSecondsRef={positionSecondsRef}
+        layout={layout}
+        onSeek={onSeek}
+        clickToSeek
+      />
+      <SongBarRuler song={song} region={region} variant="arrangement" />
       <SongStructureEditor
         sections={structure.sections}
         draft={actions.draft}
@@ -196,17 +214,9 @@ function SetlistArrangementEditorComponent({
                 waveformSummaries={waveformSummaries}
                 positionSecondsRef={positionSecondsRef}
                 layout={layout}
-                onSeek={onSeek}
-                clickToSeek
+                showPlayhead={false}
               /> : null}
               {row}
-              {section ? (
-                <SongBarRuler
-                  song={song}
-                  region={{ ...region, ...(span ?? section) }}
-                  variant="arrangement"
-                />
-              ) : null}
             </div>
           );
         }}

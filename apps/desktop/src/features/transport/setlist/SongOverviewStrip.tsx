@@ -47,6 +47,8 @@ type SongOverviewStripProps = {
   onSeek?: (seconds: number) => void;
   /** A stationary press seeks in edit surfaces; elsewhere a press only starts a drag. */
   clickToSeek?: boolean;
+  /** Hide the playhead when this is only a section's waveform backdrop. */
+  showPlayhead?: boolean;
   /** Right click / long press on the waveform at `seconds` (the DAW's ruler
    * menu: create a section or a cue, a tempo or meter change…). */
   onContextMenuAt?: (event: ReactMouseEvent<HTMLElement>, seconds: number) => void;
@@ -112,6 +114,7 @@ function SongOverviewStripComponent({
   layout,
   onSeek,
   clickToSeek = false,
+  showPlayhead = true,
   onContextMenuAt,
   onDoubleClickAt,
 }: SongOverviewStripProps) {
@@ -441,28 +444,30 @@ function SongOverviewStripComponent({
         aria-hidden="true"
         style={range.width < size.width ? { left: `${range.start}px`, width: `${range.width}px` } : undefined}
       />
-      <div ref={playheadRef} className="lt-setlist-overview-playhead">
-        {onSeek ? (
-          <button
-            type="button"
-            className="lt-setlist-playhead-handle"
-            aria-label={t("setlistView.overview.movePlayhead")}
-            title={t("setlistView.overview.movePlayhead")}
-            onPointerDown={(event) => handlePointerDown(event, true)}
-            onKeyDown={(event) => {
-              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
-              event.preventDefault();
-              event.stopPropagation();
-              const seconds = event.key === "Home" ? region.startSeconds
-                : event.key === "End" ? region.endSeconds
-                : positionSecondsRef.current + (event.key === "ArrowLeft" ? -1 : 1);
-              onSeek(Math.max(region.startSeconds, Math.min(region.endSeconds, seconds)));
-            }}
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">drag_indicator</span>
-          </button>
-        ) : null}
-      </div>
+      {showPlayhead ? (
+        <div ref={playheadRef} className="lt-setlist-overview-playhead">
+          {onSeek ? (
+            <button
+              type="button"
+              className="lt-setlist-playhead-handle"
+              aria-label={t("setlistView.overview.movePlayhead")}
+              title={t("setlistView.overview.movePlayhead")}
+              onPointerDown={(event) => handlePointerDown(event, true)}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
+                event.preventDefault();
+                event.stopPropagation();
+                const seconds = event.key === "Home" ? region.startSeconds
+                  : event.key === "End" ? region.endSeconds
+                  : positionSecondsRef.current + (event.key === "ArrowLeft" ? -1 : 1);
+                onSeek(Math.max(region.startSeconds, Math.min(region.endSeconds, seconds)));
+              }}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">drag_indicator</span>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

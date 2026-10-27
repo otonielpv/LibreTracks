@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SectionMarkerSummary, SongRegionSummary, SongView } from "@libretracks/shared/models";
 
@@ -30,6 +30,23 @@ vi.mock("../../../shared/dialog/dialogService", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../shared/dialog/dialogService")>()),
   confirmDialog: dialog.confirmDialog,
 }));
+
+const originalPointerEvent = window.PointerEvent;
+beforeAll(() => {
+  class TestPointerEvent extends MouseEvent {
+    readonly pointerId: number;
+    readonly pointerType: string;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+      this.pointerType = init.pointerType ?? "mouse";
+    }
+  }
+  Object.defineProperty(window, "PointerEvent", { configurable: true, value: TestPointerEvent });
+});
+afterAll(() => {
+  Object.defineProperty(window, "PointerEvent", { configurable: true, value: originalPointerEvent });
+});
 
 const section = (markerId: string, startSeconds: number, endSeconds: number) => ({
   markerId,
@@ -122,6 +139,9 @@ describe("Edit → Arrangement", () => {
       expect(container.querySelector("[data-setlist-zone='overview'] .lt-structure-editor")).not.toBeNull();
       expect(container.querySelector("[data-setlist-zone='drawer'] .lt-structure-editor")).toBeNull();
     }
+    expect(container.querySelectorAll(".lt-setlist-arrangement.is-waveform > .lt-setlist-bar-ruler")).toHaveLength(1);
+    expect(container.querySelectorAll(".lt-setlist-arrangement-wave-block > .lt-setlist-bar-ruler")).toHaveLength(0);
+    expect(container.querySelectorAll(".lt-setlist-arrangement .lt-setlist-overview-playhead")).toHaveLength(1);
     expect(container.querySelector("[data-setlist-zone='mixer']")).toBeNull();
     expect(container.querySelectorAll(".lt-setlist-arrangement-wave-block canvas")).toHaveLength(2);
     // Embedded: the app's own panel stays hidden.
@@ -173,6 +193,43 @@ describe("Edit → Arrangement", () => {
     expect(snap.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(snap);
     expect(useTimelineUIStore.getState().snapEnabled).toBe(true);
+  });
+
+  it("arrangement playhead scrubs continuously across section boundaries", async () => {
+    useTimelineUIStore.setState({ snapEnabled: true });
+    const base = props();
+    const onSeek = vi.fn();
+    const { container } = render(
+      <SetlistView
+        {...base}
+        performance={{ ...base.performance, onSeek }}
+        layoutClass="wide"
+      />,
+    );
+    await act(async () => {
+      await requestEditMode("arrangement");
+    });
+
+    const waveform = container.querySelector<HTMLElement>(
+      ".lt-setlist-arrangement.is-waveform > .lt-setlist-overview",
+    )!;
+    Object.defineProperty(waveform, "offsetWidth", { configurable: true, value: 1000 });
+    waveform.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 1000,
+      height: 100,
+      right: 1000,
+      bottom: 100,
+    }) as DOMRect;
+
+    fireEvent.pointerDown(waveform, { button: 0, pointerId: 1, clientX: 100, clientY: 40 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 900, clientY: 40 });
+    expect(waveform.querySelector(".lt-setlist-overview-playhead")?.classList.contains("is-dragging")).toBe(true);
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 900, clientY: 40 });
+
+    expect(onSeek.mock.lastCall?.[0]).toBeGreaterThan(20);
+    expect(waveform.querySelector(".lt-setlist-overview-playhead")?.classList.contains("is-dragging")).toBe(false);
   });
 
   it("leaving with unapplied changes asks, and stays when the answer is no", async () => {

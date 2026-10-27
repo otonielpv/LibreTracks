@@ -476,6 +476,16 @@ html.lt-mobile .lt-setlist-add-song-button {
   border-left: 1px solid rgb(255 255 255 / 0.24);
 }
 
+.lt-setlist-bar-ruler-tick.is-beat {
+  top: 0.3rem;
+  border-color: rgb(255 255 255 / 0.18);
+}
+
+.lt-setlist-bar-ruler-tick.is-subdivision {
+  top: 0.65rem;
+  border-color: rgb(255 255 255 / 0.12);
+}
+
 .lt-setlist-bar-ruler-label {
   position: absolute;
   top: 0;
@@ -490,9 +500,8 @@ html.lt-mobile .lt-setlist-add-song-button {
 }
 
 .lt-setlist-bar-ruler.is-arrangement {
-  top: auto;
-  bottom: 3.15rem;
-  height: 1rem;
+  top: calc(var(--lt-setlist-label-height) + 0.25rem);
+  height: 1.1rem;
   z-index: 1;
 }
 
@@ -2501,6 +2510,10 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 }
 
 .lt-setlist-arrangement.is-waveform {
+  position: relative;
+  display: grid;
+  grid-template-areas: "band";
+  grid-template-columns: minmax(0, 1fr);
   grid-area: band;
   min-width: 0;
   min-height: 0;
@@ -2508,12 +2521,37 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   padding: 0;
 }
 
+.lt-setlist-arrangement.is-waveform > .lt-setlist-overview,
+.lt-setlist-arrangement.is-waveform > .lt-setlist-bar-ruler,
+.lt-setlist-arrangement.is-waveform > .lt-structure-editor {
+  grid-area: band;
+  min-width: 0;
+  min-height: 0;
+}
+
+.lt-setlist-arrangement.is-waveform > .lt-structure-editor {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.lt-setlist-arrangement.is-waveform > .lt-setlist-bar-ruler {
+  z-index: 2;
+}
+
+.lt-setlist-arrangement.is-waveform > .lt-setlist-overview {
+  z-index: 0;
+}
+
 .lt-setlist-arrangement.is-waveform .lt-structure-editor,
-.lt-setlist-arrangement.is-waveform .lt-structure-strip-wrap {
+.lt-setlist-arrangement.is-waveform .lt-structure-strip-wrap,
+.lt-setlist-arrangement.is-waveform .lt-structure-strip,
+.lt-setlist-arrangement.is-waveform .lt-structure-item {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
+  pointer-events: none;
 }
 
 .lt-setlist-arrangement.is-waveform .lt-structure-caption {
@@ -2534,8 +2572,12 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 
 .lt-setlist-arrangement.is-waveform .lt-structure-item {
   position: relative;
-  min-width: 9rem;
+  min-width: 0;
   max-width: none;
+}
+
+.lt-setlist-arrangement.is-waveform.is-short .lt-structure-item {
+  min-width: 9rem;
 }
 
 .lt-setlist-arrangement.is-waveform .lt-structure-item.is-end {
@@ -2580,7 +2622,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 .lt-setlist-arrangement-wave-block > .lt-setlist-overview {
   position: absolute;
   inset: 0;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .lt-setlist-arrangement.is-waveform .lt-structure-block {
@@ -2588,12 +2630,11 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 }
 
 .lt-setlist-arrangement.is-waveform .lt-structure-block-name,
-.lt-setlist-arrangement.is-waveform .lt-structure-handle {
+.lt-setlist-arrangement.is-waveform .lt-structure-block-index,
+.lt-setlist-arrangement.is-waveform .lt-structure-block-bars,
+.lt-setlist-arrangement.is-waveform .lt-structure-handle,
+.lt-setlist-arrangement.is-waveform .lt-setlist-arrangement-insert {
   pointer-events: auto;
-}
-
-.lt-setlist-arrangement-wave-block > .lt-setlist-bar-ruler {
-  pointer-events: none;
 }
 
 .lt-setlist-arrangement-mobile-waveform {
@@ -2608,6 +2649,10 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 
 .lt-setlist-arrangement-mobile-waveform > .lt-setlist-arrangement {
   min-width: 100%;
+}
+
+.lt-setlist-arrangement-mobile-waveform .lt-setlist-arrangement.is-waveform > .lt-setlist-overview.is-short {
+  touch-action: pan-x;
 }
 
 .lt-setlist-arrangement.is-waveform .lt-setlist-overview-canvas {
@@ -2627,7 +2672,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   align-items: flex-start;
   justify-content: flex-start;
   isolation: isolate;
-  padding: 0.5rem 0.35rem;
+  padding: 3.2rem 0.35rem 0.5rem;
   border: 0;
   border-left: 2px solid var(--lt-structure-color);
   border-radius: 0;

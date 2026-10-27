@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { TimelineMenus } from "../menus/timelineMenus";
@@ -33,6 +33,7 @@ import { SongLanes } from "./lanes/SongLanes";
 import { createSectionEditHandlers, type SectionEditDeps } from "./sectionEditHandlers";
 import { useTimelineUIStore } from "../uiStore";
 import { resolveSetlistSongId } from "./songMapModel";
+import { resolveSongSeekSeconds } from "./sectionScrubModel";
 import { SONG_DROP_CLASS, songDropHandlers } from "./songDrop";
 import { requestEditMode, useSetlistStore } from "./setlistStore";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
@@ -171,6 +172,25 @@ function SetlistViewComponent({
   );
   lastShownRegionIdRef.current = shownRegionId;
   const shownRegion = regions.find((region) => region.id === shownRegionId) ?? null;
+  const seekInWaveEditor = useCallback(
+    (seconds: number) => {
+      if (
+        shownRegion &&
+        (editMode === "sections" || editMode === "arrangement") &&
+        useTimelineUIStore.getState().snapEnabled
+      ) {
+        performance.onSeek(resolveSongSeekSeconds(
+          performance.song,
+          shownRegion,
+          seconds,
+          true,
+        ));
+        return;
+      }
+      performance.onSeek(seconds);
+    },
+    [editMode, performance.onSeek, performance.song, shownRegion],
+  );
   // The band and the console take audio for the song they show.
   const songDrop = shownRegion
     ? {
@@ -317,7 +337,7 @@ function SetlistViewComponent({
                           waveformSummaries={waveformSummaries}
                           positionSecondsRef={performance.positionSecondsRef}
                           layout={layout}
-                          onSeek={performance.onSeek}
+                          onSeek={seekInWaveEditor}
                           clickToSeek
                           onContextMenuAt={sectionHandlers.openMenuAt}
                           onDoubleClickAt={sectionHandlers.createAt}
@@ -364,7 +384,7 @@ function SetlistViewComponent({
                         waveformSummaries={waveformSummaries}
                         menus={menus}
                         positionSecondsRef={performance.positionSecondsRef}
-                        onSeek={performance.onSeek}
+                        onSeek={seekInWaveEditor}
                       />
                     ) : undefined
                   }
@@ -523,13 +543,13 @@ function SetlistViewComponent({
             layout === "short" ? null : (
             <SetlistArrangementEditor region={shownRegion} handlers={structureHandlers} layout={layout}
               song={performance.song} waveformSummaries={waveformSummaries} menus={menus}
-              positionSecondsRef={performance.positionSecondsRef} onSeek={performance.onSeek} />
+              positionSecondsRef={performance.positionSecondsRef} onSeek={seekInWaveEditor} />
             )
           ) : <OverviewZoom
             startSeconds={shownRegion.startSeconds}
             endSeconds={shownRegion.endSeconds}
             positionSecondsRef={performance.positionSecondsRef}
-            onSeek={performance.onSeek}
+            onSeek={seekInWaveEditor}
             tapToSeek={editMode === "sections"}
             overlay={
                   <>
@@ -564,7 +584,7 @@ function SetlistViewComponent({
                 waveformSummaries={waveformSummaries}
                 positionSecondsRef={performance.positionSecondsRef}
                 layout={layout}
-                onSeek={performance.onSeek}
+                onSeek={editMode === "sections" ? seekInWaveEditor : performance.onSeek}
                 clickToSeek={editMode === "sections"}
                 onContextMenuAt={sectionHandlers.openMenuAt}
                 onDoubleClickAt={editMode !== null ? sectionHandlers.createAt : undefined}

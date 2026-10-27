@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { SongView } from "@libretracks/shared/models";
 
-import { barStartsInSong, nearestBarIndex, stepBar } from "./sectionScrubModel";
+import {
+  barGridTicksInSong,
+  barStartsInSong,
+  nearestBarIndex,
+  resolveSongSeekSeconds,
+  stepBar,
+} from "./sectionScrubModel";
 
 const song = (overrides: Partial<SongView> = {}) =>
   ({
@@ -15,6 +21,20 @@ const song = (overrides: Partial<SongView> = {}) =>
 describe("section scrub model", () => {
   it("a 4/4 song at 120 BPM has a bar every 2 s from its start", () => {
     expect(barStartsInSong(song(), { startSeconds: 10, endSeconds: 18 })).toEqual([10, 12, 14, 16]);
+  });
+
+  it("adds beat subdivisions as the ruler is zoomed in", () => {
+    const region = { startSeconds: 0, endSeconds: 4 };
+    expect(barGridTicksInSong(song(), region, 100).map((tick) => tick.kind)).toEqual(["bar", "bar"]);
+    expect(barGridTicksInSong(song(), region, 200).some((tick) => tick.kind === "subdivision")).toBe(true);
+    expect(barGridTicksInSong(song(), region, 200).filter((tick) => tick.kind === "bar").map((tick) => tick.barIndex))
+      .toEqual([0, 1]);
+  });
+
+  it("snaps a manual seek to a bar only while snap is enabled", () => {
+    const region = { startSeconds: 0, endSeconds: 10 };
+    expect(resolveSongSeekSeconds(song(), region, 3.1, true)).toBe(4);
+    expect(resolveSongSeekSeconds(song(), region, 3.1, false)).toBe(3.1);
   });
 
   it("meter changes make the bars as long as the meter in force", () => {
