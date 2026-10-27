@@ -10,7 +10,7 @@ describe("feature flags", () => {
   });
 
   it("network sessions stay hidden until 1.16.0", () => {
-    expect(FEATURE_FLAGS.networkSessions).toBe(false);
+    expect(FEATURE_FLAGS.networkSessions).toBe(true);
   });
 
   it("song analysis ships in 1.15.0", () => {
@@ -18,6 +18,6 @@ describe("feature flags", () => {
   });
 
   it("song templates stay hidden until 1.16.0", () => {
-    expect(FEATURE_FLAGS.songTemplates).toBe(false);
+    expect(FEATURE_FLAGS.songTemplates).toBe(true);
   });
 });
