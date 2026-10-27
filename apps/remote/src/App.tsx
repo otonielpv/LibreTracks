@@ -131,10 +131,10 @@ import {
 } from "./timelineSeek";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
-type JumpMode = "immediate" | "next_marker" | "after_bars";
-type SongJumpTrigger = "immediate" | "region_end" | "after_bars" | "next_marker";
-type SongTransitionMode = "instant" | "fade_out";
-type VampMode = "section" | "bars";
+type JumpMode = AppSettings["globalJumpMode"];
+type SongJumpTrigger = AppSettings["songJumpTrigger"];
+type SongTransitionMode = AppSettings["songTransitionMode"];
+type VampMode = AppSettings["vampMode"];
 
 type RemoteConnectionState = {
   status: ConnectionStatus;
@@ -626,8 +626,8 @@ function parsePendingJumpMode(trigger: string | undefined): { mode: JumpMode; ba
     };
   }
 
-  if (trigger === "next_marker") {
-    return { mode: "next_marker" };
+  if (trigger === "next_marker" || trigger === "next_section" || trigger === "next_cue") {
+    return { mode: trigger };
   }
 
   if (trigger === "region_end") {
@@ -646,23 +646,23 @@ function formatJumpModeLabel(mode: JumpMode, bars: number) {
     return STRINGS.nextMarker;
   }
 
+  if (mode === "next_section") {
+    return STRINGS.section;
+  }
+
+  if (mode === "next_cue") {
+    return STRINGS.cue;
+  }
+
   return `${bars} ${STRINGS.bars.toLowerCase()}`;
 }
 
 function formatSongTriggerLabel(trigger: SongJumpTrigger, bars: number) {
-  if (trigger === "immediate") {
-    return STRINGS.immediate;
-  }
-
   if (trigger === "region_end") {
     return STRINGS.songEnd;
   }
 
-  if (trigger === "next_marker") {
-    return STRINGS.nextMarker;
-  }
-
-  return `${bars} ${STRINGS.bars.toLowerCase()}`;
+  return formatJumpModeLabel(trigger, bars);
 }
 
 function StepperField({
@@ -2003,15 +2003,12 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
     });
   };
 
-  const jumpModeSummary =
-    jumpMode === "after_bars"
-      ? `${jumpBars} ${STRINGS.bars.toLowerCase()}`
-      : jumpMode === "next_marker"
-        ? STRINGS.nextMarker
-        : STRINGS.immediate;
+  const jumpModeSummary = formatJumpModeLabel(jumpMode, jumpBars);
 
   const vampSummary =
-    vampMode === "bars" ? `${vampBars} ${STRINGS.bars.toLowerCase()}` : STRINGS.section;
+    vampMode === "bars"
+      ? `${vampBars} ${STRINGS.bars.toLowerCase()}`
+      : vampMode === "cue" ? STRINGS.cue : STRINGS.section;
 
   const songJumpSummary = formatSongTriggerLabel(songTrigger, songBars);
   const songTransitionSummary = songTransition === "fade_out" ? STRINGS.fadeOut : STRINGS.cleanCut;
