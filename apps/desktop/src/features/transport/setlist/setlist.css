@@ -2553,12 +2553,12 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 }
 
 .lt-setlist-arrangement.is-waveform.is-short .lt-structure-item {
-  min-width: 9rem;
+  min-width: var(--lt-setlist-arrangement-block-min-width, 9rem);
 }
 
 .lt-setlist-arrangement.is-waveform .lt-structure-item.is-end {
-  flex: 0 0 44px;
-  min-width: 44px;
+  flex: 0 0 var(--lt-setlist-arrangement-end-width, 44px);
+  min-width: var(--lt-setlist-arrangement-end-width, 44px);
 }
 
 .lt-setlist-arrangement-insert {

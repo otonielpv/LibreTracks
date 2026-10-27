@@ -141,8 +141,15 @@ export function OverviewZoom({
     windowRef.current.offset = offset;
     layer?.style.setProperty("transform", offset ? `translate3d(${-offset}px, 0, 0)` : "none");
   };
+  const applyZoomSizing = (scale: number) => {
+    const layer = layerRef.current;
+    // Keep intrinsic arrangement widths proportional when the pinch commits.
+    layer?.style.setProperty("--lt-setlist-arrangement-block-min-width", `${9 * scale}rem`);
+    layer?.style.setProperty("--lt-setlist-arrangement-end-width", `${44 * scale}px`);
+  };
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
+    applyZoomSizing(zoom);
     if (!viewport) return;
     const maxOffset = Math.max(
       0,
@@ -225,6 +232,7 @@ export function OverviewZoom({
       wheelZoomTimerRef.current = null;
     }
     zoomRef.current = preview.targetZoom;
+    applyZoomSizing(preview.targetZoom);
     layerRef.current?.style.setProperty("width", layerWidthStyle(preview.targetZoom));
     applyOffset(preview.offset);
     setZoom(preview.targetZoom);
@@ -417,6 +425,7 @@ export function OverviewZoom({
         // layer was, so nothing jumps.
         zoomRef.current = pinch.target;
         pendingZoomRef.current = pinch.target;
+        applyZoomSizing(pinch.target);
         layerRef.current?.style.setProperty("width", layerWidthStyle(pinch.target));
         applyOffset(
           Math.max(

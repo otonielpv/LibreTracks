@@ -236,6 +236,8 @@ describe("Edit → Arrangement", () => {
     pointer(window, "pointerup", 2, 300);
     await waitFor(() => expect(useSetlistStore.getState().overviewZoom).toBe(2));
     expect(layer.style.width).not.toBe(widthBeforeZoom);
+    expect(layer.style.getPropertyValue("--lt-setlist-arrangement-block-min-width")).toBe("18rem");
+    expect(layer.style.getPropertyValue("--lt-setlist-arrangement-end-width")).toBe("88px");
     expect(layer.style.transform).not.toContain("scaleX");
 
     const overview = viewport.querySelector<HTMLElement>(".lt-setlist-overview.is-short")!;
@@ -251,6 +253,8 @@ describe("Edit → Arrangement", () => {
     pointer(window, "pointerup", 4, 100);
     pointer(window, "pointerup", 5, 200);
     await waitFor(() => expect(useSetlistStore.getState().overviewZoom).toBe(1));
+    expect(layer.style.getPropertyValue("--lt-setlist-arrangement-block-min-width")).toBe("9rem");
+    expect(layer.style.getPropertyValue("--lt-setlist-arrangement-end-width")).toBe("44px");
     expect(layer.style.transform).toContain("translate3d");
   });
 
