@@ -1,6 +1,7 @@
 import {
   memo,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -145,7 +146,6 @@ function SetlistArrangementEditorComponent({
     startDistance: number;
     startZoom: number;
     startScrollLeft: number;
-    anchorContentX: number;
     anchorFraction: number;
     contentWidth: number;
     centerX: number;
@@ -155,17 +155,35 @@ function SetlistArrangementEditorComponent({
   const ignoredCancelPointerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
   const cleanupPointerListenersRef = useRef<(() => void) | null>(null);
-  const scrollFrameRef = useRef<number | null>(null);
+  const pinchCommitRef = useRef<{
+    targetZoom: number;
+    anchorFraction: number;
+    centerX: number;
+  } | null>(null);
   useEffect(
     () => () => {
       cleanupPointerListenersRef.current?.();
-      if (scrollFrameRef.current !== null) {
-        window.cancelAnimationFrame(scrollFrameRef.current);
-      }
       arrangementRef.current?.style.removeProperty("transform");
     },
     [],
   );
+  useLayoutEffect(() => {
+    const commit = pinchCommitRef.current;
+    if (!commit || overviewZoom !== commit.targetZoom) return;
+    const arrangement = arrangementRef.current;
+    const viewport = arrangement?.closest<HTMLElement>(
+      ".lt-setlist-arrangement-mobile-waveform.is-main",
+    );
+    if (viewport) {
+      const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      viewport.scrollLeft = Math.max(
+        0,
+        Math.min(maxScroll, commit.anchorFraction * viewport.scrollWidth - commit.centerX),
+      );
+    }
+    arrangement?.style.removeProperty("transform");
+    pinchCommitRef.current = null;
+  }, [overviewZoom]);
   const handleTouchPointerDownCapture = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (layout !== "short" || event.pointerType !== "touch") return;
     const pointers = touchPointersRef.current;
@@ -203,8 +221,8 @@ function SetlistArrangementEditorComponent({
           pinch.blockCount * 9 * rem * targetZoom + 3 * rem,
         );
         const scale = targetWidth / pinch.contentWidth;
-        const translateX =
-          pinch.centerX + pinch.startScrollLeft - pinch.anchorContentX * scale;
+        const targetOffset = pinch.anchorFraction * targetWidth - pinch.centerX;
+        const translateX = pinch.startScrollLeft - targetOffset;
         arrangement.style.setProperty(
           "transform",
           `translate3d(${translateX}px, 0, 0) scaleX(${scale})`,
@@ -224,25 +242,12 @@ function SetlistArrangementEditorComponent({
         if (pinch) {
           suppressClickRef.current = true;
           if (pinch.targetZoom !== pinch.startZoom) {
+            pinchCommitRef.current = {
+              targetZoom: pinch.targetZoom,
+              anchorFraction: pinch.anchorFraction,
+              centerX: pinch.centerX,
+            };
             setOverviewZoom(pinch.targetZoom);
-            if (scrollFrameRef.current !== null) {
-              window.cancelAnimationFrame(scrollFrameRef.current);
-            }
-            scrollFrameRef.current = window.requestAnimationFrame(() => {
-              scrollFrameRef.current = null;
-              const arrangement = arrangementRef.current;
-              const viewport = arrangement?.closest<HTMLElement>(
-                ".lt-setlist-arrangement-mobile-waveform.is-main",
-              );
-              if (viewport) {
-                const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-                viewport.scrollLeft = Math.max(
-                  0,
-                  Math.min(maxScroll, pinch.anchorFraction * viewport.scrollWidth - pinch.centerX),
-                );
-              }
-              arrangement?.style.removeProperty("transform");
-            });
           } else {
             arrangementRef.current?.style.removeProperty("transform");
           }
@@ -283,7 +288,6 @@ function SetlistArrangementEditorComponent({
       startDistance: distance,
       startZoom,
       startScrollLeft,
-      anchorContentX: startScrollLeft + centerX,
       anchorFraction: Math.max(0, Math.min(1, (startScrollLeft + centerX) / contentWidth)),
       contentWidth,
       centerX,

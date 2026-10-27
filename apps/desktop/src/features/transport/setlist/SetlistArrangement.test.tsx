@@ -227,10 +227,12 @@ describe("Edit → Arrangement", () => {
     pointer(handle, "pointerdown", 1, 100);
     pointer(blockName, "pointerdown", 2, 200);
     pointer(window, "pointermove", 2, 300);
+    expect(waveform.style.transform).not.toBe("");
     pointer(window, "pointerup", 1, 100);
     pointer(window, "pointerup", 2, 300);
     expect(useSetlistStore.getState().overviewZoom).toBe(2);
     expect(waveform.style.width).not.toBe(widthBeforeZoom);
+    expect(waveform.style.transform).toBe("");
   });
 
   it("arrangement playhead scrubs continuously across section boundaries", async () => {

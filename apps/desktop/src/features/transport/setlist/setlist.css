@@ -2644,6 +2644,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 
 .lt-setlist-arrangement-mobile-waveform.is-main > .lt-setlist-arrangement {
   height: 100%;
+  transform-origin: 0 0;
 }
 
 .lt-setlist-arrangement-mobile-waveform.is-main > .lt-setlist-arrangement.is-short {
