@@ -380,10 +380,9 @@ html.lt-mobile .lt-setlist-add-song-button {
 }
 
 /* ---- Banda de la canción: onda + secciones (pasos 04-05) ----
-   Una sola banda: la onda abajo, los bloques de sección encima (tintados y
-   alineados por la misma escala), y una franja de nombres arriba que es lo
-   único que recibe clics (salta a la sección). El resto deja pasar el clic a
-   la onda (seek). La fila de acciones va debajo. */
+   Una sola banda: la onda abajo y los bloques de sección encima, alineados
+   por la misma escala. Los bloques saltan a la sección; el playhead se mueve
+   arrastrando su asa. La fila de acciones va debajo. */
 
 .lt-setlist-zone.is-overview {
   position: relative;
@@ -435,8 +434,9 @@ html.lt-mobile .lt-setlist-add-song-button {
   color: var(--lt-setlist-text);
   font: inherit;
   text-align: left;
-  pointer-events: none;
+  pointer-events: auto;
   overflow: hidden;
+  touch-action: manipulation;
 }
 
 .lt-setlist-map-label {
@@ -619,6 +619,13 @@ html.lt-mobile .lt-setlist-add-song-button {
   will-change: transform;
 }
 
+.lt-setlist-overview-playhead.is-dragging {
+  width: 3px;
+  margin-left: -1.5px;
+  background: #ffe2ab;
+  box-shadow: 0 0 8px rgb(255 226 171 / 0.55);
+}
+
 .lt-setlist-playhead-handle {
   position: absolute;
   top: 0;
@@ -648,6 +655,20 @@ html.lt-mobile .lt-setlist-add-song-button {
   background: var(--lt-setlist-surface-raised);
   color: var(--lt-setlist-accent);
   font-size: 1.1rem;
+}
+
+.lt-setlist-playhead-handle .material-symbols-outlined {
+  opacity: 0.8;
+}
+
+.lt-setlist-playhead-handle:hover .material-symbols-outlined,
+.lt-setlist-playhead-handle:focus-visible .material-symbols-outlined,
+.lt-setlist-overview-playhead.is-dragging .lt-setlist-playhead-handle .material-symbols-outlined {
+  opacity: 1;
+}
+
+.lt-setlist-overview.is-short .lt-setlist-playhead-handle .material-symbols-outlined {
+  opacity: 1;
 }
 
 /* medium: los bloques del mapa encima de la onda, alineados con ella por la
@@ -1078,8 +1099,25 @@ html.lt-mobile .lt-setlist-edit-button {
 
 .lt-setlist-sections.is-short .lt-setlist-sections-bar {
   flex: 0 0 auto;
-  padding: 0.4rem 0 calc(0.4rem + var(--lt-safe-area-bottom, 0px));
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  padding: 0.3rem 0;
   background: var(--lt-setlist-surface);
+}
+
+.lt-setlist-sections.is-short .lt-setlist-settings-button {
+  flex: 1 1 0;
+  min-width: 2.75rem;
+  padding: 0;
+}
+
+.lt-setlist-sections.is-short .lt-setlist-sections-action-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .lt-setlist-sections-strip {
@@ -2749,7 +2787,9 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 .lt-setlist-drawer.is-short .lt-setlist-sections.is-short > .lt-setlist-sections-list {
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .lt-setlist-drawer.is-short .lt-setlist-sections.is-short > .lt-setlist-sections-bar {

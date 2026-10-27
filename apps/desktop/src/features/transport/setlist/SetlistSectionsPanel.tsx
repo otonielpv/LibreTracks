@@ -19,9 +19,8 @@ type SetlistSectionsPanelProps = {
 /**
  * Edit → Sections: the actions bar (+ section at the playhead, duplicate,
  * delete) and the list of the song's sections. In `wide`/`medium` the
- * handles live on the view's own waveform; in `short` the drawer covers the
- * view, so it brings the waveform along and the bar goes to the bottom, like
- * the mobile selection bar.
+ * handles live on the view's own waveform; in `short` the compact actions
+ * stay above the independently scrollable list.
  */
 function SetlistSectionsPanelComponent({ song, region, handlers, layout, waveform }: SetlistSectionsPanelProps) {
   const { t } = useTranslation();
@@ -43,36 +42,45 @@ function SetlistSectionsPanelComponent({ song, region, handlers, layout, wavefor
 
   const bar = (
     <div className="lt-setlist-sections-bar" role="toolbar" aria-label={t("setlistView.sections.actions")}>
-      {/* On the phone the scrub editor has its own «+» at its line. */}
-      {(
-        <button type="button" className="lt-setlist-settings-button" aria-haspopup="menu" onClick={handlers.createAtPlayhead}>
-          <span className="material-symbols-outlined" aria-hidden="true">add</span>
-          {t("setlistView.sections.add")}
-        </button>
-      )}
       <button
         type="button"
         className="lt-setlist-settings-button"
-        disabled={!hasSelection}
-        onClick={handlers.duplicateSelection}
+        aria-label={t("setlistView.sections.add")}
+        title={t("setlistView.sections.add")}
+        aria-haspopup="menu"
+        onClick={handlers.createAtPlayhead}
       >
-        <span className="material-symbols-outlined" aria-hidden="true">content_copy</span>
-        {t("setlistView.sections.duplicate")}
+        <span className="material-symbols-outlined" aria-hidden="true">add</span>
+        <span className="lt-setlist-sections-action-label">{t("setlistView.sections.add")}</span>
       </button>
       <button
         type="button"
         className="lt-setlist-settings-button"
+        aria-label={t("setlistView.sections.duplicate")}
+        title={t("setlistView.sections.duplicate")}
+        disabled={!hasSelection}
+        onClick={handlers.duplicateSelection}
+      >
+        <span className="material-symbols-outlined" aria-hidden="true">content_copy</span>
+        <span className="lt-setlist-sections-action-label">{t("setlistView.sections.duplicate")}</span>
+      </button>
+      <button
+        type="button"
+        className="lt-setlist-settings-button"
+        aria-label={t("setlistView.sections.delete")}
+        title={t("setlistView.sections.delete")}
         disabled={!hasSelection}
         onClick={handlers.deleteSelection}
       >
         <span className="material-symbols-outlined" aria-hidden="true">delete</span>
-        {t("setlistView.sections.delete")}
+        <span className="lt-setlist-sections-action-label">{t("setlistView.sections.delete")}</span>
       </button>
     </div>
   );
 
   return (
     <div className={`lt-setlist-sections is-${layout}`}>
+      {layout === "short" ? bar : null}
       {layout === "short" ? null : bar}
       {waveform ? <div className="lt-setlist-sections-waveform">{waveform}</div> : null}
       <p className="lt-setlist-sections-hint">{t("setlistView.sections.hint")}</p>
@@ -106,9 +114,6 @@ function SetlistSectionsPanelComponent({ song, region, handlers, layout, wavefor
           </li>
         ))}
       </ul>
-      {/* On the phone the scrub editor brings its own bar (a sticky one here
-          covered it). */}
-      {layout === "short" && !waveform ? bar : null}
     </div>
   );
 }

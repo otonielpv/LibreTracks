@@ -56,9 +56,9 @@ const VAMP_MATCH_SECONDS = 0.05;
 /**
  * The song map, Playback-style: one coloured block per section of the shown
  * song, width proportional to its length, the active one with its own
- * progress. Tapping a block schedules the jump (the same primary action as
- * Live); tapping the pending one cancels it. While a vamp loops, its span
- * is drawn over the waveform (a pulsing frame with the loop icon), so it is
+ * progress. A stopped tap jumps to the section; while playing, a double tap
+ * does. Tapping the pending one cancels it. While a vamp loops, its span is
+ * drawn over the waveform (a pulsing frame with the loop icon), so it is
  * obvious what repeats. The menu is the DAW's section menu.
  */
 function SongMapComponent({
@@ -120,7 +120,7 @@ function SongMapComponent({
     widthPx: 100,
   });
 
-  const activate = (block: SongMapBlock) => {
+  const activate = (block: SongMapBlock, doubleClick = false) => {
     if (editing) {
       // Editing: tapping only selects, so nothing jumps by accident.
       selectSection(block.marker?.id ?? null);
@@ -130,13 +130,14 @@ function SongMapComponent({
       onCancelPendingJump();
       return;
     }
+    const playing = useTransportStore.getState().playback?.playbackState === "playing";
+    if (playing && !doubleClick) return;
     if (block.marker) {
       onMarkerAction(block.marker);
       return;
     }
     // The implicit start / whole-song block has no marker: it goes to the
     // song's start (a song jump while sounding, a cue while stopped).
-    const playing = useTransportStore.getState().playback?.playbackState === "playing";
     if (playing) onPlaySong(region.id, region.name);
     else onCueSong(region.id);
   };
@@ -200,10 +201,13 @@ function SongMapComponent({
               aria-current={isActive ? "true" : undefined}
               title={block.label}
               onClick={() => activate(block)}
+              onDoubleClick={() => {
+                if (useTransportStore.getState().playback?.playbackState === "playing") {
+                  activate(block, true);
+                }
+              }}
               onContextMenu={(event) => openMenu(event, block)}
             >
-              {/* The label strip is the only part that takes clicks: the rest
-                  of the block lets them through to the waveform (seek). */}
               <span className="lt-setlist-map-label">
                 {block.digit !== null ? (
                   <span className="lt-setlist-map-digit">{block.digit}</span>

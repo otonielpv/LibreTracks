@@ -99,6 +99,17 @@ describe("Edit mode", () => {
     expect(onSelectRegion).toHaveBeenCalledWith("b");
   });
 
+  it("short section actions stay above the scrollable section list", async () => {
+    render(<SetlistView {...props()} layoutClass="short" />);
+    enterEdit();
+    fireEvent.click(await screen.findByRole("tab", { name: "setlistView.edit.modes.sections" }));
+
+    const toolbar = await screen.findByRole("toolbar", { name: "setlistView.sections.actions" });
+    const list = screen.getByRole("list", { name: "setlistView.sections.list" });
+    expect(toolbar.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(toolbar).getAllByRole("button")).toHaveLength(3);
+  });
+
   it("Esc leaves edit mode, but not while a modal is open", () => {
     render(<SetlistView {...props()} layoutClass="wide" />);
     enterEdit();

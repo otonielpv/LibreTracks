@@ -392,7 +392,9 @@ function CompactViewComponent({
           <button
             type="button"
             className="lt-compact-view-import-song"
-            onClick={onImportSongPackageFromDialog}
+            onClick={() => {
+              void onImportSongPackageFromDialog();
+            }}
             title={t("compactView.importPackageTitle")}
           >
             <span className="material-symbols-outlined" aria-hidden="true">

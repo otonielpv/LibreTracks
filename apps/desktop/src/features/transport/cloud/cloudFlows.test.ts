@@ -6,6 +6,7 @@ import {
   cancelExportChoice,
   finishExportWithChoice,
   importFromCloud,
+  importSongWithChoice,
 } from "./cloudFlows";
 import { useCloudStore } from "./cloudStore";
 
@@ -123,6 +124,20 @@ describe("paquete de paso de una importacion desde Drive", () => {
 
     finishImport();
     expect(await flow).toBe(true);
+    expect(discardStagedPackage).toHaveBeenCalledWith(staged);
+  });
+
+  it("la importacion de una cancion pregunta el origen y reusa el importador con la ruta descargada", async () => {
+    const runImport = vi.fn(async (_sourcePath?: string) => {});
+    const flow = importSongWithChoice(runImport);
+    const choice = useCloudStore.getState().pendingChoice;
+    expect(choice).toMatchObject({ intent: "import", kind: "song" });
+
+    choice!.resolve("cloud");
+    await pick();
+    await flow;
+
+    expect(runImport).toHaveBeenCalledWith(staged);
     expect(discardStagedPackage).toHaveBeenCalledWith(staged);
   });
 

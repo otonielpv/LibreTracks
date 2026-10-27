@@ -7692,6 +7692,7 @@ export function TransportPanelContent() {
 
                   {viewMode === "setlist" && songBindings && performanceBindings ? (
                     <SetlistView {...songBindings} performance={performanceBindings}
+                      onImportSongPackageFromDialog={() => void importSongWithChoice(songViewHandlers.importSongPackageFromDialog)}
                       menus={timelineMenus} onOpenInDaw={songViewHandlers.openInDaw}
                       dragPreview={compactDragPreview} videoLanes={video.lanes} />
                   ) : null}

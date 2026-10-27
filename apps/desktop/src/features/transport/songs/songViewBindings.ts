@@ -152,7 +152,7 @@ export type SongViewBindings = {
   /** Publishes a snapshot returned by a command the view ran itself. */
   onSnapshotApplied: (snapshot: TransportSnapshot) => void;
   /** `.ltpkg` picker; the package lands as a new song at the end. */
-  onImportSongPackageFromDialog: () => void;
+  onImportSongPackageFromDialog: (sourcePath?: string) => Promise<void> | void;
   /** `.ltpkg` dropped from the OS anywhere over the song strip. */
   onImportSongPackageFromOsFile: (file: File) => void;
   /** The top bar's tap tempo (tempo/tapTempoHandler): the tempo in force at

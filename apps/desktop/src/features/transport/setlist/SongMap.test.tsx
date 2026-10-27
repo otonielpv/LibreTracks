@@ -106,10 +106,25 @@ describe("SongMap cues", () => {
 });
 
 describe("SongMap gestures", () => {
-  it("a click on a block schedules the jump with the Live primary action", () => {
+  it("a stopped click on a block schedules the jump with the Live primary action", () => {
     const props = mapProps();
     const { container } = render(<SongMap {...props} />);
     fireEvent.click(block(container, "Coro"));
+    expect(props.onMarkerAction).toHaveBeenCalledWith(markers[1]);
+  });
+
+  it("while playing, a block needs a double click to schedule its jump", () => {
+    useTransportStore.setState({ playback: { playbackState: "playing" } as never });
+    const props = mapProps();
+    const { container } = render(<SongMap {...props} />);
+    const coro = block(container, "Coro");
+
+    fireEvent.click(coro);
+    fireEvent.click(coro);
+    expect(props.onMarkerAction).not.toHaveBeenCalled();
+
+    fireEvent.doubleClick(coro);
+    expect(props.onMarkerAction).toHaveBeenCalledOnce();
     expect(props.onMarkerAction).toHaveBeenCalledWith(markers[1]);
   });
 
@@ -122,7 +137,7 @@ describe("SongMap gestures", () => {
     expect(props.onMarkerAction).not.toHaveBeenCalled();
   });
 
-  it("the start block cues the song when stopped and song-jumps when sounding", () => {
+  it("the start block cues when stopped and needs a double click while sounding", () => {
     const props = mapProps();
     const { container } = render(<SongMap {...props} />);
     fireEvent.click(block(container, "start:r1"));
@@ -130,6 +145,8 @@ describe("SongMap gestures", () => {
 
     useTransportStore.setState({ playback: { playbackState: "playing" } as never });
     fireEvent.click(block(container, "start:r1"));
+    expect(props.onPlaySong).not.toHaveBeenCalled();
+    fireEvent.doubleClick(block(container, "start:r1"));
     expect(props.onPlaySong).toHaveBeenCalledWith("r1", "Canción");
   });
 

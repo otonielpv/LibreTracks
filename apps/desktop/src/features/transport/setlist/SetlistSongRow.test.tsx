@@ -171,6 +171,14 @@ describe("SetlistSongRow gestures", () => {
     expect(props.onImportSongPackageFromOsFile).toHaveBeenCalledWith(pkg);
     expect(props.onDropOsFilesIntoSong).not.toHaveBeenCalled();
   });
+
+  it("the .ltpkg button opens the provided import flow", () => {
+    const props = rowProps();
+    render(<SetlistSongRow {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.songs.importPackage" }));
+    expect(props.onImportSongPackageFromDialog).toHaveBeenCalledOnce();
+    expect(props.onImportSongPackageFromDialog).toHaveBeenCalledWith();
+  });
 });
 
 describe("SetlistSongRow reorder", () => {

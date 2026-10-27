@@ -183,6 +183,14 @@ describe("song package import", () => {
     await flush();
     expect(deps.importSongPackageAt).not.toHaveBeenCalled();
   });
+
+  it("imports a cloud-staged package path without opening the local picker", async () => {
+    const { deps, handlers } = setup();
+    await handlers.importSongPackageFromDialog("/cache/song.ltpkg");
+
+    expect(deps.importSongPackageAt).toHaveBeenCalledWith("/cache/song.ltpkg", 70);
+    expect(dialog.open).not.toHaveBeenCalled();
+  });
 });
 
 describe("playSong", () => {

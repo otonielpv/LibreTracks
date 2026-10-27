@@ -273,8 +273,9 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
   // Non-blocking on purpose (no `busy: true`): the import runs off the
   // session lock and reports progress through the load-progress events. The
   // blocking shell overlay would freeze the UI for a large package.
-  function importSongPackageFromDialog() {
-    void getDeps().runAction(async () => {
+  function importSongPackageFromDialog(sourcePath?: string) {
+    if (sourcePath) return runSongPackageImport(sourcePath);
+    return getDeps().runAction(async () => {
       const picked = await open({
         multiple: false,
         directory: false,

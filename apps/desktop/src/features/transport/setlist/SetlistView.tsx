@@ -475,6 +475,7 @@ function SetlistViewComponent({
             endSeconds={shownRegion.endSeconds}
             positionSecondsRef={performance.positionSecondsRef}
             onSeek={performance.onSeek}
+            tapToSeek={false}
             overlay={
                   <>
                   {waveDock ? <WaveDock>{paneButtons}</WaveDock> : null}
@@ -508,8 +509,8 @@ function SetlistViewComponent({
                 waveformSummaries={waveformSummaries}
                 positionSecondsRef={performance.positionSecondsRef}
                 layout={layout}
-                // Editing too: the handles take their own pointer, the rest of
-                // the waveform moves the playhead (the iPhone report).
+                // Manual seeking is a drag gesture; tapping a section activates
+                // that section instead of seeking to an arbitrary point.
                 onSeek={performance.onSeek}
                 onContextMenuAt={sectionHandlers.openMenuAt}
                 onDoubleClickAt={editMode !== null ? sectionHandlers.createAt : undefined}

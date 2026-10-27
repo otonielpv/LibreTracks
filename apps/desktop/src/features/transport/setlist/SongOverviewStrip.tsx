@@ -24,6 +24,7 @@ import {
   requestGatedFrame,
   useFrameGateWake,
 } from "../frameGate";
+import { DRAG_THRESHOLD_PX } from "../constants";
 import { ZoomWindowContext } from "./OverviewZoom";
 import {
   buildSongOverviewPeaks,
@@ -97,8 +98,8 @@ function localX(element: HTMLElement, clientX: number) {
  * The selected song's waveform with its playhead. The canvas repaints only
  * when the peaks, the size or the sections change; the playhead is a
  * separate element moved by a rAF loop from `positionSecondsRef`, so playing
- * never re-renders this component. Tap = seek; drag = scrub (wide/medium),
- * one seek per frame at most, through the panel's coalesced seek.
+ * never re-renders this component. Taps do not seek; dragging the playhead
+ * handle (or the waveform where it is exposed) scrubs at most once per frame.
  */
 function SongOverviewStripComponent({
   region,
@@ -288,21 +289,21 @@ function SongOverviewStripComponent({
     return scale.clampSeconds(scale.pxToSeconds(localX(element, clientX)));
   };
 
-  const scrubEnabled = layout !== "short";
   const handlePointerDown = (event: ReactPointerEvent<HTMLElement>, fromPlayhead = false) => {
     if (!onSeek || event.button !== 0) return;
     if (scrubCleanupRef.current) return;
+    if (!fromPlayhead && layout === "short") return;
     event.preventDefault();
     if (fromPlayhead) event.stopPropagation();
-    else onSeek(secondsAt(event.clientX));
-    if (!scrubEnabled && !fromPlayhead) return;
     zoomWindow?.setScrubbing?.(true);
     const pointerId = event.pointerId;
+    const startClientX = event.clientX;
     let pending: number | null = null;
     let frame = 0;
     let autoScrollFrame: number | null = null;
     let latestClientX = event.clientX;
     let ended = false;
+    let dragging = false;
     const flush = () => {
       frame = 0;
       if (pending !== null) onSeek(pending);
@@ -345,9 +346,22 @@ function SongOverviewStripComponent({
         stopAutoScroll();
       }
     };
+    const startScrubbing = () => {
+      dragging = true;
+      zoomWindow?.setScrubbing?.(true);
+      playheadRef.current?.classList.add("is-dragging");
+      pending = secondsAt(latestClientX);
+      if (!frame) frame = window.requestAnimationFrame(flush);
+      maybeStartAutoScroll();
+    };
     const onMove = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== pointerId) return;
       latestClientX = moveEvent.clientX;
+      if (!dragging) {
+        if (Math.abs(latestClientX - startClientX) < DRAG_THRESHOLD_PX) return;
+        startScrubbing();
+        return;
+      }
       pending = secondsAt(latestClientX);
       if (!frame) frame = window.requestAnimationFrame(flush);
       maybeStartAutoScroll();
@@ -361,12 +375,15 @@ function SongOverviewStripComponent({
       if (frame) window.cancelAnimationFrame(frame);
       pending = null;
       zoomWindow?.setScrubbing?.(false);
+      if (dragging) {
+        playheadRef.current?.classList.remove("is-dragging");
+      }
       scrubCleanupRef.current = null;
     };
     const onUp = (upEvent: PointerEvent) => {
       if (upEvent.pointerId !== pointerId) return;
       if (frame) window.cancelAnimationFrame(frame);
-      if (upEvent.type === "pointerup") flush();
+      if (upEvent.type === "pointerup" && dragging) flush();
       cleanup();
     };
     scrubCleanupRef.current = cleanup;
@@ -400,7 +417,7 @@ function SongOverviewStripComponent({
         style={range.width < size.width ? { left: `${range.start}px`, width: `${range.width}px` } : undefined}
       />
       <div ref={playheadRef} className="lt-setlist-overview-playhead">
-        {layout === "short" && onSeek ? (
+        {onSeek ? (
           <button
             type="button"
             className="lt-setlist-playhead-handle"

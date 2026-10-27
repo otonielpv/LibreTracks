@@ -58,8 +58,10 @@ type OverviewZoomProps = {
   startSeconds: number;
   endSeconds: number;
   positionSecondsRef: { readonly current: number };
-  /** Touch: a tap seeks here (the waveform's own seek is for the mouse). */
+  /** Touch taps seek here unless `tapToSeek` is disabled. */
   onSeek?: (seconds: number) => void;
+  /** Keep section-oriented bands from treating a tap as an arbitrary seek. */
+  tapToSeek?: boolean;
   /** Inside the zoomed layer: the waveform, the section blocks, the edit
    * handles. They place things in % of the song, so they stay aligned. */
   children: ReactNode;
@@ -72,8 +74,8 @@ const isControl = (target: EventTarget | null) =>
 
 /**
  * The band's zoom, with the DAW's gestures on a phone (the iPhone reports):
- * pinch zooms around the fingers, one finger drags the zoomed song, a tap
- * seeks. Zoomed in, the band follows the playhead (centred) whenever it
+ * pinch zooms around the fingers, one finger drags the zoomed song, and a tap
+ * seeks when enabled. Zoomed in, the band follows the playhead (centred) whenever it
  * moves; after a drag by hand it stays where it was left until the playhead
  * moves again. Everything slides by rAF on one layer, with no React render;
  * a pinch writes the zoom at most once per frame. With a mouse: the
@@ -85,6 +87,7 @@ export function OverviewZoom({
   endSeconds,
   positionSecondsRef,
   onSeek,
+  tapToSeek = true,
   children,
   overlay,
 }: OverviewZoomProps) {
@@ -284,7 +287,7 @@ export function OverviewZoom({
         applyOffset(pinch.target <= 1 ? 0 : pinch.visualOffset);
         markFrameActivity();
       }
-      if (!moved && upEvent.type === "pointerup" && onSeek) {
+      if (!moved && upEvent.type === "pointerup" && tapToSeek && onSeek) {
         // A tap: the moment under the finger, through the (moved) layer.
         const layer = layerRef.current;
         const box = layer?.getBoundingClientRect();

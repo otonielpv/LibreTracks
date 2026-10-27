@@ -225,36 +225,39 @@ describe("SongOverviewStrip peaks", () => {
 });
 
 describe("SongOverviewStrip seek", () => {
-  it.each(["wide", "medium"] as const)("%s: a click seeks there and a drag scrubs once per frame", (layout) => {
+  it.each(["wide", "medium"] as const)("%s: a click does not seek and a drag scrubs once per frame", (layout) => {
     const onSeek = vi.fn();
     const { container } = render(<SongOverviewStrip {...stripProps({ layout, onSeek })} />);
     const root = layOut(container);
 
     fireEvent.pointerDown(root, { button: 0, pointerId: 1, clientX: 50 + 300 });
-    expect(onSeek).toHaveBeenLastCalledWith(130);
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 50 + 300 });
+    expect(onSeek).not.toHaveBeenCalled();
 
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 50 + 400 });
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 50 + 450 });
-    expect(onSeek).toHaveBeenCalledTimes(1);
+    fireEvent.pointerDown(root, { button: 0, pointerId: 2, clientX: 50 + 350 });
+    fireEvent.pointerMove(window, { pointerId: 2, clientX: 50 + 400 });
+    expect(root.querySelector(".lt-setlist-overview-playhead")?.classList.contains("is-dragging")).toBe(true);
+    fireEvent.pointerMove(window, { pointerId: 2, clientX: 50 + 450 });
     runFrames();
-    expect(onSeek).toHaveBeenCalledTimes(2);
+    expect(onSeek).toHaveBeenCalledTimes(1);
     expect(onSeek).toHaveBeenLastCalledWith(145);
 
-    fireEvent.pointerUp(window, { pointerId: 1, clientX: 50 + 450 });
+    fireEvent.pointerUp(window, { pointerId: 2, clientX: 50 + 450 });
+    expect(root.querySelector(".lt-setlist-overview-playhead")?.classList.contains("is-dragging")).toBe(false);
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 50 + 900 });
     runFrames();
-    expect(onSeek).toHaveBeenCalledTimes(2);
+    expect(onSeek).toHaveBeenCalledTimes(1);
   });
 
-  it("short: a tap seeks, a drag does not scrub", () => {
+  it("short: tapping or dragging the waveform does not seek", () => {
     const onSeek = vi.fn();
     const { container } = render(<SongOverviewStrip {...stripProps({ layout: "short", onSeek })} />);
     const root = layOut(container);
     fireEvent.pointerDown(root, { button: 0, pointerId: 1, clientX: 50 + 100 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 50 + 700 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 50 + 700 });
     runFrames();
-    expect(onSeek).toHaveBeenCalledTimes(1);
-    expect(onSeek).toHaveBeenCalledWith(110);
+    expect(onSeek).not.toHaveBeenCalled();
   });
 
   it("short: dragging the playhead suspends follow and ignores a second finger", () => {
@@ -310,6 +313,25 @@ describe("SongOverviewStrip seek", () => {
     fireEvent.pointerUp(window, { pointerType: "touch", pointerId: 1, clientX: 250 });
     expect(container.querySelector<HTMLElement>(".lt-setlist-zoom-layer")!.style.transform).toBe("translate3d(-300px, 0, 0)");
     runFrames();
+    expect(onSeek).not.toHaveBeenCalled();
+  });
+
+  it("can disable touch tap-to-seek for the section-oriented overview", () => {
+    const onSeek = vi.fn();
+    const { container } = render(
+      <OverviewZoom
+        startSeconds={100}
+        endSeconds={200}
+        positionSecondsRef={{ current: 150 }}
+        onSeek={onSeek}
+        tapToSeek={false}
+      >
+        <div />
+      </OverviewZoom>,
+    );
+    const viewport = container.querySelector<HTMLElement>(".lt-setlist-zoom-viewport")!;
+    fireEvent.pointerDown(viewport, { pointerType: "touch", pointerId: 1, clientX: 150 });
+    fireEvent.pointerUp(window, { pointerType: "touch", pointerId: 1, clientX: 150 });
     expect(onSeek).not.toHaveBeenCalled();
   });
 

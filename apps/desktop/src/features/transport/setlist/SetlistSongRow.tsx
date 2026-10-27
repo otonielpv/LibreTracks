@@ -284,7 +284,9 @@ function SetlistSongRowComponent({
             className="lt-setlist-add-song-button"
             aria-label={t("setlistView.songs.importPackage")}
             title={t("setlistView.songs.importPackage")}
-            onClick={onImportSongPackageFromDialog}
+            onClick={() => {
+              void onImportSongPackageFromDialog();
+            }}
           >
             <span className="material-symbols-outlined" aria-hidden="true">folder_open</span>
           </button>
