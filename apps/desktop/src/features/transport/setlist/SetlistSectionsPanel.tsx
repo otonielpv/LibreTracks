@@ -4,6 +4,8 @@ import { markerCategory, markerColor, type SongRegionSummary, type SongView } fr
 
 import { formatMusicalPosition } from "../helpers";
 import { useTimelineUIStore } from "../uiStore";
+import { SetlistSnapToggle } from "./SetlistSnapToggle";
+import { SongBarRuler } from "./SongBarRuler";
 import type { SectionEditHandlers } from "./sectionEditHandlers";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 
@@ -75,6 +77,7 @@ function SetlistSectionsPanelComponent({ song, region, handlers, layout, wavefor
         <span className="material-symbols-outlined" aria-hidden="true">delete</span>
         <span className="lt-setlist-sections-action-label">{t("setlistView.sections.delete")}</span>
       </button>
+      <SetlistSnapToggle />
     </div>
   );
 
@@ -83,6 +86,7 @@ function SetlistSectionsPanelComponent({ song, region, handlers, layout, wavefor
       {layout === "short" ? bar : null}
       {layout === "short" ? null : bar}
       {waveform ? <div className="lt-setlist-sections-waveform">{waveform}</div> : null}
+      {layout === "short" && !waveform ? <SongBarRuler song={song} region={region} /> : null}
       <p className="lt-setlist-sections-hint">{t("setlistView.sections.hint")}</p>
       <ul className="lt-setlist-sections-list" aria-label={t("setlistView.sections.list")}>
         {sections.map((marker) => (

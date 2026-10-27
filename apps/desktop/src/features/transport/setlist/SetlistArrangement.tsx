@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   ArrangementBlockSummary,
@@ -35,6 +35,8 @@ import {
 import { requestEditMode, setEditLeaveGuard } from "./setlistStore";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 import { SongOverviewStrip } from "./SongOverviewStrip";
+import { SongBarRuler } from "./SongBarRuler";
+import { SetlistSnapToggle } from "./SetlistSnapToggle";
 import type { TimelineMenus } from "../menus/timelineMenus";
 
 /**
@@ -108,14 +110,24 @@ type SetlistArrangementProps = {
 };
 
 /** The block strip, in the map's place while editing the arrangement. */
-function SetlistArrangementEditorComponent({ region, handlers, layout, song, waveformSummaries, menus }: SetlistArrangementProps & {
+function SetlistArrangementEditorComponent({
+  region,
+  handlers,
+  layout,
+  song,
+  waveformSummaries,
+  menus,
+  positionSecondsRef,
+  onSeek,
+}: SetlistArrangementProps & {
   song: SongView;
   waveformSummaries: Readonly<Record<string, WaveformSummaryDto>>;
   menus: Pick<TimelineMenus, "openMenu">;
+  positionSecondsRef: { readonly current: number };
+  onSeek: (seconds: number) => void;
 }) {
   const { t } = useTranslation();
   const actions = useArrangementActions(handlers);
-  const hiddenPosition = useRef({ current: Number.NEGATIVE_INFINITY }).current;
   if (!actions.structure || !actions.draft) return null;
   const structure = actions.structure;
   const sections = new Map(structure.sections.map((section) => [section.markerId, section]));
@@ -182,10 +194,19 @@ function SetlistArrangementEditorComponent({ region, handlers, layout, song, wav
                 clips={span ? song.clips : []}
                 sectionMarkers={[]}
                 waveformSummaries={waveformSummaries}
-                positionSecondsRef={hiddenPosition}
+                positionSecondsRef={positionSecondsRef}
                 layout={layout}
+                onSeek={onSeek}
+                clickToSeek
               /> : null}
               {row}
+              {section ? (
+                <SongBarRuler
+                  song={song}
+                  region={{ ...region, ...(span ?? section) }}
+                  variant="arrangement"
+                />
+              ) : null}
             </div>
           );
         }}
@@ -268,7 +289,12 @@ function ArrangementSelector({ actions }: { actions: ArrangementActions }) {
  * rename, delete, recapture) and Apply, all from useArrangementActions. In
  * `short` the drawer covers the view, so it also brings the block strip.
  */
-function SetlistArrangementToolbarComponent({ region, handlers, layout }: SetlistArrangementProps) {
+function SetlistArrangementToolbarComponent({
+  region,
+  handlers,
+  layout,
+  waveform,
+}: SetlistArrangementProps & { waveform?: ReactNode }) {
   useEmbeddedArrangementEditor(region);
   const actions = useArrangementActions(handlers);
   const { t, regionId, structure, draft, dirty, draftIsApplied } = actions;
@@ -313,6 +339,7 @@ function SetlistArrangementToolbarComponent({ region, handlers, layout }: Setlis
               {t("transport.structure.newArrangement")}
             </button>
           </header>
+          {waveform ? <div className="lt-setlist-arrangement-mobile-waveform">{waveform}</div> : null}
           <ArrangementSelector actions={actions} />
           <div className="lt-setlist-arrangement-actions">
             <select value="" aria-label={t("transport.structure.addSection")} onChange={(event) => {
@@ -349,6 +376,7 @@ function SetlistArrangementToolbarComponent({ region, handlers, layout }: Setlis
             </button>
           </div>
           <div className="lt-setlist-arrangement-actions" role="toolbar" aria-label={t("transport.structure.strip")}>
+            <SetlistSnapToggle className="lt-setlist-arrangement-action" />
             {(["duplicate", "remove"] as const).map((operation) => {
               const label = t(operation === "duplicate" ? "setlistView.sections.duplicate" : "setlistView.sections.delete");
               return <button key={operation} type="button" className="lt-setlist-arrangement-action"

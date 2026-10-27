@@ -8,6 +8,7 @@ import { SongStructurePanel } from "../structure/SongStructurePanel";
 import type { StructureHandlers } from "../structure/structureHandlers";
 import { INITIAL_STRUCTURE_STATE, useStructureStore } from "../structure/structureStore";
 import { updateDraft, duplicateBlock } from "../structure/structureEditor";
+import { useTimelineUIStore } from "../uiStore";
 import { SetlistView } from "./SetlistView";
 import { INITIAL_SETLIST_STATE, requestEditMode, useSetlistStore } from "./setlistStore";
 import { testRegion, testSetlistProps } from "./testBindings";
@@ -113,8 +114,14 @@ describe("Edit → Arrangement", () => {
       await requestEditMode("arrangement");
     });
     expect(container.querySelector(`.lt-structure-editor.${editorClass}`)).not.toBeNull();
-    expect(container.querySelector("[data-setlist-zone='overview'] .lt-structure-editor")).not.toBeNull();
-    expect(container.querySelector("[data-setlist-zone='drawer'] .lt-structure-editor")).toBeNull();
+    if (layoutClass === "short") {
+      expect(container.querySelector("[data-setlist-zone='overview'] .lt-structure-editor")).toBeNull();
+      expect(container.querySelector(".lt-setlist-arrangement-mobile-waveform .lt-setlist-overview.is-seekable")).not.toBeNull();
+      expect(container.querySelector(".lt-setlist-bar-ruler.is-arrangement")).not.toBeNull();
+    } else {
+      expect(container.querySelector("[data-setlist-zone='overview'] .lt-structure-editor")).not.toBeNull();
+      expect(container.querySelector("[data-setlist-zone='drawer'] .lt-structure-editor")).toBeNull();
+    }
     expect(container.querySelector("[data-setlist-zone='mixer']")).toBeNull();
     expect(container.querySelectorAll(".lt-setlist-arrangement-wave-block canvas")).toHaveLength(2);
     // Embedded: the app's own panel stays hidden.
@@ -146,10 +153,26 @@ describe("Edit → Arrangement", () => {
     await act(async () => {
       await requestEditMode("sections");
     });
-
     const body = container.querySelector(".lt-setlist-drawer-body.is-sections-mode");
     expect(body?.querySelector(".lt-setlist-sections.is-short > .lt-setlist-sections-list")).not.toBeNull();
     expect(body?.querySelector(".lt-setlist-sections.is-short > .lt-setlist-sections-bar")).not.toBeNull();
+  });
+
+  it("short arrangement editing exposes its seekable waveform, bar ruler and snap toggle", async () => {
+    useTimelineUIStore.setState({ snapEnabled: false });
+    const { container } = render(<SetlistView {...props()} layoutClass="short" />);
+    await act(async () => {
+      await requestEditMode("arrangement");
+    });
+
+    expect(container.querySelector(".lt-setlist-arrangement-mobile-waveform .lt-setlist-overview.is-seekable")).not.toBeNull();
+    expect(container.querySelector(".lt-setlist-bar-ruler.is-arrangement")).not.toBeNull();
+    const snap = container.querySelector<HTMLButtonElement>(
+      ".lt-setlist-arrangement-actions [aria-label='timelineToolbar.enableSnap']",
+    )!;
+    expect(snap.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(snap);
+    expect(useTimelineUIStore.getState().snapEnabled).toBe(true);
   });
 
   it("leaving with unapplied changes asks, and stays when the answer is no", async () => {

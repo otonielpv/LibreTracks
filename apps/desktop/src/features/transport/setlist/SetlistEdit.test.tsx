@@ -100,14 +100,24 @@ describe("Edit mode", () => {
   });
 
   it("short section actions stay above the scrollable section list", async () => {
-    render(<SetlistView {...props()} layoutClass="short" />);
+    useTimelineUIStore.setState({ snapEnabled: false });
+    const { container } = render(<SetlistView {...props()} layoutClass="short" />);
     enterEdit();
     fireEvent.click(await screen.findByRole("tab", { name: "setlistView.edit.modes.sections" }));
 
     const toolbar = await screen.findByRole("toolbar", { name: "setlistView.sections.actions" });
     const list = screen.getByRole("list", { name: "setlistView.sections.list" });
     expect(toolbar.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(toolbar).getAllByRole("button")).toHaveLength(3);
+    expect(within(toolbar).getAllByRole("button")).toHaveLength(4);
+    expect(
+      container.querySelector(".lt-setlist-sections-waveform .lt-setlist-overview.is-seekable"),
+    ).not.toBeNull();
+    expect(container.querySelector(".lt-setlist-sections-waveform .lt-setlist-bar-ruler")).not.toBeNull();
+
+    const snap = within(toolbar).getByRole("button", { name: "timelineToolbar.enableSnap" });
+    expect(snap.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(snap);
+    expect(useTimelineUIStore.getState().snapEnabled).toBe(true);
   });
 
   it("Esc leaves edit mode, but not while a modal is open", () => {

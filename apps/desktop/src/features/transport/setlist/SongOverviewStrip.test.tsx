@@ -225,6 +225,19 @@ describe("SongOverviewStrip peaks", () => {
 });
 
 describe("SongOverviewStrip seek", () => {
+  it.each(["wide", "medium", "short"] as const)("%s: edit surfaces seek on a stationary click", (layout) => {
+    const onSeek = vi.fn();
+    const { container } = render(
+      <SongOverviewStrip {...stripProps({ layout, onSeek, clickToSeek: true })} />,
+    );
+    const root = layOut(container);
+
+    fireEvent.pointerDown(root, { button: 0, pointerId: 7, clientX: 350, clientY: 10 });
+    fireEvent.pointerUp(window, { pointerId: 7, clientX: 350, clientY: 10 });
+
+    expect(onSeek).toHaveBeenCalledWith(130);
+  });
+
   it.each(["wide", "medium"] as const)("%s: a click does not seek and a drag scrubs once per frame", (layout) => {
     const onSeek = vi.fn();
     const { container } = render(<SongOverviewStrip {...stripProps({ layout, onSeek })} />);

@@ -307,6 +307,41 @@ function SetlistViewComponent({
                   region={shownRegion}
                   handlers={sectionHandlers}
                   layout={layout}
+                  waveform={
+                    layout === "short" ? (
+                      <>
+                        <SongOverviewStrip
+                          region={shownRegion}
+                          clips={performance.song.clips}
+                          sectionMarkers={performance.song.sectionMarkers}
+                          waveformSummaries={waveformSummaries}
+                          positionSecondsRef={performance.positionSecondsRef}
+                          layout={layout}
+                          onSeek={performance.onSeek}
+                          clickToSeek
+                          onContextMenuAt={sectionHandlers.openMenuAt}
+                          onDoubleClickAt={sectionHandlers.createAt}
+                        />
+                        <SongMap
+                          part="blocks"
+                          song={performance.song}
+                          region={shownRegion}
+                          layout={layout}
+                          positionSecondsRef={performance.positionSecondsRef}
+                          pendingMarkerId={performance.pendingMarkerId}
+                          activeVamp={performance.activeVamp}
+                          onMarkerAction={performance.onMarkerAction}
+                          onCancelPendingJump={performance.onCancelPendingJump}
+                          onCueSong={onCueSong}
+                          onPlaySong={onPlaySong}
+                          onSectionContextMenu={onSectionContextMenu}
+                          editing
+                          showBarRuler
+                        />
+                        {sectionLayer}
+                      </>
+                    ) : undefined
+                  }
                 />
               ) : null,
             },
@@ -315,7 +350,25 @@ function SetlistViewComponent({
               icon: "account_tree",
               labelKey: "setlistView.edit.modes.arrangement",
               content: shownRegion ? (
-                <SetlistArrangementToolbar region={shownRegion} handlers={structureHandlers} layout={layout} />
+                <SetlistArrangementToolbar
+                  region={shownRegion}
+                  handlers={structureHandlers}
+                  layout={layout}
+                  waveform={
+                    layout === "short" ? (
+                      <SetlistArrangementEditor
+                        region={shownRegion}
+                        handlers={structureHandlers}
+                        layout={layout}
+                        song={performance.song}
+                        waveformSummaries={waveformSummaries}
+                        menus={menus}
+                        positionSecondsRef={performance.positionSecondsRef}
+                        onSeek={performance.onSeek}
+                      />
+                    ) : undefined
+                  }
+                />
               ) : null,
             },
             {
@@ -460,22 +513,24 @@ function SetlistViewComponent({
       )}
     </Zone>
   );
-  // The song band: the waveform, the sections on it (tap the label strip to
-  // jump) and, while editing, the section and cue handles. Right click on the
-  // waveform opens the DAW ruler menu at that point.
+  // The song band: waveform and section map; edit mode exposes section handles
+  // and lets the waveform seek without changing normal Playback section taps.
   const overview = (
     <Zone name="overview" drop={songDrop}>
       {shownRegion ? (
         <>
           {editMode === "arrangement" ? (
+            layout === "short" ? null : (
             <SetlistArrangementEditor region={shownRegion} handlers={structureHandlers} layout={layout}
-              song={performance.song} waveformSummaries={waveformSummaries} menus={menus} />
+              song={performance.song} waveformSummaries={waveformSummaries} menus={menus}
+              positionSecondsRef={performance.positionSecondsRef} onSeek={performance.onSeek} />
+            )
           ) : <OverviewZoom
             startSeconds={shownRegion.startSeconds}
             endSeconds={shownRegion.endSeconds}
             positionSecondsRef={performance.positionSecondsRef}
             onSeek={performance.onSeek}
-            tapToSeek={false}
+            tapToSeek={editMode === "sections"}
             overlay={
                   <>
                   {waveDock ? <WaveDock>{paneButtons}</WaveDock> : null}
@@ -509,9 +564,8 @@ function SetlistViewComponent({
                 waveformSummaries={waveformSummaries}
                 positionSecondsRef={performance.positionSecondsRef}
                 layout={layout}
-                // Manual seeking is a drag gesture; tapping a section activates
-                // that section instead of seeking to an arbitrary point.
                 onSeek={performance.onSeek}
+                clickToSeek={editMode === "sections"}
                 onContextMenuAt={sectionHandlers.openMenuAt}
                 onDoubleClickAt={editMode !== null ? sectionHandlers.createAt : undefined}
               />
@@ -529,6 +583,7 @@ function SetlistViewComponent({
                 onPlaySong={onPlaySong}
                 onSectionContextMenu={onSectionContextMenu}
                 editing={editMode !== null}
+                showBarRuler={editMode === "sections"}
                 arrangementPicker={
                   editMode === null ? (
                     <SetlistArrangementPicker region={shownRegion} handlers={structureHandlers} />

@@ -20,6 +20,7 @@ import { useTransportStore } from "../store";
 import { formatBars } from "../structure/structureEditor";
 import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
 import { useTimelineUIStore } from "../uiStore";
+import { SongBarRuler } from "./SongBarRuler";
 import {
   barSecondsAtFor,
   blockIdForMarker,
@@ -44,6 +45,8 @@ type SongMapProps = Pick<
     layout: SetlistLayoutClass;
     /** Edit mode: a tap selects the section instead of jumping. */
     editing?: boolean;
+    /** Bar grid shown while editing sections. */
+    showBarRuler?: boolean;
     /** The arrangement picker, over the band. */
     arrangementPicker?: ReactNode;
     /** What to draw: the blocks (inside the band's zoom layer), the buttons
@@ -74,6 +77,7 @@ function SongMapComponent({
   onPlaySong,
   onSectionContextMenu,
   editing = false,
+  showBarRuler = false,
   arrangementPicker,
   part = "all",
 }: SongMapProps) {
@@ -228,6 +232,7 @@ function SongMapComponent({
             </button>
           );
         })}
+        {showBarRuler ? <SongBarRuler song={song} region={region} /> : null}
         {/* Key changes: a lilac mark under the label strip, where the new key
             starts (the DAW ruler's notches; they showed nowhere here). */}
         {(region.keyChanges ?? [])

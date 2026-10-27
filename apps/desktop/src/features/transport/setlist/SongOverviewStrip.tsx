@@ -42,9 +42,11 @@ type SongOverviewStripProps = {
   waveformSummaries: Readonly<Record<string, WaveformSummaryDto>>;
   positionSecondsRef: { readonly current: number };
   layout: SetlistLayoutClass;
-  /** Seek to a point of the song; the panel's coalesced seek. Absent (or
-   * while editing) the strip is read-only. */
+  /** Seek to a point of the song; the panel's coalesced seek. Absent, the
+   * strip is read-only. */
   onSeek?: (seconds: number) => void;
+  /** A stationary press seeks in edit surfaces; elsewhere a press only starts a drag. */
+  clickToSeek?: boolean;
   /** Right click / long press on the waveform at `seconds` (the DAW's ruler
    * menu: create a section or a cue, a tempo or meter change…). */
   onContextMenuAt?: (event: ReactMouseEvent<HTMLElement>, seconds: number) => void;
@@ -98,8 +100,8 @@ function localX(element: HTMLElement, clientX: number) {
  * The selected song's waveform with its playhead. The canvas repaints only
  * when the peaks, the size or the sections change; the playhead is a
  * separate element moved by a rAF loop from `positionSecondsRef`, so playing
- * never re-renders this component. Taps do not seek; dragging the playhead
- * handle (or the waveform where it is exposed) scrubs at most once per frame.
+ * never re-renders this component. Click-to-seek is opt-in; dragging the
+ * playhead handle or exposed waveform scrubs at most once per frame.
  */
 function SongOverviewStripComponent({
   region,
@@ -109,6 +111,7 @@ function SongOverviewStripComponent({
   positionSecondsRef,
   layout,
   onSeek,
+  clickToSeek = false,
   onContextMenuAt,
   onDoubleClickAt,
 }: SongOverviewStripProps) {
@@ -292,18 +295,31 @@ function SongOverviewStripComponent({
   const handlePointerDown = (event: ReactPointerEvent<HTMLElement>, fromPlayhead = false) => {
     if (!onSeek || event.button !== 0) return;
     if (scrubCleanupRef.current) return;
-    if (!fromPlayhead && layout === "short") return;
-    event.preventDefault();
+    const target = event.target;
+    if (
+      !fromPlayhead &&
+      target instanceof Element &&
+      target.closest(
+        "button, .lt-setlist-map-block, .lt-setlist-map-label, .lt-setlist-section-handle, .lt-structure-block-name, .lt-structure-handle, .lt-setlist-arrangement-insert",
+      )
+    ) {
+      return;
+    }
+    const touchTapOnly = !fromPlayhead && layout === "short";
+    if (touchTapOnly && !clickToSeek) return;
+    if (!touchTapOnly) event.preventDefault();
     if (fromPlayhead) event.stopPropagation();
     zoomWindow?.setScrubbing?.(true);
     const pointerId = event.pointerId;
     const startClientX = event.clientX;
+    const startClientY = event.clientY;
     let pending: number | null = null;
     let frame = 0;
     let autoScrollFrame: number | null = null;
     let latestClientX = event.clientX;
     let ended = false;
     let dragging = false;
+    let moved = false;
     const flush = () => {
       frame = 0;
       if (pending !== null) onSeek(pending);
@@ -357,11 +373,17 @@ function SongOverviewStripComponent({
     const onMove = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== pointerId) return;
       latestClientX = moveEvent.clientX;
+      if (touchTapOnly) {
+        moved ||= Math.hypot(latestClientX - startClientX, moveEvent.clientY - startClientY) >= DRAG_THRESHOLD_PX;
+        return;
+      }
       if (!dragging) {
         if (Math.abs(latestClientX - startClientX) < DRAG_THRESHOLD_PX) return;
+        moved = true;
         startScrubbing();
         return;
       }
+      moved = true;
       pending = secondsAt(latestClientX);
       if (!frame) frame = window.requestAnimationFrame(flush);
       maybeStartAutoScroll();
@@ -383,7 +405,10 @@ function SongOverviewStripComponent({
     const onUp = (upEvent: PointerEvent) => {
       if (upEvent.pointerId !== pointerId) return;
       if (frame) window.cancelAnimationFrame(frame);
-      if (upEvent.type === "pointerup" && dragging) flush();
+      if (upEvent.type === "pointerup") {
+        if (dragging) flush();
+        else if (clickToSeek && !moved) onSeek(secondsAt(upEvent.clientX));
+      }
       cleanup();
     };
     scrubCleanupRef.current = cleanup;

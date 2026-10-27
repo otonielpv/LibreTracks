@@ -455,6 +455,51 @@ html.lt-mobile .lt-setlist-add-song-button {
   pointer-events: auto;
 }
 
+.lt-setlist-view.is-editing .lt-setlist-map-block {
+  pointer-events: none;
+}
+
+.lt-setlist-bar-ruler {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(var(--lt-setlist-label-height) + 0.25rem);
+  height: 1.1rem;
+  z-index: 2;
+  color: var(--lt-setlist-text-muted);
+  pointer-events: none;
+}
+
+.lt-setlist-bar-ruler-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgb(255 255 255 / 0.24);
+}
+
+.lt-setlist-bar-ruler-label {
+  position: absolute;
+  top: 0;
+  left: 0.2rem;
+  padding: 0 0.15rem;
+  border-radius: 2px;
+  background: rgb(19 19 19 / 0.78);
+  color: var(--lt-setlist-text);
+  font-size: 0.68rem;
+  line-height: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-setlist-bar-ruler.is-arrangement {
+  top: auto;
+  bottom: 3.15rem;
+  height: 1rem;
+  z-index: 1;
+}
+
+.lt-setlist-bar-ruler.is-arrangement .lt-setlist-bar-ruler-label {
+  font-size: 0.62rem;
+}
+
 .lt-setlist-map-block.is-start,
 .lt-setlist-map-block.is-song {
   background: transparent;
@@ -1109,6 +1154,30 @@ html.lt-mobile .lt-setlist-edit-button {
   flex: 1 1 0;
   min-width: 2.75rem;
   padding: 0;
+}
+
+.lt-setlist-sections-waveform {
+  position: relative;
+  display: grid;
+  flex: 0 0 8rem;
+  height: 8rem;
+  min-height: 0;
+  grid-template-areas: "band";
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.4rem;
+  background: var(--lt-setlist-bg);
+}
+
+.lt-setlist-sections-waveform > .lt-setlist-overview,
+.lt-setlist-sections-waveform > .lt-setlist-section-layer {
+  grid-area: band;
+  min-height: 0;
+}
+
+.lt-setlist-sections-waveform .lt-setlist-map-blocks {
+  grid-area: band;
 }
 
 .lt-setlist-sections.is-short .lt-setlist-sections-action-label {
@@ -2511,7 +2580,34 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 .lt-setlist-arrangement-wave-block > .lt-setlist-overview {
   position: absolute;
   inset: 0;
+  pointer-events: auto;
+}
+
+.lt-setlist-arrangement.is-waveform .lt-structure-block {
   pointer-events: none;
+}
+
+.lt-setlist-arrangement.is-waveform .lt-structure-block-name,
+.lt-setlist-arrangement.is-waveform .lt-structure-handle {
+  pointer-events: auto;
+}
+
+.lt-setlist-arrangement-wave-block > .lt-setlist-bar-ruler {
+  pointer-events: none;
+}
+
+.lt-setlist-arrangement-mobile-waveform {
+  flex: 0 0 8rem;
+  height: 8rem;
+  min-height: 0;
+  overflow-x: auto;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.4rem;
+  background: var(--lt-setlist-bg);
+}
+
+.lt-setlist-arrangement-mobile-waveform > .lt-setlist-arrangement {
+  min-width: 100%;
 }
 
 .lt-setlist-arrangement.is-waveform .lt-setlist-overview-canvas {
