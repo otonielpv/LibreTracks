@@ -71,7 +71,7 @@ type OverviewZoomProps = {
 };
 
 const isControl = (target: EventTarget | null) =>
-  target instanceof Element && Boolean(target.closest("button, [role='button'], .lt-setlist-section-handle"));
+  target instanceof Element && Boolean(target.closest("button:not(.lt-setlist-map-block), [role='button']:not(.lt-setlist-map-block), .lt-setlist-section-handle"));
 
 /**
  * The band's zoom, with the DAW's gestures on a phone (the iPhone reports):
@@ -227,6 +227,7 @@ export function OverviewZoom({
 
   // Touch gestures, before the waveform's own pointer handling.
   const pointersRef = useRef(new Map<number, number>());
+  const suppressClickRef = useRef(false);
   // A pinch scales the layer with a transform (no relayout per frame: laying
   // the blocks out again at every step made every section label and edge
   // shiver). The real width is set once, when the fingers lift.
@@ -240,14 +241,17 @@ export function OverviewZoom({
   } | null>(null);
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     commitWheelZoomPreview();
+    if (pointersRef.current.size === 0) suppressClickRef.current = false;
     if (scrubbingRef.current) return;
     if (event.pointerType !== "touch" || isControl(event.target)) return;
-    event.stopPropagation();
+    const sectionTap = event.target instanceof Element && Boolean(event.target.closest(".lt-setlist-map-block"));
+    if (!sectionTap) event.stopPropagation();
     const viewport = viewportRef.current;
     if (!viewport) return;
     const pointers = pointersRef.current;
     pointers.set(event.pointerId, event.clientX);
     if (pointers.size === 2) {
+      suppressClickRef.current = true;
       // The second finger: the first one's listeners run the pinch.
       const [a, b] = [...pointers.values()];
       pinchRef.current = {
@@ -296,6 +300,7 @@ export function OverviewZoom({
       const dx = moveEvent.clientX - startX;
       if (!moved && Math.abs(dx) < DRAG_THRESHOLD_PX) return;
       moved = true;
+      suppressClickRef.current = true;
       const width = viewport.clientWidth;
       const max = Math.max(0, width * zoomRef.current - width);
       applyOffset(Math.max(0, Math.min(max, startOffset - dx)));
@@ -321,7 +326,7 @@ export function OverviewZoom({
         applyOffset(pinch.target <= 1 ? 0 : pinch.visualOffset);
         markFrameActivity();
       }
-      if (!moved && upEvent.type === "pointerup" && tapToSeek && onSeek) {
+      if (!moved && !pinch && !sectionTap && upEvent.type === "pointerup" && tapToSeek && onSeek) {
         // A tap: the moment under the finger, through the (moved) layer.
         const layer = layerRef.current;
         const box = layer?.getBoundingClientRect();
@@ -384,6 +389,11 @@ export function OverviewZoom({
         ref={viewportRef}
         className="lt-setlist-zoom-viewport"
         onPointerDownCapture={handlePointerDown}
+        onClickCapture={(event) => {
+          if (!suppressClickRef.current) return;
+          event.preventDefault();
+          event.stopPropagation();
+        }}
       >
         <div
           ref={layerRef}

@@ -234,9 +234,13 @@ describe("band zoom", () => {
     vi.stubGlobal("cancelAnimationFrame", () => {});
     useSetlistStore.setState({ overviewZoom: 4 });
     const onSeek = vi.fn();
+    const onSectionClick = vi.fn();
+    const onSectionPointerDown = vi.fn();
     const { container } = render(
       <OverviewZoom startSeconds={0} endSeconds={60} positionSecondsRef={{ current: 0 }} onSeek={onSeek}>
-        <div />
+        <button type="button" className="lt-setlist-map-block" onClick={onSectionClick} onPointerDown={onSectionPointerDown}>
+          <span>Chorus</span>
+        </button>
       </OverviewZoom>,
     );
     const viewport = container.querySelector<HTMLElement>(".lt-setlist-zoom-viewport")!;
@@ -258,8 +262,9 @@ describe("band zoom", () => {
     expect(onSeek).toHaveBeenCalledWith(15);
 
     // Two fingers 100 px apart spread to 200: 4× → 8×.
-    fireEvent.pointerDown(viewport, { ...touch, pointerId: 3, clientX: 150 });
-    fireEvent.pointerDown(viewport, { ...touch, pointerId: 4, clientX: 250 });
+    const sectionLabel = container.querySelector(".lt-setlist-map-block span")!;
+    fireEvent.pointerDown(sectionLabel, { ...touch, pointerId: 3, clientX: 150 });
+    fireEvent.pointerDown(sectionLabel, { ...touch, pointerId: 4, clientX: 250 });
     fireEvent.pointerMove(window, { ...touch, pointerId: 4, clientX: 350 });
     // While the fingers are down it only scales (no relayout per frame: the
     // sections' labels shivered); the real width lands on release.
@@ -271,6 +276,26 @@ describe("band zoom", () => {
     expect(layer.style.width).toBe("800%");
     expect(layer.style.transform).not.toContain("scaleX");
     expect(onSeek).toHaveBeenCalledTimes(1);
+    fireEvent.click(sectionLabel);
+    expect(onSectionClick).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(sectionLabel, { ...touch, pointerId: 5, clientX: 200 });
+    fireEvent.pointerUp(window, { ...touch, pointerId: 5, clientX: 200 });
+    fireEvent.click(sectionLabel);
+    expect(onSectionClick).toHaveBeenCalledTimes(1);
+    expect(onSectionPointerDown).toHaveBeenCalledTimes(3);
+    expect(onSeek).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerDown(sectionLabel, { ...touch, pointerId: 6, clientX: 250 });
+    fireEvent.pointerMove(window, { ...touch, pointerId: 6, clientX: 150 });
+    fireEvent.pointerUp(window, { ...touch, pointerId: 6, clientX: 150 });
+    fireEvent.click(sectionLabel);
+    expect(onSectionClick).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerDown(sectionLabel, { pointerType: "mouse", pointerId: 7, clientX: 200 });
+    fireEvent.pointerUp(window, { pointerType: "mouse", pointerId: 7, clientX: 200 });
+    fireEvent.click(sectionLabel);
+    expect(onSectionClick).toHaveBeenCalledTimes(2);
     Object.defineProperty(window, "PointerEvent", { configurable: true, value: original });
     vi.unstubAllGlobals();
   });
