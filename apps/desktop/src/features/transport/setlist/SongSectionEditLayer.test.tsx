@@ -314,6 +314,46 @@ describe("Section handles: touch", () => {
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 450 });
     expect(deps.rulerMarkers.moveGroup).toHaveBeenCalledTimes(1);
   });
+
+  it("cancels a section drag when a second finger starts a pinch", () => {
+    mobile.value = true;
+    const { deps, handlers } = setup();
+    renderLayer(handlers);
+    const coro = handle("Coro");
+
+    fireEvent.pointerDown(coro, {
+      button: 0,
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 400,
+    });
+    fireEvent.pointerMove(window, {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 450,
+    });
+    expect(coro.style.transform).not.toBe("");
+
+    fireEvent.pointerDown(document.body, {
+      button: 0,
+      pointerId: 2,
+      pointerType: "touch",
+      clientX: 600,
+    });
+    expect(coro.style.transform).toBe("");
+    fireEvent.pointerMove(window, {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 470,
+    });
+    fireEvent.pointerUp(window, {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 470,
+    });
+
+    expect(deps.rulerMarkers.moveGroup).not.toHaveBeenCalled();
+  });
 });
 
 // The phone report: no way to add a tempo, meter or key change mid-song.

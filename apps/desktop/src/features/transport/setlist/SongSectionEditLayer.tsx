@@ -1,5 +1,6 @@
 import {
   memo,
+  useEffect,
   useLayoutEffect,
   useRef,
   type CSSProperties,
@@ -48,6 +49,23 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
   const { t } = useTranslation();
   const layerRef = useRef<HTMLDivElement | null>(null);
   const touchMenu = useTouchContextMenu();
+  const activeTouchPointersRef = useRef(new Set<number>());
+  useEffect(() => {
+    const rememberTouch = (event: PointerEvent) => {
+      if (event.pointerType === "touch") activeTouchPointersRef.current.add(event.pointerId);
+    };
+    const forgetTouch = (event: PointerEvent) => {
+      if (event.pointerType === "touch") activeTouchPointersRef.current.delete(event.pointerId);
+    };
+    window.addEventListener("pointerdown", rememberTouch, true);
+    window.addEventListener("pointerup", forgetTouch, true);
+    window.addEventListener("pointercancel", forgetTouch, true);
+    return () => {
+      window.removeEventListener("pointerdown", rememberTouch, true);
+      window.removeEventListener("pointerup", forgetTouch, true);
+      window.removeEventListener("pointercancel", forgetTouch, true);
+    };
+  }, []);
   const snapEnabled = useTimelineUIStore((state) => state.snapEnabled);
   // Two narrow selectors, not selectedRulerMarkers (it builds a new array).
   const selectedMarkers = useTimelineUIStore((state) => state.selectedMarkers);
@@ -86,6 +104,7 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
   const handlePointerDown = (event: ReactPointerEvent<HTMLElement>, markerId: string) => {
     if (event.button !== 0) return;
     event.stopPropagation();
+    if (event.pointerType === "touch" && activeTouchPointersRef.current.size > 1) return;
     const layer = layerRef.current;
     const marker = song.sectionMarkers.find((entry) => entry.id === markerId);
     if (!layer || !marker) return;
@@ -96,19 +115,33 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
       widthPx,
     });
     const pointerId = event.pointerId;
+    const pointerType = event.pointerType;
     const startX = event.clientX;
     const modifiers = { additive: event.ctrlKey || event.metaKey, range: event.shiftKey };
     let groupIds: string[] | null = null;
     let delta = 0;
     let moved = false;
+    let cancelledByMultiTouch = false;
 
     const elementsFor = (ids: readonly string[]) =>
       ids
         .map((id) => layer.querySelector<HTMLElement>(`[data-section-handle="${id}"]`))
         .filter((element): element is HTMLElement => Boolean(element));
 
+    const cancelForPinch = (anotherEvent: PointerEvent) => {
+      if (
+        pointerType !== "touch" ||
+        anotherEvent.pointerType !== "touch" ||
+        anotherEvent.pointerId === pointerId
+      ) {
+        return;
+      }
+      cancelledByMultiTouch = true;
+      clearPreview();
+    };
+
     const onMove = (moveEvent: PointerEvent) => {
-      if (moveEvent.pointerId !== pointerId) return;
+      if (cancelledByMultiTouch || moveEvent.pointerId !== pointerId) return;
       const dx = moveEvent.clientX - startX;
       if (!moved && Math.abs(dx) < DRAG_THRESHOLD_PX) return;
       moved = true;
@@ -132,9 +165,16 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
     };
     const finish = (upEvent: PointerEvent) => {
       if (upEvent.pointerId !== pointerId) return;
+      if (pointerType === "touch") {
+        window.removeEventListener("pointerdown", cancelForPinch, true);
+      }
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", finish);
       window.removeEventListener("pointercancel", finish);
+      if (cancelledByMultiTouch) {
+        clearPreview();
+        return;
+      }
       if (!moved) {
         handlers.select(markerId, modifiers);
         return;
@@ -148,6 +188,9 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
       }
       previewTimerRef.current = window.setTimeout(clearPreview, PREVIEW_FALLBACK_MS);
     };
+    if (pointerType === "touch") {
+      window.addEventListener("pointerdown", cancelForPinch, true);
+    }
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", finish);
     window.addEventListener("pointercancel", finish);
@@ -157,17 +200,31 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
   const handleEndPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
     event.stopPropagation();
+    if (event.pointerType === "touch" && activeTouchPointersRef.current.size > 1) return;
     const layer = layerRef.current;
     const element = event.currentTarget;
     if (!layer) return;
     const widthPx = layer.offsetWidth || layer.getBoundingClientRect().width;
     const pxPerSecond = widthPx / Math.max(1e-6, region.endSeconds - region.startSeconds);
     const pointerId = event.pointerId;
+    const pointerType = event.pointerType;
     const startX = event.clientX;
     let moved = false;
     let dx = 0;
+    let cancelledByMultiTouch = false;
+    const cancelForPinch = (anotherEvent: PointerEvent) => {
+      if (
+        pointerType !== "touch" ||
+        anotherEvent.pointerType !== "touch" ||
+        anotherEvent.pointerId === pointerId
+      ) {
+        return;
+      }
+      cancelledByMultiTouch = true;
+      element.style.removeProperty("transform");
+    };
     const onMove = (moveEvent: PointerEvent) => {
-      if (moveEvent.pointerId !== pointerId) return;
+      if (cancelledByMultiTouch || moveEvent.pointerId !== pointerId) return;
       dx = moveEvent.clientX - startX;
       if (!moved && Math.abs(dx) < DRAG_THRESHOLD_PX) return;
       moved = true;
@@ -175,9 +232,16 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
     };
     const finish = (upEvent: PointerEvent) => {
       if (upEvent.pointerId !== pointerId) return;
+      if (pointerType === "touch") {
+        window.removeEventListener("pointerdown", cancelForPinch, true);
+      }
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", finish);
       window.removeEventListener("pointercancel", finish);
+      if (cancelledByMultiTouch) {
+        element.style.removeProperty("transform");
+        return;
+      }
       const committed =
         moved && upEvent.type === "pointerup" && pxPerSecond > 0
           ? handlers.resizeSongEnd(region.endSeconds + dx / pxPerSecond)
@@ -185,6 +249,9 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
       if (!committed) element.style.removeProperty("transform");
       else previewTimerRef.current = window.setTimeout(clearPreview, PREVIEW_FALLBACK_MS);
     };
+    if (pointerType === "touch") {
+      window.addEventListener("pointerdown", cancelForPinch, true);
+    }
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", finish);
     window.addEventListener("pointercancel", finish);

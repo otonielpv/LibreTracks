@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { SongRegionSummary, SongView } from "@libretracks/shared/models";
 import {
@@ -234,26 +234,32 @@ function SetlistMixerComponent({
         ) : null}
         <div className="lt-setlist-mixer-tabs" role="tablist" aria-label={t("setlistView.mixer.label")}>
           {tabs.map((entry) => (
-            <button
-              key={entry.tab}
-              type="button"
-              role="tab"
-              aria-selected={tab === entry.tab}
-              className={`lt-setlist-tab${tab === entry.tab ? " is-active" : ""}`}
-              title={entry.label}
-              onClick={() => setBottomTab(entry.tab)}
-            >
-              {short ? (
-                <span className="material-symbols-outlined" aria-hidden="true">{entry.icon}</span>
+            <Fragment key={entry.tab}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === entry.tab}
+                className={`lt-setlist-tab${tab === entry.tab ? " is-active" : ""}`}
+                title={entry.label}
+                onClick={() => setBottomTab(entry.tab)}
+              >
+                {short ? (
+                  <span className="material-symbols-outlined" aria-hidden="true">{entry.icon}</span>
+                ) : null}
+                <span className={short ? "lt-setlist-rail-label" : "lt-setlist-mixer-action-label"}>{entry.label}</span>
+              </button>
+              {short && entry.tab === "tracks" && isMobileApp && tab === "tracks" ? (
+                <MobileTrackSelectionControls
+                  placement="setlist-rail"
+                  showRailLabels
+                />
               ) : null}
-              <span className={short ? "lt-setlist-rail-label" : "lt-setlist-mixer-action-label"}>{entry.label}</span>
-            </button>
+            </Fragment>
           ))}
         </div>
-        {isMobileApp && tab === "tracks" ? (
+        {!short && isMobileApp && tab === "tracks" ? (
           <MobileTrackSelectionControls
             placement="setlist-rail"
-            showRailLabels={short}
           />
         ) : null}
         {short ? <span className="lt-setlist-rail-divider" aria-hidden="true" /> : null}

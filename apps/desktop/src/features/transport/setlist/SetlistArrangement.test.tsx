@@ -132,8 +132,9 @@ describe("Edit → Arrangement", () => {
     });
     expect(container.querySelector(`.lt-structure-editor.${editorClass}`)).not.toBeNull();
     if (layoutClass === "short") {
-      expect(container.querySelector("[data-setlist-zone='overview'] .lt-structure-editor")).toBeNull();
-      expect(container.querySelector(".lt-setlist-arrangement-mobile-waveform .lt-setlist-overview.is-seekable")).not.toBeNull();
+      expect(container.querySelector("[data-setlist-zone='overview'] .lt-setlist-arrangement-mobile-waveform.is-main .lt-structure-editor")).not.toBeNull();
+      expect(container.querySelector("[data-setlist-zone='drawer'] .lt-setlist-arrangement-mobile-waveform")).toBeNull();
+      expect(container.querySelector(".lt-setlist-arrangement-mobile-waveform.is-main .lt-setlist-overview.is-seekable")).not.toBeNull();
       expect(container.querySelector(".lt-setlist-bar-ruler.is-arrangement")).not.toBeNull();
     } else {
       expect(container.querySelector("[data-setlist-zone='overview'] .lt-structure-editor")).not.toBeNull();
@@ -179,14 +180,15 @@ describe("Edit → Arrangement", () => {
     expect(body?.querySelector(".lt-setlist-sections.is-short > .lt-setlist-sections-bar")).not.toBeNull();
   });
 
-  it("short arrangement editing exposes its seekable waveform, bar ruler and snap toggle", async () => {
+  it("short arrangement editing keeps its waveform in the main band with bar ruler and snap controls", async () => {
     useTimelineUIStore.setState({ snapEnabled: false });
     const { container } = render(<SetlistView {...props()} layoutClass="short" />);
     await act(async () => {
       await requestEditMode("arrangement");
     });
 
-    expect(container.querySelector(".lt-setlist-arrangement-mobile-waveform .lt-setlist-overview.is-seekable")).not.toBeNull();
+    expect(container.querySelector("[data-setlist-zone='overview'] .lt-setlist-arrangement-mobile-waveform.is-main .lt-setlist-overview.is-seekable")).not.toBeNull();
+    expect(container.querySelector("[data-setlist-zone='drawer'] .lt-setlist-arrangement-mobile-waveform")).toBeNull();
     expect(container.querySelector(".lt-setlist-bar-ruler.is-arrangement")).not.toBeNull();
     const snap = container.querySelector<HTMLButtonElement>(
       ".lt-setlist-arrangement-actions [aria-label='timelineToolbar.enableSnap']",
@@ -196,7 +198,7 @@ describe("Edit → Arrangement", () => {
     expect(useTimelineUIStore.getState().snapEnabled).toBe(true);
 
     const waveform = container.querySelector<HTMLElement>(
-      ".lt-setlist-arrangement-mobile-waveform .lt-setlist-arrangement",
+      ".lt-setlist-arrangement-mobile-waveform.is-main .lt-setlist-arrangement",
     )!;
     const widthBeforeZoom = waveform.style.width;
     fireEvent.click(screen.getByRole("button", { name: "setlistView.lanes.zoomIn" }));

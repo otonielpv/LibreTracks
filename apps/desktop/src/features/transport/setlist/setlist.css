@@ -1153,7 +1153,7 @@ html.lt-mobile .lt-setlist-edit-button {
 
 .lt-setlist-sections.is-short .lt-setlist-sections-bar {
   flex: 0 0 auto;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 0.35rem;
   padding: 0.3rem 0;
   background: var(--lt-setlist-surface);
@@ -1163,30 +1163,6 @@ html.lt-mobile .lt-setlist-edit-button {
   flex: 1 1 0;
   min-width: 2.75rem;
   padding: 0;
-}
-
-.lt-setlist-sections-waveform {
-  position: relative;
-  display: grid;
-  flex: 0 0 8rem;
-  height: 8rem;
-  min-height: 0;
-  grid-template-areas: "band";
-  grid-template-rows: minmax(0, 1fr);
-  overflow: hidden;
-  border: 1px solid var(--lt-setlist-border);
-  border-radius: 0.4rem;
-  background: var(--lt-setlist-bg);
-}
-
-.lt-setlist-sections-waveform > .lt-setlist-overview,
-.lt-setlist-sections-waveform > .lt-setlist-section-layer {
-  grid-area: band;
-  min-height: 0;
-}
-
-.lt-setlist-sections-waveform .lt-setlist-map-blocks {
-  grid-area: band;
 }
 
 .lt-setlist-sections.is-short .lt-setlist-sections-action-label {
@@ -2649,6 +2625,25 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 
 .lt-setlist-arrangement-mobile-waveform > .lt-setlist-arrangement {
   min-width: 100%;
+}
+
+.lt-setlist-arrangement-mobile-waveform.is-main {
+  position: relative;
+  grid-area: band;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  border: 0;
+  border-radius: 0;
+}
+
+.lt-setlist-arrangement-mobile-waveform.is-main > .lt-setlist-arrangement {
+  height: 100%;
 }
 
 .lt-setlist-arrangement-mobile-waveform .lt-setlist-arrangement.is-waveform > .lt-setlist-overview.is-short {

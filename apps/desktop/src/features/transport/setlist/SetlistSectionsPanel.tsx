@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from "react";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { markerCategory, markerColor, type SongRegionSummary, type SongView } from "@libretracks/shared/models";
 
@@ -14,17 +14,14 @@ type SetlistSectionsPanelProps = {
   region: SongRegionSummary;
   handlers: SectionEditHandlers;
   layout: SetlistLayoutClass;
-  /** `short`: the waveform with its handles, inside the full-screen drawer. */
-  waveform?: ReactNode;
 };
 
 /**
  * Edit → Sections: the actions bar (+ section at the playhead, duplicate,
- * delete) and the list of the song's sections. In `wide`/`medium` the
- * handles live on the view's own waveform; in `short` the compact actions
- * stay above the independently scrollable list.
+ * delete) and the list of the song's sections. The waveform and its handles
+ * stay in the view's main band in every layout.
  */
-function SetlistSectionsPanelComponent({ song, region, handlers, layout, waveform }: SetlistSectionsPanelProps) {
+function SetlistSectionsPanelComponent({ song, region, handlers, layout }: SetlistSectionsPanelProps) {
   const { t } = useTranslation();
   const selectedMarkers = useTimelineUIStore((state) => state.selectedMarkers);
   const selectedSectionId = useTimelineUIStore((state) => state.selectedSectionId);
@@ -85,8 +82,7 @@ function SetlistSectionsPanelComponent({ song, region, handlers, layout, wavefor
     <div className={`lt-setlist-sections is-${layout}`}>
       {layout === "short" ? bar : null}
       {layout === "short" ? null : bar}
-      {waveform ? <div className="lt-setlist-sections-waveform">{waveform}</div> : null}
-      {layout === "short" && !waveform ? <SongBarRuler song={song} region={region} /> : null}
+      {layout === "short" ? <SongBarRuler song={song} region={region} /> : null}
       <p className="lt-setlist-sections-hint">{t("setlistView.sections.hint")}</p>
       <ul className="lt-setlist-sections-list" aria-label={t("setlistView.sections.list")}>
         {sections.map((marker) => (

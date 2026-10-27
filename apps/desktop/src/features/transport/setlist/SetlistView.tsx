@@ -343,41 +343,6 @@ function SetlistViewComponent({
                   region={shownRegion}
                   handlers={sectionHandlers}
                   layout={layout}
-                  waveform={
-                    layout === "short" ? (
-                      <>
-                        <SongOverviewStrip
-                          region={shownRegion}
-                          clips={performance.song.clips}
-                          sectionMarkers={performance.song.sectionMarkers}
-                          waveformSummaries={waveformSummaries}
-                          positionSecondsRef={performance.positionSecondsRef}
-                          layout={layout}
-                          onSeek={seekInWaveEditor}
-                          clickToSeek
-                          onContextMenuAt={sectionHandlers.openMenuAt}
-                          onDoubleClickAt={sectionHandlers.createAt}
-                        />
-                        <SongMap
-                          part="blocks"
-                          song={performance.song}
-                          region={shownRegion}
-                          layout={layout}
-                          positionSecondsRef={performance.positionSecondsRef}
-                          pendingMarkerId={performance.pendingMarkerId}
-                          activeVamp={performance.activeVamp}
-                          onMarkerAction={performance.onMarkerAction}
-                          onCancelPendingJump={performance.onCancelPendingJump}
-                          onCueSong={onCueSong}
-                          onPlaySong={onPlaySong}
-                          onSectionContextMenu={onSectionContextMenu}
-                          editing
-                          showBarRuler
-                        />
-                        {sectionLayer}
-                      </>
-                    ) : undefined
-                  }
                 />
               ) : null,
             },
@@ -390,20 +355,6 @@ function SetlistViewComponent({
                   region={shownRegion}
                   handlers={structureHandlers}
                   layout={layout}
-                  waveform={
-                    layout === "short" ? (
-                      <SetlistArrangementEditor
-                        region={shownRegion}
-                        handlers={structureHandlers}
-                        layout={layout}
-                        song={performance.song}
-                        waveformSummaries={waveformSummaries}
-                        menus={menus}
-                        positionSecondsRef={performance.positionSecondsRef}
-                        onSeek={seekInWaveEditor}
-                      />
-                    ) : undefined
-                  }
                 />
               ) : null,
             },
@@ -556,7 +507,20 @@ function SetlistViewComponent({
       {shownRegion ? (
         <>
           {editMode === "arrangement" ? (
-            layout === "short" ? null : (
+            layout === "short" ? (
+              <div className="lt-setlist-arrangement-mobile-waveform is-main">
+                <SetlistArrangementEditor
+                  region={shownRegion}
+                  handlers={structureHandlers}
+                  layout={layout}
+                  song={performance.song}
+                  waveformSummaries={waveformSummaries}
+                  menus={menus}
+                  positionSecondsRef={performance.positionSecondsRef}
+                  onSeek={seekInWaveEditor}
+                />
+              </div>
+            ) : (
               <OverviewZoom
                 startSeconds={shownRegion.startSeconds}
                 endSeconds={shownRegion.endSeconds}

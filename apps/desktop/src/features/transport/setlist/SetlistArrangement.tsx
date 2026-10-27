@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   ArrangementBlockSummary,
@@ -302,14 +302,13 @@ function ArrangementSelector({ actions }: { actions: ArrangementActions }) {
 /**
  * Edit → Arrangement in the drawer: the panel's own toolbar (picker, new,
  * rename, delete, recapture) and Apply, all from useArrangementActions. In
- * `short` the drawer covers the view, so it also brings the block strip.
+ * `short` the block strip stays in the main band.
  */
 function SetlistArrangementToolbarComponent({
   region,
   handlers,
   layout,
-  waveform,
-}: SetlistArrangementProps & { waveform?: ReactNode }) {
+}: SetlistArrangementProps) {
   useEmbeddedArrangementEditor(region);
   const actions = useArrangementActions(handlers);
   const { t, regionId, structure, draft, dirty, draftIsApplied } = actions;
@@ -356,7 +355,6 @@ function SetlistArrangementToolbarComponent({
               {t("transport.structure.newArrangement")}
             </button>
           </header>
-          {waveform ? <div className="lt-setlist-arrangement-mobile-waveform">{waveform}</div> : null}
           <ArrangementSelector actions={actions} />
           <div className="lt-setlist-arrangement-actions">
             <select value="" aria-label={t("transport.structure.addSection")} onChange={(event) => {

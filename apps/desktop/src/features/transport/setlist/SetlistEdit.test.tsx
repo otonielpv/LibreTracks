@@ -109,10 +109,8 @@ describe("Edit mode", () => {
     const list = screen.getByRole("list", { name: "setlistView.sections.list" });
     expect(toolbar.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(toolbar).getAllByRole("button")).toHaveLength(4);
-    expect(
-      container.querySelector(".lt-setlist-sections-waveform .lt-setlist-overview.is-seekable"),
-    ).not.toBeNull();
-    expect(container.querySelector(".lt-setlist-sections-waveform .lt-setlist-bar-ruler")).not.toBeNull();
+    expect(container.querySelector(".lt-setlist-sections-waveform")).toBeNull();
+    expect(container.querySelector("[data-setlist-zone='overview'] .lt-setlist-section-layer")).not.toBeNull();
 
     const snap = within(toolbar).getByRole("button", { name: "timelineToolbar.enableSnap" });
     expect(snap.getAttribute("aria-pressed")).toBe("false");

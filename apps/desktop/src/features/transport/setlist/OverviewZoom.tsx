@@ -243,9 +243,17 @@ export function OverviewZoom({
     commitWheelZoomPreview();
     if (pointersRef.current.size === 0) suppressClickRef.current = false;
     if (scrubbingRef.current) return;
-    if (event.pointerType !== "touch" || isControl(event.target)) return;
+    const sectionHandle =
+      event.target instanceof Element &&
+      Boolean(event.target.closest(".lt-setlist-section-handle"));
+    if (
+      event.pointerType !== "touch" ||
+      (isControl(event.target) && !sectionHandle)
+    ) {
+      return;
+    }
     const sectionTap = event.target instanceof Element && Boolean(event.target.closest(".lt-setlist-map-block"));
-    if (!sectionTap) event.stopPropagation();
+    if (!sectionTap && !sectionHandle) event.stopPropagation();
     const viewport = viewportRef.current;
     if (!viewport) return;
     const pointers = pointersRef.current;
@@ -297,6 +305,7 @@ export function OverviewZoom({
         }
         return;
       }
+      if (sectionHandle) return;
       const dx = moveEvent.clientX - startX;
       if (!moved && Math.abs(dx) < DRAG_THRESHOLD_PX) return;
       moved = true;
@@ -326,7 +335,7 @@ export function OverviewZoom({
         applyOffset(pinch.target <= 1 ? 0 : pinch.visualOffset);
         markFrameActivity();
       }
-      if (!moved && !pinch && !sectionTap && upEvent.type === "pointerup" && tapToSeek && onSeek) {
+      if (!moved && !pinch && !sectionTap && !sectionHandle && upEvent.type === "pointerup" && tapToSeek && onSeek) {
         // A tap: the moment under the finger, through the (moved) layer.
         const layer = layerRef.current;
         const box = layer?.getBoundingClientRect();

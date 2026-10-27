@@ -29,7 +29,7 @@ export function MobileTrackSelectionControls({
 
   const buttonClass =
     placement === "setlist-rail"
-      ? "lt-setlist-mixer-action"
+      ? "lt-setlist-mixer-action lt-mobile-track-selection-control"
       : "lt-icon-button";
   const railLabel = (label: string) =>
     placement === "setlist-rail" && showRailLabels ? (

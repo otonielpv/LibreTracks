@@ -9,6 +9,8 @@ import { songCardHeight } from "./useSongsRowResize";
 import { INITIAL_SETLIST_STATE, useSetlistStore } from "./setlistStore";
 import { testRegion, testSetlistProps } from "./testBindings";
 
+const platform = vi.hoisted(() => ({ mobile: false }));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) =>
@@ -27,7 +29,9 @@ vi.mock("../structure/ArrangementBadge", () => ({
 
 vi.mock("../desktopApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../desktopApi")>()),
-  isMobileApp: false,
+  get isMobileApp() {
+    return platform.mobile;
+  },
   getPadsCatalog: vi.fn(async () => ({
     offline: false,
     pads: [{ id: "warm", name: "Warm", keysPresent: 12, keysPresentMask: new Array(12).fill(true) }],
@@ -112,6 +116,7 @@ afterAll(() => {
 
 beforeEach(() => {
   useSetlistStore.setState(INITIAL_SETLIST_STATE);
+  platform.mobile = false;
   window.localStorage.clear();
 });
 afterEach(() => vi.restoreAllMocks());
@@ -363,6 +368,25 @@ describe("phone console rail", () => {
     fireEvent.click(filter);
     expect(useSetlistStore.getState().bottomTab).toBe("tracks");
     expect(filter.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("places multi-select and move between Tracks and Pads", () => {
+    platform.mobile = true;
+    useSetlistStore.getState().setShortPane("mixer");
+    const { container } = render(
+      <SetlistView {...props({ selectedRegionId: "a" })} layoutClass="short" />,
+    );
+    const tabs = container.querySelector<HTMLElement>(".lt-setlist-mixer-tabs")!;
+    const actions = Array.from(tabs.querySelectorAll("button")).map(
+      (button) => button.getAttribute("aria-label") ?? button.getAttribute("title"),
+    );
+
+    expect(actions).toEqual([
+      "setlistView.mixer.tabs.tracks",
+      "mobileTrackActions.selectMultiple",
+      "timelineToolbar.enableTrackReorder",
+      "setlistView.mixer.tabs.pads",
+    ]);
   });
 });
 

@@ -41,6 +41,7 @@ const SELECTION_OWNED_SURFACES = [
   ".lt-mobile-selection-actions",
   ".lt-mobile-selection-actions-tab",
   ".lt-mobile-track-row-panel",
+  ".lt-mobile-track-selection-control",
   ".lt-marker-position-editor",
   // Menús, diálogos y popovers: sus acciones operan sobre la selección.
   ".lt-context-menu",
