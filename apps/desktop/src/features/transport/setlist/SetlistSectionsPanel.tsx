@@ -5,7 +5,6 @@ import { markerCategory, markerColor, type SongRegionSummary, type SongView } fr
 import { formatMusicalPosition } from "../helpers";
 import { useTimelineUIStore } from "../uiStore";
 import { SetlistSnapToggle } from "./SetlistSnapToggle";
-import { SongBarRuler } from "./SongBarRuler";
 import type { SectionEditHandlers } from "./sectionEditHandlers";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 
@@ -82,7 +81,6 @@ function SetlistSectionsPanelComponent({ song, region, handlers, layout }: Setli
     <div className={`lt-setlist-sections is-${layout}`}>
       {layout === "short" ? bar : null}
       {layout === "short" ? null : bar}
-      {layout === "short" ? <SongBarRuler song={song} region={region} /> : null}
       <p className="lt-setlist-sections-hint">{t("setlistView.sections.hint")}</p>
       <ul className="lt-setlist-sections-list" aria-label={t("setlistView.sections.list")}>
         {sections.map((marker) => (

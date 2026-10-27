@@ -28,6 +28,7 @@ import {
 const TRACK_FADER_TICKS = faderTicks(TRACK_FADER_SCALE);
 
 import type { TrackSummary } from "../desktopApi";
+import { DRAG_THRESHOLD_PX } from "../constants";
 import { TrackMeter } from "../tracks/TrackMeter";
 import { trackRowSegments } from "../tracks/trackRowWindowing";
 import { useMixerStripWindow } from "./useMixerStripWindow";
@@ -261,6 +262,108 @@ function CompactMixerComponent({
   // A big session mounts only the strips near the visible band. See
   // ./useMixerStripWindow.
   const stripsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const scroller = stripsRef.current;
+    if (!trackReorderMode || !scroller) return;
+
+    let activePointer: {
+      id: number;
+      type: string;
+      startX: number;
+      startY: number;
+      x: number;
+      y: number;
+      dragging: boolean;
+    } | null = null;
+    let frameId = 0;
+    const stopFrame = () => {
+      if (frameId === 0) return;
+      window.cancelAnimationFrame(frameId);
+      frameId = 0;
+    };
+    function scheduleFrame() {
+      if (frameId === 0) frameId = window.requestAnimationFrame(scrollAtEdge);
+    }
+    function scrollAtEdge() {
+      frameId = 0;
+      const currentScroller = stripsRef.current;
+      if (!activePointer?.dragging || !currentScroller) return;
+      const bounds = currentScroller.getBoundingClientRect();
+      const edge = Math.min(64, bounds.width * 0.18);
+      if (edge <= 0) return;
+      let delta = 0;
+      if (activePointer.x < bounds.left + edge) {
+        const intensity = Math.min(1, (bounds.left + edge - activePointer.x) / edge);
+        delta = -Math.max(1, intensity * 16);
+      } else if (activePointer.x > bounds.right - edge) {
+        const intensity = Math.min(1, (activePointer.x - (bounds.right - edge)) / edge);
+        delta = Math.max(1, intensity * 16);
+      }
+      if (delta === 0) return;
+      const previous = currentScroller.scrollLeft;
+      currentScroller.scrollLeft += delta;
+      if (currentScroller.scrollLeft === previous) return;
+      const move = new Event("pointermove", { cancelable: true });
+      Object.defineProperties(move, {
+        pointerId: { value: activePointer.id },
+        pointerType: { value: activePointer.type },
+        clientX: { value: activePointer.x },
+        clientY: { value: activePointer.y },
+      });
+      window.dispatchEvent(move);
+      scheduleFrame();
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      if (
+        event.button !== 0 ||
+        !(event.target instanceof Element) ||
+        !event.target.closest(".lt-compact-mixer-strip [data-strip-noninteractive]")
+      ) {
+        return;
+      }
+      activePointer = {
+        id: event.pointerId,
+        type: event.pointerType,
+        startX: event.clientX,
+        startY: event.clientY,
+        x: event.clientX,
+        y: event.clientY,
+        dragging: false,
+      };
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!activePointer || activePointer.id !== event.pointerId) return;
+      activePointer.x = event.clientX;
+      activePointer.y = event.clientY;
+      if (
+        !activePointer.dragging &&
+        Math.hypot(event.clientX - activePointer.startX, event.clientY - activePointer.startY) <
+          DRAG_THRESHOLD_PX
+      ) {
+        return;
+      }
+      activePointer.dragging = true;
+      scheduleFrame();
+    };
+    const onPointerEnd = (event: PointerEvent) => {
+      if (activePointer?.id !== event.pointerId) return;
+      activePointer = null;
+      stopFrame();
+    };
+
+    scroller.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("pointermove", onPointerMove, true);
+    window.addEventListener("pointerup", onPointerEnd, true);
+    window.addEventListener("pointercancel", onPointerEnd, true);
+    return () => {
+      activePointer = null;
+      stopFrame();
+      scroller.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointermove", onPointerMove, true);
+      window.removeEventListener("pointerup", onPointerEnd, true);
+      window.removeEventListener("pointercancel", onPointerEnd, true);
+    };
+  }, [trackReorderMode]);
   const stripIds = useMemo(() => visibleTracks.map((track) => track.id), [visibleTracks]);
   const { rowWindow, layout, geometry } = useMixerStripWindow(stripsRef, stripIds);
   const segments =

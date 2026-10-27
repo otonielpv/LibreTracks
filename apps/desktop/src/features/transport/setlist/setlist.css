@@ -2646,6 +2646,10 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   height: 100%;
 }
 
+.lt-setlist-arrangement-mobile-waveform.is-main > .lt-setlist-arrangement.is-short {
+  touch-action: pan-x;
+}
+
 .lt-setlist-arrangement-mobile-waveform .lt-setlist-arrangement.is-waveform > .lt-setlist-overview.is-short {
   touch-action: pan-x;
 }

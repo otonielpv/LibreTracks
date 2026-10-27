@@ -1,4 +1,11 @@
-import { memo, useEffect, useRef, useState } from "react";
+import {
+  memo,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import type {
   ArrangementBlockSummary,
@@ -131,6 +138,174 @@ function SetlistArrangementEditorComponent({
   const { t } = useTranslation();
   const actions = useArrangementActions(handlers);
   const overviewZoom = useSetlistStore((state) => state.overviewZoom);
+  const setOverviewZoom = useSetlistStore((state) => state.setOverviewZoom);
+  const arrangementRef = useRef<HTMLDivElement | null>(null);
+  const touchPointersRef = useRef(new Map<number, number>());
+  const pinchRef = useRef<{
+    startDistance: number;
+    startZoom: number;
+    startScrollLeft: number;
+    anchorContentX: number;
+    anchorFraction: number;
+    contentWidth: number;
+    centerX: number;
+    targetZoom: number;
+    blockCount: number;
+  } | null>(null);
+  const ignoredCancelPointerRef = useRef<number | null>(null);
+  const suppressClickRef = useRef(false);
+  const cleanupPointerListenersRef = useRef<(() => void) | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      cleanupPointerListenersRef.current?.();
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+      }
+      arrangementRef.current?.style.removeProperty("transform");
+    },
+    [],
+  );
+  const handleTouchPointerDownCapture = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (layout !== "short" || event.pointerType !== "touch") return;
+    const pointers = touchPointersRef.current;
+    if (pointers.size >= 2 && !pointers.has(event.pointerId)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    pointers.set(event.pointerId, event.clientX);
+    if (!cleanupPointerListenersRef.current) {
+      const onMove = (moveEvent: PointerEvent) => {
+        if (!pointers.has(moveEvent.pointerId)) return;
+        pointers.set(moveEvent.pointerId, moveEvent.clientX);
+        const pinch = pinchRef.current;
+        if (!pinch || pointers.size < 2) return;
+        moveEvent.preventDefault();
+        const [first, second] = [...pointers.values()];
+        const distance = Math.abs(first - second);
+        if (distance <= 0) return;
+        const targetZoom = Math.max(
+          1,
+          Math.min(OVERVIEW_MAX_ZOOM, pinch.startZoom * distance / pinch.startDistance),
+        );
+        pinch.targetZoom = targetZoom;
+        const arrangement = arrangementRef.current;
+        const viewport = arrangement?.closest<HTMLElement>(
+          ".lt-setlist-arrangement-mobile-waveform.is-main",
+        );
+        if (!arrangement || !viewport) return;
+        const bounds = viewport.getBoundingClientRect();
+        pinch.centerX = (first + second) / 2 - bounds.left;
+        const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+        const targetWidth = Math.max(
+          viewport.clientWidth,
+          pinch.blockCount * 9 * rem * targetZoom + 3 * rem,
+        );
+        const scale = targetWidth / pinch.contentWidth;
+        const translateX =
+          pinch.centerX + pinch.startScrollLeft - pinch.anchorContentX * scale;
+        arrangement.style.setProperty(
+          "transform",
+          `translate3d(${translateX}px, 0, 0) scaleX(${scale})`,
+        );
+      };
+      const onEnd = (endEvent: PointerEvent) => {
+        if (
+          endEvent.type === "pointercancel" &&
+          ignoredCancelPointerRef.current === endEvent.pointerId
+        ) {
+          ignoredCancelPointerRef.current = null;
+          return;
+        }
+        if (!pointers.delete(endEvent.pointerId) || pointers.size > 0) return;
+        const pinch = pinchRef.current;
+        pinchRef.current = null;
+        if (pinch) {
+          suppressClickRef.current = true;
+          if (pinch.targetZoom !== pinch.startZoom) {
+            setOverviewZoom(pinch.targetZoom);
+            if (scrollFrameRef.current !== null) {
+              window.cancelAnimationFrame(scrollFrameRef.current);
+            }
+            scrollFrameRef.current = window.requestAnimationFrame(() => {
+              scrollFrameRef.current = null;
+              const arrangement = arrangementRef.current;
+              const viewport = arrangement?.closest<HTMLElement>(
+                ".lt-setlist-arrangement-mobile-waveform.is-main",
+              );
+              if (viewport) {
+                const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+                viewport.scrollLeft = Math.max(
+                  0,
+                  Math.min(maxScroll, pinch.anchorFraction * viewport.scrollWidth - pinch.centerX),
+                );
+              }
+              arrangement?.style.removeProperty("transform");
+            });
+          } else {
+            arrangementRef.current?.style.removeProperty("transform");
+          }
+        }
+        cleanupPointerListenersRef.current?.();
+        pointers.clear();
+      };
+      window.addEventListener("pointermove", onMove, { passive: false });
+      window.addEventListener("pointerup", onEnd);
+      window.addEventListener("pointercancel", onEnd);
+      cleanupPointerListenersRef.current = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onEnd);
+        window.removeEventListener("pointercancel", onEnd);
+        cleanupPointerListenersRef.current = null;
+      };
+    }
+    if (pointers.size !== 2) return;
+    const [first, second] = [...pointers.values()];
+    const distance = Math.abs(first - second);
+    const arrangement = arrangementRef.current;
+    const viewport = arrangement?.closest<HTMLElement>(
+      ".lt-setlist-arrangement-mobile-waveform.is-main",
+    );
+    if (distance <= 0 || !arrangement || !viewport) return;
+    const bounds = viewport.getBoundingClientRect();
+    const centerX = (first + second) / 2 - bounds.left;
+    const startZoom = useSetlistStore.getState().overviewZoom;
+    const startScrollLeft = viewport.scrollLeft;
+    const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    const contentWidth = Math.max(
+      viewport.scrollWidth,
+      viewport.clientWidth,
+      actions.draft!.blocks.length * 9 * rem * startZoom + 3 * rem,
+    );
+    const firstPointerId = [...pointers.keys()][0];
+    pinchRef.current = {
+      startDistance: distance,
+      startZoom,
+      startScrollLeft,
+      anchorContentX: startScrollLeft + centerX,
+      anchorFraction: Math.max(0, Math.min(1, (startScrollLeft + centerX) / contentWidth)),
+      contentWidth,
+      centerX,
+      targetZoom: startZoom,
+      blockCount: actions.draft!.blocks.length,
+    };
+    event.preventDefault();
+    event.stopPropagation();
+    if (firstPointerId !== undefined) {
+      ignoredCancelPointerRef.current = firstPointerId;
+      const cancel = new Event("pointercancel");
+      Object.defineProperty(cancel, "pointerId", { value: firstPointerId });
+      window.dispatchEvent(cancel);
+      ignoredCancelPointerRef.current = null;
+    }
+  };
+  const handleClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!suppressClickRef.current) return;
+    suppressClickRef.current = false;
+    event.preventDefault();
+    event.stopPropagation();
+  };
   if (!actions.structure || !actions.draft) return null;
   const structure = actions.structure;
   const sections = new Map(structure.sections.map((section) => [section.markerId, section]));
@@ -177,7 +352,10 @@ function SetlistArrangementEditorComponent({
   );
   return (
     <div
+      ref={arrangementRef}
       className={`lt-setlist-arrangement is-waveform is-${layout}`}
+      onPointerDownCapture={handleTouchPointerDownCapture}
+      onClickCapture={handleClickCapture}
       style={
         layout === "short"
           ? { width: `max(100%, ${actions.draft.blocks.length * 9 * overviewZoom + 3}rem)` }
@@ -312,8 +490,6 @@ function SetlistArrangementToolbarComponent({
   useEmbeddedArrangementEditor(region);
   const actions = useArrangementActions(handlers);
   const { t, regionId, structure, draft, dirty, draftIsApplied } = actions;
-  const overviewZoom = useSetlistStore((state) => state.overviewZoom);
-  const setOverviewZoom = useSetlistStore((state) => state.setOverviewZoom);
   const selectedIndex = draft?.blocks.findIndex((block) => block.id === actions.selectedBlockId) ?? -1;
   const editSelected = (operation: "duplicate" | "remove") => {
     if (!draft || selectedIndex < 0) return;
@@ -391,32 +567,6 @@ function SetlistArrangementToolbarComponent({
             </button>
           </div>
           <div className="lt-setlist-arrangement-actions" role="toolbar" aria-label={t("transport.structure.strip")}>
-            {layout === "short" ? (
-              <>
-                <button
-                  type="button"
-                  className="lt-setlist-arrangement-action"
-                  aria-label={t("setlistView.lanes.zoomOut")}
-                  title={t("setlistView.lanes.zoomOut")}
-                  disabled={overviewZoom <= 1}
-                  onClick={() => setOverviewZoom(Math.max(1, overviewZoom / 1.25))}
-                >
-                  −
-                </button>
-                <button
-                  type="button"
-                  className="lt-setlist-arrangement-action"
-                  aria-label={t("setlistView.lanes.zoomIn")}
-                  title={t("setlistView.lanes.zoomIn")}
-                  disabled={overviewZoom >= OVERVIEW_MAX_ZOOM}
-                  onClick={() =>
-                    setOverviewZoom(Math.min(OVERVIEW_MAX_ZOOM, overviewZoom * 1.25))
-                  }
-                >
-                  +
-                </button>
-              </>
-            ) : null}
             <SetlistSnapToggle className="lt-setlist-arrangement-action" />
             {(["duplicate", "remove"] as const).map((operation) => {
               const label = t(operation === "duplicate" ? "setlistView.sections.duplicate" : "setlistView.sections.delete");

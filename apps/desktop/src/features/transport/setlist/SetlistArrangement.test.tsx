@@ -180,7 +180,7 @@ describe("Edit → Arrangement", () => {
     expect(body?.querySelector(".lt-setlist-sections.is-short > .lt-setlist-sections-bar")).not.toBeNull();
   });
 
-  it("short arrangement editing keeps its waveform in the main band with bar ruler and snap controls", async () => {
+  it("short arrangement editing keeps its waveform in the main band and zooms by pinch", async () => {
     useTimelineUIStore.setState({ snapEnabled: false });
     const { container } = render(<SetlistView {...props()} layoutClass="short" />);
     await act(async () => {
@@ -201,8 +201,35 @@ describe("Edit → Arrangement", () => {
       ".lt-setlist-arrangement-mobile-waveform.is-main .lt-setlist-arrangement",
     )!;
     const widthBeforeZoom = waveform.style.width;
-    fireEvent.click(screen.getByRole("button", { name: "setlistView.lanes.zoomIn" }));
-    expect(useSetlistStore.getState().overviewZoom).toBe(1.25);
+    expect(screen.queryByRole("button", { name: "setlistView.lanes.zoomIn" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "setlistView.lanes.zoomOut" })).toBeNull();
+    const pointer = (
+      target: Element | Window,
+      type: "pointerdown" | "pointermove" | "pointerup",
+      pointerId: number,
+      clientX: number,
+    ) => {
+      const event = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        clientX,
+        clientY: 100,
+      });
+      Object.defineProperties(event, {
+        pointerId: { value: pointerId },
+        pointerType: { value: "touch" },
+      });
+      fireEvent(target, event);
+    };
+    const blockName = container.querySelector<HTMLElement>(".lt-structure-block-name")!;
+    const handle = container.querySelector<HTMLElement>(".lt-structure-handle")!;
+    pointer(handle, "pointerdown", 1, 100);
+    pointer(blockName, "pointerdown", 2, 200);
+    pointer(window, "pointermove", 2, 300);
+    pointer(window, "pointerup", 1, 100);
+    pointer(window, "pointerup", 2, 300);
+    expect(useSetlistStore.getState().overviewZoom).toBe(2);
     expect(waveform.style.width).not.toBe(widthBeforeZoom);
   });
 

@@ -111,6 +111,7 @@ describe("Edit mode", () => {
     expect(within(toolbar).getAllByRole("button")).toHaveLength(4);
     expect(container.querySelector(".lt-setlist-sections-waveform")).toBeNull();
     expect(container.querySelector("[data-setlist-zone='overview'] .lt-setlist-section-layer")).not.toBeNull();
+    expect(container.querySelector("[data-setlist-zone='drawer'] .lt-setlist-bar-ruler")).toBeNull();
 
     const snap = within(toolbar).getByRole("button", { name: "timelineToolbar.enableSnap" });
     expect(snap.getAttribute("aria-pressed")).toBe("false");
