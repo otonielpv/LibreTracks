@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { setGuestRole } from "@libretracks/shared/desktopApi";
+import { recordProductEvent } from "../telemetry/telemetry";
 
 import type {
   NetworkGuestSnapshot,
@@ -51,7 +53,18 @@ export const useNetworkSessionStore = create<NetworkSessionState>()((set) => ({
   ...INITIAL_NETWORK_SESSION_STATE,
   openModal: () => set({ isModalOpen: true }),
   closeModal: () => set({ isModalOpen: false }),
-  setHost: (host) => set({ host }),
-  setGuest: (guest) => set({ guest }),
-  applyGuestSnapshot: (snapshot) => set({ guest: snapshot.status }),
+  setHost: (host) => {
+    if (host.hosting) recordProductEvent("feature_network_host");
+    set({ host });
+  },
+  setGuest: (guest) => {
+    if (guest.state === "connected") recordProductEvent("feature_network_guest");
+    setGuestRole(guest.state === "connected" ? guest.role : null);
+    set({ guest });
+  },
+  applyGuestSnapshot: (snapshot) => {
+    if (snapshot.status.state === "connected") recordProductEvent("feature_network_guest");
+    setGuestRole(snapshot.status.state === "connected" ? snapshot.status.role : null);
+    set({ guest: snapshot.status });
+  },
 }));

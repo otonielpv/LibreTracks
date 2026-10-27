@@ -6,6 +6,9 @@ import {
   type VideoLiveState,
 } from "../desktopApi";
 import { useVideoStore } from "./videoStore";
+import { alertDialog } from "../../../shared/dialog/dialogService";
+import i18n from "../../../shared/i18n";
+import { formatTransportError } from "../errors/formatTransportError";
 
 /**
  * Live control of the video output (paso 13): black, fade to black, idle
@@ -22,8 +25,8 @@ export function applyVideoLiveState(state: VideoLiveState) {
 export async function runVideoLiveAction(action: VideoLiveAction) {
   try {
     applyVideoLiveState(await videoLiveAction(action));
-  } catch {
-    // Output unavailable: the badge already says why.
+  } catch (error) {
+    await alertDialog(formatTransportError(error, i18n.t.bind(i18n)));
   }
 }
 

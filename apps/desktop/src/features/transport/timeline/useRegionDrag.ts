@@ -8,6 +8,7 @@ import {
   snapToTimelineBar,
 } from "./timelineMath";
 import { snapToTimelineGrid } from "./useTimelineGrid";
+import { clampRegionResizeEdge, regionResizeBounds } from "./regionResize";
 import { buildSongTempoRegions } from "@libretracks/shared/models";
 import {
   applyRegionHotspotBounds,
@@ -124,7 +125,6 @@ export function useRegionDrag({
     previewEndSeconds: number;
   };
   const regionMoveDragRef = useRef<RegionMoveDrag | null>(null);
-  const MIN_REGION_DURATION_SECONDS = 0.1;
 
   /**
    * Devuelve la banda de la región a su posición de reposo (la del modelo).
@@ -156,50 +156,14 @@ export function useRegionDrag({
     event.preventDefault();
     event.stopPropagation();
 
-    // Build sorted neighbours to compute clamp bounds. Neighbour-end is the
-    // lower bound for our start edge; neighbour-start is the upper bound
-    // for our end edge.
-    const sorted = [...song.regions].sort(
-      (left, right) => left.startSeconds - right.startSeconds,
+    // Neighbours are hard walls and the song can't be trimmed past its own
+    // audio. See ./regionResize, shared with Setlist's song settings.
+    const bounds = regionResizeBounds(
+      song.regions,
+      region,
+      Object.values(clipsByTrack).flat(),
+      getTimelineWorkspaceEndSeconds(song.durationSeconds),
     );
-    const idx = sorted.findIndex((entry) => entry.id === region.id);
-    const leftNeighbour = idx > 0 ? sorted[idx - 1] : null;
-    const rightNeighbour =
-      idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null;
-    const minStart = leftNeighbour ? leftNeighbour.endSeconds : 0;
-    // With a right neighbour, that neighbour's start is the hard wall — the
-    // region must not overlap it. Without one, the region is free to grow past
-    // the end of the song into the empty workspace tail; growing it does not
-    // move the song end or any clips (the user moves those separately if they
-    // want to). The 1-hour workspace tail is the practical upper bound.
-    const maxEnd = rightNeighbour
-      ? rightNeighbour.startSeconds
-      : getTimelineWorkspaceEndSeconds(song.durationSeconds);
-
-    // Magnet to the clips the region contains: a region can't be shrunk past
-    // its own audio (the backend rejects clips falling outside the region). A
-    // clip counts as "inside" if its timeline span overlaps the region's
-    // current span. The END edge can't shrink below the furthest clip end; the
-    // START edge can't grow past the earliest clip start.
-    let clipFloorEndSeconds: number | null = null;
-    let clipCeilStartSeconds: number | null = null;
-    for (const clips of Object.values(clipsByTrack)) {
-      for (const clip of clips) {
-        const clipStart = clip.timelineStartSeconds;
-        const clipEnd = clip.timelineStartSeconds + clip.durationSeconds;
-        const overlapsRegion =
-          clipStart < region.endSeconds && clipEnd > region.startSeconds;
-        if (!overlapsRegion) continue;
-        clipFloorEndSeconds =
-          clipFloorEndSeconds === null
-            ? clipEnd
-            : Math.max(clipFloorEndSeconds, clipEnd);
-        clipCeilStartSeconds =
-          clipCeilStartSeconds === null
-            ? clipStart
-            : Math.min(clipCeilStartSeconds, clipStart);
-      }
-    }
 
     regionResizeDragRef.current = {
       regionId: region.id,
@@ -210,12 +174,7 @@ export function useRegionDrag({
         event.currentTarget.getBoundingClientRect(),
         event.currentTarget.offsetWidth,
       ),
-      initialStartSeconds: region.startSeconds,
-      initialEndSeconds: region.endSeconds,
-      minStartSeconds: minStart,
-      maxEndSeconds: maxEnd,
-      clipFloorEndSeconds,
-      clipCeilStartSeconds,
+      ...bounds,
       previewStartSeconds: region.startSeconds,
       previewEndSeconds: region.endSeconds,
     };
@@ -284,29 +243,11 @@ export function useRegionDrag({
       }
     }
 
-    // Clamp to neighbours and minimum duration.
+    // Clamp to neighbours, the song's own audio and the minimum duration.
     if (drag.edge === "start") {
-      // Magnet: the start edge can't grow past the first clip's start (would
-      // leave audio outside the region → backend error). Hard-stop there.
-      const startCeil =
-        drag.clipCeilStartSeconds === null
-          ? drag.initialEndSeconds - MIN_REGION_DURATION_SECONDS
-          : Math.min(
-              drag.clipCeilStartSeconds,
-              drag.initialEndSeconds - MIN_REGION_DURATION_SECONDS,
-            );
-      nextStart = Math.max(drag.minStartSeconds, Math.min(nextStart, startCeil));
+      nextStart = clampRegionResizeEdge("start", nextStart, drag);
     } else {
-      // Magnet: the end edge can't shrink below the last clip's end. Hard-stop
-      // there so the region stays "imantado" at the clip boundary.
-      const endFloor =
-        drag.clipFloorEndSeconds === null
-          ? drag.initialStartSeconds + MIN_REGION_DURATION_SECONDS
-          : Math.max(
-              drag.clipFloorEndSeconds,
-              drag.initialStartSeconds + MIN_REGION_DURATION_SECONDS,
-            );
-      nextEnd = Math.min(drag.maxEndSeconds, Math.max(nextEnd, endFloor));
+      nextEnd = clampRegionResizeEdge("end", nextEnd, drag);
     }
 
     drag.previewStartSeconds = nextStart;

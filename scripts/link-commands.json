@@ -42,7 +42,6 @@
     "get_midi_inputs",
     "get_midi_outputs",
     "get_midi_status",
-    "get_pads_catalog",
     "get_remote_firewall_status",
     "get_remote_server_info",
     "get_storage_volumes",
@@ -51,7 +50,6 @@
     "list_library_dir",
     "list_library_folder_audio",
     "list_session_templates",
-    "load_pad_key",
     "move_library_asset",
     "pair_bluetooth_midi",
     "purge_decoding_cache",
@@ -78,16 +76,11 @@
     "video_calibration",
     "video_identify_displays",
     "video_list_displays",
-    "video_live_action",
-    "video_live_state",
-    "video_media_status",
-    "video_output_status",
-    "video_scrub",
-    "video_sync_stats",
     "video_test_pattern"
   ],
   "view": [
     "get_missing_media",
+    "get_pads_catalog",
     "get_project_load_progress_snapshot",
     "get_settings",
     "get_song_view",
@@ -98,7 +91,11 @@
     "is_demo_session",
     "list_video_assets",
     "prewarm_timeline_seek",
-    "request_video_thumbnails"
+    "request_video_thumbnails",
+    "video_live_state",
+    "video_media_status",
+    "video_output_status",
+    "video_sync_stats"
   ],
   "control": [
     "cancel_marker_jump",
@@ -110,7 +107,9 @@
     "schedule_region_jump",
     "seek_transport",
     "stop_transport",
-    "toggle_vamp"
+    "toggle_vamp",
+    "video_live_action",
+    "video_scrub"
   ],
   "edit": [
     "add_automation_track",
@@ -140,6 +139,7 @@
     "duplicate_clips",
     "duplicate_ruler_markers",
     "duplicate_video_clips",
+    "load_pad_key",
     "move_clip",
     "move_clip_live",
     "move_clip_to_track",
@@ -264,6 +264,8 @@
     "project:load-progress",
     "audio:meters",
     "audio:region_meters",
-    "video:thumbnails-ready"
+    "video:thumbnails-ready",
+    "video:live-state",
+    "video:output-status"
   ]
 }

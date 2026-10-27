@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { recordProductEvent } from "../telemetry/telemetry";
+
+vi.mock("../telemetry/telemetry", () => ({ recordProductEvent: vi.fn() }));
 
 import type { TransportSnapshot } from "./desktopApi";
 import type { PendingAudioImport } from "./library/pendingAudioImports";
@@ -9,6 +12,7 @@ import {
 } from "./store";
 
 function reset() {
+  vi.mocked(recordProductEvent).mockClear();
   useTransportStore.setState({
     meters: {},
     regionMeters: {},
@@ -84,6 +88,14 @@ describe("regionMeterDictionaryFromLevels", () => {
 
 describe("useTransportStore", () => {
   beforeEach(reset);
+
+  it("records an active vamp, but not ordinary transport snapshots", () => {
+    get().setPlaybackState(null);
+    get().setPlaybackState(makeSnapshot());
+    expect(recordProductEvent).not.toHaveBeenCalled();
+    get().setPlaybackState(makeSnapshot({ songGapVamp: true }));
+    expect(recordProductEvent).toHaveBeenCalledWith("feature_vamp");
+  });
 
   describe("meters", () => {
     it("replaces the meter and region-meter dictionaries", () => {

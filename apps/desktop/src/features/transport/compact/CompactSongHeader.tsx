@@ -9,6 +9,8 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
+import { NetworkControls } from "../../network/NetworkControls";
 
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
 import { useDismissOnBack } from "../mobile/backNavigation";
@@ -98,6 +100,7 @@ export function CompactSongHeaderComponent({
   reorderHandleProps,
   reorderSurfaceProps,
 }: CompactSongHeaderProps) {
+  const { canEdit, canControl, canUseFiles } = useNetworkPermissions();
   const { t } = useTranslation();
   const touchContextMenu = useTouchContextMenu({
     ignoreTarget: (target) =>
@@ -139,9 +142,10 @@ export function CompactSongHeaderComponent({
   const openMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    if (!canEdit) return;
     const { x, y } = clientToZoomedCoords(event.clientX, event.clientY);
     setContextMenu({ x, y });
-  }, []);
+  }, [canEdit]);
   // Track Shift state via window listeners so the slider's onChange can
   // read it; same pattern as the CompactMixerStrip volume / pan.
   const shiftPressedRef = useRef(false);
@@ -203,6 +207,7 @@ export function CompactSongHeaderComponent({
         <button
           type="button"
           className="lt-compact-song-play"
+          disabled={!canControl}
           aria-label={t("compactView.playAria", { name: region.name })}
           title={t("compactView.playTitle", { name: region.name })}
           onClick={(event) => {
@@ -238,7 +243,7 @@ export function CompactSongHeaderComponent({
           </div>
         ) : null}
       </div>
-      {contextMenu ? (
+      {contextMenu && canEdit ? (
         <div
           className={`lt-compact-clip-menu ${keyMenuOpen ? "is-key-picker" : ""}`}
           style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -331,6 +336,7 @@ export function CompactSongHeaderComponent({
               <button
                 type="button"
                 className="lt-compact-clip-menu-item"
+                disabled={!canUseFiles}
                 onClick={() => {
                   setContextMenu(null);
                   onExport();
@@ -341,6 +347,7 @@ export function CompactSongHeaderComponent({
               <button
                 type="button"
                 className="lt-compact-clip-menu-item"
+                disabled={!canUseFiles}
                 onClick={() => {
                   setContextMenu(null);
                   openRenderSong({ regionId: region.id, regionName: region.name });
@@ -352,6 +359,7 @@ export function CompactSongHeaderComponent({
                 <button
                   type="button"
                   className="lt-compact-clip-menu-item"
+                  disabled={!canUseFiles}
                   onClick={() => {
                     setContextMenu(null);
                     openSongAnalysis({ regionId: region.id, regionName: region.name });
@@ -375,7 +383,7 @@ export function CompactSongHeaderComponent({
           )}
         </div>
       ) : null}
-      <div
+      <NetworkControls permission="edit"><div
         className="lt-compact-song-master"
         {...NO_SONG_REORDER}
         // The master fader sits inside the clickable header. Swallow
@@ -417,7 +425,7 @@ export function CompactSongHeaderComponent({
             }
           }}
         />
-      </div>
+      </div></NetworkControls>
     </div>
   );
 }

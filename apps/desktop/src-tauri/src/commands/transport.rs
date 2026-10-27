@@ -249,6 +249,8 @@ pub(crate) fn parse_jump_trigger(
     match trigger {
         "immediate" => Ok(JumpTrigger::Immediate),
         "section_end" | "next_marker" => Ok(JumpTrigger::NextMarker),
+        "next_section" => Ok(JumpTrigger::NextSection),
+        "next_cue" => Ok(JumpTrigger::NextCue),
         "region_end" => Ok(JumpTrigger::RegionEnd),
         "after_bars" => Ok(JumpTrigger::AfterBars(bars.unwrap_or(4))),
         _ => Err(DesktopError::AudioCommand(format!(
@@ -275,6 +277,8 @@ pub(crate) fn parse_transition_type(
 pub(crate) fn parse_vamp_mode(mode: &str, bars: Option<u32>) -> Result<VampMode, DesktopError> {
     match mode {
         "section" => Ok(VampMode::Section),
+        "section_marker" => Ok(VampMode::SectionMarker),
+        "cue" => Ok(VampMode::Cue),
         "bars" => Ok(VampMode::Bars(bars.unwrap_or(4).max(1))),
         other => Err(DesktopError::AudioCommand(format!(
             "unknown vamp mode: {other}"

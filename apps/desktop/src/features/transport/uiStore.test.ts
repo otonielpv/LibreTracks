@@ -52,7 +52,9 @@ describe("useTimelineUIStore", () => {
   });
 
   describe("view mode", () => {
-    it("cycles the keyboard toggle through DAW, Compact and Live", () => {
+    it("cycles the keyboard toggle through DAW, Setlist, Compact and Live", () => {
+      get().toggleViewMode();
+      expect(get().viewMode).toBe("setlist");
       get().toggleViewMode();
       expect(get().viewMode).toBe("compact");
       get().toggleViewMode();
@@ -65,17 +67,30 @@ describe("useTimelineUIStore", () => {
       expect(recordProductEvent).toHaveBeenCalledWith("feature_daw_view");
     });
 
-    it("cycles backward through DAW, Live and Compact", () => {
+    it("cycles backward through DAW, Live, Compact and Setlist", () => {
       get().toggleViewModeBackward();
       expect(get().viewMode).toBe("live");
       get().toggleViewModeBackward();
       expect(get().viewMode).toBe("compact");
+      get().toggleViewModeBackward();
+      expect(get().viewMode).toBe("setlist");
       get().toggleViewModeBackward();
       expect(get().viewMode).toBe("daw");
 
       expect(recordProductEvent).toHaveBeenCalledWith("feature_live_view");
       expect(recordProductEvent).toHaveBeenCalledWith("feature_compact_view");
       expect(recordProductEvent).toHaveBeenCalledWith("feature_daw_view");
+    });
+
+    it("records the setlist view through explicit selection and keyboard cycling", () => {
+      get().setViewMode("setlist");
+      expect(recordProductEvent).toHaveBeenLastCalledWith("feature_setlist_view");
+      get().toggleViewModeBackward();
+      expect(recordProductEvent).toHaveBeenLastCalledWith("feature_daw_view");
+      get().toggleViewMode();
+
+      expect(get().viewMode).toBe("setlist");
+      expect(recordProductEvent).toHaveBeenLastCalledWith("feature_setlist_view");
     });
 
     it("records use of the live performance view", () => {
@@ -96,6 +111,15 @@ describe("useTimelineUIStore", () => {
     expect(get().trackReorderMode).toBe(true);
     get().setTrackReorderMode(false);
     expect(get().trackReorderMode).toBe(false);
+  });
+
+  it("records MIDI learn only when armed, including the empty target", () => {
+    get().setMidiLearnMode(null);
+    expect(recordProductEvent).not.toHaveBeenCalled();
+    get().setMidiLearnMode("");
+    expect(recordProductEvent).toHaveBeenLastCalledWith("feature_midi_learn");
+    get().setMidiLearnMode("action:play");
+    expect(recordProductEvent).toHaveBeenLastCalledWith("feature_midi_learn");
   });
 
   describe("cameraX", () => {

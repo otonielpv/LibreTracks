@@ -12,6 +12,8 @@ type Props = {
   ariaLabel: string;
   onClose: () => void;
   children: React.ReactNode;
+  className?: string;
+  role?: "dialog" | "menu";
 };
 
 /**
@@ -24,6 +26,8 @@ export function PopoverShell({
   ariaLabel,
   onClose,
   children,
+  className = "lt-pads-popover",
+  role = "dialog",
 }: Props) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [anchor, setAnchor] = useState<PopoverAnchor | null>(null);
@@ -101,8 +105,8 @@ export function PopoverShell({
   return createPortal(
     <div
       ref={panelRef}
-      className="lt-pads-popover"
-      role="dialog"
+      className={className}
+      role={role}
       aria-label={ariaLabel}
       data-placement={anchor.placement}
       style={{

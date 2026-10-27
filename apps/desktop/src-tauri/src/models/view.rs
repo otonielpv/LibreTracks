@@ -1656,6 +1656,8 @@ fn pending_jump_trigger_label(trigger: &JumpTrigger) -> String {
     match trigger {
         JumpTrigger::Immediate => "immediate".to_string(),
         JumpTrigger::NextMarker => "next_marker".to_string(),
+        JumpTrigger::NextSection => "next_section".to_string(),
+        JumpTrigger::NextCue => "next_cue".to_string(),
         JumpTrigger::RegionEnd => "region_end".to_string(),
         JumpTrigger::AfterBars(bars) => format!("after_bars:{bars}"),
     }

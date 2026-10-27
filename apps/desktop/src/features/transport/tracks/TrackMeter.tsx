@@ -333,17 +333,25 @@ type SongMasterMeterProps = {
   regionId: string;
   /** Para colgar los estilos de cada sitio (vista compacta, barra del timeline). */
   className?: string;
+  /** Vertical en la tira del master de la consola de Setlist, como las pistas. */
+  orientation?: "horizontal" | "vertical";
 };
 
 /** Medidor estéreo horizontal del master de una canción: L arriba, R abajo.
  * Va dentro de la ranura de su fader, debajo del cap. */
-function SongMasterMeterComponent({ regionId, className = "" }: SongMasterMeterProps) {
+function SongMasterMeterComponent({
+  regionId,
+  className = "",
+  orientation = "horizontal",
+}: SongMasterMeterProps) {
   return (
     <StereoMeter
       source="region"
       id={regionId}
-      orientation="horizontal"
-      className={`lt-track-meter lt-song-master-meter ${className}`.trim()}
+      orientation={orientation}
+      // lt-song-master-meter is the horizontal in-slot look (full width, no
+      // flex). On a vertical strip it squeezed the fader next to it to 0 px.
+      className={`lt-track-meter${orientation === "horizontal" ? " lt-song-master-meter" : ""} ${className}`.trim()}
     />
   );
 }

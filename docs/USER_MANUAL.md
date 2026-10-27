@@ -186,6 +186,8 @@ This lets you react in real time if the band extends a chorus, skips a bridge, o
 
 Use `Vamp` to keep playback in a musical loop when the band or stage action needs more time. `Vamp Mode` can repeat the current `Section` (sections are delimited by markers) or a fixed number of `Bars`. Press `Vamp` again to leave the loop.
 
+Leaving Vamp does not change transposition or warp settings. With warp enabled, keep `T` enabled on instruments that should follow the song's key changes and disabled on click/guide tracks that should keep their original pitch. Disabling `T` does not disable warp: those tracks still follow the shared tempo.
+
 ![Vamp settings](../screenshots/Vamp-Config.png)
 
 ### Song jumps and transitions
@@ -208,6 +210,8 @@ An arrangement changes a song's form without building jumps: two more choruses a
 3. Press `Save as original`. LibreTracks keeps the song as it is, so you can build any arrangement and go back to the original whenever you want. If a marker does not fall on the first beat of a bar, it warns you and offers `Snap to bar`.
 4. **Build the arrangement**: the song's sections are at the top. Click one to add it at the end, or drag it onto the strip below to insert it where you drop it. On the strip, drag blocks to reorder them, `Delete` removes the selected block and `Ctrl+D` duplicates it.
 5. Press `Apply`. The timeline shows the result and the following songs line up behind it, on their bar.
+
+In Setlist view, when editing sections or arrangements, the ruler above the waveform uses the song's global bar numbering and shows beats and subdivisions as you zoom in. You can drag the playhead across the whole waveform, including across section boundaries. With `Snap to Grid` enabled, it snaps to the nearest visible division (bar, beat, or subdivision); turn it off to move freely. Automatic playhead following moves the view only while Playback is running. The arrangement editor also supports zoom: use `Ctrl` + mouse wheel or a trackpad zoom gesture on desktop, and the `+`/`−` buttons in the mobile editor.
 
 You can keep several arrangements of the same song (`New`, `Rename`, `Delete`) and switch between them from the picker. The first choice in the picker is always `Original`: pick it and press `Apply` to put the song back the way it was (the arrangements are kept). The original cannot be deleted or renamed; changing its blocks creates a new arrangement from it. If you saved it wrong (a marker was missing, a section was in the wrong place), fix the song on the timeline and use `Save the original again`.
 
@@ -270,6 +274,7 @@ LibreTracks can project videos (lyrics, backgrounds, clips) in sync with the aud
 
 1. Drag a video (`.mp4`, `.mov`, `.mkv`, `.webm`…) from your file browser onto the timeline or the library. Dropped on an audio track, a video track is created next to it.
 2. A video clip moves, trims, splits, duplicates and deletes like an audio clip, and has fade in/out and its own fit (right click).
+   In Setlist view, open `Edit → Video` to edit clips on the song waveform: drag the body to move it, the edges to trim, and the top handles to adjust fades. Use the duplicate button beside a clip; its menu keeps the other actions.
 3. If the video has sound, LibreTracks asks whether to **extract it as an audio track**: it goes on a new track right below, lined up with the video. You can tick "Remember my choice", and do it later with right click → `Extract audio`.
 
 ### Setting up the display
@@ -346,7 +351,7 @@ The phone or tablet drives the audio **and** the video: the projector shows only
 - **From the device itself:** `Add video from the device` in a video track's menu, in the tracks `+` menu or in the library. The video is **copied** into the session folder (so it travels with it), after telling you its size.
 - A video the phone cannot decode (ProRes on Android, or 10-bit HEVC on a basic phone) shows as **Not playable on this device**: it is not removed.
 
-**Editing on the timeline:** like audio clips on a phone: tap a clip to select it, then drag it (or its edges, or the fade handles). Extracting a video's audio can only be done on a computer.
+**Editing on the timeline and in Setlist view:** like audio clips on a phone: tap a clip to select it, then drag it (or its edges, or the fade handles). In `Edit → Video`, use the duplicate button beside a clip and its menu for the other actions. Extracting a video's audio can only be done on a computer.
 
 **Low-end phones:** some phones have a single video decoder. The indicator then says "One player": section jumps may freeze the picture for an instant, but the audio is not affected.
 
@@ -374,6 +379,31 @@ LibreTracks desktop can publish a web remote surface for transport and mixer con
 ![Remote mixer view](../screenshots/Remote_Mixer.png)
 
 > Live workflow suggestion: keep the desktop operator focused on timeline/arrangement and assign cue or mix adjustments to a second person using the remote.
+
+### Network sessions between LibreTracks devices
+
+`Network session` connects another LibreTracks installation to a host; it is
+separate from the `Remote` web controller. Guests can choose DAW, Setlist,
+Compact or Live without changing the host's view.
+
+| Role | Actions on the host |
+| --- | --- |
+| Viewer | Read songs, sections, lyrics, mix and video status. Selecting a song to inspect it does not cue it. |
+| Controller | Viewer access plus transport, jumps (including next section and next cue), vamp, song order, transitions, pause at song end, vamp between songs, fade-stop duration and live video output controls. |
+| Editor | Controller access plus mix, metronome, voice guide, installed pads, meter measurement mode, and editing songs, sections, arrangements, clips, MIDI and automation. Includes delete, undo and redo. |
+
+Unavailable controls are disabled and update when the host changes the role or
+the connection drops. The host also validates every command. Black, fade to
+black and video output toggles operate on the host; guests follow its status.
+
+Language and timeline navigation/playhead-follow preferences are saved only on
+the guest device. Authorized playback settings are saved on the host and applied
+to its engine. Click sound, voice-guide and pad changes do not overwrite unrelated
+settings or audio routes.
+
+Importing, exporting, analysis/rendering, saving the project, managing files or
+installing pads must be done on the host. Its audio devices, MIDI ports, folders,
+auxiliary routes and display setup cannot be reconfigured from the guest.
 
 ## 8. Troubleshooting
 

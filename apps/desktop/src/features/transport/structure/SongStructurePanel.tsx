@@ -4,6 +4,7 @@ import { SongStructureEditor } from "./SongStructureEditor";
 import { SongStructureMobileScreen } from "./SongStructureMobileScreen";
 import { StructureCapture, StructureWarnings } from "./StructureSections";
 import type { StructureHandlers } from "./structureHandlers";
+import { useStructureStore } from "./structureStore";
 import { useArrangementActions, type ArrangementActions } from "./useArrangementActions";
 
 import "./structure.css";
@@ -26,7 +27,8 @@ type SongStructurePanelProps = {
  */
 export function SongStructurePanel({ handlers, variant }: SongStructurePanelProps) {
   const actions = useArrangementActions(handlers);
-  if (!actions.regionId || !actions.region) return null;
+  const host = useStructureStore((state) => state.editorHost);
+  if (!actions.regionId || !actions.region || host === "embedded") return null;
   const mobile = variant ? variant === "mobile" : isMobileApp;
   return mobile ? (
     <SongStructureMobileScreen actions={actions} handlers={handlers} />

@@ -1,3 +1,5 @@
+import type { SongView } from "@libretracks/shared/models";
+
 import {
   importAudioFilesFromPaths,
   listLibraryFolderAudio,
@@ -5,6 +7,8 @@ import {
 } from "../../desktopApi";
 import { libraryAssetFileName } from "../../helpers";
 import { classifyDroppedPaths, resolveFolderDropLayout } from "../dragDrop";
+import { previewNewSongDrop } from "../folderOverNewSong";
+import { resolveFolderSongAnchorSeconds } from "../libraryPlacement";
 import type { LibraryDragDrop } from "../libraryDragDrop";
 
 export type BrowserDropDeps = {
@@ -15,6 +19,9 @@ export type BrowserDropDeps = {
     | "dropLibraryFolder"
     | "previewDropAtClientPoint"
     | "clearDropPreview"
+    | "resolveCompactRegionAtPoint"
+    | "dropPathsIntoSong"
+    | "addLibraryAssetsToSong"
   >;
   hasSession: () => boolean;
   runAction: (action: () => Promise<void>) => Promise<unknown>;
@@ -23,6 +30,9 @@ export type BrowserDropDeps = {
   t: (key: string, options?: Record<string, unknown>) => string;
   /** Where "add to timeline" lands on touch, where there is no drag. */
   getPlayheadSeconds: () => number;
+  isSetlistView: () => boolean;
+  /** For the end of the project, where a folder dropped on «+ New song» lands. */
+  getSong: () => SongView | null;
 };
 
 /**
@@ -33,8 +43,11 @@ export type BrowserDropDeps = {
  * folder of the classic library; its audio may sit in a subfolder (see
  * list_library_folder_audio).
  *
- * Both return false when the pointer is not over the timeline, so the caller
- * can treat the gesture as cancelled.
+ * Over a song of Compacta or Setlist the drop goes into that song (its start,
+ * new tracks), like a drop from the file manager there.
+ *
+ * Both return false when the pointer is over neither, so the caller can treat
+ * the gesture as cancelled.
  */
 export function createBrowserDrop(deps: BrowserDropDeps) {
   function placePaths(paths: string[], seconds: number, trackId: string | null) {
@@ -43,11 +56,19 @@ export function createBrowserDrop(deps: BrowserDropDeps) {
       .handleNativeExternalTimelineDrop(classifyDroppedPaths(paths), seconds, trackId);
   }
 
+  /** The song (of Compacta or Setlist) under the pointer, if any. */
+  function songAt(clientX: number, clientY: number): string | null {
+    const hit = deps.dragDrop().resolveCompactRegionAtPoint(clientX, clientY);
+    return hit.hit ? hit.regionId : null;
+  }
+
   function placeFolder(args: {
     folderPath: string;
     folderName: string;
     seconds: number;
     layout: "horizontal" | "vertical";
+    /** Into this existing song instead of a new song on the timeline. */
+    regionId?: string;
   }) {
     if (!deps.hasSession()) {
       deps.setStatus(deps.t("transport.status.importRequiresSession"));
@@ -74,6 +95,13 @@ export function createBrowserDrop(deps: BrowserDropDeps) {
         })),
       );
       deps.mergeLibraryAssets(imported.assets);
+      if (args.regionId) {
+        deps.dragDrop().addLibraryAssetsToSong(
+          args.regionId,
+          imported.assets.map((asset) => ({ filePath: asset.filePath, durationSeconds: asset.durationSeconds })),
+        );
+        return;
+      }
       await deps.dragDrop().dropLibraryFolder({
         payload: imported.assets.map((asset) => ({
           file_path: asset.filePath,
@@ -88,6 +116,8 @@ export function createBrowserDrop(deps: BrowserDropDeps) {
 
   function dropPathsAt(paths: string[], clientX: number, clientY: number): boolean {
     if (!paths.length) return false;
+    const regionId = songAt(clientX, clientY);
+    if (regionId) return deps.dragDrop().dropPathsIntoSong(regionId, classifyDroppedPaths(paths));
     const drop = deps.dragDrop().resolveTimelineDropFromClientPoint(clientX, clientY);
     if (!drop.isOverTimeline) return false;
     placePaths(paths, drop.dropSeconds, drop.targetTrackId);
@@ -102,6 +132,22 @@ export function createBrowserDrop(deps: BrowserDropDeps) {
     ctrlKey: boolean;
     metaKey: boolean;
   }): boolean {
+    // Over «+ New song» (Setlist): the folder becomes a new song at the end.
+    if (document.elementFromPoint(args.clientX, args.clientY)?.closest(".lt-setlist-add-song")) {
+      const song = deps.getSong();
+      placeFolder({
+        folderPath: args.folderPath,
+        folderName: args.folderName,
+        seconds: song ? resolveFolderSongAnchorSeconds(song) : 0,
+        layout: "vertical",
+      });
+      return true;
+    }
+    const regionId = songAt(args.clientX, args.clientY);
+    if (regionId) {
+      placeFolder({ folderPath: args.folderPath, folderName: args.folderName, seconds: 0, layout: "vertical", regionId });
+      return true;
+    }
     const drop = deps.dragDrop().resolveTimelineDropFromClientPoint(args.clientX, args.clientY);
     if (!drop.isOverTimeline) return false;
     placeFolder({
@@ -116,12 +162,24 @@ export function createBrowserDrop(deps: BrowserDropDeps) {
   /** While dragging: where it would land, drawn on the timeline (the guide
    * line and badge of a drop from the file manager). A folder is a song of
    * audio. */
-  function previewAt(item: { kind: "files"; paths: string[] } | { kind: "folder" }, clientX: number, clientY: number) {
+  function previewAt(
+    item: { kind: "files"; paths: string[] } | { kind: "folder"; name?: string },
+    clientX: number,
+    clientY: number,
+  ) {
+    // A folder over «+ New song» says it will create one.
+    previewNewSongDrop(
+      document.elementFromPoint(clientX, clientY),
+      item.kind === "folder" ? (item.name ?? "") : null,
+      deps.t,
+    );
     const kind = item.kind === "folder" ? "audio" : classifyDroppedPaths(item.paths).kind;
-    deps.dragDrop().previewDropAtClientPoint(clientX, clientY, kind);
+    const count = item.kind === "folder" ? 1 : item.paths.length;
+    deps.dragDrop().previewDropAtClientPoint(clientX, clientY, kind, count);
   }
 
   function clearPreview() {
+    previewNewSongDrop(null, null, deps.t);
     deps.dragDrop().clearDropPreview();
   }
 
@@ -132,10 +190,11 @@ export function createBrowserDrop(deps: BrowserDropDeps) {
 
   /** Touch: a folder becomes a song starting at the playhead. */
   function addFolderAtPlayhead(folderPath: string, folderName: string) {
+    const song = deps.isSetlistView() ? deps.getSong() : null;
     placeFolder({
       folderPath,
       folderName,
-      seconds: deps.getPlayheadSeconds(),
+      seconds: deps.isSetlistView() ? (song ? resolveFolderSongAnchorSeconds(song) : 0) : deps.getPlayheadSeconds(),
       layout: resolveFolderDropLayout(false, false),
     });
   }

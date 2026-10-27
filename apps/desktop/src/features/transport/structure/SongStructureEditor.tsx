@@ -1,10 +1,10 @@
-import { useCallback, useMemo, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import "./structure.css";
 
 import type { StructureSectionSummary } from "./types";
-import type { ArrangementDraft, DraftBlock } from "./structureStore";
+import { useStructureStore, type ArrangementDraft, type DraftBlock } from "./structureStore";
 import {
   addBlock,
   duplicateBlock,
@@ -33,6 +33,7 @@ export type SongStructureEditorProps = {
   handleOnly?: boolean;
   /** Extra per-row content (the mobile swipe/long-press wrapper). */
   wrapBlock?: (block: DraftBlock, row: ReactNode) => ReactNode;
+  blockStyle?: (block: DraftBlock) => CSSProperties;
   /** Mobile: something to put in the gap BEFORE block `index` (the "insert
    * here" line). It lives inside the block's row so it moves with it. */
   renderGap?: (index: number) => ReactNode;
@@ -53,6 +54,7 @@ export function SongStructureEditor({
   showPalette = true,
   handleOnly = false,
   wrapBlock,
+  blockStyle,
   renderGap,
   renderEnd,
 }: SongStructureEditorProps) {
@@ -63,10 +65,18 @@ export function SongStructureEditor({
     [sections],
   );
 
+  const moveTo = (blockId: string, toIndex: number) => {
+    const current = useStructureStore.getState().draft;
+    if (!current?.blocks.some((block) => block.id === blockId)) return;
+    const index = Math.max(0, Math.min(current.blocks.length - 1, toIndex));
+    updateDraft((working) => moveBlock(working, blockId, index));
+    selectBlock(useStructureStore.getState().draft?.blocks[index]?.id ?? null);
+  };
+
   const { onBlockPointerDown, onPalettePointerDown } = useBlockReorder({
     axis: layout === "vertical" ? "y" : "x",
     listRef,
-    onMove: (blockId, toIndex) => updateDraft((d) => moveBlock(d, blockId, toIndex)),
+    onMove: moveTo,
     onTap: (blockId) => selectBlock(blockId),
     onInsert: (index, sectionId) => updateDraft((d) => insertBlock(d, index, sectionId)),
     onAppend: (sectionId) => updateDraft((d) => addBlock(d, sectionId)),
@@ -182,19 +192,29 @@ export function SongStructureEditor({
                   <span className="lt-structure-block-bars">{formatBars(section.bars, t)}</span>
                 ) : null}
                 {handleOnly ? (
-                  <span
+                  <button
+                    type="button"
                     className="lt-structure-handle material-symbols-outlined"
-                    role="button"
                     aria-label={t("transport.structure.dragHandle")}
+                    title={t("transport.structure.dragHandle")}
                     onPointerDown={(event) => onBlockPointerDown(event, block.id)}
+                    onKeyDown={(event) => {
+                      const previous = layout === "vertical" ? "ArrowUp" : "ArrowLeft";
+                      const next = layout === "vertical" ? "ArrowDown" : "ArrowRight";
+                      if (![previous, next, "Home", "End"].includes(event.key)) return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      moveTo(block.id, event.key === "Home" ? 0 : event.key === "End" ? draft.blocks.length - 1
+                        : index + (event.key === previous ? -1 : 1));
+                    }}
                   >
                     drag_indicator
-                  </span>
+                  </button>
                 ) : null}
               </div>
             );
             return (
-              <li key={block.id} data-block-id={block.id} className="lt-structure-item">
+              <li key={block.id} data-block-id={block.id} className="lt-structure-item" style={blockStyle?.(block)}>
                 {renderGap ? renderGap(index) : null}
                 {wrapBlock ? wrapBlock(block, row) : row}
               </li>

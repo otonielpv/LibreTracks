@@ -25,6 +25,7 @@ import {
 import { confirmDialog } from "../../../shared/dialog/dialogService";
 import { decideVideoAudioExtraction } from "./videoAudioExtraction";
 import { useVideoStore } from "./videoStore";
+import { recordProductEvent } from "../../telemetry/telemetry";
 
 /**
  * Handlers for video: importing files, placing them on the timeline and every
@@ -105,6 +106,7 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
       placement.trackId,
     );
     applyPlaybackSnapshot(snapshot);
+    recordProductEvent("feature_video");
     setStatus(t("transport.video.placed", { count: assets.length }));
     if (!hadVideo) {
       onFirstVideoClip();
@@ -158,6 +160,7 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
       reportSkipped(result.skipped);
       await refreshVideoAssets();
       if (!result.assets.length) return;
+      recordProductEvent("feature_video");
       if (placement) {
         await placeAssets(result.assets, placement);
       } else {
@@ -196,6 +199,7 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
     void runAction(async () => {
       await refreshVideoAssets();
       if (!result.assets.length) return;
+      recordProductEvent("feature_video");
       if (placement) {
         await placeAssets(result.assets, placement);
       } else {

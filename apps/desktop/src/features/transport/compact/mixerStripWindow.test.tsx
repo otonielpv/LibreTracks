@@ -5,6 +5,7 @@ import type { TrackSummary } from "../desktopApi";
 import { createReorderPreview } from "../reorder/reorderPreview";
 import { meterTickerStats } from "../tracks/meterTicker";
 import { compactStripItems } from "../tracks/useTrackDragPreview";
+import { useTimelineUIStore } from "../uiStore";
 import { CompactMixer } from "./CompactMixer";
 import { getCompactStripLayout, resetMixerStripWindowForTest } from "./useMixerStripWindow";
 
@@ -108,6 +109,7 @@ async function scrollTo(value: number) {
 
 beforeEach(() => {
   scrollLeft = 0;
+  useTimelineUIStore.setState({ trackReorderMode: false });
   resetMixerStripWindowForTest();
   // jsdom no carga el CSS ni tiene layout: el ancho de tira, el gap y el visor.
   const realGetComputedStyle = window.getComputedStyle.bind(window);
@@ -132,7 +134,9 @@ beforeEach(() => {
     get(this: HTMLElement) {
       return this.classList.contains("lt-compact-mixer-strips") ? scrollLeft : 0;
     },
-    set() {},
+    set(this: HTMLElement, value: number) {
+      if (this.classList.contains("lt-compact-mixer-strips")) scrollLeft = value;
+    },
   });
 });
 
@@ -193,6 +197,66 @@ describe("compact mixer strip window", () => {
       window.dispatchEvent(new Event("pointerup"));
     });
     expect(mountedStripIds()).not.toContain("t1");
+  });
+
+  it("auto-scrolls left and right while dragging a track near the mixer edges", async () => {
+    useTimelineUIStore.setState({ trackReorderMode: true });
+    renderMixer(tracksOf(30));
+    const viewport = scroller();
+    viewport.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: VIEWPORT_WIDTH,
+        bottom: 300,
+        width: VIEWPORT_WIDTH,
+        height: 300,
+      }) as DOMRect;
+
+    const pointer = (
+      target: Element | Window,
+      type: "pointerdown" | "pointermove" | "pointerup",
+      clientX: number,
+    ) => {
+      const event = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        clientX,
+        clientY: 40,
+      });
+      Object.defineProperties(event, {
+        pointerId: { value: 1 },
+        pointerType: { value: "touch" },
+      });
+      fireEvent(target, event);
+    };
+    const waitForScrollFrame = () =>
+      new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+    scrollLeft = 500;
+    await act(async () => {
+      const name = document.querySelector<HTMLElement>(
+        '[data-track-id="t1"] [data-strip-noninteractive]',
+      )!;
+      pointer(name, "pointerdown", 100);
+      pointer(window, "pointermove", 20);
+      await waitForScrollFrame();
+      pointer(window, "pointerup", 20);
+    });
+    expect(scrollLeft).toBeLessThan(500);
+
+    scrollLeft = 500;
+    await act(async () => {
+      const name = document.querySelector<HTMLElement>(
+        '[data-track-id="t1"] [data-strip-noninteractive]',
+      )!;
+      pointer(name, "pointerdown", 1100);
+      pointer(window, "pointermove", 1190);
+      await waitForScrollFrame();
+      pointer(window, "pointerup", 1190);
+    });
+    expect(scrollLeft).toBeGreaterThan(500);
   });
 
   it("reorders against every strip, mounted or not", () => {

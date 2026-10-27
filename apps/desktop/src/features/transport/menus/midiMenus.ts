@@ -165,7 +165,31 @@ function midiTrackContextMenu(track: TrackSummary): ContextMenuAction[] {
       getDeps().moveMidiClip(clipId, timelineStartSeconds),
   };
 
+  /** Move a clip, optionally onto another MIDI track (one command). */
+  function moveMidiClip(clipId: string, timelineStartSeconds: number, targetTrackId: string | null = null) {
+    getDeps().moveMidiClip(clipId, timelineStartSeconds, targetTrackId);
+  }
+
+  /** The routing dialog (port and channel) of a MIDI track. */
+  function openMidiRouteEditor(trackId: string) {
+    getDeps().openMidiRouteEditor(trackId);
+  }
+
+  /** MIDI's answer to mute: the track sends or it doesn't. */
+  function toggleMidiTrackEnabled(trackId: string) {
+    getDeps().toggleMidiTrackEnabled(trackId);
+  }
+
+  /** Output device and Bluetooth MIDI stay in Settings. */
+  function openMidiSettings() {
+    getDeps().openSettingsTab("midi");
+  }
+
   return {
+    moveMidiClip,
+    openMidiRouteEditor,
+    toggleMidiTrackEnabled,
+    openMidiSettings,
     clipCallbacks,
     openMidiClipMenu,
     createMidiClipAt,

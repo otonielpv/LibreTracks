@@ -51,6 +51,10 @@ type StructureState = {
   guard: StructureGuardRequest | null;
   /** Song whose arrangement editor is open, or `null`. */
   editorRegionId: string | null;
+  /** Who shows the open editor: the app's own panel, or a view that embeds
+   * it (the Setlist view's Edit → Arrangement). Embedded, the panel stays
+   * hidden so the editor is not shown twice. */
+  editorHost: "panel" | "embedded";
   draft: ArrangementDraft | null;
   /** The saved version of `draft`, to tell whether there are unapplied
    * changes. */
@@ -68,6 +72,7 @@ type StructureState = {
 export const INITIAL_STRUCTURE_STATE: StructureState = {
   guard: null,
   editorRegionId: null,
+  editorHost: "panel",
   draft: null,
   savedDraft: null,
   selectedBlockId: null,

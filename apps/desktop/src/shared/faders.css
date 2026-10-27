@@ -352,14 +352,15 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
     var(--lt-vfader-tick) 0
   );
   position: relative;
-  width: 24px;
+  /* As wide as the cap: the whole column takes the finger. */
+  width: 34px;
   height: 100%;
   margin: 0 auto;
   padding: 0;
   background-color: transparent;
   background-image: var(--lt-vfader-ticks), var(--lt-vfader-ticks);
   background-position: left top, right top;
-  background-size: 5px 100%;
+  background-size: 7px 100%;
   background-repeat: no-repeat;
   cursor: ns-resize;
   touch-action: none;
@@ -394,10 +395,11 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
   left: 50%;
   transform: translate(-50%, 50%);
   box-sizing: border-box;
-  width: 24px;
-  height: 13px;
+  /* Big enough to grab with a finger (the iPhone report: the cap was tiny). */
+  width: 34px;
+  height: 22px;
   border: 1px solid #000;
-  border-radius: 2px;
+  border-radius: 3px;
   background:
     linear-gradient(
         to bottom,
@@ -431,6 +433,6 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
 }
 
 .lt-compact-mixer-fader-wrap {
-  /* Medio cap (13px / 2) arriba y abajo. */
-  padding: 7px 0;
+  /* Medio cap (22px / 2) arriba y abajo. */
+  padding: 11px 0;
 }

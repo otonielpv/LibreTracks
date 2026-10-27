@@ -26,6 +26,7 @@ import {
 } from "./levelSongsPlan";
 import { useLevelSongsStore } from "./levelSongsStore";
 import { LevelTrackPicker } from "./LevelTrackPicker";
+import { recordProductEvent } from "../../telemetry/telemetry";
 
 type Phase =
   | { kind: "setup"; notice: string | null }
@@ -186,6 +187,7 @@ function LevelSongsDialog({ song, cueRoutes, onClose, onApplied }: DialogProps) 
         setPhase({ kind: "setup", notice: t("transport.levelSongs.cancelled") });
         return;
       }
+      recordProductEvent("feature_level_songs");
       setTarget({ kind: "noClip" });
       setToApply(
         defaultSongsToApply(planLevels(regions, result.songs, { kind: "noClip" })),

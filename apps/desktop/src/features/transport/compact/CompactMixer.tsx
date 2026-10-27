@@ -11,6 +11,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { CompactMidiStrip, type CompactMidiStripHandlers } from "./CompactMidiStrip";
+import { NetworkControls } from "../../network/NetworkControls";
 
 import {
   TRACK_FADER_SCALE,
@@ -27,11 +29,13 @@ import {
 const TRACK_FADER_TICKS = faderTicks(TRACK_FADER_SCALE);
 
 import type { TrackSummary } from "../desktopApi";
+import { DRAG_THRESHOLD_PX } from "../constants";
 import { TrackMeter } from "../tracks/TrackMeter";
 import { trackRowSegments } from "../tracks/trackRowWindowing";
 import { useMixerStripWindow } from "./useMixerStripWindow";
 import { useTransportStore, type OptimisticMixState } from "../store";
 import { useTimelineUIStore } from "../uiStore";
+import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
 
 /**
  * Reusable horizontal-scroll mixer that lays out one vertical channel strip
@@ -84,6 +88,9 @@ type CompactMixerProps = {
   /** Fold / unfold a folder. Same handler the DAW header uses, so the
    * collapsed flag is persisted to the song by one implementation. */
   onToggleFolder: (trackId: string) => void;
+  /** When given, MIDI tracks get their own strip (on/off and routing, no
+   * fader). Without it they keep the audio strip, as before (Compacta). */
+  midiStrip?: CompactMidiStripHandlers;
 } & CompactMixerProps_DragSelection;
 
 /** Default colour applied to a track strip when track.color is null, the
@@ -213,6 +220,7 @@ function CompactMixerComponent({
   filterActiveSong,
   collapsedFolders,
   onToggleFolder,
+  midiStrip,
 }: CompactMixerProps) {
   const trackReorderMode = useTimelineUIStore(
     (state) => state.trackReorderMode,
@@ -255,6 +263,108 @@ function CompactMixerComponent({
   // A big session mounts only the strips near the visible band. See
   // ./useMixerStripWindow.
   const stripsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const scroller = stripsRef.current;
+    if (!trackReorderMode || !scroller) return;
+
+    let activePointer: {
+      id: number;
+      type: string;
+      startX: number;
+      startY: number;
+      x: number;
+      y: number;
+      dragging: boolean;
+    } | null = null;
+    let frameId = 0;
+    const stopFrame = () => {
+      if (frameId === 0) return;
+      window.cancelAnimationFrame(frameId);
+      frameId = 0;
+    };
+    function scheduleFrame() {
+      if (frameId === 0) frameId = window.requestAnimationFrame(scrollAtEdge);
+    }
+    function scrollAtEdge() {
+      frameId = 0;
+      const currentScroller = stripsRef.current;
+      if (!activePointer?.dragging || !currentScroller) return;
+      const bounds = currentScroller.getBoundingClientRect();
+      const edge = Math.min(64, bounds.width * 0.18);
+      if (edge <= 0) return;
+      let delta = 0;
+      if (activePointer.x < bounds.left + edge) {
+        const intensity = Math.min(1, (bounds.left + edge - activePointer.x) / edge);
+        delta = -Math.max(1, intensity * 16);
+      } else if (activePointer.x > bounds.right - edge) {
+        const intensity = Math.min(1, (activePointer.x - (bounds.right - edge)) / edge);
+        delta = Math.max(1, intensity * 16);
+      }
+      if (delta === 0) return;
+      const previous = currentScroller.scrollLeft;
+      currentScroller.scrollLeft += delta;
+      if (currentScroller.scrollLeft === previous) return;
+      const move = new Event("pointermove", { cancelable: true });
+      Object.defineProperties(move, {
+        pointerId: { value: activePointer.id },
+        pointerType: { value: activePointer.type },
+        clientX: { value: activePointer.x },
+        clientY: { value: activePointer.y },
+      });
+      window.dispatchEvent(move);
+      scheduleFrame();
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      if (
+        event.button !== 0 ||
+        !(event.target instanceof Element) ||
+        !event.target.closest(".lt-compact-mixer-strip [data-strip-noninteractive]")
+      ) {
+        return;
+      }
+      activePointer = {
+        id: event.pointerId,
+        type: event.pointerType,
+        startX: event.clientX,
+        startY: event.clientY,
+        x: event.clientX,
+        y: event.clientY,
+        dragging: false,
+      };
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!activePointer || activePointer.id !== event.pointerId) return;
+      activePointer.x = event.clientX;
+      activePointer.y = event.clientY;
+      if (
+        !activePointer.dragging &&
+        Math.hypot(event.clientX - activePointer.startX, event.clientY - activePointer.startY) <
+          DRAG_THRESHOLD_PX
+      ) {
+        return;
+      }
+      activePointer.dragging = true;
+      scheduleFrame();
+    };
+    const onPointerEnd = (event: PointerEvent) => {
+      if (activePointer?.id !== event.pointerId) return;
+      activePointer = null;
+      stopFrame();
+    };
+
+    scroller.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("pointermove", onPointerMove, true);
+    window.addEventListener("pointerup", onPointerEnd, true);
+    window.addEventListener("pointercancel", onPointerEnd, true);
+    return () => {
+      activePointer = null;
+      stopFrame();
+      scroller.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointermove", onPointerMove, true);
+      window.removeEventListener("pointerup", onPointerEnd, true);
+      window.removeEventListener("pointercancel", onPointerEnd, true);
+    };
+  }, [trackReorderMode]);
   const stripIds = useMemo(() => visibleTracks.map((track) => track.id), [visibleTracks]);
   const { rowWindow, layout, geometry } = useMixerStripWindow(stripsRef, stripIds);
   const segments =
@@ -262,7 +372,18 @@ function CompactMixerComponent({
       ? trackRowSegments(layout, rowWindow)
       : null;
 
-  const renderStrip = (track: TrackSummary) => (
+  const renderStrip = (track: TrackSummary) =>
+    midiStrip && track.kind === "midi" ? (
+      <CompactMidiStrip
+        key={track.id}
+        track={track}
+        handlers={midiStrip}
+        isSelected={selectedTrackIds.includes(track.id)}
+        onContextMenu={onTrackContextMenu}
+        onSelect={onTrackSelect}
+        onDragStart={onTrackDragStart}
+      />
+    ) : (
           <CompactMixerStrip
             key={track.id}
             track={track}
@@ -280,6 +401,7 @@ function CompactMixerComponent({
   );
 
   return (
+    <NetworkControls permission="edit">
     <div
       className={`lt-compact-mixer ${trackReorderMode ? "is-track-reorder-mode" : ""}`}
     >
@@ -300,6 +422,7 @@ function CompactMixerComponent({
           : visibleTracks.map(renderStrip)}
       </div>
     </div>
+    </NetworkControls>
   );
 }
 
@@ -513,6 +636,11 @@ function CompactMixerStripComponent({
   // thumb. Set on pointerdown, cleared on pointerup/cancel.
   const [isPanDragging, setIsPanDragging] = useState(false);
   const lastTouchPointerDownAtRef = useRef(0);
+  const touchMenu = useTouchContextMenu({
+    ignoreTarget: (target) =>
+      target instanceof Element &&
+      target.closest("button, input, select, textarea, [role='slider']") !== null,
+  });
 
   const handleAudioToChange = useCallback(
     (event: ChangeEvent<HTMLSelectElement>) => {
@@ -558,16 +686,20 @@ function CompactMixerStripComponent({
 
   const handleStripClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (touchMenu.consumeTriggered()) {
+        event.preventDefault();
+        return;
+      }
       if (event.button !== 0) return;
       if (!isSelectableTarget(event.target)) return;
       onSelect(track.id, track.name, event);
     },
-    [onSelect, track.id, track.name],
+    [onSelect, touchMenu, track.id, track.name],
   );
 
   return (
     <div
-      className={`lt-compact-mixer-strip ${
+      className={`lt-compact-mixer-strip is-fader-strip ${
         isFolder ? "is-folder" : ""
       } ${isFolder && isCollapsed ? "is-folded" : ""} ${
         parentInfo ? "is-child" : ""
@@ -584,7 +716,14 @@ function CompactMixerStripComponent({
       onPointerDown={handleStripPointerDown}
       onMouseDown={handleStripMouseDown}
       onClick={handleStripClick}
-      onContextMenu={(event) => onContextMenu(event, track.id)}
+      onPointerDownCapture={touchMenu.begin}
+      onPointerMoveCapture={touchMenu.move}
+      onPointerUpCapture={touchMenu.cancel}
+      onPointerCancelCapture={touchMenu.cancel}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onContextMenu(event, track.id);
+      }}
     >
       {/* The name + parent-hint band acts as the strip's "handle".
           data-strip-noninteractive opts it into selection / drag-start
@@ -846,6 +985,8 @@ type CompactVerticalFaderProps = {
   onCommit: () => void;
   onDoubleClick: () => void;
   ariaLabel: string;
+  /** Tooltip text for a position; defaults to the track fader's dB. */
+  formatValue?: (position: number) => string;
 };
 
 function CompactVerticalFaderComponent({
@@ -854,6 +995,7 @@ function CompactVerticalFaderComponent({
   onCommit,
   onDoubleClick,
   ariaLabel,
+  formatValue = formatVolume,
 }: CompactVerticalFaderProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
@@ -1004,14 +1146,16 @@ function CompactVerticalFaderComponent({
           className="lt-compact-mixer-fader-tooltip"
           style={{ bottom: `${fillPct}%` }}
         >
-          {formatVolume(value)}
+          {formatValue(value)}
         </div>
       ) : null}
     </div>
   );
 }
 
-const CompactVerticalFader = memo(CompactVerticalFaderComponent);
+/** The console fader, exported for the Setlist console's Click, Guide and
+ * Master strips so every strip of the app shares one fader. */
+export const CompactVerticalFader = memo(CompactVerticalFaderComponent);
 
 function effectiveBool(
   optimistic: boolean | undefined,

@@ -20,6 +20,7 @@ import {
   type RenderableTrack,
 } from "./renderSelection";
 import { useRenderStore } from "./renderStore";
+import { recordProductEvent } from "../../telemetry/telemetry";
 
 type Phase =
   | { kind: "form"; notice: string | null }
@@ -168,6 +169,7 @@ function RenderSongDialog({ regionId, regionName, tracks, onClose }: DialogProps
         voiceGuideLabel: t("transport.renderModal.voiceGuideStem"),
       });
       if (result.saved) {
+        recordProductEvent("feature_audio_render");
         setPhase({ kind: "done", result });
       } else {
         setPhase({

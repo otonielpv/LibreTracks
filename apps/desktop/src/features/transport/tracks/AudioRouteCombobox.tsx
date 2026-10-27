@@ -19,9 +19,13 @@ type Props = {
   options: RouteOption[];
   ariaLabel: string;
   onChange: (value: string) => void;
+  /** "large": a full-size control (Setlist's Pads panel). Default: the
+   * compact track-header size. */
+  size?: "default" | "large";
 };
 
-function AudioRouteComboboxImpl({ value, options, ariaLabel, onChange }: Props) {
+function AudioRouteComboboxImpl({ value, options, ariaLabel, onChange, size = "default" }: Props) {
+  const sizeClass = size === "large" ? " is-large" : "";
   const [open, setOpen] = useState(false);
   // En Android, atras cierra este overlay en vez de salir de la aplicacion.
   const closeRouteList = useCallback(() => setOpen(false), []);
@@ -198,7 +202,7 @@ function AudioRouteComboboxImpl({ value, options, ariaLabel, onChange }: Props) 
 
   return (
     <div
-      className="lt-audio-route-combobox"
+      className={`lt-audio-route-combobox${sizeClass}`}
       onClick={(event) => event.stopPropagation()}
     >
       <button
@@ -227,7 +231,7 @@ function AudioRouteComboboxImpl({ value, options, ariaLabel, onChange }: Props) 
             id={listId}
             role="listbox"
             tabIndex={-1}
-            className="lt-audio-route-list"
+            className={`lt-audio-route-list${sizeClass}`}
             // Marca para quien cierre paneles al tocar fuera: esto es SUYO
             // aunque en el DOM cuelgue de `document.body`. Sin ella, el panel
             // de pista se cerraba en el `pointerdown` de la opcion y el click

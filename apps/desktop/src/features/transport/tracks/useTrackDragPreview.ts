@@ -81,6 +81,8 @@ const SETTLE_TIMEOUT_MS = 10_000;
 const HEADER_ROW_SELECTOR = ".lt-track-header-row[data-track-id]";
 const LANE_ROW_SELECTOR = ".lt-track-lane-row[data-track-id]";
 const COMPACT_STRIP_SELECTOR = ".lt-compact-mixer-strip[data-track-id]";
+/** The Setlist view's track list: every row is in the DOM, measured as is. */
+const SETLIST_ROW_SELECTOR = ".lt-setlist-track-row[data-track-id]";
 
 /** Tiras del mezclador MONTADAS, por pista. */
 function mountedCompactStrips(root: ParentNode) {
@@ -226,7 +228,8 @@ export function useTrackDragPreview({
       settlingRef.current = null;
 
       const isCompact = drag.originSurface === "compact";
-      const root: ParentNode = isCompact
+      const isSetlist = drag.originSurface === "setlist";
+      const root: ParentNode = isCompact || isSetlist
         ? document
         : (timelineShellRef.current ?? document);
       const dragged = draggedTracks(currentSong, drag.trackId);
@@ -235,7 +238,9 @@ export function useTrackDragPreview({
         ? compactLayout
           ? compactStripItems(root, compactLayout, drag.trackId)
           : null
-        : layoutTrackItems(root, trackLayoutRef.current(), visibleIdsRef.current(), drag.trackId);
+        : isSetlist
+          ? null
+          : layoutTrackItems(root, trackLayoutRef.current(), visibleIdsRef.current(), drag.trackId);
       let items: ReorderPreviewItem[];
       let source: HTMLElement | null;
       if (fromLayout) {
@@ -246,11 +251,15 @@ export function useTrackDragPreview({
         // arrastrada que no está montada: se mide lo que hay en el DOM.
         const rows = Array.from(
           root.querySelectorAll<HTMLElement>(
-            isCompact ? ".lt-compact-mixer-strip[data-track-id]" : HEADER_ROW_SELECTOR,
+            isCompact
+              ? COMPACT_STRIP_SELECTOR
+              : isSetlist
+                ? SETLIST_ROW_SELECTOR
+                : HEADER_ROW_SELECTOR,
           ),
         );
         // El carril de cada pista se desplaza con su cabecera.
-        const lanesById = isCompact
+        const lanesById = isCompact || isSetlist
           ? new Map<string, HTMLElement[]>()
           : mountedTrackRows(root).lanes;
         source = rows.find((row) => row.dataset.trackId === drag.trackId) ?? null;

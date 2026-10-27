@@ -1,5 +1,7 @@
 import { GUEST_MIRRORED_EVENTS } from "./guestCommandTable";
-import { guestRouteFor } from "./guestRouting";
+import { guestCanInvoke, guestRouteFor } from "./guestRouting";
+import { createGuestSettingsBridge } from "./guestSettings";
+import type { NetworkRole } from "./networkRoles";
 import type {
   AppSettings,
   AudioDeviceStatusEvent,
@@ -122,6 +124,11 @@ export function setIpcObserver(observer: IpcObserver | null) {
 // loads, and the app reloads to enter or leave it, so no screen ever mixes
 // the two sessions.
 let guestMirrorMode = false;
+let guestRole: NetworkRole | null = null;
+
+export function setGuestRole(role: NetworkRole | null) {
+  guestRole = role;
+}
 
 export function setGuestMirrorMode(on: boolean) {
   guestMirrorMode = on;
@@ -145,6 +152,7 @@ export async function invokeCommand<T>(command: string, args?: Record<string, un
       throw new Error("guest:notAvailable");
     }
     if (route === "host") {
+      if (!guestCanInvoke(guestRole, command)) throw new Error("guest:forbidden");
       return invoke<T>("link_proxy_invoke", { command, args: args ?? {} });
     }
   }
@@ -376,8 +384,8 @@ export async function listenToSettingsUpdated(
   handler: (settings: AppSettings) => void,
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<AppSettings>(sessionEventName("settings:updated"), (event) => {
-    handler(event.payload);
+  return listen<AppSettings>(sessionEventName("settings:updated"), async (event) => {
+    handler(guestMirrorMode ? await guestSettings.overlay(event.payload) : event.payload);
   });
 }
 
@@ -571,12 +579,23 @@ export async function getSystemResourceSnapshot(): Promise<SystemResourceSnapsho
 }
 
 export async function getSettings(): Promise<AppSettings> {
+  if (guestMirrorMode) return guestSettings.read();
   return invokeCommand<AppSettings>("get_settings");
 }
 
 export async function saveSettings(settings: AppSettings): Promise<AppSettings> {
+  if (guestMirrorMode) return guestSettings.save(settings);
   return invokeCommand<AppSettings>("save_settings", { settings });
 }
+
+const guestSettings = createGuestSettingsBridge(
+  async (command: string, args?: Record<string, unknown>) => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<AppSettings>(command, args);
+  },
+  invokeCommand,
+  () => guestRole === "editor",
+);
 
 export async function updateAudioSettings(settings: AppSettings): Promise<AppSettings> {
   return invokeCommand<AppSettings>("update_audio_settings", { settings });
@@ -1952,7 +1971,7 @@ export async function cancelMarkerJump(): Promise<TransportSnapshot> {
 }
 
 export async function toggleVamp(
-  mode: "section" | "bars",
+  mode: AppSettings["vampMode"],
   bars?: number,
 ): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("toggle_vamp", {
@@ -2840,17 +2859,19 @@ export async function setVoiceGuideVolumeRealtime(volume: number): Promise<void>
 export async function setMetronomeSoundRealtime(
   settings: AppSettings,
 ): Promise<AppSettings> {
-  return invokeCommand<AppSettings>("set_metronome_sound_realtime", {
+  const saved = await invokeCommand<AppSettings>("set_metronome_sound_realtime", {
     settings,
   });
+  return guestMirrorMode ? guestSettings.overlay(saved) : saved;
 }
 
 export async function setVoiceGuideConfigRealtime(
   settings: AppSettings,
 ): Promise<AppSettings> {
-  return invokeCommand<AppSettings>("set_voice_guide_config_realtime", {
+  const saved = await invokeCommand<AppSettings>("set_voice_guide_config_realtime", {
     settings,
   });
+  return guestMirrorMode ? guestSettings.overlay(saved) : saved;
 }
 
 // ── Ambient pads ─────────────────────────────────────────────────────────────
@@ -2903,7 +2924,8 @@ export async function clearPadKey(
 export async function setPadConfigRealtime(
   settings: AppSettings,
 ): Promise<AppSettings> {
-  return invokeCommand<AppSettings>("set_pad_config_realtime", { settings });
+  const saved = await invokeCommand<AppSettings>("set_pad_config_realtime", { settings });
+  return guestMirrorMode ? guestSettings.overlay(saved) : saved;
 }
 
 export async function setPadVolumeRealtime(volume: number): Promise<void> {
@@ -2916,7 +2938,8 @@ export async function setPadVolumeRealtime(volume: number): Promise<void> {
 export async function loadPadKey(
   settings: AppSettings,
 ): Promise<AppSettings> {
-  return invokeCommand<AppSettings>("load_pad_key", { settings });
+  const saved = await invokeCommand<AppSettings>("load_pad_key", { settings });
+  return guestMirrorMode ? guestSettings.overlay(saved) : saved;
 }
 
 export async function listenToPadDownloadProgress(
@@ -3241,7 +3264,7 @@ export async function listenToVideoOutputStatus(
   handler: (status: VideoOutputStatus) => void,
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<VideoOutputStatus>("video:output-status", (event) => {
+  return listen<VideoOutputStatus>(sessionEventName("video:output-status"), (event) => {
     handler(event.payload);
   });
 }
@@ -3274,7 +3297,7 @@ export async function listenToVideoLiveState(
   handler: (state: VideoLiveState) => void,
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<VideoLiveState>("video:live-state", (event) => {
+  return listen<VideoLiveState>(sessionEventName("video:live-state"), (event) => {
     handler(event.payload);
   });
 }

@@ -1,4 +1,5 @@
 import i18n from "../../../shared/i18n";
+import { recordProductEvent } from "../../telemetry/telemetry";
 import { confirmDialog } from "../../../shared/dialog/dialogService";
 import {
   discardStagedPackage,
@@ -83,7 +84,9 @@ async function stageFromCloud(file: CloudFile): Promise<string> {
     cancelling: false,
   });
   try {
-    return await downloadFromCloud(file.id, file.name, stagingDir);
+    const path = await downloadFromCloud(file.id, file.name, stagingDir);
+    recordProductEvent("feature_cloud");
+    return path;
   } finally {
     useCloudStore.setState({ transfer: null, cancelling: false });
     void store.refreshQuota();

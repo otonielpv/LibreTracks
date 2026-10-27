@@ -12,7 +12,7 @@ export const FEATURE_FLAGS = {
   /** Network sessions: LibreTracks apps joining a host LibreTracks over the
    * LAN with roles (viewer / control / edit). Plan in
    * docs/plans/network-sessions. Planned for 1.16.0. */
-  networkSessions: false,
+  networkSessions: true,
   /** «Analizar canción…»: tempo, key and section markers read from a song's
    * click, guide and audio. Ships in 1.15.0. */
   songAnalysis: true,
@@ -20,5 +20,5 @@ export const FEATURE_FLAGS = {
    * match aliases, and the «one folder per song» track layout. Planned for
    * 1.16.0. Its USER_MANUAL sections were taken out while hidden: bring them
    * back from commit 29da2994 when it ships. */
-  songTemplates: false,
+  songTemplates: true,
 } as const;

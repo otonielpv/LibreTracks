@@ -1,5 +1,5 @@
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
-import { isTauriApp, setGuestMirrorMode } from "@libretracks/shared/desktopApi";
+import { isTauriApp, setGuestMirrorMode, setGuestRole } from "@libretracks/shared/desktopApi";
 import { getGuestSnapshot, type NetworkGuestStatus } from "@libretracks/shared/networkApi";
 
 /** Joined and not given up: the UI runs against the host's session. */
@@ -25,6 +25,7 @@ export async function bootGuestMirrorMode(): Promise<boolean> {
     ]);
     const on = Boolean(snapshot && wantsMirrorMode(snapshot.status));
     setGuestMirrorMode(on);
+    setGuestRole(snapshot?.status.state === "connected" ? snapshot.status.role : null);
     document.documentElement.classList.toggle("lt-guest-mirror", on);
     return on;
   } catch {

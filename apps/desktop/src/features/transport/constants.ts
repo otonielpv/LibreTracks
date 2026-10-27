@@ -164,6 +164,8 @@ export const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
     key: "action:set_global_jump_mode_next_marker",
     labelKey: "transport.settingsModal.midiLearnGlobalJumpModeNextMarker",
   },
+  { key: "action:set_global_jump_mode_next_section", labelKey: "transport.settingsModal.midiLearnMarkerSection" },
+  { key: "action:set_global_jump_mode_next_cue", labelKey: "transport.settingsModal.midiLearnMarkerCue" },
   {
     key: "action:increase_global_jump_bars",
     labelKey: "transport.settingsModal.midiLearnGlobalJumpBarsIncrease",
@@ -201,6 +203,8 @@ export const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
     key: "action:set_song_jump_trigger_next_marker",
     labelKey: "transport.settingsModal.midiLearnSongJumpTriggerNextMarker",
   },
+  { key: "action:set_song_jump_trigger_next_section", labelKey: "transport.settingsModal.midiLearnSongSection" },
+  { key: "action:set_song_jump_trigger_next_cue", labelKey: "transport.settingsModal.midiLearnSongCue" },
   {
     key: "action:increase_song_jump_bars",
     labelKey: "transport.settingsModal.midiLearnSongJumpBarsIncrease",
@@ -233,6 +237,8 @@ export const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
     key: "action:set_vamp_mode_section",
     labelKey: "transport.settingsModal.midiLearnVampModeSection",
   },
+  { key: "action:set_vamp_mode_section_marker", labelKey: "transport.settingsModal.midiLearnVampSection" },
+  { key: "action:set_vamp_mode_cue", labelKey: "transport.settingsModal.midiLearnVampCue" },
   {
     key: "action:set_vamp_mode_bars",
     labelKey: "transport.settingsModal.midiLearnVampModeBars",

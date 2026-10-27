@@ -23,6 +23,9 @@ import type { SongView, VideoAssetSummary, VideoClipSummary } from "../desktopAp
 import { createVideoClipHandlers } from "./videoClipHandlers";
 import { applyVideoDrag } from "./useVideoClipHotspots";
 import { INITIAL_VIDEO_STATE, useVideoStore } from "./videoStore";
+import { recordProductEvent } from "../../telemetry/telemetry";
+
+vi.mock("../../telemetry/telemetry", () => ({ recordProductEvent: vi.fn() }));
 
 function clip(overrides: Partial<VideoClipSummary> = {}): VideoClipSummary {
   return {
@@ -167,6 +170,7 @@ describe("video clip handlers", () => {
       "a1",
     );
     expect(deps.onFirstVideoClip).toHaveBeenCalledTimes(1);
+    expect(recordProductEvent).toHaveBeenCalledWith("feature_video");
   });
 
   it("does not announce a first clip when the song already has video", async () => {
@@ -195,6 +199,7 @@ describe("video clip handlers", () => {
     handlers.importVideoPaths(["x.mp4"], null);
     await flush();
     expect(api.placeVideoClips).not.toHaveBeenCalled();
+    expect(recordProductEvent).not.toHaveBeenCalled();
     expect(deps.reportSkipped).toHaveBeenCalledWith([
       { fileName: "x.mp4", sourcePath: "x.mp4", reason: "códec no soportado" },
     ]);

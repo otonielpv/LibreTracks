@@ -376,6 +376,9 @@
   justify-content: center;
   min-width: 44px;
   min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: rgb(232 238 238 / 0.6);
   cursor: grab;
   touch-action: none;

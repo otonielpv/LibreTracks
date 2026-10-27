@@ -60,6 +60,7 @@ describe("deseleccionar pulsando fuera", () => {
     ["la barra táctil de acciones", "lt-mobile-selection-actions"],
     ["su pestaña recogida", "lt-mobile-selection-actions-tab"],
     ["la fila desplegada de una pista", "lt-mobile-track-row-panel"],
+    ["los controles de selección del mixer", "lt-mobile-track-selection-control"],
     ["el editor de posición de una marca", "lt-marker-position-editor"],
   ])("no toca la selección al pulsar %s", (_label, className) => {
     renderHook(() => useClearSelectionOnOutsideClick());

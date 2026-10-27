@@ -18,9 +18,12 @@ import type {
 import { ViewModeSwitcher } from "./ViewModeSwitcher";
 import { SongMasterMeter } from "../tracks/TrackMeter";
 import { isMobileApp } from "../desktopApi";
+import { ReturnToSetlistChip } from "../setlist/ReturnToSetlistChip";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { SongGapVampToggle } from "../live/SongGapVampToggle";
 import { RegionTempoControl } from "./RegionTempoControl";
+import { SnapIcon } from "./SnapIcon";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 type RegionMasterFaderProps = {
   regionId: string;
@@ -330,12 +333,17 @@ export function TimelineToolbar({
       document.removeEventListener("pointerdown", handlePointerDown, true);
     };
   }, [openGroup]);
-  const controlsDisabled = isProjectEmpty && !learnModeActive;
+  const { canControl, canEdit } = useNetworkPermissions();
+  const controlsDisabled = !canControl || (isProjectEmpty && !learnModeActive);
   const jumpSummary =
     globalJumpMode === "after_bars"
       ? `${globalJumpBars} bars`
       : globalJumpMode === "next_marker"
         ? t("transport.jumpMode.nextMarker")
+        : globalJumpMode === "next_section"
+          ? t("transport.jumpMode.nextSection")
+          : globalJumpMode === "next_cue"
+            ? t("transport.jumpMode.nextCue")
         : t("transport.jumpMode.immediate");
   const songJumpSummary =
     songJumpTrigger === "after_bars"
@@ -344,6 +352,10 @@ export function TimelineToolbar({
         ? t("transport.jumpMode.regionEnd")
         : songJumpTrigger === "next_marker"
           ? t("transport.jumpMode.nextMarker")
+          : songJumpTrigger === "next_section"
+            ? t("transport.jumpMode.nextSection")
+            : songJumpTrigger === "next_cue"
+              ? t("transport.jumpMode.nextCue")
           : t("transport.jumpMode.immediate");
   const songTransitionSummary =
     songTransitionMode === "fade_out"
@@ -353,7 +365,7 @@ export function TimelineToolbar({
   const regionSummary = selectedRegion
     ? `${formatTransposeSemitones(selectedRegion.transposeSemitones)} st`
     : t("timelineToolbar.regionTransposeNoSelection");
-  const regionControlsDisabled = controlsDisabled || !selectedRegion;
+  const regionControlsDisabled = !canEdit || controlsDisabled || !selectedRegion;
 
   const warpEnabled = selectedRegion?.warpEnabled ?? false;
   const warpSourceBpm = selectedRegion?.warpSourceBpm ?? null;
@@ -373,7 +385,7 @@ export function TimelineToolbar({
         })
       : t("timelineToolbar.regionWarpSummaryOff")
     : t("timelineToolbar.regionWarpNoSelection");
-  const warpControlsDisabled = controlsDisabled || !selectedRegion;
+  const warpControlsDisabled = !canEdit || controlsDisabled || !selectedRegion;
 
   // Read the optimistic value (set during drag) if present, otherwise fall
   // back to the snapshot value. This is what lets the thumb track the
@@ -390,7 +402,7 @@ export function TimelineToolbar({
         Number.isFinite(masterGainDb) ? `${masterGainDb.toFixed(1)} dB` : "-∞ dB"
       })`
     : t("timelineToolbar.regionMasterNoSelection");
-  const masterControlsDisabled = controlsDisabled || !selectedRegion;
+  const masterControlsDisabled = !canEdit || controlsDisabled || !selectedRegion;
 
   const handleModeButtonClick = (learnKey: string, commit: () => void) => {
     if (learnModeActive) {
@@ -406,6 +418,7 @@ export function TimelineToolbar({
       <div className="lt-timeline-meta">
         <div className="lt-timeline-controls lt-bottom-controls">
           <ViewModeSwitcher value={viewMode} onChange={onViewModeChange} />
+          <ReturnToSetlistChip />
 
           {viewMode === "compact" ? (
             <button
@@ -452,38 +465,7 @@ export function TimelineToolbar({
             })}
             onClick={onToggleSnap}
           >
-            {/* Horseshoe-magnet glyph drawn as inline SVG. Material
-                Symbols' `magnet` names aren't in this build so we ship
-                the shape ourselves: two thick parallel arms joined by a
-                wide rounded curve at the bottom, with the two pole tips
-                at the top — this reads as a magnet at small sizes much
-                better than the previous U-with-tick-marks attempt. When
-                snap is off we overlay a diagonal slash so the toggle
-                state is unmistakable without relying on colour. */}
-            <svg
-              className="lt-snap-icon"
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              {/* Left arm — vertical bar from top tip down to the curve */}
-              <line x1="5.5" y1="4" x2="5.5" y2="13" />
-              {/* Right arm — mirror of the left */}
-              <line x1="18.5" y1="4" x2="18.5" y2="13" />
-              {/* Bottom curve joining both arms */}
-              <path d="M5.5 13a6.5 6.5 0 0 0 13 0" />
-              {/* Pole tips (small horizontal caps so it reads as a
-                  magnet, not a tuning fork) */}
-              <line x1="3" y1="4" x2="8" y2="4" />
-              <line x1="16" y1="4" x2="21" y2="4" />
-              {!snapEnabled ? <line x1="4" y1="20" x2="20" y2="4" /> : null}
-            </svg>
+            <SnapIcon enabled={snapEnabled} />
           </button>
 
           {viewMode === "daw" ? (
@@ -497,7 +479,7 @@ export function TimelineToolbar({
               }
               aria-pressed={followPlayheadEnabled}
               title={t("timelineToolbar.followPlayheadTitle")}
-              disabled={controlsDisabled}
+              disabled={isProjectEmpty && !learnModeActive}
               onClick={onToggleFollowPlayhead}
             >
               <span className="material-symbols-outlined">my_location</span>
@@ -510,7 +492,11 @@ export function TimelineToolbar({
             summary={
               vampMode === "bars"
                 ? `${vampBars} bars`
-                : t("timelineToolbar.vampSectionOption")
+                : t(vampMode === "section_marker"
+                    ? "transport.jumpMode.sectionMarker"
+                    : vampMode === "cue"
+                      ? "transport.jumpMode.cueMarker"
+                      : "transport.jumpMode.anyMarker")
             }
             open={openGroup === "vamp"}
             onToggleOpen={() =>
@@ -620,8 +606,19 @@ export function TimelineToolbar({
                   )
                 }
               >
-                {t("timelineToolbar.vampSectionOption")}
+                {t("transport.jumpMode.anyMarker")}
               </button>
+              {(["section_marker", "cue"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={vampMode === mode ? "is-active" : ""}
+                  disabled={controlsDisabled}
+                  onClick={() => handleModeButtonClick(`action:set_vamp_mode_${mode}`, () => onVampModeChange(mode))}
+                >
+                  {t(mode === "section_marker" ? "transport.jumpMode.sectionMarker" : "transport.jumpMode.cueMarker")}
+                </button>
+              ))}
               <button
                 type="button"
                 className={vampMode === "bars" ? "is-active" : ""}
@@ -762,6 +759,17 @@ export function TimelineToolbar({
               >
                 {t("transport.jumpMode.nextMarker")}
               </button>
+              {(["next_section", "next_cue"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={globalJumpMode === mode ? "is-active" : ""}
+                  disabled={controlsDisabled}
+                  onClick={() => handleModeButtonClick(`action:set_global_jump_mode_${mode}`, () => onGlobalJumpModeChange(mode))}
+                >
+                  {t(mode === "next_section" ? "transport.jumpMode.nextSection" : "transport.jumpMode.nextCue")}
+                </button>
+              ))}
             </div>
           </ControlGroup>
 
@@ -892,6 +900,17 @@ export function TimelineToolbar({
               >
                 {t("transport.jumpMode.nextMarker")}
               </button>
+              {(["next_section", "next_cue"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={songJumpTrigger === mode ? "is-active" : ""}
+                  disabled={controlsDisabled}
+                  onClick={() => handleModeButtonClick(`action:set_song_jump_trigger_${mode}`, () => onSongJumpTriggerChange(mode))}
+                >
+                  {t(mode === "next_section" ? "transport.jumpMode.nextSection" : "transport.jumpMode.nextCue")}
+                </button>
+              ))}
             </div>
             <div className="lt-segmented-control lt-song-transition-row">
               <button

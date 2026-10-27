@@ -9,17 +9,13 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { appliedArrangementName } from "../structure/arrangementName";
 
 import {
   getEffectiveBpmAt,
   markerColor,
-  type ActiveVampSummary,
   type AppSettings,
-  type SectionMarkerSummary,
-  type SongChart,
-  type SongRegionSummary,
-  type SongView,
 } from "@libretracks/shared/models";
 import {
   buildLiveMarkerGroups,
@@ -45,28 +41,15 @@ import {
 import type { ViewMode } from "../uiStore";
 import { ViewModeSwitcher } from "../timeline/ViewModeSwitcher";
 import type { AccidentalPreference } from "@libretracks/shared/charts/personalChords";
+import type {
+  LiveViewSettings,
+  PerformanceBindings,
+} from "../songs/songViewBindings";
 import "./LivePerformanceView.css";
 
-/** The settings the live view reads: the jump modes. A network-session guest
- * only has the host's copy of these, not a whole `AppSettings`. */
-export type LiveViewSettings = Pick<
-  AppSettings,
-  | "globalJumpMode"
-  | "globalJumpBars"
-  | "songJumpTrigger"
-  | "songJumpBars"
-  | "songTransitionMode"
-  | "vampMode"
-  | "vampBars"
->;
+export type { LiveViewSettings };
 
-type LivePerformanceViewProps = {
-  song: SongView;
-  positionSecondsRef: { readonly current: number };
-  settings: LiveViewSettings;
-  pendingMarkerId: string | null;
-  pendingMarkerName: string | null;
-  activeVamp: ActiveVampSummary | null;
+type LivePerformanceViewProps = Omit<PerformanceBindings, "onSeek"> & {
   /** Absent when the view is not part of the editor (network-session guest
    * screen): then `headerStart` takes the view switcher's place. */
   onViewModeChange?: (mode: ViewMode) => void;
@@ -79,26 +62,6 @@ type LivePerformanceViewProps = {
   /** This device's own chord shift and spelling (network-session guests). */
   chartExtraSemitones?: number;
   chartAccidentals?: AccidentalPreference;
-  onMarkerAction: (marker: SectionMarkerSummary) => void;
-  onSongAction: (region: SongRegionSummary) => void;
-  /** Drag a setlist song to another position; `targetIndex` is its final
-   * position in start order (0 = first). */
-  onReorderSong?: (regionId: string, targetIndex: number) => void;
-  /** Replace a song's lyrics and chords (`null` removes them). */
-  onChartChange: (regionId: string, chart: SongChart | null) => Promise<void>;
-  onToggleVamp: () => void;
-  onCancelPendingJump: () => void;
-  onGlobalJumpModeChange: (mode: AppSettings["globalJumpMode"]) => void;
-  onGlobalJumpBarsChange: (bars: number) => void;
-  onSongJumpTriggerChange: (trigger: AppSettings["songJumpTrigger"]) => void;
-  onSongJumpBarsChange: (bars: number) => void;
-  onSongTransitionModeChange: (mode: AppSettings["songTransitionMode"]) => void;
-  onVampModeChange: (mode: AppSettings["vampMode"]) => void;
-  onVampBarsChange: (bars: number) => void;
-  /** The vamp between songs setting; the toggle shows only with a handler
-   * (not on a network-session guest, which has no settings of its own). */
-  vampBetweenSongs?: boolean;
-  onVampBetweenSongsChange?: (enabled: boolean) => void;
 };
 
 const CHART_OPEN_KEY = "lt.liveView.chartOpen";
@@ -186,8 +149,8 @@ function LivePerformanceViewComponent({
   activeVamp,
   onViewModeChange,
   headerStart,
-  canControl = true,
-  canEditChart = true,
+  canControl: allowControl = true,
+  canEditChart: allowEditChart = true,
   chartExtraSemitones = 0,
   chartAccidentals = "auto",
   onMarkerAction,
@@ -206,6 +169,9 @@ function LivePerformanceViewComponent({
   onVampBetweenSongsChange,
   onVampBarsChange,
 }: LivePerformanceViewProps) {
+  const permissions = useNetworkPermissions();
+  const canControl = allowControl && permissions.canControl;
+  const canEditChart = allowEditChart && permissions.canEdit;
   const { t } = useTranslation();
   const allGroups = useMemo(
     () => buildLiveMarkerGroups(song.sectionMarkers),
@@ -345,18 +311,24 @@ function LivePerformanceViewComponent({
   }, [selectedPlayback.activeGroupId]);
 
   const jumpOptions = [
+    { value: "next_section", label: t("transport.jumpMode.sectionMarker") },
+    { value: "next_cue", label: t("transport.jumpMode.cueMarker") },
     { value: "immediate", label: t("liveView.immediate") },
     { value: "after_bars", label: t("liveView.afterBars") },
     { value: "next_marker", label: t("liveView.nextMarker") },
   ];
   const songJumpOptions = [
+    { value: "next_section", label: t("transport.jumpMode.sectionMarker") },
+    { value: "next_cue", label: t("transport.jumpMode.cueMarker") },
     { value: "immediate", label: t("liveView.immediate") },
     { value: "region_end", label: t("liveView.regionEnd") },
     { value: "after_bars", label: t("liveView.afterBars") },
     { value: "next_marker", label: t("liveView.nextMarker") },
   ];
   const vampOptions = [
-    { value: "section", label: t("liveView.section") },
+    { value: "section", label: t("transport.jumpMode.anyMarker") },
+    { value: "section_marker", label: t("transport.jumpMode.sectionMarker") },
+    { value: "cue", label: t("transport.jumpMode.cueMarker") },
     { value: "bars", label: t("liveView.bars") },
   ];
   const songTransitionOptions = [
@@ -605,11 +577,11 @@ function LivePerformanceViewComponent({
                     {isVampAnchor ? (
                       <em
                         className="is-vamp"
-                        title={settings.vampMode === "section"
+                        title={settings.vampMode !== "bars"
                           ? t("liveView.vampSectionFeedback")
                           : t("liveView.vampBarsFeedback", { count: settings.vampBars })}
                       >
-                        {settings.vampMode === "section"
+                        {settings.vampMode !== "bars"
                           ? t("liveView.vampSectionBadge")
                           : t("liveView.vampBarsBadge", { count: settings.vampBars })}
                       </em>

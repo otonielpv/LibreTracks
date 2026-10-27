@@ -6,8 +6,12 @@ import {
   cancelExportChoice,
   finishExportWithChoice,
   importFromCloud,
+  importSongWithChoice,
 } from "./cloudFlows";
 import { useCloudStore } from "./cloudStore";
+import { recordProductEvent } from "../../telemetry/telemetry";
+
+vi.mock("../../telemetry/telemetry", () => ({ recordProductEvent: vi.fn() }));
 
 vi.mock("../desktopApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../desktopApi")>()),
@@ -101,6 +105,7 @@ describe("paquete de paso de una importacion desde Drive", () => {
     } as never);
     vi.mocked(downloadFromCloud).mockReset().mockResolvedValue(staged);
     vi.mocked(discardStagedPackage).mockClear();
+    vi.mocked(recordProductEvent).mockClear();
   });
 
   /** Elige el archivo en el selector como haria el modal. */
@@ -123,6 +128,21 @@ describe("paquete de paso de una importacion desde Drive", () => {
 
     finishImport();
     expect(await flow).toBe(true);
+    expect(discardStagedPackage).toHaveBeenCalledWith(staged);
+    expect(recordProductEvent).toHaveBeenCalledWith("feature_cloud");
+  });
+
+  it("la importacion de una cancion pregunta el origen y reusa el importador con la ruta descargada", async () => {
+    const runImport = vi.fn(async (_sourcePath?: string) => {});
+    const flow = importSongWithChoice(runImport);
+    const choice = useCloudStore.getState().pendingChoice;
+    expect(choice).toMatchObject({ intent: "import", kind: "song" });
+
+    choice!.resolve("cloud");
+    await pick();
+    await flow;
+
+    expect(runImport).toHaveBeenCalledWith(staged);
     expect(discardStagedPackage).toHaveBeenCalledWith(staged);
   });
 

@@ -2,6 +2,9 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SongChart, SongRegionSummary, SongView } from "@libretracks/shared/models";
+import { recordProductEvent } from "../../telemetry/telemetry";
+
+vi.mock("../../telemetry/telemetry", () => ({ recordProductEvent: vi.fn() }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -91,6 +94,7 @@ const lineTexts = (container: HTMLElement, selector: string) =>
 
 describe("LiveChartPanel", () => {
   beforeEach(() => {
+    vi.mocked(recordProductEvent).mockClear();
     window.localStorage.clear();
     HTMLElement.prototype.scrollTo = vi.fn() as never;
   });
@@ -104,6 +108,12 @@ describe("LiveChartPanel", () => {
     expect(container.querySelector(".lt-chart-section.is-current .lt-chart-section-label")?.textContent).toBe("EstrofaVerso 1");
     // No "up next" chip: the lyrics below already show it.
     expect(screen.queryByTitle("liveChart.upNext")).toBeNull();
+    expect(recordProductEvent).toHaveBeenCalledWith("feature_lyrics_chords");
+  });
+
+  it("does not count an empty lyrics panel as adoption", () => {
+    renderPanel(region(null), { current: 0 });
+    expect(recordProductEvent).not.toHaveBeenCalled();
   });
 
   it("scrolls so the current line sits near the top of the panel", () => {
@@ -290,6 +300,27 @@ describe("LiveChartPanel", () => {
         { markerId: "chorus", section: 1 },
       ],
     });
+  });
+
+  // Setlist's Edit → Lyrics opens the panel with its editor; Live never asks.
+  it("opens with the chart editor only when asked to (startEditing)", () => {
+    const { unmount } = renderPanel(region(null), { current: 0 });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    unmount();
+    render(
+      <LiveChartPanel
+        song={songView(region(null))}
+        region={region(null)}
+        positionSecondsRef={{ current: 0 }}
+        pendingMarkerId={null}
+        expanded={false}
+        onToggleExpanded={vi.fn()}
+        onClose={vi.fn()}
+        onChartChange={vi.fn(async () => {})}
+        startEditing
+      />,
+    );
+    expect(screen.getByRole("dialog", { name: "liveChart.editorTitle" })).toBeTruthy();
   });
 
   it("offers import and typing when the song has no lyrics", () => {

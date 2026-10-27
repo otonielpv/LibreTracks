@@ -6,12 +6,35 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { GUEST_COMMAND_ROUTES } from "./guestCommandTable";
-import { guestRouteFor } from "./guestRouting";
+import { guestCanInvoke, guestRouteFor } from "./guestRouting";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../../..");
 
 describe("guest mirror routing", () => {
+  it("checks every classified command against the same minimum role as the host", () => {
+    for (const [command, access] of Object.entries(GUEST_COMMAND_ROUTES)) {
+      for (const role of [null, "viewer", "controller", "editor"] as const) {
+        const expected = access === "local" || access === "view" ||
+          ((access === "control" || access === "custom") && (role === "controller" || role === "editor")) ||
+          (access === "edit" && role === "editor");
+        expect(guestCanInvoke(role, command), `${role}: ${command}`).toBe(expected);
+      }
+    }
+    expect(guestCanInvoke("editor", "unclassified")).toBe(false);
+  });
+
+  it("routes video state and live controls to the host, but not its display setup", () => {
+    for (const command of ["video_live_state", "video_output_status", "video_media_status", "video_live_action", "video_scrub", "get_pads_catalog", "load_pad_key"]) {
+      expect(guestRouteFor(command)).toBe("host");
+    }
+    expect(guestCanInvoke("viewer", "video_live_state")).toBe(true);
+    expect(guestCanInvoke("viewer", "video_live_action")).toBe(false);
+    expect(guestCanInvoke("controller", "video_live_action")).toBe(true);
+    expect(guestCanInvoke("controller", "load_pad_key")).toBe(false);
+    expect(guestCanInvoke("editor", "load_pad_key")).toBe(true);
+    expect(guestRouteFor("video_apply_settings")).toBe("local");
+  });
   it("session commands go to the host, device ones stay, files are blocked", () => {
     expect(guestRouteFor("get_song_view")).toBe("host");
     expect(guestRouteFor("play_transport")).toBe("host");

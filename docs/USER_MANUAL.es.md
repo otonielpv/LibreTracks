@@ -186,6 +186,8 @@ Esto te permite reaccionar en tiempo real si la banda alarga un estribillo, se s
 
 Usa `Vamp` para mantener la reproduccion en un bucle musical cuando la banda o la accion de escenario necesita mas tiempo. `Modo Vamp` puede repetir la `Seccion` actual (Las esccines están delimitadas por los marcadores) o un nume-ro fijo de `Compases`. Pulsa `Vamp` de nuevo para salir del bucle.
 
+Salir de Vamp no cambia los ajustes de tono ni de warp. Con warp activado, mantén `T` activado en los instrumentos que deban seguir los cambios de tono de la canción y desactivado en las pistas de clic/guía que deban conservar su tono original. Desactivar `T` no desactiva warp: esas pistas siguen el tempo compartido.
+
 ![Configuración del Vamp](../screenshots/Vamp-Config.png)
 
 ### Saltos de cancion y transiciones
@@ -208,6 +210,8 @@ Un arreglo cambia la forma de una canción sin montar saltos: dos coros más al 
 3. Pulsa `Guardar como original`. LibreTracks guarda la canción tal como está para poder montar cualquier arreglo y volver al original cuando quieras. Si alguna marca no cae en el primer tiempo de un compás, te avisa y te ofrece `Ajustar al compás`.
 4. **Monta el arreglo**: arriba tienes las secciones de la canción. Haz click en una para añadirla al final, o arrástrala a la tira de abajo para meterla donde la sueltes. En la tira, arrastra los bloques para cambiarlos de orden, `Supr` quita el bloque seleccionado y `Ctrl+D` lo duplica.
 5. Pulsa `Aplicar`. El timeline muestra el resultado y las canciones siguientes se colocan detrás, en su compás.
+
+En la vista Setlist, al editar secciones o arreglos, la regla sobre la onda usa la numeración global de compases y muestra pulsos y subdivisiones al acercar el zoom. Puedes arrastrar el playhead por toda la onda, incluso entre secciones. Con `Snap to Grid` activado, se ajusta a la división visible más cercana (compás, pulso o subdivisión); desactívalo para moverlo libremente. El seguimiento automático del playhead solo desplaza la vista mientras Playback está reproduciendo. El arreglo también admite zoom: usa `Ctrl` + rueda o el gesto de zoom del trackpad en escritorio, y los botones `+`/`−` del editor en móvil.
 
 Puedes guardar varios arreglos de la misma canción (`Nuevo`, `Renombrar`, `Eliminar`) y cambiar de uno a otro desde el selector. El primero del selector es siempre `Original`: elígelo y pulsa `Aplicar` para devolver la canción a como era (los arreglos no se borran). El original no se puede borrar ni renombrar; si cambias sus bloques, se crea un arreglo nuevo a partir de él. Si te equivocaste al guardarlo (faltaba una marca, una sección estaba mal puesta), corrige la canción en el timeline y usa `Volver a guardar el original`.
 
@@ -270,6 +274,7 @@ LibreTracks puede proyectar vídeos (letras, fondos, clips) sincronizados con el
 
 1. Arrastra un vídeo (`.mp4`, `.mov`, `.mkv`, `.webm`…) desde el explorador al timeline o a la biblioteca. Si lo sueltas sobre una pista de audio, se crea una pista de vídeo al lado.
 2. El clip de vídeo se mueve, recorta, divide, duplica y borra como uno de audio, y tiene fundidos de entrada y salida y su propio encaje (clic derecho).
+   En la Vista Setlist, abre `Editar → Vídeo` para ajustar los clips sobre la onda de la canción: arrastra el cuerpo para moverlo, los bordes para recortarlo y los tiradores superiores para cambiar los fundidos. El botón de duplicar está junto a cada clip; el menú conserva las demás acciones.
 3. Si el vídeo trae sonido, LibreTracks pregunta si quieres **extraerlo como pista de audio**: queda en una pista nueva justo debajo, alineada con el vídeo. Puedes marcar "Recordar mi elección", y hacerlo más tarde con clic derecho → `Extraer audio`.
 
 ### Configurar la pantalla
@@ -346,7 +351,7 @@ El móvil o la tablet manda el audio **y** el vídeo: el proyector muestra solo 
 - **Desde el propio dispositivo:** `Añadir vídeo del dispositivo` en el menú de una pista de vídeo, en el `+` de pistas o en la biblioteca. El vídeo **se copia** a la carpeta de la sesión (para que viaje con ella), después de decirte cuánto ocupa.
 - Un vídeo que el móvil no sabe decodificar (por ejemplo ProRes en Android, o HEVC de 10 bits en un móvil sencillo) aparece como **No reproducible en este dispositivo**: no se borra y sigue sonando su audio si lo extrajiste en el ordenador.
 
-**Editar en el timeline:** igual que los clips de audio en el móvil: toca un clip para seleccionarlo y arrástralo (o sus bordes, o las asas de fundido) ya seleccionado. Extraer el audio de un vídeo solo se puede hacer en el ordenador.
+**Editar en el timeline y en la Vista Setlist:** igual que los clips de audio en el móvil: toca un clip para seleccionarlo y arrástralo (o sus bordes, o las asas de fundido) ya seleccionado. En `Editar → Vídeo`, duplicar está junto al clip y el menú muestra el resto de acciones. Extraer el audio de un vídeo solo se puede hacer en el ordenador.
 
 **Gama baja:** algunos móviles solo tienen un decodificador de vídeo. Entonces el indicador dice "Un solo reproductor": los saltos de sección pueden congelar la imagen un instante, pero el audio no se ve afectado.
 
@@ -374,6 +379,33 @@ LibreTracks desktop puede publicar una superficie web remota para controlar tran
 ![Vista de mixer remote](../screenshots/Remote_Mixer.png)
 
 > Sugerencia de flujo en directo: deja al operador desktop centrado en timeline/arreglo y asigna a una segunda persona los ajustes de mezcla/cues desde el remote.
+
+### Sesiones de red entre dispositivos LibreTracks
+
+`Sesion de red` conecta otra instalacion de LibreTracks al anfitrion; es
+distinta del control web `Remote`. El invitado puede elegir DAW, Setlist,
+Compacta o Live sin cambiar la vista del anfitrion.
+
+| Rol | Acciones sobre el anfitrion |
+| --- | --- |
+| Espectador | Consultar canciones, secciones, letras, mezcla y estado de video. Seleccionar una cancion para verla no dispara un salto. |
+| Controlador | Lo anterior, mas transporte, saltos (incluidos proxima seccion y proximo cue), vamp, orden de canciones, transiciones, pausa al final, vamp entre canciones, duracion del fade-stop y control de salida de video. |
+| Editor | Lo anterior, mas mezcla, metronomo, guia de voz, pads ya instalados, modo de medicion de niveles y edicion de canciones, secciones, arreglos, clips, MIDI y automatizacion. Incluye borrar, deshacer y rehacer. |
+
+Los controles no permitidos se desactivan y se actualizan si el anfitrion cambia
+el rol o se pierde la conexion. El anfitrion tambien valida cada comando.
+Negro, fundido a negro y activar/desactivar la salida de video actuan sobre
+el anfitrion, cuyo estado se refleja en los invitados.
+
+El idioma y las preferencias de navegacion/seguimiento del cursor se guardan
+solo en el dispositivo invitado. Los ajustes de reproduccion autorizados se
+guardan en el anfitrion y se aplican a su motor. Cambiar el sonido del click,
+la guia o los pads no sobrescribe otros ajustes ni las rutas de audio.
+
+Importar, exportar, analizar/renderizar, guardar el proyecto, gestionar archivos
+o instalar pads requiere hacerlo en el anfitrion. Sus dispositivos de audio,
+puertos MIDI, carpetas, rutas auxiliares y configuracion de pantallas tampoco
+se reconfiguran desde el invitado.
 
 ## 7. Solucion de problemas
 

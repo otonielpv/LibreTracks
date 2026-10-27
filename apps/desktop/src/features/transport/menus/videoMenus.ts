@@ -1,7 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 
 import { promptDialog } from "../../../shared/dialog/dialogService";
-import { deleteTrack, isMobileApp, updateTrack } from "../desktopApi";
+import { deleteTrack, isGuestMirrorMode, isMobileApp, updateTrack } from "../desktopApi";
 import type { TrackSummary, VideoClipSummary, VideoFit } from "@libretracks/shared/models";
 import type { ContextMenuAction } from "../types";
 import type { VideoClipHandlers } from "../video/videoClipHandlers";
@@ -68,6 +68,7 @@ export function createVideoMenus(
         ? [
             {
               label: t("transport.video.menu.extractAudio"),
+              disabled: isGuestMirrorMode(),
               onSelect: () => video.extractAudio(clip.id),
             },
           ]
@@ -100,7 +101,7 @@ export function createVideoMenus(
     return [
       // Phone: copy a video from the device onto this track at the playhead
       // (plan video-mobile, paso 08 §3).
-      ...(isMobileApp && video
+      ...(isMobileApp && !isGuestMirrorMode() && video
         ? [
             {
               label: t("transport.video.addFromGallery"),

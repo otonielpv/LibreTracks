@@ -34,6 +34,7 @@ import type {
   WaveformReadyEvent,
   WaveformSummaryDto,
 } from "../features/transport/desktopApi";
+import { markerCategory } from "../features/transport/desktopApi";
 
 type PlaybackState = TransportSnapshot["playbackState"];
 
@@ -1577,23 +1578,25 @@ export const testDesktopApiMock = {
     return clone(buildSnapshot());
   },
   prewarmTimelineSeek: async (_positionSeconds: number) => {},
-  toggleVamp: async (mode: "section" | "bars", bars?: number) => {
+  toggleVamp: async (mode: AppSettings["vampMode"], bars?: number) => {
     if (state.activeVamp) {
       state.activeVamp = null;
       return clone(buildSnapshot());
     }
 
-    if (mode === "section") {
+    if (mode !== "bars") {
+      const markers = [...state.song.sectionMarkers].sort((left, right) => left.startSeconds - right.startSeconds);
       const currentMarker =
-        [...state.song.sectionMarkers]
+        [...markers]
           .reverse()
           .find(
             (marker) => state.playbackPositionSeconds >= marker.startSeconds,
           ) ?? null;
       const startSeconds = currentMarker?.startSeconds ?? 0;
       const endSeconds =
-        state.song.sectionMarkers.find(
-          (marker) => marker.startSeconds > startSeconds,
+        markers.find(
+          (marker) => marker.startSeconds > startSeconds &&
+            (mode === "section" || markerCategory(marker) === (mode === "cue" ? "cue" : "section")),
         )?.startSeconds ?? state.song.durationSeconds;
       state.activeVamp = { startSeconds, endSeconds };
       return clone(buildSnapshot());
@@ -1626,12 +1629,13 @@ export const testDesktopApiMock = {
       return clone(buildSnapshot());
     }
 
-    if (trigger === "next_marker") {
+    if (trigger === "next_marker" || trigger === "next_section" || trigger === "next_cue") {
       const hasMarkerAhead = state.song.sectionMarkers.some(
-        (entry) => entry.startSeconds > state.playbackPositionSeconds,
+        (entry) => entry.startSeconds > state.playbackPositionSeconds &&
+          (trigger === "next_marker" || markerCategory(entry) === (trigger === "next_cue" ? "cue" : "section")),
       );
       state.pendingMarkerJump = hasMarkerAhead
-        ? createPendingJump(marker, "next_marker")
+        ? createPendingJump(marker, trigger)
         : null;
       return clone(buildSnapshot());
     }
@@ -1671,9 +1675,10 @@ export const testDesktopApiMock = {
       return clone(buildSnapshot());
     }
 
-    if (trigger === "next_marker") {
+    if (trigger === "next_marker" || trigger === "next_section" || trigger === "next_cue") {
       const hasMarkerAhead = state.song.sectionMarkers.some(
-        (entry) => entry.startSeconds > state.playbackPositionSeconds,
+        (entry) => entry.startSeconds > state.playbackPositionSeconds &&
+          (trigger === "next_marker" || markerCategory(entry) === (trigger === "next_cue" ? "cue" : "section")),
       );
       state.pendingMarkerJump = hasMarkerAhead
         ? createPendingJump(
@@ -1682,7 +1687,7 @@ export const testDesktopApiMock = {
               name: region.name,
               startSeconds: region.startSeconds,
             },
-            "next_marker",
+            trigger,
             transitionLabel,
           )
         : null;

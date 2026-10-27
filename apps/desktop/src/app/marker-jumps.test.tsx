@@ -42,6 +42,20 @@ import {
 } from "../test/testUtils";
 
 describe("App / marker-jumps", () => {
+  it.each([
+    ["next_section", en.transport.jumpMode.nextSection],
+    ["next_cue", en.transport.jumpMode.nextCue],
+  ] as const)("saves the %s marker and song jump modes", async (trigger, label) => {
+    const desktopApi = await import("../features/transport/desktopApi");
+    const saveSpy = vi.mocked(desktopApi.updateAudioSettings);
+    saveSpy.mockClear();
+    await renderApp();
+    await chooseMarkerJumpMode(label);
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({ globalJumpMode: trigger })));
+    await chooseSongJumpTrigger(label);
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({ songJumpTrigger: trigger })));
+  });
+
   it("shows the marker context menu on right click", async () => {
     await renderApp();
 

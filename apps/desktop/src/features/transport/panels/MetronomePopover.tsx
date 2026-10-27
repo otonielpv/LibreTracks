@@ -1,5 +1,7 @@
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
+import { NetworkControls } from "../../network/NetworkControls";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 import type { AppSettings } from "@libretracks/shared/models";
 import {
@@ -33,30 +35,27 @@ type Props = {
   onMidiLearnTarget: (command: string) => void;
 };
 
-function MetronomePopoverImpl({
-  open,
-  anchorRef,
+type ControlsProps = Omit<Props, "open" | "anchorRef" | "onClose">;
+
+/** The metronome's controls without the popover around them: the DAW's
+ * popover wraps them, and the Setlist console shows them inline. */
+export function MetronomeControls({
   settings,
   routeOptions,
   volumeDraft,
   midiLearnMode,
-  onClose,
   onEnabledChange,
   onOutputChange,
   onVolumeDraftChange,
   onCommitVolume,
   onSoundChange,
   onMidiLearnTarget,
-}: Props) {
+}: ControlsProps) {
+  const { isGuest } = useNetworkPermissions();
   const { t } = useTranslation();
 
   return (
-    <PopoverShell
-      open={open}
-      anchorRef={anchorRef}
-      ariaLabel={t("transport.shell.metronome", { defaultValue: "Metrónomo" })}
-      onClose={onClose}
-    >
+    <NetworkControls permission="edit">
       <header className="lt-pads-popover-header">
         <span className="material-symbols-outlined" aria-hidden="true">
           music_note
@@ -93,6 +92,7 @@ function MetronomePopoverImpl({
           <select
             className="lt-pads-select"
             value={settings.metronomeOutput}
+            disabled={isGuest}
             onChange={(event) => onOutputChange(event.target.value)}
           >
             {routeOptions.map((option) => (
@@ -380,9 +380,29 @@ function MetronomePopoverImpl({
                 }
               />
             </div>
-          </>
-        ) : null}
-      </div>
+        </>
+      ) : null}
+    </div>
+    </NetworkControls>
+  );
+}
+
+function MetronomePopoverImpl({
+  open,
+  anchorRef,
+  onClose,
+  ...controls
+}: Props) {
+  const { t } = useTranslation();
+
+  return (
+    <PopoverShell
+      open={open}
+      anchorRef={anchorRef}
+      ariaLabel={t("transport.shell.metronome", { defaultValue: "Metrónomo" })}
+      onClose={onClose}
+    >
+      <MetronomeControls {...controls} />
     </PopoverShell>
   );
 }

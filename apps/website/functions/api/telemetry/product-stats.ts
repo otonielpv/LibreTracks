@@ -40,6 +40,17 @@ const FEATURE_EVENTS = [
   "feature_warp",
   "feature_midi",
   "feature_remote_panel",
+  "feature_setlist_view",
+  "feature_video",
+  "feature_lyrics_chords",
+  "feature_cloud",
+  "feature_network_host",
+  "feature_network_guest",
+  "feature_audio_render",
+  "feature_song_analysis",
+  "feature_level_songs",
+  "feature_midi_learn",
+  "feature_vamp",
 ] as const;
 
 const ACTIVATION_EVENTS = [

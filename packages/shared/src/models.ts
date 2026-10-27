@@ -14,6 +14,8 @@ export type TrackKind = "audio" | "folder" | "midi" | "video";
 export type JumpTriggerLabel =
   | "immediate"
   | "next_marker"
+  | "next_section"
+  | "next_cue"
   | "region_end"
   | `after_bars:${number}`;
 export type TransitionTypeLabel = "instant" | `fade_out:${number}`;
@@ -1438,9 +1440,9 @@ export type AppSettings = {
    * keeps sounding between songs, which is the point of an ambient pad.
    */
   padStopWithTransport: boolean;
-  globalJumpMode: "immediate" | "after_bars" | "next_marker";
+  globalJumpMode: "immediate" | "after_bars" | "next_marker" | "next_section" | "next_cue";
   globalJumpBars: number;
-  songJumpTrigger: "immediate" | "region_end" | "after_bars" | "next_marker";
+  songJumpTrigger: "immediate" | "region_end" | "after_bars" | "next_marker" | "next_section" | "next_cue";
   songJumpBars: number;
   songTransitionMode: "instant" | "fade_out";
   /** Length of the «Fade out y parar» live action, in seconds (0.1–30). */
@@ -1450,7 +1452,7 @@ export type AppSettings = {
   libraryMode: "folders" | "classic";
   /** Disk folders added to the folder library. Global, not per session. */
   libraryPlaces: string[];
-  vampMode: "section" | "bars";
+  vampMode: "section" | "section_marker" | "cue" | "bars";
   vampBars: number;
   /**
    * When true the transport pauses by itself at the end of each song (region)
@@ -1755,12 +1757,16 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     settings.padOutput?.trim().toLowerCase() || DEFAULT_APP_SETTINGS.padOutput;
   const globalJumpMode =
     settings.globalJumpMode === "after_bars" ||
+    settings.globalJumpMode === "next_section" ||
+    settings.globalJumpMode === "next_cue" ||
     settings.globalJumpMode === "next_marker"
       ? settings.globalJumpMode
       : DEFAULT_APP_SETTINGS.globalJumpMode;
   const songJumpTrigger =
     settings.songJumpTrigger === "after_bars" ||
     settings.songJumpTrigger === "region_end" ||
+    settings.songJumpTrigger === "next_section" ||
+    settings.songJumpTrigger === "next_cue" ||
     settings.songJumpTrigger === "next_marker"
       ? settings.songJumpTrigger
       : DEFAULT_APP_SETTINGS.songJumpTrigger;
@@ -1769,7 +1775,9 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
       ? settings.songTransitionMode
       : DEFAULT_APP_SETTINGS.songTransitionMode;
   const vampMode =
-    settings.vampMode === "bars"
+    settings.vampMode === "bars" ||
+    settings.vampMode === "section_marker" ||
+    settings.vampMode === "cue"
       ? settings.vampMode
       : DEFAULT_APP_SETTINGS.vampMode;
   const timelineNavigationScheme =

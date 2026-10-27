@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { TrackSummary } from "../desktopApi";
 import { CompactMixer } from "./CompactMixer";
@@ -16,6 +16,33 @@ vi.mock("react-i18next", () => ({
     },
   }),
 }));
+
+const originalPointerEvent = window.PointerEvent;
+beforeAll(() => {
+  class TestPointerEvent extends MouseEvent {
+    readonly pointerId: number;
+    readonly pointerType: string;
+    constructor(
+      type: string,
+      init: PointerEventInit & { pointerType?: string } = {},
+    ) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+      this.pointerType = init.pointerType ?? "mouse";
+    }
+  }
+  Object.defineProperty(window, "PointerEvent", {
+    configurable: true,
+    value: TestPointerEvent,
+  });
+});
+
+afterAll(() => {
+  Object.defineProperty(window, "PointerEvent", {
+    configurable: true,
+    value: originalPointerEvent,
+  });
+});
 
 const baseTrack = {
   volume: 1,
@@ -47,6 +74,7 @@ function renderMixer(
     onToggleFolder?: (trackId: string) => void;
     onTrackSelect?: () => void;
     onTrackDragStart?: () => void;
+    onTrackContextMenu?: () => void;
   } = {},
 ) {
   render(
@@ -63,7 +91,7 @@ function renderMixer(
         onCommitPan: vi.fn(),
         onAudioToChange: vi.fn(),
       }}
-      onTrackContextMenu={vi.fn()}
+      onTrackContextMenu={overrides.onTrackContextMenu ?? vi.fn()}
       selectedTrackIds={[]}
       onTrackSelect={overrides.onTrackSelect ?? vi.fn()}
       onTrackDragStart={overrides.onTrackDragStart ?? vi.fn()}
@@ -152,5 +180,29 @@ describe("CompactMixer folder folding", () => {
 
     expect(onTrackDragStart).toHaveBeenCalled();
     expect(onTrackSelect).toHaveBeenCalled();
+  });
+
+  it("opens the track menu on a long press without selecting the track", () => {
+    vi.useFakeTimers();
+    try {
+      const onTrackContextMenu = vi.fn();
+      const onTrackSelect = vi.fn();
+      renderMixer({ onTrackContextMenu, onTrackSelect });
+
+      fireEvent.pointerDown(within(stripFor("voz")).getByText("voz"), {
+        pointerType: "touch",
+        pointerId: 1,
+        button: 0,
+        clientX: 20,
+        clientY: 20,
+      });
+      vi.advanceTimersByTime(550);
+      fireEvent.click(within(stripFor("voz")).getByText("voz"));
+
+      expect(onTrackContextMenu).toHaveBeenCalledWith(expect.anything(), "voz");
+      expect(onTrackSelect).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

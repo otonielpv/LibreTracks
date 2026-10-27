@@ -18,6 +18,8 @@
  * compensated by the caller. Higher = snappier, lower = smoother.
  */
 export const FOLLOW_CAMERA_SMOOTHING = 0.22;
+/** Resume playhead-follow after this much manual-camera inactivity. */
+export const FOLLOW_CAMERA_MANUAL_PAUSE_MS = 3_000;
 /**
  * Distance (px) below which the camera locks rigidly to the goal instead of
  * easing. During steady playback the goal moves at the playhead's velocity, so
@@ -29,6 +31,13 @@ export const FOLLOW_CAMERA_SMOOTHING = 0.22;
  * we ease to soften it.
  */
 export const FOLLOW_CAMERA_LOCK_PX = 24;
+
+export function shouldPauseFollowCamera(
+  nowMs: number,
+  resumeAtMs: number,
+): boolean {
+  return nowMs < resumeAtMs;
+}
 
 /**
  * Frame-rate-compensated ease factor for the follow camera. The smoothing

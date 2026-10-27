@@ -1,0 +1,4790 @@
+/* Vista Setlist (docs/plans/setlist-view). Tres maquetas según el tamaño
+   del área de la vista: wide, medium y short (00-DISENO.md §4). Nada de
+   sombras ni blur caros: corre también en teléfonos de gama baja. */
+
+.lt-setlist-view {
+  --lt-setlist-bg: #090b0a;
+  --lt-setlist-surface: #151817;
+  --lt-setlist-surface-raised: #1c201f;
+  --lt-setlist-border: rgb(186 202 197 / 0.13);
+  --lt-setlist-text: #e9f1ee;
+  --lt-setlist-text-muted: rgb(233 241 238 / 0.62);
+  --lt-setlist-accent: #57f1db;
+  --lt-setlist-gap: 0.5rem;
+  --lt-setlist-pad: clamp(0.5rem, 1vw, 0.85rem);
+  flex: 1 1 auto;
+  min-height: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  gap: var(--lt-setlist-gap);
+  padding: var(--lt-setlist-pad);
+  overflow: hidden;
+  color: var(--lt-setlist-text);
+  background: var(--lt-setlist-bg);
+}
+
+.lt-setlist-zone {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.55rem;
+  background: var(--lt-setlist-surface);
+}
+
+.lt-setlist-bottom {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  gap: var(--lt-setlist-gap);
+}
+
+.lt-setlist-bottom > .lt-setlist-zone.is-mixer {
+  flex: 1 1 auto;
+}
+
+/* wide: fila de canciones, mapa, onda y consola (su alto, más abajo); el
+   cajón empuja. */
+
+/* medium: igual pero más apretada; el cajón es una hoja que sube desde abajo
+   y tapa el mezclador. */
+.lt-setlist-view.is-medium {
+  grid-template-rows: auto minmax(5rem, 0.6fr) minmax(10rem, 1.8fr);
+  --lt-setlist-gap: 0.35rem;
+}
+
+
+/* short: teléfono en horizontal. El mismo orden que Playback (canciones,
+   onda, consola), más apretado. Respeta la zona segura del notch. */
+.lt-setlist-view.is-short {
+  /* Canciones arriba y debajo la consola o la onda (se turnan). */
+  grid-template-rows: auto minmax(0, 1fr);
+  --lt-setlist-gap: 0.3rem;
+  --lt-setlist-pad: 0.3rem;
+  /* La izquierda NO suma la zona segura: la barra lateral de la app ya la
+     lleva en su ancho (en el iPhone 13 salía una franja negra de ~47 pt).
+     Derecha y abajo: la mayor de las dos, no la suma. */
+  padding-left: var(--lt-setlist-pad);
+  padding-right: max(var(--lt-setlist-pad), var(--lt-safe-area-right, 0px));
+  padding-bottom: max(var(--lt-setlist-pad), var(--lt-safe-area-bottom, 0px));
+}
+
+/* Consola plegada (medium y teléfono): la onda se queda el alto. */
+.lt-setlist-view.is-mixer-collapsed {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.lt-setlist-view.is-short .lt-setlist-zone.is-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border-radius: 0;
+  padding: var(--lt-safe-area-top, 0px) var(--lt-safe-area-right, 0px)
+    var(--lt-safe-area-bottom, 0px) var(--lt-safe-area-left, 0px);
+}
+
+.lt-setlist-tabs {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.lt-setlist-tab {
+  min-height: 2.75rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.45rem;
+  color: var(--lt-setlist-text-muted);
+  background: var(--lt-setlist-surface);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lt-setlist-tab.is-active {
+  color: var(--lt-setlist-text);
+  border-color: var(--lt-setlist-accent);
+}
+
+/* ---- Fila del setlist (paso 03) ---- */
+
+.lt-setlist-zone.is-songs {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-songs {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+  padding: 0.45rem;
+  overscroll-behavior: contain;
+}
+
+.lt-setlist-songs.is-horizontal {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.lt-setlist-songs.is-vertical {
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.lt-setlist-songs.is-package-drag {
+  outline: 2px dashed var(--lt-setlist-accent);
+  outline-offset: -2px;
+}
+
+.lt-setlist-song-item {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.lt-setlist-song-tile {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  width: 13rem;
+  min-height: 3.75rem;
+  padding: 0.45rem 0.5rem 0.55rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.55rem;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+}
+
+.lt-setlist-song-tile:has(.lt-setlist-song-grip) {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+}
+
+.lt-setlist-song-tile.is-medium {
+  width: 10.5rem;
+}
+
+.lt-setlist-song-tile.is-short {
+  width: 100%;
+  min-height: 2.75rem;
+  padding-block: 0.3rem;
+}
+
+.lt-setlist-song-tile.is-selected {
+  border-color: var(--lt-setlist-accent);
+  box-shadow: inset 0 0 0 1px var(--lt-setlist-accent);
+}
+
+.lt-setlist-song-tile.is-playing {
+  background: rgb(87 241 219 / 0.1);
+}
+
+.lt-setlist-song-tile.is-queued {
+  border-style: dashed;
+  border-color: #f2c45a;
+}
+
+.lt-setlist-song-tile.is-drop-target {
+  outline: 2px dashed var(--lt-setlist-accent);
+  outline-offset: -3px;
+}
+
+.lt-setlist-song-tile:focus-visible {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: 2px;
+}
+
+.lt-setlist-song-index {
+  min-width: 1.4rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--lt-setlist-text-muted);
+  text-align: center;
+}
+
+.lt-setlist-song-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.lt-setlist-song-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-song-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--lt-setlist-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-setlist-song-key {
+  color: var(--lt-setlist-accent);
+  font-weight: 700;
+}
+
+/* medium: el BPM pasa a la segunda línea, con la duración. */
+.lt-setlist-song-tile.is-medium .lt-setlist-song-meta {
+  flex-direction: column;
+}
+
+.lt-setlist-song-tile .lt-structure-badge {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.lt-setlist-song-actions {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.lt-setlist-song-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  cursor: pointer;
+}
+
+.lt-setlist-song-button:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.lt-setlist-song-progress {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: rgb(255 255 255 / 0.08);
+}
+
+.lt-setlist-song-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--lt-setlist-accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.lt-setlist-transition {
+  align-self: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.2rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lt-setlist-text-muted);
+  cursor: pointer;
+}
+
+.lt-setlist-transition .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.lt-setlist-transition.has-vamp {
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-transition-menu {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.4rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.5rem;
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-transition-menu > button {
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.lt-setlist-transition-menu > button.is-active {
+  border-color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-add-song {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 3.75rem;
+  padding: 0 0.4rem;
+  border: 1px dashed var(--lt-setlist-border);
+  border-radius: 0.55rem;
+}
+
+.lt-setlist-add-song.is-short {
+  min-height: 2.75rem;
+  width: 100%;
+}
+
+.lt-setlist-add-song-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2.25rem;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lt-setlist-add-song-button:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+/* Móvil: objetivos de 44 px. */
+html.lt-mobile .lt-setlist-song-button,
+html.lt-mobile .lt-setlist-add-song-button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+}
+
+/* ---- Banda de la canción: onda + secciones (pasos 04-05) ----
+   Una sola banda: la onda abajo y los bloques de sección encima, alineados
+   por la misma escala. Los bloques saltan a la sección; el playhead se mueve
+   arrastrando su asa. La fila de acciones va debajo. */
+
+.lt-setlist-zone.is-overview {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: "band" "actions";
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-zone.is-overview > .lt-setlist-overview {
+  grid-area: band;
+  min-height: 0;
+}
+
+.lt-setlist-zone.is-overview .lt-setlist-overview-canvas {
+  top: var(--lt-setlist-label-height);
+  height: calc(100% - var(--lt-setlist-label-height));
+}
+
+.lt-setlist-view {
+  --lt-setlist-label-height: 1.6rem;
+}
+
+.lt-setlist-map {
+  display: contents;
+}
+
+.lt-setlist-map-blocks {
+  grid-area: band;
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.lt-setlist-map-block {
+  --lt-setlist-block-color: #7c8a86;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-left: 2px solid var(--lt-setlist-block-color);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 14%, transparent);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  text-align: left;
+  pointer-events: auto;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+.lt-setlist-map-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--lt-setlist-label-height);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.4rem;
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 45%, #111514);
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.lt-setlist-view.is-editing .lt-setlist-map-block {
+  pointer-events: none;
+}
+
+.lt-setlist-bar-ruler {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(var(--lt-setlist-label-height) + 0.25rem);
+  height: 1.1rem;
+  z-index: 2;
+  color: var(--lt-setlist-text-muted);
+  pointer-events: none;
+}
+
+.lt-setlist-bar-ruler-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgb(255 255 255 / 0.24);
+}
+
+.lt-setlist-bar-ruler-tick.is-beat {
+  top: 0.3rem;
+  border-color: rgb(255 255 255 / 0.18);
+}
+
+.lt-setlist-bar-ruler-tick.is-subdivision {
+  top: 0.65rem;
+  border-color: rgb(255 255 255 / 0.12);
+}
+
+.lt-setlist-bar-ruler-label {
+  position: absolute;
+  top: 0;
+  left: 0.2rem;
+  padding: 0 0.15rem;
+  border-radius: 2px;
+  background: rgb(19 19 19 / 0.78);
+  color: var(--lt-setlist-text);
+  font-size: 0.68rem;
+  line-height: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-setlist-bar-ruler.is-arrangement {
+  top: calc(var(--lt-setlist-label-height) + 0.25rem);
+  height: 1.1rem;
+  z-index: 1;
+}
+
+.lt-setlist-bar-ruler.is-arrangement .lt-setlist-bar-ruler-label {
+  font-size: 0.62rem;
+}
+
+.lt-setlist-map-block.is-start,
+.lt-setlist-map-block.is-song {
+  background: transparent;
+}
+
+.lt-setlist-map-block.is-start .lt-setlist-map-label,
+.lt-setlist-map-block.is-song .lt-setlist-map-label {
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-map-block.is-active {
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 26%, transparent);
+}
+
+.lt-setlist-map-block.is-active .lt-setlist-map-label {
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 70%, #111514);
+}
+
+.lt-setlist-map-block.is-next .lt-setlist-map-label {
+  box-shadow: inset 0 -2px 0 var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-map-block.is-pending .lt-setlist-map-label {
+  box-shadow: inset 0 0 0 2px #f2c45a;
+}
+
+.lt-setlist-map-block.is-looping {
+  box-shadow: inset 0 0 0 2px var(--lt-setlist-accent);
+}
+
+.lt-setlist-map-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-map-bars,
+.lt-setlist-map-flag {
+  font-size: 0.72rem;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-map-flag {
+  color: #f2c45a;
+}
+
+.lt-setlist-map-digit {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-map-progress {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: rgb(255 255 255 / 0.12);
+}
+
+.lt-setlist-map-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--lt-setlist-text);
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
+}
+
+
+.lt-setlist-map-actions {
+  grid-area: actions;
+  padding: 0.25rem 0.35rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.lt-setlist-map-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 999px;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lt-setlist-map-action.is-active {
+  border-color: var(--lt-setlist-accent);
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-map.is-short .lt-setlist-map-action {
+  min-height: 2.75rem;
+  flex: 1 1 0;
+  justify-content: center;
+}
+
+.lt-setlist-map-hint {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--lt-setlist-text-muted);
+}
+
+
+/* ---- Onda de la canción (paso 05) ---- */
+
+.lt-setlist-overview {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  min-height: 3rem;
+  touch-action: none;
+}
+
+.lt-setlist-overview.is-wide {
+  min-height: 5rem;
+}
+
+.lt-setlist-overview.is-short {
+  min-height: 3rem;
+  /* Tocar hace seek; deslizar no hace scrub, así que el gesto puede ser scroll. */
+  touch-action: pan-y;
+}
+
+.lt-setlist-overview.is-seekable {
+  cursor: pointer;
+}
+
+.lt-setlist-overview-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.lt-setlist-overview-playhead {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--lt-setlist-accent);
+  visibility: hidden;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.lt-setlist-overview-playhead.is-dragging {
+  width: 3px;
+  margin-left: -1.5px;
+  background: #ffe2ab;
+  box-shadow: 0 0 8px rgb(255 226 171 / 0.55);
+}
+
+.lt-setlist-playhead-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -21px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 44px;
+  padding: 0 0 0.35rem;
+  border: 0;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.lt-setlist-playhead-handle .material-symbols-outlined {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 1.5rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.4rem;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-accent);
+  font-size: 1.1rem;
+}
+
+.lt-setlist-playhead-handle .material-symbols-outlined {
+  opacity: 0.8;
+}
+
+.lt-setlist-playhead-handle:hover .material-symbols-outlined,
+.lt-setlist-playhead-handle:focus-visible .material-symbols-outlined,
+.lt-setlist-overview-playhead.is-dragging .lt-setlist-playhead-handle .material-symbols-outlined {
+  opacity: 1;
+}
+
+.lt-setlist-overview.is-short .lt-setlist-playhead-handle .material-symbols-outlined {
+  opacity: 1;
+}
+
+/* medium: los bloques del mapa encima de la onda, alineados con ella por la
+   misma escala de tiempo (posiciones absolutas en %). */
+
+
+
+
+
+/* ---- Mezclador (paso 06) ---- */
+
+.lt-setlist-view.is-wide {
+  /* La onda es una banda (como en Playback); la consola se lleva el resto. */
+  /* The waveform takes whatever the other two leave: its fr must be 1 (fr
+     tracks summing under 1 only take that share of the free space, which
+     left a gap when the console had a fixed height). */
+  grid-template-rows: auto minmax(8rem, 1fr) var(--lt-setlist-mixer-height, minmax(14rem, 1.6fr));
+}
+
+.lt-setlist-zone.is-mixer {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-mixer-resize {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 6px;
+  z-index: 2;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.lt-setlist-mixer-resize:hover {
+  background: rgb(87 241 219 / 0.25);
+}
+
+.lt-setlist-mixer {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.4rem;
+}
+
+.lt-setlist-mixer-header {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.lt-setlist-mixer-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-right: auto;
+}
+
+.lt-setlist-mixer .lt-setlist-tab {
+  min-height: 2rem;
+}
+
+.lt-setlist-mixer-action,
+.lt-setlist-mixer-fold {
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 999px;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lt-setlist-mixer-action.is-active {
+  border-color: var(--lt-setlist-accent);
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-mixer-fold {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.4rem;
+}
+
+.lt-setlist-mixer-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.4rem;
+  background: rgb(242 196 90 / 0.12);
+  color: #f2d68a;
+  font-size: 0.8rem;
+}
+
+.lt-setlist-console {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 0.35rem;
+}
+
+.lt-setlist-console-tracks {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.lt-setlist-console-tracks > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+.lt-setlist-mixer.is-collapsed {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.lt-setlist-mixer-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 1rem;
+  overflow: auto;
+  padding: 0.25rem;
+}
+
+.lt-setlist-mixer-panel > section {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+/* ---- Modo Edición y ajustes de canción (paso 07) ---- */
+
+.lt-setlist-zone.is-songs > .lt-setlist-edit-button {
+  align-self: center;
+  margin-right: 0.45rem;
+}
+
+.lt-setlist-edit-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2.25rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 999px;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lt-setlist-edit-button.is-active {
+  border-color: #f2c45a;
+  background: rgb(242 196 90 / 0.16);
+  color: #f2d68a;
+}
+
+.lt-setlist-tabs > .lt-setlist-edit-button {
+  margin-left: auto;
+  min-height: 2.75rem;
+}
+
+/* En edición: «…» siempre visible y «+» destacado. */
+.lt-setlist-songs.is-editing .lt-setlist-song-actions {
+  opacity: 1;
+}
+
+.lt-setlist-songs.is-editing .lt-setlist-add-song {
+  border-color: #f2c45a;
+  border-style: solid;
+}
+
+.lt-setlist-map.is-editing .lt-setlist-map-block.is-selected {
+  outline: 2px solid #f2c45a;
+  outline-offset: -2px;
+}
+
+.lt-setlist-zone.is-drawer {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-drawer {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lt-setlist-drawer-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--lt-setlist-border);
+}
+
+.lt-setlist-drawer-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-drawer-modes {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-drawer-modes {
+  margin-left: 0.5rem;
+}
+
+.lt-setlist-drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.55rem;
+}
+
+
+.lt-setlist-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lt-setlist-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.lt-setlist-settings-section h3,
+.lt-setlist-settings-section h4 {
+  margin: 0;
+}
+
+.lt-setlist-settings-section h4 {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-settings-field {
+  display: grid;
+  grid-template-columns: minmax(6rem, 34%) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lt-setlist-settings-label {
+  font-size: 0.82rem;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-settings-control,
+.lt-setlist-settings-row,
+.lt-setlist-settings-choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.lt-setlist-settings-input {
+  min-width: 0;
+  flex: 1 1 5rem;
+  min-height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.35rem;
+  background: var(--lt-setlist-bg);
+  color: var(--lt-setlist-text);
+  font: inherit;
+}
+
+.lt-setlist-settings-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.4rem;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lt-setlist-settings-button.is-active {
+  border-color: var(--lt-setlist-accent);
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-settings-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.lt-setlist-settings-value,
+.lt-setlist-settings-unit {
+  min-width: 2rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+html.lt-mobile .lt-setlist-settings-button,
+html.lt-mobile .lt-setlist-settings-input,
+html.lt-mobile .lt-setlist-edit-button {
+  min-height: 2.75rem;
+}
+
+/* ---- Editar secciones (paso 08) ---- */
+
+.lt-setlist-section-layer {
+  grid-area: band;
+  position: relative;
+  z-index: 2;
+  min-height: 0;
+  pointer-events: none;
+}
+
+.lt-setlist-sections-strip > .lt-setlist-section-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.lt-setlist-section-handle {
+  --lt-setlist-block-color: #7c8a86;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  margin-left: -8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: ew-resize;
+  touch-action: none;
+  will-change: transform;
+  pointer-events: auto;
+}
+
+.lt-setlist-section-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--lt-setlist-block-color);
+}
+
+.lt-setlist-section-flag {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  max-width: 9rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0 0.3rem 0.3rem 0;
+  background: var(--lt-setlist-block-color);
+  color: #0b0d0c;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.lt-setlist-section-handle.is-selected .lt-setlist-section-flag {
+  outline: 2px solid #f2c45a;
+}
+
+/* Móvil: zona de agarre de 44 px; la onda no arrastra (hace scroll). */
+.lt-setlist-section-layer.is-touch {
+  cursor: default;
+}
+
+.lt-setlist-section-layer.is-touch .lt-setlist-section-handle {
+  width: 44px;
+  margin-left: -22px;
+}
+
+.lt-setlist-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 100%;
+}
+
+.lt-setlist-sections-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.lt-setlist-sections.is-short .lt-setlist-sections-bar {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.3rem 0;
+  background: var(--lt-setlist-surface);
+}
+
+.lt-setlist-sections.is-short .lt-setlist-settings-button {
+  flex: 1 1 0;
+  min-width: 2.75rem;
+  padding: 0;
+}
+
+.lt-setlist-sections.is-short .lt-setlist-sections-action-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.lt-setlist-sections-strip {
+  position: relative;
+  height: 9rem;
+  border-radius: 0.45rem;
+  background: var(--lt-setlist-bg);
+}
+
+.lt-setlist-sections-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-sections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lt-setlist-sections-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.3rem;
+  border-radius: 0.35rem;
+}
+
+.lt-setlist-sections-item.is-selected {
+  background: rgb(242 196 90 / 0.14);
+}
+
+.lt-setlist-sections-swatch {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+}
+
+.lt-setlist-sections-name {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.3rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lt-setlist-sections-position {
+  font-size: 0.75rem;
+  color: var(--lt-setlist-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Arreglo (paso 09) ---- */
+
+.lt-setlist-arrangement-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 999px;
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-arrangement-picker select {
+  border: 0;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  font: inherit;
+}
+
+.lt-setlist-arrangement {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.35rem;
+}
+
+.lt-setlist-arrangement-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.lt-setlist-arrangement-tools .lt-structure-toolbar {
+  flex-wrap: wrap;
+}
+
+/* ---- Pistas y audio (paso 10) ---- */
+
+.lt-setlist-tracks {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.4rem;
+}
+
+.lt-setlist-tracks-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.lt-setlist-tracks-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lt-setlist-tracks-empty {
+  margin: 0.5rem 0;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-track-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(8rem, 1fr) auto minmax(0, 2fr);
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0.15rem 0.4rem;
+  border-left: 3px solid var(--lt-track-color);
+  border-radius: 0.3rem;
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-track-row.is-selected {
+  outline: 1px solid var(--lt-setlist-accent);
+}
+
+.lt-setlist-tracks.is-short .lt-setlist-track-row {
+  grid-template-columns: auto auto minmax(0, 1fr);
+}
+
+.lt-setlist-tracks.is-short .lt-setlist-track-clips {
+  grid-column: 1 / -1;
+}
+
+.lt-setlist-track-grip {
+  cursor: grab;
+  color: var(--lt-setlist-text-muted);
+  touch-action: none;
+}
+
+.lt-setlist-track-fold {
+  border: 0;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  cursor: pointer;
+}
+
+.lt-setlist-track-name {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.lt-setlist-track-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-track-swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--lt-track-color, #7c8a86);
+}
+
+.lt-setlist-track-kind,
+.lt-setlist-track-hidden,
+.lt-setlist-track-route {
+  font-size: 0.72rem;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-track-clips {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.lt-setlist-track-clip {
+  max-width: 14rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.3rem;
+  background: var(--lt-setlist-bg);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: grab;
+}
+
+html.lt-mobile .lt-setlist-track-row {
+  min-height: 2.75rem;
+}
+
+/* ---- Correcciones tras la primera prueba (2026-10-25) ---- */
+
+/* Avisos (cues): asa con bandera abajo, para no tapar los nombres. */
+.lt-setlist-section-handle.is-cue .lt-setlist-section-flag {
+  top: auto;
+  bottom: 0;
+  border-radius: 0.3rem 0.3rem 0.3rem 0;
+  background: #f2c45a;
+}
+
+.lt-setlist-section-handle.is-cue::before {
+  background: #f2c45a;
+  opacity: 0.8;
+}
+
+/* El final de la canción: alarga o acorta la última sección. */
+.lt-setlist-section-handle.is-song-end {
+  margin-left: -16px;
+}
+
+.lt-setlist-section-handle.is-song-end::before {
+  width: 4px;
+  margin-left: -2px;
+  background: var(--lt-setlist-text);
+}
+
+/* El mezclador de Compacta trae «flex: 0 0 16rem» (allí es su alto); en la
+   consola horizontal eso era un ANCHO fijo. Aquí ocupa todo lo que queda.
+   NetworkControls intercala un fieldset con display: contents para invitados. */
+.lt-setlist-console-tracks .lt-compact-mixer {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border-top: 0;
+  background: transparent;
+}
+
+
+
+
+/* ---- Carriles de la canción (paso 11) ---- */
+
+.lt-setlist-lanes {
+  --lt-setlist-lane-header: 9rem;
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.35rem;
+  overflow: hidden;
+}
+
+.lt-setlist-lanes.is-short {
+  --lt-setlist-lane-header: 6.5rem;
+}
+
+.lt-setlist-lanes.is-names-collapsed {
+  --lt-setlist-lane-header: 1.6rem;
+}
+
+.lt-setlist-lanes.is-names-collapsed .lt-setlist-lane-name,
+.lt-setlist-lanes.is-names-collapsed .lt-setlist-lane-toggle {
+  display: none;
+}
+
+.lt-setlist-lanes-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.lt-setlist-lanes-toolbar-gap {
+  flex: 1 1 auto;
+}
+
+.lt-setlist-lanes-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.lt-setlist-lane-row {
+  display: flex;
+  min-height: 2rem;
+  border-bottom: 1px solid var(--lt-setlist-border);
+}
+
+.lt-setlist-lane-row.is-ruler {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 2.2rem;
+  background: var(--lt-setlist-surface);
+}
+
+.lt-setlist-lane-header {
+  flex: 0 0 var(--lt-setlist-lane-header);
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0 0.35rem;
+  border-left: 3px solid var(--lt-track-color, transparent);
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-lane-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-lane-toggle {
+  min-width: 1.6rem;
+  min-height: 1.5rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--lt-setlist-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lt-setlist-lane-toggle.is-active {
+  border-color: var(--lt-setlist-accent);
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-lane-cell {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-lanes-ruler {
+  cursor: pointer;
+}
+
+.lt-setlist-lanes-tick {
+  position: absolute;
+  bottom: 0;
+  height: 40%;
+  padding-left: 3px;
+  border-left: 1px solid var(--lt-setlist-border);
+  font-size: 0.68rem;
+  color: var(--lt-setlist-text-muted);
+  pointer-events: none;
+}
+
+.lt-setlist-lanes-section {
+  --lt-setlist-block-color: #7c8a86;
+  position: absolute;
+  top: 0;
+  padding: 0 0.3rem;
+  border-left: 2px solid var(--lt-setlist-block-color);
+  background: color-mix(in srgb, var(--lt-setlist-block-color) 40%, transparent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.lt-setlist-lane {
+  position: absolute;
+  inset: 0;
+}
+
+.lt-setlist-lane.is-drop-target {
+  background: rgb(87 241 219 / 0.08);
+}
+
+.lt-setlist-lane-clip {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  min-width: 2px;
+  border: 1px solid color-mix(in srgb, var(--lt-track-color, #7c8a86) 70%, transparent);
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--lt-track-color, #7c8a86) 30%, #111514);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  will-change: transform;
+}
+
+.lt-setlist-lane-clip.is-selected {
+  border-color: #f2c45a;
+  box-shadow: inset 0 0 0 1px #f2c45a;
+}
+
+.lt-setlist-lane-clip-wave {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.lt-setlist-lane-clip-name {
+  position: absolute;
+  top: 1px;
+  left: 0.3rem;
+  right: 0.3rem;
+  overflow: hidden;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.lt-setlist-lane-trim {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.lt-setlist-lane-trim.is-start {
+  left: 0;
+}
+
+.lt-setlist-lane-trim.is-end {
+  right: 0;
+}
+
+.lt-setlist-lanes-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  margin-left: -1px;
+  z-index: 4;
+  background: var(--lt-setlist-accent);
+  visibility: hidden;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Móvil: bordes de recorte de 44 px (sólo con el clip seleccionado). */
+html.lt-mobile .lt-setlist-lane-trim {
+  display: none;
+  width: 22px;
+}
+
+html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim {
+  display: block;
+}
+
+html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-start {
+  left: -11px;
+}
+
+html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
+  right: -11px;
+}
+
+.lt-setlist-lanes.is-short .lt-setlist-lanes-toolbar {
+  justify-content: space-around;
+  padding-bottom: var(--lt-safe-area-bottom, 0px);
+}
+
+/* ---- Segunda ronda de correcciones (2026-10-25) ---- */
+
+/* El Master es una tira de pista más (mismo marcado, ver
+   SetlistConsoleStrip): sólo se ancla a la derecha y lleva el acento. */
+.lt-setlist-console .lt-setlist-master-strip {
+  align-self: stretch;
+  height: auto;
+  margin-left: 0.25rem;
+}
+
+.lt-setlist-master-value {
+  justify-content: center;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--lt-setlist-text-muted);
+}
+
+/* Huecos donde una pista tiene paneo y salida: misma altura, invisibles. */
+.lt-setlist-strip-placeholder {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.lt-setlist-console.is-bar .lt-setlist-master-strip {
+  max-height: 12rem;
+}
+
+/* Panel de edición a toda la altura, junto a la banda y la consola (como el
+   inspector de Ableton): la onda y el mezclador siguen a la vista. */
+.lt-setlist-view.is-wide {
+  --lt-setlist-drawer-width: clamp(24rem, 32%, 32rem);
+}
+
+.lt-setlist-view.is-medium {
+  --lt-setlist-drawer-width: min(26rem, 46%);
+}
+
+.lt-setlist-view.is-editing:not(.is-short) {
+  grid-template-columns: minmax(0, 1fr) var(--lt-setlist-drawer-width);
+}
+
+.lt-setlist-view.is-editing:not(.is-short) > .lt-setlist-zone.is-songs {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.lt-setlist-view.is-editing:not(.is-short) > .lt-setlist-zone.is-overview {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.lt-setlist-view.is-editing:not(.is-short) > .lt-setlist-bottom {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.lt-setlist-view.is-editing:not(.is-short) > .lt-setlist-zone.is-drawer {
+  grid-column: 2;
+  grid-row: 2 / span 2;
+}
+
+.lt-setlist-drawer {
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.lt-setlist-drawer-header {
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.lt-setlist-drawer-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.lt-setlist-drawer-title > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-drawer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.5rem;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  cursor: pointer;
+}
+
+/* Las pestañas de modo, en su propia fila: iconos y texto legibles. */
+.lt-setlist-drawer-modes {
+  display: flex;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--lt-setlist-border);
+  overflow-x: auto;
+}
+
+.lt-setlist-drawer-tab {
+  display: inline-flex;
+  flex: 1 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+  padding: 0 0.8rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--lt-setlist-text-muted);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lt-setlist-drawer-tab.is-active {
+  border-color: var(--lt-setlist-accent);
+  background: rgb(87 241 219 / 0.12);
+  color: var(--lt-setlist-text);
+}
+
+.lt-setlist-drawer-body {
+  padding: 0.75rem;
+}
+
+.lt-setlist-drawer :focus-visible,
+.lt-setlist-view :focus-visible {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: 2px;
+}
+
+/* El formulario: tarjetas con título, controles de 40 px. */
+.lt-setlist-settings {
+  gap: 0.75rem;
+}
+
+.lt-setlist-settings-section {
+  gap: 0.6rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.6rem;
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-settings-section.is-plain {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.lt-setlist-settings-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.15rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-settings-heading .material-symbols-outlined {
+  font-size: 1.15rem;
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-settings-field {
+  grid-template-columns: minmax(7.5rem, 38%) minmax(0, 1fr);
+}
+
+.lt-setlist-settings-label {
+  font-size: 0.9rem;
+  color: var(--lt-setlist-text);
+}
+
+.lt-setlist-settings-input,
+.lt-setlist-settings-button {
+  min-height: 2.5rem;
+  font-size: 0.92rem;
+}
+
+.lt-setlist-settings-input {
+  padding: 0 0.65rem;
+  border-radius: 0.45rem;
+}
+
+.lt-setlist-settings-button {
+  padding: 0 0.85rem;
+  border-radius: 0.45rem;
+}
+
+.lt-setlist-settings-button:hover:not(:disabled) {
+  border-color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-settings-value {
+  min-width: 2.75rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.lt-setlist-settings-section input[type="range"] {
+  width: 100%;
+}
+
+/* Panel estrecho: etiqueta encima del control. */
+@container (max-width: 22rem) {
+  .lt-setlist-settings-field {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.lt-setlist-drawer-body {
+  container-type: inline-size;
+}
+
+/* Avisos en la banda: una etiqueta abajo en su punto, también cuando
+   coinciden con una sección (antes se plegaban dentro y no se veían). */
+.lt-setlist-map-cue {
+  position: absolute;
+  bottom: 2px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  max-width: 10rem;
+  padding: 0.05rem 0.35rem 0.05rem 0.2rem;
+  border-left: 2px solid #f2c45a;
+  border-radius: 0 0.3rem 0.3rem 0;
+  background: rgb(242 196 90 / 0.85);
+  color: #1b1607;
+  font-size: 0.7rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.lt-setlist-map-cue .material-symbols-outlined {
+  font-size: 0.85rem;
+}
+
+.lt-setlist-map-cue-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* En edición, sección y aviso en el mismo punto no se tapan: la sección se
+   agarra por la mitad de arriba (su nombre) y el aviso por la de abajo. */
+.lt-setlist-section-handle.is-section {
+  bottom: 50%;
+}
+
+.lt-setlist-section-handle.is-section::before {
+  height: 200%;
+  bottom: auto;
+}
+
+.lt-setlist-section-handle.is-cue {
+  top: 50%;
+}
+
+.lt-setlist-section-flag {
+  pointer-events: auto;
+}
+
+/* ---- Tercera ronda (2026-10-25) ---- */
+
+/* Pads: tres columnas (sonido, tonalidad, mezcla) que llenan el panel. */
+.lt-setlist-mixer-panel.is-pads {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.5rem 0.25rem;
+  font-size: 0.95rem;
+}
+
+.lt-pads-controls.is-panel {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) minmax(18rem, 1.6fr) minmax(14rem, 1fr);
+  gap: 0.75rem;
+  align-items: stretch;
+  min-height: 100%;
+}
+
+.lt-pads-panel-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.6rem;
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-pads-controls.is-panel .lt-pads-toggle,
+.lt-pads-controls.is-panel .lt-pads-field-label {
+  font-size: 0.92rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.lt-pads-controls.is-panel .lt-pads-toggle input {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.lt-pads-controls.is-panel .lt-pads-select,
+.lt-pads-controls.is-panel .lt-pads-manage-btn {
+  min-height: 2.5rem;
+  font-size: 0.92rem;
+}
+
+.lt-pads-controls.is-panel .lt-pads-manage-btn {
+  margin-top: auto;
+}
+
+.lt-pads-panel-group.is-keys .lt-pads-field {
+  flex: 1 1 auto;
+}
+
+.lt-pads-controls.is-panel .lt-pads-key-grid {
+  flex: 1 1 auto;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-auto-rows: minmax(2.75rem, 1fr);
+  gap: 0.4rem;
+}
+
+.lt-pads-controls.is-panel .lt-pads-key {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.lt-pads-controls.is-panel input[type="range"] {
+  width: 100%;
+}
+
+@container (max-width: 46rem) {
+  .lt-pads-controls.is-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .lt-pads-panel-group.is-keys {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+}
+
+@container (max-width: 30rem) {
+  .lt-pads-controls.is-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.lt-setlist-mixer {
+  container-type: inline-size;
+}
+
+/* Botón Editar: una píldora normal en la fila de canciones. */
+.lt-setlist-zone.is-songs > .lt-setlist-edit-button {
+  flex: 0 0 auto;
+  align-self: center;
+  height: 2.5rem;
+  margin: 0 0.6rem 0 0.25rem;
+  white-space: nowrap;
+}
+
+/* Tarjeta de canción: el nombre no se corta (hasta dos líneas) y la
+   tarjeta crece con él. */
+.lt-setlist-song-tile {
+  width: auto;
+  min-width: 13rem;
+  max-width: 22rem;
+}
+
+.lt-setlist-song-tile.is-short {
+  max-width: none;
+}
+
+.lt-setlist-song-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  /* Corta entre palabras, nunca dentro de una («Ocea ns»). */
+  overflow-wrap: normal;
+  word-break: normal;
+  line-height: 1.2;
+}
+
+/* Pestañas de Editar: cinco que caben siempre, icono encima del nombre. */
+.lt-setlist-drawer-modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
+  overflow-x: visible;
+}
+
+.lt-setlist-drawer-tab {
+  flex-direction: column;
+  gap: 0.15rem;
+  min-height: 3.25rem;
+  padding: 0.3rem 0.25rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.lt-setlist-drawer-tab .material-symbols-outlined {
+  font-size: 1.3rem;
+}
+
+/* El master del formulario: un fader horizontal que ocupa la fila. */
+.lt-setlist-settings-section .lt-setlist-master-fader {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 8rem;
+}
+
+/* Salto programado: la sección destino parpadea hasta que se cumple. */
+@keyframes lt-setlist-pending-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.lt-setlist-map-block.is-pending {
+  animation: lt-setlist-pending-blink 0.9s ease-in-out infinite;
+  background: rgb(242 196 90 / 0.22);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-setlist-map-block.is-pending {
+    animation: none;
+  }
+}
+
+/* Soltar audio en la canción mostrada: la onda o la consola se resaltan. */
+.lt-setlist-zone.lt-setlist-song-drop {
+  position: relative;
+}
+
+.lt-setlist-zone.lt-setlist-song-drop.is-drop-target::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 2px dashed var(--lt-setlist-accent);
+  border-radius: 0.5rem;
+  background: rgb(242 196 90 / 0.08);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.lt-setlist-mixer-empty {
+  margin: 0.5rem 0.75rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px dashed var(--lt-setlist-border);
+  border-radius: 0.5rem;
+  color: var(--lt-setlist-text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* Salida de los pads: el combobox a tamaño de control, como el select de
+   pack (el de cabecera de pista mide 22px con letra de 10px). */
+.lt-audio-route-combobox.is-large {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.lt-audio-route-combobox.is-large .lt-audio-route-trigger {
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  border-color: rgb(87 241 219 / 0.32);
+  border-radius: 3px;
+  background: #0a0a0a;
+  font-size: 0.92rem;
+}
+
+.lt-audio-route-combobox.is-large .lt-audio-route-trigger-caret {
+  font-size: 0.85rem;
+}
+
+.lt-audio-route-list.is-large {
+  max-height: 16rem;
+}
+
+.lt-audio-route-list.is-large .lt-audio-route-option {
+  padding: 0.6rem 0.85rem;
+  font-size: 0.92rem;
+}
+
+/* ---- Arreglo, cuarta ronda (2026-10-25) ---- */
+
+/* En la consola: la paleta arriba y la tira de bloques llenando el resto,
+   con bloques grandes que se leen desde lejos. La tira sigue en una fila
+   (el reordenado es por el eje x). */
+.lt-setlist-arrangement {
+  display: flex;
+  flex-direction: column;
+  padding: 0.6rem 0.75rem;
+}
+
+.lt-setlist-arrangement .lt-structure-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.lt-setlist-arrangement .lt-structure-caption {
+  font-size: 0.85rem;
+}
+
+.lt-setlist-arrangement .lt-structure-caption strong {
+  font-size: 0.9rem;
+}
+
+.lt-setlist-arrangement .lt-structure-chips {
+  gap: 0.5rem;
+  max-height: 9rem;
+}
+
+.lt-setlist-arrangement .lt-structure-chip {
+  padding: 0.6rem 0.95rem;
+  font-size: 0.95rem;
+  border-left-width: 5px;
+  border-radius: 0.4rem;
+}
+
+.lt-setlist-arrangement .lt-structure-strip-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lt-setlist-arrangement .lt-structure-strip {
+  flex: 1 1 auto;
+  min-height: 6rem;
+  max-height: 14rem;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  border-radius: 0.5rem;
+}
+
+.lt-setlist-arrangement .lt-structure-item {
+  display: flex;
+}
+
+.lt-setlist-arrangement .lt-structure-block {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: 8.5rem;
+  padding: 0.6rem 0.9rem;
+  border-left-width: 6px;
+  border-radius: 0.45rem;
+  font-size: 1rem;
+}
+
+.lt-setlist-arrangement .lt-structure-block-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.lt-setlist-arrangement .lt-structure-block-index,
+.lt-setlist-arrangement .lt-structure-block-bars {
+  font-size: 0.85rem;
+}
+
+.lt-setlist-arrangement .lt-structure-empty {
+  margin: auto;
+  font-size: 0.95rem;
+}
+
+/* En el cajón: los arreglos como tarjetas, acciones del elegido y Aplicar
+   grande abajo del todo. */
+.lt-setlist-arrangement-tools {
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0.9rem;
+}
+
+.lt-setlist-arrangement-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.lt-setlist-arrangement-head h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-arrangement-tools.is-short > .lt-setlist-arrangement-head {
+  padding-inline-end: 0.35rem;
+}
+
+.lt-setlist-arrangement-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lt-setlist-arrangement-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.6rem;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lt-setlist-arrangement-card:hover {
+  border-color: rgb(255 255 255 / 0.22);
+}
+
+.lt-setlist-arrangement-card.is-selected {
+  border-color: var(--lt-setlist-accent);
+  box-shadow: inset 0 0 0 1px var(--lt-setlist-accent);
+}
+
+.lt-setlist-arrangement-card:focus-visible {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: 2px;
+}
+
+.lt-setlist-arrangement-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lt-setlist-arrangement-card-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.lt-setlist-arrangement-card-badge {
+  flex: 0 0 auto;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgb(87 241 219 / 0.16);
+  color: #57f1db;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lt-setlist-arrangement-sequence {
+  display: flex;
+  gap: 2px;
+  height: 0.7rem;
+  overflow: hidden;
+  border-radius: 3px;
+}
+
+.lt-setlist-arrangement-segment {
+  flex: 1 1 0;
+  min-width: 3px;
+}
+
+.lt-setlist-arrangement-card-meta {
+  font-size: 0.8rem;
+  color: var(--lt-setlist-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-setlist-arrangement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.lt-setlist-arrangement-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.25rem;
+  padding: 0 0.8rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.45rem;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.lt-setlist-arrangement-action .material-symbols-outlined {
+  font-size: 1.15rem;
+}
+
+.lt-setlist-arrangement-action:hover:not(:disabled) {
+  border-color: rgb(255 255 255 / 0.25);
+}
+
+.lt-setlist-arrangement-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.lt-setlist-arrangement-action.is-danger:not(:disabled) {
+  color: #ff9b8f;
+}
+
+.lt-setlist-arrangement-footer {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+  padding-top: 0.6rem;
+  background: var(--lt-setlist-surface);
+}
+
+.lt-setlist-arrangement-footer .lt-structure-dirty {
+  text-align: center;
+}
+
+.lt-setlist-arrangement-error {
+  margin: 0;
+  color: #ff9b8f;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.lt-setlist-arrangement-selector {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+}
+
+.lt-setlist-arrangement-selector select,
+.lt-setlist-arrangement-actions select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0.4rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 4px;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+}
+
+.lt-setlist-view.is-editing.is-wave-editing {
+  grid-template-columns: minmax(0, 1fr) var(--lt-setlist-drawer-width, min(22rem, 34%));
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.lt-setlist-view.is-editing.is-wave-editing > .lt-setlist-zone.is-songs {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.lt-setlist-view.is-editing.is-wave-editing > .lt-setlist-zone.is-overview {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.lt-setlist-view.is-editing.is-wave-editing > .lt-setlist-zone.is-drawer {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  grid-column: 2;
+  grid-row: 2;
+  padding: 0;
+}
+
+.lt-setlist-arrangement.is-waveform {
+  position: relative;
+  display: grid;
+  grid-template-areas: "band";
+  grid-template-columns: minmax(0, 1fr);
+  grid-area: band;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
+}
+
+.lt-setlist-arrangement.is-waveform > .lt-setlist-overview,
+.lt-setlist-arrangement.is-waveform > .lt-setlist-bar-ruler,
+.lt-setlist-arrangement.is-waveform > .lt-structure-editor {
+  grid-area: band;
+  min-width: 0;
+  min-height: 0;
+}
+
+.lt-setlist-arrangement.is-waveform > .lt-structure-editor {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.lt-setlist-arrangement.is-waveform > .lt-setlist-bar-ruler {
+  z-index: 2;
+}
+
+.lt-setlist-arrangement.is-waveform > .lt-setlist-overview {
+  z-index: 0;
+}
+
+.lt-setlist-arrangement.is-waveform .lt-structure-editor,
+.lt-setlist-arrangement.is-waveform .lt-structure-strip-wrap,
+.lt-setlist-arrangement.is-waveform .lt-structure-strip,
+.lt-setlist-arrangement.is-waveform .lt-structure-item {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  pointer-events: none;
+}
+
+.lt-setlist-arrangement.is-waveform .lt-structure-caption {
+  display: none;
+}
+
+.lt-setlist-arrangement.is-waveform .lt-structure-strip {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  align-items: stretch;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.lt-setlist-arrangement.is-waveform .lt-structure-item {
+  position: relative;
+  min-width: 0;
+  max-width: none;
+}
+
+.lt-setlist-arrangement.is-waveform.is-short .lt-structure-item {
+  min-width: var(--lt-setlist-arrangement-block-min-width, 9rem);
+}
+
+.lt-setlist-arrangement.is-waveform .lt-structure-item.is-end {
+  flex: 0 0 var(--lt-setlist-arrangement-end-width, 44px);
+  min-width: var(--lt-setlist-arrangement-end-width, 44px);
+}
+
+.lt-setlist-arrangement-insert {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 4px;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-accent);
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.lt-structure-item:first-child > .lt-setlist-arrangement-insert {
+  transform: translateY(-50%);
+}
+
+.lt-structure-item.is-end > .lt-setlist-arrangement-insert {
+  left: 50%;
+}
+
+.lt-setlist-arrangement-wave-block {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.lt-setlist-arrangement-wave-block > .lt-setlist-overview {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.lt-setlist-arrangement.is-waveform .lt-structure-block {
+  pointer-events: none;
+}
+
+.lt-setlist-arrangement.is-waveform .lt-structure-block-name,
+.lt-setlist-arrangement.is-waveform .lt-structure-block-index,
+.lt-setlist-arrangement.is-waveform .lt-structure-block-bars,
+.lt-setlist-arrangement.is-waveform .lt-structure-handle,
+.lt-setlist-arrangement.is-waveform .lt-setlist-arrangement-insert {
+  pointer-events: auto;
+}
+
+.lt-setlist-arrangement-mobile-waveform {
+  flex: 0 0 8rem;
+  height: 8rem;
+  min-height: 0;
+  overflow-x: auto;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.4rem;
+  background: var(--lt-setlist-bg);
+}
+
+.lt-setlist-arrangement-mobile-waveform > .lt-setlist-arrangement {
+  min-width: 100%;
+}
+
+.lt-setlist-arrangement-mobile-waveform.is-main {
+  position: relative;
+  grid-area: band;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  overflow-y: hidden;
+  border: 0;
+  border-radius: 0;
+}
+
+.lt-setlist-arrangement-mobile-waveform.is-main .lt-setlist-arrangement {
+  height: 100%;
+}
+
+.lt-setlist-arrangement-mobile-waveform .lt-setlist-arrangement.is-waveform > .lt-setlist-overview.is-short {
+  touch-action: none;
+}
+
+.lt-setlist-arrangement.is-waveform .lt-setlist-overview-canvas {
+  top: 0;
+  height: 100%;
+}
+
+.lt-setlist-arrangement.is-waveform .lt-structure-block {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  isolation: isolate;
+  padding: 3.2rem 0.35rem 0.5rem;
+  border: 0;
+  border-left: 2px solid var(--lt-structure-color);
+  border-radius: 0;
+  background: transparent;
+  touch-action: pan-x;
+}
+
+.lt-setlist-arrangement.is-waveform .lt-structure-block::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--lt-structure-color);
+  opacity: 0.24;
+  pointer-events: none;
+}
+
+.lt-setlist-arrangement-wave-block .lt-structure-block.is-selected {
+  box-shadow: inset 0 0 0 2px var(--lt-setlist-accent);
+}
+
+.lt-setlist-arrangement.is-waveform .lt-structure-block-name {
+  align-self: flex-start;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.lt-setlist-arrangement-wave-block .lt-structure-block-bars {
+  display: none;
+}
+
+.lt-setlist-arrangement-wave-block .lt-structure-handle {
+  position: absolute;
+  bottom: 0.35rem;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 4px;
+  background: var(--lt-setlist-surface-raised);
+  transform: translateX(-50%);
+  cursor: grab;
+  touch-action: none;
+}
+
+@media (max-width: 600px) {
+  .lt-setlist-view.is-editing.is-wave-editing {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(7rem, 1fr) minmax(8rem, 42%);
+  }
+
+  .lt-setlist-view.is-editing.is-wave-editing > .lt-setlist-zone.is-drawer {
+    grid-column: 1;
+    grid-row: 3;
+  }
+}
+
+.lt-setlist-arrangement-footer button.is-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 3rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* ---- Teléfono apilado como Playback (2026-10-25) ---- */
+
+/* Canciones: una fila de tarjetas de una línea, con scroll horizontal. */
+.lt-setlist-songs.is-short {
+  gap: 0.3rem;
+}
+
+.lt-setlist-song-tile.is-short {
+  min-width: 12.5rem;
+  max-width: 16rem;
+  min-height: 2.75rem;
+  padding: 0.25rem 0.4rem;
+}
+
+.lt-setlist-song-tile.is-short .lt-setlist-song-name {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  font-size: 0.85rem;
+}
+
+.lt-setlist-songs.is-short .lt-setlist-transition {
+  min-width: 1.5rem;
+  padding: 0;
+}
+
+.lt-setlist-view.is-short .lt-setlist-zone.is-songs > .lt-setlist-edit-button {
+  height: 2.75rem;
+  margin: 0 0.2rem;
+  padding: 0 0.7rem;
+}
+
+/* Consola: botones de cabecera sólo con icono y tiras sin pan ni salida
+   (siguen en el menú de la pista) para que el fader tenga recorrido. */
+.lt-setlist-mixer.is-short .lt-setlist-mixer-action-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-mixer-header {
+  gap: 0.3rem;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-mixer-action,
+.lt-setlist-mixer.is-short .lt-setlist-mixer-fold,
+.lt-setlist-mixer.is-short .lt-setlist-tab {
+  min-height: 2.5rem;
+  min-width: 2.75rem;
+  padding-top: 0;
+  padding-bottom: 0;
+  justify-content: center;
+}
+
+/* Pads en el teléfono: la tonalidad primero (lo que se toca en directo) y el
+   resto en dos columnas, con scroll. */
+.lt-setlist-mixer.is-short .lt-pads-controls.is-panel {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.lt-setlist-mixer.is-short .lt-pads-panel-group.is-keys {
+  grid-column: 1 / -1;
+  order: -1;
+}
+
+.lt-setlist-mixer.is-short .lt-pads-controls.is-panel .lt-pads-key-grid {
+  grid-auto-rows: 2.75rem;
+}
+
+/* Editar en el teléfono: «atrás» y los modos en una columna a la DERECHA
+   (con scroll; más cómoda con el pulgar, pedido del usuario) y el editor con
+   todo el alto a su izquierda. El título queda para los lectores de pantalla. */
+.lt-setlist-drawer.is-short {
+  display: grid;
+  /* Columna de ancho fijo: «volver» y los modos comparten el mismo centro. */
+  grid-template-columns: minmax(0, 1fr) 3.5rem;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.lt-setlist-drawer.is-short > .lt-setlist-drawer-header {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0;
+  min-width: 0;
+  padding: 0.3rem 0 0.25rem;
+  border-bottom: 0;
+}
+
+/* «Volver» del mismo tamaño y en la misma línea que los modos. */
+.lt-setlist-drawer.is-short .lt-setlist-drawer-close {
+  box-sizing: border-box;
+  width: 2.75rem;
+  min-width: 2.75rem;
+  height: 2.75rem;
+  margin: 0;
+  padding: 0;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-drawer-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.lt-setlist-drawer.is-short > .lt-setlist-drawer-modes {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  grid-template-columns: none;
+  gap: 0.25rem;
+  min-height: 0;
+  /* La regla general le da 8 px de margen: desalineaba «volver». */
+  margin: 0;
+  padding: 0 0 0.3rem;
+  border-bottom: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.lt-setlist-drawer.is-short > .lt-setlist-drawer-modes::-webkit-scrollbar {
+  display: none;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-drawer-tab {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 2.75rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-drawer-tab-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.lt-setlist-drawer.is-short > .lt-setlist-drawer-body {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--lt-setlist-border);
+}
+
+.lt-setlist-drawer.is-short > .lt-setlist-drawer-body.is-sections-mode {
+  display: flex;
+  overflow: hidden;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-sections.is-short {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-sections.is-short > .lt-setlist-sections-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-sections.is-short > .lt-setlist-sections-bar {
+  position: static;
+  margin-top: 0;
+}
+
+/* Teléfono: la tarjeta en una línea (nombre y tono). */
+.lt-setlist-song-tile.is-short .lt-setlist-song-main {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.lt-setlist-song-tile.is-short .lt-setlist-song-meta {
+  flex: 0 0 auto;
+}
+
+/* Teléfono: «Bucle» y «Siguiente» flotan en la esquina de la onda en vez de
+   ocupar una fila; la onda se queda todo el alto de su zona. */
+.lt-setlist-view.is-short .lt-setlist-zone.is-overview {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "band";
+}
+
+.lt-setlist-view.is-short .lt-setlist-map-actions {
+  grid-area: band;
+  align-self: end;
+  justify-self: end;
+  z-index: 3;
+  flex-wrap: nowrap;
+  padding: 0.25rem;
+  pointer-events: none;
+}
+
+.lt-setlist-view.is-short .lt-setlist-map-action {
+  flex: 0 0 auto;
+  pointer-events: auto;
+  background: rgb(19 19 19 / 0.92);
+}
+
+.lt-setlist-transition {
+  min-height: 2.75rem;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-sections > .lt-setlist-sections-hint {
+  display: none;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip-name {
+  min-height: 0;
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
+}
+
+/* Botón «Onda / Mezcla» del teléfono, junto a Editar. */
+.lt-setlist-pane-toggle {
+  flex: 0 0 auto;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: 2.75rem;
+  margin-left: 0.2rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 999px;
+  background: var(--lt-setlist-surface-raised);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lt-setlist-pane-toggle.is-active {
+  border-color: var(--lt-setlist-accent);
+  color: var(--lt-setlist-accent);
+}
+
+/* Tableta: tarjetas algo más anchas para que el nombre quepa. */
+.lt-setlist-song-tile.is-medium {
+  min-width: 14rem;
+}
+
+/* Editando, el nombre de cada sección lo lleva su asa: las etiquetas del mapa
+   se pisaban con ellas. */
+.lt-setlist-view.is-editing .lt-setlist-map-label {
+  visibility: hidden;
+}
+
+/* «Bucle» y «Siguiente» flotan en la esquina de la onda en todos los
+   tamaños: una fila para uno o dos botones restaba alto a la onda. */
+.lt-setlist-zone.is-overview {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "band";
+}
+
+.lt-setlist-map-actions {
+  grid-area: band;
+  align-self: end;
+  justify-self: end;
+  z-index: 3;
+  flex-wrap: nowrap;
+  padding: 0.3rem;
+  pointer-events: none;
+}
+
+.lt-setlist-map-action {
+  pointer-events: auto;
+  background: rgb(19 19 19 / 0.92);
+}
+
+/* ---- Automatismos (paso 12) ---- */
+
+.lt-setlist-lane-row.is-automation {
+  background: rgb(255 210 122 / 0.04);
+}
+
+.lt-setlist-lane-row.is-automation.is-disabled .lt-setlist-automation-cell {
+  opacity: 0.45;
+}
+
+.lt-setlist-lane-toggle .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.lt-setlist-automation-cell {
+  cursor: copy;
+}
+
+/* El rombo en su tiempo y el nombre a su derecha; arrastrable. */
+.lt-setlist-cue {
+  position: absolute;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 12rem;
+  min-height: 2rem;
+  padding: 0 0.35rem 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  font: inherit;
+  font-size: 0.78rem;
+  transform-origin: left center;
+  translate: -0.45rem -50%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.lt-setlist-cue-diamond {
+  flex: 0 0 auto;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 1px solid rgb(0 0 0 / 0.5);
+  background: #ffd27a;
+  transform: rotate(45deg);
+}
+
+.lt-setlist-cue.is-off .lt-setlist-cue-diamond,
+.lt-setlist-automation-item.is-off .lt-setlist-cue-diamond {
+  background: transparent;
+  border-color: #ffd27a;
+}
+
+.lt-setlist-cue-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-cue:focus-visible {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: 2px;
+}
+
+/* Lista de automatismos del cajón. */
+.lt-setlist-automation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+}
+
+.lt-setlist-automation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lt-setlist-automation-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.5rem 0.35rem 0.8rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.5rem;
+  background: var(--lt-setlist-surface-raised);
+}
+
+.lt-setlist-video-item {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 0.25rem;
+}
+
+.lt-setlist-video-item.is-selected {
+  border-color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-automation-main {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0.2rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--lt-setlist-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lt-setlist-automation-when {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.lt-setlist-automation-section {
+  font-size: 0.75rem;
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-automation-name,
+.lt-setlist-automation-what {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-automation-what {
+  font-size: 0.8rem;
+  color: var(--lt-setlist-text-muted);
+}
+
+/* Teléfono (iPhone 13): la fila de canciones y la cabecera de la consola
+   ocupaban casi la mitad del alto; ahora lo justo para tocarlas. */
+.lt-setlist-view.is-short .lt-setlist-zone.is-songs {
+  padding: 0.15rem 0.25rem;
+}
+
+.lt-setlist-song-tile.is-short {
+  min-height: 2.5rem;
+  padding-top: 0.1rem;
+  padding-bottom: 0.1rem;
+}
+
+.lt-setlist-add-song.is-short {
+  min-height: 2.5rem;
+  width: auto;
+}
+
+html.lt-mobile .lt-setlist-songs.is-short .lt-setlist-song-button,
+html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
+  min-height: 2.5rem;
+  min-width: 2.5rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-zone.is-songs > .lt-setlist-edit-button,
+.lt-setlist-view.is-short .lt-setlist-pane-toggle {
+  height: 2.5rem;
+  padding: 0 0.6rem;
+  font-size: 0.9rem;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-mixer-header {
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-mixer-action,
+.lt-setlist-mixer.is-short .lt-setlist-mixer-fold,
+.lt-setlist-mixer.is-short .lt-setlist-tab {
+  min-height: 2.25rem;
+  font-size: 0.9rem;
+}
+
+/* ---- Editar secciones en el teléfono, como Playback ---- */
+
+.lt-setlist-scrub {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 0;
+}
+
+/* La onda ampliada se desliza bajo una línea fija en el centro. */
+.lt-setlist-scrub-viewport {
+  position: relative;
+  height: clamp(5.5rem, 30vh, 12rem);
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: var(--lt-setlist-bg);
+  touch-action: none;
+  cursor: grab;
+}
+
+.lt-setlist-scrub-layer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.lt-setlist-scrub-ruler {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1.3rem;
+  border-bottom: 1px solid var(--lt-setlist-border);
+}
+
+.lt-setlist-scrub-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  padding-left: 0.2rem;
+  border-left: 1px solid rgb(186 202 197 / 0.25);
+  color: var(--lt-setlist-text-muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3rem;
+}
+
+.lt-setlist-scrub-subtick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgb(186 202 197 / 0.18);
+  pointer-events: none;
+}
+
+.lt-setlist-scrub-subtick.is-beat {
+  top: 0.35rem;
+  border-color: rgb(186 202 197 / 0.14);
+}
+
+.lt-setlist-scrub-subtick.is-subdivision {
+  top: 0.7rem;
+  border-color: rgb(186 202 197 / 0.1);
+}
+
+.lt-setlist-scrub-section-guide {
+  position: absolute;
+  top: 1.42rem;
+  z-index: 1;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.25rem;
+  max-width: 9rem;
+  padding: 0 0.35rem;
+  overflow: hidden;
+  border-left: 2px solid var(--lt-setlist-block-color);
+  background: rgb(9 11 10 / 0.88);
+  color: var(--lt-setlist-block-color);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.lt-setlist-scrub-section-guide::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  bottom: -30rem;
+  left: -2px;
+  width: 2px;
+  background: var(--lt-setlist-block-color);
+  opacity: 0.65;
+}
+
+.lt-setlist-scrub-canvas {
+  position: absolute;
+  top: 2.9rem;
+  left: 0;
+  width: 100%;
+  height: calc(100% - 2.9rem);
+}
+
+/* Burbuja de sección: tocar selecciona; mantener abre su menú. */
+.lt-setlist-scrub-section {
+  position: absolute;
+  top: 1.4rem;
+  min-height: 1.4rem;
+  max-width: 10rem;
+  padding: 0 0.45rem;
+  border: 0;
+  border-left: 2px solid var(--lt-setlist-block-color);
+  border-radius: 0 0.35rem 0.35rem 0;
+  background: var(--lt-setlist-block-color);
+  color: #0b0d0c;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lt-setlist-scrub-section::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: -2px;
+  width: 2px;
+  height: 20rem;
+  background: var(--lt-setlist-block-color);
+  pointer-events: none;
+}
+
+.lt-setlist-scrub-section.is-selected {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: 1px;
+}
+
+.lt-setlist-scrub-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--lt-setlist-accent);
+  pointer-events: none;
+}
+
+.lt-setlist-scrub-bar {
+  position: absolute;
+  bottom: 0.3rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: rgb(19 19 19 / 0.92);
+  color: var(--lt-setlist-accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.lt-setlist-settings-button.is-primary {
+  border-color: var(--lt-setlist-accent);
+  color: var(--lt-setlist-accent);
+}
+
+/* Teléfono muy bajo (iPhone 13: ~255 px para la vista): M/S/T caben en la
+   columna junto al fader. */
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip-toggles .lt-compact-mixer-toggle {
+  min-height: 1.6rem;
+  height: 1.6rem;
+}
+
+.lt-setlist-scrub-bar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Teléfono: la cabecera de la consola es un raíl de iconos a la izquierda;
+   el alto entero queda para las tiras. */
+.lt-setlist-mixer-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: inherit;
+}
+
+/* El raíl de la consola, a la derecha como el de Editar. */
+.lt-setlist-mixer.is-short {
+  flex-direction: row-reverse;
+}
+
+/* Una sola columna con scroll vertical: más ancho para las tiras. */
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 2.5rem;
+  grid-auto-rows: 2.5rem;
+  align-content: start;
+  gap: 0.25rem;
+  padding: 0.25rem 0.15rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header::-webkit-scrollbar {
+  display: none;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-mixer-tabs {
+  display: contents;
+}
+
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-tab,
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-mixer-action {
+  min-width: 0;
+  min-height: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lt-setlist-mixer.is-short .lt-setlist-tab .material-symbols-outlined,
+.lt-setlist-mixer.is-short .lt-setlist-mixer-action .material-symbols-outlined {
+  font-size: 1.25rem;
+}
+
+.lt-setlist-mixer:not(.is-short) .lt-setlist-tab .lt-setlist-mixer-action-label {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+}
+
+/* Consola ampliada en el teléfono: sin la fila de canciones, todo el alto. */
+.lt-setlist-view.is-short.is-mixer-expanded {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* ---- MIDI (paso 13) ---- */
+
+.lt-setlist-lane.is-midi {
+  position: relative;
+  height: 100%;
+  cursor: copy;
+}
+
+.lt-setlist-lane.is-midi.is-disabled {
+  opacity: 0.45;
+}
+
+.lt-setlist-lane.is-midi.is-drop-target {
+  outline: 2px dashed var(--lt-setlist-accent);
+  outline-offset: -2px;
+}
+
+/* Un clip MIDI: un paquete de mensajes en un instante (sin duración). */
+.lt-setlist-midi-clip {
+  --lt-midi-clip-color: #b18cf2;
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.1rem;
+  min-width: 4.5rem;
+  max-width: 11rem;
+  padding: 0 0.45rem;
+  border: 1px solid rgb(0 0 0 / 0.35);
+  border-left: 3px solid var(--lt-midi-clip-color);
+  border-radius: 0.35rem;
+  background: rgb(177 140 242 / 0.16);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  text-align: left;
+  cursor: grab;
+  touch-action: none;
+}
+
+.lt-setlist-midi-clip:focus-visible {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: 1px;
+}
+
+.lt-setlist-midi-clip-name,
+.lt-setlist-midi-clip-events {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-midi-clip-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.lt-setlist-midi-clip-events {
+  font-size: 0.7rem;
+  color: var(--lt-setlist-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-setlist-lane-name-block {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lt-setlist-midi-route {
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--lt-setlist-accent);
+  font: inherit;
+  font-size: 0.7rem;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* Tira MIDI del mezclador: sin fader, encender y ruta. */
+.lt-compact-mixer-strip.is-midi .lt-compact-midi-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.25rem;
+}
+
+.lt-compact-mixer-strip.is-midi.is-disabled .lt-compact-midi-body {
+  opacity: 0.5;
+}
+
+.lt-compact-midi-icon {
+  color: #b18cf2;
+  font-size: 1.6rem;
+}
+
+.lt-compact-midi-power {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid rgba(186, 202, 197, 0.25);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(186, 202, 197, 0.7);
+  cursor: pointer;
+}
+
+.lt-compact-midi-power.is-active {
+  border-color: #57f1db;
+  color: #57f1db;
+}
+
+.lt-compact-midi-route {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid rgba(186, 202, 197, 0.2);
+  border-radius: 0.3rem;
+  background: #0e0e0e;
+  color: #d8fff7;
+  font: 600 10px/1.3 "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.lt-compact-midi-port {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-compact-midi-channel {
+  color: #57f1db;
+}
+
+/* Todos los modos de Editar en una fila, sean seis o siete (Letra con su
+   flag). */
+.lt-setlist-drawer:not(.is-short) .lt-setlist-drawer-modes {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0.25rem;
+}
+
+.lt-setlist-drawer:not(.is-short) .lt-setlist-drawer-tab {
+  min-width: 0;
+  font-size: 0.7rem;
+}
+
+.lt-setlist-drawer:not(.is-short) .lt-setlist-drawer-tab-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Vídeo (paso 14) ---- */
+
+.lt-setlist-lane.is-video {
+  position: relative;
+  height: 100%;
+}
+
+.lt-setlist-lane.is-video.is-drop-target {
+  outline: 2px dashed var(--lt-setlist-accent);
+  outline-offset: -2px;
+}
+
+.lt-setlist-lane-kind-icon {
+  flex: 0 0 auto;
+  font-size: 1.05rem;
+  color: var(--lt-setlist-text-muted);
+}
+
+.lt-setlist-video-clip {
+  --lt-video-clip-color: #f28c6b;
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  min-width: 2px;
+  overflow: hidden;
+  border: 1px solid rgb(0 0 0 / 0.4);
+  border-top: 3px solid var(--lt-video-clip-color);
+  border-radius: 0.3rem;
+  background: #101418;
+  cursor: grab;
+  touch-action: none;
+}
+
+.lt-setlist-video-clip.is-selected {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: -1px;
+}
+
+.lt-setlist-video-clip.is-missing {
+  opacity: 0.5;
+  border-style: dashed;
+}
+
+.lt-setlist-video-thumbs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: calc(100% - 1.15rem);
+}
+
+.lt-setlist-video-clip-name {
+  position: absolute;
+  top: 0;
+  left: 0.35rem;
+  right: 0.35rem;
+  overflow: hidden;
+  font-size: 0.72rem;
+  line-height: 1.15rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html.lt-mobile .lt-setlist-video-clip.is-selected .lt-setlist-lane-trim {
+  display: block;
+}
+
+/* ---- Tempo y compás (paso 15) ---- */
+
+.lt-setlist-lane-row.is-tempo {
+  background: rgb(87 241 219 / 0.03);
+}
+
+.lt-setlist-tempo-cell {
+  cursor: context-menu;
+}
+
+.lt-setlist-tempo-curve {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.lt-setlist-tempo-curve path {
+  fill: none;
+  stroke: var(--lt-setlist-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.lt-setlist-tempo-marker,
+.lt-setlist-meter-marker {
+  position: absolute;
+  top: 1px;
+  padding: 0 0.3rem;
+  border: 0;
+  border-left: 2px solid var(--lt-setlist-accent);
+  border-radius: 0 0.25rem 0.25rem 0;
+  background: rgb(19 19 19 / 0.85);
+  color: var(--lt-setlist-accent);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lt-setlist-tempo-marker.is-base {
+  border-left-color: var(--lt-setlist-text-muted);
+  color: var(--lt-setlist-text-muted);
+  cursor: default;
+}
+
+.lt-setlist-meter-marker {
+  top: auto;
+  bottom: 1px;
+  border-left-color: #f2c45a;
+  color: #f2c45a;
+}
+
+html.lt-mobile .lt-setlist-tempo-marker,
+html.lt-mobile .lt-setlist-meter-marker {
+  min-height: 1.6rem;
+  line-height: 1.6rem;
+}
+
+/* ---- Letra (paso 16) ---- */
+
+/* wide: la letra a la derecha de la banda, a su altura; la banda gana un
+   poco de alto mientras está abierta. */
+.lt-setlist-view.is-wide.has-lyrics {
+  grid-template-rows: auto minmax(11rem, 0.9fr) var(--lt-setlist-mixer-height, minmax(14rem, 1.6fr));
+}
+
+.lt-setlist-band-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 34%);
+  gap: var(--lt-setlist-gap);
+  min-height: 0;
+}
+
+.lt-setlist-zone.is-lyrics {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-lyrics {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.lt-setlist-lyrics > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.lt-setlist-drawer-body .lt-setlist-lyrics {
+  height: 100%;
+}
+
+/* ---- Puente a la DAW (paso 17) ---- */
+
+.lt-return-to-setlist {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  height: 1.9rem;
+  margin-left: 0.4rem;
+  padding: 0 0.6rem 0 0.3rem;
+  border: 1px solid #57f1db;
+  border-radius: 999px;
+  background: rgb(87 241 219 / 0.12);
+  color: #57f1db;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* El master no usa la rejilla compacta de las tiras de pista: su valor en
+   dB caía en la columna de M/S/T y, al cambiar de ancho (-3.5 → -12.5 dB),
+   movía el fader mientras se arrastraba (iPhone 13). */
+.lt-setlist-master-value {
+  display: block;
+  min-width: 4.5em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Derecha: sin la zona segura (la barra de la app ya llega al borde; el
+   hueco se veía vacío en el iPhone). */
+.lt-setlist-view.is-short {
+  padding-right: var(--lt-setlist-pad);
+}
+
+/* ---- Zoom de la banda (iPhone, 2026-10-26) ---- */
+
+.lt-setlist-zoom-viewport {
+  grid-area: band;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Una rejilla de una celda, como la banda: onda, bloques y asas se apilan. */
+.lt-setlist-zoom-layer {
+  display: grid;
+  grid-template-areas: "band";
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  will-change: transform;
+}
+
+.lt-setlist-zoom-controls {
+  grid-area: band;
+  align-self: end;
+  justify-self: start;
+  z-index: 3;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.3rem;
+  pointer-events: none;
+}
+
+.lt-setlist-zoom-controls .lt-setlist-map-action {
+  pointer-events: auto;
+  min-width: 2.25rem;
+  justify-content: center;
+  padding: 0 0.4rem;
+  background: rgb(19 19 19 / 0.92);
+}
+
+.lt-setlist-zoom-controls .lt-setlist-map-action:disabled {
+  opacity: 0.4;
+}
+
+/* Los avisos van abajo a la izquierda en la banda: suben un poco para no
+   quedar debajo de los botones de zoom. */
+.lt-setlist-zoom-layer .lt-setlist-map-cue {
+  bottom: 2.6rem;
+}
+
+/* ---- Onda deslizable común: avisos, automatismos y MIDI (2026-10-26) ---- */
+
+/* Avisos: debajo de las secciones, con su campana. */
+.lt-setlist-scrub-section.is-cue {
+  top: 3rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  border-radius: 0.35rem;
+}
+
+.lt-setlist-scrub-section.is-cue .material-symbols-outlined {
+  font-size: 0.85rem;
+}
+
+.lt-setlist-scrub-automation,
+.lt-setlist-scrub-midi {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 10rem;
+  min-height: 1.6rem;
+  padding: 0 0.4rem 0 0.2rem;
+  border: 0;
+  border-radius: 0.35rem;
+  background: rgb(19 19 19 / 0.88);
+  color: var(--lt-setlist-text);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  translate: -0.45rem 0;
+  cursor: pointer;
+}
+
+.lt-setlist-scrub-automation {
+  top: 3rem;
+  color: #ffd27a;
+}
+
+.lt-setlist-scrub-automation.is-off {
+  opacity: 0.55;
+}
+
+.lt-setlist-scrub-automation::after,
+.lt-setlist-scrub-midi::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0.45rem;
+  width: 1px;
+  height: 20rem;
+  background: currentColor;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.lt-setlist-scrub-midi {
+  top: calc(3rem + var(--lt-midi-row, 0) * 1.8rem);
+  color: #c9a8ff;
+}
+
+.lt-setlist-scrub-midi .material-symbols-outlined {
+  font-size: 0.95rem;
+}
+
+.lt-setlist-midi-icon {
+  color: #c9a8ff;
+}
+
+/* Dentro de la capa del zoom la onda va en la misma celda que los bloques
+   (si no, la rejilla le abría una fila aparte debajo). */
+.lt-setlist-zoom-layer > .lt-setlist-overview,
+.lt-setlist-zoom-layer > .lt-setlist-section-layer {
+  grid-area: band;
+}
+
+/* Barra de la onda deslizable: botones de icono más estrechos para que
+   quepan en una fila en el teléfono. */
+.lt-setlist-scrub-bar-row {
+  gap: 0.25rem;
+}
+
+.lt-setlist-scrub-bar-row .lt-setlist-settings-button {
+  min-width: 2.4rem;
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
+}
+
+/* ---- Gestos de la DAW en la onda (2026-10-26): pellizco y arrastre con un
+   dedo los lleva OverviewZoom; el navegador no debe quedarse el gesto. ---- */
+.lt-setlist-zoom-viewport,
+.lt-setlist-zoom-viewport .lt-setlist-overview.is-short {
+  touch-action: none;
+}
+
+/* ---- Teléfono más denso (iPhone, 2026-10-26): sin hueco abajo, esquinas
+   casi rectas y menos separación entre zonas; la fila de canciones más baja.
+   Abajo solo el margen propio: el indicador de inicio pisa poco y ese hueco
+   se notaba vacío. ---- */
+.lt-setlist-view.is-short {
+  --lt-setlist-gap: 0.15rem;
+  --lt-setlist-pad: 0.15rem;
+  padding-bottom: var(--lt-setlist-pad);
+}
+
+.lt-setlist-view.is-short .lt-setlist-zone,
+.lt-setlist-view.is-short .lt-setlist-scrub-viewport,
+.lt-setlist-drawer.is-short .lt-setlist-scrub-viewport {
+  border-radius: 0.2rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-song-tile {
+  min-height: 2rem;
+  border-radius: 0.2rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-add-song {
+  min-height: 2rem;
+}
+
+html.lt-mobile .lt-setlist-songs.is-short .lt-setlist-song-button,
+html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
+  min-height: 2rem;
+  min-width: 2.25rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-zone.is-songs > .lt-setlist-edit-button,
+.lt-setlist-view.is-short .lt-setlist-pane-toggle {
+  height: 2rem;
+  border-radius: 0.2rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-zone.is-songs {
+  padding: 0.1rem 0.2rem;
+}
+
+/* ---- Fila de pista en MIDI y automatización: elegir, encender, menú ---- */
+.lt-setlist-track-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 0.15rem 0;
+}
+
+.lt-setlist-track-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.lt-setlist-track-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.3rem;
+  background: var(--lt-setlist-surface);
+}
+
+.lt-setlist-track-chip.is-chosen {
+  border-color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-track-chip.is-off .lt-setlist-track-chip-name {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.lt-setlist-track-chip-name {
+  max-width: 10rem;
+  padding: 0 0.55rem;
+  border: 0;
+  background: none;
+  color: var(--lt-setlist-text);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.lt-setlist-track-chip-name {
+  align-self: stretch;
+  cursor: pointer;
+}
+
+.lt-setlist-track-chip-icon {
+  display: inline-grid;
+  place-items: center;
+  align-self: stretch;
+  min-width: 2.25rem;
+  border: 0;
+  border-left: 1px solid var(--lt-setlist-border);
+  background: none;
+  color: var(--lt-setlist-text-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.lt-setlist-track-chip-icon[aria-pressed="true"] {
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-view.is-short .lt-setlist-songs {
+  padding: 0.15rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-transition {
+  min-height: 2rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-edit-button,
+.lt-setlist-view.is-short .lt-setlist-pane-toggle {
+  min-height: 2rem;
+  height: 2rem;
+  border-radius: 0.2rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-map-action,
+.lt-setlist-view.is-short .lt-setlist-song-tile,
+.lt-setlist-view.is-short .lt-setlist-tab,
+.lt-setlist-view.is-short .lt-setlist-mixer-action,
+.lt-setlist-drawer.is-short .lt-setlist-settings-button,
+.lt-setlist-drawer.is-short .lt-setlist-drawer-tab,
+.lt-setlist-drawer.is-short .lt-setlist-drawer-close {
+  border-radius: 0.3rem;
+}
+
+/* Teléfono: los botones del editor en una sola fila que se desliza; al
+   partirse en dos se comían la onda. */
+.lt-setlist-drawer.is-short .lt-setlist-scrub-bar-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-scrub-bar-row::-webkit-scrollbar {
+  display: none;
+}
+
+.lt-setlist-drawer.is-short .lt-setlist-scrub-bar-row > * {
+  flex: 0 0 auto;
+}
+
+/* ---- Ronda 10 (iPhone, 2026-10-26) ---- */
+
+/* Con el dedo se pellizca: los botones de zoom sobran en táctil y en el
+   teléfono. */
+@media (pointer: coarse) {
+  .lt-setlist-zoom-controls {
+    display: none;
+  }
+}
+
+.lt-setlist-view.is-short .lt-setlist-zoom-controls {
+  display: none;
+}
+
+/* El selector de arreglo pasa a la izquierda: abajo a la derecha va el dock. */
+.lt-setlist-view.is-short .lt-setlist-map-actions {
+  justify-self: start;
+}
+
+/* Dock de botones de vista sobre la onda (como Playback), plegable. */
+.lt-setlist-wave-dock {
+  grid-area: band;
+  align-self: end;
+  justify-self: end;
+  z-index: 4;
+  display: flex;
+  align-items: stretch;
+  gap: 0.2rem;
+  margin: 0.25rem;
+  pointer-events: none;
+}
+
+.lt-setlist-wave-dock > * {
+  pointer-events: auto;
+}
+
+.lt-setlist-wave-dock-buttons {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.lt-setlist-wave-dock .lt-setlist-pane-toggle,
+.lt-setlist-wave-dock .lt-setlist-edit-button {
+  background: rgb(19 19 19 / 0.9);
+}
+
+.lt-setlist-wave-dock-toggle {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0;
+  border: 1px solid var(--lt-setlist-border);
+  border-radius: 0.3rem;
+  background: rgb(19 19 19 / 0.9);
+  color: var(--lt-setlist-text);
+  cursor: pointer;
+}
+
+.lt-setlist-wave-dock.is-hidden {
+  margin-right: 0;
+}
+
+.lt-setlist-wave-dock.is-hidden .lt-setlist-wave-dock-toggle {
+  border-right: 0;
+  border-radius: 0.3rem 0 0 0.3rem;
+}
+
+/* Vamp: el tramo que se repite, enmarcado y latiendo sobre la onda. */
+.lt-setlist-map-vamp {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  border: 2px solid var(--lt-setlist-accent);
+  border-radius: 0.2rem;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgb(87 241 219 / 0.14) 0 8px,
+    rgb(87 241 219 / 0.04) 8px 16px
+  );
+  pointer-events: none;
+  animation: lt-setlist-vamp-pulse 1.6s ease-in-out infinite;
+}
+
+.lt-setlist-map-vamp-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.3rem;
+  background: var(--lt-setlist-accent);
+  color: #06201c;
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.lt-setlist-map-vamp-badge .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+@keyframes lt-setlist-vamp-pulse {
+  50% {
+    box-shadow: 0 0 0 2px rgb(87 241 219 / 0.35), inset 0 0 1.25rem rgb(87 241 219 / 0.25);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-setlist-map-vamp {
+    animation: none;
+  }
+}
+
+/* ---- Raíl de la consola en el teléfono (2026-10-26): cada icono con su
+   palabra debajo, las pestañas sin aspecto de desactivadas y una raya entre
+   pestañas y acciones. ---- */
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header {
+  grid-template-columns: 3.25rem;
+  grid-auto-rows: auto;
+  gap: 0.2rem;
+}
+
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-tab,
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-mixer-action {
+  width: 3.25rem;
+  height: 2.75rem;
+  flex-direction: column;
+  gap: 0.05rem;
+  color: var(--lt-setlist-text);
+  opacity: 1;
+}
+
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-tab.is-active {
+  border-color: var(--lt-setlist-accent);
+  background: rgb(87 241 219 / 0.16);
+  color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-rail-label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-rail-divider {
+  height: 1px;
+  margin: 0.1rem 0.3rem;
+  background: var(--lt-setlist-border);
+}
+
+/* Botones de vista (Onda, Letra, Editar) arriba del raíl, con el mismo
+   formato: icono y palabra debajo. */
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-pane-toggle,
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-edit-button {
+  width: 3.25rem;
+  height: 2.75rem;
+  min-height: 0;
+  padding: 0;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  border-radius: 0.3rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-pane-toggle .material-symbols-outlined,
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-edit-button .material-symbols-outlined {
+  font-size: 1.25rem;
+}
+
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-pane-toggle,
+.lt-setlist-mixer.is-short > .lt-setlist-mixer-header .lt-setlist-edit-button {
+  margin: 0;
+  justify-self: center;
+}
+
+/* Teléfono, vista de letra: la letra y a su derecha el raíl de vistas
+   (Onda, Letra, Editar), igual que el de la consola. */
+.lt-setlist-lyrics-pane {
+  display: flex;
+  gap: var(--lt-setlist-gap);
+  min-width: 0;
+  min-height: 0;
+}
+
+.lt-setlist-lyrics-pane > .lt-setlist-zone {
+  flex: 1 1 auto;
+}
+
+.lt-setlist-view-rail {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.25rem 0.15rem;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.lt-setlist-view-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.lt-setlist-view.is-short .lt-setlist-view-rail .lt-setlist-pane-toggle,
+.lt-setlist-view.is-short .lt-setlist-view-rail .lt-setlist-edit-button {
+  flex: 0 0 auto;
+  width: 3.25rem;
+  height: 2.75rem;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  border-radius: 0.3rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.lt-setlist-view-rail .material-symbols-outlined {
+  font-size: 1.25rem;
+}
+
+/* ---- Esquinas casi rectas en todas las distribuciones (2026-10-26): en
+   escritorio seguía habiendo píldoras y círculos. ---- */
+.lt-setlist-view .lt-setlist-zone,
+.lt-setlist-view .lt-setlist-song-tile,
+.lt-setlist-view .lt-setlist-add-song,
+.lt-setlist-view .lt-setlist-song-button,
+.lt-setlist-view .lt-setlist-add-song-button,
+.lt-setlist-view .lt-setlist-pane-toggle,
+.lt-setlist-view .lt-setlist-edit-button,
+.lt-setlist-view .lt-setlist-tab,
+.lt-setlist-view .lt-setlist-mixer-action,
+.lt-setlist-view .lt-setlist-mixer-fold,
+.lt-setlist-view .lt-setlist-map-action,
+.lt-setlist-view .lt-setlist-mixer-hint button,
+.lt-setlist-view .lt-setlist-transition,
+.lt-setlist-view .lt-setlist-arrangement-picker,
+.lt-setlist-drawer .lt-setlist-settings-button,
+.lt-setlist-drawer .lt-setlist-drawer-tab,
+.lt-setlist-drawer .lt-setlist-drawer-close,
+.lt-setlist-drawer .lt-setlist-song-button {
+  border-radius: 0.3rem;
+}
+
+.lt-setlist-view .lt-setlist-zone {
+  border-radius: 0.25rem;
+}
+
+/* Tempo, compás y tono sobre la onda del editor: abajo, como en la regla. */
+.lt-setlist-scrub-timing {
+  position: absolute;
+  bottom: 0.2rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  min-height: 1.6rem;
+  padding: 0 0.35rem 0 0.2rem;
+  border: 0;
+  border-left: 2px solid currentColor;
+  border-radius: 0 0.25rem 0.25rem 0;
+  background: rgb(19 19 19 / 0.88);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lt-setlist-scrub-timing .material-symbols-outlined {
+  font-size: 0.9rem;
+}
+
+.lt-setlist-scrub-timing.is-tempo {
+  color: #ffb86b;
+}
+
+.lt-setlist-scrub-timing.is-meter {
+  color: #8fd3ff;
+}
+
+.lt-setlist-scrub-timing.is-key {
+  color: #c9a7ff;
+}
+
+/* Vídeo sobre la onda del editor: una barra por clip, de su duración. */
+.lt-setlist-scrub-video {
+  position: absolute;
+  top: calc(3rem + var(--lt-video-row, 0) * 1.8rem);
+  z-index: 2;
+  box-sizing: border-box;
+  display: block;
+  min-height: 1.6rem;
+  overflow: visible;
+}
+
+.lt-setlist-scrub-video-body {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  min-height: 1.6rem;
+  padding: 0 0.35rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 138 101 / 0.8);
+  border-radius: 0.25rem;
+  background: rgb(255 138 101 / 0.22);
+  color: #ffd2c2;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: grab;
+  touch-action: none;
+}
+
+.lt-setlist-scrub-video-body:focus-visible,
+.lt-setlist-scrub-video-handle:focus-visible {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: 1px;
+}
+
+.lt-setlist-scrub-video.is-selected .lt-setlist-scrub-video-body {
+  border-color: var(--lt-setlist-accent);
+}
+
+.lt-setlist-scrub-video-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-setlist-scrub-video-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.lt-setlist-scrub-video-fade.is-in {
+  left: 0;
+  width: var(--lt-video-fade-in, 0px);
+  background: linear-gradient(90deg, transparent, rgb(0 0 0 / 0.42));
+}
+
+.lt-setlist-scrub-video-fade.is-out {
+  right: 0;
+  width: var(--lt-video-fade-out, 0px);
+  background: linear-gradient(90deg, rgb(0 0 0 / 0.42), transparent);
+}
+
+.lt-setlist-scrub-video-handle {
+  position: absolute;
+  z-index: 2;
+  display: none;
+  box-sizing: border-box;
+  width: 10px;
+  min-height: 1.2rem;
+  padding: 0;
+  border: 1px solid rgb(9 11 10 / 0.9);
+  border-radius: 2px;
+  background: #e9f1ee;
+  opacity: 0.92;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.lt-setlist-scrub-video.is-selected .lt-setlist-scrub-video-handle {
+  display: block;
+}
+
+.lt-setlist-scrub-video-handle.is-trim-start {
+  top: 0;
+  bottom: 0;
+  left: -4px;
+}
+
+.lt-setlist-scrub-video-handle.is-trim-end {
+  top: 0;
+  right: -4px;
+  bottom: 0;
+}
+
+.lt-setlist-scrub-video-handle.is-fade-in,
+.lt-setlist-scrub-video-handle.is-fade-out {
+  top: -4px;
+  width: 12px;
+  height: 12px;
+  min-height: 0;
+  border-radius: 50%;
+  background: #57f1db;
+}
+
+.lt-setlist-scrub-video-handle.is-fade-in {
+  left: calc(var(--lt-video-fade-in, 0px) + 2px);
+}
+
+.lt-setlist-scrub-video-handle.is-fade-out {
+  right: calc(var(--lt-video-fade-out, 0px) + 2px);
+}
+
+.lt-setlist-scrub-video.is-missing {
+  opacity: 0.65;
+}
+
+.lt-setlist-scrub-video.is-missing .lt-setlist-scrub-video-body {
+  border-style: dashed;
+}
+
+.lt-setlist-scrub-video-body .material-symbols-outlined {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+}
+
+.lt-setlist-scrub-video-name {
+  position: relative;
+  z-index: 1;
+}
+
+.lt-setlist-scrub-video.is-selected {
+  z-index: 4;
+}
+
+.lt-setlist-video-edit-hint {
+  margin: 0;
+  color: var(--lt-setlist-text-muted);
+  font-size: 0.78rem;
+}
+
+.lt-setlist-video-icon {
+  color: #ff8a65;
+}
+
+html.lt-mobile .lt-setlist-scrub-video-handle {
+  width: 22px;
+  min-height: 1.8rem;
+}
+
+html.lt-mobile .lt-setlist-scrub-video-handle.is-trim-start {
+  left: -10px;
+}
+
+html.lt-mobile .lt-setlist-scrub-video-handle.is-trim-end {
+  right: -10px;
+}
+
+html.lt-mobile .lt-setlist-scrub-video-handle.is-fade-in,
+html.lt-mobile .lt-setlist-scrub-video-handle.is-fade-out {
+  top: -7px;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+}
+
+html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+}
+
+/* ---- Fila de canciones redimensionable (wide): asa abajo; más alta, las
+   tarjetas pasan a varias filas. ---- */
+.lt-setlist-view.is-wide > .lt-setlist-zone.is-songs {
+  position: relative;
+}
+
+.lt-setlist-songs-resize {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 6px;
+  z-index: 2;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.lt-setlist-songs-resize:hover {
+  background: rgb(87 241 219 / 0.25);
+}
+
+/* The song row is as tall as its cards need: they flow left to right and wrap
+   into more rows when the songs do not fit one (useSongsRowResize sizes them:
+   the height dragged is how big each may get, up to a limit), so there is no
+   empty stretch and no vertical scroll. The waveform and the console share
+   the rest. */
+.lt-setlist-view.is-wide.has-songs-height:not(.is-wave-editing) {
+  grid-template-rows: auto minmax(8rem, 1fr) var(--lt-setlist-mixer-height, minmax(14rem, 1.6fr));
+}
+
+.lt-setlist-view.is-wide.has-songs-height > .lt-setlist-zone.is-songs {
+  max-height: 40vh;
+}
+
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-songs.is-horizontal {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-song-item,
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-add-song,
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-transition {
+  height: var(--lt-setlist-card-h, auto);
+  min-height: 0;
+}
+
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-song-tile {
+  height: 100%;
+  min-height: 0;
+}
+
+/* In several rows an arrow between cards means nothing: it would also take a
+   slot of the column. */
+.lt-setlist-view.is-wide[data-song-rows="multi"] .lt-setlist-transition {
+  display: none;
+}
+
+.lt-setlist-view.is-wide.has-songs-height > .lt-setlist-zone.is-songs > .lt-setlist-pane-toggle,
+.lt-setlist-view.is-wide.has-songs-height > .lt-setlist-zone.is-songs > .lt-setlist-edit-button {
+  align-self: flex-start;
+  margin-top: 0.45rem;
+}
+
+/* ---- Letra a pantalla completa (el botón de ampliar no hacía nada: el
+   estado existía, el estilo no). Cubre toda la ventana; el mismo botón la
+   devuelve a su sitio. ---- */
+.lt-setlist-lyrics.is-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  padding: var(--lt-safe-area-top, 0px) var(--lt-safe-area-right, 0px)
+    var(--lt-safe-area-bottom, 0px) var(--lt-safe-area-left, 0px);
+  background: var(--lt-setlist-bg, #0e1112);
+}
+
+/* Cambio de nota sobre la banda de la onda. */
+.lt-setlist-map-key {
+  position: absolute;
+  top: calc(var(--lt-setlist-label-height, 1.6rem) + 0.2rem);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0 0.3rem 0 0.15rem;
+  border-left: 2px solid #c9a7ff;
+  border-radius: 0 0.25rem 0.25rem 0;
+  background: rgb(19 19 19 / 0.88);
+  color: #c9a7ff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.lt-setlist-map-key .material-symbols-outlined {
+  font-size: 0.85rem;
+}
+
+.lt-setlist-zoom-layer {
+  transform-origin: 0 0;
+}
+
+/* El Master, como las tiras de pista, sin escala numérica (su valor está en
+   texto arriba): con el fader más bajo las etiquetas se pisaban. */
+.lt-setlist-master-strip .lt-compact-mixer-fader-scale {
+  display: none;
+}
+
+/* Resized row: a card is as tall as its slot, so its text must fit in it:
+   one-line name (the 2-line clamp made the first card taller than its slot
+   and it overlapped the next), one-line meta, nothing spills. */
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-song-tile {
+  box-sizing: border-box;
+  overflow: hidden;
+  padding-top: 0.2rem;
+  padding-bottom: 0.3rem;
+}
+
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-song-name {
+  display: block;
+  -webkit-line-clamp: unset;
+  white-space: nowrap;
+}
+
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-song-meta {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.lt-setlist-view.is-wide.has-songs-height .lt-setlist-songs.is-horizontal {
+  gap: 0.35rem;
+}
+
+/* Una carpeta arrastrada sobre «+ Nueva canción»: la ficha avisa de que la
+   suelta crea una canción (el texto lo pone el arrastre en data-drop-label). */
+.lt-setlist-add-song[data-drop-label] {
+  position: relative;
+  border-style: solid;
+  border-color: var(--lt-setlist-accent);
+  background: rgb(87 241 219 / 0.14);
+}
+
+.lt-setlist-add-song[data-drop-label]::after {
+  content: attr(data-drop-label);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0 0.5rem;
+  border-radius: inherit;
+  background: rgb(14 17 18 / 0.92);
+  color: var(--lt-setlist-accent);
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-align: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}

@@ -242,6 +242,22 @@ describe("createTrackHeaderHandlers", () => {
       expect(trackDragRef.current?.rowElement).toBe(strip);
     });
 
+    it("routes a Setlist track-list drag through its own surface", () => {
+      const row = {
+        getBoundingClientRect: () => ({ width: 10, height: 10 }) as DOMRect,
+        offsetWidth: 10,
+        offsetHeight: 10,
+      };
+      const { handlers, trackDragRef } = setup();
+      handlers.handleTrackHeaderDragStart(
+        dragEvent((selector) => (selector === ".lt-setlist-track-row" ? row : null)),
+        "t1",
+      );
+
+      expect(trackDragRef.current?.originSurface).toBe("setlist");
+      expect(trackDragRef.current?.rowElement).toBe(row);
+    });
+
     it("routes a DAW header drag through the vertical pipeline", () => {
       const header = {
         id: "header",

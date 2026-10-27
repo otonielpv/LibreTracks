@@ -28,6 +28,7 @@ import {
   FILTER_KEYS,
 } from "./filters";
 import { createTokenPanel, type TokenPanel } from "./tokens";
+import type { AnalyticsMetric } from "./copy";
 
 echarts.use([
   AriaComponent,
@@ -238,6 +239,17 @@ const names: Record<string, Record<string, string>> = {
     feature_warp: "Warp",
     feature_midi: "MIDI",
     feature_remote_panel: "Control remoto",
+    feature_setlist_view: "Vista Setlist",
+    feature_video: "Video",
+    feature_lyrics_chords: "Letras y acordes",
+    feature_cloud: "Google Drive",
+    feature_network_host: "Sesion en red: anfitrion",
+    feature_network_guest: "Sesion en red: invitado",
+    feature_audio_render: "Renderizado de audio",
+    feature_song_analysis: "Analisis de canciones",
+    feature_level_songs: "Nivelacion de canciones",
+    feature_midi_learn: "Aprendizaje MIDI",
+    feature_vamp: "Vamp",
     audio_import: "Importacion de audio",
     project_open: "Apertura de proyecto",
     session_export: "Exportacion de sesion",
@@ -281,6 +293,17 @@ const names: Record<string, Record<string, string>> = {
     feature_warp: "Warp",
     feature_midi: "MIDI",
     feature_remote_panel: "Remote control",
+    feature_setlist_view: "Setlist view",
+    feature_video: "Video",
+    feature_lyrics_chords: "Lyrics and chords",
+    feature_cloud: "Google Drive",
+    feature_network_host: "Network session: host",
+    feature_network_guest: "Network session: guest",
+    feature_audio_render: "Audio rendering",
+    feature_song_analysis: "Song analysis",
+    feature_level_songs: "Song leveling",
+    feature_midi_learn: "MIDI learn",
+    feature_vamp: "Vamp",
     audio_import: "Audio import",
     project_open: "Project open",
     session_export: "Session export",
@@ -424,10 +447,46 @@ function renderFilterBar(): void {
 // Cards
 // ---------------------------------------------------------------------------
 
-function heading(title: string): HTMLHeadingElement {
-  const element = document.createElement("h3");
-  element.textContent = title;
-  return element;
+let activeMetricHelp: { button: HTMLButtonElement; panel: HTMLElement; container: HTMLElement } | null = null;
+
+function closeMetricHelp(): void {
+  if (!activeMetricHelp) return;
+  activeMetricHelp.button.setAttribute("aria-expanded", "false");
+  activeMetricHelp.panel.hidden = true;
+  activeMetricHelp = null;
+}
+
+function heading(key: AnalyticsMetric, tag: "h3" | "span" = "h3"): HTMLElement {
+  const container = document.createElement("div");
+  container.className = "analytics-metric-heading";
+  const row = document.createElement("div");
+  row.className = "analytics-metric-title";
+  const title = document.createElement(tag);
+  title.textContent = copy[key];
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "analytics-info";
+  button.textContent = "i";
+  button.setAttribute("aria-label", `${copy.metricInfo}: ${copy[key]}`);
+  button.setAttribute("aria-expanded", "false");
+  const panel = document.createElement("p");
+  panel.className = "analytics-metric-help";
+  panel.id = `analytics-help-${key}`;
+  panel.textContent = copy[`${key}Help`];
+  panel.hidden = true;
+  button.setAttribute("aria-controls", panel.id);
+  button.addEventListener("click", () => {
+    const opening = panel.hidden;
+    closeMetricHelp();
+    if (opening) {
+      button.setAttribute("aria-expanded", "true");
+      panel.hidden = false;
+      activeMetricHelp = { button, panel, container };
+    }
+  });
+  row.append(title, button);
+  container.append(row, panel);
+  return container;
 }
 
 type RankedRow = { key: string; devices: number; rate: number; value?: string };
@@ -437,7 +496,7 @@ type RankedRow = { key: string; devices: number; rate: number; value?: string };
  * matching filter; the rest render as plain text, which is what keeps a
  * dimension the server cannot filter on from looking clickable.
  */
-function ranked(title: string, rows: RankedRow[], filterKey?: FilterKey): HTMLElement {
+function ranked(title: AnalyticsMetric, rows: RankedRow[], filterKey?: FilterKey): HTMLElement {
   const card = document.createElement("article");
   card.className = "analytics-card analytics-ranked";
   card.append(heading(title));
@@ -462,7 +521,7 @@ function ranked(title: string, rows: RankedRow[], filterKey?: FilterKey): HTMLEl
   return card;
 }
 
-function maturity(title: string, rows: Bucket[], filterKey: FilterKey): HTMLElement {
+function maturity(title: AnalyticsMetric, rows: Bucket[], filterKey: FilterKey): HTMLElement {
   const total = rows.reduce((sum, row) => sum + row.devices, 0);
   return ranked(
     title,
@@ -479,7 +538,7 @@ function maturity(title: string, rows: Bucket[], filterKey: FilterKey): HTMLElem
 function trend(): HTMLElement {
   const card = document.createElement("article");
   card.className = "analytics-card analytics-chart-card analytics-wide";
-  card.append(heading(copy.dailyTrend));
+  card.append(heading("dailyTrend"));
   const plot = document.createElement("div");
   plot.className = "analytics-echart analytics-echart-wide";
   plot.dataset.chart = "daily";
@@ -487,7 +546,7 @@ function trend(): HTMLElement {
   return card;
 }
 
-function chartCard(title: string, chart: string, wide = false, note?: string): HTMLElement {
+function chartCard(title: AnalyticsMetric, chart: string, wide = false, note?: string): HTMLElement {
   const card = document.createElement("article");
   card.className = `analytics-card analytics-chart-card${wide ? " analytics-wide" : ""}`;
   card.append(heading(title));
@@ -512,16 +571,14 @@ function comparison(current: number, previous: number): string {
 
 function metric(
   value: string,
-  title: string,
+  title: AnalyticsMetric,
   change?: string,
   changeNote: string = copy.previousPeriod,
 ): HTMLElement {
   const card = document.createElement("article");
   const number = document.createElement("strong");
   number.textContent = value;
-  const text = document.createElement("span");
-  text.textContent = title;
-  card.append(number, text);
+  card.append(number, heading(title, "span"));
   if (change) {
     const detail = document.createElement("small");
     detail.className = change.startsWith("-") ? "is-negative" : "is-positive";
@@ -531,7 +588,7 @@ function metric(
   return card;
 }
 
-function dimension(title: string, rows: Breakdown[], filterKey: FilterKey): HTMLElement {
+function dimension(title: AnalyticsMetric, rows: Breakdown[], filterKey: FilterKey): HTMLElement {
   const total = rows.reduce((sum, row) => sum + row.devices, 0);
   // Selected values are pinned into view: filtering by a version outside the
   // top eight would otherwise leave a chip with nothing on screen to unclick.
@@ -557,7 +614,7 @@ function countryMap(rows: Breakdown[]): HTMLElement {
   const note = document.createElement("p");
   note.className = "stats-muted";
   note.textContent = copy.geographyNote;
-  card.append(heading(copy.geography), note);
+  card.append(heading("geography"), note);
   const layout = document.createElement("div");
   layout.className = "analytics-map-layout";
   const map = document.createElement("div");
@@ -594,11 +651,82 @@ function weeklyCard(): HTMLElement {
   const note = document.createElement("p");
   note.className = "stats-muted";
   note.textContent = copy.weeklyNote;
-  card.append(heading(copy.weekly), note);
+  card.append(heading("weekly"), note);
   const plot = document.createElement("div");
   plot.className = "analytics-echart";
   plot.dataset.chart = "weekly";
   card.append(plot);
+  return card;
+}
+
+let featureSearch = "";
+
+function featureCard(features: Feature[]): HTMLElement {
+  const card = document.createElement("article");
+  card.className = "analytics-card analytics-feature-card";
+  card.append(heading("features"));
+  const search = document.createElement("input");
+  search.type = "search";
+  search.className = "analytics-feature-search";
+  search.placeholder = copy.featureSearch;
+  search.setAttribute("aria-label", copy.featureSearch);
+  search.value = featureSearch;
+  const scroller = document.createElement("div");
+  scroller.className = "analytics-feature-scroll";
+  scroller.tabIndex = 0;
+  scroller.setAttribute("role", "region");
+  scroller.setAttribute("aria-label", copy.features);
+  const table = document.createElement("table");
+  table.className = "analytics-feature-table";
+  table.setAttribute("aria-label", copy.features);
+  const head = table.createTHead().insertRow();
+  for (const title of [copy.featureName, copy.featureDevices, copy.adoption]) {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = title;
+    head.append(cell);
+  }
+  const body = table.createTBody();
+  const rows = features.map((feature) => {
+    const row = body.insertRow();
+    const name = label(feature.key);
+    const nameCell = document.createElement("th");
+    nameCell.scope = "row";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = name;
+    const selected = isSelected(filters, "event", feature.key);
+    button.setAttribute("aria-pressed", String(selected));
+    row.classList.toggle("is-selected", selected);
+    button.addEventListener("click", () => toggle("event", feature.key));
+    nameCell.append(button);
+    row.append(nameCell);
+    row.insertCell().textContent = numbers.format(feature.devices);
+    row.insertCell().textContent = `${feature.adoptionRate.toFixed(1)}%`;
+    return { row, name: name.toLocaleLowerCase(locale) };
+  });
+  const empty = document.createElement("p");
+  empty.className = "stats-muted";
+  empty.setAttribute("role", "status");
+  empty.textContent = copy.featureNoMatches;
+  const filterRows = () => {
+    const query = search.value.trim().toLocaleLowerCase(locale);
+    let visible = 0;
+    for (const { row, name } of rows) {
+      row.hidden = !name.includes(query);
+      if (!row.hidden) visible++;
+    }
+    empty.hidden = visible > 0;
+    table.hidden = visible === 0;
+  };
+  search.addEventListener("input", () => {
+    featureSearch = search.value;
+    scroller.scrollTop = 0;
+    filterRows();
+  });
+  filterRows();
+  scroller.append(table, empty);
+  card.append(search, scroller);
   return card;
 }
 
@@ -755,31 +883,6 @@ function renderCharts(data: ProductStats): void {
     },
   );
 
-  const features = root?.querySelector<HTMLElement>('[data-chart="features"]');
-  if (features) createChart(
-    features,
-    {
-      aria: { enabled: true }, tooltip,
-      grid: { left: 132, right: 34, top: 12, bottom: 24 },
-      xAxis: { ...axis, type: "value", axisLabel: { ...axis.axisLabel, formatter: "{value}%" } },
-      yAxis: { ...axis, type: "category", inverse: true, data: data.features.map((item) => label(item.key)), splitLine: { show: false } },
-      series: [{
-        name: copy.adoption,
-        type: "bar",
-        barMaxWidth: 16,
-        itemStyle: { borderRadius: [0, 3, 3, 0] },
-        data: data.features.map((item) => ({
-          value: item.adoptionRate,
-          itemStyle: { color: pickedColor("event", item.key, chartTheme.blue) },
-        })),
-      }],
-    },
-    ({ dataIndex }) => {
-      const item = data.features[dataIndex];
-      if (item) toggle("event", item.key);
-    },
-  );
-
   const countries = root?.querySelector<HTMLElement>('[data-chart="countries"]');
   if (countries) {
     const countryRows = data.breakdown.countries.filter((row) => row.label !== "XX");
@@ -840,6 +943,7 @@ function renderCharts(data: ProductStats): void {
 
 function render(data: ProductStats): void {
   if (!content) return;
+  closeMetricHelp();
   content.replaceChildren();
   const summary = document.createElement("section");
   summary.className = "analytics-summary";
@@ -852,34 +956,34 @@ function render(data: ProductStats): void {
   const multiDay = startOfUtcDay(to - 1) > startOfUtcDay(from);
   const changeNote = span < DAY_MS ? copy.previousDay : copy.previousPeriod;
   summary.append(
-    metric(numbers.format(data.appStarts), copy.starts, data.comparison ? comparison(data.appStarts, data.comparison.appStarts) : undefined, changeNote),
-    metric(numbers.format(data.activeDeviceDays), copy.devices, data.comparison ? comparison(data.activeDeviceDays, data.comparison.activeDeviceDays) : undefined, changeNote),
-    metric(`${activationRate.toFixed(1)}%`, copy.activationRate),
-    metric(`${data.deepSessionRate.toFixed(1)}%`, copy.deepSessions),
+    metric(numbers.format(data.appStarts), "starts", data.comparison ? comparison(data.appStarts, data.comparison.appStarts) : undefined, changeNote),
+    metric(numbers.format(data.activeDeviceDays), "devices", data.comparison ? comparison(data.activeDeviceDays, data.comparison.activeDeviceDays) : undefined, changeNote),
+    metric(`${activationRate.toFixed(1)}%`, "activationRate"),
+    metric(`${data.deepSessionRate.toFixed(1)}%`, "deepSessions"),
   );
   if (multiDay) {
-    summary.append(metric(`${data.weekly.sundayShare.toFixed(1)}%`, copy.sundayShare));
+    summary.append(metric(`${data.weekly.sundayShare.toFixed(1)}%`, "sundayShare"));
   }
 
   const grid = document.createElement("div");
   grid.className = "analytics-grid";
   if (multiDay) grid.append(trend());
   grid.append(
-    chartCard(copy.utcActivity, "hourly", !multiDay, span < DAY_MS ? copy.partialDayNote : undefined),
+    chartCard("utcActivity", "hourly", !multiDay, span < DAY_MS ? copy.partialDayNote : undefined),
   );
   if (multiDay) grid.append(weeklyCard());
   grid.append(
-    chartCard(copy.activation, "funnel"),
+    chartCard("activation", "funnel"),
     countryMap(data.breakdown.countries),
-    dimension(copy.versions, data.breakdown.versions, "version"),
-    dimension(copy.platforms, data.breakdown.operatingSystems, "os"),
-    dimension(copy.devicesTitle, data.breakdown.deviceClasses, "device"),
-    chartCard(copy.features, "features"),
+    dimension("versions", data.breakdown.versions, "version"),
+    dimension("platforms", data.breakdown.operatingSystems, "os"),
+    dimension("devicesTitle", data.breakdown.deviceClasses, "device"),
+    featureCard(data.features),
   );
 
   const quality = document.createElement("article");
   quality.className = "analytics-card";
-  quality.append(heading(copy.quality));
+  quality.append(heading("quality"));
   data.quality.forEach((row) => {
     const line = document.createElement("p");
     line.className = "analytics-quality-row";
@@ -891,7 +995,7 @@ function render(data: ProductStats): void {
 
   grid.append(
     ranked(
-      copy.engagement,
+      "engagement",
       data.engagement.map((row) => ({
         key: `active_${row.minutes}m`,
         value: `active_${row.minutes}m`,
@@ -900,8 +1004,8 @@ function render(data: ProductStats): void {
       })),
       "event",
     ),
-    maturity(copy.installationAge, data.maturity.installationAge, "installAge"),
-    maturity(copy.activeDays, data.maturity.activeDays, "activeDays"),
+    maturity("installationAge", data.maturity.installationAge, "installAge"),
+    maturity("activeDays", data.maturity.activeDays, "activeDays"),
   );
   content.append(summary, grid);
   renderCharts(data);
@@ -1111,13 +1215,19 @@ rangeRefresh?.addEventListener("click", () => {
 });
 
 document.addEventListener("click", (event) => {
+  if (activeMetricHelp && event.target instanceof Node && !activeMetricHelp.container.contains(event.target)) {
+    closeMetricHelp();
+  }
   if (!rangePopover || rangePopover.hidden) return;
   const target = event.target as Node;
   if (rangePopover.contains(target) || rangeTrigger?.contains(target)) return;
   closePopover();
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closePopover();
+  if (event.key === "Escape") {
+    closeMetricHelp();
+    closePopover();
+  }
 });
 
 const submitToken = () => {
@@ -1129,6 +1239,7 @@ tokenInput?.addEventListener("keydown", (event) => {
   if (event.key === "Enter") submitToken();
 });
 lock?.addEventListener("click", () => {
+  closeMetricHelp();
   sessionStorage.removeItem(TOKEN_KEY);
   content?.replaceChildren();
   closePopover();

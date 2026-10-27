@@ -55,6 +55,7 @@ import {
   type TempoDetail,
 } from "./songAnalysisPlan";
 import { useSongAnalysisStore } from "./songAnalysisStore";
+import { recordProductEvent } from "../../telemetry/telemetry";
 
 type Phase =
   | { kind: "setup"; notice: string | null }
@@ -240,6 +241,7 @@ function SongAnalysisDialog({ song, regionId, regionName, onClose, onApplied }: 
         setPhase({ kind: "setup", notice: t("transport.songAnalysis.cancelled") });
         return;
       }
+      recordProductEvent("feature_song_analysis");
       const onEighths = startsOnEighths(
         clickTrackId && !fromMusic ? bpmFromNames(song, regionId, clickTrackId) : null,
         result.tempo?.analysis.segments[0]?.bpm,

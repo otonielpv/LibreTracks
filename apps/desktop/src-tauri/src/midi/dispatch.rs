@@ -283,6 +283,12 @@ fn dispatch_midi_action(
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
+        "action:set_global_jump_mode_next_section" | "action:set_global_jump_mode_next_cue" => {
+            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            next_settings.global_jump_mode = action_key.trim_start_matches("action:set_global_jump_mode_").into();
+            apply_midi_settings_update(app, settings_store, next_settings)?;
+            return Ok(());
+        }
         "action:increase_global_jump_bars" => {
             let mut next_settings = settings_store
                 .current()
@@ -333,6 +339,12 @@ fn dispatch_midi_action(
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }
+        "action:set_song_jump_trigger_next_section" | "action:set_song_jump_trigger_next_cue" => {
+            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            next_settings.song_jump_trigger = action_key.trim_start_matches("action:set_song_jump_trigger_").into();
+            apply_midi_settings_update(app, settings_store, next_settings)?;
+            return Ok(());
+        }
         "action:increase_song_jump_bars" => {
             let mut next_settings = settings_store
                 .current()
@@ -370,6 +382,12 @@ fn dispatch_midi_action(
                 .current()
                 .map_err(|error| error.to_string())?;
             next_settings.vamp_mode = "section".into();
+            apply_midi_settings_update(app, settings_store, next_settings)?;
+            return Ok(());
+        }
+        "action:set_vamp_mode_section_marker" | "action:set_vamp_mode_cue" => {
+            let mut next_settings = settings_store.current().map_err(|error| error.to_string())?;
+            next_settings.vamp_mode = action_key.trim_start_matches("action:set_vamp_mode_").into();
             apply_midi_settings_update(app, settings_store, next_settings)?;
             return Ok(());
         }

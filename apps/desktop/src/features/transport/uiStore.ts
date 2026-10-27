@@ -3,17 +3,27 @@ import { subscribeWithSelector } from "zustand/middleware";
 import { recordProductEvent } from "../telemetry/telemetry";
 import type { RulerMarkerRef } from "@libretracks/shared/desktopApi";
 
-export type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
+export type GlobalJumpMode = "immediate" | "after_bars" | "next_marker" | "next_section" | "next_cue";
 export type SongJumpTrigger =
   | "immediate"
   | "region_end"
   | "after_bars"
-  | "next_marker";
+  | "next_marker"
+  | "next_section"
+  | "next_cue";
 export type SongTransitionMode = "instant" | "fade_out";
-export type VampMode = "section" | "bars";
+export type VampMode = "section" | "section_marker" | "cue" | "bars";
 
 /** Top-level view mode: linear DAW, song-grid Compact, or stage-ready Live. */
-export type ViewMode = "daw" | "compact" | "live";
+export type ViewMode = "daw" | "setlist" | "compact" | "live";
+
+/** Tab order of the views; Shift+Tab walks it backwards. */
+export const VIEW_MODE_CYCLE: readonly ViewMode[] = [
+  "daw",
+  "setlist",
+  "compact",
+  "live",
+];
 
 export const TIMELINE_DEFAULT_ZOOM_LEVEL = 7;
 export const TIMELINE_DEFAULT_TRACK_HEIGHT = 76;
@@ -118,6 +128,12 @@ function recordViewMode(viewMode: ViewMode): void {
   recordProductEvent(`feature_${viewMode}_view`);
 }
 
+function stepViewMode(current: ViewMode, step: 1 | -1): ViewMode {
+  const index = VIEW_MODE_CYCLE.indexOf(current);
+  const length = VIEW_MODE_CYCLE.length;
+  return VIEW_MODE_CYCLE[(index + step + length) % length];
+}
+
 type TimelineUIState = {
   cameraX: number;
   zoomLevel: number;
@@ -159,6 +175,10 @@ type TimelineUIState = {
    */
   areaSelectMode: boolean;
   viewMode: ViewMode;
+  /** Where «‹ Back» in the DAW goes (Setlist's «Open in the DAW»). Any other
+   * change of view clears it. */
+  returnViewMode: ViewMode | null;
+  setReturnViewMode: (mode: ViewMode | null) => void;
   setViewMode: (mode: ViewMode) => void;
   toggleViewMode: () => void;
   toggleViewModeBackward: () => void;
@@ -234,32 +254,24 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     missingMediaOpen: false,
     areaSelectMode: false,
     viewMode: DEFAULT_VIEW_MODE,
+    returnViewMode: null,
+    setReturnViewMode: (returnViewMode) => set({ returnViewMode }),
     setViewMode: (viewMode) => {
       recordViewMode(viewMode);
-      set({ viewMode });
+      set({ viewMode, returnViewMode: null });
     },
     toggleViewMode: () => {
       set((state) => {
-        const viewMode: ViewMode =
-          state.viewMode === "daw"
-            ? "compact"
-            : state.viewMode === "compact"
-              ? "live"
-              : "daw";
+        const viewMode = stepViewMode(state.viewMode, 1);
         recordViewMode(viewMode);
-        return { viewMode };
+        return { viewMode, returnViewMode: null };
       });
     },
     toggleViewModeBackward: () => {
       set((state) => {
-        const viewMode: ViewMode =
-          state.viewMode === "daw"
-            ? "live"
-            : state.viewMode === "live"
-              ? "compact"
-              : "daw";
+        const viewMode = stepViewMode(state.viewMode, -1);
         recordViewMode(viewMode);
-        return { viewMode };
+        return { viewMode, returnViewMode: null };
       });
     },
     setCameraX: (cameraX) => {
@@ -423,6 +435,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
       }));
     },
     setMidiLearnMode: (midiLearnMode) => {
+      if (midiLearnMode !== null) recordProductEvent("feature_midi_learn");
       set({ midiLearnMode });
     },
     setTrackReorderMode: (trackReorderMode) => {

@@ -6,9 +6,39 @@
  * into a data attribute; nothing here reaches the client except through that.
  */
 
-export type AnalyticsCopy = Record<string, string>;
+export type AnalyticsMetric =
+  | "starts" | "devices" | "activationRate" | "deepSessions" | "sundayShare"
+  | "dailyTrend" | "utcActivity" | "weekly" | "activation" | "geography"
+  | "versions" | "platforms" | "devicesTitle" | "features" | "quality"
+  | "engagement" | "installationAge" | "activeDays";
 
-const es: AnalyticsCopy = {
+export type AnalyticsCopy = Record<string, string>;
+type MetricDescriptions = Record<`${AnalyticsMetric}Help`, string>;
+
+const es: AnalyticsCopy & MetricDescriptions = {
+  featureSearch: "Buscar funcionalidad",
+  featureName: "Funcionalidad",
+  featureDevices: "Disp.-día",
+  featureNoMatches: "No hay funcionalidades que coincidan.",
+  metricInfo: "Qué significa esta métrica",
+  startsHelp: "Arranques de la aplicación registrados con consentimiento en el rango seleccionado. Un mismo dispositivo puede aportar varios inicios. La comparación usa el periodo anterior; en rangos menores de un día, el mismo intervalo del día anterior.",
+  devicesHelp: "Dispositivos distintos por día UTC. Un dispositivo que usa la aplicación tres días cuenta como tres dispositivos-día, no como tres personas. El identificador cambia cada día y no permite contar usuarios únicos entre días.",
+  activationRateHelp: "Porcentaje de dispositivos-día activos que han creado o abierto un proyecto en el rango seleccionado. Indica el paso del arranque al uso de un proyecto, no que se haya reproducido o terminado.",
+  deepSessionsHelp: "Porcentaje de dispositivos-día activos que han alcanzado el hito de 30 minutos con la aplicación visible. No exige estar reproduciendo audio ni que el tiempo sea continuo; no cuenta las sesiones por separado.",
+  sundayShareHelp: "Porcentaje de dispositivos-día con día local conocido que corresponden a domingo. Usa el calendario del dispositivo, no el día UTC. Los clientes antiguos que no envían el día local quedan fuera.",
+  dailyTrendHelp: "Por día UTC: dispositivos activos, dispositivos con alguna señal de activación y dispositivos que usaron alguna funcionalidad registrada. Una señal de activación puede ser crear, abrir, importar audio, reproducir, guardar o exportar.",
+  utcActivityHelp: "Inicios de la aplicación agrupados por hora UTC durante el rango seleccionado; no es tiempo de reproducción. Al elegir una hora filtras el resto del panel, pero esta gráfica conserva todas las horas para poder cambiar de selección.",
+  weeklyHelp: "Dispositivos-día agrupados por el día de la semana local comunicado al arrancar. Un mismo dispositivo puede aparecer en varios días. Los clientes sin este dato quedan fuera; seleccionar un día filtra el resto del panel.",
+  activationHelp: "Dispositivos-día que registraron cada señal: arrancar, crear o abrir un proyecto, importar audio, reproducir y guardar o exportar. Los porcentajes usan los dispositivos-día activos. Son señales independientes, no pasos que deban ocurrir en orden.",
+  geographyHelp: "Dispositivos-día agrupados por país aproximado, inferido al recibir los eventos. No se guarda ubicación precisa. El mapa excluye el país desconocido; pulsar un país filtra las otras métricas.",
+  versionsHelp: "Distribución de dispositivos-día según la versión de la aplicación que envió los inicios. Se muestran las ocho primeras y cualquier versión seleccionada. No indica cuántas instalaciones existen en total.",
+  platformsHelp: "Distribución de dispositivos-día según su sistema operativo. Los porcentajes se calculan sobre el total de esta distribución. Seleccionar un sistema filtra el resto del panel.",
+  devicesTitleHelp: "Distribución de dispositivos-día por clase general: escritorio, móvil, tablet o desconocido. No identifica modelos ni hardware. Seleccionar una clase filtra las otras métricas.",
+  featuresHelp: "Porcentaje de dispositivos-día activos que emitieron la señal de cada funcionalidad. Cada señal se envía como máximo una vez por proceso: no mide clics ni frecuencia de uso. Los clientes antiguos no registran las funcionalidades añadidas después. Esta gráfica no se filtra por su propia selección.",
+  qualityHelp: "Éxitos divididos entre éxitos y fallos registrados para importar audio, abrir proyectos y exportar sesiones. Cada resultado se registra como máximo una vez por proceso, por lo que no es el porcentaje de todos los intentos individuales.",
+  engagementHelp: "Dispositivos-día que alcanzaron 5, 15, 30 o 60 minutos acumulados con la aplicación visible. Los hitos se solapan: alcanzar 60 minutos también cuenta en los anteriores. No es duración de reproducción y el contador se reinicia al cerrar la aplicación.",
+  installationAgeHelp: "Tiempo desde el primer día registrado localmente con estadísticas activadas, agrupado en intervalos amplios. No es la fecha de creación de una cuenta. Borrar los datos locales o retirar el consentimiento reinicia este historial.",
+  activeDaysHelp: "Días UTC distintos de actividad acumulados localmente con estadísticas activadas, agrupados en intervalos amplios. No tienen que ser consecutivos. Borrar los datos locales o retirar el consentimiento reinicia el contador.",
   access: "Acceso al panel",
   token: "Token de administración o de acceso compartido",
   enter: "Abrir métricas",
@@ -134,7 +164,30 @@ const es: AnalyticsCopy = {
   guestNeverExpires: "Tu acceso no caduca",
 };
 
-const en: AnalyticsCopy = {
+const en: AnalyticsCopy & MetricDescriptions = {
+  featureSearch: "Search features",
+  featureName: "Feature",
+  featureDevices: "Device-days",
+  featureNoMatches: "No matching features.",
+  metricInfo: "What this metric means",
+  startsHelp: "Consented app starts recorded in the selected range. One device can contribute multiple starts. The comparison uses the preceding period; for ranges shorter than a day, it uses the same interval on the previous day.",
+  devicesHelp: "Distinct devices per UTC day. One device used on three days counts as three device-days, not three people. The identifier changes every day, so unique users cannot be counted across days.",
+  activationRateHelp: "Percentage of active device-days that created or opened a project in the selected range. It measures moving from launch to using a project, not whether playback or work was completed.",
+  deepSessionsHelp: "Percentage of active device-days that reached the 30-minute milestone with the app visible. Audio need not be playing and the time need not be continuous; separate sessions are not counted individually.",
+  sundayShareHelp: "Percentage of device-days with a known local weekday that fall on Sunday. Uses the device calendar rather than the UTC weekday. Older clients that do not report the local weekday are excluded.",
+  dailyTrendHelp: "Per UTC day: active devices, devices with any activation signal, and devices that used a tracked feature. Activation signals include creating, opening, importing audio, playing, saving or exporting.",
+  utcActivityHelp: "App starts grouped by UTC hour across the selected range, not playback time. Picking an hour filters the other panels; this chart keeps every hour visible so you can change the selection.",
+  weeklyHelp: "Device-days grouped by the local weekday reported at launch. One device can appear on multiple days. Clients without this field are excluded; selecting a weekday filters the other panels.",
+  activationHelp: "Device-days reporting each signal: launch, create or open a project, import audio, play, and save or export. Percentages use active device-days. These are independent signals, not steps that must happen in order.",
+  geographyHelp: "Device-days grouped by approximate country, inferred when events arrive. Precise location is not stored. The map excludes unknown countries; selecting a country filters the other metrics.",
+  versionsHelp: "Distribution of device-days by the app version reporting starts. Shows the top eight plus any selected versions. It does not count all installations.",
+  platformsHelp: "Distribution of device-days by operating system. Percentages use the total of this distribution. Selecting a system filters the other panels.",
+  devicesTitleHelp: "Distribution of device-days by broad class: desktop, mobile, tablet or unknown. Does not identify models or hardware. Selecting a class filters the other metrics.",
+  featuresHelp: "Percentage of active device-days reporting each feature signal. Each signal is sent at most once per app process: it does not measure clicks or usage frequency. Older clients do not track features added later. This chart is not filtered by its own selection.",
+  qualityHelp: "Recorded successes divided by successes plus failures for audio import, project opening and session export. Each outcome is recorded at most once per app process, so this is not the success percentage of all individual attempts.",
+  engagementHelp: "Device-days reaching 5, 15, 30 or 60 accumulated minutes with the app visible. Milestones overlap: reaching 60 minutes also counts toward earlier ones. This is not playback duration; the timer restarts when the app closes.",
+  installationAgeHelp: "Time since the first day recorded locally with statistics enabled, grouped into broad buckets. Not the creation date of an account. Clearing local data or withdrawing consent resets this history.",
+  activeDaysHelp: "Distinct UTC days of activity accumulated locally with statistics enabled, grouped into broad buckets. Days need not be consecutive. Clearing local data or withdrawing consent resets the counter.",
   access: "Dashboard access",
   token: "Administration or shared access token",
   enter: "Open metrics",

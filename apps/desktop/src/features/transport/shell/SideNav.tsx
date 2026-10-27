@@ -5,6 +5,7 @@ import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { networkNavState } from "../../network/networkNavState";
 import { useNetworkSessionStore } from "../../network/networkSessionStore";
 import { isMobileApp } from "../desktopApi";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import type { SidebarTab } from "../types";
 
 type SideNavProps = {
@@ -38,6 +39,7 @@ export function SideNav({
   isFileActionsOpen = false,
 }: SideNavProps) {
   const { t } = useTranslation();
+  const { canUseFiles } = useNetworkPermissions();
   const isNetworkModalOpen = useNetworkSessionStore((state) => state.isModalOpen);
   const openNetworkModal = useNetworkSessionStore((state) => state.openModal);
   const networkHost = useNetworkSessionStore((state) => state.host);
@@ -49,7 +51,7 @@ export function SideNav({
       className="lt-side-nav"
       aria-label={t("transport.shell.navigation")}
     >
-      {isMobileApp && onSessionsClick ? (
+      {canUseFiles && isMobileApp && onSessionsClick ? (
         <button
           type="button"
           data-lt-tour={TOUR_TARGETS.sideNavSessions}
@@ -64,7 +66,7 @@ export function SideNav({
           })}
         </button>
       ) : null}
-      {isMobileApp && onSaveClick ? (
+      {canUseFiles && isMobileApp && onSaveClick ? (
         <button
           type="button"
           aria-label={t("timelineTopbar.save")}
@@ -75,7 +77,7 @@ export function SideNav({
           {t("timelineTopbar.saveShort", { defaultValue: "Guardar" })}
         </button>
       ) : null}
-      {isMobileApp && onFileActionsClick ? (
+      {canUseFiles && isMobileApp && onFileActionsClick ? (
         <button
           type="button"
           className={isFileActionsOpen ? "is-active" : ""}
@@ -95,12 +97,13 @@ export function SideNav({
         className={activeSidebarTab === "library" ? "is-active" : ""}
         data-lt-tour={TOUR_TARGETS.sideNavLibrary}
         aria-label={t("transport.shell.library")}
+        disabled={!canUseFiles}
         onClick={onLibraryToggle}
       >
         <span className="material-symbols-outlined">library_music</span>
         {t("transport.shell.library")}
       </button>
-      {!isMobileApp && (
+      {canUseFiles && !isMobileApp && (
         <button
           type="button"
           className={isRemoteModalOpen ? "is-active" : ""}

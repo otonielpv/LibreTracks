@@ -10,6 +10,7 @@ type ViewModeSwitcherProps = {
 
 const VIEW_MODES: Array<{ mode: ViewMode; icon: string; labelKey: string }> = [
   { mode: "daw", icon: "view_timeline", labelKey: "liveView.openDaw" },
+  { mode: "setlist", icon: "queue_music", labelKey: "liveView.openSetlist" },
   { mode: "compact", icon: "view_module", labelKey: "liveView.openCompact" },
   { mode: "live", icon: "stadium", labelKey: "liveView.open" },
 ];

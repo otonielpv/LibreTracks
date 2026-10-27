@@ -23,6 +23,7 @@ import type { VideoLaneBindings } from "./VideoClipHotspots";
 import { useVideoThumbnails } from "./useVideoThumbnails";
 import { runFirstVideoClipTrigger, runSessionOpenTrigger } from "./videoSetupTriggers";
 import { subscribeToVideoLiveState } from "./videoLive";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 /**
  * The whole video feature as the transport panel sees it: one call, a few
@@ -45,6 +46,7 @@ export type VideoFeatureDeps = {
 };
 
 export function useVideoFeature(deps: VideoFeatureDeps) {
+  const { isGuest, canEdit, canUseFiles } = useNetworkPermissions();
   const depsRef = useRef(deps);
   depsRef.current = deps;
   // Plan video-mobile, paso 09: video plays on phones too. What decides
@@ -52,7 +54,7 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
   // started), not the platform. On the desktop editing never depended on
   // libmpv, and still does not.
   const backendAvailable = useVideoStore((state) => state.status?.available ?? false);
-  const editable = !isMobileApp || backendAvailable;
+  const editable = canEdit && (isGuest || !isMobileApp || backendAvailable);
 
   const handlers = useMemo(
     () =>
@@ -129,12 +131,12 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
   const noticeCheckedForRef = useRef<string | null>(null);
   useEffect(() => {
     // The desktop's notice and wizard; a phone's setup is paso 10's.
-    if (isMobileApp || !deps.song || !libmpvAvailable) return;
+    if (isGuest || isMobileApp || !deps.song || !libmpvAvailable) return;
     if (noticeCheckedForRef.current === sessionKey) return;
     noticeCheckedForRef.current = sessionKey;
     void runSessionOpenTrigger(sessionKey, (deps.song.videoClips?.length ?? 0) > 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionKey, libmpvAvailable]);
+  }, [sessionKey, libmpvAvailable, isGuest]);
 
   useVideoThumbnails(deps.song, true);
 
@@ -167,7 +169,7 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
   // selected video track if there is one, else on a new video track. A phone
   // also offers "add a video from the device" there (paso 08 §3).
   useEffect(() => {
-    if (!editable) return;
+    if (!editable || !canUseFiles) return;
     const atPlayhead = () => ({
       seconds: depsRef.current.getPlayheadSeconds(),
       trackId: useTimelineUIStore.getState().selectedTrackIds[0] ?? null,
@@ -183,7 +185,7 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
       useVideoStore.getState().setDeleteAssets(null);
       useVideoStore.getState().setAddFromDevice(null);
     };
-  }, [editable, handlers]);
+  }, [editable, canUseFiles, handlers]);
 
   // One selection at a time across audio and video unless the user extends
   // it with a modifier (the hotspots handle that side); selecting audio clips
@@ -234,7 +236,7 @@ export function useVideoFeature(deps: VideoFeatureDeps) {
     /** For libraryDragDrop's `importVideoPaths`: files dropped from the OS,
      * referenced in place. A phone has no such drop; it copies picked videos
      * into the session instead (`handlers.addVideosFromDevice`). */
-    importVideoPaths: !isMobileApp ? handlers.importVideoPaths : undefined,
+    importVideoPaths: canUseFiles && !isMobileApp ? handlers.importVideoPaths : undefined,
     /** For timelineMenus' `videoHandlers` (absent where video is read-only). */
     handlers: editable ? handlers : undefined,
     /** For TimelineCanvasPane's `videoLanes`. */

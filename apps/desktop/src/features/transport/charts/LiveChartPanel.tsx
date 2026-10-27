@@ -42,6 +42,8 @@ import { isGuestMirrorMode } from "../desktopApi";
 import { personalChordShift } from "@libretracks/shared/charts/personalChords";
 import { PersonalChordsBar } from "../../network/PersonalChordsBar";
 import { usePersonalChords } from "../../network/usePersonalChords";
+import { useNetworkPermissions } from "../../network/useNetworkPermissions";
+import { recordProductEvent } from "../../telemetry/telemetry";
 import "./LiveChartPanel.css";
 
 const FONT_SCALE_KEY = "lt.liveChart.fontScale";
@@ -87,6 +89,9 @@ type LiveChartPanelProps = {
    * transpose). Only how the chords are drawn; the song is not touched. */
   extraSemitones?: number;
   accidentals?: AccidentalPreference;
+  /** Open with the chart editor showing (Setlist's Edit → Lyrics). Live
+   * leaves it off. */
+  startEditing?: boolean;
 };
 
 function ChartLineView({
@@ -151,10 +156,13 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   onToggleExpanded,
   onClose,
   onChartChange,
-  canEdit = true,
+  canEdit: allowEdit = true,
   extraSemitones = 0,
   accidentals = "auto",
+  startEditing = false,
 }: LiveChartPanelProps) {
+  const permissions = useNetworkPermissions();
+  const canEdit = allowEdit && permissions.canEdit;
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -168,12 +176,21 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   const [showChords, setShowChords] = useState(() =>
     readStored(SHOW_CHORDS_KEY, true, (value) => value === "true"),
   );
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(startEditing && canEdit);
+  useEffect(() => {
+    if (!canEdit) {
+      setEditorOpen(false);
+      setRecording(null);
+    }
+  }, [canEdit]);
   const [recording, setRecording] = useState<LineRecording | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const chart = region?.chart ?? null;
+  useEffect(() => {
+    if (chart?.text.trim()) recordProductEvent("feature_lyrics_chords");
+  }, [chart]);
   const markers = useMemo(
     () => chartMarkersForRegion(song.sectionMarkers, region),
     [song.sectionMarkers, region],

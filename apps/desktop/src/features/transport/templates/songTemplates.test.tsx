@@ -55,6 +55,24 @@ describe("reglas de coincidencia", () => {
 });
 
 describe("Nueva canción desde plantilla", () => {
+  it("abre fuera de la fila con scroll y cierra con Escape o al pulsar fuera", async () => {
+    const { container } = render(<NewSongTemplateMenu onCreate={vi.fn()} />);
+    const toggle = screen.getByRole("button", { name: /desde plantilla/i });
+
+    fireEvent.click(toggle);
+    const menu = await screen.findByRole("menu");
+    expect(menu.parentElement).toBe(document.body);
+    expect(container.contains(menu)).toBe(false);
+    expect(menu.style.position).toBe("fixed");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.click(toggle);
+    await screen.findByRole("menu");
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("ofrece «Sin plantilla», la de serie y las del usuario", async () => {
     const onCreate = vi.fn();
     render(<NewSongTemplateMenu onCreate={onCreate} />);
