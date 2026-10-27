@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { recordProductEvent } from "../../telemetry/telemetry";
 
 import {
   cancelCloudTransfer,
@@ -181,6 +182,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     set({ connecting: true, error: null });
     try {
       await connectCloud();
+      recordProductEvent("feature_cloud");
       await get().refreshStatus();
       await get().refreshQuota();
     } catch (error) {
@@ -231,6 +233,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     });
     try {
       const uploaded = await uploadToCloud(localPath);
+      recordProductEvent("feature_cloud");
       // The folder it landed in follows from the extension, exactly as the
       // backend routed it, so the listing refreshes without a second guess.
       const folder: CloudFolder = name.toLowerCase().endsWith(".ltset")

@@ -4,6 +4,7 @@ import {
   classifyPlatform,
   dailyDeviceToken,
   localWeekday,
+  PRODUCT_EVENT_NAMES,
   recordProductEvent,
   resetTelemetrySessionForTest,
   submitAppSession,
@@ -136,6 +137,31 @@ describe("privacy-preserving telemetry", () => {
 
     finishFirstProduct(new Response(null, { status: 202 }));
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+  });
+
+  it("keeps all feature signals opt-in, deduplicated and free of content", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 202 }));
+    const features = PRODUCT_EVENT_NAMES.filter((event) => event.startsWith("feature_"));
+    for (const event of features) recordProductEvent(event);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    useTelemetryStore.getState().setPreference("enabled");
+    await submitAppSession("1.16.0");
+    for (const event of features) {
+      recordProductEvent(event);
+      recordProductEvent(event);
+    }
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(features.length + 1));
+    const payloads = fetchMock.mock.calls.slice(1).map(([, request]) =>
+      JSON.parse(String(request?.body)) as Record<string, unknown>,
+    );
+    expect(payloads.map((payload) => payload.event)).toEqual(features);
+    for (const payload of payloads) {
+      expect(Object.keys(payload).sort()).toEqual([
+        "arch", "consentVersion", "dailyDeviceToken", "deviceClass", "event", "os", "version",
+      ]);
+    }
   });
 
   it("reuses the daily SHA-256 token across queued events", async () => {

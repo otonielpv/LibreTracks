@@ -125,10 +125,6 @@ function storeTrackHeight(trackHeight: number): void {
 }
 
 function recordViewMode(viewMode: ViewMode): void {
-  // `feature_setlist_view` is not in the closed list of the telemetry table
-  // (D1 CHECK) nor in the website Functions yet: it would be rejected. Step 19
-  // of docs/plans/setlist-view adds the migration and starts emitting it.
-  if (viewMode === "setlist") return;
   recordProductEvent(`feature_${viewMode}_view`);
 }
 
@@ -439,6 +435,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
       }));
     },
     setMidiLearnMode: (midiLearnMode) => {
+      if (midiLearnMode !== null) recordProductEvent("feature_midi_learn");
       set({ midiLearnMode });
     },
     setTrackReorderMode: (trackReorderMode) => {

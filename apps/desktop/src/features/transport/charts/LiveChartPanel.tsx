@@ -43,6 +43,7 @@ import { personalChordShift } from "@libretracks/shared/charts/personalChords";
 import { PersonalChordsBar } from "../../network/PersonalChordsBar";
 import { usePersonalChords } from "../../network/usePersonalChords";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
+import { recordProductEvent } from "../../telemetry/telemetry";
 import "./LiveChartPanel.css";
 
 const FONT_SCALE_KEY = "lt.liveChart.fontScale";
@@ -187,6 +188,9 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   const [error, setError] = useState<string | null>(null);
 
   const chart = region?.chart ?? null;
+  useEffect(() => {
+    if (chart?.text.trim()) recordProductEvent("feature_lyrics_chords");
+  }, [chart]);
   const markers = useMemo(
     () => chartMarkersForRegion(song.sectionMarkers, region),
     [song.sectionMarkers, region],

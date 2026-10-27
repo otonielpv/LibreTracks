@@ -2,6 +2,9 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SongChart, SongRegionSummary, SongView } from "@libretracks/shared/models";
+import { recordProductEvent } from "../../telemetry/telemetry";
+
+vi.mock("../../telemetry/telemetry", () => ({ recordProductEvent: vi.fn() }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -91,6 +94,7 @@ const lineTexts = (container: HTMLElement, selector: string) =>
 
 describe("LiveChartPanel", () => {
   beforeEach(() => {
+    vi.mocked(recordProductEvent).mockClear();
     window.localStorage.clear();
     HTMLElement.prototype.scrollTo = vi.fn() as never;
   });
@@ -104,6 +108,12 @@ describe("LiveChartPanel", () => {
     expect(container.querySelector(".lt-chart-section.is-current .lt-chart-section-label")?.textContent).toBe("EstrofaVerso 1");
     // No "up next" chip: the lyrics below already show it.
     expect(screen.queryByTitle("liveChart.upNext")).toBeNull();
+    expect(recordProductEvent).toHaveBeenCalledWith("feature_lyrics_chords");
+  });
+
+  it("does not count an empty lyrics panel as adoption", () => {
+    renderPanel(region(null), { current: 0 });
+    expect(recordProductEvent).not.toHaveBeenCalled();
   });
 
   it("scrolls so the current line sits near the top of the panel", () => {

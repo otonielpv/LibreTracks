@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
+import { recordProductEvent } from "../telemetry/telemetry";
 
 import type {
   AudioMeterLevel,
@@ -204,6 +205,9 @@ export const useTransportStore = create<TransportStore>()(
       });
     },
     setPlaybackState: (playback) => {
+      if (playback?.activeVamp || playback?.songGapVamp) {
+        recordProductEvent("feature_vamp");
+      }
       set((state) =>
         shouldPublishPlaybackSnapshot(state.playback, playback)
           ? { playback }

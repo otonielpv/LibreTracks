@@ -38,12 +38,48 @@ is emitted at most once per app process. No event accepts names, paths, error
 messages or arbitrary properties. Installation age and cumulative active days
 are computed locally and sent only as broad buckets.
 
+Migration `0008_feature_adoption.sql` extends that same consent-v3 taxonomy;
+it adds no payload fields or identifiers. The feature-adoption chart and its
+cross-filters include the following additional signals:
+
+| Event | Recorded when |
+| --- | --- |
+| `feature_setlist_view` | Switching to Setlist, including keyboard navigation. |
+| `feature_video` | Successfully importing a video or placing it on the timeline. |
+| `feature_lyrics_chords` | Displaying a song chart with non-empty text in Live or Setlist. |
+| `feature_cloud` | Successfully connecting Google Drive, uploading or downloading a package. |
+| `feature_network_host` | A network session reports that it is hosting. |
+| `feature_network_guest` | A network session reports a connected guest, including mirror snapshots. |
+| `feature_audio_render` | An audio render is saved, not cancelled or failed. |
+| `feature_song_analysis` | Song analysis completes without cancellation. |
+| `feature_level_songs` | Loudness measurement completes without cancellation. |
+| `feature_midi_learn` | MIDI learn is armed, with or without a target. |
+| `feature_vamp` | A transport snapshot contains an active vamp or a song-gap vamp. |
+
+These are adoption signals, not interaction counters: each is still sent at
+most once per app process, only with opt-in. The dashboard counts distinct
+device-days. Older clients do not emit the new events, so a zero before the
+updated app is released does not mean the feature was never used. No historical
+usage is backfilled. Deploy in this order: apply migration 0008, deploy the
+website/API, then release the updated app. The migration preserves all existing
+product-event rows and recreates their three indexes.
+
 The private product dashboard uses Apache ECharts with SVG rendering for
-interactive daily trends, UTC hourly activity, activation funnel and feature
-adoption. It also shows comparisons with the preceding period, versions,
+interactive daily trends, UTC hourly activity and the activation funnel.
+Feature adoption uses a searchable table showing device-days and adoption
+percentages, with a bounded scroll area so adding features never increases the
+panel height. Clicking a feature name toggles the same cross-filter as before;
+search only narrows the visible rows and does not change any metrics.
+The dashboard also shows comparisons with the preceding period, versions,
 operating systems, device classes and a country-level choropleth map. Geography is
 always aggregated from the existing two-letter edge country code; the dashboard
 does not collect or expose cities, coordinates or IP addresses.
+
+Every summary metric and chart has a round information button with a short
+explanation in the dashboard language. Click, tap, Enter or Space opens it;
+clicking again, clicking outside, opening another explanation or pressing Escape
+closes it. The explanations clarify device-day counting, rate denominators and
+the limits of once-per-process signals; opening them collects no new telemetry.
 
 ## Cross-filtering
 
@@ -114,7 +150,8 @@ this page.
    applied. Product metrics require `0003_product_telemetry.sql`, the weekday
    chart requires `0005_local_weekday.sql`, DAW view adoption requires
    `0006_daw_view_telemetry.sql`, and share tokens require
-   `0007_analytics_access_tokens.sql`. Until that last one is applied the
+   `0007_analytics_access_tokens.sql`. Extended feature adoption requires
+   `0008_feature_adoption.sql`. Until migration 0007 is applied the
    dashboard still works for the maintainer and says which migration is
    missing when the token panel is opened.
 3. In the LibreTracks Pages project, add a D1 binding named exactly

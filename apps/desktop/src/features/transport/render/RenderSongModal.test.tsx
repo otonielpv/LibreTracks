@@ -8,6 +8,9 @@ import type {
   RenderSongAudioResult,
 } from "@libretracks/shared/desktopApi";
 import type { SongView } from "@libretracks/shared/models";
+import { recordProductEvent } from "../../telemetry/telemetry";
+
+vi.mock("../../telemetry/telemetry", () => ({ recordProductEvent: vi.fn() }));
 
 /**
  * The render modal is the whole feature from the user's side: tick the
@@ -115,6 +118,7 @@ describe("RenderSongModal", () => {
     expect(request.fileName).toContain("transport.renderModal.withoutFileName");
     expect(request.fileName).toContain("Drums");
     await screen.findByText(/transport.renderModal.saved/);
+    expect(recordProductEvent).toHaveBeenCalledWith("feature_audio_render");
   });
 
   it("will not render an empty selection", () => {
@@ -144,6 +148,7 @@ describe("RenderSongModal", () => {
     await act(async () => finish({ ...saved, saved: false, cancelled: true, fileName: null }));
     // Back on the form, told what happened, choices intact.
     expect(screen.getByText("transport.renderModal.cancelled")).toBeTruthy();
+    expect(recordProductEvent).not.toHaveBeenCalled();
     expect((screen.getByLabelText("Drums") as HTMLInputElement).checked).toBe(true);
   });
 

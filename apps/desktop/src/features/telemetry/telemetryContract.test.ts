@@ -12,19 +12,34 @@ describe("telemetry contract", () => {
       resolve(repository, "apps/website/functions/api/telemetry/events.ts"),
       "utf8",
     );
-    const migrations = [
-      "0003_product_telemetry.sql",
-      "0004_live_view_telemetry.sql",
-      "0006_daw_view_telemetry.sql",
-    ].map((file) =>
-      readFileSync(resolve(repository, "apps/website/migrations", file), "utf8"),
-    ).join("\n");
+    const migration = readFileSync(
+      resolve(repository, "apps/website/migrations/0008_feature_adoption.sql"),
+      "utf8",
+    );
+    const filters = readFileSync(
+      resolve(repository, "apps/website/functions/api/telemetry/_filters.ts"),
+      "utf8",
+    );
+    const stats = readFileSync(
+      resolve(repository, "apps/website/functions/api/telemetry/product-stats.ts"),
+      "utf8",
+    );
+    const dashboard = readFileSync(
+      resolve(repository, "apps/website/src/components/analytics/dashboard.ts"),
+      "utf8",
+    );
 
     for (const event of PRODUCT_EVENT_NAMES) {
       expect(api, `${event} missing from API allowlist`).toContain(`"${event}"`);
-      expect(migrations, `${event} missing from D1 CHECK constraint`).toContain(
+      expect(migration, `${event} missing from the current D1 CHECK constraint`).toContain(
         `'${event}'`,
       );
+      expect(filters, `${event} missing from cross-filters`).toContain(`"${event}"`);
+      if (event.startsWith("feature_")) {
+        expect(stats, `${event} missing from the adoption response`).toContain(`"${event}"`);
+        expect(dashboard.match(new RegExp(`${event}:`, "g")), `${event} needs ES and EN labels`)
+          .toHaveLength(2);
+      }
     }
   });
 
