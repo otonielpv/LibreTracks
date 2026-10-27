@@ -1,5 +1,9 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parse } from "postcss";
 import { setGuestMirrorMode, setGuestRole } from "@libretracks/shared/desktopApi";
 import type { NetworkRole } from "@libretracks/shared/networkRoles";
 import type { NetworkGuestStatus } from "@libretracks/shared/networkApi";
@@ -7,6 +11,22 @@ import { SetlistView } from "../transport/setlist/SetlistView";
 import { testSetlistProps } from "../transport/setlist/testBindings";
 import { INITIAL_SETLIST_STATE, useSetlistStore } from "../transport/setlist/setlistStore";
 import { EMPTY_GUEST_STATUS, useNetworkSessionStore } from "./networkSessionStore";
+
+const setlistStyles = parse(readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "../transport/setlist/setlist.css"),
+  "utf8",
+));
+
+function layoutDeclarations(element: Element, selector: string) {
+  const declarations: Record<string, string> = {};
+  setlistStyles.walkRules(selector, (rule) => {
+    expect(element.matches(rule.selector)).toBe(true);
+    rule.walkDecls((declaration) => {
+      declarations[declaration.prop] = declaration.value;
+    });
+  });
+  return declarations;
+}
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -30,6 +50,33 @@ afterEach(() => {
 });
 
 describe("Setlist network permissions", () => {
+  it.each(["wide", "medium", "short"] as const)(
+    "keeps the full-width mixer and Master layout through guest permission wrappers (%s)",
+    (layoutClass) => {
+      role("viewer");
+      useSetlistStore.setState({ shortPane: "mixer" });
+      const { container } = render(<SetlistView {...testSetlistProps()} layoutClass={layoutClass} />);
+      const mixer = container.querySelector(".lt-compact-mixer")!;
+      const master = container.querySelector(".lt-setlist-master-strip")!;
+
+      expect(mixer.parentElement?.tagName).toBe("FIELDSET");
+      const mixerSelector = ".lt-setlist-console-tracks .lt-compact-mixer";
+      expect(layoutDeclarations(mixer, mixerSelector)).toMatchObject({
+        flex: "1 1 auto",
+        "min-width": "0",
+        padding: "0",
+      });
+      expect(layoutDeclarations(master, ".lt-setlist-console .lt-setlist-master-strip")).toMatchObject({
+        "align-self": "stretch",
+        height: "auto",
+      });
+
+      act(() => role("editor"));
+      expect(container.querySelector(".lt-compact-mixer")?.parentElement?.tagName).not.toBe("FIELDSET");
+      expect(layoutDeclarations(container.querySelector(".lt-compact-mixer")!, mixerSelector).flex).toBe("1 1 auto");
+    },
+  );
+
   it("lets a viewer select songs but not cue, play, edit, mix or import", () => {
     role("viewer");
     const props = testSetlistProps();

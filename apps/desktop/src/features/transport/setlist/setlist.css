@@ -1424,8 +1424,9 @@ html.lt-mobile .lt-setlist-track-row {
 }
 
 /* El mezclador de Compacta trae «flex: 0 0 16rem» (allí es su alto); en la
-   consola horizontal eso era un ANCHO fijo. Aquí ocupa todo lo que queda. */
-.lt-setlist-console-tracks > .lt-compact-mixer {
+   consola horizontal eso era un ANCHO fijo. Aquí ocupa todo lo que queda.
+   NetworkControls intercala un fieldset con display: contents para invitados. */
+.lt-setlist-console-tracks .lt-compact-mixer {
   flex: 1 1 auto;
   min-width: 0;
   height: auto;
@@ -1676,7 +1677,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 
 /* El Master es una tira de pista más (mismo marcado, ver
    SetlistConsoleStrip): sólo se ancla a la derecha y lleva el acento. */
-.lt-setlist-console > .lt-setlist-master-strip {
+.lt-setlist-console .lt-setlist-master-strip {
   align-self: stretch;
   height: auto;
   margin-left: 0.25rem;
@@ -1695,7 +1696,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   pointer-events: none;
 }
 
-.lt-setlist-console.is-bar > .lt-setlist-master-strip {
+.lt-setlist-console.is-bar .lt-setlist-master-strip {
   max-height: 12rem;
 }
 
