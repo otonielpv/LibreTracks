@@ -338,6 +338,10 @@ export function TimelineToolbar({
       ? `${globalJumpBars} bars`
       : globalJumpMode === "next_marker"
         ? t("transport.jumpMode.nextMarker")
+        : globalJumpMode === "next_section"
+          ? t("transport.jumpMode.nextSection")
+          : globalJumpMode === "next_cue"
+            ? t("transport.jumpMode.nextCue")
         : t("transport.jumpMode.immediate");
   const songJumpSummary =
     songJumpTrigger === "after_bars"
@@ -346,6 +350,10 @@ export function TimelineToolbar({
         ? t("transport.jumpMode.regionEnd")
         : songJumpTrigger === "next_marker"
           ? t("transport.jumpMode.nextMarker")
+          : songJumpTrigger === "next_section"
+            ? t("transport.jumpMode.nextSection")
+            : songJumpTrigger === "next_cue"
+              ? t("transport.jumpMode.nextCue")
           : t("transport.jumpMode.immediate");
   const songTransitionSummary =
     songTransitionMode === "fade_out"
@@ -482,7 +490,11 @@ export function TimelineToolbar({
             summary={
               vampMode === "bars"
                 ? `${vampBars} bars`
-                : t("timelineToolbar.vampSectionOption")
+                : t(vampMode === "section_marker"
+                    ? "transport.jumpMode.sectionMarker"
+                    : vampMode === "cue"
+                      ? "transport.jumpMode.cueMarker"
+                      : "transport.jumpMode.anyMarker")
             }
             open={openGroup === "vamp"}
             onToggleOpen={() =>
@@ -592,8 +604,19 @@ export function TimelineToolbar({
                   )
                 }
               >
-                {t("timelineToolbar.vampSectionOption")}
+                {t("transport.jumpMode.anyMarker")}
               </button>
+              {(["section_marker", "cue"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={vampMode === mode ? "is-active" : ""}
+                  disabled={controlsDisabled}
+                  onClick={() => handleModeButtonClick(`action:set_vamp_mode_${mode}`, () => onVampModeChange(mode))}
+                >
+                  {t(mode === "section_marker" ? "transport.jumpMode.sectionMarker" : "transport.jumpMode.cueMarker")}
+                </button>
+              ))}
               <button
                 type="button"
                 className={vampMode === "bars" ? "is-active" : ""}
@@ -734,6 +757,17 @@ export function TimelineToolbar({
               >
                 {t("transport.jumpMode.nextMarker")}
               </button>
+              {(["next_section", "next_cue"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={globalJumpMode === mode ? "is-active" : ""}
+                  disabled={controlsDisabled}
+                  onClick={() => handleModeButtonClick(`action:set_global_jump_mode_${mode}`, () => onGlobalJumpModeChange(mode))}
+                >
+                  {t(mode === "next_section" ? "transport.jumpMode.nextSection" : "transport.jumpMode.nextCue")}
+                </button>
+              ))}
             </div>
           </ControlGroup>
 
@@ -864,6 +898,17 @@ export function TimelineToolbar({
               >
                 {t("transport.jumpMode.nextMarker")}
               </button>
+              {(["next_section", "next_cue"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={songJumpTrigger === mode ? "is-active" : ""}
+                  disabled={controlsDisabled}
+                  onClick={() => handleModeButtonClick(`action:set_song_jump_trigger_${mode}`, () => onSongJumpTriggerChange(mode))}
+                >
+                  {t(mode === "next_section" ? "transport.jumpMode.nextSection" : "transport.jumpMode.nextCue")}
+                </button>
+              ))}
             </div>
             <div className="lt-segmented-control lt-song-transition-row">
               <button

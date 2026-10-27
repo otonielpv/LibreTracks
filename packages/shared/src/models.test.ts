@@ -438,6 +438,20 @@ describe("normalizeAppSettings", () => {
     ).toBe("next_marker");
   });
 
+  it.each(["next_section", "next_cue"] as const)("preserves the %s jump trigger", (trigger) => {
+    const result = normalizeAppSettings({
+      ...DEFAULT_APP_SETTINGS,
+      globalJumpMode: trigger,
+      songJumpTrigger: trigger,
+    });
+    expect(result.globalJumpMode).toBe(trigger);
+    expect(result.songJumpTrigger).toBe(trigger);
+  });
+
+  it.each(["section", "section_marker", "cue", "bars"] as const)("preserves the %s vamp mode", (vampMode) => {
+    expect(normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, vampMode }).vampMode).toBe(vampMode);
+  });
+
   it("keeps importMergeMatchingTracks on when the field is absent", () => {
     // Settings files written before this option exists must keep the historical
     // merge-on-import behaviour rather than flipping to separate tracks.

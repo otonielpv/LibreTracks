@@ -2,7 +2,7 @@
 
 use libretracks_core::tempo_ramp::{tempo_spans, TempoSpan};
 use libretracks_core::{
-    validate_song, Clip, DomainError, Marker, Song, SongRegion, Track, TrackKind,
+    validate_song, Clip, DomainError, Marker, MarkerCategory, Song, SongRegion, Track, TrackKind,
 };
 use thiserror::Error;
 
@@ -41,6 +41,8 @@ pub struct ActiveClip {
 pub enum JumpTrigger {
     Immediate,
     NextMarker,
+    NextSection,
+    NextCue,
     RegionEnd,
     AfterBars(u32),
 }
@@ -48,6 +50,8 @@ pub enum JumpTrigger {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VampMode {
     Section,
+    SectionMarker,
+    Cue,
     Bars(u32),
 }
 
@@ -367,16 +371,28 @@ impl AudioEngine {
         }
 
         let active_vamp = match mode {
-            VampMode::Section => {
+            VampMode::Section | VampMode::SectionMarker | VampMode::Cue => {
+                let category = match mode {
+                    VampMode::SectionMarker => Some(MarkerCategory::Section),
+                    VampMode::Cue => Some(MarkerCategory::Cue),
+                    _ => None,
+                };
                 let current_region = find_region_for_position(song, self.position_seconds);
                 let start_seconds = song
-                    .marker_at(self.position_seconds)
+                    .sorted_markers()
+                    .into_iter()
+                    .rev()
+                    .find(|marker| {
+                        marker.start_seconds <= self.position_seconds
+                            && category.is_none_or(|category| marker.category() == category)
+                    })
                     .map(|marker| marker.start_seconds)
                     .or_else(|| current_region.map(|region| region.start_seconds))
                     .unwrap_or(0.0);
                 let end_seconds = song
                     .section_markers
                     .iter()
+                    .filter(|marker| category.is_none_or(|category| marker.category() == category))
                     .filter(|marker| marker.start_seconds > start_seconds + f64::EPSILON)
                     .map(|marker| marker.start_seconds)
                     .min_by(|left, right| {
@@ -731,6 +747,16 @@ fn jump_execute_at(
         JumpTrigger::NextMarker => Ok(song
             .next_marker_after(current_position)
             .map(|marker| marker.start_seconds)),
+        JumpTrigger::NextSection | JumpTrigger::NextCue => {
+            let category = if *trigger == JumpTrigger::NextSection {
+                MarkerCategory::Section
+            } else {
+                MarkerCategory::Cue
+            };
+            Ok(song.sorted_markers().into_iter().find(|marker| {
+                marker.start_seconds > current_position && marker.category() == category
+            }).map(|marker| marker.start_seconds))
+        }
         JumpTrigger::RegionEnd => {
             Ok(find_region_for_position(song, current_position).map(|region| region.end_seconds))
         }
@@ -1582,6 +1608,32 @@ mod tests {
         assert!(scheduled.is_none());
         assert_eq!(engine.position_seconds(), 12.0);
         assert!(engine.pending_marker_jump().is_none());
+    }
+
+    #[test]
+    fn category_filtered_jumps_and_vamps_respect_marker_overrides() {
+        let mut song = demo_song();
+        song.section_markers[0].start_seconds = 0.0;
+        song.section_markers[1].start_seconds = 4.0;
+        song.section_markers[1].category_override = Some(libretracks_core::MarkerCategory::Cue);
+        song.section_markers[2].start_seconds = 8.0;
+
+        assert_eq!(super::jump_execute_at(&song, 1.0, &JumpTrigger::NextMarker).unwrap(), Some(4.0));
+        assert_eq!(super::jump_execute_at(&song, 1.0, &JumpTrigger::NextSection).unwrap(), Some(8.0));
+        assert_eq!(super::jump_execute_at(&song, 1.0, &JumpTrigger::NextCue).unwrap(), Some(4.0));
+        assert_eq!(super::jump_execute_at(&song, 4.0, &JumpTrigger::NextCue).unwrap(), None);
+
+        let mut engine = AudioEngine::new();
+        engine.load_song(song).unwrap();
+        engine.seek(5.0).unwrap();
+        assert_eq!(engine.toggle_vamp(VampMode::SectionMarker).unwrap(), Some(ActiveVamp {
+            start_seconds: 0.0,
+            end_seconds: 8.0,
+        }));
+        engine.toggle_vamp(VampMode::SectionMarker).unwrap();
+        let cue_vamp = engine.toggle_vamp(VampMode::Cue).unwrap().unwrap();
+        assert_eq!(cue_vamp.start_seconds, 4.0);
+        assert!(cue_vamp.end_seconds > 8.0);
     }
 
     #[test]

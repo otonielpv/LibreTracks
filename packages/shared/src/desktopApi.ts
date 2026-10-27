@@ -1952,7 +1952,7 @@ export async function cancelMarkerJump(): Promise<TransportSnapshot> {
 }
 
 export async function toggleVamp(
-  mode: "section" | "bars",
+  mode: AppSettings["vampMode"],
   bars?: number,
 ): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("toggle_vamp", {

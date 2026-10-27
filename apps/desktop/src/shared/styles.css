@@ -6770,6 +6770,22 @@ html.lt-ios body {
   white-space: nowrap;
 }
 
+.lt-control-group-vamp .lt-segmented-control,
+.lt-control-group-jump .lt-segmented-control,
+.lt-control-group-song .lt-segmented-control {
+  flex-wrap: wrap;
+}
+
+.lt-control-group-vamp .lt-segmented-control button,
+.lt-control-group-jump .lt-segmented-control button,
+.lt-control-group-song .lt-segmented-control button {
+  max-width: 100%;
+  height: auto;
+  padding-block: 0.45rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .lt-segmented-control button:hover,
 .lt-stepper-control-row button:hover,
 .lt-midi-learn-reset:hover {
@@ -11038,7 +11054,13 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 }
 
 .lt-telemetry-consent {
+  box-sizing: border-box;
   width: min(34rem, 100%);
+  min-height: 0;
+  max-height: calc(100vh / var(--lt-ui-zoom, 1) - 3rem - var(--lt-safe-area-top) - var(--lt-safe-area-bottom));
+  max-height: calc(100dvh / var(--lt-ui-zoom, 1) - 3rem - var(--lt-safe-area-top) - var(--lt-safe-area-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid rgb(87 241 219 / 0.22);
   border-radius: 2px;
   background:
@@ -11074,6 +11096,8 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 }
 
 .lt-telemetry-actions button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
   min-height: 2.5rem;
   border: 1px solid rgb(87 241 219 / 0.22);
   border-radius: 2px;

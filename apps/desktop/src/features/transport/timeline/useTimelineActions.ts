@@ -52,7 +52,7 @@ export function useTimelineActions({
       forcePlaybackVisualAnchor?.(nextSnapshot);
     }
 
-    if (trigger === "next_marker" && !nextSnapshot.pendingMarkerJump) {
+    if (trigger.startsWith("next_") && !nextSnapshot.pendingMarkerJump) {
       setStatus(t("transport.status.noMarkersAhead"));
       return nextSnapshot;
     }
@@ -62,6 +62,11 @@ export function useTimelineActions({
         ? t("transport.status.jumpImmediate", { name: markerName })
         : trigger === "next_marker"
           ? t("transport.status.jumpNextMarker", { name: markerName })
+          : trigger === "next_section" || trigger === "next_cue"
+            ? t("transport.jumpMode.scheduled", {
+                name: markerName,
+                when: t(trigger === "next_section" ? "transport.jumpMode.nextSection" : "transport.jumpMode.nextCue"),
+              })
           : t("transport.status.jumpAfterBars", {
               count: bars,
               name: markerName,
@@ -89,7 +94,7 @@ export function useTimelineActions({
       return nextSnapshot;
     }
 
-    if (trigger === "next_marker" && !nextSnapshot.pendingMarkerJump) {
+    if (trigger.startsWith("next_") && !nextSnapshot.pendingMarkerJump) {
       setStatus(t("transport.status.noMarkersAhead"));
       return nextSnapshot;
     }
@@ -101,6 +106,8 @@ export function useTimelineActions({
           ? t("transport.jumpMode.regionEnd")
           : trigger === "next_marker"
             ? t("transport.jumpMode.nextMarker")
+            : trigger === "next_section" || trigger === "next_cue"
+              ? t(trigger === "next_section" ? "transport.jumpMode.nextSection" : "transport.jumpMode.nextCue")
             : t("transport.jumpMode.afterBars", { count: bars });
     const howLabel =
       transition === "fade_out"
@@ -156,7 +163,9 @@ export function useTimelineActions({
           ? t("transport.status.vampBarsEnabled", {
               count: appSettings.vampBars,
             })
-          : t("transport.status.vampSectionEnabled")
+          : t("transport.jumpMode.vampEnabled", {
+              category: t(mode === "section_marker" ? "transport.jumpMode.sectionMarker" : mode === "cue" ? "transport.jumpMode.cueMarker" : "transport.jumpMode.anyMarker"),
+            })
         : t("transport.status.vampDisabled"),
     );
 

@@ -3,14 +3,16 @@ import { subscribeWithSelector } from "zustand/middleware";
 import { recordProductEvent } from "../telemetry/telemetry";
 import type { RulerMarkerRef } from "@libretracks/shared/desktopApi";
 
-export type GlobalJumpMode = "immediate" | "after_bars" | "next_marker";
+export type GlobalJumpMode = "immediate" | "after_bars" | "next_marker" | "next_section" | "next_cue";
 export type SongJumpTrigger =
   | "immediate"
   | "region_end"
   | "after_bars"
-  | "next_marker";
+  | "next_marker"
+  | "next_section"
+  | "next_cue";
 export type SongTransitionMode = "instant" | "fade_out";
-export type VampMode = "section" | "bars";
+export type VampMode = "section" | "section_marker" | "cue" | "bars";
 
 /** Top-level view mode: linear DAW, song-grid Compact, or stage-ready Live. */
 export type ViewMode = "daw" | "setlist" | "compact" | "live";

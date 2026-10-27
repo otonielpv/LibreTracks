@@ -307,18 +307,24 @@ function LivePerformanceViewComponent({
   }, [selectedPlayback.activeGroupId]);
 
   const jumpOptions = [
+    { value: "next_section", label: t("transport.jumpMode.nextSection") },
+    { value: "next_cue", label: t("transport.jumpMode.nextCue") },
     { value: "immediate", label: t("liveView.immediate") },
     { value: "after_bars", label: t("liveView.afterBars") },
     { value: "next_marker", label: t("liveView.nextMarker") },
   ];
   const songJumpOptions = [
+    { value: "next_section", label: t("transport.jumpMode.nextSection") },
+    { value: "next_cue", label: t("transport.jumpMode.nextCue") },
     { value: "immediate", label: t("liveView.immediate") },
     { value: "region_end", label: t("liveView.regionEnd") },
     { value: "after_bars", label: t("liveView.afterBars") },
     { value: "next_marker", label: t("liveView.nextMarker") },
   ];
   const vampOptions = [
-    { value: "section", label: t("liveView.section") },
+    { value: "section", label: t("transport.jumpMode.anyMarker") },
+    { value: "section_marker", label: t("transport.jumpMode.sectionMarker") },
+    { value: "cue", label: t("transport.jumpMode.cueMarker") },
     { value: "bars", label: t("liveView.bars") },
   ];
   const songTransitionOptions = [
@@ -567,11 +573,11 @@ function LivePerformanceViewComponent({
                     {isVampAnchor ? (
                       <em
                         className="is-vamp"
-                        title={settings.vampMode === "section"
+                        title={settings.vampMode !== "bars"
                           ? t("liveView.vampSectionFeedback")
                           : t("liveView.vampBarsFeedback", { count: settings.vampBars })}
                       >
-                        {settings.vampMode === "section"
+                        {settings.vampMode !== "bars"
                           ? t("liveView.vampSectionBadge")
                           : t("liveView.vampBarsBadge", { count: settings.vampBars })}
                       </em>

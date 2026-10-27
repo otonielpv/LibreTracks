@@ -1100,6 +1100,10 @@ export function TransportPanelContent() {
         return t("transport.jumpMode.nextMarker");
       }
 
+      if (trigger === "next_section" || trigger === "next_cue") {
+        return t(trigger === "next_section" ? "transport.jumpMode.nextSection" : "transport.jumpMode.nextCue");
+      }
+
       if (trigger === "region_end") {
         return t("transport.jumpMode.regionEnd");
       }
