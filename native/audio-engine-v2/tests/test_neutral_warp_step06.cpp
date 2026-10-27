@@ -15,6 +15,7 @@
 
 #include <doctest/doctest.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
+#include <lt_engine/pitch/prearmed_jump_manager.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/render/track_renderer.h>
 #include <lt_engine/session/session.h>
@@ -258,6 +259,95 @@ TEST_CASE("step06 C6/C7: las dos mitades de la decisión no pueden discrepar") {
                                   "la pista sonaría en silencio");
                 }
             }
+
         }
     }
+}
+
+TEST_CASE("neutral warp before a transposed region keeps instruments audible after Vamp") {
+#if !LT_ENGINE_HAVE_BUNGEE
+    return;
+#endif
+    constexpr Frame length = kSR * 4;
+    constexpr Frame boundary = kSR;
+    SourceManager sources;
+    add_source(sources, length);
+    auto session = make_session(SessionOpts{}, length);
+    auto& song = session.songs[0];
+    song.regions[0].end_frame = boundary;
+    Region transposed = song.regions[0];
+    transposed.id = "transposed";
+    transposed.start_frame = boundary;
+    transposed.end_frame = length;
+    transposed.transpose_semitones = -2;
+    song.regions.push_back(transposed);
+
+    Track guide = song.tracks[0];
+    guide.id = "guide";
+    guide.clips[0].id = "guide-clip";
+    guide.transpose_behavior = TransposeBehavior::NeverTranspose;
+    song.tracks.push_back(guide);
+
+    BungeeVoiceManager voices;
+    REQUIRE(voices.prepare(kSR, kChannels, kBlock * 4));
+    SUBCASE("session load") {
+        voices.rebuild_for_session(session, sources, 0);
+    }
+    SUBCASE("seek into the neutral region") {
+        voices.publish_prepared_voice_map_realtime(
+            voices.build_seek_voice_map(0, session, sources));
+    }
+    SUBCASE("committed region edit") {
+        voices.retime_existing_for_session(session, sources, 0, false);
+    }
+    SUBCASE("prepared Vamp wrap into the neutral region") {
+        PrearmedJumpManager prearm;
+        REQUIRE(prearm.prepare(kSR, kChannels, kBlock * 4));
+        auto prepared = prearm.prepare_target_now(
+            session, sources, PrearmTargetKind::VampStart,
+            song.id, "__lt_vamp__:0", 0, 1);
+        REQUIRE(prepared);
+        REQUIRE(prepared->valid);
+        CHECK(prepared->tracks.empty());
+        voices.swap_in_prepared_voices(prepared->extract_voice_map());
+        voices.enroll_missing_voices(session, sources, 0);
+    }
+
+    CHECK(voices.voice_for("clip") != nullptr);
+    CHECK(voices.voice_for("guide-clip") == nullptr);
+    CHECK(voices.diagnostics().active_voice_count == 1);
+
+    TrackRenderer::reset_diagnostics();
+    for (const auto& track : song.tracks) {
+        TrackRenderer renderer;
+        renderer.prepare(kBlock);
+        constexpr int blocks = 48;
+        std::vector<float> output;
+        std::vector<float> l(kBlock), r(kBlock);
+        float* buf[] = {l.data(), r.data()};
+        for (int b = 0; b < blocks; ++b) {
+            std::fill(l.begin(), l.end(), 0.0f);
+            std::fill(r.begin(), r.end(), 0.0f);
+            renderer.render(track, boundary + b * kBlock, kBlock,
+                            buf, kChannels, sources, &voices, kSR, 0, &song);
+            for (int f = 0; f < kBlock; ++f) {
+                output.push_back(l[f]);
+                output.push_back(r[f]);
+            }
+        }
+        constexpr Frame skip = kBlock * 16;
+        double energy = 0.0;
+        for (std::size_t i = skip * kChannels; i < output.size(); ++i)
+            energy += static_cast<double>(output[i]) * output[i];
+        const double rms = std::sqrt(
+            energy / (output.size() - skip * kChannels));
+        CAPTURE(track.id);
+        CHECK(rms > 0.05);
+        const double expected_hz = track.id == "guide"
+            ? 330.0 : 330.0 * std::pow(2.0, -2.0 / 12.0);
+        const double actual_hz = test::estimate_frequency_hz(
+            output, kSR, skip, blocks * kBlock - skip);
+        CHECK(actual_hz == doctest::Approx(expected_hz).epsilon(0.01));
+    }
+    CHECK(TrackRenderer::diagnostics().pitch_missing_stream_silence_count == 0);
 }

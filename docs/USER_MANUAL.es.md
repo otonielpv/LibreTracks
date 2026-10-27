@@ -186,6 +186,8 @@ Esto te permite reaccionar en tiempo real si la banda alarga un estribillo, se s
 
 Usa `Vamp` para mantener la reproduccion en un bucle musical cuando la banda o la accion de escenario necesita mas tiempo. `Modo Vamp` puede repetir la `Seccion` actual (Las esccines están delimitadas por los marcadores) o un nume-ro fijo de `Compases`. Pulsa `Vamp` de nuevo para salir del bucle.
 
+Salir de Vamp no cambia los ajustes de tono ni de warp. Con warp activado, mantén `T` activado en los instrumentos que deban seguir los cambios de tono de la canción y desactivado en las pistas de clic/guía que deban conservar su tono original. Desactivar `T` no desactiva warp: esas pistas siguen el tempo compartido.
+
 ![Configuración del Vamp](../screenshots/Vamp-Config.png)
 
 ### Saltos de cancion y transiciones

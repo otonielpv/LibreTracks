@@ -186,6 +186,8 @@ This lets you react in real time if the band extends a chorus, skips a bridge, o
 
 Use `Vamp` to keep playback in a musical loop when the band or stage action needs more time. `Vamp Mode` can repeat the current `Section` (sections are delimited by markers) or a fixed number of `Bars`. Press `Vamp` again to leave the loop.
 
+Leaving Vamp does not change transposition or warp settings. With warp enabled, keep `T` enabled on instruments that should follow the song's key changes and disabled on click/guide tracks that should keep their original pitch. Disabling `T` does not disable warp: those tracks still follow the shared tempo.
+
 ![Vamp settings](../screenshots/Vamp-Config.png)
 
 ### Song jumps and transitions
