@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { BUILTIN_BAND_TEMPLATE, NO_SONG_TEMPLATE } from "../desktopApi";
 import { useSongTemplateList } from "../hooks/useSongTemplateList";
+import { PopoverShell } from "../panels/PopoverShell";
 
 /**
  * The arrow next to «+ Nueva canción»: create the next song from a template
@@ -16,24 +17,8 @@ export function NewSongTemplateMenu({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const anchorRef = useRef<HTMLButtonElement | null>(null);
   const { templates } = useSongTemplateList(open);
-
-  useEffect(() => {
-    if (!open) return;
-    const closeOnOutside = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("pointerdown", closeOnOutside);
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.removeEventListener("pointerdown", closeOnOutside);
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
 
   const choose = (reference: string) => {
     setOpen(false);
@@ -41,8 +26,9 @@ export function NewSongTemplateMenu({
   };
 
   return (
-    <div className="lt-new-song-template" ref={rootRef}>
+    <div className="lt-new-song-template">
       <button
+        ref={anchorRef}
         type="button"
         className="lt-compact-view-add-song lt-new-song-template-toggle"
         aria-haspopup="menu"
@@ -55,8 +41,14 @@ export function NewSongTemplateMenu({
           arrow_drop_down
         </span>
       </button>
-      {open ? (
-        <div className="lt-new-song-template-menu" role="menu">
+      <PopoverShell
+        open={open}
+        anchorRef={anchorRef}
+        ariaLabel={t("songTemplates.newSongFromTemplate")}
+        onClose={() => setOpen(false)}
+        className="lt-new-song-template-menu"
+        role="menu"
+      >
           <button type="button" role="menuitem" onClick={() => choose(NO_SONG_TEMPLATE)}>
             {t("songTemplates.noTemplate")}
           </button>
@@ -78,8 +70,7 @@ export function NewSongTemplateMenu({
               {template.name}
             </button>
           ))}
-        </div>
-      ) : null}
+      </PopoverShell>
     </div>
   );
 }

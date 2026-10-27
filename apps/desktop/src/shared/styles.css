@@ -8365,14 +8365,10 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   line-height: 1;
 }
 
-/* Opens leftwards: the slot is the last thing on the songs strip, so there is
-   never room to its right. */
 .lt-new-song-template-menu {
-  position: absolute;
-  top: calc(100% + 0.25rem);
-  right: 0;
-  z-index: 40;
-  min-width: 12rem;
+  z-index: 1000;
+  width: min(18rem, calc(100vw - 24px));
+  box-sizing: border-box;
   max-height: 18rem;
   overflow-y: auto;
   display: flex;
