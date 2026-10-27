@@ -1,12 +1,6 @@
-import {
-  buildSongTempoRegions,
-  getSongBaseBpm,
-  getSongBaseTimeSignature,
-  type SongRegionSummary,
-  type SongView,
-} from "@libretracks/shared/models";
+import type { SongRegionSummary, SongView } from "@libretracks/shared/models";
 
-import { snapToTimelineBar } from "../timeline/timelineMath";
+import { snapSecondsToSongGrid } from "./sectionScrubModel";
 
 /** A marker never sits ON the song end: it would belong to the next song. */
 export const SECTION_END_MARGIN_SECONDS = 0.001;
@@ -18,14 +12,10 @@ export function placeSectionSeconds(
   region: Pick<SongRegionSummary, "startSeconds" | "endSeconds">,
   seconds: number,
   snapEnabled: boolean,
+  widthPx = 0,
 ): number {
   const snapped = snapEnabled
-    ? snapToTimelineBar(
-        seconds,
-        getSongBaseBpm(song),
-        getSongBaseTimeSignature(song),
-        buildSongTempoRegions(song),
-      )
+    ? snapSecondsToSongGrid(song, region, seconds, widthPx)
     : seconds;
   return Math.max(
     region.startSeconds,
@@ -58,7 +48,14 @@ export function snappedSectionDelta(
   rawDeltaSeconds: number,
   groupStartSeconds: readonly number[],
   snapEnabled: boolean,
+  widthPx = 0,
 ): number {
-  const target = placeSectionSeconds(song, region, draggedStartSeconds + rawDeltaSeconds, snapEnabled);
+  const target = placeSectionSeconds(
+    song,
+    region,
+    draggedStartSeconds + rawDeltaSeconds,
+    snapEnabled,
+    widthPx,
+  );
   return clampSectionGroupDelta(groupStartSeconds, target - draggedStartSeconds, region);
 }

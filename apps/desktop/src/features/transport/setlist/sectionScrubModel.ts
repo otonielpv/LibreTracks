@@ -71,14 +71,37 @@ export function barGridTicksInSong(
   return ticks;
 }
 
-/** Snap a manual seek to the nearest bar when grid snapping is enabled. */
-export function snapSecondsToSongBar(
+/** Snap to the nearest bar, beat, or subdivision visible at this zoom. */
+export function snapSecondsToSongGrid(
   song: SongView,
   region: Pick<SongRegionSummary, "startSeconds" | "endSeconds">,
   seconds: number,
+  widthPx: number,
 ): number {
-  const bars = barStartsInSong(song, region);
-  return bars[nearestBarIndex(bars, seconds)] ?? seconds;
+  let gridRegion = region;
+  let gridWidthPx = widthPx;
+  if (seconds >= region.endSeconds) {
+    const duration = Math.max(EPSILON_SECONDS, region.endSeconds - region.startSeconds);
+    const extendedEnd = seconds + Math.max(EPSILON_SECONDS, barSecondsAtFor(song)(seconds));
+    gridRegion = { ...region, endSeconds: extendedEnd };
+    gridWidthPx = (widthPx * (extendedEnd - region.startSeconds)) / duration;
+  }
+  const ticks = barGridTicksInSong(song, gridRegion, gridWidthPx);
+  if (ticks.length === 0) return seconds;
+
+  let low = 0;
+  let high = ticks.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (ticks[middle].seconds < seconds) low = middle + 1;
+    else high = middle;
+  }
+
+  const before = ticks[Math.max(0, low - 1)];
+  const after = ticks[Math.min(low, ticks.length - 1)];
+  return seconds - before.seconds <= after.seconds - seconds
+    ? before.seconds
+    : after.seconds;
 }
 
 export function resolveSongSeekSeconds(
@@ -86,8 +109,9 @@ export function resolveSongSeekSeconds(
   region: Pick<SongRegionSummary, "startSeconds" | "endSeconds">,
   seconds: number,
   snapEnabled: boolean,
+  widthPx = 0,
 ): number {
-  return snapEnabled ? snapSecondsToSongBar(song, region, seconds) : seconds;
+  return snapEnabled ? snapSecondsToSongGrid(song, region, seconds, widthPx) : seconds;
 }
 
 /** The bar a moment is on: the nearest downbeat, or with `floor` the bar it

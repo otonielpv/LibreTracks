@@ -153,6 +153,20 @@ function SetlistViewComponent({
   const layout = useSetlistLayout(rootRef, layoutClass);
   const editMode = useSetlistStore((state) => state.editMode);
   const waveEditing = editMode === "sections" || editMode === "arrangement";
+  const getGridWidthPx = useCallback(() => {
+    const root = rootRef.current;
+    if (!root) return 0;
+    const layer =
+      root.querySelector<HTMLElement>(
+        layout === "short"
+          ? ".lt-setlist-scrub-layer, .lt-setlist-arrangement.is-waveform"
+          : ".lt-setlist-zoom-layer",
+      );
+    const layerWidth = layer?.clientWidth || layer?.offsetWidth || 0;
+    if (layerWidth > 0) return layerWidth;
+    const waveform = root.querySelector<HTMLElement>(".lt-setlist-overview");
+    return waveform?.clientWidth || waveform?.offsetWidth || 0;
+  }, [layout]);
   const mixerCollapsed = useSetlistStore((state) => state.mixerCollapsed);
   const shortPane = useSetlistStore((state) => state.shortPane);
   const mixerExpanded = useSetlistStore((state) => state.mixerExpanded);
@@ -184,12 +198,13 @@ function SetlistViewComponent({
           shownRegion,
           seconds,
           true,
+          getGridWidthPx(),
         ));
         return;
       }
       performance.onSeek(seconds);
     },
-    [editMode, performance.onSeek, performance.song, shownRegion],
+    [editMode, getGridWidthPx, performance.onSeek, performance.song, shownRegion],
   );
   // The band and the console take audio for the song they show.
   const songDrop = shownRegion
@@ -207,6 +222,7 @@ function SetlistViewComponent({
     getRegion: () => shownRegion,
     getPlayheadSeconds: () => performance.positionSecondsRef.current,
     getSnapEnabled: () => useTimelineUIStore.getState().snapEnabled,
+    getGridWidthPx,
     menus,
     rulerMarkers,
     onSectionContextMenu,
@@ -541,9 +557,17 @@ function SetlistViewComponent({
         <>
           {editMode === "arrangement" ? (
             layout === "short" ? null : (
-            <SetlistArrangementEditor region={shownRegion} handlers={structureHandlers} layout={layout}
-              song={performance.song} waveformSummaries={waveformSummaries} menus={menus}
-              positionSecondsRef={performance.positionSecondsRef} onSeek={seekInWaveEditor} />
+              <OverviewZoom
+                startSeconds={shownRegion.startSeconds}
+                endSeconds={shownRegion.endSeconds}
+                positionSecondsRef={performance.positionSecondsRef}
+                onSeek={seekInWaveEditor}
+                tapToSeek={false}
+              >
+                <SetlistArrangementEditor region={shownRegion} handlers={structureHandlers} layout={layout}
+                  song={performance.song} waveformSummaries={waveformSummaries} menus={menus}
+                  positionSecondsRef={performance.positionSecondsRef} onSeek={seekInWaveEditor} />
+              </OverviewZoom>
             )
           ) : <OverviewZoom
             startSeconds={shownRegion.startSeconds}

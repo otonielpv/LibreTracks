@@ -49,6 +49,7 @@ function setup(overrides: Partial<SectionEditDeps> = {}) {
     getRegion: () => region,
     getPlayheadSeconds: () => 33.3,
     getSnapEnabled: () => true,
+    getGridWidthPx: () => 1000,
     menus: {
       openMenu: vi.fn(),
       rulerContextMenu: vi.fn(() => []),

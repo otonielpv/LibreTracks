@@ -3247,6 +3247,7 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
 .lt-setlist-scrub-layer {
   position: absolute;
   inset: 0 auto 0 0;
+  transform-origin: 0 0;
   will-change: transform;
 }
 
@@ -3267,6 +3268,24 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
   line-height: 1.3rem;
+}
+
+.lt-setlist-scrub-subtick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgb(186 202 197 / 0.18);
+  pointer-events: none;
+}
+
+.lt-setlist-scrub-subtick.is-beat {
+  top: 0.35rem;
+  border-color: rgb(186 202 197 / 0.14);
+}
+
+.lt-setlist-scrub-subtick.is-subdivision {
+  top: 0.7rem;
+  border-color: rgb(186 202 197 / 0.1);
 }
 
 .lt-setlist-scrub-section-guide {

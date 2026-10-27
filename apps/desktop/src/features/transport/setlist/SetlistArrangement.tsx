@@ -34,9 +34,11 @@ import {
 } from "../structure/useArrangementActions";
 import { requestEditMode, setEditLeaveGuard } from "./setlistStore";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
+import { OVERVIEW_MAX_ZOOM, ZoomWindowContext } from "./OverviewZoom";
 import { SongOverviewStrip } from "./SongOverviewStrip";
 import { SongBarRuler } from "./SongBarRuler";
 import { SetlistSnapToggle } from "./SetlistSnapToggle";
+import { useSetlistStore } from "./setlistStore";
 import type { TimelineMenus } from "../menus/timelineMenus";
 
 /**
@@ -128,6 +130,7 @@ function SetlistArrangementEditorComponent({
 }) {
   const { t } = useTranslation();
   const actions = useArrangementActions(handlers);
+  const overviewZoom = useSetlistStore((state) => state.overviewZoom);
   if (!actions.structure || !actions.draft) return null;
   const structure = actions.structure;
   const sections = new Map(structure.sections.map((section) => [section.markerId, section]));
@@ -177,7 +180,7 @@ function SetlistArrangementEditorComponent({
       className={`lt-setlist-arrangement is-waveform is-${layout}`}
       style={
         layout === "short"
-          ? { width: `max(100%, ${actions.draft.blocks.length * 9 + 3}rem)` }
+          ? { width: `max(100%, ${actions.draft.blocks.length * 9 * overviewZoom + 3}rem)` }
           : undefined
       }
     >
@@ -207,15 +210,17 @@ function SetlistArrangementEditorComponent({
           const span = spans.get(block.sectionMarkerId);
           return (
             <div className="lt-setlist-arrangement-wave-block">
-              {section ? <SongOverviewStrip
-                region={{ ...region, ...(span ?? section) }}
-                clips={span ? song.clips : []}
-                sectionMarkers={[]}
-                waveformSummaries={waveformSummaries}
-                positionSecondsRef={positionSecondsRef}
-                layout={layout}
-                showPlayhead={false}
-              /> : null}
+              <ZoomWindowContext.Provider value={null}>
+                {section ? <SongOverviewStrip
+                  region={{ ...region, ...(span ?? section) }}
+                  clips={span ? song.clips : []}
+                  sectionMarkers={[]}
+                  waveformSummaries={waveformSummaries}
+                  positionSecondsRef={positionSecondsRef}
+                  layout={layout}
+                  showPlayhead={false}
+                /> : null}
+              </ZoomWindowContext.Provider>
               {row}
             </div>
           );
@@ -308,6 +313,8 @@ function SetlistArrangementToolbarComponent({
   useEmbeddedArrangementEditor(region);
   const actions = useArrangementActions(handlers);
   const { t, regionId, structure, draft, dirty, draftIsApplied } = actions;
+  const overviewZoom = useSetlistStore((state) => state.overviewZoom);
+  const setOverviewZoom = useSetlistStore((state) => state.setOverviewZoom);
   const selectedIndex = draft?.blocks.findIndex((block) => block.id === actions.selectedBlockId) ?? -1;
   const editSelected = (operation: "duplicate" | "remove") => {
     if (!draft || selectedIndex < 0) return;
@@ -386,6 +393,32 @@ function SetlistArrangementToolbarComponent({
             </button>
           </div>
           <div className="lt-setlist-arrangement-actions" role="toolbar" aria-label={t("transport.structure.strip")}>
+            {layout === "short" ? (
+              <>
+                <button
+                  type="button"
+                  className="lt-setlist-arrangement-action"
+                  aria-label={t("setlistView.lanes.zoomOut")}
+                  title={t("setlistView.lanes.zoomOut")}
+                  disabled={overviewZoom <= 1}
+                  onClick={() => setOverviewZoom(Math.max(1, overviewZoom / 1.25))}
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  className="lt-setlist-arrangement-action"
+                  aria-label={t("setlistView.lanes.zoomIn")}
+                  title={t("setlistView.lanes.zoomIn")}
+                  disabled={overviewZoom >= OVERVIEW_MAX_ZOOM}
+                  onClick={() =>
+                    setOverviewZoom(Math.min(OVERVIEW_MAX_ZOOM, overviewZoom * 1.25))
+                  }
+                >
+                  +
+                </button>
+              </>
+            ) : null}
             <SetlistSnapToggle className="lt-setlist-arrangement-action" />
             {(["duplicate", "remove"] as const).map((operation) => {
               const label = t(operation === "duplicate" ? "setlistView.sections.duplicate" : "setlistView.sections.delete");

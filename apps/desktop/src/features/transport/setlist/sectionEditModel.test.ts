@@ -34,6 +34,15 @@ describe("placeSectionSeconds", () => {
     expect(placeSectionSeconds(song, region, 12.3, false)).toBe(12.3);
   });
 
+  it("snaps to subdivisions when the zoom exposes them", () => {
+    const fourFour = {
+      ...song,
+      bpm: 120,
+      timeSignature: "4/4",
+    } as SongView;
+    expect(placeSectionSeconds(fourFour, region, 3.1, true, 6000)).toBeCloseTo(3.125);
+  });
+
   it("never leaves the song", () => {
     expect(placeSectionSeconds(song, { startSeconds: 10, endSeconds: 20 }, 2, false)).toBe(10);
     expect(placeSectionSeconds(song, { startSeconds: 10, endSeconds: 20 }, 25, false)).toBe(
@@ -59,5 +68,15 @@ describe("snappedSectionDelta", () => {
   it("lands the dragged marker on a bar", () => {
     const delta = snappedSectionDelta(song, region, 2 * BAR, 1.2, [2 * BAR], true);
     expect(2 * BAR + delta).toBeCloseTo(3 * BAR, 6);
+  });
+
+  it("lands the dragged marker on a visible subdivision", () => {
+    const fourFour = {
+      ...song,
+      bpm: 120,
+      timeSignature: "4/4",
+    } as SongView;
+    const delta = snappedSectionDelta(fourFour, region, 2, 0.3, [2], true, 6000);
+    expect(2 + delta).toBeCloseTo(2.25);
   });
 });

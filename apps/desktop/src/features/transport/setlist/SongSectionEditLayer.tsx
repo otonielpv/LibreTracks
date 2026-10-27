@@ -123,6 +123,7 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
         scale.pxPerSecond > 0 ? dx / scale.pxPerSecond : 0,
         starts,
         snapEnabled,
+        widthPx,
       );
       const offsetPx = delta * scale.pxPerSecond;
       for (const element of elementsFor(groupIds)) {

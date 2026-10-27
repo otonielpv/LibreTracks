@@ -25,7 +25,13 @@ import type { ShortcutActionId } from "../keyboard/actions";
 import { useTransportStore } from "../store";
 import { SnapIcon } from "../timeline/SnapIcon";
 import { useTimelineUIStore } from "../uiStore";
-import { barStartsInSong, nearestBarIndex, stepBar } from "./sectionScrubModel";
+import {
+  barGridTicksInSong,
+  barStartsInSong,
+  nearestBarIndex,
+  resolveSongSeekSeconds,
+  stepBar,
+} from "./sectionScrubModel";
 import { buildSongOverviewPeaks, songOverviewClipsKey, songOverviewSummariesKey } from "./songOverviewPeaks";
 
 /** Bars across the view at the default zoom (Playback shows a few bars). */
@@ -105,7 +111,13 @@ function SongScrubViewComponent({
   const firstBarSeconds = (bars[1] ?? region.endSeconds) - (bars[0] ?? region.startSeconds);
   const duration = Math.max(0.001, region.endSeconds - region.startSeconds);
   const pxPerSecond = widthPx > 0 ? widthPx / Math.max(0.001, visibleBars * firstBarSeconds) : 0;
-  const contentWidth = duration * pxPerSecond;
+  const contentWidthFor = (barsVisible: number) =>
+    (duration * widthPx) / Math.max(0.001, barsVisible * firstBarSeconds);
+  const contentWidth = contentWidthFor(visibleBars);
+  const gridTicks = useMemo(
+    () => barGridTicksInSong(song, region, contentWidth),
+    [contentWidth, region, song],
+  );
 
   // Where the centre line is, in song seconds. A ref: panning never renders.
   const cursorRef = useRef(positionSecondsRef.current);
@@ -157,12 +169,10 @@ function SongScrubViewComponent({
   useEffect(() => {
     let frameId = 0;
     const frame = () => {
-      if (pendingBarsRef.current !== null) {
-        setVisibleBars(pendingBarsRef.current);
-        pendingBarsRef.current = null;
-      }
       const position = positionSecondsRef.current;
-      if (!panningRef.current && position !== lastPositionRef.current) {
+      if (!playing) {
+        lastPositionRef.current = Number.NaN;
+      } else if (!panningRef.current && position !== lastPositionRef.current) {
         lastPositionRef.current = position;
         if (position >= region.startSeconds && position < region.endSeconds) {
           cursorRef.current = position;
@@ -174,7 +184,7 @@ function SongScrubViewComponent({
     };
     frameId = requestGatedFrame(frame);
     return () => cancelGatedFrame(frameId);
-  }, [applyCursor, positionSecondsRef, region.endSeconds, region.startSeconds]);
+  }, [applyCursor, playing, positionSecondsRef, region.endSeconds, region.startSeconds]);
 
   // The waveform of the whole song, drawn once per zoom/content change.
   const clipsKey = songOverviewClipsKey(song.clips, region);
@@ -201,12 +211,15 @@ function SongScrubViewComponent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasWidth, clipsKey, summariesKey, region.startSeconds, region.endSeconds]);
 
-  const commitCursor = (seconds: number) => {
-    // Snap off (the DAW's own toggle): wherever the line was left.
-    const snapped = snapEnabled ? bars[nearestBarIndex(bars, seconds)] ?? seconds : seconds;
+  const commitCursor = (
+    seconds: number,
+    gridWidthPx = contentWidth,
+    updateLayer = true,
+  ) => {
+    const snapped = resolveSongSeekSeconds(song, region, seconds, snapEnabled, gridWidthPx);
     cursorRef.current = clampToSong(snapped);
     lastPositionRef.current = cursorRef.current;
-    applyCursor();
+    if (updateLayer) applyCursor();
     onSeek(cursorRef.current);
   };
 
@@ -221,12 +234,14 @@ function SongScrubViewComponent({
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       pinchRef.current = { distance: Math.abs(a - b), bars: visibleBarsRef.current };
+      pendingBarsRef.current = null;
       return;
     }
     if (pointers.size > 2) return;
     const startX = event.clientX;
     const startCursor = cursorRef.current;
     let moved = false;
+    let panned = false;
     const onMove = (moveEvent: PointerEvent) => {
       if (!pointers.has(moveEvent.pointerId)) return;
       pointers.set(moveEvent.pointerId, moveEvent.clientX);
@@ -239,6 +254,13 @@ function SongScrubViewComponent({
         if (pinch.distance > 0 && distance > 0) {
           const next = Math.max(MIN_VISIBLE_BARS, Math.min(MAX_VISIBLE_BARS, (pinch.bars * pinch.distance) / distance));
           pendingBarsRef.current = next;
+          const scale = pinch.bars / next;
+          const { widthPx: width, pxPerSecond: pps, region: bounds } = geometryRef.current;
+          const offset = width / 2 - (cursorRef.current - bounds.startSeconds) * pps * scale;
+          layerRef.current?.style.setProperty(
+            "transform",
+            `translate3d(${offset}px, 0, 0) scaleX(${scale})`,
+          );
           markFrameActivity();
         }
         return;
@@ -246,6 +268,7 @@ function SongScrubViewComponent({
       const dx = moveEvent.clientX - startX;
       if (!moved && Math.abs(dx) < DRAG_THRESHOLD_PX) return;
       moved = true;
+      panned = true;
       panningRef.current = true;
       cursorRef.current = clampToSong(startCursor - dx / geometryRef.current.pxPerSecond);
       applyCursor();
@@ -258,17 +281,29 @@ function SongScrubViewComponent({
     const onUp = (upEvent: PointerEvent) => {
       if (!pointers.delete(upEvent.pointerId) || pointers.size > 0) return;
       detach();
-      const pinched = pinchRef.current !== null;
+      const pinch = pinchRef.current;
+      const pinched = pinch !== null;
+      const nextBars = pinch
+        ? pendingBarsRef.current ?? pinch.bars
+        : visibleBarsRef.current;
       pinchRef.current = null;
+      pendingBarsRef.current = null;
       panningRef.current = false;
-      if (moved) commitCursor(cursorRef.current);
-      else if (pinched) applyCursor();
+      if (pinched && nextBars !== visibleBarsRef.current) setVisibleBars(nextBars);
+      if (panned) {
+        commitCursor(cursorRef.current, contentWidthFor(nextBars), !pinched);
+      } else if (pinched && nextBars === visibleBarsRef.current) {
+        applyCursor();
+      }
     };
     const onCancel = (cancelEvent: PointerEvent) => {
       if (!pointers.delete(cancelEvent.pointerId) || pointers.size > 0) return;
       detach();
+      const pinch = pinchRef.current;
       pinchRef.current = null;
+      pendingBarsRef.current = null;
       panningRef.current = false;
+      if (pinch && pinch.bars !== visibleBarsRef.current) setVisibleBars(pinch.bars);
       cursorRef.current = startCursor;
       applyCursor();
     };
@@ -303,15 +338,23 @@ function SongScrubViewComponent({
           style={{ width: `${contentWidth}px` } as CSSProperties}
         >
           <div className="lt-setlist-scrub-ruler" aria-hidden="true">
-            {bars.map((seconds, index) => (
-              <span
-                key={seconds}
-                className="lt-setlist-scrub-tick"
-                style={{ left: `${geometry.xOf(seconds)}px` }}
-              >
-                {index % labelEvery === 0 ? index + 1 : null}
-              </span>
-            ))}
+            {gridTicks.map((tick) =>
+              tick.kind === "bar" ? (
+                <span
+                  key={`${tick.kind}:${tick.seconds}`}
+                  className="lt-setlist-scrub-tick"
+                  style={{ left: `${geometry.xOf(tick.seconds)}px` }}
+                >
+                  {tick.barIndex % labelEvery === 0 ? tick.barIndex + 1 : null}
+                </span>
+              ) : (
+                <span
+                  key={`${tick.kind}:${tick.seconds}`}
+                  className={`lt-setlist-scrub-subtick is-${tick.kind}`}
+                  style={{ left: `${geometry.xOf(tick.seconds)}px` }}
+                />
+              ),
+            )}
           </div>
           {song.sectionMarkers
             .filter(

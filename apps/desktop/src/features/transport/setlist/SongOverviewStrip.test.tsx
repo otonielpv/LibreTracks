@@ -163,6 +163,34 @@ describe("SongOverviewStrip playhead", () => {
 });
 
 describe("OverviewZoom playhead follow", () => {
+  it("does not follow a paused seek until playback starts", () => {
+    act(() => useTransportStore.setState({ playback: { playbackState: "paused" } as never }));
+    useSetlistStore.setState({ overviewZoom: 4 });
+    const positionSecondsRef = { current: 150 };
+    const { container } = render(
+      <OverviewZoom
+        startSeconds={100}
+        endSeconds={200}
+        positionSecondsRef={positionSecondsRef}
+      >
+        <div />
+      </OverviewZoom>,
+    );
+    const viewport = container.querySelector<HTMLElement>(".lt-setlist-zoom-viewport")!;
+    Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 250 });
+    const layer = container.querySelector<HTMLElement>(".lt-setlist-zoom-layer")!;
+
+    runFrames();
+    expect(layer.style.transform).toBe("");
+    positionSecondsRef.current = 160;
+    runFrames();
+    expect(layer.style.transform).toBe("");
+
+    act(() => useTransportStore.setState({ playback: { playbackState: "playing" } as never }));
+    runFrames();
+    expect(layer.style.transform).toBe("translate3d(-475px, 0, 0)");
+  });
+
   it("keeps a manual pan while active, then returns to the playhead after inactivity", () => {
     vi.spyOn(performance, "now").mockReturnValue(0);
     useSetlistStore.setState({ overviewZoom: 4 });
@@ -205,6 +233,35 @@ describe("OverviewZoom playhead follow", () => {
     );
     runFrames();
     expect(layer.style.transform).toBe("translate3d(-475px, 0, 0)");
+  });
+
+  it("previews desktop zoom without relayout until the wheel settles", () => {
+    vi.useFakeTimers();
+    useSetlistStore.setState({ overviewZoom: 1 });
+    const { container } = render(
+      <OverviewZoom
+        startSeconds={100}
+        endSeconds={200}
+        positionSecondsRef={{ current: 150 }}
+      >
+        <div />
+      </OverviewZoom>,
+    );
+    const viewport = container.querySelector<HTMLElement>(".lt-setlist-zoom-viewport")!;
+    Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 250 });
+    const layer = container.querySelector<HTMLElement>(".lt-setlist-zoom-layer")!;
+
+    fireEvent.wheel(viewport, { ctrlKey: true, deltaY: -120, clientX: 125 });
+    expect(layer.dataset.zoom).toBe("1");
+    expect(layer.style.width).toBe("100%");
+    expect(layer.style.transform).toBe("translate3d(-31.25px, 0, 0) scaleX(1.25)");
+
+    act(() => vi.advanceTimersByTime(140));
+    expect(useSetlistStore.getState().overviewZoom).toBe(1.25);
+    expect(layer.dataset.zoom).toBe("1.25");
+    expect(layer.style.width).toBe("125%");
+    expect(layer.style.transform).toBe("translate3d(-31.25px, 0, 0)");
+    vi.useRealTimers();
   });
 });
 

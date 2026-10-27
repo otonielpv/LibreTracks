@@ -165,6 +165,7 @@ describe("Edit → Arrangement", () => {
     const view = container.querySelector<HTMLElement>(".lt-setlist-view")!;
     expect(view.classList.contains("has-songs-height")).toBe(true);
     expect(view.classList.contains("is-wave-editing")).toBe(true);
+    expect(container.querySelector("[data-setlist-zone='overview'] .lt-setlist-zoom-viewport")).not.toBeNull();
     expect(container.querySelector("[data-setlist-zone='mixer']")).toBeNull();
   });
 
@@ -193,6 +194,14 @@ describe("Edit → Arrangement", () => {
     expect(snap.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(snap);
     expect(useTimelineUIStore.getState().snapEnabled).toBe(true);
+
+    const waveform = container.querySelector<HTMLElement>(
+      ".lt-setlist-arrangement-mobile-waveform .lt-setlist-arrangement",
+    )!;
+    const widthBeforeZoom = waveform.style.width;
+    fireEvent.click(screen.getByRole("button", { name: "setlistView.lanes.zoomIn" }));
+    expect(useSetlistStore.getState().overviewZoom).toBe(1.25);
+    expect(waveform.style.width).not.toBe(widthBeforeZoom);
   });
 
   it("arrangement playhead scrubs continuously across section boundaries", async () => {

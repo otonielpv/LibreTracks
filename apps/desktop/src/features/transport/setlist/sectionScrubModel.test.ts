@@ -6,6 +6,7 @@ import {
   barStartsInSong,
   nearestBarIndex,
   resolveSongSeekSeconds,
+  snapSecondsToSongGrid,
   stepBar,
 } from "./sectionScrubModel";
 
@@ -31,10 +32,15 @@ describe("section scrub model", () => {
       .toEqual([0, 1]);
   });
 
-  it("snaps a manual seek to a bar only while snap is enabled", () => {
+  it("snaps to the nearest visible grid division only while snap is enabled", () => {
     const region = { startSeconds: 0, endSeconds: 10 };
     expect(resolveSongSeekSeconds(song(), region, 3.1, true)).toBe(4);
+    expect(resolveSongSeekSeconds(song(), region, 3.1, true, 6000)).toBeCloseTo(3.125);
     expect(resolveSongSeekSeconds(song(), region, 3.1, false)).toBe(3.1);
+  });
+
+  it("keeps the song-end resize grid available beyond the current end", () => {
+    expect(snapSecondsToSongGrid(song(), { startSeconds: 0, endSeconds: 100 }, 103.3, 1000)).toBe(104);
   });
 
   it("meter changes make the bars as long as the meter in force", () => {

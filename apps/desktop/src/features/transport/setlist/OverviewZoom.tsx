@@ -12,6 +12,7 @@ import {
   FOLLOW_CAMERA_MANUAL_PAUSE_MS,
   shouldPauseFollowCamera,
 } from "../followCamera";
+import { useTransportStore } from "../store";
 import { useSetlistStore } from "./setlistStore";
 
 export const OVERVIEW_MAX_ZOOM = 32;
@@ -94,6 +95,7 @@ export function OverviewZoom({
   useFrameGateWake();
   const zoom = useSetlistStore((state) => state.overviewZoom);
   const setZoom = useSetlistStore((state) => state.setOverviewZoom);
+  const isPlaying = useTransportStore((state) => state.playback?.playbackState === "playing");
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const layerRef = useRef<HTMLDivElement | null>(null);
   // Where the layer is, and whether a hand put it there.
@@ -104,6 +106,12 @@ export function OverviewZoom({
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
   const pendingZoomRef = useRef<number | null>(null);
+  const wheelZoomPreviewRef = useRef<{
+    baseZoom: number;
+    targetZoom: number;
+    offset: number;
+  } | null>(null);
+  const wheelZoomTimerRef = useRef<number | null>(null);
   const windowRef = useRef<ZoomWindow>({ offset: 0, width: 0 });
   const pauseFollowAfterManualNavigation = () => {
     manualFollowPauseUntilMsRef.current =
@@ -148,6 +156,7 @@ export function OverviewZoom({
       }
       if (
         viewport &&
+        isPlaying &&
         !gestureRef.current &&
         !scrubbingRef.current &&
         !shouldPauseFollowCamera(
@@ -174,7 +183,22 @@ export function OverviewZoom({
     frameId = requestGatedFrame(frame);
     return () => cancelGatedFrame(frameId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endSeconds, positionSecondsRef, startSeconds, zoom]);
+  }, [endSeconds, isPlaying, positionSecondsRef, startSeconds, zoom]);
+
+  const commitWheelZoomPreview = () => {
+    const preview = wheelZoomPreviewRef.current;
+    if (!preview) return;
+    wheelZoomPreviewRef.current = null;
+    if (wheelZoomTimerRef.current !== null) {
+      window.clearTimeout(wheelZoomTimerRef.current);
+      wheelZoomTimerRef.current = null;
+    }
+    zoomRef.current = preview.targetZoom;
+    layerRef.current?.style.setProperty("width", `${preview.targetZoom * 100}%`);
+    applyOffset(preview.offset);
+    setZoom(preview.targetZoom);
+    markFrameActivity();
+  };
 
   /** A zoom kept around `anchorX` (px in the viewport). */
   const zoomAround = (nextZoom: number, anchorX: number) => {
@@ -182,12 +206,21 @@ export function OverviewZoom({
     const clamped = Math.max(1, Math.min(OVERVIEW_MAX_ZOOM, nextZoom));
     if (!viewport) return;
     const width = viewport.clientWidth;
-    const offset = anchoredOffset(offsetRef.current, anchorX, width, zoomRef.current, clamped);
-    zoomRef.current = clamped;
-    pendingZoomRef.current = clamped;
+    const preview = wheelZoomPreviewRef.current;
+    const baseZoom = preview?.baseZoom ?? zoomRef.current;
+    const fromZoom = preview?.targetZoom ?? zoomRef.current;
+    const fromOffset = preview?.offset ?? offsetRef.current;
+    const offset = anchoredOffset(fromOffset, anchorX, width, fromZoom, clamped);
+    wheelZoomPreviewRef.current = { baseZoom, targetZoom: clamped, offset };
     const layer = layerRef.current;
-    layer?.style.setProperty("width", `${clamped * 100}%`);
-    applyOffset(clamped <= 1 ? 0 : offset);
+    layer?.style.setProperty(
+      "transform",
+      `translate3d(${-offset}px, 0, 0) scaleX(${clamped / baseZoom})`,
+    );
+    if (wheelZoomTimerRef.current !== null) {
+      window.clearTimeout(wheelZoomTimerRef.current);
+    }
+    wheelZoomTimerRef.current = window.setTimeout(commitWheelZoomPreview, 140);
     pauseFollowAfterManualNavigation();
     markFrameActivity();
   };
@@ -206,6 +239,7 @@ export function OverviewZoom({
     visualOffset: number;
   } | null>(null);
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    commitWheelZoomPreview();
     if (scrubbingRef.current) return;
     if (event.pointerType !== "touch" || isControl(event.target)) return;
     event.stopPropagation();
@@ -313,12 +347,14 @@ export function OverviewZoom({
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
       const rect = viewport.getBoundingClientRect();
+      const currentZoom = wheelZoomPreviewRef.current?.targetZoom ?? zoomRef.current;
       zoomAround(
-        zoomRef.current * (event.deltaY < 0 ? WHEEL_ZOOM_FACTOR : 1 / WHEEL_ZOOM_FACTOR),
+        currentZoom * (event.deltaY < 0 ? WHEEL_ZOOM_FACTOR : 1 / WHEEL_ZOOM_FACTOR),
         event.clientX - rect.left,
       );
       return;
     }
+    commitWheelZoomPreview();
     if (zoomRef.current <= 1) return;
     const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
     if (delta === 0) return;
@@ -334,7 +370,12 @@ export function OverviewZoom({
     if (!viewport) return;
     const listener = (event: WheelEvent) => wheelRef.current(event);
     viewport.addEventListener("wheel", listener, { passive: false });
-    return () => viewport.removeEventListener("wheel", listener);
+    return () => {
+      viewport.removeEventListener("wheel", listener);
+      if (wheelZoomTimerRef.current !== null) {
+        window.clearTimeout(wheelZoomTimerRef.current);
+      }
+    };
   }, []);
 
   return (

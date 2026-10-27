@@ -6,14 +6,9 @@ import type { RulerMarkerHandlers } from "../rulerMarkers/rulerMarkerHandlers";
 import { groupContaining, handleRulerMarkerClick } from "../rulerMarkers/rulerMarkerSelection";
 import { requestStructureEdit } from "../structure/structureGuard";
 import { selectedRulerMarkers, useTimelineUIStore } from "../uiStore";
-import {
-  buildSongTempoRegions,
-  getSongBaseBpm,
-  getSongBaseTimeSignature,
-} from "@libretracks/shared/models";
 import { clampRegionResizeEdge, regionResizeBounds } from "../timeline/regionResize";
-import { snapToTimelineBar } from "../timeline/timelineMath";
 import { placeSectionSeconds } from "./sectionEditModel";
+import { snapSecondsToSongGrid } from "./sectionScrubModel";
 
 /**
  * Section editing on the Setlist waveform (Edit → Sections). Every action is
@@ -31,6 +26,7 @@ export type SectionEditDeps = {
   getRegion: () => SongRegionSummary | null;
   getPlayheadSeconds: () => number;
   getSnapEnabled: () => boolean;
+  getGridWidthPx: () => number;
   menus: Pick<
     TimelineMenus,
     | "openMenu"
@@ -57,7 +53,13 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
     const deps = getDeps();
     const region = deps.getRegion();
     return region
-      ? placeSectionSeconds(deps.getSong(), region, seconds, deps.getSnapEnabled())
+      ? placeSectionSeconds(
+          deps.getSong(),
+          region,
+          seconds,
+          deps.getSnapEnabled(),
+          deps.getGridWidthPx(),
+        )
       : null;
   };
 
@@ -115,12 +117,7 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
     if (!region) return false;
     const song = deps.getSong();
     const snapped = deps.getSnapEnabled()
-      ? snapToTimelineBar(
-          endSeconds,
-          getSongBaseBpm(song),
-          getSongBaseTimeSignature(song),
-          buildSongTempoRegions(song),
-        )
+      ? snapSecondsToSongGrid(song, region, endSeconds, deps.getGridWidthPx())
       : endSeconds;
     const bounds = regionResizeBounds(song.regions, region, song.clips, deps.workspaceEndSeconds);
     const next = clampRegionResizeEdge("end", snapped, bounds);

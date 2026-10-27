@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { SongView } from "@libretracks/shared/models";
 
 import { resetFrameGateForTests } from "../frameGate";
+import { useTransportStore } from "../store";
 import { useTimelineUIStore } from "../uiStore";
 import { SectionScrubEditor } from "./SectionScrubEditor";
 import { testRegion } from "./testBindings";
@@ -108,6 +109,8 @@ beforeEach(() => {
   resetFrameGateForTests();
   // jsdom has no canvas: the waveform draws nothing here.
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+  useTransportStore.setState({ playback: { playbackState: "stopped" } as never });
+  useTimelineUIStore.setState({ snapEnabled: true });
   useTimelineUIStore.getState().clearSelection();
 });
 afterEach(() => {
@@ -130,17 +133,37 @@ describe("SectionScrubEditor (Playback-style section editing)", () => {
     expect(barLabel(container)).toBe("setlistView.sections.barLabel:1");
   });
 
-  it("a swipe moves only the layer; releasing lands on the nearest bar and seeks there", () => {
+  it("a swipe moves only the layer; releasing lands on the nearest visible division", () => {
     const base = props();
     const { container } = render(<SectionScrubEditor {...base} />);
     fireEvent.pointerDown(viewport(container), { button: 0, pointerId: 1, clientX: 600 });
-    // 290 px to the left = 5.8 s later.
+    // 290 px to the left = 5.8 s later; the visible grid is 0.25 s.
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 310 });
     expect(layer(container).style.transform).toBe("translate3d(110px, 0, 0)");
     expect(base.onSeek).not.toHaveBeenCalled();
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 310 });
-    expect(base.onSeek).toHaveBeenCalledWith(6);
-    expect(barLabel(container)).toBe("setlistView.sections.barLabel:4");
+    expect(base.onSeek).toHaveBeenCalledWith(5.75);
+    expect(barLabel(container)).toBe("setlistView.sections.barLabel:3");
+  });
+
+  it("shows beat subdivisions in the mobile ruler when the zoom makes them visible", () => {
+    const { container } = render(<SectionScrubEditor {...props()} />);
+    expect(container.querySelector(".lt-setlist-scrub-subtick.is-beat")).not.toBeNull();
+    expect(container.querySelector(".lt-setlist-scrub-subtick.is-subdivision")).not.toBeNull();
+  });
+
+  it("snaps the cursor to a visible subdivision", () => {
+    const base = props({ positionSecondsRef: { current: 0 } });
+    const { container } = render(<SectionScrubEditor {...base} />);
+    fireEvent.pointerDown(viewport(container), {
+      button: 0,
+      pointerId: 3,
+      pointerType: "touch",
+      clientX: 400,
+    });
+    fireEvent.pointerMove(window, { pointerId: 3, clientX: 357.5 });
+    fireEvent.pointerUp(window, { pointerId: 3, clientX: 357.5 });
+    expect(base.onSeek).toHaveBeenCalledWith(0.75);
   });
 
   it("«Section here» creates at the line; the bar arrows move the line", () => {
@@ -174,6 +197,7 @@ describe("SectionScrubEditor (Playback-style section editing)", () => {
   });
 
   it("follows the playhead while it plays, not while the finger is on it", () => {
+    useTransportStore.setState({ playback: { playbackState: "playing" } as never });
     const position = { current: 0 };
     const { container } = render(<SectionScrubEditor {...props({ positionSecondsRef: position })} />);
     position.current = 4;
@@ -184,6 +208,19 @@ describe("SectionScrubEditor (Playback-style section editing)", () => {
     position.current = 20;
     runFrames();
     expect(layer(container).style.transform).toBe("translate3d(100px, 0, 0)");
+  });
+
+  it("does not follow a paused seek until playback starts", () => {
+    act(() => useTransportStore.setState({ playback: { playbackState: "paused" } as never }));
+    const position = { current: 0 };
+    const { container } = render(<SectionScrubEditor {...props({ positionSecondsRef: position })} />);
+    position.current = 4;
+    runFrames();
+    expect(layer(container).style.transform).toBe("translate3d(400px, 0, 0)");
+
+    act(() => useTransportStore.setState({ playback: { playbackState: "playing" } as never }));
+    runFrames();
+    expect(layer(container).style.transform).toBe("translate3d(200px, 0, 0)");
   });
 });
 
