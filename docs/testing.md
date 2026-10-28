@@ -44,6 +44,25 @@ npm run test:remote
 cargo test -p libretracks-core   # or -project / -audio / -remote
 ```
 
+## Song analysis
+
+The pure audio analyser and the review's marker placement can be checked
+without the native engine:
+
+```bash
+cargo test -p libretracks-analysis --lib
+npm --prefix apps/desktop run test -- songAnalysisPlan.test.ts
+```
+
+For an unaccented click, bar-phase evidence is ranked: counts first, then a
+consensus of at least three section announcements with at least 75% of their
+starts aligned to the same beat, then announcement endings as a fallback.
+Single starts, cues alone and ambiguous start phases do not establish that
+consensus. A half-tempo reading must not replace stronger evidence from the
+selected reading with a guess based on word duration. Regression tests cover
+different phrase lengths, pickups, counts taking priority, ambiguous starts,
+and placement against measured guide timings at 148 BPM.
+
 ## The native engine suite (separate)
 
 The `libretracks-desktop` (src-tauri) crate and `lt-audio-engine-v2` link

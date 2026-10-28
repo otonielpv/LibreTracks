@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TempoProposal } from "@libretracks/shared/desktopApi";
 import type { SongView } from "@libretracks/shared/models";
+import { getBeatDurationSeconds } from "@libretracks/shared/timelineMath";
 
 import {
   bpmFromNames,
@@ -267,6 +268,35 @@ describe("guide", () => {
   it("a lone name said on beat 3 starts its section on the next downbeat", () => {
     // "Es Él": "Pre coro" two beats before its section, among names on beat 1.
     expect(sectionsAt([8, 26, 40, 56])).toEqual([106, 114, 122, 130]);
+  });
+
+  it("places short and long guide phrases on the same corrected bar grid", () => {
+    const view = plain();
+    const { analysis, markers } = announced([
+      [0.00, 3.29, ["intro"]],
+      [8.11, 8.60, ["intro"]],
+      [14.60, 16.41, ["chorus", "drums_in"]],
+      [40.54, 42.13, ["interlude", "all_in"]],
+      [53.51, 54.33, ["verse_1"]],
+      [103.79, 105.37, ["chorus", "all_in"]],
+      [152.44, 154.02, ["chorus", "all_in"]],
+      [243.26, 243.72, ["ending"]],
+    ]);
+    const placed = placeGuideSections(view, "b", 100, analysis, markers, {
+      tempoMarkers: [{ startSeconds: 100, bpm: 148 }],
+      signatureMarkers: [{ startSeconds: 100, signature: "4/4" }],
+    });
+    const bar = 4 * getBeatDurationSeconds(148, "4/4");
+    const expected = [
+      [2, "intro"], [6, "intro"], [10, "chorus"], [10, "drums_in"],
+      [26, "interlude"], [26, "all_in"], [34, "verse"],
+      [65, "chorus"], [65, "all_in"], [95, "chorus"], [95, "all_in"], [151, "ending"],
+    ] as const;
+    expect(placed).toHaveLength(expected.length);
+    for (const [index, [bars, kind]] of expected.entries()) {
+      expect(placed[index].kind).toBe(kind);
+      expect(Math.abs(placed[index].startSeconds - (100 + bars * bar))).toBeLessThan(0.0005);
+    }
   });
 
   it("a count that is a section's count-in places no count markers", () => {

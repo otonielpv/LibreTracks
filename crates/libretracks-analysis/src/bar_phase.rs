@@ -8,7 +8,9 @@
 //! downbeat ("Coro, dos, tres, cuatro"). So, among the beats of a bar, the
 //! downbeat is the one the announcements end closest before.
 //!
-//! The announcement STARTS do not tell: a guide speaks on beats 1 and 3 alike.
+//! A single announcement START does not tell: a guide speaks on beats 1 and 3 alike.
+//! Consistently aligned section starts do tell, however: when most names start
+//! on the same beat, their different word lengths must not move that beat.
 //! And a guide that speaks at the start of the bar before ("La bondad de
 //! Dios", Church of the City) ends its words two beats or more before the
 //! downbeat, closer to the wrong one. Its counts are surer: the beat after a
@@ -21,6 +23,7 @@
 //! left the change on beat 3 and a bar of 132 off the click by 50 ms.
 
 use crate::guide::GuideAnalysis;
+use crate::guide_text::is_section_kind;
 
 /// Fragments closer than this (in beats) are one announcement: "Coro" and
 /// its count-in, or the numbers of a count. The intro's "Intro… uno, dos"
@@ -36,6 +39,22 @@ const MIN_ANNOUNCEMENTS: usize = 2;
 /// announcement's end to the next downbeat). On the real guide above the
 /// right phase averages ~1 beat and the one two beats off ~3.
 const MIN_MARGIN_BEATS: f64 = 0.75;
+const MIN_SECTION_STARTS: usize = 3;
+const SECTION_START_SHARE: f64 = 0.75;
+const ON_BEAT_SHARE: f64 = 0.2;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum GuideEvidence {
+    Ends,
+    SectionStarts,
+    Counts,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GuidePhase {
+    pub pickup: usize,
+    pub evidence: GuideEvidence,
+}
 
 /// How many beats of `beat_times` (one run of a click without accent, with
 /// no gap) come before its first downbeat: 0..beats_per_bar. None when the
@@ -45,7 +64,7 @@ pub(crate) fn pickup_from_guide(
     beat_times: &[f64],
     beats_per_bar: usize,
     guide: &GuideAnalysis,
-) -> Option<usize> {
+) -> Option<GuidePhase> {
     if beats_per_bar < 2 || beat_times.len() < beats_per_bar * 2 {
         return None;
     }
@@ -56,7 +75,16 @@ pub(crate) fn pickup_from_guide(
         return None;
     }
     if let Some(phase) = phase_from_counts(beat_times, beats_per_bar, beat, guide) {
-        return Some(phase);
+        return Some(GuidePhase {
+            pickup: phase,
+            evidence: GuideEvidence::Counts,
+        });
+    }
+    if let Some(phase) = phase_from_section_starts(beat_times, beats_per_bar, beat, guide) {
+        return Some(GuidePhase {
+            pickup: phase,
+            evidence: GuideEvidence::SectionStarts,
+        });
     }
     let ends = announcement_ends(guide, beat);
     let ends: Vec<f64> = ends
@@ -86,7 +114,57 @@ pub(crate) fn pickup_from_guide(
         })
         .collect();
     scores.sort_by(|a, b| a.1.total_cmp(&b.1));
-    (scores[1].1 - scores[0].1 >= MIN_MARGIN_BEATS).then_some(scores[0].0)
+    (scores[1].1 - scores[0].1 >= MIN_MARGIN_BEATS).then_some(GuidePhase {
+        pickup: scores[0].0,
+        evidence: GuideEvidence::Ends,
+    })
+}
+
+fn phase_from_section_starts(
+    beat_times: &[f64],
+    beats_per_bar: usize,
+    beat: f64,
+    guide: &GuideAnalysis,
+) -> Option<usize> {
+    let mut votes = vec![0_usize; beats_per_bar];
+    let mut total = 0;
+    for announcement in &guide.announcements {
+        let Some(group) = guide.groups.get(announcement.group) else {
+            continue;
+        };
+        let section = group.counted_in
+            || group.labels.iter().any(|label| {
+                is_section_kind(label)
+                    || label.rsplit_once('_').is_some_and(|(kind, variant)| {
+                        is_section_kind(kind) && variant.parse::<u8>().is_ok()
+                    })
+            });
+        if !section
+            || announcement.start_seconds < beat_times[0] - ON_BEAT_SHARE * beat
+            || announcement.start_seconds > *beat_times.last()?
+        {
+            continue;
+        }
+        total += 1;
+        let next = beat_times.partition_point(|&time| time < announcement.start_seconds);
+        let nearest = [
+            next.checked_sub(1),
+            (next < beat_times.len()).then_some(next),
+        ]
+        .into_iter()
+        .flatten()
+        .min_by(|&a, &b| {
+            (beat_times[a] - announcement.start_seconds)
+                .abs()
+                .total_cmp(&(beat_times[b] - announcement.start_seconds).abs())
+        })?;
+        if (beat_times[nearest] - announcement.start_seconds).abs() <= ON_BEAT_SHARE * beat {
+            votes[nearest % beats_per_bar] += 1;
+        }
+    }
+    let (phase, &support) = votes.iter().enumerate().max_by_key(|(_, votes)| **votes)?;
+    (support >= MIN_SECTION_STARTS && support as f64 >= SECTION_START_SHARE * total as f64)
+        .then_some(phase)
 }
 
 /// The numbers of one count can be a half note apart ("uno . dos . | uno,
@@ -211,6 +289,14 @@ fn announcement_ends(guide: &GuideAnalysis, beat: f64) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pickup_from_guide(
+        times: &[f64],
+        beats_per_bar: usize,
+        guide: &GuideAnalysis,
+    ) -> Option<usize> {
+        super::pickup_from_guide(times, beats_per_bar, guide).map(|phase| phase.pickup)
+    }
     use crate::guide::GuideAnnouncement;
 
     fn guide(fragments: &[(f64, f64)]) -> GuideAnalysis {
@@ -404,6 +490,133 @@ mod tests {
         // Without the count to go by, its announcements say another bar.
         let words: Vec<(f64, f64)> = BONDAD[5..].iter().map(|&(s, e, _)| (s, e)).collect();
         assert_ne!(pickup_from_guide(&click, 4, &guide(&words)), Some(0));
+    }
+
+    fn sections(fragments: &[(f64, f64)]) -> GuideAnalysis {
+        let mut analysis = counted(
+            &fragments
+                .iter()
+                .map(|&(s, e)| (s, e, false))
+                .collect::<Vec<_>>(),
+        );
+        analysis.groups[0].labels = vec!["verse_2".to_string()];
+        analysis
+    }
+
+    #[test]
+    fn consistent_section_starts_do_not_follow_word_lengths() {
+        let click = beats(0.002, 148.0, 604);
+        // Measured guide fragments, including the opening count + Intro.
+        let analysis = sections(&[
+            (0.00, 3.29),
+            (8.11, 8.60),
+            (14.60, 16.41),
+            (40.54, 42.13),
+            (53.51, 54.33),
+            (66.50, 67.17),
+            (72.97, 73.80),
+            (79.47, 80.32),
+            (92.44, 93.12),
+            (98.92, 99.39),
+            (103.79, 105.37),
+            (123.24, 124.07),
+            (129.73, 130.55),
+            (142.71, 143.39),
+            (149.19, 149.66),
+            (152.44, 154.02),
+            (171.89, 172.72),
+            (184.87, 186.60),
+            (204.33, 205.91),
+            (223.79, 224.29),
+            (230.27, 230.77),
+            (243.26, 243.72),
+        ]);
+        let phase = super::pickup_from_guide(&click, 4, &analysis).unwrap();
+        assert_eq!(phase.pickup, 0);
+        assert_eq!(phase.evidence, GuideEvidence::SectionStarts);
+    }
+
+    #[test]
+    fn section_start_consensus_is_relative_to_the_click_not_to_zero() {
+        for phase in 0..4 {
+            let fragments: Vec<_> = (0..8)
+                .map(|i| {
+                    let start = 1.0 + (8 * i + phase) as f64 * 0.5;
+                    (start + 0.02, start + 0.8)
+                })
+                .collect();
+            let result =
+                super::pickup_from_guide(&beats(1.0, 120.0, 100), 4, &sections(&fragments))
+                    .unwrap();
+            assert_eq!(result.pickup, phase);
+            assert_eq!(result.evidence, GuideEvidence::SectionStarts);
+        }
+    }
+
+    #[test]
+    fn ambiguous_or_sparse_section_starts_do_not_override_other_evidence() {
+        let click = beats(0.0, 120.0, 200);
+        let fragments: Vec<_> = (0..8)
+            .map(|i| {
+                let start = (8 * i + 2 * (i % 2)) as f64 * 0.5;
+                (start, start + 0.3)
+            })
+            .collect();
+        assert_eq!(
+            phase_from_section_starts(&click, 4, 0.5, &sections(&fragments)),
+            None
+        );
+        assert_eq!(
+            phase_from_section_starts(&click, 4, 0.5, &sections(&fragments[..2])),
+            None
+        );
+        let off_beat: Vec<_> = fragments.iter().map(|&(s, e)| (s + 0.2, e + 0.2)).collect();
+        assert_eq!(
+            phase_from_section_starts(&click, 4, 0.5, &sections(&off_beat)),
+            None
+        );
+    }
+
+    #[test]
+    fn counts_take_priority_over_consistent_section_starts() {
+        let mut analysis = counted(&[
+            (1.0, 1.3, true),
+            (1.5, 1.8, true),
+            (5.0, 5.3, false),
+            (9.0, 9.3, false),
+            (13.0, 13.3, false),
+        ]);
+        analysis.groups[0].labels = vec!["chorus".to_string()];
+        let result = super::pickup_from_guide(&beats(0.0, 120.0, 100), 4, &analysis).unwrap();
+        assert_eq!(result.pickup, 0);
+        assert_eq!(result.evidence, GuideEvidence::Counts);
+    }
+
+    #[test]
+    fn section_consensus_requires_three_starts_and_three_quarters_support() {
+        let click = beats(0.0, 120.0, 200);
+        let mut analysis = sections(&[(4.0, 4.3), (8.0, 8.3), (12.0, 12.3), (17.0, 17.3)]);
+        assert_eq!(
+            phase_from_section_starts(&click, 4, 0.5, &analysis),
+            Some(0)
+        );
+        analysis
+            .announcements
+            .push(crate::guide::GuideAnnouncement {
+                start_seconds: 21.0,
+                end_seconds: 21.3,
+                group: 0,
+                count_words: Vec::new(),
+            });
+        assert_eq!(phase_from_section_starts(&click, 4, 0.5, &analysis), None);
+        analysis.groups[0].labels = vec!["drums_in".to_string()];
+        assert_eq!(phase_from_section_starts(&click, 4, 0.5, &analysis), None);
+        analysis.groups[0].counted_in = true;
+        analysis.announcements.pop();
+        assert_eq!(
+            phase_from_section_starts(&click, 4, 0.5, &analysis),
+            Some(0)
+        );
     }
 
     #[test]

@@ -14,7 +14,7 @@
 //! `metronome_renderer.cpp`), so a marker anywhere else would make the app's
 //! click disagree with the multitrack's.
 
-use crate::bar_phase::{pickup_from_guide, pickup_from_tempo_changes};
+use crate::bar_phase::{pickup_from_guide, pickup_from_tempo_changes, GuideEvidence};
 use crate::fft::fft;
 use crate::guide::GuideAnalysis;
 use serde::Serialize;
@@ -318,12 +318,23 @@ fn analyze_click_reading(
             // the plain tempo the bar is half the real one, and the speech
             // ending on an off-beat click would pass for a downbeat.
             let eighths: Vec<f64> = times.iter().copied().step_by(2).collect();
-            pickup_from_guide(&eighths, beats_per_bar, guide)
-                .map(|pickup| pickup * 2 % beats_per_bar)
-                .or(found)
+            let alternate = pickup_from_guide(&eighths, beats_per_bar, guide).map(|mut phase| {
+                phase.pickup = phase.pickup * 2 % beats_per_bar;
+                phase
+            });
+            match (found, alternate) {
+                (Some(direct), Some(other))
+                    if direct.evidence >= other.evidence
+                        && direct.evidence != GuideEvidence::Ends =>
+                {
+                    Some(direct)
+                }
+                (_, Some(other)) => Some(other),
+                (direct, None) => direct,
+            }
         });
         if let Some(found) = found {
-            pickup = found;
+            pickup = found.pickup;
             if pickup > 0 {
                 warnings.push(ClickWarning {
                     seconds: times[pickup],
@@ -1513,6 +1524,29 @@ mod tests {
     fn an_accented_click_has_no_eighths_reading() {
         let (clicks, _) = bars_at(0.5, 142.0, 4, 16);
         assert!(analyze_click_as_eighths(&render(&clicks), RATE, 4).is_none());
+    }
+
+    #[test]
+    fn half_tempo_word_tails_do_not_override_section_start_consensus() {
+        let beat = 60.0 / 148.0;
+        let samples = render(&unaccented(0.0, beat, 200));
+        let mut guide = guide_ending_before(beat, 4.0 * beat, beat, 8);
+        for announcement in &mut guide.announcements {
+            announcement.end_seconds = announcement.start_seconds + 2.0 * beat;
+        }
+        guide.groups.push(crate::guide::GuideGroup {
+            labels: vec!["chorus".to_string()],
+            transcript: None,
+            match_cost: None,
+            counted_in: false,
+            occurrences: 8,
+            first_start_seconds: guide.announcements[0].start_seconds,
+            first_end_seconds: guide.announcements[0].end_seconds,
+        });
+        let plain = analyze_click_with_guide(&samples, RATE, 4, false, &guide).unwrap();
+        assert_eq!(plain.segments[0].bpm, 148.0);
+        assert_close(plain.segments[0].start_seconds, beat, 0.002);
+        assert!(kinds(&plain).contains(&ClickWarningKind::DownbeatFromGuide));
     }
 
     #[test]
