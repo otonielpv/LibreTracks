@@ -2732,6 +2732,16 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
   touch-action: none;
 }
 
+@media (min-width: 601px) {
+  .lt-setlist-view.is-short.is-editing.is-wave-editing > .lt-setlist-zone.is-songs {
+    grid-column: 1;
+  }
+
+  .lt-setlist-view.is-short.is-editing.is-wave-editing > .lt-setlist-zone.is-drawer {
+    grid-row: 1 / -1;
+  }
+}
+
 @media (max-width: 600px) {
   .lt-setlist-view.is-editing.is-wave-editing {
     grid-template-columns: minmax(0, 1fr);
