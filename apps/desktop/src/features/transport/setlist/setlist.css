@@ -4869,12 +4869,18 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
 
 .lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-play {
   border-radius: 3px;
-  background: rgb(131 182 154 / 0.14);
-  color: #add1bc;
+  background: rgb(9 11 10 / 0.8);
+  color: #48da88;
+}
+
+.lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-play .material-symbols-outlined {
+  font-size: 20px;
+  font-variation-settings: "FILL" 0;
 }
 
 .lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-play:hover:not(:disabled) {
-  background: rgb(131 182 154 / 0.26);
+  background: rgb(72 218 136 / 0.2);
+  color: #80edac;
 }
 
 .lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-play:disabled {
@@ -4882,7 +4888,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
 }
 
 .lt-setlist-view .lt-setlist-song-tile.is-playing {
-  border-color: #6b9780;
+  border-color: #4a9d6f;
   box-shadow: none;
 }
 
@@ -4901,7 +4907,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   align-items: center;
   gap: 2px;
   height: 0.8rem;
-  color: #83b69a;
+  color: #48da88;
 }
 
 .lt-setlist-playing-indicator > span {
