@@ -3,16 +3,16 @@ import { useCallback, useEffect, type PointerEvent as ReactPointerEvent, type Re
 import { useSetlistStore } from "./setlistStore";
 
 /** The song row never gets shorter than one row of cards… */
-export const SONGS_MIN_HEIGHT_PX = 64;
+export const SONGS_MIN_HEIGHT_PX = 128;
 /** …nor taller than half the view. */
 export const SONGS_MAX_HEIGHT_FRACTION = 0.5;
 const STORAGE_KEY = "lt.setlistView.songsHeightPx";
 export const SONGS_HEIGHT_VAR = "--lt-setlist-songs-height";
 export const CARD_HEIGHT_VAR = "--lt-setlist-card-h";
-/** A card is never shorter than this (name + key/BPM line)… */
-export const CARD_MIN_HEIGHT_PX = 48;
+/** Minimum space for the artwork and its caption. */
+export const CARD_MIN_HEIGHT_PX = 112;
 /** …nor taller than this: past it a row only wastes space. */
-export const CARD_MAX_HEIGHT_PX = 96;
+export const CARD_MAX_HEIGHT_PX = 176;
 const LIST_PADDING_PX = 14;
 const CARD_GAP_PX = 6;
 

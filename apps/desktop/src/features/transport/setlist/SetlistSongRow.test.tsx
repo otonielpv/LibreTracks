@@ -75,6 +75,20 @@ beforeEach(() => {
 });
 
 describe("SetlistSongRow content", () => {
+  it.each<SetlistLayoutClass>(["wide", "medium", "short"])("%s: artwork precedes the song caption, with a fallback without a cover", (layout) => {
+    const coverImage = "data:image/jpeg;base64,/9j//9k=";
+    const { container } = render(<SetlistSongRow {...rowProps({
+      layout,
+      regions: [testRegion("cover", { coverImage }), testRegion("empty")],
+    })} />);
+    const covered = tile(container, "cover");
+    const artwork = covered.querySelector(".lt-setlist-song-artwork")!;
+    const caption = covered.querySelector(".lt-setlist-song-main")!;
+    expect(artwork.querySelector("img")?.getAttribute("src")).toBe(coverImage);
+    expect(artwork.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tile(container, "empty").querySelector(".lt-setlist-cover-placeholder")).not.toBeNull();
+  });
+
   it.each<SetlistLayoutClass>(["wide", "medium"])(
     "%s: one card per song in snapshot order with name, key, BPM and duration",
     (layout) => {

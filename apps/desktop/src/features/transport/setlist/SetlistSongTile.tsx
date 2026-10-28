@@ -143,9 +143,10 @@ function SetlistSongTileComponent({
           className="lt-setlist-song-grip"
         />
       ) : null}
-      <span className={`lt-setlist-song-index${region.coverImage ? " has-cover" : ""}`}>
+      <span className="lt-setlist-song-artwork">
         <SongCover region={region} />
-        <span className={region.coverImage ? "lt-setlist-cover-index" : undefined}>{index + 1}</span>
+        {!region.coverImage ? <span className="material-symbols-outlined lt-setlist-cover-placeholder" aria-hidden="true">music_note</span> : null}
+        <span className="lt-setlist-cover-index">{index + 1}</span>
       </span>
       <span className="lt-setlist-song-main">
         <span className="lt-setlist-song-name" title={region.name}>

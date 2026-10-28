@@ -418,11 +418,11 @@ describe("song cards in a resized row", () => {
   // The height dragged is how big the cards may get, shared by their rows and
   // never past a limit: the row is as tall as its cards.
   it("the cards share the height dragged, within a minimum and a maximum", () => {
-    expect(songCardHeight(215, 1)).toBe(96);
-    expect(songCardHeight(215, 3)).toBe(63);
-    expect(songCardHeight(78, 1)).toBe(64);
-    // Never shorter than the text needs, however small the row or many rows.
-    expect(songCardHeight(20, 1)).toBe(48);
-    expect(songCardHeight(150, 5)).toBe(48);
+    expect(songCardHeight(215, 1)).toBe(176);
+    expect(songCardHeight(320, 2)).toBe(150);
+    expect(songCardHeight(215, 3)).toBe(112);
+    expect(songCardHeight(78, 1)).toBe(112);
+    expect(songCardHeight(20, 1)).toBe(112);
+    expect(songCardHeight(150, 5)).toBe(112);
   });
 });
