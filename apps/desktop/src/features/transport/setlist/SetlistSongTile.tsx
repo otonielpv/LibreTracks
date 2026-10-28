@@ -102,6 +102,7 @@ function SetlistSongTileComponent({
     "lt-setlist-song-tile",
     SONG_DROP_CLASS,
     `is-${layout}`,
+    region.coverImage ? "has-cover" : "",
     isSelected ? "is-selected" : "",
     isActive ? "is-playing" : "",
     isPending ? "is-queued" : "",
