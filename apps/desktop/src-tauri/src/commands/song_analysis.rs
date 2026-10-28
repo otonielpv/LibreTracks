@@ -1113,7 +1113,7 @@ mod tests {
     ///
     /// ```text
     /// LT_AN_SESSION=<file.ltsession> LT_AN_AUDIO=<dir> LT_AN_MODEL=<ggml-base-q5_1.bin>
-    ///   [LT_AN_ONLY=<n>] cargo test --release --lib -p libretracks-desktop
+    ///   [LT_AN_ONLY=<n>] [LT_AN_SKIP=<n,n,...>] cargo test --release --lib -p libretracks-desktop
     ///   --features libretracks-desktop/no-link dump_real_session_analysis -- --ignored
     /// ```
     #[test]
@@ -1129,13 +1129,23 @@ mod tests {
         let only: Option<usize> = std::env::var("LT_AN_ONLY")
             .ok()
             .and_then(|v| v.parse().ok());
+        let skip: Vec<usize> = std::env::var("LT_AN_SKIP")
+            .unwrap_or_default()
+            .split(',')
+            .filter(|value| !value.is_empty())
+            .map(|value| {
+                value
+                    .parse()
+                    .expect("LT_AN_SKIP must contain region indices")
+            })
+            .collect();
         let session = std::path::PathBuf::from(session);
         let audio = std::path::PathBuf::from(audio);
         let song = libretracks_project::load_song_from_file(&session).expect("session loads");
         let voices = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/voices");
         let templates = load_guide_templates(&voices);
         for (index, region) in song.regions.iter().enumerate() {
-            if only.is_some_and(|only| only != index) {
+            if only.is_some_and(|only| only != index) || skip.contains(&index) {
                 continue;
             }
             let click_path = audio.join(format!("{index}_click.wav"));

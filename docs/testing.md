@@ -66,6 +66,12 @@ aligned to the same beat, and finally announcement endings. When comparing
 tempo readings, onset evidence takes priority over word-duration estimates.
 Equal tail-only evidence keeps the previous eighths fallback.
 
+Guide clips are used without transcription only for high-confidence matches.
+Weaker matches are sent to speech recognition when available, retaining the
+clip label as a fallback if no announcement can be recognised. The analyser
+tests cover this boundary and the fallback; recognition can still be affected
+by the model and the quality of the source audio.
+
 The shared numerical fixtures in
 [`crates/libretracks-analysis/tests/fixtures`](../crates/libretracks-analysis/tests/fixtures)
 cover "Rey de Reyes" (147 BPM) and "Musica del cielo" (148 BPM). They contain
@@ -86,6 +92,39 @@ the same marker assertions against the captured results and fails if the
 proposal differs from the shared fixtures. The existing
 `realSessionHarness.test.ts` is a diagnostic dump skipped without its input
 environment variables; it is not a substitute for these automatic assertions.
+
+To compare a real session's saved section and cue markers with the default
+analysis proposal, prepare its click and guide WAVs and generate results with
+the ignored `dump_real_session_analysis` test documented in
+`apps/desktop/src-tauri/src/commands/song_analysis.rs`. Then run
+`realSessionMarkerComparison.test.ts` with `LT_AN_SESSION` set to the session
+file and `LT_AN_AUDIO` to the results directory. Set `LT_AN_SKIP` to
+comma-separated zero-based region indices to exclude songs in both the native
+analysis and the comparison. Each included song must have a result file;
+missing results are errors. The test compares
+kind, variant, lane and position (within 0.25 seconds), reports missing and
+extra markers, and rejects same-lane collisions. Set `LT_AN_REPORT=1` for
+machine-readable `LT_MARKER_COMPARISON` lines. The session must have no warp
+or transposition, because the saved positions are not transport-view
+positions in that case. The test does not assess the key.
+
+The same test also runs nine recorded click/guide analyses from the
+`nine-song-analysis.json` numerical fixture without external audio or a speech
+model. It checks every saved marker against the captured proposal and records
+the known differences in one song rather than claiming it matches. These
+fixture tests cover marker placement, not fresh audio or speech recognition;
+rerun the native analysis and the strict session comparison above to test
+those. Update the documented differences when fixing them.
+
+For example, in PowerShell, to exclude the seventh song:
+
+```powershell
+$env:LT_AN_SESSION = 'C:\path\to\song.ltsession'
+$env:LT_AN_AUDIO = 'C:\path\to\results'
+$env:LT_AN_SKIP = '6'
+$env:LT_AN_REPORT = '1'
+npm --prefix apps\desktop run test -- realSessionMarkerComparison.test.ts
+```
 
 ## The native engine suite (separate)
 

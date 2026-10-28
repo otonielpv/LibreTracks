@@ -494,6 +494,22 @@ describe("guide", () => {
     ]);
   });
 
+  it("uses the song grid within the start tolerance but not for earlier counts", () => {
+    const tempo = {
+      tempoMarkers: [{ startSeconds: 100, bpm: 72, ramp: false }],
+      signatureMarkers: [],
+    };
+    const countAt = (startSeconds: number) => {
+      const { analysis, markers } = announced([
+        [startSeconds, startSeconds + 0.2, ["spoken_count"], [{ number: 1, startSeconds }]],
+      ]);
+      return placeGuideSections(plain(), "b", 100, analysis, markers, tempo)[0].startSeconds;
+    };
+    expect(countAt(-0.0004)).toBeCloseTo(100, 8);
+    expect(countAt(0)).toBeCloseTo(100, 8);
+    expect(countAt(-0.4)).toBeCloseTo(99.5, 8);
+  });
+
   it("a second section of one announcement goes in the cue lane", () => {
     // "Verso a capella": two sections cannot share a spot.
     expect(markersForLabels(["verse", "acapella"])).toEqual({

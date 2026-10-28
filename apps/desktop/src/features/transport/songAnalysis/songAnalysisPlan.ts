@@ -513,7 +513,9 @@ export function placeGuideSections(
     const beat = beatAt(seconds);
     const lookBack = seconds - barAt(seconds) - beat / 2;
     const barStart =
-      seconds >= songStart && lookBack < songStart ? songStart : downbeatFrom(lookBack);
+      seconds >= songStart - SAME_POSITION_SECONDS && lookBack < songStart
+        ? songStart
+        : downbeatFrom(lookBack);
     return barStart + Math.round((seconds - barStart) / beat) * beat;
   };
   // Which beat of its bar (0 = the downbeat) a beat on the grid is.
@@ -521,7 +523,9 @@ export function placeGuideSections(
     const beat = beatAt(beatSeconds);
     const lookBack = beatSeconds - barAt(beatSeconds) + beat / 2;
     const barStart =
-      beatSeconds >= songStart && lookBack < songStart ? songStart : downbeatFrom(lookBack);
+      beatSeconds >= songStart - SAME_POSITION_SECONDS && lookBack < songStart
+        ? songStart
+        : downbeatFrom(lookBack);
     return Math.round((beatSeconds - barStart) / beat) % (Math.round(barAt(beatSeconds) / beat) || 1);
   };
   const { sections: offTheBar, offsetAt } = sectionsOffTheBar(

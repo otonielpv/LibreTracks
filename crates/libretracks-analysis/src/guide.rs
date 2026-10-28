@@ -38,9 +38,9 @@ const MIN_SPEECH_SECONDS: f64 = 0.15;
 /// voice (see the module docs for the measured gap).
 const MATCH_COST: f64 = 1.6;
 /// Under this, a clip match is certain enough to skip transcribing the group.
-/// A fragment that only partly matches ("Verso 3, entra batería" against
-/// the clip "entra batería", 1.41) is transcribed, so both markers come out.
-const SURE_MATCH_COST: f64 = 1.0;
+/// Less certain matches are transcribed: a real "Bajar intensidad" was
+/// matched to the "breakdown" clip at 0.91, despite its different label.
+const SURE_MATCH_COST: f64 = 0.8;
 /// Speech recognition rate.
 const RECOGNITION_RATE: f64 = 16_000.0;
 /// Speech given to language detection: the longest announcements, up to this.
@@ -1228,6 +1228,55 @@ mod tests {
             1,
             "only the unmatched group is transcribed"
         );
+    }
+
+    #[test]
+    fn a_doubtful_clip_match_is_transcribed_with_the_clip_as_fallback() {
+        let template = GuideTemplate {
+            label: "breakdown".into(),
+            samples: word(0, 0.5),
+            sample_rate: RATE,
+        };
+        let other = word(1, 0.5);
+        let mut selected = None;
+        for amount in [0.03, 0.06, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7] {
+            let mut audio = vec![0.0; RATE as usize * 3];
+            for (index, (&original, &noise)) in template.samples.iter().zip(&other).enumerate() {
+                audio[RATE as usize + index] = original + amount * noise;
+            }
+            let matching = analyze_guide(&audio, RATE, std::slice::from_ref(&template), None);
+            let cost = matching.groups[0].match_cost.unwrap();
+            if (SURE_MATCH_COST..1.0).contains(&cost) {
+                selected = Some((audio, cost));
+                break;
+            }
+        }
+        let (audio, cost) = selected.expect("a moderately degraded clip");
+        let mut recogniser = FakeTranscriber {
+            language_sample_seconds: 0.0,
+            calls: Vec::new(),
+            progress: Vec::new(),
+            answers: vec![(0.8, "Bajar intensidad.")],
+        };
+        let analysis = analyze_guide(
+            &audio,
+            RATE,
+            std::slice::from_ref(&template),
+            Some(&mut recogniser),
+        );
+        assert_eq!(recogniser.calls.len(), 1, "cost {cost}");
+        assert_eq!(analysis.groups[0].labels, vec!["ease_down"]);
+        recogniser.answers = vec![(0.8, "unrecognised words")];
+        let fallback = analyze_guide(
+            &audio,
+            RATE,
+            std::slice::from_ref(&template),
+            Some(&mut recogniser),
+        );
+        assert_eq!(fallback.groups[0].labels, vec!["breakdown"]);
+        recogniser.answers.clear();
+        let fallback = analyze_guide(&audio, RATE, &[template], Some(&mut recogniser));
+        assert_eq!(fallback.groups[0].labels, vec!["breakdown"]);
     }
 
     #[test]
