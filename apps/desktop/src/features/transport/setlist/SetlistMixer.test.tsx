@@ -414,15 +414,10 @@ describe("channel strip layout", () => {
 });
 
 describe("song cards in a resized row", () => {
-  // The desktop report: a tall row with three songs lost most of its space.
-  // The height dragged is how big the cards may get, shared by their rows and
-  // never past a limit: the row is as tall as its cards.
-  it("the cards share the height dragged, within a minimum and a maximum", () => {
-    expect(songCardHeight(215, 1)).toBe(176);
-    expect(songCardHeight(320, 2)).toBe(150);
-    expect(songCardHeight(215, 3)).toBe(112);
-    expect(songCardHeight(78, 1)).toBe(112);
-    expect(songCardHeight(20, 1)).toBe(112);
-    expect(songCardHeight(150, 5)).toBe(112);
+  it("sizes one row of cards within a minimum and a maximum", () => {
+    expect(songCardHeight(215)).toBe(176);
+    expect(songCardHeight(150)).toBe(136);
+    expect(songCardHeight(78)).toBe(112);
+    expect(songCardHeight(20)).toBe(112);
   });
 });

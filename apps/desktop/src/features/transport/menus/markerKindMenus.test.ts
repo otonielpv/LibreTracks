@@ -43,6 +43,7 @@ function menus() {
     setSelectedTimelineRange: vi.fn(),
     setStatus: vi.fn(),
     setContextMenu: vi.fn(),
+    appSettings: { voiceGuideLanguage: "es" },
   } as unknown as TimelineMenuDeps;
   return { deps, ...createMarkerKindMenus(() => deps, () => ({ x: 0, y: 0 })) };
 }
@@ -50,6 +51,24 @@ function menus() {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 beforeEach(() => vi.clearAllMocks());
+
+describe("cue menus", () => {
+  it("offers count first when creating or changing a cue", () => {
+    const { deps, openCreateCueKindMenu, openCreateMarkerKindMenu, openMarkerKindMenu } = menus();
+    const actions: { label: string; onSelect: () => void }[] = [];
+    (deps.setContextMenu as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (menu: { actions: typeof actions }) => actions.splice(0, actions.length, ...menu.actions),
+    );
+    openCreateCueKindMenu(10);
+    expect(actions[0].label).toBe("transport.markerKind.count ▸");
+    openCreateMarkerKindMenu(10);
+    actions[1].onSelect();
+    expect(actions[0].label).toBe("transport.markerKind.count ▸");
+    openMarkerKindMenu(song.sectionMarkers[1]);
+    actions[1].onSelect();
+    expect(actions[0].label).toBe("transport.markerKind.count ▸");
+  });
+});
 
 describe("two sections on one spot", () => {
   it("asks, and on yes creates the section in the cue lane", async () => {

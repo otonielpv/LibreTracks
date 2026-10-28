@@ -4651,8 +4651,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   min-height: 2.75rem;
 }
 
-/* ---- Fila de canciones redimensionable (wide): asa abajo; más alta, las
-   tarjetas pasan a varias filas. ---- */
+/* ---- Fila de canciones redimensionable (wide): asa abajo. ---- */
 .lt-setlist-view.is-wide > .lt-setlist-zone.is-songs {
   position: relative;
 }
@@ -4670,11 +4669,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   background: rgb(87 241 219 / 0.25);
 }
 
-/* The song row is as tall as its cards need: they flow left to right and wrap
-   into more rows when the songs do not fit one (useSongsRowResize sizes them:
-   the height dragged is how big each may get, up to a limit), so there is no
-   empty stretch and no vertical scroll. The waveform and the console share
-   the rest. */
+/* The resized song row stays on one horizontally scrolling line. */
 .lt-setlist-view.is-wide.has-songs-height:not(.is-wave-editing) {
   grid-template-rows: auto minmax(8rem, 1fr) var(--lt-setlist-mixer-height, minmax(14rem, 1.6fr));
 }
@@ -4685,10 +4680,9 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
 
 .lt-setlist-view.is-wide.has-songs-height .lt-setlist-songs.is-horizontal {
   flex-direction: row;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  overflow-x: hidden;
-  overflow-y: auto;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .lt-setlist-view.is-wide.has-songs-height .lt-setlist-song-item,
@@ -4701,12 +4695,6 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
 .lt-setlist-view.is-wide.has-songs-height .lt-setlist-song-tile {
   height: 100%;
   min-height: 0;
-}
-
-/* In several rows an arrow between cards means nothing: it would also take a
-   slot of the column. */
-.lt-setlist-view.is-wide[data-song-rows="multi"] .lt-setlist-transition {
-  display: none;
 }
 
 .lt-setlist-view.is-wide.has-songs-height > .lt-setlist-zone.is-songs > .lt-setlist-pane-toggle,
@@ -4857,6 +4845,18 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   flex-direction: row;
   flex-wrap: nowrap;
   overflow: hidden;
+  white-space: nowrap;
+}
+
+.lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-key {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-bpm,
+.lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-duration {
+  flex: none;
 }
 
 .lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-actions {

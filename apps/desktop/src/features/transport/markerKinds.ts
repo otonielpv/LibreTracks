@@ -171,8 +171,8 @@ const SECTION_KINDS_WITHOUT_RECORDING: readonly MarkerKind[] = [
  * offer a maybe-silent cue than to hide everything). */
 export function availableCueKinds(language: string): readonly MarkerKind[] {
   const missing = CUE_KINDS_WITHOUT_RECORDING[language];
-  if (!missing || missing.length === 0) return CUE_KINDS;
-  return CUE_KINDS.filter((kind) => !missing.includes(kind));
+  const available = missing ? CUE_KINDS.filter((kind) => !missing.includes(kind)) : CUE_KINDS;
+  return [...available.filter((kind) => kind === "count"), ...available.filter((kind) => kind !== "count")];
 }
 
 /** Section kinds that have a recording, in menu order. Mirrors

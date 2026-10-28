@@ -1,5 +1,9 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { Profiler, type ComponentProps } from "react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parse } from "postcss";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resetFrameGateForTests } from "../frameGate";
@@ -75,6 +79,20 @@ beforeEach(() => {
 });
 
 describe("SetlistSongRow content", () => {
+  it("keeps resized cards on one scrolling row and key changes on one line", () => {
+    const styles = parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "setlist.css"), "utf8"));
+    const declarations = (selector: string) => {
+      const result: Record<string, string> = {};
+      styles.walkRules(selector, (rule) => rule.walkDecls((decl) => { result[decl.prop] = decl.value; }));
+      return result;
+    };
+    expect(declarations(".lt-setlist-view.is-wide.has-songs-height .lt-setlist-songs.is-horizontal"))
+      .toMatchObject({ "flex-wrap": "nowrap", "overflow-x": "auto", "overflow-y": "hidden" });
+    expect(declarations(".lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-meta"))
+      .toMatchObject({ "flex-wrap": "nowrap", "white-space": "nowrap" });
+    expect(declarations(".lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-key"))
+      .toMatchObject({ "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis" });
+  });
   it.each<SetlistLayoutClass>(["wide", "medium", "short"])("%s: artwork precedes the song caption, with a fallback without a cover", (layout) => {
     const coverImage = "data:image/jpeg;base64,/9j//9k=";
     const { container } = render(<SetlistSongRow {...rowProps({
