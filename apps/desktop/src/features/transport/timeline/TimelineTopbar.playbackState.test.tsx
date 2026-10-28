@@ -7,7 +7,20 @@ import { TimelineTopbar } from "./TimelineTopbar";
 import type { PlaybackState } from "../desktopApi";
 import i18n from "../../../shared/i18n";
 
-afterEach(cleanup);
+const platform = vi.hoisted(() => ({ isMobileApp: false }));
+
+vi.mock("../desktopApi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../desktopApi")>();
+  return {
+    ...actual,
+    get isMobileApp() { return platform.isMobileApp; },
+  };
+});
+
+afterEach(() => {
+  cleanup();
+  platform.isMobileApp = false;
+});
 
 /**
  * Paso 01 del plan de feedback de testers: reproducir y pausa tienen que
@@ -92,6 +105,17 @@ function playButton() {
 function pauseButton() {
   return screen.getByLabelText(i18n.t("timelineTopbar.pause"));
 }
+
+describe("TimelineTopbar navigation toggle placement", () => {
+  it.each([false, true])("places the toggle first in its row (mobile: %s)", (isMobileApp) => {
+    platform.isMobileApp = isMobileApp;
+    const { container } = renderTopbar("stopped");
+    const toggles = container.querySelectorAll(".lt-navigation-toggle");
+    expect(toggles).toHaveLength(1);
+    const row = container.querySelector(isMobileApp ? ".lt-transport" : ".lt-topbar-menu-row");
+    expect(row?.firstElementChild).toBe(toggles[0]);
+  });
+});
 
 describe("TimelineTopbar transport state", () => {
   it("enciende reproducir solo mientras suena", () => {

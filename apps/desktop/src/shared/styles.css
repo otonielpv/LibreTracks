@@ -11174,6 +11174,10 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   min-height: 0;
 }
 
+.lt-mobile .lt-shell-body:not(:has(> .lt-side-nav)) {
+  padding-left: var(--lt-safe-area-left);
+}
+
 .lt-mobile .lt-topbar {
   flex: 0 0 auto;
   padding-top: max(clamp(0.2rem, 1.2vh, 0.4rem), var(--lt-safe-area-top));

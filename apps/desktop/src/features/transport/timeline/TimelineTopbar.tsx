@@ -195,7 +195,7 @@ export function TimelineTopbar({
       className={isProjectEmpty ? "lt-topbar is-project-empty" : "lt-topbar"}
     >
       <div className="lt-topbar-menu-row">
-        <NavigationToggle />
+        {!isMobileApp ? <NavigationToggle /> : null}
         <div className="lt-brand">
           <span className="lt-brand-title">LIBRETRACKS</span>
         </div>
@@ -491,6 +491,7 @@ export function TimelineTopbar({
 
       <div className="lt-topbar-main-row">
         <div className="lt-transport">
+          {isMobileApp ? <NavigationToggle /> : null}
           <label className="lt-bpm-control" data-lt-tour={TOUR_TARGETS.topbarTempo}>
             <span>{t("timelineTopbar.bpmLabel")}</span>
             <input
