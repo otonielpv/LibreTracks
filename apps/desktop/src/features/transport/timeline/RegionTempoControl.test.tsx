@@ -1,8 +1,11 @@
-import { cleanup } from "@testing-library/react";
-import { fireEvent, render, screen } from "../../../test/testUtils";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RegionTempoControl } from "./RegionTempoControl";
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 
 afterEach(cleanup);
 
@@ -18,7 +21,7 @@ describe("RegionTempoControl", () => {
       />,
     );
 
-    const up = screen.getByRole("button", { name: "Raise the song by 1 BPM" });
+    const up = screen.getByRole("button", { name: "timelineToolbar.regionTempoUpAria" });
     fireEvent.click(up);
     fireEvent.click(up);
 
@@ -37,7 +40,7 @@ describe("RegionTempoControl", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Back to the song's original tempo" }),
+      screen.getByRole("button", { name: "timelineToolbar.regionTempoResetAria" }),
     );
 
     expect(onChange).toHaveBeenCalledWith(118.27);
@@ -54,7 +57,7 @@ describe("RegionTempoControl", () => {
       />,
     );
 
-    const input = screen.getByRole("textbox", { name: "Song tempo in BPM" });
+    const input = screen.getByRole("textbox", { name: "timelineToolbar.regionTempoAria" });
     fireEvent.change(input, { target: { value: "96,5" } });
     fireEvent.keyDown(input, { key: "Enter" });
     fireEvent.change(input, { target: { value: "999" } });

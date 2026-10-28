@@ -48,6 +48,8 @@ const songWith = (
 function setup(overrides: Partial<CompactSongHandlerDeps> = {}) {
   const deps: CompactSongHandlerDeps = {
     getSong: () => songWith([region("r1", { name: "Canción 1" })]),
+    getAutoWarp: () => false,
+    refreshSongView: vi.fn(async () => null),
     runAction: vi.fn(async (action) => {
       await action();
     }),
@@ -68,6 +70,7 @@ function setup(overrides: Partial<CompactSongHandlerDeps> = {}) {
     updateSongRegionKey: vi.fn(async () => snapshot(4)),
     setSongRegionCompactWidth: vi.fn(async () => snapshot(4)),
     upsertSongTempoMarker: vi.fn(async () => snapshot(5)),
+    setSongRegionTempo: vi.fn(async () => snapshot(5)),
     deleteSongRegion: vi.fn(async () => snapshot(6)),
     exportRegionAsPackage: vi.fn(async () => true),
     exportRegionAsPackageAt: vi.fn(async () => true),
@@ -206,6 +209,14 @@ describe("createCompactSongHandlers", () => {
   });
 
   describe("BPM", () => {
+    it("changes the song speed and refreshes geometry in automatic mode", async () => {
+      const { handlers, deps } = setup({ getAutoWarp: () => true, prompt: vi.fn(async () => "128") });
+      await handlers.handleCompactSetSongBpm("r1");
+      await vi.waitFor(() => expect(deps.refreshSongView).toHaveBeenCalledWith({ includeWaveforms: false, sync: true }));
+      expect(deps.setSongRegionTempo).toHaveBeenCalledWith("r1", 128);
+      expect(deps.upsertSongTempoMarker).not.toHaveBeenCalled();
+    });
+
     it("upserts a tempo marker at the region start", async () => {
       const { handlers, deps } = setup({ prompt: vi.fn(async () => "128") });
       await handlers.handleCompactSetSongBpm("r1");

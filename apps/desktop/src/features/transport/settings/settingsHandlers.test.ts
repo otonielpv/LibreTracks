@@ -43,6 +43,12 @@ function lastPatch(persist: ReturnType<typeof vi.fn>): AppSettings {
 }
 
 describe("createSettingsHandlers", () => {
+  it("persists the automatic warp preference", () => {
+    const { handlers, persistAudioSettings } = setup();
+    handlers.handleAutoWarpChange(false);
+    expect(lastPatch(persistAudioSettings).autoWarp).toBe(false);
+  });
+
   it("reads the current appSettingsRef at call time, not at creation time", () => {
     const { handlers, persistAudioSettings, appSettingsRef } = setup();
     // Mutate the ref *after* the handlers were built.

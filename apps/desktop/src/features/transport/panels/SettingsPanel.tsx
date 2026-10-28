@@ -110,6 +110,7 @@ type SettingsPanelProps = {
   onDefaultSongTemplateChange: (value: string | null) => void;
   onReferenceImportedAudioChange: (value: boolean) => void;
   onAutoColorNewTracksChange: (value: boolean) => void;
+  onAutoWarpChange: (value: boolean) => void;
   onAutoSaveEnabledChange: (value: boolean) => void;
   onAutoSaveIntervalMinutesChange: (value: number) => void;
 
@@ -182,6 +183,7 @@ export function SettingsPanel({
   onDefaultSongTemplateChange,
   onReferenceImportedAudioChange,
   onAutoColorNewTracksChange,
+  onAutoWarpChange,
   onAutoSaveEnabledChange,
   onAutoSaveIntervalMinutesChange,
   midiLearnMode,
@@ -864,6 +866,19 @@ export function SettingsPanel({
                               "Cada pista nueva toma un color de la paleta, recorriéndola en orden, para distinguirlas de un vistazo. Desactívalo si prefieres colorearlas a mano. No repinta las pistas que ya existen.",
                           })}
                         </small>
+                      </span>
+                    </label>
+
+                    <label className="lt-settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={appSettings.autoWarp}
+                        disabled={isLoading || isSaving}
+                        onChange={(event) => onAutoWarpChange(event.target.checked)}
+                      />
+                      <span className="lt-settings-toggle-copy">
+                        <span>{t("transport.settingsModal.autoWarp")}</span>
+                        <small>{t("transport.settingsModal.autoWarpHint")}</small>
                       </span>
                     </label>
 

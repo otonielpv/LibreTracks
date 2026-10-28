@@ -80,6 +80,14 @@ describe("formatTransposeSemitones", () => {
   });
 });
 
+describe("automatic warp settings", () => {
+  it("defaults to enabled for old settings and preserves an explicit choice", () => {
+    expect(DEFAULT_APP_SETTINGS.autoWarp).toBe(true);
+    expect(normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, autoWarp: undefined } as unknown as AppSettings).autoWarp).toBe(true);
+    expect(normalizeAppSettings({ ...DEFAULT_APP_SETTINGS, autoWarp: false }).autoWarp).toBe(false);
+  });
+});
+
 describe("formatBpm", () => {
   it("renders whole tempos without a decimal point", () => {
     expect(formatBpm(120)).toBe("120");

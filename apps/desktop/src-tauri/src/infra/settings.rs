@@ -133,6 +133,10 @@ fn default_auto_color_new_tracks() -> bool {
     true
 }
 
+fn default_auto_warp() -> bool {
+    true
+}
+
 fn default_reference_imported_audio() -> bool {
     true
 }
@@ -383,6 +387,8 @@ pub struct AppSettings {
     /// one: turning the switch off later repaints nothing.
     #[serde(default = "default_auto_color_new_tracks")]
     pub auto_color_new_tracks: bool,
+    #[serde(default = "default_auto_warp")]
+    pub auto_warp: bool,
     /// When true (default) the frontend saves the loaded session on its own
     /// every `auto_save_interval_minutes`, so a crash or power cut costs at most
     /// one interval of work. The timer lives in the UI (it needs the project
@@ -518,6 +524,7 @@ impl Default for AppSettings {
             song_track_layout: None,
             default_song_template: None,
             auto_color_new_tracks: default_auto_color_new_tracks(),
+            auto_warp: default_auto_warp(),
             auto_save_enabled: default_auto_save_enabled(),
             auto_save_interval_minutes: default_auto_save_interval_minutes(),
             midi_mappings: HashMap::new(),
@@ -967,6 +974,18 @@ mod tests {
         let settings: AppSettings =
             serde_json::from_str(r#"{ "autoColorNewTracks": false }"#).expect("explicit");
         assert!(!settings.auto_color_new_tracks);
+    }
+
+    #[test]
+    fn auto_warp_defaults_to_on_for_older_settings_files() {
+        let settings: AppSettings = serde_json::from_str("{}").expect("defaults");
+        assert!(settings.auto_warp);
+        let settings: AppSettings =
+            serde_json::from_str(r#"{ "autoWarp": false }"#).expect("explicit");
+        assert!(!settings.auto_warp);
+        assert!(!serde_json::to_value(settings).expect("serialize")["autoWarp"]
+            .as_bool()
+            .expect("autoWarp"));
     }
 
     #[test]

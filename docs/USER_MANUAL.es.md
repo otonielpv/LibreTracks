@@ -176,6 +176,10 @@ Puedes cambiar el tipo de compas en el timeline para ello:
 
 ![Crear una Marca de Cambio de Metrica](../screenshots/Change-Time-Signature.png)
 
+### Tono y tempo
+
+Al cambiar el tono o el tempo de una canción, LibreTracks activa warp automáticamente para mantener el tono y la velocidad independientes. Una canción sin cambios no activa warp. Puedes desactivar `Warp automático` en Ajustes para mostrar el control manual de warp y usar varispeed al cambiar el tono. Cambiar esta preferencia no modifica las canciones existentes.
+
 ### Modos de `Salto`
 
 Configura el comportamiento global desde `Salto`:

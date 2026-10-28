@@ -52,7 +52,7 @@ function settingsProps(activeTab: Props["activeTab"] = "general"): Props {
     onPauseAtSongEndChange: vi.fn(), onVampBetweenSongsChange: noop,
     onFadeOutStopSecondsChange: noop, onSongTrackLayoutChange: noop,
     onDefaultSongTemplateChange: noop, onReferenceImportedAudioChange: noop,
-    onAutoColorNewTracksChange: noop, onAutoSaveEnabledChange: noop,
+    onAutoColorNewTracksChange: noop, onAutoWarpChange: noop, onAutoSaveEnabledChange: noop,
     onAutoSaveIntervalMinutesChange: noop, midiLearnMode: null,
     midiLearnFeedback: null, midiLearnFeedbackCommand: null, midiLearnView: "core",
     onMidiLearnViewChange: noop, midiLearnMarkerRows: [], midiLearnSongRows: [],

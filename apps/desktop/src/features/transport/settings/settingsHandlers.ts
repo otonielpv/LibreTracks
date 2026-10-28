@@ -354,6 +354,13 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       );
     },
 
+    handleAutoWarpChange(nextValue: boolean) {
+      persistAudioPatch(
+        { autoWarp: nextValue },
+        t("transport.status.autoWarpUpdated"),
+      );
+    },
+
     handleReferenceImportedAudioChange(nextValue: boolean) {
       persistAudioPatch(
         { referenceImportedAudio: nextValue },

@@ -568,6 +568,8 @@ const en = {
       referenceImportedAudioHint:
         "The session points at your original files instead of duplicating them, the way desktop does. Takes far less space. If you move or delete an original, that track goes silent and shows up under Missing files.",
       autoColorNewTracks: "Colour new tracks automatically",
+      autoWarp: "Automatic warp",
+      autoWarpHint: "Enable warp when changing pitch or tempo to keep them independent. Turn this off to control warp manually and use varispeed.",
       autoColorNewTracksHint:
         "Each new track takes a colour from the palette, cycling through it in order, so you can tell them apart at a glance. Turn it off if you prefer colouring by hand. It never repaints tracks you already have.",
       songTrackLayout: "Each song's tracks",
@@ -1403,6 +1405,7 @@ const en = {
       midiSettingsUpdated: "MIDI settings updated.",
       referenceImportedAudioUpdated: "Audio import behaviour updated.",
       autoColorNewTracksUpdated: "Automatic track colours updated.",
+      autoWarpUpdated: "Automatic warp updated.",
       autoSaveUpdated: "Autosave updated.",
       projectAutoSaved: "Project autosaved.",
       trackRoutingUpdated: "Track routing updated.",

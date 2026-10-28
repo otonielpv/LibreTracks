@@ -393,3 +393,22 @@ fn a_tempo_change_that_realigns_songs_carries_their_cues() {
     );
     assert_close(cue_at(&session, "k2"), r2 + 2.0, "la cue sigue a r2");
 }
+
+#[test]
+fn automatic_warp_on_a_varispeed_song_preserves_cues_and_undoes() {
+    let mut song = three_songs();
+    song.regions[0].end_seconds = 7.0;
+    song.regions[0].transpose_semitones = 12;
+    let mut session = session_with(song, vec![mute_cue("k2", 10.0)]);
+    let audio = AudioController::default();
+
+    session.update_song_region_transpose("r1", 11, &audio).expect("transpose");
+    let r2 = region_start(&session, "r2");
+    assert_close(r2, 8.0, "song stays aligned");
+    assert_close(cue_at(&session, "k2"), r2 + 2.0, "cue follows song");
+
+    session.undo_action(&audio).expect("undo");
+    assert_close(region_start(&session, "r2"), 8.0, "song restored");
+    assert_close(cue_at(&session, "k2"), 10.0, "cue restored");
+    assert!(!session.engine.song().expect("song").regions[0].warp_enabled);
+}

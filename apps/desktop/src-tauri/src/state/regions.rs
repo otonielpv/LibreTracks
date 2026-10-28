@@ -938,16 +938,40 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
+        let previous_song = song.clone();
+        let region_before = song
+            .regions
+            .iter()
+            .find(|region| region.id == region_id)
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+        let enable_warp = !region_before.warp_enabled
+            && region_before.transpose_semitones != transpose_semitones
+            && audio.current_settings().map(|settings| settings.auto_warp).unwrap_or(true);
+        let source_bpm = effective_bpm_at(&song, region_before.start_seconds);
+        if enable_warp
+            && !(libretracks_core::MIN_WARP_SOURCE_BPM..=libretracks_core::MAX_WARP_SOURCE_BPM)
+                .contains(&source_bpm)
+        {
+            return Err(DesktopError::AudioCommand(format!(
+                "warp source bpm must be between {} and {}",
+                libretracks_core::MIN_WARP_SOURCE_BPM, libretracks_core::MAX_WARP_SOURCE_BPM
+            )));
+        }
         let region = song
             .regions
             .iter_mut()
             .find(|region| region.id == region_id)
             .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
 
+        if enable_warp {
+            region.warp_enabled = true;
+            region.warp_source_bpm = Some(source_bpm);
+        }
+
         let record_history =
             self.should_record_transpose_history(TransposeHistoryTarget::Region(region.id.clone()));
 
-        let changes_timeline = !region.warp_enabled;
+        let changes_timeline = !region.warp_enabled || enable_warp;
         // Capture the values we'll need to compensate the songs that
         // follow this region, BEFORE we mutate it.
         let edited_region_id = region.id.clone();
@@ -1079,7 +1103,19 @@ impl DesktopSession {
                 refresh_song_duration(&mut song);
             }
         }
-        if changes_timeline {
+        if enable_warp {
+            realign_regions_after_warp_tempo_change(&previous_song, &mut song);
+            audio.update_live_region_warp(region_id, true, Some(source_bpm))?;
+        }
+        if enable_warp {
+            self.persist_song_update_carrying_cues(
+                song,
+                audio,
+                AudioChangeImpact::TimelineWindow,
+                record_history,
+                UpdatePhase::Commit,
+            )?;
+        } else if changes_timeline {
             // Warp off means pitch is varispeed: changing semitones changes
             // the rendered timeline length, so clips, regions and markers
             // must all be resent in runtime/view time.

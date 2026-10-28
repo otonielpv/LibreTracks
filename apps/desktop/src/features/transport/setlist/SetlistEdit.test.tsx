@@ -162,7 +162,8 @@ describe("Edit → Song", () => {
       onMasterGainChange: vi.fn(),
       onMasterGainCommit: vi.fn(),
     };
-    render(<SetlistView {...props(spies)} layoutClass="wide" />);
+    const base = props(spies);
+    render(<SetlistView {...base} appSettings={{ ...base.appSettings, autoWarp: false }} layoutClass="wide" />);
     enterEdit();
 
     fireEvent.change(screen.getByRole("combobox", { name: "setlistView.edit.key" }), { target: { value: "E" } });
@@ -180,6 +181,13 @@ describe("Edit → Song", () => {
     fireEvent.pointerUp(master);
     expect(spies.onMasterGainChange).toHaveBeenCalledWith("b", 0.5);
     expect(spies.onMasterGainCommit).toHaveBeenCalledWith("b");
+  });
+
+  it("hides manual warp in automatic mode while retaining the tempo control", () => {
+    render(<SetlistView {...props()} layoutClass="wide" />);
+    enterEdit();
+    expect(screen.queryByRole("button", { name: "setlistView.edit.warpOff" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "timelineToolbar.regionTempoAria" })).toBeTruthy();
   });
 
   it("rename, export, render, analyse and delete are the DAW song menu's entries", () => {

@@ -20,6 +20,8 @@ import type {
  */
 export type CompactSongHandlerDeps = {
   getSong: () => SongView | null;
+  getAutoWarp: () => boolean;
+  refreshSongView: (options?: { sync?: boolean; includeWaveforms?: boolean }) => Promise<SongView | null>;
   runAction: (
     action: () => Promise<void>,
     options?: { busy?: boolean },
@@ -65,6 +67,7 @@ export type CompactSongHandlerDeps = {
     startSeconds: number,
     bpm: number,
   ) => Promise<TransportSnapshot>;
+  setSongRegionTempo: (regionId: string, bpm: number) => Promise<TransportSnapshot>;
   deleteSongRegion: (regionId: string) => Promise<TransportSnapshot>;
   exportRegionAsPackage: (
     regionId: string,
@@ -129,6 +132,8 @@ export function resolveRenamedLibraryFolderBranch(
 export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
   const {
     getSong,
+    getAutoWarp,
+    refreshSongView,
     runAction,
     applyPlaybackSnapshot,
     setStatus,
@@ -147,6 +152,7 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
     updateSongRegionKey,
     setSongRegionCompactWidth,
     upsertSongTempoMarker,
+    setSongRegionTempo,
     deleteSongRegion,
     exportRegionAsPackage,
     exportRegionAsPackageAt,
@@ -260,11 +266,6 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
     });
   };
 
-  // Set BPM for a song. Always inserts (or replaces) a tempo marker at the
-  // song's start_seconds — we agreed this stays consistent whether the song
-  // is the project's first or not, so reordering songs never silently
-  // changes which tempo applies to which section. Backend's
-  // upsertSongTempoMarker semantics handle the "create-or-replace" part.
   const handleCompactSetSongBpm = async (regionId: string) => {
     const currentSong = getSong();
     const currentRegion = findRegion(regionId);
@@ -279,15 +280,16 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
     );
     if (raw === null) return;
     const nextBpm = Number(raw.replace(",", "."));
-    if (!Number.isFinite(nextBpm) || nextBpm <= 0) {
+    const autoWarp = getAutoWarp();
+    if (!Number.isFinite(nextBpm) || nextBpm <= 0 || (autoWarp && (nextBpm < 20 || nextBpm > 300))) {
       setStatus(t("compactView.invalidBpm"));
       return;
     }
     void runAction(async () => {
-      const snapshot = await upsertSongTempoMarker(
-        currentRegion.startSeconds,
-        nextBpm,
-      );
+      const snapshot = autoWarp
+        ? await setSongRegionTempo(regionId, nextBpm)
+        : await upsertSongTempoMarker(currentRegion.startSeconds, nextBpm);
+      if (autoWarp) await refreshSongView({ includeWaveforms: false, sync: true });
       applyPlaybackSnapshot(snapshot);
       setStatus(
         t("compactView.bpmSet", { name: currentRegion.name, bpm: nextBpm.toFixed(2) }),

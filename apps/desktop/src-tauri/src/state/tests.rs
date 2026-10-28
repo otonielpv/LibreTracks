@@ -1517,6 +1517,21 @@ fn live_track_mix_commit_undoes_in_single_step() {
 }
 
 #[test]
+fn automatic_warp_starts_only_when_transpose_changes() {
+    let mut session = session_with_song_dir("auto-warp-transpose", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+
+    session.update_song_region_transpose("region_1", 0, &audio).expect("unchanged pitch");
+    assert!(!session.engine.song().expect("song").regions[0].warp_enabled);
+
+    session.update_song_region_transpose("region_1", 2, &audio).expect("change pitch");
+    let region = &session.engine.song().expect("song").regions[0];
+    assert!(region.warp_enabled);
+    assert_eq!(region.warp_source_bpm, Some(120.0));
+    assert_eq!(region.transpose_semitones, 2);
+}
+
+#[test]
 fn repeated_region_transpose_changes_group_into_one_undo_entry() {
     let mut session = session_with_song_dir("transpose-undo-demo", demo_song());
     let audio = crate::audio::engine::AudioController::default();
@@ -1528,6 +1543,7 @@ fn repeated_region_transpose_changes_group_into_one_undo_entry() {
         .update_song_region_transpose("region_1", 2, &audio)
         .expect("second transpose change should succeed");
 
+    assert!(session.engine.song().expect("song").regions[0].warp_enabled);
     assert_eq!(session.undo_stack.len(), 1);
 
     session.undo_action(&audio).expect("undo should succeed");
@@ -1541,6 +1557,7 @@ fn repeated_region_transpose_changes_group_into_one_undo_entry() {
         .expect("region should exist after undo");
 
     assert_eq!(region.transpose_semitones, 0);
+    assert!(!region.warp_enabled);
 }
 
 #[test]
@@ -1567,6 +1584,9 @@ fn varispeed_expansion_next_to_another_song_returns_descriptive_overlap_error() 
     });
     let mut session = session_with_song_dir("transpose-overlap-demo", song);
     let audio = crate::audio::engine::AudioController::default();
+    let mut settings = audio.current_settings().expect("settings");
+    settings.auto_warp = false;
+    audio.replace_settings(settings).expect("replace settings");
 
     let error = session
         .update_song_region_transpose("region_1", -2, &audio)

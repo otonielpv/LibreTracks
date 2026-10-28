@@ -309,7 +309,7 @@ function SetlistSongSettingsComponent({
       </SettingsSection>
 
       <SettingsSection icon="speed" title={t("setlistView.edit.tempoSection")}>
-        <Field label={t("setlistView.edit.warp")}>
+        {!appSettings.autoWarp ? <Field label={t("setlistView.edit.warp")}>
           <button
             type="button"
             className={`lt-setlist-settings-button${region.warpEnabled ? " is-active" : ""}`}
@@ -318,7 +318,7 @@ function SetlistSongSettingsComponent({
           >
             {region.warpEnabled ? t("setlistView.edit.warpOn") : t("setlistView.edit.warpOff")}
           </button>
-        </Field>
+        </Field> : null}
         <RegionTempoControl
           key={region.id}
           currentBpm={currentBpm}

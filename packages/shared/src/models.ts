@@ -1508,6 +1508,7 @@ export type AppSettings = {
    * turning the switch off later repaints nothing.
    */
   autoColorNewTracks: boolean;
+  autoWarp: boolean;
   /**
    * Android only: absolute path of the app-specific external directory new
    * sessions are created in, as `getExternalFilesDirs` reports it. `null` = the
@@ -1623,6 +1624,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   songTrackLayout: "shared",
   defaultSongTemplate: null,
   autoColorNewTracks: true,
+  autoWarp: true,
   sessionStorageVolume: null,
   referenceImportedAudio: true,
   autoSaveEnabled: true,
@@ -1921,6 +1923,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     // Absent in settings files written before automatic track colours shipped:
     // default to on, matching DEFAULT_APP_SETTINGS and the Rust side.
     autoColorNewTracks: settings.autoColorNewTracks ?? true,
+    autoWarp: settings.autoWarp ?? true,
     sessionStorageVolume: settings.sessionStorageVolume ?? null,
     referenceImportedAudio: settings.referenceImportedAudio ?? true,
     // Absent in settings files written before autosave shipped: default to on,

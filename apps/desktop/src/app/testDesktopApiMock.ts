@@ -2,6 +2,7 @@ import {
   getCumulativeMusicalPosition,
   type TimelineRegion,
 } from "../features/transport/timeline/timelineMath";
+import { getEffectiveBpmAt } from "@libretracks/shared/models";
 import type {
   AppSettings,
   AutomationCueSummary,
@@ -466,6 +467,7 @@ function buildInitialState(): DesktopApiMockState {
       songTrackLayout: "shared",
       defaultSongTemplate: null,
       autoColorNewTracks: true,
+      autoWarp: true,
       sessionStorageVolume: null,
       referenceImportedAudio: true,
       // Off in the mock: tests drive saving explicitly and must not race a
@@ -1986,9 +1988,16 @@ export const testDesktopApiMock = {
     // every other field (crucially `key`, which drives the effective-key badge).
     replaceSong({
       ...state.song,
-      regions: state.song.regions.map((region) =>
-        region.id === regionId ? { ...region, transposeSemitones } : region,
-      ),
+      regions: state.song.regions.map((region) => {
+        if (region.id !== regionId) return region;
+        const enableWarp = state.appSettings.autoWarp && !region.warpEnabled &&
+          region.transposeSemitones !== transposeSemitones;
+        return {
+          ...region,
+          transposeSemitones,
+          ...(enableWarp ? { warpEnabled: true, warpSourceBpm: getEffectiveBpmAt(state.song, region.startSeconds) } : {}),
+        };
+      }),
     });
     return clone(buildSnapshot());
   },

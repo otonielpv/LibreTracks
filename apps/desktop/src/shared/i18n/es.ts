@@ -559,6 +559,8 @@ const es = {
       referenceImportedAudioHint:
         "La sesión apunta a tus archivos originales en vez de duplicarlos, como en escritorio. Ocupa mucho menos. Si mueves o borras un original, la pista deja de sonar y aparece en «Archivos que faltan».",
       autoColorNewTracks: "Colorear las pistas nuevas automáticamente",
+      autoWarp: "Warp automático",
+      autoWarpHint: "Activa warp al cambiar el tono o el tempo para mantenerlos independientes. Desactívalo para controlar warp manualmente y usar varispeed.",
       autoColorNewTracksHint:
         "Cada pista nueva toma un color de la paleta, recorriéndola en orden, para distinguirlas de un vistazo. Desactívalo si prefieres colorearlas a mano. No repinta las pistas que ya tienes.",
       songTrackLayout: "Pistas de cada canción",
@@ -1428,6 +1430,7 @@ const es = {
       referenceImportedAudioUpdated:
         "Comportamiento al importar audio actualizado.",
       autoColorNewTracksUpdated: "Colores automáticos de pista actualizados.",
+      autoWarpUpdated: "Warp automático actualizado.",
       autoSaveUpdated: "Autoguardado actualizado.",
       projectAutoSaved: "Proyecto guardado automáticamente.",
       trackRoutingUpdated: "Ruteo de pista actualizado.",

@@ -2007,6 +2007,7 @@ export function TransportPanelContent() {
     handleSongTrackLayoutChange,
     handleDefaultSongTemplateChange,
     handleAutoColorNewTracksChange,
+    handleAutoWarpChange,
     handleReferenceImportedAudioChange,
     handleAutoSaveEnabledChange,
     handleAutoSaveIntervalMinutesChange,
@@ -3494,6 +3495,8 @@ export function TransportPanelContent() {
     () =>
       createCompactSongHandlers({
         getSong: () => songRef.current,
+        getAutoWarp: () => appSettingsRef.current.autoWarp,
+        refreshSongView,
         runAction,
         applyPlaybackSnapshot,
         setStatus,
@@ -3512,6 +3515,7 @@ export function TransportPanelContent() {
         updateSongRegionKey,
         setSongRegionCompactWidth,
         upsertSongTempoMarker,
+        setSongRegionTempo,
         deleteSongRegion,
         exportRegionAsPackage,
         exportRegionAsPackageAt,
@@ -3524,6 +3528,7 @@ export function TransportPanelContent() {
     [
       applyPlaybackSnapshot,
       loadLibraryState,
+      refreshSongView,
       runAction,
       setExportSongTarget,
       setLibraryAssets,
@@ -7216,6 +7221,7 @@ export function TransportPanelContent() {
                       handleSelectedRegionTransposeChange
                     }
                     selectedRegionEffectiveBpm={selectedRegionEffectiveBpm}
+                    autoWarp={appSettings.autoWarp}
                     onSelectedRegionWarpToggle={handleSelectedRegionWarpToggle}
                     onSelectedRegionTempoChange={handleSelectedRegionTempoChange}
                     onSelectedRegionMasterGainChange={
@@ -7773,6 +7779,7 @@ export function TransportPanelContent() {
               }
               onDefaultSongTemplateChange={handleDefaultSongTemplateChange}
               onAutoColorNewTracksChange={handleAutoColorNewTracksChange}
+              onAutoWarpChange={handleAutoWarpChange}
               onReferenceImportedAudioChange={handleReferenceImportedAudioChange}
               onAutoSaveEnabledChange={handleAutoSaveEnabledChange}
               onAutoSaveIntervalMinutesChange={

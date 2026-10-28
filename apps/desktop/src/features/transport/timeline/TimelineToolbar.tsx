@@ -149,6 +149,7 @@ type TimelineToolbarProps = {
   onSelectedRegionTransposeChange: (nextTransposeSemitones: number) => void;
   /** Effective timeline BPM at the start of the selected region. */
   selectedRegionEffectiveBpm: number;
+  autoWarp?: boolean;
   onSelectedRegionWarpToggle: (nextEnabled: boolean) => void;
   onSelectedRegionTempoChange: (
     region: SongRegionSummary,
@@ -292,6 +293,7 @@ export function TimelineToolbar({
   onCancelPendingJump,
   onSelectedRegionTransposeChange,
   selectedRegionEffectiveBpm,
+  autoWarp = true,
   onSelectedRegionWarpToggle,
   onSelectedRegionTempoChange,
   onSelectedRegionMasterGainChange,
@@ -377,7 +379,9 @@ export function TimelineToolbar({
       ? selectedRegionEffectiveBpm / warpSourceBpm
       : null;
   const warpSummary = selectedRegion
-    ? warpEnabled && warpSourceBpm && warpRatio
+    ? autoWarp
+      ? `${formatBpm(selectedRegionEffectiveBpm)} BPM`
+      : warpEnabled && warpSourceBpm && warpRatio
       ? t("timelineToolbar.regionWarpRatioDisplay", {
           source: formatBpm(warpSourceBpm),
           target: formatBpm(selectedRegionEffectiveBpm),
@@ -1048,7 +1052,7 @@ export function TimelineToolbar({
           />
 
           <ControlGroup
-            title={t("timelineToolbar.regionWarpLabel")}
+            title={t(autoWarp ? "setlistView.edit.tempoSection" : "timelineToolbar.regionWarpLabel")}
             summary={warpSummary}
             open={openGroup === "warp"}
             onToggleOpen={() =>
@@ -1059,7 +1063,7 @@ export function TimelineToolbar({
             details={
               selectedRegion ? (
                 <div className="lt-warp-panel">
-                  <div className="lt-warp-panel-section">
+                  {!autoWarp ? <div className="lt-warp-panel-section">
                     <span className="lt-warp-panel-label">Warp</span>
                     <div className="lt-warp-panel-row">
                       <button
@@ -1080,7 +1084,7 @@ export function TimelineToolbar({
                           : t("timelineToolbar.regionWarpSemanticsOff")}
                       </small>
                     </div>
-                  </div>
+                  </div> : null}
                   <RegionTempoControl
                     key={selectedRegion.id}
                     currentBpm={selectedRegionEffectiveBpm}
