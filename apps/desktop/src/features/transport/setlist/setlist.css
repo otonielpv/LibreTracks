@@ -2063,7 +2063,7 @@ html.lt-mobile .lt-setlist-lane-clip.is-selected .lt-setlist-lane-trim.is-end {
 .lt-setlist-zone.is-songs > .lt-setlist-edit-button {
   flex: 0 0 auto;
   align-self: center;
-  height: 2.5rem;
+  height: 2.75rem;
   margin: 0 0.6rem 0 0.25rem;
   white-space: nowrap;
 }
