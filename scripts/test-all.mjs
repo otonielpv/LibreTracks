@@ -55,6 +55,8 @@ const suites = [
       "libretracks-remote",
       "-p",
       "libretracks-link",
+      "-p",
+      "libretracks-analysis",
     ],
   },
   {

@@ -47,7 +47,8 @@ const ON_BEAT_SHARE: f64 = 0.2;
 pub(crate) enum GuideEvidence {
     Ends,
     SectionStarts,
-    Counts,
+    CountEnds,
+    CountOnsets,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -74,10 +75,16 @@ pub(crate) fn pickup_from_guide(
     if !(beat > 0.0) {
         return None;
     }
+    if let Some(phase) = phase_from_count_onsets(beat_times, beats_per_bar, beat, guide) {
+        return Some(GuidePhase {
+            pickup: phase,
+            evidence: GuideEvidence::CountOnsets,
+        });
+    }
     if let Some(phase) = phase_from_counts(beat_times, beats_per_bar, beat, guide) {
         return Some(GuidePhase {
             pickup: phase,
-            evidence: GuideEvidence::Counts,
+            evidence: GuideEvidence::CountEnds,
         });
     }
     if let Some(phase) = phase_from_section_starts(beat_times, beats_per_bar, beat, guide) {
@@ -118,6 +125,61 @@ pub(crate) fn pickup_from_guide(
         pickup: scores[0].0,
         evidence: GuideEvidence::Ends,
     })
+}
+
+/// Consecutive numbers must land on consecutive beats of this reading.
+/// A word's tail can cross the next downbeat; its number still identifies
+/// the beat on which it began. Half-time counts do not validate double time.
+fn phase_from_count_onsets(
+    beat_times: &[f64],
+    beats_per_bar: usize,
+    beat: f64,
+    guide: &GuideAnalysis,
+) -> Option<usize> {
+    let mut words: Vec<_> = guide
+        .announcements
+        .iter()
+        .flat_map(|announcement| &announcement.count_words)
+        .collect();
+    words.sort_by(|a, b| a.start_seconds.total_cmp(&b.start_seconds));
+    let nearest = |seconds: f64| {
+        let next = beat_times.partition_point(|&time| time < seconds);
+        [
+            next.checked_sub(1),
+            (next < beat_times.len()).then_some(next),
+        ]
+        .into_iter()
+        .flatten()
+        .filter(|&index| (beat_times[index] - seconds).abs() <= ON_BEAT_SHARE * beat)
+        .min_by(|&a, &b| {
+            (beat_times[a] - seconds)
+                .abs()
+                .total_cmp(&(beat_times[b] - seconds).abs())
+        })
+    };
+    let mut phase = None;
+    for pair in words.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        if a.number == 0
+            || usize::from(b.number) > beats_per_bar
+            || usize::from(b.number) != usize::from(a.number) + 1
+        {
+            continue;
+        }
+        let (Some(first), Some(second)) = (nearest(a.start_seconds), nearest(b.start_seconds))
+        else {
+            continue;
+        };
+        if second != first + 1 {
+            continue;
+        }
+        let here = (first + beats_per_bar - usize::from(a.number - 1)) % beats_per_bar;
+        if phase.is_some_and(|known| known != here) {
+            return None;
+        }
+        phase = Some(here);
+    }
+    phase
 }
 
 fn phase_from_section_starts(
@@ -589,7 +651,54 @@ mod tests {
         analysis.groups[0].labels = vec!["chorus".to_string()];
         let result = super::pickup_from_guide(&beats(0.0, 120.0, 100), 4, &analysis).unwrap();
         assert_eq!(result.pickup, 0);
-        assert_eq!(result.evidence, GuideEvidence::Counts);
+        assert_eq!(result.evidence, GuideEvidence::CountEnds);
+    }
+
+    #[test]
+    fn numbered_onsets_locate_pickups_independently_of_the_count_tail() {
+        let click = beats(0.015, 147.0, 100);
+        let beat = 60.0 / 147.0;
+        for pickup in 0..4 {
+            for tail in [0.2, 0.6, 1.1] {
+                let origin = 0.015 + (4 + pickup) as f64 * beat;
+                let mut analysis = counted(&[(origin, origin + (3.0 + tail) * beat, true)]);
+                analysis.announcements[0].count_words = (1..=4)
+                    .map(|number| crate::guide::CountWord {
+                        number,
+                        start_seconds: origin + f64::from(number - 1) * beat + 0.01,
+                    })
+                    .collect();
+                let phase = super::pickup_from_guide(&click, 4, &analysis).unwrap();
+                assert_eq!(phase.pickup, pickup);
+                assert_eq!(phase.evidence, GuideEvidence::CountOnsets);
+            }
+        }
+    }
+
+    #[test]
+    fn count_numbers_must_agree_with_the_selected_readings_beats() {
+        let click = beats(0.0, 120.0, 100);
+        let mut analysis = counted(&[(2.0, 6.0, true)]);
+        let words = |spacing: f64, offset: f64| {
+            (1..=4)
+                .map(|number| crate::guide::CountWord {
+                    number,
+                    start_seconds: 2.0 + offset + f64::from(number - 1) * spacing,
+                })
+                .collect::<Vec<_>>()
+        };
+        analysis.announcements[0].count_words = words(1.0, 0.0);
+        assert_eq!(phase_from_count_onsets(&click, 4, 0.5, &analysis), None);
+        analysis.announcements[0].count_words = words(0.5, 0.2);
+        assert_eq!(phase_from_count_onsets(&click, 4, 0.5, &analysis), None);
+        analysis.announcements[0].count_words = words(0.5, 0.0);
+        assert_eq!(phase_from_count_onsets(&click, 4, 0.5, &analysis), Some(0));
+        let mut conflicting = analysis.announcements[0].clone();
+        for word in &mut conflicting.count_words {
+            word.start_seconds += 4.5;
+        }
+        analysis.announcements.push(conflicting);
+        assert_eq!(phase_from_count_onsets(&click, 4, 0.5, &analysis), None);
     }
 
     #[test]

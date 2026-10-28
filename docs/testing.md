@@ -33,7 +33,7 @@ see below). The 163 C++ DSP tests are the authoritative engine signal.
 | `shared` | vitest (node) | `packages/shared/src/*.test.ts` |
 | `desktop frontend` | vitest (jsdom) | `apps/desktop/src/**/*.test.{ts,tsx}` |
 | `remote frontend` | vitest (jsdom) | `apps/remote/src/*.test.ts` |
-| `rust crates` | cargo | `crates/{core,project,audio,remote}` |
+| `rust crates` | cargo | `crates/libretracks-{core,project,audio,remote,link,analysis}` |
 
 You can run any suite on its own:
 
@@ -54,14 +54,38 @@ cargo test -p libretracks-analysis --lib
 npm --prefix apps/desktop run test -- songAnalysisPlan.test.ts
 ```
 
-For an unaccented click, bar-phase evidence is ranked: counts first, then a
-consensus of at least three section announcements with at least 75% of their
-starts aligned to the same beat, then announcement endings as a fallback.
-Single starts, cues alone and ambiguous start phases do not establish that
-consensus. A half-tempo reading must not replace stronger evidence from the
-selected reading with a guess based on word duration. Regression tests cover
-different phrase lengths, pickups, counts taking priority, ambiguous starts,
-and placement against measured guide timings at 148 BPM.
+These tests also run in `npm test`: the analysis crate is explicitly selected,
+because testing the desktop crate does not run its dependencies' unit tests.
+
+For an unaccented click, bar-phase evidence distinguishes numbered count
+onsets from count endings. Consecutive numbers must align with consecutive
+beats of the selected tempo; the tail of "four" crossing a downbeat cannot
+invent a pickup. Count endings remain a fallback, followed by a consensus of
+at least three section announcements with at least 75% of their starts
+aligned to the same beat, and finally announcement endings. When comparing
+tempo readings, onset evidence takes priority over word-duration estimates.
+Equal tail-only evidence keeps the previous eighths fallback.
+
+The shared numerical fixtures in
+[`crates/libretracks-analysis/tests/fixtures`](../crates/libretracks-analysis/tests/fixtures)
+cover "Rey de Reyes" (147 BPM) and "Musica del cielo" (148 BPM). They contain
+measured guide boundaries, recognised labels and count onsets, not audio.
+Rust tests synthesize the full unaccented click with and without eighth
+subdivisions and assert the resulting tempo **and the complete signature
+proposal**, including the absence of an unjustified second 4/4 marker.
+TypeScript tests consume that same proposal contract and assert every count,
+section and cue against explicit beat positions, both at session zero and in
+a later song, including replacement of a previously incorrect 4/4 restart.
+Other unit tests cover actual pickups, conflicting or off-beat counts,
+half/double-tempo incompatibility and ambiguous section starts.
+
+For local audio verification, `songAnalysisPlan.test.ts` also accepts
+`LT_ANALYSIS_REGRESSION_DIR`: its `rey/result.json` and `cielo/result.json`
+must contain the actual analyser's `{ guide, proposal }` output. This runs
+the same marker assertions against the captured results and fails if the
+proposal differs from the shared fixtures. The existing
+`realSessionHarness.test.ts` is a diagnostic dump skipped without its input
+environment variables; it is not a substitute for these automatic assertions.
 
 ## The native engine suite (separate)
 

@@ -322,10 +322,16 @@ fn analyze_click_reading(
                 phase.pickup = phase.pickup * 2 % beats_per_bar;
                 phase
             });
+            // Count endings remain duration-based: equal evidence keeps the
+            // eighths fallback. Only measured onsets can break that tie.
             match (found, alternate) {
                 (Some(direct), Some(other))
-                    if direct.evidence >= other.evidence
-                        && direct.evidence != GuideEvidence::Ends =>
+                    if direct.evidence > other.evidence
+                        || (direct.evidence == other.evidence
+                            && matches!(
+                                direct.evidence,
+                                GuideEvidence::SectionStarts | GuideEvidence::CountOnsets
+                            )) =>
                 {
                     Some(direct)
                 }
@@ -1547,6 +1553,60 @@ mod tests {
         assert_eq!(plain.segments[0].bpm, 148.0);
         assert_close(plain.segments[0].start_seconds, beat, 0.002);
         assert!(kinds(&plain).contains(&ClickWarningKind::DownbeatFromGuide));
+    }
+
+    #[test]
+    fn a_count_tail_after_the_downbeat_does_not_create_a_pickup() {
+        let beat = 60.0 / 147.0;
+        let start = 0.015;
+        let samples = render(&unaccented(start, beat, 160));
+        let mut guide = GuideAnalysis {
+            announcements: vec![crate::guide::GuideAnnouncement {
+                start_seconds: 0.01,
+                end_seconds: 3.41,
+                group: 0,
+                count_words: [0.01, 0.83, 1.65, 2.06, 2.46, 2.87]
+                    .into_iter()
+                    .zip([1, 2, 1, 2, 3, 4])
+                    .map(|(start_seconds, number)| crate::guide::CountWord {
+                        start_seconds,
+                        number,
+                    })
+                    .collect(),
+            }],
+            groups: vec![crate::guide::GuideGroup {
+                labels: vec!["spoken_count".to_string()],
+                transcript: Some("Uno, dos, uno, dos, tres, cuatro.".to_string()),
+                match_cost: None,
+                counted_in: false,
+                occurrences: 1,
+                first_start_seconds: 0.01,
+                first_end_seconds: 3.41,
+            }],
+        };
+        let analysis = analyze_click_with_guide(&samples, RATE, 4, false, &guide).unwrap();
+        assert_close(analysis.segments[0].start_seconds, start, 0.002);
+        let proposal = crate::propose_tempo_markers(
+            &analysis,
+            crate::SongSpan {
+                start_seconds: 0.0,
+                end_seconds: 70.0,
+            },
+            &crate::ExistingTiming {
+                bpm: 130.0,
+                time_signature: "4/4".to_string(),
+                tempo_markers: Vec::new(),
+                signature_markers: Vec::new(),
+            },
+        );
+        assert_eq!(proposal.signature_markers.len(), 1, "{proposal:?}");
+        assert_eq!(proposal.signature_markers[0].start_seconds, 0.0);
+        // Older/no-recognition guide data may contain only the count's end.
+        // Keep the established eighths fallback rather than changing the bar
+        // merely because both readings call their evidence a count.
+        guide.announcements[0].count_words.clear();
+        let tail_only = analyze_click_with_guide(&samples, RATE, 4, false, &guide).unwrap();
+        assert_close(tail_only.segments[0].start_seconds, start, 0.002);
     }
 
     #[test]

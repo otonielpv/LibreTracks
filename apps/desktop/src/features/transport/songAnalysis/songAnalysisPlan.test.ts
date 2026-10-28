@@ -1,8 +1,13 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import type { TempoProposal } from "@libretracks/shared/desktopApi";
+import type { GuideAnalysis, TempoProposal } from "@libretracks/shared/desktopApi";
 import type { SongView } from "@libretracks/shared/models";
 import { getBeatDurationSeconds } from "@libretracks/shared/timelineMath";
+import reyDeReyes from "../../../../../../crates/libretracks-analysis/tests/fixtures/rey-de-reyes.json";
+import musicaDelCielo from "../../../../../../crates/libretracks-analysis/tests/fixtures/musica-del-cielo.json";
 
 import {
   bpmFromNames,
@@ -207,7 +212,7 @@ describe("guide", () => {
     ]);
   });
 
-  const plain = () => ({ ...song(), tempoMarkers: [], timeSignatureMarkers: [] });
+  const plain = (): SongView => ({ ...song(), tempoMarkers: [], timeSignatureMarkers: [] });
   const oneAnnouncement = (endSeconds: number, labels: string[]) => ({
     analysis: {
       announcements: [{ startSeconds: endSeconds - 0.5, endSeconds, group: 0 }],
@@ -270,34 +275,78 @@ describe("guide", () => {
     expect(sectionsAt([8, 26, 40, 56])).toEqual([106, 114, 122, 130]);
   });
 
-  it("places short and long guide phrases on the same corrected bar grid", () => {
-    const view = plain();
-    const { analysis, markers } = announced([
-      [0.00, 3.29, ["intro"]],
-      [8.11, 8.60, ["intro"]],
-      [14.60, 16.41, ["chorus", "drums_in"]],
-      [40.54, 42.13, ["interlude", "all_in"]],
-      [53.51, 54.33, ["verse_1"]],
-      [103.79, 105.37, ["chorus", "all_in"]],
-      [152.44, 154.02, ["chorus", "all_in"]],
-      [243.26, 243.72, ["ending"]],
-    ]);
-    const placed = placeGuideSections(view, "b", 100, analysis, markers, {
-      tempoMarkers: [{ startSeconds: 100, bpm: 148 }],
-      signatureMarkers: [{ startSeconds: 100, signature: "4/4" }],
+  type RegressionFixture = {
+    name: string;
+    bpm: number;
+    durationSeconds: number;
+    announcements: {
+      startSeconds: number;
+      endSeconds: number;
+      labels: string[];
+      countWords?: number[][];
+    }[];
+    expectedTempoMarkers: { startSeconds: number; bpm: number; ramp: boolean }[];
+    expectedSignatureMarkers: { startSeconds: number; signature: string }[];
+    expectedMarkers: (number | string)[][];
+  };
+
+  for (const { id, fixture } of [
+    { id: "rey", fixture: reyDeReyes },
+    { id: "cielo", fixture: musicaDelCielo },
+  ]) {
+    it.each([0, 100])(`places every marker of ${fixture.name} at song offset %s`, (offset) => {
+      const source: RegressionFixture = fixture;
+      const resultsDir = process.env.LT_ANALYSIS_REGRESSION_DIR;
+      const recorded: { guide: GuideAnalysis; proposal: TempoProposal } | null = resultsDir
+        ? JSON.parse(readFileSync(join(resultsDir, id, "result.json"), "utf8"))
+        : null;
+      if (recorded) {
+        expect(recorded.proposal.tempoMarkers).toEqual(source.expectedTempoMarkers);
+        expect(recorded.proposal.signatureMarkers).toEqual(source.expectedSignatureMarkers);
+      }
+      const view = plain();
+      view.durationSeconds = offset + source.durationSeconds;
+      view.regions = [{
+        ...view.regions[1],
+        startSeconds: offset,
+        endSeconds: view.durationSeconds,
+      }];
+      // Reanalysis must replace, not inherit, the bad bar restart.
+      view.timeSignatureMarkers = [{
+        id: "bad-pickup",
+        startSeconds: offset + 0.42,
+        signature: "4/4",
+      }];
+      const { analysis, markers } = announced(source.announcements.map((a) => [
+        a.startSeconds,
+        a.endSeconds,
+        a.labels,
+        a.countWords?.map(([number, startSeconds]) => ({ number, startSeconds })),
+      ]));
+      const placed = placeGuideSections(
+        view, "b", offset, recorded?.guide ?? analysis,
+        recorded?.guide.groups.map((g) => markersForLabels(g.labels, g.countedIn)) ?? markers, {
+        tempoMarkers: source.expectedTempoMarkers.map((m) => ({
+          ...m, startSeconds: offset + m.startSeconds,
+        })),
+        signatureMarkers: source.expectedSignatureMarkers.map((m) => ({
+          ...m, startSeconds: offset + m.startSeconds,
+        })),
+        },
+      );
+      expect(placed).toHaveLength(source.expectedMarkers.length);
+      const beat = getBeatDurationSeconds(source.bpm, "4/4");
+      for (const [index, [beatIndex, kind, variant]] of source.expectedMarkers.entries()) {
+        if (typeof beatIndex !== "number") throw new Error("Fixture beat must be numeric");
+        expect(placed[index].kind, `marker ${index}`).toBe(kind);
+        expect(placed[index].variant, `marker ${index}`).toBe(variant ?? null);
+        expect(
+          Math.abs(placed[index].startSeconds - (offset + beatIndex * beat)),
+          `marker ${index} (${kind})`,
+        ).toBeLessThan(0.0005);
+      }
     });
-    const bar = 4 * getBeatDurationSeconds(148, "4/4");
-    const expected = [
-      [2, "intro"], [6, "intro"], [10, "chorus"], [10, "drums_in"],
-      [26, "interlude"], [26, "all_in"], [34, "verse"],
-      [65, "chorus"], [65, "all_in"], [95, "chorus"], [95, "all_in"], [151, "ending"],
-    ] as const;
-    expect(placed).toHaveLength(expected.length);
-    for (const [index, [bars, kind]] of expected.entries()) {
-      expect(placed[index].kind).toBe(kind);
-      expect(Math.abs(placed[index].startSeconds - (100 + bars * bar))).toBeLessThan(0.0005);
-    }
-  });
+  }
 
   it("a count that is a section's count-in places no count markers", () => {
     // "Poema de salvación": "Intro." before the click, then a bar of "uno, dos,

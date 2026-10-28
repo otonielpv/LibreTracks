@@ -15,6 +15,9 @@ pub mod music;
 pub mod proposal;
 pub mod simplify;
 
+#[cfg(test)]
+mod regression_tests;
+
 pub use click::{
     analyze_click, analyze_click_as_eighths, analyze_click_with_guide, ClickAnalysis, ClickWarning,
     ClickWarningKind, TempoSegment,
