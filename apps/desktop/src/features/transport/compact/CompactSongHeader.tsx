@@ -32,6 +32,7 @@ import {
 } from "../songs/SongReorderHandle";
 import { SONG_REORDER_IGNORE_ATTRIBUTE } from "../songs/useSongReorder";
 import { SongMasterMeter } from "../tracks/TrackMeter";
+import { SongCover } from "../songs/SongCoverImage";
 
 /** Spread onto the fader: dragging it must never start a song reorder from
  * the header surface. (The context menu already stops pointerdown.) */
@@ -198,6 +199,7 @@ export function CompactSongHeaderComponent({
       onPointerDown={reorderSurfaceProps?.onPointerDown}
     >
       <div className="lt-compact-song-name-row">
+        <SongCover region={region} />
         {reorderHandleProps ? (
           <SongReorderHandle
             name={region.name}

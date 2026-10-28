@@ -276,6 +276,7 @@ export type KeyChangeSummary = {
 
 export type SongRegionSummary = {
   id: string;
+  coverImage?: string | null;
   name: string;
   startSeconds: number;
   endSeconds: number;

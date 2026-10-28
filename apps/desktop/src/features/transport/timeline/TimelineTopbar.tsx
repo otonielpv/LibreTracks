@@ -28,6 +28,7 @@ import { FadeStopButton } from "./FadeStopButton";
 import { openLevelSongs } from "../levelSongs/levelSongsStore";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { NetworkControls } from "../../network/NetworkControls";
+import { NavigationToggle } from "../shell/NavigationToggle";
 
 type TimelineTopbarProps = {
   openTopMenu: "file" | null;
@@ -194,6 +195,7 @@ export function TimelineTopbar({
       className={isProjectEmpty ? "lt-topbar is-project-empty" : "lt-topbar"}
     >
       <div className="lt-topbar-menu-row">
+        <NavigationToggle />
         <div className="lt-brand">
           <span className="lt-brand-title">LIBRETRACKS</span>
         </div>

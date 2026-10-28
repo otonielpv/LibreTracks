@@ -14,6 +14,7 @@ import { formatLiveClock } from "../live/liveMarkerModel";
 import { SongReorderHandle, type SongReorderHandleProps } from "../songs/SongReorderHandle";
 import { SONG_REORDER_ID_ATTRIBUTE } from "../songs/useSongReorder";
 import { ArrangementBadge } from "../structure/ArrangementBadge";
+import { SongCover } from "../songs/SongCoverImage";
 import type { SongViewBindings } from "../songs/songViewBindings";
 import { SONG_DROP_CLASS, songDropHandlers } from "./songDrop";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
@@ -141,7 +142,10 @@ function SetlistSongTileComponent({
           className="lt-setlist-song-grip"
         />
       ) : null}
-      <span className="lt-setlist-song-index">{index + 1}</span>
+      <span className={`lt-setlist-song-index${region.coverImage ? " has-cover" : ""}`}>
+        <SongCover region={region} />
+        <span className={region.coverImage ? "lt-setlist-cover-index" : undefined}>{index + 1}</span>
+      </span>
       <span className="lt-setlist-song-main">
         <span className="lt-setlist-song-name" title={region.name}>
           {region.name}

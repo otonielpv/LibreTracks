@@ -182,6 +182,8 @@ struct SongPackageManifest {
     /// which keep their ids on import. Additive: an older reader ignores it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     region_chart: Option<libretracks_core::SongChart>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    region_cover_image: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -541,6 +543,7 @@ pub fn export_region_as_package_with_progress(
         bundled_video,
         structure,
         region_chart: region.chart.clone(),
+        region_cover_image: region.cover_image.clone(),
     };
 
     let file = File::create(output_path)?;
@@ -1270,6 +1273,7 @@ pub fn merge_extracted_song_package(
         master: manifest.region_master.clone(),
         compact_column_width_rem: None,
         chart: manifest.region_chart.clone(),
+        cover_image: manifest.region_cover_image.clone(),
         voice_guide_count_style: manifest.region_voice_guide_count_style,
         structure: manifest
             .structure
@@ -1486,6 +1490,7 @@ mod tests {
             master: SongMaster::default(),
             compact_column_width_rem: None,
             chart: None,
+            cover_image: None,
             voice_guide_count_style: None,
             structure: None,
         }
@@ -1947,6 +1952,7 @@ mod tests {
             }],
         };
         source.regions[0].chart = Some(chart.clone());
+        source.regions[0].cover_image = Some("data:image/jpeg;base64,Y292ZXI=".into());
         let package_path = song_dir.join("verse.ltpkg");
         export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
             .expect("export light");
@@ -1967,6 +1973,7 @@ mod tests {
         )
         .expect("import");
         assert_eq!(result.song.regions[0].chart.as_ref(), Some(&chart));
+        assert_eq!(result.song.regions[0].cover_image, source.regions[0].cover_image);
     }
 
     #[test]

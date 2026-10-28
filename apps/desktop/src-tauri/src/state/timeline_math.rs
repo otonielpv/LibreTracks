@@ -706,6 +706,7 @@ pub(super) fn replace_song_region_range(song: &mut Song, replacement: SongRegion
                 master: region.master.clone(),
                 compact_column_width_rem: region.compact_column_width_rem,
                 chart: region.chart.clone(),
+                cover_image: region.cover_image.clone(),
                 voice_guide_count_style: region.voice_guide_count_style,
                 structure: None,
             });
@@ -732,6 +733,7 @@ pub(super) fn replace_song_region_range(song: &mut Song, replacement: SongRegion
                 master: region.master.clone(),
                 compact_column_width_rem: region.compact_column_width_rem,
                 chart: region.chart.clone(),
+                cover_image: region.cover_image.clone(),
                 voice_guide_count_style: region.voice_guide_count_style,
                 structure: None,
             });
@@ -891,6 +893,7 @@ mod snap_regions_after_to_downbeats_tests {
             master: SongMaster::default(),
             compact_column_width_rem: None,
             chart: None,
+            cover_image: None,
             voice_guide_count_style: None,
             structure: None,
         }

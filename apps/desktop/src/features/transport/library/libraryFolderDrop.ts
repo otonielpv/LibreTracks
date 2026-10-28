@@ -11,6 +11,7 @@ import {
   resolveFolderSongDurationSeconds,
 } from "./dragDrop";
 import type { LibraryAssetDragPayload, LibraryDropLayout } from "../types";
+import { assignFolderCover } from "../songs/songCover";
 
 /** Width given to the song created from an empty library folder. A zero-width
  * region would be invisible in the DAW view; this gives it something to grab
@@ -119,6 +120,8 @@ export async function placeLibraryFolderOnTimeline(
         createdRegion.endSeconds,
       ),
     );
+    const coverSnapshot = await assignFolderCover(createdRegion.id, args.payload.map((item) => item.file_path), args.folderName);
+    if (coverSnapshot) deps.applyPlaybackSnapshot(coverSnapshot);
   }
 
   await deps.refreshSongView({ sync: true });

@@ -1,5 +1,6 @@
 //! Persistencia y operaciones de proyecto.
 
+pub mod cover;
 mod asset_path;
 mod atomic_write;
 mod disk_space;
@@ -98,6 +99,7 @@ mod tests {
                 master: libretracks_core::SongMaster::default(),
                 compact_column_width_rem: None,
                 chart: None,
+                cover_image: None,
                 voice_guide_count_style: None,
                 structure: None,
             }],

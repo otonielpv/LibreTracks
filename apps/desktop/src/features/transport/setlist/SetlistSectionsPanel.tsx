@@ -4,7 +4,6 @@ import { markerCategory, markerColor, type SongRegionSummary, type SongView } fr
 
 import { formatMusicalPosition } from "../helpers";
 import { useTimelineUIStore } from "../uiStore";
-import { SetlistSnapToggle } from "./SetlistSnapToggle";
 import type { SectionEditHandlers } from "./sectionEditHandlers";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 
@@ -73,7 +72,6 @@ function SetlistSectionsPanelComponent({ song, region, handlers, layout }: Setli
         <span className="material-symbols-outlined" aria-hidden="true">delete</span>
         <span className="lt-setlist-sections-action-label">{t("setlistView.sections.delete")}</span>
       </button>
-      <SetlistSnapToggle />
     </div>
   );
 

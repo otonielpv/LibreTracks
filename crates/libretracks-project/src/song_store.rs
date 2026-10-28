@@ -311,6 +311,7 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
             chart: None,
+            cover_image: None,
             voice_guide_count_style: None,
             structure: None,
         }],
@@ -350,6 +351,7 @@ fn migrate_v3_song(document: LegacySongDocumentV3) -> Result<Song, ProjectError>
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
             chart: None,
+            cover_image: None,
             voice_guide_count_style: None,
             structure: None,
         }],
@@ -514,6 +516,7 @@ fn fit_regions_to_clips(song: &mut Song) {
                     master: libretracks_core::SongMaster::default(),
                     compact_column_width_rem: None,
                     chart: None,
+                    cover_image: None,
                     voice_guide_count_style: None,
                     structure: None,
                 });
@@ -561,6 +564,7 @@ fn fit_regions_to_clips(song: &mut Song) {
                 master: libretracks_core::SongMaster::default(),
                 compact_column_width_rem: None,
                 chart: None,
+                cover_image: None,
                 voice_guide_count_style: None,
                 structure: None,
             });
@@ -683,6 +687,7 @@ mod tests {
             master: SongMaster::default(),
             compact_column_width_rem: None,
             chart: None,
+            cover_image: None,
             voice_guide_count_style: None,
             structure: None,
         }

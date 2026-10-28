@@ -108,15 +108,13 @@ describe("Edit mode", () => {
     const toolbar = await screen.findByRole("toolbar", { name: "setlistView.sections.actions" });
     const list = screen.getByRole("list", { name: "setlistView.sections.list" });
     expect(toolbar.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(toolbar).getAllByRole("button")).toHaveLength(4);
+    expect(within(toolbar).getAllByRole("button")).toHaveLength(3);
     expect(container.querySelector(".lt-setlist-sections-waveform")).toBeNull();
     expect(container.querySelector("[data-setlist-zone='overview'] .lt-setlist-section-layer")).not.toBeNull();
     expect(container.querySelector("[data-setlist-zone='drawer'] .lt-setlist-bar-ruler")).toBeNull();
 
-    const snap = within(toolbar).getByRole("button", { name: "timelineToolbar.enableSnap" });
-    expect(snap.getAttribute("aria-pressed")).toBe("false");
-    fireEvent.click(snap);
-    expect(useTimelineUIStore.getState().snapEnabled).toBe(true);
+    expect(within(toolbar).queryByRole("button", { name: "timelineToolbar.enableSnap" })).toBeNull();
+    expect(useTimelineUIStore.getState().snapEnabled).toBe(false);
   });
 
   it("Esc leaves edit mode, but not while a modal is open", () => {

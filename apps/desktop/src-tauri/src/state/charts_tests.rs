@@ -35,6 +35,7 @@ fn session() -> DesktopSession {
             master: SongMaster::default(),
             compact_column_width_rem: None,
             chart: None,
+            cover_image: None,
             voice_guide_count_style: None,
             structure: None,
         }],
@@ -141,6 +142,25 @@ fn removing_a_chart_can_be_undone() {
 
     session.undo_action(&audio).expect("undo");
     assert_eq!(chart(&session), Some(lyrics(vec![link("chorus", vec![])])));
+}
+
+#[test]
+fn a_cover_is_validated_persisted_removed_and_undoable() {
+    let mut session = session();
+    let audio = AudioController::default();
+    let cover = "data:image/jpeg;base64,/9j//9k=".to_string();
+    assert!(session.set_song_region_cover("r1", Some("not an image".into()), &audio).is_err());
+    assert!(session.set_song_region_cover("r1", Some(format!("data:image/jpeg;base64,{}", "A".repeat(128 * 1024))), &audio).is_err());
+    assert!(session.set_song_region_cover("missing", Some(cover.clone()), &audio).is_err());
+    session.set_song_region_cover("r1", Some(cover.clone()), &audio).expect("set cover");
+    assert_eq!(session.engine.song().unwrap().regions[0].cover_image, Some(cover.clone()));
+    session.save_project().expect("save project");
+    let saved = libretracks_project::load_song_from_file(session.song_file_path.as_ref().unwrap()).expect("load");
+    assert_eq!(saved.regions[0].cover_image, Some(cover.clone()));
+    session.set_song_region_cover("r1", None, &audio).expect("remove cover");
+    assert!(session.engine.song().unwrap().regions[0].cover_image.is_none());
+    session.undo_action(&audio).expect("undo");
+    assert_eq!(session.engine.song().unwrap().regions[0].cover_image, Some(cover));
 }
 
 #[test]

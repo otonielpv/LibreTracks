@@ -1406,6 +1406,7 @@ mod tests {
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
             chart: None,
+            cover_image: None,
             voice_guide_count_style: None,
             structure: None,
         }
@@ -2229,6 +2230,7 @@ mod tests {
         song.regions[1].warp_source_bpm = Some(70.0);
         song.regions[1].transpose_semitones = -1;
         song.regions[1].master.gain = 0.5;
+        song.regions[1].cover_image = Some("data:image/jpeg;base64,Y292ZXI=".into());
         let package_path = song_dir.join("set.ltset");
 
         export_session_as_package(

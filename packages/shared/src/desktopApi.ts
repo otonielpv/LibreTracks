@@ -949,6 +949,14 @@ export async function setSongRegionChart(
   return invokeCommand<TransportSnapshot>("set_song_region_chart", { regionId, chart });
 }
 
+export function setSongRegionCover(regionId: string, coverImage: string | null) {
+  return invokeCommand<TransportSnapshot>("set_song_region_cover", { regionId, coverImage });
+}
+
+export function findSongCoverImages(paths: string[], folderName: string) {
+  return invokeCommand<string[]>("find_song_cover_images", { paths, folderName });
+}
+
 /**
  * Persists the width (in rem) of a song's column in the compact view.
  * Pure view state — it never affects playback. Pass `null` to restore the

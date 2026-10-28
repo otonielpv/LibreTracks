@@ -218,6 +218,22 @@
   gap: 0.15rem;
 }
 
+.lt-setlist-song-index.has-cover {
+  position: relative;
+}
+
+.lt-setlist-cover-index {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 0.05rem 0.2rem;
+  background: #171d1b;
+  color: #ffffff;
+  font-size: 0.65rem;
+  line-height: 1.1;
+  border-radius: 2px 0 2px 0;
+}
+
 .lt-setlist-song-name {
   overflow: hidden;
   font-weight: 600;

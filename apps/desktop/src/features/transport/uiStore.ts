@@ -128,6 +128,11 @@ function recordViewMode(viewMode: ViewMode): void {
   recordProductEvent(`feature_${viewMode}_view`);
 }
 
+function readNavigationCollapsed(): boolean {
+  try { return window.localStorage.getItem("lt-navigation-collapsed") === "true"; }
+  catch { return false; }
+}
+
 function stepViewMode(current: ViewMode, step: 1 | -1): ViewMode {
   const index = VIEW_MODE_CYCLE.indexOf(current);
   const length = VIEW_MODE_CYCLE.length;
@@ -135,6 +140,8 @@ function stepViewMode(current: ViewMode, step: 1 | -1): ViewMode {
 }
 
 type TimelineUIState = {
+  navigationCollapsed: boolean;
+  toggleNavigation: () => void;
   cameraX: number;
   zoomLevel: number;
   trackHeight: number;
@@ -230,6 +237,13 @@ type TimelineUIState = {
 
 export const useTimelineUIStore = create<TimelineUIState>()(
   subscribeWithSelector((set, get) => ({
+    navigationCollapsed: readNavigationCollapsed(),
+    toggleNavigation: () => {
+      const navigationCollapsed = !get().navigationCollapsed;
+      set({ navigationCollapsed });
+      try { window.localStorage.setItem("lt-navigation-collapsed", String(navigationCollapsed)); }
+      catch {}
+    },
     cameraX: 0,
     zoomLevel: TIMELINE_DEFAULT_ZOOM_LEVEL,
     trackHeight:

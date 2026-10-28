@@ -22,6 +22,7 @@ import { RegionTempoControl } from "../timeline/RegionTempoControl";
 import { clampRegionResizeEdge, regionResizeBounds } from "../timeline/regionResize";
 import type { ContextMenuAction } from "../types";
 import { barSecondsAtFor } from "./songMapModel";
+import { SongCover } from "../songs/SongCoverImage";
 
 type SetlistSongSettingsProps = { onOpenInDaw: () => void } & Pick<
   SongViewBindings,
@@ -250,6 +251,9 @@ function SetlistSongSettingsComponent({
       <section className="lt-setlist-settings-section is-plain">
         <div className="lt-setlist-settings-row">
           <ActionButton action={entry("transport.menu.renameSong")} />
+          <SongCover region={region} />
+          <ActionButton action={entry("songCover.choose")} />
+          <ActionButton action={entry("songCover.remove")} />
           <button
             type="button"
             className="lt-setlist-settings-button"

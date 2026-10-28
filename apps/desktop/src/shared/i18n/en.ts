@@ -357,6 +357,8 @@ const en = {
       loadingProject: "Opening project...",
       projectReady: "Project ready to play.",
       navigation: "Main navigation",
+      hideNavigation: "Hide navigation",
+      showNavigation: "Show navigation",
       library: "Library",
       remote: "Remote",
       settings: "Settings",
@@ -2480,6 +2482,11 @@ const en = {
       "Vamp between songs: when each song ends the click keeps going at its tempo and the pad keeps sounding until you press Play for the next one.",
     holding:
       "Vamp between songs is sounding: press Play to start the next song, or Stop to end the click.",
+  },
+  songCover: {
+    choose: "Choose cover image…",
+    remove: "Remove cover image",
+    error: "Could not load the cover. Choose a JPG, PNG or WebP image up to 8 MB.",
   },
   liveView: {
     title: "Live View",

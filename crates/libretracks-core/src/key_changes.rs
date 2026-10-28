@@ -221,6 +221,7 @@ mod tests {
             compact_column_width_rem: None,
             structure: None,
             chart: None,
+            cover_image: None,
             voice_guide_count_style: None,
             key_changes: vec![change(180.0, "E")],
         };

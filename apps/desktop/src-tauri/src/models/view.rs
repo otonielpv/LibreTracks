@@ -358,6 +358,7 @@ pub struct PendingAutomationCueSummary {
 #[serde(rename_all = "camelCase")]
 pub struct SongRegionSummary {
     pub id: String,
+    pub cover_image: Option<String>,
     pub name: String,
     pub start_seconds: f64,
     pub end_seconds: f64,
@@ -1299,6 +1300,7 @@ pub struct KeyChangeSummary {
 pub(crate) fn region_to_summary(song: &Song, region: &SongRegion) -> SongRegionSummary {
     SongRegionSummary {
         id: region.id.clone(),
+        cover_image: region.cover_image.clone(),
         name: region.name.clone(),
         start_seconds: warp_timeline_seconds_at(song, region.start_seconds),
         end_seconds: warp_timeline_seconds_at(song, region.end_seconds),
@@ -1731,6 +1733,7 @@ mod tests {
             master: SongMaster::default(),
             compact_column_width_rem: None,
             chart: None,
+            cover_image: None,
             voice_guide_count_style: None,
             structure: None,
         }

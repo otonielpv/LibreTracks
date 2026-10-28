@@ -1,3 +1,4 @@
+import { SongCover } from "../songs/SongCoverImage";
 import {
   memo,
   useCallback,
@@ -346,6 +347,7 @@ function LivePerformanceViewComponent({
           <ViewModeSwitcher value="live" onChange={onViewModeChange} />
         ) : null)}
         <div className="lt-live-heading">
+          {currentRegion?.coverImage ? <SongCover region={currentRegion} /> : null}
           <span className="material-symbols-outlined" aria-hidden="true">stadium</span>
           <div><small>{t("liveView.title")}</small><strong>{currentRegion?.name ?? song.title}</strong></div>
         </div>

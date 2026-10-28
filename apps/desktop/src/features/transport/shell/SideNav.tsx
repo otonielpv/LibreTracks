@@ -7,6 +7,7 @@ import { useNetworkSessionStore } from "../../network/networkSessionStore";
 import { isMobileApp } from "../desktopApi";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import type { SidebarTab } from "../types";
+import { useTimelineUIStore } from "../uiStore";
 
 type SideNavProps = {
   activeSidebarTab: SidebarTab | null;
@@ -39,12 +40,15 @@ export function SideNav({
   isFileActionsOpen = false,
 }: SideNavProps) {
   const { t } = useTranslation();
+  const collapsed = useTimelineUIStore((state) => state.navigationCollapsed);
   const { canUseFiles } = useNetworkPermissions();
   const isNetworkModalOpen = useNetworkSessionStore((state) => state.isModalOpen);
   const openNetworkModal = useNetworkSessionStore((state) => state.openModal);
   const networkHost = useNetworkSessionStore((state) => state.host);
   const networkGuest = useNetworkSessionStore((state) => state.guest);
   const networkState = networkNavState(networkHost, networkGuest);
+
+  if (collapsed) return null;
 
   return (
     <aside

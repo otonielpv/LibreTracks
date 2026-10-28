@@ -192,10 +192,9 @@ describe("Edit → Arrangement", () => {
     expect(container.querySelector(".lt-setlist-bar-ruler.is-arrangement")).not.toBeNull();
     const snap = container.querySelector<HTMLButtonElement>(
       ".lt-setlist-arrangement-actions [aria-label='timelineToolbar.enableSnap']",
-    )!;
-    expect(snap.getAttribute("aria-pressed")).toBe("false");
-    fireEvent.click(snap);
-    expect(useTimelineUIStore.getState().snapEnabled).toBe(true);
+    );
+    expect(snap).toBeNull();
+    expect(useTimelineUIStore.getState().snapEnabled).toBe(false);
 
     const viewport = container.querySelector<HTMLElement>(
       ".lt-setlist-arrangement-mobile-waveform.is-main",

@@ -75,6 +75,12 @@ En segundo plano:
 
 ## 3. Organización del Proyecto
 
+### Navegación y portadas
+
+El botón de menú junto a la marca de la barra superior oculta o restaura la navegación de Biblioteca, Configuración y Red, tanto en ordenador como en móvil. La preferencia se conserva en el dispositivo.
+
+Al crear una canción desde una carpeta de la biblioteca, LibreTracks busca imágenes en esa carpeta y sus subcarpetas, dando prioridad a nombres como `cover`, `album`, `portada`, `front` y `folder`. También puedes usar `Elegir portada…` y `Quitar portada` en las opciones de la canción o en `Setlist → Editar → Canción`. Se admiten JPG, PNG y WebP de hasta 8 MB; se guarda una miniatura para no ocupar altura de la onda en móvil. La portada se conserva al guardar y viaja en las exportaciones de canción y sesión, incluso sin incluir audio.
+
 ### `Biblioteca`
 
 Usa `Biblioteca` como el área de preparación de assets del show.

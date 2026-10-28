@@ -18,6 +18,7 @@ import {
 } from "@libretracks/shared/models";
 import {
   confirmDialog,
+  alertDialog,
   promptDialog,
 } from "../../../shared/dialog/dialogService";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
@@ -98,6 +99,8 @@ import { createKeyChangeCallbacks, keyChangeAtCursorAction } from "../keyChanges
 import type { ShortcutActionId } from "../keyboard/actions";
 import { createVideoMenus } from "./videoMenus";
 import { matchAliasesAction } from "../templates/matchAliases";
+import { normalizeCoverImage, pickCoverFile } from "../songs/songCover";
+import { setSongRegionCover } from "../desktopApi";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -486,6 +489,27 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         onSelect: () => openSongRegionKeyMenu(region),
       },
       keyChangeAtCursorAction(region, cursorSeconds, d),
+      {
+        label: t("songCover.choose"),
+        disabled: isGuestMirrorMode(),
+        onSelect: () => pickCoverFile((file) => {
+          void d.runAction(async () => {
+            let image: string;
+            try { image = await normalizeCoverImage(file); }
+            catch { await alertDialog(t("songCover.error")); return; }
+            d.applyPlaybackSnapshot(await setSongRegionCover(region.id, image));
+            await d.refreshSongView({ includeWaveforms: false, sync: true });
+          });
+        }),
+      },
+      ...(region.coverImage ? [{
+        label: t("songCover.remove"),
+        disabled: isGuestMirrorMode(),
+        onSelect: () => d.runAction(async () => {
+          d.applyPlaybackSnapshot(await setSongRegionCover(region.id, null));
+          await d.refreshSongView({ includeWaveforms: false, sync: true });
+        }),
+      }] : []),
       {
         label: t("transport.structure.menuItem"),
         onSelect: () => openStructureEditor(region.id),

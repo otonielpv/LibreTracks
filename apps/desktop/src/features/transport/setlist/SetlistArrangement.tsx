@@ -41,7 +41,6 @@ import type { SetlistLayoutClass } from "./useSetlistLayout";
 import { OverviewZoom, ZoomWindowContext } from "./OverviewZoom";
 import { SongOverviewStrip } from "./SongOverviewStrip";
 import { SongBarRuler } from "./SongBarRuler";
-import { SetlistSnapToggle } from "./SetlistSnapToggle";
 import type { TimelineMenus } from "../menus/timelineMenus";
 
 /**
@@ -400,7 +399,6 @@ function SetlistArrangementToolbarComponent({
             </button>
           </div>
           <div className="lt-setlist-arrangement-actions" role="toolbar" aria-label={t("transport.structure.strip")}>
-            <SetlistSnapToggle className="lt-setlist-arrangement-action" />
             {(["duplicate", "remove"] as const).map((operation) => {
               const label = t(operation === "duplicate" ? "setlistView.sections.duplicate" : "setlistView.sections.delete");
               return <button key={operation} type="button" className="lt-setlist-arrangement-action"

@@ -254,6 +254,7 @@ impl DesktopSession {
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
             chart: None,
+            cover_image: None,
             voice_guide_count_style: None,
             structure: None,
         };
@@ -353,6 +354,7 @@ impl DesktopSession {
             master: libretracks_core::SongMaster::default(),
             compact_column_width_rem: None,
             chart: None,
+            cover_image: None,
             voice_guide_count_style: None,
             structure: None,
         };
@@ -443,6 +445,7 @@ impl DesktopSession {
             compact_column_width_rem: existing_region.compact_column_width_rem,
             structure: existing_region.structure.clone(),
             chart: existing_region.chart.clone(),
+            cover_image: existing_region.cover_image.clone(),
             voice_guide_count_style: existing_region.voice_guide_count_style,
             key_changes: existing_region.key_changes.clone(),
         };
@@ -700,6 +703,7 @@ impl DesktopSession {
             compact_column_width_rem: existing_region.compact_column_width_rem,
             structure: existing_region.structure.clone(),
             chart: existing_region.chart.clone(),
+            cover_image: existing_region.cover_image.clone(),
             voice_guide_count_style: existing_region.voice_guide_count_style,
             // Relativos al inicio: viajan con la canción sin tocarlos.
             key_changes: existing_region.key_changes.clone(),
@@ -1420,6 +1424,7 @@ impl DesktopSession {
             // width than the one it came from would read as a glitch.
             compact_column_width_rem: region.compact_column_width_rem,
             chart: region.chart.clone(),
+            cover_image: region.cover_image.clone(),
             voice_guide_count_style: region.voice_guide_count_style,
             // El original capturado describe la canción entera: ninguna de
             // las dos mitades lo hereda.

@@ -120,6 +120,8 @@ pub struct SongRegion {
     /// la sesión igual.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chart: Option<SongChart>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover_image: Option<String>,
     /// Cómo cuenta la voz guía la entrada de las secciones de ESTA canción.
     /// `None` —y lo que deserializan las sesiones de antes— sigue el ajuste
     /// global (`AppSettings.voice_guide_count_style`). Se omite al guardar, así

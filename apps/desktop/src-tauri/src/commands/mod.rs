@@ -1,5 +1,6 @@
 pub mod app_close;
 pub mod charts;
+pub mod covers;
 pub mod cloud;
 pub mod demo;
 pub mod engine_v2;

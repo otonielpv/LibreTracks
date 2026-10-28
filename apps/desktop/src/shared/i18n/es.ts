@@ -357,6 +357,8 @@ const es = {
       loadingProject: "Abriendo proyecto…",
       projectReady: "Proyecto listo para reproducir.",
       navigation: "Navegacion principal",
+      hideNavigation: "Ocultar navegación",
+      showNavigation: "Mostrar navegación",
       library: "Biblioteca",
       remote: "Remote",
       settings: "Configuracion",
@@ -2511,6 +2513,11 @@ const es = {
       "Vamp entre canciones: al terminar cada canción el click sigue a su tempo y el pad sigue sonando hasta que pulses Play para la siguiente.",
     holding:
       "Vamp entre canciones sonando: pulsa Play para empezar la siguiente canción, o Stop para parar el click.",
+  },
+  songCover: {
+    choose: "Elegir portada…",
+    remove: "Quitar portada",
+    error: "No se pudo cargar la portada. Elige una imagen JPG, PNG o WebP de hasta 8 MB.",
   },
   liveView: {
     title: "Vista Live",

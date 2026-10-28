@@ -59,6 +59,7 @@ use crate::infra::settings::AppSettings;
 mod arrangement;
 mod audio_prep;
 mod charts;
+mod covers;
 mod automation_runtime;
 mod cue_follow;
 mod external_import;

@@ -488,6 +488,8 @@ pub fn run() {
             commands::timeline::duplicate_ruler_markers,
             commands::timeline::delete_ruler_markers,
             commands::timeline::create_song_region,
+            commands::covers::set_song_region_cover,
+            commands::covers::find_song_cover_images,
             commands::timeline::create_empty_song,
             commands::timeline::update_song_region,
             commands::timeline::move_song_region,

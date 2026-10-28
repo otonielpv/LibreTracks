@@ -1159,6 +1159,43 @@ html.lt-ios body {
   visibility: hidden;
 }
 
+.lt-navigation-toggle {
+  display: grid;
+  place-items: center;
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #e5e2e1;
+}
+
+.lt-mobile .lt-navigation-toggle {
+  flex-basis: 2.75rem;
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+.lt-song-cover {
+  display: block;
+  flex: 0 0 2.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  max-height: 2.5rem;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
+.lt-setlist-song-tile.is-short .lt-song-cover,
+.lt-mobile .lt-song-cover {
+  flex-basis: 1.75rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  max-height: 1.75rem;
+}
+
 .lt-side-nav {
   box-sizing: border-box;
   width: 5rem;

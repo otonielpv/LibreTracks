@@ -75,6 +75,12 @@ In the background:
 
 ## 3. Project Organization
 
+### Navigation and Cover Images
+
+The menu button next to the brand in the top bar hides or restores Library, Settings and Network navigation on desktop and mobile. The preference is remembered on the device.
+
+When creating a song from a library folder, LibreTracks searches that folder and its subfolders for images, prioritizing names such as `cover`, `album`, `portada`, `front` and `folder`. You can also use `Choose cover image…` and `Remove cover image` in the song options or under `Setlist → Edit → Song`. JPG, PNG and WebP files up to 8 MB are supported; a thumbnail is stored to preserve waveform height on mobile. Covers are saved with the project and travel in song and session exports, even without audio.
+
 ### `Library`
 
 Use `Library` as the preparation area for show assets.
