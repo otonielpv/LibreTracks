@@ -1991,11 +1991,15 @@ export const testDesktopApiMock = {
       regions: state.song.regions.map((region) => {
         if (region.id !== regionId) return region;
         const enableWarp = state.appSettings.autoWarp && !region.warpEnabled &&
+          transposeSemitones !== 0 &&
           region.transposeSemitones !== transposeSemitones;
+        const disableWarp = state.appSettings.autoWarp && region.warpEnabled &&
+          transposeSemitones === 0 && region.warpSourceBpm === getEffectiveBpmAt(state.song, region.startSeconds);
         return {
           ...region,
           transposeSemitones,
           ...(enableWarp ? { warpEnabled: true, warpSourceBpm: getEffectiveBpmAt(state.song, region.startSeconds) } : {}),
+          ...(disableWarp ? { warpEnabled: false } : {}),
         };
       }),
     });

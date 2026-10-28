@@ -178,7 +178,7 @@ You can change the time signature on the timeline:
 
 ### Pitch and tempo
 
-Changing a song's pitch or tempo automatically enables warp to keep pitch and speed independent. An unchanged song does not enable warp. Turn off `Automatic warp` in Settings to show the manual warp control and use varispeed when changing pitch. Changing this preference does not modify existing songs.
+Changing a song's pitch or tempo automatically enables warp to keep pitch and speed independent. An unchanged song does not enable warp; restoring both the original pitch and tempo turns it off again. Turn off `Automatic warp` in Settings to show the manual warp control and use varispeed when changing pitch. Changing this preference does not modify existing songs.
 
 ### `Jump` modes
 

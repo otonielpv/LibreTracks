@@ -896,18 +896,23 @@ impl DesktopSession {
             )));
         }
 
+        let auto_warp = audio
+            .current_settings()
+            .map(|settings| settings.auto_warp)
+            .unwrap_or(true);
+        let warp_enabled = !(auto_warp && region.transpose_semitones == 0 && bpm == source_bpm);
         scale_region_tempo(&mut song, region_id, bpm)?;
         if let Some(region) = song
             .regions
             .iter_mut()
             .find(|region| region.id == region_id)
         {
-            region.warp_enabled = true;
+            region.warp_enabled = warp_enabled;
             region.warp_source_bpm = Some(source_bpm);
         }
         realign_regions_after_warp_tempo_change(&previous_song, &mut song);
 
-        audio.update_live_region_warp(region_id, true, Some(source_bpm))?;
+        audio.update_live_region_warp(region_id, warp_enabled, Some(source_bpm))?;
         // Realinear traslada las canciones siguientes: sus cues van con ellas.
         self.persist_song_update_carrying_cues(
             song,
@@ -944,10 +949,19 @@ impl DesktopSession {
             .iter()
             .find(|region| region.id == region_id)
             .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+        let auto_warp = audio
+            .current_settings()
+            .map(|settings| settings.auto_warp)
+            .unwrap_or(true);
         let enable_warp = !region_before.warp_enabled
+            && transpose_semitones != 0
             && region_before.transpose_semitones != transpose_semitones
-            && audio.current_settings().map(|settings| settings.auto_warp).unwrap_or(true);
+            && auto_warp;
         let source_bpm = effective_bpm_at(&song, region_before.start_seconds);
+        let disable_warp = auto_warp
+            && region_before.warp_enabled
+            && transpose_semitones == 0
+            && region_before.warp_source_bpm == Some(source_bpm);
         if enable_warp
             && !(libretracks_core::MIN_WARP_SOURCE_BPM..=libretracks_core::MAX_WARP_SOURCE_BPM)
                 .contains(&source_bpm)
@@ -966,6 +980,8 @@ impl DesktopSession {
         if enable_warp {
             region.warp_enabled = true;
             region.warp_source_bpm = Some(source_bpm);
+        } else if disable_warp {
+            region.warp_enabled = false;
         }
 
         let record_history =
@@ -977,7 +993,7 @@ impl DesktopSession {
         let edited_region_id = region.id.clone();
         let edited_region_start = region.start_seconds;
         let edited_region_end = region.end_seconds;
-        let edited_region_warp_enabled = region.warp_enabled;
+        let edited_region_warp_enabled = region.warp_enabled || disable_warp;
         let previous_transpose = region.transpose_semitones;
         region.transpose_semitones = transpose_semitones;
         if jump_debug_logging_enabled() {
@@ -1103,11 +1119,11 @@ impl DesktopSession {
                 refresh_song_duration(&mut song);
             }
         }
-        if enable_warp {
+        if enable_warp || disable_warp {
             realign_regions_after_warp_tempo_change(&previous_song, &mut song);
-            audio.update_live_region_warp(region_id, true, Some(source_bpm))?;
+            audio.update_live_region_warp(region_id, enable_warp, Some(source_bpm))?;
         }
-        if enable_warp {
+        if enable_warp || disable_warp {
             self.persist_song_update_carrying_cues(
                 song,
                 audio,

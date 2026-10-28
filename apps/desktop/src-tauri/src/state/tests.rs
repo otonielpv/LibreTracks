@@ -1532,6 +1532,68 @@ fn automatic_warp_starts_only_when_transpose_changes() {
 }
 
 #[test]
+fn automatic_warp_turns_off_when_pitch_and_tempo_return_to_original() {
+    let mut session = session_with_song_dir("auto-warp-reset", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+
+    session.update_song_region_transpose("region_1", 2, &audio).expect("pitch");
+    session.update_song_region_transpose("region_1", 0, &audio).expect("reset pitch");
+    assert!(!session.engine.song().expect("song").regions[0].warp_enabled);
+
+    session.set_song_region_tempo("region_1", 130.0, &audio).expect("tempo");
+    session.set_song_region_tempo("region_1", 120.0, &audio).expect("reset tempo");
+    assert!(!session.engine.song().expect("song").regions[0].warp_enabled);
+    session.undo_action(&audio).expect("undo reset");
+    assert!(session.engine.song().expect("song").regions[0].warp_enabled);
+}
+
+#[test]
+fn automatic_warp_stays_on_until_both_pitch_and_tempo_are_original() {
+    let mut session = session_with_song_dir("auto-warp-mixed", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+
+    session.update_song_region_transpose("region_1", 2, &audio).expect("pitch");
+    session.set_song_region_tempo("region_1", 130.0, &audio).expect("tempo");
+    session.update_song_region_transpose("region_1", 0, &audio).expect("reset pitch");
+    assert!(session.engine.song().expect("song").regions[0].warp_enabled);
+    session.set_song_region_tempo("region_1", 120.0, &audio).expect("reset tempo");
+    assert!(!session.engine.song().expect("song").regions[0].warp_enabled);
+
+    session.update_song_region_transpose("region_1", 2, &audio).expect("pitch again");
+    session.set_song_region_tempo("region_1", 130.0, &audio).expect("tempo again");
+    session.set_song_region_tempo("region_1", 120.0, &audio).expect("reset tempo first");
+    assert!(session.engine.song().expect("song").regions[0].warp_enabled);
+    session.update_song_region_transpose("region_1", 0, &audio).expect("reset pitch last");
+    assert!(!session.engine.song().expect("song").regions[0].warp_enabled);
+}
+
+#[test]
+fn automatic_warp_reset_respects_manual_mode_and_existing_varispeed() {
+    let audio = crate::audio::engine::AudioController::default();
+    let mut settings = audio.current_settings().expect("settings");
+    settings.auto_warp = false;
+    audio.replace_settings(settings).expect("replace settings");
+    let mut session = session_with_song_dir("manual-warp-reset", demo_song());
+
+    session.update_song_region_warp("region_1", true, Some(120.0), &audio).expect("manual warp");
+    session.update_song_region_transpose("region_1", 2, &audio).expect("pitch");
+    session.update_song_region_transpose("region_1", 0, &audio).expect("reset pitch");
+    assert!(session.engine.song().expect("song").regions[0].warp_enabled);
+    session.set_song_region_tempo("region_1", 130.0, &audio).expect("tempo");
+    session.set_song_region_tempo("region_1", 120.0, &audio).expect("reset tempo");
+    assert!(session.engine.song().expect("song").regions[0].warp_enabled);
+
+    let mut song = demo_song();
+    song.regions[0].transpose_semitones = 2;
+    let mut session = session_with_song_dir("auto-warp-varispeed-reset", song);
+    let mut settings = audio.current_settings().expect("settings");
+    settings.auto_warp = true;
+    audio.replace_settings(settings).expect("replace settings");
+    session.update_song_region_transpose("region_1", 0, &audio).expect("reset varispeed pitch");
+    assert!(!session.engine.song().expect("song").regions[0].warp_enabled);
+}
+
+#[test]
 fn repeated_region_transpose_changes_group_into_one_undo_entry() {
     let mut session = session_with_song_dir("transpose-undo-demo", demo_song());
     let audio = crate::audio::engine::AudioController::default();
