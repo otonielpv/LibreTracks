@@ -246,8 +246,7 @@ pub(crate) fn default_template_tracks(
 
 /// Aplica a la canción `region_id` la plantilla `explicit` (la que el usuario
 /// eligió al crearla) o, si no hay, la plantilla por defecto de Ajustes, con
-/// el modo de pistas de Ajustes. Sin ninguna de las dos no hace nada: es lo
-/// que mantiene «Nueva canción» igual que siempre para quien no usa plantillas.
+/// el modo de pistas de Ajustes. Sin plantilla solo aplica la disposición.
 pub(crate) fn apply_song_template(
     song: &mut Song,
     region_id: &str,
@@ -263,9 +262,7 @@ pub(crate) fn apply_song_template(
             .as_ref()
             .and_then(|settings| default_template_tracks(settings, locale.as_deref())),
     };
-    let Some(template) = template else {
-        return Ok(false);
-    };
+    let template = template.unwrap_or_default();
     let layout = settings
         .map(|settings| settings.track_layout())
         .unwrap_or_default();
@@ -563,7 +560,7 @@ impl TemplateDropSummary {
 }
 
 /// Decide dónde va cada stem de un drop. `None` = la organización está
-/// apagada (ni plantilla por defecto ni pistas con alias en la sesión) y quien
+/// apagada (pistas compartidas, sin plantilla ni pistas con alias) y quien
 /// llama sigue exactamente su camino de siempre.
 ///
 /// `drops` son `(fichero, inicio en tiempo de fuente)`. Lee la duración de cada
@@ -580,7 +577,13 @@ pub(crate) fn organise_stem_drop(
     let template = settings
         .as_ref()
         .and_then(|settings| default_template_tracks(settings, locale.as_deref()));
-    if template.is_none() && !song.tracks.iter().any(|t| !t.match_aliases.is_empty()) {
+    let layout = settings
+        .map(|settings| settings.track_layout())
+        .unwrap_or_default();
+    if template.is_none()
+        && layout == SongImportTrackMode::MergeIntoExisting
+        && !song.tracks.iter().any(|t| !t.match_aliases.is_empty())
+    {
         return Ok(None);
     }
     let mut stems = Vec::with_capacity(drops.len());
@@ -595,9 +598,6 @@ pub(crate) fn organise_stem_drop(
             duration_seconds: metadata.duration_seconds,
         });
     }
-    let layout = settings
-        .map(|settings| settings.track_layout())
-        .unwrap_or_default();
     organise_stem_drop_with(
         song,
         &stems,
@@ -657,11 +657,9 @@ pub(crate) fn organise_stem_drop_with(
     let mut placements: Vec<Option<StemPlacement>> = vec![None; stems.len()];
     let mut used: HashSet<String> = HashSet::new();
     let mut last_sibling: HashMap<String, String> = HashMap::new();
-    let per_song = template.is_some() && layout != SongImportTrackMode::MergeIntoExisting;
+    let per_song = layout != SongImportTrackMode::MergeIntoExisting;
     for region_id in region_order {
-        if let Some(template) = template {
-            apply_template_to_region(song, template, &region_id, layout, auto_color)?;
-        }
+        apply_template_to_region(song, template.unwrap_or_default(), &region_id, layout, auto_color)?;
         // Después de la plantilla: sus pistas ya tienen id y no se repiten.
         let mut ids = TrackIdAllocator::new(song);
         let indexes: Vec<usize> = (0..stems.len())
@@ -1476,8 +1474,6 @@ mod tests {
 
     #[test]
     fn a_session_made_from_a_template_organises_drops_without_a_default() {
-        // No default template: the aliases the session's tracks carry are
-        // enough, and nothing new is laid out.
         let mut song = session(vec![region("r1", "Uno", 0.0, 10.0)]);
         let mut click = builtin_band_template(None)[0].clone();
         click.id = "session_click".into();
@@ -1494,14 +1490,15 @@ mod tests {
         )
         .expect("organise");
         assert_eq!(track_of(&song, &placements[0]).id, "session_click");
+        let folder_id = song_folder_id(&song, "r1").expect("song folder");
         assert_eq!(
             placements[1],
             StemPlacement::Unmatched {
-                parent_track_id: None,
-                song_region_id: None
+                parent_track_id: Some(folder_id),
+                song_region_id: Some("r1".into())
             }
         );
-        assert_eq!(song.tracks.len(), 1);
+        assert_eq!(song.tracks.len(), 2);
     }
 
     #[test]

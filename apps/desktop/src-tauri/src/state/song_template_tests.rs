@@ -223,6 +223,99 @@ fn compact_drop_with_a_template_organises_the_stems_in_one_undo_step() {
 }
 
 #[test]
+fn timeline_drop_without_a_template_still_respects_song_folder_layout() {
+    let mut session = empty_session("tpl-drop-folder-no-template");
+    let audio = audio_with(None, Some("songFolder"));
+    let files = write_stems(&session, &MULTITRACK);
+    let requests: Vec<_> = files
+        .iter()
+        .map(|file_path| CreateAudioTrackWithClipRequest {
+            track_name: file_path
+                .trim_start_matches("audio/")
+                .trim_end_matches(".wav")
+                .into(),
+            file_path: file_path.clone(),
+            timeline_start_seconds: 0.0,
+        })
+        .collect();
+    let undo_depth = session.undo_stack.len();
+    session
+        .create_audio_tracks_with_clips(&requests, &audio)
+        .expect("drop");
+    let song = loaded(&session);
+    let region = &song.regions[0];
+    assert_eq!(
+        song_folder_of(&song, &region.id).as_deref(),
+        Some(region.name.as_str())
+    );
+    for file in MULTITRACK {
+        assert_eq!(
+            parent_name_of_clip(&song, file).as_deref(),
+            Some(region.name.as_str())
+        );
+    }
+    assert_eq!(session.last_template_drop, None);
+    assert_eq!(session.undo_stack.len(), undo_depth + 1);
+    session.undo_action(&audio).expect("undo drop");
+    assert!(loaded(&session).tracks.is_empty());
+    assert!(loaded(&session).clips.is_empty());
+}
+
+#[test]
+fn compact_drops_without_a_template_reuse_the_song_folder() {
+    let mut session = empty_session("tpl-compact-folder-no-template");
+    let audio = audio_with(None, Some("songFolder"));
+    let files = write_stems(&session, &MULTITRACK);
+    for file_path in &files {
+        session
+            .create_clips_with_auto_tracks(
+                &[CreateClipWithAutoTrackRequest {
+                    file_path: file_path.clone(),
+                    timeline_start_seconds: 0.0,
+                }],
+                &audio,
+            )
+            .expect("drop into song");
+    }
+    let song = loaded(&session);
+    assert_eq!(song.tracks.len(), MULTITRACK.len() + 1);
+    let region = &song.regions[0];
+    for file in MULTITRACK {
+        assert_eq!(
+            parent_name_of_clip(&song, file).as_deref(),
+            Some(region.name.as_str())
+        );
+    }
+    session
+        .create_empty_song(Some("Second song"), None, &audio)
+        .expect("create second song");
+    let song = loaded(&session);
+    let second = song.regions.last().expect("second song");
+    assert_eq!(
+        song_folder_of(&song, &second.id).as_deref(),
+        Some("Second song")
+    );
+    session
+        .create_clips_with_auto_tracks(
+            &[CreateClipWithAutoTrackRequest {
+                file_path: files[0].clone(),
+                timeline_start_seconds: second.start_seconds,
+            }],
+            &audio,
+        )
+        .expect("drop into second song");
+    let song = loaded(&session);
+    let last_clip = song.clips.last().expect("second song clip");
+    let track = song
+        .tracks
+        .iter()
+        .find(|track| track.id == last_clip.track_id)
+        .expect("second song track");
+    assert_eq!(track.song_region_id.as_deref(), Some(second.id.as_str()));
+    assert_eq!(song.tracks.len(), MULTITRACK.len() + 3);
+}
+
+#[test]
 fn timeline_drop_in_song_folder_mode_keeps_each_song_together() {
     let mut session = empty_session("tpl-drop-folder");
     let audio = audio_with(Some(BUILTIN_BAND_TEMPLATE), Some("songFolder"));
@@ -406,9 +499,9 @@ fn deleting_a_song_keeps_shared_tracks() {
 /// Soltar una carpeta de la biblioteca: los audios crean su canción al
 /// colocarse y después `libraryFolderDrop` crea la definitiva encima y le pone
 /// el nombre de la carpeta. La plantilla no debe hacer una segunda copia.
-fn drop_library_folder(layout: &str) -> Song {
-    let mut session = empty_session(&format!("tpl-folder-drop-{layout}"));
-    let audio = audio_with(Some(BUILTIN_BAND_TEMPLATE), Some(layout));
+fn drop_library_folder(layout: &str, template: Option<&str>) -> Song {
+    let mut session = empty_session(&format!("tpl-folder-drop-{layout}-{}", template.is_some()));
+    let audio = audio_with(template, Some(layout));
     let files = write_stems(&session, &MULTITRACK);
     let requests: Vec<_> = files
         .iter()
@@ -444,7 +537,7 @@ fn band_folder_copies(song: &Song) -> usize {
 #[test]
 fn a_library_folder_drop_lays_the_template_out_once() {
     for layout in ["shared", "separate", "songFolder"] {
-        let song = drop_library_folder(layout);
+        let song = drop_library_folder(layout, Some(BUILTIN_BAND_TEMPLATE));
         assert_eq!(song.regions.len(), 1, "{layout}");
         assert_eq!(band_folder_copies(&song), 1, "{layout}: one copy of the band");
         if layout != "shared" {
@@ -460,6 +553,35 @@ fn a_library_folder_drop_lays_the_template_out_once() {
             assert_eq!(
                 song_folder_of(&song, &song.regions[0].id).as_deref(),
                 Some("Way Maker")
+            );
+        }
+    }
+}
+
+#[test]
+fn a_library_folder_drop_without_a_template_respects_the_track_layout() {
+    for layout in ["shared", "separate", "songFolder"] {
+        let song = drop_library_folder(layout, None);
+        assert_eq!(song.regions.len(), 1, "{layout}");
+        let region = &song.regions[0];
+        assert_eq!(region.name, "Way Maker");
+        assert_eq!(
+            song.tracks.len(),
+            MULTITRACK.len() + usize::from(layout == "songFolder"),
+            "{layout}: no duplicate folders"
+        );
+        for track in &song.tracks {
+            assert_eq!(
+                track.song_region_id.as_ref(),
+                (layout != "shared").then_some(&region.id),
+                "{layout}: track ownership survives region replacement"
+            );
+        }
+        for file in MULTITRACK {
+            assert_eq!(
+                parent_name_of_clip(&song, file).as_deref(),
+                (layout == "songFolder").then_some("Way Maker"),
+                "{layout}"
             );
         }
     }

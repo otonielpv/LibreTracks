@@ -779,7 +779,11 @@ impl DesktopSession {
         }
 
         refresh_song_duration(&mut song);
-        self.last_template_drop = Some(TemplateDropSummary::of(&placements));
+        self.last_template_drop = song
+            .tracks
+            .iter()
+            .any(|track| !track.match_aliases.is_empty())
+            .then(|| TemplateDropSummary::of(&placements));
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
         Ok(self.snapshot())
     }
