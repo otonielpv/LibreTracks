@@ -130,6 +130,26 @@ describe("SetlistSongRow content", () => {
 });
 
 describe("SetlistSongRow gestures", () => {
+  it("only marks the sounding song, and clears its feedback on pause or stop", () => {
+    const props = rowProps({ activeRegionId: "a", selectedRegionId: "b" });
+    const { container, rerender } = render(<SetlistSongRow {...props} />);
+    expect(container.querySelector(".lt-setlist-playing-indicator")).toBeNull();
+    act(() => setPlayback("playing"));
+    expect(tile(container, "a").classList.contains("is-playing")).toBe(true);
+    expect(tile(container, "a").getAttribute("aria-current")).toBe("true");
+    expect(within(tile(container, "a")).getByRole("status").getAttribute("aria-label")).toBe("transport.status.songStarted:Alfa");
+    expect(tile(container, "b").classList.contains("is-playing")).toBe(false);
+    rerender(<SetlistSongRow {...props} activeRegionId="b" />);
+    expect(tile(container, "a").classList.contains("is-playing")).toBe(false);
+    expect(tile(container, "b").classList.contains("is-playing")).toBe(true);
+    act(() => useTransportStore.setState({ playback: { playbackState: "paused" } as never }));
+    expect(container.querySelector(".lt-setlist-playing-indicator")).toBeNull();
+    act(() => setPlayback("playing"));
+    expect(container.querySelectorAll(".lt-setlist-playing-indicator")).toHaveLength(1);
+    act(() => setPlayback("stopped"));
+    expect(container.querySelector(".is-playing")).toBeNull();
+  });
+
   it("a click selects and, stopped, cues the song", () => {
     const props = rowProps();
     const { container } = render(<SetlistSongRow {...props} />);

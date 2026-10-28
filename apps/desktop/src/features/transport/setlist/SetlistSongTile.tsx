@@ -15,6 +15,7 @@ import { SongReorderHandle, type SongReorderHandleProps } from "../songs/SongReo
 import { SONG_REORDER_ID_ATTRIBUTE } from "../songs/useSongReorder";
 import { ArrangementBadge } from "../structure/ArrangementBadge";
 import { SongCover } from "../songs/SongCoverImage";
+import { useTransportStore } from "../store";
 import type { SongViewBindings } from "../songs/songViewBindings";
 import { SONG_DROP_CLASS, songDropHandlers } from "./songDrop";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
@@ -67,6 +68,7 @@ function SetlistSongTileComponent({
 }: SetlistSongTileProps) {
   const { t } = useTranslation();
   const regionId = region.id;
+  const isSounding = useTransportStore((state) => isActive && state.playback?.playbackState === "playing");
   const { canControl, canEdit, canUseFiles } = useNetworkPermissions();
   const songKey = regionEffectiveKey(region);
   const duration = formatLiveClock(region.endSeconds - region.startSeconds);
@@ -104,7 +106,7 @@ function SetlistSongTileComponent({
     `is-${layout}`,
     region.coverImage ? "has-cover" : "",
     isSelected ? "is-selected" : "",
-    isActive ? "is-playing" : "",
+    isSounding ? "is-playing" : "",
     isPending ? "is-queued" : "",
     isDropTarget ? "is-drop-target" : "",
   ]
@@ -119,6 +121,7 @@ function SetlistSongTileComponent({
       role="button"
       tabIndex={0}
       aria-pressed={isSelected}
+      aria-current={isSounding ? "true" : undefined}
       aria-label={t("setlistView.songs.tileLabel", { index: index + 1, name: region.name })}
       title={t("setlistView.songs.tileLabel", { index: index + 1, name: region.name })}
       onClick={() => actions.onActivate(regionId)}
@@ -146,7 +149,16 @@ function SetlistSongTileComponent({
       <span className="lt-setlist-song-artwork">
         <SongCover region={region} />
         {!region.coverImage ? <span className="material-symbols-outlined lt-setlist-cover-placeholder" aria-hidden="true">music_note</span> : null}
-        <span className="lt-setlist-cover-index">{index + 1}</span>
+        <span className="lt-setlist-cover-index">
+          {index + 1}
+          {isSounding ? (
+            <span className="lt-setlist-playing-indicator" role="status"
+              aria-label={t("transport.status.songStarted", { name: region.name })}
+              title={t("transport.status.songStarted", { name: region.name })}>
+              <span aria-hidden="true" /><span aria-hidden="true" /><span aria-hidden="true" />
+            </span>
+          ) : null}
+        </span>
       </span>
       <span className="lt-setlist-song-main">
         <span className="lt-setlist-song-name" title={region.name}>
@@ -172,7 +184,7 @@ function SetlistSongTileComponent({
       <span className="lt-setlist-song-actions" data-no-song-reorder="">
         <button
           type="button"
-          className="lt-setlist-song-button"
+          className="lt-setlist-song-button lt-setlist-song-play"
           disabled={!canControl}
           aria-label={t("setlistView.songs.play", { name: region.name })}
           title={t("setlistView.songs.play", { name: region.name })}

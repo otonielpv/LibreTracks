@@ -4867,6 +4867,72 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   background: rgb(9 11 10 / 0.8);
 }
 
+.lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-play {
+  border-radius: 3px;
+  background: #43de8a;
+  color: #071b10;
+}
+
+.lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-play:hover:not(:disabled) {
+  background: #79f3af;
+}
+
+.lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-play:disabled {
+  opacity: 0.45;
+}
+
+.lt-setlist-view .lt-setlist-song-tile.is-playing {
+  border-color: #43de8a;
+  box-shadow: inset 0 0 0 2px #43de8a;
+}
+
+.lt-setlist-view .lt-setlist-song-tile.is-playing .lt-setlist-song-name {
+  color: #79f3af;
+}
+
+.lt-setlist-view .lt-setlist-cover-index {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.lt-setlist-playing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 0.8rem;
+  color: #43de8a;
+}
+
+.lt-setlist-playing-indicator > span {
+  width: 3px;
+  height: 12px;
+  background: currentColor;
+  transform-origin: center;
+  animation: lt-setlist-playing-bar 0.7s ease-in-out infinite alternate;
+}
+
+.lt-setlist-playing-indicator > span:nth-child(2) {
+  height: 8px;
+  animation-delay: -0.3s;
+}
+
+.lt-setlist-playing-indicator > span:nth-child(3) {
+  height: 10px;
+  animation-delay: -0.5s;
+}
+
+@keyframes lt-setlist-playing-bar {
+  from { transform: scaleY(0.35); }
+  to { transform: scaleY(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-setlist-playing-indicator > span {
+    animation: none;
+  }
+}
+
 .lt-setlist-view .lt-setlist-song-tile .lt-structure-badge {
   position: absolute;
   right: 0.35rem;
