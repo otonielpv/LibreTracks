@@ -805,6 +805,14 @@ const en = {
       close: "Close",
       applied: "Markers applied. Use Undo to revert.",
       failed: "Could not analyze: {{error}}",
+      applyFailed: "Could not apply the analysis: {{error}}",
+      errorDetails: "Technical details",
+      analysisAlreadyRunning:
+        "An analysis is already running. Wait for it to finish or stop it before trying again.",
+      nothingToAnalyze:
+        "No tracks are selected for analysis. Go back and choose at least one.",
+      sectionMarkersConflict:
+        "Section or cue markers are out of order or share the same position. Go back to the review and deselect the detected sections, or check the existing markers on the timeline before trying again.",
       tempo: "Tempo",
       signature: "Meter",
       changes: "Changes",
@@ -1226,6 +1234,10 @@ const en = {
         "A clip cannot cross from one song into the next. Shorten or move the clip first.",
       invalidMarker:
         "A marker has an invalid position or shortcut. Move it to a valid position and try again.",
+      markersOutOfOrder:
+        "Section or cue markers are out of order or share the same position. Check their positions on the timeline and try again.",
+      signatureMarkersOutOfOrder:
+        "Time signature markers are out of order or share the same position. Check their positions on the timeline and try again.",
       invalidMidiData:
         "The MIDI clip contains an invalid channel, note or position. Review its events and try again.",
       unsupportedProjectVersion:

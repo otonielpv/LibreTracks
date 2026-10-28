@@ -820,6 +820,14 @@ const es = {
       close: "Cerrar",
       applied: "Marcas aplicadas. Puedes deshacerlo con Deshacer.",
       failed: "No se pudo analizar: {{error}}",
+      applyFailed: "No se pudo aplicar el análisis: {{error}}",
+      errorDetails: "Detalles técnicos",
+      analysisAlreadyRunning:
+        "Ya hay un análisis en curso. Espera a que termine o detenlo antes de volver a intentarlo.",
+      nothingToAnalyze:
+        "No hay pistas seleccionadas para analizar. Vuelve atrás y elige al menos una.",
+      sectionMarkersConflict:
+        "Las marcas de sección o de aviso no están ordenadas o coinciden en la misma posición. Vuelve a la revisión y desmarca las secciones detectadas, o revisa las marcas existentes en el timeline antes de volver a intentarlo.",
       tempo: "Tempo",
       signature: "Compás",
       changes: "Cambios",
@@ -1243,6 +1251,10 @@ const es = {
         "Un clip no puede atravesar el límite entre dos canciones. Acórtalo o muévelo primero.",
       invalidMarker:
         "Una marca tiene una posición o un atajo no válidos. Muévela a una posición válida y vuelve a intentarlo.",
+      markersOutOfOrder:
+        "Las marcas de sección o de aviso no están ordenadas o coinciden en la misma posición. Revisa sus posiciones en el timeline y vuelve a intentarlo.",
+      signatureMarkersOutOfOrder:
+        "Las marcas de compás no están ordenadas o coinciden en la misma posición. Revisa sus posiciones en el timeline y vuelve a intentarlo.",
       invalidMidiData:
         "El clip MIDI contiene un canal, una nota o una posición no válidos. Revisa sus eventos y vuelve a intentarlo.",
       unsupportedProjectVersion:

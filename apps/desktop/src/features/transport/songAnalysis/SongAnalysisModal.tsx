@@ -26,6 +26,7 @@ import {
   markerKindVariants,
 } from "../markerKinds";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { formatTransportError } from "../errors/formatTransportError";
 import { useSongStore } from "../songStore";
 import { useTransportStore } from "../store";
 import {
@@ -68,7 +69,7 @@ type Phase =
     }
   | { kind: "review"; result: AnalyzeSongResult }
   | { kind: "applied" }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; raw: string; review: AnalyzeSongResult | null };
 
 type Props = {
   /** Hands the snapshot the apply (or a seek) returns to the transport. */
@@ -212,20 +213,20 @@ function SongAnalysisDialog({ song, regionId, regionName, onClose, onApplied }: 
     if (!canAnalyze || analyzing) return;
     setPhase({ kind: "analyzing", fraction: 0, stage: "render", done: null, total: null });
     unlistenRef.current?.();
-    unlistenRef.current = await listenToSongAnalysisProgress((event) => {
-      setPhase((current) =>
-        current.kind === "analyzing"
-          ? {
-              kind: "analyzing",
-              fraction: event.fraction,
-              stage: event.stage ?? current.stage,
-              done: event.done ?? null,
-              total: event.total ?? null,
-            }
-          : current,
-      );
-    });
     try {
+      unlistenRef.current = await listenToSongAnalysisProgress((event) => {
+        setPhase((current) =>
+          current.kind === "analyzing"
+            ? {
+                kind: "analyzing",
+                fraction: event.fraction,
+                stage: event.stage ?? current.stage,
+                done: event.done ?? null,
+                total: event.total ?? null,
+              }
+            : current,
+        );
+      });
       const fromMusic = clickTrackId === FROM_MUSIC;
       const result = await analyzeSong({
         regionId,
@@ -276,8 +277,14 @@ function SongAnalysisDialog({ song, regionId, regionName, onClose, onApplied }: 
       });
       setPhase({ kind: "review", result });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setPhase({ kind: "error", message });
+      const raw = error instanceof Error ? error.message : String(error);
+      const lower = raw.toLowerCase();
+      const message = lower.includes("an analysis is already running")
+        ? t("transport.songAnalysis.analysisAlreadyRunning")
+        : lower.includes("nothing to analyze")
+          ? t("transport.songAnalysis.nothingToAnalyze")
+          : formatTransportError(error, t, song);
+      setPhase({ kind: "error", message, raw, review: null });
     } finally {
       unlistenRef.current?.();
       unlistenRef.current = null;
@@ -322,7 +329,7 @@ function SongAnalysisDialog({ song, regionId, regionName, onClose, onApplied }: 
     (touchesTempo || appliesKey || appliesSections);
 
   const apply = async () => {
-    if (!canApply) return;
+    if (!canApply || phase.kind !== "review") return;
     setApplying(true);
     try {
       const snapshot = await applySongAnalysis(
@@ -357,9 +364,17 @@ function SongAnalysisDialog({ song, regionId, regionName, onClose, onApplied }: 
       onApplied(snapshot);
       setPhase({ kind: "applied" });
     } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error);
+      const lower = raw.toLowerCase();
       setPhase({
         kind: "error",
-        message: error instanceof Error ? error.message : String(error),
+        message:
+          lower.includes("markers are out of order") &&
+          !lower.includes("time signature markers are out of order")
+            ? t("transport.songAnalysis.sectionMarkersConflict")
+            : formatTransportError(error, t, song),
+        raw,
+        review: phase.result,
       });
     } finally {
       setApplying(false);
@@ -647,8 +662,16 @@ function SongAnalysisDialog({ song, regionId, regionName, onClose, onApplied }: 
         {phase.kind === "error" ? (
           <div className="lt-settings-modal-body lt-render-modal-body" aria-live="polite">
             <p className="lt-render-warning">
-              {t("transport.songAnalysis.failed", { error: phase.message })}
+              {t(phase.review ? "transport.songAnalysis.applyFailed" : "transport.songAnalysis.failed", {
+                error: phase.message,
+              })}
             </p>
+            {!phase.message.includes(phase.raw) && phase.raw ? (
+              <details>
+                <summary>{t("transport.songAnalysis.errorDetails")}</summary>
+                <p>{phase.raw}</p>
+              </details>
+            ) : null}
           </div>
         ) : null}
 
@@ -702,7 +725,13 @@ function SongAnalysisDialog({ song, regionId, regionName, onClose, onApplied }: 
                 <button
                   type="button"
                   className="lt-secondary-button"
-                  onClick={() => setPhase({ kind: "setup", notice: null })}
+                  onClick={() =>
+                    setPhase(
+                      phase.review
+                        ? { kind: "review", result: phase.review }
+                        : { kind: "setup", notice: null },
+                    )
+                  }
                 >
                   {t("transport.songAnalysis.back")}
                 </button>

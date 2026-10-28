@@ -23,6 +23,7 @@ type TempoChange = {
   signatureMarkers: ProposedSignatureMarker[];
 };
 const analyzeSong = vi.fn<(request: AnalyzeSongRequest) => Promise<AnalyzeSongResult>>();
+const listenToSongAnalysisProgress = vi.fn(async () => () => {});
 const applySongAnalysis =
   vi.fn<
     (
@@ -51,7 +52,7 @@ vi.mock("@libretracks/shared/desktopApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@libretracks/shared/desktopApi")>()),
   analyzeSong: (request: AnalyzeSongRequest) => analyzeSong(request),
   cancelAnalyzeSong: async () => {},
-  listenToSongAnalysisProgress: async () => () => {},
+  listenToSongAnalysisProgress: () => listenToSongAnalysisProgress(),
   applySongAnalysis: (
     regionId: string,
     tempo: TempoChange | null,
@@ -218,6 +219,43 @@ describe("SongAnalysisModal", () => {
     useSongAnalysisStore.setState({ target: null });
     const { container } = render(<SongAnalysisModal onApplied={() => {}} />);
     expect(container.innerHTML).toBe("");
+  });
+
+  it("explains a marker conflict on apply and returns to the edited review", async () => {
+    analyzeSong.mockResolvedValue(result());
+    const raw = "audio engine error: song is invalid: markers are out of order: section_19 before section_20";
+    applySongAnalysis.mockRejectedValueOnce(raw);
+    const onApplied = vi.fn();
+    render(<SongAnalysisModal onApplied={onApplied} />);
+    await analyzeAndReview();
+    fireEvent.change(await screen.findByLabelText("transport.songAnalysis.key"), {
+      target: { value: "Bm" },
+    });
+    fireEvent.click(screen.getByText("transport.songAnalysis.apply"));
+
+    expect(await screen.findByText(/transport\.songAnalysis\.applyFailed.*sectionMarkersConflict/)).toBeTruthy();
+    expect(screen.getByText(raw).closest("details")?.open).toBe(false);
+    expect(onApplied).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("transport.songAnalysis.back"));
+    expect((screen.getByLabelText("transport.songAnalysis.key") as HTMLSelectElement).value).toBe("Bm");
+    expect(analyzeSong).toHaveBeenCalledTimes(1);
+  });
+
+  it("formats analysis errors and returns to setup", async () => {
+    analyzeSong.mockRejectedValueOnce("An analysis is already running");
+    render(<SongAnalysisModal onApplied={() => {}} />);
+    await analyzeAndReview();
+    expect(await screen.findByText(/transport\.songAnalysis\.failed.*analysisAlreadyRunning/)).toBeTruthy();
+    fireEvent.click(screen.getByText("transport.songAnalysis.back"));
+    expect(screen.getByText("transport.songAnalysis.analyze")).toBeTruthy();
+  });
+
+  it("reports failure to subscribe to analysis progress", async () => {
+    listenToSongAnalysisProgress.mockRejectedValueOnce(new Error("listener failed"));
+    render(<SongAnalysisModal onApplied={() => {}} />);
+    fireEvent.click(screen.getByText("transport.songAnalysis.analyze"));
+    expect(await screen.findByText(/transport\.songAnalysis\.failed.*listener failed/)).toBeTruthy();
+    expect(analyzeSong).not.toHaveBeenCalled();
   });
 
   it("reads the tempo from the click and the key from the harmonic tracks", async () => {

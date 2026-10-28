@@ -115,4 +115,16 @@ describe("formatTransportError", () => {
       "El motor de audio no pudo completar la operación. Detalles: audio engine error: device stopped unexpectedly",
     );
   });
+
+  it.each([
+    [es, "markers are out of order: section_19 before section_20", "sección o de aviso"],
+    [en, "markers are out of order: section_19 before section_20", "Section or cue"],
+    [es, "time signature markers are out of order: a before b", "marcas de compás"],
+    [en, "time signature markers are out of order: a before b", "Time signature markers"],
+  ])("explains ordering conflicts without exposing IDs", (locale, error, expected) => {
+    const message = formatTransportError(`audio engine error: song is invalid: ${error}`, translator(locale));
+    expect(message).toContain(expected);
+    expect(message).not.toContain("section_19");
+    expect(message).toContain(locale === es ? "misma posición" : "same position");
+  });
 });

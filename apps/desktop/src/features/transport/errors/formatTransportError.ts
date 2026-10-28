@@ -65,7 +65,7 @@ export function formatTransportError(
   if (structureLocked) {
     return t("transport.structure.lockedStatus", { name: structureLocked[2] });
   }
-  if (raw.includes("no song is loaded")) {
+  if (lower.includes("no song is loaded") || lower.includes("no song loaded")) {
     return t("transport.errors.noSongLoaded");
   }
   if (raw.includes("transport state is unavailable")) {
@@ -284,11 +284,15 @@ export function formatTransportError(
   if (lower.includes("spans the boundary between region")) {
     return t("transport.errors.clipCrossesSongs");
   }
+  if (lower.includes("time signature markers are out of order")) {
+    return t("transport.errors.signatureMarkersOutOfOrder");
+  }
+  if (lower.includes("markers are out of order")) {
+    return t("transport.errors.markersOutOfOrder");
+  }
   if (
     lower.includes("marker has invalid") ||
     lower.includes("marker digit is duplicated") ||
-    lower.includes("markers are out of order") ||
-    lower.includes("time signature markers are out of order") ||
     (lower.includes("time signature marker") &&
       lower.includes("is invalid")) ||
     /marker \S+ has invalid (position|digit)/.test(lower)
