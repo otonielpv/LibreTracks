@@ -263,6 +263,8 @@ El render respeta el cambio de tono y el warp de la canción, y no depende de mu
 
 Para renderizar la sesión, abre `Archivo` > `Renderizar audio de la sesión…` (en móvil, el menú de archivos). Elige toda la línea de tiempo en un archivo o cada canción por separado en un ZIP. También puedes cambiar el intervalo desde el diálogo de una canción. La opción de pistas separadas funciona en ambos casos; al elegir canciones separadas, el ZIP contiene las pistas de cada canción.
 
+Las pistas se agrupan por canción; las compartidas y las que están fuera de canciones aparecen en grupos propios. `Quitar click / guía` desmarca de una vez las pistas identificadas por su nombre o el de su carpeta; vuelve a pulsar `Incluir click / guía` para recuperarlas. Las casillas del metrónomo y la voz guía de la aplicación son independientes de estas pistas.
+
 En estéreo puedes ajustar por separado el paneo del conjunto de pistas, del metrónomo y de la voz guía. El paneo de las pistas se aplica después del paneo del mezclador, sin modificarlo. En mono estos controles no se aplican.
 
 Cada intervalo renderizado está limitado a tres horas. Para sesiones más largas, usa la salida por canción siempre que cada canción esté dentro de ese límite.

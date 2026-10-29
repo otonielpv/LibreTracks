@@ -1,5 +1,6 @@
-import type { SongView, TrackSummary } from "@libretracks/shared/models";
+import type { SongRegionSummary, SongView, TrackSummary } from "@libretracks/shared/models";
 import type { RenderSampleFormat } from "@libretracks/shared/desktopApi";
+import { songIdsByTrack } from "../panels/trackSongGroups";
 
 /**
  * Pure helpers behind the "Render audio" modal: which tracks a song can
@@ -15,6 +16,36 @@ export type RenderableTrack = {
   /** Folders under which this track sits, outermost first. */
   folderNames: string[];
 };
+
+export type RenderTrackGroup = {
+  key: string;
+  region: SongRegionSummary | null;
+  tracks: RenderableTrack[];
+};
+
+const RENDER_CUE_NAME = /\b(click|clic|clik|metr[oó]nom[oe]?|guides?|gu[ií]as?|cues?|count[- ]?in|conteo)(?=\b|\d)/i;
+
+export function groupRenderTracks(song: SongView | null, tracks: RenderableTrack[]): RenderTrackGroup[] {
+  if (!song) return [];
+  const songsByTrack = songIdsByTrack(song);
+  const groups: RenderTrackGroup[] = [];
+  const shared = tracks.filter((track) => (songsByTrack.get(track.id)?.length ?? 0) > 1);
+  if (shared.length) groups.push({ key: "shared", region: null, tracks: shared });
+  for (const region of [...song.regions].sort((a, b) => a.startSeconds - b.startSeconds)) {
+    const own = tracks.filter((track) => {
+      const ids = songsByTrack.get(track.id);
+      return ids?.length === 1 && ids[0] === region.id;
+    });
+    if (own.length) groups.push({ key: `region:${region.id}`, region, tracks: own });
+  }
+  const outside = tracks.filter((track) => !songsByTrack.has(track.id));
+  if (outside.length) groups.push({ key: "outside", region: null, tracks: outside });
+  return groups;
+}
+
+export function isRenderCueTrack(track: RenderableTrack): boolean {
+  return [track.name, ...track.folderNames].some((name) => RENDER_CUE_NAME.test(name.normalize("NFC")));
+}
 
 /**
  * Audio tracks with at least one clip sounding inside the song, in session

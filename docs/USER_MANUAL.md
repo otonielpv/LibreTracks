@@ -263,6 +263,8 @@ The render follows the song's transposition and warp, and ignores mute and solo:
 
 To render the session, choose `File` > `Render session audio…` (on mobile, open the file menu). Choose the whole timeline in one file or each song separately in a ZIP. You can also change the range from a song's render dialog. Separate tracks work in both cases; when rendering each song separately, the ZIP contains each song's tracks.
 
+Tracks are grouped by song, with separate groups for shared tracks and tracks outside songs. `Remove click / guide` clears tracks identified by their name or folder name; use `Include click / guide` to select them again. The app metronome and voice guide checkboxes are independent of these tracks.
+
 For stereo exports, adjust the tracks, metronome and voice guide pans independently. The tracks pan is applied after the mixer pan without changing it. Pan controls do not apply to mono exports.
 
 Each rendered range is limited to three hours. For longer sessions, export each song separately as long as each song is within that limit.

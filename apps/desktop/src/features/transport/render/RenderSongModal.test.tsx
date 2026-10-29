@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -153,6 +153,62 @@ describe("RenderSongModal", () => {
     fireEvent.click(screen.getByText("transport.renderModal.confirm"));
     await waitFor(() => expect(renderSongAudio).toHaveBeenCalledTimes(1));
     expect(renderSongAudio.mock.calls[0][0]).toMatchObject({ scope: "session", trackIds: ["d", "b", "k"], tracksPan: 0 });
+  });
+
+  it("shows cue pan faders only when their app sources are included", () => {
+    render(<RenderSongModal />);
+    expect(screen.queryByLabelText("transport.renderModal.metronomePan")).toBeNull();
+    expect(screen.queryByLabelText("transport.renderModal.voiceGuidePan")).toBeNull();
+    fireEvent.click(screen.getByText("transport.renderModal.includeMetronome"));
+    fireEvent.change(screen.getByLabelText("transport.renderModal.metronomePan"), { target: { value: "1" } });
+    fireEvent.click(screen.getByText("transport.renderModal.includeVoiceGuide"));
+    expect(screen.getByLabelText("transport.renderModal.voiceGuidePan")).toBeTruthy();
+    fireEvent.click(screen.getByText("transport.renderModal.includeMetronome"));
+    expect(screen.queryByLabelText("transport.renderModal.metronomePan")).toBeNull();
+    fireEvent.click(screen.getByText("transport.renderModal.includeMetronome"));
+    expect((screen.getByLabelText("transport.renderModal.metronomePan") as HTMLInputElement).value).toBe("1");
+    fireEvent.doubleClick(screen.getByLabelText("transport.renderModal.metronomePan"));
+    expect((screen.getByLabelText("transport.renderModal.metronomePan") as HTMLInputElement).value).toBe("0");
+  });
+
+  it("groups session tracks and toggles detected click and guide tracks together", async () => {
+    const setlist = song();
+    setlist.regions.push({ id: "r2", name: "Second", startSeconds: 100, endSeconds: 200 } as never);
+    setlist.tracks.push(
+      { id: "click1", name: "Click 1", kind: "audio", depth: 0 } as never,
+      { id: "guide", name: "Guía", kind: "audio", depth: 0 } as never,
+      { id: "shared", name: "Click", kind: "audio", depth: 0 } as never,
+      { id: "loose", name: "Loose", kind: "audio", depth: 0 } as never,
+    );
+    setlist.clips.push(
+      { id: "click1", trackId: "click1", timelineStartSeconds: 0, durationSeconds: 90 } as never,
+      { id: "guide", trackId: "guide", timelineStartSeconds: 100, durationSeconds: 90 } as never,
+      { id: "shared", trackId: "shared", timelineStartSeconds: 0, durationSeconds: 200 } as never,
+      { id: "loose", trackId: "loose", timelineStartSeconds: 250, durationSeconds: 10 } as never,
+    );
+    useSongStore.setState({ song: setlist });
+    useRenderStore.setState({ target: { regionId: "", regionName: "" } });
+    renderSongAudio.mockResolvedValue(saved);
+    render(<RenderSongModal />);
+    expect(screen.getByRole("button", { name: /Oceans/ }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("button", { name: /Second/ }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("button", { name: /transport.levelSongs.sharedTracks/ }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("button", { name: /transport.renderModal.outsideSongs/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Oceans/ }));
+    const firstGroup = screen.getByRole("button", { name: /Oceans/ }).closest("li")!;
+    expect(within(firstGroup).getByLabelText("Click 1")).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Oceans" }));
+    expect((within(firstGroup).getByLabelText("Drums") as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Oceans" }));
+    fireEvent.click(screen.getByText("transport.renderModal.removeCueTracks"));
+    expect((screen.getByLabelText("Click") as HTMLInputElement).checked).toBe(false);
+    expect((within(firstGroup).getByLabelText("Click 1") as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByText("transport.renderModal.includeCueTracks"));
+    expect((screen.getByLabelText("Click") as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByText("transport.renderModal.removeCueTracks"));
+    fireEvent.click(screen.getByText("transport.renderModal.confirm"));
+    await waitFor(() => expect(renderSongAudio).toHaveBeenCalledTimes(1));
+    expect(renderSongAudio.mock.calls[0][0].trackIds).toEqual(["d", "b", "k", "loose"]);
   });
 
   it("shows progress and can stop the render", async () => {

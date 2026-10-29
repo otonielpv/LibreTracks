@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { SongView } from "@libretracks/shared/models";
 
 import {
   cancelRenderSongAudio,
@@ -12,15 +13,19 @@ import { useDismissOnBack } from "../mobile/backNavigation";
 import { useSongStore } from "../songStore";
 import {
   defaultRenderFileName,
+  groupRenderTracks,
+  isRenderCueTrack,
   loadRenderPreferences,
   RENDER_SAMPLE_RATES,
   renderableTracks,
   saveRenderPreferences,
   type RenderPreferences,
   type RenderableTrack,
+  type RenderTrackGroup,
 } from "./renderSelection";
 import { useRenderStore } from "./renderStore";
 import { recordProductEvent } from "../../telemetry/telemetry";
+import { useTouchRangeDrag } from "../tracks/useTouchRangeDrag";
 
 type Phase =
   | { kind: "form"; notice: string | null }
@@ -29,6 +34,81 @@ type Phase =
   | { kind: "error"; message: string };
 
 const FORMATS: RenderSampleFormat[] = ["pcm16", "pcm24", "float32"];
+
+function RenderPanFader({ label, centerLabel, value, disabled, onChange }: {
+  label: string;
+  centerLabel: string;
+  value: number;
+  disabled: boolean;
+  onChange: (value: number) => void;
+}) {
+  const display = value === 0 ? centerLabel : `${value < 0 ? "L" : "R"} ${Math.round(Math.abs(value) * 100)}%`;
+  const touchDrag = useTouchRangeDrag({ min: -1, max: 1, step: 0.01, onChange, onCommit: () => {} });
+  return (
+    <label className="lt-render-pan">
+      <span className="lt-render-pan-heading">
+        <span>{label}</span><span className="lt-render-pan-value">{display}</span>
+      </span>
+      <span className="lt-render-pan-guides" aria-hidden="true"><span>L</span><span>C</span><span>R</span></span>
+      <input type="range" className="lt-fader is-pan" min={-1} max={1} step={0.01}
+        value={value} disabled={disabled} aria-label={label} aria-valuetext={display}
+        onChange={(event) => onChange(Number(event.target.value))}
+        onPointerDown={touchDrag} onDoubleClick={() => onChange(0)} />
+    </label>
+  );
+}
+
+function RenderSessionTrackPicker({ groups, selected, onToggle, onSetMany }: {
+  groups: RenderTrackGroup[];
+  selected: ReadonlySet<string>;
+  onToggle: (id: string) => void;
+  onSetMany: (ids: string[], on: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(() => new Set(groups.length === 1 ? [groups[0].key] : ["shared"]));
+  const toggleOpen = (key: string) => setOpen((previous) => {
+    const next = new Set(previous);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
+  return (
+    <ul className="lt-render-track-list lt-level-songs-groups">
+      {groups.map((group) => {
+        const ids = group.tracks.map((track) => track.id);
+        const count = ids.filter((id) => selected.has(id)).length;
+        const expanded = open.has(group.key);
+        const title = group.region?.name ?? t(group.key === "shared" ? "transport.levelSongs.sharedTracks" : "transport.renderModal.outsideSongs");
+        return (
+          <li key={group.key} className="lt-level-songs-group">
+            <div className="lt-level-songs-group-header">
+              <input type="checkbox" aria-label={title} checked={count === ids.length}
+                ref={(input) => { if (input) input.indeterminate = count > 0 && count < ids.length; }}
+                onChange={() => onSetMany(ids, count !== ids.length)} />
+              <button type="button" className="lt-level-songs-group-toggle" aria-expanded={expanded}
+                onClick={() => toggleOpen(group.key)}>
+                <span className="material-symbols-outlined" aria-hidden="true">{expanded ? "expand_more" : "chevron_right"}</span>
+                <span className="lt-level-songs-group-title">{title}</span>
+                <span className="lt-level-songs-group-summary">{t("transport.levelSongs.groupCount", { count, total: ids.length })}</span>
+              </button>
+            </div>
+            {expanded ? <ul className="lt-render-track-grid lt-level-songs-track-grid">
+              {group.tracks.map((track) => (
+                <li key={track.id}>
+                  <label className="lt-render-track">
+                    <input type="checkbox" checked={selected.has(track.id)} onChange={() => onToggle(track.id)} />
+                    <span className="lt-render-track-swatch" style={{ background: track.color ?? "#57f1db" }} aria-hidden="true" />
+                    <span className="lt-render-track-name">{track.name}</span>
+                  </label>
+                </li>
+              ))}
+            </ul> : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 /**
  * "Render audio" for one song: pick the tracks that go in, the file format,
@@ -51,6 +131,7 @@ export function RenderSongModal() {
       sessionTracks={renderableTracks(song, null)}
       sessionName={song?.title || ""}
       hasSongs={Boolean(song?.regions.length)}
+      song={song}
       onClose={close}
     />
   );
@@ -63,10 +144,11 @@ type DialogProps = {
   sessionTracks: RenderableTrack[];
   sessionName: string;
   hasSongs: boolean;
+  song: SongView | null;
   onClose: () => void;
 };
 
-function RenderSongDialog({ regionId, regionName, tracks: songTracks, sessionTracks, sessionName, hasSongs, onClose }: DialogProps) {
+function RenderSongDialog({ regionId, regionName, tracks: songTracks, sessionTracks, sessionName, hasSongs, song, onClose }: DialogProps) {
   const { t } = useTranslation();
   const [scope, setScope] = useState<"song" | "session" | "songs">(regionId ? "song" : "session");
   const tracks = scope === "song" ? songTracks : sessionTracks;
@@ -142,7 +224,14 @@ function RenderSongDialog({ regionId, regionName, tracks: songTracks, sessionTra
     return result;
   }, [tracks]);
 
+  const sessionGroups = useMemo(
+    () => scope === "song" ? [] : groupRenderTracks(song, sessionTracks),
+    [scope, song, sessionTracks],
+  );
+
   const selectedCount = tracks.filter((track) => selected.has(track.id)).length;
+  const cueIds = tracks.filter(isRenderCueTrack).map((track) => track.id);
+  const allCuesSelected = cueIds.length > 0 && cueIds.every((id) => selected.has(id));
   const hasSomethingToRender =
     selectedCount > 0 || preferences.includeMetronome || preferences.includeVoiceGuide;
 
@@ -273,8 +362,17 @@ function RenderSongDialog({ regionId, regionName, tracks: songTracks, sessionTra
                     >
                       {t("transport.renderModal.selectNone")}
                     </button>
+                    <button
+                      type="button"
+                      className="lt-secondary-button"
+                      disabled={cueIds.length === 0}
+                      title={t("transport.renderModal.cueTracksHint")}
+                      onClick={() => setMany(cueIds, !allCuesSelected)}
+                    >
+                      {t(allCuesSelected ? "transport.renderModal.removeCueTracks" : "transport.renderModal.includeCueTracks")}
+                    </button>
                   </div>
-                  <ul className="lt-render-track-list">
+                  {scope === "song" ? <ul className="lt-render-track-list">
                     {groups.map((group) => {
                       const ids = group.tracks.map((track) => track.id);
                       const on = ids.filter((id) => selected.has(id)).length;
@@ -315,7 +413,15 @@ function RenderSongDialog({ regionId, regionName, tracks: songTracks, sessionTra
                         </li>
                       );
                     })}
-                  </ul>
+                  </ul> : (
+                    <RenderSessionTrackPicker
+                      key={scope}
+                      groups={sessionGroups}
+                      selected={selected}
+                      onToggle={toggleTrack}
+                      onSetMany={setMany}
+                    />
+                  )}
                 </>
               )}
             </fieldset>
@@ -446,16 +552,14 @@ function RenderSongDialog({ regionId, regionName, tracks: songTracks, sessionTra
                 </span>
               </label>
 
-              {(["tracksPan", "metronomePan", "voiceGuidePan"] as const).map((key) => (
-                <label className="lt-settings-field" key={key}>
-                  <span className="lt-settings-field-label">
-                    {t(`transport.renderModal.${key}`)}: {preferences[key] === 0 ? t("transport.renderModal.panCenter") : `${preferences[key] < 0 ? "L" : "R"} ${Math.round(Math.abs(preferences[key]) * 100)}%`}
-                  </span>
-                  <input type="range" min={-1} max={1} step={0.01} value={preferences[key]}
-                    disabled={preferences.channels === 1 || (key === "metronomePan" && !preferences.includeMetronome) || (key === "voiceGuidePan" && !preferences.includeVoiceGuide)}
-                    onChange={(event) => update({ [key]: Number(event.target.value) })} />
-                </label>
-              ))}
+              {(["tracksPan", "metronomePan", "voiceGuidePan"] as const)
+                .filter((key) => key === "tracksPan" || (key === "metronomePan" ? preferences.includeMetronome : preferences.includeVoiceGuide))
+                .map((key) => (
+                  <RenderPanFader key={key} label={t(`transport.renderModal.${key}`)}
+                    centerLabel={t("transport.renderModal.panCenter")} value={preferences[key]}
+                    disabled={preferences.channels === 1}
+                    onChange={(value) => update({ [key]: value })} />
+                ))}
 
               <label className="lt-settings-field">
                 <span className="lt-settings-field-label">
