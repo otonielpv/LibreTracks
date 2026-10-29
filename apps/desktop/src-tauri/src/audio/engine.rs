@@ -2263,6 +2263,17 @@ impl AudioController {
     }
 
     pub fn engine_snapshot(&self) -> Result<EngineSnapshot, DesktopError> {
+        self.engine_snapshot_inner(false)
+    }
+
+    pub fn project_audio_preparation_snapshot(&self) -> Result<EngineSnapshot, DesktopError> {
+        self.engine_snapshot_inner(true)
+    }
+
+    fn engine_snapshot_inner(
+        &self,
+        current_sources_only: bool,
+    ) -> Result<EngineSnapshot, DesktopError> {
         // Defense in depth: retry a few times before giving up with "state
         // locked". The root cause of long lock holds is fixed (waits no longer
         // hold the lock), but a brief overlap with any other command shouldn't
@@ -2289,9 +2300,17 @@ impl AudioController {
                 "engine_snapshot: state locked".into(),
             ));
         };
-        ensure_engine(&mut state)?
+        let mut snapshot = ensure_engine(&mut state)?
             .get_snapshot()
-            .map_err(|e| DesktopError::AudioCommand(e.to_string()))
+            .map_err(|e| DesktopError::AudioCommand(e.to_string()))?;
+        if current_sources_only {
+            snapshot.source_states.retain(|source| {
+                state
+                    .current_song_source_ids
+                    .contains(&normalize_source_id(&source.source_id))
+            });
+        }
+        Ok(snapshot)
     }
 
     /// Enumerate output devices through the LIVE engine (the one playback uses),

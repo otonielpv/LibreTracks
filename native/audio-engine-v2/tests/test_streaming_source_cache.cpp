@@ -6,13 +6,17 @@
 #include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/decoded_source.h>
 #include <lt_engine/sources/source_manager.h>
+#include <lt_engine/sources/preparation_queue.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -116,6 +120,90 @@ void require_audio_equal(const std::vector<float>& a, const std::vector<float>& 
 }
 
 } // namespace
+
+TEST_CASE("Changing session cancels preparation of sources no longer needed") {
+    SourceManager manager;
+    DecodeWorkerPool pool(1);
+    SourcePreparationQueue preparation(&manager, &pool, [](EngineEvent) {}, 48000);
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool started = false;
+    bool released = false;
+    pool.submit_decode("blocker", "blocker", "", 48000, {}, {},
+        [&](const Id&, const std::string&, int, const JobProgressCallback&,
+            const DecodeCancellationCallback&) {
+            std::unique_lock lock(mutex);
+            started = true;
+            changed.notify_all();
+            changed.wait(lock, [&] { return released; });
+            return std::string{};
+        });
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return started; });
+    }
+    std::vector<Source> previous;
+    for (int index = 0; index < 10; ++index) {
+        Source source;
+        source.id = "previous-" + std::to_string(index);
+        source.file_path = "missing-previous-" + std::to_string(index) + ".wav";
+        previous.push_back(source);
+    }
+    preparation.enqueue_session(previous, 0);
+    preparation.enqueue_session({previous.front()}, 0);
+    const auto states = preparation.preparation_states();
+    for (const auto& state : states) {
+        if (state.source_id == previous.front().id) {
+            CHECK(state.status == "loading");
+        } else {
+            CHECK(state.status == "cancelled");
+        }
+    }
+    {
+        std::lock_guard lock(mutex);
+        released = true;
+    }
+    changed.notify_all();
+    pool.wait_all();
+    for (const auto& job : pool.all_jobs()) {
+        if (job.source_id != "blocker" && job.source_id != previous.front().id)
+            CHECK(job.status == JobStatus::Cancelled);
+    }
+}
+
+TEST_CASE("DecodeWorkerPool cancellation reaches a running conversion") {
+    DecodeWorkerPool pool(1);
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool started = false;
+    bool released = false;
+    std::atomic<bool> observed_cancellation{false};
+    pool.submit_decode("active", "active", "", 48000, {}, {},
+        [&](const Id&, const std::string&, int, const JobProgressCallback&,
+            const DecodeCancellationCallback& is_cancelled) {
+            std::unique_lock lock(mutex);
+            started = true;
+            changed.notify_all();
+            changed.wait(lock, [&] { return released; });
+            observed_cancellation.store(is_cancelled());
+            return std::string{};
+        });
+    {
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return started; });
+    }
+    pool.cancel("active");
+    {
+        std::lock_guard lock(mutex);
+        released = true;
+    }
+    changed.notify_all();
+    pool.wait_all();
+    CHECK(observed_cancellation.load());
+    const auto jobs = pool.all_jobs();
+    REQUIRE(jobs.size() == 1);
+    CHECK(jobs.front().status == JobStatus::Cancelled);
+}
 
 TEST_CASE("SourceManager stores prepared sources in disk-backed block cache") {
     SourceManager manager;
@@ -1649,6 +1737,30 @@ TEST_CASE("streaming cache blocks are readable before the writer finalizes the W
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     CHECK(finalized_source->is_range_ready(kTailStart, kProbeFrames));
+}
+
+TEST_CASE("Cancelled streaming conversion never leaves a reusable partial cache") {
+    const auto wav_path = make_temp_wav_path("cancelled_streaming");
+    constexpr Frame frames = 65536 * 3;
+    REQUIRE(write_wav_pcm_float(wav_path, make_reference_audio(frames, 2), 2, 44100));
+    const Id source_id = "cancelled-streaming";
+    SourceManager manager;
+    manager.register_source(source_id, wav_path);
+    bool cancelled = false;
+    const auto result = manager.decode_and_store_streaming(
+        source_id, wav_path, 48000,
+        [&](int percent) { if (percent > 1) cancelled = true; },
+        [&] { return cancelled; });
+    CHECK(result.is_err());
+    CHECK(cancelled);
+    CHECK_FALSE(manager.get_shared(source_id));
+    SourceManager reopened;
+    reopened.register_source(source_id, wav_path);
+    CHECK_FALSE(reopened.try_install_from_cache_file(source_id, 48000));
+    REQUIRE(manager.decode_and_store_streaming(source_id, wav_path, 48000).is_ok());
+    REQUIRE(manager.get_shared(source_id));
+    CHECK(manager.get_shared(source_id)->duration_frames() > frames);
+    std::remove(wav_path.c_str());
 }
 
 TEST_CASE("decode_and_store_streaming matches whole-file decode (resampled)") {

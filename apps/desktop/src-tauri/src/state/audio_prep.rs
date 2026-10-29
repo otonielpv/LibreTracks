@@ -210,7 +210,7 @@ impl DesktopSession {
             // contended (e.g. meter polling holds it). Don't propagate — that
             // would abort the whole open flow. Just back off and retry on the
             // next iteration so the loop survives temporary contention.
-            let snapshot = match audio.engine_snapshot() {
+            let snapshot = match audio.project_audio_preparation_snapshot() {
                 Ok(s) => s,
                 Err(_) => {
                     if started_at.elapsed() >= TIMEOUT {
@@ -359,12 +359,27 @@ impl DesktopSession {
         const POLL_INTERVAL: Duration = Duration::from_millis(50);
         const SOURCES_BASE: u8 = 18;
         const SOURCES_SPAN: u8 = 62;
+        let project_dir = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned)?
+            .song_dir
+            .clone();
         let started_at = Instant::now();
         let mut last_ready = usize::MAX;
         let mut last_total = usize::MAX;
         let mut last_percent = u8::MAX;
         loop {
-            let snapshot = match audio.engine_snapshot() {
+            {
+                let mut session = state
+                    .session
+                    .lock()
+                    .map_err(|_| DesktopError::StatePoisoned)?;
+                if session.song_dir != project_dir {
+                    return Ok(session.snapshot());
+                }
+            }
+            let snapshot = match audio.project_audio_preparation_snapshot() {
                 Ok(s) => s,
                 Err(_) => {
                     if started_at.elapsed() >= TIMEOUT {

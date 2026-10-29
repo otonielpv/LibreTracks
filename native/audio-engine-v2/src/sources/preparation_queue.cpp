@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace lt {
 
@@ -27,6 +28,8 @@ struct SourcePreparationQueue::Impl {
 
     mutable std::mutex                          mtx;
     std::unordered_map<Id, SourcePreparationInfo> states;
+    std::unordered_map<Id, Id> job_ids;
+    uint64_t next_job = 0;
 };
 
 SourcePreparationQueue::SourcePreparationQueue(SourceManager*    source_manager,
@@ -46,6 +49,16 @@ SourcePreparationQueue::~SourcePreparationQueue() {
 }
 
 void SourcePreparationQueue::enqueue_source(const Source& source) {
+    Id previous_job;
+    {
+        std::lock_guard lock(impl_->mtx);
+        auto found = impl_->states.find(source.id);
+        if (found != impl_->states.end() && found->second.status == "cancelled")
+            previous_job = impl_->job_ids[source.id];
+    }
+    if (!previous_job.empty())
+        impl_->pool->wait_until_inactive(previous_job);
+    Id job_id;
     // Skip if already loaded or queued.
     {
         std::lock_guard lock(impl_->mtx);
@@ -60,6 +73,8 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
         info.status           = "queued";
         info.progress_percent = 0;
         impl_->states[source.id] = info;
+        job_id = source.id + ":prepare:" + std::to_string(++impl_->next_job);
+        impl_->job_ids[source.id] = job_id;
     }
 
     // Register in SourceManager (idempotent).
@@ -115,16 +130,17 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
 
     std::weak_ptr<Impl> weak_impl = impl_;
     impl_->pool->submit_decode(
-        source_id,  // job_id == source_id for simplicity
+        job_id,
         source_id,
         file_path,
         sr,
-        [weak_impl, source_id](const Job& job) {
+        [weak_impl, source_id, job_id](const Job& job) {
             auto impl = weak_impl.lock();
             if (!impl) {
                 return;
             }
             std::lock_guard lock(impl->mtx);
+            if (impl->job_ids[source_id] != job_id) return;
             auto& info = impl->states[source_id];
             if (info.status != "ready" && info.status != "failed" && info.status != "cancelled") {
                 info.status = "loading";
@@ -133,10 +149,15 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
                     std::clamp(job.progress_pct, 0, 99));
             }
         },
-        [weak_impl, source_id](Job& job) {
+        [weak_impl, source_id, job_id](Job& job) {
             auto impl = weak_impl.lock();
             if (!impl) {
                 return;
+            }
+            {
+                std::lock_guard lock(impl->mtx);
+                if (impl->job_ids[source_id] != job_id
+                    || impl->states[source_id].status == "cancelled") return;
             }
             // Worker thread callback — marshal into engine event queue.
             if (job.status == JobStatus::Completed) {
@@ -167,6 +188,8 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
                 }
                 {
                     std::lock_guard lock(impl->mtx);
+                    if (impl->job_ids[source_id] != job_id
+                        || impl->states[source_id].status == "cancelled") return;
                     auto& info = impl->states[source_id];
                     if (stored.is_ok()) {
                         info.status           = "ready";
@@ -189,6 +212,8 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
             } else if (job.status == JobStatus::Failed) {
                 {
                     std::lock_guard lock(impl->mtx);
+                if (impl->job_ids[source_id] != job_id
+                    || impl->states[source_id].status == "cancelled") return;
                 auto& info = impl->states[source_id];
                 info.status = "failed";
                 info.error_message = job.error_message;
@@ -205,7 +230,8 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
         streaming_decode_enabled()
             ? StreamingStoreCallback(
                   [weak_impl](const Id& sid, const std::string& path, int target_sr,
-                              const JobProgressCallback& prog) -> std::string {
+                              const JobProgressCallback& prog,
+                              const DecodeCancellationCallback& is_cancelled) -> std::string {
                       auto impl = weak_impl.lock();
                       if (!impl)
                           return "preparation queue gone";
@@ -218,7 +244,7 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
                                   j.progress_pct = pct;
                                   prog(j);
                               }
-                          });
+                          }, is_cancelled);
                       return r.is_ok() ? std::string{} : r.error();
                   })
             : StreamingStoreCallback{}
@@ -235,6 +261,19 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
 
 void SourcePreparationQueue::enqueue_session(const std::vector<Source>& sources,
                                               Frame playhead_frame) {
+    std::unordered_set<Id> required;
+    for (const auto& source : sources)
+        required.insert(source.id);
+    {
+        std::lock_guard lock(impl_->mtx);
+        for (auto& [id, info] : impl_->states) {
+            if (!required.contains(id)
+                && (info.status == "queued" || info.status == "loading")) {
+                impl_->pool->cancel(impl_->job_ids[id]);
+                info.status = "cancelled";
+            }
+        }
+    }
     // Sort sources by distance to playhead before enqueueing.
     std::vector<const Source*> sorted;
     sorted.reserve(sources.size());
@@ -251,7 +290,7 @@ void SourcePreparationQueue::cancel_all() {
     std::lock_guard lock(impl_->mtx);
     for (auto& [id, info] : impl_->states) {
         if (info.status == "queued" || info.status == "loading") {
-            impl_->pool->cancel(id);
+            impl_->pool->cancel(impl_->job_ids[id]);
             info.status = "cancelled";
         }
     }

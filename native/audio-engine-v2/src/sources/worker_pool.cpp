@@ -54,6 +54,7 @@ struct DecodeTask {
 struct DecodeWorkerPool::Impl {
     std::vector<std::thread>             threads;
     std::deque<std::shared_ptr<DecodeTask>> queue;
+    std::unordered_map<Id, std::shared_ptr<DecodeTask>> active;
     mutable std::mutex                   mtx;
     std::condition_variable              cv;
     bool                                 stopping = false;
@@ -71,7 +72,13 @@ struct DecodeWorkerPool::Impl {
                 if (stopping && queue.empty()) return;
                 task = std::move(queue.front());
                 queue.pop_front();
+                active[task->job_id] = task;
             }
+            auto active_guard = std::shared_ptr<void>(nullptr, [this, task](void*) {
+                std::lock_guard lock(mtx);
+                active.erase(task->job_id);
+                cv.notify_all();
+            });
 
             // Update status to Running.
             {
@@ -121,7 +128,8 @@ struct DecodeWorkerPool::Impl {
                 JobProgressCallback prog =
                     [&report_progress](const Job& j) { report_progress(j.progress_pct); };
                 const std::string err = task->streaming_store(
-                    task->source_id, task->file_path, task->target_sample_rate, prog);
+                    task->source_id, task->file_path, task->target_sample_rate, prog,
+                    [task] { return task->cancelled.load(std::memory_order_relaxed); });
                 if (task->cancelled.load(std::memory_order_relaxed)) {
                     finish_job(task->job_id, JobStatus::Cancelled, "", task->on_done, task);
                     continue;
@@ -152,7 +160,8 @@ struct DecodeWorkerPool::Impl {
 
             auto  result = decode_file_to_float32(
                 task->file_path, task->target_sample_rate,
-                &channel_count, &duration_frames, report_progress);
+                &channel_count, &duration_frames, report_progress,
+                [task] { return task->cancelled.load(std::memory_order_relaxed); });
 
             if (task->cancelled.load(std::memory_order_relaxed)) {
                 finish_job(task->job_id, JobStatus::Cancelled, "", task->on_done, task);
@@ -280,6 +289,8 @@ void DecodeWorkerPool::submit_decode(const Id& job_id,
 
 void DecodeWorkerPool::cancel(const Id& job_id) {
     std::lock_guard lock(impl_->mtx);
+    if (const auto it = impl_->active.find(job_id); it != impl_->active.end())
+        it->second->cancelled.store(true, std::memory_order_relaxed);
     for (auto& task : impl_->queue) {
         if (task->job_id == job_id)
             task->cancelled.store(true, std::memory_order_relaxed);
@@ -295,12 +306,17 @@ std::vector<Job> DecodeWorkerPool::all_jobs() const {
     return out;
 }
 
+void DecodeWorkerPool::wait_until_inactive(const Id& job_id) {
+    std::unique_lock lock(impl_->mtx);
+    impl_->cv.wait(lock, [&] { return !impl_->active.contains(job_id); });
+}
+
 void DecodeWorkerPool::wait_all() {
     // Poll until queue is empty and no job is Running.
     while (true) {
         {
             std::lock_guard lock(impl_->mtx);
-            if (impl_->queue.empty()) {
+            if (impl_->queue.empty() && impl_->active.empty()) {
                 std::lock_guard jl(impl_->jobs_mtx);
                 bool any_running = false;
                 for (const auto& [id, j] : impl_->jobs)

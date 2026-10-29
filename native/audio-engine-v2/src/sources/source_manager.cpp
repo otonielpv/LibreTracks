@@ -1191,7 +1191,8 @@ Result<void> SourceManager::decode_and_store_streaming(
     const Id& source_id,
     const std::string& file_path,
     int target_sample_rate,
-    SourceStoreProgressCallback on_progress) {
+    SourceStoreProgressCallback on_progress,
+    std::function<bool()> is_cancelled) {
 #if LT_ENGINE_USE_LIBSNDFILE
     auto report_progress = [&](int pct) {
         if (on_progress) on_progress(std::clamp(pct, 0, 100));
@@ -1405,6 +1406,7 @@ Result<void> SourceManager::decode_and_store_streaming(
 
     // Phase 1: feed real decoded input.
     while (in_done < fi.duration_frames && out_written < target_out_frames) {
+        if (is_cancelled && is_cancelled()) { decode_ok = false; break; }
         const int want = static_cast<int>(std::min<Frame>(
             kReadChunkFrames, fi.duration_frames - in_done));
         const int got = decoder->read_frames(in_chunk.data(), want);
@@ -1432,6 +1434,7 @@ Result<void> SourceManager::decode_and_store_streaming(
         int guard = 0;
         const int kMaxFlush = 256;  // « 256k input frames of latency is impossible
         while (out_written < target_out_frames && guard++ < kMaxFlush) {
+            if (is_cancelled && is_cancelled()) { decode_ok = false; break; }
             out_chunk.clear();
             const Frame produced = resampler->process_chunk(
                 in_chunk.data(), kFlushBlock, /*end_of_input=*/true, out_chunk);
@@ -1445,11 +1448,27 @@ Result<void> SourceManager::decode_and_store_streaming(
         }
     }
 
+    const bool cancelled = is_cancelled && is_cancelled();
+    if (!decode_ok || out_written <= 0 || cancelled) {
+        sf_count_t empty_frames = 0;
+        sf_command(sf, SFC_FILE_TRUNCATE, &empty_frames, sizeof(empty_frames));
+        sf_close(sf);
+        decoder->close();
+        {
+            std::lock_guard lock(write_mutex_);
+            EntryMap next = *load_entries();
+            if (auto found = next.find(source_id); found != next.end()) {
+                found->second.status = cancelled ? "cancelled" : "failed";
+                found->second.source.reset();
+                found->second.cache_file_path.clear();
+                publish_locked(std::move(next));
+            }
+        }
+        std::remove(cache_file.c_str());
+        return Result<void>::err("Streaming decode failed: " + file_path);
+    }
     sf_close(sf);
     decoder->close();
-
-    if (!decode_ok || out_written <= 0)
-        return Result<void>::err("Streaming decode failed: " + file_path);
 
     const Frame duration_frames = out_written;
     const size_t disk_cache_bytes =
@@ -1504,6 +1523,7 @@ Result<void> SourceManager::decode_and_store_streaming(
     return Result<void>::ok();
 #else
     (void)source_id; (void)file_path; (void)target_sample_rate; (void)on_progress;
+    (void)is_cancelled;
     return Result<void>::err("streaming decode requires libsndfile");
 #endif
 }

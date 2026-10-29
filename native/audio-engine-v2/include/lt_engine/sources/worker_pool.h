@@ -40,6 +40,7 @@ struct Job {
 // major source of memory pressure that evicts the audio thread's working set.
 using JobCompletionCallback = std::function<void(Job&)>;
 using JobProgressCallback = std::function<void(const Job&)>;
+using DecodeCancellationCallback = std::function<bool()>;
 
 // Optional streaming decode+store, run on the worker thread INSTEAD of the
 // whole-file decode_file_to_float32 + on_done handback. When set, the worker
@@ -50,7 +51,8 @@ using JobProgressCallback = std::function<void(const Job&)>;
 using StreamingStoreCallback =
     std::function<std::string(const Id& source_id, const std::string& file_path,
                               int target_sample_rate,
-                              const JobProgressCallback& on_progress)>;
+                              const JobProgressCallback& on_progress,
+                              const DecodeCancellationCallback& is_cancelled)>;
 
 class DecodeWorkerPool {
 public:
@@ -73,6 +75,8 @@ public:
 
     // Cancel a pending or running job.  No-op if already complete.
     void cancel(const Id& job_id);
+
+    void wait_until_inactive(const Id& job_id);
 
     // Snapshot of all known jobs (safe to call from any thread).
     std::vector<Job> all_jobs() const;

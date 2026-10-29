@@ -229,7 +229,8 @@ public:
     Result<void> decode_and_store_streaming(const Id& source_id,
                                             const std::string& file_path,
                                             int target_sample_rate,
-                                            SourceStoreProgressCallback on_progress = {});
+                                            SourceStoreProgressCallback on_progress = {},
+                                            std::function<bool()> is_cancelled = {});
 
     // If a previously-written PCM cache file exists for this source, install
     // it as a streaming entry (status = "cache_ready") without re-decoding

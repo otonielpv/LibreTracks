@@ -64,6 +64,7 @@ Result<std::vector<float>> decode_file_to_float32(
     int                target_sample_rate,
     int*               out_channel_count,
     Frame*             out_duration_frames,
-    DecodeProgressCallback on_progress = {});
+    DecodeProgressCallback on_progress = {},
+    std::function<bool()> is_cancelled = {});
 
 } // namespace lt

@@ -287,7 +287,8 @@ Result<std::vector<float>> decode_file_to_float32(
     int                target_sample_rate,
     int*               out_channel_count,
     Frame*             out_duration_frames,
-    DecodeProgressCallback on_progress)
+    DecodeProgressCallback on_progress,
+    std::function<bool()> is_cancelled)
 {
     auto report_progress = [&](int progress_pct) {
         if (on_progress) {
@@ -316,6 +317,8 @@ Result<std::vector<float>> decode_file_to_float32(
     Frame total_read = 0;
     constexpr int kReadChunkFrames = 65536;
     while (total_read < fi.duration_frames) {
+        if (is_cancelled && is_cancelled())
+            return Result<std::vector<float>>::err("Decode cancelled");
         const int frames_to_read = static_cast<int>(
             std::min<Frame>(kReadChunkFrames, fi.duration_frames - total_read));
         if (frames_to_read <= 0)
@@ -341,6 +344,8 @@ Result<std::vector<float>> decode_file_to_float32(
         return Result<std::vector<float>>::err("Failed to decode: " + normalized_path);
 
     report_progress(72);
+    if (is_cancelled && is_cancelled())
+        return Result<std::vector<float>>::err("Decode cancelled");
     auto resampler = make_resampler();
     ResamplerDiagnostics resampler_diagnostics;
     auto resample_result = resampler->process(raw, fi.channel_count,

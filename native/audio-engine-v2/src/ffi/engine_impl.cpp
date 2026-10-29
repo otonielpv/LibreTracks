@@ -747,7 +747,7 @@ Result<void> EngineImpl::initialize() {
     // they are NOT destroyed/recreated per LoadSession. This lets a source
     // decoded early (e.g. on library import, or a previous session) survive a
     // LoadSession instead of being cancelled + cleared + re-decoded. LoadSession
-    // just enqueues; the queue skips sources already ready/loading. Only a real
+    // cancels obsolete pending work and keeps shared/ready sources. Only a real
     // sample-rate change (different cache) clears + re-decodes.
     prep_queue_ = std::make_unique<SourcePreparationQueue>(
         source_manager_.get(),
@@ -1831,11 +1831,6 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             std::atomic_store(&session_, std::shared_ptr<const Session>(next_session));
             (void)session_generation_.fetch_add(1, std::memory_order_relaxed);
 
-            // PERSISTENT prep queue + source manager: do NOT clear() or recreate
-            // the queue. Enqueue the session's sources — the queue skips ones
-            // already ready/loading, so only genuinely new files decode. Sources
-            // prepared earlier (library import, prior session) are reused as-is,
-            // and their same-pass waveform peaks are already available.
             prep_queue_->enqueue_session(session_->sources,
                                           clock_->position().frame);
 
