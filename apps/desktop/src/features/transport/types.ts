@@ -69,6 +69,10 @@ export type ContextMenuAction = {
   swatch?: string;
   /** Display-ready keyboard shortcut shown right-aligned, Reaper-style. */
   shortcut?: string;
+  /** Category heading the entry is listed under. Consecutive entries with
+   * the same section form one group; a change of section draws a divider
+   * (and the heading, when there is one). See menus/menuSections. */
+  section?: string;
   onSelect: () => void | Promise<void>;
 };
 

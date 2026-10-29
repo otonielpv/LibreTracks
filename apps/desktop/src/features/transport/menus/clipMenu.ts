@@ -8,6 +8,7 @@ import {
 } from "../desktopApi";
 import { clipDisplayName, formatClock } from "../helpers";
 import type { ContextMenuAction } from "../types";
+import { menuSection } from "./menuSections";
 import type { TimelineMenuDeps } from "./timelineMenus";
 
 export type ClipContextMenuArgs = {
@@ -60,66 +61,68 @@ export function clipContextMenuActions({
   const canSplit = splittableClips.length > 0;
 
   return [
-    {
-      label: t("transport.menu.splitClipAtCursor"),
-      shortcut: d.shortcutHint("edit.splitClip"),
-      disabled: !canSplit,
-      onSelect: async () => {
-        await d.runAction(async () => {
-          const ids = splittableClips.map((entry) => entry.id);
-          const nextSnapshot =
-            ids.length > 1
-              ? await splitClips(ids, currentCursorSeconds)
-              : await splitClip(ids[0], currentCursorSeconds);
-          d.applyPlaybackSnapshot(nextSnapshot);
-          d.setStatus(
-            ids.length > 1
-              ? t("transport.status.clipsSplitAt", {
-                  count: ids.length,
-                  time: formatClock(currentCursorSeconds),
-                  defaultValue: "Split {{count}} clips at {{time}}.",
+    ...menuSection(t("transport.menu.groups.edit"), [
+      {
+        label: t("transport.menu.splitClipAtCursor"),
+        shortcut: d.shortcutHint("edit.splitClip"),
+        disabled: !canSplit,
+        onSelect: async () => {
+          await d.runAction(async () => {
+            const ids = splittableClips.map((entry) => entry.id);
+            const nextSnapshot =
+              ids.length > 1
+                ? await splitClips(ids, currentCursorSeconds)
+                : await splitClip(ids[0], currentCursorSeconds);
+            d.applyPlaybackSnapshot(nextSnapshot);
+            d.setStatus(
+              ids.length > 1
+                ? t("transport.status.clipsSplitAt", {
+                    count: ids.length,
+                    time: formatClock(currentCursorSeconds),
+                    defaultValue: "Split {{count}} clips at {{time}}.",
+                  })
+                : t("transport.status.clipSplitAt", {
+                    time: formatClock(currentCursorSeconds),
+                  }),
+            );
+          });
+        },
+      },
+      {
+        label: t("transport.menu.duplicateClip"),
+        shortcut: d.shortcutHint("edit.duplicate"),
+        onSelect: async () => {
+          await d.runAction(async () => {
+            const sourceClips = targetClips;
+            const sourceEndSeconds = Math.max(
+              ...sourceClips.map(
+                (sourceClip) =>
+                  sourceClip.timelineStartSeconds + sourceClip.durationSeconds,
+              ),
+            );
+            await d.duplicateClipGroup(sourceClips, sourceEndSeconds);
+            d.setStatus(
+              t("transport.status.clipDuplicated", { name: clipName }),
+            );
+          });
+        },
+      },
+      {
+        label: t("transport.menu.selectColor"),
+        swatch: clip.color ?? undefined,
+        onSelect: () =>
+          openColorMenu(
+            targetClips.length > 1
+              ? t("transport.menu.colorOfClips", {
+                  count: targetClips.length,
+                  defaultValue: "Color de {{count}} clips",
                 })
-              : t("transport.status.clipSplitAt", {
-                  time: formatClock(currentCursorSeconds),
-                }),
-          );
-        });
+              : t("transport.menu.colorOf", { name: clipName }),
+            clip.color,
+            (color) => d.handleSetClipColors(targetClips, color).then(() => undefined),
+          ),
       },
-    },
-    {
-      label: t("transport.menu.duplicateClip"),
-      shortcut: d.shortcutHint("edit.duplicate"),
-      onSelect: async () => {
-        await d.runAction(async () => {
-          const sourceClips = targetClips;
-          const sourceEndSeconds = Math.max(
-            ...sourceClips.map(
-              (sourceClip) =>
-                sourceClip.timelineStartSeconds + sourceClip.durationSeconds,
-            ),
-          );
-          await d.duplicateClipGroup(sourceClips, sourceEndSeconds);
-          d.setStatus(
-            t("transport.status.clipDuplicated", { name: clipName }),
-          );
-        });
-      },
-    },
-    {
-      label: t("transport.menu.selectColor"),
-      swatch: clip.color ?? undefined,
-      onSelect: () =>
-        openColorMenu(
-          targetClips.length > 1
-            ? t("transport.menu.colorOfClips", {
-                count: targetClips.length,
-                defaultValue: "Color de {{count}} clips",
-              })
-            : t("transport.menu.colorOf", { name: clipName }),
-          clip.color,
-          (color) => d.handleSetClipColors(targetClips, color).then(() => undefined),
-        ),
-    },
+    ]),
     {
       label: t("common.delete"),
       shortcut: d.shortcutHint("edit.delete"),

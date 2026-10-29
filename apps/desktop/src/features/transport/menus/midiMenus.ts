@@ -3,6 +3,7 @@ import { deleteTrack, updateTrack } from "../desktopApi";
 import type { MidiClipSummary, TrackSummary } from "@libretracks/shared/models";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { ContextMenuAction } from "../types";
+import { menuSection } from "./menuSections";
 import type { TimelineMenuDeps, ColorPickerPopoverState } from "./timelineMenus";
 
 /**
@@ -83,47 +84,51 @@ function midiTrackContextMenu(track: TrackSummary): ContextMenuAction[] {
   const d = getDeps();
   const { t } = d;
   return [
-    {
-      label: t("transport.midi.addClip"),
-      onSelect: () =>
-        createMidiClipAt(track.id, d.displayPositionSecondsRef.current),
-    },
-    {
-      label: t("transport.midi.routeModalTitle"),
-      onSelect: () => d.openMidiRouteEditor(track.id),
-    },
-    {
-      label: track.midiEnabled === false
-        ? t("transport.midi.enableTrack")
-        : t("transport.midi.disableTrack"),
-      onSelect: () => d.toggleMidiTrackEnabled(track.id),
-    },
-    {
-      label: t("common.rename"),
-      shortcut: d.shortcutHint("edit.rename"),
-      onSelect: async () => {
-        const nextName = (
-          await promptDialog(t("transport.prompt.trackRename"), track.name)
-        )?.trim();
-        if (!nextName) return;
-        await d.runAction(async () => {
-          const nextSnapshot = await updateTrack({
-            trackId: track.id,
-            name: nextName,
-          });
-          d.applyPlaybackSnapshot(nextSnapshot);
-          d.setStatus(t("transport.status.trackRenamed", { name: nextName }));
-        });
+    ...menuSection(t("transport.menu.groups.midi"), [
+      {
+        label: t("transport.midi.addClip"),
+        onSelect: () =>
+          createMidiClipAt(track.id, d.displayPositionSecondsRef.current),
       },
-    },
-    {
-      label: t("transport.menu.selectColor"),
-      swatch: track.color ?? undefined,
-      onSelect: () =>
-        openColorMenu(t("transport.menu.colorOf", { name: track.name }), track.color, (color) =>
-          d.handleSetTrackColor(track, color).then(() => undefined),
-        ),
-    },
+      {
+        label: t("transport.midi.routeModalTitle"),
+        onSelect: () => d.openMidiRouteEditor(track.id),
+      },
+      {
+        label: track.midiEnabled === false
+          ? t("transport.midi.enableTrack")
+          : t("transport.midi.disableTrack"),
+        onSelect: () => d.toggleMidiTrackEnabled(track.id),
+      },
+    ]),
+    ...menuSection(t("transport.menu.groups.track"), [
+      {
+        label: t("common.rename"),
+        shortcut: d.shortcutHint("edit.rename"),
+        onSelect: async () => {
+          const nextName = (
+            await promptDialog(t("transport.prompt.trackRename"), track.name)
+          )?.trim();
+          if (!nextName) return;
+          await d.runAction(async () => {
+            const nextSnapshot = await updateTrack({
+              trackId: track.id,
+              name: nextName,
+            });
+            d.applyPlaybackSnapshot(nextSnapshot);
+            d.setStatus(t("transport.status.trackRenamed", { name: nextName }));
+          });
+        },
+      },
+      {
+        label: t("transport.menu.selectColor"),
+        swatch: track.color ?? undefined,
+        onSelect: () =>
+          openColorMenu(t("transport.menu.colorOf", { name: track.name }), track.color, (color) =>
+            d.handleSetTrackColor(track, color).then(() => undefined),
+          ),
+      },
+    ]),
     {
       label: t("common.delete"),
       onSelect: async () => {
