@@ -89,6 +89,7 @@ import { createMarkerKindMenus } from "./markerKindMenus";
 import { createTrackFolderMenus } from "./trackFolderMenus";
 import { colorPickerActions } from "./colorPickerMenu";
 import { clipContextMenuActions } from "./clipMenu";
+import { menuSection } from "./menuSections";
 import type { ExportSongTarget } from "../panels/ExportSongModal";
 import { openRenderSong } from "../render/renderStore";
 import { isGuestMirrorMode } from "../desktopApi";
@@ -350,25 +351,29 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         };
 
     return [
-      createMarkerAction,
-      {
-        label: t("transport.menu.changeTimelineBpm"),
-        disabled: !song,
-        onSelect: () => changeTimelineBpmAt(positionSeconds),
-      },
-      {
-        label: t("transport.menu.createTimeSignatureMarker"),
-        disabled: !song,
-        onSelect: () => createTimeSignatureMarkerAt(positionSeconds),
-      },
-      {
-        label: t("transport.automation.createCue"),
-        // Only a loaded song is required: a cue whose job is a pad change, a
-        // mute or a jump to an exact position needs neither regions nor
-        // markers (the editor falls back to a frame target).
-        disabled: !song,
-        onSelect: () => createAutomationCueAt(positionSeconds),
-      },
+      ...menuSection(t("transport.menu.groups.create"), [
+        createMarkerAction,
+        {
+          label: t("transport.automation.createCue"),
+          // Only a loaded song is required: a cue whose job is a pad change, a
+          // mute or a jump to an exact position needs neither regions nor
+          // markers (the editor falls back to a frame target).
+          disabled: !song,
+          onSelect: () => createAutomationCueAt(positionSeconds),
+        },
+      ]),
+      ...menuSection(t("transport.menu.groups.tempoMeter"), [
+        {
+          label: t("transport.menu.changeTimelineBpm"),
+          disabled: !song,
+          onSelect: () => changeTimelineBpmAt(positionSeconds),
+        },
+        {
+          label: t("transport.menu.createTimeSignatureMarker"),
+          disabled: !song,
+          onSelect: () => createTimeSignatureMarkerAt(positionSeconds),
+        },
+      ]),
       {
         label: t("transport.menu.clearTimelineSelection"),
         disabled: !timelineRange,
@@ -459,146 +464,158 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     // Splitting needs the playhead strictly inside this song.
     const canSplitSong =
       cursorSeconds > region.startSeconds && cursorSeconds < region.endSeconds;
+    // Grouped by what the user is after; the delete stays last, alone.
     return [
-      {
-        label: t("transport.menu.renameSong"),
-        shortcut: d.shortcutHint("edit.rename"),
-        onSelect: async () => {
-          const nextName = (
-            await promptDialog(t("transport.prompt.songRename"), region.name)
-          )?.trim();
-          if (!nextName) {
-            return;
-          }
+      ...menuSection(t("transport.menu.groups.song"), [
+        {
+          label: t("transport.menu.renameSong"),
+          shortcut: d.shortcutHint("edit.rename"),
+          onSelect: async () => {
+            const nextName = (
+              await promptDialog(t("transport.prompt.songRename"), region.name)
+            )?.trim();
+            if (!nextName) {
+              return;
+            }
 
-          await d.runAction(async () => {
-            const nextSnapshot = await updateSongRegion(
+            await d.runAction(async () => {
+              const nextSnapshot = await updateSongRegion(
+                region.id,
+                nextName,
+                region.startSeconds,
+                region.endSeconds,
+              );
+              d.applyPlaybackSnapshot(nextSnapshot);
+              await d.syncSongLibraryFolderAfterRename(region.name, nextName);
+              d.setStatus(t("transport.status.songRenamed", { name: nextName }));
+            });
+          },
+        },
+        {
+          label: t("songCover.choose"),
+          disabled: isGuestMirrorMode(),
+          onSelect: () => pickCoverFile((file) => {
+            void d.runAction(async () => {
+              let image: string;
+              try { image = await normalizeCoverImage(file); }
+              catch { await alertDialog(t("songCover.error")); return; }
+              d.applyPlaybackSnapshot(await setSongRegionCover(region.id, image));
+              await d.refreshSongView({ includeWaveforms: false, sync: true });
+            });
+          }),
+        },
+        ...(region.coverImage ? [{
+          label: t("songCover.remove"),
+          disabled: isGuestMirrorMode(),
+          onSelect: () => d.runAction(async () => {
+            d.applyPlaybackSnapshot(await setSongRegionCover(region.id, null));
+            await d.refreshSongView({ includeWaveforms: false, sync: true });
+          }),
+        }] : []),
+      ]),
+      ...menuSection(t("transport.menu.groups.keyTempo"), [
+        {
+          label: `${t("transport.menu.songKey", { defaultValue: "Nota de la canción" })} ▸`,
+          onSelect: () => openSongRegionKeyMenu(region),
+        },
+        keyChangeAtCursorAction(region, cursorSeconds, d),
+        {
+          label: t("transport.menu.changeRegionWarpSourceBpm"),
+          onSelect: async () => {
+            const currentSourceBpm =
+              region.warpSourceBpm ??
+              getEffectiveBpmAt(d.song, region.startSeconds);
+            const input = (
+              await promptDialog(
+                t("transport.prompt.regionWarpSourceBpm"),
+                currentSourceBpm.toFixed(2),
+              )
+            )?.trim();
+            if (!input) {
+              return;
+            }
+            const nextSourceBpm = Number(input.replace(",", "."));
+            if (!Number.isFinite(nextSourceBpm) || nextSourceBpm <= 0) {
+              return;
+            }
+            await d.runAction(async () => {
+              const nextSnapshot = await updateSongRegionWarp(
+                region.id,
+                region.warpEnabled,
+                nextSourceBpm,
+              );
+              await d.refreshSongView({ includeWaveforms: false, sync: true });
+              d.applyPlaybackSnapshot(nextSnapshot);
+              d.setStatus(
+                t("transport.status.regionWarpSourceBpmUpdated", {
+                  bpm: nextSourceBpm.toFixed(2),
+                  name: region.name,
+                }),
+              );
+            });
+          },
+        },
+      ]),
+      ...menuSection(t("transport.menu.groups.structure"), [
+        {
+          label: t("transport.structure.menuItem"),
+          onSelect: () => openStructureEditor(region.id),
+        },
+        {
+          label: t("transport.menu.splitSongAtCursor", {
+            defaultValue: "Partir canción en el cursor",
+          }),
+          shortcut: d.shortcutHint("edit.splitSong"),
+          disabled: !canSplitSong,
+          onSelect: async () => {
+            await d.splitSongRegionAtCursor(
               region.id,
-              nextName,
               region.startSeconds,
               region.endSeconds,
             );
-            d.applyPlaybackSnapshot(nextSnapshot);
-            await d.syncSongLibraryFolderAfterRename(region.name, nextName);
-            d.setStatus(t("transport.status.songRenamed", { name: nextName }));
-          });
+          },
         },
-      },
-      {
-        label: `${t("transport.menu.songKey", { defaultValue: "Nota de la canción" })} ▸`,
-        onSelect: () => openSongRegionKeyMenu(region),
-      },
-      keyChangeAtCursorAction(region, cursorSeconds, d),
-      {
-        label: t("songCover.choose"),
-        disabled: isGuestMirrorMode(),
-        onSelect: () => pickCoverFile((file) => {
-          void d.runAction(async () => {
-            let image: string;
-            try { image = await normalizeCoverImage(file); }
-            catch { await alertDialog(t("songCover.error")); return; }
-            d.applyPlaybackSnapshot(await setSongRegionCover(region.id, image));
-            await d.refreshSongView({ includeWaveforms: false, sync: true });
-          });
+      ]),
+      ...menuSection(
+        t("transport.menu.groups.playback"),
+        songSettingsSubmenus(region, {
+          ...d,
+          globalCountStyle: d.appSettings.voiceGuideCountStyle,
+          nextPosition: bumpContextMenuPosition,
         }),
-      },
-      ...(region.coverImage ? [{
-        label: t("songCover.remove"),
-        disabled: isGuestMirrorMode(),
-        onSelect: () => d.runAction(async () => {
-          d.applyPlaybackSnapshot(await setSongRegionCover(region.id, null));
-          await d.refreshSongView({ includeWaveforms: false, sync: true });
-        }),
-      }] : []),
-      {
-        label: t("transport.structure.menuItem"),
-        onSelect: () => openStructureEditor(region.id),
-      },
-      {
-        label: t("transport.menu.splitSongAtCursor", {
-          defaultValue: "Partir canción en el cursor",
-        }),
-        shortcut: d.shortcutHint("edit.splitSong"),
-        disabled: !canSplitSong,
-        onSelect: async () => {
-          await d.splitSongRegionAtCursor(
-            region.id,
-            region.startSeconds,
-            region.endSeconds,
-          );
+      ),
+      ...menuSection(t("transport.menu.groups.export"), [
+        {
+          label: t("transport.menu.exportSong", {
+            defaultValue: "Exportar Cancion",
+          }),
+          disabled: isGuestMirrorMode(),
+          onSelect: () => {
+            d.setExportSongTarget({
+              regionId: region.id,
+              regionName: region.name,
+            });
+          },
         },
-      },
-      {
-        label: t("transport.menu.changeRegionWarpSourceBpm"),
-        onSelect: async () => {
-          const currentSourceBpm =
-            region.warpSourceBpm ??
-            getEffectiveBpmAt(d.song, region.startSeconds);
-          const input = (
-            await promptDialog(
-              t("transport.prompt.regionWarpSourceBpm"),
-              currentSourceBpm.toFixed(2),
-            )
-          )?.trim();
-          if (!input) {
-            return;
-          }
-          const nextSourceBpm = Number(input.replace(",", "."));
-          if (!Number.isFinite(nextSourceBpm) || nextSourceBpm <= 0) {
-            return;
-          }
-          await d.runAction(async () => {
-            const nextSnapshot = await updateSongRegionWarp(
-              region.id,
-              region.warpEnabled,
-              nextSourceBpm,
-            );
-            await d.refreshSongView({ includeWaveforms: false, sync: true });
-            d.applyPlaybackSnapshot(nextSnapshot);
-            d.setStatus(
-              t("transport.status.regionWarpSourceBpmUpdated", {
-                bpm: nextSourceBpm.toFixed(2),
-                name: region.name,
-              }),
-            );
-          });
+        {
+          label: t("transport.menu.renderSong"),
+          disabled: isGuestMirrorMode(),
+          onSelect: () => {
+            openRenderSong({ regionId: region.id, regionName: region.name });
+          },
         },
-      },
-      ...songSettingsSubmenus(region, {
-        ...d,
-        globalCountStyle: d.appSettings.voiceGuideCountStyle,
-        nextPosition: bumpContextMenuPosition,
-      }),
-      {
-        label: t("transport.menu.exportSong", {
-          defaultValue: "Exportar Cancion",
-        }),
-        disabled: isGuestMirrorMode(),
-        onSelect: () => {
-          d.setExportSongTarget({
-            regionId: region.id,
-            regionName: region.name,
-          });
-        },
-      },
-      {
-        label: t("transport.menu.renderSong"),
-        disabled: isGuestMirrorMode(),
-        onSelect: () => {
-          openRenderSong({ regionId: region.id, regionName: region.name });
-        },
-      },
-      ...(FEATURE_FLAGS.songAnalysis
-        ? [
-            {
-              label: t("transport.menu.analyzeSong"),
-              disabled: isGuestMirrorMode(),
-              onSelect: () => {
-                openSongAnalysis({ regionId: region.id, regionName: region.name });
+        ...(FEATURE_FLAGS.songAnalysis
+          ? [
+              {
+                label: t("transport.menu.analyzeSong"),
+                disabled: isGuestMirrorMode(),
+                onSelect: () => {
+                  openSongAnalysis({ regionId: region.id, regionName: region.name });
+                },
               },
-            },
-          ]
-        : []),
+            ]
+          : []),
+      ]),
       {
         label: t("transport.menu.deleteSong"),
         shortcut: d.shortcutHint("edit.delete"),
@@ -789,82 +806,86 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     const canEditMarker = Boolean(section);
 
     return [
-      {
-        label: t("transport.menu.jumpToMarker"),
-        disabled: !canEditMarker,
-        onSelect: async () => {
-          await d.runAction(async () => {
-            const nextSnapshot = await scheduleMarkerJump(section.id);
-            d.applyPlaybackSnapshot(nextSnapshot);
-            d.setStatus(
-              t("transport.status.markerCursorSent", { name: section.name }),
-            );
-          });
+      ...menuSection(t("transport.menu.groups.navigate"), [
+        {
+          label: t("transport.menu.jumpToMarker"),
+          disabled: !canEditMarker,
+          onSelect: async () => {
+            await d.runAction(async () => {
+              const nextSnapshot = await scheduleMarkerJump(section.id);
+              d.applyPlaybackSnapshot(nextSnapshot);
+              d.setStatus(
+                t("transport.status.markerCursorSent", { name: section.name }),
+              );
+            });
+          },
         },
-      },
-      {
-        label: t("common.rename"),
-        shortcut: d.shortcutHint("edit.rename"),
-        disabled: !canEditMarker,
-        onSelect: async () => {
-          const nextName = (
-            await promptDialog(t("transport.prompt.markerRename"), section.name)
-          )?.trim();
-          if (!nextName) {
-            return;
-          }
-          await d.runAction(async () => {
-            const nextSnapshot = await updateSectionMarker(
-              section.id,
-              nextName,
-              section.startSeconds,
-            );
-            d.applyPlaybackSnapshot(nextSnapshot);
-            d.setStatus(
-              t("transport.status.markerRenamed", { name: nextName }),
-            );
-          });
+      ]),
+      ...menuSection(t("transport.menu.groups.edit"), [
+        {
+          label: t("common.rename"),
+          shortcut: d.shortcutHint("edit.rename"),
+          disabled: !canEditMarker,
+          onSelect: async () => {
+            const nextName = (
+              await promptDialog(t("transport.prompt.markerRename"), section.name)
+            )?.trim();
+            if (!nextName) {
+              return;
+            }
+            await d.runAction(async () => {
+              const nextSnapshot = await updateSectionMarker(
+                section.id,
+                nextName,
+                section.startSeconds,
+              );
+              d.applyPlaybackSnapshot(nextSnapshot);
+              d.setStatus(
+                t("transport.status.markerRenamed", { name: nextName }),
+              );
+            });
+          },
         },
-      },
-      {
-        // Arrastrar la bandera es el gesto rapido; esto es el exacto. En movil
-        // no hay alternativa: un pixel a poco zoom son varios compases.
-        label: t("markerPosition.action", { defaultValue: "Posición…" }),
-        disabled: !canEditMarker,
-        onSelect: () =>
-          useTimelineUIStore.getState().setMarkerPositionEditorId(section.id),
-      },
-      {
-        label: t("transport.menu.markerKind"),
-        swatch: markerColor(section),
-        disabled: !canEditMarker,
-        onSelect: () => openMarkerKindMenu(section),
-      },
-      // Colour is only user-editable for Custom markers — typed sections/cues
-      // take their colour from the kind palette.
-      ...(markerKindCategory(section.kind) === "section" &&
-      (section.kind ?? "custom") === "custom"
-        ? [
-            {
-              label: t("transport.menu.markerColor"),
-              swatch: markerColor(section),
-              disabled: !canEditMarker,
-              onSelect: () =>
-                openColorMenu(
-                  t("transport.menu.markerColor"),
-                  section.color,
-                  (color) =>
-                    d.runAction(async () => {
-                      const nextSnapshot = await setSectionMarkerColor(
-                        section.id,
-                        color,
-                      );
-                      d.applyPlaybackSnapshot(nextSnapshot);
-                    }),
-                ),
-            },
-          ]
-        : []),
+        {
+          // Arrastrar la bandera es el gesto rapido; esto es el exacto. En movil
+          // no hay alternativa: un pixel a poco zoom son varios compases.
+          label: t("markerPosition.action", { defaultValue: "Posición…" }),
+          disabled: !canEditMarker,
+          onSelect: () =>
+            useTimelineUIStore.getState().setMarkerPositionEditorId(section.id),
+        },
+        {
+          label: t("transport.menu.markerKind"),
+          swatch: markerColor(section),
+          disabled: !canEditMarker,
+          onSelect: () => openMarkerKindMenu(section),
+        },
+        // Colour is only user-editable for Custom markers — typed sections/cues
+        // take their colour from the kind palette.
+        ...(markerKindCategory(section.kind) === "section" &&
+        (section.kind ?? "custom") === "custom"
+          ? [
+              {
+                label: t("transport.menu.markerColor"),
+                swatch: markerColor(section),
+                disabled: !canEditMarker,
+                onSelect: () =>
+                  openColorMenu(
+                    t("transport.menu.markerColor"),
+                    section.color,
+                    (color) =>
+                      d.runAction(async () => {
+                        const nextSnapshot = await setSectionMarkerColor(
+                          section.id,
+                          color,
+                        );
+                        d.applyPlaybackSnapshot(nextSnapshot);
+                      }),
+                  ),
+              },
+            ]
+          : []),
+      ]),
       {
         label: t("common.delete"),
         disabled: !canEditMarker,
@@ -937,7 +958,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     const createAnchor = isFolder ? null : track;
     const createParentId = isFolder ? track.id : track.parentTrackId ?? null;
 
-    const actions: ContextMenuAction[] = [
+    const insertActions: ContextMenuAction[] = [
       {
         label: t("transport.menu.insertTrack"),
         onSelect: () =>
@@ -949,69 +970,135 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
           d.handleCreateTrack("folder", createAnchor, createParentId),
       },
       {
-        // Alcanzable tambien sin puntero: en movil la franja de 4 px del
-        // borde de la fila -y con ella su doble clic- no existe, porque se
-        // comia los scrolls.
-        label: t("trackHeader.resetRowHeight", {
-          defaultValue: "Restablecer alto de la pista",
-        }),
-        onSelect: () => d.resetTrackRowHeight(track.id),
+        label: t("transport.midi.addTrack"),
+        onSelect: () => d.handleCreateTrack("midi", createAnchor, createParentId),
       },
-      {
-        label: t("common.rename"),
-        shortcut: d.shortcutHint("edit.rename"),
-        onSelect: async () => {
-          const nextName = (
-            await promptDialog(t("transport.prompt.trackRename"), track.name)
-          )?.trim();
-          if (!nextName) {
-            return;
-          }
-          await d.runAction(async () => {
-            const nextSnapshot = await updateTrack({
-              trackId: track.id,
-              name: nextName,
-            });
-            d.applyPlaybackSnapshot(nextSnapshot);
-            d.setStatus(t("transport.status.trackRenamed", { name: nextName }));
-          });
-        },
-      },
-      {
-        label: t("transport.menu.selectColor"),
-        swatch: track.color ?? undefined,
-        onSelect: () =>
-          openColorMenu(t("transport.menu.colorOf", { name: track.name }), track.color, (color) =>
-            d.handleSetTrackColor(track, color).then(() => undefined),
-          ),
-      },
-      // Las palabras con las que una plantilla manda stems aquí al soltarlos.
-      ...(FEATURE_FLAGS.songTemplates ? [matchAliasesAction(track, d)] : []),
-      // Sumar a mono: solo pistas de audio (una carpeta no tiene canales
-      // propios que sumar). No toca el fichero, asi que es reversible.
-      ...(isFolder
+      // Offer the automation lane here too, anchored after this track, so the
+      // user can add it from a track's own menu (not only the empty area).
+      ...(currentSong.automationTrack
         ? []
         : [
             {
-              label: track.monoDownmix
-                ? t("transport.menu.trackMonoOff", {
-                    defaultValue: "Volver a estereo",
-                  })
-                : t("transport.menu.trackMonoOn", {
-                    defaultValue: "Sumar a mono",
-                  }),
-              onSelect: async () => {
-                await d.runAction(async () => {
-                  const nextSnapshot = await updateTrackMonoDownmix({
-                    trackId: track.id,
-                    monoDownmix: !track.monoDownmix,
-                  });
-                  d.applyPlaybackSnapshot(nextSnapshot);
-                  await d.refreshSongView({ includeWaveforms: false });
-                });
-              },
-            } satisfies ContextMenuAction,
+              label: t("transport.automation.addTrack"),
+              onSelect: () => handleAddAutomationTrack(track.id),
+            },
           ]),
+    ];
+
+    // The track itself, then what to add next to it, then folders; the delete
+    // stays last, alone.
+    return [
+      ...menuSection(t("transport.menu.groups.track"), [
+        {
+          label: t("common.rename"),
+          shortcut: d.shortcutHint("edit.rename"),
+          onSelect: async () => {
+            const nextName = (
+              await promptDialog(t("transport.prompt.trackRename"), track.name)
+            )?.trim();
+            if (!nextName) {
+              return;
+            }
+            await d.runAction(async () => {
+              const nextSnapshot = await updateTrack({
+                trackId: track.id,
+                name: nextName,
+              });
+              d.applyPlaybackSnapshot(nextSnapshot);
+              d.setStatus(t("transport.status.trackRenamed", { name: nextName }));
+            });
+          },
+        },
+        {
+          label: t("transport.menu.selectColor"),
+          swatch: track.color ?? undefined,
+          onSelect: () =>
+            openColorMenu(t("transport.menu.colorOf", { name: track.name }), track.color, (color) =>
+              d.handleSetTrackColor(track, color).then(() => undefined),
+            ),
+        },
+        // Las palabras con las que una plantilla manda stems aquí al soltarlos.
+        ...(FEATURE_FLAGS.songTemplates ? [matchAliasesAction(track, d)] : []),
+        // Sumar a mono: solo pistas de audio (una carpeta no tiene canales
+        // propios que sumar). No toca el fichero, asi que es reversible.
+        ...(isFolder
+          ? []
+          : [
+              {
+                label: track.monoDownmix
+                  ? t("transport.menu.trackMonoOff", {
+                      defaultValue: "Volver a estereo",
+                    })
+                  : t("transport.menu.trackMonoOn", {
+                      defaultValue: "Sumar a mono",
+                    }),
+                onSelect: async () => {
+                  await d.runAction(async () => {
+                    const nextSnapshot = await updateTrackMonoDownmix({
+                      trackId: track.id,
+                      monoDownmix: !track.monoDownmix,
+                    });
+                    d.applyPlaybackSnapshot(nextSnapshot);
+                    await d.refreshSongView({ includeWaveforms: false });
+                  });
+                },
+              } satisfies ContextMenuAction,
+            ]),
+        {
+          // Alcanzable tambien sin puntero: en movil la franja de 4 px del
+          // borde de la fila -y con ella su doble clic- no existe, porque se
+          // comia los scrolls.
+          label: t("trackHeader.resetRowHeight", {
+            defaultValue: "Restablecer alto de la pista",
+          }),
+          onSelect: () => d.resetTrackRowHeight(track.id),
+        },
+      ]),
+      ...menuSection(t("transport.menu.groups.insert"), insertActions),
+      ...menuSection(t("transport.menu.groups.folder"), [
+        {
+          label: t("transport.menu.indentIntoPreviousFolder"),
+          disabled: !previousFolder,
+          onSelect: async () => {
+            if (!previousFolder) {
+              return;
+            }
+            await d.runAction(async () => {
+              const nextSnapshot = await moveTrack({
+                trackId: track.id,
+                parentTrackId: previousFolder.id,
+              });
+              d.applyPlaybackSnapshot(nextSnapshot);
+              await d.refreshSongView();
+              d.setStatus(
+                t("transport.status.trackMovedIntoFolder", {
+                  name: previousFolder.name,
+                }),
+              );
+            });
+          },
+        },
+        {
+          label: t("transport.menu.removeFromFolder"),
+          disabled: !track.parentTrackId,
+          onSelect: async () => {
+            await d.runAction(async () => {
+              const nextSnapshot = await moveTrack({
+                trackId: track.id,
+                insertAfterTrackId: track.parentTrackId ?? null,
+                parentTrackId: parentOfParent,
+              });
+              d.applyPlaybackSnapshot(nextSnapshot);
+              await d.refreshSongView();
+              d.setStatus(
+                t("transport.status.trackRemovedFromFolder", {
+                  name: track.name,
+                }),
+              );
+            });
+          },
+        },
+      ]),
       {
         label: t("common.delete"),
         onSelect: async () => {
@@ -1044,65 +1131,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
           });
         },
       },
-      {
-        label: t("transport.menu.indentIntoPreviousFolder"),
-        disabled: !previousFolder,
-        onSelect: async () => {
-          if (!previousFolder) {
-            return;
-          }
-          await d.runAction(async () => {
-            const nextSnapshot = await moveTrack({
-              trackId: track.id,
-              parentTrackId: previousFolder.id,
-            });
-            d.applyPlaybackSnapshot(nextSnapshot);
-            await d.refreshSongView();
-            d.setStatus(
-              t("transport.status.trackMovedIntoFolder", {
-                name: previousFolder.name,
-              }),
-            );
-          });
-        },
-      },
-      {
-        label: t("transport.menu.removeFromFolder"),
-        disabled: !track.parentTrackId,
-        onSelect: async () => {
-          await d.runAction(async () => {
-            const nextSnapshot = await moveTrack({
-              trackId: track.id,
-              insertAfterTrackId: track.parentTrackId ?? null,
-              parentTrackId: parentOfParent,
-            });
-            d.applyPlaybackSnapshot(nextSnapshot);
-            await d.refreshSongView();
-            d.setStatus(
-              t("transport.status.trackRemovedFromFolder", {
-                name: track.name,
-              }),
-            );
-          });
-        },
-      },
     ];
-
-    // Offer the automation lane here too, anchored after this track, so the
-    // user can add it from a track's own menu (not only the empty area).
-    if (!currentSong.automationTrack) {
-      actions.push({
-        label: t("transport.automation.addTrack"),
-        onSelect: () => handleAddAutomationTrack(track.id),
-      });
-    }
-
-    actions.push({
-      label: t("transport.midi.addTrack"),
-      onSelect: () => d.handleCreateTrack("midi", createAnchor, createParentId),
-    });
-
-    return actions;
   }
 
   function multiTrackContextMenu(tracks: TrackSummary[]): ContextMenuAction[] {
@@ -1110,6 +1139,22 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     const { t } = d;
     const currentColor = resolveSharedTimelineColor(tracks);
     return [
+      ...menuSection(t("transport.menu.groups.track"), [
+        {
+          label: t("transport.menu.selectColor"),
+          swatch: currentColor ?? undefined,
+          onSelect: () =>
+            openColorMenu(
+              t("transport.menu.colorOfTracks", { count: tracks.length }),
+              currentColor,
+              (color) => d.handleSetTrackColors(tracks, color).then(() => undefined),
+            ),
+        },
+      ]),
+      // Meter varias pistas en una carpeta de una vez. Arrastrando habia que
+      // repetir el gesto una por una, y acertar el 40% central de la fila de
+      // la carpeta con un dedo es una moneda al aire.
+      ...menuSection(t("transport.menu.groups.folder"), folderActions(tracks)),
       {
         // Una sola llamada al backend: un sync del motor, un snapshot y una
         // entrada de historial, en vez de N idas y vueltas. Mismo camino que
@@ -1128,20 +1173,6 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
             );
           });
         },
-      },
-      // Meter varias pistas en una carpeta de una vez. Arrastrando habia que
-      // repetir el gesto una por una, y acertar el 40% central de la fila de
-      // la carpeta con un dedo es una moneda al aire.
-      ...folderActions(tracks),
-      {
-        label: t("transport.menu.selectColor"),
-        swatch: currentColor ?? undefined,
-        onSelect: () =>
-          openColorMenu(
-            t("transport.menu.colorOfTracks", { count: tracks.length }),
-            currentColor,
-            (color) => d.handleSetTrackColors(tracks, color).then(() => undefined),
-          ),
       },
     ];
   }

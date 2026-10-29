@@ -514,6 +514,15 @@ html.lt-ios body {
   text-transform: uppercase;
 }
 
+/* Titulo de categoria dentro de un desplegable (ARCHIVO). */
+.lt-top-menu-section {
+  color: #859490;
+  font: 600 9px/1 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 0.35rem 0.65rem 0.15rem;
+}
+
 .lt-top-menu-separator {
   height: 1px;
   margin: 0.3rem 0;
@@ -7110,6 +7119,27 @@ html.lt-ios body {
 
 .lt-context-menu-back .material-symbols-outlined {
   font-size: 16px;
+}
+
+/* Categorias del menu (ContextMenuAction.section). */
+.lt-context-menu-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.lt-context-menu-divider {
+  margin: 0.15rem 0.2rem;
+  border: 0;
+  border-top: 1px solid rgb(133 148 144 / 0.18);
+}
+
+.lt-context-menu-section {
+  color: #859490;
+  font: 600 9px/1 "Space Grotesk", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 0.2rem 0.35rem 0.05rem;
 }
 
 .lt-context-menu-swatch {

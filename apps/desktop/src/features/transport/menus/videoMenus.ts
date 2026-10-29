@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { promptDialog } from "../../../shared/dialog/dialogService";
 import { deleteTrack, isGuestMirrorMode, isMobileApp, updateTrack } from "../desktopApi";
 import type { TrackSummary, VideoClipSummary, VideoFit } from "@libretracks/shared/models";
+import { menuSection } from "./menuSections";
 import type { ContextMenuAction } from "../types";
 import type { VideoClipHandlers } from "../video/videoClipHandlers";
 import type { TimelineMenuDeps } from "./timelineMenus";
@@ -29,51 +30,53 @@ export function createVideoMenus(
     const video = handlers();
     if (!video) return [];
     const fitOption = (fit: VideoFit | null, labelKey: string): ContextMenuAction => ({
-      label: `${t("transport.video.menu.fit")}: ${t(labelKey)}${
-        (clip.fit ?? null) === fit ? "  ✓" : ""
-      }`,
+      label: `${t(labelKey)}${(clip.fit ?? null) === fit ? "  ✓" : ""}`,
       onSelect: () => video.setFit(clip.id, fit),
     });
     return [
-      {
-        label: t("transport.video.menu.split"),
-        shortcut: d.shortcutHint("edit.splitClip"),
-        onSelect: async () => {
-          await video.splitSelectedAt(d.displayPositionSecondsRef.current);
+      ...menuSection(t("transport.menu.groups.edit"), [
+        {
+          label: t("transport.video.menu.split"),
+          shortcut: d.shortcutHint("edit.splitClip"),
+          onSelect: async () => {
+            await video.splitSelectedAt(d.displayPositionSecondsRef.current);
+          },
         },
-      },
-      {
-        label: t("transport.video.menu.duplicate"),
-        shortcut: d.shortcutHint("edit.duplicate"),
-        onSelect: () => video.duplicateClips([clip.id]),
-      },
-      fitOption(null, "transport.video.menu.fitInherit"),
-      fitOption("contain", "transport.video.menu.fitContain"),
-      fitOption("cover", "transport.video.menu.fitCover"),
-      fitOption("stretch", "transport.video.menu.fitStretch"),
-      {
-        label: t("transport.video.menu.resetFades"),
-        disabled: !clip.fadeInSeconds && !clip.fadeOutSeconds,
-        onSelect: () => video.setFades(clip.id, 0, 0),
-      },
-      {
-        label: t("transport.video.menu.color"),
-        onSelect: () =>
-          openColorMenu(t("transport.video.menu.color"), clip.color, async (color) => {
-            video.setColor(clip.id, color);
-          }),
-      },
-      // Decoding a video's sound needs libmpv: not on a phone (paso 09 §2).
-      ...(video.clipHasAudio(clip)
-        ? [
-            {
-              label: t("transport.video.menu.extractAudio"),
-              disabled: isGuestMirrorMode(),
-              onSelect: () => video.extractAudio(clip.id),
-            },
-          ]
-        : []),
-      ...(d.videoExtraClipActions?.(clip) ?? []),
+        {
+          label: t("transport.video.menu.duplicate"),
+          shortcut: d.shortcutHint("edit.duplicate"),
+          onSelect: () => video.duplicateClips([clip.id]),
+        },
+        {
+          label: t("transport.video.menu.resetFades"),
+          disabled: !clip.fadeInSeconds && !clip.fadeOutSeconds,
+          onSelect: () => video.setFades(clip.id, 0, 0),
+        },
+        {
+          label: t("transport.video.menu.color"),
+          onSelect: () =>
+            openColorMenu(t("transport.video.menu.color"), clip.color, async (color) => {
+              video.setColor(clip.id, color);
+            }),
+        },
+        // Decoding a video's sound needs libmpv: not on a phone (paso 09 §2).
+        ...(video.clipHasAudio(clip)
+          ? [
+              {
+                label: t("transport.video.menu.extractAudio"),
+                disabled: isGuestMirrorMode(),
+                onSelect: () => video.extractAudio(clip.id),
+              },
+            ]
+          : []),
+        ...(d.videoExtraClipActions?.(clip) ?? []),
+      ]),
+      ...menuSection(t("transport.video.menu.fit"), [
+        fitOption(null, "transport.video.menu.fitInherit"),
+        fitOption("contain", "transport.video.menu.fitContain"),
+        fitOption("cover", "transport.video.menu.fitCover"),
+        fitOption("stretch", "transport.video.menu.fitStretch"),
+      ]),
       {
         label: t("transport.video.menu.delete"),
         shortcut: d.shortcutHint("edit.delete"),

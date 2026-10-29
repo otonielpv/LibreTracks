@@ -1,8 +1,9 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { isMobileApp } from "../desktopApi";
 import { useViewportClampedMenu } from "../hooks/useViewportClampedMenu";
+import { startsMenuGroup } from "../menus/menuSections";
 import { useDismissOnBack } from "../mobile/backNavigation";
 import type { ContextMenuState } from "../types";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
@@ -149,9 +150,18 @@ export function TimelineContextMenus({
       ) : (
         <strong>{contextMenu.title}</strong>
       )}
-      {contextMenu.actions.map((action) => (
+      {contextMenu.actions.map((action, index) => (
+        <Fragment key={action.label}>
+        {startsMenuGroup(contextMenu.actions, index) ? (
+          // Las categorias: un divisor entre grupos y su titulo, si lo tiene.
+          <div className="lt-context-menu-group" role="presentation">
+            {index > 0 ? <hr className="lt-context-menu-divider" /> : null}
+            {action.section ? (
+              <span className="lt-context-menu-section">{action.section}</span>
+            ) : null}
+          </div>
+        ) : null}
         <button
-          key={action.label}
           type="button"
           disabled={action.disabled || !canEdit}
           onClick={() => {
@@ -172,6 +182,7 @@ export function TimelineContextMenus({
             <kbd className="lt-context-menu-shortcut">{action.shortcut}</kbd>
           ) : null}
         </button>
+        </Fragment>
       ))}
     </div>
   );
