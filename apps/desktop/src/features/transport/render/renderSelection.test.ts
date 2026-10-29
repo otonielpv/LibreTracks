@@ -6,6 +6,8 @@ import type { SongView } from "@libretracks/shared/models";
 import {
   DEFAULT_RENDER_PREFERENCES,
   defaultRenderFileName,
+  groupRenderTracks,
+  isRenderCueTrack,
   loadRenderPreferences,
   renderableTracks,
   saveRenderPreferences,
@@ -98,6 +100,28 @@ describe("defaultRenderFileName", () => {
     );
     expect(defaultRenderFileName(t, "Song A", tracks, new Set(), "mix")).toBe("Song A (mix)");
     expect(defaultRenderFileName(t, "Song A", tracks, all, "stems")).toBe("Song A - stems");
+  });
+});
+
+describe("session track groups", () => {
+  it("keeps shared tracks once and includes tracks outside songs", () => {
+    const value = song();
+    value.clips.push({ id: "outside", trackId: "g1", timelineStartSeconds: 300, durationSeconds: 20 } as never);
+    value.tracks.push({ id: "loose", name: "Loose", kind: "audio", depth: 0 } as never);
+    value.clips.push({ id: "loose-clip", trackId: "loose", timelineStartSeconds: 300, durationSeconds: 20 } as never);
+    expect(groupRenderTracks(value, renderableTracks(value, null)).map((group) => [group.key, group.tracks.map((track) => track.id)])).toEqual([
+      ["shared", ["d"]], ["region:r1", ["g1", "g2"]], ["region:r2", ["other"]], ["outside", ["loose"]],
+    ]);
+  });
+
+  it("recognizes click and guide tracks and their folders without matching instruments", () => {
+    const track = renderableTracks(song(), "r1")[0];
+    expect(isRenderCueTrack({ ...track, name: "Click 1" })).toBe(true);
+    expect(isRenderCueTrack({ ...track, name: "Click1" })).toBe(true);
+    expect(isRenderCueTrack({ ...track, name: "Guía" })).toBe(true);
+    expect(isRenderCueTrack({ ...track, name: "Guia2" })).toBe(true);
+    expect(isRenderCueTrack({ ...track, folderNames: ["Guide"] })).toBe(true);
+    expect(isRenderCueTrack({ ...track, name: "Clicky Synth" })).toBe(false);
   });
 });
 

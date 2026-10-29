@@ -2121,6 +2121,7 @@ html.lt-ios body {
 
 .lt-render-track-tools {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }
@@ -2144,6 +2145,40 @@ html.lt-ios body {
 .lt-render-track-tools button:hover {
   border-color: rgb(87 241 219 / 0.28);
   color: #57f1db;
+}
+
+.lt-render-track-tools button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.lt-render-pan {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.6rem 0.2rem;
+  color: #e5e2e1;
+}
+
+.lt-render-pan-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font: 700 0.82rem/1.3 "Space Grotesk", sans-serif;
+}
+
+.lt-render-pan-value {
+  color: #74b8ff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lt-render-pan-guides {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 0.35rem;
+  color: rgb(186 202 197 / 0.6);
+  font: 700 0.65rem/1 "Space Grotesk", sans-serif;
 }
 
 .lt-render-hint {
