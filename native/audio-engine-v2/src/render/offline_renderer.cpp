@@ -53,6 +53,14 @@ constexpr double kMaxRenderSeconds = 3.0 * 60.0 * 60.0;
 
 const char* const kCancelled = "cancelled";
 
+std::pair<float, float> pan_render_bus(float left, float right, float pan) {
+    pan = clamp_pan(pan);
+    const float to_left = std::max(0.0f, -pan);
+    const float to_right = std::max(0.0f, pan);
+    return {left * (1.0f - to_left * 0.5f - to_right) + right * to_left * 0.5f,
+            right * (1.0f - to_right * 0.5f - to_left) + left * to_right * 0.5f};
+}
+
 // Where the time goes, per track. On Android it lands in logcat under
 // LTRender, the only place a phone's numbers can be read; elsewhere it goes to
 // the engine's debug log.
@@ -643,8 +651,11 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
                     src_l = summed;
                     src_r = summed;
                 }
-                out_l[f] += src_l * gain * left_gain;
-                out_r[f] += src_r * gain * right_gain;
+                const float mixed_l = src_l * gain * left_gain;
+                const float mixed_r = src_r * gain * right_gain;
+                const auto [left, right] = pan_render_bus(mixed_l, mixed_r, ctx.request.tracks_pan);
+                out_l[f] += left;
+                out_r[f] += right;
             }
         }
 
@@ -667,15 +678,25 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
 // forced to the master route (a render has no monitor bus).
 template <typename RenderBlock>
 Result<void> render_cue_layer(RenderContext& ctx, RenderBlock&& render_block,
-                              float* acc_l, float* acc_r) {
+                              float* acc_l, float* acc_r, float pan) {
     const Frame total = ctx.range_end - ctx.range_start;
     int block_index = 0;
+    std::array<float, kBlockFrames> left{};
+    std::array<float, kBlockFrames> right{};
+    pan = clamp_pan(pan);
     for (Frame timeline_frame = ctx.range_start; timeline_frame < ctx.range_end;
          timeline_frame += kBlockFrames, ++block_index) {
         const int n = static_cast<int>(std::min<Frame>(kBlockFrames, ctx.range_end - timeline_frame));
-        float* planes[2] = {acc_l + (timeline_frame - ctx.range_start),
-                            acc_r + (timeline_frame - ctx.range_start)};
+        std::fill_n(left.begin(), n, 0.0f);
+        std::fill_n(right.begin(), n, 0.0f);
+        float* planes[2] = {left.data(), right.data()};
         render_block(planes, n, timeline_frame);
+        const auto offset = timeline_frame - ctx.range_start;
+        for (int frame = 0; frame < n; ++frame) {
+            const auto [out_left, out_right] = pan_render_bus(left[frame], right[frame], pan);
+            acc_l[offset + frame] += out_left;
+            acc_r[offset + frame] += out_right;
+        }
         if ((block_index & 63) == 0) {
             const double done = static_cast<double>(timeline_frame - ctx.range_start + n)
                 / static_cast<double>(std::max<Frame>(1, total));
@@ -922,7 +943,7 @@ Result<OfflineRenderReport> render_offline(const OfflineRenderRequest& request,
             auto done = render_cue_layer(run,
                 [&](float** planes, int n, Frame frame) {
                     metronome.render(planes, 2, n, sr, frame, &session);
-                }, acc_l.data(), acc_r.data());
+                }, acc_l.data(), acc_r.data(), request.metronome_pan);
             if (done.is_err())
                 return fail(done.error());
             run.units_done += 1.0;
@@ -939,7 +960,7 @@ Result<OfflineRenderReport> render_offline(const OfflineRenderRequest& request,
             auto done = render_cue_layer(run,
                 [&](float** planes, int n, Frame frame) {
                     guide.render(planes, 2, n, sr, frame, &session);
-                }, acc_l.data(), acc_r.data());
+                }, acc_l.data(), acc_r.data(), request.voice_guide_pan);
             if (done.is_err())
                 return fail(done.error());
             run.units_done += 1.0;
@@ -1024,6 +1045,12 @@ Result<OfflineRenderRequest> offline_render_request_from_json(const std::string&
         req.apply_mixer = j.value("apply_mixer", true);
         req.dither = j.value("dither", true);
         req.measure_loudness = j.value("measure_loudness", false);
+        if (j.contains("pans") && j["pans"].is_object()) {
+            const auto& pans = j["pans"];
+            req.tracks_pan = pans.value("tracks", 0.0f);
+            req.metronome_pan = pans.value("metronome", 0.0f);
+            req.voice_guide_pan = pans.value("voice_guide", 0.0f);
+        }
         for (const auto& jo : j.at("outputs")) {
             OfflineRenderOutput out;
             out.path = jo.value("path", std::string());

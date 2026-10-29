@@ -26,6 +26,7 @@ import { NetworkSessionBadge } from "../../network/NetworkSessionBadge";
 import { requestAppClose } from "../../appClose/appCloseService";
 import { FadeStopButton } from "./FadeStopButton";
 import { openLevelSongs } from "../levelSongs/levelSongsStore";
+import { openRenderSong } from "../render/renderStore";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { NetworkControls } from "../../network/NetworkControls";
 import { NavigationToggle } from "../shell/NavigationToggle";
@@ -384,6 +385,10 @@ export function TimelineTopbar({
                       defaultValue: "Exportar sesión…",
                     })}
                   </span>
+                </button>
+                <button type="button" role="menuitem" disabled={!canPersistProject}
+                  onClick={() => onTopMenuAction(() => openRenderSong({ regionId: "", regionName: "" }))}>
+                  <span>{t("transport.renderModal.renderSession")}</span>
                 </button>
                 {/* Sin `disabled`: conectar la cuenta y revisar lo ya subido
                     tiene sentido aunque no haya proyecto abierto. */}

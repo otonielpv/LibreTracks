@@ -175,6 +175,16 @@ TEST_CASE("offline render mixes only the chosen tracks, with their gain and pan"
         CHECK(out.at(30000, 1) == doctest::Approx(0.05f));   // tb panned hard left
     }
 
+    SUBCASE("render track balance applies independently of mixer pan") {
+        auto req = base_request(song, 0.0, 2.0);
+        req.tracks_pan = 1.0f;
+        req.outputs.push_back({dir.file("mix.wav"), {"ta"}});
+        REQUIRE(render_offline(req).is_ok());
+        const auto out = read_wav(dir.file("mix.wav"));
+        CHECK(out.at(30000, 0) == doctest::Approx(0.0f));
+        CHECK(out.at(30000, 1) == doctest::Approx(0.05f));
+    }
+
     SUBCASE("raw stems ignore the mixer and write one file per track") {
         auto req = base_request(song, 0.0, 2.0);
         req.apply_mixer = false;
@@ -493,6 +503,7 @@ TEST_CASE("offline render request JSON round trip") {
         {"outputs", json::array({{{"path", "x.wav"}, {"track_ids", {"a", "b"}},
                                   {"include_metronome", true}}})},
         {"metronome", {{"volume", 0.5}, {"beat_preset", 3}}},
+        {"pans", {{"tracks", -1.0}, {"metronome", 1.0}, {"voice_guide", 0.5}}},
     };
     auto parsed = offline_render_request_from_json(j.dump());
     REQUIRE(parsed.is_ok());
@@ -506,7 +517,72 @@ TEST_CASE("offline render request JSON round trip") {
     CHECK(r.outputs[0].track_ids.size() == 2);
     CHECK(r.outputs[0].include_metronome);
     CHECK(r.metronome.beat_preset == 3);
+    CHECK(r.tracks_pan == doctest::Approx(-1.0f));
+    CHECK(r.metronome_pan == doctest::Approx(1.0f));
+    CHECK(r.voice_guide_pan == doctest::Approx(0.5f));
     CHECK(offline_render_request_from_json(R"({"format":"mp3"})").is_err());
+}
+
+TEST_CASE("offline render pans the metronome independently of tracks") {
+    TempDir dir;
+    const std::string source = dir.file("source.wav");
+    write_float_wav(source, constant_stereo(48000, 0.1f), 2, 48000);
+    const json song = song_json(json::array({track_json("t")}),
+        json::array({clip_json("c", "t", source, 0.0, 1.0)}));
+    auto req = base_request(song, 0.0, 1.0);
+    req.tracks_pan = -1.0f;
+    req.metronome_pan = 1.0f;
+    req.outputs.push_back({dir.file("mix.wav"), {"t"}, true, false});
+    REQUIRE(render_offline(req).is_ok());
+    const auto out = read_wav(dir.file("mix.wav"));
+    float right_peak = 0.0f;
+    float left_error = 0.0f;
+    for (Frame frame = 0; frame < out.frames(); ++frame) {
+        left_error = std::max(left_error, std::abs(out.at(frame, 0) - 0.1f));
+        right_peak = std::max(right_peak, std::abs(out.at(frame, 1)));
+    }
+    CHECK(left_error < 0.0001f);
+    CHECK(right_peak > 0.01f);
+}
+
+TEST_CASE("offline render preserves both stereo channels at extreme pan") {
+    TempDir dir;
+    const std::string source = dir.file("stereo.wav");
+    std::vector<float> samples(48000 * 2, 0.0f);
+    for (std::size_t frame = 0; frame < 48000; ++frame)
+        samples[frame * 2 + 1] = 0.2f;
+    write_float_wav(source, samples, 2, 48000);
+    const json song = song_json(json::array({track_json("t")}),
+        json::array({clip_json("c", "t", source, 0.0, 1.0)}));
+    auto req = base_request(song, 0.0, 1.0);
+    req.tracks_pan = -1.0f;
+    req.outputs.push_back({dir.file("mix.wav"), {"t"}});
+    REQUIRE(render_offline(req).is_ok());
+    const auto out = read_wav(dir.file("mix.wav"));
+    CHECK(out.at(1000, 0) == doctest::Approx(0.1f));
+    CHECK(out.at(1000, 1) == doctest::Approx(0.0f));
+}
+
+TEST_CASE("offline render pans the voice guide independently") {
+    TempDir dir;
+    json song = song_json(json::array(), json::array());
+    song["sectionMarkers"] = json::array({{{"id", "m"}, {"name", "Chorus"},
+                                           {"startSeconds", 4.0}, {"kind", "chorus"}}});
+    auto req = base_request(song, 0.0, 5.0);
+    req.voice_guide_dir = LT_VOICES_DIR;
+    req.voice_guide_lang = "en";
+    req.voice_guide_pan = -1.0f;
+    req.outputs.push_back({dir.file("guide.wav"), {}, false, true});
+    REQUIRE(render_offline(req).is_ok());
+    const auto out = read_wav(dir.file("guide.wav"));
+    float left_peak = 0.0f;
+    float right_peak = 0.0f;
+    for (Frame frame = 0; frame < out.frames(); ++frame) {
+        left_peak = std::max(left_peak, std::abs(out.at(frame, 0)));
+        right_peak = std::max(right_peak, std::abs(out.at(frame, 1)));
+    }
+    CHECK(left_peak > 0.01f);
+    CHECK(right_peak == doctest::Approx(0.0f));
 }
 
 TEST_CASE("offline render: measure mode reports loudness and writes nothing") {

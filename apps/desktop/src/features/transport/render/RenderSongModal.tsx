@@ -46,8 +46,11 @@ export function RenderSongModal() {
     <RenderSongDialog
       key={target.regionId}
       regionId={target.regionId}
-      regionName={target.regionName}
+      regionName={target.regionName || song?.title || ""}
       tracks={renderableTracks(song, target.regionId)}
+      sessionTracks={renderableTracks(song, null)}
+      sessionName={song?.title || ""}
+      hasSongs={Boolean(song?.regions.length)}
       onClose={close}
     />
   );
@@ -57,11 +60,16 @@ type DialogProps = {
   regionId: string;
   regionName: string;
   tracks: RenderableTrack[];
+  sessionTracks: RenderableTrack[];
+  sessionName: string;
+  hasSongs: boolean;
   onClose: () => void;
 };
 
-function RenderSongDialog({ regionId, regionName, tracks, onClose }: DialogProps) {
+function RenderSongDialog({ regionId, regionName, tracks: songTracks, sessionTracks, sessionName, hasSongs, onClose }: DialogProps) {
   const { t } = useTranslation();
+  const [scope, setScope] = useState<"song" | "session" | "songs">(regionId ? "song" : "session");
+  const tracks = scope === "song" ? songTracks : sessionTracks;
   const [preferences, setPreferences] = useState<RenderPreferences>(loadRenderPreferences);
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(tracks.map((track) => track.id)),
@@ -73,7 +81,7 @@ function RenderSongDialog({ regionId, regionName, tracks, onClose }: DialogProps
   const running = phase.kind === "running";
   const suggestedFileName = defaultRenderFileName(
     t,
-    regionName,
+    scope === "song" ? regionName : sessionName,
     tracks,
     selected,
     preferences.mode,
@@ -155,6 +163,7 @@ function RenderSongDialog({ regionId, regionName, tracks, onClose }: DialogProps
     try {
       const result = await renderSongAudio({
         regionId,
+        scope,
         trackIds: tracks.filter((track) => selected.has(track.id)).map((track) => track.id),
         mode: preferences.mode,
         format: preferences.format,
@@ -164,6 +173,9 @@ function RenderSongDialog({ regionId, regionName, tracks, onClose }: DialogProps
         applyMixer: preferences.applyMixer,
         includeMetronome: preferences.includeMetronome,
         includeVoiceGuide: preferences.includeVoiceGuide,
+        tracksPan: preferences.channels === 2 ? preferences.tracksPan : 0,
+        metronomePan: preferences.channels === 2 ? preferences.metronomePan : 0,
+        voiceGuidePan: preferences.channels === 2 ? preferences.voiceGuidePan : 0,
         fileName,
         metronomeLabel: t("transport.renderModal.metronomeStem"),
         voiceGuideLabel: t("transport.renderModal.voiceGuideStem"),
@@ -208,13 +220,29 @@ function RenderSongDialog({ regionId, regionName, tracks, onClose }: DialogProps
               {t("transport.renderModal.eyebrow")}
             </span>
             <h2 id="lt-render-modal-title">{t("transport.renderModal.title")}</h2>
-            <p>{regionName}</p>
+            <p>{scope === "song" ? regionName : sessionName}</p>
           </div>
         </header>
 
         {phase.kind === "form" ? (
           <div className="lt-settings-modal-body lt-render-modal-body">
             {phase.notice ? <p className="lt-render-notice">{phase.notice}</p> : null}
+
+            <fieldset className="lt-render-section">
+              <legend className="lt-settings-field-label">{t("transport.renderModal.scope")}</legend>
+              {(["song", "session", "songs"] as const).filter((value) =>
+                value === "song" ? Boolean(regionId) : value === "songs" ? hasSongs : true,
+              ).map((value) => (
+                <label className="lt-render-check" key={value}>
+                  <input type="radio" name="lt-render-scope" checked={scope === value} onChange={() => {
+                    setScope(value);
+                    setSelected(new Set((value === "song" ? songTracks : sessionTracks).map((track) => track.id)));
+                    setFileNameDraft(null);
+                  }} />
+                  <span>{t(`transport.renderModal.scope_${value}`)}</span>
+                </label>
+              ))}
+            </fieldset>
 
             <fieldset className="lt-render-section">
               <legend className="lt-settings-field-label">
@@ -417,6 +445,17 @@ function RenderSongDialog({ regionId, regionName, tracks, onClose }: DialogProps
                   <strong>{t("transport.renderModal.includeVoiceGuide")}</strong>
                 </span>
               </label>
+
+              {(["tracksPan", "metronomePan", "voiceGuidePan"] as const).map((key) => (
+                <label className="lt-settings-field" key={key}>
+                  <span className="lt-settings-field-label">
+                    {t(`transport.renderModal.${key}`)}: {preferences[key] === 0 ? t("transport.renderModal.panCenter") : `${preferences[key] < 0 ? "L" : "R"} ${Math.round(Math.abs(preferences[key]) * 100)}%`}
+                  </span>
+                  <input type="range" min={-1} max={1} step={0.01} value={preferences[key]}
+                    disabled={preferences.channels === 1 || (key === "metronomePan" && !preferences.includeMetronome) || (key === "voiceGuidePan" && !preferences.includeVoiceGuide)}
+                    onChange={(event) => update({ [key]: Number(event.target.value) })} />
+                </label>
+              ))}
 
               <label className="lt-settings-field">
                 <span className="lt-settings-field-label">

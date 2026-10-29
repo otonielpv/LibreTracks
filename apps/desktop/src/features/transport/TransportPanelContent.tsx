@@ -190,6 +190,7 @@ import {
   type ExportSongTarget,
 } from "./panels/ExportSongModal";
 import { RenderSongModal } from "./render/RenderSongModal";
+import { openRenderSong } from "./render/renderStore";
 import { LevelSongsModal } from "./levelSongs/LevelSongsModal";
 import { SongAnalysisModal } from "./songAnalysis/SongAnalysisModal";
 import { LevelSongsMenuItem } from "./levelSongs/LevelSongsMenuItem";
@@ -6887,6 +6888,13 @@ export function TransportPanelContent() {
                   {t("timelineTopbar.importSong")}
                 </button>
                 <CloudMenuItem onSelected={() => setIsMobileFileActionsOpen(false)} />
+                <button type="button" role="menuitem" disabled={!song} onClick={() => {
+                  setIsMobileFileActionsOpen(false);
+                  openRenderSong({ regionId: "", regionName: "" });
+                }}>
+                  <span className="material-symbols-outlined">audio_file</span>
+                  {t("transport.renderModal.renderSession")}
+                </button>
                 <button
                   type="button"
                   role="menuitem"

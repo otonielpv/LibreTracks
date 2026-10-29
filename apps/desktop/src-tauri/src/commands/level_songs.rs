@@ -407,6 +407,7 @@ fn measure_songs(
                 apply_mixer: true,
                 dither: false,
                 measure_loudness: true,
+                pans: None,
                 metronome: None,
                 voice_guide: None,
             };
@@ -749,6 +750,7 @@ mod tests {
                     apply_mixer: true,
                     dither: false,
                     measure_loudness: measure,
+                    pans: None,
                     metronome: None,
                     voice_guide: None,
                 };

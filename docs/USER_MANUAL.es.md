@@ -243,7 +243,7 @@ Puedes exportar una canción en caso de aberla creado con las regiones, esto exp
 
 ![Exportar Canción](../screenshots/Export-Song.png)
 
-### Renderizar audio de una canción
+### Renderizar audio de una canción o sesión
 
 Para mandar a cada músico su pista de ensayo (al batería todo menos la batería, al guitarrista todo menos las guitarras):
 
@@ -260,6 +260,12 @@ Para mandar a cada músico su pista de ensayo (al batería todo menos la baterí
 6. Pulsa `Renderizar` y elige dónde guardarlo.
 
 El render respeta el cambio de tono y el warp de la canción, y no depende de mute ni solo: sale lo que marques. Puedes seguir reproduciendo mientras se renderiza.
+
+Para renderizar la sesión, abre `Archivo` > `Renderizar audio de la sesión…` (en móvil, el menú de archivos). Elige toda la línea de tiempo en un archivo o cada canción por separado en un ZIP. También puedes cambiar el intervalo desde el diálogo de una canción. La opción de pistas separadas funciona en ambos casos; al elegir canciones separadas, el ZIP contiene las pistas de cada canción.
+
+En estéreo puedes ajustar por separado el paneo del conjunto de pistas, del metrónomo y de la voz guía. El paneo de las pistas se aplica después del paneo del mezclador, sin modificarlo. En mono estos controles no se aplican.
+
+Cada intervalo renderizado está limitado a tres horas. Para sesiones más largas, usa la salida por canción siempre que cada canción esté dentro de ese límite.
 
 ### Importar canciones y paquetes
 

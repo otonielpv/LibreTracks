@@ -584,6 +584,7 @@ fn run_job(
         apply_mixer: false,
         dither: false,
         measure_loudness: false,
+        pans: None,
         metronome: None,
         voice_guide: None,
     };

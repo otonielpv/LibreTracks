@@ -75,6 +75,10 @@ describe("renderableTracks", () => {
     expect(renderableTracks(song(), "missing")).toEqual([]);
     expect(renderableTracks(null, "r1")).toEqual([]);
   });
+
+  it("includes tracks from the whole session when no region is specified", () => {
+    expect(renderableTracks(song(), null).map((track) => track.id)).toEqual(["g1", "g2", "d", "other"]);
+  });
 });
 
 describe("defaultRenderFileName", () => {

@@ -21,17 +21,17 @@ export type RenderableTrack = {
  * order. Folders are not listed (they render through their tracks), nor are
  * MIDI tracks, which make no sound of their own.
  */
-export function renderableTracks(song: SongView | null, regionId: string): RenderableTrack[] {
-  const region = song?.regions.find((candidate) => candidate.id === regionId);
-  if (!song || !region) {
+export function renderableTracks(song: SongView | null, regionId: string | null): RenderableTrack[] {
+  const region = regionId === null ? null : song?.regions.find((candidate) => candidate.id === regionId);
+  if (!song || (regionId !== null && !region)) {
     return [];
   }
   const withClips = new Set(
     song.clips
       .filter(
         (clip) =>
-          clip.timelineStartSeconds < region.endSeconds &&
-          clip.timelineStartSeconds + clip.durationSeconds > region.startSeconds,
+          !region || (clip.timelineStartSeconds < region.endSeconds &&
+          clip.timelineStartSeconds + clip.durationSeconds > region.startSeconds),
       )
       .map((clip) => clip.trackId),
   );
@@ -104,6 +104,9 @@ export type RenderPreferences = {
   applyMixer: boolean;
   includeMetronome: boolean;
   includeVoiceGuide: boolean;
+  tracksPan: number;
+  metronomePan: number;
+  voiceGuidePan: number;
 };
 
 export const DEFAULT_RENDER_PREFERENCES: RenderPreferences = {
@@ -116,6 +119,9 @@ export const DEFAULT_RENDER_PREFERENCES: RenderPreferences = {
   applyMixer: true,
   includeMetronome: false,
   includeVoiceGuide: false,
+  tracksPan: 0,
+  metronomePan: 0,
+  voiceGuidePan: 0,
 };
 
 export const RENDER_SAMPLE_RATES = [44100, 48000, 88200, 96000] as const;
@@ -149,10 +155,17 @@ export function loadRenderPreferences(): RenderPreferences {
       applyMixer: merged.applyMixer !== false,
       includeMetronome: Boolean(merged.includeMetronome),
       includeVoiceGuide: Boolean(merged.includeVoiceGuide),
+      tracksPan: validPan(merged.tracksPan),
+      metronomePan: validPan(merged.metronomePan),
+      voiceGuidePan: validPan(merged.voiceGuidePan),
     };
   } catch {
     return DEFAULT_RENDER_PREFERENCES;
   }
+}
+
+function validPan(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
 }
 
 export function saveRenderPreferences(preferences: RenderPreferences): void {

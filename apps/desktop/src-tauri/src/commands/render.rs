@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use lt_audio_engine_v2::{
-    RenderError, RenderOutput, RenderRequest, RenderSampleFormat, RenderVoiceGuide,
+    RenderError, RenderOutput, RenderPans, RenderRequest, RenderSampleFormat, RenderVoiceGuide,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -47,10 +47,21 @@ pub enum RenderMode {
     Stems,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum RenderScope {
+    #[default]
+    Song,
+    Session,
+    Songs,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderSongAudioRequest {
     pub region_id: String,
+    #[serde(default)]
+    pub scope: RenderScope,
     pub track_ids: Vec<String>,
     pub mode: RenderMode,
     pub format: RenderSampleFormat,
@@ -64,6 +75,12 @@ pub struct RenderSongAudioRequest {
     pub include_metronome: bool,
     #[serde(default)]
     pub include_voice_guide: bool,
+    #[serde(default)]
+    pub tracks_pan: f32,
+    #[serde(default)]
+    pub metronome_pan: f32,
+    #[serde(default)]
+    pub voice_guide_pan: f32,
     /// File name without extension, already localised by the UI.
     pub file_name: String,
     /// Stem names for the click and the guide, localised by the UI.
@@ -211,18 +228,26 @@ pub async fn render_song_audio(
             .ok_or_else(|| "No song loaded".to_string())?;
         (song_dir, song)
     };
-    if !song
+    if request.scope == RenderScope::Song && !song
         .regions
         .iter()
         .any(|region| region.id == request.region_id)
     {
         return Err("Region not found".to_string());
     }
+    if request.scope == RenderScope::Songs && song.regions.is_empty() {
+        return Err("No songs to render".to_string());
+    }
+    if [request.tracks_pan, request.metronome_pan, request.voice_guide_pan]
+        .iter().any(|pan| !pan.is_finite() || !(-1.0..=1.0).contains(pan)) {
+        return Err("Invalid pan".to_string());
+    }
 
     let base_name = sanitize_file_name(&request.file_name);
-    let (extension, filter) = match request.mode {
-        RenderMode::Mix => ("wav", "Wave Audio"),
-        RenderMode::Stems => ("zip", "Zip"),
+    let (extension, filter) = if request.mode == RenderMode::Stems || request.scope == RenderScope::Songs {
+        ("zip", "Zip")
+    } else {
+        ("wav", "Wave Audio")
     };
     let suggested = format!("{base_name}.{extension}");
     let Some(target) = pick_render_target(&app, &suggested, filter, extension).await? else {
@@ -320,7 +345,15 @@ struct RenderJob<'a> {
 
 impl RenderJob<'_> {
     fn run(&self, write_path: &Path) -> Result<RenderSongAudioResult, JobError> {
-        let stems = self.request.mode == RenderMode::Stems;
+        self.run_with_renderer(write_path, lt_audio_engine_v2::render_offline)
+    }
+
+    fn run_with_renderer(
+        &self,
+        write_path: &Path,
+        mut render: impl FnMut(&RenderRequest, &mut dyn FnMut(f64) -> bool) -> Result<lt_audio_engine_v2::RenderReport, RenderError>,
+    ) -> Result<RenderSongAudioResult, JobError> {
+        let stems = self.request.mode == RenderMode::Stems || self.request.scope == RenderScope::Songs;
         let stem_dir = self.staging_root.join(format!(
             "render-{}",
             std::time::SystemTime::now()
@@ -334,40 +367,61 @@ impl RenderJob<'_> {
         if stems {
             std::fs::create_dir_all(&stem_dir)?;
         }
-        let engine_request = match self.engine_request(write_path, &stem_dir) {
-            Ok(request) => request,
-            Err(error) => {
-                let _ = std::fs::remove_dir_all(&stem_dir);
-                return Err(error);
-            }
-        };
-
-        // Stems leave ~5% of the bar for zipping, which is disk-bound.
         let render_share = if stems { 0.95 } else { 1.0 };
+        let mut regions: Vec<_> = self.song.regions.iter().collect();
+        regions.sort_by(|left, right| left.start_seconds.total_cmp(&right.start_seconds));
+        let jobs: Vec<Option<&libretracks_core::SongRegion>> = if self.request.scope == RenderScope::Songs {
+            regions.into_iter().map(Some).collect()
+        } else {
+            vec![None]
+        };
         let mut last_emit = Instant::now() - Duration::from_secs(1);
-        let mut on_progress = |fraction: f64| {
-            if last_emit.elapsed() >= Duration::from_millis(100) {
-                last_emit = Instant::now();
-                self.emit_progress(fraction * render_share, "rendering");
+        let mut files = Vec::new();
+        let mut missing_files = Vec::new();
+        for (index, region) in jobs.iter().enumerate() {
+            let result = (|| {
+                let mut engine_request = self.engine_request_for_region(write_path, &stem_dir, region.map(|item| item.id.as_str()))?;
+                if let Some(region) = region {
+                    let prefix = format!("{:02} {}", index + 1, sanitize_file_name(&region.name));
+                    for output in &mut engine_request.outputs {
+                        let name = if self.request.mode == RenderMode::Mix {
+                            format!("{prefix}.wav")
+                        } else {
+                            let name = Path::new(&output.path).file_name().unwrap_or_default().to_string_lossy();
+                            format!("{prefix} - {name}")
+                        };
+                        output.path = path_string(&stem_dir.join(name));
+                    }
+                }
+                let mut on_progress = |fraction: f64| {
+                    if last_emit.elapsed() >= Duration::from_millis(100) {
+                        last_emit = Instant::now();
+                        self.emit_progress((index as f64 + fraction) / jobs.len() as f64 * render_share, "rendering");
+                    }
+                    !RENDER_CANCEL.load(Ordering::Acquire)
+                };
+                render(&engine_request, &mut on_progress).map_err(|error| match error {
+                    RenderError::Cancelled => JobError::Cancelled,
+                    RenderError::Failed(error) => JobError::Failed(error.to_string()),
+                })
+            })();
+            match result {
+                Ok(report) => {
+                    files.extend(report.files);
+                    for path in report.missing_files {
+                        if !missing_files.contains(&path) { missing_files.push(path); }
+                    }
+                }
+                Err(error) => {
+                    let _ = std::fs::remove_dir_all(&stem_dir);
+                    return Err(error);
+                }
             }
-            !RENDER_CANCEL.load(Ordering::Acquire)
-        };
-        let rendered = lt_audio_engine_v2::render_offline(&engine_request, &mut on_progress);
-        let report = match rendered {
-            Ok(report) => report,
-            Err(RenderError::Cancelled) => {
-                let _ = std::fs::remove_dir_all(&stem_dir);
-                return Err(JobError::Cancelled);
-            }
-            Err(RenderError::Failed(error)) => {
-                let _ = std::fs::remove_dir_all(&stem_dir);
-                return Err(JobError::Failed(error.to_string()));
-            }
-        };
+        }
 
         if stems {
             self.emit_progress(render_share, "packing");
-            let zipped = zip_stems(&report.files, write_path);
+            let zipped = zip_stems(&files, write_path);
             let _ = std::fs::remove_dir_all(&stem_dir);
             zipped?;
         }
@@ -377,17 +431,29 @@ impl RenderJob<'_> {
             saved: true,
             cancelled: false,
             file_name: None,
-            file_count: report.files.len() as u32,
-            missing_files: report.missing_files,
+            file_count: files.len() as u32,
+            missing_files,
         })
     }
 
     /// What the engine is asked for: the LoadSession payload, the song's
     /// runtime bounds and one output per file. A mix writes straight to
     /// `write_path`; stems go to `stem_dir` to be zipped afterwards.
+    #[cfg(test)]
     fn engine_request(&self, write_path: &Path, stem_dir: &Path) -> Result<RenderRequest, JobError> {
-        let (project_json, (start_seconds, end_seconds)) =
-            render_range(self.song_dir, self.song, &self.request.region_id)?;
+        self.engine_request_for_region(write_path, stem_dir, None)
+    }
+
+    fn engine_request_for_region(&self, write_path: &Path, stem_dir: &Path, region_id: Option<&str>) -> Result<RenderRequest, JobError> {
+        let (project_json, (start_seconds, end_seconds)) = if let Some(region_id) = region_id {
+            render_range(self.song_dir, self.song, region_id)?
+        } else if self.request.scope == RenderScope::Session {
+            let (json, runtime_song) = crate::audio::engine::runtime_session_json(self.song_dir, self.song)
+                .map_err(|error| JobError::Failed(error.to_string()))?;
+            (json, (0.0, runtime_song.duration_seconds))
+        } else {
+            render_range(self.song_dir, self.song, &self.request.region_id)?
+        };
 
         let request = self.request;
         let sample_rate =
@@ -478,6 +544,11 @@ impl RenderJob<'_> {
             apply_mixer: request.apply_mixer,
             dither: true,
             measure_loudness: false,
+            pans: Some(RenderPans {
+                tracks: if request.channels == 2 { request.tracks_pan } else { 0.0 },
+                metronome: if request.channels == 2 { request.metronome_pan } else { 0.0 },
+                voice_guide: if request.channels == 2 { request.voice_guide_pan } else { 0.0 },
+            }),
             metronome: request
                 .include_metronome
                 .then(|| crate::audio::engine::metronome_render_config(self.settings)),
@@ -608,6 +679,87 @@ mod tests {
         assert!(!request.include_voice_guide);
     }
 
+    #[test]
+    fn session_and_song_requests_use_runtime_ranges_and_pans() {
+        let song: libretracks_core::Song = serde_json::from_value(serde_json::json!({
+            "id": "session", "title": "Set", "durationSeconds": 12.0,
+            "regions": [
+                {"id": "a", "name": "A", "startSeconds": 1.0, "endSeconds": 4.0},
+                {"id": "b", "name": "B", "startSeconds": 7.0, "endSeconds": 10.0}
+            ],
+            "tracks": [], "clips": [], "sectionMarkers": []
+        })).unwrap();
+        let mut request: RenderSongAudioRequest = serde_json::from_value(serde_json::json!({
+            "regionId": "", "scope": "session", "trackIds": [], "mode": "mix",
+            "format": "float32", "channels": 2, "normalize": false,
+            "applyMixer": true, "includeMetronome": true, "fileName": "Set",
+            "tracksPan": -1.0, "metronomePan": 1.0, "voiceGuidePan": 0.5
+        })).unwrap();
+        let settings = crate::infra::settings::AppSettings::default();
+        let emit = |_: f64, _: &'static str| {};
+        let build = |request: &RenderSongAudioRequest, region: Option<&str>| {
+            let job = RenderJob {
+                emit: &emit, request, song_dir: Path::new("."), song: &song,
+                settings: &settings, engine_rate: 48000, voices_dir: None,
+                staging_root: Path::new("."),
+            };
+            job.engine_request_for_region(Path::new("mix.wav"), Path::new("stems"), region).unwrap()
+        };
+        let session = build(&request, None);
+        assert_eq!((session.start_seconds, session.end_seconds), (0.0, 12.0));
+        let pans = session.pans.unwrap();
+        assert_eq!((pans.tracks, pans.metronome, pans.voice_guide), (-1.0, 1.0, 0.5));
+        request.scope = RenderScope::Songs;
+        let second = build(&request, Some("b"));
+        assert_eq!((second.start_seconds, second.end_seconds), (7.0, 10.0));
+        request.channels = 1;
+        let mono = build(&request, Some("a"));
+        let pans = mono.pans.unwrap();
+        assert_eq!((pans.tracks, pans.metronome, pans.voice_guide), (0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn songs_are_rendered_in_timeline_order_and_packed_with_unique_names() {
+        let song: libretracks_core::Song = serde_json::from_value(serde_json::json!({
+            "id": "session", "title": "Set", "durationSeconds": 12.0,
+            "regions": [
+                {"id": "b", "name": "Same", "startSeconds": 7.0, "endSeconds": 10.0},
+                {"id": "a", "name": "Same", "startSeconds": 1.0, "endSeconds": 4.0}
+            ],
+            "tracks": [], "clips": [], "sectionMarkers": []
+        })).unwrap();
+        let request: RenderSongAudioRequest = serde_json::from_value(serde_json::json!({
+            "regionId": "", "scope": "songs", "trackIds": [], "mode": "mix",
+            "format": "float32", "channels": 2, "normalize": false,
+            "applyMixer": true, "includeMetronome": true, "fileName": "Set"
+        })).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let settings = crate::infra::settings::AppSettings::default();
+        let emit = |_: f64, _: &'static str| {};
+        let job = RenderJob {
+            emit: &emit, request: &request, song_dir: dir.path(), song: &song,
+            settings: &settings, engine_rate: 48000, voices_dir: None,
+            staging_root: dir.path(),
+        };
+        let mut ranges = Vec::new();
+        let zip_path = dir.path().join("songs.zip");
+        let result = job.run_with_renderer(&zip_path, |request, _| {
+            ranges.push((request.start_seconds, request.end_seconds));
+            let files = request.outputs.iter().map(|output| {
+                std::fs::write(&output.path, b"audio").unwrap();
+                lt_audio_engine_v2::RenderedFile {
+                    path: output.path.clone(), frames: 1, peak: 0.0, loudness: None,
+                }
+            }).collect();
+            Ok(lt_audio_engine_v2::RenderReport { files, missing_clips: 0, missing_files: vec![] })
+        }).unwrap();
+        assert_eq!(ranges, vec![(1.0, 4.0), (7.0, 10.0)]);
+        assert_eq!(result.file_count, 2);
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(zip_path).unwrap()).unwrap();
+        assert_eq!(zip.by_index(0).unwrap().name(), "01 Same.wav");
+        assert_eq!(zip.by_index(1).unwrap().name(), "02 Same.wav");
+    }
+
     /// Builds the engine requests for a real session, for an end-to-end run
     /// against the real engine library (which this crate's test binary cannot
     /// load on Windows, see the desktop-crate testing notes):
@@ -654,6 +806,7 @@ mod tests {
                 );
                 let request = RenderSongAudioRequest {
                     region_id: region.id.clone(),
+                    scope: RenderScope::Song,
                     track_ids: track_ids.clone(),
                     mode,
                     format: RenderSampleFormat::Pcm24,
@@ -663,6 +816,9 @@ mod tests {
                     apply_mixer: true,
                     include_metronome: mode == RenderMode::Stems,
                     include_voice_guide: false,
+                    tracks_pan: 0.0,
+                    metronome_pan: 0.0,
+                    voice_guide_pan: 0.0,
                     file_name: label.clone(),
                     metronome_label: "Metrónomo".into(),
                     voice_guide_label: "Voz guía".into(),

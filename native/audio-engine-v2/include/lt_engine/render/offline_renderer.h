@@ -71,6 +71,10 @@ struct OfflineRenderRequest {
     // "Level songs" uses it to compare songs as they reach the desk.
     bool   measure_loudness = false;
 
+    float tracks_pan = 0.0f;
+    float metronome_pan = 0.0f;
+    float voice_guide_pan = 0.0f;
+
     MetronomeConfig  metronome;             // used by outputs with include_metronome
     VoiceGuideConfig voice_guide;           // used by outputs with include_voice_guide
     std::string      voice_guide_dir;

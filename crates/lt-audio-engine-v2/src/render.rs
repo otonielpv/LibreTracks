@@ -59,6 +59,13 @@ pub struct RenderVoiceGuide {
     pub lang: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenderPans {
+    pub tracks: f32,
+    pub metronome: f32,
+    pub voice_guide: f32,
+}
+
 /// Mirrors `lt::OfflineRenderRequest` (see offline_renderer.h).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderRequest {
@@ -78,6 +85,8 @@ pub struct RenderRequest {
     /// empty), no limiter, and each [`RenderedFile`] carries its loudness.
     #[serde(default)]
     pub measure_loudness: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pans: Option<RenderPans>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metronome: Option<RenderMetronome>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -227,6 +236,7 @@ mod tests {
             apply_mixer: true,
             dither: true,
             measure_loudness: false,
+            pans: None,
             metronome: None,
             voice_guide: None,
         };

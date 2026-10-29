@@ -1354,6 +1354,7 @@ export type RenderSampleFormat = "pcm16" | "pcm24" | "float32";
 /** "Render audio" of one song (region). See commands/render.rs. */
 export type RenderSongAudioRequest = {
   regionId: string;
+  scope: "song" | "session" | "songs";
   trackIds: string[];
   /** "mix" = one .wav; "stems" = one .wav per track, delivered as a .zip. */
   mode: "mix" | "stems";
@@ -1366,6 +1367,9 @@ export type RenderSongAudioRequest = {
   applyMixer: boolean;
   includeMetronome: boolean;
   includeVoiceGuide: boolean;
+  tracksPan: number;
+  metronomePan: number;
+  voiceGuidePan: number;
   /** File name without extension. */
   fileName: string;
   metronomeLabel: string;

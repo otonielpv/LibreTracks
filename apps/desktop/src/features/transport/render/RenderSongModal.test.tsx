@@ -130,6 +130,31 @@ describe("RenderSongModal", () => {
     expect((screen.getByText("transport.renderModal.confirm") as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("exports every song with independent track and cue pans", async () => {
+    renderSongAudio.mockResolvedValue(saved);
+    render(<RenderSongModal />);
+    fireEvent.click(screen.getByText("transport.renderModal.scope_songs"));
+    fireEvent.click(screen.getByText("transport.renderModal.includeMetronome"));
+    fireEvent.click(screen.getByText("transport.renderModal.includeVoiceGuide"));
+    fireEvent.change(screen.getByLabelText(/transport.renderModal.tracksPan/), { target: { value: "-1" } });
+    fireEvent.change(screen.getByLabelText(/transport.renderModal.metronomePan/), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText(/transport.renderModal.voiceGuidePan/), { target: { value: "0.5" } });
+    fireEvent.click(screen.getByText("transport.renderModal.confirm"));
+    await waitFor(() => expect(renderSongAudio).toHaveBeenCalledTimes(1));
+    expect(renderSongAudio.mock.calls[0][0]).toMatchObject({ scope: "songs", tracksPan: -1, metronomePan: 1, voiceGuidePan: 0.5 });
+  });
+
+  it("opens for the entire session and ignores pan when exporting mono", async () => {
+    useRenderStore.setState({ target: { regionId: "", regionName: "" } });
+    renderSongAudio.mockResolvedValue(saved);
+    render(<RenderSongModal />);
+    fireEvent.change(screen.getByLabelText(/transport.renderModal.tracksPan/), { target: { value: "-1" } });
+    fireEvent.change(screen.getByLabelText("transport.renderModal.channels"), { target: { value: "1" } });
+    fireEvent.click(screen.getByText("transport.renderModal.confirm"));
+    await waitFor(() => expect(renderSongAudio).toHaveBeenCalledTimes(1));
+    expect(renderSongAudio.mock.calls[0][0]).toMatchObject({ scope: "session", trackIds: ["d", "b", "k"], tracksPan: 0 });
+  });
+
   it("shows progress and can stop the render", async () => {
     let finish: (result: RenderSongAudioResult) => void = () => {};
     renderSongAudio.mockImplementation(

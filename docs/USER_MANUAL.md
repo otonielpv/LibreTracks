@@ -243,7 +243,7 @@ You can export a song after creating it as a region. The export includes the son
 
 ![Export song](../screenshots/Export-Song.png)
 
-### Render a song's audio
+### Render song or session audio
 
 To send each musician their rehearsal track (the drummer gets everything but the drums, the guitarist everything but the guitars):
 
@@ -260,6 +260,12 @@ To send each musician their rehearsal track (the drummer gets everything but the
 6. Press `Render` and choose where to save it.
 
 The render follows the song's transposition and warp, and ignores mute and solo: what you tick is what you get. Playback can keep running while it renders.
+
+To render the session, choose `File` > `Render session audio…` (on mobile, open the file menu). Choose the whole timeline in one file or each song separately in a ZIP. You can also change the range from a song's render dialog. Separate tracks work in both cases; when rendering each song separately, the ZIP contains each song's tracks.
+
+For stereo exports, adjust the tracks, metronome and voice guide pans independently. The tracks pan is applied after the mixer pan without changing it. Pan controls do not apply to mono exports.
+
+Each rendered range is limited to three hours. For longer sessions, export each song separately as long as each song is within that limit.
 
 ### Import songs and packages
 
