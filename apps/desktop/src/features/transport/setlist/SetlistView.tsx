@@ -622,6 +622,9 @@ function SetlistViewComponent({
   };
   const songs = (
     <Zone name="songs" zoneRef={songsZoneRef}>
+      {layout !== "short" ? (
+        <div className="lt-setlist-song-toolbar">{paneButtons}</div>
+      ) : null}
       {layout === "wide" ? (
         <div
           className="lt-setlist-songs-resize"
@@ -659,7 +662,7 @@ function SetlistViewComponent({
         editing={editMode !== null}
       />
       {/* Phone, waveform pane: these ride over the waveform instead. */}
-      {waveDock || railButtons || lyricsPane ? null : paneButtons}
+      {layout !== "short" || waveDock || railButtons || lyricsPane ? null : paneButtons}
     </Zone>
   );
   const closeLyrics = () => (layout === "short" ? setShortPane("mixer") : setLyricsOpen(false));

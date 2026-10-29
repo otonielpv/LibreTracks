@@ -364,11 +364,7 @@ TEST_CASE("a scheduled jump announces its destination before the trigger frame")
     CHECK(diag.counts_fired == 4);
 }
 
-TEST_CASE("a short jump still counts even when the name does not fit") {
-    // Section clip is long (1.5 s); the jump is only ~1 bar (2 s at 120 BPM 4/4)
-    // ahead, but the count bar needs the whole [trigger-2s, trigger). The name
-    // would need to start at trigger-2s-1.5s = before frame 0 → it does NOT fit,
-    // so it is skipped, but the count still plays in full.
+TEST_CASE("a short jump prioritizes its section over the count") {
     auto bank = make_marked_bank();
     bank->sections[static_cast<std::size_t>(MarkerKind::Verse)]
         .base.samples.assign(static_cast<int>(kSampleRate * 1.5), 0.5f);
@@ -382,8 +378,46 @@ TEST_CASE("a short jump still counts even when the name does not fit") {
     jump.kind = MarkerKind::Verse;
     auto ch = render_all(r, session, kSampleRate * 4, 1024, jump);
     auto diag = r.diagnostics();
-    CHECK(diag.counts_fired == 4);       // count always plays
-    CHECK(diag.announcements_fired == 0); // name didn't fit, skipped
+    CHECK(diag.counts_fired == 1);
+    CHECK(diag.announcements_fired == 1);
+}
+
+TEST_CASE("nearby sections prioritize the section and cue over the count") {
+    const double section_seconds = 0.6;
+    const struct {
+        double gap_seconds;
+        double bpm;
+        double cue_seconds;
+        int expected_counts;
+    } cases[] = {{2.0, 120.0, 0.2, 6}, {2.0, 120.0, 0.7, 5},
+                 {1.4, 120.0, 0.7, 4}, {240.0 / 63.0, 63.0, 1.0, 6}};
+    for (const auto& test_case : cases) {
+        CAPTURE(test_case.gap_seconds);
+        CAPTURE(test_case.bpm);
+        auto bank = make_marked_bank();
+        bank->sections[static_cast<std::size_t>(MarkerKind::Chorus)]
+            .base.samples.assign(static_cast<int>(kSampleRate * section_seconds), 0.6f);
+        bank->cues[static_cast<std::size_t>(MarkerKind::AllIn)]
+            .samples.assign(static_cast<int>(kSampleRate * test_case.cue_seconds), 0.7f);
+        auto session = make_session(MarkerKind::Vamp, 4.0, test_case.bpm);
+        Marker chorus;
+        chorus.id = "chorus";
+        chorus.kind = MarkerKind::Chorus;
+        chorus.frame = static_cast<Frame>(std::llround((4.0 + test_case.gap_seconds) * kSampleRate));
+        session.songs[0].markers.push_back(chorus);
+        Marker cue = chorus;
+        cue.id = "all-in";
+        cue.kind = MarkerKind::AllIn;
+        session.songs[0].markers.push_back(cue);
+        VoiceGuideRenderer renderer;
+        renderer.set_clip_bank(bank);
+        renderer.set_config({true, 1.0f, "monitor", 1, true});
+        const auto channels = render_all(renderer, session, kSampleRate * 8);
+        CHECK(renderer.diagnostics().announcements_fired == 3);
+        CHECK(renderer.diagnostics().counts_fired == test_case.expected_counts);
+        CHECK(channels[2][4 * kSampleRate + kSampleRate / 4] == doctest::Approx(0.54f));
+        CHECK(channels[2][4 * kSampleRate + 3 * kSampleRate / 4] == doctest::Approx(0.63f));
+    }
 }
 
 TEST_CASE("a jump to a Custom destination plays only the count") {

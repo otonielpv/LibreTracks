@@ -803,7 +803,22 @@ void VoiceGuideRenderer::render(float** output_channels,
                         // (abs_frame is monotonic), so no scalar guard is needed to
                         // fire-once. We still record the latest chained marker frame
                         // for the loose-cue path's belt-and-suspenders dedup.
-                        Frame block_start = count_bar_start;
+                        const VoiceGuideClip* section = bank->section_for(kind, variant);
+                        Frame announcement_frames = section
+                            ? static_cast<Frame>(section->samples.size()) : 0;
+                        for (int index = 0; index < chained_count; ++index)
+                            announcement_frames += static_cast<Frame>(chained[index]->samples.size());
+                        Frame available_start = song->start_frame;
+                        if (!is_jump) {
+                            for (const auto& previous : song->markers) {
+                                if (previous.is_cue() || previous.frame >= target_frame) continue;
+                                if (previous.kind == MarkerKind::Custom) continue;
+                                available_start = std::max(available_start, previous.frame + 1);
+                            }
+                        }
+                        const Frame announcement_end = std::max(
+                            count_bar_start, available_start + announcement_frames);
+                        Frame block_start = announcement_end;
                         for (int i = chained_count - 1; i >= 0; --i) {
                             const Frame cue_start =
                                 block_start - static_cast<Frame>(chained[i]->samples.size());
@@ -823,11 +838,7 @@ void VoiceGuideRenderer::render(float** output_channels,
 
                         // Section announcement: fire so its (trimmed) length ends
                         // at block_start (= count_bar_start when no cues chained).
-                        // Best-effort — only if it still fits ahead of the current
-                        // block (short jumps may leave no room; the count always
-                        // plays).
-                        if (const VoiceGuideClip* section =
-                                bank->section_for(kind, variant)) {
+                        if (section) {
                             const Frame section_start =
                                 block_start - static_cast<Frame>(section->samples.size());
                             if (section_start == abs_frame
@@ -842,7 +853,7 @@ void VoiceGuideRenderer::render(float** output_channels,
                         // Count over the lead span, laid out by the style: every
                         // beat "1..N" (Full), a half-note bar first ("1 . 2 . |
                         // 1 2 3 4") or the whole count at half speed. Always
-                        // plays (rhythmic entry), even when the name didn't fit.
+                        // plays only after the section and chained cues finish.
                         if (count_in) {
                             const int lead_beats =
                                 beats_per_bar * voice_guide_count_span_bars(style, lead_bars);
@@ -852,7 +863,7 @@ void VoiceGuideRenderer::render(float** output_channels,
                                     ? frame_before(target_frame, lead_beats - b)
                                     : count_bar_start
                                         + static_cast<Frame>(std::llround(b * beat_frames));
-                                if (beat_frame != abs_frame) continue;
+                                if (beat_frame != abs_frame || beat_frame < announcement_end) continue;
                                 const int beat_number =
                                     voice_guide_count_number(style, beats_per_bar, b);
                                 if (beat_number <= 0) continue;   // silent half beat

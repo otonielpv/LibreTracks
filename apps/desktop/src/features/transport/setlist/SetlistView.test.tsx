@@ -70,6 +70,18 @@ describe("SetlistView skeleton", () => {
     expect(screen.queryByRole("button", { name: "setlistView.pane.song" })).toBeNull();
   });
 
+  it.each(["wide", "medium"] as const)("%s keeps view controls above the full-width song list", (layoutClass) => {
+    const { container } = render(<SetlistView {...testSetlistProps()} layoutClass={layoutClass} />);
+    const songs = container.querySelector("[data-setlist-zone='songs']")!;
+    const toolbar = songs.querySelector(".lt-setlist-song-toolbar")!;
+    expect(toolbar).not.toBeNull();
+    expect(toolbar.querySelector(".lt-setlist-edit-button")).not.toBeNull();
+    expect(toolbar.nextElementSibling?.classList.contains("lt-setlist-songs")
+      || toolbar.nextElementSibling?.classList.contains("lt-setlist-songs-resize")).toBe(true);
+    expect(songs.querySelector(":scope > .lt-setlist-edit-button")).toBeNull();
+    expect(songs.querySelector(":scope > .lt-setlist-pane-toggle")).toBeNull();
+  });
+
   it.each(["automation", "midi", "video"] as const)(
     "wide keeps the track timeline visible while editing %s",
     (mode) => {

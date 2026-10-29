@@ -114,6 +114,27 @@
   overflow: hidden;
 }
 
+.lt-setlist-view:not(.is-short) > .lt-setlist-zone.is-songs {
+  flex-direction: column;
+}
+
+.lt-setlist-song-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  padding: 0.25rem 0.45rem 0;
+}
+
+.lt-setlist-view .lt-setlist-song-toolbar > button {
+  height: 2rem;
+  min-height: 2rem;
+  margin: 0;
+  padding: 0 0.6rem;
+  border-radius: 0.4rem;
+}
+
 .lt-setlist-songs {
   position: relative;
   flex: 1 1 auto;
