@@ -882,10 +882,11 @@ impl AudioController {
         suppress_seek_fade: bool,
     ) -> Result<(), DesktopError> {
         self.with_engine_state("schedule_jump_at_frame", None, |engine, _state| {
-            let trigger_frame = seconds_to_frame_for_engine(engine, trigger_seconds);
+            let frame_rate = engine_frame_rate(engine);
+            let trigger_frame = seconds_to_frames(frame_rate, trigger_seconds);
             if target.frame.is_none() {
                 target.frame =
-                    target_seconds.map(|seconds| seconds_to_frame_for_engine(engine, seconds));
+                    target_seconds.map(|seconds| seconds_to_frames(frame_rate, seconds));
             }
             if jump_debug_logging_enabled() {
                 eprintln!(
@@ -1000,6 +1001,7 @@ impl AudioController {
 
     pub fn update_live_song_regions(&self, song: &Song) -> Result<(), DesktopError> {
         self.with_engine_state("set_song_regions", None, |engine, state| {
+            let frame_rate = engine_frame_rate(engine);
             let runtime_song = song_with_warped_timeline(song);
             let regions = song
                 .regions
@@ -1008,20 +1010,20 @@ impl AudioController {
                 .map(|region| RegionUpdate {
                     id: region.0.id.clone(),
                     name: region.0.name.clone(),
-                    start_frame: seconds_to_frame_for_engine(engine, region.1.start_seconds),
-                    end_frame: seconds_to_frame_for_engine(engine, region.1.end_seconds),
+                    start_frame: seconds_to_frames(frame_rate, region.1.start_seconds),
+                    end_frame: seconds_to_frames(frame_rate, region.1.end_seconds),
                     transpose_semitones: region.0.transpose_semitones,
                     warp_enabled: region.0.warp_enabled,
                     warp_source_bpm: region.0.warp_source_bpm.unwrap_or(0.0),
                     master_gain: region.0.master.gain as f32,
                     fade_in_frames: region_fade_frames(
-                        engine,
+                        frame_rate,
                         region.0,
                         region.1,
                         region.0.master.fade_in_seconds,
                     ),
                     fade_out_frames: region_fade_frames(
-                        engine,
+                        frame_rate,
                         region.0,
                         region.1,
                         region.0.master.fade_out_seconds,
@@ -1046,6 +1048,7 @@ impl AudioController {
 
     pub fn update_live_section_markers(&self, song: &Song) -> Result<(), DesktopError> {
         self.with_engine_state("set_song_markers", None, |engine, state| {
+            let frame_rate = engine_frame_rate(engine);
             let runtime_song = song_with_warped_timeline(song);
             let markers = song
                 .section_markers
@@ -1054,7 +1057,7 @@ impl AudioController {
                 .map(|marker| MarkerUpdate {
                     id: marker.0.id.clone(),
                     name: marker.0.name.clone(),
-                    frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                    frame: seconds_to_frames(frame_rate, marker.1.start_seconds),
                     kind: marker.0.kind.as_token().to_string(),
                     variant: marker.0.variant.unwrap_or(0) as i32,
                     category_override: marker.0.category_override.map(marker_category_token),
@@ -1083,6 +1086,7 @@ impl AudioController {
         self.transport_timing_update_count
             .fetch_add(1, Ordering::Relaxed);
         self.with_engine_state("set_song_timeline_window", None, |engine, state| {
+            let frame_rate = engine_frame_rate(engine);
             let resolved_song = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
             let runtime_song = song_with_warped_timeline(&resolved_song);
             let clips = runtime_song
@@ -1092,24 +1096,12 @@ impl AudioController {
                     id: clip.id.clone(),
                     track_id: clip.track_id.clone(),
                     source_id: clip.file_path.clone(),
-                    timeline_start_frame: seconds_to_frame_for_engine(
-                        engine,
-                        clip.timeline_start_seconds,
-                    ),
-                    source_start_frame: seconds_to_frame_for_engine(
-                        engine,
-                        clip.source_start_seconds,
-                    ),
-                    length_frames: seconds_to_frame_for_engine(engine, clip.duration_seconds),
+                    timeline_start_frame: seconds_to_frames(frame_rate, clip.timeline_start_seconds),
+                    source_start_frame: seconds_to_frames(frame_rate, clip.source_start_seconds),
+                    length_frames: seconds_to_frames(frame_rate, clip.duration_seconds),
                     gain: clip.gain as f32,
-                    fade_in_frames: seconds_to_frame_for_engine(
-                        engine,
-                        clip.fade_in_seconds.unwrap_or(0.0),
-                    ),
-                    fade_out_frames: seconds_to_frame_for_engine(
-                        engine,
-                        clip.fade_out_seconds.unwrap_or(0.0),
-                    ),
+                    fade_in_frames: seconds_to_frames(frame_rate, clip.fade_in_seconds.unwrap_or(0.0)),
+                    fade_out_frames: seconds_to_frames(frame_rate, clip.fade_out_seconds.unwrap_or(0.0)),
                     semitones: 0,
                 })
                 .collect();
@@ -1120,20 +1112,20 @@ impl AudioController {
                 .map(|region| RegionUpdate {
                     id: region.0.id.clone(),
                     name: region.0.name.clone(),
-                    start_frame: seconds_to_frame_for_engine(engine, region.1.start_seconds),
-                    end_frame: seconds_to_frame_for_engine(engine, region.1.end_seconds),
+                    start_frame: seconds_to_frames(frame_rate, region.1.start_seconds),
+                    end_frame: seconds_to_frames(frame_rate, region.1.end_seconds),
                     transpose_semitones: region.0.transpose_semitones,
                     warp_enabled: region.0.warp_enabled,
                     warp_source_bpm: region.0.warp_source_bpm.unwrap_or(0.0),
                     master_gain: region.0.master.gain as f32,
                     fade_in_frames: region_fade_frames(
-                        engine,
+                        frame_rate,
                         region.0,
                         region.1,
                         region.0.master.fade_in_seconds,
                     ),
                     fade_out_frames: region_fade_frames(
-                        engine,
+                        frame_rate,
                         region.0,
                         region.1,
                         region.0.master.fade_out_seconds,
@@ -1148,7 +1140,7 @@ impl AudioController {
                 .map(|marker| MarkerUpdate {
                     id: marker.0.id.clone(),
                     name: marker.0.name.clone(),
-                    frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                    frame: seconds_to_frames(frame_rate, marker.1.start_seconds),
                     kind: marker.0.kind.as_token().to_string(),
                     variant: marker.0.variant.unwrap_or(0) as i32,
                     category_override: marker.0.category_override.map(marker_category_token),
@@ -1160,7 +1152,7 @@ impl AudioController {
                 .iter()
                 .map(|marker| TempoMarkerUpdate {
                     id: marker.id.clone(),
-                    frame: seconds_to_frame_for_engine(engine, marker.start_seconds),
+                    frame: seconds_to_frames(frame_rate, marker.start_seconds),
                     bpm: marker.bpm,
                     ramp: marker.ramp,
                 })
@@ -1174,7 +1166,7 @@ impl AudioController {
                         parse_engine_time_signature(&marker.0.signature)?;
                     Ok(TimeSignatureMarkerUpdate {
                         id: marker.0.id.clone(),
-                        frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                        frame: seconds_to_frames(frame_rate, marker.1.start_seconds),
                         beats_per_bar,
                         beat_unit,
                     })
@@ -1217,6 +1209,7 @@ impl AudioController {
         self.transport_timing_update_count
             .fetch_add(1, Ordering::Relaxed);
         self.with_engine_state("upsert_song_tracks", None, |engine, state| {
+            let frame_rate = engine_frame_rate(engine);
             let resolved_song = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
             let runtime_song = song_with_warped_timeline(&resolved_song);
 
@@ -1241,24 +1234,12 @@ impl AudioController {
                     .push(TrackClipUpdate {
                         id: clip.id.clone(),
                         source_id: clip.file_path.clone(),
-                        timeline_start_frame: seconds_to_frame_for_engine(
-                            engine,
-                            clip.timeline_start_seconds,
-                        ),
-                        source_start_frame: seconds_to_frame_for_engine(
-                            engine,
-                            clip.source_start_seconds,
-                        ),
-                        length_frames: seconds_to_frame_for_engine(engine, clip.duration_seconds),
+                        timeline_start_frame: seconds_to_frames(frame_rate, clip.timeline_start_seconds),
+                        source_start_frame: seconds_to_frames(frame_rate, clip.source_start_seconds),
+                        length_frames: seconds_to_frames(frame_rate, clip.duration_seconds),
                         gain: clip.gain as f32,
-                        fade_in_frames: seconds_to_frame_for_engine(
-                            engine,
-                            clip.fade_in_seconds.unwrap_or(0.0),
-                        ),
-                        fade_out_frames: seconds_to_frame_for_engine(
-                            engine,
-                            clip.fade_out_seconds.unwrap_or(0.0),
-                        ),
+                        fade_in_frames: seconds_to_frames(frame_rate, clip.fade_in_seconds.unwrap_or(0.0)),
+                        fade_out_frames: seconds_to_frames(frame_rate, clip.fade_out_seconds.unwrap_or(0.0)),
                         semitones: 0,
                     });
             }
@@ -1304,20 +1285,20 @@ impl AudioController {
                 .map(|region| RegionUpdate {
                     id: region.0.id.clone(),
                     name: region.0.name.clone(),
-                    start_frame: seconds_to_frame_for_engine(engine, region.1.start_seconds),
-                    end_frame: seconds_to_frame_for_engine(engine, region.1.end_seconds),
+                    start_frame: seconds_to_frames(frame_rate, region.1.start_seconds),
+                    end_frame: seconds_to_frames(frame_rate, region.1.end_seconds),
                     transpose_semitones: region.0.transpose_semitones,
                     warp_enabled: region.0.warp_enabled,
                     warp_source_bpm: region.0.warp_source_bpm.unwrap_or(0.0),
                     master_gain: region.0.master.gain as f32,
                     fade_in_frames: region_fade_frames(
-                        engine,
+                        frame_rate,
                         region.0,
                         region.1,
                         region.0.master.fade_in_seconds,
                     ),
                     fade_out_frames: region_fade_frames(
-                        engine,
+                        frame_rate,
                         region.0,
                         region.1,
                         region.0.master.fade_out_seconds,
@@ -1332,7 +1313,7 @@ impl AudioController {
                 .map(|marker| MarkerUpdate {
                     id: marker.0.id.clone(),
                     name: marker.0.name.clone(),
-                    frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                    frame: seconds_to_frames(frame_rate, marker.1.start_seconds),
                     kind: marker.0.kind.as_token().to_string(),
                     variant: marker.0.variant.unwrap_or(0) as i32,
                     category_override: marker.0.category_override.map(marker_category_token),
@@ -1344,7 +1325,7 @@ impl AudioController {
                 .iter()
                 .map(|marker| TempoMarkerUpdate {
                     id: marker.id.clone(),
-                    frame: seconds_to_frame_for_engine(engine, marker.start_seconds),
+                    frame: seconds_to_frames(frame_rate, marker.start_seconds),
                     bpm: marker.bpm,
                     ramp: marker.ramp,
                 })
@@ -1358,7 +1339,7 @@ impl AudioController {
                         parse_engine_time_signature(&marker.0.signature)?;
                     Ok(TimeSignatureMarkerUpdate {
                         id: marker.0.id.clone(),
-                        frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                        frame: seconds_to_frames(frame_rate, marker.1.start_seconds),
                         beats_per_bar,
                         beat_unit,
                     })
@@ -1399,6 +1380,7 @@ impl AudioController {
         self.transport_timing_update_count
             .fetch_add(1, Ordering::Relaxed);
         self.with_engine_state("set_song_timing", None, |engine, state| {
+            let frame_rate = engine_frame_rate(engine);
             let runtime_song = song_with_warped_timeline(song);
             let (beats_per_bar, beat_unit) = parse_engine_time_signature(&song.time_signature)?;
             let tempo_markers = runtime_song
@@ -1406,7 +1388,7 @@ impl AudioController {
                 .iter()
                 .map(|marker| TempoMarkerUpdate {
                     id: marker.id.clone(),
-                    frame: seconds_to_frame_for_engine(engine, marker.start_seconds),
+                    frame: seconds_to_frames(frame_rate, marker.start_seconds),
                     bpm: marker.bpm,
                     ramp: marker.ramp,
                 })
@@ -1420,7 +1402,7 @@ impl AudioController {
                         parse_engine_time_signature(&marker.0.signature)?;
                     Ok(TimeSignatureMarkerUpdate {
                         id: marker.0.id.clone(),
-                        frame: seconds_to_frame_for_engine(engine, marker.1.start_seconds),
+                        frame: seconds_to_frames(frame_rate, marker.1.start_seconds),
                         beats_per_bar,
                         beat_unit,
                     })
@@ -3616,7 +3598,7 @@ fn region_voice_guide_count_style(region: &libretracks_core::SongRegion) -> i32 
 /// with warp the runtime region is stretched, so the fade is stretched by the
 /// same ratio to keep covering the same music. Non-finite or negative = none.
 fn region_fade_frames(
-    engine: &Engine,
+    frame_rate: f64,
     region: &libretracks_core::SongRegion,
     runtime_region: &libretracks_core::SongRegion,
     fade_seconds: f64,
@@ -3631,18 +3613,29 @@ fn region_fade_frames(
     } else {
         1.0
     };
-    seconds_to_frame_for_engine(engine, fade_seconds.min(length.max(0.0)) * ratio)
+    seconds_to_frames(frame_rate, fade_seconds.min(length.max(0.0)) * ratio)
 }
 
 fn seconds_to_frame_for_engine(engine: &Engine, seconds: f64) -> i64 {
-    let sample_rate = engine
+    seconds_to_frames(engine_frame_rate(engine), seconds)
+}
+
+/// The rate the engine bakes frames at. Read it ONCE per command and convert
+/// with [`seconds_to_frames`]: it costs a whole engine snapshot (JSON over the
+/// FFI, with every source's state), and taking one per clip, region and marker
+/// made a warp toggle wait ~1 s in a 10-song session.
+fn engine_frame_rate(engine: &Engine) -> f64 {
+    engine
         .get_snapshot()
         .ok()
         .map(|snapshot| snapshot.device.sample_rate)
         .filter(|sample_rate| *sample_rate > 0)
         .map(f64::from)
-        .unwrap_or(ENGINE_SAMPLE_RATE);
-    (seconds.max(0.0) * sample_rate).round() as i64
+        .unwrap_or(ENGINE_SAMPLE_RATE)
+}
+
+fn seconds_to_frames(frame_rate: f64, seconds: f64) -> i64 {
+    (seconds.max(0.0) * frame_rate).round() as i64
 }
 
 #[cfg(test)]
