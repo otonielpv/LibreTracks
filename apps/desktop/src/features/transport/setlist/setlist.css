@@ -4675,6 +4675,7 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
 /* ---- Fila de canciones redimensionable (wide): asa abajo. ---- */
 .lt-setlist-view.is-wide > .lt-setlist-zone.is-songs {
   position: relative;
+  padding-bottom: 6px;
 }
 
 .lt-setlist-songs-resize {
