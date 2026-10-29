@@ -208,6 +208,84 @@ fn tokens(text: &str) -> Vec<String> {
     cleaned.split_whitespace().map(str::to_string).collect()
 }
 
+pub fn parse_marker_label(text: &str) -> Option<AnnouncedMarker> {
+    let words = tokens(text);
+    let normalized = words.concat();
+    let number_start = normalized
+        .trim_end_matches(|character: char| character.is_ascii_digit())
+        .len();
+    let (label, number) = normalized.split_at(number_start);
+    let (label, variant) = if number.is_empty() {
+        match words.split_last() {
+            Some((last, rest)) if number_word(last).is_some() => {
+                (rest.concat(), Some(u8::try_from(number_word(last)?).ok()?))
+            }
+            _ => (normalized, None),
+        }
+    } else {
+        (label.to_string(), Some(number.parse::<u8>().ok()?))
+    };
+    if variant == Some(0) {
+        return None;
+    }
+    let kind = PHRASES.iter().find_map(|(phrase, kind)| {
+        (phrase.concat() == label || kind.replace('_', "") == label).then_some(*kind)
+    })?;
+    let is_section = SECTION_KINDS.contains(&kind)
+        || matches!(
+            kind,
+            "drum_solo" | "bass_solo" | "guitar_solo" | "next_song"
+        );
+    if variant.is_some() && !is_section {
+        return None;
+    }
+    Some(AnnouncedMarker { kind, variant })
+}
+
+#[cfg(test)]
+mod marker_label_tests {
+    use super::{parse_marker_label, AnnouncedMarker};
+
+    #[test]
+    fn recognizes_exact_section_and_cue_labels() {
+        for (label, kind, variant) in [
+            (" INTRO ", "intro", None),
+            ("Estrofa 2", "verse", Some(2)),
+            ("Verse3", "verse", Some(3)),
+            ("Coro dos", "chorus", Some(2)),
+            ("PRE-CHORUS 1", "pre_chorus", Some(1)),
+            ("Guitar Solo 2", "guitar_solo", Some(2)),
+            ("All In", "all_in", None),
+            ("drums_in", "drums_in", None),
+            ("Subir intensidad", "build", None),
+            ("key_change_up", "key_change_up", None),
+            ("tempo_down", "tempo_down", None),
+        ] {
+            assert_eq!(
+                parse_marker_label(label),
+                Some(AnnouncedMarker { kind, variant }),
+                "{label}"
+            );
+        }
+    }
+
+    #[test]
+    fn leaves_unknown_ambiguous_and_invalid_labels_untyped() {
+        for label in [
+            "",
+            "Pass",
+            "My intro notes",
+            "Verse / Chorus",
+            "Verse 0",
+            "Verse 256",
+            "Build 2",
+            "Lighting cue",
+        ] {
+            assert_eq!(parse_marker_label(label), None, "{label}");
+        }
+    }
+}
+
 fn edit_distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();

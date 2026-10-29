@@ -725,16 +725,21 @@ fn append_imported_section_marker(song: &mut Song, start_seconds: f64, name: &st
         return;
     }
 
+    let (kind, variant) = libretracks_analysis::guide_text::parse_marker_label(name)
+        .and_then(|label| {
+            serde_json::from_value::<MarkerKind>(serde_json::Value::String(label.kind.into()))
+                .ok()
+                .map(|kind| (kind, label.variant))
+        })
+        .unwrap_or((MarkerKind::Custom, None));
+
     song.section_markers.push(Marker {
         id: format!("marker_import_{}", timestamp_suffix()),
         name: name.trim().to_string(),
         start_seconds,
         digit: None,
-        // Imported markers carry only a freeform label from the external DAW, so
-        // they land as untyped Custom sections (kind palette / voice bank fall
-        // back to the base). The user can retag them afterwards.
-        kind: MarkerKind::Custom,
-        variant: None,
+        kind,
+        variant,
         color: None,
         category_override: None,
     });
@@ -804,8 +809,59 @@ fn ensure_unique_imported_song_entity_ids(song: &mut Song) {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_external_project;
+    use super::{append_imported_section_marker, parse_external_project};
+    use libretracks_core::{MarkerCategory, MarkerKind, Song};
     use std::fs;
+
+    #[test]
+    fn imported_labels_preserve_names_and_positions_with_semantic_kinds() {
+        let mut song: Song = serde_json::from_value(serde_json::json!({
+            "id": "import-test", "title": "Import", "durationSeconds": 60.0,
+            "tracks": [], "clips": [], "sectionMarkers": []
+        }))
+        .expect("empty song");
+        for (position, name) in [
+            (12.0, "  Estrofa 2  "),
+            (16.0, "Drums In"),
+            (20.0, "Lighting cue"),
+        ] {
+            append_imported_section_marker(&mut song, position, name);
+        }
+
+        assert_eq!(song.section_markers.len(), 3);
+        for (marker, (position, name, kind, variant, category)) in
+            song.section_markers.iter().zip([
+                (
+                    12.0,
+                    "Estrofa 2",
+                    MarkerKind::Verse,
+                    Some(2),
+                    MarkerCategory::Section,
+                ),
+                (
+                    16.0,
+                    "Drums In",
+                    MarkerKind::DrumsIn,
+                    None,
+                    MarkerCategory::Cue,
+                ),
+                (
+                    20.0,
+                    "Lighting cue",
+                    MarkerKind::Custom,
+                    None,
+                    MarkerCategory::Section,
+                ),
+            ])
+        {
+            assert_eq!(marker.name, name);
+            assert_eq!(marker.start_seconds, position);
+            assert_eq!(marker.kind, kind);
+            assert_eq!(marker.variant, variant);
+            assert_eq!(marker.category(), category);
+            assert_eq!(marker.category_override, None);
+        }
+    }
 
     fn write_als(dir: &std::path::Path, relative_audio: &str) -> String {
         let project_path = dir.join("song.als");
