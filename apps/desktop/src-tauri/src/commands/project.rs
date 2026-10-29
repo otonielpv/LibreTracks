@@ -2369,6 +2369,11 @@ pub async fn import_audio_files_from_paths(
 /// documents inside a picked SAF tree (there are no paths there); those go to
 /// the by-reference URI importer Android already uses, which reads them through
 /// the tree's persistable permission. Real paths take the usual road.
+///
+/// A URI is referenced only if it passes `probe_referenceable`, like the file
+/// picker's import: on some phones `/proc/self/fd/N` cannot be reopened
+/// ("Permission denied (os error 13)") and referencing it failed the whole
+/// folder. Those are copied into the session from the descriptor instead.
 fn import_paths_or_tree_uris(
     song_dir: &std::path::Path,
     song: Option<&libretracks_core::Song>,
@@ -2381,18 +2386,123 @@ fn import_paths_or_tree_uris(
             .cloned()
             .partition(|file| file.source_path.starts_with("content://"));
         if !uris.is_empty() {
-            let mut outcome =
-                crate::state::import_referenced_audio_uris_to_library(song_dir, song, &uris)?;
-            if !paths.is_empty() {
-                let more =
-                    crate::state::import_audio_files_from_paths_to_library(song_dir, song, &paths)?;
-                outcome.assets.extend(more.assets);
-                outcome.skipped.extend(more.skipped);
+            let (referenced, to_copy): (Vec<_>, Vec<_>) =
+                uris.into_iter().partition(|file| {
+                    crate::platform::android_content_uri::probe_referenceable(&file.source_path)
+                });
+            let mut parts = Vec::new();
+            if !referenced.is_empty() {
+                parts.push(crate::state::import_referenced_audio_uris_to_library(
+                    song_dir,
+                    song,
+                    &referenced,
+                ));
             }
-            return Ok(outcome);
+            if !to_copy.is_empty() {
+                parts.push(import_tree_uris_by_copy(song_dir, song, &to_copy));
+            }
+            if !paths.is_empty() {
+                parts.push(crate::state::import_audio_files_from_paths_to_library(
+                    song_dir, song, &paths,
+                ));
+            }
+            return merge_import_parts(parts);
         }
     }
     crate::state::import_audio_files_from_paths_to_library(song_dir, song, files)
+}
+
+/// Copy `content://` documents into the session through their open descriptor
+/// (no reopening by path), then hand them to the staged importer, which moves
+/// them into `audio/` and owns naming and collisions.
+#[cfg(target_os = "android")]
+fn import_tree_uris_by_copy(
+    song_dir: &std::path::Path,
+    song: Option<&libretracks_core::Song>,
+    files: &[AudioFilePathImportPayload],
+) -> Result<crate::models::LibraryImportResult, DesktopError> {
+    let staging_root = song_dir.join("cache").join("saf-import");
+    let mut staged = Vec::with_capacity(files.len());
+    let mut skipped = Vec::new();
+    // Skipped entries name what the caller asked for, not the staging copy.
+    let mut original_of = std::collections::HashMap::new();
+    for (index, file) in files.iter().enumerate() {
+        let staged_dir = staging_root.join(format!("tree-{index}"));
+        let staged_path = staged_dir.join(&file.file_name);
+        let copied = std::fs::create_dir_all(&staged_dir).and_then(|()| {
+            crate::platform::android_content_uri::copy_content_to(&file.source_path, &staged_path)
+        });
+        match copied {
+            Ok(_) => {
+                let copy = staged_path.to_string_lossy().into_owned();
+                original_of.insert(copy.clone(), file.source_path.clone());
+                staged.push(AudioFilePathImportPayload {
+                    file_name: file.file_name.clone(),
+                    source_path: copy,
+                });
+            }
+            Err(error) => {
+                let _ = std::fs::remove_dir_all(&staged_dir);
+                skipped.push(crate::models::SkippedImport {
+                    file_name: file.file_name.clone(),
+                    source_path: file.source_path.clone(),
+                    reason: error.to_string(),
+                });
+            }
+        }
+    }
+    let outcome = if staged.is_empty() {
+        Ok(crate::models::LibraryImportResult {
+            assets: Vec::new(),
+            skipped: Vec::new(),
+        })
+    } else {
+        crate::state::import_staged_audio_files_to_library(song_dir, song, &staged)
+    };
+    let _ = std::fs::remove_dir_all(&staging_root);
+    outcome.map(|mut outcome| {
+        for entry in &mut outcome.skipped {
+            if let Some(original) = original_of.get(&entry.source_path) {
+                entry.source_path = original.clone();
+            }
+        }
+        outcome.skipped.extend(skipped);
+        outcome
+    })
+}
+
+/// One import made of several roads: what each brought in, together. Fails
+/// only when nothing at all came in (the first error then says why), like a
+/// single import that read nothing.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn merge_import_parts(
+    parts: Vec<Result<crate::models::LibraryImportResult, DesktopError>>,
+) -> Result<crate::models::LibraryImportResult, DesktopError> {
+    let mut merged = crate::models::LibraryImportResult {
+        assets: Vec::new(),
+        skipped: Vec::new(),
+    };
+    let mut first_error = None;
+    for part in parts {
+        match part {
+            Ok(outcome) => {
+                merged.assets.extend(outcome.assets);
+                merged.skipped.extend(outcome.skipped);
+            }
+            Err(error) => {
+                first_error.get_or_insert(error);
+            }
+        }
+    }
+    if merged.assets.is_empty() {
+        if let Some(error) = first_error {
+            return Err(error);
+        }
+        if let Some(first) = merged.skipped.first() {
+            return Err(DesktopError::AudioCommand(first.reason.clone()));
+        }
+    }
+    Ok(merged)
 }
 
 /// Android: consume files staged by `stage_imported_audio_chunk` — they are
@@ -3570,4 +3680,62 @@ pub fn video_export_payload(
         }
     };
     Ok(VideoExportPayload { count, bytes })
+}
+
+#[cfg(test)]
+mod import_parts_tests {
+    use super::merge_import_parts;
+    use crate::infra::error::DesktopError;
+    use crate::models::{LibraryAssetSummary, LibraryImportResult, SkippedImport};
+
+    fn asset(name: &str) -> LibraryAssetSummary {
+        LibraryAssetSummary {
+            file_name: name.into(),
+            file_path: format!("audio/{name}"),
+            duration_seconds: 1.0,
+            is_missing: false,
+            folder_path: None,
+        }
+    }
+
+    fn skipped(name: &str, reason: &str) -> SkippedImport {
+        SkippedImport {
+            file_name: name.into(),
+            source_path: format!("content://x/document/{name}"),
+            reason: reason.into(),
+        }
+    }
+
+    // Android folder library: the referenced files failed ("Permission denied
+    // (os error 13)") and the copied ones came in; the folder must still land.
+    #[test]
+    fn a_failed_road_does_not_sink_the_ones_that_worked() {
+        let merged = merge_import_parts(vec![
+            Err(DesktopError::AudioCommand("io error: Permission denied (os error 13)".into())),
+            Ok(LibraryImportResult {
+                assets: vec![asset("Bass.wav"), asset("Click.wav")],
+                skipped: vec![skipped("notes.wav", "unsupported")],
+            }),
+        ])
+        .expect("what came in is kept");
+        assert_eq!(merged.assets.len(), 2);
+        assert_eq!(merged.skipped.len(), 1);
+    }
+
+    #[test]
+    fn nothing_in_is_still_an_error() {
+        let error = merge_import_parts(vec![
+            Err(DesktopError::AudioCommand("first".into())),
+            Err(DesktopError::AudioCommand("second".into())),
+        ])
+        .expect_err("nothing came in");
+        assert!(error.to_string().contains("first"));
+
+        let error = merge_import_parts(vec![Ok(LibraryImportResult {
+            assets: Vec::new(),
+            skipped: vec![skipped("Bass.wav", "unreadable")],
+        })])
+        .expect_err("only skips");
+        assert!(error.to_string().contains("unreadable"));
+    }
 }
