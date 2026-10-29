@@ -559,7 +559,8 @@ export function placeGuideSections(
       if (countIns.has(index)) continue;
       for (const word of announcement.countWords) {
         const startSeconds = nearestBeat(renderStartSeconds + word.startSeconds);
-        if (onSpot(startSeconds).some((other) => other.kind === "count")) continue;
+        // One marker per spot and lane: a count on a cue's beat is that cue.
+        if (onSpot(startSeconds).some((other) => !inSectionLane(other))) continue;
         placed.push({ startSeconds, kind: "count", variant: word.number, categoryOverride: null });
       }
       continue;
@@ -663,6 +664,14 @@ export function placeGuideSections(
         : sectionSlot && !sectionHere
           ? "section"
           : null;
+      // Nor two cues: the engine rejects two markers on one spot of a lane
+      // ("markers are out of order") and the whole analysis with them. A
+      // named cue is worth more than a count's number on its beat.
+      if (!inSectionLane({ kind: marker.kind, categoryOverride })) {
+        const cueHere = here.find((other) => !inSectionLane(other));
+        if (cueHere && cueHere.kind !== "count") continue;
+        if (cueHere) placed.splice(placed.indexOf(cueHere), 1);
+      }
       placed.push({ startSeconds: spot, ...marker, categoryOverride });
     }
   }

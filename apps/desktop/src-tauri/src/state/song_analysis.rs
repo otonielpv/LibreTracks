@@ -155,12 +155,13 @@ pub(super) fn apply_sections_to_song(
     song.section_markers
         .retain(|marker| !inside(marker.start_seconds));
     let suffix = timestamp_suffix();
+    let mut added: Vec<(MarkerCategory, f64)> = Vec::new();
     for (index, (position, section)) in stored.into_iter().enumerate() {
         if !inside(position) {
             continue;
         }
         let name = section.name.trim();
-        song.section_markers.push(Marker {
+        let marker = Marker {
             id: format!("section_{suffix}_{index}"),
             name: if name.is_empty() {
                 format!("{:?}", section.kind)
@@ -175,7 +176,16 @@ pub(super) fn apply_sections_to_song(
             category_override: section
                 .category_override
                 .filter(|lane| *lane != section.kind.category()),
-        });
+        };
+        // Two markers on one spot of a lane fail validation ("markers are out
+        // of order") and the whole analysis with them: the first one stays.
+        if added.iter().any(|(lane, at)| {
+            *lane == marker.category() && (at - position).abs() < SAME_POSITION_SECONDS
+        }) {
+            continue;
+        }
+        added.push((marker.category(), position));
+        song.section_markers.push(marker);
     }
     song.section_markers
         .sort_by(|left, right| left.start_seconds.total_cmp(&right.start_seconds));

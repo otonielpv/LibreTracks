@@ -32,6 +32,7 @@ import {
   tempoLevel,
   viewSeconds,
 } from "./songAnalysisPlan";
+import { MARKER_KINDS } from "../markerKinds";
 
 const audioTrack = (id: string, name: string, kind = "audio") =>
   ({ id, name, kind, depth: 0, parentTrackId: null }) as never;
@@ -268,6 +269,54 @@ describe("guide", () => {
     // bars until another brings them back. The click's bars stay (no 2/4):
     // the sections fall mid-bar, where the user placed them.
     expect(sectionsAt([8, 24, 42, 58, 76, 92])).toEqual([106, 114, 123, 131, 140, 148]);
+  });
+
+  // The engine rejects two markers on one spot of the same lane ("markers are
+  // out of order"), so the whole analysis could not be applied.
+  const sameLaneCollisions = (placed: ReturnType<typeof placeGuideSections>) =>
+    placed.filter((marker, index) =>
+      placed
+        .slice(0, index)
+        .some(
+          (other) =>
+            Math.abs(other.startSeconds - marker.startSeconds) < 0.001 &&
+            laneOf(other) === laneOf(marker),
+        ),
+    );
+  const laneOf = (marker: ReturnType<typeof placeGuideSections>[number]) =>
+    marker.categoryOverride ??
+    ((MARKER_KINDS as readonly string[]).includes(marker.kind) ? "section" : "cue");
+
+  it("never puts two markers on one spot of the same lane", () => {
+    // Three sections on one downbeat: the second takes the cue lane, the
+    // third has nowhere left.
+    const sections = announced([
+      [4, 4.4, ["chorus"]],
+      [4.5, 4.9, ["verse"]],
+      [5, 5.4, ["bridge"]],
+    ]);
+    const threeSections = placeGuideSections(plain(), "b", 100, sections.analysis, sections.markers, null);
+    expect(sameLaneCollisions(threeSections)).toEqual([]);
+    expect(threeSections.map((marker) => marker.kind)).toEqual(["chorus", "verse"]);
+
+    // Two different cues said back to back warn from the same bar.
+    const cues = announced([
+      [4, 4.4, ["drums_in"]],
+      [4.5, 4.9, ["softly"]],
+    ]);
+    const twoCues = placeGuideSections(plain(), "b", 100, cues.analysis, cues.markers, null);
+    expect(sameLaneCollisions(twoCues)).toEqual([]);
+
+    // A count said on the beat of a cue.
+    const counted = announced([
+      [1.6, 2.4, ["count"], [{ number: 1, startSeconds: 2 }]],
+      [3, 3.4, ["drums_in"]],
+    ]);
+    counted.markers[0] = { section: "", cue: "count", ignored: false };
+    const withCount = placeGuideSections(plain(), "b", 100, counted.analysis, counted.markers, null);
+    expect(sameLaneCollisions(withCount)).toEqual([]);
+    // The named cue stays; the count's number on its beat goes.
+    expect(withCount.map((marker) => marker.kind)).toEqual(["drums_in"]);
   });
 
   it("a lone name said on beat 3 starts its section on the next downbeat", () => {

@@ -261,6 +261,32 @@ fn a_second_section_on_the_same_spot_goes_in_the_cue_lane() {
 }
 
 #[test]
+fn two_guide_markers_on_one_spot_of_a_lane_keep_the_first() {
+    // "markers are out of order: section_…_15 before section_…_16": two cues
+    // on one beat made the engine reject the whole analysis.
+    let mut song = setlist();
+    apply_sections_to_song(
+        &mut song,
+        "r2",
+        &[
+            section(64.0, MarkerKind::Verse, None, "Verso"),
+            AnalysedSection {
+                category_override: Some(MarkerCategory::Cue),
+                ..section(64.0, MarkerKind::Chorus, None, "Coro")
+            },
+            AnalysedSection {
+                category_override: Some(MarkerCategory::Cue),
+                ..section(64.0, MarkerKind::Bridge, None, "Puente")
+            },
+        ],
+    )
+    .expect("apply");
+    let kinds: Vec<MarkerKind> = song.section_markers.iter().map(|m| m.kind).collect();
+    assert_eq!(kinds, vec![MarkerKind::Verse, MarkerKind::Chorus]);
+    libretracks_core::validate_song(&song).expect("the song stays valid");
+}
+
+#[test]
 fn a_section_kind_can_be_created_in_the_cue_lane() {
     let song = setlist();
     let root = tempdir().expect("temp dir").keep();

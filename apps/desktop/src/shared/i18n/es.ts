@@ -827,7 +827,7 @@ const es = {
       nothingToAnalyze:
         "No hay pistas seleccionadas para analizar. Vuelve atrás y elige al menos una.",
       sectionMarkersConflict:
-        "Las marcas de sección o de aviso no están ordenadas o coinciden en la misma posición. Vuelve a la revisión y desmarca las secciones detectadas, o revisa las marcas existentes en el timeline antes de volver a intentarlo.",
+        "Las marcas de sección o de aviso no están ordenadas o coinciden en la misma posición. Vuelve a la revisión y pon en «Ignorar» uno de los anuncios que caen en el mismo sitio, o desmarca las secciones detectadas.",
       tempo: "Tempo",
       signature: "Compás",
       changes: "Cambios",

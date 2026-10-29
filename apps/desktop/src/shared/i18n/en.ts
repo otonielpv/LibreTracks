@@ -812,7 +812,7 @@ const en = {
       nothingToAnalyze:
         "No tracks are selected for analysis. Go back and choose at least one.",
       sectionMarkersConflict:
-        "Section or cue markers are out of order or share the same position. Go back to the review and deselect the detected sections, or check the existing markers on the timeline before trying again.",
+        "Section or cue markers are out of order or share the same position. Go back to the review and set one of the announcements that fall on the same spot to “Ignore”, or deselect the detected sections.",
       tempo: "Tempo",
       signature: "Meter",
       changes: "Changes",
