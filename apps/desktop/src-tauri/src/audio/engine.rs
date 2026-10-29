@@ -1914,6 +1914,7 @@ impl AudioController {
             // Metronome / voice-only changes skip this entirely (they used to
             // needlessly reopen the device and freeze playback). Startup passes
             // rebuild_stream = true.
+            let rate_before = engine_sample_rate(engine);
             if rebuild_stream {
             // Device-open errors must NOT abort apply_settings. There are
             // two failure modes we treat differently:
@@ -2117,6 +2118,7 @@ impl AudioController {
                 }
             }
             } // end if rebuild_stream
+            forget_session_after_rate_change(state, rate_before, engine_sample_rate(engine));
 
             // Hilos del pool de render. Fuera del `if rebuild_stream`: cambiarlo
             // no necesita reabrir el dispositivo, y el motor lo aplica entre
@@ -2254,10 +2256,12 @@ impl AudioController {
     /// which case the engine keeps its current rate and the caller falls back
     /// to converting.
     pub fn set_output_sample_rate(&self, sample_rate: u32) -> Result<(), DesktopError> {
-        self.with_engine_state("set_output_sample_rate", None, |engine, _state| {
+        self.with_engine_state("set_output_sample_rate", None, |engine, state| {
+            let rate_before = engine_sample_rate(engine);
             engine.send_command(&EngineCommand::SetSampleRate {
                 sample_rate: sample_rate as i32,
             })?;
+            forget_session_after_rate_change(state, rate_before, engine_sample_rate(engine));
             Ok(())
         })
     }
@@ -2875,11 +2879,13 @@ impl AudioController {
                 .last_device_recovery_attempt
                 .map_or(true, |last| last.elapsed() >= RECOVERY_RETRY_INTERVAL);
             if due {
+                let rate_before = engine_sample_rate(engine);
                 if let Err(error) = engine.send_command(&EngineCommand::RecoverOutputDevice) {
                     if audio_debug_logging_enabled() {
                         eprintln!("[libretracks-audio] device recovery attempt failed: {error}");
                     }
                 }
+                forget_session_after_rate_change(state, rate_before, engine_sample_rate(engine));
                 // Stamp AFTER the attempt: a slow failing open (seconds on
                 // DirectSound) must not make the next tick immediately due
                 // and starve the state lock.
@@ -3175,6 +3181,25 @@ fn ensure_engine(state: &mut ControllerState) -> Result<&Engine, DesktopError> {
         state.engine = Some(engine);
     }
     Ok(state.engine.as_ref().expect("engine should be initialized"))
+}
+
+fn engine_sample_rate(engine: &Engine) -> i32 {
+    engine
+        .get_snapshot()
+        .map(|snapshot| snapshot.device.sample_rate)
+        .unwrap_or(0)
+}
+
+/// After the device's sample rate changed, the engine re-bakes its timeline
+/// from the JSON of the last `LoadSession`, so everything sent since by
+/// `UpsertSongTracks` (a song or tracks added, clips moved) is gone from it:
+/// a song added before switching devices played silence until a restart.
+/// Forgetting the loaded session makes the next play/seek/edit send the whole
+/// song again (see `ensure_song_loaded`); `DesktopSession` reloads it at once.
+fn forget_session_after_rate_change(state: &mut ControllerState, before: i32, after: i32) {
+    if before > 0 && after > 0 && before != after {
+        state.loaded_session_signature = None;
+    }
 }
 
 fn ensure_song_loaded(
@@ -3624,6 +3649,21 @@ fn seconds_to_frame_for_engine(engine: &Engine, seconds: f64) -> i64 {
 mod tests {
     use super::*;
     use libretracks_core::{Clip, Song, Track, TrackKind};
+
+    // A song added by upsert, then a device at another sample rate: the engine
+    // re-bakes from the last LoadSession and loses it, so the next command
+    // must send the whole song again.
+    #[test]
+    fn a_new_sample_rate_forgets_the_loaded_session() {
+        let mut state = ControllerState::new();
+        state.loaded_session_signature = Some("loaded".into());
+        forget_session_after_rate_change(&mut state, 48_000, 48_000);
+        assert!(state.loaded_session_signature.is_some(), "same rate keeps it");
+        forget_session_after_rate_change(&mut state, 0, 44_100);
+        assert!(state.loaded_session_signature.is_some(), "unknown rate keeps it");
+        forget_session_after_rate_change(&mut state, 48_000, 44_100);
+        assert!(state.loaded_session_signature.is_none());
+    }
 
     fn song_for_signature() -> Song {
         Song {

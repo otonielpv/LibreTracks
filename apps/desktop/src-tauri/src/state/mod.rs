@@ -1946,6 +1946,13 @@ impl DesktopSession {
         }
 
         audio.apply_settings_with_stream_rebuild(next_settings.clone(), plan.rebuild_stream)?;
+        // A device at another sample rate drops what the engine got since its
+        // last full load (the song just added, among others): send it all again.
+        if plan.rebuild_stream && !audio.has_loaded_session() {
+            if let (Some(song_dir), Some(song)) = (self.song_dir.clone(), self.engine.song()) {
+                audio.replace_song_buffers(&song_dir, song, "device_sample_rate_change")?;
+            }
+        }
         // Turning the vamp between songs off silences a holding one in the
         // engine (SetSongGapVamp false).
         if !next_settings.vamp_between_songs {
