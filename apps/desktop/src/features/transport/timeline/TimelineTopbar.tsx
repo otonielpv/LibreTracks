@@ -250,6 +250,11 @@ export function TimelineTopbar({
             ) : null}
             {canOpenFileMenu && openTopMenu === "file" && !isMobileApp ? (
               <div className="lt-top-menu-dropdown" role="menu" aria-label={t("timelineTopbar.fileMenu")}>
+                {/* Por categorias: proyecto, guardar, importar, exportar y
+                    herramientas; salir al final, aparte. */}
+                <div className="lt-top-menu-section" role="presentation">
+                  {t("timelineTopbar.groups.project", { defaultValue: "Proyecto" })}
+                </div>
                 <button
                   type="button"
                   role="menuitem"
@@ -350,84 +355,10 @@ export function TimelineTopbar({
                     </div>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    if (learnModeActive) {
-                      onMidiLearnTarget("action:open_project");
-                      return;
-                    }
-                    onTopMenuAction(onImportSong);
-                  }}
-                >
-                  <span>{t("timelineTopbar.importSong")}</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => onTopMenuAction(onImportSession)}
-                >
-                  <span>
-                    {t("timelineTopbar.importSession", {
-                      defaultValue: "Importar sesión…",
-                    })}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={!canPersistProject && !learnModeActive}
-                  onClick={() => onTopMenuAction(onExportSession)}
-                >
-                  <span>
-                    {t("timelineTopbar.exportSession", {
-                      defaultValue: "Exportar sesión…",
-                    })}
-                  </span>
-                </button>
-                <button type="button" role="menuitem" disabled={!canPersistProject}
-                  onClick={() => onTopMenuAction(() => openRenderSong({ regionId: "", regionName: "" }))}>
-                  <span>{t("transport.renderModal.renderSession")}</span>
-                </button>
-                {/* Sin `disabled`: conectar la cuenta y revisar lo ya subido
-                    tiene sentido aunque no haya proyecto abierto. */}
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => onTopMenuAction(onOpenCloud)}
-                >
-                  <span>
-                    {t("timelineTopbar.cloud", {
-                      defaultValue: "Nube…",
-                    })}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    if (learnModeActive) {
-                      onMidiLearnTarget("action:open_project");
-                      return;
-                    }
-                    onTopMenuAction(onImportExternalProject);
-                  }}
-                >
-                  <span>{t("timelineTopbar.importExternalProject")}</span>
-                </button>
                 <div className="lt-top-menu-separator" aria-hidden="true" />
-                {/* Whole-setlist action, so it lives here and not only in each
-                    song's menu, where it read as "this song". */}
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={!canPersistProject}
-                  onClick={() => onTopMenuAction(openLevelSongs)}
-                >
-                  <span>{t("transport.menu.levelSongs")}</span>
-                </button>
-                <div className="lt-top-menu-separator" aria-hidden="true" />
+                <div className="lt-top-menu-section" role="presentation">
+                  {t("timelineTopbar.groups.save", { defaultValue: "Guardar" })}
+                </div>
                 <button
                   type="button"
                   role="menuitem"
@@ -469,6 +400,94 @@ export function TimelineTopbar({
                       defaultValue: "Guardar como plantilla…",
                     })}
                   </span>
+                </button>
+                <div className="lt-top-menu-separator" aria-hidden="true" />
+                <div className="lt-top-menu-section" role="presentation">
+                  {t("timelineTopbar.groups.import", { defaultValue: "Importar" })}
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    if (learnModeActive) {
+                      onMidiLearnTarget("action:open_project");
+                      return;
+                    }
+                    onTopMenuAction(onImportSong);
+                  }}
+                >
+                  <span>{t("timelineTopbar.importSong")}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => onTopMenuAction(onImportSession)}
+                >
+                  <span>
+                    {t("timelineTopbar.importSession", {
+                      defaultValue: "Importar sesión…",
+                    })}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    if (learnModeActive) {
+                      onMidiLearnTarget("action:open_project");
+                      return;
+                    }
+                    onTopMenuAction(onImportExternalProject);
+                  }}
+                >
+                  <span>{t("timelineTopbar.importExternalProject")}</span>
+                </button>
+                <div className="lt-top-menu-separator" aria-hidden="true" />
+                <div className="lt-top-menu-section" role="presentation">
+                  {t("timelineTopbar.groups.export", { defaultValue: "Exportar" })}
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!canPersistProject && !learnModeActive}
+                  onClick={() => onTopMenuAction(onExportSession)}
+                >
+                  <span>
+                    {t("timelineTopbar.exportSession", {
+                      defaultValue: "Exportar sesión…",
+                    })}
+                  </span>
+                </button>
+                <button type="button" role="menuitem" disabled={!canPersistProject}
+                  onClick={() => onTopMenuAction(() => openRenderSong({ regionId: "", regionName: "" }))}>
+                  <span>{t("transport.renderModal.renderSession")}</span>
+                </button>
+                {/* Sin `disabled`: conectar la cuenta y revisar lo ya subido
+                    tiene sentido aunque no haya proyecto abierto. */}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => onTopMenuAction(onOpenCloud)}
+                >
+                  <span>
+                    {t("timelineTopbar.cloud", {
+                      defaultValue: "Nube…",
+                    })}
+                  </span>
+                </button>
+                <div className="lt-top-menu-separator" aria-hidden="true" />
+                <div className="lt-top-menu-section" role="presentation">
+                  {t("timelineTopbar.groups.tools", { defaultValue: "Herramientas" })}
+                </div>
+                {/* Whole-setlist action, so it lives here and not only in each
+                    song's menu, where it read as "this song". */}
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!canPersistProject}
+                  onClick={() => onTopMenuAction(openLevelSongs)}
+                >
+                  <span>{t("transport.menu.levelSongs")}</span>
                 </button>
                 <div className="lt-top-menu-separator" aria-hidden="true" />
                 {/* Salir desde ARCHIVO: guarda, avisa de que esta guardado y

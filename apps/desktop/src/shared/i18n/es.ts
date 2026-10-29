@@ -2181,6 +2181,13 @@ const es = {
     closeWithoutSaving: "Cerrar sin guardar",
   },
   timelineTopbar: {
+    groups: {
+      project: "Proyecto",
+      save: "Guardar",
+      import: "Importar",
+      export: "Exportar",
+      tools: "Herramientas",
+    },
     songTimeSignatureAria: "Compas de la cancion",
     cloud: "Nube…",
     saveShort: "Guardar",

@@ -2153,6 +2153,13 @@ const en = {
     closeWithoutSaving: "Close without saving",
   },
   timelineTopbar: {
+    groups: {
+      project: "Project",
+      save: "Save",
+      import: "Import",
+      export: "Export",
+      tools: "Tools",
+    },
     songTimeSignatureAria: "Song time signature",
     cloud: "Cloud…",
     saveShort: "Save",
