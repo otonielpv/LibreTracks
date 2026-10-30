@@ -37,7 +37,10 @@ sleep 15
 
 echo "--- setup: a song with two tracks, the loopback as controller"
 js '(async () => {
-  await inv("create_empty_song", { name: "MIDI Map" });
+  await inv("start_create_song_named_at", { name: "MIDI Map " + Date.now(), parentDir: null });
+  for (let i = 0; i < 60 && !(await inv("get_song_view", { includeWaveforms: false })); i += 1) {
+    await new Promise((r) => setTimeout(r, 500));
+  }
   await inv("create_track", { name: "Bajo", kind: "audio", insertAfterTrackId: null, parentTrackId: null });
   await inv("create_track", { name: "Teclas", kind: "audio", insertAfterTrackId: null, parentTrackId: null });
   const s = await inv("get_settings");
@@ -48,6 +51,18 @@ js '(async () => {
   return true;
 })()' >/dev/null
 sleep 12
+# First-run screens (privacy consent, tours menu) would cover the shots.
+js '(async () => {
+  document.querySelector(".lt-telemetry-actions .lt-secondary-button")?.click();
+  await new Promise((r) => setTimeout(r, 800));
+  for (let i = 0; i < 3; i += 1) {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return true;
+})()' >/dev/null
+wait_ui
+shot 00-first-run-dismissed
 BASS=$(track_id Bajo)
 echo "Bajo = $BASS"
 check "song has the two tracks" '(async () => (await inv("get_song_view", { includeWaveforms: false })).tracks.length === 2)()'
@@ -87,7 +102,7 @@ check "second press unmutes" "(async () => (await inv('get_song_view', { include
 AFTER=$(js 'inv("get_midi_control_diagnostics")')
 echo "diagnostics before: $BEFORE"
 echo "diagnostics after:  $AFTER"
-check "mute presses wrote nothing to disk" "(async () => { const b = $BEFORE, a = $AFTER; return JSON.parse(a).settingsDiskWrites === JSON.parse(b).settingsDiskWrites; })()"
+check "two presses: no disk write, one commit each" "(async () => { const b = $BEFORE, a = $AFTER; return a.settingsDiskWrites === b.settingsDiskWrites && a.trackCommits - b.trackCommits === 2; })()"
 
 echo "--- strips: strip:2:solo resolves against the bank"
 js '(async () => { const s = await inv("get_settings"); s.midiMappings["strip:2:solo"] = { status: 144, data1: 62, isCc: false }; await inv("update_audio_settings", { settings: s }); await inv("save_settings", { settings: s }); return true; })()' >/dev/null
