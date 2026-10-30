@@ -3,11 +3,18 @@ import { useEffect } from "react";
 import type { SongView } from "@libretracks/shared/models";
 
 import {
+  getMidiBank,
   isTauriApp,
+  listenToMidiBankChanged,
   listenToMidiMixChanged,
   syncMidiController,
   type MidiMixChangedPayload,
 } from "../desktopApi";
+import {
+  hasStripMappings,
+  midiStripOrder,
+  useMidiBankStore,
+} from "../midi/midiBankStore";
 import { setSong } from "../songStore";
 import { useTransportStore } from "../store";
 
@@ -35,13 +42,17 @@ export function midiControllableTracks(song: SongView | null) {
 export function useMidiControllerSync({
   song,
   activeSongRegionId,
-  stripOrder,
+  midiMappings,
 }: {
   song: SongView | null;
   activeSongRegionId: string;
-  /** Visible track ids of the active mixer, in order (strips, paso 04). */
-  stripOrder?: string[];
+  midiMappings: Record<string, unknown>;
 }) {
+  const stripsActive = hasStripMappings(midiMappings);
+  useEffect(() => {
+    useMidiBankStore.getState().setActive(stripsActive);
+  }, [stripsActive]);
+
   useEffect(() => {
     if (!isTauriApp) {
       return;
@@ -56,31 +67,37 @@ export function useMidiControllerSync({
     const region = song?.regions.find((item) => item.id === activeSongRegionId);
     void syncMidiController({
       tracks,
-      stripOrder: stripOrder ?? tracks.map((track) => track.id),
+      stripOrder: midiStripOrder(song),
       songMaster: region
         ? { regionId: region.id, gain: region.master?.gain ?? 1 }
         : null,
     }).catch(() => undefined);
-  }, [song, activeSongRegionId, stripOrder]);
+  }, [song, activeSongRegionId]);
 
   useEffect(() => {
     if (!isTauriApp) {
       return;
     }
     let active = true;
-    let unlisten: (() => void) | null = null;
-    void listenToMidiMixChanged(applyMidiMixChanged)
-      .then((dispose) => {
-        if (!active) {
-          dispose();
-          return;
-        }
-        unlisten = dispose;
+    const disposers: Array<() => void> = [];
+    const keep = (dispose: () => void) => {
+      if (active) {
+        disposers.push(dispose);
+      } else {
+        dispose();
+      }
+    };
+    const setBank = useMidiBankStore.getState().setBank;
+    void listenToMidiMixChanged(applyMidiMixChanged).then(keep).catch(() => undefined);
+    void listenToMidiBankChanged(setBank).then(keep).catch(() => undefined);
+    void getMidiBank()
+      .then((bank) => {
+        if (active) setBank(bank);
       })
       .catch(() => undefined);
     return () => {
       active = false;
-      unlisten?.();
+      disposers.forEach((dispose) => dispose());
     };
   }, []);
 }

@@ -30,7 +30,7 @@ use std::{
 };
 
 use libretracks_core::midi_control::{
-    Debounce, MidiBindingIndex, MixControl, SoftTakeover, Throttle,
+    Bank, Debounce, MidiBindingIndex, MixControl, SoftTakeover, Throttle, BANK_SIZE,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
@@ -48,6 +48,7 @@ pub(crate) const UI_INTERVAL: Duration = Duration::from_millis(33);
 const TEMPO_INTERVAL: Duration = Duration::from_millis(50);
 const SETTINGS_UPDATED_EVENT: &str = "settings:updated";
 const MIX_CHANGED_EVENT: &str = "midi:mix-changed";
+const BANK_CHANGED_EVENT: &str = "midi:bank-changed";
 
 #[derive(Debug, Default)]
 pub(crate) struct Diagnostics {
@@ -114,12 +115,23 @@ pub struct TrackMixPatch {
     pub solo: Option<bool>,
 }
 
+/// The tracks the strips drive right now, for the mixer's bank indicator.
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BankState {
+    pub offset: usize,
+    pub size: usize,
+    pub track_ids: Vec<String>,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct MixMirror {
     pub(crate) tracks: HashMap<String, TrackMix>,
     /// The visible tracks of the active mixer, in order (strips, paso 04).
     pub(crate) strip_order: Vec<String>,
     pub(crate) song_master: Option<SongMasterSync>,
+    /// Which 8 of `strip_order` the strips drive (paso 04).
+    pub(crate) bank: Bank,
     /// Fields moved by a control and not committed yet, per track. A sync
     /// from the UI must not overwrite them with its older values.
     pending: HashMap<String, Vec<MixControl>>,
@@ -188,11 +200,20 @@ impl MixMirror {
         self.pending.retain(|id, _| next.contains_key(id));
         self.tracks = next;
         self.strip_order = strip_order;
+        self.bank.clamp(self.strip_order.len());
         let keep_ours = self.song_master_pending
             && matches!((&self.song_master, &song_master), (Some(ours), Some(theirs)) if ours.region_id == theirs.region_id);
         if !keep_ours {
             self.song_master = song_master;
             self.song_master_pending = false;
+        }
+    }
+
+    pub(crate) fn bank_state(&self) -> BankState {
+        BankState {
+            offset: self.bank.offset,
+            size: BANK_SIZE,
+            track_ids: self.bank.tracks(&self.strip_order).to_vec(),
         }
     }
 
@@ -258,6 +279,24 @@ impl MidiControl {
     pub(crate) fn with_mix<R>(&self, f: impl FnOnce(&mut MixMirror) -> R) -> R {
         let mut mix = self.mix.lock().unwrap_or_else(|e| e.into_inner());
         f(&mut mix)
+    }
+
+    /// Strip controls must catch their new track again after a bank change.
+    pub(crate) fn release_strip_takeovers(&self) {
+        let mut map = self.takeover.lock().unwrap_or_else(|e| e.into_inner());
+        map.retain(|key, _| !key.starts_with("strip:"));
+    }
+
+    /// Move the bank by `step`; tells the UI when it moved.
+    pub(crate) fn step_bank(&self, app: &AppHandle, step: i32) {
+        let moved = self.with_mix(|mix| {
+            let len = mix.strip_order.len();
+            mix.bank.step(len, step).then(|| mix.bank_state())
+        });
+        if let Some(state) = moved {
+            self.release_strip_takeovers();
+            let _ = app.emit(BANK_CHANGED_EVENT, state);
+        }
     }
 
     pub(crate) fn settings_dirty(&self, app: &AppHandle) {
@@ -503,11 +542,26 @@ pub fn get_midi_control_diagnostics() -> MidiControlDiagnostics {
 /// changes (not per frame).
 #[tauri::command]
 pub fn midi_controller_sync(
+    app: AppHandle,
     tracks: Vec<TrackMixSync>,
     strip_order: Vec<String>,
     song_master: Option<SongMasterSync>,
 ) {
-    control().with_mix(|mix| mix.sync(tracks, strip_order, song_master));
+    let control = control();
+    let (before, after) = control.with_mix(|mix| {
+        let before = mix.bank_state();
+        mix.sync(tracks, strip_order, song_master);
+        (before, mix.bank_state())
+    });
+    if before != after {
+        control.release_strip_takeovers();
+        let _ = app.emit(BANK_CHANGED_EVENT, after);
+    }
+}
+
+#[tauri::command]
+pub fn get_midi_bank() -> BankState {
+    control().with_mix(|mix| mix.bank_state())
 }
 
 #[cfg(test)]

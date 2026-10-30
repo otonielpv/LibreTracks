@@ -16,6 +16,7 @@ import type { TrackKind } from "../desktopApi";
 import { useTransportStore } from "../store";
 import { useTimelineUIStore } from "../uiStore";
 import { isMobileApp } from "../desktopApi";
+import { useIsInMidiBank } from "../midi/midiBankStore";
 
 /**
  * Sitio que hay que dejar libre en el borde inferior: ahi flotan la barra de
@@ -121,6 +122,7 @@ function TrackHeaderItemComponent({
   onCommitPan,
   onAudioToChange,
 }: TrackHeaderItemProps) {
+  const isInMidiBank = useIsInMidiBank(trackId);
   const { t } = useTranslation();
   const lastTouchPointerDownAtRef = useRef(0);
   const optimisticMix = useTransportStore((state) => state.optimisticMix[trackId] ?? null);
@@ -339,7 +341,7 @@ function TrackHeaderItemComponent({
   return (
     <>
     <div
-      className={`lt-track-header ${densityClass} ${isSelected ? "is-selected" : ""} ${effectiveTrackSolo ? "is-solo" : ""} ${trackKind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${isDragging ? "is-dragging" : ""}`}
+      className={`lt-track-header ${densityClass} ${isSelected ? "is-selected" : ""} ${effectiveTrackSolo ? "is-solo" : ""} ${trackKind === "folder" ? "is-folder" : ""} ${isDropTarget ? "is-drop-target" : ""} ${isDragging ? "is-dragging" : ""} ${isInMidiBank ? "is-midi-bank" : ""}`}
       style={headerStyle}
       role="button"
       tabIndex={0}

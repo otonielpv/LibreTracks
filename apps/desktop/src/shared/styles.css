@@ -14372,3 +14372,18 @@ html.lt-mobile .lt-setlist-mixer.is-short > .lt-setlist-mixer-header > .lt-setli
 .lt-mobile .lt-compact-view-import-song {
   min-height: 3.25rem;
 }
+
+/* --- Banco de tiras MIDI (plan midi-controllers, paso 04) ---
+ * Las 8 pistas que mueven las tiras del controlador llevan un filo de color,
+ * como el anillo con que Ableton marca dónde está la superficie de control. */
+:root {
+  --lt-midi-bank-color: #e2483d;
+}
+
+.lt-track-header.is-midi-bank {
+  box-shadow: inset 3px 0 0 var(--lt-midi-bank-color);
+}
+
+.lt-compact-mixer-strip.is-midi-bank {
+  box-shadow: inset 0 3px 0 var(--lt-midi-bank-color);
+}

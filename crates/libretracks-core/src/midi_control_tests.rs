@@ -337,3 +337,45 @@ fn throttle_emits_leading_and_trailing_but_not_every_hit() {
     assert!(throttle.poll(start + ms(33)), "trailing");
     assert!(!throttle.poll(start + ms(80)), "nothing pending");
 }
+
+// --- Banks ---
+
+fn order(len: usize) -> Vec<String> {
+    (1..=len).map(|index| format!("t{index}")).collect()
+}
+
+#[test]
+fn strips_resolve_against_the_current_bank() {
+    let tracks = order(19);
+    let mut bank = Bank::default();
+    assert_eq!(bank.track(&tracks, 1), Some("t1"));
+    assert_eq!(bank.track(&tracks, 8), Some("t8"));
+    assert_eq!(bank.track(&tracks, 9), None, "only 8 strips");
+    assert_eq!(bank.track(&tracks, 0), None);
+    assert!(bank.step(tracks.len(), 1));
+    assert_eq!(bank.track(&tracks, 1), Some("t9"));
+    assert!(bank.step(tracks.len(), 1));
+    assert_eq!(bank.track(&tracks, 3), Some("t19"));
+    assert_eq!(bank.track(&tracks, 4), None, "past the last track");
+    assert_eq!(bank.tracks(&tracks).len(), 3);
+}
+
+#[test]
+fn bank_steps_stop_at_both_ends() {
+    let mut bank = Bank::default();
+    assert!(!bank.step(19, -1), "already on the first bank");
+    assert!(bank.step(19, 5));
+    assert_eq!(bank.offset, 16, "jumps to the last bank, not past it");
+    assert!(!bank.step(19, 1));
+    assert!(!Bank::default().step(8, 1), "one bank only");
+    assert!(!Bank::default().step(0, 1));
+}
+
+#[test]
+fn bank_clamps_when_tracks_go_away() {
+    let mut bank = Bank { offset: 16 };
+    bank.clamp(10);
+    assert_eq!(bank.offset, 8);
+    bank.clamp(0);
+    assert_eq!(bank.offset, 0);
+}

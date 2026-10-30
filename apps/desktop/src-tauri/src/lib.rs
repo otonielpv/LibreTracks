@@ -328,6 +328,7 @@ pub fn run() {
             commands::system::send_midi_test_note,
             midi::control::get_midi_control_diagnostics,
             midi::control::midi_controller_sync,
+            midi::control::get_midi_bank,
             commands::transport::get_transport_snapshot,
             commands::transport::fade_out_and_stop,
             commands::library_places::list_library_dir,

@@ -647,6 +647,54 @@ impl MidiTarget {
     }
 }
 
+/// Strips per bank: the 8 faders of a nanoKONTROL2, SMC-Mixer or MCU.
+pub const BANK_SIZE: usize = 8;
+
+/// Banks of [`BANK_SIZE`] strips over the visible tracks (D7). The bank is
+/// an offset into the track order, always a multiple of the bank size.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Bank {
+    pub offset: usize,
+}
+
+impl Bank {
+    /// The track id behind strip `strip` (1-based), if there is one.
+    pub fn track<'a>(&self, order: &'a [String], strip: u16) -> Option<&'a str> {
+        let index = usize::from(strip.checked_sub(1)?);
+        if index >= BANK_SIZE {
+            return None;
+        }
+        order.get(self.offset + index).map(String::as_str)
+    }
+
+    /// Move by `step` banks, staying on a bank that has tracks. Returns
+    /// whether it moved.
+    pub fn step(&mut self, len: usize, step: i32) -> bool {
+        let last = len.saturating_sub(1) / BANK_SIZE * BANK_SIZE;
+        let next = if step < 0 {
+            self.offset.saturating_sub(BANK_SIZE * step.unsigned_abs() as usize)
+        } else {
+            (self.offset + BANK_SIZE * step as usize).min(last)
+        };
+        let moved = next != self.offset;
+        self.offset = next;
+        moved
+    }
+
+    /// The track list changed: keep the bank on a page that exists.
+    pub fn clamp(&mut self, len: usize) {
+        let last = len.saturating_sub(1) / BANK_SIZE * BANK_SIZE;
+        self.offset = (self.offset / BANK_SIZE * BANK_SIZE).min(last);
+    }
+
+    /// The ids the bank controls, in strip order.
+    pub fn tracks<'a>(&self, order: &'a [String]) -> &'a [String] {
+        let start = self.offset.min(order.len());
+        let end = (self.offset + BANK_SIZE).min(order.len());
+        &order[start..end]
+    }
+}
+
 /// Message → the targets bound to it (D4).
 #[derive(Debug, Clone, Default)]
 pub struct MidiBindingIndex {

@@ -42,6 +42,7 @@ import {
   INITIAL_SETLIST_STATE,
   useSetlistStore,
 } from "../features/transport/setlist/setlistStore";
+import { useMidiBankStore } from "../features/transport/midi/midiBankStore";
 import { emitWaveformReadyForTest, resetTestDesktopApiMock, testDesktopApiMock } from "../app/testDesktopApiMock";
 
 export type MockWebviewDragDropEvent =
@@ -396,6 +397,7 @@ beforeEach(async () => {
   });
   // Vista Setlist: pestañas, cajón de edición y alto del mezclador.
   useSetlistStore.setState(INITIAL_SETLIST_STATE);
+  useMidiBankStore.setState({ active: false, offset: 0, trackIds: [] });
   vi.clearAllMocks();
   vi.restoreAllMocks();
   await i18n.changeLanguage("en");

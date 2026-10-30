@@ -489,6 +489,22 @@ export async function listenToMidiMixChanged(
   });
 }
 
+/** The tracks the controller's 8 strips drive right now (paso 04). */
+export type MidiBankState = { offset: number; size: number; trackIds: string[] };
+
+export async function getMidiBank(): Promise<MidiBankState> {
+  return invokeCommand<MidiBankState>("get_midi_bank");
+}
+
+export async function listenToMidiBankChanged(
+  handler: (bank: MidiBankState) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<MidiBankState>("midi:bank-changed", (event) => {
+    handler(event.payload);
+  });
+}
+
 /** Counters that prove a fader sweep stays off the disk and the session lock. */
 export type MidiControlDiagnostics = {
   messages: number;

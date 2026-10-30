@@ -36,6 +36,7 @@ import { useMixerStripWindow } from "./useMixerStripWindow";
 import { useTransportStore, type OptimisticMixState } from "../store";
 import { useTimelineUIStore } from "../uiStore";
 import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
+import { useIsInMidiBank } from "../midi/midiBankStore";
 
 /**
  * Reusable horizontal-scroll mixer that lays out one vertical channel strip
@@ -540,6 +541,7 @@ function CompactMixerStripComponent({
   hiddenChildCount,
   onToggleFolder,
 }: CompactMixerStripProps) {
+  const isInMidiBank = useIsInMidiBank(track.id);
   const { t } = useTranslation();
   const isFolder = track.kind === "folder";
   // Mirror the DAW TrackHeaderItem: tracks that live inside a folder
@@ -703,7 +705,7 @@ function CompactMixerStripComponent({
         isFolder ? "is-folder" : ""
       } ${isFolder && isCollapsed ? "is-folded" : ""} ${
         parentInfo ? "is-child" : ""
-      } ${isSelected ? "is-selected" : ""}`}
+      } ${isSelected ? "is-selected" : ""} ${isInMidiBank ? "is-midi-bank" : ""}`}
       data-track-id={track.id}
       style={
         {

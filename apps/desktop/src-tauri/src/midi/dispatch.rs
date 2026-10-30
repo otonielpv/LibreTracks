@@ -99,6 +99,29 @@ pub(crate) fn dispatch_midi_message(app: &AppHandle, message: MidiMessage) -> Re
                 message,
                 normalized,
             ),
+            MidiTarget::Strip { strip, control: mix_control } => {
+                let track_id = control
+                    .with_mix(|mix| mix.bank.track(&mix.strip_order, *strip).map(str::to_string));
+                match track_id {
+                    Some(track_id) => dispatch_track(
+                        app,
+                        &track_id,
+                        *mix_control,
+                        &target.key(),
+                        binding,
+                        target,
+                        message,
+                        normalized,
+                    ),
+                    None => Ok(()),
+                }
+            }
+            MidiTarget::Bank(step) => {
+                if ButtonState::is_press(normalized) {
+                    control.step_bank(app, *step);
+                }
+                Ok(())
+            }
             MidiTarget::Mixer(mixer) => dispatch_mixer(
                 app,
                 &settings_store,
@@ -109,7 +132,6 @@ pub(crate) fn dispatch_midi_message(app: &AppHandle, message: MidiMessage) -> Re
                 message,
                 normalized,
             ),
-            _ => Ok(()),
         };
         if let Err(error) = result {
             first_error.get_or_insert(error);
