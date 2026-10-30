@@ -14627,3 +14627,46 @@ html.lt-mobile .lt-setlist-mixer.is-short > .lt-setlist-mixer-header > .lt-setli
 .lt-midi-profiles-detected .lt-ghost-button {
   border-color: var(--lt-midi-map-mapped);
 }
+
+/* Franja del modo Mapeo: el texto y el icono son un boton que la cambia de
+ * borde. En el movil va compacta en la esquina inferior derecha, fuera del
+ * centro donde abren las hojas de ajustes (vamp, saltos). */
+.lt-midi-map-banner-move {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lt-midi-map-banner.is-top {
+  top: calc(8px + var(--lt-safe-area-top, 0px));
+  bottom: auto;
+}
+
+.lt-midi-map-banner.is-compact {
+  left: auto;
+  right: calc(12px + var(--lt-safe-area-right, 0px));
+  bottom: calc(12px + var(--lt-safe-area-bottom, 0px));
+  max-width: min(46vw, 360px);
+  padding: 4px 4px 4px 12px;
+  gap: 8px;
+  font-size: 12px;
+  transform: none;
+}
+
+.lt-midi-map-banner.is-compact.is-top {
+  top: calc(8px + var(--lt-safe-area-top, 0px));
+  bottom: auto;
+}
+
+.lt-midi-map-banner.is-compact .lt-midi-map-banner-exit {
+  min-height: 36px;
+  padding: 0 12px;
+}

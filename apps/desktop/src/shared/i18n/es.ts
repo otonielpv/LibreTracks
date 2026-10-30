@@ -278,6 +278,9 @@ const es = {
   midiMap: {
     banner: "Modo Mapeo MIDI: toca un control y mueve el control físico.",
     bannerTarget: "Mueve el control físico para {{target}}.",
+    bannerShort: "Mapeo MIDI: toca un control",
+    bannerTargetShort: "Mueve el control físico",
+    moveBanner: "Mover el aviso arriba o abajo",
     exit: "Salir",
     mapTarget: "Mapear {{target}}",
     volume: "Volumen",

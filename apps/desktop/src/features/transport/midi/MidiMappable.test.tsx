@@ -83,6 +83,16 @@ describe("MIDI Map mode", () => {
     expect(useTimelineUIStore.getState().midiLearnMode).toBeNull();
   });
 
+  it("tapping the banner moves it to the other edge, so it never hides a sheet", () => {
+    useTimelineUIStore.getState().setMidiLearnMode("");
+    render(<MidiMapBanner />);
+    const banner = screen.getByRole("status");
+    expect(banner.className).not.toContain("is-top");
+    fireEvent.click(screen.getByRole("button", { name: "midiMap.moveBanner" }));
+    expect(banner.className).toContain("is-top");
+    expect(useTimelineUIStore.getState().midiLearnMode).toBe("");
+  });
+
   it("edits and removes bindings, marking another session's tracks", () => {
     const onChange = vi.fn();
     const mappings: Record<string, MidiBinding> = {

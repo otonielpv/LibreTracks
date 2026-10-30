@@ -278,6 +278,9 @@ const en = {
   midiMap: {
     banner: "MIDI Map mode: tap a control, then move the hardware control.",
     bannerTarget: "Move the hardware control for {{target}}.",
+    bannerShort: "MIDI Map: tap a control",
+    bannerTargetShort: "Move the hardware control",
+    moveBanner: "Move the notice up or down",
     exit: "Exit",
     mapTarget: "Map {{target}}",
     volume: "Volume",

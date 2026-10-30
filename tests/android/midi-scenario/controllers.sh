@@ -43,6 +43,10 @@ js '(async () => {
   }
   await inv("create_track", { name: "Bajo", kind: "audio", insertAfterTrackId: null, parentTrackId: null });
   await inv("create_track", { name: "Teclas", kind: "audio", insertAfterTrackId: null, parentTrackId: null });
+  await inv("create_song_region", { startSeconds: 0, endSeconds: 60 });
+  for (const [at, name] of [[0, "Intro"], [16, "Estrofa"], [32, "Coro"]]) {
+    await inv("create_section_marker", { startSeconds: at, kind: null, variant: null, name, categoryOverride: null });
+  }
   const s = await inv("get_settings");
   Object.assign(s, { selectedMidiDevice: "LT Loopback", selectedMidiOutputDevice: "LT Loopback", midiMappings: {} });
   await inv("update_audio_settings", { settings: s });
@@ -111,6 +115,39 @@ note 62
 check "strip 2 soloed the second track of the bank" '(async () => { const v = await inv("get_song_view", { includeWaveforms: false }); const b = await inv("get_midi_bank"); return b.trackIds.length === 2 && v.tracks.find(t => t.id === b.trackIds[1]).solo === true; })()'
 check "the bank indicator rings the two tracks" '(async () => document.querySelectorAll(".is-midi-bank").length >= 2)()'
 shot 06-strip-solo
+
+echo "--- phone: the banner keeps clear of the setting sheets"
+map_mode() {
+  tap '[data-lt-tour="side-nav-settings"]' >/dev/null; wait_ui
+  tap '#lt-settings-tab-midiLearn' >/dev/null; wait_ui
+  tap '.lt-midi-learn-activate' >/dev/null; wait_ui
+}
+map_mode
+check "on a phone the banner is the compact pill" '(async () => document.querySelector(".lt-midi-map-banner")?.classList.contains("is-compact") === true)()'
+tap '.lt-control-popover-trigger' >/dev/null; wait_ui
+check "the open vamp sheet and the banner do not overlap" '(async () => {
+  const banner = document.querySelector(".lt-midi-map-banner")?.getBoundingClientRect();
+  const sheet = document.querySelector(".lt-control-popover.is-open .lt-control-popover-panel, .lt-control-popover-portal .lt-control-popover-panel, .lt-control-popover.is-open [role=dialog]");
+  if (!banner) return "no banner";
+  if (!sheet) return "no sheet";
+  const r = sheet.getBoundingClientRect();
+  return banner.right <= r.left || banner.left >= r.right || banner.bottom <= r.top || banner.top >= r.bottom;
+})()'
+shot 07-vamp-sheet-and-banner
+tap '.lt-control-popover-trigger' >/dev/null; wait_ui 1
+check "a tap on the banner moves it to the top edge" '(async () => { document.querySelector(".lt-midi-map-banner-move").click(); await new Promise((r) => setTimeout(r, 300)); return document.querySelector(".lt-midi-map-banner").classList.contains("is-top"); })()'
+
+echo "--- Live view: markers, vamp and songs are mappable"
+tap '.lt-view-mode-switcher button:nth-child(4)' >/dev/null; wait_ui 3
+check "every section marker row of the song is tinted" '(async () => { const rows = document.querySelectorAll(".lt-live-cue-row"); return rows.length === 3 && [...rows].every((row) => row.querySelector(".lt-midi-mappable-layer")); })()'
+check "the jump and vamp mode options are tinted too" '(async () => { const options = document.querySelectorAll(".lt-live-setting-options button"); return options.length >= 10 && [...options].every((b) => b.querySelector(".lt-midi-mappable-layer")); })()'
+check "vamp, cancel and the song play button are tinted" '(async () => [".lt-live-vamp", ".lt-live-cancel", ".lt-live-region-play"].every((sel) => document.querySelector(sel)?.querySelector(".lt-midi-mappable-layer")))()'
+shot 08-live-map-mode
+js "(async () => { document.querySelectorAll('.lt-live-cue-row')[1].click(); return true; })()" >/dev/null
+wait_ui 1
+note 64
+check "tapping the second marker learned action:jump_marker_2" "(async () => { const b = (await inv('get_settings')).midiMappings['action:jump_marker_2']; return !!b && b.status === 144 && b.data1 === 64; })()"
+shot 09-live-learned
 
 echo
 if [ "$fails" -eq 0 ]; then echo "ALL PASS"; else echo "$fails FAILED"; fi

@@ -47,6 +47,8 @@ import type {
   PerformanceBindings,
 } from "../songs/songViewBindings";
 import "./LivePerformanceView.css";
+import { markerCategory } from "../markerKinds";
+import { MidiMappable } from "../midi/MidiMappable";
 
 export type { LiveViewSettings };
 
@@ -94,6 +96,8 @@ type SettingCardProps = {
   bars?: number;
   onBarsChange?: (bars: number) => void;
   action?: ReactNode;
+  /** MIDI Map mode: each option learns `${learnPrefix}${option.value}`. */
+  learnPrefix?: string;
 };
 
 function SettingCard({
@@ -105,6 +109,7 @@ function SettingCard({
   bars,
   onBarsChange,
   action,
+  learnPrefix,
 }: SettingCardProps) {
   return (
     <div className="lt-live-setting-card">
@@ -113,15 +118,20 @@ function SettingCard({
         <small>{label}</small>
         <span className="lt-live-setting-options" role="group" aria-label={label}>
           {options.map((option) => (
+            <MidiMappable
+              key={option.value}
+              target={learnPrefix ? `${learnPrefix}${option.value}` : ""}
+              label={`${label}: ${option.label}`}
+            >
             <button
               type="button"
-              key={option.value}
               className={option.value === value ? "is-active" : ""}
               aria-pressed={option.value === value}
               onClick={() => onChange(option.value)}
             >
               {option.label}
             </button>
+            </MidiMappable>
           ))}
         </span>
       </span>
@@ -176,6 +186,18 @@ function LivePerformanceViewComponent({
   const { t } = useTranslation();
   const allGroups = useMemo(
     () => buildLiveMarkerGroups(song.sectionMarkers),
+    [song.sectionMarkers],
+  );
+  // MIDI Map mode: jump_marker_N counts the session's section markers in
+  // time order, as the Rust dispatch does; cues are not jump targets.
+  const markerJumpIndex = useMemo(
+    () =>
+      new Map(
+        [...song.sectionMarkers]
+          .filter((marker) => markerCategory(marker) === "section")
+          .sort((left, right) => left.startSeconds - right.startSeconds)
+          .map((marker, index) => [marker.id, index + 1]),
+      ),
     [song.sectionMarkers],
   );
   const sortedRegions = useMemo(
@@ -409,6 +431,7 @@ function LivePerformanceViewComponent({
                 ) : null}
               </button>
               {canControl ? (
+              <MidiMappable target={`action:jump_song_${index + 1}`} label={region.name}>
               <button
                 type="button"
                 className="lt-live-region-play"
@@ -417,6 +440,7 @@ function LivePerformanceViewComponent({
               >
                 <span className="material-symbols-outlined" aria-hidden="true">play_arrow</span>
               </button>
+              </MidiMappable>
               ) : null}
             </div>
           ))}
@@ -442,6 +466,7 @@ function LivePerformanceViewComponent({
       <section className="lt-live-settings" aria-label={t("liveView.performanceSettings")}>
         <SettingCard
           label={t("liveView.markerJump")}
+          learnPrefix="action:set_global_jump_mode_"
           barsLabel={t("liveView.bars")}
           value={settings.globalJumpMode}
           options={jumpOptions}
@@ -451,6 +476,7 @@ function LivePerformanceViewComponent({
         />
         <SettingCard
           label={t("liveView.songJump")}
+          learnPrefix="action:set_song_jump_trigger_"
           barsLabel={t("liveView.bars")}
           value={settings.songJumpTrigger}
           options={songJumpOptions}
@@ -464,9 +490,9 @@ function LivePerformanceViewComponent({
               aria-label={t("liveView.songTransition")}
             >
               {songTransitionOptions.map((option) => (
+                <MidiMappable key={option.value} target={`action:set_song_transition_${option.value}`} label={option.label}>
                 <button
                   type="button"
-                  key={option.value}
                   className={settings.songTransitionMode === option.value ? "is-active" : ""}
                   aria-pressed={settings.songTransitionMode === option.value}
                   title={`${t("liveView.songTransition")}: ${option.label}`}
@@ -476,12 +502,14 @@ function LivePerformanceViewComponent({
                 >
                   {option.label}
                 </button>
+                </MidiMappable>
               ))}
             </span>
           )}
         />
         <SettingCard
           label={t("liveView.vampType")}
+          learnPrefix="action:set_vamp_mode_"
           barsLabel={t("liveView.bars")}
           value={settings.vampMode}
           options={vampOptions}
@@ -496,9 +524,11 @@ function LivePerformanceViewComponent({
                   onChange={onVampBetweenSongsChange}
                 />
               ) : null}
+              <MidiMappable target="action:toggle_vamp" label="VAMP">
               <button type="button" className={`lt-live-vamp${isVampActive ? " is-active" : ""}`} aria-pressed={isVampActive} onClick={(event) => { event.preventDefault(); onToggleVamp(); }}>
                 VAMP
               </button>
+              </MidiMappable>
             </span>
           )}
         />
@@ -518,6 +548,7 @@ function LivePerformanceViewComponent({
               {groups.length} {t("liveView.markers")}
             </span>
             {canControl ? (
+            <MidiMappable target="action:cancel_jump" label={t("liveView.cancelJump")}>
             <button
               type="button"
               className="lt-live-cancel"
@@ -528,6 +559,7 @@ function LivePerformanceViewComponent({
               <span className="material-symbols-outlined" aria-hidden="true">cancel_schedule_send</span>
               <span>{t("liveView.cancelJump")}</span>
             </button>
+            </MidiMappable>
             ) : null}
           </div>
         </div>
@@ -540,10 +572,15 @@ function LivePerformanceViewComponent({
               : false;
             const isPast = activeGroupIndex >= 0 && index < activeGroupIndex;
             const isVampAnchor = group.id === vampGroupId;
+            const jumpIndex = markerJumpIndex.get(group.primary.id);
             return (
+              <MidiMappable
+                key={group.id}
+                target={canControl && jumpIndex ? `action:jump_marker_${jumpIndex}` : ""}
+                label={group.primary.name}
+              >
               <button
                 type="button"
-                key={group.id}
                 ref={(node) => { rowRefs.current[group.id] = node; }}
                 aria-disabled={canControl ? undefined : true}
                 className={`lt-live-cue-row${canControl ? "" : " is-readonly"}${isActive ? " is-active" : ""}${isNext ? " is-next" : ""}${isPending ? " is-pending" : ""}${isPast ? " is-past" : ""}${isVampAnchor ? " is-vamp" : ""}${group.category === "cue" ? " is-cue" : ""}`}
@@ -606,6 +643,7 @@ function LivePerformanceViewComponent({
                 <time>{formatLiveClock(group.startSeconds - (selectedRegion?.startSeconds ?? 0))}</time>
                 <span className="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
               </button>
+              </MidiMappable>
             );
           })}
           {groups.length === 0 ? <p className="lt-live-empty">{t("liveView.noMarkers")}</p> : null}
