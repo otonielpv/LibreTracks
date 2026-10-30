@@ -2,7 +2,11 @@ import {
   getCumulativeMusicalPosition,
   type TimelineRegion,
 } from "../features/transport/timeline/timelineMath";
-import { getEffectiveBpmAt } from "@libretracks/shared/models";
+// Runtime values come from the shared models, never from desktopApi: this file
+// IS the mock of desktopApi, and importing a value from the module being mocked
+// deadlocks vite-node while it loads. No error, no timeout: every src/app test
+// just hangs forever. Type-only imports from desktopApi below are fine.
+import { getEffectiveBpmAt, markerCategory } from "@libretracks/shared/models";
 import type {
   AppSettings,
   AutomationCueSummary,
@@ -35,7 +39,6 @@ import type {
   WaveformReadyEvent,
   WaveformSummaryDto,
 } from "../features/transport/desktopApi";
-import { markerCategory } from "../features/transport/desktopApi";
 
 type PlaybackState = TransportSnapshot["playbackState"];
 
