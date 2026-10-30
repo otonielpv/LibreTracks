@@ -312,7 +312,7 @@ export function MidiSettingsTab({
           <small>{t("transport.midi.controllerOutputHint")}</small>
         </div>
 
-        <label className="lt-settings-field lt-settings-checkbox">
+        <label className="lt-settings-toggle">
           <input
             type="checkbox"
             checked={platform.stripsFollowSong}
@@ -321,8 +321,8 @@ export function MidiSettingsTab({
               platform.onChange({ midiStripsFollowSong: event.target.checked })
             }
           />
-          <span>
-            {t("transport.midi.stripsFollowSong")}
+          <span className="lt-settings-toggle-copy">
+            <span>{t("transport.midi.stripsFollowSong")}</span>
             <small>{t("transport.midi.stripsFollowSongHint")}</small>
           </span>
         </label>

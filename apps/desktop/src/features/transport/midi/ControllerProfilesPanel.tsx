@@ -109,7 +109,7 @@ export function ControllerProfilesPanel({
       {detected ? (
         <div className="lt-midi-profiles-detected" role="status">
           <span>{t("midiMap.profileDetected", { name: detected.profile.name })}</span>
-          <button type="button" disabled={disabled} onClick={() => apply(detected.profile)}>
+          <button type="button" className="lt-ghost-button" disabled={disabled} onClick={() => apply(detected.profile)}>
             {t("midiMap.profileApply")}
           </button>
         </div>
@@ -129,15 +129,16 @@ export function ControllerProfilesPanel({
         </select>
         <button
           type="button"
+          className="lt-ghost-button"
           disabled={disabled || !selected}
           onClick={() => selected && apply(selected)}
         >
           {t("midiMap.profileApply")}
         </button>
-        <button type="button" disabled={disabled} onClick={() => fileRef.current?.click()}>
+        <button type="button" className="lt-ghost-button" disabled={disabled} onClick={() => fileRef.current?.click()}>
           {t("midiMap.profileImport")}
         </button>
-        <button type="button" disabled={disabled} onClick={() => void exportProfile()}>
+        <button type="button" className="lt-ghost-button" disabled={disabled} onClick={() => void exportProfile()}>
           {t("midiMap.profileExport")}
         </button>
         <input

@@ -23,6 +23,7 @@ export function MidiControlDiagnosticsLine() {
     <p className="lt-midi-diagnostics">
       <button
         type="button"
+        className="lt-ghost-button"
         onClick={() => {
           void getMidiControlDiagnostics()
             .then(setCounts)

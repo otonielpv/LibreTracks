@@ -55,7 +55,7 @@ export function MidiBindingsEditor({
               <span className="lt-midi-binding-pill">{formatMidiBinding(binding)}</span>
               <button
                 type="button"
-                className="lt-midi-bindings-remove"
+                className="lt-ghost-button lt-midi-bindings-remove"
                 disabled={disabled}
                 onClick={() => onChange(key, null)}
               >

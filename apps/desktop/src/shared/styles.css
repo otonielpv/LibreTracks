@@ -14602,3 +14602,28 @@ html.lt-mobile .lt-setlist-mixer.is-short > .lt-setlist-mixer-header > .lt-setli
   margin: 0 0 8px;
   font-size: 12px;
 }
+
+/* Selectores y campos del panel de controladores con el aspecto de Ajustes
+ * (Tailwind 4 sin preflight: sin esto salen con el estilo del navegador). */
+.lt-midi-profiles select,
+.lt-midi-bindings-fields select,
+.lt-midi-bindings-fields input[type="number"] {
+  border: 1px solid rgb(87 241 219 / 0.18);
+  border-radius: 2px;
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.4rem 0.55rem;
+  font: 600 0.82rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-midi-profiles select {
+  min-width: 12rem;
+}
+
+.lt-midi-bindings-remove {
+  margin-left: auto;
+}
+
+.lt-midi-profiles-detected .lt-ghost-button {
+  border-color: var(--lt-midi-map-mapped);
+}
