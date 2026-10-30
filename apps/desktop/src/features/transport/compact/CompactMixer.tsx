@@ -37,6 +37,8 @@ import { useTransportStore, type OptimisticMixState } from "../store";
 import { useTimelineUIStore } from "../uiStore";
 import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
 import { useIsInMidiBank } from "../midi/midiBankStore";
+import { trackTarget } from "../midi/controllerTargets";
+import { MidiMappable, useMidiMappable } from "../midi/MidiMappable";
 
 /**
  * Reusable horizontal-scroll mixer that lays out one vertical channel strip
@@ -542,6 +544,8 @@ function CompactMixerStripComponent({
   onToggleFolder,
 }: CompactMixerStripProps) {
   const isInMidiBank = useIsInMidiBank(track.id);
+  const volumeMap = useMidiMappable(trackTarget(track.id, "volume"), track.name);
+  const panMap = useMidiMappable(trackTarget(track.id, "pan"), track.name);
   const { t } = useTranslation();
   const isFolder = track.kind === "folder";
   // Mirror the DAW TrackHeaderItem: tracks that live inside a folder
@@ -805,24 +809,28 @@ function CompactMixerStripComponent({
       ) : null}
 
       <div className="lt-compact-mixer-strip-toggles">
-        <button
-          type="button"
-          className={`lt-compact-mixer-toggle is-mute ${muted ? "is-on" : ""}`}
-          aria-pressed={muted}
-          aria-label={`Mute ${track.name}`}
-          onClick={() => handlers.onToggleMute(track.id)}
-        >
-          M
-        </button>
-        <button
-          type="button"
-          className={`lt-compact-mixer-toggle is-solo ${solo ? "is-on" : ""}`}
-          aria-pressed={solo}
-          aria-label={`Solo ${track.name}`}
-          onClick={() => handlers.onToggleSolo(track.id)}
-        >
-          S
-        </button>
+        <MidiMappable target={trackTarget(track.id, "mute")} label={`${track.name} · M`}>
+          <button
+            type="button"
+            className={`lt-compact-mixer-toggle is-mute ${muted ? "is-on" : ""}`}
+            aria-pressed={muted}
+            aria-label={`Mute ${track.name}`}
+            onClick={() => handlers.onToggleMute(track.id)}
+          >
+            M
+          </button>
+        </MidiMappable>
+        <MidiMappable target={trackTarget(track.id, "solo")} label={`${track.name} · S`}>
+          <button
+            type="button"
+            className={`lt-compact-mixer-toggle is-solo ${solo ? "is-on" : ""}`}
+            aria-pressed={solo}
+            aria-label={`Solo ${track.name}`}
+            onClick={() => handlers.onToggleSolo(track.id)}
+          >
+            S
+          </button>
+        </MidiMappable>
         <button
           type="button"
           className={`lt-compact-mixer-toggle is-transpose ${
@@ -849,7 +857,7 @@ function CompactMixerStripComponent({
           travel bottom→top reliably. The meter is a div whose height
           tracks the same `meters[trackId]` dictionary the DAW track
           headers already populate. */}
-      <div className="lt-compact-mixer-fader-wrap">
+      <div className={`lt-compact-mixer-fader-wrap ${volumeMap.className}`}>
         <div className="lt-compact-mixer-fader-scale" aria-hidden="true">
           {TRACK_FADER_TICKS.map((tick) => (
             <span
@@ -880,13 +888,14 @@ function CompactMixerStripComponent({
           ariaLabel={`Volume ${track.name}`}
         />
         <TrackMeter trackId={track.id} />
+        {volumeMap.overlay}
       </div>
 
       {/* Pan slider. Horizontal so it doesn't claim more height inside the
           already-tall strip. -1 → L, 0 → C, +1 → R. The guide row above
           shows L/C/R tick labels so the user reads the slider without
           touching it, and a tooltip floats over the thumb while dragging. */}
-      <div className="lt-compact-mixer-pan-wrap">
+      <div className={`lt-compact-mixer-pan-wrap ${panMap.className}`}>
         <div className="lt-compact-mixer-pan-guides" aria-hidden="true">
           <span className="lt-compact-mixer-pan-guide is-left">L</span>
           <span className="lt-compact-mixer-pan-guide is-centre">C</span>
@@ -925,6 +934,7 @@ function CompactMixerStripComponent({
             </div>
           ) : null}
         </div>
+        {panMap.overlay}
       </div>
 
       <select

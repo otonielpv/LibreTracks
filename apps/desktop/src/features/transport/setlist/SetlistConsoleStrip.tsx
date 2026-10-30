@@ -2,6 +2,7 @@ import { memo, type CSSProperties, type ReactNode } from "react";
 import { TRACK_FADER_SCALE, faderTicks } from "@libretracks/shared/faderScale";
 
 import { CompactVerticalFader } from "../compact/CompactMixer";
+import { useMidiMappable } from "../midi/MidiMappable";
 
 // Same ticks as the track strips (computed once: the scale never changes).
 const TRACK_FADER_TICKS = faderTicks(TRACK_FADER_SCALE);
@@ -18,6 +19,8 @@ type SetlistConsoleStripProps = {
   onDoubleClick: () => void;
   /** The vertical meter, next to the fader like a track's. */
   meter?: ReactNode;
+  /** MIDI Map mode target of the fader (plan midi-controllers, paso 05). */
+  midiTarget?: string;
 };
 
 /**
@@ -37,7 +40,10 @@ function SetlistConsoleStripComponent({
   onCommit,
   onDoubleClick,
   meter,
+  midiTarget,
 }: SetlistConsoleStripProps) {
+  const faderMap = useMidiMappable(midiTarget ?? "", name);
+  const mappable = midiTarget ? faderMap : null;
   return (
     <div
       className="lt-compact-mixer-strip lt-setlist-master-strip"
@@ -51,7 +57,7 @@ function SetlistConsoleStripComponent({
       <div className="lt-compact-mixer-strip-toggles lt-setlist-master-value" aria-hidden="true">
         {formatValue(position)}
       </div>
-      <div className="lt-compact-mixer-fader-wrap">
+      <div className={`lt-compact-mixer-fader-wrap ${mappable?.className ?? ""}`}>
         <div className="lt-compact-mixer-fader-scale" aria-hidden="true">
           {TRACK_FADER_TICKS.map((tick) => (
             <span key={tick.label} style={{ top: `${(tick.offsetFromTop * 100).toFixed(2)}%` }}>
@@ -68,6 +74,7 @@ function SetlistConsoleStripComponent({
           formatValue={formatValue}
         />
         {meter}
+        {mappable?.overlay}
       </div>
       <div className="lt-compact-mixer-pan-wrap lt-setlist-strip-placeholder" aria-hidden="true">
         <div className="lt-compact-mixer-pan-guides">

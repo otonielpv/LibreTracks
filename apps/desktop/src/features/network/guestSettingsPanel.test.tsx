@@ -59,6 +59,7 @@ function settingsProps(activeTab: Props["activeTab"] = "general"): Props {
     visibleMidiLearnRows: [], activeMidiLearnCommand: null, onMidiLearnToggle: noop,
     onResetMidiMappings: noop, onMidiLearnCommandRelearn: noop,
     onDynamicMidiLearnJump: noop, onMidiLearnTarget: noop,
+    onMidiBindingChange: noop, formatMidiLearnCommandLabel: (key: string) => key,
   };
 }
 

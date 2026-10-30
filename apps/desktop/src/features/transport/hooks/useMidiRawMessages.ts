@@ -99,6 +99,14 @@ export function useMidiRawMessages({
         return;
       }
 
+      // Learn from a press, never a release: a button whose note off (or
+      // velocity-0 note on) arrived first used to be stored as 0x8n and
+      // never fired again.
+      const kind = message.status & 0xf0;
+      if (kind === 0x80 || (kind === 0x90 && message.data2 === 0)) {
+        return;
+      }
+
       const nextBinding = {
         status: message.status,
         data1: message.data1,

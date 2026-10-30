@@ -168,6 +168,7 @@ function SetlistMixerComponent({
     <SetlistConsoleStrip
       name={t("setlistView.mixer.master")}
       title={t("setlistView.mixer.masterTitle")}
+      midiTarget="mixer:song_master:volume"
       position={gainToPosition(masterGain, TRACK_FADER_SCALE)}
       ariaLabel={t("setlistView.mixer.masterAria", { name: region.name })}
       formatValue={formatMaster}

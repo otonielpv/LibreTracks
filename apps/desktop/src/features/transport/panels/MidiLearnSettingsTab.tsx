@@ -1,7 +1,14 @@
 import { useTranslation } from "react-i18next";
 
+import type { MidiBinding } from "@libretracks/shared/models";
+
 import { formatMidiBinding } from "../helpers";
+import { describeMidiTarget, mixerLearnKeys } from "../midi/controllerTargets";
+import { MidiBindingsEditor } from "../midi/MidiBindingsEditor";
+import { useSongStore } from "../songStore";
 import type { MidiLearnCommandRow, MidiLearnFeedback } from "../types";
+
+export type MidiLearnView = "core" | "markers" | "songs" | "mixer" | "bindings";
 
 /**
  * The Settings modal's MIDI Learn tab.
@@ -20,8 +27,8 @@ export type MidiLearnSettingsTabProps = {
   midiLearnMode: string | null;
   midiLearnFeedback: MidiLearnFeedback | null;
   midiLearnFeedbackCommand: MidiLearnCommandRow | null;
-  midiLearnView: "core" | "markers" | "songs";
-  onMidiLearnViewChange: (view: "core" | "markers" | "songs") => void;
+  midiLearnView: MidiLearnView;
+  onMidiLearnViewChange: (view: MidiLearnView) => void;
   midiLearnMarkerRows: MidiLearnCommandRow[];
   midiLearnSongRows: MidiLearnCommandRow[];
   visibleMidiLearnRows: MidiLearnCommandRow[];
@@ -30,6 +37,10 @@ export type MidiLearnSettingsTabProps = {
   onResetMidiMappings: () => void;
   onMidiLearnCommandRelearn: (key: string) => void;
   onDynamicMidiLearnJump: (type: "marker" | "song") => void;
+  /** Every binding, for the "Mixer" rows and the "Bindings" editor. */
+  midiMappings: Record<string, MidiBinding>;
+  onMidiBindingChange: (key: string, binding: MidiBinding | null) => void;
+  formatCommandLabel: (key: string) => string;
 };
 
 export function MidiLearnSettingsTab({
@@ -50,9 +61,23 @@ export function MidiLearnSettingsTab({
   onResetMidiMappings,
   onMidiLearnCommandRelearn,
   onDynamicMidiLearnJump,
+  midiMappings,
+  onMidiBindingChange,
+  formatCommandLabel,
 }: MidiLearnSettingsTabProps) {
   const { t } = useTranslation();
   const busy = isLoading || isSaving;
+  const song = useSongStore((state) => state.song);
+  // The mixer rows (strips, banks, click, guide, pads, song master) are
+  // built here rather than in the monolith (plan midi-controllers, paso 05).
+  const rows: MidiLearnCommandRow[] =
+    midiLearnView === "mixer"
+      ? mixerLearnKeys().map((key) => ({
+          key,
+          label: describeMidiTarget(key, t, song) ?? key,
+          binding: midiMappings[key] ?? null,
+        }))
+      : visibleMidiLearnRows;
 
   const relearnLabel = (command: MidiLearnCommandRow, isTarget: boolean) => {
     if (isTarget) {
@@ -100,7 +125,7 @@ export function MidiLearnSettingsTab({
               type="button"
               className={`lt-midi-learn-activate ${midiLearnMode !== null ? "is-active" : ""}`}
               disabled={busy}
-              onClick={() => onMidiLearnToggle({ closePanels: false })}
+              onClick={() => onMidiLearnToggle({ closePanels: true })}
             >
               <span className="material-symbols-outlined">graphic_eq</span>
               {t("transport.shell.midiLearn")}
@@ -167,11 +192,32 @@ export function MidiLearnSettingsTab({
               count: midiLearnSongRows.length,
             })}
           </button>
+          <button
+            type="button"
+            className={midiLearnView === "mixer" ? "is-active" : ""}
+            onClick={() => onMidiLearnViewChange("mixer")}
+          >
+            {t("midiMap.viewMixer")}
+          </button>
+          <button
+            type="button"
+            className={midiLearnView === "bindings" ? "is-active" : ""}
+            onClick={() => onMidiLearnViewChange("bindings")}
+          >
+            {t("midiMap.viewBindings", { count: Object.keys(midiMappings).length })}
+          </button>
         </div>
 
-        {layout === "list" ? (
+        {midiLearnView === "bindings" ? (
+          <MidiBindingsEditor
+            midiMappings={midiMappings}
+            describe={formatCommandLabel}
+            disabled={busy}
+            onChange={onMidiBindingChange}
+          />
+        ) : layout === "list" ? (
           <ul className="lt-midi-learn-list">
-            {visibleMidiLearnRows.map((command) => {
+            {rows.map((command) => {
               const isTarget = midiLearnMode === command.key;
               return (
                 <li
@@ -212,7 +258,7 @@ export function MidiLearnSettingsTab({
                 </tr>
               </thead>
               <tbody>
-                {visibleMidiLearnRows.map((command) => {
+                {rows.map((command) => {
                   const isTarget = midiLearnMode === command.key;
                   return (
                     <tr

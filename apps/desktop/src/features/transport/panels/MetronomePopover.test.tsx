@@ -27,14 +27,12 @@ describe("MetronomePopover", () => {
         settings={{ ...DEFAULT_APP_SETTINGS, metronomeAccentEnabled: true }}
         routeOptions={[]}
         volumeDraft={1}
-        midiLearnMode={null}
         onClose={vi.fn()}
         onEnabledChange={vi.fn()}
         onOutputChange={vi.fn()}
         onVolumeDraftChange={vi.fn()}
         onCommitVolume={vi.fn()}
         onSoundChange={onSoundChange}
-        onMidiLearnTarget={vi.fn()}
       />,
     );
 

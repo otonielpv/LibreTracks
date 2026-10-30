@@ -27,6 +27,7 @@ import { PadManagerModal } from "./PadManagerModal";
 import { useDismissOnBack } from "../mobile/backNavigation";
 import { NetworkControls } from "../../network/NetworkControls";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
+import { useMidiMappable } from "../midi/MidiMappable";
 
 type RouteOption = { value: string; label: string };
 
@@ -240,8 +241,11 @@ export function PadsControls({
       )}
     </div>
   );
+  // MIDI Map mode (plan midi-controllers, paso 05).
+  const padsVolumeMap = useMidiMappable("mixer:pads:volume", t("midiMap.pads"));
   const volumeField = (
-    <div className="lt-pads-field">
+    <div className={`lt-pads-field ${padsVolumeMap.className}`}>
+      {padsVolumeMap.overlay}
       <span className="lt-pads-field-label">
         {t("pads.volume", { defaultValue: "Volumen" })}
         <span className="lt-pads-volume-value">{volumeLabel} dB</span>

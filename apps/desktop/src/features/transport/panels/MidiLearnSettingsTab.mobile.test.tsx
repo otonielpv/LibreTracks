@@ -97,6 +97,9 @@ function Harness() {
       // What createMidiLearnHandlers.handleMidiLearnCommandRelearn does.
       onMidiLearnCommandRelearn={(key) => setMidiLearnMode(key)}
       onDynamicMidiLearnJump={() => {}}
+      midiMappings={settings.midiMappings}
+      onMidiBindingChange={() => {}}
+      formatCommandLabel={(key) => LABELS[key] ?? key}
     />
   );
 }

@@ -15,6 +15,7 @@ import {
   positionToGain,
 } from "@libretracks/shared/faderScale";
 import { PopoverShell } from "./PopoverShell";
+import { useMidiMappable } from "../midi/MidiMappable";
 
 type RouteOption = { value: string; label: string };
 
@@ -25,14 +26,12 @@ type Props = {
   routeOptions: RouteOption[];
   /** Live volume draft, committed on pointer-up/blur (kept in the parent). */
   volumeDraft: number;
-  midiLearnMode: string | null;
   onClose: () => void;
   onEnabledChange: (checked: boolean) => void;
   onOutputChange: (value: string) => void;
   onVolumeDraftChange: (value: number) => void;
   onCommitVolume: (value: number) => void;
   onSoundChange: (patch: Partial<AppSettings>) => void;
-  onMidiLearnTarget: (command: string) => void;
 };
 
 type ControlsProps = Omit<Props, "open" | "anchorRef" | "onClose">;
@@ -43,16 +42,21 @@ export function MetronomeControls({
   settings,
   routeOptions,
   volumeDraft,
-  midiLearnMode,
   onEnabledChange,
   onOutputChange,
   onVolumeDraftChange,
   onCommitVolume,
   onSoundChange,
-  onMidiLearnTarget,
 }: ControlsProps) {
   const { isGuest } = useNetworkPermissions();
   const { t } = useTranslation();
+  // MIDI Map mode (plan midi-controllers, paso 05): the old `param:` key
+  // keeps the bindings users already learned on this fader.
+  const toggleMap = useMidiMappable("action:toggle_metronome");
+  const volumeMap = useMidiMappable(
+    "param:metronome_volume",
+    t("transport.settingsModal.metronomeVolume"),
+  );
 
   return (
     <NetworkControls permission="edit">
@@ -64,16 +68,11 @@ export function MetronomeControls({
       </header>
 
       <div className="lt-pads-controls">
-        <label className="lt-pads-toggle">
+        <label className={`lt-pads-toggle ${toggleMap.className}`}>
+          {toggleMap.overlay}
           <input
             type="checkbox"
             checked={settings.metronomeEnabled}
-            onPointerDown={(event) => {
-              if (midiLearnMode === null) return;
-              event.preventDefault();
-              event.stopPropagation();
-              onMidiLearnTarget("action:toggle_metronome");
-            }}
             onChange={(event) => onEnabledChange(event.target.checked)}
           />
           <span>
@@ -103,7 +102,8 @@ export function MetronomeControls({
           </select>
         </div>
 
-        <div className="lt-pads-field">
+        <div className={`lt-pads-field ${volumeMap.className}`}>
+          {volumeMap.overlay}
           <span className="lt-pads-field-label">
             {t("transport.settingsModal.metronomeVolume")}
             <span className="lt-pads-volume-value">
@@ -118,12 +118,6 @@ export function MetronomeControls({
             step={0.001}
             value={gainToPosition(volumeDraft, AUX_FADER_SCALE)}
             aria-label={t("transport.settingsModal.metronomeVolume")}
-            onPointerDown={(event) => {
-              if (midiLearnMode === null) return;
-              event.preventDefault();
-              event.stopPropagation();
-              onMidiLearnTarget("param:metronome_volume");
-            }}
             onChange={(event) =>
               onVolumeDraftChange(
                 positionToGain(Number(event.target.value), AUX_FADER_SCALE),

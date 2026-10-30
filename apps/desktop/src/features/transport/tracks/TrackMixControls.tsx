@@ -9,6 +9,8 @@ import {
 } from "@libretracks/shared/faderScale";
 
 import { AudioRouteCombobox } from "./AudioRouteCombobox";
+import { trackTarget } from "../midi/controllerTargets";
+import { useMidiMappable } from "../midi/MidiMappable";
 import { useFineDragRange } from "../timeline/useFineDragRange";
 import { useTouchRangeDrag } from "./useTouchRangeDrag";
 
@@ -116,9 +118,12 @@ export function TrackMixControls({
     onCommit: () => onCommitPan(trackId),
   });
 
+  const volumeMap = useMidiMappable(trackTarget(trackId, "volume"));
+  const panMap = useMidiMappable(trackTarget(trackId, "pan"));
+
   return (
     <div className="lt-track-mix-controls">
-      <label className="lt-track-volume">
+      <label className={`lt-track-volume ${volumeMap.className}`}>
         <span>
           <span className="lt-track-mix-label">{t("trackHeader.volume")}</span>
           <em className="lt-track-mix-value">
@@ -165,8 +170,9 @@ export function TrackMixControls({
             onCommitVolume(trackId);
           }}
         />
+        {volumeMap.overlay}
       </label>
-      <label className="lt-track-pan">
+      <label className={`lt-track-pan ${panMap.className}`}>
         <span>
           <span className="lt-track-mix-label">
             {t("trackHeader.pan", { defaultValue: "Pan" })}
@@ -207,6 +213,7 @@ export function TrackMixControls({
             onCommitPan(trackId);
           }}
         />
+        {panMap.overlay}
       </label>
       <label className="lt-track-audio-to">
         <span>{t("trackHeader.audioTo", { defaultValue: "Audio To" })}</span>

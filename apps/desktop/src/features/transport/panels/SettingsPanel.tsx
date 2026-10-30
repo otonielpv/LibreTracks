@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { AppSettings, AudioDeviceDescriptor } from "@libretracks/shared/models";
+import type { AppSettings, AudioDeviceDescriptor, MidiBinding } from "@libretracks/shared/models";
 import { AUTO_SAVE_INTERVAL_PRESETS, isSongTrackLayout } from "@libretracks/shared/models";
 import { DefaultSongTemplateField } from "../templates/DefaultSongTemplateField";
 import type { DecodingCacheInfo } from "@libretracks/shared/desktopApi";
@@ -37,7 +37,7 @@ import {
   MidiSettingsTab,
   type MidiOutputSettings,
 } from "./MidiSettingsTab";
-import { MidiLearnSettingsTab } from "./MidiLearnSettingsTab";
+import { MidiLearnSettingsTab, type MidiLearnView } from "./MidiLearnSettingsTab";
 import { useDismissOnBack } from "../mobile/backNavigation";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
@@ -117,14 +117,16 @@ type SettingsPanelProps = {
   midiLearnMode: string | null;
   midiLearnFeedback: MidiLearnFeedback | null;
   midiLearnFeedbackCommand: MidiLearnCommandRow | null;
-  midiLearnView: "core" | "markers" | "songs";
-  onMidiLearnViewChange: (view: "core" | "markers" | "songs") => void;
+  midiLearnView: MidiLearnView;
+  onMidiLearnViewChange: (view: MidiLearnView) => void;
   midiLearnMarkerRows: MidiLearnCommandRow[];
   midiLearnSongRows: MidiLearnCommandRow[];
   visibleMidiLearnRows: MidiLearnCommandRow[];
   activeMidiLearnCommand: MidiLearnCommandRow | null;
   onMidiLearnToggle: (options?: { closePanels?: boolean }) => void;
   onResetMidiMappings: () => void;
+  onMidiBindingChange: (key: string, binding: MidiBinding | null) => void;
+  formatMidiLearnCommandLabel: (key: string) => string;
   onMidiLearnCommandRelearn: (key: string) => void;
   onDynamicMidiLearnJump: (type: "marker" | "song") => void;
   onMidiLearnTarget: (key: string) => void;
@@ -197,6 +199,8 @@ export function SettingsPanel({
   activeMidiLearnCommand,
   onMidiLearnToggle,
   onResetMidiMappings,
+  onMidiBindingChange,
+  formatMidiLearnCommandLabel,
   onMidiLearnCommandRelearn,
   onDynamicMidiLearnJump,
   onMidiLearnTarget,
@@ -996,6 +1000,9 @@ export function SettingsPanel({
                   onResetMidiMappings={onResetMidiMappings}
                   onMidiLearnCommandRelearn={onMidiLearnCommandRelearn}
                   onDynamicMidiLearnJump={onDynamicMidiLearnJump}
+                  midiMappings={appSettings.midiMappings}
+                  onMidiBindingChange={onMidiBindingChange}
+                  formatCommandLabel={formatMidiLearnCommandLabel}
                 />
               ) : null}
             </div>

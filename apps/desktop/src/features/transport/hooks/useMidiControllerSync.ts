@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import type { SongView } from "@libretracks/shared/models";
+import type { MidiBinding, SongView } from "@libretracks/shared/models";
 
 import {
   getMidiBank,
@@ -15,6 +15,7 @@ import {
   midiStripOrder,
   useMidiBankStore,
 } from "../midi/midiBankStore";
+import { setMidiMappingsForMappable } from "../midi/MidiMappable";
 import { setSong } from "../songStore";
 import { useTransportStore } from "../store";
 
@@ -46,8 +47,11 @@ export function useMidiControllerSync({
 }: {
   song: SongView | null;
   activeSongRegionId: string;
-  midiMappings: Record<string, unknown>;
+  midiMappings: Record<string, MidiBinding>;
 }) {
+  useEffect(() => {
+    setMidiMappingsForMappable(midiMappings);
+  }, [midiMappings]);
   const stripsActive = hasStripMappings(midiMappings);
   useEffect(() => {
     useMidiBankStore.getState().setActive(stripsActive);

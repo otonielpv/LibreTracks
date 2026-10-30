@@ -53,6 +53,7 @@ export type ShortcutActionId =
   | "view.zoomOut"
   | "view.zoomReset"
   | "view.toggleFullscreen"
+  | "view.toggleMidiMap"
   // navigation
   | "nav.cancelOrClear"
   // video (paso 13)
@@ -248,6 +249,13 @@ export const SHORTCUT_ACTIONS: ShortcutActionDef[] = [
     group: "view",
     labelKey: "shortcuts.action.toggleFullscreen",
     defaultBinding: "F11",
+  },
+  {
+    // New: Ableton's MIDI Map mode key (plan midi-controllers, paso 05).
+    id: "view.toggleMidiMap",
+    group: "view",
+    labelKey: "shortcuts.action.toggleMidiMap",
+    defaultBinding: "Ctrl+M",
   },
 
   // --- Navigation --------------------------------------------------------

@@ -16,6 +16,7 @@ import {
 } from "@libretracks/shared/faderScale";
 import { PopoverShell } from "./PopoverShell";
 import { voiceGuideCountStyleLabel } from "../songs/songCountStyle";
+import { useMidiMappable } from "../midi/MidiMappable";
 
 type RouteOption = { value: string; label: string };
 
@@ -44,6 +45,8 @@ export function VoiceGuideControls({
 }: ControlsProps) {
   const { isGuest } = useNetworkPermissions();
   const { t } = useTranslation();
+  // MIDI Map mode (plan midi-controllers, paso 05).
+  const voiceVolumeMap = useMidiMappable("mixer:voice_guide:volume", t("midiMap.voiceGuide"));
 
   // Voice guide can route to the local monitor; mirror the ordering the old
   // settings tab used (Monitor first, then the shared routing options).
@@ -188,7 +191,8 @@ export function VoiceGuideControls({
               </select>
             </div>
 
-            <div className="lt-pads-field">
+            <div className={`lt-pads-field ${voiceVolumeMap.className}`}>
+                {voiceVolumeMap.overlay}
               <span className="lt-pads-field-label">
                 {t("transport.settingsModal.voiceGuideVolume", {
                   defaultValue: "Voice volume",

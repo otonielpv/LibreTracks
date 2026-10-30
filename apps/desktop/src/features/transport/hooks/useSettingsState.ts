@@ -16,6 +16,7 @@ import {
   listenToMidiDevicesChanged,
 } from "../desktopApi";
 import type { MidiLearnFeedback, SettingsTab } from "../types";
+import type { MidiLearnView } from "../panels/MidiLearnSettingsTab";
 
 type UseSettingsStateProps = {
   /** Pushes the saved locale into i18n; returns once the language is applied. */
@@ -42,9 +43,7 @@ export function useSettingsState({
     useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [midiLearnFeedback, setMidiLearnFeedback] =
     useState<MidiLearnFeedback | null>(null);
-  const [midiLearnView, setMidiLearnView] = useState<
-    "core" | "markers" | "songs"
-  >("core");
+  const [midiLearnView, setMidiLearnView] = useState<MidiLearnView>("core");
   const [metronomeVolumeDraft, setMetronomeVolumeDraft] = useState(
     DEFAULT_APP_SETTINGS.metronomeVolume,
   );

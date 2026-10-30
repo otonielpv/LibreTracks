@@ -17,6 +17,8 @@ import { useTransportStore } from "../store";
 import { useTimelineUIStore } from "../uiStore";
 import { isMobileApp } from "../desktopApi";
 import { useIsInMidiBank } from "../midi/midiBankStore";
+import { trackTarget } from "../midi/controllerTargets";
+import { MidiMappable } from "../midi/MidiMappable";
 
 /**
  * Sitio que hay que dejar libre en el borde inferior: ahi flotan la barra de
@@ -250,6 +252,7 @@ function TrackHeaderItemComponent({
   // impide justo eso: comparar dos pistas de un tiron. Volumen, pan y salida
   // se ajustan una vez y viven en el panel.
   const muteButton = (
+    <MidiMappable target={trackTarget(trackId, "mute")} label={`${trackName} · M`}>
     <button
       type="button"
       className={`lt-track-toggle-mute ${effectiveTrackMuted ? "is-active" : ""}`}
@@ -261,8 +264,10 @@ function TrackHeaderItemComponent({
     >
       M
     </button>
+    </MidiMappable>
   );
   const soloButton = (
+    <MidiMappable target={trackTarget(trackId, "solo")} label={`${trackName} · S`}>
     <button
       type="button"
       className={`lt-track-toggle-solo ${effectiveTrackSolo ? "is-active" : ""}`}
@@ -274,6 +279,7 @@ function TrackHeaderItemComponent({
     >
       S
     </button>
+    </MidiMappable>
   );
   const controlRow = (
           <div className="lt-track-control-row">

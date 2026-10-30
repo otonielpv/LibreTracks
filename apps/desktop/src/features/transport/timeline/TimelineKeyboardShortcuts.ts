@@ -28,6 +28,7 @@ import {
   resolveBindings,
   useKeybindingStore,
 } from "../keyboard/keybindingStore";
+import { useTimelineUIStore } from "../uiStore";
 
 type TimelineKeyboardShortcutsProps = {
   runAction: (
@@ -413,6 +414,10 @@ export function useTimelineKeyboardShortcuts({
       },
       "nav.cancelOrClear": (event) => {
         event.preventDefault();
+        if (useTimelineUIStore.getState().midiLearnMode !== null) {
+          useTimelineUIStore.getState().setMidiLearnMode(null);
+          return;
+        }
         if (openTopMenu) {
           setOpenTopMenu(null);
           return;
@@ -439,6 +444,14 @@ export function useTimelineKeyboardShortcuts({
           return;
         }
         void toggleFullscreen();
+      },
+      "view.toggleMidiMap": (event) => {
+        event.preventDefault();
+        if (event.repeat) {
+          return;
+        }
+        const ui = useTimelineUIStore.getState();
+        ui.setMidiLearnMode(ui.midiLearnMode === null ? "" : null);
       },
       ...VIDEO_SHORTCUT_HANDLERS,
     };

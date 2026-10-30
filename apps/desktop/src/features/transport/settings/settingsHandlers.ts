@@ -3,6 +3,7 @@ import {
   type AppSettings,
   type AudioBackendKind,
   type AudioDeviceDescriptor,
+  type MidiBinding,
 } from "@libretracks/shared/models";
 
 import {
@@ -207,6 +208,17 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
               })
             : t("transport.status.audioDeviceSystemDefault"),
       );
+    },
+
+    /** Edit or remove one binding (MIDI Map list, plan midi-controllers). */
+    handleMidiBindingChange(key: string, binding: MidiBinding | null) {
+      const next = { ...appSettingsRef.current.midiMappings };
+      if (binding) {
+        next[key] = binding;
+      } else {
+        delete next[key];
+      }
+      persistAudioPatch({ midiMappings: next }, t("transport.status.midiMappingsUpdated"));
     },
 
     handleResetMidiMappings() {

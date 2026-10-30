@@ -370,6 +370,8 @@ import { useWaveformProgress } from "./hooks/useWaveformProgress";
 import { useVisibleTracks } from "./hooks/useVisibleTracks";
 import { useMidiRawMessages } from "./hooks/useMidiRawMessages";
 import { useMidiControllerSync } from "./hooks/useMidiControllerSync";
+import { MidiMapBanner } from "./midi/MidiMapBanner";
+import { describeMidiTarget } from "./midi/controllerTargets";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { useDragListeners } from "./hooks/useDragListeners";
 import { usePlaybackUiDiagnostics } from "./hooks/usePlaybackUiDiagnostics";
@@ -1259,7 +1261,7 @@ export function TransportPanelContent() {
         }
       }
 
-      return key;
+      return describeMidiTarget(key, t, useSongStore.getState().song) ?? key;
     },
     [midiLearnRows, t],
   );
@@ -1993,6 +1995,7 @@ export function TransportPanelContent() {
     handleMetronomeOutputChange,
     handleAudioOutputDeviceChange,
     handleResetMidiMappings,
+    handleMidiBindingChange,
     handleGlobalJumpModeChange,
     handleGlobalJumpBarsChange,
     handleSongJumpTriggerChange,
@@ -6652,6 +6655,7 @@ export function TransportPanelContent() {
         onContextMenu={(event) => event.preventDefault()}
       >
         <AndroidBackGuard />
+        <MidiMapBanner describe={formatMidiLearnCommandLabel} />
         <BusyOverlay visible={isShellBusy} feedback={busyFeedback} displayPercent={displayPercent} />
         <MissingMidiWarningModal deviceName={missingMidiDeviceWarning} onDismiss={handleDismissMissingMidiDeviceWarning} onDontShowAgain={handleHideMissingMidiDeviceWarning} />
         <StructureGuardDialog onEditOriginal={structureHandlers.editOriginal} />
@@ -6814,14 +6818,12 @@ export function TransportPanelContent() {
           settings={appSettings}
           routeOptions={audioRoutingOptions}
           volumeDraft={metronomeVolumeDraft}
-          midiLearnMode={midiLearnMode}
           onClose={() => setIsMetronomePopoverOpen(false)}
           onEnabledChange={handleMetronomeEnabledChange}
           onOutputChange={handleMetronomeOutputChange}
           onVolumeDraftChange={handleMetronomeVolumeDraftChange}
           onCommitVolume={commitMetronomeVolumeDraft}
           onSoundChange={handleMetronomeSoundChange}
-          onMidiLearnTarget={handleMidiLearnTarget}
         />
 
         <VoiceGuidePopover
@@ -7806,6 +7808,8 @@ export function TransportPanelContent() {
               activeMidiLearnCommand={activeMidiLearnCommand}
               onMidiLearnToggle={handleMidiLearnToggle}
               onResetMidiMappings={handleResetMidiMappings}
+              onMidiBindingChange={handleMidiBindingChange}
+              formatMidiLearnCommandLabel={formatMidiLearnCommandLabel}
               onMidiLearnCommandRelearn={handleMidiLearnCommandRelearn}
               onDynamicMidiLearnJump={handleDynamicMidiLearnJump}
               onMidiLearnTarget={handleMidiLearnTarget}

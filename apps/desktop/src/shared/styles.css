@@ -14387,3 +14387,170 @@ html.lt-mobile .lt-setlist-mixer.is-short > .lt-setlist-mixer-header > .lt-setli
 .lt-compact-mixer-strip.is-midi-bank {
   box-shadow: inset 0 3px 0 var(--lt-midi-bank-color);
 }
+
+/* --- Modo Mapeo MIDI (plan midi-controllers, paso 05) ---
+ * Con MIDI Learn activo, cada control mapeable se tiñe; los ya vinculados
+ * llevan el mensaje encima y el que está aprendiendo late. */
+:root {
+  --lt-midi-map-color: #3d8bfd;
+  --lt-midi-map-mapped: #2fbf71;
+}
+
+.lt-midi-mappable,
+.lt-midi-mappable-wrap {
+  position: relative;
+}
+
+.lt-midi-mappable-wrap {
+  display: inline-flex;
+}
+
+.lt-midi-mappable-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--lt-midi-map-color);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--lt-midi-map-color) 28%, transparent);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.lt-midi-mappable-overlay.is-mapped {
+  border-color: var(--lt-midi-map-mapped);
+  background: color-mix(in srgb, var(--lt-midi-map-mapped) 30%, transparent);
+}
+
+.lt-midi-mappable-overlay.is-armed {
+  border-width: 2px;
+  animation: lt-midi-map-pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes lt-midi-map-pulse {
+  from {
+    background: color-mix(in srgb, var(--lt-midi-map-color) 18%, transparent);
+  }
+  to {
+    background: color-mix(in srgb, var(--lt-midi-map-color) 55%, transparent);
+  }
+}
+
+.lt-midi-mappable-badge {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 9px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.lt-midi-map-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + var(--lt-safe-area-bottom, 0px));
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 10px 8px 14px;
+  border-radius: 999px;
+  background: var(--lt-midi-map-color);
+  color: #fff;
+  font-size: 13px;
+  transform: translateX(-50%);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.lt-midi-map-banner-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-midi-map-banner-exit {
+  flex: none;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lt-midi-bindings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lt-midi-bindings > li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--lt-border, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+}
+
+.lt-midi-bindings > li.is-other-session {
+  opacity: 0.6;
+}
+
+.lt-midi-bindings-head,
+.lt-midi-bindings-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.lt-midi-bindings-head strong {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.lt-midi-bindings-fields label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.lt-midi-bindings-fields input[type="number"] {
+  width: 4.5em;
+}
+
+.lt-midi-bindings-note {
+  font-size: 11px;
+}
+
+/* En el móvil, controles al tamaño del dedo. */
+.lt-mobile .lt-midi-bindings-fields select,
+.lt-mobile .lt-midi-bindings-fields input[type="number"],
+.lt-mobile .lt-midi-bindings-remove {
+  min-height: 40px;
+}
+
+.lt-mobile .lt-midi-mappable-badge {
+  font-size: 10px;
+  line-height: 16px;
+}
