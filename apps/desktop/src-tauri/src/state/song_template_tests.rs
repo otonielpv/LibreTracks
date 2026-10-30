@@ -586,3 +586,134 @@ fn a_library_folder_drop_without_a_template_respects_the_track_layout() {
         }
     }
 }
+
+fn drop_multitrack_in_daw(session: &mut DesktopSession, audio: &AudioController, at: f64) {
+    let files = write_stems(session, &MULTITRACK);
+    let requests: Vec<_> = files
+        .iter()
+        .map(|file_path| CreateAudioTrackWithClipRequest {
+            track_name: file_path
+                .trim_start_matches("audio/")
+                .trim_end_matches(".wav")
+                .into(),
+            file_path: file_path.clone(),
+            timeline_start_seconds: at,
+        })
+        .collect();
+    session
+        .create_audio_tracks_with_clips(&requests, audio)
+        .expect("drop");
+}
+
+/// «Guardar como plantilla» en carpeta por canción: la plantilla lleva una
+/// sola copia de la banda, sin la carpeta de la canción ni sus stems, y la
+/// canción siguiente sale con un único nivel de carpeta.
+#[test]
+fn saving_a_song_folder_session_as_template_keeps_one_clean_band() {
+    let mut session = empty_session("tpl-save-song-folder");
+    let audio = audio_with(Some(BUILTIN_BAND_TEMPLATE), Some("songFolder"));
+    drop_multitrack_in_daw(&mut session, &audio, 0.0);
+    drop_multitrack_in_daw(&mut session, &audio, 20.0);
+    let song = loaded(&session);
+    assert_eq!(song.regions.len(), 2);
+
+    let template_path = session
+        .song_dir
+        .clone()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("Banda.lttemplate");
+    session
+        .save_current_as_template(template_path.clone())
+        .expect("save as template");
+    let template = libretracks_project::load_song_from_file(&template_path).expect("template");
+    let names: Vec<&str> = template.tracks.iter().map(|t| t.name.as_str()).collect();
+    for region in &song.regions {
+        assert!(!names.contains(&region.name.as_str()), "{names:?}");
+    }
+    assert_eq!(band_folder_copies(&template), 1, "{names:?}");
+    // Ni carriles de stems ni el banjo suelto: solo lo que tiene alias.
+    assert!(template.tracks.iter().all(|t| !t.match_aliases.is_empty()), "{names:?}");
+    // Lo que sumaba por la carpeta de la canción vuelve al master.
+    assert!(template
+        .tracks
+        .iter()
+        .filter(|t| t.parent_track_id.is_none())
+        .all(|t| t.audio_to == "master"));
+
+    let audio = audio_with(Some(&template_path.to_string_lossy()), Some("songFolder"));
+    session
+        .create_empty_song(Some("Tercera"), None, &audio)
+        .expect("song from the saved template");
+    let song = loaded(&session);
+    let third = song.regions.iter().find(|r| r.name == "Tercera").unwrap();
+    let folder = song_folder_of(&song, &third.id).expect("its folder");
+    assert_eq!(folder, "Tercera");
+    let folder_id = song
+        .tracks
+        .iter()
+        .find(|t| t.parent_track_id.is_none() && t.song_region_id.as_ref() == Some(&third.id))
+        .unwrap()
+        .id
+        .clone();
+    let children: Vec<&str> = song
+        .tracks
+        .iter()
+        .filter(|t| t.parent_track_id.as_deref() == Some(folder_id.as_str()))
+        .map(|t| t.name.as_str())
+        .collect();
+    assert!(children.contains(&"Guitarras"), "{children:?}");
+    assert!(song
+        .tracks
+        .iter()
+        .filter(|t| t.song_region_id.as_ref() == Some(&third.id))
+        .all(|t| t.kind != TrackKind::Folder || t.name == "Tercera" || !t.match_aliases.is_empty()));
+}
+
+/// Sin alias en la sesión, una plantilla de sesión sigue guardando todas las
+/// pistas, también las que tienen audio.
+#[test]
+fn a_session_template_without_aliases_keeps_every_track() {
+    let mut session = empty_session("tpl-save-plain");
+    let audio = audio_with(None, None);
+    drop_multitrack_in_daw(&mut session, &audio, 0.0);
+    let tracks = loaded(&session).tracks.len();
+    let template_path = session
+        .song_dir
+        .clone()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("Plana.lttemplate");
+    session
+        .save_current_as_template(template_path.clone())
+        .expect("save as template");
+    let template = libretracks_project::load_song_from_file(&template_path).expect("template");
+    assert_eq!(template.tracks.len(), tracks);
+}
+
+/// Sin alias, una plantilla de sesión guarda las pistas de todas las canciones
+/// aunque el modo las haga de cada canción (el E2E de plantillas de sesión).
+#[test]
+fn a_session_template_without_aliases_keeps_the_tracks_of_every_song() {
+    for layout in ["separate", "songFolder"] {
+        let mut session = empty_session(&format!("tpl-save-plain-{layout}"));
+        let audio = audio_with(None, Some(layout));
+        drop_multitrack_in_daw(&mut session, &audio, 0.0);
+        drop_multitrack_in_daw(&mut session, &audio, 20.0);
+        let tracks = loaded(&session).tracks.len();
+        let template_path = session
+            .song_dir
+            .clone()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("Plana.lttemplate");
+        session
+            .save_current_as_template(template_path.clone())
+            .expect("save as template");
+        let template = libretracks_project::load_song_from_file(&template_path).expect("template");
+        assert_eq!(template.tracks.len(), tracks, "{layout}");
+    }
+}

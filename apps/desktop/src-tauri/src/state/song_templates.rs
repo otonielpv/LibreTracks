@@ -124,6 +124,10 @@ pub(crate) fn builtin_band_template(locale: Option<&str>) -> Vec<Track> {
                 "acustica",
                 "electric guitar",
                 "acoustic guitar",
+                "distor",
+                "distorsion",
+                "steel",
+                "lap steel",
             ],
         ),
         (
@@ -162,6 +166,9 @@ pub(crate) fn builtin_band_template(locale: Option<&str>) -> Vec<Track> {
                 "cuerdas",
                 "orchestra",
                 "orquesta",
+                // Más palabras que «loop» (Batería, que va antes): sin esto el
+                // empate se lo lleva la batería.
+                "synth loop",
             ],
         ),
         (
@@ -170,7 +177,8 @@ pub(crate) fn builtin_band_template(locale: Option<&str>) -> Vec<Track> {
             TrackKind::Folder,
             "#5C8CE6",
             &[
-                "vox", "voz", "voces", "vocals", "vocal", "bgv", "bgvs", "coros", "choir", "lead",
+                "vox", "voz", "voces", "vocals", "vocal", "bgv", "bgvs", "coro", "coros", "choir",
+                "chorus", "lead", "soprano", "alto", "tenor",
             ],
         ),
         (
@@ -516,6 +524,21 @@ fn merge_aliases(track: &mut Track, aliases: &[String]) -> bool {
     changed
 }
 
+/// Los alias de `template` en las pistas compartidas con su mismo nombre y
+/// tipo, sin crear ninguna. Es lo que hace el modo compartido con una pista
+/// que ya existe.
+fn merge_template_aliases(song: &mut Song, template: &[Track]) {
+    for template_track in template {
+        if let Some(existing) = song.tracks.iter_mut().find(|track| {
+            track.song_region_id.is_none()
+                && track.kind == template_track.kind
+                && track.name.trim().to_lowercase() == template_track.name.trim().to_lowercase()
+        }) {
+            merge_aliases(existing, &template_track.match_aliases);
+        }
+    }
+}
+
 /// Un stem que se suelta: su fichero, dónde empieza (tiempo de fuente) y
 /// cuánto dura.
 pub(crate) struct StemDrop<'a> {
@@ -658,8 +681,17 @@ pub(crate) fn organise_stem_drop_with(
     let mut used: HashSet<String> = HashSet::new();
     let mut last_sibling: HashMap<String, String> = HashMap::new();
     let per_song = layout != SongImportTrackMode::MergeIntoExisting;
+    // Shared tracks that already have aliases are the session's own layout
+    // (a song created «from template…», or a session made from one): the
+    // default template must not add its tracks next to them. It still lends
+    // its aliases to the tracks it shares a name with.
+    let session_has_layout = !per_song && !alias_targets(song, None).is_empty();
     for region_id in region_order {
-        apply_template_to_region(song, template.unwrap_or_default(), &region_id, layout, auto_color)?;
+        if session_has_layout {
+            merge_template_aliases(song, template.unwrap_or_default());
+        } else {
+            apply_template_to_region(song, template.unwrap_or_default(), &region_id, layout, auto_color)?;
+        }
         // Después de la plantilla: sus pistas ya tienen id y no se repiten.
         let mut ids = TrackIdAllocator::new(song);
         let indexes: Vec<usize> = (0..stems.len())
@@ -1499,6 +1531,100 @@ mod tests {
             }
         );
         assert_eq!(song.tracks.len(), 2);
+    }
+
+    /// Stems de un setlist real que la plantilla de serie no sabía colocar.
+    #[test]
+    fn the_builtin_template_places_the_stems_of_a_real_setlist() {
+        let parent_of = |song: &Song, placement: &StemPlacement| {
+            let track = track_of(song, placement);
+            song.tracks
+                .iter()
+                .find(|t| Some(&t.id) == track.parent_track_id.as_ref())
+                .map(|t| t.name.clone())
+        };
+        let mut song = session(vec![]);
+        let template = builtin_band_template(Some("es"));
+        let files = [
+            "audio/Alto.wav",
+            "audio/Tenor.wav",
+            "audio/CHORUS_04.wav",
+            "audio/DISTOR 1_06.wav",
+            "audio/DISTORSION_12.wav",
+            "audio/Lap Steel.wav",
+            "audio/Synth Loop.wav",
+            "audio/LOOP_01.wav",
+        ];
+        let drop = stems(&files, 0.0);
+        let placements = organise_stem_drop_with(
+            &mut song,
+            &drop,
+            Some(&template),
+            SongImportTrackMode::MergeIntoExisting,
+            true,
+            false,
+            Some("es"),
+        )
+        .expect("organise");
+        let expected = [
+            "Voces",
+            "Voces",
+            "Voces",
+            "Guitarras",
+            "Guitarras",
+            "Guitarras",
+            "Synth y pads",
+            // Un loop a secas sigue siendo de la batería.
+            "Batería",
+        ];
+        for (index, group) in expected.iter().enumerate() {
+            assert_eq!(
+                parent_of(&song, &placements[index]).as_deref(),
+                Some(*group),
+                "{}",
+                files[index]
+            );
+        }
+    }
+
+    /// Una canción creada «desde plantilla…» con otra plantilla: al soltar sus
+    /// stems, la plantilla por defecto no añade sus pistas a las de la sesión.
+    #[test]
+    fn shared_drops_keep_the_layout_the_session_already_has() {
+        let mut song = session(vec![region("r1", "Uno", 0.0, 10.0)]);
+        // La plantilla elegida: solo Click y una carpeta de teclados propia.
+        let mut click = builtin_band_template(Some("es"))[0].clone();
+        click.id = "own_click".into();
+        click.match_aliases = vec!["click".into()];
+        let mut keys = builtin_band_template(Some("es"))[5].clone();
+        keys.id = "own_keys".into();
+        keys.name = "Pianos".into();
+        keys.match_aliases = vec!["keys".into()];
+        song.tracks = vec![click, keys];
+        let default_template = builtin_band_template(Some("es"));
+        let drop = stems(&["audio/Click.wav", "audio/Keys.wav", "audio/EG 1.wav"], 0.0);
+        let placements = organise_stem_drop_with(
+            &mut song,
+            &drop,
+            Some(&default_template),
+            SongImportTrackMode::MergeIntoExisting,
+            true,
+            false,
+            Some("es"),
+        )
+        .expect("organise");
+
+        assert!(song.tracks.iter().all(|t| t.name != "Guitarras" && t.name != "Teclados"));
+        assert_eq!(track_of(&song, &placements[0]).id, "own_click");
+        assert_eq!(
+            track_of(&song, &placements[1]).parent_track_id.as_deref(),
+            Some("own_keys")
+        );
+        // La guitarra no tiene sitio en esta sesión: pista suelta, como siempre.
+        assert!(matches!(placements[2], StemPlacement::Unmatched { .. }));
+        // La pista que comparte nombre con la de serie recibe sus alias.
+        let own_click = song.tracks.iter().find(|t| t.id == "own_click").unwrap();
+        assert!(own_click.match_aliases.iter().any(|a| a == "metronome"));
     }
 
     #[test]

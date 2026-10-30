@@ -13,7 +13,8 @@ use std::{
 
 use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState, TransitionType, VampMode};
 use libretracks_core::{
-    region_warp_ratio_in_song, source_seconds_at_view, warp_timeline_seconds_at, Song, TempoMarker,
+    region_warp_ratio_in_song, source_seconds_at_view, warp_timeline_seconds_at, Song, SongRegion,
+    TempoMarker, TrackKind,
 };
 use libretracks_project::{
     append_wav_files_to_song, downsample_peaks_over_span, global_waveform_file_path,
@@ -3711,6 +3712,9 @@ pub(super) fn build_empty_song(song_id: String, title: String) -> Song {
 /// regions, markers, tempo map and per-track mix). The result is what gets
 /// serialized into a portable `.lttemplate` file.
 pub(super) fn strip_song_to_template(mut song: Song) -> Song {
+    // Before regions and clips go: what the song templates added to a session
+    // is told apart by them.
+    keep_one_song_of_template_tracks(&mut song);
     song.title = "Plantilla".into();
     song.artist = None;
     song.key = None;
@@ -3746,6 +3750,126 @@ pub(super) fn strip_song_to_template(mut song: Song) -> Song {
     }
 
     song
+}
+
+/// A session laid out by a song template in a per-song track mode holds one
+/// copy of the template per song, and in «carpeta por canción» each copy sits
+/// in a folder named after its song. Saved as is, the template would carry
+/// every copy and the folder, and the next song would get «Song B > Song A >
+/// Drums». So:
+/// - only the tracks of the first song that has any survive (plus the shared
+///   ones), and that song's folder is unwrapped: its tracks go to the root and
+///   what summed through it goes back to the master;
+/// - the stem lanes go too (audio tracks without aliases that hold audio
+///   inside an alias folder, or made for a song): the template recreates them
+///   from the stem names on every drop.
+///
+/// Only for a session the song templates laid out, i.e. one with match
+/// aliases. Without them a session template keeps every track, of every song,
+/// as it always did.
+fn keep_one_song_of_template_tracks(song: &mut Song) {
+    if !song.tracks.iter().any(|track| !track.match_aliases.is_empty()) {
+        return;
+    }
+    let mut regions: Vec<&SongRegion> = song.regions.iter().collect();
+    regions.sort_by(|left, right| left.start_seconds.total_cmp(&right.start_seconds));
+    let owned: HashSet<&str> = song
+        .tracks
+        .iter()
+        .filter_map(|track| track.song_region_id.as_deref())
+        .collect();
+    let kept_song = regions
+        .iter()
+        .find(|region| owned.contains(region.id.as_str()))
+        .map(|region| (region.id.clone(), region.name.clone()))
+        .or_else(|| {
+            song.tracks
+                .iter()
+                .find_map(|track| track.song_region_id.clone())
+                .map(|id| (id, String::new()))
+        });
+
+    if let Some((kept_id, kept_name)) = kept_song {
+        // Other songs' tracks, and anything hanging from them.
+        let mut removed: HashSet<String> = song
+            .tracks
+            .iter()
+            .filter(|track| {
+                track
+                    .song_region_id
+                    .as_deref()
+                    .is_some_and(|id| id != kept_id)
+            })
+            .map(|track| track.id.clone())
+            .collect();
+        loop {
+            let before = removed.len();
+            for track in &song.tracks {
+                if track
+                    .parent_track_id
+                    .as_ref()
+                    .is_some_and(|parent| removed.contains(parent))
+                {
+                    removed.insert(track.id.clone());
+                }
+            }
+            if removed.len() == before {
+                break;
+            }
+        }
+        song.tracks.retain(|track| !removed.contains(&track.id));
+
+        let song_folder = song
+            .tracks
+            .iter()
+            .find(|track| {
+                track.kind == TrackKind::Folder
+                    && track.parent_track_id.is_none()
+                    && track.match_aliases.is_empty()
+                    && track.song_region_id.as_deref() == Some(kept_id.as_str())
+                    && track.name == kept_name
+            })
+            .map(|track| track.id.clone());
+        if let Some(folder_id) = song_folder {
+            song.tracks.retain(|track| track.id != folder_id);
+            for track in &mut song.tracks {
+                if track.parent_track_id.as_deref() == Some(folder_id.as_str()) {
+                    track.parent_track_id = None;
+                    if track.audio_to.trim().eq_ignore_ascii_case("inherit") {
+                        track.audio_to = "master".to_string();
+                    }
+                }
+            }
+        }
+    }
+
+    let with_audio: HashSet<&str> = song
+        .clips
+        .iter()
+        .map(|clip| clip.track_id.as_str())
+        .collect();
+    let alias_folders: HashSet<&str> = song
+        .tracks
+        .iter()
+        .filter(|track| track.kind == TrackKind::Folder && !track.match_aliases.is_empty())
+        .map(|track| track.id.as_str())
+        .collect();
+    let lanes: HashSet<String> = song
+        .tracks
+        .iter()
+        .filter(|track| {
+            track.kind == TrackKind::Audio
+                && track.match_aliases.is_empty()
+                && with_audio.contains(track.id.as_str())
+                && (track.song_region_id.is_some()
+                    || track
+                        .parent_track_id
+                        .as_deref()
+                        .is_some_and(|parent| alias_folders.contains(parent)))
+        })
+        .map(|track| track.id.clone())
+        .collect();
+    song.tracks.retain(|track| !lanes.contains(&track.id));
 }
 
 /// Turn a loaded `.lttemplate` document into the seed `Song` for a fresh
@@ -4681,5 +4805,7 @@ mod charts_tests;
 mod midi_song_ops_tests;
 #[cfg(test)]
 mod song_template_tests;
+#[cfg(test)]
+mod song_template_corpus_tests;
 #[cfg(test)]
 mod ruler_markers_tests;

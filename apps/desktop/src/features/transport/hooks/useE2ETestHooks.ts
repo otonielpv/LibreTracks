@@ -24,6 +24,7 @@ import {
   loadPadKey,
   deletePad,
   saveSettings,
+  updateAudioSettings,
   createAudioTracksWithClips,
   createClipsWithAutoTracks,
   createEmptySong,
@@ -596,8 +597,12 @@ export function useE2ETestHooks(
       },
       listSessionTemplates: () => listSessionTemplates(),
       setSongTemplateSettings: async (defaultSongTemplate, songTrackLayout) => {
+        // Same two calls as the Settings panel (persistAudioSettings): the
+        // templates read the audio controller's copy, which saveSettings
+        // alone never reaches.
         const base = await getSettings();
-        await saveSettings({ ...base, defaultSongTemplate, songTrackLayout });
+        const live = await updateAudioSettings({ ...base, defaultSongTemplate, songTrackLayout });
+        await saveSettings(live);
       },
       createEmptySong: async (name, template) => {
         await createEmptySong(name ?? undefined, template);
