@@ -143,15 +143,39 @@ impl CloudStorage for OneDriveClient {
         Ok(files)
     }
 
+    /// Quota of the whole OneDrive.
+    ///
+    /// With only `Files.ReadWrite.AppFolder` granted, Graph answers 403 to
+    /// `/me/drive` until the app folder exists, and fine afterwards. Confirmed
+    /// against a real account on 2026-10-30: right after the first consent the
+    /// quota was refused, and after one upload created the folder it was
+    /// readable. A fresh account opening the panel is exactly that first
+    /// moment, so on 403 the folder is provisioned (a GET on approot creates
+    /// it) and the quota asked once more.
     async fn quota(&self) -> Result<Quota, CloudError> {
-        let response = self
-            .http
-            .get(format!("{}/me/drive", self.base))
-            .header(reqwest::header::AUTHORIZATION, self.auth().await?)
-            .query(&[("$select", "quota")])
-            .send()
-            .await
-            .map_err(net)?;
+        let ask = || async {
+            self.http
+                .get(format!("{}/me/drive", self.base))
+                .header(reqwest::header::AUTHORIZATION, self.auth().await?)
+                .query(&[("$select", "quota")])
+                .send()
+                .await
+                .map_err(net)
+        };
+        let mut response = ask().await?;
+        if response.status() == 403 {
+            let provisioned = self
+                .http
+                .get(format!("{}/me/drive/special/approot", self.base))
+                .header(reqwest::header::AUTHORIZATION, self.auth().await?)
+                .send()
+                .await
+                .map_err(net)?;
+            if !provisioned.status().is_success() {
+                return Err(transfer::provider_error(PROVIDER, provisioned).await);
+            }
+            response = ask().await?;
+        }
         let drive: DriveResponse = transfer::parse(PROVIDER, response).await?;
         Ok(drive.quota.unwrap_or_default().into())
     }
@@ -686,6 +710,37 @@ mod tests {
             !*saw_auth_on_upload.lock().unwrap(),
             "the bearer token was sent to the pre-authenticated upload URL"
         );
+    }
+
+    /// A brand-new account: the quota is refused until the app folder exists.
+    /// The panel must still show it on first open.
+    #[tokio::test]
+    async fn the_quota_provisions_the_app_folder_on_a_fresh_account() {
+        let provisioned = Arc::new(Mutex::new(false));
+        let base = {
+            let provisioned = Arc::clone(&provisioned);
+            test_server::serve(move |req, _| match req.target.as_str() {
+                "/me/drive/special/approot" => {
+                    *provisioned.lock().unwrap() = true;
+                    Response::json(200, r#"{"id":"root","name":"LibreTracks","folder":{}}"#)
+                }
+                t if t.starts_with("/me/drive?") => {
+                    if *provisioned.lock().unwrap() {
+                        Response::json(200, r#"{"quota":{"used":10,"total":5368709120}}"#)
+                    } else {
+                        Response::json(403, r#"{"error":{"code":"accessDenied"}}"#)
+                    }
+                }
+                _ => Response::json(404, "{}"),
+            })
+            .await
+        };
+        let mut client = OneDriveClient::new(Box::new(FixedToken)).unwrap();
+        client.base = base;
+
+        let quota = client.quota().await.unwrap();
+        assert_eq!(quota.limit_bytes, Some(5_368_709_120));
+        assert!(*provisioned.lock().unwrap());
     }
 
     #[test]
