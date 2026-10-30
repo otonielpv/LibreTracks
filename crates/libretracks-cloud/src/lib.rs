@@ -24,6 +24,7 @@
 //! crate cannot be unit-tested (`cargo test -p libretracks-desktop` fails to
 //! link), so anything that wants tests has to live outside it.
 
+pub mod dropbox;
 pub mod google;
 pub mod keychain;
 pub mod loopback;

@@ -5,12 +5,16 @@
 //! interface for Google to redirect back. This is the flow Google recommends
 //! for desktop clients, and the only one still supported there.
 //!
-//! # Why the port is not fixed
+//! # Why the port is not fixed (except for Dropbox)
 //!
-//! Google accepts any port for a desktop client, so the listener binds port 0
-//! and lets the OS pick a free one. A hardcoded port would collide with
-//! whatever else the user is running and fail at the worst moment, and a second
-//! LibreTracks window would fight the first for it.
+//! Google and Microsoft accept any port for a desktop client, so the listener
+//! binds port 0 and lets the OS pick a free one. A hardcoded port would collide
+//! with whatever else the user is running and fail at the worst moment, and a
+//! second LibreTracks window would fight the first for it.
+//!
+//! Dropbox matches the redirect URI exactly, port included, so it gets a short
+//! list of registered ports via [`LoopbackListener::bind_first_free`] and takes
+//! the first one nobody else holds.
 //!
 //! # Why anything on the machine can talk to this socket
 //!
@@ -43,6 +47,21 @@ impl LoopbackListener {
             .map_err(CloudError::Io)?;
         let port = listener.local_addr().map_err(CloudError::Io)?.port();
         Ok(Self { listener, port })
+    }
+
+    /// Bind the first of `ports` that is free, for providers that only accept
+    /// redirect URIs registered in advance.
+    pub async fn bind_first_free(ports: &[u16]) -> Result<Self, CloudError> {
+        let mut last_error = None;
+        for &port in ports {
+            match TcpListener::bind(("127.0.0.1", port)).await {
+                Ok(listener) => return Ok(Self { listener, port }),
+                Err(e) => last_error = Some(e),
+            }
+        }
+        Err(CloudError::Io(last_error.unwrap_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "no ports to try")
+        })))
     }
 
     /// The port the authorization request must advertise as its redirect.
@@ -177,6 +196,28 @@ mod tests {
     fn a_garbage_request_line_does_not_panic() {
         assert!(parse_redirect_request("").is_err());
         assert!(parse_redirect_request("GET").is_err());
+    }
+
+    /// Something else (another app, or a second LibreTracks window mid
+    /// sign-in) holding the first registered port must not block the sign-in.
+    #[tokio::test]
+    async fn a_taken_port_falls_through_to_the_next() {
+        let squatter = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let taken = squatter.local_addr().unwrap().port();
+        let free = {
+            let probe = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            probe.local_addr().unwrap().port()
+        };
+        let listener = LoopbackListener::bind_first_free(&[taken, free]).await.unwrap();
+        assert_eq!(listener.port(), free);
+    }
+
+    #[tokio::test]
+    async fn no_free_port_is_an_error_not_a_panic() {
+        let squatter = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let taken = squatter.local_addr().unwrap().port();
+        assert!(LoopbackListener::bind_first_free(&[taken]).await.is_err());
+        assert!(LoopbackListener::bind_first_free(&[]).await.is_err());
     }
 
     #[test]

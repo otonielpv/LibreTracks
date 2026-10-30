@@ -320,6 +320,30 @@ pub(crate) fn retry_delay(attempt: u32) -> Duration {
     Duration::from_secs(secs.min(30))
 }
 
+/// Make a local file name acceptable to every provider.
+///
+/// OneDrive refuses `" * : < > ? / \ |` and names ending in a space or a dot.
+/// Windows forbids the same characters, so a file exported there is already
+/// fine; one exported on macOS or Android may carry a `:` (a song title with a
+/// time in it), and refusing the whole upload over that would be absurd.
+/// Dropbox refuses a subset of the same set, so one rule serves both.
+pub(crate) fn portable_name(name: &str) -> String {
+    let replaced: String = name
+        .chars()
+        .map(|c| match c {
+            '"' | '*' | ':' | '<' | '>' | '?' | '/' | '\\' | '|' => '_',
+            c if c.is_control() => '_',
+            c => c,
+        })
+        .collect();
+    let trimmed = replaced.trim_start().trim_end_matches([' ', '.']);
+    if trimmed.is_empty() {
+        "_".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 pub(crate) fn net(e: reqwest::Error) -> CloudError {
     CloudError::Network(e.to_string())
 }
@@ -405,6 +429,15 @@ mod tests {
         pacer.record(POLICY.initial, Duration::from_millis(500));
         assert!(pacer.chunk_size() > POLICY.initial);
         assert!(pacer.confirmed_bytes_per_second.is_some());
+    }
+
+    #[test]
+    fn forbidden_characters_are_replaced_not_refused() {
+        assert_eq!(portable_name("Ensayo 19:30.ltset"), "Ensayo 19_30.ltset");
+        assert_eq!(portable_name(r#"a"b*c<d>e?f/g\h|i.ltpkg"#), "a_b_c_d_e_f_g_h_i.ltpkg");
+        assert_eq!(portable_name("Canción ñ.ltpkg"), "Canción ñ.ltpkg");
+        assert_eq!(portable_name("trailing. . "), "trailing");
+        assert_eq!(portable_name("..."), "_");
     }
 
     #[test]
