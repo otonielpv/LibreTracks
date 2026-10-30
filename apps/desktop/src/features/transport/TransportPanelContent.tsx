@@ -369,6 +369,7 @@ import { useSongWaveforms } from "./hooks/useSongWaveforms";
 import { useWaveformProgress } from "./hooks/useWaveformProgress";
 import { useVisibleTracks } from "./hooks/useVisibleTracks";
 import { useMidiRawMessages } from "./hooks/useMidiRawMessages";
+import { useMidiControllerSync } from "./hooks/useMidiControllerSync";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { useDragListeners } from "./hooks/useDragListeners";
 import { usePlaybackUiDiagnostics } from "./hooks/usePlaybackUiDiagnostics";
@@ -1876,6 +1877,7 @@ export function TransportPanelContent() {
       ) => void)
     | null
   >(null);
+  useMidiControllerSync({ song, activeSongRegionId });
   useMidiRawMessages({
     appSettingsRef,
     setAppSettings,

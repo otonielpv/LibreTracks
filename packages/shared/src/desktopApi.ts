@@ -449,6 +449,58 @@ export async function listenToMidiRawMessage(
   });
 }
 
+/** One track's mix as the MIDI controller mirror holds it. */
+export type MidiControllerTrackMix = {
+  id: string;
+  volume: number;
+  pan: number;
+  muted: boolean;
+  solo: boolean;
+};
+
+/**
+ * Push the UI's view of the mix to the MIDI controller mirror (plan
+ * midi-controllers, paso 03): the tracks, the visible strip order and the
+ * active song's master. Called when they change, never per frame.
+ */
+export async function syncMidiController(args: {
+  tracks: MidiControllerTrackMix[];
+  stripOrder: string[];
+  songMaster: { regionId: string; gain: number } | null;
+}): Promise<void> {
+  await invokeCommand("midi_controller_sync", args);
+}
+
+/** What MIDI controls moved since the last event (≤30 Hz). */
+export type MidiMixChangedPayload = {
+  tracks: Record<
+    string,
+    { volume?: number; pan?: number; muted?: boolean; solo?: boolean }
+  >;
+  songMaster?: { regionId: string; gain: number };
+};
+
+export async function listenToMidiMixChanged(
+  handler: (payload: MidiMixChangedPayload) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<MidiMixChangedPayload>("midi:mix-changed", (event) => {
+    handler(event.payload);
+  });
+}
+
+/** Counters that prove a fader sweep stays off the disk and the session lock. */
+export type MidiControlDiagnostics = {
+  messages: number;
+  settingsDiskWrites: number;
+  sessionLockTakes: number;
+  trackCommits: number;
+};
+
+export async function getMidiControlDiagnostics(): Promise<MidiControlDiagnostics> {
+  return invokeCommand<MidiControlDiagnostics>("get_midi_control_diagnostics");
+}
+
 export async function getTransportSnapshot(): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("get_transport_snapshot");
 }

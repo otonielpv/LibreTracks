@@ -14,13 +14,13 @@ use std::sync::atomic::Ordering;
 
 use libretracks_audio::PlaybackState;
 use libretracks_core::midi_control::{
-    decode_relative, fader, normalized_value, ButtonState, ControlMode, MidiBinding, MidiTarget,
-    RELATIVE_STEP,
+    decode_relative, fader, normalized_value, ButtonEvent, ButtonState, ControlMode, MidiBinding,
+    MidiTarget, MixControl, MixerTarget, RELATIVE_STEP,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
-use super::control::control;
+use super::control::{control, SongMasterSync, TrackMix};
 use crate::{
     audio::engine::jump_debug_logging_enabled,
     commands::events::emit_transport_lifecycle_event,
@@ -83,6 +83,26 @@ pub(crate) fn dispatch_midi_message(app: &AppHandle, message: MidiMessage) -> Re
                 app,
                 &settings_store,
                 name,
+                &target.key(),
+                binding,
+                target,
+                message,
+                normalized,
+            ),
+            MidiTarget::Track { track_id, control } => dispatch_track(
+                app,
+                track_id,
+                *control,
+                &target.key(),
+                binding,
+                target,
+                message,
+                normalized,
+            ),
+            MidiTarget::Mixer(mixer) => dispatch_mixer(
+                app,
+                &settings_store,
+                *mixer,
                 &target.key(),
                 binding,
                 target,
@@ -522,6 +542,164 @@ fn parse_dynamic_jump_index(action_key: &str, prefix: &str) -> Option<usize> {
         .filter(|index| *index > 0)
 }
 
+/// A track's mixer control (paso 03). The value comes from the mix mirror
+/// and goes to the engine through the realtime path; the model and the undo
+/// entry are committed by the control worker once the control is still.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn dispatch_track(
+    app: &AppHandle,
+    track_id: &str,
+    mix_control: MixControl,
+    target_key: &str,
+    binding: &MidiBinding,
+    target: &MidiTarget,
+    message: MidiMessage,
+    normalized: f64,
+) -> Result<(), String> {
+    let control = control();
+    // A track the UI has not told us about (another session's binding, or
+    // the UI not synced yet) is left alone.
+    let Some(current) = control.with_mix(|mix| mix.tracks.get(track_id).cloned()) else {
+        return Ok(());
+    };
+    let Some(next) = next_track_mix(binding, target, target_key, mix_control, message, normalized, &current)
+    else {
+        return Ok(());
+    };
+
+    let audio = &app.state::<DesktopState>().audio;
+    let pick = |field: MixControl| (field == mix_control).then_some(());
+    audio
+        .update_live_track_mix(
+            track_id,
+            pick(MixControl::Volume).map(|()| next.volume),
+            pick(MixControl::Pan).map(|()| next.pan),
+            pick(MixControl::Mute).map(|()| next.muted),
+            pick(MixControl::Solo).map(|()| next.solo),
+            None,
+        )
+        .map_err(|error| error.to_string())?;
+    control.with_mix(|mix| mix.set_track(track_id, mix_control, next));
+    control.track_dirty(app, track_id);
+    Ok(())
+}
+
+/// The track's mix after this message, or `None` if it does not move it.
+pub(crate) fn next_track_mix(
+    binding: &MidiBinding,
+    target: &MidiTarget,
+    target_key: &str,
+    mix_control: MixControl,
+    message: MidiMessage,
+    normalized: f64,
+    current: &TrackMix,
+) -> Option<TrackMix> {
+    let mode = binding.effective_mode(target);
+    let mut next = current.clone();
+    match mix_control {
+        MixControl::Volume => {
+            let position = fader::gain_to_position(current.volume, fader::TRACK_MAX_DB);
+            let position =
+                continuous_position(binding, mode, target_key, message, normalized, position)?;
+            next.volume = fader::position_to_gain(position, fader::TRACK_MAX_DB);
+        }
+        MixControl::Pan => {
+            let position = fader::pan_to_position(current.pan);
+            let position =
+                continuous_position(binding, mode, target_key, message, normalized, position)?;
+            next.pan = fader::position_to_pan(position);
+        }
+        MixControl::Mute | MixControl::Solo => {
+            let value = if mix_control == MixControl::Mute {
+                &mut next.muted
+            } else {
+                &mut next.solo
+            };
+            match ButtonState::decide(mode, normalized, *value) {
+                ButtonEvent::Set(on) if on != *value => *value = on,
+                ButtonEvent::Fire => *value = !*value,
+                _ => return None,
+            }
+        }
+    }
+    (next != *current).then_some(next)
+}
+
+/// Click, voice guide, pads and the active song's master (paso 03).
+#[allow(clippy::too_many_arguments)]
+fn dispatch_mixer(
+    app: &AppHandle,
+    settings_store: &AppSettingsStore,
+    mixer: MixerTarget,
+    target_key: &str,
+    binding: &MidiBinding,
+    target: &MidiTarget,
+    message: MidiMessage,
+    normalized: f64,
+) -> Result<(), String> {
+    let mode = binding.effective_mode(target);
+    let audio = &app.state::<DesktopState>().audio;
+
+    if mixer == MixerTarget::SongMaster {
+        let Some(master) = control().with_mix(|mix| mix.song_master.clone()) else {
+            return Ok(());
+        };
+        let position = fader::gain_to_position(master.gain, fader::TRACK_MAX_DB);
+        let Some(position) =
+            continuous_position(binding, mode, target_key, message, normalized, position)
+        else {
+            return Ok(());
+        };
+        let gain = fader::position_to_gain(position, fader::TRACK_MAX_DB).min(MAX_SONG_MASTER_GAIN);
+        audio
+            .update_live_region_master_gain(&master.region_id, gain as f32)
+            .map_err(|error| error.to_string())?;
+        control().with_mix(|mix| {
+            mix.set_song_master(SongMasterSync {
+                region_id: master.region_id,
+                gain,
+            })
+        });
+        control().song_master_dirty(app);
+        return Ok(());
+    }
+
+    let read = |settings: &AppSettings| match mixer {
+        MixerTarget::Metronome => settings.metronome_volume,
+        MixerTarget::VoiceGuide => settings.voice_guide_volume,
+        _ => settings.pad_volume,
+    };
+    let (current, _) = settings_store
+        .read(|settings| fader::gain_to_position(read(settings), fader::AUX_MAX_DB))
+        .map_err(|error| error.to_string())?;
+    let Some(position) = continuous_position(binding, mode, target_key, message, normalized, current)
+    else {
+        return Ok(());
+    };
+    let gain = fader::position_to_gain(position, fader::AUX_MAX_DB);
+    let changed = settings_store
+        .update(|settings| match mixer {
+            MixerTarget::Metronome => settings.metronome_volume = gain,
+            MixerTarget::VoiceGuide => settings.voice_guide_volume = gain,
+            _ => settings.pad_volume = gain,
+        })
+        .map_err(|error| error.to_string())?;
+    if !changed {
+        return Ok(());
+    }
+    match mixer {
+        MixerTarget::Metronome => audio.set_metronome_volume_realtime(gain),
+        MixerTarget::VoiceGuide => audio.set_voice_guide_volume_realtime(gain),
+        _ => audio.set_pad_volume_realtime(gain),
+    }
+    .map_err(|error| error.to_string())?;
+    control().settings_dirty(app);
+    Ok(())
+}
+
+/// `MAX_SONG_MASTER_GAIN` in levelSongs/levelSongsPlan.ts.
+const MAX_SONG_MASTER_GAIN: f64 = 2.0;
+
 /// Where a continuous control puts its target (0..1), or `None` when the
 /// message must not move it: an absolute fader that has not picked up the
 /// current value yet (D6), or an encoder that did not turn.
@@ -820,9 +998,38 @@ fn map_cc_to_range(value: u8, min: u32, max: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        continuous_position, map_cc_to_range, next_region_index, previous_region_index,
-        ControlMode, MidiBinding, MidiMessage,
+        continuous_position, map_cc_to_range, next_region_index, next_track_mix,
+        previous_region_index, ControlMode, MidiBinding, MidiMessage, MidiTarget, MixControl,
+        TrackMix,
     };
+
+    fn unity() -> TrackMix {
+        TrackMix { volume: 1.0, pan: 0.0, muted: false, solo: false }
+    }
+
+    #[test]
+    fn track_volume_follows_the_on_screen_taper_and_mute_toggles_on_press() {
+        let mut binding = MidiBinding::new(0xB0, 7);
+        binding.takeover = Some(false);
+        let volume = MidiTarget::parse("track:t1:volume").unwrap();
+        // 3/4 of the travel is unity on the on-screen fader.
+        let value = 95u8; // 95/127 ~ 0.748
+        let next = next_track_mix(&binding, &volume, "test:t1v", MixControl::Volume, cc(value), f64::from(value) / 127.0, &TrackMix { volume: 0.0, ..unity() })
+            .expect("moves");
+        assert!((next.volume - 1.0).abs() < 0.03, "{}", next.volume);
+        let bottom = next_track_mix(&binding, &volume, "test:t1v", MixControl::Volume, cc(0), 0.0, &unity()).unwrap();
+        assert_eq!(bottom.volume, 0.0);
+
+        let mute = MidiTarget::parse("track:t1:mute").unwrap();
+        let note = MidiBinding::new(0x90, 40);
+        let press = MidiMessage { status: 0x90, data1: 40, data2: 127 };
+        let release = MidiMessage { status: 0x80, data1: 40, data2: 0 };
+        let muted = next_track_mix(&note, &mute, "test:t1m", MixControl::Mute, press, 1.0, &unity()).unwrap();
+        assert!(muted.muted);
+        assert_eq!(next_track_mix(&note, &mute, "test:t1m", MixControl::Mute, release, 0.0, &muted), None, "release does nothing");
+        let unmuted = next_track_mix(&note, &mute, "test:t1m", MixControl::Mute, press, 1.0, &muted).unwrap();
+        assert!(!unmuted.muted);
+    }
 
     fn cc(value: u8) -> MidiMessage {
         MidiMessage {

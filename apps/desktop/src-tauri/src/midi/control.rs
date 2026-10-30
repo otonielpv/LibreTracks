@@ -1,4 +1,4 @@
-//! Control-surface state for MIDI dispatch (plan midi-controllers, paso 02).
+//! Control-surface state for MIDI dispatch (plan midi-controllers, pasos 02-03).
 //!
 //! A fader sends dozens of messages per sweep, so nothing per message may
 //! touch the disk or the session lock (D5). This module holds what dispatch
@@ -6,15 +6,20 @@
 //!
 //! - the binding index, rebuilt only when the settings revision moves;
 //! - soft-takeover state per target;
-//! - a worker thread that coalesces the slow side effects: the settings JSON
-//!   is written once the controls have been quiet for [`QUIET_DELAY`],
-//!   `settings:updated` goes out at most every [`UI_INTERVAL`], and a tempo
-//!   knob takes the session lock at most every [`TEMPO_INTERVAL`];
+//! - the mix mirror: each track's volume/pan/mute/solo, the strip order and
+//!   the active song's master, pushed by the UI (`midi_controller_sync`) and
+//!   moved by the controls themselves, so a fader knows where its track is
+//!   without the session lock;
+//! - a worker thread that coalesces the slow side effects: one commit (one
+//!   undo entry) per track once its controls have been quiet for
+//!   [`QUIET_DELAY`], the settings JSON on the same delay, `midi:mix-changed`
+//!   and `settings:updated` at most every [`UI_INTERVAL`] (D11), and a tempo
+//!   knob's session lock at most every [`TEMPO_INTERVAL`];
 //! - diagnostic counters, read by `get_midi_control_diagnostics`, to count
 //!   (not eyeball) disk writes and lock takes per message.
 
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     sync::{
         atomic::{AtomicU64, Ordering},
         mpsc::{self, RecvTimeoutError, Sender},
@@ -24,8 +29,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use libretracks_core::midi_control::{Debounce, MidiBindingIndex, SoftTakeover, Throttle};
-use serde::Serialize;
+use libretracks_core::midi_control::{
+    Debounce, MidiBindingIndex, MixControl, SoftTakeover, Throttle,
+};
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{
@@ -40,6 +47,7 @@ pub(crate) const QUIET_DELAY: Duration = Duration::from_millis(300);
 pub(crate) const UI_INTERVAL: Duration = Duration::from_millis(33);
 const TEMPO_INTERVAL: Duration = Duration::from_millis(50);
 const SETTINGS_UPDATED_EVENT: &str = "settings:updated";
+const MIX_CHANGED_EVENT: &str = "midi:mix-changed";
 
 #[derive(Debug, Default)]
 pub(crate) struct Diagnostics {
@@ -59,16 +67,86 @@ pub struct MidiControlDiagnostics {
     pub track_commits: u64,
 }
 
+/// One track as the UI sees it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackMix {
+    pub volume: f64,
+    pub pan: f64,
+    pub muted: bool,
+    pub solo: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackMixSync {
+    pub id: String,
+    #[serde(flatten)]
+    pub mix: TrackMix,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SongMasterSync {
+    pub region_id: String,
+    pub gain: f64,
+}
+
+/// What changed since the last `midi:mix-changed`, keyed by track id.
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MixPatch {
+    pub tracks: BTreeMap<String, TrackMixPatch>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub song_master: Option<SongMasterSync>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackMixPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub volume: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pan: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub solo: Option<bool>,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct MixMirror {
+    pub(crate) tracks: HashMap<String, TrackMix>,
+    /// The visible tracks of the active mixer, in order (strips, paso 04).
+    pub(crate) strip_order: Vec<String>,
+    pub(crate) song_master: Option<SongMasterSync>,
+    /// Fields moved by a control and not committed yet, per track. A sync
+    /// from the UI must not overwrite them with its older values.
+    pending: HashMap<String, Vec<MixControl>>,
+    song_master_pending: bool,
+    patch: MixPatch,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CommitKey {
+    Track(String),
+    SongMaster,
+}
+
 enum WorkerEvent {
     /// The settings changed in memory; write them once quiet.
     SettingsDirty,
     /// Apply this tempo (the latest wins).
     Tempo(f64),
+    /// A control moved this track or the song master: commit once quiet and
+    /// tell the UI.
+    MixDirty(CommitKey),
 }
 
 pub(crate) struct MidiControl {
     index: Mutex<(u64, Arc<MidiBindingIndex>)>,
     takeover: Mutex<HashMap<String, SoftTakeover>>,
+    pub(crate) mix: Mutex<MixMirror>,
     worker: Mutex<Option<Sender<WorkerEvent>>>,
     pub(crate) diagnostics: Diagnostics,
 }
@@ -78,9 +156,77 @@ pub(crate) fn control() -> &'static MidiControl {
     CONTROL.get_or_init(|| MidiControl {
         index: Mutex::new((u64::MAX, Arc::new(MidiBindingIndex::default()))),
         takeover: Mutex::new(HashMap::new()),
+        mix: Mutex::new(MixMirror::default()),
         worker: Mutex::new(None),
         diagnostics: Diagnostics::default(),
     })
+}
+
+impl MixMirror {
+    /// Take the UI's view of the mix, except for what a control moved and
+    /// has not committed yet.
+    pub(crate) fn sync(
+        &mut self,
+        tracks: Vec<TrackMixSync>,
+        strip_order: Vec<String>,
+        song_master: Option<SongMasterSync>,
+    ) {
+        let mut next = HashMap::with_capacity(tracks.len());
+        for TrackMixSync { id, mut mix } in tracks {
+            if let (Some(fields), Some(ours)) = (self.pending.get(&id), self.tracks.get(&id)) {
+                for field in fields {
+                    match field {
+                        MixControl::Volume => mix.volume = ours.volume,
+                        MixControl::Pan => mix.pan = ours.pan,
+                        MixControl::Mute => mix.muted = ours.muted,
+                        MixControl::Solo => mix.solo = ours.solo,
+                    }
+                }
+            }
+            next.insert(id, mix);
+        }
+        self.pending.retain(|id, _| next.contains_key(id));
+        self.tracks = next;
+        self.strip_order = strip_order;
+        let keep_ours = self.song_master_pending
+            && matches!((&self.song_master, &song_master), (Some(ours), Some(theirs)) if ours.region_id == theirs.region_id);
+        if !keep_ours {
+            self.song_master = song_master;
+            self.song_master_pending = false;
+        }
+    }
+
+    /// A control moved one field of a track.
+    pub(crate) fn set_track(&mut self, track_id: &str, control: MixControl, mix: TrackMix) {
+        let fields = self.pending.entry(track_id.to_string()).or_default();
+        if !fields.contains(&control) {
+            fields.push(control);
+        }
+        let patch = self.patch.tracks.entry(track_id.to_string()).or_default();
+        match control {
+            MixControl::Volume => patch.volume = Some(mix.volume),
+            MixControl::Pan => patch.pan = Some(mix.pan),
+            MixControl::Mute => patch.muted = Some(mix.muted),
+            MixControl::Solo => patch.solo = Some(mix.solo),
+        }
+        self.tracks.insert(track_id.to_string(), mix);
+    }
+
+    pub(crate) fn set_song_master(&mut self, master: SongMasterSync) {
+        self.song_master_pending = true;
+        self.patch.song_master = Some(master.clone());
+        self.song_master = Some(master);
+    }
+
+    /// The fields to commit for a track, clearing them.
+    fn take_pending(&mut self, track_id: &str) -> Option<(Vec<MixControl>, TrackMix)> {
+        let fields = self.pending.remove(track_id)?;
+        Some((fields, self.tracks.get(track_id)?.clone()))
+    }
+
+    fn take_patch(&mut self) -> MixPatch {
+        std::mem::take(&mut self.patch)
+    }
 }
 
 impl MidiControl {
@@ -100,9 +246,18 @@ impl MidiControl {
     }
 
     /// Run `f` with the takeover state of `target_key`.
-    pub(crate) fn with_takeover<R>(&self, target_key: &str, f: impl FnOnce(&mut SoftTakeover) -> R) -> R {
+    pub(crate) fn with_takeover<R>(
+        &self,
+        target_key: &str,
+        f: impl FnOnce(&mut SoftTakeover) -> R,
+    ) -> R {
         let mut map = self.takeover.lock().unwrap_or_else(|e| e.into_inner());
         f(map.entry(target_key.to_string()).or_default())
+    }
+
+    pub(crate) fn with_mix<R>(&self, f: impl FnOnce(&mut MixMirror) -> R) -> R {
+        let mut mix = self.mix.lock().unwrap_or_else(|e| e.into_inner());
+        f(&mut mix)
     }
 
     pub(crate) fn settings_dirty(&self, app: &AppHandle) {
@@ -113,21 +268,24 @@ impl MidiControl {
         self.send(app, WorkerEvent::Tempo(bpm));
     }
 
+    pub(crate) fn track_dirty(&self, app: &AppHandle, track_id: &str) {
+        self.send(app, WorkerEvent::MixDirty(CommitKey::Track(track_id.to_string())));
+    }
+
+    pub(crate) fn song_master_dirty(&self, app: &AppHandle) {
+        self.send(app, WorkerEvent::MixDirty(CommitKey::SongMaster));
+    }
+
     fn send(&self, app: &AppHandle, event: WorkerEvent) {
         let mut worker = self.worker.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(sender) = worker.as_ref() {
-            match sender.send(event) {
+        let event = match worker.as_ref() {
+            Some(sender) => match sender.send(event) {
                 Ok(()) => return,
-                Err(mpsc::SendError(event)) => {
-                    // The worker died (panicked); start a new one below.
-                    *worker = None;
-                    let sender = spawn_worker(app.clone());
-                    let _ = sender.send(event);
-                    *worker = Some(sender);
-                    return;
-                }
-            }
-        }
+                // The worker died (panicked): start a new one below.
+                Err(mpsc::SendError(event)) => event,
+            },
+            None => event,
+        };
         let sender = spawn_worker(app.clone());
         let _ = sender.send(event);
         *worker = Some(sender);
@@ -151,12 +309,16 @@ fn spawn_worker(app: AppHandle) -> Sender<WorkerEvent> {
         .spawn(move || {
             let mut settings_write = Debounce::<()>::new(QUIET_DELAY);
             let mut settings_emit = Throttle::new(UI_INTERVAL);
+            let mut mix_commit = Debounce::<CommitKey>::new(QUIET_DELAY);
+            let mut mix_emit = Throttle::new(UI_INTERVAL);
             let mut tempo_throttle = Throttle::new(TEMPO_INTERVAL);
             let mut pending_tempo: Option<f64> = None;
             loop {
                 let next = [
                     settings_write.next_deadline(),
                     settings_emit.next_deadline(),
+                    mix_commit.next_deadline(),
+                    mix_emit.next_deadline(),
                     tempo_throttle.next_deadline(),
                 ]
                 .into_iter()
@@ -180,8 +342,15 @@ fn spawn_worker(app: AppHandle) -> Sender<WorkerEvent> {
                             apply_tempo(&app, pending_tempo.take());
                         }
                     }
+                    Ok(WorkerEvent::MixDirty(key)) => {
+                        mix_commit.touch(key, now);
+                        if mix_emit.hit(now) {
+                            emit_mix(&app);
+                        }
+                    }
                     Err(RecvTimeoutError::Timeout) => {}
                     Err(RecvTimeoutError::Disconnected) => {
+                        commit_mix(&app, mix_commit.take_all());
                         if !settings_write.take_all().is_empty() {
                             write_settings(&app);
                         }
@@ -191,8 +360,15 @@ fn spawn_worker(app: AppHandle) -> Sender<WorkerEvent> {
                 if settings_emit.poll(now) {
                     emit_settings(&app);
                 }
+                if mix_emit.poll(now) {
+                    emit_mix(&app);
+                }
                 if tempo_throttle.poll(now) {
                     apply_tempo(&app, pending_tempo.take());
+                }
+                let due = mix_commit.take_due(now);
+                if !due.is_empty() {
+                    commit_mix(&app, due);
                 }
                 if !settings_write.take_due(now).is_empty() {
                     write_settings(&app);
@@ -211,16 +387,92 @@ fn emit_settings(app: &AppHandle) {
     }
 }
 
+fn emit_mix(app: &AppHandle) {
+    let patch = control().with_mix(MixMirror::take_patch);
+    if patch != MixPatch::default() {
+        let _ = app.emit(MIX_CHANGED_EVENT, patch);
+    }
+}
+
 fn write_settings(app: &AppHandle) {
     let Ok(settings) = app.state::<AppSettingsStore>().current() else {
         return;
     };
+    // Realtime paths (aux faders) skipped the engine's settings cache.
+    let _ = app
+        .state::<DesktopState>()
+        .audio
+        .replace_settings(settings.clone());
     control()
         .diagnostics
         .settings_disk_writes
         .fetch_add(1, Ordering::Relaxed);
     if let Err(error) = save_app_settings(app, &settings) {
         eprintln!("[libretracks-midi] could not save settings: {error}");
+    }
+}
+
+/// One commit per quiet track: the model, the undo entry and the snapshot
+/// the UI refreshes from. The engine already has the values.
+fn commit_mix(app: &AppHandle, keys: Vec<CommitKey>) {
+    if keys.is_empty() {
+        return;
+    }
+    let commits: Vec<_> = control().with_mix(|mix| {
+        keys.iter()
+            .filter_map(|key| match key {
+                CommitKey::Track(track_id) => mix
+                    .take_pending(track_id)
+                    .map(|(fields, values)| (Some((track_id.clone(), fields, values)), None)),
+                CommitKey::SongMaster => std::mem::take(&mut mix.song_master_pending)
+                    .then(|| mix.song_master.clone().map(|master| (None, Some(master))))
+                    .flatten(),
+            })
+            .collect()
+    });
+    if commits.is_empty() {
+        return;
+    }
+    let state = app.state::<DesktopState>();
+    control()
+        .diagnostics
+        .session_lock_takes
+        .fetch_add(1, Ordering::Relaxed);
+    let Ok(mut session) = state.session.lock() else {
+        return;
+    };
+    let mut last_snapshot = None;
+    for commit in commits {
+        let result = match commit {
+            (Some((track_id, fields, values)), _) => {
+                control()
+                    .diagnostics
+                    .track_commits
+                    .fetch_add(1, Ordering::Relaxed);
+                let has = |field| fields.contains(&field);
+                session.commit_track_mix_model_and_command(
+                    &track_id,
+                    has(MixControl::Volume).then_some(values.volume),
+                    has(MixControl::Pan).then_some(values.pan),
+                    has(MixControl::Mute).then_some(values.muted),
+                    has(MixControl::Solo).then_some(values.solo),
+                    None,
+                    &state.audio,
+                )
+            }
+            (None, Some(master)) => {
+                session.update_song_region_master_gain(&master.region_id, master.gain, &state.audio)
+            }
+            _ => continue,
+        };
+        match result {
+            Ok(snapshot) => last_snapshot = Some(snapshot),
+            Err(error) => eprintln!("[libretracks-midi] mix commit failed: {error}"),
+        }
+    }
+    drop(session);
+    if let Some(snapshot) = last_snapshot {
+        emit_transport_lifecycle_event(app, "sync", &snapshot);
     }
 }
 
@@ -245,4 +497,85 @@ fn apply_tempo(app: &AppHandle, bpm: Option<f64>) {
 #[tauri::command]
 pub fn get_midi_control_diagnostics() -> MidiControlDiagnostics {
     control().snapshot()
+}
+
+/// The UI's view of the mix, pushed whenever the song or the visible mixer
+/// changes (not per frame).
+#[tauri::command]
+pub fn midi_controller_sync(
+    tracks: Vec<TrackMixSync>,
+    strip_order: Vec<String>,
+    song_master: Option<SongMasterSync>,
+) {
+    control().with_mix(|mix| mix.sync(tracks, strip_order, song_master));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn track(id: &str, volume: f64) -> TrackMixSync {
+        TrackMixSync {
+            id: id.into(),
+            mix: TrackMix {
+                volume,
+                pan: 0.0,
+                muted: false,
+                solo: false,
+            },
+        }
+    }
+
+    #[test]
+    fn a_ui_sync_does_not_undo_an_uncommitted_fader_move() {
+        let mut mirror = MixMirror::default();
+        mirror.sync(vec![track("a", 1.0), track("b", 1.0)], vec![], None);
+        let mut moved = mirror.tracks["a"].clone();
+        moved.volume = 0.3;
+        mirror.set_track("a", MixControl::Volume, moved);
+        // The UI pushes its (older) song while the commit is pending.
+        let mut stale_b = track("b", 0.5);
+        stale_b.mix.muted = true;
+        mirror.sync(vec![track("a", 1.0), stale_b], vec![], None);
+        assert_eq!(mirror.tracks["a"].volume, 0.3, "ours wins until committed");
+        assert_eq!(mirror.tracks["b"].volume, 0.5, "untouched tracks follow the UI");
+        assert!(mirror.tracks["b"].muted);
+
+        let (fields, values) = mirror.take_pending("a").expect("pending");
+        assert_eq!(fields, [MixControl::Volume]);
+        assert_eq!(values.volume, 0.3);
+        mirror.sync(vec![track("a", 0.8)], vec![], None);
+        assert_eq!(mirror.tracks["a"].volume, 0.8, "after the commit the UI leads");
+        assert!(!mirror.tracks.contains_key("b"), "deleted tracks drop out");
+    }
+
+    #[test]
+    fn the_patch_accumulates_until_taken() {
+        let mut mirror = MixMirror::default();
+        mirror.sync(vec![track("a", 1.0)], vec![], None);
+        let mut mix = mirror.tracks["a"].clone();
+        mix.volume = 0.5;
+        mirror.set_track("a", MixControl::Volume, mix.clone());
+        mix.muted = true;
+        mirror.set_track("a", MixControl::Mute, mix);
+        let patch = mirror.take_patch();
+        assert_eq!(patch.tracks["a"].volume, Some(0.5));
+        assert_eq!(patch.tracks["a"].muted, Some(true));
+        assert_eq!(patch.tracks["a"].pan, None);
+        assert_eq!(mirror.take_patch(), MixPatch::default());
+    }
+
+    #[test]
+    fn song_master_keeps_ours_only_for_the_same_song() {
+        let mut mirror = MixMirror::default();
+        let master = |region: &str, gain: f64| SongMasterSync {
+            region_id: region.into(),
+            gain,
+        };
+        mirror.set_song_master(master("r1", 0.5));
+        mirror.sync(vec![], vec![], Some(master("r1", 1.0)));
+        assert_eq!(mirror.song_master, Some(master("r1", 0.5)));
+        mirror.sync(vec![], vec![], Some(master("r2", 1.0)));
+        assert_eq!(mirror.song_master, Some(master("r2", 1.0)), "the playhead moved on");
+    }
 }
