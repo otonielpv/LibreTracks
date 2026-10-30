@@ -1616,7 +1616,7 @@ impl AudioController {
         &self,
         edit: impl FnOnce(&mut AppSettings),
     ) -> Result<(), DesktopError> {
-        let previous = self.current_settings()?;
+        let previous = self.automation_base_settings()?;
         let mut settings = previous.clone();
         edit(&mut settings);
         if settings == previous {
@@ -1634,7 +1634,7 @@ impl AudioController {
         &self,
         edit: impl FnOnce(&mut AppSettings),
     ) -> Result<(), DesktopError> {
-        let previous = self.current_settings()?;
+        let previous = self.automation_base_settings()?;
         let mut settings = previous.clone();
         edit(&mut settings);
         if settings == previous {
@@ -1653,6 +1653,23 @@ impl AudioController {
         }
         self.set_voice_guide_config_realtime(&settings)?;
         self.commit_automation_settings(settings)
+    }
+
+    /// What a cue edits: the app's settings store, not this controller's copy.
+    /// `save_settings` (library places, video choice…) only updates the store,
+    /// so this copy can lag behind it; a cue that started from it and then
+    /// stored and broadcast the result wiped a library folder added since the
+    /// app started. Falls back to this copy without an app (headless tests).
+    fn automation_base_settings(&self) -> Result<AppSettings, DesktopError> {
+        let stored = self.app_handle.lock().ok().and_then(|slot| {
+            slot.as_ref()
+                .and_then(|app| app.try_state::<crate::infra::settings::AppSettingsStore>())
+                .and_then(|store| store.current().ok())
+        });
+        match stored {
+            Some(settings) => Ok(settings),
+            None => self.current_settings(),
+        }
     }
 
     /// Settings a cue changed behind the UI's back: keep the engine's copy and
@@ -1725,7 +1742,7 @@ impl AudioController {
         fade_in_seconds: f64,
         fade_out_seconds: f64,
     ) -> Result<(), DesktopError> {
-        let mut settings = self.current_settings()?;
+        let mut settings = self.automation_base_settings()?;
         let clip_changed = settings.pad_id != pad_id || settings.pad_key != pad_key;
         // Enabling the pad must also decode its clip. set_pad_config_realtime
         // only pushes atomics — it never calls set_clip — so a cue that turns a
