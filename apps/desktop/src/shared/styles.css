@@ -7968,6 +7968,21 @@ html.lt-ios body {
   font-size: 1rem;
 }
 
+/* Con el dedo, la franja entera agarraba el redimensionado: un deslizamiento
+   que empezaba entre dos canciones no hacía scroll y encogía la columna (el
+   scroll de la compacta «se trababa»). En táctil solo agarra el icono, junto
+   a la cabecera; el resto de la franja deja pasar el scroll. */
+.lt-mobile .lt-compact-column-resizer {
+  pointer-events: none;
+  touch-action: auto;
+}
+
+.lt-mobile .lt-compact-column-resizer-icon {
+  pointer-events: auto;
+  touch-action: none;
+  padding: 0.4rem 0.2rem;
+}
+
 body.lt-song-reordering .lt-compact-column-resize-slot {
   visibility: hidden;
   pointer-events: none;
