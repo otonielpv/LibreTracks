@@ -22,6 +22,7 @@ import {
 import type { ShortcutActionId } from "../keyboard/actions";
 import { eventToBinding } from "../keyboard/keybinding";
 import { VIDEO_SHORTCUT_HANDLERS } from "../video/videoLive";
+import { toggleFullscreen } from "../window/fullscreen";
 import {
   buildBindingIndex,
   resolveBindings,
@@ -432,6 +433,13 @@ export function useTimelineKeyboardShortcuts({
       "view.zoomIn": () => {},
       "view.zoomOut": () => {},
       "view.zoomReset": () => {},
+      "view.toggleFullscreen": (event) => {
+        event.preventDefault();
+        if (event.repeat) {
+          return;
+        }
+        void toggleFullscreen();
+      },
       ...VIDEO_SHORTCUT_HANDLERS,
     };
 
@@ -519,6 +527,13 @@ export function useTimelineKeyboardShortcuts({
           });
           return;
         }
+      }
+
+      // Fullscreen types no character, so it has no reason to wait for the
+      // focus to leave a text field.
+      if (bindingToAction.get(binding) === "view.toggleFullscreen") {
+        handlers["view.toggleFullscreen"](event);
+        return;
       }
 
       // Generic configurable shortcuts. Everything past this point is ignored

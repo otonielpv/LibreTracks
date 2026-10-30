@@ -52,6 +52,7 @@ export type ShortcutActionId =
   | "view.zoomIn"
   | "view.zoomOut"
   | "view.zoomReset"
+  | "view.toggleFullscreen"
   // navigation
   | "nav.cancelOrClear"
   // video (paso 13)
@@ -240,6 +241,13 @@ export const SHORTCUT_ACTIONS: ShortcutActionDef[] = [
     labelKey: "shortcuts.action.zoomReset",
     defaultBinding: "Ctrl+0",
     editable: false,
+  },
+  {
+    // New: F11 is the fullscreen key in every browser and most Windows apps.
+    id: "view.toggleFullscreen",
+    group: "view",
+    labelKey: "shortcuts.action.toggleFullscreen",
+    defaultBinding: "F11",
   },
 
   // --- Navigation --------------------------------------------------------

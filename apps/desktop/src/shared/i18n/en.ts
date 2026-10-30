@@ -266,6 +266,7 @@ const en = {
       zoomIn: "Zoom interface in",
       zoomOut: "Zoom interface out",
       zoomReset: "Reset interface scale",
+      toggleFullscreen: "Fullscreen",
       cancelOrClear: "Cancel / Clear selection",
       videoBlack: "Video: black",
       videoFadeBlack: "Video: fade to black",

@@ -266,6 +266,7 @@ const es = {
       zoomIn: "Ampliar interfaz",
       zoomOut: "Reducir interfaz",
       zoomReset: "Restablecer escala de interfaz",
+      toggleFullscreen: "Pantalla completa",
       cancelOrClear: "Cancelar / Limpiar selección",
       videoBlack: "Vídeo: negro",
       videoFadeBlack: "Vídeo: fundido a negro",
