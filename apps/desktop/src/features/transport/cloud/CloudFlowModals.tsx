@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { CloudFileFilters } from "./CloudFileFilters";
 import { filterCloudFiles, NO_FILTERS, withMeta } from "./cloudFileFilter";
 import { describePackageMeta } from "./packageNaming";
-import { useCloudStore } from "./cloudStore";
+import { statusOf, useCloudStore } from "./cloudStore";
 
 /**
  * The two questions an import or export asks when the cloud is available:
@@ -30,8 +30,8 @@ function formatBytes(bytes: number): string {
 function StorageChoiceModal() {
   const { t } = useTranslation();
   const pending = useCloudStore((state) => state.pendingChoice);
-  const status = useCloudStore((state) => state.status);
-  const connecting = useCloudStore((state) => state.connecting);
+  const status = useCloudStore((state) => statusOf(state.statuses, "google-drive"));
+  const connecting = useCloudStore((state) => state.connecting === "google-drive");
   const refreshStatus = useCloudStore((state) => state.refreshStatus);
   const connect = useCloudStore((state) => state.connect);
 
@@ -53,7 +53,7 @@ function StorageChoiceModal() {
   // Three states, not two. Before the first probe answers, `status` is null:
   // treating that as "not configured" rendered the Drive option permanently
   // disabled on a clean start, which read as the button being broken.
-  const checking = status === null;
+  const checking = status === undefined;
   const configured = status?.configured ?? false;
   const connected = status?.connected ?? false;
 
@@ -127,12 +127,12 @@ function StorageChoiceModal() {
               disabled={checking || !configured || connecting}
               onClick={() => {
                 if (connected) {
-                  pending.resolve("cloud");
+                  pending.resolve("google-drive");
                 } else {
                   // Connect without closing: cancelling the consent screen
                   // should leave the user back on this question, not back at
                   // the start of the import.
-                  void connect();
+                  void connect("google-drive");
                 }
               }}
             >

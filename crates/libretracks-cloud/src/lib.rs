@@ -31,6 +31,7 @@ pub mod loopback;
 pub mod oauth;
 pub mod onedrive;
 pub mod pkce;
+pub mod provider;
 pub mod redirect;
 pub mod token;
 #[cfg(test)]
@@ -38,6 +39,8 @@ mod test_server;
 pub(crate) mod transfer;
 
 use std::path::Path;
+
+pub use provider::CloudProvider;
 
 use async_trait::async_trait;
 

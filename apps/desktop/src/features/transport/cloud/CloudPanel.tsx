@@ -6,7 +6,7 @@ import { type CloudFolder } from "../desktopApi";
 import { CloudFileFilters } from "./CloudFileFilters";
 import { filterCloudFiles, NO_FILTERS, withMeta } from "./cloudFileFilter";
 import { describePackageMeta } from "./packageNaming";
-import { useCloudStore } from "./cloudStore";
+import { statusOf, useCloudStore } from "./cloudStore";
 
 /**
  * Connect the app to the user's own Google Drive, and manage what is stored
@@ -73,10 +73,11 @@ export function CloudPanel() {
   const { t } = useTranslation();
   const isOpen = useCloudStore((state) => state.isPanelOpen);
   const onClose = useCloudStore((state) => state.closePanel);
-  const status = useCloudStore((state) => state.status);
+  const provider = useCloudStore((state) => state.provider);
+  const status = useCloudStore((state) => statusOf(state.statuses, state.provider));
   const quota = useCloudStore((state) => state.quota);
   const files = useCloudStore((state) => state.files);
-  const connecting = useCloudStore((state) => state.connecting);
+  const connecting = useCloudStore((state) => state.connecting !== null);
   const loadingFolder = useCloudStore((state) => state.loadingFolder);
   const transfer = useCloudStore((state) => state.transfer);
   const cancelling = useCloudStore((state) => state.cancelling);
@@ -188,7 +189,7 @@ export function CloudPanel() {
                 type="button"
                 className="lt-google-button"
                 disabled={connecting}
-                onClick={() => void connect()}
+                onClick={() => void connect(provider)}
               >
                 <GoogleMark />
                 <span>
@@ -209,13 +210,13 @@ export function CloudPanel() {
                   <GoogleMark />
                   {t("transport.cloud.connectedTo", {
                     defaultValue: "Conectado a {{provider}}",
-                    provider: status?.provider ?? "Google Drive",
+                    provider: status?.name ?? "Google Drive",
                   })}
                 </span>
                 <button
                   type="button"
                   className="lt-ghost-button"
-                  onClick={() => void disconnect()}
+                  onClick={() => void disconnect(provider)}
                 >
                   <span className="material-symbols-outlined" aria-hidden="true">
                     logout

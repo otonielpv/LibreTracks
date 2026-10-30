@@ -1,10 +1,14 @@
-//! Cloud transfer commands: sign in to the user's own Google Drive and move
-//! `.ltpkg` / `.ltset` packages in and out of it.
+//! Cloud transfer commands: sign in to the user's own Google Drive, OneDrive or
+//! Dropbox and move `.ltpkg` / `.ltset` packages in and out of it.
 //!
 //! LibreTracks stores nothing and hosts nothing. The files land in an account
-//! the user owns, under a `LibreTracks/` folder with `Songs/` and `Sessions/`
+//! the user owns, under a folder of the app's own with `Songs/` and `Sessions/`
 //! inside, reached with a token that never leaves this device. See
 //! [`libretracks_cloud`] for the shape of all that.
+//!
+//! Every command but the status takes the provider's key (`google-drive`,
+//! `onedrive`, `dropbox`). Several accounts can be connected at once, one per
+//! provider, and each export or import says which one it is for.
 //!
 //! # These are explicit transfers, not sync
 //!
@@ -20,11 +24,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
-use libretracks_cloud::google::client_config;
-use libretracks_cloud::google::drive::DriveClient;
-use libretracks_cloud::google::oauth::GoogleOAuth;
 use libretracks_cloud::token::{TokenManager, TokenStore};
-use libretracks_cloud::{CloudError, CloudStorage, RemoteFolder};
+use libretracks_cloud::{CloudError, CloudProvider, CloudStorage, RemoteFolder};
 
 const TRANSFER_PROGRESS_EVENT: &str = "cloud:transfer-progress";
 
@@ -83,15 +84,18 @@ const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(300);
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CloudStatus {
-    /// Whether this build can talk to Google at all.
+    /// Stable key the other commands take: `google-drive`, `onedrive`, `dropbox`.
+    pub provider: String,
+    /// Product name, for display.
+    pub name: String,
+    /// Whether this build can talk to the provider at all.
     ///
     /// Separate from `connected` on purpose: a build without the OAuth client
-    /// secret completes the whole consent screen and only then fails, so the UI
-    /// must be able to hide or disable the feature up front rather than walking
-    /// the user into that.
+    /// secret or id completes the whole consent screen and only then fails, so
+    /// the UI must be able to hide or disable the provider up front rather
+    /// than walking the user into that.
     pub configured: bool,
     pub connected: bool,
-    pub provider: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -127,18 +131,8 @@ fn describe(error: CloudError) -> String {
     error.to_string()
 }
 
-/// Whether this build carries the credentials it needs.
-///
-/// Google requires the client secret for desktop clients despite documenting it
-/// as optional, and it is injected at build time rather than committed, so a
-/// clone built without `LIBRETRACKS_GOOGLE_CLIENT_SECRET` legitimately has
-/// none. Mobile client types are issued no secret and are always configured.
-fn is_configured() -> bool {
-    if cfg!(any(target_os = "android", target_os = "ios")) {
-        true
-    } else {
-        client_config::CLIENT_SECRET.is_some()
-    }
+fn provider_from(key: &str) -> Result<CloudProvider, String> {
+    CloudProvider::from_key(key).ok_or_else(|| format!("unknown cloud provider: {key}"))
 }
 
 /// The credential store for this platform.
@@ -149,38 +143,44 @@ fn is_configured() -> bool {
 /// `AndroidKeyStore` over JNI and iOS through its own Keychain.
 ///
 /// A refresh token is standing authorisation to reach part of a real person's
-/// Drive until they revoke it, which is why none of these is "a file in app
-/// storage".
-fn token_store(app: &AppHandle) -> Result<Box<dyn TokenStore>, String> {
+/// cloud storage until they revoke it, which is why none of these is "a file
+/// in app storage".
+///
+/// One entry per provider, named by its key, so disconnecting one account
+/// never touches another's credentials.
+fn token_store(app: &AppHandle, provider: CloudProvider) -> Result<Box<dyn TokenStore>, String> {
     // Only the iOS branch needs it; the others reach their store without one.
     let _ = app;
     #[cfg(target_os = "android")]
     {
         Ok(Box::new(
-            crate::platform::android_token_store::AndroidTokenStore::google_drive(),
+            crate::platform::android_token_store::AndroidTokenStore::new(provider.key()),
         ))
     }
     #[cfg(target_os = "ios")]
     {
-        Ok(Box::new(
-            crate::platform::ios_token_store::IosTokenStore::google_drive(app.clone()),
-        ))
+        Ok(Box::new(crate::platform::ios_token_store::IosTokenStore::new(
+            app.clone(),
+            provider.key(),
+        )))
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         Ok(Box::new(
-            libretracks_cloud::keychain::KeychainTokenStore::google_drive().map_err(describe)?,
+            libretracks_cloud::keychain::KeychainTokenStore::new(provider.key())
+                .map_err(describe)?,
         ))
     }
 }
 
-fn token_manager(app: &AppHandle) -> Result<TokenManager, String> {
-    TokenManager::new(Arc::new(GoogleOAuth), token_store(app)?).map_err(describe)
+fn token_manager(app: &AppHandle, provider: CloudProvider) -> Result<TokenManager, String> {
+    TokenManager::new(provider.oauth(), token_store(app, provider)?).map_err(describe)
 }
 
-fn drive(app: &AppHandle) -> Result<DriveClient, String> {
-    let manager = token_manager(app)?;
-    DriveClient::new(Box::new(manager)).map_err(describe)
+fn storage(app: &AppHandle, provider: &str) -> Result<Box<dyn CloudStorage>, String> {
+    let provider = provider_from(provider)?;
+    let manager = token_manager(app, provider)?;
+    provider.storage(Box::new(manager)).map_err(describe)
 }
 
 fn folder_from(name: &str) -> Result<RemoteFolder, String> {
@@ -270,44 +270,58 @@ pub async fn cloud_discard_staged(app: AppHandle, path: String) -> Result<(), St
     }
 }
 
+/// Every provider this app knows, in display order, with its state.
+///
+/// Unconfigured ones are included rather than filtered out so the frontend can
+/// decide how to present them; it hides them today.
 #[tauri::command]
-pub async fn cloud_status(app: AppHandle) -> Result<CloudStatus, String> {
-    let connected = token_manager(&app)
-        .ok()
-        .map(|manager| manager.is_connected())
-        .unwrap_or(false);
-
-    Ok(CloudStatus {
-        configured: is_configured(),
-        connected,
-        provider: "Google Drive".to_string(),
-    })
+pub async fn cloud_status(app: AppHandle) -> Result<Vec<CloudStatus>, String> {
+    Ok(CloudProvider::ALL
+        .into_iter()
+        .map(|provider| {
+            let configured = provider.is_configured();
+            let connected = configured
+                && token_manager(&app, provider)
+                    .map(|manager| manager.is_connected())
+                    .unwrap_or(false);
+            CloudStatus {
+                provider: provider.key().to_string(),
+                name: provider.display_name().to_string(),
+                configured,
+                connected,
+            }
+        })
+        .collect())
 }
 
 /// Run the sign-in: open the system browser, catch the redirect, store the
 /// token in the OS credential store.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
-pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
+pub async fn cloud_connect(app: AppHandle, provider: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
 
-    use libretracks_cloud::google::oauth;
-    use libretracks_cloud::oauth::OAuthProvider;
-    use libretracks_cloud::loopback::LoopbackListener;
     use libretracks_cloud::token::exchange_code;
 
+    let provider = provider_from(&provider)?;
     // Checked before anything is opened. Failing here shows a plain "cloud not
     // configured in this build"; failing after the consent screen shows an
     // opaque OAuth error to someone who already granted access.
-    if !is_configured() {
-        return Err("this build has no Google OAuth client secret configured".to_string());
+    if !provider.is_configured() {
+        return Err(format!(
+            "this build has no {} OAuth credentials configured",
+            provider.display_name()
+        ));
     }
 
-    let listener = LoopbackListener::bind().await.map_err(describe)?;
-    let session = oauth::begin(listener.port()).map_err(|e| e.to_string())?;
+    let oauth = provider.oauth();
+    let listener = provider.bind_loopback().await.map_err(describe)?;
+    let session = provider
+        .begin_sign_in(listener.port())
+        .map_err(|e| e.to_string())?;
 
     app.opener()
-        .open_url(GoogleOAuth.authorization_url(&session), None::<&str>)
+        .open_url(oauth.authorization_url(&session), None::<&str>)
         .map_err(|e| format!("could not open the browser: {e}"))?;
 
     let params = tokio::time::timeout(SIGN_IN_TIMEOUT, listener.wait_for_redirect())
@@ -321,11 +335,11 @@ pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
         .verify_state(&params.state)
         .map_err(|e| e.to_string())?;
 
-    let token = exchange_code(&GoogleOAuth, &session, &params.code)
+    let token = exchange_code(oauth.as_ref(), &session, &params.code)
         .await
         .map_err(describe)?;
 
-    token_manager(&app)?
+    token_manager(&app, provider)?
         .adopt(&token)
         .map_err(describe)
 }
@@ -373,17 +387,23 @@ pub fn register_deep_link_handler(app: &AppHandle) {
 /// not a stylistic choice.
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tauri::command]
-pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
+pub async fn cloud_connect(app: AppHandle, provider: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
 
-    use libretracks_cloud::google::oauth;
-    use libretracks_cloud::oauth::OAuthProvider;
     use libretracks_cloud::redirect::parse_redirect_str;
     use libretracks_cloud::token::exchange_code;
 
+    let provider = provider_from(&provider)?;
+    if !provider.is_configured() {
+        return Err(format!(
+            "this build has no {} OAuth credentials configured",
+            provider.display_name()
+        ));
+    }
+    let oauth = provider.oauth();
     // Port is ignored on mobile: the redirect is a private URI scheme, not a
     // socket. Passing 0 keeps one signature for every platform.
-    let session = oauth::begin(0).map_err(|e| e.to_string())?;
+    let session = provider.begin_sign_in(0).map_err(|e| e.to_string())?;
 
     let (sender, receiver) = tokio::sync::oneshot::channel();
     {
@@ -397,7 +417,7 @@ pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
     }
 
     app.opener()
-        .open_url(GoogleOAuth.authorization_url(&session), None::<&str>)
+        .open_url(oauth.authorization_url(&session), None::<&str>)
         .map_err(|e| format!("could not open the browser: {e}"))?;
 
     let raw = tokio::time::timeout(SIGN_IN_TIMEOUT, receiver)
@@ -411,29 +431,31 @@ pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
         .verify_state(&params.state)
         .map_err(|e| e.to_string())?;
 
-    let token = exchange_code(&GoogleOAuth, &session, &params.code)
+    let token = exchange_code(oauth.as_ref(), &session, &params.code)
         .await
         .map_err(describe)?;
 
-    token_manager(&app)?
+    token_manager(&app, provider)?
         .adopt(&token)
         .map_err(describe)
 }
 
+/// Forget one provider's account. The others stay connected.
 #[tauri::command]
-pub async fn cloud_disconnect(app: AppHandle) -> Result<(), String> {
-    // Folder ids belong to the Drive they came from. Keeping them across a
-    // sign-out would have the next account writing into ids that are not its
-    // own.
-    libretracks_cloud::google::drive::forget_cached_folders().await;
-    token_manager(&app)?
+pub async fn cloud_disconnect(app: AppHandle, provider: String) -> Result<(), String> {
+    let provider = provider_from(&provider)?;
+    // Drive's folder ids belong to the account they came from. Keeping them
+    // across a sign-out would have the next account writing into ids that are
+    // not its own.
+    provider.forget_cached_state().await;
+    token_manager(&app, provider)?
         .disconnect()
         .map_err(describe)
 }
 
 #[tauri::command]
-pub async fn cloud_quota(app: AppHandle) -> Result<CloudQuota, String> {
-    let quota = drive(&app)?.quota().await.map_err(describe)?;
+pub async fn cloud_quota(app: AppHandle, provider: String) -> Result<CloudQuota, String> {
+    let quota = storage(&app, &provider)?.quota().await.map_err(describe)?;
     Ok(CloudQuota {
         used_bytes: quota.used_bytes,
         limit_bytes: quota.limit_bytes,
@@ -442,8 +464,12 @@ pub async fn cloud_quota(app: AppHandle) -> Result<CloudQuota, String> {
 }
 
 #[tauri::command]
-pub async fn cloud_list(app: AppHandle, folder: String) -> Result<Vec<CloudFile>, String> {
-    let files = drive(&app)?
+pub async fn cloud_list(
+    app: AppHandle,
+    provider: String,
+    folder: String,
+) -> Result<Vec<CloudFile>, String> {
+    let files = storage(&app, &provider)?
         .list(folder_from(&folder)?)
         .await
         .map_err(describe)?;
@@ -460,7 +486,11 @@ pub async fn cloud_list(app: AppHandle, folder: String) -> Result<Vec<CloudFile>
 
 /// Upload a local package, routed to `Songs` or `Sessions` by its extension.
 #[tauri::command]
-pub async fn cloud_upload(app: AppHandle, local_path: String) -> Result<CloudFile, String> {
+pub async fn cloud_upload(
+    app: AppHandle,
+    provider: String,
+    local_path: String,
+) -> Result<CloudFile, String> {
     let path = PathBuf::from(&local_path);
     let folder = RemoteFolder::for_path(&path)
         .ok_or_else(|| "only .ltpkg and .ltset packages can be uploaded".to_string())?;
@@ -472,7 +502,7 @@ pub async fn cloud_upload(app: AppHandle, local_path: String) -> Result<CloudFil
 
     let transfer = TransferGuard::begin()?;
     let handle = app.clone();
-    let uploaded = drive(&app)?
+    let uploaded = storage(&app, &provider)?
         .upload(folder, &path, &name, &move |done, total| {
             emit_progress(&handle, done, total)
         }, &move || transfer.is_cancelled())
@@ -491,6 +521,7 @@ pub async fn cloud_upload(app: AppHandle, local_path: String) -> Result<CloudFil
 #[tauri::command]
 pub async fn cloud_download(
     app: AppHandle,
+    provider: String,
     file_id: String,
     file_name: String,
     dest_dir: String,
@@ -498,7 +529,7 @@ pub async fn cloud_download(
     let dest = PathBuf::from(dest_dir).join(&file_name);
     let transfer = TransferGuard::begin()?;
     let handle = app.clone();
-    drive(&app)?
+    storage(&app, &provider)?
         .download(&file_id, &dest, &move |done, total| {
             emit_progress(&handle, done, total)
         }, &move || transfer.is_cancelled())
@@ -523,8 +554,11 @@ pub fn cloud_cancel_transfer() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn cloud_delete(app: AppHandle, file_id: String) -> Result<(), String> {
-    drive(&app)?.delete(&file_id).await.map_err(describe)
+pub async fn cloud_delete(app: AppHandle, provider: String, file_id: String) -> Result<(), String> {
+    storage(&app, &provider)?
+        .delete(&file_id)
+        .await
+        .map_err(describe)
 }
 
 #[cfg(test)]
@@ -537,5 +571,13 @@ mod tests {
         assert_eq!(folder_from("sessions").unwrap(), RemoteFolder::Sessions);
         assert!(folder_from("templates").is_err());
         assert!(folder_from("").is_err());
+    }
+
+    #[test]
+    fn provider_keys_from_the_frontend_resolve() {
+        assert_eq!(provider_from("google-drive").unwrap(), CloudProvider::GoogleDrive);
+        assert_eq!(provider_from("onedrive").unwrap(), CloudProvider::OneDrive);
+        assert_eq!(provider_from("dropbox").unwrap(), CloudProvider::Dropbox);
+        assert!(provider_from("Google Drive").is_err());
     }
 }

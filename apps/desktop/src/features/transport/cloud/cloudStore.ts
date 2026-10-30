@@ -12,12 +12,14 @@ import {
   uploadToCloud,
   type CloudFile,
   type CloudFolder,
+  type CloudProviderId,
   type CloudQuota,
   type CloudStatus,
 } from "../desktopApi";
 
 /**
- * State for moving packages in and out of the user's own Google Drive.
+ * State for moving packages in and out of the user's own cloud accounts
+ * (Google Drive, OneDrive, Dropbox; several may be connected at once).
  *
  * # Why a store and not component state
  *
@@ -40,8 +42,24 @@ import {
 export type PendingChoice = {
   intent: "import" | "export";
   kind: "song" | "session";
-  resolve: (choice: "local" | "cloud" | null) => void;
+  resolve: (choice: StorageChoice | null) => void;
 };
+
+/** Where an import comes from or an export goes: this device, or an account. */
+export type StorageChoice = "local" | CloudProviderId;
+
+/** Whether a destination is one of the accounts rather than this device. */
+export function isCloudTarget(target: StorageChoice | null): target is CloudProviderId {
+  return target !== null && target !== "local";
+}
+
+/** The status of one provider, or undefined before the first probe answers. */
+export function statusOf(
+  statuses: CloudStatus[] | null,
+  provider: CloudProviderId,
+): CloudStatus | undefined {
+  return statuses?.find((status) => status.provider === provider);
+}
 
 export type PendingPick = {
   folder: CloudFolder;
@@ -76,7 +94,7 @@ type CloudState = {
   isPanelOpen: boolean;
   /** Set while the local-or-cloud chooser is on screen. */
   pendingChoice: PendingChoice | null;
-  /** Set while the "which file from Drive" picker is on screen. */
+  /** Set while the "which file from the cloud" picker is on screen. */
   pendingPick: PendingPick | null;
   /**
    * Where the export in progress is headed.
@@ -85,12 +103,21 @@ type CloudState = {
    * it closes, so it has to survive in between. It lives here rather than in
    * `TransportPanelContent` so that file gains no state.
    */
-  exportTarget: "local" | "cloud" | null;
-  status: CloudStatus | null;
+  exportTarget: StorageChoice | null;
+  /** Every provider and its state; null until the first probe answers. */
+  statuses: CloudStatus[] | null;
+  /**
+   * The account the panel, the picker and the transfers are working with.
+   *
+   * One at a time on purpose: `quota` and `files` below belong to it, and a
+   * flow sets it from the user's choice before listing or uploading.
+   */
+  provider: CloudProviderId;
+  /** Quota and listings of {@link provider}. */
   quota: CloudQuota | null;
   files: Record<CloudFolder, CloudFile[]>;
-  /** True only while the browser sign-in is in flight. */
-  connecting: boolean;
+  /** The provider whose browser sign-in is in flight, if any. */
+  connecting: CloudProviderId | null;
   loadingFolder: CloudFolder | null;
   transfer: CloudTransfer | null;
   /** True after cancel was pressed and before the backend transfer exits. */
@@ -102,10 +129,12 @@ type CloudState = {
   closePanel: () => void;
   setPendingChoice: (choice: PendingChoice | null) => void;
   setPendingPick: (pick: PendingPick | null) => void;
-  setExportTarget: (target: "local" | "cloud" | null) => void;
+  setExportTarget: (target: StorageChoice | null) => void;
+  /** Switch the working account, dropping the previous one's listings. */
+  setProvider: (provider: CloudProviderId) => void;
   refreshStatus: () => Promise<void>;
-  connect: () => Promise<void>;
-  disconnect: () => Promise<void>;
+  connect: (provider: CloudProviderId) => Promise<void>;
+  disconnect: (provider: CloudProviderId) => Promise<void>;
   refreshQuota: () => Promise<void>;
   refreshFiles: (folder: CloudFolder) => Promise<void>;
   upload: (localPath: string) => Promise<CloudFile | null>;
@@ -152,10 +181,11 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   pendingChoice: null,
   pendingPick: null,
   exportTarget: null,
-  status: null,
+  statuses: null,
+  provider: "google-drive",
   quota: null,
   files: { ...EMPTY_FILES },
-  connecting: false,
+  connecting: null,
   loadingFolder: null,
   transfer: null,
   cancelling: false,
@@ -166,10 +196,18 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   setPendingChoice: (pendingChoice) => set({ pendingChoice }),
   setPendingPick: (pendingPick) => set({ pendingPick }),
   setExportTarget: (exportTarget) => set({ exportTarget }),
+  setProvider: (provider) => {
+    if (provider === get().provider) {
+      return;
+    }
+    // The previous account's files must not show under the new one's name,
+    // not even for the moment the new listing takes.
+    set({ provider, quota: null, files: { ...EMPTY_FILES }, error: null });
+  },
 
   refreshStatus: async () => {
     try {
-      set({ status: await getCloudStatus() });
+      set({ statuses: await getCloudStatus() });
     } catch (error) {
       // A status probe that fails must not present as "disconnected": the
       // difference between "no account" and "could not ask" changes what the
@@ -178,26 +216,31 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     }
   },
 
-  connect: async () => {
-    set({ connecting: true, error: null });
+  connect: async (provider) => {
+    set({ connecting: provider, error: null });
     try {
-      await connectCloud();
+      await connectCloud(provider);
       recordProductEvent("feature_cloud");
+      get().setProvider(provider);
       await get().refreshStatus();
       await get().refreshQuota();
     } catch (error) {
       set({ error: messageOf(error) });
     } finally {
-      set({ connecting: false });
+      set({ connecting: null });
     }
   },
 
-  disconnect: async () => {
+  disconnect: async (provider) => {
     try {
-      await disconnectCloud();
+      await disconnectCloud(provider);
       // Drop everything the account produced, or the manager keeps listing
-      // files from an account that is no longer connected.
-      set({ quota: null, files: { ...EMPTY_FILES }, error: null });
+      // files from an account that is no longer connected. Only when it is the
+      // one on screen: the others' state is not loaded anyway.
+      if (get().provider === provider) {
+        set({ quota: null, files: { ...EMPTY_FILES } });
+      }
+      set({ error: null });
       await get().refreshStatus();
     } catch (error) {
       set({ error: messageOf(error) });
@@ -206,7 +249,12 @@ export const useCloudStore = create<CloudState>((set, get) => ({
 
   refreshQuota: async () => {
     try {
-      set({ quota: await getCloudQuota() });
+      const provider = get().provider;
+      const quota = await getCloudQuota(provider);
+      // Dropped if the user switched account while it was in flight.
+      if (get().provider === provider) {
+        set({ quota });
+      }
     } catch (error) {
       set({ error: messageOf(error) });
     }
@@ -215,8 +263,11 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   refreshFiles: async (folder) => {
     set({ loadingFolder: folder, error: null });
     try {
-      const listed = await listCloudFiles(folder);
-      set((state) => ({ files: { ...state.files, [folder]: listed } }));
+      const provider = get().provider;
+      const listed = await listCloudFiles(provider, folder);
+      if (get().provider === provider) {
+        set((state) => ({ files: { ...state.files, [folder]: listed } }));
+      }
     } catch (error) {
       set({ error: messageOf(error) });
     } finally {
@@ -232,7 +283,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       error: null,
     });
     try {
-      const uploaded = await uploadToCloud(localPath);
+      const uploaded = await uploadToCloud(get().provider, localPath);
       recordProductEvent("feature_cloud");
       // The folder it landed in follows from the extension, exactly as the
       // backend routed it, so the listing refreshes without a second guess.
@@ -267,7 +318,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
 
   remove: async (folder, fileId) => {
     try {
-      await deleteCloudFile(fileId);
+      await deleteCloudFile(get().provider, fileId);
       set((state) => ({
         files: {
           ...state.files,
@@ -329,10 +380,11 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       pendingChoice: null,
       pendingPick: null,
       exportTarget: null,
-      status: null,
+      statuses: null,
+      provider: "google-drive",
       quota: null,
       files: { ...EMPTY_FILES },
-      connecting: false,
+      connecting: null,
       loadingFolder: null,
       transfer: null,
       cancelling: false,

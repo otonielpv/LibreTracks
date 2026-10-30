@@ -29,16 +29,12 @@ pub struct KeychainTokenStore {
 }
 
 impl KeychainTokenStore {
-    /// One entry per provider, so adding a second backend later does not
-    /// collide with the Google credentials already stored.
+    /// One entry per provider, named by `CloudProvider::key`, so the accounts
+    /// never collide and disconnecting one leaves the others alone.
     pub fn new(provider: &str) -> Result<Self, CloudError> {
         let entry = keyring::Entry::new(SERVICE, provider)
             .map_err(|e| CloudError::Network(format!("credential store unavailable: {e}")))?;
         Ok(Self { entry })
-    }
-
-    pub fn google_drive() -> Result<Self, CloudError> {
-        Self::new("google-drive")
     }
 }
 

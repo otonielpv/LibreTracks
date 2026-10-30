@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useDismissOnBack } from "../mobile/backNavigation";
-import { useCloudStore } from "../cloud/cloudStore";
+import { isCloudTarget, useCloudStore } from "../cloud/cloudStore";
 import {
   defaultIncludeVideo,
   useVideoExportPayload,
@@ -59,7 +59,7 @@ export function ExportSessionModal({
   const includeVideo =
     includeVideoChoice ??
     (videoPayload
-      ? defaultIncludeVideo(videoPayload.bytes, useCloudStore.getState().exportTarget === "cloud")
+      ? defaultIncludeVideo(videoPayload.bytes, isCloudTarget(useCloudStore.getState().exportTarget))
       : true);
 
   if (!isOpen) {

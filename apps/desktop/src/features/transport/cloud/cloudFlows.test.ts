@@ -30,8 +30,8 @@ describe("destino de exportacion", () => {
     useCloudStore.getState().reset();
   });
 
-  /** Responde la pregunta local/Drive como haria el modal. */
-  function answer(choice: "local" | "cloud" | null) {
+  /** Responde la pregunta local/nube como haria el modal. */
+  function answer(choice: "local" | "google-drive" | "dropbox" | null) {
     const pending = useCloudStore.getState().pendingChoice;
     if (!pending) throw new Error("no hay pregunta pendiente");
     pending.resolve(choice);
@@ -40,10 +40,10 @@ describe("destino de exportacion", () => {
   it("guarda la eleccion y abre el selector de modo", async () => {
     const openModeChooser = vi.fn();
     const flow = beginExportWithChoice("session", openModeChooser);
-    answer("cloud");
+    answer("google-drive");
     await flow;
 
-    expect(useCloudStore.getState().exportTarget).toBe("cloud");
+    expect(useCloudStore.getState().exportTarget).toBe("google-drive");
     expect(openModeChooser).toHaveBeenCalledOnce();
   });
 
@@ -61,9 +61,9 @@ describe("destino de exportacion", () => {
   /// siguiente exportacion se iba a Drive sin preguntar nada.
   it("cancelar el selector de modo olvida el destino", async () => {
     const flow = beginExportWithChoice("session", () => {});
-    answer("cloud");
+    answer("google-drive");
     await flow;
-    expect(useCloudStore.getState().exportTarget).toBe("cloud");
+    expect(useCloudStore.getState().exportTarget).toBe("google-drive");
 
     cancelExportChoice();
     expect(useCloudStore.getState().exportTarget).toBeNull();
@@ -138,7 +138,7 @@ describe("paquete de paso de una importacion desde Drive", () => {
     const choice = useCloudStore.getState().pendingChoice;
     expect(choice).toMatchObject({ intent: "import", kind: "song" });
 
-    choice!.resolve("cloud");
+    choice!.resolve("google-drive");
     await pick();
     await flow;
 
@@ -154,5 +154,54 @@ describe("paquete de paso de una importacion desde Drive", () => {
 
     expect(await flow).toBe(false);
     expect(discardStagedPackage).toHaveBeenCalledWith(staged);
+  });
+});
+
+/**
+ * Con varias cuentas conectadas, la eleccion del usuario decide a cual se
+ * habla. Equivocarse aqui sube la sesion a Drive cuando se eligio Dropbox.
+ */
+describe("varias cuentas", () => {
+  beforeEach(() => {
+    useCloudStore.getState().reset();
+    vi.mocked(downloadFromCloud).mockReset().mockResolvedValue("/cache/cloud-staging/x.ltset");
+  });
+
+  it("importar eligiendo Dropbox descarga de Dropbox", async () => {
+    useCloudStore.setState({
+      refreshFiles: async () => {},
+      refreshQuota: async () => {},
+    } as never);
+    const flow = importSongWithChoice(async () => {});
+    useCloudStore.getState().pendingChoice!.resolve("dropbox");
+    expect(useCloudStore.getState().provider).toBe("dropbox");
+
+    await vi.waitFor(() => expect(useCloudStore.getState().pendingPick).not.toBeNull());
+    useCloudStore.getState().pendingPick!.resolve({ id: "id:a", name: "x.ltpkg", sizeBytes: 1 } as never);
+    await flow;
+
+    expect(downloadFromCloud).toHaveBeenCalledWith("dropbox", "id:a", "x.ltpkg", "/cache/cloud-staging");
+  });
+
+  it("una exportacion va a la cuenta elegida aunque se cambie de cuenta en medio", async () => {
+    const upload = vi.fn(async () => null);
+    useCloudStore.setState({ upload } as never);
+    const opened = vi.fn();
+    const begun = beginExportWithChoice("session", opened);
+    useCloudStore.getState().pendingChoice!.resolve("onedrive");
+    await begun;
+    expect(opened).toHaveBeenCalled();
+
+    // Entre el selector de modo y la exportacion, el panel cambia a Drive.
+    useCloudStore.getState().setProvider("google-drive");
+    let providerAtUpload: string | null = null;
+    upload.mockImplementation(async () => {
+      providerAtUpload = useCloudStore.getState().provider;
+      return null;
+    });
+    await finishExportWithChoice("Set.ltset", async () => {});
+
+    expect(upload).toHaveBeenCalledWith("/cache/cloud-staging/Set.ltset");
+    expect(providerAtUpload).toBe("onedrive");
   });
 });

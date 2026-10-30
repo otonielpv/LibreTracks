@@ -71,7 +71,7 @@ describe("VideoExportOption", () => {
   });
 
   it("an upload to the cloud of more than 500 MB starts without the videos", async () => {
-    useCloudStore.setState({ exportTarget: "cloud" });
+    useCloudStore.setState({ exportTarget: "dropbox" });
     api.getVideoExportPayload.mockResolvedValue({ count: 2, bytes: 0.8 * GB });
     render(<ExportSessionModal isOpen sessionTitle="Set" onCancel={() => {}} onConfirm={() => {}} />);
     await screen.findByText(/transport.video.export.summary/);

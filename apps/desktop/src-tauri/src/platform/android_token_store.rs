@@ -28,7 +28,7 @@ use libretracks_cloud::CloudError;
 const CLASS: &str = "com.libretracks.desktop.SecureTokenStore";
 
 pub struct AndroidTokenStore {
-    /// Entry name, so a second provider later does not collide with Google's.
+    /// Entry name: the provider's key (`CloudProvider::key`), one per account.
     name: String,
 }
 
@@ -37,10 +37,6 @@ impl AndroidTokenStore {
         Self {
             name: provider.to_string(),
         }
-    }
-
-    pub fn google_drive() -> Self {
-        Self::new("google-drive")
     }
 }
 

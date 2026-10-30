@@ -2976,29 +2976,37 @@ export async function deleteTracks(
   return invokeCommand<TransportSnapshot>("delete_tracks", { trackIds });
 }
 
-// ── Cloud (the user's own Google Drive) ──────────────────────────────────────
+// ── Cloud (the user's own Google Drive, OneDrive or Dropbox) ─────────────────
 //
 // LibreTracks hosts nothing: these move `.ltpkg` / `.ltset` packages in and out
-// of an account the USER owns, under a `LibreTracks/` folder with `Songs/` and
-// `Sessions/` inside. The token lives in the OS credential store on the device
-// and never reaches us.
+// of an account the USER owns, under a folder of the app's own with `Songs/`
+// and `Sessions/` inside. The token lives in the OS credential store on the
+// device and never reaches us.
+//
+// Several accounts can be connected at once, one per provider, so every call
+// but the status names the provider it is for.
 //
 // Explicit transfers, not sync: nothing runs in the background, so there is
 // never a conflict to resolve.
+
+/** Stable provider key, as the backend sends and expects it. */
+export type CloudProviderId = "google-drive" | "onedrive" | "dropbox";
 
 /** Which of the two cloud folders a listing refers to. */
 export type CloudFolder = "songs" | "sessions";
 
 export type CloudStatus = {
+  provider: CloudProviderId;
+  /** Product name, shown as is. */
+  name: string;
   /**
-   * Whether this build can reach Google at all. Distinct from `connected`: a
-   * build compiled without the OAuth client secret walks the user through the
-   * entire consent screen and only then fails, so the UI disables the entry
-   * point instead of letting that happen.
+   * Whether this build can reach the provider at all. Distinct from
+   * `connected`: a build compiled without the OAuth credentials walks the user
+   * through the entire consent screen and only then fails, so the UI hides or
+   * disables the provider instead of letting that happen.
    */
   configured: boolean;
   connected: boolean;
-  provider: string;
 };
 
 export type CloudQuota = {
@@ -3023,8 +3031,9 @@ export type CloudTransferProgressEvent = {
   emittedAtUnixMs: number;
 };
 
-export async function getCloudStatus(): Promise<CloudStatus> {
-  return invokeCommand<CloudStatus>("cloud_status");
+/** Every provider the app knows, in display order, with its state. */
+export async function getCloudStatus(): Promise<CloudStatus[]> {
+  return invokeCommand<CloudStatus[]>("cloud_status");
 }
 
 /**
@@ -3034,42 +3043,52 @@ export async function getCloudStatus(): Promise<CloudStatus> {
  * caller can refresh its status straight after. Rejects if they cancel the
  * consent screen or take longer than five minutes.
  */
-export async function connectCloud(): Promise<void> {
-  return invokeCommand<void>("cloud_connect");
-}
-
-/** Forget the account and drop its credentials from the OS store. */
-export async function disconnectCloud(): Promise<void> {
-  return invokeCommand<void>("cloud_disconnect");
+export async function connectCloud(provider: CloudProviderId): Promise<void> {
+  return invokeCommand<void>("cloud_connect", { provider });
 }
 
 /**
- * Quota of the whole Google account, not of LibreTracks.
- *
- * Drive counts Gmail and Photos against the same allowance, so showing only
- * what LibreTracks occupies leaves the user unable to explain why a session
- * does not fit.
+ * Forget one provider's account and drop its credentials from the OS store.
+ * The other connected accounts are untouched.
  */
-export async function getCloudQuota(): Promise<CloudQuota> {
-  return invokeCommand<CloudQuota>("cloud_quota");
+export async function disconnectCloud(provider: CloudProviderId): Promise<void> {
+  return invokeCommand<void>("cloud_disconnect", { provider });
 }
 
-export async function listCloudFiles(folder: CloudFolder): Promise<CloudFile[]> {
-  return invokeCommand<CloudFile[]>("cloud_list", { folder });
+/**
+ * Quota of the whole account, not of LibreTracks.
+ *
+ * Drive counts Gmail and Photos against the same allowance (OneDrive does the
+ * same with Outlook attachments), so showing only what LibreTracks occupies
+ * leaves the user unable to explain why a session does not fit.
+ */
+export async function getCloudQuota(provider: CloudProviderId): Promise<CloudQuota> {
+  return invokeCommand<CloudQuota>("cloud_quota", { provider });
+}
+
+export async function listCloudFiles(
+  provider: CloudProviderId,
+  folder: CloudFolder,
+): Promise<CloudFile[]> {
+  return invokeCommand<CloudFile[]>("cloud_list", { provider, folder });
 }
 
 /** Upload a package, filed under Songs or Sessions by its extension. */
-export async function uploadToCloud(localPath: string): Promise<CloudFile> {
-  return invokeCommand<CloudFile>("cloud_upload", { localPath });
+export async function uploadToCloud(
+  provider: CloudProviderId,
+  localPath: string,
+): Promise<CloudFile> {
+  return invokeCommand<CloudFile>("cloud_upload", { provider, localPath });
 }
 
 /** Download a package into `destDir`; resolves with the local path it landed on. */
 export async function downloadFromCloud(
+  provider: CloudProviderId,
   fileId: string,
   fileName: string,
   destDir: string,
 ): Promise<string> {
-  return invokeCommand<string>("cloud_download", { fileId, fileName, destDir });
+  return invokeCommand<string>("cloud_download", { provider, fileId, fileName, destDir });
 }
 
 /** Abort the active upload/download. Safe when it has just completed. */
@@ -3077,8 +3096,11 @@ export async function cancelCloudTransfer(): Promise<void> {
   return invokeCommand<void>("cloud_cancel_transfer");
 }
 
-export async function deleteCloudFile(fileId: string): Promise<void> {
-  return invokeCommand<void>("cloud_delete", { fileId });
+export async function deleteCloudFile(
+  provider: CloudProviderId,
+  fileId: string,
+): Promise<void> {
+  return invokeCommand<void>("cloud_delete", { provider, fileId });
 }
 
 /**

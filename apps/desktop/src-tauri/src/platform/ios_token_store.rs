@@ -20,7 +20,7 @@ use libretracks_cloud::CloudError;
 
 pub struct IosTokenStore {
     app: AppHandle,
-    /// Entry name, so a second provider later does not collide with Google's.
+    /// Entry name: the provider's key (`CloudProvider::key`), one per account.
     name: String,
 }
 
@@ -30,10 +30,6 @@ impl IosTokenStore {
             app,
             name: provider.to_string(),
         }
-    }
-
-    pub fn google_drive(app: AppHandle) -> Self {
-        Self::new(app, "google-drive")
     }
 }
 

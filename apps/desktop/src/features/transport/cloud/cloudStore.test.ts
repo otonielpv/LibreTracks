@@ -1,6 +1,13 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { listCloudFiles } from "../desktopApi";
 import { newTransfer, useCloudStore } from "./cloudStore";
+
+vi.mock("../../telemetry/telemetry", () => ({ recordProductEvent: vi.fn() }));
+vi.mock("../desktopApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../desktopApi")>()),
+  listCloudFiles: vi.fn(),
+}));
 
 describe("progreso de transferencia de nube", () => {
   beforeEach(() => {
@@ -63,5 +70,38 @@ describe("progreso de transferencia de nube", () => {
     startAt(0);
     useCloudStore.getState().setTransferProgress(0, 0, 1_000);
     expect(useCloudStore.getState().transfer?.percent).toBe(0);
+  });
+});
+
+describe("cuenta activa", () => {
+  beforeEach(() => {
+    useCloudStore.getState().reset();
+  });
+
+  it("cambiar de cuenta vacia las listas de la anterior", () => {
+    useCloudStore.setState({
+      provider: "google-drive",
+      quota: { usedBytes: 1, limitBytes: 2, freeBytes: 1 },
+      files: { songs: [{ id: "g1", name: "a.ltpkg", sizeBytes: 1, modified: null }], sessions: [] },
+    });
+    useCloudStore.getState().setProvider("dropbox");
+    const state = useCloudStore.getState();
+    expect(state.provider).toBe("dropbox");
+    expect(state.quota).toBeNull();
+    expect(state.files.songs).toEqual([]);
+  });
+
+  it("una lista que llega despues de cambiar de cuenta se descarta", async () => {
+    let answer!: (files: never[]) => void;
+    vi.mocked(listCloudFiles).mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve as never)),
+    );
+    const pending = useCloudStore.getState().refreshFiles("songs");
+    useCloudStore.getState().setProvider("onedrive");
+    answer([{ id: "g1", name: "de-drive.ltpkg", sizeBytes: 1, modified: null }] as never);
+    await pending;
+
+    expect(listCloudFiles).toHaveBeenCalledWith("google-drive", "songs");
+    expect(useCloudStore.getState().files.songs).toEqual([]);
   });
 });

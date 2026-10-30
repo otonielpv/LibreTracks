@@ -8,25 +8,28 @@ import {
   isMobileApp,
   type CloudFile,
   type CloudFolder,
+  type CloudProviderId,
 } from "../desktopApi";
 import { formatBytes } from "../video/VideoExportOption";
 import { connectionType, shouldConfirmCloudDownload } from "../video/videoImportQuestion";
 import {
+  isCloudTarget,
   isCloudTransferCancellation,
   newTransfer,
   useCloudStore,
+  type StorageChoice,
 } from "./cloudStore";
 
 /**
- * The local-or-Drive flows behind the ordinary import and export actions.
+ * The local-or-cloud flows behind the ordinary import and export actions.
  *
  * # The cloud is a source, not a separate feature
  *
  * There is no "download" button anywhere. Pressing *Import session* asks where
- * from — this machine or Drive — and Drive simply becomes another place a
- * package can come from, ending in the same import the local path uses. The
- * cloud panel is for managing what is stored (what is there, how much room is
- * left, deleting), never for moving things.
+ * from — this machine, Drive, OneDrive or Dropbox — and the account simply
+ * becomes another place a package can come from, ending in the same import the
+ * local path uses. The cloud panel is for managing what is stored (what is
+ * there, how much room is left, deleting), never for moving things.
  *
  * # Why these are promises
  *
@@ -35,28 +38,37 @@ import {
  * components. The store holds the resolver while the modal is up.
  */
 
-/** Ask whether this action targets the local disk or the cloud. */
+/**
+ * Ask whether this action targets the local disk or one of the accounts.
+ *
+ * Choosing an account also makes it the store's working provider, so the
+ * picker, the download and the upload that follow all talk to it.
+ */
 export function chooseStorage(
   intent: "import" | "export",
   kind: "song" | "session",
-): Promise<"local" | "cloud" | null> {
+): Promise<StorageChoice | null> {
   return new Promise((resolve) => {
     useCloudStore.getState().setPendingChoice({
       intent,
       kind,
       resolve: (choice) => {
         useCloudStore.getState().setPendingChoice(null);
+        if (choice && choice !== "local") {
+          useCloudStore.getState().setProvider(choice);
+        }
         resolve(choice);
       },
     });
   });
 }
 
-/** Ask which package in Drive to use. Resolves null if the user backs out. */
+/** Ask which package in the working account to use. Null if the user backs out. */
 export function pickCloudFile(folder: CloudFolder): Promise<CloudFile | null> {
   const store = useCloudStore.getState();
   // Fired without awaiting: the picker renders its own loading state, and
-  // blocking here would leave the user looking at nothing while Drive answers.
+  // blocking here would leave the user looking at nothing while the provider
+  // answers.
   void store.refreshFiles(folder);
   return new Promise((resolve) => {
     store.setPendingPick({
@@ -70,7 +82,7 @@ export function pickCloudFile(folder: CloudFolder): Promise<CloudFile | null> {
 }
 
 /**
- * Bring a package down from Drive and hand back the local path it landed on.
+ * Bring a package down from the cloud and hand back the local path it landed on.
  *
  * Staged in a temp directory rather than somewhere the user chose: this file is
  * an implementation detail of an import, not something they keep, and asking
@@ -84,7 +96,7 @@ async function stageFromCloud(file: CloudFile): Promise<string> {
     cancelling: false,
   });
   try {
-    const path = await downloadFromCloud(file.id, file.name, stagingDir);
+    const path = await downloadFromCloud(store.provider, file.id, file.name, stagingDir);
     recordProductEvent("feature_cloud");
     return path;
   } finally {
@@ -94,7 +106,7 @@ async function stageFromCloud(file: CloudFile): Promise<string> {
 }
 
 /**
- * Full "import from Drive" flow: pick a package, fetch it, import it.
+ * Full "import from the cloud" flow: pick a package, fetch it, import it.
  *
  * `runImport` is the SAME import the local path uses — the caller passes the
  * existing handler and it receives an ordinary local path. That is what keeps
@@ -162,13 +174,13 @@ export async function importWithStorageChoice(
     await runLocalImport();
     return;
   }
-  if (choice === "cloud") {
+  if (choice) {
     await importFromCloud(kind === "song" ? "songs" : "sessions", runCloudImport);
   }
 }
 
 /**
- * "Import song" with the local-or-Drive question in front of it.
+ * "Import song" with the local-or-cloud question in front of it.
  *
  * `runImport` is the existing handler: called with no argument it opens the
  * usual file picker, called with a path it imports that package. One function,
@@ -190,7 +202,7 @@ export async function importSongWithChoice(
   );
 }
 
-/** "Import session" with the local-or-Drive question in front of it. */
+/** "Import session" with the local-or-cloud question in front of it. */
 export async function importSessionWithChoice(
   runImport: (sourcePath?: string) => Promise<void> | void,
 ): Promise<void> {
@@ -242,10 +254,11 @@ export async function finishExportWithChoice(
   const target = store.exportTarget;
   store.setExportTarget(null);
 
-  if (target !== "cloud") {
+  if (!isCloudTarget(target)) {
     await runExport();
     return;
   }
+  uploadTargetIs(target);
 
   try {
     const stagingDir = await getCloudStagingDir();
@@ -306,4 +319,15 @@ export async function exportAskingWhere(
  */
 export function cancelExportChoice(): void {
   useCloudStore.getState().setExportTarget(null);
+}
+
+/**
+ * Point the store at the account an export was meant for.
+ *
+ * Normally already true, since choosing set it. But the destination is held
+ * across the mode chooser, and the user can open the cloud panel and switch
+ * accounts in between; the export must still land where they first said.
+ */
+function uploadTargetIs(provider: CloudProviderId): void {
+  useCloudStore.getState().setProvider(provider);
 }
