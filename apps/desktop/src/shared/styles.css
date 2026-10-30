@@ -14247,47 +14247,42 @@ html.lt-mobile .lt-setlist-mixer.is-short > .lt-setlist-mixer-header > .lt-setli
   min-height: 0;
 }
 
-/* ── Compacta en móvil: un solo scroll para toda la tira ──
-   Cada pila de clips era su propio scroll vertical dentro de la tira
-   horizontal, y con más de unas pocas canciones el deslizamiento horizontal
-   perdía frames (emulador Android, gesto táctil sintetizado: 2 canciones
-   59,7 fps; 10 canciones 45-50 fps; con un solo scroll, 59,3). Forzar capa
-   propia a cada pila no ayudaba. En el teléfono la tira se desliza en los dos
-   ejes, las columnas crecen con sus clips y la cabecera de cada canción se
-   queda fija arriba. El escritorio conserva el scroll por canción. */
+/* ── Compacta en móvil: scroll vertical fuera, horizontal dentro ──
+   Cada pila de clips con scroll propio dentro de la tira horizontal hacía
+   perder frames al deslizar (emulador Android con gesto táctil sintetizado:
+   10 canciones sin pilas 59,7 fps, con pilas 32-35). Un solo scroll en los dos
+   ejes iba fluido pero dejaba arrastrar en diagonal y rebotar. Ahora son dos
+   scrolls perpendiculares: el envoltorio sube y baja, la tira va de lado y las
+   columnas crecen con sus clips. Cada gesto se queda en el eje en que empieza.
+   En escritorio el envoltorio no existe (display: contents). */
+.lt-compact-songs-scroll {
+  display: contents;
+}
+
+.lt-mobile .lt-compact-songs-scroll {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .lt-mobile .lt-compact-songs {
-  overflow: auto;
+  flex: none;
+  min-height: 100%;
+  box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
   align-items: flex-start;
-  /* Sin relleno arriba: la cabecera fija se pega al borde y los clips no
-     asoman por encima de ella. */
-  padding-top: 0;
 }
 
 .lt-mobile .lt-compact-song-column {
   overflow: visible;
-  min-height: 100%;
 }
 
 .lt-mobile .lt-compact-song-clip-stack {
   flex: 0 0 auto;
   overflow: visible;
-}
-
-/* Con la columna: la activa pone position: relative (por su franja de
-   «sonando», que sticky también sostiene). */
-.lt-mobile .lt-compact-song-column .lt-compact-song-header {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  /* Los mismos tonos semitransparentes, ya mezclados sobre el fondo de la
-     tira: fija, los clips pasan por debajo y no deben verse a través. */
-  background: rgb(18 24 23);
-}
-
-.lt-mobile .lt-compact-song-column .lt-compact-song-header.is-selected {
-  background: rgb(23 30 29);
-}
-
-.lt-mobile .lt-compact-song-column.is-queued .lt-compact-song-header {
-  background: rgb(34 26 12);
 }

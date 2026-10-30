@@ -31,6 +31,7 @@ import { CompactSongHeader } from "./CompactSongHeader";
 import { MobileTrackSelectionControls } from "../mobile/MobileTrackSelectionControls";
 import { columnDensityClass, useColumnResize } from "./useColumnResize";
 import { useNearbySongColumns } from "./useNearbySongColumns";
+import { useSongColumnHandlers } from "./useSongColumnHandlers";
 import {
   SONG_REORDER_ID_ATTRIBUTE,
   useSongReorder,
@@ -230,6 +231,22 @@ function CompactViewComponent({
   // Only columns near the visible band fill their clip stack. See
   // ./useNearbySongColumns.
   const nearbyColumns = useNearbySongColumns(songsStripRef, regionIds);
+  const columnHandlers = useSongColumnHandlers(
+    {
+      onMasterGainChange,
+      onMasterGainCommit,
+      onDropOsFilesIntoSong,
+      onDropLibraryAssetsIntoSong,
+      onPlaySong,
+      onRenameSong,
+      onSetSongBpm,
+      onDeleteSong,
+      onExportSong,
+      onSetSongKey,
+      onSelectRegion,
+    },
+    regions,
+  );
 
   // `template` comes from the arrow next to the button; without it the
   // backend applies the default template in Settings, if any.
@@ -314,7 +331,10 @@ function CompactViewComponent({
       {/* Top zone: songs + master + clip stacks. Horizontal scroll when
           the project has more songs than fit on screen. Accepts OS drag
           of a .ltpkg file anywhere over the strip — the drop appends a
-          new song at the end of the project, mirroring the DAW timeline. */}
+          new song at the end of the project, mirroring the DAW timeline.
+          On a phone the wrapper is the vertical scroller and the strip only
+          scrolls sideways; on desktop it is display: contents. */}
+      <div className="lt-compact-songs-scroll">
       <div
         ref={songsStripRef}
         className={
@@ -338,20 +358,9 @@ function CompactViewComponent({
             moveTargets={moveTargets}
             isActive={region.id === activeRegionId}
             isQueued={region.id === pendingRegionId}
-            onMasterGainChange={(gain) => onMasterGainChange(region.id, gain)}
-            onMasterGainCommit={() => onMasterGainCommit(region.id)}
-            onDropOsFiles={(files) => onDropOsFilesIntoSong(region.id, files)}
-            onDropLibraryAssets={(payload) =>
-              onDropLibraryAssetsIntoSong(region.id, payload)
-            }
+            {...columnHandlers(region.id)}
             onMoveClipToTrack={onMoveClipToTrack}
             onDeleteClip={onDeleteClip}
-            onPlay={() => onPlaySong(region.id, region.name)}
-            onRename={() => onRenameSong(region.id)}
-            onSetBpm={() => onSetSongBpm(region.id)}
-            onDelete={() => onDeleteSong(region.id)}
-            onExport={() => onExportSong(region.id)}
-            onSetKey={(key) => onSetSongKey(region.id, key)}
             bpm={bpmByRegion[region.id]}
             placeholderCount={
               dragPreview &&
@@ -361,7 +370,6 @@ function CompactViewComponent({
                 : 0
             }
             isSelected={selectedRegionId === region.id}
-            onSelect={() => onSelectRegion(region.id)}
             onWidthChange={onSongColumnWidthChange}
             onResizingChange={handleColumnResizingChange}
           />
@@ -411,6 +419,7 @@ function CompactViewComponent({
             {t("compactView.importPackage")}
           </button>
         </div> : null}
+      </div>
       </div>
 
       {/* Android: the mixer band eats most of a phone's landscape height, so

@@ -44,9 +44,10 @@ export function useNearbySongColumns(
             : new Set(intersecting),
         );
       },
-      // One strip width of slack on each side, so a column is filled in
-      // before it scrolls into view.
-      { root: strip, rootMargin: "0px 100% 0px 100%" },
+      // Half a strip width of slack on each side: a column is filled in
+      // before it scrolls into view. A whole width left ~9 of 10 stacks
+      // filled on a phone, which is what this hook exists to avoid.
+      { root: strip, rootMargin: "0px 50% 0px 50%" },
     );
     strip
       .querySelectorAll<HTMLElement>(".lt-compact-song-column[data-region-id]")
