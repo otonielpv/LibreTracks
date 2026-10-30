@@ -45,12 +45,18 @@ export type PendingChoice = {
   resolve: (choice: StorageChoice | null) => void;
 };
 
-/** Where an import comes from or an export goes: this device, or an account. */
-export type StorageChoice = "local" | CloudProviderId;
+/**
+ * Where an import comes from or an export goes.
+ *
+ * An export names the account it uploads to. An import only says "cloud": the
+ * picker then lists every connected account at once, and the file chosen
+ * carries its own provider.
+ */
+export type StorageChoice = "local" | "cloud" | CloudProviderId;
 
 /** Whether a destination is one of the accounts rather than this device. */
 export function isCloudTarget(target: StorageChoice | null): target is CloudProviderId {
-  return target !== null && target !== "local";
+  return target !== null && target !== "local" && target !== "cloud";
 }
 
 /** The status of one provider, or undefined before the first probe answers. */
@@ -61,9 +67,15 @@ export function statusOf(
   return statuses?.find((status) => status.provider === provider);
 }
 
+/** A file in one of the accounts, tagged with the account it lives in. */
+export type ProviderFile = CloudFile & {
+  provider: CloudProviderId;
+  providerName: string;
+};
+
 export type PendingPick = {
   folder: CloudFolder;
-  resolve: (file: CloudFile | null) => void;
+  resolve: (file: ProviderFile | null) => void;
 };
 
 export type CloudTransfer = {
@@ -119,6 +131,13 @@ type CloudState = {
   /** The provider whose browser sign-in is in flight, if any. */
   connecting: CloudProviderId | null;
   loadingFolder: CloudFolder | null;
+  /**
+   * What the import picker shows: one folder of EVERY connected account,
+   * merged and tagged. Separate from `files`, which belongs to the panel's
+   * working account.
+   */
+  pickerFiles: ProviderFile[];
+  pickerLoading: boolean;
   transfer: CloudTransfer | null;
   /** True after cancel was pressed and before the backend transfer exits. */
   cancelling: boolean;
@@ -137,6 +156,8 @@ type CloudState = {
   disconnect: (provider: CloudProviderId) => Promise<void>;
   refreshQuota: () => Promise<void>;
   refreshFiles: (folder: CloudFolder) => Promise<void>;
+  /** Load `folder` from every connected account into `pickerFiles`. */
+  refreshPickerFiles: (folder: CloudFolder) => Promise<void>;
   upload: (localPath: string) => Promise<CloudFile | null>;
   remove: (folder: CloudFolder, fileId: string) => Promise<void>;
   setTransferProgress: (doneBytes: number, totalBytes: number, atMs: number) => void;
@@ -187,6 +208,8 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   files: { ...EMPTY_FILES },
   connecting: null,
   loadingFolder: null,
+  pickerFiles: [],
+  pickerLoading: false,
   transfer: null,
   cancelling: false,
   error: null,
@@ -272,6 +295,39 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       set({ error: messageOf(error) });
     } finally {
       set({ loadingFolder: null });
+    }
+  },
+
+  refreshPickerFiles: async (folder) => {
+    set({ pickerFiles: [], pickerLoading: true, error: null });
+    try {
+      // Re-read the statuses: the picker must not miss an account connected a
+      // moment ago, nor list one just disconnected.
+      await get().refreshStatus();
+      const connected = (get().statuses ?? []).filter((status) => status.connected);
+      // One account failing (expired grant, no network to that host) must not
+      // hide the others: each is listed on its own and failures are reported.
+      const results = await Promise.allSettled(
+        connected.map(async (status) =>
+          (await listCloudFiles(status.provider, folder)).map(
+            (file): ProviderFile => ({
+              ...file,
+              provider: status.provider,
+              providerName: status.name,
+            }),
+          ),
+        ),
+      );
+      const merged = results.flatMap((result) =>
+        result.status === "fulfilled" ? result.value : [],
+      );
+      merged.sort((a, b) => (b.modified ?? "").localeCompare(a.modified ?? ""));
+      const failed = results.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      set({ pickerFiles: merged, ...(failed ? { error: messageOf(failed.reason) } : {}) });
+    } finally {
+      set({ pickerLoading: false });
     }
   },
 
@@ -386,6 +442,8 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       files: { ...EMPTY_FILES },
       connecting: null,
       loadingFolder: null,
+      pickerFiles: [],
+      pickerLoading: false,
       transfer: null,
       cancelling: false,
       error: null,

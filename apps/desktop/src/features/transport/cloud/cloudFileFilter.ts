@@ -31,7 +31,8 @@ export const NO_FILTERS: CloudFilters = {
 
 export type CloudFileWithMeta = CloudFile & { meta: ParsedPackageName };
 
-export function withMeta(files: CloudFile[]): CloudFileWithMeta[] {
+/** Generic so extra fields (the import picker's provider tag) survive. */
+export function withMeta<F extends CloudFile>(files: F[]): (F & { meta: ParsedPackageName })[] {
   return files.map((file) => ({ ...file, meta: parsePackageFileName(file.name) }));
 }
 
@@ -78,10 +79,10 @@ export function matchesFilters(
   return true;
 }
 
-export function filterCloudFiles(
-  files: CloudFile[],
+export function filterCloudFiles<F extends CloudFile>(
+  files: F[],
   filters: CloudFilters,
-): CloudFileWithMeta[] {
+): (F & { meta: ParsedPackageName })[] {
   return withMeta(files).filter((file) => matchesFilters(file, filters));
 }
 

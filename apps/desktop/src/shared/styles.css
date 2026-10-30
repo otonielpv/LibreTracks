@@ -12266,14 +12266,63 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   color: rgb(255 190 184);
 }
 
+/* Una fila por proveedor: varias cuentas pueden estar conectadas a la vez. */
+.lt-cloud-accounts {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .lt-cloud-account {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding-bottom: 0.75rem;
+  padding: 0.6rem 0;
   border-bottom: 1px solid rgb(87 241 219 / 0.14);
   font-size: 0.9rem;
+}
+
+.lt-cloud-account.is-active .lt-cloud-account-name {
+  color: rgb(87 241 219);
+}
+
+.lt-cloud-account-state {
+  display: block;
+  font-size: 0.75rem;
+  color: rgb(214 226 224 / 0.55);
+}
+
+.lt-cloud-account-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.lt-provider-glyph {
+  font-size: 18px;
+  color: rgb(87 241 219 / 0.8);
+}
+
+.lt-storage-choice-mark {
+  display: inline-flex;
+  align-items: center;
+  height: 1.6rem;
+}
+
+.lt-storage-choice-back {
+  margin-top: 0.75rem;
+}
+
+.lt-cloud-active-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.95rem;
 }
 
 .lt-cloud-quota-bar {
@@ -12511,6 +12560,21 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+/* De qué cuenta viene cada archivo: el selector de importar las mezcla todas.
+   Ancho fijo para que los nombres queden alineados en columna. */
+.lt-cloud-provider-tag {
+  flex: 0 0 5.5rem;
+  overflow: hidden;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid rgb(87 241 219 / 0.28);
+  border-radius: 2px;
+  font-size: 0.7rem;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgb(214 226 224 / 0.75);
 }
 
 .lt-cloud-picker-modal .lt-cloud-list li:hover {

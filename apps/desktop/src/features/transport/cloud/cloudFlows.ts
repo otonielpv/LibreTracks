@@ -6,7 +6,6 @@ import {
   downloadFromCloud,
   getCloudStagingDir,
   isMobileApp,
-  type CloudFile,
   type CloudFolder,
   type CloudProviderId,
 } from "../desktopApi";
@@ -17,6 +16,7 @@ import {
   isCloudTransferCancellation,
   newTransfer,
   useCloudStore,
+  type ProviderFile,
   type StorageChoice,
 } from "./cloudStore";
 
@@ -54,7 +54,7 @@ export function chooseStorage(
       kind,
       resolve: (choice) => {
         useCloudStore.getState().setPendingChoice(null);
-        if (choice && choice !== "local") {
+        if (isCloudTarget(choice)) {
           useCloudStore.getState().setProvider(choice);
         }
         resolve(choice);
@@ -63,13 +63,16 @@ export function chooseStorage(
   });
 }
 
-/** Ask which package in the working account to use. Null if the user backs out. */
-export function pickCloudFile(folder: CloudFolder): Promise<CloudFile | null> {
+/**
+ * Ask which package to use, from any connected account. Null if the user
+ * backs out.
+ */
+export function pickCloudFile(folder: CloudFolder): Promise<ProviderFile | null> {
   const store = useCloudStore.getState();
   // Fired without awaiting: the picker renders its own loading state, and
-  // blocking here would leave the user looking at nothing while the provider
-  // answers.
-  void store.refreshFiles(folder);
+  // blocking here would leave the user looking at nothing while the providers
+  // answer.
+  void store.refreshPickerFiles(folder);
   return new Promise((resolve) => {
     store.setPendingPick({
       folder,
@@ -88,7 +91,7 @@ export function pickCloudFile(folder: CloudFolder): Promise<CloudFile | null> {
  * an implementation detail of an import, not something they keep, and asking
  * for a location would turn one action into two.
  */
-async function stageFromCloud(file: CloudFile): Promise<string> {
+async function stageFromCloud(file: ProviderFile): Promise<string> {
   const store = useCloudStore.getState();
   const stagingDir = await getCloudStagingDir();
   useCloudStore.setState({
@@ -96,7 +99,8 @@ async function stageFromCloud(file: CloudFile): Promise<string> {
     cancelling: false,
   });
   try {
-    const path = await downloadFromCloud(store.provider, file.id, file.name, stagingDir);
+    // From the account the file came from, whatever the panel is showing.
+    const path = await downloadFromCloud(file.provider, file.id, file.name, stagingDir);
     recordProductEvent("feature_cloud");
     return path;
   } finally {

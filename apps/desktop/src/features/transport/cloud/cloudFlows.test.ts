@@ -94,13 +94,19 @@ describe("destino de exportacion", () => {
  * tamano entero en la cache, junto a la sesion en la que se habia convertido.
  */
 describe("paquete de paso de una importacion desde Drive", () => {
-  const file = { id: "f1", name: "testanalisis.ltset", sizeBytes: 1 } as never;
+  const file = {
+    id: "f1",
+    name: "testanalisis.ltset",
+    sizeBytes: 1,
+    provider: "google-drive",
+    providerName: "Google Drive",
+  } as never;
   const staged = "/cache/cloud-staging/testanalisis.ltset";
 
   beforeEach(() => {
     useCloudStore.getState().reset();
     useCloudStore.setState({
-      refreshFiles: async () => {},
+      refreshPickerFiles: async () => {},
       refreshQuota: async () => {},
     } as never);
     vi.mocked(downloadFromCloud).mockReset().mockResolvedValue(staged);
@@ -138,7 +144,7 @@ describe("paquete de paso de una importacion desde Drive", () => {
     const choice = useCloudStore.getState().pendingChoice;
     expect(choice).toMatchObject({ intent: "import", kind: "song" });
 
-    choice!.resolve("google-drive");
+    choice!.resolve("cloud");
     await pick();
     await flow;
 
@@ -167,17 +173,26 @@ describe("varias cuentas", () => {
     vi.mocked(downloadFromCloud).mockReset().mockResolvedValue("/cache/cloud-staging/x.ltset");
   });
 
-  it("importar eligiendo Dropbox descarga de Dropbox", async () => {
+  /// El selector de importar mezcla todas las cuentas: lo que manda es la
+  /// cuenta del archivo elegido, no la que tenga abierta el panel.
+  it("importar descarga de la cuenta del archivo elegido", async () => {
     useCloudStore.setState({
-      refreshFiles: async () => {},
+      refreshPickerFiles: async () => {},
       refreshQuota: async () => {},
     } as never);
     const flow = importSongWithChoice(async () => {});
-    useCloudStore.getState().pendingChoice!.resolve("dropbox");
-    expect(useCloudStore.getState().provider).toBe("dropbox");
+    useCloudStore.getState().pendingChoice!.resolve("cloud");
+    // "cloud" no es una cuenta: no cambia la cuenta de trabajo del panel.
+    expect(useCloudStore.getState().provider).toBe("google-drive");
 
     await vi.waitFor(() => expect(useCloudStore.getState().pendingPick).not.toBeNull());
-    useCloudStore.getState().pendingPick!.resolve({ id: "id:a", name: "x.ltpkg", sizeBytes: 1 } as never);
+    useCloudStore.getState().pendingPick!.resolve({
+      id: "id:a",
+      name: "x.ltpkg",
+      sizeBytes: 1,
+      provider: "dropbox",
+      providerName: "Dropbox",
+    } as never);
     await flow;
 
     expect(downloadFromCloud).toHaveBeenCalledWith("dropbox", "id:a", "x.ltpkg", "/cache/cloud-staging");

@@ -2,26 +2,28 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 // Transfer progress is subscribed once by CloudToast, which is always mounted.
-import { type CloudFolder } from "../desktopApi";
+import { type CloudFolder, type CloudProviderId, type CloudStatus } from "../desktopApi";
 import { CloudFileFilters } from "./CloudFileFilters";
 import { filterCloudFiles, NO_FILTERS, withMeta } from "./cloudFileFilter";
 import { describePackageMeta } from "./packageNaming";
+import { GoogleMark, ProviderMark } from "./ProviderMark";
 import { statusOf, useCloudStore } from "./cloudStore";
 
 /**
- * Connect the app to the user's own Google Drive, and manage what is stored
- * there.
+ * Connect the app to the user's own cloud accounts, and manage what is stored
+ * in each.
  *
- * LibreTracks hosts nothing: this signs in to an account the user owns and
- * shows the `LibreTracks/Songs` and `LibreTracks/Sessions` folders it created
- * inside it. The credential lives in the OS credential store on this device.
+ * LibreTracks hosts nothing: this signs in to accounts the user owns (Google
+ * Drive, OneDrive, Dropbox; several at once if they like) and shows the
+ * `Songs` and `Sessions` folders the app keeps in each. The credentials live in
+ * the OS credential store on this device, one entry per account.
  *
  * # The quota is the whole account, deliberately
  *
- * Drive counts Gmail and Photos against the same 15 GB. Showing only what
- * LibreTracks occupies would leave someone staring at "1.2 GB used" unable to
- * work out why a session will not fit, so the account figure leads and the
- * app's own share is secondary.
+ * Drive counts Gmail and Photos against the same 15 GB, OneDrive counts
+ * Outlook. Showing only what LibreTracks occupies would leave someone staring
+ * at "1.2 GB used" unable to work out why a session will not fit, so the
+ * account figure leads and the provider's own caveat sits under it.
  */
 
 function formatBytes(bytes: number): string {
@@ -39,53 +41,130 @@ function formatBytes(bytes: number): string {
 const FOLDERS: CloudFolder[] = ["sessions", "songs"];
 
 /**
- * The Google "G", inline.
- *
- * Inline rather than a remote asset because the app must work offline, and
- * because loading Google branding from Google would be a request we make on the
- * user behalf for no reason. The four paths and their colours are the mark as
- * published: it must not be recoloured, rotated or redrawn, so leave it alone.
+ * One row per configured provider: its state and the action that makes sense.
  */
-function GoogleMark() {
+function AccountRow({
+  status,
+  active,
+  onShow,
+}: {
+  status: CloudStatus;
+  active: boolean;
+  onShow: (provider: CloudProviderId) => void;
+}) {
+  const { t } = useTranslation();
+  const connecting = useCloudStore((state) => state.connecting);
+  const connect = useCloudStore((state) => state.connect);
+  const disconnect = useCloudStore((state) => state.disconnect);
+  const waiting = connecting === status.provider;
+
   return (
-    <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true" focusable="false">
-      <path
-        fill="#EA4335"
-        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-      />
-      <path
-        fill="#4285F4"
-        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.28-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-      />
-      <path
-        fill="#34A853"
-        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-      />
-    </svg>
+    <li className={`lt-cloud-account${active ? " is-active" : ""}`}>
+      <span className="lt-cloud-account-name">
+        <ProviderMark provider={status.provider} />
+        <span>
+          {status.name}
+          <span className="lt-cloud-account-state">
+            {status.connected
+              ? t("transport.cloud.connectedShort", { defaultValue: "Conectada" })
+              : t("transport.cloud.notConnectedShort", { defaultValue: "Sin conectar" })}
+          </span>
+        </span>
+      </span>
+      <span className="lt-cloud-account-actions">
+        {status.connected ? (
+          <>
+            {!active ? (
+              <button
+                type="button"
+                className="lt-ghost-button"
+                onClick={() => onShow(status.provider)}
+              >
+                {t("transport.cloud.showFiles", { defaultValue: "Ver archivos" })}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="lt-ghost-button"
+              onClick={() => void disconnect(status.provider)}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">
+                logout
+              </span>
+              {t("transport.cloud.disconnect", { defaultValue: "Desconectar" })}
+            </button>
+          </>
+        ) : status.provider === "google-drive" ? (
+          // Google's branding rules ask for its own sign-in button shape.
+          <button
+            type="button"
+            className="lt-google-button"
+            disabled={connecting !== null}
+            onClick={() => void connect(status.provider)}
+          >
+            <GoogleMark />
+            <span>
+              {waiting
+                ? t("transport.cloud.connecting", { defaultValue: "Esperando al navegador…" })
+                : t("transport.cloud.connectProvider", {
+                    defaultValue: "Conectar con {{provider}}",
+                    provider: status.name,
+                  })}
+            </span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="lt-ghost-button"
+            disabled={connecting !== null}
+            onClick={() => void connect(status.provider)}
+          >
+            {waiting
+              ? t("transport.cloud.connecting", { defaultValue: "Esperando al navegador…" })
+              : t("transport.cloud.connectProvider", {
+                  defaultValue: "Conectar con {{provider}}",
+                  provider: status.name,
+                })}
+          </button>
+        )}
+      </span>
+    </li>
   );
+}
+
+/** What the provider counts against the same allowance, if anything. */
+function quotaHint(provider: CloudProviderId, t: ReturnType<typeof useTranslation>["t"]) {
+  switch (provider) {
+    case "google-drive":
+      return t("transport.cloud.quotaHint", {
+        defaultValue:
+          "Google comparte este espacio con Gmail y Fotos, así que no todo está disponible para LibreTracks.",
+      });
+    case "onedrive":
+      return t("transport.cloud.quotaHintOneDrive", {
+        defaultValue:
+          "Microsoft comparte este espacio con Outlook, así que no todo está disponible para LibreTracks.",
+      });
+    default:
+      return null;
+  }
 }
 
 export function CloudPanel() {
   const { t } = useTranslation();
   const isOpen = useCloudStore((state) => state.isPanelOpen);
   const onClose = useCloudStore((state) => state.closePanel);
+  const statuses = useCloudStore((state) => state.statuses);
   const provider = useCloudStore((state) => state.provider);
-  const status = useCloudStore((state) => statusOf(state.statuses, state.provider));
+  const setProvider = useCloudStore((state) => state.setProvider);
   const quota = useCloudStore((state) => state.quota);
   const files = useCloudStore((state) => state.files);
-  const connecting = useCloudStore((state) => state.connecting !== null);
   const loadingFolder = useCloudStore((state) => state.loadingFolder);
   const transfer = useCloudStore((state) => state.transfer);
   const cancelling = useCloudStore((state) => state.cancelling);
   const cancelTransfer = useCloudStore((state) => state.cancelTransfer);
   const error = useCloudStore((state) => state.error);
   const refreshStatus = useCloudStore((state) => state.refreshStatus);
-  const connect = useCloudStore((state) => state.connect);
-  const disconnect = useCloudStore((state) => state.disconnect);
   const refreshQuota = useCloudStore((state) => state.refreshQuota);
   const refreshFiles = useCloudStore((state) => state.refreshFiles);
   const remove = useCloudStore((state) => state.remove);
@@ -95,7 +174,10 @@ export function CloudPanel() {
   // be two places to clear.
   const [filters, setFilters] = useState(NO_FILTERS);
 
-  const connected = status?.connected ?? false;
+  const configured = statuses?.filter((status) => status.configured) ?? [];
+  const active = statusOf(statuses, provider);
+  const connected = active?.connected ?? false;
+  const firstConnected = configured.find((status) => status.connected)?.provider;
 
   useEffect(() => {
     if (isOpen) {
@@ -103,21 +185,30 @@ export function CloudPanel() {
     }
   }, [isOpen, refreshStatus]);
 
+  // Show an account that is actually connected. The working provider defaults
+  // to Drive, and someone who only connected Dropbox should not open the panel
+  // to an empty Drive section.
+  useEffect(() => {
+    if (isOpen && !connected && firstConnected) {
+      setProvider(firstConnected);
+    }
+  }, [isOpen, connected, firstConnected, setProvider]);
+
   useEffect(() => {
     if (!isOpen || !connected) {
       return;
     }
-    // In series, not in parallel. Two concurrent listings each resolve the
-    // LibreTracks folder, and Drive listings are eventually consistent, so both
-    // could miss a folder the other had just created and make a second one.
-    // The backend caches ids now, but there is no reason to race it either.
+    // In series, not in parallel. Two concurrent Drive listings each resolve
+    // the LibreTracks folder, and Drive listings are eventually consistent, so
+    // both could miss a folder the other had just created and make a second
+    // one. The backend caches ids now, but there is no reason to race it.
     void (async () => {
       await refreshQuota();
       for (const folder of FOLDERS) {
         await refreshFiles(folder);
       }
     })();
-  }, [isOpen, connected, refreshQuota, refreshFiles]);
+  }, [isOpen, connected, provider, refreshQuota, refreshFiles]);
 
   if (!isOpen) {
     return null;
@@ -127,6 +218,7 @@ export function CloudPanel() {
     quota && quota.limitBytes
       ? Math.min(100, Math.round((quota.usedBytes / quota.limitBytes) * 100))
       : null;
+  const hint = quotaHint(provider, t);
 
   return (
     <div className="lt-modal-backdrop" onClick={onClose}>
@@ -170,62 +262,48 @@ export function CloudPanel() {
             </p>
           ) : null}
 
-          {status && !status.configured ? (
+          {statuses === null ? (
+            <p className="lt-cloud-note">{t("common.loading", { defaultValue: "Cargando…" })}</p>
+          ) : configured.length === 0 ? (
             <p className="lt-cloud-note">
               {t("transport.cloud.notConfigured", {
                 defaultValue:
-                  "Esta compilación no incluye las credenciales de Google, así que la nube no está disponible.",
+                  "Esta compilación no incluye las credenciales de ningún proveedor, así que la nube no está disponible.",
               })}
             </p>
-          ) : !connected ? (
-            <>
-              <p className="lt-cloud-note">
-                {t("transport.cloud.explainer", {
-                  defaultValue:
-                    "Conecta tu cuenta de Google Drive para llevar canciones y sesiones de un dispositivo a otro. Los archivos se guardan en TU cuenta: LibreTracks no aloja nada y solo puede ver los archivos que crea la propia aplicación.",
-                })}
-              </p>
-              <button
-                type="button"
-                className="lt-google-button"
-                disabled={connecting}
-                onClick={() => void connect(provider)}
-              >
-                <GoogleMark />
-                <span>
-                  {connecting
-                    ? t("transport.cloud.connecting", {
-                        defaultValue: "Esperando al navegador…",
-                      })
-                    : t("transport.cloud.connect", {
-                        defaultValue: "Conectar con Google Drive",
-                      })}
-                </span>
-              </button>
-            </>
           ) : (
             <>
-              <div className="lt-cloud-account">
-                <span className="lt-cloud-account-name">
-                  <GoogleMark />
-                  {t("transport.cloud.connectedTo", {
-                    defaultValue: "Conectado a {{provider}}",
-                    provider: status?.name ?? "Google Drive",
+              {!firstConnected ? (
+                <p className="lt-cloud-note">
+                  {t("transport.cloud.explainer", {
+                    defaultValue:
+                      "Conecta tu cuenta de Google Drive, OneDrive o Dropbox para llevar canciones y sesiones de un dispositivo a otro. Puedes conectar varias a la vez y elegir cuál usar cada vez que exportas o importas. Los archivos se guardan en TU cuenta: LibreTracks no aloja nada y solo ve lo que guarda la propia aplicación.",
                   })}
-                </span>
-                <button
-                  type="button"
-                  className="lt-ghost-button"
-                  onClick={() => void disconnect(provider)}
-                >
-                  <span className="material-symbols-outlined" aria-hidden="true">
-                    logout
-                  </span>
-                  {t("transport.cloud.disconnect", {
-                    defaultValue: "Desconectar",
-                  })}
-                </button>
-              </div>
+                </p>
+              ) : null}
+
+              <section className="lt-cloud-folder">
+                <h3>{t("transport.cloud.accounts", { defaultValue: "Cuentas" })}</h3>
+                <ul className="lt-cloud-accounts">
+                  {configured.map((status) => (
+                    <AccountRow
+                      key={status.provider}
+                      status={status}
+                      active={status.connected && status.provider === provider}
+                      onShow={setProvider}
+                    />
+                  ))}
+                </ul>
+              </section>
+            </>
+          )}
+
+          {connected && active ? (
+            <>
+              <h3 className="lt-cloud-active-title">
+                <ProviderMark provider={provider} />
+                {active.name}
+              </h3>
 
               {quota ? (
                 <div className="lt-cloud-quota">
@@ -244,32 +322,25 @@ export function CloudPanel() {
                     {quota.limitBytes
                       ? t("transport.cloud.quota", {
                           defaultValue:
-                            "{{used}} de {{limit}} usados en tu cuenta de Google ({{free}} libres)",
+                            "{{used}} de {{limit}} usados en tu cuenta de {{provider}} ({{free}} libres)",
                           used: formatBytes(quota.usedBytes),
                           limit: formatBytes(quota.limitBytes),
                           free: formatBytes(quota.freeBytes ?? 0),
+                          provider: active.name,
                         })
                       : t("transport.cloud.quotaUnlimited", {
                           defaultValue: "{{used}} usados; cuenta sin límite",
                           used: formatBytes(quota.usedBytes),
                         })}
                   </p>
-                  <p className="lt-cloud-quota-hint">
-                    {t("transport.cloud.quotaHint", {
-                      defaultValue:
-                        "Google comparte este espacio con Gmail y Fotos, así que no todo está disponible para LibreTracks.",
-                    })}
-                  </p>
+                  {hint ? <p className="lt-cloud-quota-hint">{hint}</p> : null}
                 </div>
               ) : null}
 
               {transfer ? (
                 <div className="lt-cloud-transfer">
                   <span>
-                    <span
-                      className="material-symbols-outlined lt-spin"
-                      aria-hidden="true"
-                    >
+                    <span className="material-symbols-outlined lt-spin" aria-hidden="true">
                       progress_activity
                     </span>{" "}
                     {t("transport.cloud.transferring", {
@@ -278,20 +349,16 @@ export function CloudPanel() {
                       percent: transfer.percent,
                     })}
                   </span>
-                  {(
-                    <button
-                      type="button"
-                      className="lt-link-button lt-cloud-cancel"
-                      disabled={cancelling}
-                      onClick={() => void cancelTransfer()}
-                    >
-                      {cancelling
-                        ? t("transport.cloud.cancelling", {
-                            defaultValue: "Cancelando…",
-                          })
-                        : t("common.cancel", { defaultValue: "Cancelar" })}
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="lt-link-button lt-cloud-cancel"
+                    disabled={cancelling}
+                    onClick={() => void cancelTransfer()}
+                  >
+                    {cancelling
+                      ? t("transport.cloud.cancelling", { defaultValue: "Cancelando…" })
+                      : t("common.cancel", { defaultValue: "Cancelar" })}
+                  </button>
                 </div>
               ) : null}
 
@@ -358,7 +425,7 @@ export function CloudPanel() {
                 );
               })}
             </>
-          )}
+          ) : null}
         </div>
       </section>
     </div>

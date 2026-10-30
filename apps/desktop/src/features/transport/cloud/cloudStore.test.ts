@@ -1,13 +1,56 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { listCloudFiles } from "../desktopApi";
+import { getCloudStatus, listCloudFiles } from "../desktopApi";
 import { newTransfer, useCloudStore } from "./cloudStore";
 
 vi.mock("../../telemetry/telemetry", () => ({ recordProductEvent: vi.fn() }));
 vi.mock("../desktopApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../desktopApi")>()),
   listCloudFiles: vi.fn(),
+  getCloudStatus: vi.fn(),
 }));
+
+describe("selector de importar con varias cuentas", () => {
+  beforeEach(() => {
+    useCloudStore.getState().reset();
+    vi.mocked(listCloudFiles).mockReset();
+    vi.mocked(getCloudStatus).mockResolvedValue([
+      { provider: "google-drive", name: "Google Drive", configured: true, connected: true },
+      { provider: "onedrive", name: "OneDrive", configured: true, connected: false },
+      { provider: "dropbox", name: "Dropbox", configured: true, connected: true },
+    ]);
+  });
+
+  it("junta las cuentas conectadas, etiqueta cada archivo y ordena por fecha", async () => {
+    vi.mocked(listCloudFiles).mockImplementation(async (provider) =>
+      provider === "google-drive"
+        ? [{ id: "g1", name: "vieja.ltpkg", sizeBytes: 1, modified: "2026-01-01T00:00:00Z" }]
+        : [{ id: "d1", name: "nueva.ltpkg", sizeBytes: 1, modified: "2026-10-01T00:00:00Z" }],
+    );
+    await useCloudStore.getState().refreshPickerFiles("songs");
+
+    // La cuenta sin conectar no se consulta.
+    expect(listCloudFiles).toHaveBeenCalledTimes(2);
+    const files = useCloudStore.getState().pickerFiles;
+    expect(files.map((file) => [file.id, file.provider, file.providerName])).toEqual([
+      ["d1", "dropbox", "Dropbox"],
+      ["g1", "google-drive", "Google Drive"],
+    ]);
+  });
+
+  it("una cuenta que falla no oculta las demas", async () => {
+    vi.mocked(listCloudFiles).mockImplementation(async (provider) => {
+      if (provider === "dropbox") throw new Error("the account is not connected");
+      return [{ id: "g1", name: "a.ltpkg", sizeBytes: 1, modified: null }];
+    });
+    await useCloudStore.getState().refreshPickerFiles("songs");
+
+    const state = useCloudStore.getState();
+    expect(state.pickerFiles.map((file) => file.id)).toEqual(["g1"]);
+    expect(state.error).toContain("not connected");
+    expect(state.pickerLoading).toBe(false);
+  });
+});
 
 describe("progreso de transferencia de nube", () => {
   beforeEach(() => {
