@@ -14286,3 +14286,25 @@ html.lt-mobile .lt-setlist-mixer.is-short > .lt-setlist-mixer-header > .lt-setli
   flex: 0 0 auto;
   overflow: visible;
 }
+
+/* Las columnas crecen con sus clips, así que «Nueva canción» e «Importar»
+   ya no pueden estirarse a su altura: con 20 clips eran dos huecos de media
+   pantalla y el texto quedaba fuera de la vista. Altura fija, arriba. */
+.lt-mobile .lt-compact-view-song-actions {
+  align-self: flex-start;
+}
+
+.lt-mobile .lt-compact-view-add-song-group,
+.lt-mobile .lt-compact-view-add-song,
+.lt-mobile .lt-compact-view-import-song {
+  flex: 0 0 auto;
+}
+
+.lt-mobile .lt-compact-view-add-song-group > .lt-compact-view-add-song {
+  flex: 1 1 auto;
+}
+
+.lt-mobile .lt-compact-view-add-song,
+.lt-mobile .lt-compact-view-import-song {
+  min-height: 3.25rem;
+}
