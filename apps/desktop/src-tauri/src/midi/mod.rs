@@ -10,6 +10,7 @@
 //! events, so a slow dispatch never backs up the transport's callback.
 
 pub(crate) mod bluetooth;
+pub(crate) mod control;
 mod dispatch;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) mod lifecycle;

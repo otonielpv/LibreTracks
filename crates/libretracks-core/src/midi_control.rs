@@ -301,6 +301,7 @@ pub const RELATIVE_STEP: f64 = 1.0 / 128.0;
 pub struct SoftTakeover {
     picked_up: bool,
     last_control: Option<f64>,
+    last_written: Option<f64>,
 }
 
 impl SoftTakeover {
@@ -329,6 +330,120 @@ impl SoftTakeover {
 
     pub fn is_picked_up(&self) -> bool {
         self.picked_up
+    }
+
+    /// Tell the takeover what the target holds now. If it is not what this
+    /// control last wrote, something else moved it and the control lets go.
+    pub fn sync(&mut self, current: f64) {
+        if self
+            .last_written
+            .is_some_and(|written| (written - current).abs() > 1e-6)
+        {
+            self.release();
+            self.last_written = None;
+        }
+    }
+
+    pub fn wrote(&mut self, value: f64) {
+        self.last_written = Some(value);
+    }
+}
+
+/// Coalesces a burst into one action once the keys have been quiet for
+/// `delay` (D5: one undo entry, one disk write per gesture).
+#[derive(Debug, Clone)]
+pub struct Debounce<K> {
+    delay: std::time::Duration,
+    deadlines: Vec<(K, std::time::Instant)>,
+}
+
+impl<K: PartialEq + Clone> Debounce<K> {
+    pub fn new(delay: std::time::Duration) -> Self {
+        Self {
+            delay,
+            deadlines: Vec::new(),
+        }
+    }
+
+    pub fn touch(&mut self, key: K, now: std::time::Instant) {
+        let deadline = now + self.delay;
+        match self.deadlines.iter_mut().find(|(existing, _)| *existing == key) {
+            Some(entry) => entry.1 = deadline,
+            None => self.deadlines.push((key, deadline)),
+        }
+    }
+
+    /// Keys whose quiet period ended, removed from the schedule.
+    pub fn take_due(&mut self, now: std::time::Instant) -> Vec<K> {
+        let mut due = Vec::new();
+        self.deadlines.retain(|(key, deadline)| {
+            if *deadline <= now {
+                due.push(key.clone());
+                false
+            } else {
+                true
+            }
+        });
+        due
+    }
+
+    /// Everything still pending, as at shutdown.
+    pub fn take_all(&mut self) -> Vec<K> {
+        self.deadlines.drain(..).map(|(key, _)| key).collect()
+    }
+
+    pub fn next_deadline(&self) -> Option<std::time::Instant> {
+        self.deadlines.iter().map(|(_, deadline)| *deadline).min()
+    }
+}
+
+/// At most one emission per `interval`, leading and trailing: the first
+/// change goes out at once, the last one of a burst is never lost (D11).
+#[derive(Debug, Clone)]
+pub struct Throttle {
+    interval: std::time::Duration,
+    last: Option<std::time::Instant>,
+    pending: bool,
+}
+
+impl Throttle {
+    pub fn new(interval: std::time::Duration) -> Self {
+        Self {
+            interval,
+            last: None,
+            pending: false,
+        }
+    }
+
+    /// A change happened. Returns whether to emit now; otherwise it is kept
+    /// for [`Throttle::poll`].
+    pub fn hit(&mut self, now: std::time::Instant) -> bool {
+        if self.last.is_none_or(|last| now >= last + self.interval) {
+            self.last = Some(now);
+            self.pending = false;
+            true
+        } else {
+            self.pending = true;
+            false
+        }
+    }
+
+    /// Whether a held change is due now.
+    pub fn poll(&mut self, now: std::time::Instant) -> bool {
+        if self.pending && self.last.is_none_or(|last| now >= last + self.interval) {
+            self.last = Some(now);
+            self.pending = false;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn next_deadline(&self) -> Option<std::time::Instant> {
+        if !self.pending {
+            return None;
+        }
+        Some(self.last.map_or_else(std::time::Instant::now, |last| last + self.interval))
     }
 }
 

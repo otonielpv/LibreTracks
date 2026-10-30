@@ -3,22 +3,33 @@
 //! Every transport ends here: the listener frames bytes into [`MidiMessage`]s
 //! and hands them to [`dispatch_midi_message`], which emits the raw message
 //! for the UI (learn mode, monitors) and runs the matching binding, either an
-//! `action:*` (play, jump to marker…) or a `param:*` driven by a CC.
+//! `action:*` (play, jump to marker…), a `param:*` driven by a value, or a
+//! mixer target (plan midi-controllers). One control can drive several.
+//!
+//! Continuous controls never touch the disk or the session lock per message
+//! (D5): settings change in memory and [`super::control`] writes them once
+//! the controls go quiet.
+
+use std::sync::atomic::Ordering;
 
 use libretracks_audio::PlaybackState;
+use libretracks_core::midi_control::{
+    decode_relative, fader, normalized_value, ButtonState, ControlMode, MidiBinding, MidiTarget,
+    RELATIVE_STEP,
+};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
+use super::control::control;
 use crate::{
     audio::engine::jump_debug_logging_enabled,
     commands::events::emit_transport_lifecycle_event,
     commands::transport::{parse_jump_trigger, parse_transition_type, parse_vamp_mode},
-    infra::settings::{save_app_settings, AppSettings, AppSettingsStore, MidiBinding},
+    infra::settings::{AppSettings, AppSettingsStore},
     state::DesktopState,
 };
 
 const MIDI_RAW_MESSAGE_EVENT: &str = "midi:raw_message";
-const SETTINGS_UPDATED_EVENT: &str = "settings:updated";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct MidiMessage {
@@ -46,24 +57,58 @@ pub(crate) fn dispatch_midi_message(app: &AppHandle, message: MidiMessage) -> Re
     )
     .map_err(|error| error.to_string())?;
 
+    let control = control();
+    control.diagnostics.messages.fetch_add(1, Ordering::Relaxed);
     let settings_store = app.state::<AppSettingsStore>();
-    let settings = settings_store
-        .current()
-        .map_err(|error| error.to_string())?;
-
-    let Some((binding_key, binding)) = find_matching_binding(&settings, message) else {
+    let index = control.index(&settings_store);
+    let bindings = index.lookup(message.status, message.data1);
+    if bindings.is_empty() {
         return Ok(());
-    };
-
-    if binding_key.starts_with("action:") {
-        return dispatch_midi_action(app, &settings_store, &settings, binding_key, message);
     }
+    let normalized = normalized_value(message.status, message.data1, message.data2);
 
-    if binding_key.starts_with("param:") {
-        return dispatch_midi_parameter(app, &settings_store, binding_key, binding, message);
+    let mut first_error = None;
+    for (target, binding) in bindings {
+        let result = match target {
+            MidiTarget::Action(_) => {
+                if !action_fires(binding, target, normalized) {
+                    continue;
+                }
+                let settings = settings_store
+                    .current()
+                    .map_err(|error| error.to_string())?;
+                dispatch_midi_action(app, &settings_store, &settings, &target.key())
+            }
+            MidiTarget::Param(name) => dispatch_midi_parameter(
+                app,
+                &settings_store,
+                name,
+                &target.key(),
+                binding,
+                target,
+                message,
+                normalized,
+            ),
+            _ => Ok(()),
+        };
+        if let Err(error) = result {
+            first_error.get_or_insert(error);
+        }
     }
+    first_error.map_or(Ok(()), Err)
+}
 
-    Ok(())
+/// Whether a message fires an action. Buttons fire on press; a momentary
+/// binding on a `toggle_*` action fires on release too, so holding the
+/// button holds the switch.
+fn action_fires(binding: &MidiBinding, target: &MidiTarget, normalized: f64) -> bool {
+    let pressed = ButtonState::is_press(normalized);
+    match binding.effective_mode(target) {
+        ControlMode::Momentary => {
+            pressed || matches!(target, MidiTarget::Action(name) if name.starts_with("toggle_"))
+        }
+        _ => pressed,
+    }
 }
 
 fn dispatch_midi_action(
@@ -71,12 +116,7 @@ fn dispatch_midi_action(
     settings_store: &AppSettingsStore,
     settings: &AppSettings,
     action_key: &str,
-    message: MidiMessage,
 ) -> Result<(), String> {
-    if message.status & 0xF0 == 0x90 && message.data2 == 0 {
-        return Ok(());
-    }
-
     // Video live control (paso 13) never needs the session.
     if let Some(action) = crate::video::live::VideoLiveAction::from_midi_key(action_key) {
         crate::video::live::run(app, action)?;
@@ -482,177 +522,209 @@ fn parse_dynamic_jump_index(action_key: &str, prefix: &str) -> Option<usize> {
         .filter(|index| *index > 0)
 }
 
+/// Where a continuous control puts its target (0..1), or `None` when the
+/// message must not move it: an absolute fader that has not picked up the
+/// current value yet (D6), or an encoder that did not turn.
+pub(crate) fn continuous_position(
+    binding: &MidiBinding,
+    mode: ControlMode,
+    target_key: &str,
+    message: MidiMessage,
+    normalized: f64,
+    current: f64,
+) -> Option<f64> {
+    if mode.is_relative() {
+        let steps = decode_relative(message.data2, mode);
+        if steps == 0 {
+            return None;
+        }
+        let next = (current + f64::from(steps) * RELATIVE_STEP).clamp(0.0, 1.0);
+        return Some(next);
+    }
+    if mode != ControlMode::Absolute {
+        return None;
+    }
+    let value = binding.scale(normalized);
+    if !binding.takeover_enabled() {
+        return Some(value);
+    }
+    control()
+        .with_takeover(target_key, |takeover| {
+            takeover.sync(current);
+            let follows = takeover.feed(value, current);
+            if follows {
+                takeover.wrote(value);
+            }
+            follows
+        })
+        .then_some(value)
+}
+
+/// A discrete parameter's value from a control, as the 0-127 the mapping
+/// tables below were written for.
+fn discrete_value(binding: &MidiBinding, normalized: f64) -> u8 {
+    (binding.scale(normalized) * 127.0).round() as u8
+}
+
+#[allow(clippy::too_many_arguments)]
 fn dispatch_midi_parameter(
     app: &AppHandle,
     settings_store: &AppSettingsStore,
-    binding_key: &str,
+    name: &str,
+    target_key: &str,
     binding: &MidiBinding,
+    target: &MidiTarget,
     message: MidiMessage,
+    normalized: f64,
 ) -> Result<(), String> {
-    if !binding.is_cc {
+    let mode = binding.effective_mode(target);
+    if mode != ControlMode::Absolute && !mode.is_relative() {
         return Ok(());
     }
 
-    let previous_settings = settings_store
-        .current()
-        .map_err(|error| error.to_string())?;
-    let mut next_settings = previous_settings.clone();
-    let mut changed = false;
-
-    match binding_key {
-        "param:metronome_volume" => {
-            // The setting is a linear gain on a fader that runs to +20 dB, so a
-            // raw `data2 / 127` (the old 0..1 slider mapping) pinned the knob's
-            // whole travel at or below 0 dB. Map the CC across the fader's dB
-            // range instead: fully down is silence, ~3/4 up is unity, top is
-            // +20 dB — the same places they sit on the on-screen fader.
-            let next_volume = metronome_volume_from_cc(message.data2);
-            if (next_settings.metronome_volume - next_volume).abs() > f64::EPSILON {
-                next_settings.metronome_volume = next_volume;
-                changed = true;
-            }
-        }
-        "param:tempo" => {
-            let next_bpm = map_cc_to_range(message.data2, 40, 240) as f64;
-            let state = app.state::<DesktopState>();
-            let mut session = state
-                .session
-                .lock()
-                .map_err(|_| "desktop session lock poisoned".to_string())?;
-            let snapshot = session
-                .update_song_tempo(next_bpm, &state.audio)
+    match name {
+        "metronome_volume" => {
+            // The setting is a linear gain on a fader that runs to +20 dB:
+            // map the control across the on-screen fader's taper, so fully
+            // down is silence, ~3/4 up is unity and the top is +20 dB.
+            let (current, _) = settings_store
+                .read(|settings| {
+                    fader::gain_to_position(settings.metronome_volume, fader::AUX_MAX_DB)
+                })
                 .map_err(|error| error.to_string())?;
-            emit_transport_lifecycle_event(app, "sync", &snapshot);
+            let Some(position) =
+                continuous_position(binding, mode, target_key, message, normalized, current)
+            else {
+                return Ok(());
+            };
+            let gain = fader::position_to_gain(position, fader::AUX_MAX_DB);
+            let changed = settings_store
+                .update(|settings| settings.metronome_volume = gain)
+                .map_err(|error| error.to_string())?;
+            if changed {
+                app.state::<DesktopState>()
+                    .audio
+                    .set_metronome_volume_realtime(gain)
+                    .map_err(|error| error.to_string())?;
+                control().settings_dirty(app);
+            }
             return Ok(());
         }
-        "param:vamp_bars" => {
-            let next_bars = map_cc_to_range(message.data2, 1, 16);
-            if next_settings.vamp_bars != next_bars {
-                next_settings.vamp_bars = next_bars;
-                changed = true;
+        "tempo" => {
+            // The tempo lives in the session, which a knob must not lock per
+            // message: absolute only, applied by the control worker at a
+            // bounded rate (the latest value wins).
+            if mode != ControlMode::Absolute {
+                return Ok(());
             }
+            let next_bpm = map_cc_to_range(discrete_value(binding, normalized), 40, 240) as f64;
+            control().tempo(app, next_bpm);
+            return Ok(());
         }
-        "param:global_jump_mode" => {
-            let next_mode = match message.data2 {
-                0..=42 => "immediate",
-                43..=85 => "after_bars",
-                _ => "next_marker",
-            };
-            if next_settings.global_jump_mode != next_mode {
-                next_settings.global_jump_mode = next_mode.to_string();
-                changed = true;
-            }
-        }
-        "param:global_jump_bars" => {
-            let next_bars = map_cc_to_range(message.data2, 1, 16);
-            if next_settings.global_jump_bars != next_bars {
-                next_settings.global_jump_bars = next_bars;
-                changed = true;
-            }
-        }
-        "param:song_jump_trigger" => {
-            let next_trigger = match message.data2 {
-                0..=31 => "immediate",
-                32..=63 => "after_bars",
-                64..=95 => "region_end",
-                _ => "next_marker",
-            };
-            if next_settings.song_jump_trigger != next_trigger {
-                next_settings.song_jump_trigger = next_trigger.to_string();
-                changed = true;
-            }
-        }
-        "param:song_jump_bars" => {
-            let next_bars = map_cc_to_range(message.data2, 1, 16);
-            if next_settings.song_jump_bars != next_bars {
-                next_settings.song_jump_bars = next_bars;
-                changed = true;
-            }
-        }
-        "param:song_transition_mode" => {
-            let next_mode = if message.data2 < 64 {
-                "instant"
-            } else {
-                "fade_out"
-            };
-            if next_settings.song_transition_mode != next_mode {
-                next_settings.song_transition_mode = next_mode.to_string();
-                changed = true;
-            }
-        }
-        "param:vamp_mode" => {
-            let next_mode = if message.data2 < 64 {
-                "section"
-            } else {
-                "bars"
-            };
-            if next_settings.vamp_mode != next_mode {
-                next_settings.vamp_mode = next_mode.to_string();
-                changed = true;
-            }
-        }
-        "param:jump_bars" => {
-            let next_bars = map_cc_to_range(message.data2, 1, 16);
-            if next_settings.global_jump_mode == "after_bars" {
-                if next_settings.global_jump_bars != next_bars {
-                    next_settings.global_jump_bars = next_bars;
-                    changed = true;
-                }
-            }
-            if next_settings.song_jump_trigger == "after_bars" {
-                if next_settings.song_jump_bars != next_bars {
-                    next_settings.song_jump_bars = next_bars;
-                    changed = true;
-                }
-            }
-            if next_settings.global_jump_mode != "after_bars"
-                && next_settings.song_jump_trigger != "after_bars"
-                && (next_settings.global_jump_bars != next_bars
-                    || next_settings.song_jump_bars != next_bars)
-            {
-                next_settings.global_jump_bars = next_bars;
-                next_settings.song_jump_bars = next_bars;
-                changed = true;
-            }
-        }
-        _ => return Ok(()),
+        _ => {}
     }
 
-    if !changed {
-        return Ok(());
-    }
+    let relative_steps = mode
+        .is_relative()
+        .then(|| decode_relative(message.data2, mode));
+    let value = discrete_value(binding, normalized);
+    let bars = |current: u32| match relative_steps {
+        Some(steps) => (i64::from(current) + i64::from(steps)).clamp(1, 16) as u32,
+        None => map_cc_to_range(value, 1, 16),
+    };
+    // Enum parameters only make sense as positions.
+    let absolute = relative_steps.is_none();
 
-    apply_midi_settings_update(app, settings_store, next_settings)
+    let changed = settings_store
+        .update(|next_settings| match name {
+            "vamp_bars" => next_settings.vamp_bars = bars(next_settings.vamp_bars),
+            "global_jump_mode" if absolute => {
+                next_settings.global_jump_mode = match value {
+                    0..=42 => "immediate",
+                    43..=85 => "after_bars",
+                    _ => "next_marker",
+                }
+                .to_string();
+            }
+            "global_jump_bars" => {
+                next_settings.global_jump_bars = bars(next_settings.global_jump_bars);
+            }
+            "song_jump_trigger" if absolute => {
+                next_settings.song_jump_trigger = match value {
+                    0..=31 => "immediate",
+                    32..=63 => "after_bars",
+                    64..=95 => "region_end",
+                    _ => "next_marker",
+                }
+                .to_string();
+            }
+            "song_jump_bars" => {
+                next_settings.song_jump_bars = bars(next_settings.song_jump_bars);
+            }
+            "song_transition_mode" if absolute => {
+                next_settings.song_transition_mode =
+                    if value < 64 { "instant" } else { "fade_out" }.to_string();
+            }
+            "vamp_mode" if absolute => {
+                next_settings.vamp_mode = if value < 64 { "section" } else { "bars" }.to_string();
+            }
+            "jump_bars" => {
+                let global_after = next_settings.global_jump_mode == "after_bars";
+                let song_after = next_settings.song_jump_trigger == "after_bars";
+                if global_after {
+                    next_settings.global_jump_bars = bars(next_settings.global_jump_bars);
+                }
+                if song_after {
+                    next_settings.song_jump_bars = bars(next_settings.song_jump_bars);
+                }
+                if !global_after && !song_after {
+                    let next = bars(next_settings.global_jump_bars);
+                    next_settings.global_jump_bars = next;
+                    next_settings.song_jump_bars = next;
+                }
+            }
+            _ => {}
+        })
+        .map_err(|error| error.to_string())?;
+
+    if changed {
+        apply_settings_in_memory(app, settings_store)?;
+    }
+    Ok(())
 }
 
+/// Hand the in-memory settings to the engine (never reopening the device:
+/// the old path did, once per CC) and schedule the JSON write and the UI
+/// update on the control worker.
+fn apply_settings_in_memory(
+    app: &AppHandle,
+    settings_store: &AppSettingsStore,
+) -> Result<(), String> {
+    let settings = settings_store
+        .current()
+        .map_err(|error| error.to_string())?;
+    app.state::<DesktopState>()
+        .audio
+        .apply_settings_with_stream_rebuild(settings, false)
+        .map_err(|error| error.to_string())?;
+    control().settings_dirty(app);
+    Ok(())
+}
+
+/// Replace the settings from a MIDI action (or a Bluetooth reconnect): in
+/// memory and to the engine now, disk and UI through the control worker.
 pub(crate) fn apply_midi_settings_update(
     app: &AppHandle,
     settings_store: &AppSettingsStore,
     next_settings: AppSettings,
 ) -> Result<(), String> {
-    let previous_settings = settings_store
-        .current()
+    let changed = settings_store
+        .update(|settings| *settings = next_settings)
         .map_err(|error| error.to_string())?;
-    if previous_settings == next_settings {
+    if !changed {
         return Ok(());
     }
-
-    settings_store
-        .set(next_settings.clone())
-        .map_err(|error| error.to_string())?;
-
-    let state = app.state::<DesktopState>();
-    state
-        .audio
-        .apply_settings(next_settings.clone())
-        .map_err(|error| error.to_string())?;
-
-    save_app_settings(app, &next_settings).map_err(|error| error.to_string())?;
-
-    app.emit(SETTINGS_UPDATED_EVENT, next_settings)
-        .map_err(|error| error.to_string())?;
-
-    Ok(())
+    apply_settings_in_memory(app, settings_store)
 }
 
 fn jump_to_next_region(
@@ -735,47 +807,6 @@ fn jump_to_neighbour_region(
         .map_err(|error| error.to_string())
 }
 
-fn find_matching_binding<'a>(
-    settings: &'a AppSettings,
-    message: MidiMessage,
-) -> Option<(&'a str, &'a MidiBinding)> {
-    settings
-        .midi_mappings
-        .iter()
-        .find(|(_, binding)| binding.status == message.status && binding.data1 == message.data1)
-        .map(|(key, binding)| (key.as_str(), binding))
-}
-
-/// Map a CC value (0-127) onto the click fader's travel, as a linear gain.
-///
-/// Mirrors the shape of `AUX_FADER_SCALE` (packages/shared/src/faderScale.ts)
-/// at its two anchors: unity sits ~3/4 of the way up and the top is +20 dB.
-/// Below unity the real fader uses a piecewise taper; replicating it here would
-/// duplicate a curve that can drift out of sync, so this interpolates linearly
-/// in dB down to the -60 dB floor — close enough for a knob, and the fader
-/// itself remains the single source of truth for the on-screen shape.
-fn metronome_volume_from_cc(value: u8) -> f64 {
-    /// Fader position that means unity gain / 0 dB.
-    const UNITY_POSITION: f64 = 0.75;
-    const MAX_DB: f64 = 20.0;
-    const FLOOR_DB: f64 = -60.0;
-
-    let position = f64::from(value) / 127.0;
-    if position <= 0.0 {
-        return 0.0;
-    }
-
-    let db = if position >= UNITY_POSITION {
-        let t = (position - UNITY_POSITION) / (1.0 - UNITY_POSITION);
-        t * MAX_DB
-    } else {
-        let t = position / UNITY_POSITION;
-        FLOOR_DB + t * -FLOOR_DB
-    };
-
-    10f64.powf(db / 20.0).clamp(0.0, 10.0)
-}
-
 fn map_cc_to_range(value: u8, min: u32, max: u32) -> u32 {
     if min >= max {
         return min;
@@ -788,7 +819,47 @@ fn map_cc_to_range(value: u8, min: u32, max: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{map_cc_to_range, next_region_index, previous_region_index};
+    use super::{
+        continuous_position, map_cc_to_range, next_region_index, previous_region_index,
+        ControlMode, MidiBinding, MidiMessage,
+    };
+
+    fn cc(value: u8) -> MidiMessage {
+        MidiMessage {
+            status: 0xB0,
+            data1: 7,
+            data2: value,
+        }
+    }
+
+    #[test]
+    fn absolute_fader_waits_for_pickup_then_follows() {
+        let binding = MidiBinding::new(0xB0, 7);
+        let key = "test:pickup";
+        let at = |value: u8, current: f64| {
+            continuous_position(&binding, ControlMode::Absolute, key, cc(value), f64::from(value) / 127.0, current)
+        };
+        assert_eq!(at(10, 0.8), None, "far below the value: ignored");
+        let picked = at(102, 0.8).expect("reached the value");
+        assert!((picked - 102.0 / 127.0).abs() < 1e-9);
+        let current = picked;
+        assert!(at(20, current).is_some(), "follows once picked up");
+        // The screen moved the target to 0.9: the fader lets go.
+        assert_eq!(at(25, 0.9), None);
+    }
+
+    #[test]
+    fn takeover_off_follows_at_once_and_encoders_step_from_the_current_value() {
+        let mut binding = MidiBinding::new(0xB0, 7);
+        binding.takeover = Some(false);
+        let jump = continuous_position(&binding, ControlMode::Absolute, "test:off", cc(0), 0.0, 0.8);
+        assert_eq!(jump, Some(0.0));
+        let up = continuous_position(&binding, ControlMode::RelativeTwosComplement, "test:enc", cc(2), 0.0, 0.5)
+            .unwrap();
+        assert!((up - (0.5 + 2.0 / 128.0)).abs() < 1e-12);
+        let still = continuous_position(&binding, ControlMode::RelativeBinaryOffset, "test:enc", cc(64), 0.5, 0.5);
+        assert_eq!(still, None);
+    }
 
     #[test]
     fn maps_cc_values_to_useful_ranges() {

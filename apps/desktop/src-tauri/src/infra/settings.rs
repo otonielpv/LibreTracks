@@ -715,13 +715,47 @@ impl AppSettings {
 
 pub struct AppSettingsStore {
     settings: Mutex<AppSettings>,
+    /// Bumped on every `set`, so a cache built from the settings (the MIDI
+    /// binding index) knows when to rebuild without cloning them per message.
+    revision: std::sync::atomic::AtomicU64,
 }
 
 impl AppSettingsStore {
     pub fn new(settings: AppSettings) -> Self {
         Self {
             settings: Mutex::new(settings),
+            revision: std::sync::atomic::AtomicU64::new(0),
         }
+    }
+
+    pub fn revision(&self) -> u64 {
+        self.revision.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Read without cloning the whole settings, plus the revision read.
+    pub fn read<R>(&self, f: impl FnOnce(&AppSettings) -> R) -> Result<(R, u64), io::Error> {
+        let settings = self
+            .settings
+            .lock()
+            .map_err(|_| io::Error::other("settings state lock poisoned"))?;
+        Ok((f(&settings), self.revision()))
+    }
+
+    /// Change in place under the lock (read-modify-write without a race
+    /// against another writer). Returns whether anything changed.
+    pub fn update(&self, f: impl FnOnce(&mut AppSettings)) -> Result<bool, io::Error> {
+        let mut settings = self
+            .settings
+            .lock()
+            .map_err(|_| io::Error::other("settings state lock poisoned"))?;
+        let before = settings.clone();
+        f(&mut settings);
+        let changed = *settings != before;
+        if changed {
+            self.revision
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        }
+        Ok(changed)
     }
 
     pub fn current(&self) -> Result<AppSettings, io::Error> {
@@ -737,6 +771,8 @@ impl AppSettingsStore {
             .lock()
             .map_err(|_| io::Error::other("settings state lock poisoned"))?;
         *current = settings;
+        self.revision
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
         Ok(())
     }
 }

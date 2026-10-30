@@ -289,3 +289,51 @@ fn pan_centre_is_the_middle_of_the_control() {
     assert_eq!(position_to_pan(1.0), 1.0);
     assert_eq!(pan_to_position(0.0), 0.5);
 }
+
+#[test]
+fn soft_takeover_lets_go_when_something_else_moves_the_target() {
+    let mut takeover = SoftTakeover::default();
+    assert!(takeover.feed(0.5, 0.5));
+    takeover.wrote(0.5);
+    takeover.sync(0.5);
+    assert!(takeover.is_picked_up(), "our own write keeps it");
+    takeover.sync(0.9);
+    assert!(!takeover.is_picked_up(), "the screen moved it");
+}
+
+// --- Scheduling ---
+
+#[test]
+fn debounce_fires_once_after_the_burst_goes_quiet() {
+    use std::time::{Duration, Instant};
+    let start = Instant::now();
+    let ms = Duration::from_millis;
+    let mut debounce = Debounce::new(ms(300));
+    debounce.touch("t1", start);
+    debounce.touch("t1", start + ms(200));
+    debounce.touch("t2", start + ms(100));
+    assert!(debounce.take_due(start + ms(400)).contains(&"t2"));
+    assert!(debounce.take_due(start + ms(450)).is_empty(), "t1 was pushed back");
+    assert_eq!(debounce.next_deadline(), Some(start + ms(500)));
+    assert_eq!(debounce.take_due(start + ms(500)), ["t1"]);
+    assert_eq!(debounce.next_deadline(), None);
+}
+
+#[test]
+fn throttle_emits_leading_and_trailing_but_not_every_hit() {
+    use std::time::{Duration, Instant};
+    let start = Instant::now();
+    let ms = Duration::from_millis;
+    let mut throttle = Throttle::new(ms(33));
+    assert!(throttle.hit(start), "leading");
+    let mut emitted = 0;
+    for step in 1..=30 {
+        if throttle.hit(start + ms(step)) {
+            emitted += 1;
+        }
+    }
+    assert_eq!(emitted, 0, "30 messages in 30 ms do not emit again");
+    assert!(!throttle.poll(start + ms(32)));
+    assert!(throttle.poll(start + ms(33)), "trailing");
+    assert!(!throttle.poll(start + ms(80)), "nothing pending");
+}

@@ -326,6 +326,7 @@ pub fn run() {
             commands::system::pair_bluetooth_midi,
             commands::system::reconnect_bluetooth_midi,
             commands::system::send_midi_test_note,
+            midi::control::get_midi_control_diagnostics,
             commands::transport::get_transport_snapshot,
             commands::transport::fade_out_and_stop,
             commands::library_places::list_library_dir,
