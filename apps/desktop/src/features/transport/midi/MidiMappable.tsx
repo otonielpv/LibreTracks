@@ -1,4 +1,10 @@
-import type { ReactNode } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  type MouseEvent as ReactMouseEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 
@@ -12,10 +18,15 @@ import { useTimelineUIStore } from "../uiStore";
  *
  * While MIDI Learn is on (`midiLearnMode !== null`), every control declared
  * mappable is tinted; clicking (or tapping) it arms the learn for its target
- * and the next hardware message binds there. A control becomes mappable with
- * one line: wrap it in `<MidiMappable target="track:<id>:volume">`, or, when
- * a wrapper would break its layout, take `useMidiMappable(target)` and put
- * its `className` and `overlay` on an existing container.
+ * and the next hardware message binds there.
+ *
+ * - A button: wrap it in `<MidiMappable target="…">`. Nothing is added
+ *   around it: the button itself gets a class, a capture-phase click that
+ *   arms the learn instead of running the button, and a tint layer inside.
+ *   Its layout and every `.group > button` rule stay as they were.
+ * - Something that cannot hold children (a range input): take
+ *   `useMidiMappable(target)` and put its `className` and `overlay` on an
+ *   existing container.
  */
 
 /** The current bindings, mirrored from the settings (narrow selectors). */
@@ -30,23 +41,27 @@ export function setMidiMappingsForMappable(mappings: Record<string, MidiBinding>
 }
 
 export type MidiMappableParts = {
-  /** Add to the control's container (it must be able to hold an overlay). */
+  /** Add to the control (or its container): positions the tint layer. */
   className: string;
-  /** Interactive cover: arms the learn on click. */
+  /** Interactive cover for a container: arms the learn on click. */
   overlay: ReactNode;
-  /**
-   * Visual-only binding chip, for controls that keep their own click
-   * handling in map mode (the transport buttons).
-   */
+  /** Visual-only tint and binding chip, for a host that arms by itself. */
   badge: ReactNode;
+  /** Arms the learn for this target. */
+  arm: () => void;
 };
 
-const NONE: MidiMappableParts = { className: "", overlay: null, badge: null };
+const NONE: MidiMappableParts = {
+  className: "",
+  overlay: null,
+  badge: null,
+  arm: () => {},
+};
 
 export function useMidiMappable(target: string, label?: string): MidiMappableParts {
   const { t } = useTranslation();
   const learnMode = useTimelineUIStore((state) => state.midiLearnMode);
-  const active = learnMode !== null;
+  const active = learnMode !== null && target !== "";
   const binding = useMidiMappingsStore((state) =>
     active ? (state.mappings[target] ?? null) : null,
   );
@@ -56,14 +71,18 @@ export function useMidiMappable(target: string, label?: string): MidiMappablePar
   const armed = learnMode === target;
   const stateClass = `${binding ? "is-mapped" : ""} ${armed ? "is-armed" : ""}`;
   const chip = binding ? (
-    <span className="lt-midi-mappable-badge">{formatMidiBinding(binding)}</span>
+    <span className="lt-midi-mappable-chip">{formatMidiBinding(binding)}</span>
   ) : null;
+  const arm = () => useTimelineUIStore.getState().setMidiLearnMode(target);
   return {
     className: `lt-midi-mappable ${stateClass}`,
+    // A span, not a button: generic `… button` rules of the host group
+    // (sizes, opaque backgrounds) must not restyle the cover.
     overlay: (
-      <button
-        type="button"
-        className={`lt-midi-mappable-overlay ${stateClass}`}
+      <span
+        role="button"
+        tabIndex={0}
+        className={`lt-midi-mappable-layer is-interactive ${stateClass}`}
         aria-label={t("midiMap.mapTarget", { target: label ?? target })}
         aria-pressed={armed}
         data-midi-target={target}
@@ -71,37 +90,65 @@ export function useMidiMappable(target: string, label?: string): MidiMappablePar
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          useTimelineUIStore.getState().setMidiLearnMode(target);
+          arm();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            arm();
+          }
         }}
       >
         {chip}
-      </button>
+      </span>
     ),
-    badge: chip,
+    badge: (
+      <span
+        className={`lt-midi-mappable-layer ${stateClass}`}
+        aria-hidden="true"
+        data-midi-target={target}
+      >
+        {chip}
+      </span>
+    ),
+    arm,
   };
 }
+
+type HostProps = {
+  className?: string;
+  children?: ReactNode;
+  onClickCapture?: (event: ReactMouseEvent) => void;
+  "aria-label"?: string;
+};
 
 export function MidiMappable({
   target,
   label,
-  className,
   children,
 }: {
   target: string;
   label?: string;
-  className?: string;
-  children: ReactNode;
+  /** One element that can hold children (a button, a label, a div). */
+  children: ReactElement<HostProps>;
 }) {
   const parts = useMidiMappable(target, label);
-  // Outside map mode there is no wrapper at all, so child selectors and flex
-  // layouts around the control stay exactly as they were.
-  if (!parts.overlay) {
-    return <>{children}</>;
+  if (!parts.badge || !isValidElement(children)) {
+    return children;
   }
-  return (
-    <div className={`lt-midi-mappable-wrap ${className ?? ""} ${parts.className}`}>
-      {children}
-      {parts.overlay}
-    </div>
-  );
+  const props = children.props;
+  return cloneElement(children, {
+    className: `${props.className ?? ""} ${parts.className}`.trim(),
+    onClickCapture: (event: ReactMouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      parts.arm();
+    },
+    children: (
+      <>
+        {props.children}
+        {parts.badge}
+      </>
+    ),
+  });
 }

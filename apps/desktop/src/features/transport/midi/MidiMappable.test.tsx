@@ -12,7 +12,7 @@ import {
 } from "./controllerTargets";
 import { MidiBindingsEditor } from "./MidiBindingsEditor";
 import { MidiMapBanner } from "./MidiMapBanner";
-import { MidiMappable, useMidiMappingsStore } from "./MidiMappable";
+import { MidiMappable, useMidiMappable, useMidiMappingsStore } from "./MidiMappable";
 
 const t = (key: string, options?: Record<string, unknown>) =>
   options ? `${key}:${JSON.stringify(options)}` : key;
@@ -28,25 +28,51 @@ describe("MIDI Map mode", () => {
     expect(container.innerHTML).toBe('<button type="button">M</button>');
   });
 
-  it("tints the control in map mode and arms the learn for its target on tap", () => {
+  it("tints the button itself in map mode and a tap arms the learn instead of muting", () => {
     useMidiMappingsStore.setState({
       mappings: { "track:t1:mute": { status: 0x90, data1: 36, isCc: false } },
     });
     useTimelineUIStore.getState().setMidiLearnMode("");
     const onClick = vi.fn();
-    render(
-      <MidiMappable target="track:t1:mute" label="Bass · M">
-        <button type="button" onClick={onClick}>
-          M
-        </button>
-      </MidiMappable>,
+    const { container } = render(
+      <div className="lt-track-toggle-group">
+        <MidiMappable target="track:t1:mute" label="Bass · M">
+          <button type="button" className="lt-track-toggle-mute" onClick={onClick}>
+            M
+          </button>
+        </MidiMappable>
+      </div>,
     );
-    const overlay = screen.getByRole("button", { name: "midiMap.mapTarget" });
-    expect(overlay.className).toContain("is-mapped");
-    expect(overlay.textContent).toContain("Note On 36");
-    fireEvent.click(overlay);
+    // No wrapper: the button stays a direct child of its group, so the
+    // group's "> button" and "button" rules keep sizing it.
+    const button = container.querySelector(".lt-track-toggle-group > button")!;
+    expect(button.className).toContain("lt-track-toggle-mute");
+    expect(button.className).toContain("lt-midi-mappable");
+    // The tint is a span, never a button a generic rule could restyle.
+    const layer = button.querySelector(".lt-midi-mappable-layer")!;
+    expect(layer.tagName).toBe("SPAN");
+    expect(layer.className).toContain("is-mapped");
+    expect(layer.textContent).toContain("Note On 36");
+    expect(container.querySelectorAll("button")).toHaveLength(1);
+    fireEvent.click(button);
     expect(useTimelineUIStore.getState().midiLearnMode).toBe("track:t1:mute");
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("a container overlay (faders) arms the learn on tap", () => {
+    useTimelineUIStore.getState().setMidiLearnMode("");
+    function Fader() {
+      const map = useMidiMappable("track:t1:volume", "Bass");
+      return (
+        <label className={map.className}>
+          <input type="range" />
+          {map.overlay}
+        </label>
+      );
+    }
+    render(<Fader />);
+    fireEvent.click(screen.getByRole("button", { name: "midiMap.mapTarget" }));
+    expect(useTimelineUIStore.getState().midiLearnMode).toBe("track:t1:volume");
   });
 
   it("banner names the armed target and exits map mode", () => {

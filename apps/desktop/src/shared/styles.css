@@ -14396,38 +14396,46 @@ html.lt-mobile .lt-setlist-mixer.is-short > .lt-setlist-mixer-header > .lt-setli
   --lt-midi-map-mapped: #2fbf71;
 }
 
-.lt-midi-mappable,
-.lt-midi-mappable-wrap {
+/* Solo existe en modo Mapeo: el anfitrion sostiene la capa de tinte. */
+.lt-midi-mappable {
   position: relative;
 }
 
-.lt-midi-mappable-wrap {
-  display: inline-flex;
-}
-
-.lt-midi-mappable-overlay {
+/* Tinte y chip del vinculo. Es un span (no un button) a proposito: las
+ * reglas genericas "grupo button" del anfitrion no deben alcanzarlo. */
+.lt-midi-mappable-layer {
   position: absolute;
   inset: 0;
   z-index: 5;
   display: flex;
+  box-sizing: border-box;
   align-items: flex-start;
   justify-content: center;
+  width: auto;
+  height: auto;
   min-width: 0;
+  min-height: 0;
   margin: 0;
-  padding: 2px;
+  padding: 1px;
+  overflow: hidden;
   border: 1px solid var(--lt-midi-map-color);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--lt-midi-map-color) 28%, transparent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--lt-midi-map-color) 30%, transparent);
+  pointer-events: none;
+}
+
+.lt-midi-mappable-layer.is-interactive {
   cursor: pointer;
+  pointer-events: auto;
   touch-action: manipulation;
 }
 
-.lt-midi-mappable-overlay.is-mapped {
+.lt-midi-mappable-layer.is-mapped {
   border-color: var(--lt-midi-map-mapped);
-  background: color-mix(in srgb, var(--lt-midi-map-mapped) 30%, transparent);
+  background: color-mix(in srgb, var(--lt-midi-map-mapped) 32%, transparent);
 }
 
-.lt-midi-mappable-overlay.is-armed {
+.lt-midi-mappable-layer.is-armed {
   border-width: 2px;
   animation: lt-midi-map-pulse 0.9s ease-in-out infinite alternate;
 }
@@ -14441,18 +14449,16 @@ html.lt-mobile .lt-setlist-mixer.is-short > .lt-setlist-mixer-header > .lt-setli
   }
 }
 
-.lt-midi-mappable-badge {
+.lt-midi-mappable-chip {
   max-width: 100%;
   overflow: hidden;
-  padding: 0 4px;
-  border-radius: 3px;
+  padding: 0 3px;
+  border-radius: 2px;
   background: rgba(0, 0, 0, 0.72);
   color: #fff;
-  font-size: 9px;
-  line-height: 14px;
+  font: 600 9px/13px system-ui, sans-serif;
   text-overflow: ellipsis;
   white-space: nowrap;
-  pointer-events: none;
 }
 
 .lt-midi-map-banner {
@@ -14550,7 +14556,7 @@ html.lt-mobile .lt-setlist-mixer.is-short > .lt-setlist-mixer-header > .lt-setli
   min-height: 40px;
 }
 
-.lt-mobile .lt-midi-mappable-badge {
+.lt-mobile .lt-midi-mappable-chip {
   font-size: 10px;
   line-height: 16px;
 }
