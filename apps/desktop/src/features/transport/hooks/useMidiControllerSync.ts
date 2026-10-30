@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import type { AppSettings, MidiBinding, SongView } from "@libretracks/shared/models";
 
@@ -12,6 +12,7 @@ import {
   type MidiMixChangedPayload,
 } from "../desktopApi";
 import {
+  activeSongTrackIds,
   hasStripMappings,
   midiStripOrder,
   useMidiBankStore,
@@ -53,7 +54,11 @@ export function useMidiControllerSync({
   /** The switches whose LEDs the controller shows (paso 06). */
   appSettings: Pick<
     AppSettings,
-    "metronomeEnabled" | "voiceGuideEnabled" | "padEnabled" | "midiControllerOutput"
+    | "metronomeEnabled"
+    | "voiceGuideEnabled"
+    | "padEnabled"
+    | "midiControllerOutput"
+    | "midiStripsFollowSong"
   >;
 }) {
   // Controller LEDs (paso 06): report the transport whenever it or a
@@ -82,6 +87,8 @@ export function useMidiControllerSync({
     setMidiMappingsForMappable(midiMappings);
   }, [midiMappings]);
   const stripsActive = hasStripMappings(midiMappings);
+  const followSong = appSettings.midiStripsFollowSong;
+  const lastRegionRef = useRef<string | null>(null);
   useEffect(() => {
     useMidiBankStore.getState().setActive(stripsActive);
   }, [stripsActive]);
@@ -98,14 +105,22 @@ export function useMidiControllerSync({
       solo: track.solo,
     }));
     const region = song?.regions.find((item) => item.id === activeSongRegionId);
+    // Strips follow the active song: its tracks only, back to the first
+    // bank whenever the song changes.
+    const songChanged = lastRegionRef.current !== activeSongRegionId;
+    lastRegionRef.current = activeSongRegionId;
     void syncMidiController({
       tracks,
-      stripOrder: midiStripOrder(song),
+      stripOrder: midiStripOrder(
+        song,
+        followSong ? activeSongTrackIds(song, activeSongRegionId || null) : null,
+      ),
+      resetBank: followSong && songChanged,
       songMaster: region
         ? { regionId: region.id, gain: region.master?.gain ?? 1 }
         : null,
     }).catch(() => undefined);
-  }, [song, activeSongRegionId]);
+  }, [song, activeSongRegionId, followSong]);
 
   useEffect(() => {
     if (!isTauriApp) {

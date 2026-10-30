@@ -467,6 +467,8 @@ export async function syncMidiController(args: {
   tracks: MidiControllerTrackMix[];
   stripOrder: string[];
   songMaster: { regionId: string; gain: number } | null;
+  /** Go back to the first bank (the active song changed). */
+  resetBank?: boolean;
 }): Promise<void> {
   await invokeCommand("midi_controller_sync", args);
 }

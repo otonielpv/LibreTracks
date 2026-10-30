@@ -37,6 +37,7 @@ function renderTab(onChange = vi.fn()) {
     onSendTestNote: () => {},
     platform: {
       controllerOutput: null,
+      stripsFollowSong: true,
       networkSession: false,
       virtualPort: false,
       keepInBackground: true,

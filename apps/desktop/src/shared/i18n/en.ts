@@ -1964,6 +1964,9 @@ const en = {
       toValue: "To",
       outputDevice: "MIDI output",
       outputDeviceNone: "No output",
+      stripsFollowSong: "Strips follow the active song",
+      stripsFollowSongHint:
+        "The controller's 8 faders drive only the playing song's tracks and go back to the first bank when the song changes.",
       controllerOutput: "Controller output (LEDs)",
       controllerOutputHint:
         "The port your fader controller listens on for mute, solo, play and vamp state. Usually named like its input.",

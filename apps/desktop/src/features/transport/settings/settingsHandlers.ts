@@ -280,6 +280,7 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
           | "midiVirtualPort"
           | "keepMidiInBackground"
           | "midiControllerOutput"
+          | "midiStripsFollowSong"
         >
       >,
     ) {

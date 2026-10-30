@@ -36,10 +36,48 @@ export function hasStripMappings(midiMappings: Record<string, unknown>) {
 }
 
 /**
+ * The tracks of the song under the playhead: those with an audio or MIDI
+ * clip starting inside its region, plus the folders that hold them. `null`
+ * when there is no such song or it has no clips yet (then every track).
+ */
+export function activeSongTrackIds(
+  song: SongView | null,
+  activeRegionId: string | null,
+): Set<string> | null {
+  const region = activeRegionId
+    ? song?.regions.find((item) => item.id === activeRegionId)
+    : undefined;
+  if (!song || !region) return null;
+  const inside = (start: number) =>
+    start >= region.startSeconds && start < region.endSeconds;
+  const ids = new Set<string>();
+  for (const clip of song.clips) {
+    if (inside(clip.timelineStartSeconds)) ids.add(clip.trackId);
+  }
+  for (const clip of song.midiClips ?? []) {
+    if (inside(clip.timelineStartSeconds)) ids.add(clip.trackId);
+  }
+  if (ids.size === 0) return null;
+  const byId = new Map(song.tracks.map((track) => [track.id, track]));
+  for (const id of [...ids]) {
+    let parentId = byId.get(id)?.parentTrackId;
+    while (parentId && !ids.has(parentId)) {
+      ids.add(parentId);
+      parentId = byId.get(parentId)?.parentTrackId;
+    }
+  }
+  return ids;
+}
+
+/**
  * The order the strips follow (D7): the tracks a fader can drive (no video),
  * as the mixer shows them, skipping the children of a collapsed folder.
+ * With `onlyTrackIds` (strips follow the active song), only those tracks.
  */
-export function midiStripOrder(song: SongView | null): string[] {
+export function midiStripOrder(
+  song: SongView | null,
+  onlyTrackIds: Set<string> | null = null,
+): string[] {
   const tracks = song?.tracks ?? [];
   const byId = new Map(tracks.map((track) => [track.id, track]));
   const hidden = (trackId: string | null | undefined): boolean => {
@@ -55,6 +93,11 @@ export function midiStripOrder(song: SongView | null): string[] {
     return false;
   };
   return tracks
-    .filter((track) => track.kind !== "video" && !hidden(track.parentTrackId))
+    .filter(
+      (track) =>
+        track.kind !== "video" &&
+        !hidden(track.parentTrackId) &&
+        (!onlyTrackIds || onlyTrackIds.has(track.id)),
+    )
     .map((track) => track.id);
 }

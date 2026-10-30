@@ -62,12 +62,15 @@ export type MidiPlatformPatch = Partial<
     | "midiVirtualPort"
     | "keepMidiInBackground"
     | "midiControllerOutput"
+    | "midiStripsFollowSong"
   >
 >;
 
 export type MidiPlatformSettings = {
   /** Port for the control surface's LEDs (plan midi-controllers, paso 06). */
   controllerOutput: string | null;
+  /** Strips follow the active song (midi-controllers). */
+  stripsFollowSong: boolean;
   networkSession: boolean;
   virtualPort: boolean;
   keepInBackground: boolean;
@@ -308,6 +311,21 @@ export function MidiSettingsTab({
           </div>
           <small>{t("transport.midi.controllerOutputHint")}</small>
         </div>
+
+        <label className="lt-settings-field lt-settings-checkbox">
+          <input
+            type="checkbox"
+            checked={platform.stripsFollowSong}
+            disabled={isLoading || isSaving}
+            onChange={(event) =>
+              platform.onChange({ midiStripsFollowSong: event.target.checked })
+            }
+          />
+          <span>
+            {t("transport.midi.stripsFollowSong")}
+            <small>{t("transport.midi.stripsFollowSongHint")}</small>
+          </span>
+        </label>
 
         {capabilities?.virtualPorts ? (
           <label className="lt-settings-toggle">

@@ -548,10 +548,14 @@ pub fn midi_controller_sync(
     tracks: Vec<TrackMixSync>,
     strip_order: Vec<String>,
     song_master: Option<SongMasterSync>,
+    reset_bank: Option<bool>,
 ) {
     let control = control();
     let (before, after) = control.with_mix(|mix| {
         let before = mix.bank_state();
+        if reset_bank == Some(true) {
+            mix.bank = Bank::default();
+        }
         mix.sync(tracks, strip_order, song_master);
         (before, mix.bank_state())
     });

@@ -1414,6 +1414,8 @@ export type AppSettings = {
   selectedMidiOutputDevice: string | null;
   /** Port for the control surface's LEDs and motor faders (midi-controllers). */
   midiControllerOutput: string | null;
+  /** Controller strips drive only the active song's tracks (midi-controllers). */
+  midiStripsFollowSong: boolean;
   suppressMissingMidiDeviceWarning: boolean;
   /** iOS RTP-MIDI network session. Off by default (asks for local network). */
   midiNetworkSession: boolean;
@@ -1594,6 +1596,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   selectedMidiDevice: null,
   selectedMidiOutputDevice: null,
   midiControllerOutput: null,
+  midiStripsFollowSong: true,
   suppressMissingMidiDeviceWarning: false,
   midiNetworkSession: false,
   midiVirtualPort: false,
@@ -1869,6 +1872,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     selectedMidiDevice,
     selectedMidiOutputDevice,
     midiControllerOutput,
+    midiStripsFollowSong: settings.midiStripsFollowSong !== false,
     suppressMissingMidiDeviceWarning: Boolean(
       settings.suppressMissingMidiDeviceWarning,
     ),

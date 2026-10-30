@@ -1992,6 +1992,9 @@ const es = {
       toValue: "Hasta",
       outputDevice: "Salida MIDI",
       outputDeviceNone: "Sin salida",
+      stripsFollowSong: "Las tiras siguen a la canción activa",
+      stripsFollowSongHint:
+        "Los 8 faders del controlador mueven solo las pistas de la canción que suena y vuelven al primer banco al cambiar de canción.",
       controllerOutput: "Salida del controlador (LEDs)",
       controllerOutputHint:
         "El puerto por el que el controlador de faders recibe el estado de mute, solo, play y vamp. Suele llamarse como su entrada.",

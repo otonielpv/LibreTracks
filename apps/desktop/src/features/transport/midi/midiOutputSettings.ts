@@ -30,6 +30,7 @@ export function buildMidiOutputSettings(
     ...portHandlers,
     platform: {
       controllerOutput: appSettings.midiControllerOutput,
+      stripsFollowSong: appSettings.midiStripsFollowSong,
       networkSession: appSettings.midiNetworkSession,
       virtualPort: appSettings.midiVirtualPort,
       keepInBackground: appSettings.keepMidiInBackground,

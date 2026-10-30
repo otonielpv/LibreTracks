@@ -149,6 +149,10 @@ fn default_auto_save_enabled() -> bool {
     true
 }
 
+fn default_midi_strips_follow_song() -> bool {
+    true
+}
+
 fn default_auto_save_interval_minutes() -> u32 {
     5
 }
@@ -207,6 +211,11 @@ pub struct AppSettings {
     /// the lighting desk and the fader controller are different devices.
     #[serde(default)]
     pub midi_controller_output: Option<String>,
+    /// The controller's strips drive only the active song's tracks, and go
+    /// back to the first bank when the song changes. The UI applies it; Rust
+    /// keeps it so a save from Rust does not drop it.
+    #[serde(default = "default_midi_strips_follow_song")]
+    pub midi_strips_follow_song: bool,
     #[serde(default)]
     pub suppress_missing_midi_device_warning: bool,
     /// iOS: RTP-MIDI network session (plan mobile-midi, paso 07). Off by
@@ -472,6 +481,7 @@ impl Default for AppSettings {
             selected_midi_device: None,
             selected_midi_output_device: None,
             midi_controller_output: None,
+            midi_strips_follow_song: default_midi_strips_follow_song(),
             suppress_missing_midi_device_warning: false,
             midi_network_session: false,
             midi_virtual_port: false,
