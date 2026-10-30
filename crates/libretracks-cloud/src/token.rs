@@ -26,7 +26,7 @@ use async_trait::async_trait;
 
 use serde::{Deserialize, Serialize};
 
-use crate::google::drive::AccessTokens;
+use crate::AccessTokens;
 use crate::oauth::{AuthSession, OAuthProvider, TokenResponse};
 use crate::CloudError;
 
@@ -116,8 +116,8 @@ pub trait TokenStore: Send + Sync {
 /// replaced. The lock makes the second caller wait and then find the token the
 /// first one just stored.
 fn refresh_lock(provider: &'static str) -> Arc<tokio::sync::Mutex<()>> {
-    static LOCKS: OnceLock<Mutex<HashMap<&'static str, Arc<tokio::sync::Mutex<()>>>>> =
-        OnceLock::new();
+    type Locks = HashMap<&'static str, Arc<tokio::sync::Mutex<()>>>;
+    static LOCKS: OnceLock<Mutex<Locks>> = OnceLock::new();
     let mut locks = LOCKS
         .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()

@@ -28,9 +28,13 @@ pub mod google;
 pub mod keychain;
 pub mod loopback;
 pub mod oauth;
+pub mod onedrive;
 pub mod pkce;
 pub mod redirect;
 pub mod token;
+#[cfg(test)]
+mod test_server;
+pub(crate) mod transfer;
 
 use std::path::Path;
 
@@ -144,6 +148,19 @@ impl RemoteFolder {
 pub type ProgressFn = dyn Fn(u64, u64) + Send + Sync;
 /// Returns true once the caller has asked the active transfer to stop.
 pub type CancelFn = dyn Fn() -> bool + Send + Sync;
+
+/// Where a storage client gets a valid access token from.
+///
+/// Kept as a trait so the storage code knows nothing about keychains, refresh
+/// tokens or platform storage: [`token::TokenManager`] is the real
+/// implementation, reading the OS credential store and refreshing when the hour
+/// is up.
+#[async_trait]
+pub trait AccessTokens: Send + Sync {
+    /// A token that is valid *now*. Implementations refresh as needed and
+    /// return [`CloudError::NotConnected`] when the user must sign in again.
+    async fn access_token(&self) -> Result<String, CloudError>;
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum CloudError {
