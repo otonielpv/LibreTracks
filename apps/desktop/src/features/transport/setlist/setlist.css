@@ -5034,3 +5034,173 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   text-overflow: ellipsis;
   pointer-events: none;
 }
+
+/* ---- Teléfono (iPhone 13, 2026-10-30): la ficha con portada medía 112 px de
+   alto y dejaba la consola sin sitio (los faders se pisaban con M/S). Ficha
+   más baja y estrecha, y ▶/«…» más pequeños sobre la portada: con 44 px
+   tapaban media carátula. ---- */
+.lt-setlist-view.is-short .lt-setlist-song-tile,
+.lt-setlist-view.is-short .lt-setlist-song-tile:has(.lt-setlist-song-grip) {
+  width: 8.75rem;
+  min-width: 8.75rem;
+  max-width: 8.75rem;
+  height: 5.25rem;
+  min-height: 5.25rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-song-tile .lt-setlist-song-main {
+  padding: 0.15rem 0.4rem 0.2rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-cover-placeholder {
+  font-size: 1.6rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-song-artwork .lt-setlist-cover-index {
+  inset: auto auto 0.2rem 0.25rem;
+  padding: 0 0.25rem;
+  font-size: 0.75rem;
+}
+
+.lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-actions {
+  gap: 0;
+}
+
+html.lt-mobile .lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-button {
+  width: 2rem;
+  min-width: 2rem;
+  height: 1.85rem;
+  min-height: 1.85rem;
+  padding: 0;
+}
+
+.lt-setlist-view.is-short .lt-setlist-song-tile .lt-setlist-song-button .material-symbols-outlined {
+  font-size: 17px;
+}
+
+.lt-setlist-view.is-short .lt-setlist-song-tile .lt-setlist-song-actions {
+  top: 0.15rem;
+  right: 0.15rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-song-tile .lt-setlist-song-grip {
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 1.25rem;
+  min-width: 1.25rem;
+  height: 1.5rem;
+  min-height: 1.5rem;
+}
+
+.lt-setlist-view.is-short .lt-setlist-add-song,
+.lt-setlist-view.is-short .lt-setlist-transition {
+  height: 5.25rem;
+  min-height: 0;
+}
+
+/* Teléfono: el carril del fader medía 36 px con un cap de 22 (14 px de
+   recorrido, imposible de mover). Pan y salida se quedan, pero apretados:
+   sin la fila de etiquetas L/C/R (el centro lo marca el carril) y el
+   selector bajo, para que el fader se lleve el resto del alto. */
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-pan-wrap {
+  margin: 0.15rem 0 0.1rem;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip.is-fader-strip .lt-compact-mixer-pan-guides {
+  display: none;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-audio-to {
+  height: 1rem;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-strip-toggles,
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-fader-wrap {
+  margin-top: 0.15rem;
+}
+
+/* Teléfono: cada píxel de alto va al fader. El contenedor de la consola
+   tenía 6 px de relleno por lado, cada tira 7 + 5 px y la fila de tiras 4 px
+   de reserva abajo: casi 30 px de hueco vacío sobre 160. */
+.lt-setlist-mixer.is-short {
+  padding: 0.15rem;
+  gap: 0.2rem;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strips {
+  padding-bottom: 0;
+  gap: 0.25rem;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip {
+  padding: 0.2rem 0.3rem 0.2rem;
+}
+
+.lt-setlist-mixer.is-short .lt-compact-mixer-strip-name {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.lt-setlist-view.is-short .lt-setlist-zone.is-songs,
+.lt-setlist-view.is-short .lt-setlist-songs {
+  padding: 0.1rem;
+}
+
+/* Alto corto (teléfono, o ventana baja de escritorio): las barras de scroll
+   horizontales de la fila de canciones y de las tiras reservaban 12-17 px de
+   alto cada una en WebView2 (el hueco bajo las fichas y bajo la consola). Se
+   sigue deslizando con el dedo, la rueda o el trackpad. */
+.lt-setlist-view.is-short .lt-setlist-songs,
+.lt-setlist-mixer.is-short .lt-compact-mixer-strips {
+  scrollbar-width: none;
+}
+
+.lt-setlist-view.is-short .lt-setlist-songs::-webkit-scrollbar,
+.lt-setlist-mixer.is-short .lt-compact-mixer-strips::-webkit-scrollbar {
+  display: none;
+}
+
+/* ▶ y «…» de la ficha, del tamaño de la flecha de Playback: una píldora
+   pequeña en la esquina de la portada, no dos botones de 44 px. */
+html .lt-setlist-view.is-short .lt-setlist-song-tile .lt-setlist-song-button {
+  width: 1.4rem;
+  min-width: 1.4rem;
+  height: 1.25rem;
+  min-height: 1.25rem;
+  padding: 0;
+}
+
+html .lt-setlist-view.is-short .lt-setlist-song-tile .lt-setlist-song-button .material-symbols-outlined {
+  font-size: 15px;
+}
+
+html .lt-setlist-view.is-short .lt-setlist-song-tile .lt-setlist-song-grip {
+  width: 1rem;
+  min-width: 1rem;
+  height: 1.25rem;
+  min-height: 1.25rem;
+}
+
+html .lt-setlist-view.is-short .lt-setlist-song-tile .lt-setlist-song-grip .material-symbols-outlined {
+  font-size: 13px;
+}
+
+html .lt-setlist-view.is-short .lt-setlist-song-tile .lt-setlist-song-actions,
+html .lt-setlist-view.is-short .lt-setlist-song-tile .lt-setlist-song-grip {
+  top: 0.2rem;
+}
+
+html .lt-setlist-view.is-short .lt-setlist-song-tile .lt-setlist-song-actions {
+  right: 0.2rem;
+}
+
+html .lt-setlist-view.is-short .lt-setlist-song-tile .lt-setlist-song-grip {
+  left: 0.2rem;
+}
+
+html.lt-mobile .lt-setlist-view:not(.is-short) .lt-setlist-song-tile .lt-setlist-song-button {
+  width: 1.75rem;
+  min-width: 1.75rem;
+  height: 1.6rem;
+  min-height: 1.6rem;
+}
