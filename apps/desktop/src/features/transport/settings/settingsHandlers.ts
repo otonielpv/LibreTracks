@@ -221,6 +221,17 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       persistAudioPatch({ midiMappings: next }, t("transport.status.midiMappingsUpdated"));
     },
 
+    /** Apply a controller profile (plan midi-controllers, paso 07). */
+    handleApplyControllerProfile(
+      midiMappings: Record<string, MidiBinding>,
+      controllerOutput: string | null,
+    ) {
+      persistAudioPatch(
+        controllerOutput ? { midiMappings, midiControllerOutput: controllerOutput } : { midiMappings },
+        t("transport.status.midiMappingsUpdated"),
+      );
+    },
+
     handleResetMidiMappings() {
       persistAudioPatch({ midiMappings: {} }, t("transport.status.midiMappingsReset"));
       setMidiLearnFeedback(null);

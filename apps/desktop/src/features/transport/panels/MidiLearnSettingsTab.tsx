@@ -4,6 +4,7 @@ import type { MidiBinding } from "@libretracks/shared/models";
 
 import { formatMidiBinding } from "../helpers";
 import { describeMidiTarget, mixerLearnKeys } from "../midi/controllerTargets";
+import { ControllerProfilesPanel } from "../midi/ControllerProfilesPanel";
 import { MidiBindingsEditor } from "../midi/MidiBindingsEditor";
 import { useSongStore } from "../songStore";
 import type { MidiLearnCommandRow, MidiLearnFeedback } from "../types";
@@ -41,6 +42,12 @@ export type MidiLearnSettingsTabProps = {
   midiMappings: Record<string, MidiBinding>;
   onMidiBindingChange: (key: string, binding: MidiBinding | null) => void;
   formatCommandLabel: (key: string) => string;
+  /** Controller profiles (paso 07). */
+  selectedMidiInput: string | null;
+  onApplyControllerProfile: (
+    mappings: Record<string, MidiBinding>,
+    controllerOutput: string | null,
+  ) => void;
 };
 
 export function MidiLearnSettingsTab({
@@ -64,6 +71,8 @@ export function MidiLearnSettingsTab({
   midiMappings,
   onMidiBindingChange,
   formatCommandLabel,
+  selectedMidiInput,
+  onApplyControllerProfile,
 }: MidiLearnSettingsTabProps) {
   const { t } = useTranslation();
   const busy = isLoading || isSaving;
@@ -140,6 +149,13 @@ export function MidiLearnSettingsTab({
             </button>
           </div>
         </div>
+
+        <ControllerProfilesPanel
+          midiMappings={midiMappings}
+          selectedInput={selectedMidiInput}
+          disabled={busy}
+          onApply={onApplyControllerProfile}
+        />
 
         <div className="lt-midi-learn-feedback" aria-live="polite">
           <strong>{t("transport.settingsModal.midiLearnLatest")}</strong>

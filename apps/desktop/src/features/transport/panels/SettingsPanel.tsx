@@ -126,6 +126,10 @@ type SettingsPanelProps = {
   onMidiLearnToggle: (options?: { closePanels?: boolean }) => void;
   onResetMidiMappings: () => void;
   onMidiBindingChange: (key: string, binding: MidiBinding | null) => void;
+  onApplyControllerProfile: (
+    mappings: Record<string, MidiBinding>,
+    controllerOutput: string | null,
+  ) => void;
   formatMidiLearnCommandLabel: (key: string) => string;
   onMidiLearnCommandRelearn: (key: string) => void;
   onDynamicMidiLearnJump: (type: "marker" | "song") => void;
@@ -200,6 +204,7 @@ export function SettingsPanel({
   onMidiLearnToggle,
   onResetMidiMappings,
   onMidiBindingChange,
+  onApplyControllerProfile,
   formatMidiLearnCommandLabel,
   onMidiLearnCommandRelearn,
   onDynamicMidiLearnJump,
@@ -1002,6 +1007,8 @@ export function SettingsPanel({
                   onDynamicMidiLearnJump={onDynamicMidiLearnJump}
                   midiMappings={appSettings.midiMappings}
                   onMidiBindingChange={onMidiBindingChange}
+                  onApplyControllerProfile={onApplyControllerProfile}
+                  selectedMidiInput={selectedMidiInputDevice || null}
                   formatCommandLabel={formatMidiLearnCommandLabel}
                 />
               ) : null}

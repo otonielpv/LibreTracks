@@ -1996,6 +1996,7 @@ export function TransportPanelContent() {
     handleAudioOutputDeviceChange,
     handleResetMidiMappings,
     handleMidiBindingChange,
+    handleApplyControllerProfile,
     handleGlobalJumpModeChange,
     handleGlobalJumpBarsChange,
     handleSongJumpTriggerChange,
@@ -7809,6 +7810,7 @@ export function TransportPanelContent() {
               onMidiLearnToggle={handleMidiLearnToggle}
               onResetMidiMappings={handleResetMidiMappings}
               onMidiBindingChange={handleMidiBindingChange}
+              onApplyControllerProfile={handleApplyControllerProfile}
               formatMidiLearnCommandLabel={formatMidiLearnCommandLabel}
               onMidiLearnCommandRelearn={handleMidiLearnCommandRelearn}
               onDynamicMidiLearnJump={handleDynamicMidiLearnJump}

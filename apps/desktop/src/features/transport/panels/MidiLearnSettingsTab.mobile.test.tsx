@@ -100,6 +100,8 @@ function Harness() {
       midiMappings={settings.midiMappings}
       onMidiBindingChange={() => {}}
       formatCommandLabel={(key) => LABELS[key] ?? key}
+      selectedMidiInput={null}
+      onApplyControllerProfile={() => {}}
     />
   );
 }

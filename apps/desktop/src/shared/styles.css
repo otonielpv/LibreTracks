@@ -14554,3 +14554,36 @@ html.lt-mobile .lt-setlist-mixer.is-short > .lt-setlist-mixer-header > .lt-setli
   font-size: 10px;
   line-height: 16px;
 }
+
+/* --- Perfiles de controlador MIDI (plan midi-controllers, paso 07) --- */
+.lt-midi-profiles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.lt-midi-profiles-row,
+.lt-midi-profiles-detected {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.lt-midi-profiles-detected {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--lt-midi-map-mapped) 22%, transparent);
+}
+
+.lt-midi-profiles-message {
+  margin: 0;
+  font-size: 12px;
+}
+
+.lt-mobile .lt-midi-profiles-row select,
+.lt-mobile .lt-midi-profiles-row button,
+.lt-mobile .lt-midi-profiles-detected button {
+  min-height: 40px;
+}
