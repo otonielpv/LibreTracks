@@ -1412,6 +1412,8 @@ export type AppSettings = {
   selectedMidiDevice: string | null;
   /** Port the timeline MIDI tracks send to. Separate from the input device. */
   selectedMidiOutputDevice: string | null;
+  /** Port for the control surface's LEDs and motor faders (midi-controllers). */
+  midiControllerOutput: string | null;
   suppressMissingMidiDeviceWarning: boolean;
   /** iOS RTP-MIDI network session. Off by default (asks for local network). */
   midiNetworkSession: boolean;
@@ -1591,6 +1593,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   audioSingleThreadRender: false,
   selectedMidiDevice: null,
   selectedMidiOutputDevice: null,
+  midiControllerOutput: null,
   suppressMissingMidiDeviceWarning: false,
   midiNetworkSession: false,
   midiVirtualPort: false,
@@ -1735,6 +1738,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const selectedMidiDevice = settings.selectedMidiDevice?.trim() || null;
   const selectedMidiOutputDevice =
     settings.selectedMidiOutputDevice?.trim() || null;
+  const midiControllerOutput = settings.midiControllerOutput?.trim() || null;
   const locale = settings.locale?.trim().toLowerCase();
   // Aux faders (click / voice guide) run an Ableton-style dB scale up to
   // +20 dB, i.e. a linear gain of ~10. Clamp to that headroom, not to unity.
@@ -1864,6 +1868,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     audioSingleThreadRender: Boolean(settings.audioSingleThreadRender),
     selectedMidiDevice,
     selectedMidiOutputDevice,
+    midiControllerOutput,
     suppressMissingMidiDeviceWarning: Boolean(
       settings.suppressMissingMidiDeviceWarning,
     ),

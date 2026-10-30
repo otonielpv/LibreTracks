@@ -1,12 +1,13 @@
 import { useEffect } from "react";
 
-import type { MidiBinding, SongView } from "@libretracks/shared/models";
+import type { AppSettings, MidiBinding, SongView } from "@libretracks/shared/models";
 
 import {
   getMidiBank,
   isTauriApp,
   listenToMidiBankChanged,
   listenToMidiMixChanged,
+  midiControllerTransport,
   syncMidiController,
   type MidiMixChangedPayload,
 } from "../desktopApi";
@@ -44,11 +45,39 @@ export function useMidiControllerSync({
   song,
   activeSongRegionId,
   midiMappings,
+  appSettings,
 }: {
   song: SongView | null;
   activeSongRegionId: string;
   midiMappings: Record<string, MidiBinding>;
+  /** The switches whose LEDs the controller shows (paso 06). */
+  appSettings: Pick<
+    AppSettings,
+    "metronomeEnabled" | "voiceGuideEnabled" | "padEnabled" | "midiControllerOutput"
+  >;
 }) {
+  // Controller LEDs (paso 06): report the transport whenever it or a
+  // lit setting changes; Rust sends only the LEDs that moved.
+  const playing = useTransportStore((state) => state.playback?.playbackState === "playing");
+  const paused = useTransportStore((state) => state.playback?.playbackState === "paused");
+  const vampActive = useTransportStore((state) => Boolean(state.playback?.activeVamp));
+  const { metronomeEnabled, voiceGuideEnabled, padEnabled, midiControllerOutput } = appSettings;
+  useEffect(() => {
+    if (!isTauriApp || !midiControllerOutput) {
+      return;
+    }
+    void midiControllerTransport({ playing, paused, vampActive }).catch(() => undefined);
+  }, [
+    playing,
+    paused,
+    vampActive,
+    metronomeEnabled,
+    voiceGuideEnabled,
+    padEnabled,
+    midiControllerOutput,
+    midiMappings,
+  ]);
+
   useEffect(() => {
     setMidiMappingsForMappable(midiMappings);
   }, [midiMappings]);

@@ -58,11 +58,16 @@ export type MidiOutputSettings = {
 export type MidiPlatformPatch = Partial<
   Pick<
     AppSettings,
-    "midiNetworkSession" | "midiVirtualPort" | "keepMidiInBackground"
+    | "midiNetworkSession"
+    | "midiVirtualPort"
+    | "keepMidiInBackground"
+    | "midiControllerOutput"
   >
 >;
 
 export type MidiPlatformSettings = {
+  /** Port for the control surface's LEDs (plan midi-controllers, paso 06). */
+  controllerOutput: string | null;
   networkSession: boolean;
   virtualPort: boolean;
   keepInBackground: boolean;
@@ -270,6 +275,38 @@ export function MidiSettingsTab({
             </button>
           </div>
           <small>{t("transport.midi.outputDeviceHint")}</small>
+        </div>
+
+        <div className="lt-settings-field">
+          <label className="lt-settings-field-label" htmlFor="lt-midi-controller-output">
+            {t("transport.midi.controllerOutput")}
+          </label>
+          <div className="lt-settings-field-control-row">
+            <select
+              id="lt-midi-controller-output"
+              value={platform.controllerOutput ?? ""}
+              disabled={isLoading || isSaving}
+              onChange={(event) =>
+                platform.onChange({ midiControllerOutput: event.target.value || null })
+              }
+            >
+              <option value="">{t("transport.midi.outputDeviceNone")}</option>
+              {platform.controllerOutput &&
+              !midiOutputDevices.includes(platform.controllerOutput) ? (
+                <option value={platform.controllerOutput}>
+                  {t("transport.settingsModal.midiDeviceUnavailable", {
+                    name: platform.controllerOutput,
+                  })}
+                </option>
+              ) : null}
+              {midiOutputDevices.map((deviceName) => (
+                <option key={deviceName} value={deviceName}>
+                  {deviceName}
+                </option>
+              ))}
+            </select>
+          </div>
+          <small>{t("transport.midi.controllerOutputHint")}</small>
         </div>
 
         {capabilities?.virtualPorts ? (

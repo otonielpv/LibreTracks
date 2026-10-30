@@ -379,3 +379,31 @@ fn bank_clamps_when_tracks_go_away() {
     bank.clamp(0);
     assert_eq!(bank.offset, 0);
 }
+
+// --- Feedback ---
+
+#[test]
+fn feedback_lights_buttons_on_the_channel_they_send_on() {
+    let note = MidiBinding::new(0x92, 41);
+    assert_eq!(feedback_message(&note, FeedbackValue::Switch(true)), Some([0x92, 41, 127]));
+    assert_eq!(feedback_message(&note, FeedbackValue::Switch(false)), Some([0x92, 41, 0]));
+    let cc = MidiBinding::new(0xB0, 48);
+    assert_eq!(feedback_message(&cc, FeedbackValue::Switch(true)), Some([0xB0, 48, 127]));
+    // A note cannot show a position, a pitch bend cannot show an LED.
+    assert_eq!(feedback_message(&note, FeedbackValue::Position(0.5)), None);
+    let bend = MidiBinding::new(0xE1, 0);
+    assert_eq!(feedback_message(&bend, FeedbackValue::Switch(true)), None);
+}
+
+#[test]
+fn feedback_moves_motor_faders_inside_the_binding_range() {
+    let bend = MidiBinding::new(0xE0, 0);
+    assert_eq!(feedback_message(&bend, FeedbackValue::Position(1.0)), Some([0xE0, 0x7F, 0x7F]));
+    assert_eq!(feedback_message(&bend, FeedbackValue::Position(0.0)), Some([0xE0, 0, 0]));
+    let mut cc = MidiBinding::new(0xB0, 7);
+    cc.min = 0.5;
+    assert_eq!(feedback_message(&cc, FeedbackValue::Position(0.75)), Some([0xB0, 7, 64]));
+    assert_eq!(feedback_message(&cc, FeedbackValue::Position(0.2)), None, "outside the range");
+    cc.mode = Some(ControlMode::RelativeTwosComplement);
+    assert_eq!(feedback_message(&cc, FeedbackValue::Position(0.75)), None, "plain encoder");
+}

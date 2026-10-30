@@ -603,6 +603,9 @@ pub(crate) fn dispatch_track(
         .map_err(|error| error.to_string())?;
     control.with_mix(|mix| mix.set_track(track_id, mix_control, next));
     control.track_dirty(app, track_id);
+    if mix_control.is_switch() {
+        super::feedback::refresh(app);
+    }
     Ok(())
 }
 
@@ -908,6 +911,7 @@ fn apply_settings_in_memory(
         .apply_settings_with_stream_rebuild(settings, false)
         .map_err(|error| error.to_string())?;
     control().settings_dirty(app);
+    super::feedback::refresh(app);
     Ok(())
 }
 

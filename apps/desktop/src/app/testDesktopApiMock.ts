@@ -414,6 +414,7 @@ function buildInitialState(): DesktopApiMockState {
       audioSingleThreadRender: false,
       selectedMidiDevice: null,
       selectedMidiOutputDevice: null,
+      midiControllerOutput: null,
       suppressMissingMidiDeviceWarning: false,
       midiNetworkSession: false,
       midiVirtualPort: false,

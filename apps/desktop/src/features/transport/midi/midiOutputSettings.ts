@@ -29,6 +29,7 @@ export function buildMidiOutputSettings(
     selectedMissing: Boolean(selected) && !devices.includes(selected),
     ...portHandlers,
     platform: {
+      controllerOutput: appSettings.midiControllerOutput,
       networkSession: appSettings.midiNetworkSession,
       virtualPort: appSettings.midiVirtualPort,
       keepInBackground: appSettings.keepMidiInBackground,

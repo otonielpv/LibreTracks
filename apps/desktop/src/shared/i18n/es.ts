@@ -1980,6 +1980,9 @@ const es = {
       toValue: "Hasta",
       outputDevice: "Salida MIDI",
       outputDeviceNone: "Sin salida",
+      controllerOutput: "Salida del controlador (LEDs)",
+      controllerOutputHint:
+        "El puerto por el que el controlador de faders recibe el estado de mute, solo, play y vamp. Suele llamarse como su entrada.",
       outputDeviceHint:
         "Puerto al que envian las pistas MIDI (mesas de luces, software de letras).",
       testNote: "Enviar nota de prueba",

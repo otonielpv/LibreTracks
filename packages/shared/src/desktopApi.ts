@@ -505,6 +505,20 @@ export async function listenToMidiBankChanged(
   });
 }
 
+/** Transport state for the controller's LEDs (paso 06). */
+export async function midiControllerTransport(transport: {
+  playing: boolean;
+  paused: boolean;
+  vampActive: boolean;
+}): Promise<void> {
+  await invokeCommand("midi_controller_transport", { transport });
+}
+
+/** Light every bound control again (a controller plugged in late). */
+export async function midiControllerResendFeedback(): Promise<void> {
+  await invokeCommand("midi_controller_resend_feedback");
+}
+
 /** Counters that prove a fader sweep stays off the disk and the session lock. */
 export type MidiControlDiagnostics = {
   messages: number;

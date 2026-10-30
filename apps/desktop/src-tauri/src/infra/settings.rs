@@ -202,6 +202,11 @@ pub struct AppSettings {
     /// from a foot controller are independent choices.
     #[serde(default)]
     pub selected_midi_output_device: Option<String>,
+    /// Port the control surface listens on for its LEDs and motor faders
+    /// (plan midi-controllers, paso 06). Separate from the timeline's output:
+    /// the lighting desk and the fader controller are different devices.
+    #[serde(default)]
+    pub midi_controller_output: Option<String>,
     #[serde(default)]
     pub suppress_missing_midi_device_warning: bool,
     /// iOS: RTP-MIDI network session (plan mobile-midi, paso 07). Off by
@@ -466,6 +471,7 @@ impl Default for AppSettings {
             audio_single_thread_render: false,
             selected_midi_device: None,
             selected_midi_output_device: None,
+            midi_controller_output: None,
             suppress_missing_midi_device_warning: false,
             midi_network_session: false,
             midi_virtual_port: false,

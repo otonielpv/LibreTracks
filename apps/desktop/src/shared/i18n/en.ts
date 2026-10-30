@@ -1952,6 +1952,9 @@ const en = {
       toValue: "To",
       outputDevice: "MIDI output",
       outputDeviceNone: "No output",
+      controllerOutput: "Controller output (LEDs)",
+      controllerOutputHint:
+        "The port your fader controller listens on for mute, solo, play and vamp state. Usually named like its input.",
       outputDeviceHint:
         "Port the MIDI tracks send to (lighting desks, lyric software).",
       testNote: "Send test note",

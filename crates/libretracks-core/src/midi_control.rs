@@ -647,6 +647,41 @@ impl MidiTarget {
     }
 }
 
+/// What a control should show: a button's LED, or a motor fader / LED
+/// ring position (D10).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FeedbackValue {
+    Switch(bool),
+    /// The target's position, 0..1, before the binding's range.
+    Position(f64),
+}
+
+/// The message that shows `value` on the control behind `binding`, or
+/// `None` when that control cannot show it (an encoder without a ring, a
+/// program change, a pitch-bend LED).
+pub fn feedback_message(binding: &MidiBinding, value: FeedbackValue) -> Option<[u8; 3]> {
+    let channel = binding.status & 0x0F;
+    let relative = binding.mode.is_some_and(ControlMode::is_relative);
+    match (binding.kind(), value) {
+        (MidiMessageKind::Note, FeedbackValue::Switch(on)) => {
+            Some([0x90 | channel, binding.data1 & 0x7F, if on { 127 } else { 0 }])
+        }
+        (MidiMessageKind::ControlChange, FeedbackValue::Switch(on)) if !relative => {
+            Some([0xB0 | channel, binding.data1 & 0x7F, if on { 127 } else { 0 }])
+        }
+        (MidiMessageKind::ControlChange, FeedbackValue::Position(position)) if !relative => {
+            let control = binding.unscale(position.clamp(0.0, 1.0))?;
+            Some([0xB0 | channel, binding.data1 & 0x7F, (control * 127.0).round() as u8])
+        }
+        (MidiMessageKind::PitchBend, FeedbackValue::Position(position)) => {
+            let control = binding.unscale(position.clamp(0.0, 1.0))?;
+            let word = (control * 16383.0).round() as u16;
+            Some([0xE0 | channel, (word & 0x7F) as u8, ((word >> 7) & 0x7F) as u8])
+        }
+        _ => None,
+    }
+}
+
 /// Strips per bank: the 8 faders of a nanoKONTROL2, SMC-Mixer or MCU.
 pub const BANK_SIZE: usize = 8;
 

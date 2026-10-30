@@ -265,7 +265,10 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       patch: Partial<
         Pick<
           AppSettings,
-          "midiNetworkSession" | "midiVirtualPort" | "keepMidiInBackground"
+          | "midiNetworkSession"
+          | "midiVirtualPort"
+          | "keepMidiInBackground"
+          | "midiControllerOutput"
         >
       >,
     ) {

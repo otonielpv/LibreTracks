@@ -29,13 +29,14 @@ function capabilities(overrides: Partial<MidiCapabilities>): MidiCapabilities {
 
 function renderTab(onChange = vi.fn()) {
   const midiOutput: MidiOutputSettings = {
-    devices: [],
+    devices: ["nanoKONTROL2"],
     selected: "",
     selectedMissing: false,
     onChange: () => {},
     onRefresh: () => {},
     onSendTestNote: () => {},
     platform: {
+      controllerOutput: null,
       networkSession: false,
       virtualPort: false,
       keepInBackground: true,
@@ -90,5 +91,14 @@ describe("MidiSettingsTab platform toggles", () => {
     renderTab();
     expect(screen.getByLabelText(/virtual MIDI port/i)).toBeTruthy();
     expect(screen.queryByLabelText(/Network MIDI session/i)).toBeNull();
+  });
+
+  it("saves the controller's LED port, on every platform", () => {
+    caps.value = capabilities({});
+    const onChange = renderTab();
+    fireEvent.change(screen.getByLabelText(/Controller output|Salida del controlador/i), {
+      target: { value: "nanoKONTROL2" },
+    });
+    expect(onChange).toHaveBeenCalledWith({ midiControllerOutput: "nanoKONTROL2" });
   });
 });

@@ -1879,7 +1879,7 @@ export function TransportPanelContent() {
       ) => void)
     | null
   >(null);
-  useMidiControllerSync({ song, activeSongRegionId, midiMappings: appSettings.midiMappings });
+  useMidiControllerSync({ song, activeSongRegionId, midiMappings: appSettings.midiMappings, appSettings });
   useMidiRawMessages({
     appSettingsRef,
     setAppSettings,

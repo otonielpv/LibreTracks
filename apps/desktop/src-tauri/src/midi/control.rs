@@ -296,6 +296,8 @@ impl MidiControl {
         if let Some(state) = moved {
             self.release_strip_takeovers();
             let _ = app.emit(BANK_CHANGED_EVENT, state);
+            // The strips' LEDs now belong to other tracks.
+            super::feedback::refresh(app);
         }
     }
 
@@ -557,6 +559,7 @@ pub fn midi_controller_sync(
         control.release_strip_takeovers();
         let _ = app.emit(BANK_CHANGED_EVENT, after);
     }
+    super::feedback::refresh(&app);
 }
 
 #[tauri::command]
