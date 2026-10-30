@@ -22,6 +22,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use libretracks_cloud::google::client_config;
 use libretracks_cloud::google::drive::DriveClient;
+use libretracks_cloud::google::oauth::GoogleOAuth;
 use libretracks_cloud::token::{TokenManager, TokenStore};
 use libretracks_cloud::{CloudError, CloudStorage, RemoteFolder};
 
@@ -173,8 +174,12 @@ fn token_store(app: &AppHandle) -> Result<Box<dyn TokenStore>, String> {
     }
 }
 
+fn token_manager(app: &AppHandle) -> Result<TokenManager, String> {
+    TokenManager::new(Arc::new(GoogleOAuth), token_store(app)?).map_err(describe)
+}
+
 fn drive(app: &AppHandle) -> Result<DriveClient, String> {
-    let manager = TokenManager::new(token_store(app)?).map_err(describe)?;
+    let manager = token_manager(app)?;
     DriveClient::new(Box::new(manager)).map_err(describe)
 }
 
@@ -267,9 +272,8 @@ pub async fn cloud_discard_staged(app: AppHandle, path: String) -> Result<(), St
 
 #[tauri::command]
 pub async fn cloud_status(app: AppHandle) -> Result<CloudStatus, String> {
-    let connected = token_store(&app)
+    let connected = token_manager(&app)
         .ok()
-        .and_then(|store| TokenManager::new(store).ok())
         .map(|manager| manager.is_connected())
         .unwrap_or(false);
 
@@ -287,7 +291,8 @@ pub async fn cloud_status(app: AppHandle) -> Result<CloudStatus, String> {
 pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
 
-    use libretracks_cloud::google::oauth::AuthSession;
+    use libretracks_cloud::google::oauth;
+    use libretracks_cloud::oauth::OAuthProvider;
     use libretracks_cloud::loopback::LoopbackListener;
     use libretracks_cloud::token::exchange_code;
 
@@ -299,10 +304,10 @@ pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
     }
 
     let listener = LoopbackListener::bind().await.map_err(describe)?;
-    let session = AuthSession::begin(listener.port()).map_err(|e| e.to_string())?;
+    let session = oauth::begin(listener.port()).map_err(|e| e.to_string())?;
 
     app.opener()
-        .open_url(session.authorization_url(), None::<&str>)
+        .open_url(GoogleOAuth.authorization_url(&session), None::<&str>)
         .map_err(|e| format!("could not open the browser: {e}"))?;
 
     let params = tokio::time::timeout(SIGN_IN_TIMEOUT, listener.wait_for_redirect())
@@ -316,12 +321,11 @@ pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
         .verify_state(&params.state)
         .map_err(|e| e.to_string())?;
 
-    let token = exchange_code(&session, &params.code)
+    let token = exchange_code(&GoogleOAuth, &session, &params.code)
         .await
         .map_err(describe)?;
 
-    TokenManager::new(token_store(&app)?)
-        .map_err(describe)?
+    token_manager(&app)?
         .adopt(&token)
         .map_err(describe)
 }
@@ -372,13 +376,14 @@ pub fn register_deep_link_handler(app: &AppHandle) {
 pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
 
-    use libretracks_cloud::google::oauth::AuthSession;
+    use libretracks_cloud::google::oauth;
+    use libretracks_cloud::oauth::OAuthProvider;
     use libretracks_cloud::redirect::parse_redirect_str;
     use libretracks_cloud::token::exchange_code;
 
     // Port is ignored on mobile: the redirect is a private URI scheme, not a
     // socket. Passing 0 keeps one signature for every platform.
-    let session = AuthSession::begin(0).map_err(|e| e.to_string())?;
+    let session = oauth::begin(0).map_err(|e| e.to_string())?;
 
     let (sender, receiver) = tokio::sync::oneshot::channel();
     {
@@ -392,7 +397,7 @@ pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
     }
 
     app.opener()
-        .open_url(session.authorization_url(), None::<&str>)
+        .open_url(GoogleOAuth.authorization_url(&session), None::<&str>)
         .map_err(|e| format!("could not open the browser: {e}"))?;
 
     let raw = tokio::time::timeout(SIGN_IN_TIMEOUT, receiver)
@@ -406,12 +411,11 @@ pub async fn cloud_connect(app: AppHandle) -> Result<(), String> {
         .verify_state(&params.state)
         .map_err(|e| e.to_string())?;
 
-    let token = exchange_code(&session, &params.code)
+    let token = exchange_code(&GoogleOAuth, &session, &params.code)
         .await
         .map_err(describe)?;
 
-    TokenManager::new(token_store(&app)?)
-        .map_err(describe)?
+    token_manager(&app)?
         .adopt(&token)
         .map_err(describe)
 }
@@ -422,8 +426,7 @@ pub async fn cloud_disconnect(app: AppHandle) -> Result<(), String> {
     // sign-out would have the next account writing into ids that are not its
     // own.
     libretracks_cloud::google::drive::forget_cached_folders().await;
-    TokenManager::new(token_store(&app)?)
-        .map_err(describe)?
+    token_manager(&app)?
         .disconnect()
         .map_err(describe)
 }

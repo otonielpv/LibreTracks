@@ -27,6 +27,7 @@
 pub mod google;
 pub mod keychain;
 pub mod loopback;
+pub mod oauth;
 pub mod pkce;
 pub mod redirect;
 pub mod token;

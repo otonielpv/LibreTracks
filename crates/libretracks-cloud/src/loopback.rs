@@ -17,7 +17,7 @@
 //! It can, which is exactly why the `state` parameter is checked before the
 //! authorization code is redeemed. Anything on the box may connect to
 //! 127.0.0.1; only the flow that started this sign-in knows the state value.
-//! That check lives in [`crate::google::oauth::AuthSession::verify_state`] and
+//! That check lives in [`crate::oauth::AuthSession::verify_state`] and
 //! is not optional.
 
 #![cfg(not(any(target_os = "android", target_os = "ios")))]

@@ -32,9 +32,11 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Arc;
 
 use libretracks_cloud::google::drive::DriveClient;
-use libretracks_cloud::google::oauth::AuthSession;
+use libretracks_cloud::google::oauth::{self, GoogleOAuth};
+use libretracks_cloud::oauth::OAuthProvider;
 use libretracks_cloud::loopback::LoopbackListener;
 use libretracks_cloud::token::{exchange_code, StoredToken, TokenManager, TokenStore};
 use libretracks_cloud::{CloudError, CloudStorage, RemoteFolder};
@@ -109,18 +111,18 @@ fn open_in_browser(url: &str) {
 /// Full sign-in: browser, redirect, code exchange.
 async fn sign_in(store: &FileTokenStore) -> Result<(), Box<dyn Error>> {
     let listener = LoopbackListener::bind().await?;
-    let session = AuthSession::begin(listener.port())?;
+    let session = oauth::begin(listener.port())?;
 
     println!("Escuchando en 127.0.0.1:{}", listener.port());
     println!("Abriendo el navegador para autorizar...");
-    open_in_browser(&session.authorization_url());
+    open_in_browser(&GoogleOAuth.authorization_url(&session));
 
     let params = listener.wait_for_redirect().await?;
     // Never skip this. Anything on the machine can reach the loopback socket;
     // only the flow that started this sign-in knows the state value.
     session.verify_state(&params.state)?;
 
-    let token = exchange_code(&session, &params.code).await?;
+    let token = exchange_code(&GoogleOAuth, &session, &params.code).await?;
     store.save(&token)?;
     println!("Sesion iniciada y token guardado en {}", token_path().display());
     Ok(())
@@ -131,7 +133,10 @@ async fn client(store_path: PathBuf) -> Result<DriveClient, Box<dyn Error>> {
     if store.load()?.is_none() {
         sign_in(&store).await?;
     }
-    let manager = TokenManager::new(Box::new(FileTokenStore { path: token_path() }))?;
+    let manager = TokenManager::new(
+        Arc::new(GoogleOAuth),
+        Box::new(FileTokenStore { path: token_path() }),
+    )?;
     Ok(DriveClient::new(Box::new(manager))?)
 }
 
