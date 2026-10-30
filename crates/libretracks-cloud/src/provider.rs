@@ -73,18 +73,11 @@ impl CloudProvider {
                 cfg!(any(target_os = "android", target_os = "ios"))
                     || crate::google::client_config::CLIENT_SECRET.is_some()
             }
-            // Desktop only until step 07 of docs/plans/cloud-providers: the
-            // mobile redirect schemes are not declared to the deep-link plugin
-            // yet, so a phone would open the consent screen and never get the
-            // answer back. Hidden beats a button that cannot work.
-            CloudProvider::OneDrive => {
-                !cfg!(any(target_os = "android", target_os = "ios"))
-                    && crate::onedrive::CLIENT_ID.is_some_and(|id| !id.is_empty())
-            }
-            CloudProvider::Dropbox => {
-                !cfg!(any(target_os = "android", target_os = "ios"))
-                    && crate::dropbox::APP_KEY.is_some_and(|key| !key.is_empty())
-            }
+            // On mobile the sign-in comes back through a private scheme that
+            // must be declared in tauri.conf.json (Android) and
+            // Info.ios.plist (iOS); see the mobile redirect constants.
+            CloudProvider::OneDrive => crate::onedrive::CLIENT_ID.is_some_and(|id| !id.is_empty()),
+            CloudProvider::Dropbox => crate::dropbox::APP_KEY.is_some_and(|key| !key.is_empty()),
         }
     }
 
@@ -183,12 +176,38 @@ mod tests {
     }
 
     /// The registered ids are in the source, so a plain build has OneDrive and
-    /// Dropbox on desktop without any environment set up.
+    /// Dropbox without any environment set up.
     #[test]
-    fn onedrive_and_dropbox_work_out_of_the_box_on_desktop() {
-        if !cfg!(any(target_os = "android", target_os = "ios")) {
-            assert!(CloudProvider::OneDrive.is_configured());
-            assert!(CloudProvider::Dropbox.is_configured());
+    fn onedrive_and_dropbox_work_out_of_the_box() {
+        assert!(CloudProvider::OneDrive.is_configured());
+        assert!(CloudProvider::Dropbox.is_configured());
+    }
+
+    /// A mobile redirect whose scheme is not declared to the OS completes the
+    /// consent screen and never comes back to the app. The schemes live in two
+    /// config files outside this crate; this keeps them from drifting away
+    /// from the constants the sign-in actually sends.
+    #[test]
+    fn mobile_redirect_schemes_are_declared_to_the_os() {
+        let conf = include_str!("../../../apps/desktop/src-tauri/tauri.conf.json");
+        let plist = include_str!("../../../apps/desktop/src-tauri/Info.ios.plist");
+        // Tracked copy of what the deep-link plugin generates. It only
+        // rewrites it when its build script runs, which a warm cargo cache
+        // skips, so it has to be right on its own.
+        let manifest = include_str!(
+            "../../../apps/desktop/src-tauri/gen/android/app/src/main/AndroidManifest.xml"
+        );
+        let onedrive = crate::onedrive::MOBILE_REDIRECT_URI.split(':').next().unwrap();
+        let dropbox = format!("db-{}", crate::dropbox::REGISTERED_APP_KEY);
+        for scheme in [onedrive, dropbox.as_str()] {
+            let quoted = format!("\"{scheme}\"");
+            let tagged = format!("<string>{scheme}</string>");
+            assert!(conf.contains(&quoted), "{scheme} missing from tauri.conf.json deep-link schemes");
+            assert!(plist.contains(&tagged), "{scheme} missing from Info.ios.plist CFBundleURLSchemes");
+            assert!(
+                manifest.contains(&format!("android:scheme={quoted}")),
+                "{scheme} missing from the Android manifest deep-link intent-filter"
+            );
         }
     }
 }

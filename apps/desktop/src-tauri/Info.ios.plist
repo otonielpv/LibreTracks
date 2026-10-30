@@ -102,6 +102,29 @@
         <string>com.googleusercontent.apps.809304051758-ekp6mq7miacmd1qtjej20tqv2grhs68d</string>
       </array>
     </dict>
+    <!-- OneDrive: com.libretracks.app://oauth2redirect/onedrive, registered in
+         Azure (crates/libretracks-cloud/src/onedrive/mod.rs,
+         MOBILE_REDIRECT_URI). Dropbox: db-<app key>://2/token, the scheme
+         Dropbox's own SDKs use (crates/libretracks-cloud/src/dropbox/mod.rs);
+         if the app key changes, this scheme changes with it. Same reason as
+         Google's above for declaring them here rather than trusting the
+         plugin's build script. -->
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.libretracks.app.onedrive</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>com.libretracks.app</string>
+      </array>
+    </dict>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.libretracks.app.dropbox</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>db-zja1w62v8or5jkw</string>
+      </array>
+    </dict>
   </array>
 </dict>
 </plist>

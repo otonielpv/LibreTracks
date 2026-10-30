@@ -151,6 +151,15 @@ if ! plutil -extract CFBundleURLTypes json -o - "$plist" 2>/dev/null   | grep 'c
   plutil -extract CFBundleURLTypes json -o - "$plist" >&2 2>/dev/null || echo "(no CFBundleURLTypes at all)" >&2
   exit 1
 fi
+# Same for OneDrive and Dropbox, whose sign-ins come back through their own
+# schemes (crates/libretracks-cloud/src/{onedrive,dropbox}/mod.rs).
+for scheme in com.libretracks.app db-zja1w62v8or5jkw; do
+  if ! plutil -extract CFBundleURLTypes json -o - "$plist" 2>/dev/null | grep "\"$scheme\"" >/dev/null; then
+    echo "::error::The IPA does not declare the $scheme URL scheme, so that cloud sign-in can never hand the code back to the app." >&2
+    plutil -extract CFBundleURLTypes json -o - "$plist" >&2 2>/dev/null
+    exit 1
+  fi
+done
 
 
 # Declared once in Info.ios.plist so App Store Connect stops asking about
@@ -187,7 +196,7 @@ echo "Architectures:    $archs"
 echo "Device family:    $device_family"
 echo "Full screen:      UIRequiresFullScreen = $fullscreen"
 echo "Background audio: declared"
-echo "OAuth scheme:     com.googleusercontent.apps.* declared"
+echo "OAuth schemes:    com.googleusercontent.apps.*, com.libretracks.app, db-zja1w62v8or5jkw declared"
 echo "Encryption:       ITSAppUsesNonExemptEncryption = $encryption"
 echo "Audio engine:     native static C++ engine linked (RemoteIO, no JUCE)"
 echo "Full pack:        Bungee + FFmpeg + voice guide + pads enabled"

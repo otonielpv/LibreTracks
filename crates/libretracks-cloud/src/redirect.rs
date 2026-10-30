@@ -75,6 +75,23 @@ mod tests {
         assert_eq!(params.state, "s/x");
     }
 
+    /// The two mobile shapes OneDrive and Dropbox come back with: a
+    /// two-slash scheme with a host, unlike Google's `scheme:/path`.
+    #[test]
+    fn onedrive_and_dropbox_mobile_redirects_parse() {
+        let onedrive = parse_redirect_str(
+            "com.libretracks.app://oauth2redirect/onedrive?code=M.C5_x&state=s1",
+        )
+        .unwrap();
+        assert_eq!(onedrive.code, "M.C5_x");
+        assert_eq!(onedrive.state, "s1");
+
+        let dropbox =
+            parse_redirect_str("db-zja1w62v8or5jkw://2/token?code=abc-DEF&state=s2").unwrap();
+        assert_eq!(dropbox.code, "abc-DEF");
+        assert_eq!(dropbox.state, "s2");
+    }
+
     #[test]
     fn declining_the_consent_screen_reads_as_a_cancel() {
         assert!(matches!(
