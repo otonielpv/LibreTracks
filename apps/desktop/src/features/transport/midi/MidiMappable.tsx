@@ -152,3 +152,12 @@ export function MidiMappable({
     ),
   });
 }
+
+/**
+ * Only the tint layer, for a host that already arms the learn by itself and
+ * is positioned on its own (absolute hotspots: markers, song regions), so
+ * map mode must not change its `position`.
+ */
+export function MidiLearnBadge({ target }: { target: string | null }) {
+  return useMidiMappable(target ?? "").badge;
+}

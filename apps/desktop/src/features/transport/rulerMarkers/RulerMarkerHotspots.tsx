@@ -27,6 +27,7 @@ import {
   handleRulerMarkerClick,
   includesRulerMarker,
 } from "./rulerMarkerSelection";
+import { MidiLearnBadge } from "../midi/MidiMappable";
 
 /** Margen de agarre a la IZQUIERDA del mastil de una marca. La bandera se
  * dibuja a la derecha, asi que sin este margen el mastil en si mismo -que es lo
@@ -189,6 +190,14 @@ export function RulerMarkerHotspots({
     },
   });
 
+  // jump_marker_N counts section markers only, in time order (as dispatch).
+  const sectionJumpIndex = new Map(
+    [...(song?.sectionMarkers ?? [])]
+      .filter((candidate) => markerCategory(candidate) === "section")
+      .sort((left, right) => left.startSeconds - right.startSeconds)
+      .map((candidate, index) => [candidate.id, index + 1]),
+  );
+
   return (
     <>
       {song?.sectionMarkers.map((section) => {
@@ -301,6 +310,13 @@ export function RulerMarkerHotspots({
             }}
           >
             <span className="lt-sr-only">{section.name}</span>
+            <MidiLearnBadge
+              target={
+                sectionJumpIndex.has(section.id)
+                  ? `action:jump_marker_${sectionJumpIndex.get(section.id)}`
+                  : null
+              }
+            />
           </button>
         );
       })}

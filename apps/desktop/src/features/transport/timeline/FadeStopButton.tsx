@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { fadeOutAndStop } from "../desktopApi";
 import { useTransportStore } from "../store";
+import { MidiMappable } from "../midi/MidiMappable";
 
 type FadeStopButtonProps = {
   /** MIDI-learn mode: a click picks this action as the learn target instead. */
@@ -36,6 +37,7 @@ export function FadeStopButton({
   const label = fading ? t("timelineTopbar.fadeOutStopActive") : t("timelineTopbar.fadeOutStop");
 
   return (
+    <MidiMappable target="action:fade_out_stop">
     <button
       type="button"
       className={`${className}${fading ? " is-active" : ""}`.trim()}
@@ -55,5 +57,6 @@ export function FadeStopButton({
         trending_down
       </span>
     </button>
+    </MidiMappable>
   );
 }

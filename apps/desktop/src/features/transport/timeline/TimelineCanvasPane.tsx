@@ -100,6 +100,7 @@ import {
   externalDropGuideColors,
 } from "./externalDropLook";
 import { TIMELINE_RULER_HEIGHT } from "../constants";
+import { MidiLearnBadge } from "../midi/MidiMappable";
 
 // Must stay in sync with the lane layout in Renderer/drawBackground.ts and
 // the ruler heights in styles.css: 94px is the mobile lanes' bottom edge (87)
@@ -809,6 +810,11 @@ export function TimelineCanvasPane({
             onNativeTrackHeightChange={onNativeTrackHeightChange}
           >
             {song?.regions.map((region) => {
+              // jump_song_N cuenta las regiones en orden de tiempo (MIDI Map).
+              const songJumpIndex =
+                [...song.regions]
+                  .sort((left, right) => left.startSeconds - right.startSeconds)
+                  .findIndex((candidate) => candidate.id === region.id) + 1;
               // React pinta la posición de REPOSO. La posición en vuelo la
               // escribe el arrastre directamente sobre el elemento (ver
               // `applyRegionHotspotBounds`), sin pasar por aquí: un `setState`
@@ -972,6 +978,7 @@ export function TimelineCanvasPane({
                     onPointerCancel={endRegionResize}
                   />
                   <SongFadeHandles region={region} pixelsPerSecond={pixelsPerSecond} />
+                  <MidiLearnBadge target={`action:jump_song_${songJumpIndex}`} />
                 </button>
               );
             })}

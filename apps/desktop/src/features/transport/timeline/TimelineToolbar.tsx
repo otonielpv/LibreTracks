@@ -24,6 +24,7 @@ import { SongGapVampToggle } from "../live/SongGapVampToggle";
 import { RegionTempoControl } from "./RegionTempoControl";
 import { SnapIcon } from "./SnapIcon";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
+import { MidiMappable } from "../midi/MidiMappable";
 
 type RegionMasterFaderProps = {
   regionId: string;
@@ -509,6 +510,7 @@ export function TimelineToolbar({
             className="lt-control-group-vamp"
             data-lt-tour={TOUR_TARGETS.toolbarVamp}
             action={
+              <MidiMappable target="action:toggle_vamp">
               <button
                 type="button"
                 className={`lt-compact-action lt-vamp-button ${isVampActive ? "is-active" : ""}`}
@@ -526,6 +528,7 @@ export function TimelineToolbar({
                 <span className="material-symbols-outlined">repeat</span>
                 <span>{t("timelineToolbar.vampButton")}</span>
               </button>
+              </MidiMappable>
             }
             details={
               <>
@@ -533,6 +536,7 @@ export function TimelineToolbar({
                   <label className="lt-stepper-control">
                     <span>{t("timelineToolbar.vampBarsLabel")}</span>
                     <div className="lt-stepper-control-row">
+                      <MidiMappable target="action:decrease_vamp_bars">
                       <button
                         type="button"
                         aria-label={t("timelineToolbar.vampBarsAria")}
@@ -548,6 +552,7 @@ export function TimelineToolbar({
                       >
                         -
                       </button>
+                      </MidiMappable>
                       <input
                         aria-label={t("timelineToolbar.vampBarsAria")}
                         type="number"
@@ -567,6 +572,7 @@ export function TimelineToolbar({
                           onVampBarsChange(Number(event.target.value) || 1)
                         }
                       />
+                      <MidiMappable target="action:increase_vamp_bars">
                       <button
                         type="button"
                         aria-label={t("timelineToolbar.vampBarsAria")}
@@ -582,6 +588,7 @@ export function TimelineToolbar({
                       >
                         +
                       </button>
+                      </MidiMappable>
                     </div>
                   </label>
                 ) : null}
@@ -600,6 +607,7 @@ export function TimelineToolbar({
               role="group"
               aria-label={t("timelineToolbar.vampModeAria")}
             >
+              <MidiMappable target="action:set_vamp_mode_section">
               <button
                 type="button"
                 className={vampMode === "section" ? "is-active" : ""}
@@ -612,9 +620,10 @@ export function TimelineToolbar({
               >
                 {t("transport.jumpMode.anyMarker")}
               </button>
+              </MidiMappable>
               {(["section_marker", "cue"] as const).map((mode) => (
+                <MidiMappable key={mode} target={`action:set_vamp_mode_${mode}`}>
                 <button
-                  key={mode}
                   type="button"
                   className={vampMode === mode ? "is-active" : ""}
                   disabled={controlsDisabled}
@@ -622,7 +631,9 @@ export function TimelineToolbar({
                 >
                   {t(mode === "section_marker" ? "transport.jumpMode.sectionMarker" : "transport.jumpMode.cueMarker")}
                 </button>
+                </MidiMappable>
               ))}
+              <MidiMappable target="action:set_vamp_mode_bars">
               <button
                 type="button"
                 className={vampMode === "bars" ? "is-active" : ""}
@@ -635,6 +646,7 @@ export function TimelineToolbar({
               >
                 {t("timelineToolbar.vampBarsOption")}
               </button>
+              </MidiMappable>
             </div>
           </ControlGroup>
 
@@ -724,6 +736,7 @@ export function TimelineToolbar({
               role="group"
               aria-label={t("timelineToolbar.markerJumpModeAria")}
             >
+              <MidiMappable target="action:set_global_jump_mode_immediate">
               <button
                 type="button"
                 className={globalJumpMode === "immediate" ? "is-active" : ""}
@@ -737,6 +750,8 @@ export function TimelineToolbar({
               >
                 {t("transport.jumpMode.immediate")}
               </button>
+              </MidiMappable>
+              <MidiMappable target="action:set_global_jump_mode_after_bars">
               <button
                 type="button"
                 className={globalJumpMode === "after_bars" ? "is-active" : ""}
@@ -750,6 +765,8 @@ export function TimelineToolbar({
               >
                 {t("timelineToolbar.afterBarsOption")}
               </button>
+              </MidiMappable>
+              <MidiMappable target="action:set_global_jump_mode_next_marker">
               <button
                 type="button"
                 className={globalJumpMode === "next_marker" ? "is-active" : ""}
@@ -763,9 +780,10 @@ export function TimelineToolbar({
               >
                 {t("transport.jumpMode.nextMarker")}
               </button>
+              </MidiMappable>
               {(["next_section", "next_cue"] as const).map((mode) => (
+                <MidiMappable key={mode} target={`action:set_global_jump_mode_${mode}`}>
                 <button
-                  key={mode}
                   type="button"
                   className={globalJumpMode === mode ? "is-active" : ""}
                   disabled={controlsDisabled}
@@ -773,6 +791,7 @@ export function TimelineToolbar({
                 >
                   {t(mode === "next_section" ? "transport.jumpMode.nextSection" : "transport.jumpMode.nextCue")}
                 </button>
+                </MidiMappable>
               ))}
             </div>
           </ControlGroup>
@@ -792,6 +811,7 @@ export function TimelineToolbar({
                   <label className="lt-stepper-control">
                     <span>{t("timelineToolbar.songBarsLabel")}</span>
                     <div className="lt-stepper-control-row">
+                      <MidiMappable target="action:decrease_song_jump_bars">
                       <button
                         type="button"
                         aria-label={t("timelineToolbar.songJumpBarsAria")}
@@ -807,6 +827,7 @@ export function TimelineToolbar({
                       >
                         -
                       </button>
+                      </MidiMappable>
                       <input
                         aria-label={t("timelineToolbar.songJumpBarsAria")}
                         type="number"
@@ -826,6 +847,7 @@ export function TimelineToolbar({
                           onSongJumpBarsChange(Number(event.target.value) || 1)
                         }
                       />
+                      <MidiMappable target="action:increase_song_jump_bars">
                       <button
                         type="button"
                         aria-label={t("timelineToolbar.songJumpBarsAria")}
@@ -841,6 +863,7 @@ export function TimelineToolbar({
                       >
                         +
                       </button>
+                      </MidiMappable>
                     </div>
                   </label>
                 ) : null}
@@ -852,6 +875,7 @@ export function TimelineToolbar({
               role="group"
               aria-label={t("timelineToolbar.songJumpModeAria")}
             >
+              <MidiMappable target="action:set_song_jump_trigger_immediate">
               <button
                 type="button"
                 className={songJumpTrigger === "immediate" ? "is-active" : ""}
@@ -865,6 +889,8 @@ export function TimelineToolbar({
               >
                 {t("transport.jumpMode.immediate")}
               </button>
+              </MidiMappable>
+              <MidiMappable target="action:set_song_jump_trigger_region_end">
               <button
                 type="button"
                 className={songJumpTrigger === "region_end" ? "is-active" : ""}
@@ -878,6 +904,8 @@ export function TimelineToolbar({
               >
                 {t("transport.jumpMode.regionEnd")}
               </button>
+              </MidiMappable>
+              <MidiMappable target="action:set_song_jump_trigger_after_bars">
               <button
                 type="button"
                 className={songJumpTrigger === "after_bars" ? "is-active" : ""}
@@ -891,6 +919,8 @@ export function TimelineToolbar({
               >
                 {t("timelineToolbar.afterBarsOption")}
               </button>
+              </MidiMappable>
+              <MidiMappable target="action:set_song_jump_trigger_next_marker">
               <button
                 type="button"
                 className={songJumpTrigger === "next_marker" ? "is-active" : ""}
@@ -904,9 +934,10 @@ export function TimelineToolbar({
               >
                 {t("transport.jumpMode.nextMarker")}
               </button>
+              </MidiMappable>
               {(["next_section", "next_cue"] as const).map((mode) => (
+                <MidiMappable key={mode} target={`action:set_song_jump_trigger_${mode}`}>
                 <button
-                  key={mode}
                   type="button"
                   className={songJumpTrigger === mode ? "is-active" : ""}
                   disabled={controlsDisabled}
@@ -914,9 +945,11 @@ export function TimelineToolbar({
                 >
                   {t(mode === "next_section" ? "transport.jumpMode.nextSection" : "transport.jumpMode.nextCue")}
                 </button>
+                </MidiMappable>
               ))}
             </div>
             <div className="lt-segmented-control lt-song-transition-row">
+              <MidiMappable target="action:set_song_transition_instant">
               <button
                 type="button"
                 className={songTransitionMode === "instant" ? "is-active" : ""}
@@ -930,6 +963,8 @@ export function TimelineToolbar({
               >
                 {t("timelineToolbar.songTransitionInstant")}
               </button>
+              </MidiMappable>
+              <MidiMappable target="action:set_song_transition_fade_out">
               <button
                 type="button"
                 className={songTransitionMode === "fade_out" ? "is-active" : ""}
@@ -943,6 +978,7 @@ export function TimelineToolbar({
               >
                 {t("timelineToolbar.songTransitionFadeOut")}
               </button>
+              </MidiMappable>
             </div>
           </ControlGroup>
 
@@ -1105,6 +1141,7 @@ export function TimelineToolbar({
             }
           />
 
+          <MidiMappable target="action:cancel_jump">
           <button
             type="button"
             className={`lt-global-cancel-button ${pendingMarkerJumpLabel ? "is-warning" : ""}`}
@@ -1123,6 +1160,7 @@ export function TimelineToolbar({
             <span className="material-symbols-outlined">close</span>
             <span>{t("timelineToolbar.cancelJump")}</span>
           </button>
+          </MidiMappable>
         </div>
         <div className="lt-timeline-stats">
           <span>{t("timelineToolbar.tracksCount", { count: trackCount })}</span>

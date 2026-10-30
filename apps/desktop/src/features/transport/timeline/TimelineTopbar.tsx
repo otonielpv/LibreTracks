@@ -30,6 +30,7 @@ import { openRenderSong } from "../render/renderStore";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { NetworkControls } from "../../network/NetworkControls";
 import { NavigationToggle } from "../shell/NavigationToggle";
+import { MidiMappable } from "../midi/MidiMappable";
 
 type TimelineTopbarProps = {
   openTopMenu: "file" | null;
@@ -255,6 +256,7 @@ export function TimelineTopbar({
                 <div className="lt-top-menu-section" role="presentation">
                   {t("timelineTopbar.groups.project", { defaultValue: "Proyecto" })}
                 </div>
+                <MidiMappable target="action:create_song">
                 <button
                   type="button"
                   role="menuitem"
@@ -268,6 +270,7 @@ export function TimelineTopbar({
                 >
                   <span>{t("timelineTopbar.newProject")}</span>
                 </button>
+                </MidiMappable>
                 <button
                   type="button"
                   role="menuitem"
@@ -279,6 +282,7 @@ export function TimelineTopbar({
                     })}
                   </span>
                 </button>
+                <MidiMappable target="action:open_project">
                 <button
                   type="button"
                   role="menuitem"
@@ -292,6 +296,7 @@ export function TimelineTopbar({
                 >
                   <span>{t("timelineTopbar.open")}</span>
                 </button>
+                </MidiMappable>
                 <div className="lt-top-menu-subwrap">
                   <button
                     type="button"
@@ -359,6 +364,7 @@ export function TimelineTopbar({
                 <div className="lt-top-menu-section" role="presentation">
                   {t("timelineTopbar.groups.save", { defaultValue: "Guardar" })}
                 </div>
+                <MidiMappable target="action:save_project">
                 <button
                   type="button"
                   role="menuitem"
@@ -374,6 +380,8 @@ export function TimelineTopbar({
                   <span>{t("timelineTopbar.save")}</span>
                   <span className="lt-top-menu-shortcut">Ctrl+S</span>
                 </button>
+                </MidiMappable>
+                <MidiMappable target="action:save_project_as">
                 <button
                   type="button"
                   role="menuitem"
@@ -389,6 +397,7 @@ export function TimelineTopbar({
                   <span>{t("timelineTopbar.saveAs")}</span>
                   <span className="lt-top-menu-shortcut">Ctrl+Shift+S</span>
                 </button>
+                </MidiMappable>
                 <button
                   type="button"
                   role="menuitem"
@@ -405,6 +414,7 @@ export function TimelineTopbar({
                 <div className="lt-top-menu-section" role="presentation">
                   {t("timelineTopbar.groups.import", { defaultValue: "Importar" })}
                 </div>
+                <MidiMappable target="action:open_project">
                 <button
                   type="button"
                   role="menuitem"
@@ -418,6 +428,7 @@ export function TimelineTopbar({
                 >
                   <span>{t("timelineTopbar.importSong")}</span>
                 </button>
+                </MidiMappable>
                 <button
                   type="button"
                   role="menuitem"
@@ -429,6 +440,7 @@ export function TimelineTopbar({
                     })}
                   </span>
                 </button>
+                <MidiMappable target="action:open_project">
                 <button
                   type="button"
                   role="menuitem"
@@ -442,6 +454,7 @@ export function TimelineTopbar({
                 >
                   <span>{t("timelineTopbar.importExternalProject")}</span>
                 </button>
+                </MidiMappable>
                 <div className="lt-top-menu-separator" aria-hidden="true" />
                 <div className="lt-top-menu-section" role="presentation">
                   {t("timelineTopbar.groups.export", { defaultValue: "Exportar" })}
@@ -549,6 +562,7 @@ export function TimelineTopbar({
             <small>{tempoSourceLabel}</small>
           </label>
 
+          <MidiMappable target="param:tempo">
           <button
             type="button"
             className="lt-tap-tempo-button"
@@ -566,6 +580,7 @@ export function TimelineTopbar({
             <span className="material-symbols-outlined" aria-hidden="true">touch_app</span>
             <span>{t("timelineTopbar.tapTempoShort")}</span>
           </button>
+          </MidiMappable>
 
           <label className="lt-bpm-control" data-lt-tour={TOUR_TARGETS.topbarTimeSignature}>
             <span>{t("timelineTopbar.timeSignatureLabel")}</span>
@@ -612,6 +627,7 @@ export function TimelineTopbar({
           </NetworkControls>
           <NetworkControls permission="control">
           <div className="lt-transport-buttons" data-lt-tour={TOUR_TARGETS.topbarTransport}>
+            <MidiMappable target="action:previous_song">
             <button
               type="button"
               aria-label={t("timelineTopbar.previous")}
@@ -627,6 +643,8 @@ export function TimelineTopbar({
             >
               <span className="material-symbols-outlined">skip_previous</span>
             </button>
+            </MidiMappable>
+            <MidiMappable target="action:stop">
             <button
               type="button"
               aria-label={t("timelineTopbar.stop")}
@@ -642,11 +660,13 @@ export function TimelineTopbar({
             >
               <span className="material-symbols-outlined">stop</span>
             </button>
+            </MidiMappable>
             <FadeStopButton
               className="lt-fade-stop"
               learnModeActive={learnModeActive}
               onMidiLearnTarget={onMidiLearnTarget}
             />
+            <MidiMappable target="action:play">
             <button
               type="button"
               aria-label={t("timelineTopbar.play")}
@@ -664,6 +684,8 @@ export function TimelineTopbar({
             >
               <span className="material-symbols-outlined">play_arrow</span>
             </button>
+            </MidiMappable>
+            <MidiMappable target="action:pause">
             <button
               type="button"
               aria-label={t("timelineTopbar.pause")}
@@ -681,8 +703,10 @@ export function TimelineTopbar({
             >
               <span className="material-symbols-outlined">pause</span>
             </button>
+            </MidiMappable>
             <NetworkControls permission="edit">
             <div className="lt-topbar-split" data-lt-tour={TOUR_TARGETS.topbarMetronome}>
+              <MidiMappable target="action:toggle_metronome">
               <button
                 type="button"
                 ref={metronomeButtonRef}
@@ -707,6 +731,7 @@ export function TimelineTopbar({
                   {t("timelineTopbar.click")}
                 </span>
               </button>
+              </MidiMappable>
               <button
                 type="button"
                 className={
@@ -727,6 +752,7 @@ export function TimelineTopbar({
               </button>
             </div>
             <div className="lt-topbar-split" data-lt-tour={TOUR_TARGETS.topbarVoiceGuide}>
+              <MidiMappable target="action:toggle_voice_guide">
               <button
                 type="button"
                 ref={voiceGuideButtonRef}
@@ -751,6 +777,7 @@ export function TimelineTopbar({
                   {t("timelineTopbar.guide")}
                 </span>
               </button>
+              </MidiMappable>
               <button
                 type="button"
                 className={
@@ -771,6 +798,7 @@ export function TimelineTopbar({
               </button>
             </div>
             <div className="lt-topbar-split" data-lt-tour={TOUR_TARGETS.topbarPads}>
+              <MidiMappable target="action:toggle_pads">
               <button
                 type="button"
                 ref={padButtonRef}
@@ -793,6 +821,7 @@ export function TimelineTopbar({
                 <span className="material-symbols-outlined">graphic_eq</span>
                 <span className="lt-button-label">{t("timelineTopbar.pads")}</span>
               </button>
+              </MidiMappable>
               <button
                 type="button"
                 className={
@@ -813,6 +842,7 @@ export function TimelineTopbar({
               </button>
             </div>
             </NetworkControls>
+            <MidiMappable target="action:next_song">
             <button
               type="button"
               aria-label={t("timelineTopbar.next")}
@@ -828,6 +858,7 @@ export function TimelineTopbar({
             >
               <span className="material-symbols-outlined">skip_next</span>
             </button>
+            </MidiMappable>
           </div>
 
           </NetworkControls>
