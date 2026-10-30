@@ -182,15 +182,13 @@ mod tests {
         }
     }
 
+    /// The registered ids are in the source, so a plain build has OneDrive and
+    /// Dropbox on desktop without any environment set up.
     #[test]
-    fn configuration_follows_the_build_inputs() {
-        assert_eq!(
-            CloudProvider::OneDrive.is_configured(),
-            option_env!("LIBRETRACKS_ONEDRIVE_CLIENT_ID").is_some_and(|v| !v.is_empty())
-        );
-        assert_eq!(
-            CloudProvider::Dropbox.is_configured(),
-            option_env!("LIBRETRACKS_DROPBOX_APP_KEY").is_some_and(|v| !v.is_empty())
-        );
+    fn onedrive_and_dropbox_work_out_of_the_box_on_desktop() {
+        if !cfg!(any(target_os = "android", target_os = "ios")) {
+            assert!(CloudProvider::OneDrive.is_configured());
+            assert!(CloudProvider::Dropbox.is_configured());
+        }
     }
 }

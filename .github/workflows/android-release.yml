@@ -17,10 +17,10 @@ name: Android Release (signed Play build)
 
 env:
   BUNGEE_VERSION: v2.4.24
-  # OneDrive and Dropbox client ids, read by option_env! in
-  # crates/libretracks-cloud on every platform. Public by nature (PKCE public
-  # clients, no secret); kept as build inputs so forks register their own apps.
-  # Empty on fork pull requests, and the providers are then hidden in the app.
+  # Optional overrides of the OneDrive and Dropbox client ids, read by
+  # option_env! in crates/libretracks-cloud on every platform. The registered
+  # ids already live in the source (they are public, PKCE public clients); an
+  # empty value, as on fork pull requests, falls back to them.
   LIBRETRACKS_ONEDRIVE_CLIENT_ID: ${{ secrets.ONEDRIVE_CLIENT_ID }}
   LIBRETRACKS_DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
 

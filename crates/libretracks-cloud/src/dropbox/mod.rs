@@ -25,10 +25,18 @@ pub const SCOPES: &str =
 pub const AUTH_ENDPOINT: &str = "https://www.dropbox.com/oauth2/authorize";
 pub const TOKEN_ENDPOINT: &str = "https://api.dropboxapi.com/oauth2/token";
 
-/// App key, injected at build time. Public by nature (PKCE, no secret); a
-/// build input so that forks register their own app. See
-/// [`crate::onedrive::CLIENT_ID`] for the full reasoning, which is identical.
-pub const APP_KEY: Option<&str> = option_env!("LIBRETRACKS_DROPBOX_APP_KEY");
+/// App key of this project's Dropbox app (registered 2026-10-30). Public by
+/// nature (PKCE, no secret), so it lives in the source like Google's client
+/// ids. A fork sets `LIBRETRACKS_DROPBOX_APP_KEY` at build time to use its own;
+/// see [`crate::onedrive::REGISTERED_CLIENT_ID`].
+pub const REGISTERED_APP_KEY: &str = "zja1w62v8or5jkw";
+
+/// The app key this build presents: the build-time override when set and
+/// non-empty, the registered one otherwise.
+pub const APP_KEY: Option<&str> = match option_env!("LIBRETRACKS_DROPBOX_APP_KEY") {
+    Some(key) if !key.is_empty() => Some(key),
+    _ => Some(REGISTERED_APP_KEY),
+};
 
 /// Loopback ports registered as redirect URIs in the Dropbox App Console.
 ///

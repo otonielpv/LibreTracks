@@ -31,18 +31,23 @@ pub const SCOPES: &str = "Files.ReadWrite.AppFolder offline_access";
 pub const AUTH_ENDPOINT: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 pub const TOKEN_ENDPOINT: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 
-/// Application (client) id of the Azure app registration, injected at build
-/// time like Google's secret.
+/// Application (client) id of this project's Azure app registration
+/// (directory of libretracks.app@gmail.com, registered 2026-10-30).
 ///
-/// It is not a secret: OneDrive is registered as a public client and the flow
-/// is protected by PKCE, so no client secret exists at all. It stays a build
-/// input for the other reason Google's secret is one: an AGPL fork rebuilt
-/// from this repository must register its own app rather than run against
-/// this project's registration and show its name on the consent screen.
-///
-/// `None` in a build without `LIBRETRACKS_ONEDRIVE_CLIENT_ID`, and then the
-/// provider reports itself as not configured before any browser opens.
-pub const CLIENT_ID: Option<&str> = option_env!("LIBRETRACKS_ONEDRIVE_CLIENT_ID");
+/// In the source like Google's client ids, and for the same reason: it is not
+/// a secret. OneDrive is registered as a public client and the flow is
+/// protected by PKCE, so no client secret exists at all. A fork should register
+/// its own app and set `LIBRETRACKS_ONEDRIVE_CLIENT_ID` at build time, which
+/// overrides this.
+pub const REGISTERED_CLIENT_ID: &str = "8e5ba141-3308-488b-948f-06e1d5201231";
+
+/// The client id this build presents: the build-time override when set and
+/// non-empty, the registered one otherwise. Always `Some` today; kept an
+/// `Option` so a build can still opt out (see `CloudProvider::is_configured`).
+pub const CLIENT_ID: Option<&str> = match option_env!("LIBRETRACKS_ONEDRIVE_CLIENT_ID") {
+    Some(id) if !id.is_empty() => Some(id),
+    _ => Some(REGISTERED_CLIENT_ID),
+};
 
 /// Mobile redirect: a private scheme registered under "Mobile and desktop
 /// applications" in the Azure portal, and declared to the deep-link plugin in
