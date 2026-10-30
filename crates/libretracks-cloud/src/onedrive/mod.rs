@@ -48,7 +48,11 @@ pub const CLIENT_ID: Option<&str> = option_env!("LIBRETRACKS_ONEDRIVE_CLIENT_ID"
 /// applications" in the Azure portal, and declared to the deep-link plugin in
 /// `tauri.conf.json`. Reverse-domain, per RFC 8252, so no other app has a
 /// reason to claim it.
-pub const MOBILE_REDIRECT_URI: &str = "com.libretracks.app:/oauth2redirect/onedrive";
+///
+/// Two slashes, unlike Google's `scheme:/path`: the Azure portal refuses a
+/// custom redirect that is not `scheme://...`. It must match the registered
+/// value character for character.
+pub const MOBILE_REDIRECT_URI: &str = "com.libretracks.app://oauth2redirect/onedrive";
 
 /// The redirect this build sends.
 ///
