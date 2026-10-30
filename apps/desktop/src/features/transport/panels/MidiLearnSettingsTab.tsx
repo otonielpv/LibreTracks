@@ -6,6 +6,7 @@ import { formatMidiBinding } from "../helpers";
 import { describeMidiTarget, mixerLearnKeys } from "../midi/controllerTargets";
 import { ControllerProfilesPanel } from "../midi/ControllerProfilesPanel";
 import { MidiBindingsEditor } from "../midi/MidiBindingsEditor";
+import { MidiControlDiagnosticsLine } from "../midi/MidiControlDiagnosticsLine";
 import { useSongStore } from "../songStore";
 import type { MidiLearnCommandRow, MidiLearnFeedback } from "../types";
 
@@ -225,12 +226,15 @@ export function MidiLearnSettingsTab({
         </div>
 
         {midiLearnView === "bindings" ? (
-          <MidiBindingsEditor
-            midiMappings={midiMappings}
-            describe={formatCommandLabel}
-            disabled={busy}
-            onChange={onMidiBindingChange}
-          />
+          <>
+            <MidiControlDiagnosticsLine />
+            <MidiBindingsEditor
+              midiMappings={midiMappings}
+              describe={formatCommandLabel}
+              disabled={busy}
+              onChange={onMidiBindingChange}
+            />
+          </>
         ) : layout === "list" ? (
           <ul className="lt-midi-learn-list">
             {rows.map((command) => {

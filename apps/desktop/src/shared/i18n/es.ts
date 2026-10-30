@@ -320,6 +320,9 @@ const es = {
     profileCopied: "Perfil copiado al portapapeles.",
     profileInvalid: "El perfil no es válido: {{reason}}",
     profileCustomName: "Mi controlador",
+    diagnosticsMeasure: "Medir",
+    diagnostics:
+      "{{messages}} mensajes · {{writes}} escrituras a disco · {{locks}} tomas del lock · {{commits}} commits de pista",
     remove: "Quitar",
   },
   transport: {

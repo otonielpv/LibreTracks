@@ -320,6 +320,9 @@ const en = {
     profileCopied: "Profile copied to the clipboard.",
     profileInvalid: "Invalid profile: {{reason}}",
     profileCustomName: "My controller",
+    diagnosticsMeasure: "Measure",
+    diagnostics:
+      "{{messages}} messages · {{writes}} disk writes · {{locks}} lock takes · {{commits}} track commits",
     remove: "Remove",
   },
   transport: {
