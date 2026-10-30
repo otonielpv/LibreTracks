@@ -170,6 +170,9 @@ final class IosFolderPickerPlugin: Plugin {
   private var retainSelectedURL = true
   private var memoryWarningObserver: NSObjectProtocol?
   private var instrumentedNavigationDelegateClasses = Set<ObjectIdentifier>()
+  private var foregroundObserver: NSObjectProtocol?
+  private var initialWebviewURL: URL?
+  private var webContentReloads: [Date] = []
 
   override init() {
     super.init()
@@ -219,13 +222,59 @@ final class IosFolderPickerPlugin: Plugin {
     typealias OriginalCallback = @convention(c) (AnyObject, Selector, WKWebView) -> Void
     let original = unsafeBitCast(originalImplementation, to: OriginalCallback.self)
     let replacement: @convention(block) (AnyObject, WKWebView) -> Void = {
-      receiver, terminatedWebview in
+      [weak self] receiver, terminatedWebview in
       logWebContentTermination()
       original(receiver, selector, terminatedWebview)
+      self?.reloadAfterWebContentLoss(terminatedWebview, reason: "process terminated")
     }
     method_setImplementation(method, imp_implementationWithBlock(replacement))
     instrumentedNavigationDelegateClasses.insert(classId)
     diagnostic("installed native WebContent termination logger")
+    installForegroundWebContentProbe(on: webview)
+  }
+
+  /// iOS reclaims the WebContent process of a backgrounded app under memory
+  /// pressure. Neither Wry nor Tauri reloads afterwards (Tauri never sets
+  /// Wry's terminate handler), so the webview stays black on return while the
+  /// Rust side keeps running. Reloading boots the UI again against it.
+  private func reloadAfterWebContentLoss(_ webview: WKWebView, reason: String) {
+    let now = Date()
+    webContentReloads = webContentReloads.filter { now.timeIntervalSince($0) < 60 }
+    // A page that dies while loading would otherwise reload forever.
+    guard webContentReloads.count < 3 else {
+      diagnostic("WebContent lost (\(reason)); reload suppressed after repeated crashes")
+      return
+    }
+    webContentReloads.append(now)
+    diagnostic("WebContent lost (\(reason)); reloading webview")
+    DispatchQueue.main.async {
+      if webview.url != nil {
+        webview.reload()
+      } else if let url = self.initialWebviewURL ?? URL(string: "tauri://localhost") {
+        webview.load(URLRequest(url: url))
+      }
+    }
+  }
+
+  /// The termination callback is normally delivered when the app resumes, but
+  /// if it never arrives the dead process still shows up as a failed script
+  /// evaluation. Probe once per return to the foreground.
+  private func installForegroundWebContentProbe(on webview: WKWebView) {
+    guard foregroundObserver == nil else { return }
+    initialWebviewURL = webview.url
+    foregroundObserver = NotificationCenter.default.addObserver(
+      forName: UIApplication.didBecomeActiveNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self, weak webview] _ in
+      guard let webview else { return }
+      webview.evaluateJavaScript("1") { _, error in
+        guard let error = error as? WKError,
+          error.code == .webContentProcessTerminated || error.code == .webViewInvalidated
+        else { return }
+        self?.reloadAfterWebContentLoss(webview, reason: "foreground probe failed")
+      }
+    }
   }
 
   @objc public func pickFolder(_ invoke: Invoke) throws {
