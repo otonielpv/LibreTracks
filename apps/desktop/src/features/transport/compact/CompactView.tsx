@@ -30,6 +30,7 @@ import {
 import { CompactSongHeader } from "./CompactSongHeader";
 import { MobileTrackSelectionControls } from "../mobile/MobileTrackSelectionControls";
 import { columnDensityClass, useColumnResize } from "./useColumnResize";
+import { useNearbySongColumns } from "./useNearbySongColumns";
 import {
   SONG_REORDER_ID_ATTRIBUTE,
   useSongReorder,
@@ -226,6 +227,9 @@ function CompactViewComponent({
     disabled: !canControl || resizingRegionId !== null,
   });
   const canRenderSongReorder = canControl && Boolean(onReorderSong) && regionIds.length > 1;
+  // Only columns near the visible band fill their clip stack. See
+  // ./useNearbySongColumns.
+  const nearbyColumns = useNearbySongColumns(songsStripRef, regionIds);
 
   // `template` comes from the arrow next to the button; without it the
   // backend applies the default template in Settings, if any.
@@ -330,6 +334,7 @@ function CompactViewComponent({
               canRenderSongReorder ? songReorder.surfaceProps : undefined
             }
             clips={clipsByRegion[region.id] ?? []}
+            renderClips={nearbyColumns === null || nearbyColumns.has(region.id)}
             moveTargets={moveTargets}
             isActive={region.id === activeRegionId}
             isQueued={region.id === pendingRegionId}
@@ -473,6 +478,9 @@ type CompactSongColumnProps = {
   ) => void;
   onMoveClipToTrack: (clipId: string, targetTrackId: string) => void;
   onDeleteClip: (clipId: string) => void;
+  /** False while the column is far from the visible band: the stack stays
+   * empty so it is not a scroller of its own. See ./useNearbySongColumns. */
+  renderClips: boolean;
   onPlay: () => void;
   onRename: () => void;
   onSetBpm: () => void;
@@ -506,6 +514,7 @@ function CompactSongColumnComponent({
   reorderHandleProps,
   reorderSurfaceProps,
   clips,
+  renderClips,
   moveTargets,
   isActive,
   isQueued,
@@ -718,7 +727,7 @@ function CompactSongColumnComponent({
           <div className="lt-compact-song-clip-stack-empty">
             {t("compactView.dropClipsHere")}
           </div>
-        ) : (
+        ) : !renderClips ? null : (
           clips.map((clip) => (
             <div
               className={

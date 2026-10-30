@@ -165,3 +165,45 @@ describe("CompactView touch context menu", () => {
     fireEvent(window, touchPointer("pointerup", 21));
   });
 });
+describe("CompactView clip stacks far from the visible band", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("empties the stack of a column the observer reports off the band", () => {
+    let report: ((entries: Array<{ target: Element; isIntersecting: boolean }>) => void) | null =
+      null;
+    const observed: Element[] = [];
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: typeof report) {
+          report = callback;
+        }
+        observe(element: Element) {
+          observed.push(element);
+        }
+        disconnect() {}
+      },
+    );
+    renderCompactView(vi.fn(), [region, secondRegion]);
+    const column = (id: string) => observed.find((el) => (el as HTMLElement).dataset.regionId === id)!;
+
+    // Before the first report every column is filled.
+    expect(screen.queryByText(clip.clipName)).not.toBeNull();
+    expect(observed).toHaveLength(2);
+
+    act(() =>
+      report!([
+        { target: column(region.id), isIntersecting: false },
+        { target: column(secondRegion.id), isIntersecting: true },
+      ]),
+    );
+    expect(screen.queryByText(clip.clipName)).toBeNull();
+    // Off the band is not "empty song": no drop hint either.
+    expect(
+      column(region.id).querySelector(".lt-compact-song-clip-stack-empty"),
+    ).toBeNull();
+
+    act(() => report!([{ target: column(region.id), isIntersecting: true }]));
+    expect(screen.queryByText(clip.clipName)).not.toBeNull();
+  });
+});
