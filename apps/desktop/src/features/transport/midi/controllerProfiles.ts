@@ -62,7 +62,71 @@ function nanoKontrol2(): ControllerProfile {
   };
 }
 
-export const BUILTIN_CONTROLLER_PROFILES: ControllerProfile[] = [nanoKontrol2()];
+const note = (data1: number): MidiBinding => ({ status: 0x90, data1, isCc: false });
+
+/**
+ * Mackie Control Universal (plan midi-controllers, paso 09). The protocol is
+ * public and fixed: faders are 14-bit pitch bend on channels 1-8 (master on
+ * 9) and move by motor when the app sends the same message back; V-Pots are
+ * CC 16-23 in sign-magnitude; buttons are notes on channel 1 whose LED
+ * lights with the same note at velocity 127: REC 0-7, SOLO 8-15, MUTE 16-23,
+ * bank left/right 46/47, rewind 91, forward 92, stop 93, play 94, cycle 86,
+ * click 89.
+ */
+function mackieBindings(): Record<string, MidiBinding> {
+  const bindings: Record<string, MidiBinding> = {};
+  for (let strip = 1; strip <= 8; strip += 1) {
+    const offset = strip - 1;
+    bindings[`strip:${strip}:volume`] = { status: 0xe0 | offset, data1: 0, isCc: false };
+    bindings[`strip:${strip}:pan`] = { ...cc(16 + offset), mode: "relativeSignMagnitude" };
+    bindings[`strip:${strip}:solo`] = note(8 + offset);
+    bindings[`strip:${strip}:mute`] = note(16 + offset);
+  }
+  bindings["mixer:song_master:volume"] = { status: 0xe8, data1: 0, isCc: false };
+  bindings["bank:prev"] = note(46);
+  bindings["bank:next"] = note(47);
+  bindings["action:previous_song"] = note(91);
+  bindings["action:next_song"] = note(92);
+  bindings["action:stop"] = note(93);
+  bindings["action:play"] = note(94);
+  bindings["action:toggle_vamp"] = note(86);
+  bindings["action:toggle_metronome"] = note(89);
+  return bindings;
+}
+
+function mackieControl(): ControllerProfile {
+  return {
+    version: 1,
+    id: "mackie-control",
+    name: "Mackie Control (MCU)",
+    portMatch: ["mackie", "mcu", "x-touch", "qcon", "platform m"],
+    notes:
+      "Put the controller in Mackie Control / MCU mode. Motor faders and button LEDs need the controller output set in Settings > MIDI.",
+    bindings: mackieBindings(),
+  };
+}
+
+/**
+ * M-Vave SMC-Mixer in its Mackie mode (the protocol above), which this app
+ * drives in full. Its generic CC mode has no confirmed map yet (plan, "Por
+ * verificar"): learn it and export it as a profile.
+ */
+function smcMixer(): ControllerProfile {
+  return {
+    ...mackieControl(),
+    id: "mvave-smc-mixer",
+    name: "M-Vave SMC-Mixer (Mackie)",
+    portMatch: ["smc-mixer", "smc mixer", "smc_mixer"],
+    notes:
+      "Switch the SMC-Mixer to its Mackie (MCU) mode. For LEDs and motor faders choose its output in Settings > MIDI.",
+  };
+}
+
+export const BUILTIN_CONTROLLER_PROFILES: ControllerProfile[] = [
+  nanoKontrol2(),
+  smcMixer(),
+  mackieControl(),
+];
 
 /** The profile whose port name matches one of the given ports. */
 export function detectControllerProfile(

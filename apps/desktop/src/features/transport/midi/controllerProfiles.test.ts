@@ -64,4 +64,27 @@ describe("controller profiles", () => {
     );
     expect(lenient.bindings).toEqual({});
   });
+
+  it("Mackie faders are pitch bend per channel, V-Pots relative, buttons notes", () => {
+    const mackie = BUILTIN_CONTROLLER_PROFILES.find((item) => item.id === "mackie-control")!;
+    expect(mackie.bindings["strip:1:volume"].status).toBe(0xe0);
+    expect(mackie.bindings["strip:8:volume"].status).toBe(0xe7);
+    expect(mackie.bindings["mixer:song_master:volume"].status).toBe(0xe8);
+    expect(mackie.bindings["strip:2:pan"]).toMatchObject({ data1: 17, mode: "relativeSignMagnitude" });
+    expect(mackie.bindings["strip:3:mute"]).toEqual({ status: 0x90, data1: 18, isCc: false });
+    expect(mackie.bindings["action:play"].data1).toBe(94);
+    // The SMC-Mixer is found by its own port name before the generic profile.
+    expect(detectControllerProfile(["SMC-Mixer Bluetooth"])?.profile.id).toBe("mvave-smc-mixer");
+    expect(detectControllerProfile(["X-Touch"])?.profile.id).toBe("mackie-control");
+  });
+
+  it("applying Mackie on top of another profile drops the controls it reuses", () => {
+    const mackie = BUILTIN_CONTROLLER_PROFILES.find((item) => item.id === "mackie-control")!;
+    const next = applyControllerProfile(
+      { "param:tempo": { status: 0xe0, data1: 12, isCc: false } },
+      mackie,
+    );
+    expect(next["param:tempo"]).toBeUndefined();
+  });
 });
+

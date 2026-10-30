@@ -14,7 +14,7 @@ use std::{
 };
 
 use libretracks_core::midi_control::{
-    feedback_message, FeedbackValue, MidiBinding, MidiTarget, MixControl,
+    fader, feedback_message, FeedbackValue, MidiBinding, MidiTarget, MixControl, MixerTarget,
 };
 use serde::Deserialize;
 use tauri::{AppHandle, Manager};
@@ -92,23 +92,33 @@ pub(crate) fn refresh(app: &AppHandle) {
     }
     let transport = feedback.transport;
     let desired = control().with_mix(|mix| {
+        // Switches light LEDs; volume and pan move motor faders and LED
+        // rings (paso 09, Mackie Control). Sent on refreshes only, never per
+        // fader message, so a motor does not fight the hand moving it.
         let switch_of = |track_id: &str, mix_control: MixControl| {
             let track = mix.tracks.get(track_id);
-            let on = match mix_control {
-                MixControl::Mute => track.is_some_and(|track| track.muted),
-                MixControl::Solo => track.is_some_and(|track| track.solo),
-                // Motor faders are paso 09 (Mackie Control).
-                MixControl::Volume | MixControl::Pan => return None,
-            };
-            Some(FeedbackValue::Switch(on))
+            Some(match mix_control {
+                MixControl::Mute => FeedbackValue::Switch(track.is_some_and(|track| track.muted)),
+                MixControl::Solo => FeedbackValue::Switch(track.is_some_and(|track| track.solo)),
+                MixControl::Volume => FeedbackValue::Position(track.map_or(0.0, |track| {
+                    fader::gain_to_position(track.volume, fader::TRACK_MAX_DB)
+                })),
+                MixControl::Pan => FeedbackValue::Position(
+                    track.map_or(0.5, |track| fader::pan_to_position(track.pan)),
+                ),
+            })
         };
         desired_feedback(&mappings, &|target| match target {
             MidiTarget::Track { track_id, control } => switch_of(track_id, *control),
             MidiTarget::Strip { strip, control } => {
                 match mix.bank.track(&mix.strip_order, *strip) {
                     Some(track_id) => switch_of(track_id, *control),
-                    // An empty strip shows off.
-                    None => control.is_switch().then_some(FeedbackValue::Switch(false)),
+                    // An empty strip shows off, its fader down.
+                    None => Some(match control {
+                        MixControl::Mute | MixControl::Solo => FeedbackValue::Switch(false),
+                        MixControl::Volume => FeedbackValue::Position(0.0),
+                        MixControl::Pan => FeedbackValue::Position(0.5),
+                    }),
                 }
             }
             MidiTarget::Action(name) => {
@@ -123,6 +133,9 @@ pub(crate) fn refresh(app: &AppHandle) {
                 };
                 Some(FeedbackValue::Switch(on))
             }
+            MidiTarget::Mixer(MixerTarget::SongMaster) => mix.song_master.as_ref().map(|master| {
+                FeedbackValue::Position(fader::gain_to_position(master.gain, fader::TRACK_MAX_DB))
+            }),
             _ => None,
         })
     });
@@ -195,6 +208,19 @@ mod tests {
                 ("track:a:mute".to_string(), [0x90, 16, 127]),
                 ("action:play".to_string(), [0xB0, 41, 0]),
             ]
+        );
+    }
+
+    #[test]
+    fn a_mackie_fader_gets_its_track_position_as_14_bit_pitch_bend() {
+        let mappings = vec![("strip:1:volume".to_string(), MidiBinding::new(0xE3, 0))];
+        // Unity gain sits at 3/4 of the on-screen fader travel.
+        let unity = fader::gain_to_position(1.0, fader::TRACK_MAX_DB);
+        let desired = desired_feedback(&mappings, &|_| Some(FeedbackValue::Position(unity)));
+        let word = (0.75f64 * 16383.0).round() as u16;
+        assert_eq!(
+            desired,
+            vec![("strip:1:volume".to_string(), [0xE3, (word & 0x7F) as u8, (word >> 7) as u8])]
         );
     }
 }
