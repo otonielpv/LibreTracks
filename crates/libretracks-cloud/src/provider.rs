@@ -73,8 +73,18 @@ impl CloudProvider {
                 cfg!(any(target_os = "android", target_os = "ios"))
                     || crate::google::client_config::CLIENT_SECRET.is_some()
             }
-            CloudProvider::OneDrive => crate::onedrive::CLIENT_ID.is_some_and(|id| !id.is_empty()),
-            CloudProvider::Dropbox => crate::dropbox::APP_KEY.is_some_and(|key| !key.is_empty()),
+            // Desktop only until step 07 of docs/plans/cloud-providers: the
+            // mobile redirect schemes are not declared to the deep-link plugin
+            // yet, so a phone would open the consent screen and never get the
+            // answer back. Hidden beats a button that cannot work.
+            CloudProvider::OneDrive => {
+                !cfg!(any(target_os = "android", target_os = "ios"))
+                    && crate::onedrive::CLIENT_ID.is_some_and(|id| !id.is_empty())
+            }
+            CloudProvider::Dropbox => {
+                !cfg!(any(target_os = "android", target_os = "ios"))
+                    && crate::dropbox::APP_KEY.is_some_and(|key| !key.is_empty())
+            }
         }
     }
 

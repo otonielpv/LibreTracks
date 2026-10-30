@@ -16,6 +16,12 @@ name: iOS Release (signed App Store build)
 env:
   BUNGEE_VERSION: v2.4.24
   FFMPEG_VERSION: 7.1.1
+  # OneDrive and Dropbox client ids, read by option_env! in
+  # crates/libretracks-cloud on every platform. Public by nature (PKCE public
+  # clients, no secret); kept as build inputs so forks register their own apps.
+  # Empty on fork pull requests, and the providers are then hidden in the app.
+  LIBRETRACKS_ONEDRIVE_CLIENT_ID: ${{ secrets.ONEDRIVE_CLIENT_ID }}
+  LIBRETRACKS_DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
 
 on:
   workflow_dispatch:

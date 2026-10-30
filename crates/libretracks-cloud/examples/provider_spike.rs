@@ -229,7 +229,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "upload" => {
             let path = std::env::temp_dir().join("spike-prueba.ltset");
             fs::write(&path, "paquete de prueba de LibreTracks\n")?;
-            upload(storage.as_ref(), &path, "spike-prueba.ltset").await?;
+            // Optional name: try one with accents to exercise Dropbox's
+            // ASCII-only Dropbox-API-Arg header against the real service.
+            let name = extra.unwrap_or_else(|| "spike-prueba.ltset".to_string());
+            upload(storage.as_ref(), &path, &name).await?;
         }
         "big" => {
             let mib: u64 = extra.as_deref().unwrap_or("1024").parse()?;
