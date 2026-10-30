@@ -1,5 +1,6 @@
 pub mod automation;
 pub mod key_changes;
+pub mod midi_control;
 pub mod midi_port_names;
 pub mod midi_schedule;
 pub mod midi_wire;

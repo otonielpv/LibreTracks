@@ -403,6 +403,46 @@ describe("normalizeAppSettings", () => {
     });
   });
 
+  it("keeps the midi binding behaviour fields and drops defaults", () => {
+    const result = normalizeAppSettings({
+      ...DEFAULT_APP_SETTINGS,
+      midiMappings: {
+        "strip:1:volume": {
+          status: 0xb0,
+          data1: 0,
+          isCc: true,
+          mode: "relativeBinaryOffset",
+          min: -2,
+          max: 0.5,
+          invert: true,
+          takeover: false,
+        },
+        "action:play": {
+          status: 0x90,
+          data1: 1,
+          isCc: false,
+          mode: "bogus" as never,
+          min: 0,
+          max: 1,
+        },
+      },
+    });
+    expect(result.midiMappings["strip:1:volume"]).toEqual({
+      status: 0xb0,
+      data1: 0,
+      isCc: true,
+      mode: "relativeBinaryOffset",
+      max: 0.5,
+      invert: true,
+      takeover: false,
+    });
+    expect(result.midiMappings["action:play"]).toEqual({
+      status: 0x90,
+      data1: 1,
+      isCc: false,
+    });
+  });
+
   it("clamps jump bars to at least 1 and floors them", () => {
     const result = normalizeAppSettings({
       ...DEFAULT_APP_SETTINGS,

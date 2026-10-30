@@ -153,13 +153,9 @@ fn default_auto_save_interval_minutes() -> u32 {
     5
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct MidiBinding {
-    pub status: u8,
-    pub data1: u8,
-    pub is_cc: bool,
-}
+/// A learned MIDI control. Lives in the core (plan midi-controllers, paso
+/// 01) with its decisions; old `{status, data1, isCc}` entries still parse.
+pub use libretracks_core::midi_control::MidiBinding;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -706,6 +702,15 @@ impl AppSettings {
                 (self.metronome_volume * LEGACY_METRONOME_OUTPUT_GAIN).clamp(0.0, 10.0);
         }
     }
+
+    /// Bindings written by the old learn, folded into the canonical form
+    /// ([`MidiBinding::migrated`]): a button stored from its note off fires
+    /// on press again, `isCc` follows the status.
+    pub(crate) fn migrate_midi_mappings(&mut self) {
+        for binding in self.midi_mappings.values_mut() {
+            *binding = binding.clone().migrated();
+        }
+    }
 }
 
 pub struct AppSettingsStore {
@@ -746,6 +751,7 @@ pub fn load_app_settings(app: &AppHandle) -> Result<AppSettings, io::Error> {
     let mut settings: AppSettings =
         serde_json::from_str(&contents).map_err(|error| io::Error::other(error.to_string()))?;
     settings.migrate_legacy_metronome_volume();
+    settings.migrate_midi_mappings();
     Ok(settings)
 }
 
@@ -1043,11 +1049,7 @@ mod tests {
         settings.metronome_volume = 0.42;
         settings.midi_mappings.insert(
             "play".into(),
-            MidiBinding {
-                status: 0x90,
-                data1: 60,
-                is_cc: false,
-            },
+            MidiBinding::new(0x90, 60),
         );
         let json = serde_json::to_string(&settings).expect("serialize");
         let restored: AppSettings = serde_json::from_str(&json).expect("deserialize");
@@ -1063,12 +1065,23 @@ mod tests {
     }
 
     #[test]
+    fn old_midi_mappings_load_and_migrate() {
+        // The exact shapes the pre-plan learn wrote: CC, note on, note off.
+        let json = r#"{ "midiMappings": {
+            "param:metronome_volume": { "status": 176, "data1": 7, "isCc": true },
+            "action:play": { "status": 144, "data1": 60, "isCc": false },
+            "action:stop": { "status": 128, "data1": 61, "isCc": false }
+        } }"#;
+        let mut settings: AppSettings = serde_json::from_str(json).expect("old file");
+        settings.migrate_midi_mappings();
+        assert_eq!(settings.midi_mappings["param:metronome_volume"], MidiBinding::new(0xB0, 7));
+        assert_eq!(settings.midi_mappings["action:play"], MidiBinding::new(0x90, 60));
+        assert_eq!(settings.midi_mappings["action:stop"], MidiBinding::new(0x90, 61));
+    }
+
+    #[test]
     fn midi_binding_uses_camel_case_is_cc() {
-        let json = serde_json::to_string(&MidiBinding {
-            status: 1,
-            data1: 2,
-            is_cc: true,
-        })
+        let json = serde_json::to_string(&MidiBinding::new(0xB0, 2))
         .expect("serialize");
         assert!(json.contains("isCc"));
     }

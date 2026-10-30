@@ -1193,10 +1193,35 @@ export type RegionMeterLevel = {
   rightPeak?: number;
 };
 
+/** How a control's value turns into a change (`ControlMode` in Rust). */
+export const MIDI_CONTROL_MODES = [
+  "absolute",
+  "relativeTwosComplement",
+  "relativeBinaryOffset",
+  "relativeSignMagnitude",
+  "toggle",
+  "momentary",
+  "trigger",
+] as const;
+export type MidiControlMode = (typeof MIDI_CONTROL_MODES)[number];
+
+/**
+ * A learned control (`libretracks_core::midi_control::MidiBinding`). The
+ * first three fields are the pre-plan format; the rest are optional and
+ * absent means the default (mode by target, full range, takeover on).
+ */
 export type MidiBinding = {
   status: number;
   data1: number;
   isCc: boolean;
+  mode?: MidiControlMode;
+  /** Lower end of the target travel, 0..1. */
+  min?: number;
+  /** Upper end of the target travel, 0..1. */
+  max?: number;
+  invert?: boolean;
+  /** Soft takeover for absolute controls; absent = on. */
+  takeover?: boolean;
 };
 
 // Procedural metronome click timbres. Index order MUST match the C++
@@ -1637,11 +1662,35 @@ function normalizeJumpBars(value: number, fallback: number) {
 }
 
 function normalizeMidiBinding(binding: MidiBinding): MidiBinding {
-  return {
+  const normalized: MidiBinding = {
     status: Math.max(0, Math.min(255, Math.floor(binding.status) || 0)),
     data1: Math.max(0, Math.min(255, Math.floor(binding.data1) || 0)),
     isCc: Boolean(binding.isCc),
   };
+  // Optional behaviour fields survive only when set to something other than
+  // the default, so an untouched binding round-trips as the old 3 fields.
+  if (binding.mode && MIDI_CONTROL_MODES.includes(binding.mode)) {
+    normalized.mode = binding.mode;
+  }
+  const unit = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.max(0, Math.min(1, value))
+      : null;
+  const min = unit(binding.min);
+  if (min !== null && min !== 0) {
+    normalized.min = min;
+  }
+  const max = unit(binding.max);
+  if (max !== null && max !== 1) {
+    normalized.max = max;
+  }
+  if (binding.invert === true) {
+    normalized.invert = true;
+  }
+  if (binding.takeover === false || binding.takeover === true) {
+    normalized.takeover = binding.takeover;
+  }
+  return normalized;
 }
 
 /** The built-in song template's reference (the backend's `builtin:band`). */
