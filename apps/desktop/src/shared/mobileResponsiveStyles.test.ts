@@ -304,6 +304,15 @@ describe("contrato responsive móvil", () => {
     expect(actions).toContain("flex: 0 0 auto");
   });
 
+  // Seis vistas en MIDI Learn: la regla genérica del segmentado (más abajo
+  // en el fichero) ponía nowrap y los botones encogían cortando el texto.
+  it("las vistas de MIDI Learn saltan de línea en vez de cortarse", () => {
+    const tabs = declarationsIn(styles, ".lt-segmented-control.lt-midi-learn-view-tabs");
+    const buttons = declarationsIn(styles, ".lt-segmented-control.lt-midi-learn-view-tabs button");
+    expect(tabs).toContain("flex-wrap: wrap");
+    expect(buttons).toContain("flex: 0 0 auto");
+  });
+
   it("convierte la navegación lateral en barra inferior en vertical", () => {
     expect(styles).toMatch(/@media\s*\(orientation:\s*portrait\)/);
     expect(styles).toMatch(

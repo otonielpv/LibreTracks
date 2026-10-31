@@ -1987,11 +1987,18 @@ html.lt-ios body {
   gap: 0.5rem;
 }
 
-.lt-midi-learn-view-tabs {
+/* Six views since Scenes (plan live-scenes). Two classes so this beats the
+   generic `.lt-segmented-control { flex-wrap: nowrap }` further down; and
+   the buttons keep their width, so a view that does not fit goes to the next
+   line instead of being cut ("CONTROLES PRINCIPAL", "CANCIONES (0"). */
+.lt-segmented-control.lt-midi-learn-view-tabs {
   justify-content: flex-start;
-  /* Six views since Scenes (plan live-scenes): wrap rather than overflow
-     in a narrow window. */
   flex-wrap: wrap;
+}
+
+.lt-segmented-control.lt-midi-learn-view-tabs button {
+  flex: 0 0 auto;
+  padding: 0 0.7rem;
 }
 
 .lt-midi-binding-pill,
