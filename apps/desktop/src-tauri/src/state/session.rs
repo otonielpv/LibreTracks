@@ -7,9 +7,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use libretracks_core::mix_scene::{scenes_for_template, MixScene};
 use libretracks_core::Song;
 use libretracks_project::{
-    load_song_from_file, save_song_to_file, ExtractedSessionPackage,
+    load_song_from_file, save_song_to_file, serialize_song_document, ExtractedSessionPackage,
     ExtractedSongPackage, SidecarFile,
 };
 
@@ -152,7 +153,7 @@ impl DesktopSession {
             .unwrap_or_else(|| default_session_name(ui_locale(audio).as_deref()).to_owned());
         let song_id = format!("song_{}", timestamp_suffix());
         let song = build_empty_song(song_id, title);
-        self.create_song_at_path_with(target_pick, existing_dir, song, audio)
+        self.create_song_at_path_with(target_pick, existing_dir, song, Vec::new(), audio)
     }
 
     /// Create a brand-new project at `target_pick` whose arrangement structure
@@ -182,8 +183,9 @@ impl DesktopSession {
             .unwrap_or_else(|| default_session_name(ui_locale(audio).as_deref()).to_owned());
         let song_id = format!("song_{}", timestamp_suffix());
         let song = build_template_song(template_song, song_id, project_name);
+        let mix_scenes = template_mix_scenes(&template_path);
 
-        self.create_song_at_path_with(target_pick, existing_dir, song, audio)
+        self.create_song_at_path_with(target_pick, existing_dir, song, mix_scenes, audio)
     }
 
     /// Shared body for creating a new on-disk project (empty or from a
@@ -195,6 +197,7 @@ impl DesktopSession {
         target_pick: PathBuf,
         existing_dir: ExistingProjectDir,
         song: Song,
+        mix_scenes: Vec<MixScene>,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let parent_dir = target_pick.parent().map(Path::to_path_buf).ok_or_else(|| {
@@ -224,7 +227,11 @@ impl DesktopSession {
         fs::create_dir_all(song_dir.join("audio"))?;
         fs::create_dir_all(song_dir.join("cache").join("waveforms"))?;
         write_library_manifest(&song_dir, &[])?;
-        save_automation(&song_dir, &AutomationDocument::default())
+        let automation = AutomationDocument {
+            mix_scenes,
+            ..AutomationDocument::default()
+        };
+        save_automation(&song_dir, &automation)
             .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
 
         let save_started_at = Instant::now();
@@ -240,15 +247,35 @@ impl DesktopSession {
     /// at `template_path`. Only the organizational structure is kept (tracks,
     /// folder hierarchy, routing, names and colors); clips, regions, markers and
     /// per-track mix are dropped so the template is a clean starting point.
-    pub fn save_current_as_template(&self, template_path: PathBuf) -> Result<(), DesktopError> {
+    ///
+    /// The session's mix scenes travel too (plan live-scenes, paso 07), in a
+    /// `mixScenes` key next to the song: rules by song, folder or name make
+    /// sense in any session, rules by track id do not and are left out (see
+    /// `scenes_for_template`). An older app reads the song and ignores the
+    /// key. Returns how many rules were left out.
+    pub fn save_current_as_template(&self, template_path: PathBuf) -> Result<usize, DesktopError> {
         let song = self
             .engine
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
         let template = strip_song_to_template(song);
-        save_song_to_file(&template_path, &template)?;
-        Ok(())
+        let (mix_scenes, dropped_rules) = scenes_for_template(&self.automation.mix_scenes);
+        if mix_scenes.is_empty() {
+            save_song_to_file(&template_path, &template)?;
+            return Ok(dropped_rules);
+        }
+        let mut document: serde_json::Value = serde_json::from_str(&serialize_song_document(&template)?)
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        document["mixScenes"] = serde_json::to_value(&mix_scenes)
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        let json = serde_json::to_string_pretty(&document)
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+        if let Some(parent) = template_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        libretracks_project::write_file_atomically(&template_path, json.as_bytes())?;
+        Ok(dropped_rules)
     }
 
     pub fn save_project(&mut self) -> Result<TransportSnapshot, DesktopError> {
@@ -816,4 +843,17 @@ impl DesktopSession {
 
         Ok(inserted.snapshot)
     }
+}
+
+/// The mix scenes a `.lttemplate` carries (paso 07). A template from before
+/// the plan has none; a key that does not parse is ignored rather than
+/// failing the new session: the scenes are a bonus, the structure is the
+/// template.
+pub(super) fn template_mix_scenes(template_path: &Path) -> Vec<MixScene> {
+    fs::read_to_string(template_path)
+        .ok()
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
+        .and_then(|document| document.get("mixScenes").cloned())
+        .and_then(|scenes| serde_json::from_value(scenes).ok())
+        .unwrap_or_default()
 }

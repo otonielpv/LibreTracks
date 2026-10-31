@@ -38,6 +38,8 @@ import {
   type ProductEventName,
 } from "../../telemetry/telemetry";
 import { useOpenWithFile } from "./useOpenWithFile";
+import { templateDroppedRuleCount } from "../panels/mixScenes/sceneRules";
+import { getSong } from "../songStore";
 
 type UseProjectActionsProps = {
   runAction: (
@@ -610,10 +612,15 @@ export function useProjectActions({
         if (!saved) {
           return;
         }
+        // Scenes travel with the template, minus the rules by track id
+        // (plan live-scenes, paso 07): say how many stayed behind.
+        const droppedRules = templateDroppedRuleCount(getSong()?.mixScenes);
         setStatus(
-          t("transport.status.templateSaved", {
-            defaultValue: "Plantilla guardada.",
-          }),
+          droppedRules > 0
+            ? t("transport.status.templateSavedDroppedRules", { count: droppedRules })
+            : t("transport.status.templateSaved", {
+                defaultValue: "Plantilla guardada.",
+              }),
         );
       },
       { busy: true },

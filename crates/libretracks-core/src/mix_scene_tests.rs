@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use serde_json::json;
 
 use crate::mix_scene::{
-    active_song_track_ids, apply_change, resolve_scene, MixScene, PanChange, ResolvedChange,
+    active_song_track_ids, apply_change, resolve_scene, scenes_for_template, MixScene, PanChange, ResolvedChange,
     SceneLatches, SceneRule, TrackChange, TrackMix, TrackSelector, VolumeChange,
 };
 use crate::model::Song;
@@ -552,4 +552,28 @@ fn a_deleted_track_is_forgotten_and_the_rest_still_restore() {
     assert_eq!(latches.values_for_save("bass"), None);
     let restored = latches.release("down");
     assert_eq!(restored, vec![("drums".to_string(), mix(0.6))]);
+}
+
+#[test]
+fn a_template_keeps_rule_scenes_and_drops_track_ids() {
+    let by_id = |id: &str| TrackSelector::Track { track_id: id.into() };
+    let mut minister = scene(vec![rule(TrackSelector::ActiveSong, vec![by_id("t9"), TrackSelector::NameContains { words: vec!["voz".into()] }])]);
+    minister.id = "minister".into();
+    let mut mixed = scene(vec![rule(by_id("t1"), vec![]), rule(TrackSelector::Folder { name: "Banda".into() }, vec![])]);
+    mixed.id = "mixed".into();
+    let mut ids_only = scene(vec![rule(by_id("t1"), vec![]), rule(by_id("t2"), vec![])]);
+    ids_only.id = "ids".into();
+    let mut empty = scene(vec![]);
+    empty.id = "empty".into();
+
+    let (kept, dropped) = scenes_for_template(&[minister, mixed, ids_only, empty]);
+    let ids: Vec<&str> = kept.iter().map(|scene| scene.id.as_str()).collect();
+    assert_eq!(ids, vec!["minister", "mixed", "empty"]);
+    assert_eq!(dropped, 3);
+    // The exception by id goes too; the one by name stays.
+    assert_eq!(
+        kept[0].rules[0].except,
+        vec![TrackSelector::NameContains { words: vec!["voz".into()] }]
+    );
+    assert_eq!(kept[1].rules.len(), 1);
 }

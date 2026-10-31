@@ -1486,6 +1486,10 @@ const en = {
       projectSavedAt: "Project saved to {{path}}.",
       projectSavedNewLocation: "Project saved to a new location.",
       templateSaved: "Template saved.",
+      templateSavedDroppedRules_one:
+        "Template saved with its scenes. {{count}} rule naming a specific track stays behind: the template does not keep that track.",
+      templateSavedDroppedRules_other:
+        "Template saved with its scenes. {{count}} rules naming specific tracks stay behind: the template does not keep those tracks.",
       audioDeviceUpdated: "Audio device updated to {{name}}.",
       audioDeviceSystemDefault: "Audio device switched to the system default.",
       outputSampleRateResetUnsupported:

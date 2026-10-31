@@ -1506,6 +1506,10 @@ const es = {
       projectSavedAt: "Proyecto guardado en {{path}}.",
       projectSavedNewLocation: "Proyecto guardado en nueva ubicacion.",
       templateSaved: "Plantilla guardada.",
+      templateSavedDroppedRules_one:
+        "Plantilla guardada con sus escenas. {{count}} regla de pista concreta no viaja: la plantilla no conserva esas pistas.",
+      templateSavedDroppedRules_other:
+        "Plantilla guardada con sus escenas. {{count}} reglas de pista concreta no viajan: la plantilla no conserva esas pistas.",
       audioDeviceUpdated: "Dispositivo de audio actualizado a {{name}}.",
       audioDeviceSystemDefault:
         "Dispositivo de audio ajustado al predeterminado del sistema.",

@@ -8,6 +8,7 @@ import {
   moveId,
   parseWords,
   resolveSceneTrackIds,
+  templateDroppedRuleCount,
 } from "./sceneRules";
 
 const track = (id: string, name: string, kind = "audio", parentTrackId: string | null = null) => ({
@@ -89,5 +90,21 @@ describe("scene rules preview", () => {
     expect(moveId(["a", "b", "c"], 2, 0)).toEqual(["c", "a", "b"]);
     const same = ["a"];
     expect(moveId(same, 0, 1)).toBe(same);
+  });
+});
+
+describe("scenes in a session template", () => {
+  it("counts the rules by track id a template leaves out", () => {
+    const byId: MixSceneSummary = {
+      id: "s",
+      name: "s",
+      rampSeconds: 0,
+      rules: [
+        { select: { type: "track", trackId: "bajo" }, change: { muted: true } },
+        { select: { type: "activeSong" }, change: { muted: true } },
+      ],
+    };
+    expect(templateDroppedRuleCount([ministerScene("m", "M"), byId])).toBe(1);
+    expect(templateDroppedRuleCount(undefined)).toBe(0);
   });
 });

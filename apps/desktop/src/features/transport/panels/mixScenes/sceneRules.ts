@@ -117,6 +117,17 @@ export function folderNames(song: SongView | null): string[] {
   return [...seen.values()].sort((left, right) => left.localeCompare(right));
 }
 
+/**
+ * Scene rules a session template leaves out: those naming a track id, which
+ * a template does not keep (mirror of `scenes_for_template` in the core).
+ */
+export function templateDroppedRuleCount(scenes: MixSceneSummary[] | undefined) {
+  return (scenes ?? []).reduce(
+    (count, scene) => count + scene.rules.filter((rule) => rule.select.type === "track").length,
+    0,
+  );
+}
+
 /** Words the quick "music down to minister" scene leaves alone. */
 export const MINISTER_EXCEPT_WORDS = ["voz", "voc", "vox", "click", "guía", "guide"];
 

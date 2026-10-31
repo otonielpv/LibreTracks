@@ -614,3 +614,96 @@ fn deleting_an_engaged_track_then_releasing_restores_the_rest() {
         .expect("release without error");
     assert_eq!(track_of(&session, "voz1").volume, 0.9);
 }
+
+// --- Paso 07: scenes in session templates --------------------------------
+
+fn template_session() -> (DesktopSession, std::path::PathBuf, tempfile::TempDir) {
+    let mut session = two_song_session();
+    let mut by_id = everything_down();
+    by_id.id = "by-id".into();
+    by_id.rules[0].select = TrackSelector::Track {
+        track_id: "bass1".into(),
+    };
+    session.automation.mix_scenes = vec![music_down(2.0), by_id];
+    let temp = tempfile::tempdir().expect("tempdir");
+    let template_path = temp.path().join("Banda.lttemplate");
+    (session, template_path, temp)
+}
+
+#[test]
+fn a_template_carries_only_the_scenes_made_of_rules() {
+    let (session, template_path, _temp) = template_session();
+    let dropped = session
+        .save_current_as_template(template_path.clone())
+        .expect("save template");
+    assert_eq!(dropped, 1);
+    let document: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&template_path).unwrap()).unwrap();
+    let ids: Vec<&str> = document["mixScenes"]
+        .as_array()
+        .expect("scenes in the template")
+        .iter()
+        .map(|scene| scene["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, vec!["down"]);
+    // An app from before the plan reads the same file: the song parses and
+    // the extra key is ignored.
+    let song = load_song_from_file(&template_path).expect("older reader still parses it");
+    assert_eq!(song.tracks.len(), 4);
+}
+
+#[test]
+fn a_session_from_the_template_has_the_scene_and_it_works() {
+    let (session, template_path, temp) = template_session();
+    session.save_current_as_template(template_path.clone()).unwrap();
+
+    let mut fresh = DesktopSession::default();
+    let audio = AudioController::default();
+    fresh
+        .create_song_from_template_path(
+            template_path,
+            temp.path().join("Domingo.ltsession"),
+            super::ExistingProjectDir::Refuse,
+            &audio,
+        )
+        .expect("create from template");
+    let ids: Vec<String> = fresh.automation.mix_scenes.iter().map(|s| s.id.clone()).collect();
+    assert_eq!(ids, vec!["down".to_string()]);
+    let saved = crate::audio::automation::load_automation(fresh.song_dir.as_ref().unwrap()).unwrap();
+    assert_eq!(saved.mix_scenes.len(), 1, "written to the new session's automation file");
+
+    // A song imported afterwards: its tracks get the scene.
+    {
+        let song = fresh.engine.song_mut().unwrap();
+        song.regions = vec![region("r1", 0.0, 12.0)];
+        song.tracks = vec![track("bajo", "Bajo", 0.8), track("voz", "Voz", 0.9)];
+        song.clips = vec![clip("bajo", 1.0), clip("voz", 1.0)];
+    }
+    fresh.trigger_mix_scene("down", SceneMode::Apply, &audio).unwrap();
+    assert!(track_of(&fresh, "bajo").muted);
+    assert!(!track_of(&fresh, "voz").muted, "the voice is excepted");
+}
+
+#[test]
+fn a_template_from_before_the_plan_opens_without_scenes() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let template_path = temp.path().join("Vieja.lttemplate");
+    let template = super::strip_song_to_template(track_of_song(&two_song_session()));
+    libretracks_project::save_song_to_file(&template_path, &template).expect("old template");
+    assert!(!fs::read_to_string(&template_path).unwrap().contains("mixScenes"));
+
+    let mut fresh = DesktopSession::default();
+    fresh
+        .create_song_from_template_path(
+            template_path,
+            temp.path().join("Nueva.ltsession"),
+            super::ExistingProjectDir::Refuse,
+            &AudioController::default(),
+        )
+        .expect("old template opens");
+    assert!(fresh.automation.mix_scenes.is_empty());
+}
+
+fn track_of_song(session: &DesktopSession) -> Song {
+    session.engine.song().cloned().expect("song loaded")
+}

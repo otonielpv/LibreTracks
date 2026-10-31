@@ -178,6 +178,41 @@ impl<'de> Deserialize<'de> for MixScene {
     }
 }
 
+// --- Templates (paso 07) ---------------------------------------------------
+
+/// The scenes a session template carries: a template keeps no clips, so a
+/// rule (or an exception) naming a track id points at nothing in the new
+/// session. Those are dropped; a scene left without rules by that is
+/// dropped whole. Returns the scenes and how many rules were dropped.
+pub fn scenes_for_template(scenes: &[MixScene]) -> (Vec<MixScene>, usize) {
+    let by_id = |selector: &TrackSelector| matches!(selector, TrackSelector::Track { .. });
+    let mut dropped = 0;
+    let kept = scenes
+        .iter()
+        .filter_map(|scene| {
+            let had_rules = !scene.rules.is_empty();
+            let rules: Vec<SceneRule> = scene
+                .rules
+                .iter()
+                .filter(|rule| {
+                    let keep = !by_id(&rule.select);
+                    dropped += usize::from(!keep);
+                    keep
+                })
+                .map(|rule| SceneRule {
+                    except: rule.except.iter().filter(|e| !by_id(e)).cloned().collect(),
+                    ..rule.clone()
+                })
+                .collect();
+            (!rules.is_empty() || !had_rules).then(|| MixScene {
+                rules,
+                ..scene.clone()
+            })
+        })
+        .collect();
+    (kept, dropped)
+}
+
 // --- Active song ----------------------------------------------------------
 
 /// The tracks of the song under `position_seconds` (the song's source time,
