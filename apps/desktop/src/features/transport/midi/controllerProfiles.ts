@@ -118,7 +118,7 @@ function smcMixer(): ControllerProfile {
     name: "M-Vave SMC-Mixer (Mackie)",
     portMatch: ["smc-mixer", "smc mixer", "smc_mixer"],
     notes:
-      "Switch the SMC-Mixer to its Mackie (MCU) mode. For LEDs and motor faders choose its output in Settings > MIDI.",
+      "Switch the SMC-Mixer to its Mackie (MCU) mode. For the button LEDs choose its output in Settings > MIDI.",
   };
 }
 

@@ -326,6 +326,14 @@ const en = {
     profileImport: "Import…",
     profileExport: "Export",
     profileDetected: "{{name}} detected.",
+    profileNotes: {
+      "korg-nanokontrol2":
+        "Factory CC scene. For the S/M buttons and the transport to light from the app, set LED Mode to External in the KORG KONTROL Editor.",
+      "mackie-control":
+        "Put the controller in Mackie Control / MCU mode. Motor faders and button LEDs need the controller output set in Settings > MIDI.",
+      "mvave-smc-mixer":
+        "Switch the SMC-Mixer to its Mackie (MCU) mode. For the button LEDs choose its output in Settings > MIDI.",
+    },
     profileApplied: "{{name}} profile applied.",
     profileCopied: "Profile copied to the clipboard.",
     profileInvalid: "Invalid profile: {{reason}}",

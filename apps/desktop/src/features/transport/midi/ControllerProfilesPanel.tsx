@@ -154,7 +154,12 @@ export function ControllerProfilesPanel({
           }}
         />
       </div>
-      {selected?.notes ? <small>{selected.notes}</small> : null}
+      {selected?.notes ? (
+        <small>
+          {/* Built-in profiles are translated; an imported one shows its own notes. */}
+          {t(`midiMap.profileNotes.${selected.id}`, { defaultValue: selected.notes })}
+        </small>
+      ) : null}
       {message ? (
         <p className="lt-midi-profiles-message" aria-live="polite">
           {message}

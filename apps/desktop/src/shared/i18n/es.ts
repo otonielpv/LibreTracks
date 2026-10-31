@@ -326,6 +326,14 @@ const es = {
     profileImport: "Importar…",
     profileExport: "Exportar",
     profileDetected: "Detectado {{name}}.",
+    profileNotes: {
+      "korg-nanokontrol2":
+        "Escena CC de fábrica. Para que los botones S/M y el transporte se iluminen desde la app, pon LED Mode en External en el KORG KONTROL Editor.",
+      "mackie-control":
+        "Pon el controlador en modo Mackie Control / MCU. Los faders motorizados y los LEDs de los botones necesitan la salida del controlador en Ajustes > MIDI.",
+      "mvave-smc-mixer":
+        "Cambia el SMC-Mixer a su modo Mackie (MCU). Para los LEDs de los botones elige su salida en Ajustes > MIDI.",
+    },
     profileApplied: "Perfil {{name}} aplicado.",
     profileCopied: "Perfil copiado al portapapeles.",
     profileInvalid: "El perfil no es válido: {{reason}}",
