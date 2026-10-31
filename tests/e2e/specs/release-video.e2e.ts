@@ -527,6 +527,24 @@ describe("release video (desktop scenes)", function () {
     // 10 — song templates: the arrow next to «+ New song» in Compact.
     {
       const { rec, done } = scene("10-plantillas");
+      // Settings › General: the template for every new song and the «one
+      // folder per song» layout. Shown only: these are the machine's settings.
+      await AppPage.openSettings();
+      await browser.pause(800);
+      await rec.click("#lt-settings-tab-general", 1000);
+      const showField = async (text: string, tag: string) => {
+        const field = await tagByText(".lt-settings-field", L(text), tag);
+        await runInPage((sel: string) => document.querySelector(sel)?.scrollIntoView({ block: "center" }), field);
+        await browser.pause(600);
+        await rec.zoomTo(field, { margin: 40, maxZoom: 1.6 });
+        await rec.moveTo(`${field} select`, 600);
+        await rec.hold(2.8);
+        await rec.zoomOut(400);
+      };
+      await showField("Plantilla para canciones nuevas", "rv-template-field");
+      await showField("Pistas de cada canción", "rv-layout-field");
+      await rec.key("Escape", 600);
+      await AppPage.resetShell();
       await rec.click(viewBtn(3), 1800);
       const arrow = ".lt-new-song-template-toggle";
       if (await rectOf(arrow)) {
@@ -643,6 +661,21 @@ describe("release video (desktop scenes)", function () {
         if (!(await rectOf(pane))) break;
         await rec.click(pane, 1200);
         await rec.hold(1.8);
+      }
+      // On a phone the scenes fold into one button: open it, engage, release.
+      const menu = ".lt-scene-menu-button";
+      if (await rectOf(menu)) {
+        await rec.click(menu, 900);
+        await rec.hold(0.8);
+        const item = ".lt-scene-menu .lt-scene-button";
+        if (await rectOf(item)) {
+          await rec.click(item, 900);
+          await rec.hold(1.2);
+          await rec.click(item, 700);
+        }
+        await rec.key("Escape", 500);
+      } else {
+        console.log("[release-video] 13-movil: no scenes button on the phone");
       }
       await rec.holdUntil((durations["13-movil"] ?? 8) + 0.7);
       if (record) {

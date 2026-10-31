@@ -51,7 +51,7 @@
     },
     {
       "id": "10-plantillas",
-      "text": "Las plantillas de canción crean canciones con sus pistas y carpetas. Usa la flecha junto a Nueva canción, y al soltar los stems de un multitrack, cada audio cae en su sitio según su nombre."
+      "text": "Las plantillas de canción crean canciones con sus pistas y carpetas. En Configuración, General, elige la plantilla para todas las canciones nuevas, y si prefieres, una carpeta por canción. Para una canción concreta, usa la flecha junto a Nueva canción. Y al soltar los stems de un multitrack, cada audio cae en su sitio según su nombre."
     },
     {
       "id": "11-nube",
@@ -63,7 +63,7 @@
     },
     {
       "id": "13-movil",
-      "text": "Y en el móvil, la vista Setlist se adapta como Playback en el iPhone: la onda o el mezclador, por turnos, con un toque.",
+      "text": "Y en el móvil, la vista Setlist se adapta como Playback en el iPhone: la onda o el mezclador, por turnos, con un toque. Y las escenas, recogidas en su propio botón.",
       "subtitles": "mobile"
     },
     {
