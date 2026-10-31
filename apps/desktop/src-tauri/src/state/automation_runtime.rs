@@ -33,6 +33,17 @@ use super::{
 /// (otherwise it would never fire and would hold every later cue hostage).
 const LANDING_JUMP_MARGIN_SECONDS: f64 = 0.05;
 
+/// The song (region) strictly under `position_seconds`; `None` between
+/// songs. The same notion as `active_song_track_ids`.
+pub(super) fn region_at(song: &Song, position_seconds: f64) -> Option<String> {
+    song.regions
+        .iter()
+        .find(|region| {
+            position_seconds >= region.start_seconds && position_seconds < region.end_seconds
+        })
+        .map(|region| region.id.clone())
+}
+
 /// A track's mix as the scene logic sees it.
 pub(super) fn track_mix_of(song: &Song, track_id: &str) -> Option<TrackMix> {
     song.tracks
@@ -220,6 +231,7 @@ impl DesktopSession {
             scene.name = "Mix scene".into();
         }
 
+        let scene_id = scene.id.clone();
         if let Some(existing) = self
             .automation
             .mix_scenes
@@ -231,6 +243,11 @@ impl DesktopSession {
             self.automation.mix_scenes.push(scene);
         }
         self.persist_automation(audio)?;
+        // Edited while engaged: the new rules apply now, keeping the values
+        // saved for the tracks still in and restoring the ones that left.
+        if self.scene_latches.is_engaged(&scene_id) {
+            self.reresolve_engaged_scenes(Some(&scene_id), audio)?;
+        }
         Ok(self.snapshot())
     }
 
@@ -260,6 +277,10 @@ impl DesktopSession {
         scene_id: &str,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
+        // Deleting an engaged scene restores its tracks first.
+        if self.scene_latches.is_engaged(scene_id) {
+            self.trigger_mix_scene_runtime(scene_id, SceneMode::Restore, None, audio)?;
+        }
         let before = self.automation.mix_scenes.len();
         self.automation
             .mix_scenes
@@ -624,7 +645,7 @@ impl DesktopSession {
     /// This deliberately does NOT push an undo entry or bump the project
     /// revision: automation is playback state, not a user edit, and
     /// `commit_track_mix_model_and_command` (the UI path) owns that behaviour.
-    fn mirror_track_mix_into_model(
+    pub(super) fn mirror_track_mix_into_model(
         &mut self,
         track_id: &str,
         volume: Option<f64>,
@@ -978,6 +999,7 @@ impl DesktopSession {
             // Once per trigger, not per track (paso 02, notas).
             let active_song = active_song_track_ids(song, self.engine.position_seconds());
             let resolved = resolve_scene(&scene, song, active_song.as_ref());
+            self.scene_song_region = region_at(song, self.engine.position_seconds());
             self.scene_latches
                 .engage(scene_id, resolved, |track_id| track_mix_of(song, track_id))
         } else {
@@ -1012,6 +1034,91 @@ impl DesktopSession {
     pub(super) fn mix_touched_by_user(&mut self, track_id: &str) {
         self.scene_latches.touched_by_user(track_id);
         self.active_mix_ramps.retain(|ramp| ramp.track_id != track_id);
+    }
+
+    /// D11 (kept by the user, 2026-10-31): when the song under the playhead
+    /// changes with scenes engaged, they move with it. The leaving song's
+    /// tracks get their saved values back and the arriving song's tracks
+    /// take the scene, with its ramp. `Track` rules do not move. Between
+    /// songs the scene stays engaged and touches nothing until the next.
+    /// Cheap when nothing changed: one pass over the regions.
+    pub(super) fn follow_mix_scenes_to_active_song(
+        &mut self,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        if self.scene_latches.is_empty() {
+            return Ok(());
+        }
+        let Some(song) = self.engine.song() else {
+            return Ok(());
+        };
+        let region = region_at(song, self.engine.position_seconds());
+        if region == self.scene_song_region {
+            return Ok(());
+        }
+        self.scene_song_region = region;
+        self.reresolve_engaged_scenes(None, audio)
+    }
+
+    /// Resolve the engaged scenes again against the song under the
+    /// playhead (`only` = just that one) and play what moved, each with its
+    /// own ramp. Scenes made only of `Track` rules are left alone unless
+    /// named: nothing about them depends on the song.
+    fn reresolve_engaged_scenes(
+        &mut self,
+        only: Option<&str>,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        let engaged = self.scene_latches.engaged_ids();
+        let scenes: Vec<MixScene> = self
+            .automation
+            .mix_scenes
+            .iter()
+            .filter(|scene| engaged.contains(&scene.id))
+            .filter(|scene| match only {
+                Some(id) => scene.id == id,
+                None => scene.follows_song(),
+            })
+            .cloned()
+            .collect();
+        let playing = self.engine.playback_state() == PlaybackState::Playing;
+        for scene in scenes {
+            let Some(song) = self.engine.song() else {
+                return Ok(());
+            };
+            let active_song = active_song_track_ids(song, self.engine.position_seconds());
+            let resolved = resolve_scene(&scene, song, active_song.as_ref());
+            let targets: Vec<(String, TrackMix)> = self
+                .scene_latches
+                .update(&scene.id, resolved, |track_id| track_mix_of(song, track_id))
+                .into_iter()
+                // Only what moves: replaying an unchanged track would cut
+                // a ramp that is still taking it there.
+                .filter(|(track_id, target)| track_mix_of(song, track_id) != Some(*target))
+                .collect();
+            let ramp = if playing { scene.ramp_seconds } else { 0.0 };
+            self.play_mix_targets(targets, ramp, audio)?;
+        }
+        Ok(())
+    }
+
+    /// Land every running ramp on its final value, in the engine and the
+    /// model, and drop it. Stop and seek used to just drop them, which left
+    /// the track wherever the ramp was at that tick (the model is mirrored
+    /// from the ramp tick by tick).
+    pub(super) fn finish_mix_ramps(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
+        let ramps = std::mem::take(&mut self.active_mix_ramps);
+        if ramps.is_empty() {
+            return Ok(());
+        }
+        for ramp in ramps {
+            let volume = ramp.volume.map(|(_, to)| to);
+            let pan = ramp.pan.map(|(_, to)| to);
+            audio.update_live_track_mix(&ramp.track_id, volume, pan, None, None, None)?;
+            self.mirror_track_mix_into_model(&ramp.track_id, volume, pan, None, None);
+        }
+        self.bump_mix_revision();
+        Ok(())
     }
 
     /// Move each track to its target mix: mute and solo at once, volume and

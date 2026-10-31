@@ -493,6 +493,15 @@ impl SceneLatches {
         }
     }
 
+    /// Forget the tracks `exists` says are gone (deleted from the session),
+    /// so releasing a scene later restores the others without error.
+    pub fn forget_missing_tracks(&mut self, exists: impl Fn(&str) -> bool) {
+        self.base.retain(|track_id, _| exists(track_id));
+        for latch in &mut self.latches {
+            latch.changes.retain(|change| exists(&change.track_id));
+        }
+    }
+
     /// The track's value before any scene, which is what a save must write
     /// (D9). `None` when no scene holds it.
     pub fn values_for_save(&self, track_id: &str) -> Option<TrackMix> {

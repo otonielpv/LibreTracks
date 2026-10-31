@@ -159,6 +159,7 @@ impl DesktopSession {
         self.pending_automation_jump = None;
         self.active_automation_job = None;
         self.scene_latches.clear();
+        self.scene_song_region = None;
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.live_history_anchor = None;

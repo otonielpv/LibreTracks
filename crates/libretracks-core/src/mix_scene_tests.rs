@@ -538,3 +538,18 @@ fn updating_an_engaged_scene_keeps_the_base_and_restores_who_left() {
     assert_eq!(latches.values_for_save("drums"), None);
     assert!(latches.update("missing", vec![], current_of(&during)).is_empty());
 }
+
+#[test]
+fn a_deleted_track_is_forgotten_and_the_rest_still_restore() {
+    let mut latches = SceneLatches::default();
+    let before = [("bass", mix(0.8)), ("drums", mix(0.6))];
+    latches.engage(
+        "down",
+        vec![volume_abs("bass", 0.1), volume_abs("drums", 0.1)],
+        current_of(&before),
+    );
+    latches.forget_missing_tracks(|track_id| track_id != "bass");
+    assert_eq!(latches.values_for_save("bass"), None);
+    let restored = latches.release("down");
+    assert_eq!(restored, vec![("drums".to_string(), mix(0.6))]);
+}

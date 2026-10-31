@@ -1147,6 +1147,12 @@ impl DesktopSession {
         }
 
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
+        // An engaged scene forgets the deleted tracks; releasing it later
+        // restores the others.
+        if let Some(song) = self.engine.song() {
+            self.scene_latches
+                .forget_missing_tracks(|id| song.tracks.iter().any(|track| track.id == id));
+        }
 
         Ok(self.snapshot())
     }

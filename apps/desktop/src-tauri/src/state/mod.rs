@@ -434,6 +434,9 @@ pub struct DesktopSession {
     /// Mix scenes engaged and the mix from before them (plan live-scenes).
     /// Live state like the vamp: never persisted, dropped with the session.
     pub(super) scene_latches: SceneLatches,
+    /// The song the engaged scenes were last resolved against; when the
+    /// playhead lands in another, they move there (D11, paso 06).
+    pub(super) scene_song_region: Option<String>,
     /// Output port the timeline's MIDI tracks send to. Held here rather than
     /// threaded through `sync_position`, which has dozens of call sites; the
     /// manager is internally synchronised and cheap to clone as an `Arc`.
@@ -595,6 +598,7 @@ impl Default for DesktopSession {
             automation_run_counts: HashMap::new(),
             active_mix_ramps: Vec::new(),
             scene_latches: SceneLatches::default(),
+            scene_song_region: None,
             midi_output: None,
             midi_cursor_seconds: 0.0,
             active_midi_notes: Vec::new(),
@@ -2041,7 +2045,8 @@ impl DesktopSession {
         self.transport_clock.stop();
         self.pending_automation_jump = None;
         self.active_automation_job = None;
-        self.active_mix_ramps.clear();
+        // A ramp cut short lands where it was going, as the model says.
+        self.finish_mix_ramps(audio)?;
         // A fresh session: every cue can fire its full quota again.
         self.reset_automation_run_counts(None);
         // Full panic rather than just note-offs: on stop the show device should
@@ -2071,8 +2076,10 @@ impl DesktopSession {
         self.engine.seek(position_seconds)?;
         // Seeking before a cue makes it eligible to fire its full quota again.
         self.reset_automation_run_counts(Some(self.engine.position_seconds()));
-        // A seek cancels any in-progress ramps (their timeline anchor is stale).
-        self.active_mix_ramps.clear();
+        // A seek cancels any in-progress ramps (their timeline anchor is
+        // stale); each lands on its final value rather than mid-way.
+        self.finish_mix_ramps(audio)?;
+        self.follow_mix_scenes_to_active_song(audio)?;
         // Re-anchor MIDI at the new position and release anything sounding, so
         // a seek mid-note can't leave a hanging note on the show device.
         self.land_midi_cursor(self.engine.position_seconds());
@@ -2874,6 +2881,14 @@ impl DesktopSession {
     }
 
     pub(super) fn sync_position(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
+        let result = self.sync_playing_position(audio);
+        // After the position moved, whatever moved it (playback, a jump, a
+        // cue): an engaged scene follows the song under the playhead.
+        self.follow_mix_scenes_to_active_song(audio)?;
+        result
+    }
+
+    fn sync_playing_position(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
         if self.engine.playback_state() != PlaybackState::Playing {
             return Ok(());
         }

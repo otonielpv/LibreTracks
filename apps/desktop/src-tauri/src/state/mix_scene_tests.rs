@@ -476,3 +476,141 @@ fn reordering_scenes_persists_the_new_order() {
     let order: Vec<_> = saved.mix_scenes.iter().map(|scene| scene.id.as_str()).collect();
     assert_eq!(order, vec!["c", "a", "b"]);
 }
+
+// --- Paso 06: song changes and edge cases --------------------------------
+
+/// "Music down" by rule: every audio track of the active song, -12 dB.
+fn song_down(ramp_seconds: f64) -> MixScene {
+    MixScene {
+        id: "down".into(),
+        name: "Bajar".into(),
+        ramp_seconds,
+        rules: vec![SceneRule {
+            select: TrackSelector::ActiveSong,
+            except: vec![],
+            change: TrackChange {
+                volume: Some(VolumeChange::RelativeDb(-12.0)),
+                ..TrackChange::default()
+            },
+        }],
+    }
+}
+
+fn down_12(volume: f64) -> f64 {
+    volume * 10f64.powf(-12.0 / 20.0)
+}
+
+fn close(actual: f64, expected: f64) -> bool {
+    (actual - expected).abs() < 1e-9
+}
+
+#[test]
+fn an_engaged_scene_moves_to_the_next_song() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    session.automation.mix_scenes.push(song_down(0.0));
+    session.trigger_mix_scene("down", SceneMode::Apply, &audio).unwrap();
+    assert!(close(track_of(&session, "bass1").volume, down_12(0.8)));
+    assert_eq!(track_of(&session, "bass2").volume, 0.7);
+
+    session.seek(13.0, &audio).expect("into song 2");
+    assert_eq!(track_of(&session, "bass1").volume, 0.8, "song 1 back");
+    assert_eq!(track_of(&session, "voz1").volume, 0.9);
+    assert!(close(track_of(&session, "bass2").volume, down_12(0.7)), "song 2 down");
+    assert_eq!(session.snapshot().active_mix_scene_ids, vec!["down".to_string()]);
+
+    session.trigger_mix_scene("down", SceneMode::Restore, &audio).unwrap();
+    assert_eq!(track_of(&session, "bass2").volume, 0.7);
+    assert_eq!(track_of(&session, "voz2").volume, 0.6);
+    assert_eq!(track_of(&session, "bass1").volume, 0.8);
+}
+
+#[test]
+fn between_songs_the_scene_waits_for_the_next_one() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    // A two-second gap between the songs.
+    session.engine.song_mut().unwrap().regions[0].end_seconds = 10.0;
+    session.automation.mix_scenes.push(song_down(0.0));
+    session.trigger_mix_scene("down", SceneMode::Apply, &audio).unwrap();
+
+    session.seek(11.0, &audio).expect("into the gap");
+    assert_eq!(track_of(&session, "bass1").volume, 0.8, "the song that left is back");
+    assert_eq!(track_of(&session, "bass2").volume, 0.7, "the next one not yet");
+    assert_eq!(session.snapshot().active_mix_scene_ids, vec!["down".to_string()]);
+
+    session.seek(13.0, &audio).expect("into song 2");
+    assert!(close(track_of(&session, "bass2").volume, down_12(0.7)));
+}
+
+#[test]
+fn stop_keeps_the_scene_and_a_cut_ramp_lands_on_its_value() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    session.automation.mix_scenes.push(song_down(4.0));
+    session.engine.play().expect("play");
+    session
+        .trigger_mix_scene_runtime("down", SceneMode::Apply, None, &audio)
+        .unwrap();
+    assert!(!session.active_mix_ramps.is_empty());
+    // A tick halfway mirrored the ramp into the model.
+    session.mirror_track_mix_into_model("bass1", Some(0.5), None, None, None);
+
+    session.stop(&audio).expect("stop");
+    assert!(session.active_mix_ramps.is_empty());
+    assert!(close(track_of(&session, "bass1").volume, down_12(0.8)), "landed, not mid-way");
+    assert_eq!(session.snapshot().active_mix_scene_ids, vec!["down".to_string()]);
+
+    // Same for a seek inside the song.
+    session.trigger_mix_scene("down", SceneMode::Restore, &audio).unwrap();
+    session.engine.play().expect("play");
+    session
+        .trigger_mix_scene_runtime("down", SceneMode::Apply, None, &audio)
+        .unwrap();
+    session.mirror_track_mix_into_model("bass1", Some(0.5), None, None, None);
+    session.seek(5.0, &audio).expect("seek in song 1");
+    assert!(session.active_mix_ramps.is_empty());
+    assert!(close(track_of(&session, "bass1").volume, down_12(0.8)));
+}
+
+#[test]
+fn editing_or_deleting_an_engaged_scene_leaves_the_mix_right() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    session.automation.mix_scenes.push(song_down(0.0));
+    session.trigger_mix_scene("down", SceneMode::Apply, &audio).unwrap();
+
+    // Now only the bass, and to a fixed level.
+    let mut edited = song_down(0.0);
+    edited.rules = vec![SceneRule {
+        select: TrackSelector::NameContains {
+            words: vec!["bajo".into()],
+        },
+        except: vec![],
+        change: TrackChange {
+            volume: Some(VolumeChange::Absolute(0.2)),
+            ..TrackChange::default()
+        },
+    }];
+    session.upsert_mix_scene(edited, &audio).expect("edit");
+    assert_eq!(track_of(&session, "bass1").volume, 0.2);
+    assert_eq!(track_of(&session, "voz1").volume, 0.9, "the voice left the scene");
+
+    session.delete_mix_scene("down", &audio).expect("delete");
+    assert_eq!(track_of(&session, "bass1").volume, 0.8, "restored before deleting");
+    assert!(session.snapshot().active_mix_scene_ids.is_empty());
+}
+
+#[test]
+fn deleting_an_engaged_track_then_releasing_restores_the_rest() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    session.automation.mix_scenes.push(song_down(0.0));
+    session.trigger_mix_scene("down", SceneMode::Apply, &audio).unwrap();
+
+    session.delete_tracks(&["bass1".into()], &audio).expect("delete track");
+    session
+        .trigger_mix_scene("down", SceneMode::Restore, &audio)
+        .expect("release without error");
+    assert_eq!(track_of(&session, "voz1").volume, 0.9);
+}
