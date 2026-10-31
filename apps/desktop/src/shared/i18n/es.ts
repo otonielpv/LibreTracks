@@ -240,6 +240,7 @@ const es = {
       view: "Vista",
       navigation: "Navegación",
       video: "Vídeo",
+      setlist: "Vista Setlist (actuación)",
     },
     action: {
       playPause: "Reproducir / Pausar",
@@ -273,6 +274,12 @@ const es = {
       videoFadeBlack: "Vídeo: fundido a negro",
       videoIdle: "Vídeo: mostrar reposo",
       videoToggleOutput: "Vídeo: activar/desactivar salida",
+      openSetlist: "Abrir vista Setlist",
+      setlistPreviousSection: "Sección anterior (cursor)",
+      setlistNextSection: "Sección siguiente (cursor)",
+      setlistPreviousSong: "Canción anterior",
+      setlistNextSong: "Canción siguiente",
+      setlistConfirmJump: "Saltar a la sección del cursor",
     },
   },
   midiMap: {
@@ -3419,6 +3426,41 @@ const es = {
         done: {
           title: "Listo para el escenario",
           body: "Todo esto se guarda con la sesión, así que se configura una vez y ya. Cualquier recorrido se puede repetir desde el botón TUTORIAL.",
+        },
+      },
+    },
+    setlist: {
+      name: "Vista Setlist",
+      summary: "Canciones, mapa de secciones, mezclador y Editar.",
+      steps: {
+        intro: {
+          title: "Vista Setlist",
+          body: "La vista para tocar en directo si vienes de Playback o Prime: tus canciones arriba, la canción elegida con sus secciones en medio y la mesa abajo. Es la misma sesión que ves en la DAW, solo que mirada de otra manera.",
+        },
+        songs: {
+          title: "Las canciones",
+          body: "Una tarjeta por canción, en el orden del setlist. Toca una para verla y, con el transporte parado, prepararla. Doble toque o ▶ la pone a sonar. Arrástralas para reordenar el setlist.",
+        },
+        map: {
+          title: "El mapa de la canción",
+          body: "Cada bloque es una sección sobre la onda de la canción. Parado, un toque salta ahí. Sonando, doble toque: el salto espera al momento que marque el modo de salto, y tocar la sección pendiente lo cancela.",
+          bodyMobile: "Cada bloque es una sección sobre la onda de la canción. Parado, un toque salta ahí. Sonando, doble toque: el salto espera al momento que marque el modo de salto, y tocar la sección pendiente lo cancela. Mantén pulsado un bloque para ver su menú.",
+        },
+        keys: {
+          title: "Con el teclado",
+          body: "Con las flechas ← → mueves un cursor por las secciones y con Enter saltas a ella. Con ↑ ↓ cambias de canción y con Esc quitas el cursor. Los números 1-9 siguen saltando directamente a cada sección.",
+        },
+        mixer: {
+          title: "El mezclador",
+          body: "Las pistas de la canción que estás viendo, con su master. Aquí también están las escenas de mezcla. En el teléfono el mezclador y la onda se turnan: cambia entre ellos con los botones Mezcla y Onda.",
+        },
+        edit: {
+          title: "Editar",
+          body: "Para retocar la canción sin pasar por la DAW: ajustes, secciones, arreglo, pistas, carriles, automatismos, MIDI, vídeo y letra. Pulsa Hecho para volver a tocar.",
+        },
+        done: {
+          title: "A tocar",
+          body: "Puedes volver a este recorrido cuando quieras desde el botón TUTORIAL.",
         },
       },
     },

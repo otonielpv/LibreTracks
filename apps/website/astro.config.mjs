@@ -181,6 +181,7 @@ export default defineConfig({
           collapsed: false,
           items: [
             { slug: "docs/live-view" },
+            { slug: "docs/setlist-view" },
             { slug: "docs/live-control-flow" },
             { slug: "docs/voice-guide" },
             { slug: "docs/ambient-pads" },

@@ -463,7 +463,7 @@ describe("oferta de recorridos al abrir una sesión", () => {
     ).toBe(true);
   });
 
-  it("calla cuando ya se han visto los cuatro", () => {
+  it("calla cuando ya se han visto los cinco", () => {
     expect(
       shouldOfferToursOnSessionOpen({
         ...base,
@@ -471,6 +471,7 @@ describe("oferta de recorridos al abrir una sesión", () => {
           workspace: "completed",
           daw: "completed",
           live: "completed",
+          setlist: "completed",
           cloud: "completed",
         },
       }),

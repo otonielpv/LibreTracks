@@ -341,7 +341,7 @@ describe("el botón GUÍA elige el recorrido según la pantalla", () => {
     expect(screen.getByText(landing.welcome.title)).toBeTruthy();
   });
 
-  it("con sesión abierta ofrece los cuatro recorridos en un menú", () => {
+  it("con sesión abierta ofrece los cinco recorridos en un menú", () => {
     // Este es el reparto que justifica partirlos: hasta que no hay proyecto
     // cargado no existen ni la línea de tiempo ni las vistas, y una vez
     // cargado hay demasiado que contar para una sola tirada.
@@ -364,7 +364,7 @@ describe("el botón GUÍA elige el recorrido según la pantalla", () => {
       Array.from(menu?.querySelectorAll("[data-tour-choice]") ?? []).map(
         (item) => item.getAttribute("data-tour-choice"),
       ),
-    ).toEqual(["workspace", "daw", "live", "cloud"]);
+    ).toEqual(["workspace", "daw", "live", "setlist", "cloud"]);
   });
 
   it("elegir un recorrido en el menú lo lanza y cierra el menú", () => {
@@ -547,7 +547,7 @@ describe("oferta al abrir una sesión", () => {
     expect(menu).not.toBeNull();
     expect(
       Array.from(menu?.querySelectorAll("[data-tour-choice]") ?? []).length,
-    ).toBe(4);
+    ).toBe(5);
     // Ofrece, no impone: no arranca ningún recorrido por su cuenta.
     expect(document.querySelector(".lt-tour-root")).toBeNull();
     unsubscribe();
@@ -568,11 +568,12 @@ describe("oferta al abrir una sesión", () => {
     unsubscribe();
   });
 
-  it("calla cuando ya se han visto los cuatro", () => {
+  it("calla cuando ya se han visto los cinco", () => {
     const unsubscribe = openSessionWith({
       workspace: "completed",
       daw: "completed",
       live: "completed",
+      setlist: "completed",
       cloud: "completed",
     });
 

@@ -13,6 +13,7 @@ import type { TourTargetId } from "./tourTargets";
  * - `workspace` — con la sesión abierta: dónde está cada zona.
  * - `daw` — montar una canción: regla, regiones, marcas, pistas y clips.
  * - `live` — preparar el directo: saltos, vamp, master, tono y warp.
+ * - `setlist` — la vista Setlist: canciones, mapa, mezclador y Editar.
  *
  * Un único recorrido que hablara de la línea de tiempo desde la pantalla de
  * inicio describiría cosas que el usuario no tiene delante; y uno que juntara
@@ -30,7 +31,7 @@ import type { TourTargetId } from "./tourTargets";
 
 export type TourPlatform = "desktop" | "mobile";
 
-export type TourId = "landing" | "workspace" | "daw" | "live" | "cloud";
+export type TourId = "landing" | "workspace" | "daw" | "live" | "setlist" | "cloud";
 
 /**
  * En qué pantalla está el usuario. Lo mismo que decide `toursForContext`.
@@ -152,7 +153,7 @@ export function toursForContext(hasOpenSession: boolean): TourId[] {
   // sin ella, y para quien ya terminó el tutorial es además la novedad que hay
   // que contarle.
   return hasOpenSession
-    ? ["workspace", "daw", "live", "cloud"]
+    ? ["workspace", "daw", "live", "setlist", "cloud"]
     : ["landing", "cloud"];
 }
 

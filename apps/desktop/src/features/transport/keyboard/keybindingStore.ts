@@ -1,8 +1,11 @@
 import { create } from "zustand";
 
 import {
+  SHADOWABLE_GROUPS,
   SHORTCUT_ACTIONS,
+  shortcutScope,
   type ShortcutActionId,
+  type ShortcutScope,
 } from "./actions";
 
 // Persistent, user-customisable map of action → key binding.
@@ -82,14 +85,36 @@ export function resolveBindings(
  */
 export function buildBindingIndex(
   resolved: Record<ShortcutActionId, string | null>,
+  scope?: ShortcutScope,
 ): Map<string, ShortcutActionId> {
+  // Without `scope`: the global actions. With it: only that scope's, which
+  // the dispatcher consults first while the context is on screen.
   const index = new Map<string, ShortcutActionId>();
   for (const [id, binding] of Object.entries(resolved)) {
-    if (binding) {
+    if (binding && shortcutScope(id as ShortcutActionId) === scope) {
       index.set(binding, id as ShortcutActionId);
     }
   }
   return index;
+}
+
+const GROUP_BY_ACTION = new Map(
+  SHORTCUT_ACTIONS.map((action) => [action.id, action.group]),
+);
+
+/**
+ * Whether two actions on the same key would fight. Same scope: always. A
+ * scoped action over a global one: only when the global one is not in a
+ * group that context may shadow (Setlist arrows over the clip nudge are
+ * fine; over play/pause they are not).
+ */
+export function actionsCollide(a: ShortcutActionId, b: ShortcutActionId): boolean {
+  const scopeA = shortcutScope(a);
+  const scopeB = shortcutScope(b);
+  if (scopeA === scopeB) return true;
+  if (scopeA && scopeB) return false;
+  const globalId = scopeA ? b : a;
+  return !SHADOWABLE_GROUPS.includes(GROUP_BY_ACTION.get(globalId)!);
 }
 
 type KeybindingState = {
@@ -144,7 +169,11 @@ export function findBindingConflict(
 ): ShortcutActionId | null {
   const resolved = resolveBindings(overrides);
   for (const [id, value] of Object.entries(resolved)) {
-    if (id !== exceptId && value === binding) {
+    if (
+      id !== exceptId &&
+      value === binding &&
+      actionsCollide(id as ShortcutActionId, exceptId)
+    ) {
       return id as ShortcutActionId;
     }
   }

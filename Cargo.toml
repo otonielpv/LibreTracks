@@ -29,6 +29,15 @@ thiserror = "2"
 [patch.crates-io]
 midir = { path = "vendor/midir" }
 
+# Full debug info made target-desktop-native/debug grow past 30 GB (the
+# desktop lib alone is built as staticlib + cdylib + rlib). Line tables keep
+# file:line in backtraces of our own crates; dependencies get none.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 # "Analizar canción" is number crunching (FFT, MFCC, DTW): unoptimised it runs
 # ~30x slower (grouping a guide: 23 s instead of 0.7 s), which made `tauri dev`
 # useless for trying it. Only this crate, so dev builds stay quick.

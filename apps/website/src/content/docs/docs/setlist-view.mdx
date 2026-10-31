@@ -1,0 +1,41 @@
+---
+title: Setlist View
+description: "LibreTracks Setlist view, Playback style: a row of songs, the section map over the waveform, the song's mixer, keyboard jumps and editing without going to the DAW."
+---
+
+The **Setlist view** is the view for playing live if you come from Playback or Prime: your songs in a row on top, the chosen song with its sections over the waveform in the middle and the mixer below. It is the same session you see in the DAW, looked at differently: what you change here shows in the other views and the other way round.
+
+Open it from the view switcher or with `Tab`, which cycles DAW, Setlist, Compact and Live (`Shift+Tab` goes backwards). In `Settings > Shortcuts` you can give `Open Setlist view` a key of its own; it ships unbound.
+
+## If you come from Playback or Prime
+
+| In Playback / Prime | In LibreTracks |
+| --- | --- |
+| Song list on top | A row of song cards. Tap one to show it; with everything stopped, it is also cued. |
+| Tap a song to play it | Double tap or `▶` on the card. If another one is playing, the jump follows the song transition (the button between two cards). |
+| Section map over the waveform | The song map: one block per section, at its real width. |
+| Tap a section to jump | Stopped, one tap. Playing, double tap: the jump waits for the moment your jump mode sets and the block blinks yellow; tap it again to cancel. |
+| Live ReOrder from the keyboard | `←` `→` move a cursor over the sections and `Enter` jumps to the marked one. `↑` `↓` change song and `Esc` clears the cursor. Number keys `1`-`9` still jump straight there. |
+| Looping a section | `Vamp`. The repeating stretch is framed over the waveform with a «Looping» badge. |
+| The song's mixer | The mixer below, with the tracks of the song you are looking at and its master. The `Scenes` button opens the mix scenes. |
+| Editing the song | `Edit`: settings, sections, arrangement, tracks, lanes, automation, MIDI and video. `Done` goes back to playing. |
+
+## Songs
+
+- **Choose**: tap a card. The map, the waveform and the mixer switch to that song. With the transport stopped, it is also cued to start from its beginning.
+- **Play**: double tap or `▶`. With a card focused, `Enter` does the same.
+- **Transition**: the button between two cards chooses how one song moves to the next (cut or fade) and whether the vamp holds between songs.
+- **Reorder**: drag the card. The whole song moves, with its audio, markers and tempo.
+- **Menu** (right-click, or long-press on mobile): the same song menu as in the DAW, with `Open in the DAW` first to go to the song framed on the timeline.
+
+## The song map
+
+Each block is a section, with its colour and bar count. The playing block fills as it goes and the next one is marked. Cues show as labels at the bottom of the waveform and key changes as a lilac mark. Right-clicking a block opens the DAW's section menu, and the arrangement picker sits over the waveform.
+
+## MIDI controller
+
+Turn on Map mode (`Ctrl+M`), tap the control on screen and press the controller button. In the Setlist view you can map each card's `▶` (jump to song N), each block of the map (jump to section N, the same as in Live) and the mixer faders.
+
+## On phones and tablets
+
+On a phone, like Playback on an iPhone, the waveform and the mixer take turns under the songs: switch with the `Waveform` and `Mixer` buttons. On tablets and computers all three show at once; on medium screens the mixer can fold away to give the waveform the height.

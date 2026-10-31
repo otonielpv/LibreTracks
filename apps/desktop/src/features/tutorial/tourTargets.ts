@@ -63,6 +63,11 @@ export const TOUR_TARGETS = {
   toolbarTranspose: "toolbar-transpose",
   toolbarWarp: "toolbar-warp",
   viewModeSwitcher: "view-mode-switcher",
+  // Vista Setlist (plan setlist-view, paso 19).
+  setlistSongs: "setlist-songs",
+  setlistMap: "setlist-map",
+  setlistMixer: "setlist-mixer",
+  setlistEdit: "setlist-edit",
 } as const;
 
 export type TourTargetKey = keyof typeof TOUR_TARGETS;

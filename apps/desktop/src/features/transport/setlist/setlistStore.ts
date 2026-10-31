@@ -49,6 +49,9 @@ export type SetlistState = {
   /** Edit → Lanes: horizontal scroll inside the song, in px (clamped by the
    * time scale). */
   lanesScrollPx: number;
+  /** Performance: the song-map block the ←/→ keys are on (Playback's "Live
+   * ReOrder"); Enter jumps there. `null` = no cursor drawn. */
+  sectionCursorId: string | null;
 };
 
 export const INITIAL_SETLIST_STATE: SetlistState = {
@@ -64,6 +67,7 @@ export const INITIAL_SETLIST_STATE: SetlistState = {
   waveDockHidden: false,
   lanesZoom: 1,
   lanesScrollPx: 0,
+  sectionCursorId: null,
 };
 
 type SetlistActions = {
@@ -79,6 +83,7 @@ type SetlistActions = {
   setWaveDockHidden: (hidden: boolean) => void;
   setLanesZoom: (zoom: number) => void;
   setLanesScrollPx: (scrollPx: number) => void;
+  setSectionCursorId: (blockId: string | null) => void;
 };
 
 /**
@@ -120,5 +125,6 @@ export const useSetlistStore = create<SetlistState & SetlistActions>()(
     setLanesZoom: (lanesZoom) =>
       set({ lanesZoom: Math.max(LANES_MIN_ZOOM, Math.min(LANES_MAX_ZOOM, lanesZoom)) }),
     setLanesScrollPx: (lanesScrollPx) => set({ lanesScrollPx: Math.max(0, lanesScrollPx) }),
+    setSectionCursorId: (sectionCursorId) => set({ sectionCursorId }),
   }),
 );

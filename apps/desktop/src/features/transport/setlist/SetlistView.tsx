@@ -37,6 +37,7 @@ import { resolveSetlistSongId } from "./songMapModel";
 import { resolveSongSeekSeconds } from "./sectionScrubModel";
 import { SONG_DROP_CLASS, songDropHandlers } from "./songDrop";
 import { requestEditMode, useSetlistStore } from "./setlistStore";
+import { useSetlistKeyboardBridge } from "./setlistKeyboard";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
 import "./setlist.css";
 
@@ -191,6 +192,8 @@ function SetlistViewComponent({
   );
   lastShownRegionIdRef.current = shownRegionId;
   const shownRegion = regions.find((region) => region.id === shownRegionId) ?? null;
+  // ←/→/Enter/↑/↓ in performance (paso 19).
+  useSetlistKeyboardBridge({ regions, shownRegion, performance, onSelectRegion, onCueSong, onPlaySong });
   const seekInWaveEditor = useCallback(
     (seconds: number) => {
       if (

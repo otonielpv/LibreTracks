@@ -6,6 +6,8 @@ import type { SectionMarkerSummary, SongView } from "@libretracks/shared/models"
 
 import { resetFrameGateForTests } from "../frameGate";
 import { useTransportStore } from "../store";
+import { useTimelineUIStore } from "../uiStore";
+import { INITIAL_SETLIST_STATE, useSetlistStore } from "./setlistStore";
 import { SongMap } from "./SongMap";
 import { testRegion } from "./testBindings";
 
@@ -69,6 +71,8 @@ beforeEach(() => {
   vi.stubGlobal("cancelAnimationFrame", () => {});
   resetFrameGateForTests();
   useTransportStore.setState({ playback: { playbackState: "stopped" } as never });
+  useSetlistStore.setState(INITIAL_SETLIST_STATE);
+  useTimelineUIStore.setState({ midiLearnMode: null });
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -201,5 +205,47 @@ describe("SongMap live position", () => {
     runFrames();
     expect(renders).toBe(baseline + 1);
     expect(block(container, "Puente").classList.contains("is-active")).toBe(true);
+  });
+});
+
+describe("SongMap keyboard cursor (paso 19)", () => {
+  it("draws nothing new until the arrows set a cursor", () => {
+    const { container } = render(<SongMap {...mapProps()} />);
+    expect(container.querySelector(".is-cursor")).toBeNull();
+    act(() => useSetlistStore.getState().setSectionCursorId("Coro"));
+    expect(block(container, "Coro").classList.contains("is-cursor")).toBe(true);
+    expect(container.querySelectorAll(".is-cursor")).toHaveLength(1);
+  });
+
+  it("is not drawn while editing", () => {
+    useSetlistStore.setState({ sectionCursorId: "Coro" });
+    const { container } = render(<SongMap {...mapProps({ editing: true })} />);
+    expect(container.querySelector(".is-cursor")).toBeNull();
+  });
+});
+
+describe("SongMap MIDI learn (paso 19, C2)", () => {
+  it("maps each section to the jump_marker_N target Live uses", () => {
+    useTimelineUIStore.setState({ midiLearnMode: "" });
+    const { container } = render(<SongMap {...mapProps()} />);
+    const targets = Array.from(container.querySelectorAll("[data-midi-target]")).map(
+      (element) => element.getAttribute("data-midi-target"),
+    );
+    // Sections only, in time order; the implicit start has no marker.
+    expect(targets).toEqual(["action:jump_marker_1", "action:jump_marker_2", "action:jump_marker_3"]);
+  });
+
+  it("a tap in Map mode arms the learn instead of jumping", () => {
+    useTimelineUIStore.setState({ midiLearnMode: "" });
+    const props = mapProps();
+    const { container } = render(<SongMap {...props} />);
+    fireEvent.click(block(container, "Coro"));
+    expect(useTimelineUIStore.getState().midiLearnMode).toBe("action:jump_marker_2");
+    expect(props.onMarkerAction).not.toHaveBeenCalled();
+  });
+
+  it("outside Map mode nothing MIDI is drawn", () => {
+    const { container } = render(<SongMap {...mapProps()} />);
+    expect(container.querySelector("[data-midi-target]")).toBeNull();
   });
 });

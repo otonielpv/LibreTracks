@@ -258,6 +258,45 @@ Las reglas por canción, carpeta y nombre valen para **cualquier canción** de l
 
 Las escenas viajan con la sesión (`.ltset`) y con las plantillas de sesión. En una plantilla, las reglas por carpeta son especialmente útiles: «Carpeta Instrumentos, −12 dB» funciona en todas las sesiones que crees a partir de ella. Las reglas de una pista concreta no viajan con la plantilla, porque la plantilla no guarda esas pistas.
 
+## Vista Setlist
+
+La Vista Setlist es la vista para tocar en directo si vienes de Playback o de Prime: tus canciones en una fila arriba, la canción elegida con sus secciones sobre la onda en medio y el mezclador abajo. Es la misma sesión que ves en la DAW, mirada de otra manera: lo que cambias aquí se ve en las demás vistas y al revés.
+
+Se abre desde el selector de vistas o con `Tab`, que recorre DAW, Setlist, Compacta y Live (`Mayús+Tab` va al revés). En `Configuración > Atajos` puedes asignar una tecla propia a `Abrir vista Setlist`; viene sin asignar.
+
+### Si vienes de Playback o Prime
+
+| En Playback / Prime | En LibreTracks |
+| --- | --- |
+| Lista de canciones arriba | Fila de tarjetas de canción. Toca una para verla; con todo parado, además la prepara. |
+| Pulsar una canción para que suene | Doble toque o `▶` en la tarjeta. Si ya suena otra, el salto sigue la transición entre canciones (el botón entre dos tarjetas). |
+| Mapa de secciones sobre la onda | El mapa de la canción: un bloque por sección, con su ancho real. |
+| Tocar una sección para saltar | Parado, un toque. Sonando, doble toque: el salto espera al momento del modo de salto y el bloque parpadea en amarillo; tócalo otra vez para cancelarlo. |
+| Live ReOrder con el teclado | `←` `→` mueven un cursor por las secciones y `Enter` salta a la marcada. `↑` `↓` cambian de canción y `Esc` quita el cursor. Los números `1`-`9` siguen saltando directamente. |
+| Bucle de una sección | `Vamp`. El tramo que se repite se ve enmarcado sobre la onda con el aviso «En bucle». |
+| Mezclador de la canción | El mezclador de abajo, con las pistas de la canción que estás viendo y su master. El botón `Escenas` abre las escenas de mezcla. |
+| Editar la canción | `Editar`: ajustes, secciones, arreglo, pistas, carriles, automatismos, MIDI y vídeo. `Hecho` vuelve a tocar. |
+
+### Canciones
+
+- **Elegir**: toca una tarjeta. El mapa, la onda y el mezclador pasan a esa canción. Con el transporte parado, además se prepara para empezar desde su inicio.
+- **Reproducir**: doble toque o `▶`. Con una tarjeta enfocada, `Enter` hace lo mismo.
+- **Transición**: el botón entre dos tarjetas elige cómo se pasa de una canción a la siguiente (corte o fade) y si se mantiene el vamp entre canciones.
+- **Reordenar**: arrastra la tarjeta. La canción se mueve entera, con su audio, sus marcas y su tempo.
+- **Menú** (clic derecho o mantener pulsado en el móvil): el mismo menú de la canción que en la DAW, con `Abrir en la DAW` al principio para ir a la canción encuadrada en la línea de tiempo.
+
+### El mapa de la canción
+
+Cada bloque es una sección, con su color y sus compases. El bloque que suena se rellena según avanza y el siguiente queda marcado. Los avisos se ven como etiquetas en la parte baja de la onda y los cambios de nota como una marca lila. El clic derecho en un bloque abre el menú de sección de la DAW, y sobre la onda puedes elegir el arreglo de la canción.
+
+### Controlador MIDI
+
+Activa el modo Mapeo (`Ctrl+M`), toca el control en la pantalla y pulsa el botón del controlador. En la Vista Setlist son mapeables el `▶` de cada tarjeta (salto a la canción N), cada bloque del mapa (salto a la sección N, el mismo que en Live) y los faders del mezclador.
+
+### En el teléfono y la tablet
+
+En el teléfono, como Playback en un iPhone, debajo de las canciones se ven por turnos la onda o el mezclador: cambia con los botones `Onda` y `Mezcla`. En la tablet y el ordenador se ven los tres a la vez; en pantallas medianas el mezclador se puede plegar para dar altura a la onda.
+
 ## Exportar canciones y paquetes
 
 Puedes exportar una canción en caso de aberla creado con las regiones, esto exportará toda la configuración de la canción para tenerla disponible en futuras sesiones. Para ello:

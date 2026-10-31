@@ -19,9 +19,10 @@ import { SongGapVampToggle } from "../live/SongGapVampToggle";
 import { useLiveProgressBars } from "../live/useLiveProgressBars";
 import type { SongViewBindings } from "../songs/songViewBindings";
 import { useSongReorder } from "../songs/useSongReorder";
-import { useTransportStore } from "../store";
 import { NewSongTemplateMenu } from "../templates/NewSongTemplateMenu";
 import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
+import { activateSetlistSong } from "./setlistActivation";
 import { SetlistSongTile, type SetlistSongTileActions } from "./SetlistSongTile";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 
@@ -131,14 +132,8 @@ function SetlistSongRowComponent({
 
   const actions = useMemo<SetlistSongTileActions>(
     () => ({
-      onActivate: (regionId) => {
-        onSelectRegion(regionId);
-        // Read at click time, not subscribed: the row must not re-render on
-        // every transport change. Sounding, a tap only prepares the song.
-        const playing =
-          useTransportStore.getState().playback?.playbackState === "playing";
-        if (!playing && canControl) onCueSong(regionId);
-      },
+      onActivate: (regionId) =>
+        activateSetlistSong(regionId, { canControl, onSelectRegion, onCueSong }),
       onPlaySong,
       onSongContextMenu,
       onDropOsFilesIntoSong,
@@ -208,6 +203,7 @@ function SetlistSongRowComponent({
     <div
       ref={listRef}
       className={`lt-setlist-songs is-${layout}${isVertical ? " is-vertical" : " is-horizontal"}${dragPreview?.isPackage ? " is-package-drag" : ""}${editing ? " is-editing" : ""}`}
+      data-lt-tour={TOUR_TARGETS.setlistSongs}
       role="list"
       aria-label={t("setlistView.songs.label")}
       onDragOver={(event) => event.preventDefault()}

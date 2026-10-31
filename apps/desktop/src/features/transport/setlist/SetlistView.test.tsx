@@ -5,6 +5,8 @@ import { useTimelineUIStore } from "../uiStore";
 import { SetlistView } from "./SetlistView";
 import { INITIAL_SETLIST_STATE, useSetlistStore } from "./setlistStore";
 import { testSetlistProps } from "./testBindings";
+import { setlistTour } from "../../tutorial/tours/setlist";
+import { TOUR_TARGETS, findTourTarget } from "../../tutorial/tourTargets";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -153,5 +155,22 @@ describe("SetlistView skeleton", () => {
     expect(screen.getByRole("button", { name: "setlistView.sections.add" })).toBeTruthy();
     act(() => useSetlistStore.getState().setEditMode(null));
     expect(zones(container)).toEqual(["songs", "mixer"]);
+  });
+});
+
+describe("SetlistView tour anchors (paso 19, C3)", () => {
+  it.each(["wide", "medium"] as const)("%s: every Setlist tour step finds its control", (layoutClass) => {
+    render(<SetlistView {...testSetlistProps()} layoutClass={layoutClass} />);
+    const targets = setlistTour.steps
+      .map((step) => step.target)
+      .filter((target) => target && target !== TOUR_TARGETS.sideNavHelp);
+    expect(targets.length).toBeGreaterThanOrEqual(4);
+    for (const target of targets) {
+      expect(findTourTarget(target!), target).not.toBeNull();
+    }
+  });
+
+  it("every step opens the Setlist view", () => {
+    expect(setlistTour.steps.every((step) => step.viewMode === "setlist")).toBe(true);
   });
 });

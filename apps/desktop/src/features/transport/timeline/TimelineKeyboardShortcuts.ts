@@ -22,6 +22,12 @@ import {
 import type { ShortcutActionId } from "../keyboard/actions";
 import { eventToBinding } from "../keyboard/keybinding";
 import { VIDEO_SHORTCUT_HANDLERS } from "../video/videoLive";
+import {
+  SETLIST_SHORTCUT_HANDLERS,
+  clearSetlistSectionCursor,
+  focusedControlOwnsKey,
+  isSetlistKeyboardActive,
+} from "../setlist/setlistKeyboard";
 import { toggleFullscreen } from "../window/fullscreen";
 import {
   buildBindingIndex,
@@ -176,7 +182,11 @@ export function useTimelineKeyboardShortcuts({
   useEffect(() => {
     // Resolve the effective action → binding map and its reverse index once
     // per override change, not on every keystroke.
-    const bindingToAction = buildBindingIndex(resolveBindings(overrides));
+    const resolvedBindings = resolveBindings(overrides);
+    const bindingToAction = buildBindingIndex(resolvedBindings);
+    // Setlist performance keys (paso 19): consulted first while that view is
+    // on screen and not editing, so ←/→ there walk sections, not nudge.
+    const setlistBindingToAction = buildBindingIndex(resolvedBindings, "setlist");
 
     // ---- One handler per configurable action. These wrap exactly the
     // behaviour the app shipped before the keybinding registry existed, so
@@ -418,6 +428,9 @@ export function useTimelineKeyboardShortcuts({
           useTimelineUIStore.getState().setMidiLearnMode(null);
           return;
         }
+        if (clearSetlistSectionCursor()) {
+          return;
+        }
         if (openTopMenu) {
           setOpenTopMenu(null);
           return;
@@ -453,7 +466,15 @@ export function useTimelineKeyboardShortcuts({
         const ui = useTimelineUIStore.getState();
         ui.setMidiLearnMode(ui.midiLearnMode === null ? "" : null);
       },
+      "view.setlist": (event) => {
+        event.preventDefault();
+        if (event.repeat) {
+          return;
+        }
+        useTimelineUIStore.getState().setViewMode("setlist");
+      },
       ...VIDEO_SHORTCUT_HANDLERS,
+      ...SETLIST_SHORTCUT_HANDLERS,
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -553,6 +574,14 @@ export function useTimelineKeyboardShortcuts({
       // while the user is typing or focused in a SELECT.
       if (typingTarget || isSelectTarget) {
         return;
+      }
+
+      if (isSetlistKeyboardActive()) {
+        const setlistAction = setlistBindingToAction.get(binding);
+        if (setlistAction && !focusedControlOwnsKey(binding, event.target)) {
+          handlers[setlistAction](event);
+          return;
+        }
       }
 
       // Backspace is a permanent alias for the Delete action (clip/track

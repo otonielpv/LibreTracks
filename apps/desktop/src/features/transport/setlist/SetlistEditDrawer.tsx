@@ -10,6 +10,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { useDismissOnBack } from "../mobile/backNavigation";
 import { requestEditMode, useSetlistStore, type SetlistEditMode } from "./setlistStore";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
@@ -183,6 +184,7 @@ export function SetlistEditButton() {
   return (
     <button
       type="button"
+      data-lt-tour={TOUR_TARGETS.setlistEdit}
       disabled={!canEdit}
       className={`lt-setlist-edit-button${editing ? " is-active" : ""}`}
       aria-pressed={editing}

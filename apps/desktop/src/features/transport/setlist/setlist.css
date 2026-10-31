@@ -954,6 +954,14 @@ html.lt-mobile .lt-setlist-add-song-button {
   outline-offset: -2px;
 }
 
+/* Keyboard cursor (←/→, paso 19). Only exists after an arrow press, so the
+ * view looks as before for everyone else. White dashed, unlike the pending
+ * jump's yellow: it is a choice, not something scheduled. */
+.lt-setlist-map-block.is-cursor {
+  outline: 2px dashed rgb(255 255 255 / 0.9);
+  outline-offset: -3px;
+}
+
 .lt-setlist-zone.is-drawer {
   display: flex;
   min-height: 0;

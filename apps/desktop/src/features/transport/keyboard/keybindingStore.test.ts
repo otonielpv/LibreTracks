@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { SHORTCUT_ACTIONS } from "./actions";
 import {
+  actionsCollide,
   buildBindingIndex,
   findBindingConflict,
   KEYBINDINGS_STORAGE_KEY,
@@ -91,5 +93,48 @@ describe("useKeybindingStore persistence", () => {
     store.resetAll();
     expect(useKeybindingStore.getState().overrides).toEqual({});
     expect(window.localStorage.getItem(KEYBINDINGS_STORAGE_KEY)).toBe("{}");
+  });
+});
+
+describe("Setlist scope (plan setlist-view, paso 19)", () => {
+  it("no two shipped defaults collide", () => {
+    const bound = SHORTCUT_ACTIONS.filter((action) => action.defaultBinding);
+    for (const a of bound) {
+      for (const b of bound) {
+        if (a.id >= b.id || a.defaultBinding !== b.defaultBinding) continue;
+        expect(actionsCollide(a.id, b.id), `${a.id} vs ${b.id} on ${a.defaultBinding}`).toBe(false);
+      }
+    }
+  });
+
+  it("registers the view shortcut unbound and the performance keys", () => {
+    const resolved = resolveBindings({});
+    expect(resolved["view.setlist"]).toBeNull();
+    expect(resolved["setlist.previousSection"]).toBe("ArrowLeft");
+    expect(resolved["setlist.nextSection"]).toBe("ArrowRight");
+    expect(resolved["setlist.previousSong"]).toBe("ArrowUp");
+    expect(resolved["setlist.nextSong"]).toBe("ArrowDown");
+    expect(resolved["setlist.confirmJump"]).toBe("Enter");
+  });
+
+  it("keeps scoped keys out of the global index and vice versa", () => {
+    const resolved = resolveBindings({});
+    const global = buildBindingIndex(resolved);
+    const setlist = buildBindingIndex(resolved, "setlist");
+    expect(global.get("ArrowLeft")).toBe("edit.nudgeLeft");
+    expect(global.has("Enter")).toBe(false);
+    expect(setlist.get("ArrowLeft")).toBe("setlist.previousSection");
+    expect(setlist.get("Enter")).toBe("setlist.confirmJump");
+    expect(setlist.has("Space")).toBe(false);
+  });
+
+  it("lets a Setlist key shadow an edit key but not transport or view keys", () => {
+    expect(findBindingConflict({}, "S", "setlist.nextSong")).toBeNull();
+    expect(findBindingConflict({}, "Space", "setlist.nextSong")).toBe("transport.playPause");
+    expect(findBindingConflict({}, "Tab", "setlist.confirmJump")).toBe("view.toggleViewMode");
+    // Inside the scope, two actions on one key do fight.
+    expect(findBindingConflict({}, "Enter", "setlist.nextSong")).toBe("setlist.confirmJump");
+    // And a global edit key over a Setlist one is fine the other way round.
+    expect(findBindingConflict({}, "ArrowDown", "edit.nudgeLeft")).toBeNull();
   });
 });

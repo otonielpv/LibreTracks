@@ -240,6 +240,7 @@ const en = {
       view: "View",
       navigation: "Navigation",
       video: "Video",
+      setlist: "Setlist view (performance)",
     },
     action: {
       playPause: "Play / Pause",
@@ -273,6 +274,12 @@ const en = {
       videoFadeBlack: "Video: fade to black",
       videoIdle: "Video: show idle screen",
       videoToggleOutput: "Video: output on/off",
+      openSetlist: "Open Setlist view",
+      setlistPreviousSection: "Previous section (cursor)",
+      setlistNextSection: "Next section (cursor)",
+      setlistPreviousSong: "Previous song",
+      setlistNextSong: "Next song",
+      setlistConfirmJump: "Jump to the section under the cursor",
     },
   },
   midiMap: {
@@ -3388,6 +3395,41 @@ const en = {
         done: {
           title: "Ready for the stage",
           body: "All of this is saved with the session, so it is a one-time setup. Any tour can be replayed from the TUTORIAL button.",
+        },
+      },
+    },
+    setlist: {
+      name: "Setlist view",
+      summary: "Songs, section map, mixer and Edit.",
+      steps: {
+        intro: {
+          title: "Setlist view",
+          body: "The view for playing live if you come from Playback or Prime: your songs on top, the chosen song with its sections in the middle and the console below. It is the same session you see in the DAW, just looked at differently.",
+        },
+        songs: {
+          title: "The songs",
+          body: "One card per song, in setlist order. Tap one to show it and, with the transport stopped, cue it. Double tap or ▶ plays it. Drag them to reorder the setlist.",
+        },
+        map: {
+          title: "The song map",
+          body: "Each block is a section over the song's waveform. Stopped, a tap jumps there. Playing, double tap: the jump waits for the moment your jump mode sets, and tapping the pending section cancels it.",
+          bodyMobile: "Each block is a section over the song's waveform. Stopped, a tap jumps there. Playing, double tap: the jump waits for the moment your jump mode sets, and tapping the pending section cancels it. Long-press a block for its menu.",
+        },
+        keys: {
+          title: "From the keyboard",
+          body: "The ← → arrows move a cursor over the sections and Enter jumps there. ↑ ↓ change song and Esc clears the cursor. Number keys 1-9 still jump straight to each section.",
+        },
+        mixer: {
+          title: "The mixer",
+          body: "The tracks of the song you are looking at, with its master. Mix scenes live here too. On a phone the mixer and the waveform take turns: switch with the Mixer and Waveform buttons.",
+        },
+        edit: {
+          title: "Edit",
+          body: "To touch up the song without going to the DAW: settings, sections, arrangement, tracks, lanes, automation, MIDI, video and lyrics. Press Done to go back to playing.",
+        },
+        done: {
+          title: "Time to play",
+          body: "You can come back to this tour any time from the TUTORIAL button.",
         },
       },
     },

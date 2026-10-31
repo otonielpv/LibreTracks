@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 
 import { regionEffectiveKey, type SongRegionSummary } from "../desktopApi";
 import { KeySequenceLabel } from "../keyChanges/SoundingKeyLabel";
+import { MidiMappable } from "../midi/MidiMappable";
 import { formatLiveClock } from "../live/liveMarkerModel";
 import { SongReorderHandle, type SongReorderHandleProps } from "../songs/SongReorderHandle";
 import { SONG_REORDER_ID_ATTRIBUTE } from "../songs/useSongReorder";
@@ -182,6 +183,8 @@ function SetlistSongTileComponent({
       </span>
       {layout !== "short" ? <ArrangementBadge region={region} /> : null}
       <span className="lt-setlist-song-actions" data-no-song-reorder="">
+        {/* The same MIDI learn target as Live's play button. */}
+        <MidiMappable target={canControl ? `action:jump_song_${index + 1}` : ""} label={region.name}>
         <button
           type="button"
           className="lt-setlist-song-button lt-setlist-song-play"
@@ -198,6 +201,7 @@ function SetlistSongTileComponent({
             play_arrow
           </span>
         </button>
+        </MidiMappable>
         <button
           type="button"
           className="lt-setlist-song-button"

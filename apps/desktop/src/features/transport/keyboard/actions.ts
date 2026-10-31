@@ -21,7 +21,8 @@ export type ShortcutGroup =
   | "view"
   | "project"
   | "navigation"
-  | "video";
+  | "video"
+  | "setlist";
 
 export type ShortcutActionId =
   // transport
@@ -54,13 +55,28 @@ export type ShortcutActionId =
   | "view.zoomReset"
   | "view.toggleFullscreen"
   | "view.toggleMidiMap"
+  | "view.setlist"
   // navigation
   | "nav.cancelOrClear"
   // video (paso 13)
   | "video.black"
   | "video.fadeBlack"
   | "video.idle"
-  | "video.toggleOutput";
+  | "video.toggleOutput"
+  // Setlist view, performance only (plan setlist-view, paso 19)
+  | "setlist.previousSection"
+  | "setlist.nextSection"
+  | "setlist.previousSong"
+  | "setlist.nextSong"
+  | "setlist.confirmJump";
+
+/**
+ * Where an action listens. Global actions (no scope) work in every view; a
+ * scoped one only while that context is on screen, and there it wins over a
+ * global action on the same key. That is how the Setlist's arrows can share
+ * ←/→ with the clip nudge: in Setlist performance nothing is being edited.
+ */
+export type ShortcutScope = "setlist";
 
 export type ShortcutActionDef = {
   id: ShortcutActionId;
@@ -76,6 +92,8 @@ export type ShortcutActionDef = {
    * variants that don't fit the canonical binding form). Defaults to true.
    */
   editable?: boolean;
+  /** Context the action is limited to; omitted = global. */
+  scope?: ShortcutScope;
 };
 
 export const SHORTCUT_ACTIONS: ShortcutActionDef[] = [
@@ -257,6 +275,14 @@ export const SHORTCUT_ACTIONS: ShortcutActionDef[] = [
     labelKey: "shortcuts.action.toggleMidiMap",
     defaultBinding: "Ctrl+M",
   },
+  {
+    // Jump straight to the Setlist view. Unbound by default: Tab already
+    // cycles the views and every free letter is a future collision.
+    id: "view.setlist",
+    group: "view",
+    labelKey: "shortcuts.action.openSetlist",
+    defaultBinding: null,
+  },
 
   // --- Navigation --------------------------------------------------------
   {
@@ -292,7 +318,65 @@ export const SHORTCUT_ACTIONS: ShortcutActionDef[] = [
     labelKey: "shortcuts.action.videoToggleOutput",
     defaultBinding: null,
   },
+
+  // --- Setlist (paso 19) ---------------------------------------------------
+  // Playback's "Live ReOrder": ←/→ walk the sections of the shown song with
+  // a cursor, Enter jumps there, ↑/↓ change song. Only in performance (not
+  // in Edit, where the arrows still nudge clips).
+  {
+    id: "setlist.previousSection",
+    group: "setlist",
+    labelKey: "shortcuts.action.setlistPreviousSection",
+    defaultBinding: "ArrowLeft",
+    scope: "setlist",
+  },
+  {
+    id: "setlist.nextSection",
+    group: "setlist",
+    labelKey: "shortcuts.action.setlistNextSection",
+    defaultBinding: "ArrowRight",
+    scope: "setlist",
+  },
+  {
+    id: "setlist.previousSong",
+    group: "setlist",
+    labelKey: "shortcuts.action.setlistPreviousSong",
+    defaultBinding: "ArrowUp",
+    scope: "setlist",
+  },
+  {
+    id: "setlist.nextSong",
+    group: "setlist",
+    labelKey: "shortcuts.action.setlistNextSong",
+    defaultBinding: "ArrowDown",
+    scope: "setlist",
+  },
+  {
+    id: "setlist.confirmJump",
+    group: "setlist",
+    labelKey: "shortcuts.action.setlistConfirmJump",
+    defaultBinding: "Enter",
+    scope: "setlist",
+  },
 ];
+
+const SCOPE_BY_ACTION = new Map<ShortcutActionId, ShortcutScope>(
+  SHORTCUT_ACTIONS.flatMap((action) =>
+    action.scope ? [[action.id, action.scope] as const] : [],
+  ),
+);
+
+/** The scope an action listens in; `undefined` = global. */
+export function shortcutScope(id: ShortcutActionId): ShortcutScope | undefined {
+  return SCOPE_BY_ACTION.get(id);
+}
+
+/**
+ * Global groups a scoped action may shadow while its context is on screen.
+ * Editing does not happen in Setlist performance, so its keys are free there;
+ * transport, view and navigation keys must keep working everywhere.
+ */
+export const SHADOWABLE_GROUPS: readonly ShortcutGroup[] = ["edit"];
 
 export const SHORTCUT_GROUP_ORDER: ShortcutGroup[] = [
   "transport",
@@ -301,6 +385,7 @@ export const SHORTCUT_GROUP_ORDER: ShortcutGroup[] = [
   "view",
   "navigation",
   "video",
+  "setlist",
 ];
 
 /** i18n key for a group heading (under `shortcuts.group.*`). */

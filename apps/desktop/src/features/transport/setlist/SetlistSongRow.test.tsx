@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { resetFrameGateForTests } from "../frameGate";
 import { SONG_REORDER_ID_ATTRIBUTE } from "../songs/useSongReorder";
 import { useTransportStore } from "../store";
+import { useTimelineUIStore } from "../uiStore";
 import { SetlistSongRow } from "./SetlistSongRow";
 import { testRegion } from "./testBindings";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
@@ -230,6 +231,23 @@ describe("SetlistSongRow gestures", () => {
     fireEvent.click(screen.getByRole("button", { name: "setlistView.songs.importPackage" }));
     expect(props.onImportSongPackageFromDialog).toHaveBeenCalledOnce();
     expect(props.onImportSongPackageFromDialog).toHaveBeenCalledWith();
+  });
+});
+
+describe("SetlistSongRow MIDI learn (paso 19, C2)", () => {
+  afterEach(() => useTimelineUIStore.setState({ midiLearnMode: null }));
+
+  it("each card's play button is the jump_song_N target Live's uses", () => {
+    useTimelineUIStore.setState({ midiLearnMode: "" });
+    const props = rowProps();
+    const { container } = render(<SetlistSongRow {...props} />);
+    const play = tile(container, "b").querySelector<HTMLElement>(".lt-setlist-song-play")!;
+    expect(play.querySelector("[data-midi-target]")?.getAttribute("data-midi-target")).toBe(
+      "action:jump_song_2",
+    );
+    fireEvent.click(play);
+    expect(useTimelineUIStore.getState().midiLearnMode).toBe("action:jump_song_2");
+    expect(props.onPlaySong).not.toHaveBeenCalled();
   });
 });
 

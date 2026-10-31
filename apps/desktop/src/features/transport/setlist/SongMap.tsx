@@ -12,6 +12,8 @@ import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { markerCategory, transposeKey, type SongRegionSummary } from "@libretracks/shared/models";
 
 import { isMobileApp } from "../desktopApi";
+import { MidiLearnBadge } from "../midi/MidiMappable";
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { openSongAnalysis } from "../songAnalysis/songAnalysisStore";
 import type {
   PerformanceBindings,
@@ -26,8 +28,11 @@ import {
   barSecondsAtFor,
   blockIdForMarker,
   buildSongMapBlocks,
+  sectionJumpIndexes,
   type SongMapBlock,
 } from "./songMapModel";
+import { jumpToSongMapBlock } from "./setlistActivation";
+import { useSetlistStore } from "./setlistStore";
 import { createSongTimeScale } from "./songTimeScale";
 import { useSongMapPlayback } from "./useSongMapPlayback";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
@@ -97,6 +102,10 @@ function SongMapComponent({
     [region, song, t],
   );
   const { activeId, nextId } = useSongMapPlayback(blocks, positionSecondsRef, fillRef);
+  // The keyboard cursor (←/→, paso 19); null unless the arrows were used.
+  const cursorId = useSetlistStore((state) => (editing ? null : state.sectionCursorId));
+  // The MIDI learn index of each section: the same `jump_marker_N` Live maps.
+  const jumpIndexes = useMemo(() => sectionJumpIndexes(song.sectionMarkers), [song.sectionMarkers]);
   const pendingBlockId = blockIdForMarker(blocks, pendingMarkerId);
   const loopingBlockId = activeVamp
     ? (blocks.find(
@@ -126,6 +135,11 @@ function SongMapComponent({
     widthPx: 100,
   });
 
+  const midiTargetFor = (block: SongMapBlock): string | null => {
+    const jumpIndex = block.marker ? jumpIndexes.get(block.marker.id) : undefined;
+    return canControl && !editing && jumpIndex ? `action:jump_marker_${jumpIndex}` : null;
+  };
+
   const activate = (block: SongMapBlock, doubleClick = false) => {
     if (!canControl) return;
     if (editing) {
@@ -133,20 +147,23 @@ function SongMapComponent({
       selectSection(block.marker?.id ?? null);
       return;
     }
-    if (block.id === pendingBlockId) {
-      onCancelPendingJump();
+    // MIDI Map mode: a tap arms the learn for the section's jump.
+    const ui = useTimelineUIStore.getState();
+    if (ui.midiLearnMode !== null) {
+      const target = midiTargetFor(block);
+      if (target) ui.setMidiLearnMode(target);
       return;
     }
     const playing = useTransportStore.getState().playback?.playbackState === "playing";
-    if (playing && !doubleClick) return;
-    if (block.marker) {
-      onMarkerAction(block.marker);
-      return;
-    }
-    // The implicit start / whole-song block has no marker: it goes to the
-    // song's start (a song jump while sounding, a cue while stopped).
-    if (playing) onPlaySong(region.id, region.name);
-    else onCueSong(region.id);
+    if (playing && !doubleClick && block.id !== pendingBlockId) return;
+    jumpToSongMapBlock(block, {
+      region,
+      pendingBlockId,
+      onMarkerAction,
+      onCancelPendingJump,
+      onPlaySong,
+      onCueSong,
+    });
   };
 
   const openMenu = (event: ReactMouseEvent<HTMLElement>, block: SongMapBlock) => {
@@ -161,6 +178,7 @@ function SongMapComponent({
       {part === "actions" ? null : (
       <div
         className="lt-setlist-map-blocks"
+        data-lt-tour={TOUR_TARGETS.setlistMap}
         role="list"
         aria-label={t("setlistView.map.label", { name: region.name })}
         onPointerDownCapture={isMobileApp ? touchMenu.begin : undefined}
@@ -187,10 +205,12 @@ function SongMapComponent({
             block.id === nextId ? "is-next" : "",
             block.id === pendingBlockId ? "is-pending" : "",
             block.id === loopingBlockId ? "is-looping" : "",
+            block.id === cursorId ? "is-cursor" : "",
             editing && block.marker && block.marker.id === selectedSectionId ? "is-selected" : "",
           ]
             .filter(Boolean)
             .join(" ");
+          const learnTarget = midiTargetFor(block);
           return (
             <button
               key={block.id}
@@ -233,6 +253,7 @@ function SongMapComponent({
                   <span ref={fillRef} className="lt-setlist-map-progress-fill" />
                 </span>
               ) : null}
+              <MidiLearnBadge target={learnTarget} />
             </button>
           );
         })}

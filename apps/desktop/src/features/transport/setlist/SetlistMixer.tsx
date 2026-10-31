@@ -24,6 +24,7 @@ import { isMobileApp } from "../desktopApi";
 import { MobileTrackSelectionControls } from "../mobile/MobileTrackSelectionControls";
 import { SetlistConsoleStrip } from "./SetlistConsoleStrip";
 import { useSetlistStore, type SetlistBottomTab } from "./setlistStore";
+import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { computeSongTrackContent } from "./songTrackContent";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 
@@ -214,7 +215,7 @@ function SetlistMixerComponent({
 
   if (foldable && collapsed) {
     return (
-      <div className={`lt-setlist-mixer is-${layout} is-collapsed`}>
+      <div className={`lt-setlist-mixer is-${layout} is-collapsed`} data-lt-tour={TOUR_TARGETS.setlistMixer}>
         <div className="lt-setlist-console is-bar">{masterStrip}</div>
         <button
           type="button"
@@ -231,7 +232,7 @@ function SetlistMixerComponent({
   }
 
   return (
-    <div className={`lt-setlist-mixer is-${layout}`}>
+    <div className={`lt-setlist-mixer is-${layout}`} data-lt-tour={TOUR_TARGETS.setlistMixer}>
       <div className="lt-setlist-mixer-header">
         {viewButtons ? (
           <>

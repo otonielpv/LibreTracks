@@ -3,6 +3,7 @@ import { cloudTour } from "./cloud";
 import { dawTour } from "./daw";
 import { landingTour } from "./landing";
 import { liveTour } from "./live";
+import { setlistTour } from "./setlist";
 import { workspaceTour } from "./workspace";
 
 /**
@@ -14,5 +15,6 @@ export const TOURS: Record<TourId, TourDefinition> = {
   workspace: workspaceTour,
   daw: dawTour,
   live: liveTour,
+  setlist: setlistTour,
   cloud: cloudTour,
 };

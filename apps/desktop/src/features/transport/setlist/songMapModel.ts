@@ -1,5 +1,6 @@
 import {
   getEffectiveBpmAt,
+  markerCategory,
   markerColor,
   type SectionMarkerSummary,
   type SongRegionSummary,
@@ -191,6 +192,21 @@ export function resolveActiveBlock(
 /** The song the map shows: the selected one, else the one it showed last
  * (a section menu clears the song selection, like in the DAW), else the
  * sounding one, else the first. */
+/**
+ * The 1-based `jump_marker_N` index of each section, as the MIDI dispatch
+ * counts them: sections only (cues are not jump targets), in time order.
+ */
+export function sectionJumpIndexes(
+  markers: readonly SectionMarkerSummary[],
+): Map<string, number> {
+  return new Map(
+    markers
+      .filter((marker) => markerCategory(marker) === "section")
+      .sort((left, right) => left.startSeconds - right.startSeconds)
+      .map((marker, index) => [marker.id, index + 1]),
+  );
+}
+
 export function resolveSetlistSongId(
   regions: readonly SongRegionSummary[],
   selectedRegionId: string | null,
