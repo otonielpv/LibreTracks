@@ -18,7 +18,7 @@ LibreTracks habla MIDI en los dos sentidos:
 En **Configuración › MIDI**, elige el **Dispositivo de entrada MIDI**. Si lo
 enchufas con la app abierta, pulsa el botón de refrescar de al lado.
 
-![Pestaña MIDI de la Configuración](/guide/desktop/settings-midi.png)
+![Pestaña MIDI de la Configuración](/guide/desktop/settings-midi-1.png)
 
 Si el cable se suelta en pleno directo, aparece el aviso **Controlador MIDI
 desconectado** en la barra superior, y la app lo vuelve a abrir sola en
@@ -46,6 +46,63 @@ Qué se puede manejar:
 - **Vídeo**: negro, fundido a negro, pantalla de reposo y activar la salida.
 - **Sesión**: nuevo, abrir, guardar, guardar como, deshacer, rehacer y crear
   una marca en el cursor.
+
+## Controladores de faders (nanoKONTROL2, Mackie…)
+
+Además de pedales y botones, LibreTracks se maneja con un controlador de
+faders, como en Ableton.
+
+### Modo Mapeo MIDI
+
+Pulsa `Ctrl+M` (o **Aprendizaje MIDI** en
+**Configuración › Aprendizaje MIDI**). Todo lo que se puede asignar se tiñe:
+faders, paneos, mute y solo de cada pista en la DAW, la Vista Compacta y la
+Vista Setlist, el master de la canción, el click, la guía, los pads, los
+botones de escena y los saltos de Live y Setlist. Lo que ya tiene vínculo sale
+en verde, con su mensaje encima.
+
+![Modo Mapeo MIDI](/guide/desktop/midi-map-mode.png)
+
+1. El aviso del modo. **Salir** (o `Esc`) lo cierra; la flecha lo sube o lo
+   baja si tapa algo.
+2. Un control mapeable. Tócalo y mueve el control físico: queda vinculado.
+
+### Tiras 1-8, perfiles y faders motorizados
+
+En **Configuración › Aprendizaje MIDI**:
+
+![Aprendizaje MIDI: perfiles y mezclador](/guide/desktop/midi-learn-mixer.png)
+
+1. **Aprendizaje MIDI** activa el Modo Mapeo.
+2. **Perfil de controlador**: si LibreTracks reconoce tu controlador por el
+   nombre del puerto, te lo propone. **Aplicar** rellena las tiras, el
+   transporte y los bancos de una vez. Hay perfiles para **Korg
+   nanoKONTROL2**, **Mackie Control** y **M-Vave SMC-Mixer** (en su modo
+   Mackie). **Importar…** y **Exportar** guardan o cargan tus propios
+   vínculos.
+3. Las vistas de la lista:
+   - **Mezclador**: las **tiras 1 a 8** (volumen, paneo, mute y solo), que
+     siguen el orden de las pistas visibles de la canción que suena, más
+     **Banco siguiente** y **Banco anterior** para pasar de 8 en 8. Las 8
+     pistas que manejas llevan un filo rojo en su cabecera.
+   - **Escenas**: ver [Escenas de mezcla](/es/docs/live-scenes/).
+   - **Vínculos**: todo lo asignado, con su **Modo** (absoluto, relativo,
+     botón conmutado o momentáneo), **Mínimo**, **Máximo**, **Invertir** y
+     **Recogida**.
+
+Para que los LEDs de los botones y los faders motorizados sigan la mezcla,
+elige en **Configuración › MIDI** la **Salida del controlador (LEDs)**: el
+puerto por el que tu controlador recibe el estado, que suele llamarse como su
+entrada.
+
+**Modo de recogida** (**Configuración › MIDI**) decide qué pasa cuando el
+fader físico no está donde está la pista, por ejemplo al cambiar de banco o
+de canción:
+
+- **Ninguno**: la pista salta a donde esté el fader.
+- **Recoger**: el fader no hace nada hasta llegar al valor de la pista.
+- **Escalar valor**: el fader mueve la pista enseguida y los dos se encuentran
+  al final del recorrido. Nunca salta ni se queda muerto.
 
 ## Enviar MIDI desde la canción
 

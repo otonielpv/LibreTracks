@@ -1,0 +1,83 @@
+---
+title: Mix scenes
+description: "Mix scenes in LibreTracks: mix states you engage and release with a button, by MIDI or from an automation cue, like bringing the band down while someone speaks. Releasing one puts the mix back as it was."
+---
+
+A **scene** is a mix state you engage and release by hand: for example,
+bringing the instruments down while someone talks to the audience and bringing
+them back afterwards. When you release it, the mix goes back **exactly** to
+how it was before.
+
+## Create a scene
+
+Open **File › Mix scenes…**. On mobile, the **File** sheet in the side rail;
+in the [Setlist View](/docs/setlist-view/), the mixer's **Scenes** button. No
+automation track is needed.
+
+![Mix scenes editor](/guide/desktop-en/mix-scenes-editor.png)
+
+1. **The session's scenes**, in order. Each one's number (1, 2, 3…) is what
+   the buttons and the controller use; change it with the arrows.
+2. **+ Bring the band down (except vocals)** creates the usual scene in one
+   click: every track of the song except those named voz, voc, vox, click,
+   guía or guide, −12 dB, with a 2-second ramp. **+ New scene** creates an
+   empty one.
+3. **Name** and **Ramp**: the seconds it takes to reach the new mix (and to
+   come back when you release it).
+4. **The rules**. Each rule reads like a sentence: *which tracks*, *except
+   which*, and *what changes*.
+   - **Which tracks:** `Every track of the song` (the one under the
+     playhead), `Folder` (the tracks in a folder with that name), `Name
+     contains` (words separated by commas; case and accents are ignored, so
+     "voz" finds "Vóz guía") or a specific `Track`.
+   - **except:** zero or more selectors that are taken away.
+   - **What changes:** volume (`± dB` over each track's own level, or a fixed
+     value), pan, mute and solo. Anything left on **No change** is not
+     touched.
+5. **Which tracks it affects in the current song**, to check the rule before
+   using it live.
+
+Song, folder and name rules work for **any song** in the session: you don't
+need a scene per song.
+
+## Engage and release it
+
+The [Live View](/docs/live-view/), the [Setlist View](/docs/setlist-view/)
+mixer and the [Compact View](/docs/compact-view/) have a button per scene.
+Press it to engage the scene (it lights up) and again to release it.
+
+![Scene buttons in the Live View](/guide/desktop-en/scene-buttons-live.png)
+
+You can also:
+
+- **Use a MIDI controller.** In **Settings › MIDI Learn › Scenes** each scene
+  has three rows: *toggle* (one button engages and releases), *engage* and
+  *release*. Press **Learn** on the row and then the controller's button. The
+  same place has **Scene 1** to **Scene 8**, which follow the editor's order
+  and work in any session. Or use [MIDI Map mode](/docs/tasks/midi/#midi-map-mode):
+  turn it on, tap the scene's button and press the controller's button. The
+  controller's LED follows the scene even when you engage it on screen.
+- **From an automation cue**: in its scene action, pick **Engage the scene**,
+  **Toggle (engage or release)** or **Release the scene and go back**. See
+  [Automation](/docs/automation/).
+
+## While it is engaged
+
+- If you move a track's fader, mute or solo by hand (on screen or on the
+  controller), that track leaves the scene: when you release it, the track
+  stays where you left it.
+- If playback moves on to the **next song**, the scene stays engaged and
+  carries over: the tracks of the song that ends go back to their level and
+  those of the new one come down with the ramp. Rules for a specific track
+  don't carry over.
+- Stopping, playing again or jumping within the song doesn't release it.
+- Saving (also on close and on export) writes the mix from **before** the
+  scene: you won't reopen the session with the music down.
+
+## Scenes in templates
+
+Scenes travel with the session (`.ltset`) and with
+[session templates](/docs/integration-ecosystem/#session-templates). In a
+template, folder rules are the most useful: "Folder Instruments, −12 dB"
+works in every session you create from it. Rules for a specific track don't
+travel with the template, because the template doesn't keep those tracks.

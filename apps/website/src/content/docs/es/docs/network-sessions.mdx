@@ -1,0 +1,71 @@
+---
+title: Sesiones de red
+description: "Conecta varios LibreTracks en la misma Wi-Fi: uno hospeda la sesión y los demás la siguen desde su propia app (ordenador, tablet o móvil), cada uno con su permiso: Lector, Control o Edición."
+---
+
+Una **sesión de red** conecta varios LibreTracks en la misma Wi-Fi. Uno
+**hospeda** (el que suena) y los demás **se unen** desde su propia app, en el
+ordenador, la tablet o el móvil. Cada invitado ve la sesión del anfitrión en
+directo y puede elegir su vista (DAW, Setlist, Compacta o Live) sin cambiar la
+del anfitrión. El invitado **no reproduce audio**: todo suena en el anfitrión.
+
+No es lo mismo que el [Remote](/es/docs/remote-control/), que es una página web
+para manejar el transporte desde el navegador. Aquí cada dispositivo usa la app
+completa.
+
+Se abre con **Red** en la barra lateral.
+
+## Hospedar
+
+![Sesión de red: hospedar](/guide/desktop/network-host.png)
+
+1. Pestañas **Hospedar** y **Unirse**.
+2. Los ajustes del anfitrión:
+   - **Nombre de este dispositivo**: así te verán los demás.
+   - **PIN de Control** y **PIN de Edición**: el PIN que tiene que escribir
+     el invitado para entrar con ese rol. Vacío en Control significa que nadie
+     puede pedir ese rol; vacío en Edición, que está desactivado.
+   - **Seguir hospedando tras reiniciar la app**.
+3. **Hospedar** empieza la sesión. A la derecha aparecen la dirección para
+   unirse (con un código QR), los invitados conectados con su rol, y los
+   **Dispositivos recordados**, que entran sin volver a pedir el PIN; **Olvidar**
+   les quita ese permiso.
+
+:::caution[Windows y el cortafuegos]
+Si el cortafuegos de Windows bloquea las conexiones en la red en la que
+estás, la ventana lo avisa arriba y ofrece permitirlo. Sin eso, los demás no
+pueden encontrarte ni unirse.
+:::
+
+## Unirse
+
+![Sesión de red: unirse](/guide/desktop/network-join.png)
+
+- **Anfitriones en esta red**: los que LibreTracks encuentra solo en la Wi-Fi.
+  Toca uno para unirte.
+- **PIN (opcional)**: sin PIN entras como **Lector**. Con el de Control o el
+  de Edición, con ese rol.
+- **Recordar este dispositivo** para no volver a escribir el PIN.
+- **Dirección del anfitrión**: si no aparece en la lista, escribe la que
+  muestra el anfitrión, por ejemplo `192.168.1.20:3040`.
+
+Los dos dispositivos tienen que estar en la **misma Wi-Fi**, y no en una red
+de invitados que aísle los dispositivos entre sí, como la de algunos locales.
+
+## Qué puede hacer cada rol
+
+| Rol | Qué puede hacer en el anfitrión |
+| --- | --- |
+| **Lector** | Ver canciones, secciones, letra, mezcla y el estado del vídeo. Elegir una canción para verla no la hace saltar. |
+| **Control** | Lo anterior, más transporte, saltos, Vamp, orden de las canciones, transiciones, pausa al final, vamp entre canciones y la salida de vídeo (negro, fundido, reposo). |
+| **Edición** | Lo anterior, más la mezcla, el metrónomo, la voz guía, los pads, la letra y los acordes, el tono, y editar canciones, secciones, arreglos, clips, MIDI y automatizaciones, con deshacer y rehacer. |
+
+Los controles que tu rol no permite salen desactivados, y se actualizan si el
+anfitrión te cambia el rol o se pierde la conexión.
+
+Lo que necesita los archivos o los aparatos del anfitrión se hace **en el
+anfitrión**: importar, exportar, analizar, renderizar, guardar el proyecto,
+instalar pads, y elegir sus tarjetas de sonido, puertos MIDI o pantallas.
+
+El idioma y las preferencias de vista del invitado se guardan solo en su
+dispositivo.

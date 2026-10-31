@@ -1,0 +1,69 @@
+---
+title: Network sessions
+description: "Connect several LibreTracks apps on the same Wi-Fi: one hosts the session and the others follow it from their own app (computer, tablet or phone), each with its own permission: Viewer, Control or Edit."
+---
+
+A **network session** connects several LibreTracks apps on the same Wi-Fi.
+One **hosts** (the one that plays) and the others **join** from their own app,
+on a computer, tablet or phone. Each guest sees the host's session live and
+can pick its own view (DAW, Setlist, Compact or Live) without changing the
+host's. The guest **plays no audio**: everything sounds on the host.
+
+It is not the same as the [Remote](/docs/remote-control/), which is a web page
+for driving the transport from a browser. Here every device uses the full app.
+
+Open it with **Network** in the side bar.
+
+## Host
+
+![Network session: host](/guide/desktop-en/network-host.png)
+
+1. **Host** and **Join** tabs.
+2. The host's settings:
+   - **This device's name**: what the others see.
+   - **Control PIN** and **Edit PIN**: the PIN a guest has to type to join
+     with that role. An empty Control PIN means nobody can ask for that role;
+     an empty Edit PIN means it is disabled.
+   - **Keep hosting after the app restarts**.
+3. **Host** starts the session. On the right you get the address to join
+   (with a QR code), the connected guests and their role, and the
+   **Remembered devices**, which join without the PIN again; **Forget** takes
+   that away.
+
+:::caution[Windows and the firewall]
+If the Windows firewall blocks connections on the network you are on, the
+window warns you at the top and offers to allow it. Without that, the others
+can't find you or join.
+:::
+
+## Join
+
+![Network session: join](/guide/desktop-en/network-join.png)
+
+- **Hosts on this network**: the ones LibreTracks finds by itself on the
+  Wi-Fi. Tap one to join.
+- **PIN (optional)**: without a PIN you join as **Viewer**. With the Control
+  or Edit PIN, with that role.
+- **Remember this device** so you don't type the PIN again.
+- **Host address**: if it isn't in the list, type the one the host shows, for
+  example `192.168.1.20:3040`.
+
+Both devices must be on the **same Wi-Fi**, and not on a guest network that
+isolates devices from each other, as some venues have.
+
+## What each role can do
+
+| Role | What it can do on the host |
+| --- | --- |
+| **Viewer** | See songs, sections, lyrics, the mix and the video state. Picking a song to look at it doesn't jump to it. |
+| **Control** | All of the above, plus transport, jumps, Vamp, song order, transitions, pause at the end, vamp between songs and the video output (black, fade, idle). |
+| **Edit** | All of the above, plus the mix, the metronome, the voice guide, the pads, lyrics and chords, the key, and editing songs, sections, arrangements, clips, MIDI and automation, with undo and redo. |
+
+Controls your role doesn't allow are disabled, and they update if the host
+changes your role or the connection drops.
+
+Anything that needs the host's files or hardware is done **on the host**:
+importing, exporting, analysing, rendering, saving the project, installing
+pads, and choosing its sound cards, MIDI ports or screens.
+
+The guest's language and view preferences are kept on the guest's device only.

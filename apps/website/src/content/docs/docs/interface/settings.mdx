@@ -65,7 +65,7 @@ on their own straight away, except the hardware outputs, which have their own
   <kbd>Alt</kbd>+wheel changes the height of the track under the mouse.
 - **Playhead follow**: where the cursor stays when the timeline follows it.
 
-![The General tab: playback and import](/guide/desktop-en/settings-general-2.png)
+![The General tab: playback and each song's tracks](/guide/desktop-en/settings-general-2.png)
 
 - **Pause at the end of each song**: instead of moving on to the next one by
   itself, playback stops at the end of each song. Ideal when someone has to
@@ -77,15 +77,22 @@ on their own straight away, except the hardware outputs, which have their own
 - **"Fade out and stop" length**: how many seconds that button takes to fade
   the song out (5 by default). See
   [Fade out and stop](/docs/interface/main-screen/#fade-out-and-stop).
-- **Merge tracks with the same name on import**: when you import a song, its
-  "Bass" goes to the "Bass" track you already have instead of creating
-  another.
+- **Each song's tracks**: whether songs share tracks, each gets its own
+  folder, or its own copy of the tracks. See
+  [Song templates](/docs/song-templates/#each-songs-tracks).
+
+![The General tab: template, colour and warp](/guide/desktop-en/settings-general-3.png)
+
+- **Template for new songs**: which tracks and folders new songs come with
+  and where the audio you drop lands. See [Song templates](/docs/song-templates/).
 - **Colour new tracks automatically**.
+- **Automatic warp**: turns warp on when you change the pitch or the tempo.
+  See [Automatic warp](/docs/pitch-and-warp/#automatic-warp).
+
+![The General tab: saving, library and interface](/guide/desktop-en/settings-general-4.png)
+
 - **Autosave**: saves the session every so often, never while you play.
-
-![The General tab: saving, library and interface](/guide/desktop-en/settings-general-3.png)
-
-- **Save every**: how many minutes.
+  **Save every**: how many minutes.
 - **Use the classic library**: the Library shows only the audio imported into
   the session, with its virtual folders, as before, instead of the folders on
   your disk. See [The Library](/docs/interface/side-nav-library/#the-library).
@@ -93,16 +100,16 @@ on their own straight away, except the hardware outputs, which have their own
   to read it from a distance. Shortcuts: <kbd>Ctrl</kbd>+<kbd>+</kbd>,
   <kbd>Ctrl</kbd>+<kbd>−</kbd> and <kbd>Ctrl</kbd>+<kbd>0</kbd>.
 
-![The General tab: cache, updates and statistics](/guide/desktop-en/settings-general-4.png)
+![The General tab: cache and updates](/guide/desktop-en/settings-general-5.png)
 
 - **Audio cache**: MP3, FLAC and other compressed audio is decompressed once
   and kept here, so the session loads instantly next time. You can change the
   folder, give it a maximum size or empty it to free up space.
-
 - **Check for updates**: checks whether there is a new version. The app also
   tells you by itself when it starts.
-- **Optional usage statistics**: aggregated, anonymous data that helps improve
-  LibreTracks. Audio, names and the content of your sessions are never sent.
+- **Optional usage statistics** (further down): aggregated, anonymous data
+  that helps improve LibreTracks. Audio, names and the content of your
+  sessions are never sent.
 
 ## Video
 
@@ -147,13 +154,23 @@ for help. The logs contain no audio and no personal data.
 
 ## MIDI
 
-![The MIDI tab](/guide/desktop-en/settings-midi.png)
+![The MIDI tab: input and outputs](/guide/desktop-en/settings-midi-1.png)
 
 - **MIDI input device**: the pedal, pad or controller you want to drive
   LibreTracks with. The button on the right looks for devices again.
 - **MIDI output**: the port MIDI tracks send notes and program changes
   through, to keyboards, lighting desks or lyrics software. **Send test note**
   checks that it gets there.
+- **Controller output (LEDs)**: the port your fader controller listens on for
+  mute, solo, play and vamp state. Usually named like its input.
+
+![The MIDI tab: strips and takeover](/guide/desktop-en/settings-midi-2.png)
+
+- **Strips follow the active song**: the controller's 8 faders move only the
+  tracks of the playing song and go back to the first bank when the song
+  changes.
+- **Takeover mode**: what happens when the physical fader isn't where the
+  track is. See [Fader controllers](/docs/tasks/midi/#strips-1-8-profiles-and-motorized-faders).
 
 ## MIDI Learn
 

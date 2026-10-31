@@ -1,0 +1,86 @@
+---
+title: Escenas de mezcla
+description: "Escenas de mezcla en LibreTracks: estados de mezcla que pones y quitas con un botón, por MIDI o desde un automatismo, como bajar la banda mientras alguien habla. Al quitarla, la mezcla vuelve a como estaba."
+---
+
+Una **escena** es un estado de mezcla que pones y quitas a mano: por ejemplo,
+bajar los instrumentos mientras alguien habla al público y devolverlos
+después. Al quitarla, la mezcla vuelve **exactamente** a como estaba antes de
+ponerla.
+
+## Crear una escena
+
+Abre **Archivo › Escenas de mezcla…**. En el móvil, la hoja **Archivo** del
+carril lateral; en la [Vista Setlist](/es/docs/setlist-view/), el botón
+**Escenas** del mezclador. No hace falta ninguna pista de automatismos.
+
+![Editor de escenas de mezcla](/guide/desktop/mix-scenes-editor.png)
+
+1. **Las escenas de la sesión**, en orden. El número de cada una (1, 2, 3…)
+   es el que usan los botones y el controlador; cámbialo con las flechas.
+2. **+ Bajar la banda (menos voces)** crea la escena típica en un toque:
+   todas las pistas de la canción menos las que se llaman voz, voc, vox,
+   click, guía o guide, −12 dB, con una rampa de 2 segundos. **+ Nueva
+   escena** crea una vacía.
+3. **Nombre** y **Rampa**: los segundos que tarda en llegar a la nueva mezcla
+   (y en volver al quitarla).
+4. **Las reglas**. Cada regla se lee como una frase: *a qué pistas*, *excepto
+   cuáles* y *qué cambia*.
+   - **A qué pistas:** `Todas las pistas de la canción` (la que está bajo el
+     cabezal), `Carpeta` (las pistas de una carpeta con ese nombre), `Nombre
+     contiene` (palabras separadas por comas; no distingue mayúsculas ni
+     tildes, así que «voz» encuentra «Vóz guía») o una `Pista` concreta.
+   - **excepto:** cero o más selectores que se restan.
+   - **Qué cambia:** volumen (`± dB` sobre lo que tenga cada pista, o un
+     valor fijo), paneo, mute y solo. Lo que dejes en **Sin cambio** no se
+     toca.
+5. **A qué pistas afecta en la canción actual**, para comprobar la regla
+   antes de usarla en directo.
+
+Las reglas por canción, carpeta y nombre valen para **cualquier canción** de
+la sesión: no hace falta una escena por canción.
+
+## Ponerla y quitarla
+
+En la [Vista Live](/es/docs/live-view/), en el mezclador de la
+[Vista Setlist](/es/docs/setlist-view/) y en la
+[Vista Compacta](/es/docs/compact-view/) hay un botón por escena. Tócalo para
+ponerla (se ilumina) y otra vez para quitarla.
+
+![Botones de escena en la Vista Live](/guide/desktop/scene-buttons-live.png)
+
+También puedes:
+
+- **Con un controlador MIDI.** En **Configuración › Aprendizaje MIDI ›
+  Escenas** hay tres filas por escena: *alternar* (un botón pone y quita),
+  *poner* y *quitar*. Pulsa **Aprender** en la fila y luego el botón del
+  controlador. Ahí mismo están **Escena 1** a **Escena 8**, que siguen el
+  orden del editor y valen para cualquier sesión. O usa el
+  [Modo Mapeo MIDI](/es/docs/tasks/midi/#modo-mapeo-midi): actívalo, toca el
+  botón de la escena y pulsa el botón del controlador. El LED del controlador
+  sigue a la escena aunque la pongas desde la pantalla.
+- **Desde un automatismo**: en su acción de escena, elige **Poner la
+  escena**, **Alternar (poner o quitar)** o **Quitar la escena y volver a lo
+  de antes**. Ver [Automatizaciones](/es/docs/automation/).
+
+## Mientras está puesta
+
+- Si mueves a mano el fader, el mute o el solo de una pista (en pantalla o con
+  el controlador), esa pista sale de la escena: al quitarla, se queda donde la
+  dejaste.
+- Si la reproducción pasa a la **canción siguiente**, la escena sigue puesta y
+  se traslada: las pistas de la canción que termina vuelven a su volumen y las
+  de la nueva bajan con la rampa. Las reglas de una pista concreta no se
+  trasladan.
+- Parar, volver a reproducir o saltar dentro de la canción no la quita.
+- Guardar (también al cerrar y al exportar) escribe la mezcla de **antes** de
+  la escena: no volverás a abrir la sesión con la música bajada.
+
+## Escenas en las plantillas
+
+Las escenas viajan con la sesión (`.ltset`) y con las
+[plantillas de sesión](/es/docs/integration-ecosystem/#plantillas-de-sesión).
+En una plantilla, las reglas por carpeta son las más útiles: «Carpeta
+Instrumentos, −12 dB» funciona en todas las sesiones que crees a partir de
+ella. Las reglas de una pista concreta no viajan con la plantilla, porque la
+plantilla no guarda esas pistas.

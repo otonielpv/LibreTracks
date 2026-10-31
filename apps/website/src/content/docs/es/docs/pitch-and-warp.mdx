@@ -27,22 +27,38 @@ El modelo es el mismo que Warp en Ableton Live.
   caption="+2 semitonos con el warp apagado: la canción sube de tono y además se acorta, y su tonalidad pasa de D a E."
 />
 
-Lo que ocurre depende del warp:
+Lo que ocurre depende del warp, que LibreTracks enciende solo al cambiar el
+tono (ver [Warp automático](#warp-automático)):
 
-- **Warp apagado** (lo normal al empezar): funciona como acelerar o frenar una
-  cinta. Subir el tono **acorta** la canción y bajarlo la alarga. Las canciones
-  siguientes se recolocan solas para no solaparse. Todas las pistas cambian, sin
-  excepción.
-- **Warp encendido**: el tono cambia y la duración **no**. Es lo que quieres
-  casi siempre en directo.
+- **Warp encendido** (lo normal): el tono cambia y la duración **no**. Es lo
+  que quieres casi siempre en directo.
+- **Warp apagado** (solo con el warp automático desactivado): funciona como
+  acelerar o frenar una cinta. Subir el tono **acorta** la canción y bajarlo
+  la alarga. Las canciones siguientes se recolocan solas para no solaparse.
+  Todas las pistas cambian, sin excepción.
 
 La tonalidad de la canción (la letra junto a su nombre) se transpone sola, y la
 etiqueta *+2 st* recuerda que está transpuesta.
 
-## Encender el warp
+## Warp automático
 
-Con la canción seleccionada, abre **Warp** en la barra de herramientas y pulsa
-el interruptor.
+Al cambiar el tono o el tempo de una canción, LibreTracks **enciende el warp
+solo** para que tono y velocidad sigan siendo independientes. Una canción sin
+cambios no lo enciende, y al devolver el tono y el tempo a sus valores
+originales se vuelve a apagar. En la barra de herramientas el grupo se llama
+entonces **Tempo**, sin interruptor de warp.
+
+Se cambia en **Configuración › General**:
+
+![Warp automático](/guide/desktop/settings-auto-warp.png)
+
+Desactívalo si quieres controlar el warp a mano y usar varispeed al cambiar el
+tono. Cambiar este ajuste no modifica las canciones que ya tienes.
+
+## Encender el warp a mano
+
+Con el warp automático desactivado, selecciona la canción, abre **Warp y
+tempo** en la barra de herramientas y pulsa el interruptor.
 
 <Clip
   src="/guide/desktop/warp-on.mp4"

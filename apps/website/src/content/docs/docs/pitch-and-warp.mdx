@@ -27,21 +27,39 @@ The model is the same as Warp in Ableton Live.
   caption="+2 semitones with warp off: the song goes up in pitch and also gets shorter, and its key goes from D to E."
 />
 
-What happens depends on warp:
+What happens depends on warp, which LibreTracks turns on by itself when you
+change the pitch (see [Automatic warp](#automatic-warp)):
 
-- **Warp off** (the usual starting point): it works like speeding up or slowing
-  down a tape. Raising the pitch **shortens** the song and lowering it
-  lengthens it. The following songs move by themselves so they don't overlap.
-  Every track changes, without exception.
-- **Warp on**: the pitch changes and the length **doesn't**. It is what you
-  want almost always live.
+- **Warp on** (the usual case): the pitch changes and the length **doesn't**.
+  It is what you want almost always live.
+- **Warp off** (only with automatic warp turned off): it works like speeding
+  up or slowing down a tape. Raising the pitch **shortens** the song and
+  lowering it lengthens it. The following songs move by themselves so they
+  don't overlap. Every track changes, without exception.
 
 The song's key (the letter next to its name) is transposed by itself, and the
 *+2 st* label reminds you it is transposed.
 
-## Turning warp on
+## Automatic warp
 
-With the song selected, open **Warp** in the toolbar and flip the switch.
+When you change a song's pitch or tempo, LibreTracks **turns warp on by
+itself** so pitch and speed stay independent. A song with no changes doesn't
+turn it on, and putting the pitch and tempo back to their original values
+turns it off again. The toolbar group is then called **Tempo**, with no warp
+switch.
+
+It is set in **Settings › General**:
+
+![Automatic warp](/guide/desktop-en/settings-auto-warp.png)
+
+Turn it off if you want to control warp by hand and use varispeed when you
+change the pitch. Changing this setting doesn't modify the songs you already
+have.
+
+## Turning warp on by hand
+
+With automatic warp turned off, select the song, open **Warp & tempo** in the
+toolbar and flip the switch.
 
 <Clip
   src="/guide/desktop-en/warp-on.mp4"

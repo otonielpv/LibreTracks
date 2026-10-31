@@ -18,7 +18,7 @@ LibreTracks speaks MIDI both ways:
 In **Settings › MIDI**, choose the **MIDI input device**. If you plug it in
 with the app open, press the refresh button next to it.
 
-![The MIDI tab in Settings](/guide/desktop-en/settings-midi.png)
+![The MIDI tab in Settings](/guide/desktop-en/settings-midi-1.png)
 
 If the cable comes loose mid-show, the **MIDI controller disconnected** notice
 appears in the top bar, and the app opens it again by itself as soon as you
@@ -45,6 +45,59 @@ control:
 - **Video**: black, fade to black, idle screen and turning the output on.
 - **Session**: new, open, save, save as, undo, redo and create a marker at the
   cursor.
+
+## Fader controllers (nanoKONTROL2, Mackie…)
+
+Besides pedals and buttons, LibreTracks works with a fader controller, like
+Ableton.
+
+### MIDI Map mode
+
+Press `Ctrl+M` (or **MIDI Learn** in **Settings › MIDI Learn**). Everything
+you can assign is tinted: each track's fader, pan, mute and solo in the DAW,
+the Compact View and the Setlist View, the song master, the click, the guide,
+the pads, the scene buttons and the jumps in Live and Setlist. Controls that
+already have a binding show in green, with their message on top.
+
+![MIDI Map mode](/guide/desktop-en/midi-map-mode.png)
+
+1. The mode's banner. **Exit** (or `Esc`) closes it; the arrow moves it up or
+   down if it covers something.
+2. A mappable control. Tap it and move the physical control: it is bound.
+
+### Strips 1-8, profiles and motorized faders
+
+In **Settings › MIDI Learn**:
+
+![MIDI Learn: profiles and mixer](/guide/desktop-en/midi-learn-mixer.png)
+
+1. **MIDI Learn** turns MIDI Map mode on.
+2. **Controller profile**: if LibreTracks recognises your controller by its
+   port name, it suggests the profile. **Apply** fills in the strips, the
+   transport and the banks at once. There are profiles for the **Korg
+   nanoKONTROL2**, **Mackie Control** and the **M-Vave SMC-Mixer** (in its
+   Mackie mode). **Import…** and **Export** load or save your own bindings.
+3. The list's views:
+   - **Mixer**: **strips 1 to 8** (volume, pan, mute and solo), which follow
+     the order of the visible tracks of the playing song, plus **Next bank**
+     and **Previous bank** to move 8 at a time. The 8 tracks you control get
+     a red edge on their header.
+   - **Scenes**: see [Mix scenes](/docs/live-scenes/).
+   - **Bindings**: everything assigned, with its **Mode** (absolute,
+     relative, toggle or momentary button), **Min**, **Max**,
+     **Invert** and **Takeover**.
+
+For the button LEDs and motorized faders to follow the mix, pick the
+**Controller output (LEDs)** in **Settings › MIDI**: the port your controller
+listens on for state, usually named like its input.
+
+**Takeover mode** (**Settings › MIDI**) decides what happens when the physical
+fader isn't where the track is, for example after changing bank or song:
+
+- **None**: the track jumps to wherever the fader is.
+- **Pick-up**: the fader does nothing until it reaches the track's value.
+- **Value scaling**: the fader moves the track straight away and both meet at
+  the end of the travel. It never jumps or goes dead.
 
 ## Sending MIDI from the song
 

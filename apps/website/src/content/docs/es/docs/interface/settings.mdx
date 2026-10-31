@@ -67,7 +67,7 @@ tienen su propio botón *Aplicar*.
 - **Seguimiento del cursor**: dónde se queda el cursor cuando la línea de
   tiempo lo sigue.
 
-![Pestaña General: reproducción e importación](/guide/desktop/settings-general-2.png)
+![Pestaña General: reproducción y pistas de cada canción](/guide/desktop/settings-general-2.png)
 
 - **Pausar al terminar cada canción**: en vez de pasar sola a la siguiente,
   la reproducción se para al final de cada canción. Ideal cuando hay que
@@ -79,15 +79,23 @@ tienen su propio botón *Aplicar*.
 - **Duración de «Fade out y parar»**: cuántos segundos tarda en apagarse la
   canción con ese botón (5 por defecto). Ver
   [Fade out y parar](/es/docs/interface/main-screen/#fade-out-y-parar).
-- **Unir pistas con el mismo nombre al importar**: al importar una canción,
-  su «Bajo» va a la pista «Bajo» que ya tienes, en lugar de crear otra.
+- **Pistas de cada canción**: si las canciones comparten pistas, cada una
+  tiene una carpeta propia o su propia copia de las pistas. Ver
+  [Plantillas de canción](/es/docs/song-templates/#pistas-de-cada-canción).
+
+![Pestaña General: plantilla, color y warp](/guide/desktop/settings-general-3.png)
+
+- **Plantilla para canciones nuevas**: con qué pistas y carpetas salen las
+  canciones nuevas y dónde caen los audios que sueltas. Ver
+  [Plantillas de canción](/es/docs/song-templates/).
 - **Colorear las pistas nuevas automáticamente**.
+- **Warp automático**: enciende el warp al cambiar el tono o el tempo. Ver
+  [Warp automático](/es/docs/pitch-and-warp/#warp-automático).
+
+![Pestaña General: guardado, biblioteca e interfaz](/guide/desktop/settings-general-4.png)
+
 - **Guardar automáticamente**: guarda la sesión cada cierto tiempo, nunca
-  mientras reproduces.
-
-![Pestaña General: guardado, biblioteca e interfaz](/guide/desktop/settings-general-3.png)
-
-- **Guardar cada**: cada cuántos minutos.
+  mientras reproduces. **Guardar cada**: cada cuántos minutos.
 - **Usar la biblioteca clásica**: la Biblioteca muestra solo el audio importado
   a la sesión, con sus carpetas virtuales, como antes, en lugar de tus carpetas
   del disco. Ver [La Biblioteca](/es/docs/interface/side-nav-library/#la-biblioteca).
@@ -95,7 +103,7 @@ tienen su propio botón *Aplicar*.
   más grande para verla de lejos. Atajos: <kbd>Ctrl</kbd>+<kbd>+</kbd>,
   <kbd>Ctrl</kbd>+<kbd>−</kbd> y <kbd>Ctrl</kbd>+<kbd>0</kbd>.
 
-![Pestaña General: caché, actualizaciones y estadísticas](/guide/desktop/settings-general-4.png)
+![Pestaña General: caché y actualizaciones](/guide/desktop/settings-general-5.png)
 
 - **Caché de audio**: el MP3, FLAC y demás audio comprimido se descomprime
   una vez y se guarda aquí, para que la próxima vez la sesión cargue al
@@ -103,9 +111,9 @@ tienen su propio botón *Aplicar*.
   para liberar espacio.
 - **Buscar actualizaciones**: comprueba si hay una versión nueva. La app
   también avisa sola al arrancar.
-- **Estadísticas opcionales de uso**: datos agregados y anónimos que ayudan a
-  mejorar LibreTracks. Nunca se envía audio, nombres ni contenido de tus
-  sesiones.
+- **Estadísticas opcionales de uso** (más abajo): datos agregados y anónimos
+  que ayudan a mejorar LibreTracks. Nunca se envía audio, nombres ni contenido
+  de tus sesiones.
 
 ## Vídeo
 
@@ -152,7 +160,7 @@ datos personales.
 
 ## MIDI
 
-![Pestaña MIDI](/guide/desktop/settings-midi.png)
+![Pestaña MIDI: entrada y salidas](/guide/desktop/settings-midi-1.png)
 
 - **Dispositivo de entrada MIDI**: el pedal, pad o controlador con el que
   quieres manejar LibreTracks. El botón de la derecha vuelve a buscar
@@ -160,6 +168,17 @@ datos personales.
 - **Salida MIDI**: el puerto por el que las pistas MIDI envían notas y
   cambios de programa a teclados, mesas de luces o software de letras.
   **Enviar nota de prueba** comprueba que llega.
+- **Salida del controlador (LEDs)**: el puerto por el que tu controlador de
+  faders recibe el estado de mute, solo, play y vamp. Suele llamarse como su
+  entrada.
+
+![Pestaña MIDI: tiras y recogida](/guide/desktop/settings-midi-2.png)
+
+- **Las tiras siguen a la canción activa**: los 8 faders del controlador
+  mueven solo las pistas de la canción que suena y vuelven al primer banco al
+  cambiar de canción.
+- **Modo de recogida**: qué pasa cuando el fader físico no está donde está la
+  pista. Ver [Controladores de faders](/es/docs/tasks/midi/#tiras-1-8-perfiles-y-faders-motorizados).
 
 ## MIDI Learn
 

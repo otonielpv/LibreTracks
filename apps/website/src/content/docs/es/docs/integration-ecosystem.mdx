@@ -1,6 +1,6 @@
 ---
 title: Exportar, importar y compartir
-description: "Llevar canciones y sesiones a otro equipo o al móvil (.ltpkg y .ltset), la nube con tu Google Drive, renderizar a WAV, plantillas de sesión e importar proyectos de Reaper y Ableton."
+description: "Llevar canciones y sesiones a otro equipo o al móvil (.ltpkg y .ltset), la nube (Google Drive, OneDrive o Dropbox), renderizar a WAV, plantillas de sesión e importar proyectos de Reaper y Ableton."
 ---
 
 import Legend from "../../../../components/guide/Legend.astro";
@@ -15,7 +15,7 @@ una mezcla en WAV para quien la necesite. Esta página explica cada camino.
 | Llevarte **la sesión entera** a otro equipo | Exportar sesión | `.ltset` |
 | Empezar sesiones nuevas con **tus pistas y salidas** | Guardar como plantilla | `.lttemplate` |
 | Mandar **un audio** (mezcla o pistas) | Renderizar audio | `.wav` / `.zip` |
-| Tenerlo todo **en la nube** | Importar / Exportar → Google Drive | — |
+| Tenerlo todo **en la nube** | Importar / Exportar → Nube | — |
 
 :::note[Tus audios no se copian al importarlos]
 Al añadir audio a una sesión, LibreTracks lo usa **desde donde está** en tu
@@ -99,40 +99,43 @@ eliges **dónde guardar** la sesión, y LibreTracks crea ahí su carpeta y la
 abre. A diferencia de una canción, una sesión **no se mezcla** con la que
 tenías: se abre como sesión nueva.
 
-## La nube: tu Google Drive
+## La nube: Google Drive, OneDrive y Dropbox
 
-LibreTracks puede guardar canciones y sesiones en **tu propia cuenta de
-Google Drive**, para pasarlas del ordenador al móvil o a otro equipo sin
-cables ni pendrives. LibreTracks no tiene servidores: los archivos están en tu
-Drive, en una carpeta `LibreTracks`, y la app **solo puede ver los archivos
-que ha creado ella**, nada más de tu cuenta.
+LibreTracks puede guardar canciones y sesiones en **tus propias cuentas** de
+Google Drive, OneDrive o Dropbox, para pasarlas del ordenador al móvil o a
+otro equipo sin cables ni pendrives. Puedes tener **varias conectadas a la
+vez**. LibreTracks no tiene servidores: los archivos están en tu cuenta, en una
+carpeta de LibreTracks, y la app **solo ve los archivos que ha guardado ella**,
+nada más de tu cuenta.
 
-Con la cuenta conectada, **Importar** y **Exportar** (de canción y de sesión)
-preguntan primero dónde:
+Con alguna cuenta conectada, **Importar** y **Exportar** (de canción y de
+sesión) preguntan primero dónde:
 
-![Elegir entre este equipo y Google Drive](/guide/desktop/storage-choice.png)
+![Elegir entre este equipo y la nube](/guide/desktop/storage-choice.png)
 
-- **Exportar → Google Drive** sube el archivo a tu cuenta. Al exportar una
-  canción se pregunta después de elegir el modo; al exportar una sesión, antes.
-- **Importar → Google Drive** muestra lo que tienes subido, con buscador y
+- **Exportar → Nube** sube el archivo. Si tienes más de una cuenta conectada,
+  después eliges a cuál. Al exportar una canción se pregunta después de elegir
+  el modo; al exportar una sesión, antes.
+- **Importar → Nube** muestra en una sola lista lo que tienes subido en todas
+  tus cuentas, con una etiqueta del proveedor en cada archivo, buscador y
   filtros, y lo descarga.
 
 El botón **Nube** (en **Archivo → Nube…** y en la pantalla de inicio) no sube
-ni baja nada: es para **gestionar la cuenta**.
+ni baja nada: es para **gestionar las cuentas**.
 
 ![Panel de la nube](/guide/desktop/cloud-panel.png)
 
-- **Conectar con Google Drive** abre el navegador para que inicies sesión y
-  des permiso. La primera vez es lo único que ves en el panel.
-- **Desconectar** quita la cuenta de este dispositivo. Lo que tienes en Drive
-  no se borra.
-- El **espacio** usado y libre es el de **toda tu cuenta de Google**, que se
-  comparte con Gmail y Fotos.
-- Las listas **Sesiones** y **Canciones** muestran lo que has subido, con su
-  tamaño, y un botón **Borrar** para quitarlo de Drive.
+- **Cuentas**: cada proveedor con su estado. **Conectar con…** abre el navegador
+  para que inicies sesión y des permiso; **Desconectar** quita la cuenta de
+  este dispositivo (lo que tienes guardado no se borra); **Ver archivos**
+  muestra lo de esa cuenta debajo.
+- El **espacio** usado y libre es el de **toda la cuenta**: Google lo comparte
+  con Gmail y Fotos, y Microsoft con Outlook.
+- Las listas **Sesiones** y **Canciones** muestran lo que has subido a esa
+  cuenta, con su tamaño, y un botón **Borrar** para quitarlo.
 
-La conexión se guarda en el propio dispositivo: en el móvil hay que conectar
-la cuenta también.
+Las conexiones se guardan en el propio dispositivo: en el móvil hay que
+conectar las cuentas también.
 
 ## Renderizar audio
 

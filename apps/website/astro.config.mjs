@@ -165,6 +165,7 @@ export default defineConfig({
           items: [
             { slug: "docs/tasks/library" },
             { slug: "docs/tasks/songs" },
+            { slug: "docs/song-templates" },
             { slug: "docs/arrangements" },
             { slug: "docs/tasks/markers" },
             { slug: "docs/song-analysis" },
@@ -185,6 +186,7 @@ export default defineConfig({
             { slug: "docs/live-control-flow" },
             { slug: "docs/voice-guide" },
             { slug: "docs/ambient-pads" },
+            { slug: "docs/live-scenes" },
             { slug: "docs/remote-control" },
             { slug: "docs/automation" },
           ],
@@ -195,6 +197,7 @@ export default defineConfig({
           collapsed: false,
           items: [
             { slug: "docs/integration-ecosystem" },
+            { slug: "docs/network-sessions" },
             { slug: "docs/tasks/midi" },
             { slug: "docs/compact-view" },
             { slug: "docs/core-concepts" },

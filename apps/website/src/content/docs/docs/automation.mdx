@@ -1,6 +1,6 @@
 ---
 title: Automation
-description: "The LibreTracks automation track: actions that fire by themselves at an exact point (jumps, mute, solo, volume, mix scenes, pads and waits), how to limit their repeats and how to create mix scenes."
+description: "The LibreTracks automation track: actions that fire by themselves at an exact point (jumps, mute, solo, volume, mix scenes, pads, click, voice guide and waits) and how to limit their repeats."
 ---
 
 An **automation** is a list of actions LibreTracks runs by itself when
@@ -34,8 +34,10 @@ The actions run **in order**, top to bottom; use the arrows to reorder them.
 | **Mute / unmute track** | Mutes a track or turns it back on. |
 | **Solo / unsolo track** | Sets or clears a track's solo. |
 | **Volume / pan** | Takes a track's volume (0–100) and pan to a value, at once or with a few seconds of **smoothing**. |
-| **Apply scene** | Applies a [mix scene](#mix-scenes) in one go. |
+| **Apply scene** | Engages, toggles or releases a [mix scene](/docs/live-scenes/). |
 | **Control pads** | Turns the [pad](/docs/ambient-pads/) on or off and sets pack, key, output, volume and fades. |
+| **Set click** | Changes the [metronome](/docs/audio-routing-metronome/) mid-song: on or off, accent, sounds, subdivision and output. Anything left empty doesn't change. |
+| **Set voice guide** | Changes the [voice guide](/docs/voice-guide/): on or off, language, count-in and its style, warning bars and output. Anything left empty doesn't change. |
 | **Wait** | Lets a few seconds go by before the next action. |
 
 **Picking the track**: in the mute, solo and volume actions, the track list is
@@ -68,19 +70,10 @@ with it.
 
 ## Mix scenes
 
-A **scene** is a saved mix: the volume, pan, mute and solo of the tracks you
-choose. With the **Apply scene** action it is applied in one go, for example to
-leave just voice and click for an a cappella ending and bring back the full
-mix in the next section.
-
-Right-click the automation track's header › **Manage mix scenes...**:
-
-![The mix scene manager](/guide/desktop-en/mix-scenes.png)
-
-1. **+ New scene** and give it a name.
-2. On each track, tick what the scene controls (**Vol**, **Pan**, **Mute**,
-   **Solo**) and set its value. Whatever you don't tick is left alone when it
-   is applied.
+Mix scenes have their own page: [Mix scenes](/docs/live-scenes/). They are
+created in **File › Mix scenes…** and don't need the automation track; from an
+automation cue, the **Apply scene** action can engage, toggle or release one
+at an exact point in the song.
 
 ## Tips
 

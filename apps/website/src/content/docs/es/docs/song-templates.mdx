@@ -1,0 +1,72 @@
+---
+title: Plantillas de canción
+description: "Plantillas de canción en LibreTracks: canciones nuevas con sus pistas y carpetas, y los stems de un multitrack que caen solos en su sitio según su nombre (Click, EG, Keys, BGV…)."
+---
+
+Una plantilla guarda pistas, carpetas, colores y salidas. Además de para crear
+sesiones, sirve para crear **canciones** y para **ordenar los audios que
+sueltas**: si sueltas `Way Maker - EG 1.wav`, `Way Maker - Keys.wav`… en una
+canción, cada uno cae en su carpeta (Guitarras, Teclados…) según su nombre.
+
+Sin plantilla elegida, todo funciona exactamente igual que antes.
+
+## Elegir la plantilla
+
+En **Configuración › General**, elige **Plantilla para canciones nuevas**:
+
+![Plantilla para canciones nuevas](/guide/desktop/settings-song-template.png)
+
+**Banda (incluida)** trae Click, Guía, Batería, Bajo, Guitarras, Teclados,
+Synth y pads, Voces y Efectos, con los nombres que usan los multitracks
+comerciales en español y en inglés (EG, AG, Keys, BGV, FX…). También aparecen
+tus propias plantillas de sesión.
+
+:::note
+La plantilla incluida manda Click y Guía al master. Si tus cascos van por otra
+salida, cambia sus salidas y guarda tu propia plantilla con **Archivo ›
+Guardar como plantilla…**.
+:::
+
+## Crear una canción con la plantilla
+
+Pulsa **+ Nueva canción** en la [Vista Compacta](/es/docs/compact-view/) o en
+la [Vista Setlist](/es/docs/setlist-view/): sale con la estructura de la
+plantilla. La flecha de al lado (**Nueva canción desde plantilla**) deja
+elegir otra plantilla, o **Sin plantilla**, solo para esa canción.
+
+![Nueva canción desde plantilla](/guide/desktop/new-song-template-menu.png)
+
+1. La flecha junto a **+ Nueva canción**.
+2. Las plantillas disponibles.
+
+Después, suelta los stems en la canción. Un aviso cuenta cuántos se han
+organizado y cuántos no tenían regla; **Deshacer** (o `Ctrl+Z`) deshace el
+lote entero. Los audios que no coinciden con nada se colocan como siempre.
+
+## Reglas de coincidencia
+
+Clic derecho en una pista o carpeta › **Reglas de coincidencia…**: las
+palabras, separadas por comas, que mandan un audio allí.
+
+- Se comparan palabras completas, sin tildes ni mayúsculas: `ag` no coincide
+  con `stage`. El nombre común del lote y el de la canción no cuentan.
+- Si coinciden dos reglas, gana la más larga (`electric guitar` antes que
+  `guitar`) y, si empatan, la pista que va antes.
+- En una **pista**, el primer stem va a ella y el siguiente crea una pista
+  hermana. En una **carpeta**, cada stem crea una pista dentro.
+
+Para guardar tus cambios, **Archivo › Guardar como plantilla…**.
+
+## Pistas de cada canción
+
+**Configuración › General › Pistas de cada canción** decide qué pasa con la
+segunda canción y las siguientes:
+
+![Pistas de cada canción](/guide/desktop/settings-song-track-layout.png)
+
+- **Compartidas entre canciones**: todas usan las mismas pistas; la canción 2
+  rellena los carriles de la 1.
+- **Una carpeta por canción**: cada canción tiene una carpeta con su nombre y
+  sus pistas dentro.
+- **Sueltas por canción**: cada canción tiene su propia copia de las pistas en
+  la raíz.

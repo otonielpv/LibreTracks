@@ -1,6 +1,6 @@
 ---
 title: Export, import and share
-description: "Take songs and sessions to another computer or to your phone (.ltpkg and .ltset), the cloud with your Google Drive, rendering to WAV, session templates and importing Reaper and Ableton projects."
+description: "Take songs and sessions to another computer or to your phone (.ltpkg and .ltset), the cloud (Google Drive, OneDrive or Dropbox), rendering to WAV, session templates and importing Reaper and Ableton projects."
 ---
 
 import Legend from "../../../components/guide/Legend.astro";
@@ -15,7 +15,7 @@ or a mix as a WAV for whoever needs it. This page explains each route.
 | Take **the whole session** to another computer | Export session | `.ltset` |
 | Start new sessions with **your tracks and outputs** | Save as template | `.lttemplate` |
 | Send **an audio file** (mix or stems) | Render audio | `.wav` / `.zip` |
-| Keep it all **in the cloud** | Import / Export → Google Drive | — |
+| Keep it all **in the cloud** | Import / Export → Cloud | — |
 
 :::note[Your audio is not copied when you import it]
 When you add audio to a session, LibreTracks plays it **from wherever it is**
@@ -96,40 +96,43 @@ the session, and LibreTracks creates its folder there and opens it. Unlike a
 song, a session is **not merged** into the one you had: it opens as a new
 session.
 
-## The cloud: your Google Drive
+## The cloud: Google Drive, OneDrive and Dropbox
 
-LibreTracks can keep songs and sessions in **your own Google Drive
-account**, to move them from the computer to your phone or another computer
-without cables or USB sticks. LibreTracks has no servers: the files are in
-your Drive, in a `LibreTracks` folder, and the app **can only see the files it
-created**, nothing else in your account.
+LibreTracks can keep songs and sessions in **your own** Google Drive, OneDrive
+or Dropbox accounts, to move them from the computer to your phone or another
+computer without cables or USB sticks. You can keep **several connected at
+once**. LibreTracks has no servers: the files are in your account, in a
+LibreTracks folder, and the app **only sees the files it saved**, nothing else
+in your account.
 
-With the account connected, **Import** and **Export** (of songs and sessions)
+With an account connected, **Import** and **Export** (of songs and sessions)
 first ask where:
 
-![Choosing between this device and Google Drive](/guide/desktop-en/storage-choice.png)
+![Choosing between this device and the cloud](/guide/desktop-en/storage-choice.png)
 
-- **Export → Google Drive** uploads the file to your account. For a song it
-  asks after you pick the mode; for a session, before.
-- **Import → Google Drive** shows what you have uploaded, with search and
-  filters, and downloads it.
+- **Export → Cloud** uploads the file. With more than one account connected,
+  you then pick which one. For a song it asks after you pick the mode; for a
+  session, before.
+- **Import → Cloud** shows what you uploaded to all your accounts in a single
+  list, with a provider label on each file, search and filters, and downloads
+  it.
 
 The **Cloud** button (in **File → Cloud…** and on the start screen) does not
-upload or download anything: it is for **managing the account**.
+upload or download anything: it is for **managing the accounts**.
 
 ![The cloud panel](/guide/desktop-en/cloud-panel.png)
 
-- **Connect Google Drive** opens the browser so you can sign in and grant
-  access. The first time, that is all the panel shows.
-- **Disconnect** removes the account from this device. Nothing in your Drive
-  is deleted.
-- The **space** used and free is that of **your whole Google account**, shared
-  with Gmail and Photos.
-- The **Sessions** and **Songs** lists show what you uploaded, with its size,
-  and a **Delete** button to remove it from Drive.
+- **Accounts**: each provider and its state. **Connect…** opens the browser so
+  you can sign in and grant access; **Disconnect** removes the account from
+  this device (nothing you stored is deleted); **Show files** lists that
+  account's files below.
+- The **space** used and free is that of **the whole account**: Google shares
+  it with Gmail and Photos, Microsoft with Outlook.
+- The **Sessions** and **Songs** lists show what you uploaded to that account,
+  with its size, and a **Delete** button to remove it.
 
-The connection is kept on each device: on your phone you connect the account
-there too.
+The connections are kept on each device: on your phone you connect the
+accounts there too.
 
 ## Rendering audio
 

@@ -2179,6 +2179,173 @@ describe("user guide screenshots", function () {
   // tests/android/guide-shots/shots.ts (trackSelect, clipSelect), same demo
   // song, and a 915x412 @2 viewport, the emulator's 1828x822 frames. It
   // changes the page for good, so it is the LAST step.
+  it("novedades 1.16: mix scenes, MIDI map mode, network sessions, song templates", async () => {
+    await ensureSession();
+    // Opening the session can put the stored language back: pin it again.
+    if (UI_LANG === "en" && (await runInPage(() => document.body.innerText.includes("SALTO DE MARCA")))) {
+      await useAppLocale("en");
+      await AppPage.waitUntilBooted();
+      await ensureSession();
+    }
+    await AppPage.resetShell();
+    const setViewMode = (mode: string) =>
+      browser.execute((m: string) => (window as any).__ltE2E.setViewMode(m), mode);
+    const fileMenu = `${tour("topbar-file-menu")} .lt-top-menu-trigger`;
+
+    // Mix scenes: the editor, from the File menu, with the quick «band down»
+    // scene the button creates (on the throwaway copy of the session).
+    await (await $(fileMenu)).click();
+    await browser.pause(600);
+    await (await $(await tagByText(".lt-top-menu-dropdown button", L("Escenas de mezcla"), "scenes-item"))).click();
+    await browser.pause(900);
+    const sceneModal = ".lt-scene-modal";
+    if (!(await rectOf(".lt-scene-list-select"))) {
+      await (await $(".lt-scene-add.is-template")).click();
+      await browser.pause(900);
+    }
+    await annotatedShot(
+      "mix-scenes-editor",
+      [
+        { selector: ".lt-scene-list", n: 1, pad: 2 },
+        { selector: ".lt-scene-add.is-template", n: 2, pad: 2 },
+        { selector: ".lt-scene-detail-head", n: 3, pad: 2 },
+        { selector: ".lt-scene-rules", n: 4, pad: 2 },
+        { selector: ".lt-scene-preview", n: 5, pad: 2 },
+      ],
+      { crop: { selector: sceneModal, margin: 12 } },
+    );
+    await browser.keys(["Escape"]);
+    await browser.pause(600);
+    if (await rectOf(sceneModal)) {
+      await (await $(`${sceneModal} button.is-primary`)).click();
+      await browser.pause(600);
+    }
+
+    // The scene buttons in the Live view.
+    await setViewMode("live");
+    await browser.pause(1500);
+    if (await rectOf(".lt-live-scenes")) {
+      await annotatedShot("scene-buttons-live", [{ selector: ".lt-live-scenes", n: 1, pad: 4 }], {
+        crop: { selector: ".lt-live-scenes", margin: 120 },
+      });
+    } else {
+      console.log("[guideshots] SKIPPED scene-buttons-live: no scene bar");
+    }
+
+    // New song from a template: the arrow next to «+ New song» (Compact).
+    await setViewMode("compact");
+    await browser.pause(1500);
+    if (await rectOf(".lt-new-song-template-toggle")) {
+      await (await $(".lt-new-song-template-toggle")).click();
+      await browser.pause(700);
+      await annotatedShot(
+        "new-song-template-menu",
+        [
+          { selector: ".lt-new-song-template-toggle", n: 1, pad: 3 },
+          { selector: ".lt-new-song-template-menu", n: 2, pad: 3 },
+        ],
+        { crop: { marks: 60 } },
+      );
+      await browser.keys(["Escape"]);
+      await browser.pause(400);
+    } else {
+      console.log("[guideshots] SKIPPED new-song-template-menu: no template arrow");
+    }
+    await setViewMode("daw");
+    await browser.pause(1500);
+    await AppPage.resetShell();
+
+    // MIDI Map mode (Ctrl+M): every learnable control is tinted.
+    await browser.keys(["Control", "m"]);
+    await browser.pause(900);
+    if (await rectOf(".lt-midi-map-banner")) {
+      // The banner sits at the bottom: move it up, next to the track headers.
+      if (await rectOf(".lt-midi-map-banner-move")) {
+        await (await $(".lt-midi-map-banner-move")).click();
+        await browser.pause(500);
+      }
+      const banner = await rectOf(".lt-midi-map-banner");
+      const header = await rectOf(".lt-track-header .lt-midi-mappable-layer");
+      const marks = [
+        { selector: ".lt-midi-map-banner", n: 1, pad: 3 },
+        ...(header ? [{ selector: ".lt-track-header .lt-midi-mappable-layer", n: 2, pad: 2 }] : []),
+      ];
+      const right = Math.max((banner?.x ?? 0) + (banner?.w ?? 0), 700) + 24;
+      await annotatedShot("midi-map-mode", marks, {
+        crop: { x: 0, y: Math.max(0, (banner?.y ?? 0) - 24), w: right, h: 520 },
+      });
+      await browser.keys(["Escape"]);
+      await browser.pause(600);
+    } else {
+      console.log("[guideshots] SKIPPED midi-map-mode: no banner");
+    }
+
+    // Settings › MIDI Learn: controller profiles and the 1-8 strips.
+    await AppPage.openSettings();
+    await (await AppPage.settingsTab("midiLearn")).click();
+    await browser.pause(900);
+    await (await $(await tagByText(".lt-midi-learn-view-tabs button", L("Mezclador"), "midi-mixer-view"))).click();
+    await browser.pause(700);
+    await annotatedShot(
+      "midi-learn-mixer",
+      [
+        { selector: ".lt-midi-learn-activate", n: 1, pad: 2 },
+        { selector: ".lt-midi-profiles", n: 2, pad: 2 },
+        { selector: ".lt-midi-learn-view-tabs", n: 3, pad: 2 },
+      ],
+      { crop: { selector: ".lt-settings-tab-panels", margin: 4 } },
+    );
+    await browser.keys(["Escape"]);
+    await AppPage.resetShell();
+
+    // Settings › General: the template for new songs and «Automatic warp»,
+    // each cropped to its own field.
+    await AppPage.openSettings();
+    await (await AppPage.settingsTab("general")).click();
+    await browser.pause(900);
+    const fieldShot = async (selector: string, text: string, name: string, tag: string) => {
+      const target = await tagByText(selector, text, tag);
+      await runInPage((sel: string) => document.querySelector(sel)?.scrollIntoView({ block: "center" }), target);
+      await browser.pause(500);
+      await shot(name, { selector: target, margin: 10 });
+    };
+    await fieldShot(".lt-settings-field", L("Plantilla para canciones nuevas"), "settings-song-template", "song-template-field");
+    await fieldShot(".lt-settings-field", L("Pistas de cada canción"), "settings-song-track-layout", "song-layout-field");
+    await fieldShot(".lt-settings-toggle", L("Warp automático"), "settings-auto-warp", "auto-warp-toggle");
+    await browser.keys(["Escape"]);
+    await AppPage.resetShell();
+
+    // Network sessions: the side bar's «Network» window, host and join tabs.
+    // The device name and the PINs are the machine's own: blur them.
+    await (await $(".lt-network-nav")).click();
+    await browser.pause(900);
+    const blurNetworkFields = () =>
+      runInPage(() => {
+        document
+          .querySelectorAll<HTMLElement>(".lt-network-modal input, .lt-network-modal .lt-network-row-name")
+          .forEach((el) => {
+            el.style.filter = "blur(5px)";
+          });
+      });
+    await blurNetworkFields();
+    await annotatedShot(
+      "network-host",
+      [
+        { selector: ".lt-network-tabs", n: 1, pad: 2 },
+        { selector: ".lt-network-form", n: 2, pad: 2 },
+        { selector: ".lt-network-button.is-primary", n: 3, pad: 3 },
+      ],
+      { crop: { selector: ".lt-network-modal", margin: 12 } },
+    );
+    await (await $(".lt-network-tab:nth-of-type(2)")).click();
+    await browser.pause(1200);
+    await blurNetworkFields();
+    await shot("network-join", { selector: ".lt-network-modal", margin: 12 });
+    await (await $(".lt-network-modal .lt-settings-modal-close")).click();
+    await browser.pause(600);
+    await AppPage.resetShell();
+  });
+
   it("mobile 1.15: selection bar (phone layout)", async () => {
     const phoneDir = path.join(repoRoot, "apps", "website", "public", "guide", UI_LANG === "en" ? "mobile-en" : "mobile");
     mkdirSync(phoneDir, { recursive: true });

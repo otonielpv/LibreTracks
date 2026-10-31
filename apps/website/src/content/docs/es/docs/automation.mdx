@@ -1,6 +1,6 @@
 ---
 title: Automatizaciones
-description: "La pista de automatismos de LibreTracks: acciones que se disparan solas en un punto exacto (saltos, mute, solo, volumen, escenas de mezcla, pads y esperas), cómo limitar sus repeticiones y cómo crear escenas de mezcla."
+description: "La pista de automatismos de LibreTracks: acciones que se disparan solas en un punto exacto (saltos, mute, solo, volumen, escenas de mezcla, pads, click, voz guía y esperas) y cómo limitar sus repeticiones."
 ---
 
 Un **automatismo** es una lista de acciones que LibreTracks ejecuta sola cuando
@@ -36,8 +36,10 @@ reordenarlas.
 | **Mute / unmute pista** | Silencia o vuelve a activar una pista. |
 | **Solo / unsolo pista** | Pone o quita el solo de una pista. |
 | **Volumen / paneo** | Lleva el volumen (0–100) y el panorama de una pista a un valor, de golpe o con un **suavizado** de unos segundos. |
-| **Aplicar escena** | Aplica una [escena de mezcla](#escenas-de-mezcla) a la vez. |
+| **Aplicar escena** | Pone, alterna o quita una [escena de mezcla](/es/docs/live-scenes/). |
 | **Controlar pads** | Enciende o apaga el [pad](/es/docs/ambient-pads/) y fija pack, tonalidad, salida, volumen y fundidos. |
+| **Ajustar click** | Cambia el [metrónomo](/es/docs/audio-routing-metronome/) a mitad de canción: encenderlo o apagarlo, el acento, los sonidos, la subdivisión y la salida. Lo que dejes vacío no cambia. |
+| **Ajustar voz guía** | Cambia la [voz guía](/es/docs/voice-guide/): encenderla o apagarla, el idioma, el conteo y su estilo, los compases de aviso y la salida. Lo que dejes vacío no cambia. |
 | **Esperar** | Deja pasar unos segundos antes de la siguiente acción. |
 
 **Elegir la pista**: en las acciones de mute, solo y volumen, la lista de
@@ -71,19 +73,11 @@ mueven con ella.
 
 ## Escenas de mezcla
 
-Una **escena** es una mezcla guardada: el volumen, el panorama, el mute y el
-solo de las pistas que elijas. Con la acción **Aplicar escena** se aplica de
-golpe, por ejemplo para dejar solo voz y click en un final a capella y
-recuperar la mezcla completa en la siguiente sección.
-
-Clic derecho en la cabecera de la pista de automatismos › **Gestionar escenas
-de mezcla…**:
-
-![Gestor de escenas de mezcla](/guide/desktop/mix-scenes.png)
-
-1. **+ Nueva escena** y ponle un nombre.
-2. En cada pista, marca qué controla la escena (**Vol**, **Pan**, **Mute**,
-   **Solo**) y ajusta su valor. Lo que no marques no se toca al aplicarla.
+Las escenas de mezcla tienen su propia página:
+[Escenas de mezcla](/es/docs/live-scenes/). Se crean en **Archivo › Escenas
+de mezcla…** y no necesitan la pista de automatismos; desde un automatismo,
+la acción **Aplicar escena** puede ponerla, alternarla o quitarla en un punto
+exacto de la canción.
 
 ## Consejos
 
