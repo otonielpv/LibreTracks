@@ -234,6 +234,27 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    /// Put the scenes in this order: the editor's list, which is also the
+    /// order of the `scene_slot:<n>` MIDI targets (D10). Ids not given keep
+    /// their relative order at the end; unknown ids are ignored.
+    pub fn reorder_mix_scenes(
+        &mut self,
+        scene_ids: &[String],
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut rest = std::mem::take(&mut self.automation.mix_scenes);
+        let mut ordered = Vec::with_capacity(rest.len());
+        for scene_id in scene_ids {
+            if let Some(index) = rest.iter().position(|scene| &scene.id == scene_id) {
+                ordered.push(rest.remove(index));
+            }
+        }
+        ordered.extend(rest);
+        self.automation.mix_scenes = ordered;
+        self.persist_automation(audio)?;
+        Ok(self.snapshot())
+    }
+
     pub fn delete_mix_scene(
         &mut self,
         scene_id: &str,

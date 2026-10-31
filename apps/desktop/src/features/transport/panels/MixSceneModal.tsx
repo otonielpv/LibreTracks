@@ -1,9 +1,19 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { MixSceneSummary, SongView } from "../desktopApi";
+import type { MixSceneRule, MixSceneSummary, SongView } from "../desktopApi";
+import { useSoundingKeyStore } from "../keyChanges/soundingKeyStore";
 import { useDismissOnBack } from "../mobile/backNavigation";
-import { trackOverrideOf, withTrackOverride } from "./mixScenes/trackOverrides";
+import { CommitInput, SceneRuleCard } from "./mixScenes/SceneRuleCard";
+import {
+  createSceneId,
+  defaultRule,
+  folderNames,
+  ministerScene,
+  moveId,
+  resolveSceneTrackIds,
+} from "./mixScenes/sceneRules";
+import { groupTracksBySong } from "./trackSongGroups";
 
 type MixSceneModalProps = {
   open: boolean;
@@ -13,20 +23,16 @@ type MixSceneModalProps = {
   onUpsert: (scene: MixSceneSummary) => Promise<void> | void;
   /** Delete a scene by id. */
   onDelete: (sceneId: string) => Promise<void> | void;
+  /** Persist the scenes' order (the MIDI scene slots follow it). */
+  onReorder: (sceneIds: string[]) => Promise<void> | void;
 };
 
-function createSceneId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `scene-${crypto.randomUUID()}`;
-  }
-  return `scene-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 /**
- * Manage mix scenes: a list of scenes (create / rename / delete) and, for the
- * selected scene, optional per-track overrides (volume / pan / mute / solo).
- * Each parameter is independently toggled — unchecked params are left untouched
- * when the scene is applied. Mirrors the AutomationCueModal structure.
+ * Mix scenes editor (plan live-scenes, paso 03): the scenes on the left, in
+ * the order the `scene_slot` MIDI targets follow, and the selected scene's
+ * rules on the right, each read as a sentence: "all the song's tracks except
+ * names with voz, vox → volume -12 dB". Below, the tracks it touches in the
+ * song under the playhead.
  */
 export function MixSceneModal({
   open,
@@ -34,64 +40,86 @@ export function MixSceneModal({
   onCancel,
   onUpsert,
   onDelete,
+  onReorder,
 }: MixSceneModalProps) {
-  // En Android, atras cierra este overlay en vez de salir de la aplicacion.
-  useDismissOnBack(onCancel, open);
+  // A stable callback: an unstable one re-registers and reorders the back
+  // stack on every render (project_back_dismiss_reregister_trap).
+  const cancelRef = useRef(onCancel);
+  cancelRef.current = onCancel;
+  const dismiss = useCallback(() => cancelRef.current(), []);
+  useDismissOnBack(dismiss, open);
   const { t } = useTranslation();
-  const scenes = song?.mixScenes ?? [];
-  const tracks = (song?.tracks ?? []).filter((t) => t.kind !== "folder");
+  const activeRegionId = useSoundingKeyStore((state) => state.regionId);
 
+  // Edits show at once; the song view catches up after the save round trip.
+  const persisted = song?.mixScenes;
+  const [scenes, setScenes] = useState<MixSceneSummary[]>(persisted ?? []);
+  useEffect(() => setScenes(persisted ?? []), [persisted]);
   const [selectedId, setSelectedId] = useState<string | null>(
-    () => scenes[0]?.id ?? null,
+    () => persisted?.[0]?.id ?? null,
   );
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   if (!open) {
     return null;
   }
 
-  const selected = scenes.find((s) => s.id === selectedId) ?? null;
+  const selected = scenes.find((scene) => scene.id === selectedId) ?? null;
+  const folders = folderNames(song);
+  const trackGroups = groupTracksBySong(song);
 
-  const overrideFor = (trackId: string) =>
-    selected ? trackOverrideOf(selected, trackId) : undefined;
-
-  // Replace one track's override inside the selected scene and persist.
-  const patchOverride = (
-    trackId: string,
-    patch: Partial<{
-      volume: number | null;
-      pan: number | null;
-      muted: boolean | null;
-      solo: boolean | null;
-    }>,
-  ) => {
-    if (!selected) return;
-    const existing = overrideFor(trackId);
-    const merged = {
-      trackId,
-      volume: existing?.volume ?? null,
-      pan: existing?.pan ?? null,
-      muted: existing?.muted ?? null,
-      solo: existing?.solo ?? null,
-      ...patch,
-    };
-    void onUpsert(withTrackOverride(selected, merged));
+  const saveScene = (next: MixSceneSummary) => {
+    setScenes((current) =>
+      current.some((scene) => scene.id === next.id)
+        ? current.map((scene) => (scene.id === next.id ? next : scene))
+        : [...current, next],
+    );
+    void onUpsert(next);
   };
 
-  const createScene = () => {
-    const scene: MixSceneSummary = {
+  const addScene = (scene: MixSceneSummary) => {
+    saveScene(scene);
+    setSelectedId(scene.id);
+  };
+
+  const createScene = () =>
+    addScene({
       id: createSceneId(),
-      name: t("transport.mixScene.defaultName", {
-        index: scenes.length + 1,
-      }),
-      rampSeconds: 0,
+      name: t("transport.mixScene.defaultName", { index: scenes.length + 1 }),
+      rampSeconds: 1,
       rules: [],
-    };
-    void Promise.resolve(onUpsert(scene)).then(() => setSelectedId(scene.id));
+    });
+
+  const createMinisterScene = () =>
+    addScene(ministerScene(createSceneId(), t("transport.mixScene.ministerName")));
+
+  const moveScene = (from: number, to: number) => {
+    const current = scenes.map((scene) => scene.id);
+    const ids = moveId(current, from, to);
+    if (ids === current) return;
+    setScenes(ids.map((id) => scenes.find((scene) => scene.id === id)!));
+    void onReorder(ids);
   };
 
-  const renameScene = (scene: MixSceneSummary, name: string) => {
-    void onUpsert({ ...scene, name });
+  const patchRule = (index: number, rule: MixSceneRule) => {
+    if (!selected) return;
+    saveScene({
+      ...selected,
+      rules: selected.rules.map((current, i) => (i === index ? rule : current)),
+    });
   };
+
+  const removeRule = (index: number) => {
+    if (!selected) return;
+    saveScene({ ...selected, rules: selected.rules.filter((_, i) => i !== index) });
+  };
+
+  const previewIds = selected
+    ? resolveSceneTrackIds(selected, song, activeRegionId || null)
+    : [];
+  const trackName = (id: string) =>
+    song?.tracks.find((track) => track.id === id)?.name ?? id;
+  const hasActiveSong = Boolean(activeRegionId);
 
   return (
     <div className="lt-modal-backdrop" onClick={onCancel}>
@@ -115,34 +143,75 @@ export function MixSceneModal({
         <div className="lt-settings-modal-body lt-scene-body">
           <div className="lt-scene-list">
             {scenes.length === 0 ? (
-              <p className="lt-automation-empty">
-                {t("transport.mixScene.empty")}
-              </p>
+              <p className="lt-automation-empty">{t("transport.mixScene.empty")}</p>
             ) : (
-              scenes.map((scene) => (
-                <button
-                  key={scene.id}
-                  type="button"
-                  className={`lt-scene-list-item ${
-                    scene.id === selectedId ? "is-selected" : ""
-                  }`}
-                  onClick={() => setSelectedId(scene.id)}
-                >
-                  {scene.name}
-                  <span className="lt-scene-list-meta">
-                    {t("transport.mixScene.tracksCount", {
-                      count: scene.rules.length,
-                    })}
-                  </span>
-                </button>
-              ))
+              <ol className="lt-scene-list-items">
+                {scenes.map((scene, index) => (
+                  <li
+                    key={scene.id}
+                    className={`lt-scene-list-item ${
+                      scene.id === selectedId ? "is-selected" : ""
+                    } ${dragIndex === index ? "is-dragging" : ""}`}
+                    draggable
+                    onDragStart={() => setDragIndex(index)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => {
+                      if (dragIndex !== null) moveScene(dragIndex, index);
+                      setDragIndex(null);
+                    }}
+                    onDragEnd={() => setDragIndex(null)}
+                  >
+                    <button
+                      type="button"
+                      className="lt-scene-list-select"
+                      aria-pressed={scene.id === selectedId}
+                      onClick={() => setSelectedId(scene.id)}
+                    >
+                      <span className="lt-scene-list-number">{index + 1}</span>
+                      <span className="lt-scene-list-text">
+                        <span className="lt-scene-list-name">{scene.name}</span>
+                        <span className="lt-scene-list-meta">
+                          {t("transport.mixScene.rulesCount", { count: scene.rules.length })}
+                        </span>
+                      </span>
+                    </button>
+                    <span className="lt-scene-list-move">
+                      <button
+                        type="button"
+                        className="lt-scene-icon-button"
+                        aria-label={t("transport.mixScene.moveUp", { name: scene.name })}
+                        disabled={index === 0}
+                        onClick={() => moveScene(index, index - 1)}
+                      >
+                        <span className="material-symbols-outlined" aria-hidden="true">
+                          arrow_upward
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="lt-scene-icon-button"
+                        aria-label={t("transport.mixScene.moveDown", { name: scene.name })}
+                        disabled={index === scenes.length - 1}
+                        onClick={() => moveScene(index, index + 1)}
+                      >
+                        <span className="material-symbols-outlined" aria-hidden="true">
+                          arrow_downward
+                        </span>
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ol>
             )}
+            <button type="button" className="lt-secondary-button lt-scene-add" onClick={createScene}>
+              {t("transport.mixScene.newScene")}
+            </button>
             <button
               type="button"
-              className="lt-secondary-button lt-scene-add"
-              onClick={createScene}
+              className="lt-secondary-button lt-scene-add is-template"
+              onClick={createMinisterScene}
             >
-              {t("transport.mixScene.newScene")}
+              {t("transport.mixScene.ministerTemplate")}
             </button>
           </div>
 
@@ -150,184 +219,92 @@ export function MixSceneModal({
             {selected ? (
               <>
                 <div className="lt-scene-detail-head">
-                  <label className="lt-settings-field">
-                    <span className="lt-settings-field-label">
-                      {t("transport.mixScene.name")}
-                    </span>
+                  <label className="lt-scene-field lt-scene-name-field">
+                    <span className="lt-scene-change-label">{t("transport.mixScene.name")}</span>
                     <input
                       type="text"
                       value={selected.name}
-                      onChange={(event) =>
-                        renameScene(selected, event.target.value)
-                      }
+                      onChange={(event) => saveScene({ ...selected, name: event.target.value })}
+                    />
+                  </label>
+                  <label className="lt-scene-field lt-scene-ramp-field">
+                    <span className="lt-scene-change-label">
+                      {t("transport.mixScene.rampSeconds")}
+                    </span>
+                    <CommitInput
+                      type="number"
+                      ariaLabel={t("transport.mixScene.rampSeconds")}
+                      suffix="s"
+                      value={String(selected.rampSeconds)}
+                      onCommit={(text) => {
+                        const seconds = Number(text);
+                        if (Number.isFinite(seconds)) {
+                          saveScene({ ...selected, rampSeconds: Math.min(30, Math.max(0, seconds)) });
+                        }
+                      }}
                     />
                   </label>
                   <button
                     type="button"
-                    className="lt-secondary-button"
+                    className="lt-secondary-button lt-scene-delete"
                     onClick={() => {
-                      void Promise.resolve(onDelete(selected.id)).then(() =>
-                        setSelectedId(null),
-                      );
+                      void Promise.resolve(onDelete(selected.id)).then(() => setSelectedId(null));
                     }}
                   >
                     {t("transport.mixScene.deleteScene")}
                   </button>
                 </div>
 
-                <div className="lt-scene-tracks">
-                  {tracks.length === 0 ? (
-                    <p className="lt-automation-empty">
-                      {t("transport.mixScene.noTracks")}
-                    </p>
+                <div className="lt-scene-rules">
+                  {selected.rules.length === 0 ? (
+                    <p className="lt-automation-empty">{t("transport.mixScene.noRules")}</p>
                   ) : (
-                    tracks.map((track) => {
-                      const ov = overrideFor(track.id);
-                      return (
-                        <div className="lt-scene-track-row" key={track.id}>
-                          <span className="lt-scene-track-name">
-                            {track.name}
-                          </span>
-                          <OverrideToggle
-                            label="Vol"
-                            active={ov?.volume != null}
-                            onToggle={(on) =>
-                              patchOverride(track.id, {
-                                volume: on ? 1 : null,
-                              })
-                            }
-                          >
-                            <input
-                              type="number"
-                              min={0}
-                              max={100}
-                              step={1}
-                              value={Math.round((ov?.volume ?? 1) * 100)}
-                              onChange={(event) =>
-                                patchOverride(track.id, {
-                                  volume: Number(event.target.value) / 100,
-                                })
-                              }
-                            />
-                          </OverrideToggle>
-                          <OverrideToggle
-                            label="Pan"
-                            active={ov?.pan != null}
-                            onToggle={(on) =>
-                              patchOverride(track.id, { pan: on ? 0 : null })
-                            }
-                          >
-                            <input
-                              type="number"
-                              min={-100}
-                              max={100}
-                              step={1}
-                              value={Math.round((ov?.pan ?? 0) * 100)}
-                              onChange={(event) =>
-                                patchOverride(track.id, {
-                                  pan: Number(event.target.value) / 100,
-                                })
-                              }
-                            />
-                          </OverrideToggle>
-                          <OverrideToggle
-                            label="Mute"
-                            active={ov?.muted != null}
-                            onToggle={(on) =>
-                              patchOverride(track.id, {
-                                muted: on ? true : null,
-                              })
-                            }
-                          >
-                            <select
-                              value={ov?.muted ? "on" : "off"}
-                              onChange={(event) =>
-                                patchOverride(track.id, {
-                                  muted: event.target.value === "on",
-                                })
-                              }
-                            >
-                              <option value="on">Mute</option>
-                              <option value="off">
-                                {t("transport.mixScene.muteOff")}
-                              </option>
-                            </select>
-                          </OverrideToggle>
-                          <OverrideToggle
-                            label="Solo"
-                            active={ov?.solo != null}
-                            onToggle={(on) =>
-                              patchOverride(track.id, {
-                                solo: on ? true : null,
-                              })
-                            }
-                          >
-                            <select
-                              value={ov?.solo ? "on" : "off"}
-                              onChange={(event) =>
-                                patchOverride(track.id, {
-                                  solo: event.target.value === "on",
-                                })
-                              }
-                            >
-                              <option value="on">Solo</option>
-                              <option value="off">
-                                {t("transport.mixScene.soloOff")}
-                              </option>
-                            </select>
-                          </OverrideToggle>
-                        </div>
-                      );
-                    })
+                    selected.rules.map((rule, index) => (
+                      <SceneRuleCard
+                        key={index}
+                        index={index}
+                        rule={rule}
+                        folders={folders}
+                        trackGroups={trackGroups}
+                        onChange={(next) => patchRule(index, next)}
+                        onRemove={() => removeRule(index)}
+                      />
+                    ))
                   )}
+                  <button
+                    type="button"
+                    className="lt-secondary-button lt-scene-add-rule"
+                    onClick={() =>
+                      saveScene({ ...selected, rules: [...selected.rules, defaultRule()] })
+                    }
+                  >
+                    {t("transport.mixScene.addRule")}
+                  </button>
                 </div>
+
+                <p className="lt-scene-preview" aria-live="polite">
+                  {!hasActiveSong
+                    ? t("transport.mixScene.previewNoSong")
+                    : previewIds.length === 0
+                      ? t("transport.mixScene.previewNone")
+                      : t("transport.mixScene.preview", {
+                          names: previewIds.map(trackName).join(", "),
+                          count: previewIds.length,
+                        })}
+                </p>
               </>
             ) : (
-              <p className="lt-automation-empty">
-                {t("transport.mixScene.selectOrCreate")}
-              </p>
+              <p className="lt-automation-empty">{t("transport.mixScene.selectOrCreate")}</p>
             )}
           </div>
         </div>
 
         <div className="lt-inline-actions lt-automation-modal-actions">
-          <button
-            type="button"
-            className="is-primary"
-            onClick={onCancel}
-          >
+          <button type="button" className="is-primary" onClick={onCancel}>
             {t("common.close")}
           </button>
         </div>
       </section>
-    </div>
-  );
-}
-
-/** A parameter override cell: a checkbox that enables/disables the override,
- * and the control (shown only when active). */
-function OverrideToggle({
-  label,
-  active,
-  onToggle,
-  children,
-}: {
-  label: string;
-  active: boolean;
-  onToggle: (on: boolean) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={`lt-scene-override ${active ? "is-active" : ""}`}>
-      <label className="lt-scene-override-toggle">
-        <input
-          type="checkbox"
-          checked={active}
-          onChange={(event) => onToggle(event.target.checked)}
-        />
-        {label}
-      </label>
-      {active ? <div className="lt-scene-override-control">{children}</div> : null}
     </div>
   );
 }

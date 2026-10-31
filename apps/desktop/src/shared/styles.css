@@ -2872,7 +2872,7 @@ html.lt-ios body {
 
 .lt-automation-action-fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.55rem;
   /* Stretch cells to equal height so the label-grows rule below can bottom-
      align every input regardless of how many lines its label wraps to. */
@@ -2942,47 +2942,56 @@ html.lt-ios body {
   font: 600 0.85rem/1.2 "Space Grotesk", sans-serif;
 }
 
-/* Mix scene manager modal. */
+/* Mix scene editor (plan live-scenes, paso 03). One scroller: the body.
+   The header and the Close button stay put, and on a phone the list and the
+   rules scroll together instead of nesting two scroll areas
+   (project_mobile_nested_scroller_trap). */
 .lt-scene-modal {
-  max-width: 44rem;
-  /* Bound the modal to the viewport and let the inner track list be the only
-     scroll area, so the header/footer stay put while the tracks scroll. */
+  max-width: 58rem;
   max-height: calc(100vh - 3rem);
+  max-height: calc(100dvh - 3rem);
   overflow: hidden;
+}
+
+.lt-scene-modal > .lt-settings-modal-header,
+.lt-scene-modal > .lt-automation-modal-actions {
+  flex: 0 0 auto;
 }
 
 .lt-scene-body {
   display: grid;
-  grid-template-columns: 12rem 1fr;
+  grid-template-columns: 14rem minmax(0, 1fr);
   gap: 0.9rem;
-  /* The track list inside caps its own height and scrolls, so the body just
-     wraps its content. */
   align-items: start;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.3rem;
 }
 
 .lt-scene-list {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  /* Self-contained scroll, matching the track list. */
-  max-height: 52vh;
-  overflow-y: auto;
-  padding-right: 0.3rem;
+  min-width: 0;
+}
+
+.lt-scene-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .lt-scene-list-item {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.15rem;
-  padding: 0.6rem 0.7rem;
+  align-items: stretch;
   border: 1px solid rgb(255 255 255 / 0.1);
   border-radius: 4px;
   background: rgb(28 31 32 / 0.9);
-  color: #f3f0ef;
-  cursor: pointer;
-  font: 600 0.9rem/1.2 "Space Grotesk", sans-serif;
-  text-align: left;
 }
 
 .lt-scene-list-item.is-selected {
@@ -2990,106 +2999,341 @@ html.lt-ios body {
   background: rgb(255 122 182 / 0.08);
 }
 
+.lt-scene-list-item.is-dragging {
+  opacity: 0.5;
+}
+
+.lt-scene-list-select {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.55rem 0.6rem;
+  border: 0;
+  background: transparent;
+  color: #f3f0ef;
+  cursor: pointer;
+  text-align: left;
+}
+
+.lt-scene-list-number {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 2px;
+  background: rgb(255 122 182 / 0.16);
+  color: #ff9bcc;
+  font: 700 0.8rem/1 "Space Grotesk", sans-serif;
+}
+
+.lt-scene-list-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.lt-scene-list-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 0.9rem/1.2 "Space Grotesk", sans-serif;
+}
+
 .lt-scene-list-meta {
   color: rgb(186 202 197 / 0.65);
   font: 500 0.74rem/1.1 "Space Grotesk", sans-serif;
 }
 
+.lt-scene-list-move {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0.15rem;
+}
+
+.lt-scene-icon-button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: rgb(186 202 197 / 0.8);
+  cursor: pointer;
+}
+
+.lt-scene-list-move .lt-scene-icon-button {
+  width: 1.7rem;
+  height: 1.4rem;
+}
+
+.lt-scene-icon-button .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+.lt-scene-icon-button:hover:not(:disabled) {
+  border-color: rgb(87 241 219 / 0.28);
+  color: #57f1db;
+}
+
+.lt-scene-icon-button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 .lt-scene-add {
   margin-top: 0.2rem;
+  text-align: left;
+}
+
+.lt-scene-add.is-template {
+  border-color: rgb(255 122 182 / 0.3);
+  color: #ff9bcc;
 }
 
 .lt-scene-detail {
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
-  min-height: 0;
+  min-width: 0;
 }
 
 .lt-scene-detail-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
-  gap: 0.7rem;
-  flex: 0 0 auto;
+  gap: 0.6rem;
 }
 
-.lt-scene-detail-head .lt-settings-field {
-  flex: 1;
+.lt-scene-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
 }
 
-.lt-scene-detail-head input[type="text"] {
+.lt-scene-name-field {
+  flex: 1 1 12rem;
+}
+
+.lt-scene-ramp-field {
+  flex: 0 0 6rem;
+}
+
+.lt-scene-ramp-field .lt-scene-input.is-number {
+  flex: 1 1 auto;
+}
+
+.lt-scene-delete {
+  min-height: 2.2rem;
+}
+
+.lt-scene-detail-head input[type="text"],
+.lt-scene-rule select,
+.lt-scene-input input {
   width: 100%;
   box-sizing: border-box;
+  min-height: 2.2rem;
   border-radius: 2px;
   border: 1px solid rgb(87 241 219 / 0.18);
   background: rgb(28 31 32 / 0.98);
   color: #f3f0ef;
-  padding: 0.6rem 0.7rem;
-  font: 600 0.9rem/1.2 "Space Grotesk", sans-serif;
+  padding: 0.45rem 0.6rem;
+  font: 600 0.85rem/1.2 "Space Grotesk", sans-serif;
 }
 
-.lt-scene-tracks {
+.lt-scene-detail-head input[type="text"] {
+  padding: 0.6rem 0.7rem;
+  font-size: 0.9rem;
+}
+
+.lt-scene-input {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+.lt-scene-input.is-number {
+  flex: 0 0 5.5rem;
+}
+
+.lt-scene-input-suffix {
+  position: absolute;
+  right: 0.55rem;
+  color: rgb(186 202 197 / 0.6);
+  font: 600 0.75rem/1 "Space Grotesk", sans-serif;
+  pointer-events: none;
+}
+
+.lt-scene-input.is-number input {
+  padding-right: 1.8rem;
+}
+
+.lt-scene-rules {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  /* Direct, self-contained scroll: cap the height and always scroll, so it does
-     not depend on parent flex/grid height propagation (which kept failing). */
-  max-height: 45vh;
-  overflow-y: auto;
-  padding-right: 0.3rem;
+  gap: 0.55rem;
 }
 
-.lt-scene-track-row {
-  display: grid;
-  grid-template-columns: minmax(6rem, 1fr) repeat(4, minmax(5rem, 7rem));
-  gap: 0.5rem;
-  align-items: start;
-  padding: 0.5rem;
-  border: 1px solid rgb(255 255 255 / 0.06);
+.lt-scene-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.6rem;
+  border: 1px solid rgb(255 255 255 / 0.07);
+  border-left: 2px solid rgb(255 122 182 / 0.45);
   border-radius: 4px;
   background: rgb(15 18 19 / 0.6);
 }
 
-.lt-scene-track-name {
-  color: #f3f0ef;
-  font: 600 0.85rem/1.3 "Space Grotesk", sans-serif;
-  align-self: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.lt-scene-override {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.lt-scene-override-toggle {
+.lt-scene-rule-line {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.lt-scene-rule-line.is-except {
+  padding-left: 2.1rem;
+}
+
+.lt-scene-rule-index {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.06);
   color: rgb(186 202 197 / 0.8);
-  font: 600 0.74rem/1.1 "Space Grotesk", sans-serif;
+  font: 700 0.75rem/1 "Space Grotesk", sans-serif;
+}
+
+.lt-scene-rule-word {
+  flex: 0 0 auto;
+  color: #ff9bcc;
+  font: 700 0.78rem/1 "Space Grotesk", sans-serif;
+  text-transform: lowercase;
+}
+
+.lt-scene-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lt-scene-selector > select {
+  flex: 1 1 10rem;
+  width: auto;
+}
+
+.lt-scene-add-except {
+  padding: 0.35rem 0.6rem;
+}
+
+/* Volume, pan, mute, solo: four columns, the value field under its mode. */
+.lt-scene-rule-changes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding-left: 2.1rem;
+}
+
+.lt-scene-change {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.lt-scene-change-label {
+  flex: 1 0 100%;
+  color: rgb(186 202 197 / 0.75);
+  font: 600 0.7rem/1.1 "Space Grotesk", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  cursor: pointer;
 }
 
-.lt-scene-override.is-active .lt-scene-override-toggle {
-  color: #ff9bcc;
-}
-
-.lt-scene-override-control input,
-.lt-scene-override-control select {
+.lt-scene-change > select {
+  flex: 1 1 100%;
   width: 100%;
-  box-sizing: border-box;
-  border-radius: 2px;
-  border: 1px solid rgb(87 241 219 / 0.18);
-  background: rgb(28 31 32 / 0.98);
-  color: #f3f0ef;
-  padding: 0.4rem 0.5rem;
-  font: 600 0.82rem/1.1 "Space Grotesk", sans-serif;
+}
+
+.lt-scene-change > .lt-scene-input.is-number {
+  flex: 1 1 100%;
+}
+
+.lt-scene-add-rule {
+  align-self: flex-start;
+}
+
+.lt-scene-preview {
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 4px;
+  background: rgb(87 241 219 / 0.06);
+  color: rgb(186 202 197 / 0.9);
+  font: 500 0.82rem/1.35 "Space Grotesk", sans-serif;
+}
+
+@media (max-width: 44rem) {
+  .lt-scene-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Phones (always landscape): little height, so spend fewer pixels on the
+   header and keep touch targets at 40px. */
+.lt-mobile .lt-scene-modal {
+  width: min(58rem, 100%);
+  max-height: calc(100dvh - var(--lt-safe-area-top) - var(--lt-safe-area-bottom) - 1rem);
+  gap: 0.55rem;
+  padding: 0.7rem;
+}
+
+.lt-mobile .lt-scene-modal .lt-settings-modal-header p {
+  display: none;
+}
+
+.lt-mobile .lt-scene-body {
+  grid-template-columns: 11rem minmax(0, 1fr);
+  -webkit-overflow-scrolling: touch;
+}
+
+.lt-mobile .lt-scene-rule-changes,
+.lt-mobile .lt-scene-rule-line.is-except {
+  padding-left: 0;
+}
+
+.lt-mobile .lt-scene-rule select,
+.lt-mobile .lt-scene-input input,
+.lt-mobile .lt-scene-detail-head input[type="text"],
+.lt-mobile .lt-scene-icon-button,
+.lt-mobile .lt-scene-list-select,
+.lt-mobile .lt-scene-modal .lt-secondary-button {
+  min-height: 2.5rem;
+}
+
+.lt-mobile .lt-scene-icon-button {
+  width: 2.5rem;
+}
+
+.lt-mobile .lt-scene-list-move .lt-scene-icon-button {
+  width: 2.2rem;
+  height: 2rem;
+  min-height: 2rem;
 }
 
 /* Maximum-size row: label + a narrow numeric input with an inline "GB" unit

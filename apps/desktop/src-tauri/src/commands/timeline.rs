@@ -968,6 +968,21 @@ pub fn delete_mix_scene(
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command(async)]
+pub fn reorder_mix_scenes(
+    scene_ids: Vec<String>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .reorder_mix_scenes(&scene_ids, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 /// Engage, toggle or release a mix scene by hand (plan live-scenes, paso 02).
 #[tauri::command(async)]
 pub fn trigger_mix_scene(

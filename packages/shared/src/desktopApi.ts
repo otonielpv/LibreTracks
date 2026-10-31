@@ -2653,6 +2653,11 @@ export async function deleteMixScene(sceneId: string): Promise<TransportSnapshot
   return invokeCommand<TransportSnapshot>("delete_mix_scene", { sceneId });
 }
 
+/** Reorder the mix scenes (the editor's list and the MIDI scene slots). */
+export async function reorderMixScenes(sceneIds: string[]): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("reorder_mix_scenes", { sceneIds });
+}
+
 /** Engage, toggle or release a mix scene by hand (live state, no undo). */
 export async function triggerMixScene(
   sceneId: string,

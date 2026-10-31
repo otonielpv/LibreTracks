@@ -450,3 +450,29 @@ fn a_pre_plan_apply_scene_cue_has_the_apply_mode() {
     assert!(json.contains(r#""mode":"toggle""#), "{json}");
     assert_eq!(serde_json::from_str::<AutomationAction>(&json).unwrap(), toggle);
 }
+
+// --- Paso 03: order -------------------------------------------------------
+
+#[test]
+fn reordering_scenes_persists_the_new_order() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    let named = |id: &str| MixScene {
+        id: id.into(),
+        name: id.into(),
+        ramp_seconds: 0.0,
+        rules: vec![],
+    };
+    session.automation.mix_scenes = vec![named("a"), named("b"), named("c")];
+
+    let snapshot = session
+        .reorder_mix_scenes(&["c".into(), "ghost".into(), "a".into()], &audio)
+        .expect("reorder");
+    let order: Vec<_> = snapshot.mix_scenes.iter().map(|scene| scene.id.as_str()).collect();
+    assert_eq!(order, vec!["c", "a", "b"]);
+
+    let saved = crate::audio::automation::load_automation(session.song_dir.as_ref().unwrap())
+        .expect("load automation");
+    let order: Vec<_> = saved.mix_scenes.iter().map(|scene| scene.id.as_str()).collect();
+    assert_eq!(order, vec!["c", "a", "b"]);
+}

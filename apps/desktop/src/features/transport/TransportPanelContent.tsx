@@ -24,7 +24,6 @@ import {
   type AppSettings,
   type AudioDeviceDescriptor,
   type AutomationActionSummary,
-  type MixSceneSummary,
   type ClipSummary,
   type JumpTriggerLabel,
   type PendingJumpSummary,
@@ -115,8 +114,6 @@ import {
   upsertSongTempoMarker,
   upsertSongTimeSignatureMarker,
   upsertAutomationCue,
-  upsertMixScene,
-  deleteMixScene,
   setAutomationTrackPosition,
   formatTransposeSemitones,
   listSessionTemplates,
@@ -208,6 +205,7 @@ import { createMidiClipHandlers } from "./midi/midiClipHandlers";
 import { useVideoFeature } from "./video/useVideoFeature";
 import { VideoSetupLayer } from "./video/VideoSetupLayer";
 import { MixSceneModal } from "./panels/MixSceneModal";
+import { createMixSceneHandlers } from "./panels/mixScenes/mixSceneHandlers";
 import { RemotePanel } from "./panels/RemotePanel";
 import { NetworkSessionRoot } from "../network/NetworkSessionRoot";
 import { MobileLanding } from "./compact/MobileLanding";
@@ -5594,27 +5592,8 @@ export function TransportPanelContent() {
     [automationCueDraft, runAction, applyPlaybackSnapshot, refreshSongView, t],
   );
 
-  // Mix scene create/edit — the modal calls these; backend commands already
-  // exist. Refresh so the new/changed scene is available to applyScene actions.
-  const handleUpsertMixScene = useCallback(
-    async (scene: MixSceneSummary) => {
-      await runAction(async () => {
-        const nextSnapshot = await upsertMixScene(scene);
-        applyPlaybackSnapshot(nextSnapshot);
-        await refreshSongView({ includeWaveforms: false, sync: true });
-      });
-    },
-    [runAction, applyPlaybackSnapshot, refreshSongView],
-  );
-
-  const handleDeleteMixScene = useCallback(
-    async (sceneId: string) => {
-      await runAction(async () => {
-        const nextSnapshot = await deleteMixScene(sceneId);
-        applyPlaybackSnapshot(nextSnapshot);
-        await refreshSongView({ includeWaveforms: false, sync: true });
-      });
-    },
+  const mixSceneHandlers = useMemo(
+    () => createMixSceneHandlers({ runAction, applyPlaybackSnapshot, refreshSongView }),
     [runAction, applyPlaybackSnapshot, refreshSongView],
   );
 
@@ -7942,8 +7921,9 @@ export function TransportPanelContent() {
               open={isMixSceneModalOpen}
               song={song}
               onCancel={() => setIsMixSceneModalOpen(false)}
-              onUpsert={handleUpsertMixScene}
-              onDelete={handleDeleteMixScene}
+              onUpsert={mixSceneHandlers.upsert}
+              onDelete={mixSceneHandlers.remove}
+              onReorder={mixSceneHandlers.reorder}
             />
 
             <TimelineContextMenus

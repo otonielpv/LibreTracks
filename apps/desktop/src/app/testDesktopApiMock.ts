@@ -2088,6 +2088,17 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
+  reorderMixScenes: async (sceneIds: string[]) => {
+    const scenes = state.song.mixScenes ?? [];
+    const ordered = sceneIds
+      .map((id) => scenes.find((scene) => scene.id === id))
+      .filter((scene): scene is MixSceneSummary => Boolean(scene));
+    replaceSong({
+      ...state.song,
+      mixScenes: [...ordered, ...scenes.filter((scene) => !sceneIds.includes(scene.id))],
+    });
+    return clone(buildSnapshot());
+  },
   triggerMixScene: async (sceneId: string, mode: MixSceneMode) => {
     if (!(state.song.mixScenes ?? []).some((scene) => scene.id === sceneId)) {
       return clone(buildSnapshot());
