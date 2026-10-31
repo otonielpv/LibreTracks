@@ -13,9 +13,11 @@ const setlistCss = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)),
 
 function rule(selector: string, source = css): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]+)\\}`).exec(source);
-  expect(match, `falta la regla ${selector}`).toBeTruthy();
-  return match?.[1] ?? "";
+  // Todos los bloques del selector, como la cascada: un segundo bloque con
+  // una sola propiedad no debe esconder las del primero.
+  const matches = [...source.matchAll(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]+)\\}`, "g"))];
+  expect(matches.length, `falta la regla ${selector}`).toBeGreaterThan(0);
+  return matches.map((match) => match[1]).join("\n");
 }
 
 describe("estilos del editor de arreglos", () => {

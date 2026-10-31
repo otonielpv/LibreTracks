@@ -38,7 +38,9 @@
     "get_library_assets",
     "get_library_folders",
     "get_library_waveform_summaries",
+    "get_midi_bank",
     "get_midi_capabilities",
+    "get_midi_control_diagnostics",
     "get_midi_inputs",
     "get_midi_outputs",
     "get_midi_status",
@@ -50,6 +52,10 @@
     "list_library_dir",
     "list_library_folder_audio",
     "list_session_templates",
+    "midi_controller_resend_feedback",
+    "midi_controller_scenes",
+    "midi_controller_sync",
+    "midi_controller_transport",
     "move_library_asset",
     "pair_bluetooth_midi",
     "purge_decoding_cache",
@@ -204,7 +210,10 @@
     "upsert_midi_clip",
     "upsert_mix_scene",
     "upsert_song_tempo_marker",
-    "upsert_song_time_signature_marker"
+    "upsert_song_time_signature_marker",
+    "set_song_region_cover",
+    "reorder_mix_scenes",
+    "trigger_mix_scene"
   ],
   "custom": [
     "save_settings"
@@ -253,7 +262,8 @@
     "start_import_library_assets_from_dialog",
     "start_save_session_as_template",
     "update_audio_settings",
-    "video_export_payload"
+    "video_export_payload",
+    "find_song_cover_images"
   ],
   "events": [
     "transport:lifecycle",

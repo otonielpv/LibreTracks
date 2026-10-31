@@ -18,9 +18,10 @@ import type { VideoLaneBindings } from "../video/VideoClipHotspots";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { OverviewZoom } from "./OverviewZoom";
 import { SetlistLyrics } from "./SetlistLyrics";
-import { waveformEditModes } from "./waveformEditModes";
+import { textEditModes, waveformEditModes } from "./waveformEditModes";
 import { WaveDock } from "./WaveDock";
-import { SetlistEditButton, SetlistEditDrawer } from "./SetlistEditDrawer";
+import { SetlistEditDrawer } from "./SetlistEditDrawer";
+import { SetlistPaneButtons } from "./SetlistPaneButtons";
 import { SetlistSongSettings } from "./SetlistSongSettings";
 import { SetlistSectionsPanel } from "./SetlistSectionsPanel";
 import { SetlistTrackList } from "./SetlistTrackList";
@@ -36,7 +37,7 @@ import { useTimelineUIStore } from "../uiStore";
 import { resolveSetlistSongId } from "./songMapModel";
 import { resolveSongSeekSeconds } from "./sectionScrubModel";
 import { SONG_DROP_CLASS, songDropHandlers } from "./songDrop";
-import { requestEditMode, useSetlistStore } from "./setlistStore";
+import { useSetlistStore } from "./setlistStore";
 import { useSetlistKeyboardBridge } from "./setlistKeyboard";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
 import "./setlist.css";
@@ -389,33 +390,7 @@ function SetlistViewComponent({
               runShortcutAction,
               video: videoLanes,
             }),
-            ...(FEATURE_FLAGS.lyrics
-              ? [
-                  {
-                    mode: "lyrics" as const,
-                    icon: "lyrics",
-                    labelKey: "setlistView.edit.modes.lyrics",
-                    content: (
-                      <SetlistLyrics
-                        performance={performance}
-                        region={shownRegion}
-                        onClose={() => void requestEditMode(null)}
-                        startEditing
-                      />
-                    ),
-                  },
-                ]
-              : []),
-            ...(layout === "short"
-              ? []
-              : [
-            {
-              mode: "lanes" as const,
-              icon: "view_timeline",
-              labelKey: "setlistView.edit.modes.lanes",
-              content: <p className="lt-setlist-sections-hint">{t("setlistView.lanes.hint")}</p>,
-            },
-                ]),
+            ...textEditModes({ performance, region: shownRegion, layout, lanesHint: t("setlistView.lanes.hint") }),
           ]}
         />
       </Zone>
@@ -431,39 +406,7 @@ function SetlistViewComponent({
   const songsHeightPx = useSetlistStore((state) => state.songsHeightPx);
   const songsResize = useSongsRowResize(rootRef, songsZoneRef);
   const paneButtons = (
-    <>
-      {layout === "short" ? (
-        <button
-          type="button"
-          // A way to the other view, not a state: it is never lit (lit, «Mix»
-          // read as if the mixer were what you were looking at).
-          className="lt-setlist-pane-toggle"
-          title={t(shortPane === "song" ? "setlistView.pane.showMixerTitle" : "setlistView.pane.showSongTitle")}
-          onClick={() => setShortPane(shortPane === "song" ? "mixer" : "song")}
-        >
-          <span className="material-symbols-outlined" aria-hidden="true">
-            {shortPane === "song" ? "tune" : "graphic_eq"}
-          </span>
-          {t(shortPane === "song" ? "setlistView.pane.mixer" : "setlistView.pane.song")}
-        </button>
-      ) : null}
-      {FEATURE_FLAGS.lyrics ? (
-        <button
-          type="button"
-          className={`lt-setlist-pane-toggle${lyricsOpen || lyricsPane ? " is-active" : ""}`}
-          aria-pressed={lyricsOpen || lyricsPane}
-          title={t("setlistView.lyrics.toggleTitle")}
-          onClick={() => {
-            if (layout === "short") setShortPane(lyricsPane ? "mixer" : "lyrics");
-            else setLyricsOpen(!lyricsOpenSetting);
-          }}
-        >
-          <span className="material-symbols-outlined" aria-hidden="true">lyrics</span>
-          {t("setlistView.lyrics.button")}
-        </button>
-      ) : null}
-      <SetlistEditButton />
-    </>
+    <SetlistPaneButtons layout={layout} lyricsActive={lyricsOpen || lyricsPane} lyricsPane={lyricsPane} />
   );
   // Phone, waveform pane: Playback keeps the view buttons in a dock over the
   // bottom right of the waveform, folded away with an arrow.

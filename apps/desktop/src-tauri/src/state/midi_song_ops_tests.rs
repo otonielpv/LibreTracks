@@ -176,6 +176,10 @@ fn a_song_pushed_by_another_takes_its_midi_clips_along() {
 fn transposing_without_warp_shifts_the_following_midi_clips() {
     let mut session = two_song_session();
     let audio = AudioController::default();
+    // Con el warp automático el tono encendería warp y no habría varispeed.
+    let mut settings = audio.current_settings().expect("settings");
+    settings.auto_warp = false;
+    audio.replace_settings(settings).expect("replace settings");
     // Sin warp el tono cambia la duración de la canción (varispeed), y las
     // que vienen detrás se desplazan para no solaparse ni dejar hueco.
     session

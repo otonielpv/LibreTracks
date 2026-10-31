@@ -330,13 +330,14 @@ describe("App / timeline-tracks", () => {
     // tocan con los faders de siempre, en el panel que abre la barra de la
     // seleccion (ver MobileSelectionActionBar). Un menu de escalones fijos era
     // un sucedaneo de un fader.
+    // Agrupado por categorias (ab332492): color, carpetas y, al final, borrar.
     expect(buttons.map((button) => button.textContent)).toEqual([
-      expect.stringContaining("Delete"),
+      expect.stringContaining("Select colour"),
       // Meter varias en una carpeta de un tiron: arrastrando habia que repetir
       // el gesto una por una y acertar el 40% central de la fila de la carpeta.
       expect.stringContaining("Move to folder"),
       expect.stringContaining("Remove From Folder"),
-      expect.stringContaining("Select colour"),
+      expect.stringContaining("Delete"),
     ]);
   });
 

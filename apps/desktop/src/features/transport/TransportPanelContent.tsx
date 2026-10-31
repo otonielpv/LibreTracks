@@ -262,7 +262,6 @@ import type {
   LibraryDragHoverState,
   LiveClipMoveState,
   LiveTrackMixRequestState,
-  MidiLearnCommandRow,
   NativeDropCandidateDebug,
   NativeDropCoordinateMode,
   OptimisticClipOperation,
@@ -281,7 +280,6 @@ import {
   TRACK_HEADER_WIDTH,
   LIVE_TRACK_MIX_MIN_INTERVAL_MS,
   LIVE_ZOOM_COMMIT_DEBOUNCE_MS,
-  MIDI_LEARN_COMMANDS,
   NATIVE_DND_DEBUG_ENABLED,
   SCROLL_COMMIT_DEBOUNCE_MS,
   TIMELINE_FIT_RIGHT_GUTTER_PX,
@@ -371,7 +369,7 @@ import { useVisibleTracks } from "./hooks/useVisibleTracks";
 import { useMidiRawMessages } from "./hooks/useMidiRawMessages";
 import { useMidiControllerSync } from "./hooks/useMidiControllerSync";
 import { MidiMapBanner } from "./midi/MidiMapBanner";
-import { describeMidiTarget } from "./midi/controllerTargets";
+import { useMidiLearnRows } from "./hooks/useMidiLearnRows";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { useDragListeners } from "./hooks/useDragListeners";
 import { usePlaybackUiDiagnostics } from "./hooks/usePlaybackUiDiagnostics";
@@ -1151,132 +1149,19 @@ export function TransportPanelContent() {
   const toggleViewModeBackward = useTimelineUIStore(
     (state) => state.toggleViewModeBackward,
   );
-  const midiLearnCommandRows = useMemo(
-    () =>
-      MIDI_LEARN_COMMANDS.map((command) => ({
-        ...command,
-        label: t(command.labelKey),
-        binding: appSettings.midiMappings[command.key] ?? null,
-      })) satisfies MidiLearnCommandRow[],
-    [appSettings.midiMappings, t],
-  );
-  const dynamicMidiLearnJumpRows = useMemo(
-    () =>
-      Object.entries(appSettings.midiMappings)
-        .filter(([key]) => {
-          if (key.startsWith("action:jump_marker_")) {
-            const index = Number(key.slice("action:jump_marker_".length));
-            return Number.isInteger(index) && index >= 1 && index <= 100;
-          }
-
-          if (key.startsWith("action:jump_song_")) {
-            const index = Number(key.slice("action:jump_song_".length));
-            return Number.isInteger(index) && index >= 1 && index <= 20;
-          }
-
-          return false;
-        })
-        .map(([key, binding]) => {
-          const markerIndex = key.startsWith("action:jump_marker_")
-            ? Number(key.slice("action:jump_marker_".length))
-            : null;
-          const songIndex = key.startsWith("action:jump_song_")
-            ? Number(key.slice("action:jump_song_".length))
-            : null;
-          return {
-            key,
-            label:
-              markerIndex !== null && Number.isInteger(markerIndex)
-                ? t("transport.settingsModal.midiLearnJumpMarker", {
-                    index: markerIndex,
-                  })
-                : t("transport.settingsModal.midiLearnJumpSong", {
-                    index: songIndex,
-                  }),
-            binding,
-          };
-        })
-        .sort((left, right) =>
-          left.key.localeCompare(right.key, undefined, { numeric: true }),
-        ),
-    [appSettings.midiMappings, t],
-  );
-  const midiLearnRows = useMemo(
-    () => [...midiLearnCommandRows, ...dynamicMidiLearnJumpRows],
-    [dynamicMidiLearnJumpRows, midiLearnCommandRows],
-  );
-  const midiLearnMarkerRows = useMemo(
-    () =>
-      dynamicMidiLearnJumpRows.filter((command) =>
-        command.key.startsWith("action:jump_marker_"),
-      ),
-    [dynamicMidiLearnJumpRows],
-  );
-  const midiLearnSongRows = useMemo(
-    () =>
-      dynamicMidiLearnJumpRows.filter((command) =>
-        command.key.startsWith("action:jump_song_"),
-      ),
-    [dynamicMidiLearnJumpRows],
-  );
-  const visibleMidiLearnRows = useMemo(() => {
-    if (midiLearnView === "markers") {
-      return midiLearnMarkerRows;
-    }
-
-    if (midiLearnView === "songs") {
-      return midiLearnSongRows;
-    }
-
-    return midiLearnCommandRows;
-  }, [
-    midiLearnCommandRows,
+  const {
     midiLearnMarkerRows,
     midiLearnSongRows,
+    visibleMidiLearnRows,
+    midiLearnFeedbackCommand,
+    formatMidiLearnCommandLabel,
+    activeMidiLearnCommand,
+  } = useMidiLearnRows({
+    midiMappings: appSettings.midiMappings,
     midiLearnView,
-  ]);
-  const midiLearnFeedbackCommand = useMemo(
-    () =>
-      midiLearnRows.find((command) => command.key === midiLearnFeedback?.key) ??
-      null,
-    [midiLearnRows, midiLearnFeedback],
-  );
-  const formatMidiLearnCommandLabel = useCallback(
-    (key: string) => {
-      const learnedRow = midiLearnRows.find((command) => command.key === key);
-      if (learnedRow) {
-        return learnedRow.label;
-      }
-
-      if (key.startsWith("action:jump_marker_")) {
-        const index = Number(key.slice("action:jump_marker_".length));
-        if (Number.isInteger(index) && index >= 1 && index <= 100) {
-          return t("transport.settingsModal.midiLearnJumpMarker", { index });
-        }
-      }
-
-      if (key.startsWith("action:jump_song_")) {
-        const index = Number(key.slice("action:jump_song_".length));
-        if (Number.isInteger(index) && index >= 1 && index <= 20) {
-          return t("transport.settingsModal.midiLearnJumpSong", { index });
-        }
-      }
-
-      return describeMidiTarget(key, t, useSongStore.getState().song) ?? key;
-    },
-    [midiLearnRows, t],
-  );
-  const activeMidiLearnCommand = useMemo(
-    () =>
-      midiLearnMode === null
-        ? null
-        : {
-            key: midiLearnMode,
-            label: formatMidiLearnCommandLabel(midiLearnMode),
-            binding: appSettings.midiMappings[midiLearnMode] ?? null,
-          },
-    [formatMidiLearnCommandLabel, midiLearnMode, appSettings.midiMappings],
-  );
+    midiLearnFeedback,
+    midiLearnMode,
+  });
 
   // Mirror the persisted metronome volume into the slider draft so the
   // settings UI reflects external changes (remote, another window).

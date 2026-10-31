@@ -142,7 +142,10 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "upsert_midi_clip"
         | "upsert_mix_scene"
         | "upsert_song_tempo_marker"
-        | "upsert_song_time_signature_marker" => Some(ProxyAccess::Edit),
+        | "upsert_song_time_signature_marker"
+        | "set_song_region_cover"
+        | "reorder_mix_scenes"
+        | "trigger_mix_scene" => Some(ProxyAccess::Edit),
         "save_settings" => Some(ProxyAccess::Custom),
         _ => None,
     }
@@ -286,6 +289,9 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "upsert_mix_scene",
     "upsert_song_tempo_marker",
     "upsert_song_time_signature_marker",
+    "set_song_region_cover",
+    "reorder_mix_scenes",
+    "trigger_mix_scene",
 ];
 
 /// Run a proxied command with the guest's arguments, exactly as the host's
@@ -1245,6 +1251,30 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::timeline::upsert_song_time_signature_marker(arg(&args, "startSeconds")?, arg(&args, "signature")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "set_song_region_cover" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::covers::set_song_region_cover(arg(&args, "regionId")?, arg(&args, "coverImage")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "reorder_mix_scenes" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::reorder_mix_scenes(arg(&args, "sceneIds")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "trigger_mix_scene" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::trigger_mix_scene(arg(&args, "sceneId")?, arg(&args, "mode")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?

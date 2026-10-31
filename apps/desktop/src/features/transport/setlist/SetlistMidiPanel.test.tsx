@@ -9,6 +9,7 @@ import { anchoredOffset, followOffset, OverviewZoom } from "./OverviewZoom";
 import { SetlistMidiPanel, songMidiClips } from "./SetlistMidiPanel";
 import { SetlistView } from "./SetlistView";
 import { INITIAL_SETLIST_STATE, useSetlistStore } from "./setlistStore";
+import { useTransportStore } from "../store";
 import { testRegion, testSetlistProps } from "./testBindings";
 
 vi.mock("react-i18next", () => ({
@@ -310,6 +311,8 @@ describe("band zoom", () => {
     const runFrames = () => act(() => frames.splice(0).forEach((callback) => callback(0)));
     const position = { current: 30 };
     useSetlistStore.setState({ overviewZoom: 4 });
+    // The layer only follows the playhead while playing.
+    useTransportStore.setState({ playback: { playbackState: "playing" } as never });
     const { container } = render(
       <OverviewZoom startSeconds={0} endSeconds={60} positionSecondsRef={position}>
         <div />
@@ -339,8 +342,12 @@ describe("band zoom", () => {
     expect(layer.style.transform).toMatch(/^translate3d\(-1120\.26\d*px, 0, 0\)$/);
     fireEvent.wheel(viewport, { deltaX: -200, deltaY: 10 });
     expect(layer.style.transform).toMatch(/^translate3d\(-920\.26\d*px, 0, 0\)$/);
-    // Ctrl+wheel out, down to the whole song.
+    // Ctrl+wheel out, down to the whole song. The zoom previews with a
+    // transform and commits once the wheel rests (140 ms).
+    vi.useFakeTimers();
     for (let step = 0; step < 12; step += 1) fireEvent.wheel(viewport, { deltaY: 100, ctrlKey: true });
+    act(() => vi.advanceTimersByTime(200));
+    vi.useRealTimers();
     runFrames();
     expect(layer.style.width).toBe("100%");
     expect(layer.style.transform).toBe("none");

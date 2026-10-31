@@ -3,7 +3,11 @@ import type { SongRegionSummary, SongView, TrackSummary, WaveformSummaryDto } fr
 import type { ShortcutActionId } from "../keyboard/actions";
 import type { TimelineMenus } from "../menus/timelineMenus";
 import type { VideoLaneBindings } from "../video/VideoClipHotspots";
+import type { ComponentProps } from "react";
+import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import type { SetlistEditModeEntry } from "./SetlistEditDrawer";
+import { SetlistLyrics } from "./SetlistLyrics";
+import { requestEditMode } from "./setlistStore";
 import { SetlistAutomationPanel } from "./SetlistAutomationPanel";
 import { SetlistMidiPanel } from "./SetlistMidiPanel";
 import { SetlistVideoPanel } from "./SetlistVideoPanel";
@@ -50,5 +54,49 @@ export function waveformEditModes(input: WaveformEditModesInput): SetlistEditMod
       labelKey: "setlistView.edit.modes.video",
       content: region ? <SetlistVideoPanel {...scrub} region={region} tracks={tracks} video={input.video} /> : null,
     },
+  ];
+}
+
+/** The drawer's text-only modes: the lyrics editor (behind its flag) and,
+ * off the phone, the hint that the song's lanes are under the waveform. */
+export function textEditModes({
+  performance,
+  region,
+  layout,
+  lanesHint,
+}: {
+  performance: ComponentProps<typeof SetlistLyrics>["performance"];
+  region: SongRegionSummary | null;
+  layout: SetlistLayoutClass;
+  lanesHint: string;
+}): SetlistEditModeEntry[] {
+  return [
+    ...(FEATURE_FLAGS.lyrics
+      ? [
+          {
+            mode: "lyrics" as const,
+            icon: "lyrics",
+            labelKey: "setlistView.edit.modes.lyrics",
+            content: (
+              <SetlistLyrics
+                performance={performance}
+                region={region}
+                onClose={() => void requestEditMode(null)}
+                startEditing
+              />
+            ),
+          },
+        ]
+      : []),
+    ...(layout === "short"
+      ? []
+      : [
+          {
+            mode: "lanes" as const,
+            icon: "view_timeline",
+            labelKey: "setlistView.edit.modes.lanes",
+            content: <p className="lt-setlist-sections-hint">{lanesHint}</p>,
+          },
+        ]),
   ];
 }
