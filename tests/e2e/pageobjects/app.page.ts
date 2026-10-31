@@ -90,6 +90,8 @@ export type E2ESettings = {
   voiceGuideEnabled: boolean;
   /** Where the track meters measure; absent in builds older than the setting. */
   trackMeterMode?: "postFader" | "postPan" | "preFader";
+  /** Warp turns on by itself on a pitch/tempo change (1.16.0). */
+  autoWarp?: boolean;
 };
 
 export type E2ETimelineView = {

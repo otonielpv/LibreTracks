@@ -14,6 +14,7 @@ export type SessionFixture = {
   unusedAudioFilePath: string;
   sessionFilePath: string;
   initialMetronomeEnabled: boolean | null;
+  initialAutoWarp?: boolean | null;
 };
 
 /** Fundamental frequency of the WAV fixture written by writeToneWav. */
@@ -295,6 +296,8 @@ export async function measureRenderedPitch(trackId: string): Promise<number> {
  * an effect when warp is on. Re-selects the region first (playback can drop it).
  */
 export async function setRegionWarp(enabled: boolean, regionIndex = 0) {
+  // The manual warp switch only shows with «Warp automático» off.
+  await setAutoWarp(false);
   const targetId = (await AppPage.songView())?.regions[regionIndex]?.id;
   if (!targetId) {
     throw new Error(`No region at index ${regionIndex} to warp`);
@@ -323,6 +326,30 @@ export async function setRegionWarp(enabled: boolean, regionIndex = 0) {
       timeoutMsg: `Region warp did not become ${enabled} in the model`,
     },
   );
+}
+
+/**
+ * Turn «Warp automático» on or off the way a user does, in Settings › General,
+ * so both the UI and the engine see it. These are the machine's real settings:
+ * the spec puts the original value back in its `after`.
+ */
+export async function setAutoWarp(enabled: boolean) {
+  if (((await AppPage.settings()).autoWarp ?? true) === enabled) return;
+  await AppPage.openSettings();
+  const generalTab = await AppPage.settingsTab("general");
+  await generalTab.waitForClickable({ timeout: 15_000 });
+  await generalTab.click();
+  const toggle = await $(
+    "//label[contains(@class,'lt-settings-toggle')][.//span[normalize-space()='Warp automático']]//input",
+  );
+  await toggle.waitForClickable({ timeout: 15_000 });
+  await toggle.click();
+  await browser.waitUntil(
+    async () => ((await AppPage.settings()).autoWarp ?? true) === enabled,
+    { timeout: 15_000, timeoutMsg: `autoWarp did not become ${enabled}` },
+  );
+  await AppPage.resetShell();
+  await (await AppPage.settingsTabList).waitForDisplayed({ reverse: true, timeout: 15_000 });
 }
 
 /**

@@ -24,6 +24,7 @@ import {
   AUDIO_FILE_NAME,
   UNUSED_AUDIO_FILE_NAME,
   type SessionFixture,
+  setAutoWarp,
   writeToneWav,
 } from "./session/support.js";
 import { registerSessionTransportFlows } from "./session/transport.flows.js";
@@ -40,6 +41,7 @@ describe("Session creation", () => {
     unusedAudioFilePath: "",
     sessionFilePath: "",
     initialMetronomeEnabled: null,
+    initialAutoWarp: null,
   };
 
   before(async () => {
@@ -69,6 +71,7 @@ describe("Session creation", () => {
     fixture.initialMetronomeEnabled = (
       await AppPage.settings()
     ).metronomeEnabled;
+    fixture.initialAutoWarp = (await AppPage.settings()).autoWarp ?? true;
   });
 
   after(async () => {
@@ -87,6 +90,11 @@ describe("Session creation", () => {
           (await AppPage.settings()).metronomeEnabled ===
           fixture.initialMetronomeEnabled,
       );
+    }
+
+    // The warp flows switch «Warp automático» off; give it back.
+    if (fixture.initialAutoWarp != null) {
+      await setAutoWarp(fixture.initialAutoWarp);
     }
 
     removeWorkDir(fixture.sessionParentDir);
