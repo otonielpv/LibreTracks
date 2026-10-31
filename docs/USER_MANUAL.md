@@ -233,6 +233,31 @@ With an arrangement applied, the song shows `⇄ Sunday` (the arrangement's name
 
 Arrangements travel in song packages (`.ltpkg`) and session packages (`.ltset`). If you open the session with an older version of LibreTracks, you will see the arrangement written on the timeline and it will sound the same, but saving from that version loses the arrangement's original.
 
+### Live scenes
+
+A scene is a mix state you engage and release by hand: for example, bringing the instruments down while someone ministers and bringing them back afterwards. Releasing it puts the mix back exactly as it was before.
+
+**Create a scene.** Open `File > Mix scenes…` (on a phone, the `File` sheet of the side rail; in the Setlist view, the mixer's `Scenes` button). No automation track is needed. `+ Bring the music down to minister` creates the typical scene: every track of the song except those named voz, voc, vox, click, guía or guide, −12 dB, with a 2 second ramp.
+
+Each scene is a list of **rules** that read as a sentence: which tracks, except which, and what changes.
+
+- **Which tracks:** `Every track of the song` (the one under the playhead), `Folder` (the tracks inside a folder with that name), `Name contains` (comma-separated words; case and accents are ignored, so "vox" finds "BGVox") or one specific `Track`.
+- **Except:** zero or more selectors taken away.
+- **What changes:** volume (`± dB` over each track's level, or `Set %`), pan, mute and solo.
+
+Song, folder and name rules work in **any song** of the session. Below the rules you see which tracks the scene touches in the current song. Each scene's number (1, 2, 3…) is its order; change it with the arrows.
+
+**Engage and release.** The live view, the Setlist mixer and the compact view have one button per scene: tap it to engage (it lights up) and again to release. With a MIDI controller: turn on Map mode, tap the scene's button and press the controller's button. In `Settings > MIDI Learn > Mixer` you can also learn `Scene 1` to `Scene 8`, which follow the editor's order and work in any session. The controller LED follows the scene even when it is engaged from the screen or by automation. An automation cue can also `Engage`, `Toggle` or `Release` a scene.
+
+**While it is engaged:**
+
+- If you move a track's fader, mute or solo by hand (on screen or on the controller), that track leaves the scene: when you release it, the track stays where you left it.
+- When playback moves on to the next song, the scene stays engaged and moves with it: the tracks of the song that ended go back to their level and the new song's tracks come down with the ramp. Rules naming a specific track do not move.
+- Stopping, playing again or jumping within the song does not release it.
+- Saving (also on close and on export) writes the mix from **before** the scene: you will not reopen the session with the music down.
+
+Scenes travel with the session (`.ltset`) and with session templates. In a template, folder rules are especially handy: "Folder Instruments, −12 dB" works in every session created from it. Rules naming a specific track do not travel with a template, because the template does not keep those tracks.
+
 ## 6. Export Songs And Packages
 
 You can export a song after creating it as a region. The export includes the song configuration so it can be reused in future sessions.

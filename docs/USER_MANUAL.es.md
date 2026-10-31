@@ -233,6 +233,31 @@ Con un arreglo aplicado, la canción muestra `⇄ Domingo` (el nombre del arregl
 
 Los arreglos viajan en los paquetes de canción (`.ltpkg`) y de sesión (`.ltset`). Si abres la sesión con una versión anterior de LibreTracks, verás el arreglo escrito en el timeline y sonará igual, pero si guardas desde esa versión se pierde el original del arreglo.
 
+### Escenas en directo
+
+Una escena es un estado de mezcla que pones y quitas a mano: por ejemplo, bajar los instrumentos mientras se ministra y devolverlos después. Al quitarla, la mezcla vuelve exactamente a como estaba antes de ponerla.
+
+**Crear una escena.** Abre `Archivo > Escenas de mezcla…` (en el móvil, la hoja `Archivo` del carril lateral; en la vista Setlist, el botón `Escenas` del mezclador). No hace falta ninguna pista de automatismos. El botón `+ Bajar música para ministrar` crea la escena típica: todas las pistas de la canción menos las que se llaman voz, voc, vox, click, guía o guide, −12 dB, con una rampa de 2 segundos.
+
+Cada escena es una lista de **reglas**, que se leen como una frase: a qué pistas, excepto cuáles, y qué cambia.
+
+- **A qué pistas:** `Todas las pistas de la canción` (la que está bajo el cabezal), `Carpeta` (las pistas de dentro de una carpeta con ese nombre), `Nombre contiene` (palabras separadas por comas; no distingue mayúsculas ni tildes, así que «voz» encuentra «Vóz guía» y «VOX» encuentra «BGVox») o una `Pista` concreta.
+- **Excepto:** cero o más selectores que se restan.
+- **Qué cambia:** volumen (`± dB` sobre lo que tenga cada pista, o `Fijar %`), paneo, mute y solo.
+
+Las reglas por canción, carpeta y nombre valen para **cualquier canción** de la sesión. Debajo de las reglas ves a qué pistas afecta en la canción actual. El número de cada escena (1, 2, 3…) es su orden; cámbialo con las flechas.
+
+**Ponerla y quitarla.** En la vista en directo, en el mezclador del Setlist y en la vista compacta hay un botón por escena: tócalo para ponerla (se ilumina) y otra vez para quitarla. Con el controlador MIDI: activa el modo Mapeo, toca el botón de la escena y pulsa el botón del controlador. En `Ajustes > MIDI Learn > Mezclador` también puedes aprender `Escena 1` a `Escena 8`, que siguen el orden del editor y sirven para cualquier sesión. El LED del controlador sigue a la escena aunque la pongas desde la pantalla o desde un automatismo. Un automatismo también puede `Poner`, `Alternar` o `Quitar` una escena.
+
+**Mientras está puesta:**
+
+- Si mueves a mano el fader, el mute o el solo de una pista (en pantalla o con el controlador), esa pista sale de la escena: al quitarla, se queda donde la dejaste.
+- Si la reproducción pasa a la canción siguiente, la escena sigue puesta y se traslada: las pistas de la canción que termina vuelven a su volumen y las de la nueva bajan con la rampa. Las reglas de una pista concreta no se mueven.
+- Parar, volver a reproducir o saltar dentro de la canción no la quita.
+- Guardar (también al cerrar y al exportar) escribe la mezcla de **antes** de la escena: no volverás a abrir la sesión con la música bajada.
+
+Las escenas viajan con la sesión (`.ltset`) y con las plantillas de sesión. En una plantilla, las reglas por carpeta son especialmente útiles: «Carpeta Instrumentos, −12 dB» funciona en todas las sesiones que crees a partir de ella. Las reglas de una pista concreta no viajan con la plantilla, porque la plantilla no guarda esas pistas.
+
 ## Exportar canciones y paquetes
 
 Puedes exportar una canción en caso de aberla creado con las regiones, esto exportará toda la configuración de la canción para tenerla disponible en futuras sesiones. Para ello:
