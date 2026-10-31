@@ -13,6 +13,7 @@ import {
 } from "@libretracks/shared/faderScale";
 
 import type { CompactMidiStripHandlers } from "../compact/CompactMidiStrip";
+import { SceneButtons } from "../scenes/SceneButtons";
 import { CompactMixer } from "../compact/CompactMixer";
 import { PadManagerModal } from "../panels/PadManagerModal";
 import { PadsControls, usePadsCatalog } from "../panels/PadsPopover";
@@ -362,6 +363,7 @@ function SetlistMixerComponent({
       {tab === "tracks" && songTrackIds?.size === 0 && !showAllTracks ? (
         <p className="lt-setlist-mixer-empty">{t("setlistView.mixer.emptySong")}</p>
       ) : null}
+      {tab === "tracks" ? <SceneButtons className="lt-setlist-scenes" /> : null}
       {tab === "tracks" ? (
         <div className="lt-setlist-console">
           <div className="lt-setlist-console-tracks">

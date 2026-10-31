@@ -205,7 +205,7 @@ import { createMidiClipHandlers } from "./midi/midiClipHandlers";
 import { useVideoFeature } from "./video/useVideoFeature";
 import { VideoSetupLayer } from "./video/VideoSetupLayer";
 import { MixSceneModal } from "./panels/MixSceneModal";
-import { createMixSceneHandlers } from "./panels/mixScenes/mixSceneHandlers";
+import { useMixSceneHandlers } from "./panels/mixScenes/mixSceneHandlers";
 import { RemotePanel } from "./panels/RemotePanel";
 import { NetworkSessionRoot } from "../network/NetworkSessionRoot";
 import { MobileLanding } from "./compact/MobileLanding";
@@ -5592,10 +5592,7 @@ export function TransportPanelContent() {
     [automationCueDraft, runAction, applyPlaybackSnapshot, refreshSongView, t],
   );
 
-  const mixSceneHandlers = useMemo(
-    () => createMixSceneHandlers({ runAction, applyPlaybackSnapshot, refreshSongView }),
-    [runAction, applyPlaybackSnapshot, refreshSongView],
-  );
+  const mixSceneHandlers = useMixSceneHandlers({ runAction, applyPlaybackSnapshot, refreshSongView });
 
   function previewZoom(
     nextZoomLevel: number,

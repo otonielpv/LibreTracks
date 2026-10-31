@@ -1,3 +1,5 @@
+import { useEffect, useMemo } from "react";
+
 import type {
   MixSceneMode,
   MixSceneSummary,
@@ -10,6 +12,7 @@ import {
   triggerMixScene,
   upsertMixScene,
 } from "../../desktopApi";
+import { useMixSceneTriggerStore } from "../../scenes/SceneButtons";
 
 export type MixSceneHandlerDeps = {
   runAction: (action: () => Promise<void>) => Promise<void>;
@@ -45,3 +48,20 @@ export function createMixSceneHandlers({
 }
 
 export type MixSceneHandlers = ReturnType<typeof createMixSceneHandlers>;
+
+/**
+ * The handlers, built once, with `trigger` registered for the scene buttons
+ * the views host (`scenes/SceneButtons.tsx`).
+ */
+export function useMixSceneHandlers(deps: MixSceneHandlerDeps) {
+  const { runAction, applyPlaybackSnapshot, refreshSongView } = deps;
+  const handlers = useMemo(
+    () => createMixSceneHandlers({ runAction, applyPlaybackSnapshot, refreshSongView }),
+    [runAction, applyPlaybackSnapshot, refreshSongView],
+  );
+  useEffect(() => {
+    useMixSceneTriggerStore.setState({ trigger: handlers.trigger });
+    return () => useMixSceneTriggerStore.setState({ trigger: null });
+  }, [handlers]);
+  return handlers;
+}

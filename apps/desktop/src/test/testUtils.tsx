@@ -213,6 +213,8 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     deleteAutomationCue: vi.fn(testDesktopApiMock.deleteAutomationCue),
     upsertMixScene: vi.fn(testDesktopApiMock.upsertMixScene),
     deleteMixScene: vi.fn(testDesktopApiMock.deleteMixScene),
+    reorderMixScenes: vi.fn(testDesktopApiMock.reorderMixScenes),
+    triggerMixScene: vi.fn(testDesktopApiMock.triggerMixScene),
     addAutomationTrack: vi.fn(testDesktopApiMock.addAutomationTrack),
     removeAutomationTrack: vi.fn(testDesktopApiMock.removeAutomationTrack),
     setAutomationTrackPosition: vi.fn(testDesktopApiMock.setAutomationTrackPosition),

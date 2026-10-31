@@ -155,6 +155,7 @@ function shouldPublishPlaybackSnapshot(
     current.playbackState !== next.playbackState ||
     current.projectRevision !== next.projectRevision ||
     current.mixRevision !== next.mixRevision ||
+    (current.activeMixSceneIds ?? []).join("|") !== (next.activeMixSceneIds ?? []).join("|") ||
     current.fadingToStop !== next.fadingToStop ||
     current.songGapVamp !== next.songGapVamp ||
     current.songDir !== next.songDir ||

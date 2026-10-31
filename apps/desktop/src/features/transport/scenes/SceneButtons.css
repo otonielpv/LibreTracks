@@ -1,0 +1,106 @@
+/* Scene buttons (plan live-scenes, paso 04). A row that scrolls sideways
+   instead of wrapping, so it never pushes the view's own controls around. */
+.lt-scene-buttons {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.lt-scene-buttons::-webkit-scrollbar {
+  display: none;
+}
+
+.lt-scene-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 11rem;
+  min-height: 1.75rem;
+  padding: 0.2rem 0.55rem 0.2rem 0.25rem;
+  border: 1px solid rgb(255 122 182 / 0.3);
+  border-radius: 0.3rem;
+  background: rgb(255 122 182 / 0.06);
+  color: #f3c7dc;
+  font: 700 0.72rem/1 "Space Grotesk", sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lt-scene-button:hover:not(:disabled) {
+  border-color: rgb(255 122 182 / 0.6);
+}
+
+.lt-scene-button.is-active {
+  border-color: #ff7ab6;
+  background: #ff7ab6;
+  color: #1a0d13;
+  box-shadow: 0 0 10px rgb(255 122 182 / 0.35);
+}
+
+.lt-scene-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.lt-scene-button-number {
+  display: grid;
+  place-items: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.2rem;
+  background: rgb(255 122 182 / 0.18);
+  font-size: 0.68rem;
+}
+
+.lt-scene-button.is-active .lt-scene-button-number {
+  background: rgb(26 13 19 / 0.2);
+}
+
+.lt-scene-button-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Live: a strip under the marker matrix title, the full panel wide. */
+.lt-live-scenes {
+  flex: 0 0 auto;
+  padding: 0 0.65rem 0.45rem;
+}
+
+/* Setlist: a strip above the console. */
+.lt-setlist-scenes {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.45rem 0;
+}
+
+/* Compact, desktop: a strip above the mixer. */
+.lt-compact-view > .lt-compact-scenes {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.5rem;
+  border-top: 1px solid rgb(255 255 255 / 0.06);
+}
+
+/* Compact, phone: inside the mixer toolbar, to the right of the toggle. */
+.lt-compact-mixer-toolbar > .lt-compact-scenes {
+  flex: 0 1 auto;
+  margin-left: auto;
+}
+
+/* Phones: a finger needs more than 28 px. The compact toolbar takes the
+   height of what it holds (1.5rem without scenes, as before); no :has(),
+   which Safari 15 lacks (project_catalina_css_compat). */
+.lt-mobile .lt-scene-button {
+  min-height: 2.25rem;
+  padding-right: 0.65rem;
+  font-size: 0.78rem;
+}
+
+html.lt-mobile .lt-compact-view > .lt-compact-mixer-toolbar {
+  flex-basis: auto;
+}

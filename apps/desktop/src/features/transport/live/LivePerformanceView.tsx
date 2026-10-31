@@ -49,6 +49,7 @@ import type {
 import "./LivePerformanceView.css";
 import { markerCategory } from "../markerKinds";
 import { MidiMappable } from "../midi/MidiMappable";
+import { SceneButtons } from "../scenes/SceneButtons";
 
 export type { LiveViewSettings };
 
@@ -563,6 +564,7 @@ function LivePerformanceViewComponent({
             ) : null}
           </div>
         </div>
+        <SceneButtons className="lt-live-scenes" disabled={!canControl} />
         <div className="lt-live-cue-grid">
           {groups.map((group, index) => {
             const isActive = group.id === selectedPlayback.activeGroupId;
