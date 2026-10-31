@@ -313,6 +313,16 @@ describe("contrato responsive móvil", () => {
     expect(buttons).toContain("flex: 0 0 auto");
   });
 
+  // Siete entradas en la hoja «Archivo» del móvil: en una columna la última
+  // quedaba cortada en un teléfono apaisado.
+  it("reparte la hoja Archivo del móvil en dos columnas con alto dvh", () => {
+    const sheet = declarationsIn(styles, ".lt-mobile-file-menu");
+    const mobile = declarationsIn(styles, ".lt-mobile .lt-mobile-file-menu");
+    expect(sheet).toMatch(/max-height:\s*calc\(100dvh/);
+    expect(mobile).toContain("display: grid");
+    expect(mobile).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+  });
+
   it("convierte la navegación lateral en barra inferior en vertical", () => {
     expect(styles).toMatch(/@media\s*\(orientation:\s*portrait\)/);
     expect(styles).toMatch(
