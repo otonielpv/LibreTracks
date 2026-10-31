@@ -4278,6 +4278,20 @@ pub(super) fn timestamp_suffix() -> u128 {
         .unwrap_or(0)
 }
 
+/// `track_<millis>`, moved past any id the song already has: two tracks made
+/// within the same millisecond (two video extractions committed back to back)
+/// would otherwise share an id and the engine rejects the song.
+pub(super) fn unique_track_id(tracks: &[libretracks_core::Track]) -> String {
+    let mut stamp = timestamp_suffix();
+    loop {
+        let id = format!("track_{stamp}");
+        if !tracks.iter().any(|track| track.id == id) {
+            return id;
+        }
+        stamp += 1;
+    }
+}
+
 pub(super) fn set_song_tempo_at_source_position(song: &mut Song, start_seconds: f64, bpm: f64) {
     if start_seconds <= 0.0001 {
         song.bpm = bpm;

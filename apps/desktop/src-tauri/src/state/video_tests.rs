@@ -469,6 +469,21 @@ fn extracted_audio_lands_below_the_video_track_aligned_with_the_clip() {
 }
 
 #[test]
+fn a_new_track_id_skips_ids_taken_in_the_same_millisecond() {
+    // The CI Mac committed two video extractions within one millisecond and
+    // both new tracks came out as track_<millis>: DuplicateTrackId.
+    let mut taken = song(&two_song_session()).tracks;
+    let now = super::timestamp_suffix();
+    for offset in 0..50 {
+        let mut track = taken[0].clone();
+        track.id = format!("track_{}", now + offset);
+        taken.push(track);
+    }
+    let id = super::unique_track_id(&taken);
+    assert!(taken.iter().all(|track| track.id != id), "{id} is already taken");
+}
+
+#[test]
 fn two_videos_with_the_same_name_give_two_wavs() {
     let mut session = two_song_session();
     let audio = AudioController::default();

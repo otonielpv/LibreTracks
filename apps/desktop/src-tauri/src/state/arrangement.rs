@@ -20,7 +20,7 @@ use super::{
     ensure_region_covers_clip, file_stem_for_auto_track, insert_track,
     normalize_timeline_start_seconds, normalize_ui_color, prune_auto_created_empty_tracks,
     prune_empty_regions, refresh_song_duration, reparent_track, split_clip_at_source,
-    timestamp_suffix, ui_locale,
+    timestamp_suffix, ui_locale, unique_track_id,
     validate_clip_window, AudioChangeImpact, ClipMoveRequest, CreateAudioTrackWithClipRequest,
     UpdatePhase,
     CreateClipRequest, CreateClipWithAutoTrackRequest, DesktopSession,
@@ -1258,7 +1258,7 @@ pub(super) fn new_track(
     let color = auto_color_for_new_track(&song.tracks, kind, auto_color_enabled(audio));
 
     Track {
-        id: format!("track_{}", timestamp_suffix()),
+        id: unique_track_id(&song.tracks),
         name: name.to_string(),
         kind,
         parent_track_id: parent_track_id.map(str::to_string),
