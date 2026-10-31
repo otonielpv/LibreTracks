@@ -4,6 +4,7 @@ pub mod midi_control;
 pub mod midi_port_names;
 pub mod midi_schedule;
 pub mod midi_wire;
+pub mod mix_scene;
 pub mod model;
 pub mod net_clock;
 pub mod song_structure;
@@ -548,3 +549,7 @@ mod structure_model_tests;
 #[cfg(test)]
 #[path = "chart_tests.rs"]
 mod chart_tests;
+
+#[cfg(test)]
+#[path = "mix_scene_tests.rs"]
+mod mix_scene_tests;

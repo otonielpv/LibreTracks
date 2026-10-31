@@ -112,6 +112,15 @@ fn flush(tokens: &mut Vec<String>, current: &mut String) {
     }
 }
 
+/// `text` lowercased with its accents folded, for comparisons that ignore
+/// both (scene rules match "Vóz guía" with "voz").
+pub fn fold_text(text: &str) -> String {
+    text.chars()
+        .flat_map(char::to_lowercase)
+        .map(fold_accent)
+        .collect()
+}
+
 /// Folds the accented letters a Spanish, Portuguese or French stem name
 /// carries, so "Batería" matches the alias "bateria". Pulling a Unicode
 /// normalisation crate in for this would be a dependency for a dozen letters.

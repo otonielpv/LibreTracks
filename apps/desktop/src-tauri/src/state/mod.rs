@@ -4809,3 +4809,5 @@ mod song_template_tests;
 mod song_template_corpus_tests;
 #[cfg(test)]
 mod ruler_markers_tests;
+#[cfg(test)]
+mod mix_scene_tests;

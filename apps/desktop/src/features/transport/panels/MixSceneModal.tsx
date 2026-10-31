@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import type { MixSceneSummary, SongView } from "../desktopApi";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { trackOverrideOf, withTrackOverride } from "./mixScenes/trackOverrides";
 
 type MixSceneModalProps = {
   open: boolean;
@@ -51,7 +52,7 @@ export function MixSceneModal({
   const selected = scenes.find((s) => s.id === selectedId) ?? null;
 
   const overrideFor = (trackId: string) =>
-    selected?.trackOverrides.find((o) => o.trackId === trackId);
+    selected ? trackOverrideOf(selected, trackId) : undefined;
 
   // Replace one track's override inside the selected scene and persist.
   const patchOverride = (
@@ -73,19 +74,7 @@ export function MixSceneModal({
       solo: existing?.solo ?? null,
       ...patch,
     };
-    // Drop the override entirely when nothing is set anymore.
-    const isEmpty =
-      merged.volume == null &&
-      merged.pan == null &&
-      merged.muted == null &&
-      merged.solo == null;
-    const nextOverrides = selected.trackOverrides.filter(
-      (o) => o.trackId !== trackId,
-    );
-    if (!isEmpty) {
-      nextOverrides.push(merged);
-    }
-    void onUpsert({ ...selected, trackOverrides: nextOverrides });
+    void onUpsert(withTrackOverride(selected, merged));
   };
 
   const createScene = () => {
@@ -94,7 +83,8 @@ export function MixSceneModal({
       name: t("transport.mixScene.defaultName", {
         index: scenes.length + 1,
       }),
-      trackOverrides: [],
+      rampSeconds: 0,
+      rules: [],
     };
     void Promise.resolve(onUpsert(scene)).then(() => setSelectedId(scene.id));
   };
@@ -141,7 +131,7 @@ export function MixSceneModal({
                   {scene.name}
                   <span className="lt-scene-list-meta">
                     {t("transport.mixScene.tracksCount", {
-                      count: scene.trackOverrides.length,
+                      count: scene.rules.length,
                     })}
                   </span>
                 </button>

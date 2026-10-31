@@ -324,23 +324,8 @@ pub struct AutomationTransitionSummary {
     pub duration_seconds: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct MixSceneSummary {
-    pub id: String,
-    pub name: String,
-    pub track_overrides: Vec<MixSceneTrackOverrideSummary>,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct MixSceneTrackOverrideSummary {
-    pub track_id: String,
-    pub volume: Option<f64>,
-    pub pan: Option<f64>,
-    pub muted: Option<bool>,
-    pub solo: Option<bool>,
-}
+/// The UI sees the scene model as is: rules, ramp and all.
+pub type MixSceneSummary = MixScene;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -1049,24 +1034,7 @@ pub(crate) fn automation_jump_target_to_summary(
 }
 
 pub(crate) fn mix_scenes_to_summary(scenes: &[MixScene]) -> Vec<MixSceneSummary> {
-    scenes
-        .iter()
-        .map(|scene| MixSceneSummary {
-            id: scene.id.clone(),
-            name: scene.name.clone(),
-            track_overrides: scene
-                .track_overrides
-                .iter()
-                .map(|override_| MixSceneTrackOverrideSummary {
-                    track_id: override_.track_id.clone(),
-                    volume: override_.volume,
-                    pan: override_.pan,
-                    muted: override_.muted,
-                    solo: override_.solo,
-                })
-                .collect(),
-        })
-        .collect()
+    scenes.to_vec()
 }
 
 pub(crate) fn clip_to_summary(

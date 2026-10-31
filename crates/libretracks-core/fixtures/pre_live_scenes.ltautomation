@@ -1,0 +1,50 @@
+{
+  "cues": [
+    {
+      "id": "cue_soft",
+      "name": "Bajar",
+      "atSeconds": 42.0,
+      "enabled": true,
+      "actions": [
+        {
+          "type": "applyScene",
+          "sceneId": "scene_soft",
+          "rampSeconds": 2.0
+        }
+      ]
+    }
+  ],
+  "mixScenes": [
+    {
+      "id": "scene_soft",
+      "name": "Ministrar",
+      "trackOverrides": [
+        {
+          "trackId": "track_drums",
+          "volume": 0.4,
+          "muted": false
+        },
+        {
+          "trackId": "track_bass",
+          "pan": -0.25
+        },
+        {
+          "trackId": "track_keys",
+          "solo": true
+        }
+      ]
+    },
+    {
+      "id": "scene_empty",
+      "name": "Vacia",
+      "trackOverrides": []
+    },
+    {
+      "id": "scene_bare",
+      "name": "Sin campo"
+    }
+  ],
+  "trackPresent": true,
+  "trackAfterId": "track_drums",
+  "trackEnabled": true
+}

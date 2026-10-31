@@ -536,18 +536,40 @@ export type AutomationCueSummary = {
   actions: AutomationActionSummary[];
 };
 
-export type MixSceneTrackOverrideSummary = {
-  trackId: string;
-  volume?: number | null;
-  pan?: number | null;
+/** Which tracks a scene rule picks (plan live-scenes, D4/D5). */
+export type MixSceneTrackSelector =
+  | { type: "track"; trackId: string }
+  | { type: "activeSong" }
+  | { type: "folder"; name: string }
+  | { type: "nameContains"; words: string[] };
+
+export type MixSceneVolumeChange =
+  | { type: "absolute"; value: number }
+  | { type: "relativeDb"; value: number };
+
+export type MixScenePanChange =
+  | { type: "absolute"; value: number }
+  | { type: "relative"; value: number };
+
+export type MixSceneTrackChange = {
+  volume?: MixSceneVolumeChange | null;
+  pan?: MixScenePanChange | null;
   muted?: boolean | null;
   solo?: boolean | null;
+};
+
+export type MixSceneRule = {
+  select: MixSceneTrackSelector;
+  except?: MixSceneTrackSelector[];
+  change: MixSceneTrackChange;
 };
 
 export type MixSceneSummary = {
   id: string;
   name: string;
-  trackOverrides: MixSceneTrackOverrideSummary[];
+  /** Ramp when engaged or released by hand, in seconds (0 = instant). */
+  rampSeconds: number;
+  rules: MixSceneRule[];
 };
 
 export type PendingAutomationCueSummary = {

@@ -62,28 +62,9 @@ pub use libretracks_core::automation::{
     AutomationAction, AutomationCue, AutomationJumpTarget, AutomationTransitionMode,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct MixScene {
-    pub id: String,
-    pub name: String,
-    #[serde(default)]
-    pub track_overrides: Vec<MixSceneTrackOverride>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct MixSceneTrackOverride {
-    pub track_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub volume: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pan: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub muted: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub solo: Option<bool>,
-}
+/// Scenes moved to the core with their rules (plan live-scenes, paso 01);
+/// pre-plan `trackOverrides` migrate on read.
+pub use libretracks_core::mix_scene::MixScene;
 
 pub fn automation_file_path(song_dir: impl AsRef<Path>) -> PathBuf {
     song_dir.as_ref().join(AUTOMATION_FILE_NAME)
@@ -117,6 +98,7 @@ pub fn save_automation(
 mod tests {
     use super::*;
     use libretracks_core::automation::AutomationTransition;
+    use libretracks_core::mix_scene::{SceneRule, TrackChange, TrackSelector, VolumeChange};
 
     #[test]
     fn automation_document_round_trips() {
@@ -160,12 +142,16 @@ mod tests {
             mix_scenes: vec![MixScene {
                 id: "scene_soft".into(),
                 name: "Soft".into(),
-                track_overrides: vec![MixSceneTrackOverride {
-                    track_id: "track_drums".into(),
-                    volume: Some(0.4),
-                    pan: None,
-                    muted: Some(false),
-                    solo: None,
+                ramp_seconds: 1.5,
+                rules: vec![SceneRule {
+                    select: TrackSelector::ActiveSong,
+                    except: vec![TrackSelector::NameContains {
+                        words: vec!["voz".into()],
+                    }],
+                    change: TrackChange {
+                        volume: Some(VolumeChange::RelativeDb(-12.0)),
+                        ..TrackChange::default()
+                    },
                 }],
             }],
             track_present: true,

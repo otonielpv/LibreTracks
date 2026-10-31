@@ -10,6 +10,7 @@
 use libretracks_audio::{
     ActiveVamp, JumpTrigger, PendingMarkerJump, PlaybackState, TransitionType,
 };
+use libretracks_core::mix_scene::{active_song_track_ids, apply_change, resolve_scene, TrackMix};
 use libretracks_core::{source_seconds_at_view, warp_timeline_seconds_at, Song};
 use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
 
@@ -31,6 +32,19 @@ use super::{
 /// whose instant the landing already reached is armed this far ahead instead
 /// (otherwise it would never fire and would hold every later cue hostage).
 const LANDING_JUMP_MARGIN_SECONDS: f64 = 0.05;
+
+/// A track's mix as the scene logic sees it.
+pub(super) fn track_mix_of(song: &Song, track_id: &str) -> Option<TrackMix> {
+    song.tracks
+        .iter()
+        .find(|track| track.id == track_id)
+        .map(|track| TrackMix {
+            volume: track.volume,
+            pan: track.pan,
+            muted: track.muted,
+            solo: track.solo,
+        })
+}
 
 pub(super) fn native_region_jump_trigger_view_seconds(
     source_song: &Song,
@@ -884,74 +898,77 @@ impl DesktopSession {
         else {
             return Ok(());
         };
+        let Some(song) = self.engine.song() else {
+            return Ok(());
+        };
+        let active_song = active_song_track_ids(song, self.engine.position_seconds());
+        let targets: Vec<(String, TrackMix)> = resolve_scene(&scene, song, active_song.as_ref())
+            .into_iter()
+            .filter_map(|resolved| {
+                let current = track_mix_of(song, &resolved.track_id)?;
+                Some((resolved.track_id, apply_change(current, &resolved.change)))
+            })
+            .collect();
+        self.play_mix_targets(targets, ramp_seconds, audio)
+    }
 
+    /// Move each track to its target mix: mute and solo at once, volume and
+    /// pan over `ramp_seconds` from where they are now (0 = at once). The
+    /// model takes the target straight away; the ramp moves the live value
+    /// and mirrors it back tick by tick.
+    pub(super) fn play_mix_targets(
+        &mut self,
+        targets: Vec<(String, TrackMix)>,
+        ramp_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
         let position_seconds = self.engine.position_seconds();
-        let ramped = ramp_seconds > 0.0;
         let mut new_ramps: Vec<ActiveMixRamp> = Vec::new();
-
         let song = self.engine.song_mut()?;
-        for override_ in scene.track_overrides {
-            if let Some(track) = song
-                .tracks
-                .iter_mut()
-                .find(|track| track.id == override_.track_id)
-            {
-                let volume = override_.volume.map(|volume| volume.clamp(0.0, 1.0));
-                let pan = override_.pan.map(|pan| pan.clamp(-1.0, 1.0));
-                // Capture the current values BEFORE overwriting, to ramp from.
-                let from_volume = track.volume;
-                let from_pan = track.pan;
-                if let Some(volume) = volume {
-                    track.volume = volume;
-                }
-                if let Some(pan) = pan {
-                    track.pan = pan;
-                }
-                if let Some(muted) = override_.muted {
-                    track.muted = muted;
-                }
-                if let Some(solo) = override_.solo {
-                    track.solo = solo;
-                }
+        for (track_id, target) in targets {
+            let Some(track) = song.tracks.iter_mut().find(|track| track.id == track_id) else {
+                continue;
+            };
+            // Capture the current values BEFORE overwriting, to ramp from.
+            let from_volume = track.volume;
+            let from_pan = track.pan;
+            track.volume = target.volume;
+            track.pan = target.pan;
+            track.muted = target.muted;
+            track.solo = target.solo;
+            self.active_mix_ramps.retain(|existing| existing.track_id != track_id);
 
-                if ramped && (volume.is_some() || pan.is_some()) {
-                    // Mute/solo are discrete → apply now; volume/pan ramp.
-                    audio.update_live_track_mix(
-                        &track.id,
-                        None,
-                        None,
-                        override_.muted,
-                        override_.solo,
-                        None,
-                    )?;
-                    new_ramps.push(ActiveMixRamp {
-                        track_id: track.id.clone(),
-                        start_position_seconds: position_seconds,
-                        duration_seconds: ramp_seconds,
-                        volume: volume.map(|to| (from_volume, to)),
-                        pan: pan.map(|to| (from_pan, to)),
-                    });
-                } else {
-                    audio.update_live_track_mix(
-                        &track.id,
-                        volume,
-                        pan,
-                        override_.muted,
-                        override_.solo,
-                        None,
-                    )?;
-                }
+            let volume_moves = from_volume != target.volume;
+            let pan_moves = from_pan != target.pan;
+            if ramp_seconds > 0.0 && (volume_moves || pan_moves) {
+                audio.update_live_track_mix(
+                    &track_id,
+                    None,
+                    None,
+                    Some(target.muted),
+                    Some(target.solo),
+                    None,
+                )?;
+                new_ramps.push(ActiveMixRamp {
+                    track_id,
+                    start_position_seconds: position_seconds,
+                    duration_seconds: ramp_seconds,
+                    volume: volume_moves.then_some((from_volume, target.volume)),
+                    pan: pan_moves.then_some((from_pan, target.pan)),
+                });
+            } else {
+                audio.update_live_track_mix(
+                    &track_id,
+                    Some(target.volume),
+                    Some(target.pan),
+                    Some(target.muted),
+                    Some(target.solo),
+                    None,
+                )?;
             }
-        }
-
-        // Replace any existing ramps for these tracks with the new ones.
-        for ramp in &new_ramps {
-            self.active_mix_ramps
-                .retain(|existing| existing.track_id != ramp.track_id);
         }
         self.active_mix_ramps.extend(new_ramps);
         self.bump_mix_revision();
-
         Ok(())
     }
 
