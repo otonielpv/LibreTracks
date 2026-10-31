@@ -146,11 +146,10 @@ describe("controllerTargets", () => {
     expect(isOtherSessionTarget("strip:1:solo", song)).toBe(false);
   });
 
-  it("lists 8 strips x 4 controls, the banks, the 4 app faders and 8 scene slots", () => {
+  it("lists 8 strips x 4 controls, the banks and the 4 app faders", () => {
     const keys = mixerLearnKeys();
-    expect(keys).toHaveLength(8 * 4 + 2 + 4 + 8);
+    expect(keys).toHaveLength(8 * 4 + 2 + 4);
     expect(keys).toContain("strip:8:solo");
     expect(keys).toContain("mixer:song_master:volume");
-    expect(keys).toContain("scene_slot:8");
   });
 });

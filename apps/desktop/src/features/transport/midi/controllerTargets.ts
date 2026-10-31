@@ -102,8 +102,7 @@ export function isOtherSessionTarget(key: string, song: SongView | null) {
   return scene !== null && !song?.mixScenes?.some((item) => item.id === scene[0]);
 }
 
-/** The "Mixer" view rows: strips 1-8, banks, the app-level faders and the
- * scene slots 1-8. */
+/** The "Mixer" view rows: strips 1-8, banks and the app-level faders. */
 export function mixerLearnKeys(): string[] {
   const keys: string[] = [];
   for (let index = 1; index <= STRIP_COUNT; index += 1) {
@@ -113,6 +112,20 @@ export function mixerLearnKeys(): string[] {
   }
   keys.push("bank:prev", "bank:next");
   for (const mixer of MIXER_TARGETS) keys.push(mixer.key);
+  return keys;
+}
+
+/**
+ * The "Scenes" view rows (plan live-scenes): toggle, engage and release for
+ * each scene of the open session, by name, then the slots 1-8, which follow
+ * the editor's order and work in any session. Learnable from here in any
+ * view, the DAW included, which has no scene buttons.
+ */
+export function sceneLearnKeys(song: SongView | null): string[] {
+  const keys: string[] = [];
+  for (const scene of song?.mixScenes ?? []) {
+    for (const mode of SCENE_MODES) keys.push(`scene:${scene.id}:${mode}`);
+  }
   for (let index = 1; index <= SCENE_SLOT_COUNT; index += 1) {
     keys.push(`scene_slot:${index}`);
   }

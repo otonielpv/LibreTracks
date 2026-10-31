@@ -301,6 +301,8 @@ const es = {
     sceneSlot: "Escena {{index}} (alternar)",
     otherSessionScene: "Escena de otra sesión",
     viewMixer: "Mezclador",
+    viewScenes: "Escenas ({{count}})",
+    noScenes: "Esta sesión no tiene escenas. Créalas en Archivo › Escenas de mezcla…; las ranuras «Escena 1-8» de abajo ya se pueden aprender y seguirán el orden del editor.",
     viewBindings: "Vínculos ({{count}})",
     noBindings: "Aún no hay ningún vínculo.",
     mode: "Modo",

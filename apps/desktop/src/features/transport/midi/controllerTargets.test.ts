@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { SongView } from "@libretracks/shared/models";
 
 import i18n from "../../../shared/i18n";
-import { describeMidiTarget, isOtherSessionTarget, mixerLearnKeys } from "./controllerTargets";
+import {
+  describeMidiTarget,
+  isOtherSessionTarget,
+  mixerLearnKeys,
+  sceneLearnKeys,
+} from "./controllerTargets";
 
 const song = {
   tracks: [],
@@ -23,11 +28,21 @@ describe("scene MIDI targets (plan live-scenes, paso 05)", () => {
     expect(describeMidiTarget("scene:s1:foo", es, song)).toBeNull();
   });
 
-  it("flags scenes of another session and offers slots 1-8 in the Mixer view", () => {
+  it("flags scenes of another session", () => {
     expect(isOtherSessionTarget("scene:gone:toggle", song)).toBe(true);
     expect(isOtherSessionTarget("scene:s1:toggle", song)).toBe(false);
     expect(isOtherSessionTarget("scene_slot:1", song)).toBe(false);
-    const slots = mixerLearnKeys().filter((key) => key.startsWith("scene_slot:"));
-    expect(slots).toEqual([1, 2, 3, 4, 5, 6, 7, 8].map((n) => `scene_slot:${n}`));
+  });
+
+  it("the Scenes view lists each scene's three targets, then slots 1-8", () => {
+    const slots = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `scene_slot:${n}`);
+    expect(sceneLearnKeys(song)).toEqual([
+      "scene:s1:toggle",
+      "scene:s1:apply",
+      "scene:s1:restore",
+      ...slots,
+    ]);
+    expect(sceneLearnKeys(null)).toEqual(slots);
+    expect(mixerLearnKeys().some((key) => key.startsWith("scene"))).toBe(false);
   });
 });

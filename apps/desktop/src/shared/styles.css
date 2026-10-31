@@ -1912,6 +1912,16 @@ html.lt-ios body {
   background: rgb(255 255 255 / 0.03);
 }
 
+/* Scenes view without scenes: say where they are made (plan live-scenes). */
+.lt-midi-learn-scenes-hint {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border-left: 2px solid rgb(255 122 182 / 0.5);
+  background: rgb(255 122 182 / 0.06);
+  color: rgb(186 202 197 / 0.9);
+  font: 500 0.82rem/1.4 "Space Grotesk", sans-serif;
+}
+
 .lt-midi-learn-feedback strong,
 .lt-midi-learn-live strong {
   color: #f3f0ef;
@@ -1979,6 +1989,9 @@ html.lt-ios body {
 
 .lt-midi-learn-view-tabs {
   justify-content: flex-start;
+  /* Six views since Scenes (plan live-scenes): wrap rather than overflow
+     in a narrow window. */
+  flex-wrap: wrap;
 }
 
 .lt-midi-binding-pill,

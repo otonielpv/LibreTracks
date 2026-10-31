@@ -301,6 +301,8 @@ const en = {
     sceneSlot: "Scene {{index}} (toggle)",
     otherSessionScene: "Scene from another session",
     viewMixer: "Mixer",
+    viewScenes: "Scenes ({{count}})",
+    noScenes: "This session has no scenes. Create them in File › Mix scenes…; the “Scene 1-8” slots below can be learnt already and follow the editor’s order.",
     viewBindings: "Bindings ({{count}})",
     noBindings: "No bindings yet.",
     mode: "Mode",

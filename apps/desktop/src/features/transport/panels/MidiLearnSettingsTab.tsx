@@ -3,14 +3,14 @@ import { useTranslation } from "react-i18next";
 import type { MidiBinding } from "@libretracks/shared/models";
 
 import { formatMidiBinding } from "../helpers";
-import { describeMidiTarget, mixerLearnKeys } from "../midi/controllerTargets";
+import { describeMidiTarget, mixerLearnKeys, sceneLearnKeys } from "../midi/controllerTargets";
 import { ControllerProfilesPanel } from "../midi/ControllerProfilesPanel";
 import { MidiBindingsEditor } from "../midi/MidiBindingsEditor";
 import { MidiControlDiagnosticsLine } from "../midi/MidiControlDiagnosticsLine";
 import { useSongStore } from "../songStore";
 import type { MidiLearnCommandRow, MidiLearnFeedback } from "../types";
 
-export type MidiLearnView = "core" | "markers" | "songs" | "mixer" | "bindings";
+export type MidiLearnView = "core" | "markers" | "songs" | "mixer" | "scenes" | "bindings";
 
 /**
  * The Settings modal's MIDI Learn tab.
@@ -80,14 +80,18 @@ export function MidiLearnSettingsTab({
   const song = useSongStore((state) => state.song);
   // The mixer rows (strips, banks, click, guide, pads, song master) are
   // built here rather than in the monolith (plan midi-controllers, paso 05).
+  const generatedRow = (key: string): MidiLearnCommandRow => ({
+    key,
+    label: describeMidiTarget(key, t, song) ?? key,
+    binding: midiMappings[key] ?? null,
+  });
+  const sceneCount = song?.mixScenes?.length ?? 0;
   const rows: MidiLearnCommandRow[] =
     midiLearnView === "mixer"
-      ? mixerLearnKeys().map((key) => ({
-          key,
-          label: describeMidiTarget(key, t, song) ?? key,
-          binding: midiMappings[key] ?? null,
-        }))
-      : visibleMidiLearnRows;
+      ? mixerLearnKeys().map(generatedRow)
+      : midiLearnView === "scenes"
+        ? sceneLearnKeys(song).map(generatedRow)
+        : visibleMidiLearnRows;
 
   const relearnLabel = (command: MidiLearnCommandRow, isTarget: boolean) => {
     if (isTarget) {
@@ -218,12 +222,23 @@ export function MidiLearnSettingsTab({
           </button>
           <button
             type="button"
+            className={midiLearnView === "scenes" ? "is-active" : ""}
+            onClick={() => onMidiLearnViewChange("scenes")}
+          >
+            {t("midiMap.viewScenes", { count: sceneCount })}
+          </button>
+          <button
+            type="button"
             className={midiLearnView === "bindings" ? "is-active" : ""}
             onClick={() => onMidiLearnViewChange("bindings")}
           >
             {t("midiMap.viewBindings", { count: Object.keys(midiMappings).length })}
           </button>
         </div>
+
+        {midiLearnView === "scenes" && sceneCount === 0 ? (
+          <p className="lt-midi-learn-scenes-hint">{t("midiMap.noScenes")}</p>
+        ) : null}
 
         {midiLearnView === "bindings" ? (
           <>
