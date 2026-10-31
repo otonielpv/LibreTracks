@@ -330,6 +330,7 @@ pub fn run() {
             midi::control::midi_controller_sync,
             midi::control::get_midi_bank,
             midi::feedback::midi_controller_transport,
+            midi::feedback::midi_controller_scenes,
             midi::feedback::midi_controller_resend_feedback,
             commands::transport::get_transport_snapshot,
             commands::transport::fade_out_and_stop,

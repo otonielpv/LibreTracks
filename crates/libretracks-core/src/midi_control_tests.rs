@@ -407,3 +407,56 @@ fn feedback_moves_motor_faders_inside_the_binding_range() {
     cc.mode = Some(ControlMode::RelativeTwosComplement);
     assert_eq!(feedback_message(&cc, FeedbackValue::Position(0.75)), None, "plain encoder");
 }
+
+// --- Scene targets (plan live-scenes, paso 05). ---
+
+#[test]
+fn scene_targets_round_trip_and_reject_bad_keys() {
+    for key in ["scene:s-1:toggle", "scene:s-1:apply", "scene:s-1:restore", "scene_slot:3"] {
+        let target = MidiTarget::parse(key).unwrap_or_else(|| panic!("{key} parses"));
+        assert_eq!(target.key(), key);
+        assert_eq!(MidiTarget::parse(&target.key()), Some(target));
+    }
+    for key in ["scene:", "scene::toggle", "scene:s-1", "scene:s-1:foo", "scene_slot:0", "scene_slot:x", "scene_slot:"] {
+        assert_eq!(MidiTarget::parse(key), None, "{key} is rejected");
+    }
+}
+
+#[test]
+fn scene_toggles_are_switches_and_apply_restore_fire() {
+    let kind = |key: &str| MidiTarget::parse(key).unwrap().value_kind();
+    assert_eq!(kind("scene:s:toggle"), TargetValueKind::Switch);
+    assert_eq!(kind("scene_slot:1"), TargetValueKind::Switch);
+    assert_eq!(kind("scene:s:apply"), TargetValueKind::Trigger);
+    assert_eq!(kind("scene:s:restore"), TargetValueKind::Trigger);
+    assert!(MidiTarget::parse("scene:s:toggle").unwrap().toggles());
+    assert!(!MidiTarget::parse("scene:s:apply").unwrap().toggles());
+    assert!(MidiTarget::parse("scene:s:apply").unwrap().belongs_to_session());
+}
+
+#[test]
+fn scene_slots_follow_the_editor_order() {
+    let scenes = vec!["a".to_string(), "b".to_string()];
+    let slot = |n: u16| MidiTarget::SceneSlot(n).scene_trigger(&scenes);
+    assert_eq!(slot(1), Some(("a".to_string(), SceneMode::Toggle)));
+    assert_eq!(slot(2), Some(("b".to_string(), SceneMode::Toggle)));
+    assert_eq!(slot(3), None, "past the last scene does nothing");
+    let by_id = MidiTarget::parse("scene:b:restore").unwrap();
+    assert_eq!(by_id.scene_trigger(&scenes), Some(("b".to_string(), SceneMode::Restore)));
+    let other = MidiTarget::parse("scene:gone:toggle").unwrap();
+    assert_eq!(other.scene_trigger(&scenes), None, "a scene of another session");
+    assert_eq!(MidiTarget::parse("action:play").unwrap().scene_trigger(&scenes), None);
+}
+
+#[test]
+fn scene_leds_follow_the_engaged_scenes() {
+    let scenes = vec!["a".to_string(), "b".to_string()];
+    let engaged = vec!["b".to_string()];
+    let led = |key: &str| MidiTarget::parse(key).unwrap().scene_led(&scenes, &engaged);
+    assert_eq!(led("scene:b:toggle"), Some(true));
+    assert_eq!(led("scene:a:toggle"), Some(false));
+    assert_eq!(led("scene_slot:2"), Some(true));
+    assert_eq!(led("scene_slot:1"), Some(false));
+    assert_eq!(led("scene_slot:9"), Some(false));
+    assert_eq!(led("scene:b:apply"), None);
+}

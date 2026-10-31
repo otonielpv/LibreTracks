@@ -7,6 +7,7 @@ import {
   isTauriApp,
   listenToMidiBankChanged,
   listenToMidiMixChanged,
+  midiControllerScenes,
   midiControllerTransport,
   syncMidiController,
   type MidiMixChangedPayload,
@@ -82,6 +83,26 @@ export function useMidiControllerSync({
     midiControllerOutput,
     midiMappings,
   ]);
+
+  // Scene LEDs (plan live-scenes, paso 05): the snapshot says which scenes
+  // are engaged whoever engaged them (screen, MIDI, a cue, a song change).
+  // Joined into strings so the effect runs on a change, not per snapshot.
+  const sceneIds = useTransportStore((state) =>
+    (state.playback?.mixScenes ?? []).map((scene) => scene.id).join("\n"),
+  );
+  const activeSceneIds = useTransportStore((state) =>
+    (state.playback?.activeMixSceneIds ?? []).join("\n"),
+  );
+  useEffect(() => {
+    if (!isTauriApp || !midiControllerOutput) {
+      return;
+    }
+    const split = (joined: string) => (joined ? joined.split("\n") : []);
+    void midiControllerScenes({
+      sceneIds: split(sceneIds),
+      activeSceneIds: split(activeSceneIds),
+    }).catch(() => undefined);
+  }, [sceneIds, activeSceneIds, midiControllerOutput, midiMappings]);
 
   useEffect(() => {
     setMidiMappingsForMappable(midiMappings);

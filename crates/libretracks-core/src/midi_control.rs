@@ -21,6 +21,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::automation::SceneMode;
+
 /// The kind of channel message a control sends. Note off folds into
 /// [`MidiMessageKind::Note`]: a button bound from its press must also see its
 /// release.
@@ -562,6 +564,12 @@ pub enum MidiTarget {
     Mixer(MixerTarget),
     /// `bank:next` / `bank:prev`.
     Bank(i32),
+    /// `scene:<id>:toggle|apply|restore` — a mix scene of the open session
+    /// (plan live-scenes, D10).
+    Scene { scene_id: String, mode: SceneMode },
+    /// `scene_slot:<n>` — the n-th (1-based) scene in the editor's order,
+    /// toggled: a profile can map "buttons 1-8 = scenes 1-8" for any session.
+    SceneSlot(u16),
 }
 
 /// What kind of value a target takes, which picks the default mode.
@@ -607,6 +615,23 @@ impl MidiTarget {
             }
             return Some(Self::Mixer(MixerTarget::parse(target)?));
         }
+        if let Some(rest) = key.strip_prefix("scene:") {
+            let (scene_id, mode) = rest.rsplit_once(':')?;
+            if scene_id.is_empty() {
+                return None;
+            }
+            return Some(Self::Scene {
+                scene_id: scene_id.to_string(),
+                mode: SceneMode::parse(mode)?,
+            });
+        }
+        if let Some(slot) = key.strip_prefix("scene_slot:") {
+            return slot
+                .parse::<u16>()
+                .ok()
+                .filter(|slot| *slot > 0)
+                .map(Self::SceneSlot);
+        }
         match key {
             "bank:next" => Some(Self::Bank(1)),
             "bank:prev" => Some(Self::Bank(-1)),
@@ -623,6 +648,8 @@ impl MidiTarget {
             Self::Mixer(target) => format!("mixer:{}:volume", target.as_str()),
             Self::Bank(step) if *step < 0 => "bank:prev".to_string(),
             Self::Bank(_) => "bank:next".to_string(),
+            Self::Scene { scene_id, mode } => format!("scene:{scene_id}:{}", mode.as_str()),
+            Self::SceneSlot(slot) => format!("scene_slot:{slot}"),
         }
     }
 
@@ -630,6 +657,12 @@ impl MidiTarget {
         match self {
             Self::Action(name) if name.starts_with("toggle_") => TargetValueKind::Switch,
             Self::Action(_) | Self::Bank(_) => TargetValueKind::Trigger,
+            // A toggle lights its LED with the scene; apply and restore fire.
+            Self::Scene { mode, .. } => match mode {
+                SceneMode::Toggle => TargetValueKind::Switch,
+                SceneMode::Apply | SceneMode::Restore => TargetValueKind::Trigger,
+            },
+            Self::SceneSlot(_) => TargetValueKind::Switch,
             Self::Param(_) | Self::Mixer(_) => TargetValueKind::Continuous,
             Self::Track { control, .. } | Self::Strip { control, .. } => {
                 if control.is_switch() {
@@ -642,8 +675,51 @@ impl MidiTarget {
     }
 
     /// Track bindings live in the session (D8): a track id only exists there.
+    /// So does a scene id.
     pub fn belongs_to_session(&self) -> bool {
-        matches!(self, Self::Track { .. })
+        matches!(self, Self::Track { .. } | Self::Scene { .. })
+    }
+
+    /// Whether a momentary binding fires on release too, so holding the
+    /// button holds the switch: `toggle_*` actions and scene toggles.
+    pub fn toggles(&self) -> bool {
+        match self {
+            Self::Action(name) => name.starts_with("toggle_"),
+            Self::Scene { mode, .. } => *mode == SceneMode::Toggle,
+            Self::SceneSlot(_) => true,
+            _ => false,
+        }
+    }
+
+    /// The scene a scene target triggers in a session whose scenes are
+    /// `scene_ids` (editor order), and how. `None` for other targets, a slot
+    /// past the last scene, or an id the session does not have.
+    pub fn scene_trigger(&self, scene_ids: &[String]) -> Option<(String, SceneMode)> {
+        match self {
+            Self::Scene { scene_id, mode } => scene_ids
+                .iter()
+                .any(|id| id == scene_id)
+                .then(|| (scene_id.clone(), *mode)),
+            Self::SceneSlot(slot) => scene_ids
+                .get(usize::from(*slot) - 1)
+                .map(|id| (id.clone(), SceneMode::Toggle)),
+            _ => None,
+        }
+    }
+
+    /// The LED of a scene target: on while its scene is engaged. `None` for
+    /// targets without one (apply, restore, other kinds).
+    pub fn scene_led(&self, scene_ids: &[String], engaged: &[String]) -> Option<bool> {
+        match self {
+            Self::Scene { mode: SceneMode::Apply | SceneMode::Restore, .. } => None,
+            Self::Scene { scene_id, .. } => Some(engaged.contains(scene_id)),
+            Self::SceneSlot(slot) => Some(
+                scene_ids
+                    .get(usize::from(*slot) - 1)
+                    .is_some_and(|id| engaged.contains(id)),
+            ),
+            _ => None,
+        }
     }
 }
 

@@ -132,6 +132,12 @@ pub(crate) fn dispatch_midi_message(app: &AppHandle, message: MidiMessage) -> Re
                 message,
                 normalized,
             ),
+            MidiTarget::Scene { .. } | MidiTarget::SceneSlot(_) => {
+                if !action_fires(binding, target, normalized) {
+                    continue;
+                }
+                dispatch_scene(app, target)
+            }
         };
         if let Err(error) = result {
             first_error.get_or_insert(error);
@@ -141,16 +147,39 @@ pub(crate) fn dispatch_midi_message(app: &AppHandle, message: MidiMessage) -> Re
 }
 
 /// Whether a message fires an action. Buttons fire on press; a momentary
-/// binding on a `toggle_*` action fires on release too, so holding the
-/// button holds the switch.
+/// binding on a `toggle_*` action or a scene toggle fires on release too, so
+/// holding the button holds the switch.
 fn action_fires(binding: &MidiBinding, target: &MidiTarget, normalized: f64) -> bool {
     let pressed = ButtonState::is_press(normalized);
     match binding.effective_mode(target) {
-        ControlMode::Momentary => {
-            pressed || matches!(target, MidiTarget::Action(name) if name.starts_with("toggle_"))
-        }
+        ControlMode::Momentary => pressed || target.toggles(),
         _ => pressed,
     }
+}
+
+/// A scene button (plan live-scenes, paso 05): the same command as the
+/// on-screen button, one session lock per firing (releases of a trigger
+/// never get here). A slot past the last scene or a scene of another
+/// session does nothing.
+fn dispatch_scene(app: &AppHandle, target: &MidiTarget) -> Result<(), String> {
+    let state = app.state::<DesktopState>();
+    control()
+        .diagnostics
+        .session_lock_takes
+        .fetch_add(1, Ordering::Relaxed);
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| "desktop session lock poisoned".to_string())?;
+    let Some((scene_id, mode)) = target.scene_trigger(&session.mix_scene_ids()) else {
+        return Ok(());
+    };
+    let snapshot = session
+        .trigger_mix_scene(&scene_id, mode, &state.audio)
+        .map_err(|error| error.to_string())?;
+    drop(session);
+    emit_transport_lifecycle_event(app, "sync", &snapshot);
+    Ok(())
 }
 
 fn dispatch_midi_action(

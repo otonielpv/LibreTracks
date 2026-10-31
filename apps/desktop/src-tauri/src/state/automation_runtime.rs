@@ -910,6 +910,11 @@ impl DesktopSession {
         Ok(())
     }
 
+    /// The session's scene ids in the editor's order (the MIDI scene slots).
+    pub(crate) fn mix_scene_ids(&self) -> Vec<String> {
+        self.automation.mix_scenes.iter().map(|scene| scene.id.clone()).collect()
+    }
+
     /// Engage, toggle or release a scene by hand (screen, MIDI). Live state,
     /// not an edit: no undo entry and nothing written to disk (D9).
     pub fn trigger_mix_scene(

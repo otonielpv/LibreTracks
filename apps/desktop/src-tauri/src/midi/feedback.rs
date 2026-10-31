@@ -36,6 +36,9 @@ pub struct TransportFeedback {
 struct FeedbackState {
     port: Option<String>,
     transport: TransportFeedback,
+    /// The session's scenes in editor order and those engaged, as the UI
+    /// last reported them (plan live-scenes, paso 05).
+    scenes: SceneFeedback,
     /// Last message sent per binding key.
     sent: HashMap<String, [u8; 3]>,
 }
@@ -43,6 +46,13 @@ struct FeedbackState {
 fn state() -> &'static Mutex<FeedbackState> {
     static STATE: OnceLock<Mutex<FeedbackState>> = OnceLock::new();
     STATE.get_or_init(|| Mutex::new(FeedbackState::default()))
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneFeedback {
+    pub scene_ids: Vec<String>,
+    pub active_scene_ids: Vec<String>,
 }
 
 /// What each binding's control should show now. Pure over its inputs so the
@@ -91,6 +101,7 @@ pub(crate) fn refresh(app: &AppHandle) {
         feedback.sent.clear();
     }
     let transport = feedback.transport;
+    let scenes = feedback.scenes.clone();
     let desired = control().with_mix(|mix| {
         // Switches light LEDs; volume and pan move motor faders and LED
         // rings (paso 09, Mackie Control). Sent on refreshes only, never per
@@ -136,6 +147,9 @@ pub(crate) fn refresh(app: &AppHandle) {
             MidiTarget::Mixer(MixerTarget::SongMaster) => mix.song_master.as_ref().map(|master| {
                 FeedbackValue::Position(fader::gain_to_position(master.gain, fader::TRACK_MAX_DB))
             }),
+            MidiTarget::Scene { .. } | MidiTarget::SceneSlot(_) => target
+                .scene_led(&scenes.scene_ids, &scenes.active_scene_ids)
+                .map(FeedbackValue::Switch),
             _ => None,
         })
     });
@@ -167,6 +181,20 @@ pub fn midi_controller_transport(app: AppHandle, transport: TransportFeedback) {
     {
         let mut feedback = state().lock().unwrap_or_else(|e| e.into_inner());
         feedback.transport = transport;
+    }
+    refresh(&app);
+}
+
+/// The UI reports the scenes whenever they or the engaged ones change (from
+/// the screen, MIDI, a cue or a song change), so scene LEDs follow.
+#[tauri::command]
+pub fn midi_controller_scenes(app: AppHandle, scenes: SceneFeedback) {
+    {
+        let mut feedback = state().lock().unwrap_or_else(|e| e.into_inner());
+        if feedback.scenes == scenes {
+            return;
+        }
+        feedback.scenes = scenes;
     }
     refresh(&app);
 }
@@ -207,6 +235,42 @@ mod tests {
             vec![
                 ("track:a:mute".to_string(), [0x90, 16, 127]),
                 ("action:play".to_string(), [0xB0, 41, 0]),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_scene_led_follows_the_scene_however_it_was_engaged() {
+        let mappings = vec![
+            ("scene:down:toggle".to_string(), MidiBinding::new(0x90, 20)),
+            ("scene_slot:2".to_string(), MidiBinding::new(0x90, 21)),
+            ("scene:down:apply".to_string(), MidiBinding::new(0x90, 22)),
+        ];
+        let led = |scenes: &SceneFeedback| {
+            desired_feedback(&mappings, &|target| {
+                target
+                    .scene_led(&scenes.scene_ids, &scenes.active_scene_ids)
+                    .map(FeedbackValue::Switch)
+            })
+        };
+        let mut scenes = SceneFeedback {
+            scene_ids: vec!["down".into(), "piano".into()],
+            active_scene_ids: vec![],
+        };
+        assert_eq!(
+            led(&scenes),
+            vec![
+                ("scene:down:toggle".to_string(), [0x90, 20, 0]),
+                ("scene_slot:2".to_string(), [0x90, 21, 0]),
+            ]
+        );
+        // Engaged from the screen: the UI reports it, the LEDs light.
+        scenes.active_scene_ids = vec!["down".into(), "piano".into()];
+        assert_eq!(
+            led(&scenes),
+            vec![
+                ("scene:down:toggle".to_string(), [0x90, 20, 127]),
+                ("scene_slot:2".to_string(), [0x90, 21, 127]),
             ]
         );
     }

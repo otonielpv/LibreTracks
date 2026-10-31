@@ -12,7 +12,7 @@ fn default_true() -> bool {
 
 /// What a cue does with a mix scene. Every mode latches: a scene a cue
 /// applied can be released later by another cue, a button or MIDI.
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum SceneMode {
     #[default]
@@ -24,6 +24,23 @@ pub enum SceneMode {
 impl SceneMode {
     pub fn is_apply(&self) -> bool {
         *self == SceneMode::Apply
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SceneMode::Apply => "apply",
+            SceneMode::Toggle => "toggle",
+            SceneMode::Restore => "restore",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "apply" => Some(SceneMode::Apply),
+            "toggle" => Some(SceneMode::Toggle),
+            "restore" => Some(SceneMode::Restore),
+            _ => None,
+        }
     }
 }
 

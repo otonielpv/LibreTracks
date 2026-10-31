@@ -517,6 +517,14 @@ export async function midiControllerTransport(transport: {
   await invokeCommand("midi_controller_transport", { transport });
 }
 
+/** The scenes and the engaged ones, for the scene buttons' LEDs. */
+export async function midiControllerScenes(scenes: {
+  sceneIds: string[];
+  activeSceneIds: string[];
+}): Promise<void> {
+  await invokeCommand("midi_controller_scenes", { scenes });
+}
+
 /** Light every bound control again (a controller plugged in late). */
 export async function midiControllerResendFeedback(): Promise<void> {
   await invokeCommand("midi_controller_resend_feedback");
