@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { AppSettings } from "@libretracks/shared/models";
+import {
+  MIDI_TAKEOVER_MODES,
+  type AppSettings,
+  type MidiTakeoverMode,
+} from "@libretracks/shared/models";
 
 import {
   isAndroidApp,
@@ -63,6 +67,7 @@ export type MidiPlatformPatch = Partial<
     | "keepMidiInBackground"
     | "midiControllerOutput"
     | "midiStripsFollowSong"
+    | "midiTakeoverMode"
   >
 >;
 
@@ -71,6 +76,8 @@ export type MidiPlatformSettings = {
   controllerOutput: string | null;
   /** Strips follow the active song (midi-controllers). */
   stripsFollowSong: boolean;
+  /** Ableton's "Takeover Mode" for motorless faders. */
+  takeoverMode: MidiTakeoverMode;
   networkSession: boolean;
   virtualPort: boolean;
   keepInBackground: boolean;
@@ -326,6 +333,29 @@ export function MidiSettingsTab({
             <small>{t("transport.midi.stripsFollowSongHint")}</small>
           </span>
         </label>
+
+        <div className="lt-settings-field">
+          <label htmlFor="lt-midi-takeover-mode">{t("transport.midi.takeoverMode")}</label>
+          <div className="lt-settings-field-control-row">
+            <select
+              id="lt-midi-takeover-mode"
+              value={platform.takeoverMode}
+              disabled={isLoading || isSaving}
+              onChange={(event) =>
+                platform.onChange({
+                  midiTakeoverMode: event.target.value as MidiTakeoverMode,
+                })
+              }
+            >
+              {MIDI_TAKEOVER_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {t(`transport.midi.takeoverModes.${mode}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <small>{t(`transport.midi.takeoverModeHints.${platform.takeoverMode}`)}</small>
+        </div>
 
         {capabilities?.virtualPorts ? (
           <label className="lt-settings-toggle">

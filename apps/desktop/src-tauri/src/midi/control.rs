@@ -30,7 +30,7 @@ use std::{
 };
 
 use libretracks_core::midi_control::{
-    Bank, Debounce, MidiBindingIndex, MixControl, SoftTakeover, Throttle, BANK_SIZE,
+    Bank, Debounce, MidiBindingIndex, MixControl, SoftTakeover, TakeoverMode, Throttle, BANK_SIZE,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
@@ -156,7 +156,8 @@ enum WorkerEvent {
 }
 
 pub(crate) struct MidiControl {
-    index: Mutex<(u64, Arc<MidiBindingIndex>)>,
+    /// The binding index and the takeover mode of one settings revision.
+    index: Mutex<(u64, Arc<MidiBindingIndex>, TakeoverMode)>,
     takeover: Mutex<HashMap<String, SoftTakeover>>,
     pub(crate) mix: Mutex<MixMirror>,
     worker: Mutex<Option<Sender<WorkerEvent>>>,
@@ -166,7 +167,11 @@ pub(crate) struct MidiControl {
 pub(crate) fn control() -> &'static MidiControl {
     static CONTROL: OnceLock<MidiControl> = OnceLock::new();
     CONTROL.get_or_init(|| MidiControl {
-        index: Mutex::new((u64::MAX, Arc::new(MidiBindingIndex::default()))),
+        index: Mutex::new((
+            u64::MAX,
+            Arc::new(MidiBindingIndex::default()),
+            TakeoverMode::default(),
+        )),
         takeover: Mutex::new(HashMap::new()),
         mix: Mutex::new(MixMirror::default()),
         worker: Mutex::new(None),
@@ -258,12 +263,20 @@ impl MidiControl {
         if cached.0 == settings.revision() {
             return Arc::clone(&cached.1);
         }
-        if let Ok((index, revision)) =
-            settings.read(|settings| MidiBindingIndex::build(settings.midi_mappings.iter()))
-        {
-            *cached = (revision, Arc::new(index));
+        if let Ok(((index, mode), revision)) = settings.read(|settings| {
+            (
+                MidiBindingIndex::build(settings.midi_mappings.iter()),
+                settings.midi_takeover_mode,
+            )
+        }) {
+            *cached = (revision, Arc::new(index), mode);
         }
         Arc::clone(&cached.1)
+    }
+
+    /// The takeover mode of the settings the index was last built from.
+    pub(crate) fn takeover_mode(&self) -> TakeoverMode {
+        self.index.lock().unwrap_or_else(|e| e.into_inner()).2
     }
 
     /// Run `f` with the takeover state of `target_key`.

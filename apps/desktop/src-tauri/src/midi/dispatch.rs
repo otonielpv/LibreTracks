@@ -755,8 +755,9 @@ fn dispatch_mixer(
 const MAX_SONG_MASTER_GAIN: f64 = 2.0;
 
 /// Where a continuous control puts its target (0..1), or `None` when the
-/// message must not move it: an absolute fader that has not picked up the
-/// current value yet (D6), or an encoder that did not turn.
+/// message must not move it: an absolute fader that has not caught the
+/// current value yet under the takeover mode (D6), or an encoder that did
+/// not turn.
 pub(crate) fn continuous_position(
     binding: &MidiBinding,
     mode: ControlMode,
@@ -780,16 +781,13 @@ pub(crate) fn continuous_position(
     if !binding.takeover_enabled() {
         return Some(value);
     }
-    control()
-        .with_takeover(target_key, |takeover| {
-            takeover.sync(current);
-            let follows = takeover.feed(value, current);
-            if follows {
-                takeover.wrote(value);
-            }
-            follows
-        })
-        .then_some(value)
+    let takeover_mode = control().takeover_mode();
+    control().with_takeover(target_key, |takeover| {
+        takeover.sync(current);
+        let next = takeover.next(takeover_mode, value, current, (binding.min, binding.max))?;
+        takeover.wrote(next);
+        Some(next)
+    })
 }
 
 /// A discrete parameter's value from a control, as the 0-127 the mapping

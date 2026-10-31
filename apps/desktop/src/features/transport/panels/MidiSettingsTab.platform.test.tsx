@@ -38,6 +38,7 @@ function renderTab(onChange = vi.fn()) {
     platform: {
       controllerOutput: null,
       stripsFollowSong: true,
+      takeoverMode: "valueScaling",
       networkSession: false,
       virtualPort: false,
       keepInBackground: true,

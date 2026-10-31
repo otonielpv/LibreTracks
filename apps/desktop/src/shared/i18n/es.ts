@@ -318,7 +318,7 @@ const es = {
     max: "Máximo",
     invert: "Invertir",
     takeover: "Recogida",
-    takeoverHint: "El fader no mueve nada hasta cruzar el valor actual.",
+    takeoverHint: "Aplica el modo de recogida de Ajustes > MIDI. Desmarcado, este control salta al valor del fader.",
     profiles: "Perfil de controlador",
     profileApply: "Aplicar",
     profileImport: "Importar…",
@@ -2008,6 +2008,17 @@ const es = {
       stripsFollowSong: "Las tiras siguen a la canción activa",
       stripsFollowSongHint:
         "Los 8 faders del controlador mueven solo las pistas de la canción que suena y vuelven al primer banco al cambiar de canción.",
+      takeoverMode: "Modo de recogida",
+      takeoverModes: {
+        none: "Ninguno",
+        pickUp: "Recoger",
+        valueScaling: "Escalar valor",
+      },
+      takeoverModeHints: {
+        none: "La pista salta a donde esté el fader. Simple, pero el volumen puede pegar un salto al cambiar de banco o de canción.",
+        pickUp: "El fader no hace nada hasta llegar al valor actual de la pista; desde ahí la sigue.",
+        valueScaling: "El fader mueve la pista al momento, escalado para que ambos se encuentren al final del recorrido; desde ahí la sigue 1:1. Nunca salta ni se queda muerto.",
+      },
       controllerOutput: "Salida del controlador (LEDs)",
       controllerOutputHint:
         "El puerto por el que el controlador de faders recibe el estado de mute, solo, play y vamp. Suele llamarse como su entrada.",

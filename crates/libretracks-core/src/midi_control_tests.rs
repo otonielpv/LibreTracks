@@ -252,6 +252,51 @@ fn soft_takeover_release_needs_a_new_pickup() {
 }
 
 #[test]
+fn value_scaling_moves_at_once_and_meets_the_control_at_the_end() {
+    // After a bank change: fader at the bottom (0.1), track at unity (0.75).
+    let mut takeover = SoftTakeover::default();
+    let full = (0.0, 1.0);
+    let mode = TakeoverMode::ValueScaling;
+    assert_eq!(takeover.next(mode, 0.1, 0.75, full), None, "only learns where it is");
+    let up = takeover.next(mode, 0.2, 0.75, full).expect("moves at once");
+    assert!(up > 0.75 && up < 0.8, "up, scaled to the room left: {up}");
+    let mut target = up;
+    let mut control = 0.2;
+    while control < 1.0 {
+        control = (control + 0.05_f64).min(1.0);
+        target = takeover.next(mode, control, target, full).expect("keeps moving");
+    }
+    assert!((target - 1.0).abs() < 1e-9, "meets the control at the top");
+    assert!(takeover.is_picked_up());
+    assert_eq!(takeover.next(mode, 0.4, target, full), Some(0.4), "then follows 1:1");
+}
+
+#[test]
+fn value_scaling_down_reaches_silence_with_the_control() {
+    let mut takeover = SoftTakeover::default();
+    let mode = TakeoverMode::ValueScaling;
+    // Fader high (0.9), track low (0.3): pulling down lowers it gently.
+    takeover.next(mode, 0.9, 0.3, (0.0, 1.0));
+    let down = takeover.next(mode, 0.6, 0.3, (0.0, 1.0)).expect("moves");
+    assert!((down - 0.2).abs() < 1e-9, "a third of the travel, a third of the value");
+    assert_eq!(takeover.next(mode, 0.0, down, (0.0, 1.0)), Some(0.0));
+}
+
+#[test]
+fn takeover_modes_none_and_pick_up() {
+    let mut takeover = SoftTakeover::default();
+    assert_eq!(takeover.next(TakeoverMode::None, 0.1, 0.8, (0.0, 1.0)), Some(0.1));
+    let mut takeover = SoftTakeover::default();
+    assert_eq!(takeover.next(TakeoverMode::PickUp, 0.1, 0.8, (0.0, 1.0)), None);
+    assert_eq!(takeover.next(TakeoverMode::PickUp, 0.79, 0.8, (0.0, 1.0)), Some(0.79));
+    assert_eq!(TakeoverMode::default(), TakeoverMode::ValueScaling);
+    assert_eq!(
+        serde_json::to_string(&TakeoverMode::ValueScaling).unwrap(),
+        "\"valueScaling\""
+    );
+}
+
+#[test]
 fn buttons_toggle_hold_or_fire() {
     use ButtonEvent::*;
     use ControlMode::*;

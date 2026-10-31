@@ -159,7 +159,7 @@ fn default_auto_save_interval_minutes() -> u32 {
 
 /// A learned MIDI control. Lives in the core (plan midi-controllers, paso
 /// 01) with its decisions; old `{status, data1, isCc}` entries still parse.
-pub use libretracks_core::midi_control::MidiBinding;
+pub use libretracks_core::midi_control::{MidiBinding, TakeoverMode};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -216,6 +216,10 @@ pub struct AppSettings {
     /// keeps it so a save from Rust does not drop it.
     #[serde(default = "default_midi_strips_follow_song")]
     pub midi_strips_follow_song: bool,
+    /// What a motorless fader does when it is not where its target is
+    /// (Ableton's "Takeover Mode"). Absent in old settings: value scaling.
+    #[serde(default)]
+    pub midi_takeover_mode: TakeoverMode,
     #[serde(default)]
     pub suppress_missing_midi_device_warning: bool,
     /// iOS: RTP-MIDI network session (plan mobile-midi, paso 07). Off by
@@ -482,6 +486,7 @@ impl Default for AppSettings {
             selected_midi_output_device: None,
             midi_controller_output: None,
             midi_strips_follow_song: default_midi_strips_follow_song(),
+            midi_takeover_mode: TakeoverMode::default(),
             suppress_missing_midi_device_warning: false,
             midi_network_session: false,
             midi_virtual_port: false,

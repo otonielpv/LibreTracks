@@ -43,7 +43,7 @@ function settingsProps(activeTab: Props["activeTab"] = "general"): Props {
       devices: [], selected: "", selectedMissing: false, onChange: noop,
       onRefresh: noop, onSendTestNote: noop,
       platform: {
-        controllerOutput: null, stripsFollowSong: true, networkSession: false, virtualPort: false, keepInBackground: true,
+        controllerOutput: null, stripsFollowSong: true, takeoverMode: "valueScaling", networkSession: false, virtualPort: false, keepInBackground: true,
         onChange: noop,
       },
     },

@@ -152,11 +152,6 @@ export function applyControllerProfile(
   current: Record<string, MidiBinding>,
   profile: ControllerProfile,
 ): Record<string, MidiBinding> {
-  const controlKey = (binding: MidiBinding) => {
-    const kind = binding.status & 0xf0;
-    const status = kind === 0x80 ? 0x90 | (binding.status & 0x0f) : binding.status;
-    return kind === 0xe0 ? `${status}` : `${status}:${binding.data1}`;
-  };
   const used = new Set(Object.values(profile.bindings).map(controlKey));
   const next: Record<string, MidiBinding> = {};
   for (const [key, binding] of Object.entries(current)) {
@@ -165,6 +160,42 @@ export function applyControllerProfile(
     }
   }
   return { ...next, ...profile.bindings };
+}
+
+/** The physical control a binding listens to (pitch bend: the channel). */
+function controlKey(binding: MidiBinding) {
+  const kind = binding.status & 0xf0;
+  const status = kind === 0x80 ? 0x90 | (binding.status & 0x0f) : binding.status;
+  return kind === 0xe0 ? `${status}` : `${status}:${binding.data1}`;
+}
+
+/**
+ * The mappings after learning `binding` for `key`. A control may drive
+ * several tracks on purpose (D4), but never a strip and something else: a
+ * strip moves with the bank and the other target does not, so after
+ * `bank:next` fader 1 drove track 9 and track 1 at once. Learning a strip
+ * takes the control off every other `strip:*`/`track:*` binding, and
+ * learning a track takes it off the strips.
+ */
+export function learnMidiBinding(
+  current: Record<string, MidiBinding>,
+  key: string,
+  binding: MidiBinding,
+): Record<string, MidiBinding> {
+  const isStrip = (target: string) => target.startsWith("strip:");
+  const isMix = (target: string) => isStrip(target) || trackIdOfTarget(target) !== null;
+  const control = controlKey(binding);
+  const next: Record<string, MidiBinding> = {};
+  for (const [other, existing] of Object.entries(current)) {
+    const clashes =
+      controlKey(existing) === control &&
+      isMix(key) &&
+      isMix(other) &&
+      (isStrip(key) || isStrip(other));
+    if (!clashes) next[other] = existing;
+  }
+  next[key] = binding;
+  return next;
 }
 
 /** A profile from the current device-level bindings, for export. */

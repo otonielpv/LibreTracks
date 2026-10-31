@@ -318,7 +318,7 @@ const en = {
     max: "Max",
     invert: "Invert",
     takeover: "Takeover",
-    takeoverHint: "The fader does nothing until it crosses the current value.",
+    takeoverHint: "Uses the takeover mode from Settings > MIDI. Unchecked, this control jumps to the fader's value.",
     profiles: "Controller profile",
     profileApply: "Apply",
     profileImport: "Import…",
@@ -1980,6 +1980,17 @@ const en = {
       stripsFollowSong: "Strips follow the active song",
       stripsFollowSongHint:
         "The controller's 8 faders drive only the playing song's tracks and go back to the first bank when the song changes.",
+      takeoverMode: "Takeover mode",
+      takeoverModes: {
+        none: "None",
+        pickUp: "Pick-up",
+        valueScaling: "Value scaling",
+      },
+      takeoverModeHints: {
+        none: "The track jumps to wherever the fader is. Simple, but the volume can jump after changing bank or song.",
+        pickUp: "The fader does nothing until it reaches the track's current value, then follows it.",
+        valueScaling: "The fader moves the track at once, scaled so both meet at the end of the travel; from there it follows 1:1. Never jumps, never feels dead.",
+      },
       controllerOutput: "Controller output (LEDs)",
       controllerOutputHint:
         "The port your fader controller listens on for mute, solo, play and vamp state. Usually named like its input.",

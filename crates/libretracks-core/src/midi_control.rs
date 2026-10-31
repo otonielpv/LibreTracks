@@ -292,6 +292,25 @@ pub fn decode_relative(data2: u8, mode: ControlMode) -> i32 {
 /// How much of the target travel one encoder detent moves.
 pub const RELATIVE_STEP: f64 = 1.0 / 128.0;
 
+/// What an absolute control without a motor does when it is not where its
+/// target is (after a bank change, a new song, or a move on screen). The
+/// three choices of Ableton Live's "Takeover Mode"; one global setting
+/// (`midiTakeoverMode`), and a binding with `takeover: false` always uses
+/// [`TakeoverMode::None`], like REAPER's per-binding "Soft takeover" box.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TakeoverMode {
+    /// The target jumps to the control.
+    None,
+    /// The target waits until the control reaches it, then follows.
+    PickUp,
+    /// The target moves the same way as the control, scaled so both meet at
+    /// the end of the travel; once they meet it follows 1:1. Never jumps and
+    /// never feels dead, which is why it is the default.
+    #[default]
+    ValueScaling,
+}
+
 /// Soft takeover (D6): an absolute control without a motor does not move its
 /// target until it reaches the target's current value, so switching songs or
 /// banks does not make the volume jump on stage.
@@ -348,6 +367,59 @@ impl SoftTakeover {
 
     pub fn wrote(&mut self, value: f64) {
         self.last_written = Some(value);
+    }
+
+    /// Where the target goes for a control at `control` (both in control
+    /// space, 0..1), or `None` when it must not move. `range` is the part of
+    /// the target travel the control covers (`MidiBinding::min..max`), where
+    /// value scaling makes control and target meet.
+    pub fn next(
+        &mut self,
+        mode: TakeoverMode,
+        control: f64,
+        current: f64,
+        range: (f64, f64),
+    ) -> Option<f64> {
+        match mode {
+            TakeoverMode::None => {
+                self.picked_up = true;
+                self.last_control = Some(control);
+                Some(control)
+            }
+            TakeoverMode::PickUp => self.feed(control, current).then_some(control),
+            TakeoverMode::ValueScaling => {
+                let last = self.last_control.replace(control);
+                if self.picked_up {
+                    return Some(control);
+                }
+                let crossed = last.is_some_and(|last| (last - current) * (control - current) <= 0.0);
+                if (control - current).abs() <= Self::THRESHOLD || crossed {
+                    self.picked_up = true;
+                    return Some(control);
+                }
+                // The first message after a release only says where the
+                // control is: there is no movement to scale yet.
+                let last = last?;
+                let (low, high) = (range.0.min(range.1), range.0.max(range.1));
+                let current = current.clamp(low, high);
+                let next = if control > last {
+                    let room = high - last;
+                    if room <= f64::EPSILON {
+                        return None;
+                    }
+                    current + (control - last) * (high - current) / room
+                } else if control < last {
+                    let room = last - low;
+                    if room <= f64::EPSILON {
+                        return None;
+                    }
+                    current - (last - control) * (current - low) / room
+                } else {
+                    return None;
+                };
+                Some(next.clamp(low, high))
+            }
+        }
     }
 }
 

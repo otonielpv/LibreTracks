@@ -12,6 +12,7 @@ import {
   updateAudioSettings,
 } from "../desktopApi";
 import { findMidiMappingKeyForMessage, formatMidiBinding } from "../helpers";
+import { learnMidiBinding } from "../midi/controllerProfiles";
 import { useTimelineUIStore } from "../uiStore";
 
 type MidiBinding = { status: number; data1: number; isCc: boolean };
@@ -114,10 +115,11 @@ export function useMidiRawMessages({
       };
       const nextSettings = normalizeAppSettings({
         ...appSettingsRef.current,
-        midiMappings: {
-          ...appSettingsRef.current.midiMappings,
-          [learnMode]: nextBinding,
-        },
+        midiMappings: learnMidiBinding(
+          appSettingsRef.current.midiMappings,
+          learnMode,
+          nextBinding,
+        ),
       });
       const previousSettings = appSettingsRef.current;
       const learnedCommandLabel = formatMidiLearnCommandLabel(learnMode);

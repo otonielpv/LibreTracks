@@ -281,6 +281,7 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
           | "keepMidiInBackground"
           | "midiControllerOutput"
           | "midiStripsFollowSong"
+          | "midiTakeoverMode"
         >
       >,
     ) {

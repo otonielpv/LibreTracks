@@ -1239,6 +1239,14 @@ export const MIDI_CONTROL_MODES = [
 export type MidiControlMode = (typeof MIDI_CONTROL_MODES)[number];
 
 /**
+ * Ableton Live's "Takeover Mode" (`TakeoverMode` in
+ * `libretracks-core/src/midi_control.rs`): jump, pick up, or scale the
+ * value until fader and target meet.
+ */
+export const MIDI_TAKEOVER_MODES = ["none", "pickUp", "valueScaling"] as const;
+export type MidiTakeoverMode = (typeof MIDI_TAKEOVER_MODES)[number];
+
+/**
  * A learned control (`libretracks_core::midi_control::MidiBinding`). The
  * first three fields are the pre-plan format; the rest are optional and
  * absent means the default (mode by target, full range, takeover on).
@@ -1449,6 +1457,8 @@ export type AppSettings = {
   midiControllerOutput: string | null;
   /** Controller strips drive only the active song's tracks (midi-controllers). */
   midiStripsFollowSong: boolean;
+  /** What a motorless fader does when it is not where its target is. */
+  midiTakeoverMode: MidiTakeoverMode;
   suppressMissingMidiDeviceWarning: boolean;
   /** iOS RTP-MIDI network session. Off by default (asks for local network). */
   midiNetworkSession: boolean;
@@ -1630,6 +1640,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   selectedMidiOutputDevice: null,
   midiControllerOutput: null,
   midiStripsFollowSong: true,
+  midiTakeoverMode: "valueScaling",
   suppressMissingMidiDeviceWarning: false,
   midiNetworkSession: false,
   midiVirtualPort: false,
@@ -1906,6 +1917,11 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     selectedMidiOutputDevice,
     midiControllerOutput,
     midiStripsFollowSong: settings.midiStripsFollowSong !== false,
+    midiTakeoverMode: (MIDI_TAKEOVER_MODES as readonly string[]).includes(
+      settings.midiTakeoverMode as string,
+    )
+      ? (settings.midiTakeoverMode as MidiTakeoverMode)
+      : "valueScaling",
     suppressMissingMidiDeviceWarning: Boolean(
       settings.suppressMissingMidiDeviceWarning,
     ),

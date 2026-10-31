@@ -4,6 +4,7 @@ import {
   applyControllerProfile,
   BUILTIN_CONTROLLER_PROFILES,
   detectControllerProfile,
+  learnMidiBinding,
   parseControllerProfile,
   profileFromMappings,
 } from "./controllerProfiles";
@@ -86,5 +87,35 @@ describe("controller profiles", () => {
     );
     expect(next["param:tempo"]).toBeUndefined();
   });
-});
 
+  it("learning keeps a control off a strip and a track at once", () => {
+    const fader1 = { status: 0xe0, data1: 0, isCc: false };
+    const fader2 = { status: 0xe1, data1: 0, isCc: false };
+    const play = { status: 0x90, data1: 94, isCc: false };
+    // Learnt on the on-screen fader of track 1 after the strips were set up:
+    // after bank:next fader 1 drove track 9 (strip 1) and track 1.
+    const strips = {
+      "strip:1:volume": fader1,
+      "strip:2:volume": fader2,
+      "action:play": play,
+    };
+    const onTrack = learnMidiBinding(strips, "track:t1:volume", { ...fader1, data1: 64 });
+    expect(onTrack["strip:1:volume"]).toBeUndefined();
+    expect(onTrack["track:t1:volume"]).toBeDefined();
+    expect(onTrack["strip:2:volume"]).toBe(fader2);
+    expect(onTrack["action:play"]).toBe(play);
+
+    // And the other way round: re-learning the strip drops the track.
+    const back = learnMidiBinding(onTrack, "strip:1:volume", fader1);
+    expect(back["track:t1:volume"]).toBeUndefined();
+    expect(back["strip:1:volume"]).toBe(fader1);
+
+    // One fader driving two tracks stays possible (D4).
+    const both = learnMidiBinding(
+      { "track:t1:volume": fader2 },
+      "track:t2:volume",
+      fader2,
+    );
+    expect(Object.keys(both).sort()).toEqual(["track:t1:volume", "track:t2:volume"]);
+  });
+});

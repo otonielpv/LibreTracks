@@ -31,6 +31,7 @@ export function buildMidiOutputSettings(
     platform: {
       controllerOutput: appSettings.midiControllerOutput,
       stripsFollowSong: appSettings.midiStripsFollowSong,
+      takeoverMode: appSettings.midiTakeoverMode,
       networkSession: appSettings.midiNetworkSession,
       virtualPort: appSettings.midiVirtualPort,
       keepInBackground: appSettings.keepMidiInBackground,
