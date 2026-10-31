@@ -206,6 +206,8 @@ import { useVideoFeature } from "./video/useVideoFeature";
 import { VideoSetupLayer } from "./video/VideoSetupLayer";
 import { MixSceneModal } from "./panels/MixSceneModal";
 import { useMixSceneHandlers } from "./panels/mixScenes/mixSceneHandlers";
+import { MixScenesMenuItem } from "./panels/mixScenes/MixScenesMenuItem";
+import { setMixSceneEditorOpen, useMixSceneEditorStore } from "./panels/mixScenes/mixSceneEditorStore";
 import { RemotePanel } from "./panels/RemotePanel";
 import { NetworkSessionRoot } from "../network/NetworkSessionRoot";
 import { MobileLanding } from "./compact/MobileLanding";
@@ -948,7 +950,8 @@ export function TransportPanelContent() {
   const [automationCueDraft, setAutomationCueDraft] =
     useState<AutomationCueDraft | null>(null);
   const midiDrafts = useMidiDrafts();
-  const [isMixSceneModalOpen, setIsMixSceneModalOpen] = useState(false);
+  const isMixSceneModalOpen = useMixSceneEditorStore((state) => state.open);
+  const setIsMixSceneModalOpen = setMixSceneEditorOpen;
   const [isPadsPopoverOpen, setIsPadsPopoverOpen] = useState(false);
   const padButtonRef = useRef<HTMLButtonElement | null>(null);
   const [isMetronomePopoverOpen, setIsMetronomePopoverOpen] = useState(false);
@@ -6910,6 +6913,7 @@ export function TransportPanelContent() {
                   disabled={!song}
                   onSelected={() => setIsMobileFileActionsOpen(false)}
                 />
+                <MixScenesMenuItem disabled={!song} onSelected={() => setIsMobileFileActionsOpen(false)} />
               </div>
             </div>
           ) : null}

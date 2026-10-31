@@ -1125,6 +1125,7 @@ const en = {
       renderSong: "Render audio…",
       analyzeSong: "Analyze song (tempo, key and sections)…",
       levelSongs: "Level song volumes…",
+      mixScenes: "Mix scenes…",
       exportSong: "Export Song",
       deleteSong: "Delete Song",
       deleteMarker: "Delete Marker",

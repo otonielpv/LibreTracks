@@ -1141,6 +1141,7 @@ const es = {
       renderSong: "Renderizar audio…",
       analyzeSong: "Analizar canción (tempo, nota y secciones)…",
       levelSongs: "Nivelar volumen de canciones…",
+      mixScenes: "Escenas de mezcla…",
       exportSong: "Exportar Cancion",
       deleteSong: "Borrar Cancion",
       deleteMarker: "Borrar marca",

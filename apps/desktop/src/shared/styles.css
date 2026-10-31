@@ -2953,7 +2953,13 @@ html.lt-ios body {
   overflow: hidden;
 }
 
-.lt-scene-modal > .lt-settings-modal-header,
+.lt-scene-modal > .lt-settings-modal-header {
+  flex: 0 0 auto;
+}
+
+/* Close never shrinks out of the frame: on a phone the old modal grew past
+   100vh (taller than an Android WebView shows) and Close ended up off
+   screen, behind the tracks. */
 .lt-scene-modal > .lt-automation-modal-actions {
   flex: 0 0 auto;
 }
@@ -2967,6 +2973,7 @@ html.lt-ios body {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  touch-action: pan-y;
   padding-right: 0.3rem;
 }
 
@@ -3303,7 +3310,8 @@ html.lt-ios body {
   padding: 0.7rem;
 }
 
-.lt-mobile .lt-scene-modal .lt-settings-modal-header p {
+.lt-mobile .lt-scene-modal .lt-settings-modal-header p,
+.lt-mobile .lt-scene-modal .lt-settings-modal-eyebrow {
   display: none;
 }
 

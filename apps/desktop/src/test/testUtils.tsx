@@ -29,6 +29,7 @@ import {
 } from "../features/network/networkSessionStore";
 import { useCloudStore } from "../features/transport/cloud/cloudStore";
 import { useLevelSongsStore } from "../features/transport/levelSongs/levelSongsStore";
+import { useMixSceneEditorStore } from "../features/transport/panels/mixScenes/mixSceneEditorStore";
 import { useRenderStore } from "../features/transport/render/renderStore";
 import { useSongAnalysisStore } from "../features/transport/songAnalysis/songAnalysisStore";
 import { INITIAL_VIDEO_STATE, useVideoStore } from "../features/transport/video/videoStore";
@@ -383,6 +384,7 @@ beforeEach(async () => {
   // que lo abra lo dejaria abierto encima de la siguiente.
   useRenderStore.setState({ target: null });
   useLevelSongsStore.setState({ open: false });
+  useMixSceneEditorStore.setState({ open: false });
   useSongAnalysisStore.setState({ target: null });
   useNetworkSessionStore.setState(INITIAL_NETWORK_SESSION_STATE);
   // Video selection and library, and the canvas thumbnail/preview registry.

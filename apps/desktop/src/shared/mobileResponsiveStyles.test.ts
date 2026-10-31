@@ -285,6 +285,25 @@ describe("contrato responsive móvil", () => {
     expect(lists).toContain("overflow: visible");
   });
 
+  // El editor de escenas en un teléfono: con `100vh` y `overflow: hidden`
+  // el modal era más alto que lo que enseña el WebView de Android y
+  // «Cerrar» quedaba fuera de la pantalla, detrás de las pistas.
+  it("deja «Cerrar» del editor de escenas siempre a la vista", () => {
+    const modal = declarationsIn(styles, ".lt-scene-modal");
+    const mobileModal = declarationsFor(".lt-mobile .lt-scene-modal");
+    const body = declarationsIn(styles, ".lt-scene-body");
+    const actions = declarationsIn(styles, ".lt-scene-modal > .lt-automation-modal-actions");
+
+    expect(modal).toContain("overflow: hidden");
+    expect(modal).toMatch(/max-height:\s*calc\(100dvh/);
+    expect(mobileModal).toMatch(/max-height:\s*calc\(100dvh/);
+    // El cuerpo es el único scroller y encoge; el pie no.
+    expect(body).toContain("overflow-y: auto");
+    expect(body).toContain("min-height: 0");
+    expect(body).toContain("touch-action: pan-y");
+    expect(actions).toContain("flex: 0 0 auto");
+  });
+
   it("convierte la navegación lateral en barra inferior en vertical", () => {
     expect(styles).toMatch(/@media\s*\(orientation:\s*portrait\)/);
     expect(styles).toMatch(

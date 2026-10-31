@@ -26,6 +26,7 @@ import { NetworkSessionBadge } from "../../network/NetworkSessionBadge";
 import { requestAppClose } from "../../appClose/appCloseService";
 import { FadeStopButton } from "./FadeStopButton";
 import { openLevelSongs } from "../levelSongs/levelSongsStore";
+import { openMixSceneEditor } from "../panels/mixScenes/mixSceneEditorStore";
 import { openRenderSong } from "../render/renderStore";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { NetworkControls } from "../../network/NetworkControls";
@@ -501,6 +502,16 @@ export function TimelineTopbar({
                   onClick={() => onTopMenuAction(openLevelSongs)}
                 >
                   <span>{t("transport.menu.levelSongs")}</span>
+                </button>
+                {/* Scenes belong to the session, not to the automation lane:
+                    they are triggered by hand too (plan live-scenes). */}
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!canPersistProject}
+                  onClick={() => onTopMenuAction(openMixSceneEditor)}
+                >
+                  <span>{t("transport.menu.mixScenes")}</span>
                 </button>
                 <div className="lt-top-menu-separator" aria-hidden="true" />
                 {/* Salir desde ARCHIVO: guarda, avisa de que esta guardado y
