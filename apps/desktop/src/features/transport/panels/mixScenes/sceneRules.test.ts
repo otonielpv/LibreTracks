@@ -4,7 +4,7 @@ import type { MixSceneSummary, SongView } from "@libretracks/shared/models";
 
 import {
   folderNames,
-  ministerScene,
+  bandDownScene,
   moveId,
   parseWords,
   resolveSceneTrackIds,
@@ -49,8 +49,8 @@ const song = {
 } as unknown as SongView;
 
 describe("scene rules preview", () => {
-  it("the quick minister scene leaves voices, click, guide, folder and video out", () => {
-    const scene = ministerScene("s", "Ministrar");
+  it("the quick band-down scene leaves voices, click, guide, folder and video out", () => {
+    const scene = bandDownScene("s", "Banda baja");
     expect(resolveSceneTrackIds(scene, song, "r1")).toEqual(["bajo", "piano"]);
     expect(resolveSceneTrackIds(scene, song, "r2")).toEqual(["bajo2"]);
     expect(resolveSceneTrackIds(scene, song, null)).toEqual([]);
@@ -104,7 +104,7 @@ describe("scenes in a session template", () => {
         { select: { type: "activeSong" }, change: { muted: true } },
       ],
     };
-    expect(templateDroppedRuleCount([ministerScene("m", "M"), byId])).toBe(1);
+    expect(templateDroppedRuleCount([bandDownScene("m", "M"), byId])).toBe(1);
     expect(templateDroppedRuleCount(undefined)).toBe(0);
   });
 });

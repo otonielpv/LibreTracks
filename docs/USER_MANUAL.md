@@ -235,9 +235,9 @@ Arrangements travel in song packages (`.ltpkg`) and session packages (`.ltset`).
 
 ### Live scenes
 
-A scene is a mix state you engage and release by hand: for example, bringing the instruments down while someone ministers and bringing them back afterwards. Releasing it puts the mix back exactly as it was before.
+A scene is a mix state you engage and release by hand: for example, bringing the instruments down while someone talks to the audience and bringing them back afterwards. Releasing it puts the mix back exactly as it was before.
 
-**Create a scene.** Open `File > Mix scenes…` (on a phone, the `File` sheet of the side rail; in the Setlist view, the mixer's `Scenes` button). No automation track is needed. `+ Bring the music down to minister` creates the typical scene: every track of the song except those named voz, voc, vox, click, guía or guide, −12 dB, with a 2 second ramp.
+**Create a scene.** Open `File > Mix scenes…` (on a phone, the `File` sheet of the side rail; in the Setlist view, the mixer's `Scenes` button). No automation track is needed. `+ Bring the band down (except vocals)` creates the typical scene: every track of the song except those named voz, voc, vox, click, guía or guide, −12 dB, with a 2 second ramp.
 
 Each scene is a list of **rules** that read as a sentence: which tracks, except which, and what changes.
 

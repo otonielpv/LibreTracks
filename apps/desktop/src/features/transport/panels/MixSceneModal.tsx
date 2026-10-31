@@ -9,7 +9,7 @@ import {
   createSceneId,
   defaultRule,
   folderNames,
-  ministerScene,
+  bandDownScene,
   moveId,
   resolveSceneTrackIds,
 } from "./mixScenes/sceneRules";
@@ -90,8 +90,8 @@ export function MixSceneModal({
       rules: [],
     });
 
-  const createMinisterScene = () =>
-    addScene(ministerScene(createSceneId(), t("transport.mixScene.ministerName")));
+  const createBandDownScene = () =>
+    addScene(bandDownScene(createSceneId(), t("transport.mixScene.bandDownName")));
 
   const moveScene = (from: number, to: number) => {
     const current = scenes.map((scene) => scene.id);
@@ -209,9 +209,9 @@ export function MixSceneModal({
             <button
               type="button"
               className="lt-secondary-button lt-scene-add is-template"
-              onClick={createMinisterScene}
+              onClick={createBandDownScene}
             >
-              {t("transport.mixScene.ministerTemplate")}
+              {t("transport.mixScene.bandDownTemplate")}
             </button>
           </div>
 

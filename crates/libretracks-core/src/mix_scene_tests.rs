@@ -100,7 +100,7 @@ fn pre_plan_scenes_load_as_absolute_track_rules() {
     assert_eq!(scenes.len(), 3);
 
     let soft = &scenes[0];
-    assert_eq!(soft.name, "Ministrar");
+    assert_eq!(soft.name, "Banda baja");
     assert_eq!(soft.ramp_seconds, 0.0);
     assert_eq!(
         soft.rules,
@@ -557,8 +557,8 @@ fn a_deleted_track_is_forgotten_and_the_rest_still_restore() {
 #[test]
 fn a_template_keeps_rule_scenes_and_drops_track_ids() {
     let by_id = |id: &str| TrackSelector::Track { track_id: id.into() };
-    let mut minister = scene(vec![rule(TrackSelector::ActiveSong, vec![by_id("t9"), TrackSelector::NameContains { words: vec!["voz".into()] }])]);
-    minister.id = "minister".into();
+    let mut band_down = scene(vec![rule(TrackSelector::ActiveSong, vec![by_id("t9"), TrackSelector::NameContains { words: vec!["voz".into()] }])]);
+    band_down.id = "band-down".into();
     let mut mixed = scene(vec![rule(by_id("t1"), vec![]), rule(TrackSelector::Folder { name: "Banda".into() }, vec![])]);
     mixed.id = "mixed".into();
     let mut ids_only = scene(vec![rule(by_id("t1"), vec![]), rule(by_id("t2"), vec![])]);
@@ -566,9 +566,9 @@ fn a_template_keeps_rule_scenes_and_drops_track_ids() {
     let mut empty = scene(vec![]);
     empty.id = "empty".into();
 
-    let (kept, dropped) = scenes_for_template(&[minister, mixed, ids_only, empty]);
+    let (kept, dropped) = scenes_for_template(&[band_down, mixed, ids_only, empty]);
     let ids: Vec<&str> = kept.iter().map(|scene| scene.id.as_str()).collect();
-    assert_eq!(ids, vec!["minister", "mixed", "empty"]);
+    assert_eq!(ids, vec!["band-down", "mixed", "empty"]);
     assert_eq!(dropped, 3);
     // The exception by id goes too; the one by name stays.
     assert_eq!(

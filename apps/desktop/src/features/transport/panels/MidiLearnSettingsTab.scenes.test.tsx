@@ -105,7 +105,7 @@ async function flush() {
 
 const withScene = {
   tracks: [],
-  mixScenes: [{ id: "s1", name: "Ministrar", rampSeconds: 2, rules: [] }],
+  mixScenes: [{ id: "s1", name: "Banda baja", rampSeconds: 2, rules: [] }],
 } as unknown as SongView;
 
 describe("MidiLearnSettingsTab, Scenes view", () => {
@@ -125,9 +125,9 @@ describe("MidiLearnSettingsTab, Scenes view", () => {
     render(<Harness layout="list" />);
     await flush();
     expect(screen.getAllByRole("listitem")).toHaveLength(3 + 8);
-    expect(screen.getByText("Scene “Ministrar” (toggle)")).toBeTruthy();
-    expect(screen.getByText("Scene “Ministrar” (engage)")).toBeTruthy();
-    expect(screen.getByText("Scene “Ministrar” (release)")).toBeTruthy();
+    expect(screen.getByText("Scene “Banda baja” (toggle)")).toBeTruthy();
+    expect(screen.getByText("Scene “Banda baja” (engage)")).toBeTruthy();
+    expect(screen.getByText("Scene “Banda baja” (release)")).toBeTruthy();
     expect(screen.getByText("Scene 8 (toggle)")).toBeTruthy();
     expect(screen.queryByText(/This session has no scenes/)).toBeNull();
   });
@@ -137,7 +137,7 @@ describe("MidiLearnSettingsTab, Scenes view", () => {
     render(<Harness layout="list" />);
     await flush();
     fireEvent.click(
-      screen.getByRole("button", { name: "Learn: Scene “Ministrar” (engage)" }),
+      screen.getByRole("button", { name: "Learn: Scene “Banda baja” (engage)" }),
     );
     await act(async () => {
       api.rawHandler?.({ status: 0x90, data1: 36, data2: 100 });

@@ -235,9 +235,9 @@ Los arreglos viajan en los paquetes de canción (`.ltpkg`) y de sesión (`.ltset
 
 ### Escenas en directo
 
-Una escena es un estado de mezcla que pones y quitas a mano: por ejemplo, bajar los instrumentos mientras se ministra y devolverlos después. Al quitarla, la mezcla vuelve exactamente a como estaba antes de ponerla.
+Una escena es un estado de mezcla que pones y quitas a mano: por ejemplo, bajar los instrumentos mientras alguien habla al público y devolverlos después. Al quitarla, la mezcla vuelve exactamente a como estaba antes de ponerla.
 
-**Crear una escena.** Abre `Archivo > Escenas de mezcla…` (en el móvil, la hoja `Archivo` del carril lateral; en la vista Setlist, el botón `Escenas` del mezclador). No hace falta ninguna pista de automatismos. El botón `+ Bajar música para ministrar` crea la escena típica: todas las pistas de la canción menos las que se llaman voz, voc, vox, click, guía o guide, −12 dB, con una rampa de 2 segundos.
+**Crear una escena.** Abre `Archivo > Escenas de mezcla…` (en el móvil, la hoja `Archivo` del carril lateral; en la vista Setlist, el botón `Escenas` del mezclador). No hace falta ninguna pista de automatismos. El botón `+ Bajar la banda (menos voces)` crea la escena típica: todas las pistas de la canción menos las que se llaman voz, voc, vox, click, guía o guide, −12 dB, con una rampa de 2 segundos.
 
 Cada escena es una lista de **reglas**, que se leen como una frase: a qué pistas, excepto cuáles, y qué cambia.
 

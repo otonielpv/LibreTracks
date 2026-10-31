@@ -17,7 +17,7 @@
   "mixScenes": [
     {
       "id": "scene_soft",
-      "name": "Ministrar",
+      "name": "Banda baja",
       "trackOverrides": [
         {
           "trackId": "track_drums",

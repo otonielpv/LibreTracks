@@ -48,9 +48,9 @@ describe("MixSceneModal", () => {
     useSoundingKeyStore.setState({ regionId: "r1" });
   });
 
-  it("creates the minister scene and shows it the same after reopening", () => {
+  it("creates the band-down scene and shows it the same after reopening", () => {
     const { props, unmount } = renderModal(baseSong);
-    fireEvent.click(screen.getByText("transport.mixScene.ministerTemplate"));
+    fireEvent.click(screen.getByText("transport.mixScene.bandDownTemplate"));
 
     expect(props.onUpsert).toHaveBeenCalledTimes(1);
     const saved = props.onUpsert.mock.calls[0][0] as MixSceneSummary;

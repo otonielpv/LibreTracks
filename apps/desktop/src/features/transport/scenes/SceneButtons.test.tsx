@@ -26,7 +26,7 @@ function publish(snapshot: TransportSnapshot) {
 describe("SceneButtons", () => {
   beforeEach(async () => {
     resetTestDesktopApiMock();
-    await testDesktopApiMock.upsertMixScene(scene("down", "Ministrar"));
+    await testDesktopApiMock.upsertMixScene(scene("down", "Banda baja"));
     publish(await testDesktopApiMock.upsertMixScene(scene("piano", "Solo piano")));
   });
 
@@ -45,7 +45,7 @@ describe("SceneButtons", () => {
       },
     });
     render(<SceneButtons />);
-    const first = screen.getByRole("button", { name: /Ministrar/ });
+    const first = screen.getByRole("button", { name: /Banda baja/ });
     expect(first.getAttribute("aria-pressed")).toBe("false");
 
     await act(async () => fireEvent.click(first));
@@ -67,7 +67,7 @@ describe("SceneButtons", () => {
     expect(screen.getByRole("button", { name: /Solo piano/ }).getAttribute("aria-pressed")).toBe(
       "true",
     );
-    expect(screen.getByRole("button", { name: /Ministrar/ }).getAttribute("aria-pressed")).toBe(
+    expect(screen.getByRole("button", { name: /Banda baja/ }).getAttribute("aria-pressed")).toBe(
       "false",
     );
   });
@@ -83,7 +83,7 @@ describe("SceneButtons", () => {
     useMixSceneTriggerStore.setState({ trigger: () => {} });
     render(<SceneButtons />);
     const buttons = screen.getAllByRole("button");
-    expect(buttons.map((button) => button.textContent)).toEqual(["1Ministrar", "2Solo piano"]);
+    expect(buttons.map((button) => button.textContent)).toEqual(["1Banda baja", "2Solo piano"]);
     expect(buttons[0].className).not.toContain("lt-midi-mappable");
 
     act(() => useTimelineUIStore.setState({ midiLearnMode: "__map__" }));

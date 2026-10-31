@@ -128,11 +128,11 @@ export function templateDroppedRuleCount(scenes: MixSceneSummary[] | undefined) 
   );
 }
 
-/** Words the quick "music down to minister" scene leaves alone. */
-export const MINISTER_EXCEPT_WORDS = ["voz", "voc", "vox", "click", "guía", "guide"];
+/** Words the quick "band down" scene leaves alone. */
+export const BAND_DOWN_EXCEPT_WORDS = ["voz", "voc", "vox", "click", "guía", "guide"];
 
 /** The quick scene: the active song but voices, click and guide, -12 dB. */
-export function ministerScene(id: string, name: string): MixSceneSummary {
+export function bandDownScene(id: string, name: string): MixSceneSummary {
   return {
     id,
     name,
@@ -140,7 +140,7 @@ export function ministerScene(id: string, name: string): MixSceneSummary {
     rules: [
       {
         select: { type: "activeSong" },
-        except: [{ type: "nameContains", words: [...MINISTER_EXCEPT_WORDS] }],
+        except: [{ type: "nameContains", words: [...BAND_DOWN_EXCEPT_WORDS] }],
         change: { volume: { type: "relativeDb", value: -12 } },
       },
     ],
