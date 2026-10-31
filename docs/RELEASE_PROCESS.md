@@ -34,14 +34,11 @@ features that are built but hidden (no UI at all while their flag is
 `false`). Check it every release: a feature planned for this version is
 turned on here, together with the guard test next to it
 (`featureFlags.test.ts`), in the release commit. Commits of a hidden feature
-do NOT go in the release notes. As of 1.15.0: `lyrics` (lyrics & chords in
-Live and the remote) and `songAnalysis` («Analizar canción…»: tempo, key and
-sections from the click, guide and audio) are on and ship in 1.15.0.
-`networkSessions` (LibreTracks apps joining a host over the LAN,
-`docs/plans/network-sessions`) and `songTemplates` (songs from a template,
-stems organised on drop, «one folder per song» layout) are off, planned for
-1.16.0. While off, their backend stays in place (the templates E2E drives it
-through test hooks); only the UI is hidden.
+do NOT go in the release notes. As of 1.16.0 every flag is on:
+`lyrics` and `songAnalysis` shipped in 1.15.0, `networkSessions`
+(LibreTracks apps joining a host over the LAN) and `songTemplates` (songs
+from a template, stems organised on drop, «one folder per song» layout) in
+1.16.0.
 
 ## 2. Commit pending work (optional)
 

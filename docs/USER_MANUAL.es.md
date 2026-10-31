@@ -105,6 +105,49 @@ Usa `Folder track` cuando quieras agrupar stems, por ejemplo batería, tracks de
 
 ![Tracks y Carpetas](../screenshots/Tracks-Folder.gif)
 
+### Plantillas de canción: cada stem a su sitio
+
+Una plantilla guarda pistas, carpetas, colores y routing. Además de para crear
+sesiones, sirve para crear **canciones** y para **organizar los audios que
+sueltas**: si sueltas `Way Maker - EG 1.wav`, `Way Maker - Keys.wav`… en una
+canción, cada uno cae en su carpeta (Guitarras, Teclados…) por su nombre.
+
+1. En `Configuración` › `General`, elige `Plantilla para canciones nuevas`.
+   `Banda (incluida)` trae Click, Guía, Batería, Bajo, Guitarras, Teclados,
+   Synth y pads, Voces y Efectos, con los nombres de los multitracks
+   comerciales en español e inglés (EG, AG, Keys, BGV, FX…).
+2. Pulsa `+ Nueva canción`: sale con esa estructura. La flecha de al lado
+   (`Nueva canción desde plantilla`) deja elegir otra plantilla, o
+   `Sin plantilla`, solo para esa canción.
+3. Suelta los stems en la canción. Un aviso cuenta cuántos se han organizado y
+   cuántos no tenían regla; `Deshacer` (o `Ctrl+Z`) lo deshace entero.
+
+Los audios que no coinciden con nada se colocan como siempre. Sin plantilla
+elegida, todo funciona exactamente igual que antes.
+
+**Reglas de coincidencia.** Clic derecho en una pista o carpeta ›
+`Reglas de coincidencia…`: las palabras, separadas por comas, que mandan un
+audio allí. Se comparan palabras completas sin acentos ni mayúsculas (`ag` no
+coincide con `stage`), y el nombre común del lote y el de la canción no cuentan.
+Si dos reglas coinciden, gana la más larga (`electric guitar` antes que
+`guitar`) y, si empatan, la pista que va antes. En una **pista**, el primer
+stem va a ella y el siguiente crea una pista hermana; en una **carpeta**, cada
+stem crea una pista dentro. Para guardar tus cambios, `Archivo` ›
+`Guardar como plantilla…`.
+
+> La plantilla incluida manda Click y Guía al master. Si tus cascos van por
+> otra salida, cambia su routing y guarda tu propia plantilla.
+
+**Pistas de cada canción** (`Configuración` › `General`) decide qué pasa con
+la segunda canción:
+
+- `Compartidas entre canciones`: todas usan las mismas pistas; la canción 2
+  rellena los carriles de la 1.
+- `Una carpeta por canción`: cada canción tiene una carpeta con su nombre y
+  sus pistas dentro.
+- `Sueltas por canción`: cada canción tiene su propia copia de las pistas en la
+  raíz.
+
 ## 4. Edición Básica (Timeline)
 
 LibreTracks mantiene el timeline directo y orientado a directo.

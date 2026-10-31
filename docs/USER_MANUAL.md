@@ -105,6 +105,47 @@ Use `Folder track` when you want to group stems, such as drums, band tracks, cho
 
 ![Tracks and folders](../screenshots/Tracks-Folder.gif)
 
+### Song templates: every stem in its place
+
+A template keeps tracks, folders, colours and routing. Besides creating
+sessions, it creates **songs** and **organises the audio you drop**: drop
+`Way Maker - EG 1.wav`, `Way Maker - Keys.wav`… into a song and each one lands
+in its folder (Guitars, Keys…) by its name.
+
+1. In `Settings` › `General`, pick `Template for new songs`. `Band (built in)`
+   has Click, Guide, Drums, Bass, Guitars, Keys, Synths & pads, Vocals and
+   FX, with the names commercial multitracks use in English and Spanish (EG,
+   AG, Keys, BGV, FX…).
+2. Click `+ New song`: it comes with that layout. The arrow next to it
+   (`New song from template`) lets you pick another template, or
+   `No template`, for that song only.
+3. Drop the stems into the song. A notice counts how many were organised and
+   how many had no rule; `Undo` (or `Ctrl+Z`) takes the whole drop back.
+
+Audio that matches nothing is placed as usual. With no template picked,
+everything works exactly as before.
+
+**Matching rules.** Right-click a track or folder › `Matching rules…`: the
+words, separated by commas, that send an audio file there. Whole words are
+compared, ignoring accents and case (`ag` does not match `stage`), and the
+name the batch shares and the song name do not count. When two rules match,
+the longer one wins (`electric guitar` over `guitar`) and, on a tie, the track
+that comes first. On a **track**, the first stem goes to it and the next one
+makes a sibling track; on a **folder**, each stem makes a track inside it. To
+keep your changes, `File` › `Save as template…`.
+
+> The built-in template sends Click and Guide to the master. If your in-ears
+> use another output, change their routing and save your own template.
+
+**Each song's tracks** (`Settings` › `General`) decides what the second song
+does:
+
+- `Shared between songs`: every song uses the same tracks; song 2 fills the
+  lanes of song 1.
+- `One folder per song`: each song has a folder with its name and its tracks
+  inside.
+- `Separate per song`: each song has its own copy of the tracks at the root.
+
 ## 4. Basic Editing (Timeline)
 
 LibreTracks keeps the timeline direct and performance-oriented.
