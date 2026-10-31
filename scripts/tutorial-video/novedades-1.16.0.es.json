@@ -1,0 +1,78 @@
+{
+  "title": "Novedades de LibreTracks 1.16.0",
+  "voice": "es-ES-AlvaroNeural",
+  "rate": "+5%",
+  "display": {
+    "Libre Tracks": "LibreTracks",
+    "uno punto dieciséis punto cero": "1.16.0",
+    "libretracks punto com": "libretracks.com",
+    "Control eme": "Ctrl+M",
+    "nano Kontrol dos": "nanoKONTROL2",
+    "wifi": "Wi-Fi",
+    "One Drive": "OneDrive",
+    "Drop box": "Dropbox"
+  },
+  "scenes": [
+    {
+      "id": "01-intro",
+      "text": "Libre Tracks uno punto dieciséis punto cero llega con la vista Setlist, escenas de mezcla, controladores MIDI, sesiones de red entre dispositivos, plantillas de canción, y One Drive y Drop box."
+    },
+    {
+      "id": "02-setlist",
+      "text": "La gran novedad es la vista Setlist, pensada si vienes de Playback. Ábrela con este botón del selector de vistas, o con la tecla Tab. Arriba, tus canciones en tarjetas. En medio, el mapa de secciones sobre la onda. Y abajo, el mezclador de la canción."
+    },
+    {
+      "id": "03-setlist-tocar",
+      "text": "Toca una canción para verla. Para saltar de sección, muévete con las flechas y pulsa Enter, o haz doble clic en el bloque: el salto espera al momento justo, como en el directo."
+    },
+    {
+      "id": "04-setlist-editar",
+      "text": "Con Editar cambias la canción sin pasar por la DAW: sus ajustes y su portada, las secciones, el arreglo, las pistas, la automatización o la letra. Hecho vuelve a tocar."
+    },
+    {
+      "id": "05-escenas",
+      "text": "Las escenas de mezcla guardan cambios como bajar la banda mientras alguien habla. Ábrelas en Archivo, Escenas de mezcla. Este botón crea la escena típica en un toque, y debajo ves a qué pistas afecta."
+    },
+    {
+      "id": "06-escenas-directo",
+      "text": "En directo, tócala para ponerla, y otra vez para quitarla: la mezcla vuelve exactamente a como estaba. También se dispara con un controlador MIDI o desde un automatismo."
+    },
+    {
+      "id": "07-midi",
+      "text": "Para los controladores MIDI llega el modo Mapeo, como en Ableton. Pulsa Control eme, y todo lo que se puede asignar se ilumina. Toca un control en la pantalla, y mueve el del controlador."
+    },
+    {
+      "id": "08-midi-perfiles",
+      "text": "En Configuración, Aprendizaje MIDI, hay perfiles listos para el nano Kontrol dos y Mackie Control, ocho tiras de faders con bancos, y luces y faders motorizados que siguen la mezcla."
+    },
+    {
+      "id": "09-red",
+      "text": "Con las sesiones de red, varios Libre Tracks en la misma wifi se conectan entre sí. Uno hospeda, y los demás lo siguen desde su propia app, con el permiso que elijas: solo ver, controlar el directo, o editar. Está en Red, en la barra lateral."
+    },
+    {
+      "id": "10-plantillas",
+      "text": "Las plantillas de canción crean canciones con sus pistas y carpetas. Usa la flecha junto a Nueva canción, y al soltar los stems de un multitrack, cada audio cae en su sitio según su nombre."
+    },
+    {
+      "id": "11-nube",
+      "text": "En la nube, además de Google Drive, ahora puedes usar One Drive y Drop box, y tener varias cuentas conectadas a la vez. Está en Archivo, Nube."
+    },
+    {
+      "id": "12-warp",
+      "text": "Y el warp se activa solo al cambiar el tono o el tempo, para que la canción no cambie de velocidad. Si prefieres hacerlo a mano, se desactiva en Configuración."
+    },
+    {
+      "id": "13-movil",
+      "text": "Y en el móvil, la vista Setlist se adapta como Playback en el iPhone: la onda o el mezclador, por turnos, con un toque.",
+      "subtitles": "mobile"
+    },
+    {
+      "id": "14-correcciones",
+      "text": "Y además, un buen montón de correcciones. Aquí tienes las más importantes."
+    },
+    {
+      "id": "15-final",
+      "text": "Descarga Libre Tracks gratis en libretracks punto com."
+    }
+  ]
+}

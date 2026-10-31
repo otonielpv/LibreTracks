@@ -1,6 +1,6 @@
 import { browser, $ } from "@wdio/globals";
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import AppPage from "../pageobjects/app.page.js";
@@ -12,59 +12,50 @@ import { L } from "../utils/uiText.js";
 /**
  * Not a test — records the DESKTOP scenes of the release video
  * (docs/RELEASE_PROCESS.md step 11a). Rewritten every release for that
- * release's feature; git history keeps the previous ones. This one is 1.15.0:
- * lyrics and chords in the Live View, «Analizar canción», key changes, tempo
- * ramps and song tempo, the count-in style and selecting several markers.
+ * release's feature; git history keeps the previous ones. This one is 1.16.0:
+ * the Setlist View, mix scenes, MIDI Map mode and controller profiles,
+ * network sessions, song templates, OneDrive/Dropbox and automatic warp.
  *
- *   LT_RELEASEVIDEO=1 LT_TUTORIAL_DIR=marketing/video-1.15.0 LT_SHOTS_SESSION=<COPY of a real session> \
+ *   LT_RELEASEVIDEO=1 LT_TUTORIAL_DIR=marketing/video-1.16.0 LT_SHOTS_SESSION=<COPY of a real session> \
  *     npx wdio run tests/e2e/wdio.conf.ts --spec tests/e2e/specs/release-video.e2e.ts --mochaOpts.timeout 1800000
  *
- * The session is copied to a temp folder first (applying the analysis
- * writes to it); it must be TestMultiplesAnalisis, with lyrics on «Eres
- * Todopoderoso». Script: scripts/tutorial-video/novedades-1.15.0.es.json.
- * 1.15.0 has no phone recording from a device (a debug APK with Whisper cannot
- * be built on Windows): the mobile scene is THIS app with the WebView reporting
- * an Android phone (user agent, touch, a landscape phone viewport), which is
- * what switches the frontend to its phone layout. It is recorded last, so the
- * desktop scenes never see the phone emulation.
+ * The session is copied to a temp folder first (the scenes create a scene
+ * and a song in it); it is TestMultiplesAnalisis. Script:
+ * scripts/tutorial-video/novedades-1.16.0.es.json. The mobile scene is THIS
+ * app with the WebView reporting an Android phone (user agent, touch, a
+ * landscape phone viewport), which switches the frontend to its phone layout.
+ * It is recorded last, so the desktop scenes never see the phone emulation.
  *
- * Optional LT_TUTORIAL_SCENES=04-montar,06-vamp re-encodes only those scenes
+ * The machine's own settings are touched only to be read: the network
+ * window's device name, PINs and remembered devices are blurred, and the cloud
+ * panel's file names and quota too.
+ *
+ * Optional LT_TUTORIAL_SCENES=05-escenas,07-midi re-encodes only those scenes
  * (the rest still run, so the app reaches the right state).
  */
 
 const repoRoot = path.resolve(__dirname, "..", "..", "..");
-const tutorialDir = path.resolve(process.env.LT_TUTORIAL_DIR ?? "marketing/video-1.15.0");
+const tutorialDir = path.resolve(process.env.LT_TUTORIAL_DIR ?? "marketing/video-1.16.0");
 const golden = process.env.LT_SHOTS_SESSION ?? "";
 const workDir = path.join(os.tmpdir(), "lt-release-video-session");
 const session = golden ? path.join(workDir, path.basename(golden)) : "";
 const only = (process.env.LT_TUTORIAL_SCENES ?? "").split(",").filter(Boolean);
 const loopback = path.join(repoRoot, "scripts", "tutorial-video", "loopback.py");
 const TITLES = {
-  intro: ["Novedades de LibreTracks 1.15.0", "Analizar canción, letra y acordes, cambios de nota y rampas de tempo"],
-  mobile: ["También en el móvil", "Android e iOS · Seleccionar por área"],
-  end: ["LibreTracks 1.15.0", "Gratis en libretracks.com"],
+  intro: ["Novedades de LibreTracks 1.16.0", "Vista Setlist, escenas de mezcla, controladores MIDI y sesiones de red"],
+  end: ["LibreTracks 1.16.0", "Gratis en libretracks.com"],
   fixes: "Y además, correcciones",
 };
 /** The fixes card: the user-visible fixes of the release, shown, not narrated one by one. */
 const FIXES = [
-  "Una canción exportada vuelve con su warp, su volumen, sus fades y su conteo",
-  "Las cues y los clips en la marca de destino de un salto ya no se saltan",
-  "El click ya no suena doble donde empieza un tempo nuevo",
-  "Partir una canción con warp corta justo en el cursor",
-  "Los WAV en un disco duro mecánico ya no petardean",
-  "Los audios que faltan se pueden quitar de la sesión",
-  "En iPhone y iPad el tono es correcto aunque el iPhone trabaje a otra frecuencia",
-  "Ctrl + rueda fuera del timeline ya no hace zoom de toda la app",
+  "La canción vuelve a sonar bien tras cambiar a una tarjeta de sonido con otra frecuencia",
+  "Los automatismos ya no borran las carpetas de la biblioteca",
+  "En Android se puede usar el audio de cualquier carpeta de la biblioteca",
+  "Analizar canción ya no pone dos marcas de la guía en el mismo sitio",
+  "Las listas de canciones del móvil se mueven con más fluidez",
+  "La hoja Archivo del móvil cabe entera en pantalla",
+  "F11 pone y quita la pantalla completa",
 ];
-// The speech recognition model, set aside while recording so the analysis
-// scene shows its download notice, and put back afterwards.
-const speechModel = path.join(
-  process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"),
-  "com.libretracks.desktop",
-  "models",
-  "ggml-base-q5_1.bin",
-);
-const speechModelAside = `${speechModel}.release-video`;
 
 const tour = (id: string) => `[data-lt-tour="${id}"]`;
 const W = 1920;
@@ -291,7 +282,6 @@ describe("release video (desktop scenes)", function () {
     mkdirSync(scenesDir, { recursive: true });
     rmSync(workDir, { recursive: true, force: true });
     cpSync(path.dirname(golden), workDir, { recursive: true });
-    if (existsSync(speechModel)) renameSync(speechModel, speechModelAside);
     await AppPage.waitUntilBooted();
     await AppPage.reopenSessionUntil(session, (s) => s.tracks.length >= 5, 180_000);
     await AppPage.resetShell();
@@ -312,14 +302,6 @@ describe("release video (desktop scenes)", function () {
 
   beforeEach(() => parkOsCursor());
 
-  after(() => {
-    // The scene downloads the model again; if it did not finish, put the
-    // original back.
-    if (!existsSync(speechModelAside)) return;
-    if (existsSync(speechModel)) rmSync(speechModelAside);
-    else renameSync(speechModelAside, speechModel);
-  });
-
   afterEach(async function () {
     if (this.currentTest?.state === "failed") {
       try {
@@ -334,11 +316,8 @@ describe("release video (desktop scenes)", function () {
     const regions = async () =>
       [...((await AppPage.songView())?.regions ?? [])].sort((a, b) => a.startSeconds - b.startSeconds);
     const all = await regions();
-    // The shots session (TestMultiplesAnalisis) has lyrics, a key change and
-    // analysed markers on «Eres Todopoderoso».
     const song = all.find((r) => /todopoderoso/i.test(r.name)) ?? all[1];
-    const bare = all.find((r) => r.id !== song?.id && !/todopoderoso/i.test(r.name));
-    if (!song || !bare) throw new Error("the session needs the lyrics song and another one");
+    if (!song) throw new Error("the session needs «Eres Todopoderoso»");
     const length = song.endSeconds - song.startSeconds;
     const zoom = 1400 / (length * 18);
     const fitSong = () => setTimelineView({ zoomLevel: zoom, cameraX: Math.max(0, song.startSeconds * zoom * 18 - 160) });
@@ -359,35 +338,18 @@ describe("release video (desktop scenes)", function () {
       if (!box) throw new Error("no song band");
       return box;
     };
-    /** Clickable (not under the track headers) matches of `selector`, in ruler order, `gap` px apart. */
-    const onRuler = async (selector: string, gap: number) =>
-      (await runInPage(
-        (sel: string, minGap: number) => {
-          const picked: Array<{ x: number; y: number }> = [];
-          let lastX = -Infinity;
-          Array.from(document.querySelectorAll(sel))
-            .map((e) => ({ e, r: e.getBoundingClientRect() }))
-            .filter(({ e, r }) => {
-              if (!(r.width > 0 && r.left >= 40 && r.right <= window.innerWidth - 40)) return false;
-              const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-              return top === e || e.contains(top);
-            })
-            .sort((a, b) => a.r.left - b.r.left)
-            .forEach(({ r }) => {
-              if (r.left - lastX < minGap) return;
-              picked.push({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
-              lastX = r.left;
-            });
-          return picked;
-        },
-        selector,
-        gap,
-      )) as Array<{ x: number; y: number }>;
     const play = `.lt-transport-buttons button[aria-label="${L("Reproducir")}"]`;
+    const stop = `.lt-transport-buttons button[aria-label="${L("Detener")}"]`;
     const viewBtn = (n: number) => `${tour("view-mode-switcher")} button:nth-of-type(${n})`;
+    const fileMenu = `${tour("topbar-file-menu")} .lt-top-menu-trigger`;
+    const fileItem = async (rec: Recorder, text: string, tag: string) => {
+      await rec.click(fileMenu, 700);
+      await rec.click(await tagByText(".lt-top-menu-dropdown button", L(text), tag), 1200);
+    };
+    const zone = (name: string) => `[data-setlist-zone="${name}"]`;
 
     await fitSong();
-    await invoke("seek_transport", { positionSeconds: song.startSeconds + 60 });
+    await invoke("seek_transport", { positionSeconds: song.startSeconds + 20 });
     await browser.pause(800);
 
     // 01 — title over the timeline.
@@ -400,381 +362,292 @@ describe("release video (desktop scenes)", function () {
       await done();
     }
 
-    // 02 — Live View, the Lyrics button, and the lyrics following the song.
+    // 02 — the Setlist View: the button, then its three zones.
     {
-      const { rec, done } = scene("02-letra");
-      await invoke("seek_transport", { positionSeconds: song.startSeconds + 28 });
-      await rec.click(viewBtn(3), 1800);
-      // Start with the lyrics hidden so the button really opens them.
-      if (await rectOf(".lt-live-chart")) {
-        await (await $(".lt-live-chart-toggle")).click();
-        await browser.pause(600);
+      const { rec, done } = scene("02-setlist");
+      await rec.moveTo(viewBtn(2), 700);
+      await rec.hold(1.5);
+      await rec.click(viewBtn(2), 2000);
+      for (const name of ["songs", "overview", "mixer"]) {
+        if (!(await rectOf(zone(name)))) continue;
+        await rec.zoomTo(zone(name), { margin: 20, maxZoom: 1.5 });
+        await rec.hold(2.6);
+        await rec.zoomOut(500);
       }
+      await done();
+    }
+
+    // 03 — pick the song, play, move the cursor with the arrows and jump.
+    {
+      const { rec, done } = scene("03-setlist-tocar");
+      const tile = `.lt-setlist-song-tile[data-region-id="${song.id}"]`;
+      if (await rectOf(tile)) await rec.click(tile, 1200);
+      await rec.click(play, 400);
+      await rec.realtimeWithAudio(2500, loopback);
+      await rec.key("ArrowRight", 300);
+      await rec.key("ArrowRight", 300);
       await rec.hold(0.8);
-      await rec.click(".lt-live-chart-toggle", 1200);
-      await rec.click(play, 150);
-      await rec.realtimeWithAudio(9000, loopback);
-      // Play again does not stop it, and a moving timeline throws off every
-      // click after this scene.
-      await rec.click(`.lt-transport-buttons button[aria-label="${L("Detener")}"]`, 400);
+      await rec.key("Enter", 300);
+      await rec.realtimeWithAudio(6500, loopback);
+      await rec.click(stop, 600);
       await done();
     }
 
-    // 03 — a song without lyrics: import or paste; then the editor.
+    // 04 — Edit: the drawer and its modes, then Done.
     {
-      const { rec, done } = scene("03-letra-anadir");
-      await invoke("seek_transport", { positionSeconds: bare.startSeconds + 20 });
-      await browser.pause(1500);
-      if (await rectOf(".lt-live-chart-empty-actions")) {
-        await rec.zoomTo(".lt-live-chart", { margin: 30, maxZoom: 1.4 });
-        await rec.moveTo(".lt-live-chart-empty-actions .lt-live-chart-action.is-primary", 700);
-        await rec.hold(2.2);
-        await rec.moveTo(".lt-live-chart-empty-actions .lt-live-chart-action:not(.is-primary)", 600);
-        await rec.hold(1.5);
-        await rec.zoomOut(500);
-      }
-      await invoke("seek_transport", { positionSeconds: song.startSeconds + 28 });
-      await browser.pause(1500);
-      await rec.click(`.lt-live-chart button[aria-label="${L("Editar letra y sincronía")}"]`, 1200);
-      await rec.zoomTo(".lt-chart-editor", { margin: 30, maxZoom: 1.3 });
-      await rec.hold(3);
-      await rec.zoomOut(500);
-      await rec.click(await tagByText(".lt-chart-editor button", L("Cancelar"), "rv-cancel", true), 600);
-      await rec.click(viewBtn(1), 1200);
-      await done();
-    }
-
-    // 04 — the song with no markers at all (taken off in the work copy, so
-    // the analysis visibly fills the ruler), then right-click → Analizar
-    // canción, the setup.
-    const modal = ".lt-song-analysis-modal";
-    {
-      const view = await AppPage.songView();
-      const inSong = (view?.sectionMarkers ?? []).filter(
-        (m) => m.startSeconds >= song.startSeconds - 0.01 && m.startSeconds < song.endSeconds,
-      );
-      for (const marker of inSong) await AppPage.deleteSectionMarker(marker.id);
-      await browser.pause(1200);
-      console.log(`[release-video] 04-analizar: ${inSong.length} markers taken off the song`);
-    }
-    {
-      const { rec, done } = scene("04-analizar");
-      await fitSong();
-      await invoke("seek_transport", { positionSeconds: song.startSeconds + 60 });
-      const band = await songBand();
-      // The empty ruler first: this is what the analysis starts from.
-      await rec.zoomTo({ x: band.x, y: band.y - 20, w: Math.min(band.w, 1400), h: 240 }, { margin: 20, maxZoom: 1.8 });
-      await rec.hold(Math.max(3, (durations["04-analizar"] ?? 20) - 9));
-      await rec.zoomOut(600);
-      await rec.rightClick({ x: band.x + Math.min(band.w, 1400) * 0.25, y: band.y + band.h / 2 });
-      await rec.hold(1);
-      await rec.click(await tagByText(".lt-context-menu button", L("Analizar canción"), "rv-analyze"), 1200);
-      await rec.zoomTo(modal, { margin: 30, maxZoom: 1.4 });
-      await rec.hold(1.5);
-      await rec.moveTo(`${modal} .lt-settings-field select`, 600);
-      await rec.hold(1.2);
-      await rec.moveTo(`${modal} .lt-render-section`, 600);
-      await rec.hold(1.2);
-      await done();
-    }
-
-    // 04b — the speech recognition download: what it is for, and the download
-    // itself (the wait is cut).
-    {
-      const { rec, done } = scene("04b-voz");
-      const callout = `${modal} .lt-song-analysis-callout`;
-      if (await rectOf(callout)) {
-        await rec.moveTo(callout, 700);
-        await rec.hold(Math.max(2, (durations["04b-voz"] ?? 8) - 5));
-        await rec.click(`${callout} .lt-song-analysis-button`, 300);
-        await rec.hold(1.5);
-        for (let i = 0; i < 300 && (await rectOf(callout)); i++) await browser.pause(1000);
-        await rec.hold(2.5);
-      } else {
-        console.log("[release-video] 04b-voz: no download notice (is the model still on disk?)");
-      }
-      await done();
-    }
-
-    // 05 — Analyze; the wait is cut (no frames), then the review and Apply.
-    {
-      const { rec, done } = scene("05-revisar");
-      await rec.click(`${modal} .lt-export-modal-actions .is-primary`, 300);
-      await rec.hold(1.5);
-      for (let i = 0; i < 400 && !(await rectOf(`${modal} .lt-song-analysis-part`)); i++) await browser.pause(1000);
-      await rec.hold(2.5);
-      await runInPage(() => {
-        const body = document.querySelector(".lt-song-analysis-modal .lt-settings-modal-body");
-        body?.querySelector(".lt-song-analysis-guide")?.scrollIntoView({ block: "start", behavior: "smooth" });
-      });
-      for (let i = 0; i < 15; i++) await rec.frame(1 / 15);
-      await rec.hold(2.5);
-      await rec.click(`${modal} .lt-export-modal-actions .is-primary`, 1200);
-      await rec.hold(1);
-      if (await rectOf(modal)) await rec.click(`${modal} .lt-export-modal-actions .is-primary`, 800);
-      await rec.zoomOut(500);
-      await done();
-    }
-
-    // 05b — the result: the same ruler, now with every section, the tempo and
-    // the key in place.
-    {
-      const { rec, done } = scene("05b-resultado");
-      await fitSong();
-      const band = await songBand();
-      await rec.zoomTo({ x: band.x, y: band.y - 20, w: Math.min(band.w, 1400), h: 240 }, { margin: 20, maxZoom: 1.8 });
-      const marks = await onRuler(".lt-marker-hotspot", 180);
-      await rec.hold(1.5);
-      for (const mark of marks.slice(0, 6)) {
-        await rec.moveTo(mark, 500);
-        await rec.hold(0.5);
-      }
-      await rec.hold(1.5);
-      await rec.zoomOut(600);
-      await done();
-    }
-
-    // 06 — key change: the notch on the band, and the menu entry.
-    {
-      const { rec, done } = scene("06-nota");
-      await fitSong();
-      const band = await songBand();
-      await rec.zoomTo({ x: band.x, y: band.y - 20, w: Math.min(band.w, 1400), h: 220 }, { margin: 20, maxZoom: 1.8 });
-      await rec.rightClick({ x: band.x + Math.min(band.w, 1400) * 0.25, y: band.y + band.h / 2 });
-      await rec.hold(0.6);
-      await rec.moveTo(await tagByText(".lt-context-menu button", L("Cambio de nota en el cursor"), "rv-key"), 600);
-      await rec.hold(2.5);
-      await browser.keys(["Escape"]);
-      await browser.pause(300);
-      if (await rectOf(".lt-key-change-hotspot")) {
-        await rec.moveTo(".lt-key-change-hotspot", 800);
-        await rec.hold(3);
-      }
-      await rec.zoomOut(500);
-      await done();
-    }
-
-    // 07 — ramp on a tempo marker; song tempo in «Warp y tempo».
-    {
-      const { rec, done } = scene("07-tempo");
-      const [tempo] = await onRuler(".lt-tempo-hotspot:not(.lt-time-signature-hotspot)", 0);
-      if (tempo) {
-        await rec.zoomTo({ x: Math.max(0, tempo.x - 80), y: tempo.y - 200, w: 900, h: 360 }, { margin: 20, maxZoom: 1.8 });
-        await rec.rightClick(tempo);
-        await rec.hold(0.6);
-        await rec.moveTo(await tagByText(".lt-context-menu button", L("Rampa"), "rv-ramp"), 600);
-        await rec.hold(2.5);
-        await browser.keys(["Escape"]);
-        await browser.pause(300);
-        await rec.zoomOut(500);
-      }
-      const band = await songBand();
-      await rec.clickAt({ x: band.x + 200, y: band.y + band.h / 2 }, 600);
-      await rec.click(`${tour("toolbar-warp")} .lt-control-popover-trigger`, 900);
-      await rec.zoomTo(".lt-control-popover-panel", { margin: 40, maxZoom: 1.6 });
-      await rec.hold(1.2);
-      const plus = await tagByText(".lt-control-popover-panel button", "+", "rv-plus", true);
-      await rec.click(plus, 700);
-      await rec.click(plus, 900);
-      await rec.hold(1.5);
-      await rec.click(await tagByText(".lt-control-popover-panel button", L("Original"), "rv-orig", true), 900);
-      await rec.zoomOut(500);
-      await rec.click(`${tour("toolbar-warp")} .lt-control-popover-trigger`, 600);
-      await done();
-    }
-
-    // 08 — count style in the voice guide window.
-    {
-      const { rec, done } = scene("08-conteo");
-      const toggle = `${tour("topbar-voice-guide")} > button:nth-of-type(1)`;
-      if (!((await (await $(toggle)).getAttribute("class")) ?? "").includes("is-active")) {
-        await (await $(toggle)).click();
-        await browser.pause(800);
-      }
-      await rec.click(`${tour("topbar-voice-guide")} > button:nth-of-type(2)`, 900);
-      await rec.zoomTo(".lt-pads-popover", { margin: 40, maxZoom: 1.6 });
-      const style = `.lt-pads-popover select[aria-label="${L("Estilo de conteo")}"]`;
-      if (await rectOf(style)) {
-        await rec.moveTo(style, 700);
-        await rec.hold(1);
-        // A native <select> draws its open list outside the page, where no
-        // frame can see it. Show the same element as an in-page list (`size`)
-        // while it is on camera, pick each style in turn, then put the user's
-        // value back (it is a real setting) and the dropdown back to normal.
-        const select = await $(style);
-        const original = await select.getValue();
-        const count = (await runInPage(
-          (sel: string) => {
-            const el = document.querySelector(sel) as HTMLSelectElement | null;
-            if (!el) return 0;
-            el.size = el.options.length;
-            el.style.height = "auto";
-            el.style.overflow = "hidden";
-            return el.options.length;
-          },
-          style,
-        )) as number;
-        await browser.pause(300);
-        await rec.hold(1.5);
-        for (let i = 0; i < count; i++) {
-          const option = await runInPage(
-            (sel: string, index: number) => {
-              const el = document.querySelector(sel) as HTMLSelectElement | null;
-              const r = el?.options[index]?.getBoundingClientRect();
-              return r ? { x: r.left + Math.min(60, r.width / 2), y: r.top + r.height / 2 } : null;
-            },
-            style,
-            i,
-          );
-          if (option) await rec.moveTo(option as { x: number; y: number }, 500);
-          await select.selectByIndex(i);
-          await browser.pause(300);
-          await rec.hold(1.6);
-        }
-        await select.selectByAttribute("value", original);
-        await runInPage((sel: string) => {
-          const el = document.querySelector(sel) as HTMLSelectElement | null;
-          if (!el) return;
-          el.size = 0;
-          el.style.height = "";
-          el.style.overflow = "";
-        }, style);
-        await browser.pause(400);
-      }
-      await rec.zoomOut(500);
-      await browser.keys(["Escape"]);
-      await rec.hold(0.6);
-      const band = await songBand();
-      await rec.rightClick({ x: band.x + 300, y: band.y + band.h / 2 });
-      await rec.hold(0.6);
-      const countItem = await tagByText(".lt-context-menu button", L("Conteo de la voz guía"), "rv-count");
-      await rec.moveTo(countItem, 600);
-      // The per-song submenu, with its options: a plain DOM click (a WebDriver
-      // click on an item that opens a submenu can land on its first entry).
-      await runInPage((sel: string) => (document.querySelector(sel) as HTMLElement | null)?.click(), countItem);
-      await browser.pause(500);
-      await rec.hold(1.2);
-      // Run the cursor down the per-song options so each one is read.
-      const entries = (await runInPage(() =>
-        Array.from(document.querySelectorAll(".lt-context-menu button"))
-          .map((b) => b.getBoundingClientRect())
-          .filter((r) => r.width > 0 && r.height > 0)
-          .map((r) => ({ x: r.left + Math.min(80, r.width / 2), y: r.top + r.height / 2 })),
+      const { rec, done } = scene("04-setlist-editar");
+      await rec.click(".lt-setlist-edit-button", 1500);
+      const tabs = (await runInPage(() =>
+        Array.from(document.querySelectorAll(".lt-setlist-drawer-tab"))
+          .map((e) => e.getBoundingClientRect())
+          .filter((r) => r.width > 0)
+          .map((r) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 })),
       )) as Array<{ x: number; y: number }>;
-      for (const entry of entries) {
-        await rec.moveTo(entry, 450);
-        await rec.hold(1.1);
+      for (const point of tabs.slice(0, 5)) {
+        await rec.clickAt(point, 900);
+        await rec.hold(0.9);
+      }
+      if (tabs[0]) await rec.clickAt(tabs[0], 800);
+      await rec.hold(1);
+      await rec.click(".lt-setlist-edit-button", 1200);
+      await done();
+    }
+
+    // 05 — mix scenes: File › Mix scenes…, the quick «band down» scene.
+    {
+      const { rec, done } = scene("05-escenas");
+      await rec.click(viewBtn(1), 1500);
+      await fileItem(rec, "Escenas de mezcla", "rv-scenes");
+      await rec.zoomTo(".lt-scene-modal", { margin: 30, maxZoom: 1.3 });
+      await rec.hold(1.5);
+      if (!(await rectOf(".lt-scene-list-select"))) {
+        await rec.click(".lt-scene-add.is-template", 1500);
+      } else {
+        await rec.moveTo(".lt-scene-add.is-template", 700);
       }
       await rec.hold(1.5);
-      await browser.keys(["Escape"]);
-      await browser.pause(300);
-      if (await rectOf(".lt-context-menu")) await browser.keys(["Escape"]);
-      await rec.hold(0.4);
-      await done();
-    }
-
-    // 09 — three ruler markers with Ctrl+click.
-    {
-      const { rec, done } = scene("09-marcas");
-      const marks = await onRuler(".lt-marker-hotspot", 150);
-      if (marks.length < 4) throw new Error("09-marcas: not enough markers on screen");
-      await rec.zoomTo({ x: marks[1].x - 120, y: marks[1].y - 150, w: 1100, h: 300 }, { margin: 20, maxZoom: 1.8 });
-      await rec.clickAt(marks[1], 500);
-      // Ctrl and the click in ONE action: Recorder.clickAt's perform() releases
-      // every key when it ends, so a Ctrl held across two clicks only reached
-      // the first one.
-      for (const mark of [marks[2], marks[3]]) {
-        await rec.moveTo(mark, 600);
-        await browser.performActions([
-          {
-            type: "key",
-            id: "rv-kb",
-            actions: [
-              { type: "keyDown", value: "\uE009" },
-              { type: "pause", duration: 0 },
-              { type: "pause", duration: 0 },
-              { type: "pause", duration: 0 },
-              { type: "keyUp", value: "\uE009" },
-            ],
-          },
-          {
-            type: "pointer",
-            id: "rv-mouse",
-            parameters: { pointerType: "mouse" },
-            actions: [
-              { type: "pause", duration: 0 },
-              { type: "pointerMove", duration: 0, x: Math.round(mark.x), y: Math.round(mark.y), origin: "viewport" },
-              { type: "pointerDown", button: 0 },
-              { type: "pointerUp", button: 0 },
-              { type: "pause", duration: 0 },
-            ],
-          },
-        ]);
-        await browser.releaseActions();
-        await rec.hold(0.6);
-      }
-      const selected = await runInPage(() => document.querySelectorAll(".lt-marker-hotspot.is-selected").length);
-      console.log(`[release-video] 09-marcas: ${selected} markers selected`);
-      await rec.hold(3);
-      await browser.keys(["Escape"]);
+      await rec.moveTo(".lt-scene-rules", 700);
+      await rec.hold(1.8);
+      await rec.moveTo(".lt-scene-preview", 700);
+      await rec.hold(2);
       await rec.zoomOut(500);
+      await rec.click(".lt-scene-modal button.is-primary", 900);
       await done();
     }
 
-    // 11 — the fixes, shown on a card (narrated only as a whole).
+    // 06 — the scene button in Live, engaged and released while playing.
     {
-      const { rec, done } = scene("11-correcciones");
-      await runInPage(() => document.getElementById("lt-tutorial-title")?.remove());
+      const { rec, done } = scene("06-escenas-directo");
+      await invoke("seek_transport", { positionSeconds: song.startSeconds + 40 });
+      await rec.click(viewBtn(4), 1800);
+      await rec.click(play, 300);
+      await rec.realtimeWithAudio(2500, loopback);
+      const sceneButton = ".lt-live-scenes .lt-scene-button";
+      if (await rectOf(sceneButton)) {
+        await rec.click(sceneButton, 200);
+        await rec.realtimeWithAudio(4000, loopback);
+        await rec.click(sceneButton, 200);
+        await rec.realtimeWithAudio(3500, loopback);
+      } else {
+        console.log("[release-video] 06: no scene button in Live");
+      }
+      await rec.click(stop, 600);
+      await rec.click(viewBtn(1), 1500);
+      await done();
+    }
+
+    // 07 — MIDI Map mode: Ctrl+M, the tint, a fader picked.
+    {
+      const { rec, done } = scene("07-midi");
+      await AppPage.resetShell();
+      await rec.hold(1);
+      await browser.keys(["Control", "m"]);
+      await browser.pause(900);
+      await rec.hold(2.5);
+      const layer = ".lt-track-header .lt-midi-mappable-layer.is-interactive";
+      if (await rectOf(layer)) {
+        await rec.zoomTo({ x: 0, y: 0, w: viewportW * 0.55, h: viewportH * 0.6 }, { margin: 0, maxZoom: 1.6 });
+        await rec.click(layer, 1200);
+        await rec.hold(2.5);
+        await rec.zoomOut(500);
+      }
+      await rec.key("Escape", 400);
+      if (await rectOf(".lt-midi-map-banner")) await rec.key("Escape", 400);
+      await done();
+    }
+
+    // 08 — Settings › MIDI Learn: the controller profiles and the 1-8 strips.
+    {
+      const { rec, done } = scene("08-midi-perfiles");
+      await AppPage.openSettings();
+      await browser.pause(800);
+      await rec.click("#lt-settings-tab-midiLearn", 1200);
+      await rec.zoomTo(".lt-midi-profiles", { margin: 40, maxZoom: 1.6 });
+      await rec.hold(3);
+      await rec.zoomOut(500);
+      await rec.click(await tagByText(".lt-midi-learn-view-tabs button", L("Mezclador"), "rv-mixer-view"), 1000);
+      await rec.hold(3);
+      await rec.key("Escape", 600);
+      await AppPage.resetShell();
+      await done();
+    }
+
+    // 09 — network sessions: the side bar's Network window, host and join.
+    {
+      const { rec, done } = scene("09-red");
+      const blur = () =>
+        runInPage(() => {
+          document
+            .querySelectorAll<HTMLElement>(".lt-network-modal input, .lt-network-modal .lt-network-row-name")
+            .forEach((el) => {
+              el.style.filter = "blur(6px)";
+            });
+        });
+      await rec.moveTo(".lt-network-nav", 700);
+      await rec.hold(0.8);
+      await rec.click(".lt-network-nav", 200);
+      await blur();
+      await browser.pause(600);
+      await blur();
+      await rec.zoomTo(".lt-network-modal", { margin: 30, maxZoom: 1.3 });
+      await rec.moveTo(".lt-network-form", 700);
+      await rec.hold(3);
+      await rec.moveTo(".lt-network-button.is-primary", 700);
+      await rec.hold(2);
+      await rec.click(".lt-network-tab:nth-of-type(2)", 200);
+      await blur();
+      await browser.pause(800);
+      await blur();
+      await rec.hold(3.5);
+      await rec.zoomOut(500);
+      await rec.click(".lt-network-modal .lt-settings-modal-close", 800);
+      await done();
+    }
+
+    // 10 — song templates: the arrow next to «+ New song» in Compact.
+    {
+      const { rec, done } = scene("10-plantillas");
+      await rec.click(viewBtn(3), 1800);
+      const arrow = ".lt-new-song-template-toggle";
+      if (await rectOf(arrow)) {
+        await runInPage((sel: string) => document.querySelector(sel)?.scrollIntoView({ inline: "center", block: "nearest" }), arrow);
+        await browser.pause(800);
+        await rec.click(arrow, 900);
+        await rec.hold(1.5);
+        await rec.click(await tagByText(".lt-new-song-template-menu button", L("Banda (incluida)"), "rv-band"), 2500);
+        // The new song is the last column, off to the right: bring it in.
+        await runInPage(() => {
+          document.querySelectorAll<HTMLElement>(".lt-compact-view *").forEach((el) => {
+            if (el.scrollWidth > el.clientWidth + 40 && getComputedStyle(el).overflowX !== "visible") {
+              el.scrollTo({ left: el.scrollWidth, behavior: "smooth" });
+            }
+          });
+        });
+        for (let i = 0; i < 20; i++) await rec.frame(1 / 20);
+        await rec.hold(4);
+      } else {
+        console.log("[release-video] 10: no template arrow");
+      }
+      await rec.click(viewBtn(1), 1500);
+      await done();
+    }
+
+    // 11 — the cloud: File › Cloud…, the three providers.
+    {
+      const { rec, done } = scene("11-nube");
+      await rec.click(fileMenu, 700);
+      await rec.click(await tagByText(".lt-top-menu-dropdown button", L("Nube"), "rv-cloud"), 200);
+      const blurCloud = () =>
+        runInPage(() =>
+          document
+            .querySelectorAll<HTMLElement>(
+              ".lt-cloud-modal .lt-cloud-quota > *:not(.lt-cloud-quota-bar):not(.lt-cloud-quota-hint), .lt-cloud-modal .lt-cloud-file-name, .lt-cloud-modal .lt-cloud-file-meta, .lt-cloud-modal .lt-cloud-file-size",
+            )
+            .forEach((el) => {
+              el.style.filter = "blur(6px)";
+            }),
+        );
+      for (let i = 0; i < 12; i++) {
+        await blurCloud();
+        await browser.pause(250);
+      }
+      if (await rectOf(".lt-cloud-accounts")) {
+        await rec.zoomTo(".lt-cloud-accounts", { margin: 40, maxZoom: 1.6 });
+        await blurCloud();
+        await rec.hold(4);
+        await rec.zoomOut(500);
+      }
+      await blurCloud();
+      await rec.click(".lt-cloud-modal .lt-settings-modal-close", 800);
+      await done();
+    }
+
+    // 12 — automatic warp: +2 semitones and warp turns on by itself.
+    {
+      const { rec, done } = scene("12-warp");
+      await fitSong();
+      const band = await songBand();
+      await rec.clickAt({ x: band.x + 200, y: band.y + band.h / 2 }, 700);
+      await rec.click(`${tour("toolbar-transpose")} .lt-control-popover-trigger`, 900);
+      await rec.zoomTo(".lt-control-popover-panel", { margin: 40, maxZoom: 1.6 });
+      const up = `button[aria-label="${L("Subir un semitono la region seleccionada")}"]`;
+      await rec.click(up, 700);
+      await rec.click(up, 1200);
+      await rec.hold(1.5);
+      await rec.zoomOut(500);
+      await rec.click(`${tour("toolbar-transpose")} .lt-control-popover-trigger`, 600);
+      await rec.moveTo(tour("toolbar-warp"), 700);
+      await rec.hold(2.5);
+      // Back to the original key, which turns warp off again.
+      await rec.click(`${tour("toolbar-transpose")} .lt-control-popover-trigger`, 700);
+      const down = `button[aria-label="${L("Bajar un semitono la region seleccionada")}"]`;
+      await rec.click(down, 500);
+      await rec.click(down, 800);
+      await rec.click(`${tour("toolbar-transpose")} .lt-control-popover-trigger`, 600);
+      await done();
+    }
+
+    // 14 — the fixes, shown on a card (narrated only as a whole).
+    {
+      const { rec, done } = scene("14-correcciones");
+      await removeTitleCard();
       await listCard(TITLES.fixes, FIXES);
-      await rec.hold(Math.max(6, durations["11-correcciones"] ?? 6));
+      await rec.hold(Math.max(6, durations["14-correcciones"] ?? 6));
       await done();
     }
 
-    // 12 — end card.
+    // 15 — end card.
     {
-      const { rec, done } = scene("12-final");
-      await runInPage(() => document.getElementById("lt-tutorial-title")?.remove());
+      const { rec, done } = scene("15-final");
+      await removeTitleCard();
       await titleCard(TITLES.end[0], TITLES.end[1]);
-      await rec.hold(durations["12-final"]);
+      await rec.hold(durations["15-final"]);
       await done();
       await removeTitleCard();
     }
 
-    // 10 — the phone layout and «Seleccionar por área», recorded LAST (see
-    // the header): a box over the track headers, then one over the clips.
+    // 13 — the Setlist View on a phone, recorded LAST (see the header): the
+    // waveform or the mixer, one at a time, with the pane button.
     {
       await toPhone();
-      const rec = new Recorder(cdp, "10-movil", { x: 0, y: 0, w: PHONE.w, h: PHONE.h }, scenesDir,
+      await browser.execute(() => (window as any).__ltE2E.setViewMode("setlist"));
+      await browser.pause(2500);
+      const rec = new Recorder(cdp, "13-movil", { x: 0, y: 0, w: PHONE.w, h: PHONE.h }, scenesDir,
         { x: PHONE.w * 0.7, y: PHONE.h * 0.6 },
         { width: 1920, height: Math.round((1920 * PHONE.h) / PHONE.w / 2) * 2, dpr: PHONE.dpr, viewport: { w: PHONE.w, h: PHONE.h } });
-      const record = only.length === 0 || only.includes("10-movil");
-      console.log("[release-video] scene 10-movil");
-      await rec.hold(1.5);
-      const areaButton = `.lt-mobile-selection-actions button[aria-label="${L("Seleccionar por área")}"]`;
-      await rec.click(areaButton, 800);
-      await rec.hold(1.2);
-      const headers = (await runInPage(() =>
-        Array.from(document.querySelectorAll(".lt-track-header"))
-          .map((e) => e.getBoundingClientRect())
-          .filter((r) => r.height > 0 && r.top >= 0 && r.bottom <= window.innerHeight)
-          .map((r) => ({ x: r.left, y: r.top, w: r.width, h: r.height })),
-      )) as Array<{ x: number; y: number; w: number; h: number }>;
-      if (headers.length >= 2) {
-        const a = headers[0];
-        const b = headers[Math.min(2, headers.length - 1)];
-        await touchDrag(rec, { x: a.x + 10, y: a.y + 6 }, { x: a.x + a.w - 10, y: b.y + b.h - 6 });
+      const record = only.length === 0 || only.includes("13-movil");
+      console.log("[release-video] scene 13-movil");
+      await rec.hold(2);
+      const pane = ".lt-setlist-pane-toggle";
+      for (let i = 0; i < 2; i++) {
+        if (!(await rectOf(pane))) break;
+        await rec.click(pane, 1200);
         await rec.hold(1.8);
-        // Then the clips on those lanes.
-        const laneX = a.x + a.w + 30;
-        await touchDrag(rec, { x: laneX, y: a.y + 8 }, { x: laneX + 260, y: b.y + b.h - 8 });
-        await rec.hold(2);
-      } else {
-        console.log("[release-video] 10-movil: no track headers on the phone screen");
       }
-      await rec.holdUntil((durations["10-movil"] ?? 10) + 0.7);
+      await rec.holdUntil((durations["13-movil"] ?? 8) + 0.7);
       if (record) {
         await rec.encode();
-        letterbox("10-movil");
+        letterbox("13-movil");
       }
     }
   });
