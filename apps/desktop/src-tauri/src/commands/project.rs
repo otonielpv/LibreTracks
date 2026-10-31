@@ -2637,9 +2637,7 @@ pub async fn export_region_as_package(
             .clone()
             .ok_or_else(|| "No song loaded".to_string())?;
         let song = session
-            .engine
-            .song()
-            .cloned()
+            .song_for_disk()
             .ok_or_else(|| "No song loaded".to_string())?;
         let region_name = song
             .regions
@@ -2719,9 +2717,7 @@ pub async fn export_region_as_package_at(
             .clone()
             .ok_or_else(|| "No song loaded".to_string())?;
         let song = session
-            .engine
-            .song()
-            .cloned()
+            .song_for_disk()
             .ok_or_else(|| "No song loaded".to_string())?;
         (song_dir, song)
     };

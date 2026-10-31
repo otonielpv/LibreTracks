@@ -10,14 +10,14 @@
 use libretracks_audio::{
     ActiveVamp, JumpTrigger, PendingMarkerJump, PlaybackState, TransitionType,
 };
-use libretracks_core::mix_scene::{active_song_track_ids, apply_change, resolve_scene, TrackMix};
+use libretracks_core::mix_scene::{active_song_track_ids, resolve_scene, TrackMix};
 use libretracks_core::{source_seconds_at_view, warp_timeline_seconds_at, Song};
 use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
 
 use crate::audio::engine::{jump_debug_logging_enabled, AudioController};
 use crate::audio::automation::{
     save_automation, AutomationAction, AutomationCue, AutomationJumpTarget,
-    AutomationTransitionMode, MixScene,
+    AutomationTransitionMode, MixScene, SceneMode,
 };
 use crate::infra::error::DesktopError;
 use crate::models::TransportSnapshot;
@@ -687,8 +687,14 @@ impl DesktopSession {
             AutomationAction::ApplyScene {
                 scene_id,
                 ramp_seconds,
+                mode,
             } => {
-                self.apply_mix_scene_runtime(scene_id, ramp_seconds.unwrap_or(0.0), audio)?;
+                self.trigger_mix_scene_runtime(
+                    scene_id,
+                    *mode,
+                    Some(ramp_seconds.unwrap_or(0.0)),
+                    audio,
+                )?;
             }
             AutomationAction::SetPad {
                 enabled,
@@ -883,10 +889,37 @@ impl DesktopSession {
         Ok(())
     }
 
+    /// Engage, toggle or release a scene by hand (screen, MIDI). Live state,
+    /// not an edit: no undo entry and nothing written to disk (D9).
+    pub fn trigger_mix_scene(
+        &mut self,
+        scene_id: &str,
+        mode: SceneMode,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        self.sync_position(audio)?;
+        self.trigger_mix_scene_runtime(scene_id, mode, None, audio)?;
+        Ok(self.snapshot())
+    }
+
+    /// A jump's scene: it latches like a manual one, so a cue or a button
+    /// can release it and a save writes the mix from before it.
     pub(super) fn apply_mix_scene_runtime(
         &mut self,
         scene_id: &str,
         ramp_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        self.trigger_mix_scene_runtime(scene_id, SceneMode::Apply, Some(ramp_seconds), audio)
+    }
+
+    /// `ramp_seconds` `None` uses the scene's own ramp. Ramps only advance
+    /// while playing, so a scene triggered when stopped lands at once.
+    pub(super) fn trigger_mix_scene_runtime(
+        &mut self,
+        scene_id: &str,
+        mode: SceneMode,
+        ramp_seconds: Option<f64>,
         audio: &AudioController,
     ) -> Result<(), DesktopError> {
         let Some(scene) = self
@@ -898,18 +931,61 @@ impl DesktopSession {
         else {
             return Ok(());
         };
-        let Some(song) = self.engine.song() else {
-            return Ok(());
+        let engage = match mode {
+            SceneMode::Apply => true,
+            SceneMode::Restore => false,
+            SceneMode::Toggle => !self.scene_latches.is_engaged(scene_id),
         };
-        let active_song = active_song_track_ids(song, self.engine.position_seconds());
-        let targets: Vec<(String, TrackMix)> = resolve_scene(&scene, song, active_song.as_ref())
-            .into_iter()
-            .filter_map(|resolved| {
-                let current = track_mix_of(song, &resolved.track_id)?;
-                Some((resolved.track_id, apply_change(current, &resolved.change)))
-            })
-            .collect();
-        self.play_mix_targets(targets, ramp_seconds, audio)
+        if !engage && !self.scene_latches.is_engaged(scene_id) {
+            return Ok(());
+        }
+        let playing = self.engine.playback_state() == PlaybackState::Playing;
+        let ramp = if playing {
+            ramp_seconds.unwrap_or(scene.ramp_seconds)
+        } else {
+            0.0
+        };
+        let targets = if engage {
+            let Some(song) = self.engine.song() else {
+                return Ok(());
+            };
+            // Once per trigger, not per track (paso 02, notas).
+            let active_song = active_song_track_ids(song, self.engine.position_seconds());
+            let resolved = resolve_scene(&scene, song, active_song.as_ref());
+            self.scene_latches
+                .engage(scene_id, resolved, |track_id| track_mix_of(song, track_id))
+        } else {
+            self.scene_latches.release(scene_id)
+        };
+        self.play_mix_targets(targets, ramp, audio)
+    }
+
+    /// The engine's song as it must go to disk: tracks a scene holds keep
+    /// the values from before the scene (D9), so saving with "music down"
+    /// engaged does not reopen the session with the music down.
+    pub(crate) fn song_for_disk(&self) -> Option<Song> {
+        let mut song = self.engine.song().cloned()?;
+        if !self.scene_latches.is_empty() {
+            for track in &mut song.tracks {
+                if let Some(mix) = self.scene_latches.values_for_save(&track.id) {
+                    track.volume = mix.volume;
+                    track.pan = mix.pan;
+                    track.muted = mix.muted;
+                    track.solo = mix.solo;
+                }
+            }
+        }
+        Some(song)
+    }
+
+    /// The user changed this track by hand (fader, mute or solo, on screen
+    /// or by MIDI): it leaves every engaged scene and any running ramp, so
+    /// what they set stays (D3). If they release the scene within the MIDI
+    /// commit delay (300 ms) the commit lands after the restore and their
+    /// value wins, which is the right outcome too.
+    pub(super) fn mix_touched_by_user(&mut self, track_id: &str) {
+        self.scene_latches.touched_by_user(track_id);
+        self.active_mix_ramps.retain(|ramp| ramp.track_id != track_id);
     }
 
     /// Move each track to its target mix: mute and solo at once, volume and
@@ -929,9 +1005,20 @@ impl DesktopSession {
             let Some(track) = song.tracks.iter_mut().find(|track| track.id == track_id) else {
                 continue;
             };
-            // Capture the current values BEFORE overwriting, to ramp from.
-            let from_volume = track.volume;
-            let from_pan = track.pan;
+            // Ramp from where the track sounds now: mid-ramp that is the
+            // ramp's value, not the target the model already holds.
+            let (mut from_volume, mut from_pan) = (track.volume, track.pan);
+            if let Some(ramp) = self.active_mix_ramps.iter().find(|r| r.track_id == track_id) {
+                let t = if ramp.duration_seconds > 0.0 {
+                    ((position_seconds - ramp.start_position_seconds) / ramp.duration_seconds)
+                        .clamp(0.0, 1.0)
+                } else {
+                    1.0
+                };
+                let lerp = |(from, to): (f64, f64)| from + (to - from) * t;
+                from_volume = ramp.volume.map(lerp).unwrap_or(from_volume);
+                from_pan = ramp.pan.map(lerp).unwrap_or(from_pan);
+            }
             track.volume = target.volume;
             track.pan = target.pan;
             track.muted = target.muted;

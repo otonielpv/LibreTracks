@@ -16,7 +16,7 @@ pub mod warp;
 
 pub use automation::{
     AutomationAction, AutomationCue, AutomationJumpTarget, AutomationTransition,
-    AutomationTransitionMode,
+    AutomationTransitionMode, SceneMode,
 };
 pub use model::{
     default_audio_to, implicit_start_section_id, Arrangement, ArrangementBlock, OriginalSection,

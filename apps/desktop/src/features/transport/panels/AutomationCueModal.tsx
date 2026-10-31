@@ -13,6 +13,7 @@ import {
   type AppSettings,
   type AutomationActionSummary,
   type AutomationJumpTargetSummary,
+  type MixSceneMode,
   type PadCatalogEntry,
   type SongView,
 } from "../desktopApi";
@@ -722,6 +723,24 @@ function ActionEditor({
                 {scene.name}
               </option>
             ))}
+          </select>
+        </label>
+        <label className="lt-settings-field">
+          <span className="lt-settings-field-label">
+            {t("transport.automation.sceneMode")}
+          </span>
+          <select
+            value={action.mode ?? "apply"}
+            onChange={(event) =>
+              onChange({
+                ...action,
+                mode: event.target.value as MixSceneMode,
+              })
+            }
+          >
+            <option value="apply">{t("transport.automation.sceneModeApply")}</option>
+            <option value="toggle">{t("transport.automation.sceneModeToggle")}</option>
+            <option value="restore">{t("transport.automation.sceneModeRestore")}</option>
           </select>
         </label>
         <label className="lt-settings-field">

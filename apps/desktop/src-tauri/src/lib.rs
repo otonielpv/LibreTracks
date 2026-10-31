@@ -557,6 +557,7 @@ pub fn run() {
             commands::timeline::set_automation_track_position,
             commands::timeline::upsert_mix_scene,
             commands::timeline::delete_mix_scene,
+            commands::timeline::trigger_mix_scene,
             commands::timeline::assign_section_marker_digit,
             commands::timeline::set_section_marker_kind,
             commands::timeline::set_section_marker_color,

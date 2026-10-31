@@ -59,7 +59,7 @@ impl Default for AutomationDocument {
 }
 
 pub use libretracks_core::automation::{
-    AutomationAction, AutomationCue, AutomationJumpTarget, AutomationTransitionMode,
+    AutomationAction, AutomationCue, AutomationJumpTarget, AutomationTransitionMode, SceneMode,
 };
 
 /// Scenes moved to the core with their rules (plan live-scenes, paso 01);

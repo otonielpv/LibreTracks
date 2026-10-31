@@ -21,6 +21,7 @@ import type {
   MarkerCategory,
   MarkerKind,
   MidiClipSummary,
+  MixSceneMode,
   MixSceneSummary,
   OpenWithFile,
   PadCatalogEntry,
@@ -2650,6 +2651,14 @@ export async function upsertMixScene(scene: MixSceneSummary): Promise<TransportS
 
 export async function deleteMixScene(sceneId: string): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("delete_mix_scene", { sceneId });
+}
+
+/** Engage, toggle or release a mix scene by hand (live state, no undo). */
+export async function triggerMixScene(
+  sceneId: string,
+  mode: MixSceneMode,
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("trigger_mix_scene", { sceneId, mode });
 }
 
 export async function createSectionMarker(

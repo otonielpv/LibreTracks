@@ -12,6 +12,7 @@ use std::{
 };
 
 use libretracks_audio::{AudioEngine, JumpTrigger, PlaybackState, TransitionType, VampMode};
+use libretracks_core::mix_scene::SceneLatches;
 use libretracks_core::{
     region_warp_ratio_in_song, source_seconds_at_view, warp_timeline_seconds_at, Song, SongRegion,
     TempoMarker, TrackKind,
@@ -430,6 +431,9 @@ pub struct DesktopSession {
     pub(super) automation_run_counts: HashMap<String, u32>,
     /// In-progress volume/pan ramps from SetTrackMix actions with ramp_seconds.
     pub(super) active_mix_ramps: Vec<ActiveMixRamp>,
+    /// Mix scenes engaged and the mix from before them (plan live-scenes).
+    /// Live state like the vamp: never persisted, dropped with the session.
+    pub(super) scene_latches: SceneLatches,
     /// Output port the timeline's MIDI tracks send to. Held here rather than
     /// threaded through `sync_position`, which has dozens of call sites; the
     /// manager is internally synchronised and cheap to clone as an `Arc`.
@@ -590,6 +594,7 @@ impl Default for DesktopSession {
             active_automation_job: None,
             automation_run_counts: HashMap::new(),
             active_mix_ramps: Vec::new(),
+            scene_latches: SceneLatches::default(),
             midi_output: None,
             midi_cursor_seconds: 0.0,
             active_midi_notes: Vec::new(),
@@ -3382,6 +3387,7 @@ impl DesktopSession {
                 .map(|sample| transport_drift_summary_to_view(source_song.as_ref(), sample)),
             project_revision: self.project_revision,
             mix_revision: self.mix_revision,
+            active_mix_scene_ids: self.scene_latches.engaged_ids(),
             fading_to_stop: self.is_fading_to_stop(),
             song_gap_vamp: self.song_gap_vamp_holding,
             song_dir: self
@@ -4098,6 +4104,7 @@ pub(super) fn validate_automation_cue(
             AutomationAction::ApplyScene {
                 scene_id,
                 ramp_seconds,
+                ..
             } => {
                 if !scene_exists(scene_id) {
                     return Err(DesktopError::AudioCommand(format!(

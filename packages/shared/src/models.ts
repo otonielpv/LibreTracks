@@ -483,7 +483,13 @@ export type AutomationActionSummary =
       pan?: number | null;
       rampSeconds?: number | null;
     }
-  | { type: "applyScene"; sceneId: string; rampSeconds?: number | null }
+  | {
+      type: "applyScene";
+      sceneId: string;
+      rampSeconds?: number | null;
+      /** Engage (default), toggle or release the scene. */
+      mode?: MixSceneMode;
+    }
   | {
       type: "setPad";
       enabled: boolean;
@@ -535,6 +541,8 @@ export type AutomationCueSummary = {
   /** Ordered actions executed in sequence when the playhead reaches atSeconds. */
   actions: AutomationActionSummary[];
 };
+
+export type MixSceneMode = "apply" | "toggle" | "restore";
 
 /** Which tracks a scene rule picks (plan live-scenes, D4/D5). */
 export type MixSceneTrackSelector =
@@ -1109,6 +1117,9 @@ export type TransportSnapshot = {
    * must refetch the mix or it keeps showing the buttons from before the cue.
    * Optional for snapshots from older backends and the browser demo. */
   mixRevision?: number;
+  /** Mix scenes engaged, in the order they were engaged. Optional for older
+   * backends and the browser demo. */
+  activeMixSceneIds?: string[];
   /** A «Fade out y parar» is running. Optional for older backends. */
   fadingToStop?: boolean;
   /** The vamp between songs is holding: paused on a song end with the click

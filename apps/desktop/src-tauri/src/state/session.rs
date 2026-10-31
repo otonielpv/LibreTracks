@@ -254,10 +254,7 @@ impl DesktopSession {
     pub fn save_project(&mut self) -> Result<TransportSnapshot, DesktopError> {
         let song_file_path = self.current_song_file_path()?;
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song = self
-            .engine
-            .song()
-            .cloned()
+        let song = self.song_for_disk()
             .ok_or(DesktopError::NoSongLoaded)?;
 
         let save_started_at = Instant::now();
@@ -420,10 +417,7 @@ impl DesktopSession {
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
 
         let save_started_at = Instant::now();
-        let saved_song = self
-            .engine
-            .song()
-            .cloned()
+        let saved_song = self.song_for_disk()
             .ok_or(DesktopError::NoSongLoaded)?;
         save_song_to_file(&song_file_path, &saved_song)?;
         self.perf_metrics.song_save_millis = save_started_at.elapsed().as_millis();
@@ -432,10 +426,7 @@ impl DesktopSession {
     }
 
     pub fn save_project_as(&mut self) -> Result<Option<TransportSnapshot>, DesktopError> {
-        let song = self
-            .engine
-            .song()
-            .cloned()
+        let song = self.song_for_disk()
             .ok_or(DesktopError::NoSongLoaded)?;
 
         let target_pick = FileDialog::new()
@@ -460,10 +451,7 @@ impl DesktopSession {
         target_pick: PathBuf,
     ) -> Result<TransportSnapshot, DesktopError> {
         let source_song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song = self
-            .engine
-            .song()
-            .cloned()
+        let song = self.song_for_disk()
             .ok_or(DesktopError::NoSongLoaded)?;
 
         // Save As mirrors Create: the user picks <name>.ltsession in any
@@ -523,10 +511,7 @@ impl DesktopSession {
         &self,
     ) -> Result<(PathBuf, Song, Vec<SidecarFile>), DesktopError> {
         let song_dir = self.song_dir.clone().ok_or(DesktopError::NoSongLoaded)?;
-        let song = self
-            .engine
-            .song()
-            .cloned()
+        let song = self.song_for_disk()
             .ok_or(DesktopError::NoSongLoaded)?;
 
         // Flush automation so the bundled sidecar matches the live session.

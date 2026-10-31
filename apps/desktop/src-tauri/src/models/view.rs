@@ -12,7 +12,7 @@ use std::collections::HashSet;
 
 use crate::audio::automation::{
     AutomationAction, AutomationCue, AutomationDocument, AutomationJumpTarget,
-    AutomationTransitionMode, MixScene,
+    AutomationTransitionMode, MixScene, SceneMode,
 };
 use crate::infra::error::DesktopError;
 use crate::state::WaveformMemoryCache;
@@ -40,6 +40,9 @@ pub struct TransportSnapshot {
     /// See `DesktopSession::mix_revision`: bumps when automation changes the
     /// mix, so the UI knows to refetch the tracks' mute/solo/volume/pan.
     pub mix_revision: u64,
+    /// Mix scenes engaged by hand or by a cue, in the order they were engaged
+    /// (plan live-scenes, paso 02).
+    pub active_mix_scene_ids: Vec<String>,
     /// A «Fade out y parar» is running: the UI lights its button.
     pub fading_to_stop: bool,
     /// The vamp between songs is holding: paused on a song end with the click
@@ -249,6 +252,7 @@ pub enum AutomationActionSummary {
         scene_id: String,
         #[serde(rename = "rampSeconds", skip_serializing_if = "Option::is_none")]
         ramp_seconds: Option<f64>,
+        mode: SceneMode,
     },
     SetPad {
         enabled: bool,
@@ -957,9 +961,11 @@ pub(crate) fn automation_action_to_summary(
         AutomationAction::ApplyScene {
             scene_id,
             ramp_seconds,
+            mode,
         } => AutomationActionSummary::ApplyScene {
             scene_id: scene_id.clone(),
             ramp_seconds: *ramp_seconds,
+            mode: *mode,
         },
         AutomationAction::SetPad {
             enabled,

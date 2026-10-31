@@ -10,6 +10,7 @@ import { getEffectiveBpmAt, markerCategory } from "@libretracks/shared/models";
 import type {
   AppSettings,
   AutomationCueSummary,
+  MixSceneMode,
   MixSceneSummary,
   AudioDeviceStatusEvent,
   AudioMeterLevel,
@@ -51,6 +52,8 @@ type DesktopApiMockState = {
   activeVamp: TransportSnapshot["activeVamp"];
   pendingMarkerJump: PendingJumpSummary | null;
   pendingAutomationCue: TransportSnapshot["pendingAutomationCue"];
+  /** Mix scenes engaged by hand, in engage order (the backend's latches). */
+  activeMixSceneIds: string[];
   playbackPositionSeconds: number;
   playbackState: PlaybackState;
   projectRevision: number;
@@ -508,6 +511,7 @@ function buildInitialState(): DesktopApiMockState {
     activeVamp: null,
     pendingMarkerJump: null,
     pendingAutomationCue: null,
+    activeMixSceneIds: [],
     playbackPositionSeconds: 0,
     playbackState: "stopped",
     projectRevision: 1,
@@ -685,6 +689,7 @@ function buildSnapshot(): TransportSnapshot {
     activeVamp: state.activeVamp ? clone(state.activeVamp) : null,
     automationCues: clone(state.song.automationCues ?? []),
     mixScenes: clone(state.song.mixScenes ?? []),
+    activeMixSceneIds: [...state.activeMixSceneIds],
     musicalPosition,
     transportClock: {
       anchorPositionSeconds: state.playbackPositionSeconds,
@@ -2072,16 +2077,29 @@ export const testDesktopApiMock = {
     return clone(buildSnapshot());
   },
   upsertMixScene: async (scene: MixSceneSummary) => {
-    const scenes = (state.song.mixScenes ?? []).filter(
-      (candidate) => candidate.id !== scene.id,
-    );
+    // Edited in place, new at the end: the order is the scene slot order.
+    const scenes = state.song.mixScenes ?? [];
+    const exists = scenes.some((candidate) => candidate.id === scene.id);
     replaceSong({
       ...state.song,
-      mixScenes: [...scenes, clone(scene)],
+      mixScenes: exists
+        ? scenes.map((candidate) => (candidate.id === scene.id ? clone(scene) : candidate))
+        : [...scenes, clone(scene)],
     });
     return clone(buildSnapshot());
   },
+  triggerMixScene: async (sceneId: string, mode: MixSceneMode) => {
+    if (!(state.song.mixScenes ?? []).some((scene) => scene.id === sceneId)) {
+      return clone(buildSnapshot());
+    }
+    const engaged = state.activeMixSceneIds.includes(sceneId);
+    const engage = mode === "apply" || (mode === "toggle" && !engaged);
+    state.activeMixSceneIds = state.activeMixSceneIds.filter((id) => id !== sceneId);
+    if (engage) state.activeMixSceneIds.push(sceneId);
+    return clone(buildSnapshot());
+  },
   deleteMixScene: async (sceneId: string) => {
+    state.activeMixSceneIds = state.activeMixSceneIds.filter((id) => id !== sceneId);
     replaceSong({
       ...state.song,
       mixScenes: (state.song.mixScenes ?? []).filter((s) => s.id !== sceneId),

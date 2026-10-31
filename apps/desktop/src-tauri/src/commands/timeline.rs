@@ -18,7 +18,7 @@
 
 use tauri::State;
 
-use crate::audio::automation::{AutomationCue, MixScene};
+use crate::audio::automation::{AutomationCue, MixScene, SceneMode};
 use crate::infra::error::DesktopError;
 use crate::models::{SongStructureResult, TransportSnapshot};
 use crate::state::{
@@ -965,6 +965,23 @@ pub fn delete_mix_scene(
 
     session
         .delete_mix_scene(&scene_id, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+/// Engage, toggle or release a mix scene by hand (plan live-scenes, paso 02).
+#[tauri::command(async)]
+pub fn trigger_mix_scene(
+    scene_id: String,
+    mode: SceneMode,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .trigger_mix_scene(&scene_id, mode, &state.audio)
         .map_err(|error| error.to_string())
 }
 

@@ -1011,6 +1011,9 @@ impl DesktopSession {
         self.sync_position(audio)?;
         self.push_history_entry();
         self.redo_stack.clear();
+        if volume.is_some() || pan.is_some() || muted.is_some() || solo.is_some() {
+            self.mix_touched_by_user(track_id);
+        }
 
         self.update_loaded_track(track_id, None, volume, pan, muted, solo, audio_to)?;
         // Category A: one targeted command per changed field. No broad sync. No LoadSession.
@@ -1041,6 +1044,9 @@ impl DesktopSession {
         self.sync_position(audio)?;
         self.push_history_entry();
         self.redo_stack.clear();
+        if volume.is_some() || pan.is_some() || muted.is_some() || solo.is_some() {
+            self.mix_touched_by_user(track_id);
+        }
 
         self.update_loaded_track(track_id, name, volume, pan, muted, solo, audio_to)?;
         // A video track's mute/solo decide which picture is shown; the audio

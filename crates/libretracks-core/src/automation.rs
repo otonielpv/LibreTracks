@@ -10,6 +10,23 @@ fn default_true() -> bool {
     true
 }
 
+/// What a cue does with a mix scene. Every mode latches: a scene a cue
+/// applied can be released later by another cue, a button or MIDI.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SceneMode {
+    #[default]
+    Apply,
+    Toggle,
+    Restore,
+}
+
+impl SceneMode {
+    pub fn is_apply(&self) -> bool {
+        *self == SceneMode::Apply
+    }
+}
+
 /// A cue is a "job": an ordered list of actions executed in sequence when the
 /// playhead reaches `at_seconds`. A jump, if present, must be the last action
 /// (it's scheduled sample-exact in the native engine as the culmination).
@@ -104,6 +121,10 @@ pub enum AutomationAction {
             skip_serializing_if = "Option::is_none"
         )]
         ramp_seconds: Option<f64>,
+        /// Engage, toggle or release the scene (plan live-scenes, paso 02).
+        /// Cues written before it have no mode and apply.
+        #[serde(default, skip_serializing_if = "SceneMode::is_apply")]
+        mode: SceneMode,
     },
     SetPad {
         enabled: bool,

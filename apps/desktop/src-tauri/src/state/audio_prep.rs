@@ -158,6 +158,7 @@ impl DesktopSession {
             .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
         self.pending_automation_jump = None;
         self.active_automation_job = None;
+        self.scene_latches.clear();
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.live_history_anchor = None;
