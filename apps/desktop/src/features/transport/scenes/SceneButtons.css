@@ -104,3 +104,32 @@
 html.lt-mobile .lt-compact-view > .lt-compact-mixer-toolbar {
   flex-basis: auto;
 }
+
+/* Phones: the scenes fold into one button (SceneMenuButton); it borrows the
+   look of the button bar it sits in, and turns the scene colour while one is
+   engaged. */
+.lt-scene-menu-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.lt-scene-menu-button.is-active,
+.lt-scene-menu-button.is-active.is-active {
+  border-color: rgb(255 122 182 / 0.7);
+  background: rgb(255 122 182 / 0.18);
+  color: #ffd3e7;
+}
+
+/* Inside its popover the row becomes a list, one scene per line. */
+.lt-scene-menu .lt-scene-buttons.lt-scene-menu-list {
+  flex-direction: column;
+  align-items: stretch;
+  overflow: visible;
+  min-width: 12rem;
+}
+
+.lt-scene-menu .lt-scene-menu-list .lt-scene-button {
+  max-width: none;
+  width: 100%;
+}

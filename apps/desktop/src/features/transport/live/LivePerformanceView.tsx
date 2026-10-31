@@ -50,6 +50,7 @@ import "./LivePerformanceView.css";
 import { markerCategory } from "../markerKinds";
 import { MidiMappable } from "../midi/MidiMappable";
 import { SceneButtons } from "../scenes/SceneButtons";
+import { SceneMenuButton, usePhoneScreen } from "../scenes/SceneMenuButton";
 
 export type { LiveViewSettings };
 
@@ -185,6 +186,7 @@ function LivePerformanceViewComponent({
   const canControl = allowControl && permissions.canControl;
   const canEditChart = allowEditChart && permissions.canEdit;
   const { t } = useTranslation();
+  const phoneScreen = usePhoneScreen();
   const allGroups = useMemo(
     () => buildLiveMarkerGroups(song.sectionMarkers),
     [song.sectionMarkers],
@@ -562,9 +564,10 @@ function LivePerformanceViewComponent({
             </button>
             </MidiMappable>
             ) : null}
+            {phoneScreen ? <SceneMenuButton className="lt-live-cancel" disabled={!canControl} /> : null}
           </div>
         </div>
-        <SceneButtons className="lt-live-scenes" disabled={!canControl} />
+        {phoneScreen ? null : <SceneButtons className="lt-live-scenes" disabled={!canControl} />}
         <div className="lt-live-cue-grid">
           {groups.map((group, index) => {
             const isActive = group.id === selectedPlayback.activeGroupId;

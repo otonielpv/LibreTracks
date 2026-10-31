@@ -2240,6 +2240,8 @@ const es = {
       previewNone: "En la canción actual no afecta a ninguna pista.",
       previewNoSong: "Sin canción bajo el cursor: las reglas de canción, carpeta y nombre no eligen nada aquí.",
       buttonsLabel: "Escenas de mezcla",
+      menuButton: "Escenas",
+      menuButtonActive: "Escenas: hay una escena puesta",
       buttonEngage: "Poner «{{name}}»",
       buttonRelease: "Quitar «{{name}}» y volver a lo de antes",
       selectOrCreate: "Selecciona o crea una escena para editarla.",

@@ -364,7 +364,7 @@ function SetlistMixerComponent({
       {tab === "tracks" && songTrackIds?.size === 0 && !showAllTracks ? (
         <p className="lt-setlist-mixer-empty">{t("setlistView.mixer.emptySong")}</p>
       ) : null}
-      {tab === "tracks" ? <SceneButtons className="lt-setlist-scenes" /> : null}
+      {tab === "tracks" && !short ? <SceneButtons className="lt-setlist-scenes" /> : null}
       {tab === "tracks" ? (
         <div className="lt-setlist-console">
           <div className="lt-setlist-console-tracks">

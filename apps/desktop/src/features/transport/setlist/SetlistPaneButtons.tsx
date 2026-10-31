@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
+import { SceneMenuButton } from "../scenes/SceneMenuButton";
 import { SetlistEditButton } from "./SetlistEditDrawer";
 import { useSetlistStore } from "./setlistStore";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
@@ -54,6 +55,8 @@ export function SetlistPaneButtons({
         </button>
       ) : null}
       <SetlistEditButton />
+      {/* A phone: the scenes fold into one button here, out of the mixer's height. */}
+      {layout === "short" ? <SceneMenuButton className="lt-setlist-pane-toggle" /> : null}
     </>
   );
 }

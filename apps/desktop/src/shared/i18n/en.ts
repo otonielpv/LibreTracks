@@ -2212,6 +2212,8 @@ const en = {
       previewNone: "In the current song it affects no track.",
       previewNoSong: "No song under the playhead: song, folder and name rules pick nothing here.",
       buttonsLabel: "Mix scenes",
+      menuButton: "Scenes",
+      menuButtonActive: "Scenes: a scene is engaged",
       buttonEngage: "Engage “{{name}}”",
       buttonRelease: "Release “{{name}}” and go back",
       selectOrCreate: "Select or create a scene to edit it.",

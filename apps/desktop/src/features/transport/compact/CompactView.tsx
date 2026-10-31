@@ -39,7 +39,7 @@ import {
 import type { SongReorderHandleProps } from "../songs/SongReorderHandle";
 import type { SongViewBindings } from "../songs/songViewBindings";
 import { isMobileApp } from "../desktopApi";
-import { SceneButtons } from "../scenes/SceneButtons";
+import { SceneBar } from "../scenes/SceneMenuButton";
 import { LIBRARY_ASSET_DRAG_MIME } from "../library/dragDrop";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
 import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
@@ -443,10 +443,10 @@ function CompactViewComponent({
           </button>
           {isMixerVisible ? <MobileTrackSelectionControls /> : null}
           {/* Outside the fold: a scene is one tap away with the mixer hidden. */}
-          <SceneButtons className="lt-compact-scenes" />
+          <SceneBar className="lt-compact-scenes" menuClassName="lt-compact-mixer-toggle" />
         </div>
       ) : (
-        <SceneButtons className="lt-compact-scenes" />
+        <SceneBar className="lt-compact-scenes" menuClassName="lt-compact-mixer-toggle" />
       )}
 
       {/* Bottom zone: global mixer over all tracks. Reusable so the DAW
