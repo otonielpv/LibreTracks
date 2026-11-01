@@ -29,4 +29,20 @@ describe("calculatePopoverAnchor", () => {
     expect(anchor.left).toBe(968);
     expect(anchor.maxHeight).toBe(702);
   });
+
+  it("keeps a tall panel clear of the bottom safe area", () => {
+    // iPhone 13 landscape: 390 px tall, home indicator inset of 21 px.
+    const anchor = calculatePopoverAnchor(
+      { top: 20, bottom: 56, left: 600 },
+      300,
+      900,
+      844,
+      390,
+      21,
+    );
+
+    expect(anchor.placement).toBe("below");
+    expect(anchor.top + anchor.maxHeight).toBeLessThanOrEqual(390 - 21 - 12);
+  });
 });
+

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useDismissOnBack } from "../mobile/backNavigation";
 import {
   calculatePopoverAnchor,
+  measureSafeAreaBottom,
   type PopoverAnchor,
 } from "./popoverPosition";
 
@@ -31,6 +32,9 @@ export function PopoverShell({
 }: Props) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [anchor, setAnchor] = useState<PopoverAnchor | null>(null);
+  // Measured on open and on resize, not per update: the panel's own scroll
+  // repositions it, and a probe there would force a layout every frame.
+  const safeAreaBottomRef = useRef(0);
   // En Android, atras cierra el popover en vez de salir de la aplicacion.
   useDismissOnBack(onClose, open);
 
@@ -50,6 +54,7 @@ export function PopoverShell({
         height,
         window.innerWidth,
         window.innerHeight,
+        safeAreaBottomRef.current,
       ),
     );
   }, [anchorRef]);
@@ -60,6 +65,7 @@ export function PopoverShell({
 
   useEffect(() => {
     if (!open) return;
+    safeAreaBottomRef.current = measureSafeAreaBottom();
     updateAnchor();
     const handlePointer = (event: MouseEvent) => {
       const target = event.target as Node | null;
@@ -88,15 +94,19 @@ export function PopoverShell({
       if (event.key === "Escape") onClose();
     };
     const reposition = () => updateAnchor();
+    const handleResize = () => {
+      safeAreaBottomRef.current = measureSafeAreaBottom();
+      updateAnchor();
+    };
     window.addEventListener("mousedown", handlePointer);
     window.addEventListener("keydown", handleKey);
     window.addEventListener("scroll", reposition, true);
-    window.addEventListener("resize", reposition);
+    window.addEventListener("resize", handleResize);
     return () => {
       window.removeEventListener("mousedown", handlePointer);
       window.removeEventListener("keydown", handleKey);
       window.removeEventListener("scroll", reposition, true);
-      window.removeEventListener("resize", reposition);
+      window.removeEventListener("resize", handleResize);
     };
   }, [open, updateAnchor, anchorRef, onClose]);
 
