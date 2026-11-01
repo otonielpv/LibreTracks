@@ -503,6 +503,33 @@ pub(super) fn refresh_song_duration(song: &mut Song) {
     song.duration_seconds = max_clip_end.max(max_region_end).max(1.0);
 }
 
+/// The warped timeline of `song` restricted to what the musical position
+/// (`musical_position_summary`) reads: tempo, meter and their markers. The
+/// warp itself only reads `bpm`, `tempo_markers` and `regions`
+/// (libretracks-core/src/warp.rs). Clips, tracks and section markers are left
+/// out on purpose: the transport snapshot builds this on every poll, and
+/// copying a whole session there twice per poll was most of its cost.
+pub(super) fn song_timing_for_transport(song: &Song) -> Song {
+    let timing_only = Song {
+        id: song.id.clone(),
+        title: String::new(),
+        artist: None,
+        key: None,
+        bpm: song.bpm,
+        time_signature: song.time_signature.clone(),
+        duration_seconds: song.duration_seconds,
+        tempo_markers: song.tempo_markers.clone(),
+        time_signature_markers: song.time_signature_markers.clone(),
+        regions: song.regions.clone(),
+        tracks: Vec::new(),
+        clips: Vec::new(),
+        midi_clips: Vec::new(),
+        video_clips: Vec::new(),
+        section_markers: Vec::new(),
+    };
+    song_with_warped_timeline_for_transport(&timing_only)
+}
+
 pub(super) fn song_with_warped_timeline_for_transport(song: &Song) -> Song {
     let source_song = song.clone();
     let mut runtime = song.clone();

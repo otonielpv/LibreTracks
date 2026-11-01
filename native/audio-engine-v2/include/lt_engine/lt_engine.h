@@ -98,6 +98,12 @@ LT_API const char* lt_audio_engine_poll_event(LtEngine* engine);
  *  Always returns a valid JSON object even before Initialize(). */
 LT_API const char* lt_audio_engine_get_snapshot(LtEngine* engine);
 
+/** Same JSON as lt_audio_engine_get_snapshot without the per-source state
+ *  (`source_states` is empty and the disk-cache total is 0). Its cost does
+ *  not grow with the session: meant for frequent reads such as the meters.
+ *  The pointer is valid until the next call on this thread. */
+LT_API const char* lt_audio_engine_get_meter_snapshot(LtEngine* engine);
+
 // ---------------------------------------------------------------------------
 // Device enumeration helpers (convenience wrappers)
 // ---------------------------------------------------------------------------

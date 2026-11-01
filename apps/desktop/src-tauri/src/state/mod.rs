@@ -3320,7 +3320,9 @@ impl DesktopSession {
         runtime_transport: Option<(f64, bool)>,
     ) -> TransportSnapshot {
         let started_at = Instant::now();
-        let source_song = self.engine.song().cloned();
+        // Borrowed, not cloned: this runs on every transport poll (4-10 Hz)
+        // under the session lock, and a 10-song session is thousands of clips.
+        let source_song = self.engine.song();
         let raw_position_seconds = runtime_transport
             .map(|(position_seconds, _)| position_seconds)
             .unwrap_or_else(|| self.current_position());
@@ -3329,28 +3331,25 @@ impl DesktopSession {
             transport_clock.anchor_position_seconds = position_seconds;
             transport_clock.running = running;
         }
-        let position_seconds = timeline_seconds_to_view(source_song.as_ref(), raw_position_seconds);
+        let position_seconds = timeline_seconds_to_view(source_song, raw_position_seconds);
         let transport_clock =
-            transport_clock_summary_to_view(source_song.as_ref(), transport_clock);
-        let transport_song = source_song
-            .as_ref()
-            .map(song_with_warped_timeline_for_transport);
+            transport_clock_summary_to_view(source_song, transport_clock);
+        // Only the musical position reads it, and that only needs the timing.
+        let transport_song = source_song.map(song_timing_for_transport);
         let snapshot = TransportSnapshot {
             playback_state: playback_state_label(self.engine.playback_state()).to_string(),
             position_seconds,
-            current_marker: source_song.as_ref().and_then(|song| {
+            current_marker: source_song.and_then(|song| {
                 song.marker_at(raw_position_seconds)
                     .map(|marker| marker_to_warped_summary(song, &marker))
             }),
             pending_marker_jump: self.engine.pending_marker_jump().map(|pending_jump| {
                 source_song
-                    .as_ref()
                     .map(|song| pending_jump_to_warped_summary(song, pending_jump))
                     .unwrap_or_else(|| pending_jump_to_summary(pending_jump))
             }),
             pending_automation_cue: self.pending_automation_jump.as_ref().and_then(|pending| {
                 source_song
-                    .as_ref()
                     .map(|song| PendingAutomationCueSummary {
                         cue_id: pending.cue_id.clone(),
                         cue_name: pending.cue_name.clone(),
@@ -3366,12 +3365,10 @@ impl DesktopSession {
             }),
             active_vamp: self.engine.active_vamp().map(|active_vamp| {
                 source_song
-                    .as_ref()
                     .map(|song| active_vamp_to_warped_summary(song, active_vamp))
                     .unwrap_or_else(|| active_vamp_to_summary(active_vamp))
             }),
             automation_cues: source_song
-                .as_ref()
                 .map(|song| {
                     automation_cues_to_summary(
                         song,
@@ -3399,7 +3396,7 @@ impl DesktopSession {
             last_drift_sample: self
                 .last_drift_sample
                 .clone()
-                .map(|sample| transport_drift_summary_to_view(source_song.as_ref(), sample)),
+                .map(|sample| transport_drift_summary_to_view(source_song, sample)),
             project_revision: self.project_revision,
             mix_revision: self.mix_revision,
             active_mix_scene_ids: self.scene_latches.engaged_ids(),

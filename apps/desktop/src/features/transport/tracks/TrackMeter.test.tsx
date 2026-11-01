@@ -2,7 +2,7 @@ import { act, render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useSongStore } from "../songStore";
-import { useTransportStore } from "../store";
+import { useMeterStore } from "../meterStore";
 import { TrackMeter, channelPeaks } from "./TrackMeter";
 
 function channels(container: HTMLElement) {
@@ -22,7 +22,7 @@ describe("channelPeaks", () => {
 
 describe("TrackMeter", () => {
   beforeEach(() => {
-    useTransportStore.setState({ meters: {} });
+    useMeterStore.setState({ meters: {} });
     useSongStore.setState({ song: null });
   });
 
@@ -39,7 +39,7 @@ describe("TrackMeter", () => {
   });
 
   it("draws one bar per channel", () => {
-    useTransportStore.setState({
+    useMeterStore.setState({
       meters: { drums: { leftPeak: 0.8, rightPeak: 0 } },
     });
     const { container } = render(<TrackMeter trackId="drums" />);
@@ -54,7 +54,7 @@ describe("TrackMeter", () => {
     const { container } = render(<TrackMeter trackId="drums" />);
 
     act(() => {
-      useTransportStore.setState({
+      useMeterStore.setState({
         meters: { drums: { leftPeak: 1.2, rightPeak: 0.1 } },
       });
     });

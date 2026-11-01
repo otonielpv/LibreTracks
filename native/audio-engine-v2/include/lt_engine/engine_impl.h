@@ -50,6 +50,9 @@ public:
     void         service_control_thread_tasks();  // call once before command batches
     std::string  poll_event();           // returns "" when queue empty
     std::string  get_snapshot()  const;
+    /// get_snapshot() without the per-source state (source_states and the
+    /// disk-cache total stay empty). For the meter thread's 30 Hz reads.
+    std::string  get_meter_snapshot()  const;
     std::string  list_devices(bool force_rescan = false)  const;
     std::string  get_source_peaks(const std::string& source_id,
                                   int resolution_frames) const;
@@ -74,6 +77,7 @@ private:
 #ifdef LT_ENGINE_BENCHMARK_HOOKS
     friend class StreamingBenchmarkEngine;
 #endif
+    std::string  build_snapshot(bool include_sources) const;
     // ── State machine ────────────────────────────────────────────────────
     enum class State { Created, Initialized, ShutDown };
     State state_ = State::Created;

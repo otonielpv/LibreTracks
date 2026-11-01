@@ -16,7 +16,7 @@ import {
 } from "@libretracks/shared/meterBallistics";
 
 import { useSongStore } from "../songStore";
-import { useTransportStore, type TrackMeterState } from "../store";
+import { useMeterStore, type TrackMeterState } from "../meterStore";
 import { registerMeter, selectMeter } from "./meterTicker";
 
 const EMPTY_METER: TrackMeterState = {
@@ -256,7 +256,7 @@ function StereoMeterComponent({ source, id, orientation, className }: StereoMete
     });
 
     const currentPeaks = channelPeaks(
-      selectMeter(useTransportStore.getState(), source, id) ?? EMPTY_METER,
+      selectMeter(useMeterStore.getState(), source, id) ?? EMPTY_METER,
       monoRef.current,
     );
     animation.channels.forEach((channel, index) => {

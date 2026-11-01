@@ -234,10 +234,12 @@ import {
   activateFromSources,
   deriveSourcesPreparing,
   nextSourcesPrepareUiState,
-  SOURCES_PREPARE_INITIAL,
   SOURCES_SHOW_DELAY_MS,
-  type SourcesPrepareUiState,
 } from "./sourcesPrepare";
+import { usePreparationStatusStore } from "./preparationStatusStore";
+import { PreparationIndicators } from "./PreparationIndicators";
+import { useMeterStore } from "./meterStore";
+import { countUiActivity } from "./perf/uiActivity";
 import { useProjectActions } from "./hooks/useProjectActions";
 import { useProjectAudioPreparation } from "./hooks/useProjectAudioPreparation";
 import { useE2ETestHooks } from "./hooks/useE2ETestHooks";
@@ -394,6 +396,13 @@ import {
   parseBpmDraft,
   parseTimeSignatureDraft,
 } from "./tempo/tempoFieldInput";
+
+// Zustand actions are stable: read once so handlers need no extra deps.
+const {
+  setPitch: setPitchPrepareUiState,
+  setSources: setSourcesPrepareUiState,
+  setSourcesPreparing,
+} = usePreparationStatusStore.getState();
 
 /** Max linear gain a track fader reaches (+10 dB ≈ 3.162). The fader is a dB
  * scale now, so track volume must clamp to this headroom, not to unity (1.0). */
@@ -652,6 +661,7 @@ export { calculateTapTempoBpm, nextTapTempoTimes } from "./tapTempo";
  */
 export function TransportPanelContent() {
   useRenderCounter("TransportPanelContent");
+  countUiActivity("panelRenders");
   const { t, i18n } = useTranslation();
   // `song` now lives in useSongStore so each zone can subscribe with a
   // selector (see ./songStore). This component still reads the whole value for
@@ -713,26 +723,20 @@ export function TransportPanelContent() {
     return () =>
       window.removeEventListener(UI_ZOOM_STATUS_EVENT, onUiZoomStatus);
   }, [setStatus, t]);
-  const [pitchPrepareUiState, setPitchPrepareUiState] = useState<{
-    active: boolean;
-    message: string;
-    error?: string;
-    startedAt?: number;
-  }>({ active: false, message: "" });
-  // Global "Preparing audio…" indicator. `sourcesPrepareUiState.active` is
-  // debounced (see sourcesPrepare.ts) so cache-warm projects never flash it.
-  // `sourcesPreparing` is the UNdebounced flag that speeds up the snapshot poll.
-  const [sourcesPrepareUiState, setSourcesPrepareUiState] =
-    useState<SourcesPrepareUiState>(SOURCES_PREPARE_INITIAL);
-  const [sourcesPreparing, setSourcesPreparing] = useState(false);
+  // Preparation indicators ("Preparing audio…", transposed audio) live in
+  // preparationStatusStore and are painted by <PreparationIndicators>: every
+  // snapshot poll used to rewrite them here and re-render this whole panel.
+  // The panel only reads the two booleans that pick the poll cadence.
+  // `sources.active` is debounced (see sourcesPrepare.ts) so cache-warm
+  // projects never flash it; `sourcesPreparing` is the UNdebounced flag.
+  const pitchPreparing = usePreparationStatusStore((state) => state.pitch.active);
+  const sourcesPreparing = usePreparationStatusStore(
+    (state) => state.sourcesPreparing || state.project.active,
+  );
   const {
-    uiState: projectAudioPreparationUiState,
     begin: beginProjectAudioPreparation,
     cancel: cancelProjectAudioPreparation,
   } = useProjectAudioPreparation();
-  const audioPreparationUiState = projectAudioPreparationUiState.active
-    ? projectAudioPreparationUiState
-    : sourcesPrepareUiState;
   // Non-modal "Descomprimiendo paquete…" indicator for the non-blocking .ltpkg
   // import (same style as the "Preparing audio…" indicator). The import no
   // longer raises the shell overlay, so without this the user sees nothing
@@ -3766,7 +3770,7 @@ export function TransportPanelContent() {
       return;
     }
 
-    useTransportStore.getState().setMeters({});
+    useMeterStore.getState().setMeters({});
   }, [playbackState, song?.projectRevision]);
 
   // Derive the clips-by-track and tracks-by-id lookup maps from the song.
@@ -3943,8 +3947,8 @@ export function TransportPanelContent() {
   useTransportPolling({
     playbackState,
     applyPlaybackSnapshot,
-    pitchPreparing: pitchPrepareUiState.active,
-    sourcesPreparing: sourcesPreparing || projectAudioPreparationUiState.active,
+    pitchPreparing,
+    sourcesPreparing,
   });
 
   // Android long-press opens context menus while the finger is still down;
@@ -6000,6 +6004,7 @@ export function TransportPanelContent() {
     _phase: "mount" | "update" | "nested-update",
     actualDuration: number,
   ) {
+    countUiActivity("uiCommits");
     pendingRenderMetricRef.current = actualDuration;
     if (renderMetricTimeoutRef.current !== null) {
       return;
@@ -7917,57 +7922,7 @@ export function TransportPanelContent() {
               </div>
             ) : null}
 
-            {audioPreparationUiState.active ? (
-              <div
-                className="lt-source-prep-indicator"
-                aria-live="polite"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(audioPreparationUiState.percent)}
-              >
-                <div className="lt-source-prep-line">
-                  <span className="lt-source-prep-label">
-                    {t("transport.status.preparingAudio")}
-                  </span>
-                  <span className="lt-source-prep-detail">
-                    {t("transport.status.tracksReady", {
-                      ready: audioPreparationUiState.readyCount,
-                      total: audioPreparationUiState.total,
-                    })}{" "}
-                    {Math.round(audioPreparationUiState.percent)}%
-                  </span>
-                </div>
-                <div className="lt-source-prep-bar">
-                  <span
-                    style={{
-                      width: `${Math.max(0, Math.min(100, audioPreparationUiState.percent))}%`,
-                    }}
-                  />
-                </div>
-                {audioPreparationUiState.failedCount > 0 ? (
-                  <span className="lt-source-prep-failed">
-                    {t("transport.status.sourcesFailed", {
-                      count: audioPreparationUiState.failedCount,
-                    })}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
-
-            {pitchPrepareUiState.active || status !== "" ? (
-              <div className="lt-status-overlay" aria-live="polite">
-                <span>
-                  {pitchPrepareUiState.active
-                    ? `${pitchPrepareUiState.message}${
-                        pitchPrepareUiState.error
-                          ? `: ${pitchPrepareUiState.error}`
-                          : ""
-                      }`
-                    : status}
-                </span>
-              </div>
-            ) : null}
+            <PreparationIndicators status={status} />
           </div>
         </div>
       </div>

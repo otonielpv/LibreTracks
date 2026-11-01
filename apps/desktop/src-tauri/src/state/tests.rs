@@ -777,6 +777,32 @@ fn transport_timeline_scales_bpm_inside_varispeed_region() {
 }
 
 #[test]
+fn transport_timing_song_gives_the_same_musical_position_as_the_full_warp() {
+    let mut song = demo_song_with_varispeed_region();
+    song.bpm = 120.0;
+    song.regions[0].transpose_semitones = -2;
+    song.time_signature_markers = vec![TimeSignatureMarker {
+        id: "sig_late".into(),
+        start_seconds: 9.0,
+        signature: "3/4".into(),
+    }];
+    let full = super::song_with_warped_timeline_for_transport(&song);
+    let timing = super::song_timing_for_transport(&song);
+
+    assert!(timing.clips.is_empty() && timing.tracks.is_empty());
+    assert_eq!(timing.tempo_markers, full.tempo_markers);
+    assert_eq!(timing.time_signature_markers, full.time_signature_markers);
+    for tenth in 0..200 {
+        let seconds = f64::from(tenth) * 0.1;
+        assert_eq!(
+            musical_position_summary(&timing, seconds).display,
+            musical_position_summary(&full, seconds).display,
+            "musical position differs at {seconds} s"
+        );
+    }
+}
+
+#[test]
 fn snapshot_after_playing_seek_keeps_visual_clock_running() {
     let mut session = DesktopSession::default();
     session

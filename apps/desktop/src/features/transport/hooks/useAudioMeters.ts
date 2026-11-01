@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { isTauriApp, listenToAudioMeters } from "../desktopApi";
-import { meterDictionaryFromLevels, useTransportStore } from "../store";
+import { meterDictionaryFromLevels, useMeterStore } from "../meterStore";
+import { countUiActivity } from "../perf/uiActivity";
 
 export function useAudioMeters() {
   useEffect(() => {
@@ -20,7 +21,7 @@ export function useAudioMeters() {
         return;
       }
 
-      useTransportStore.getState().setMeters(pendingMeters);
+      useMeterStore.getState().setMeters(pendingMeters);
       pendingMeters = null;
     };
 
@@ -28,6 +29,7 @@ export function useAudioMeters() {
       if (!active) {
         return;
       }
+      countUiActivity("meterEvents");
 
       pendingMeters = meterDictionaryFromLevels(levels);
       if (frameId === null) {

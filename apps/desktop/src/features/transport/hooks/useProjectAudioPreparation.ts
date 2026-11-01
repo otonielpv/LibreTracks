@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { ProjectLoadProgressEvent } from "@libretracks/shared/models";
 import { listenToProjectLoadProgress } from "../desktopApi";
-import {
-  SOURCES_PREPARE_INITIAL,
-  type SourcesPrepareUiState,
-} from "../sourcesPrepare";
+import { SOURCES_PREPARE_INITIAL } from "../sourcesPrepare";
 import { projectAudioPreparationStateFromEvent } from "../projectAudioPreparation";
+import { usePreparationStatusStore } from "../preparationStatusStore";
+
+// Zustand actions are stable.
+const setUiState = usePreparationStatusStore.getState().setProject;
 
 /**
  * Owns the long-lived half of a deferred project open/import.
@@ -16,11 +17,11 @@ import { projectAudioPreparationStateFromEvent } from "../projectAudioPreparatio
  * event resolves. This hook stays subscribed for the lifetime of the transport
  * and only dismisses readiness at the backend's terminal 100% event, which is
  * emitted after source decode, first-play cache preparation and Bungee prearm.
+ *
+ * The state itself lives in preparationStatusStore (`project`), painted by
+ * <PreparationIndicators>, so progress events don't re-render the transport.
  */
 export function useProjectAudioPreparation() {
-  const [uiState, setUiState] = useState<SourcesPrepareUiState>(
-    SOURCES_PREPARE_INITIAL,
-  );
   const armedRef = useRef(false);
   const startedAtRef = useRef(0);
 
@@ -73,5 +74,5 @@ export function useProjectAudioPreparation() {
     };
   }, []);
 
-  return { uiState, begin, cancel };
+  return { begin, cancel };
 }

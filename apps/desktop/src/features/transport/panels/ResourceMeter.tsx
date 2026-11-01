@@ -8,6 +8,7 @@ import {
 
 import { useSystemResources } from "../hooks/useSystemResources";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { readUiActivityRates, type UiActivityRates } from "../perf/uiActivity";
 
 /** Format a byte count as a human-readable size (e.g. "1.4 GB"). */
 function formatBytes(bytes: number): string {
@@ -209,6 +210,7 @@ export function ResourceMeter() {
               />
             ) : null}
           </dl>
+          <UiActivityRows snapshot={snapshot} />
           <p className="lt-resource-meter-hint">{t("resourceMeter.hint")}</p>
         </div>
       ) : null}
@@ -325,12 +327,57 @@ function MobileResourceMeter({
               />
             )}
           </dl>
+          <UiActivityRows snapshot={snapshot} />
           <p className="lt-resource-meter-hint">
             {t("resourceMeter.mobileHint")}
           </p>
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Tasas de actividad de la interfaz (ver perf/uiActivity.ts). Se leen al
+ * llegar cada muestra de recursos, una vez por segundo, sólo con el menú
+ * abierto. En iOS es la única forma de ver lo que gasta el WebView: la «CPU de
+ * la app» no incluye su proceso.
+ */
+function UiActivityRows({ snapshot }: { snapshot: SystemResourceSnapshot }) {
+  const { t } = useTranslation();
+  const [rates, setRates] = useState<UiActivityRates | null>(null);
+  useEffect(() => {
+    setRates(readUiActivityRates());
+  }, [snapshot]);
+
+  if (!rates) return null;
+  const format = (value: number) =>
+    t("resourceMeter.perSecond", { value: value.toFixed(1) });
+
+  return (
+    <>
+      <div className="lt-resource-meter-panel-header">
+        {t("resourceMeter.uiSection")}
+      </div>
+      <dl className="lt-resource-meter-rows">
+        <ResourceRow
+          label={t("resourceMeter.uiPanelRenders")}
+          value={format(rates.panelRenders)}
+        />
+        <ResourceRow
+          label={t("resourceMeter.uiCommits")}
+          value={format(rates.uiCommits)}
+        />
+        <ResourceRow
+          label={t("resourceMeter.uiSnapshots")}
+          value={format(rates.snapshots)}
+        />
+        <ResourceRow
+          label={t("resourceMeter.uiMeterEvents")}
+          value={format(rates.meterEvents)}
+        />
+      </dl>
+    </>
   );
 }
 

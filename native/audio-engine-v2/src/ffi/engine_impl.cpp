@@ -979,6 +979,20 @@ std::string EngineImpl::poll_event() {
 }
 
 std::string EngineImpl::get_snapshot() const {
+    return build_snapshot(/*include_sources=*/true);
+}
+
+// The meter thread reads the engine ~30 times a second while playing. All it
+// needs is the meters, the transport/device state and the cache counters that
+// feed the starvation log below; the per-source part (preparation state and
+// diagnostics of EVERY source, file paths included) is what makes a full
+// snapshot cost more the bigger the session, and it took the same locks as the
+// preparation workers. See docs: project-engine-snapshot-cost.
+std::string EngineImpl::get_meter_snapshot() const {
+    return build_snapshot(/*include_sources=*/false);
+}
+
+std::string EngineImpl::build_snapshot(bool include_sources) const {
     EngineSnapshot snap;
 
     if (clock_) {
@@ -1157,11 +1171,13 @@ std::string EngineImpl::get_snapshot() const {
         snap.mixer_song_gap_vamp_active = mixer_->song_gap_vamp_active();
     }
 
-    if (prep_queue_) {
+    std::vector<SourceDiagnostics> source_diagnostics;
+    if (include_sources && source_manager_)
+        source_diagnostics = source_manager_->diagnostics();
+    if (include_sources && prep_queue_) {
         snap.source_states = prep_queue_->preparation_states();
     }
-    if (source_manager_) {
-        const auto source_diagnostics = source_manager_->diagnostics();
+    if (include_sources && source_manager_) {
         std::unordered_map<Id, SourceDiagnostics> diagnostics_by_id;
         diagnostics_by_id.reserve(source_diagnostics.size());
         for (const auto& d : source_diagnostics)
@@ -1178,7 +1194,11 @@ std::string EngineImpl::get_snapshot() const {
                 info.error_message.clear();
             } else if (d.status == "failed") {
                 info.status = d.status;
-                info.error_message = d.error_message;
+                // Keep the queue's reason when the source manager has none:
+                // overwriting it with "" is how every failed source reached
+                // the error log as "no reason reported by the engine".
+                if (!d.error_message.empty())
+                    info.error_message = d.error_message;
             }
         }
 
@@ -1206,10 +1226,12 @@ std::string EngineImpl::get_snapshot() const {
         snap.source_cache.blocks_cached = cd.blocks_cached;
         snap.source_cache.blocks_hit = cd.blocks_hit;
         snap.source_cache.blocks_miss = cd.blocks_miss;
-        std::size_t disk_bytes = 0;
-        for (const auto& d : source_manager_->diagnostics())
-            disk_bytes += d.disk_cache_bytes;
-        snap.source_cache.disk_bytes_used = disk_bytes;
+        if (include_sources) {
+            std::size_t disk_bytes = 0;
+            for (const auto& d : source_diagnostics)
+                disk_bytes += d.disk_cache_bytes;
+            snap.source_cache.disk_bytes_used = disk_bytes;
+        }
         snap.cpu.source_cache_miss_frames =
             static_cast<uint64_t>(source_manager_->total_cache_miss_frames());
     }

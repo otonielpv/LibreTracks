@@ -44,6 +44,11 @@ import {
   useSetlistStore,
 } from "../features/transport/setlist/setlistStore";
 import { useMidiBankStore } from "../features/transport/midi/midiBankStore";
+import { INITIAL_METER_STATE, useMeterStore } from "../features/transport/meterStore";
+import {
+  INITIAL_PREPARATION_STATUS,
+  usePreparationStatusStore,
+} from "../features/transport/preparationStatusStore";
 import { emitWaveformReadyForTest, resetTestDesktopApiMock, testDesktopApiMock } from "../app/testDesktopApiMock";
 
 export type MockWebviewDragDropEvent =
@@ -326,8 +331,8 @@ beforeEach(async () => {
     value: vi.fn(() => null),
   });
   resetTestDesktopApiMock();
+  useMeterStore.setState(INITIAL_METER_STATE);
   useTransportStore.setState({
-    meters: {},
     playback: null,
     optimisticMix: {},
     pendingAudioImports: [],
@@ -403,6 +408,9 @@ beforeEach(async () => {
   // Vista Setlist: pestañas, cajón de edición y alto del mezclador.
   useSetlistStore.setState(INITIAL_SETLIST_STATE);
   useMidiBankStore.setState({ active: false, offset: 0, trackIds: [] });
+  // Indicadores de preparación: sin esto un «Preparando audio…» quedaría
+  // encendido para la prueba siguiente.
+  usePreparationStatusStore.setState(INITIAL_PREPARATION_STATUS);
   vi.clearAllMocks();
   vi.restoreAllMocks();
   await i18n.changeLanguage("en");

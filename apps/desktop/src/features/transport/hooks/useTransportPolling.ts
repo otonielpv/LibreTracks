@@ -6,6 +6,7 @@ import {
   recordSnapshotIpc,
 } from "../perf/perfMetrics";
 import { rememberSnapshotRoundTrip } from "../snapshotRoundTrip";
+import { countUiActivity } from "../perf/uiActivity";
 
 const PLAYING_POLL_INTERVAL_MS = 250;
 const IDLE_POLL_INTERVAL_MS = 800;
@@ -14,9 +15,12 @@ const IDLE_POLL_INTERVAL_MS = 800;
 // promptly the moment the work completes. Without this the user sees the
 // overlay linger up to ~800ms past the actual completion in idle state.
 const PITCH_PREPARING_POLL_INTERVAL_MS = 100;
-// Same fast cadence while audio sources are being prepared, so the global
-// "Preparing audio…" indicator's percent/track-count updates smoothly.
-const SOURCES_PREPARING_POLL_INTERVAL_MS = 100;
+// While audio sources are being prepared the indicator's numbers only move
+// when Rust re-reads the engine, every TRANSPORT_PITCH_SYNC_INTERVAL (800 ms,
+// src-tauri/src/state/mod.rs). Polling at 100 ms rebuilt the whole snapshot
+// seven times out of eight for nothing, for the minutes a cold session takes
+// to prepare; half the refresh period keeps the bar at most ~1.2 s behind.
+const SOURCES_PREPARING_POLL_INTERVAL_MS = 400;
 const SLOW_POLL_THRESHOLD_MS = 120;
 const SLOW_POLL_BACKOFF_MS = 750;
 
@@ -68,14 +72,12 @@ export function useTransportPolling({
       }, delayMs);
     };
 
-    const basePollInterval =
-      pitchPreparing || sourcesPreparing
-        ? Math.min(
-            PITCH_PREPARING_POLL_INTERVAL_MS,
-            SOURCES_PREPARING_POLL_INTERVAL_MS,
-          )
-        : playbackState === "playing"
-          ? PLAYING_POLL_INTERVAL_MS
+    const basePollInterval = pitchPreparing
+      ? PITCH_PREPARING_POLL_INTERVAL_MS
+      : playbackState === "playing"
+        ? PLAYING_POLL_INTERVAL_MS
+        : sourcesPreparing
+          ? SOURCES_PREPARING_POLL_INTERVAL_MS
           : IDLE_POLL_INTERVAL_MS;
 
     const refreshSnapshot = async () => {
@@ -90,6 +92,7 @@ export function useTransportPolling({
         const ipcEndedAt = performance.now();
         const ipcDurationMs = ipcEndedAt - ipcStartedAt;
         recordSnapshotIpc(ipcDurationMs);
+        countUiActivity("snapshots");
         if (!active) {
           return;
         }

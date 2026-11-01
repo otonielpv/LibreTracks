@@ -2696,7 +2696,10 @@ impl AudioController {
             return MeterTick::default();
         };
         let mut tick = MeterTick::default();
-        if let Ok(snapshot) = engine.get_snapshot() {
+        // The light read: this runs every 33 ms while playing, and a full
+        // snapshot carries every source's state (it grows with the session
+        // and takes the preparation workers' locks). Nothing below reads it.
+        if let Ok(snapshot) = engine.get_meter_snapshot() {
             if let Some(previously_fallback) = watchdog {
                 tick.device_status = self.device_watchdog_apply(
                     &mut state,

@@ -10,12 +10,12 @@ import {
   regionMeterDictionaryFromLevels,
   useTransportStore,
 } from "./store";
+import { INITIAL_METER_STATE, useMeterStore } from "./meterStore";
 
 function reset() {
   vi.mocked(recordProductEvent).mockClear();
+  useMeterStore.setState(INITIAL_METER_STATE);
   useTransportStore.setState({
-    meters: {},
-    regionMeters: {},
     playback: null,
     optimisticMix: {},
     optimisticRegionMaster: {},
@@ -99,10 +99,22 @@ describe("useTransportStore", () => {
 
   describe("meters", () => {
     it("replaces the meter and region-meter dictionaries", () => {
-      get().setMeters({ a: { leftPeak: 0.1, rightPeak: 0.2 } });
-      expect(get().meters).toEqual({ a: { leftPeak: 0.1, rightPeak: 0.2 } });
-      get().setRegionMeters({ r1: { leftPeak: 0.7, rightPeak: 0.5 } });
-      expect(get().regionMeters).toEqual({ r1: { leftPeak: 0.7, rightPeak: 0.5 } });
+      const meters = useMeterStore.getState;
+      meters().setMeters({ a: { leftPeak: 0.1, rightPeak: 0.2 } });
+      expect(meters().meters).toEqual({ a: { leftPeak: 0.1, rightPeak: 0.2 } });
+      meters().setRegionMeters({ r1: { leftPeak: 0.7, rightPeak: 0.5 } });
+      expect(meters().regionMeters).toEqual({ r1: { leftPeak: 0.7, rightPeak: 0.5 } });
+    });
+
+    it("leaves the transport store untouched, so its selectors don't rerun at 30 Hz", () => {
+      let transportPublications = 0;
+      const unsubscribe = useTransportStore.subscribe(() => {
+        transportPublications += 1;
+      });
+      useMeterStore.getState().setMeters({ a: { leftPeak: 0.5, rightPeak: 0.5 } });
+      useMeterStore.getState().setRegionMeters({ r1: { leftPeak: 0.5, rightPeak: 0.5 } });
+      unsubscribe();
+      expect(transportPublications).toBe(0);
     });
 
     it("reads stereo region meters and falls back to the mono peak", () => {

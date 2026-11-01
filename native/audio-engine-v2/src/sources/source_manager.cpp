@@ -1366,6 +1366,11 @@ Result<void> SourceManager::decode_and_store_streaming(
     // Write `produced` interleaved frames from `out_chunk` to the cache + eager
     // blocks, capped so the total never exceeds target_out_frames. Returns the
     // number of frames actually written (post-cap).
+    // Why the decode stopped, for the source's error_message. A bare
+    // "Streaming decode failed" reached the user's error log as "no reason
+    // reported by the engine" while sources failed only under load (iPhone,
+    // 2026-11-01), which is exactly when the cause matters.
+    std::string failure_reason;
     auto write_output = [&](Frame produced) -> bool {
         if (produced <= 0) return true;
         const Frame remaining = target_out_frames - out_written;
@@ -1373,7 +1378,15 @@ Result<void> SourceManager::decode_and_store_streaming(
         const Frame n = std::min<Frame>(produced, remaining);
         const sf_count_t w = sf_writef_float(sf, out_chunk.data(),
                                              static_cast<sf_count_t>(n));
-        if (w <= 0) return false;
+        if (w <= 0) {
+            const int err = errno;
+            failure_reason = "could not write the PCM cache at frame "
+                + std::to_string(out_written) + " of "
+                + std::to_string(target_out_frames) + ": "
+                + sf_strerror(sf) + " (errno " + std::to_string(err) + ": "
+                + std::strerror(err) + ")";
+            return false;
+        }
         accumulate_peaks(out_chunk.data(), out_written, n);  // same-pass waveform
         // R5: fill only the first `eager_blocks` into RAM as they're decoded, so
         // the progressively published source is instantly audible from its head
@@ -1426,12 +1439,24 @@ Result<void> SourceManager::decode_and_store_streaming(
         const int want = static_cast<int>(std::min<Frame>(
             kReadChunkFrames, fi.duration_frames - in_done));
         const int got = decoder->read_frames(in_chunk.data(), want);
-        if (got <= 0) break;  // unexpected EOF; flush handles the rest
+        if (got <= 0) {
+            // Unexpected EOF; flush handles the rest. Noted in case nothing
+            // at all came out (out_written == 0 below).
+            failure_reason = "the decoder returned no more audio after "
+                + std::to_string(in_done) + " of "
+                + std::to_string(fi.duration_frames) + " frames";
+            break;
+        }
         in_done += got;
         out_chunk.clear();
         const Frame produced = resampler->process_chunk(
             in_chunk.data(), got, /*end_of_input=*/false, out_chunk);
-        if (produced < 0 || !write_output(produced)) { decode_ok = false; break; }
+        if (produced < 0) {
+            failure_reason = "the resampler failed at input frame " + std::to_string(in_done);
+            decode_ok = false;
+            break;
+        }
+        if (!write_output(produced)) { decode_ok = false; break; }
         if (fi.duration_frames > 0) {
             report_progress(1 + static_cast<int>((in_done * 98) / fi.duration_frames));
         }
@@ -1454,7 +1479,11 @@ Result<void> SourceManager::decode_and_store_streaming(
             out_chunk.clear();
             const Frame produced = resampler->process_chunk(
                 in_chunk.data(), kFlushBlock, /*end_of_input=*/true, out_chunk);
-            if (produced < 0) { decode_ok = false; break; }
+            if (produced < 0) {
+                failure_reason = "the resampler failed while flushing its tail";
+                decode_ok = false;
+                break;
+            }
             if (produced == 0) {
                 if (++empty_runs >= 2) break;  // resampler drained; stop chasing
                 continue;
@@ -1466,6 +1495,8 @@ Result<void> SourceManager::decode_and_store_streaming(
 
     const bool cancelled = is_cancelled && is_cancelled();
     if (!decode_ok || out_written <= 0 || cancelled) {
+        if (failure_reason.empty() && !cancelled)
+            failure_reason = "no audio was produced";
         sf_count_t empty_frames = 0;
         sf_command(sf, SFC_FILE_TRUNCATE, &empty_frames, sizeof(empty_frames));
         sf_close(sf);
@@ -1475,13 +1506,15 @@ Result<void> SourceManager::decode_and_store_streaming(
             EntryMap next = *load_entries();
             if (auto found = next.find(source_id); found != next.end()) {
                 found->second.status = cancelled ? "cancelled" : "failed";
+                found->second.error_message = cancelled ? std::string{} : failure_reason;
                 found->second.source.reset();
                 found->second.cache_file_path.clear();
                 publish_locked(std::move(next));
             }
         }
         remove_file_compat(cache_file);
-        return Result<void>::err("Streaming decode failed: " + file_path);
+        return Result<void>::err("Streaming decode failed: " + file_path
+            + (failure_reason.empty() ? std::string{} : " (" + failure_reason + ")"));
     }
     sf_close(sf);
     decoder->close();

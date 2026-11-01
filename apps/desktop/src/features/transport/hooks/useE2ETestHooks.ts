@@ -74,7 +74,7 @@ import {
   type MarkerKind,
   type TrackKind,
 } from "../desktopApi";
-import { useTransportStore, type MeterDictionary } from "../store";
+import { useMeterStore, type MeterDictionary } from "../meterStore";
 import { useTimelineUIStore, type ViewMode } from "../uiStore";
 
 /**
@@ -428,7 +428,7 @@ export function useE2ETestHooks(
         if (zoomLevel !== undefined) store.setZoomLevel(zoomLevel);
         if (cameraX !== undefined) store.setCameraX(cameraX);
       },
-      getTrackMeters: () => useTransportStore.getState().meters,
+      getTrackMeters: () => useMeterStore.getState().meters,
       getAudioOutputMeter,
       getAudioOutputCapture,
       getSupportedSampleRates: async () => {

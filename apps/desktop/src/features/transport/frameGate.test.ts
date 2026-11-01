@@ -7,6 +7,7 @@ import {
   resetFrameGateForTests,
 } from "./frameGate";
 import { useTransportStore } from "./store";
+import { useMeterStore } from "./meterStore";
 import type { TransportSnapshot } from "./desktopApi";
 
 // Un bucle como los del timeline: pide el siguiente fotograma en cada vuelta.
@@ -86,9 +87,24 @@ describe("frameGate", () => {
     vi.advanceTimersByTime(2_000);
     const parkedAt = loop.frames();
 
-    useTransportStore.setState({ meters: {} });
+    useTransportStore.setState({ optimisticMix: {} });
     vi.advanceTimersByTime(1_000);
     expect(loop.frames()).toBe(parkedAt + 1);
+    loop.stop();
+  });
+
+  it("meter packets don't wake parked loops", () => {
+    // 30 packets a second while playing: they live in their own store so they
+    // don't hand every parked loop a frame each time.
+    const loop = startLoop();
+    vi.advanceTimersByTime(2_000);
+    const parkedAt = loop.frames();
+
+    for (let packet = 0; packet < 30; packet += 1) {
+      useMeterStore.getState().setMeters({ a: { leftPeak: packet / 30, rightPeak: 0 } });
+    }
+    vi.advanceTimersByTime(1_000);
+    expect(loop.frames()).toBe(parkedAt);
     loop.stop();
   });
 

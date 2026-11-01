@@ -2,20 +2,21 @@ import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { recordProductEvent } from "../telemetry/telemetry";
 
-import type {
-  AudioMeterLevel,
-  RegionMeterLevel,
-  TransportSnapshot,
-} from "./desktopApi";
+import type { TransportSnapshot } from "./desktopApi";
 import type {
   PendingAudioImport,
   PendingAudioImportStatus,
 } from "./library/pendingAudioImports";
 
-export type TrackMeterState = {
-  leftPeak: number;
-  rightPeak: number;
-};
+// Meters moved to ./meterStore (they publish 30 times a second). Re-exported
+// so existing imports keep working.
+export {
+  meterDictionaryFromLevels,
+  regionMeterDictionaryFromLevels,
+  type MeterDictionary,
+  type RegionMeterDictionary,
+  type TrackMeterState,
+} from "./meterStore";
 
 export type OptimisticMixState = Partial<{
   muted: boolean;
@@ -24,22 +25,13 @@ export type OptimisticMixState = Partial<{
   volume: number;
 }>;
 
-export type MeterDictionary = Record<string, TrackMeterState>;
-
-/** Same shape as a track meter: the song master meter is stereo too. */
-export type RegionMeterDictionary = Record<string, TrackMeterState>;
-
 export type OptimisticRegionMasterDictionary = Record<string, number>;
 
 type TransportStore = {
-  meters: MeterDictionary;
-  regionMeters: RegionMeterDictionary;
   playback: TransportSnapshot | null;
   optimisticMix: Record<string, OptimisticMixState>;
   optimisticRegionMaster: OptimisticRegionMasterDictionary;
   pendingAudioImports: PendingAudioImport[];
-  setMeters: (meters: MeterDictionary) => void;
-  setRegionMeters: (meters: RegionMeterDictionary) => void;
   setPlaybackState: (playback: TransportSnapshot | null) => void;
   setOptimisticMix: (trackId: string, mix: OptimisticMixState | null) => void;
   setOptimisticRegionMaster: (regionId: string, gain: number | null) => void;
@@ -56,36 +48,6 @@ type TransportStore = {
    * old failure keeps being reported alongside the new one. */
   clearFailedPendingAudioImports: () => void;
 };
-
-export function meterDictionaryFromLevels(
-  levels: AudioMeterLevel[],
-): MeterDictionary {
-  const meters: MeterDictionary = {};
-
-  for (const level of levels) {
-    meters[level.trackId] = {
-      leftPeak: level.leftPeak,
-      rightPeak: level.rightPeak,
-    };
-  }
-
-  return meters;
-}
-
-export function regionMeterDictionaryFromLevels(
-  levels: RegionMeterLevel[],
-): RegionMeterDictionary {
-  const meters: RegionMeterDictionary = {};
-
-  for (const level of levels) {
-    meters[level.regionId] = {
-      leftPeak: level.leftPeak ?? level.peak,
-      rightPeak: level.rightPeak ?? level.peak,
-    };
-  }
-
-  return meters;
-}
 
 function jumpSignature(playback: TransportSnapshot | null) {
   const jump = playback?.pendingMarkerJump;
@@ -175,18 +137,10 @@ function shouldPublishPlaybackSnapshot(
 
 export const useTransportStore = create<TransportStore>()(
   subscribeWithSelector((set) => ({
-    meters: {},
-    regionMeters: {},
     playback: null,
     optimisticMix: {},
     optimisticRegionMaster: {},
     pendingAudioImports: [],
-    setMeters: (meters) => {
-      set({ meters });
-    },
-    setRegionMeters: (regionMeters) => {
-      set({ regionMeters });
-    },
     setOptimisticRegionMaster: (regionId, gain) => {
       set((state) => {
         if (gain === null) {

@@ -2,7 +2,7 @@ import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useSongStore } from "../songStore";
-import { useTransportStore, type TrackMeterState } from "../store";
+import { useMeterStore, type TrackMeterState } from "../meterStore";
 import { meterTickerStats, registerMeter } from "./meterTicker";
 import { TrackMeter } from "./TrackMeter";
 
@@ -52,7 +52,7 @@ const trackIds = (count: number) =>
   Array.from({ length: count }, (_, index) => `track-${index}`);
 
 beforeEach(() => {
-  useTransportStore.setState({ meters: {}, regionMeters: {} });
+  useMeterStore.setState({ meters: {}, regionMeters: {} });
   useSongStore.setState({ song: null });
 });
 
@@ -73,7 +73,7 @@ describe("shared meter ticker", () => {
       </>,
     );
 
-    act(() => useTransportStore.setState({ meters: meterDictionary(ids, 0.8) }));
+    act(() => useMeterStore.setState({ meters: meterDictionary(ids, 0.8) }));
     // Todos reciben objetivo nuevo y quedan en movimiento (subiendo + pico).
     frames.frame();
     expect(frames.frame()).toBe(1);
@@ -87,11 +87,11 @@ describe("shared meter ticker", () => {
     const a = registerMeter({ source: "track", id: "a", onMeter: onA, step: () => false });
     const b = registerMeter({ source: "track", id: "b", onMeter: onB, step: () => false });
     try {
-      useTransportStore.setState({ meters: meterDictionary(["a", "b"], 0.5) });
+      useMeterStore.setState({ meters: meterDictionary(["a", "b"], 0.5) });
       onA.mockClear();
       onB.mockClear();
 
-      useTransportStore.setState({
+      useMeterStore.setState({
         meters: { a: { leftPeak: 0.9, rightPeak: 0.9 }, b: { leftPeak: 0.5, rightPeak: 0.5 } },
       });
 
@@ -103,9 +103,9 @@ describe("shared meter ticker", () => {
     }
   });
 
-  it("subscribes to the transport store once, whatever the number of meters", () => {
+  it("subscribes to the meter store once, whatever the number of meters", () => {
     installManualFrames();
-    const subscribe = vi.spyOn(useTransportStore, "subscribe");
+    const subscribe = vi.spyOn(useMeterStore, "subscribe");
     const ids = trackIds(20);
     const view = render(
       <>
@@ -132,9 +132,9 @@ describe("shared meter ticker", () => {
       </>,
     );
 
-    act(() => useTransportStore.setState({ meters: meterDictionary(ids, 0.8) }));
+    act(() => useMeterStore.setState({ meters: meterDictionary(ids, 0.8) }));
     frames.frame();
-    act(() => useTransportStore.setState({ meters: meterDictionary(ids, 0) }));
+    act(() => useMeterStore.setState({ meters: meterDictionary(ids, 0) }));
     // Caída + retención del pico: unos segundos de frames bastan.
     for (let index = 0; index < 600 && frames.pending() > 0; index += 1) {
       frames.frame(16);

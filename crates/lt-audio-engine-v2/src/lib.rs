@@ -304,6 +304,18 @@ impl Engine {
         serde_json::from_str(&s).map_err(|e| EngineError::Serialization(e.to_string()))
     }
 
+    /// `get_snapshot` without the per-source state: `source_states` comes back
+    /// empty and `source_cache.disk_bytes_used` 0. Its cost does not grow with
+    /// the session, so it is the one to call many times a second (meters).
+    pub fn get_meter_snapshot(&self) -> Result<EngineSnapshot, EngineError> {
+        let ptr = unsafe { lt_audio_engine_get_meter_snapshot(self.handle) };
+        if ptr.is_null() {
+            return Err(EngineError::SnapshotFailed);
+        }
+        let s = unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy() };
+        serde_json::from_str(&s).map_err(|e| EngineError::Serialization(e.to_string()))
+    }
+
     pub fn list_devices(&self) -> Result<Vec<DeviceInfo>, EngineError> {
         self.list_devices_ext(false)
     }

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { isTauriApp, listenToRegionMeters } from "../desktopApi";
-import { regionMeterDictionaryFromLevels, useTransportStore } from "../store";
+import { regionMeterDictionaryFromLevels, useMeterStore } from "../meterStore";
 
 export function useRegionMeters() {
   useEffect(() => {
@@ -20,7 +20,7 @@ export function useRegionMeters() {
         return;
       }
 
-      useTransportStore.getState().setRegionMeters(pending);
+      useMeterStore.getState().setRegionMeters(pending);
       pending = null;
     };
 

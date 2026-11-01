@@ -1,5 +1,5 @@
 import { recordMeterTick } from "../perf/perfMetrics";
-import { useTransportStore, type TrackMeterState } from "../store";
+import { useMeterStore, type TrackMeterState } from "../meterStore";
 
 /**
  * Reloj compartido de los medidores (`TrackMeter`, `SongMasterMeter`).
@@ -33,7 +33,7 @@ export type MeterRegistration = {
   unregister: () => void;
 };
 
-type TransportState = ReturnType<typeof useTransportStore.getState>;
+type MeterState = ReturnType<typeof useMeterStore.getState>;
 
 const clients = new Set<MeterClient>();
 const moving = new Set<MeterClient>();
@@ -41,7 +41,7 @@ let frameId: number | null = null;
 let unsubscribeStore: (() => void) | null = null;
 
 export function selectMeter(
-  state: Pick<TransportState, "meters" | "regionMeters">,
+  state: Pick<MeterState, "meters" | "regionMeters">,
   source: MeterSource,
   id: string,
 ) {
@@ -58,7 +58,7 @@ export function areTrackMetersEqual(
   );
 }
 
-function dispatchMeters(state: TransportState, previous: TransportState) {
+function dispatchMeters(state: MeterState, previous: MeterState) {
   if (state.meters === previous.meters && state.regionMeters === previous.regionMeters) {
     return;
   }
@@ -92,7 +92,7 @@ function scheduleFrame() {
 export function registerMeter(client: MeterClient): MeterRegistration {
   clients.add(client);
   if (unsubscribeStore === null) {
-    unsubscribeStore = useTransportStore.subscribe(dispatchMeters);
+    unsubscribeStore = useMeterStore.subscribe(dispatchMeters);
   }
 
   return {
