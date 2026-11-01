@@ -65,15 +65,22 @@ namespace {
 // snapshotted at startup and only refreshed by _putenv — so getenv() would not
 // see a folder the user just picked. Querying the Win32 block directly keeps the
 // C++ side in sync with what Rust wrote. Returns empty when unset.
+//
+// The wide variant, not GetEnvironmentVariableA: the A call hands back the
+// ANSI codepage, so a cache folder under "C:\Users\Fam-González-Calán" came
+// back as cp1252 bytes, to_wide() then read them as UTF-8 and every cache
+// write failed with "path not found" — no track of that user ever sounded.
 std::string read_env(const char* name) {
 #if defined(_WIN32)
-    DWORD needed = GetEnvironmentVariableA(name, nullptr, 0);
+    const std::wstring wide_name = to_wide(name);
+    DWORD needed = GetEnvironmentVariableW(wide_name.c_str(), nullptr, 0);
     if (needed == 0)
         return {};
-    std::string value(needed, '\0');
-    DWORD written = GetEnvironmentVariableA(name, value.data(), needed);
-    value.resize(written);
-    return value;
+    std::wstring value(needed, L'\0');
+    DWORD written = GetEnvironmentVariableW(wide_name.c_str(), value.data(), needed);
+    if (written == 0 || written >= needed)
+        return {};
+    return from_wide(value.data(), static_cast<int>(written));
 #else
     const char* raw = std::getenv(name);
     return raw ? std::string(raw) : std::string();
@@ -192,13 +199,21 @@ bool create_directory_if_missing(const std::string& path) {
     if (is_root_path(path))
         return true;
 #if defined(_WIN32)
-    if (_mkdir(path.c_str()) == 0)
+    if (_wmkdir(to_wide(path).c_str()) == 0)
         return true;
 #else
     if (::mkdir(path.c_str(), 0755) == 0)
         return true;
 #endif
     return errno == EEXIST;
+}
+
+bool remove_file_compat(const std::string& path) {
+#if defined(_WIN32)
+    return _wremove(to_wide(path).c_str()) == 0;
+#else
+    return std::remove(path.c_str()) == 0;
+#endif
 }
 
 bool create_directories_compat(const std::string& path) {
@@ -312,7 +327,7 @@ unsigned long long free_disk_bytes_for(const std::string& dir) {
     ULARGE_INTEGER free_bytes_caller{};
     ULARGE_INTEGER total_bytes{};
     ULARGE_INTEGER total_free{};
-    if (GetDiskFreeSpaceExA(dir.c_str(),
+    if (GetDiskFreeSpaceExW(to_wide(dir).c_str(),
                              &free_bytes_caller,
                              &total_bytes,
                              &total_free)) {
@@ -366,18 +381,19 @@ bool is_pcm_cache_file(const std::string& name) {
 std::vector<CacheEntryStat> list_cache_entries(const std::string& dir) {
     std::vector<CacheEntryStat> out;
 #if defined(_WIN32)
-    WIN32_FIND_DATAA fd{};
-    const std::string pattern = dir + "\\*";  // filter by extension below
-    HANDLE h = FindFirstFileA(pattern.c_str(), &fd);
+    WIN32_FIND_DATAW fd{};
+    const std::wstring pattern = to_wide(dir + "\\*");  // filter by extension below
+    HANDLE h = FindFirstFileW(pattern.c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE)
         return out;
     do {
         if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
             continue;
-        if (!is_pcm_cache_file(fd.cFileName))
+        const std::string name = from_wide(fd.cFileName);
+        if (!is_pcm_cache_file(name))
             continue;
         CacheEntryStat e;
-        e.path = dir + "\\" + fd.cFileName;
+        e.path = dir + "\\" + name;
         LARGE_INTEGER sz{};
         sz.LowPart = fd.nFileSizeLow;
         sz.HighPart = static_cast<LONG>(fd.nFileSizeHigh);
@@ -388,7 +404,7 @@ std::vector<CacheEntryStat> list_cache_entries(const std::string& dir) {
         ft.HighPart = fd.ftLastWriteTime.dwHighDateTime;
         e.mtime = static_cast<long long>(ft.QuadPart);
         out.push_back(std::move(e));
-    } while (FindNextFileA(h, &fd));
+    } while (FindNextFileW(h, &fd));
     FindClose(h);
 #else
     DIR* d = ::opendir(dir.c_str());
@@ -479,7 +495,7 @@ void evict_cache_lru(const std::string& dir,
             continue;
         if (protected_paths.find(e.path) != protected_paths.end())
             continue;
-        if (std::remove(e.path.c_str()) == 0)
+        if (remove_file_compat(e.path))
             total -= e.size_bytes;
     }
 }
@@ -497,7 +513,7 @@ FileStat stat_file(const std::string& path) {
         return out;
 #if defined(_WIN32)
     struct _stat64 st{};
-    if (_stat64(path.c_str(), &st) == 0) {
+    if (_wstat64(to_wide(path).c_str(), &st) == 0) {
         out.size_bytes = static_cast<long long>(st.st_size);
         out.mtime      = static_cast<long long>(st.st_mtime);
     }
@@ -704,7 +720,7 @@ unsigned long long purge_source_cache(unsigned int* out_failed) {
     unsigned long long freed = 0;
     unsigned int failed = 0;
     for (const auto& e : list_cache_entries(dir)) {
-        if (std::remove(e.path.c_str()) == 0) {
+        if (remove_file_compat(e.path)) {
             if (e.size_bytes > 0)
                 freed += static_cast<unsigned long long>(e.size_bytes);
         } else {
@@ -1464,7 +1480,7 @@ Result<void> SourceManager::decode_and_store_streaming(
                 publish_locked(std::move(next));
             }
         }
-        std::remove(cache_file.c_str());
+        remove_file_compat(cache_file);
         return Result<void>::err("Streaming decode failed: " + file_path);
     }
     sf_close(sf);
@@ -2690,7 +2706,7 @@ bool SourceManager::try_install_from_cache_file(const Id& source_id,
     // open project whose stems haven't been re-decoded for months would be
     // the first thing evicted the next time someone imports new audio.
 #if defined(_WIN32)
-    HANDLE h = CreateFileA(cache_file.c_str(), FILE_WRITE_ATTRIBUTES,
+    HANDLE h = CreateFileW(to_wide(cache_file).c_str(), FILE_WRITE_ATTRIBUTES,
                             FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
                             OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h != INVALID_HANDLE_VALUE) {

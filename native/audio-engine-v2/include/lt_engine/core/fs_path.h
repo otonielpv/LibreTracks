@@ -42,6 +42,20 @@ inline std::wstring to_wide(const std::string& utf8) {
     return out;
 }
 
+// The inverse: a UTF-16 string from a wide Win32 API back to engine UTF-8.
+inline std::string from_wide(const wchar_t* wide, int length = -1) {
+    if (!wide || length == 0) return std::string();
+    const int len = WideCharToMultiByte(CP_UTF8, 0, wide, length,
+                                        nullptr, 0, nullptr, nullptr);
+    if (len <= 0) return std::string();
+    std::string out(static_cast<std::size_t>(len), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, wide, length, out.data(), len,
+                        nullptr, nullptr);
+    if (length < 0 && !out.empty() && out.back() == '\0')
+        out.pop_back();
+    return out;
+}
+
 } // namespace lt
 
 #endif // _WIN32

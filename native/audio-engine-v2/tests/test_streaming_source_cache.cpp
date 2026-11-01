@@ -857,6 +857,46 @@ TEST_CASE("PCM cache writes go into LIBRETRACKS_CACHE_DIR/source-cache") {
     CHECK(stats.file_count == 1);
 }
 
+#if defined(_WIN32)
+TEST_CASE("a cache folder under an accented Windows user name accepts writes") {
+    // Reported by a user whose profile is "C:\Users\Fam-González-Calán": no
+    // track ever sounded, every source failed with "Could not create PCM
+    // cache: ... path not found". Rust sets LIBRETRACKS_CACHE_DIR with
+    // SetEnvironmentVariableW; the engine read it back with the A variant
+    // (ANSI codepage bytes) and then decoded those bytes as UTF-8. Set it the
+    // way Rust does, so this fails if the engine goes back to the A call.
+    wchar_t tmp[MAX_PATH + 1] = {};
+    REQUIRE(GetTempPathW(MAX_PATH, tmp) > 0);
+    const std::wstring dir = std::wstring(tmp) + L"lt_cachedir_Gonz\u00E1lez_Cal\u00E1n";
+    REQUIRE(SetEnvironmentVariableW(L"LIBRETRACKS_CACHE_DIR", dir.c_str()));
+    purge_source_cache();
+
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr Frame kFrames = kDefaultBlockFrames * 2;
+    {
+        SourceManager manager;
+        const Id source_id = "accented-cache-dir-source";
+        manager.register_source(source_id, "accented-cache-dir-source.wav");
+        const auto stored = manager.store_decoded_source(
+            source_id, make_reference_audio(kFrames, kChannels),
+            kChannels, kSampleRate, kFrames);
+        INFO((stored.is_ok() ? std::string() : stored.error()));
+        CHECK(stored.is_ok());
+        // The directory the host shows is UTF-8, not codepage bytes.
+        CHECK(source_cache_directory() == from_wide(dir.c_str()) + "\\source-cache");
+        CHECK(source_cache_dir_size_bytes() > 0);
+    }
+
+    unsigned int failed = 0;
+    CHECK(purge_source_cache(&failed) > 0);
+    CHECK(failed == 0);
+    RemoveDirectoryW((dir + L"\\source-cache").c_str());
+    RemoveDirectoryW(dir.c_str());
+    SetEnvironmentVariableW(L"LIBRETRACKS_CACHE_DIR", nullptr);
+}
+#endif
+
 TEST_CASE("source_cache_dir_size_bytes and purge_source_cache operate on the configured dir") {
     ScopedCacheDir scope("size_and_purge");
     constexpr int kChannels = 2;
