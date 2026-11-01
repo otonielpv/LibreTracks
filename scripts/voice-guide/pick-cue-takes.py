@@ -9,10 +9,14 @@ from faster_whisper import WhisperModel
 
 folder = sys.argv[1]
 expected = {
-    ("es", "tempo_up"): "sube tempo",
-    ("es", "tempo_down"): "baja tempo",
-    ("en", "tempo_up"): "speed up",
-    ("en", "tempo_down"): "slow down",
+    ("es", "count_it"): "marcar",
+    ("es", "silence"): "silencio",
+    ("es", "loud"): "fuerte",
+    ("es", "here_we_go"): "empezamos",
+    ("en", "count_it"): "count it",
+    ("en", "silence"): "silence",
+    ("en", "loud"): "loud",
+    ("en", "here_we_go"): "here we go",
 }
 
 def load(path):

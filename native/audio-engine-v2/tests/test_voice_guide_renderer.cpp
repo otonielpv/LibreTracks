@@ -941,6 +941,10 @@ TEST_CASE("shipped voice pack covers every announced kind") {
         {MarkerKind::EaseDown,      "ease_down",      true},
         {MarkerKind::GetReady,      "get_ready",      true},
         {MarkerKind::WorshipFreely, "worship_freely", true},
+        {MarkerKind::CountIt,       "count_it",       true},
+        {MarkerKind::Silence,       "silence",        true},
+        {MarkerKind::Loud,          "loud",           true},
+        {MarkerKind::HereWeGo,      "here_we_go",     true},
     };
 
     for (const char* lang_cstr : {"es", "en"}) {
@@ -997,6 +1001,17 @@ TEST_CASE("new marker kinds report the right category") {
     // A count is a one-shot on its own beat.
     CHECK(marker_kind_is_cue(MarkerKind::Count));
     CHECK(marker_kind_from_string("count") == MarkerKind::Count);
+
+    // Count it, Silence, Loud and Here we go are one-shot cues.
+    CHECK(marker_kind_is_cue(MarkerKind::CountIt));
+    CHECK(marker_kind_is_cue(MarkerKind::Silence));
+    CHECK(marker_kind_is_cue(MarkerKind::Loud));
+    CHECK(marker_kind_is_cue(MarkerKind::HereWeGo));
+    CHECK_FALSE(marker_kind_is_cue(MarkerKind::Custom));
+    CHECK(marker_kind_from_string("count_it") == MarkerKind::CountIt);
+    CHECK(marker_kind_from_string("silence") == MarkerKind::Silence);
+    CHECK(marker_kind_from_string("loud") == MarkerKind::Loud);
+    CHECK(marker_kind_from_string("here_we_go") == MarkerKind::HereWeGo);
 }
 
 // Dragging a marker between the two ruler rows stores a category override. The

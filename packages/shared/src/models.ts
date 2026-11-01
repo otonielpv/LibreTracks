@@ -77,6 +77,10 @@ export type MarkerKind =
   | "tempo_down"
   // Spoken count: a cue whose variant is the number ("one", "two"...).
   | "count"
+  | "count_it"
+  | "silence"
+  | "loud"
+  | "here_we_go"
   | "custom";
 
 /** Whether a marker behaves as a song section (Verse, Chorus — name + count-in)
@@ -90,6 +94,8 @@ export type MarkerCategory = "section" | "cue";
  * cues as jump targets). Mirrors the cue half of the Rust `MarkerKind` enum. */
 export const CUE_KINDS: readonly MarkerKind[] = [
   "get_ready",
+  "here_we_go",
+  "count_it",
   "build",
   "slowly_build",
   "ease_down",
@@ -98,6 +104,8 @@ export const CUE_KINDS: readonly MarkerKind[] = [
   "break",
   "hold",
   "softly",
+  "loud",
+  "silence",
   "swell",
   "hits",
   "last_time",
@@ -200,6 +208,14 @@ const MARKER_KIND_COLORS: Record<MarkerKind, string> = {
   tempo_down: "#4f9fb8",
   // Counts are timing, not dynamics: the neutral grey of the click family.
   count: "#a7b4bd",
+  // Count it is timing too, a shade warmer than the counts it asks for.
+  count_it: "#b8b0a0",
+  // Silence a darker shade of Break's grey, Loud a redder shade of Build's
+  // orange.
+  silence: "#77818f",
+  loud: "#e8665a",
+  // Here we go is a start signal, the same gold family as Get ready.
+  here_we_go: "#e6bd6a",
 };
 
 /** Resting-state colour for a kind. Falls back to the custom grey for unknown

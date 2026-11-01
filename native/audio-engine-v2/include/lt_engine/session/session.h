@@ -163,7 +163,12 @@ enum class MarkerKind : int {
     // plays the counts/<n> clip on its own frame, so a guide's bare count-in
     // ("1 . 2 . | 1 2 3 4") is one marker per number, each on its beat.
     Count = 47,
-    Custom = 48,
+    // Spoken cues: Count it (ES "Marcar"), Silence, Loud, Here we go.
+    CountIt = 48,
+    Silence = 49,
+    Loud = 50,
+    HereWeGo = 51,
+    Custom = 52,
 };
 
 // Map a serialized snake_case kind token (as sent by Rust/TS) to the enum.

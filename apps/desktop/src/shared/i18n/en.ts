@@ -1231,6 +1231,10 @@ const en = {
       tempo_up: "Speed Up",
       tempo_down: "Slow Down",
       count: "Count",
+      count_it: "Count It",
+      silence: "Silence",
+      loud: "Loud",
+      here_we_go: "Here We Go",
     },
     prompt: {
       timelineBpm: "New timeline BPM",

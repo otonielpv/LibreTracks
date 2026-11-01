@@ -16,7 +16,8 @@ newer transformers/datasets need newer torch/huggingface_hub.
 
     HF_HUB_OFFLINE=1 f5env/Scripts/python.exe -I clone-cues.py <voices dir> <out dir>
 
-Edit `jobs` below for the cues to generate (here: the tempo cues).
+Edit `jobs` below for the cues to generate (here: Count it, Silence, Loud and
+Here we go).
 """
 import glob
 import os
@@ -49,7 +50,12 @@ jobs = {
     "es": {
         "ref": ["key_change_up", "key_change_down", "build", "ease_down"],
         "ref_text": "Sube tono. Baja tono. Subir intensidad. Bajar intensidad.",
-        "texts": {"tempo_up": "Sube tempo.", "tempo_down": "Baja tempo."},
+        "texts": {
+            "count_it": "Marcar.",
+            "silence": "Silencio.",
+            "loud": "Fuerte.",
+            "here_we_go": "Empezamos.",
+        },
         "model": dict(
             model="F5TTS_Base",
             ckpt_file=glob.glob(f"{HF}/models--jpgallegoar--F5-Spanish/snapshots/*/model_1250000.safetensors")[0],
@@ -59,7 +65,12 @@ jobs = {
     "en": {
         "ref": ["key_change_up", "key_change_down", "slowly_build", "get_ready"],
         "ref_text": "Key change up. Key change down. Slowly build. Get ready.",
-        "texts": {"tempo_up": "Speed up.", "tempo_down": "Slow down."},
+        "texts": {
+            "count_it": "Count it.",
+            "silence": "Silence.",
+            "loud": "Loud.",
+            "here_we_go": "Here we go.",
+        },
         "model": dict(model="F5TTS_v1_Base"),
     },
 }

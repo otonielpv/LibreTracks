@@ -867,6 +867,12 @@ pub enum MarkerKind {
     // Spoken count: a cue whose `variant` is the number ("one", "two"...). A
     // guide's bare count-in is one of these per number, each on its beat.
     Count,
+    // Spoken cues: Count it (ES "Marcar"), Silence, Loud and Here we go (ES
+    // "Empezamos"). One-shots like any other cue; appended per the ABI rule.
+    CountIt,
+    Silence,
+    Loud,
+    HereWeGo,
     /// User-defined section with no pre-recorded voice clip; the announcement
     /// falls back to silence (or TTS, if added later).
     #[default]
@@ -938,6 +944,10 @@ impl MarkerKind {
             MarkerKind::TempoUp => "tempo_up",
             MarkerKind::TempoDown => "tempo_down",
             MarkerKind::Count => "count",
+            MarkerKind::CountIt => "count_it",
+            MarkerKind::Silence => "silence",
+            MarkerKind::Loud => "loud",
+            MarkerKind::HereWeGo => "here_we_go",
             MarkerKind::Custom => "custom",
         }
     }
@@ -970,7 +980,11 @@ impl MarkerKind {
             | MarkerKind::GetReady
             | MarkerKind::TempoUp
             | MarkerKind::TempoDown
-            | MarkerKind::Count => MarkerCategory::Cue,
+            | MarkerKind::Count
+            | MarkerKind::CountIt
+            | MarkerKind::Silence
+            | MarkerKind::Loud
+            | MarkerKind::HereWeGo => MarkerCategory::Cue,
             // NextSong falls through: it is announced with a count-in like a
             // section, not fired as a one-shot.
             _ => MarkerCategory::Section,
