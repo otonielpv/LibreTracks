@@ -196,3 +196,23 @@ describe("drawRulerRegion key changes", () => {
     expect(texts).not.toContain("E");
   });
 });
+
+describe("drawRulerRegion pinned name", () => {
+  // The canvas is shifted left by the sub-pixel remainder after drawing, so a
+  // name pinned to the left edge must be drawn that much further right to stay
+  // put on screen; otherwise it shakes while the playhead is followed.
+  it("cancels the canvas nudge when the name is pinned to the edge", () => {
+    const { ctx } = createContextSpy();
+    // Region started 2 s before the left edge: the name is pinned.
+    drawRulerRegion(ctx, region(), WIDTH, 200, PPS, false, 0.4);
+    const nameCall = vi.mocked(ctx.fillText).mock.calls.find(([text]) => text === "Coro");
+    expect(nameCall?.[1]).toBeCloseTo(-1 + 0.4);
+  });
+
+  it("leaves a name that follows its region start untouched", () => {
+    const { ctx } = createContextSpy();
+    drawRulerRegion(ctx, region({ startSeconds: 1 }), WIDTH, 0, PPS, false, 0.4);
+    const nameCall = vi.mocked(ctx.fillText).mock.calls.find(([text]) => text === "Coro");
+    expect(nameCall?.[1]).toBe(100 + 7);
+  });
+});

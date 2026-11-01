@@ -68,3 +68,28 @@ export function timelineVisibleTrackHeight(
   const safeRuler = Number.isFinite(rulerHeight) ? Math.max(0, rulerHeight) : 0;
   return Math.max(1, Math.floor(safeViewport - safeRuler));
 }
+
+/**
+ * Sub-pixel remainder by which a canvas drawn at `Math.round(cameraX)` is
+ * shifted with a CSS transform, so its crisp 1px lines still glide with the
+ * fractional camera.
+ *
+ * At rest the remainder is snapped to whole device pixels: a fractional
+ * translate makes the compositor resample the bitmap and the ruler text goes
+ * soft. While the camera moves it is NOT snapped. At DPR 1 the snapped
+ * remainder is always 0, so a slow follow glide (a fraction of a pixel per
+ * frame at low zoom) moved the grid a whole pixel every few frames: the
+ * stutter the split exists to avoid. A moving bitmap's softness goes unseen;
+ * its stepping does not.
+ */
+export function canvasSubpixelOffsetX(
+  cameraX: number,
+  previousFrameCameraX: number,
+  devicePixelRatio: number,
+): number {
+  const remainder = cameraX - Math.round(cameraX);
+  if (cameraX !== previousFrameCameraX) {
+    return remainder;
+  }
+  return Math.round(remainder * devicePixelRatio) / devicePixelRatio;
+}

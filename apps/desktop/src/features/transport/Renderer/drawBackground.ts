@@ -266,6 +266,9 @@ export type RulerBackgroundLayerArgs = {
   width: number;
   height: number;
   cameraX: number;
+  /** Sub-pixel CSS translate the canvas receives after drawing; see
+   * {@link drawRulerRegion}. */
+  stickyOffsetX?: number;
   pixelsPerSecond: number;
   timelineGrid: TimelineGrid;
   regions: SongRegionSummary[];
@@ -471,6 +474,12 @@ export function drawRulerRegion(
   cameraX: number,
   pixelsPerSecond: number,
   isSelected: boolean,
+  // The canvas is drawn at an integer camera and then shifted by this
+  // remainder with a CSS transform. Anything anchored to the time axis rides
+  // along correctly, but the name pinned to the left edge must not move, so it
+  // is drawn this much further right to cancel the shift. Without it the name
+  // shook back and forth by up to a pixel while the playhead was followed.
+  stickyOffsetX = 0,
 ) {
   const left = secondsToScreenX(region.startSeconds, cameraX, pixelsPerSecond);
   const regionWidth =
@@ -504,7 +513,7 @@ export function drawRulerRegion(
 
   // El nombre se queda pegado al borde izquierdo; la primera muesca de cambio
   // de nota que tenga delante lo recorta (ver keyChanges/drawKeyChanges).
-  const textLeft = blockLeft + 7;
+  const textLeft = Math.max(-8 + stickyOffsetX, left) + 7;
   const notches = keyChangeNotches(region, cameraX, pixelsPerSecond);
   const nextNotchX =
     notches.find((notch) => notch.x > textLeft)?.x ?? Infinity;
@@ -522,7 +531,7 @@ export function drawRulerRegion(
   const textCenterY = blockTop + blockHeight / 2 + 0.5;
   context.fillText(region.name, textLeft, textCenterY);
 
-  let badgeLeft = blockLeft + 7 + context.measureText(region.name).width + 8;
+  let badgeLeft = textLeft + context.measureText(region.name).width + 8;
   const badges: string[] = [];
   // The transpose always shifts the key, warp or not (warp = time-ratio,
   // transpose = pitch-scale, both independent on the same Bungee voice). Shown
@@ -894,6 +903,7 @@ export function drawRulerBackgroundLayer(
       args.cameraX,
       args.pixelsPerSecond,
       args.selectedRegionId === region.id,
+      args.stickyOffsetX,
     );
   }
 

@@ -255,16 +255,18 @@ pub(crate) async fn stream_to_file(
     let mut stream = response.bytes_stream();
 
     loop {
+        // Checked on every chunk, not only when the stream goes quiet: the
+        // sleep below is recreated each iteration, so on a healthy connection
+        // it never won the race and the cancel button did nothing until the
+        // whole package had arrived. The sleep is only for a stalled server.
+        if cancelled() {
+            drop(out);
+            let _ = tokio::fs::remove_file(&staging).await;
+            return Err(CloudError::Cancelled);
+        }
         let chunk = tokio::select! {
             next = stream.next() => next,
-            _ = tokio::time::sleep(Duration::from_millis(PROGRESS_INTERVAL_MS)) => {
-                if cancelled() {
-                    drop(out);
-                    let _ = tokio::fs::remove_file(&staging).await;
-                    return Err(CloudError::Cancelled);
-                }
-                continue;
-            }
+            _ = tokio::time::sleep(Duration::from_millis(PROGRESS_INTERVAL_MS)) => continue,
         };
         let Some(chunk) = chunk else { break };
         let chunk = chunk.map_err(net)?;
@@ -379,6 +381,45 @@ pub(crate) async fn parse<T: for<'de> Deserialize<'de>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A download whose chunks never stop arriving must still honour a cancel.
+    /// The old loop only looked at the flag when no chunk came for 100 ms.
+    #[tokio::test]
+    async fn a_cancel_stops_a_download_that_keeps_streaming() {
+        use std::sync::atomic::AtomicBool;
+
+        let body = futures_util::stream::unfold((), |()| async {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+            Some((Ok::<_, std::io::Error>(vec![0u8; 1024]), ()))
+        });
+        let response = reqwest::Response::from(
+            http::Response::builder()
+                .body(reqwest::Body::wrap_stream(body))
+                .unwrap(),
+        );
+        let dir = std::env::temp_dir().join(format!("lt-cloud-cancel-{}", std::process::id()));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let dest = dir.join("song.ltpkg");
+
+        let flag = Arc::new(AtomicBool::new(false));
+        let setter = Arc::clone(&flag);
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            setter.store(true, Ordering::Release);
+        });
+        let cancelled = move || flag.load(Ordering::Acquire);
+
+        let result = tokio::time::timeout(
+            Duration::from_secs(2),
+            stream_to_file(response, &dest, &|_, _| {}, &cancelled),
+        )
+        .await
+        .expect("the download ignored the cancel");
+        assert!(matches!(result, Err(CloudError::Cancelled)));
+        assert!(!dest.exists());
+        assert!(!dest.with_extension("part").exists());
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
 
     const POLICY: ChunkPolicy = ChunkPolicy {
         alignment: 256 * 1024,

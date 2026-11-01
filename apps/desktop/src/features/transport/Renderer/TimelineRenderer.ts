@@ -12,6 +12,7 @@ import { recordCanvasRender } from "../perf/perfMetrics";
 import type { TimelineGrid } from "../timeline/timelineMath";
 import type { TrackRowLayout } from "../tracks/trackLayout";
 import {
+  canvasSubpixelOffsetX,
   timelineCanvasPixelRatio,
   timelineCanvasViewport,
 } from "./canvasPixelRatio";
@@ -138,6 +139,7 @@ export class TimelineRenderer {
   // when a redraw vs a cheap transform-only update is needed.
   private lastBackgroundRoundedCameraX = Number.NaN;
   private lastBackgroundSubpixelOffsetX = Number.NaN;
+  private lastFrameCameraX = Number.NaN;
 
   constructor(
     private readonly backgroundCanvas: HTMLCanvasElement,
@@ -318,15 +320,15 @@ export class TimelineRenderer {
           markFrameActivity();
         }
 
-        // Quantised to whole device pixels for the same reason as the ruler
-        // (see CanvasTimeline): a fractional-device-pixel translate makes the
-        // compositor resample the bitmap and softens the grid. Both layers use
-        // the same quantisation so their grids stay aligned with each other.
+        // Same nudge as the ruler (see canvasSubpixelOffsetX), so both grids
+        // stay aligned: device-pixel snapped at rest, exact while moving.
         const roundedCameraX = Math.round(snapshot.cameraX);
-        const devicePixelRatio = timelineCanvasPixelRatio();
-        const backgroundSubpixelOffsetX =
-          Math.round((snapshot.cameraX - roundedCameraX) * devicePixelRatio) /
-          devicePixelRatio;
+        const backgroundSubpixelOffsetX = canvasSubpixelOffsetX(
+          snapshot.cameraX,
+          this.lastFrameCameraX,
+          timelineCanvasPixelRatio(),
+        );
+        this.lastFrameCameraX = snapshot.cameraX;
 
         if (this.dirtyBackground) {
           // Draw the grid at the integer camera so 1px lines land on whole

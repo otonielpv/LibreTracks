@@ -2588,6 +2588,7 @@ dependencies = [
  "base64 0.22.1",
  "futures-util",
  "getrandom 0.2.17",
+ "http",
  "keyring",
  "reqwest 0.12.28",
  "serde",

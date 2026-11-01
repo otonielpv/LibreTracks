@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canvasSubpixelOffsetX,
   timelineCanvasPixelRatio,
   timelineCanvasViewport,
   timelineVisibleTrackHeight,
@@ -59,5 +60,18 @@ describe("timelineCanvasPixelRatio", () => {
     expect(timelineVisibleTrackHeight(600, 94)).toBe(506);
     expect(timelineVisibleTrackHeight(100, 134)).toBe(1);
     expect(timelineVisibleTrackHeight(Number.NaN, 134)).toBe(1);
+  });
+});
+
+describe("canvasSubpixelOffsetX", () => {
+  it("keeps the exact remainder while the camera glides, even at DPR 1", () => {
+    // Snapped to device pixels this would be 0 and the grid would step.
+    expect(canvasSubpixelOffsetX(100.3, 100.1, 1)).toBeCloseTo(0.3);
+    expect(canvasSubpixelOffsetX(100.7, 100.5, 1)).toBeCloseTo(-0.3);
+  });
+
+  it("snaps to whole device pixels once the camera rests", () => {
+    expect(canvasSubpixelOffsetX(100.3, 100.3, 1)).toBe(0);
+    expect(canvasSubpixelOffsetX(100.3, 100.3, 2)).toBe(0.5);
   });
 });

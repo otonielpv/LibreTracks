@@ -57,6 +57,7 @@ import { BASE_PIXELS_PER_SECOND, type TimelineGrid } from "./timelineMath";
 import { secondsToScreenX } from "./timelineMath";
 import type { TrackRowLayout } from "../tracks/trackLayout";
 import {
+  canvasSubpixelOffsetX,
   timelineCanvasPixelRatio,
   timelineVisibleTrackHeight,
 } from "../Renderer/canvasPixelRatio";
@@ -552,6 +553,7 @@ export function TimelineRulerCanvas({
     let lastBaseCameraX = Number.NaN;
     let lastBasePixelsPerSecond = Number.NaN;
     let lastBaseSubpixelOffsetX = Number.NaN;
+    let lastFrameCameraX = Number.NaN;
     let lastOverlaySceneVersion = -1;
     let lastOverlayCameraX = Number.NaN;
     let lastOverlayPixelsPerSecond = Number.NaN;
@@ -585,25 +587,26 @@ export function TimelineRulerCanvas({
       // the 1px stepping of rounding in place. Redraw only when the integer
       // camera changes; between those the transform alone carries the motion.
       //
-      // The nudge is quantised to whole DEVICE pixels. Translating a rasterised
-      // canvas by a fraction of a device pixel makes the compositor resample
-      // the whole bitmap — which softened the entire ruler, text included, and
-      // read as "the header goes blurry at some zoom levels" (worst near a
-      // half-pixel remainder). Snapping to the device grid keeps the composite
-      // a pure copy, so the ruler stays sharp at every zoom; the residual error
-      // is at most half a device pixel, well under the 1px stepping this trick
-      // exists to avoid.
+      // At rest the nudge is quantised to whole DEVICE pixels so the ruler
+      // text stays sharp; while the camera moves it is exact, or the grid
+      // steps again at DPR 1 (see canvasSubpixelOffsetX).
       const roundedCameraX = Math.round(cameraX);
-      const devicePixelRatio = timelineCanvasPixelRatio();
-      const subpixelOffsetX =
-        Math.round((cameraX - roundedCameraX) * devicePixelRatio) /
-        devicePixelRatio;
+      const subpixelOffsetX = canvasSubpixelOffsetX(
+        cameraX,
+        lastFrameCameraX,
+        timelineCanvasPixelRatio(),
+      );
+      lastFrameCameraX = cameraX;
 
       try {
         if (
           lastBaseSceneVersion !== sceneVersionRef.current ||
           lastBaseCameraX !== roundedCameraX ||
-          lastBasePixelsPerSecond !== livePixelsPerSecond
+          lastBasePixelsPerSecond !== livePixelsPerSecond ||
+          // The song name pinned to the left edge is compensated for the
+          // nudge (stickyOffsetX), so it must be redrawn whenever the nudge
+          // changes or it shakes with the sub-pixel sawtooth.
+          lastBaseSubpixelOffsetX !== subpixelOffsetX
         ) {
           const baseContext = setupCanvas(
             baseCanvas,
@@ -616,6 +619,7 @@ export function TimelineRulerCanvas({
               width: snapshot.width,
               height: snapshot.height,
               cameraX: roundedCameraX,
+              stickyOffsetX: subpixelOffsetX,
               pixelsPerSecond: livePixelsPerSecond,
               timelineGrid: snapshot.timelineGrid,
               regions: snapshot.regions,
