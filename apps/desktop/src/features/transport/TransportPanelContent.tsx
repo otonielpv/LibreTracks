@@ -378,6 +378,7 @@ import { useAutomationMixSync } from "./hooks/useAutomationMixSync";
 import { cameraXAfterStoppedJump } from "./timeline/revealPlayheadOnJump";
 import { createBrowserDrop } from "./library/folders/browserDrop";
 import { useWindowTitle } from "./hooks/useWindowTitle";
+import { useFollowSongTracks } from "./hooks/useFollowSongTracks";
 import { useSongStore } from "./songStore";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
 import { createTapTempoHandler } from "./tempo/tapTempoHandler";
@@ -5086,6 +5087,9 @@ export function TransportPanelContent() {
   // Which track rows the DAW mounts. See ./tracks/useTrackRowWindow.
   useTrackRowWindowController({ viewportRef: timelineScrollViewportRef, layout: trackRowLayout,
     tracks: visibleTracks, onRowsMounted: attachMountedTrackRows });
+  // Keeps the playing song's tracks at the top of the list. See the hook.
+  useFollowSongTracks({ active: viewMode === "daw", viewportRef: timelineScrollViewportRef, layoutRef: trackRowLayoutRef,
+    visibleTracksRef, songRef, activeRegionId: activeSongRegionId });
 
   // Native iOS keeps this last-known state after WebContent dies, so a black
   // UI can leave evidence in errors.log even though JavaScript is already gone.

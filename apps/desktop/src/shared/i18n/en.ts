@@ -2472,6 +2472,10 @@ const en = {
     disableFollowPlayhead: "Disable cursor follow",
     enableFollowPlayhead: "Enable cursor follow",
     followPlayheadTitle: "Follow playhead while playing",
+    enableFollowSongTracks: "Show the current song's tracks",
+    disableFollowSongTracks: "Stop following the current song's tracks",
+    followSongTracksTitle:
+      "Brings the current song's tracks to the top of the list. If you scroll by hand, it returns to them after a few seconds.",
     markerJumpLabel: "Marker Jump",
     markerJumpModeAria: "Marker jump mode",
     jumpLabel: "Marker Jump",
@@ -2703,6 +2707,8 @@ const en = {
   liveView: {
     title: "Live View",
     chooseView: "Choose view",
+    daw: "DAW",
+    setlistView: "Setlist",
     compact: "Compact",
     live: "Live",
     open: "Open Live View",

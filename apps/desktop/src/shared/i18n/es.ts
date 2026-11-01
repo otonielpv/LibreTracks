@@ -2501,6 +2501,10 @@ const es = {
     disableFollowPlayhead: "Desactivar seguimiento del cursor",
     enableFollowPlayhead: "Activar seguimiento del cursor",
     followPlayheadTitle: "Seguir el cursor durante la reproduccion",
+    enableFollowSongTracks: "Mostrar las pistas de la canción en reproducción",
+    disableFollowSongTracks: "Dejar de seguir las pistas de la canción",
+    followSongTracksTitle:
+      "Sube las pistas de la canción que suena al principio de la lista. Si te mueves a mano, vuelve a ellas a los pocos segundos.",
     markerJumpLabel: "Salto de Marca",
     markerJumpModeAria: "Modo de salto de marca",
     jumpLabel: "Salto de Marca",
@@ -2734,6 +2738,8 @@ const es = {
   liveView: {
     title: "Vista Live",
     chooseView: "Elegir vista",
+    daw: "DAW",
+    setlistView: "Setlist",
     compact: "Compacta",
     live: "Live",
     open: "Abrir vista Live",

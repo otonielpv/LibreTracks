@@ -160,6 +160,9 @@ type TimelineUIState = {
   markerSelectionAnchor: RulerMarkerRef | null;
   snapEnabled: boolean;
   followPlayheadEnabled: boolean;
+  /** DAW: keep the tracks of the song under the playhead scrolled to the top
+   * of the track list (see hooks/useFollowSongTracks). */
+  followSongTracksEnabled: boolean;
   midiLearnMode: string | null;
   trackReorderMode: boolean;
   /** Marca cuya posición se está corrigiendo a mano; null con el editor cerrado. */
@@ -215,6 +218,7 @@ type TimelineUIState = {
     enabled: boolean | ((currentFollowPlayheadEnabled: boolean) => boolean),
   ) => void;
   toggleFollowPlayheadEnabled: () => void;
+  toggleFollowSongTracksEnabled: () => void;
   setMidiLearnMode: (midiLearnMode: string | null) => void;
   setTrackReorderMode: (enabled: boolean) => void;
   toggleTrackReorderMode: () => void;
@@ -260,6 +264,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     markerSelectionAnchor: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
     followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
+    followSongTracksEnabled: false,
     midiLearnMode: null,
     trackReorderMode: false,
     markerPositionEditorId: null,
@@ -446,6 +451,11 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     toggleFollowPlayheadEnabled: () => {
       set((state) => ({
         followPlayheadEnabled: !state.followPlayheadEnabled,
+      }));
+    },
+    toggleFollowSongTracksEnabled: () => {
+      set((state) => ({
+        followSongTracksEnabled: !state.followSongTracksEnabled,
       }));
     },
     setMidiLearnMode: (midiLearnMode) => {

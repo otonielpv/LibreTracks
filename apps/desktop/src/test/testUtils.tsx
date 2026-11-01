@@ -351,6 +351,7 @@ beforeEach(async () => {
     markerSelectionAnchor: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
     followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
+    followSongTracksEnabled: false,
     midiLearnMode: null,
     trackReorderMode: false,
     markerPositionEditorId: null,

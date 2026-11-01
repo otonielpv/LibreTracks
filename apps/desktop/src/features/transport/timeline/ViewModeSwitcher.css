@@ -1,0 +1,50 @@
+/* Mobile view switcher: one button with the current view, the four views in a
+   menu. The button keeps the toolbar's icon-button look but grows to fit the
+   view's name. */
+.lt-view-mode-menu-button.lt-icon-button {
+  width: auto;
+  gap: 0.25rem;
+  padding: 0 0.35rem 0 0.45rem;
+  font: 700 0.72rem/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.lt-view-mode-menu-button .lt-view-mode-menu-caret {
+  font-size: 16px;
+  opacity: 0.75;
+}
+
+.lt-pads-popover.lt-view-mode-menu-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: auto;
+  min-width: 10rem;
+  padding: 0.4rem;
+}
+
+.lt-view-mode-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.5rem;
+  padding: 0 0.7rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #bacac5;
+  font: 600 0.85rem/1 "Space Grotesk", sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lt-view-mode-menu-item .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.lt-view-mode-menu-item.is-active {
+  border-color: rgb(87 241 219 / 0.4);
+  background: rgb(87 241 219 / 0.1);
+  color: #57f1db;
+}

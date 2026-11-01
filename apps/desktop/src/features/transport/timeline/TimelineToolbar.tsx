@@ -8,6 +8,7 @@ import {
   type SongRegionSummary,
 } from "../desktopApi";
 import { useTransportStore } from "../store";
+import { useTimelineUIStore } from "../uiStore";
 import type {
   GlobalJumpMode,
   SongJumpTrigger,
@@ -309,6 +310,14 @@ export function TimelineToolbar({
 }: TimelineToolbarProps) {
   const { t } = useTranslation();
   const learnModeActive = midiLearnMode !== null;
+  // Read here rather than threaded through the transport panel: only this
+  // button and hooks/useFollowSongTracks use it.
+  const followSongTracksEnabled = useTimelineUIStore(
+    (state) => state.followSongTracksEnabled,
+  );
+  const toggleFollowSongTracks = useTimelineUIStore(
+    (state) => state.toggleFollowSongTracksEnabled,
+  );
   const [openGroup, setOpenGroup] = useState<
     "jump" | "vamp" | "song" | "region" | "warp" | "master" | null
   >(null);
@@ -418,6 +427,32 @@ export function TimelineToolbar({
     commit();
   };
 
+  // On a phone the toolbar scrolls sideways: the cancel button goes before the
+  // vamp and jump settings so a pending jump can be cancelled without
+  // scrolling. On desktop it closes the row.
+  const cancelJumpButton = (
+    <MidiMappable target="action:cancel_jump">
+    <button
+      type="button"
+      className={`lt-global-cancel-button ${pendingMarkerJumpLabel ? "is-warning" : ""}`}
+      aria-label={t("timelineToolbar.cancelJump")}
+      title={pendingMarkerJumpLabel ?? t("timelineToolbar.cancelJump")}
+      disabled={!pendingMarkerJumpLabel && !learnModeActive}
+      onClick={() => {
+        if (learnModeActive) {
+          onMidiLearnTarget("action:cancel_jump");
+          return;
+        }
+
+        onCancelPendingJump();
+      }}
+    >
+      <span className="material-symbols-outlined">close</span>
+      <span>{t("timelineToolbar.cancelJump")}</span>
+    </button>
+    </MidiMappable>
+  );
+
   return (
     <div className="lt-timeline-topline" ref={toolbarRootRef}>
       <div className="lt-timeline-meta">
@@ -491,6 +526,25 @@ export function TimelineToolbar({
             </button>
           ) : null}
 
+          {viewMode === "daw" ? (
+            <button
+              type="button"
+              className={`lt-icon-button ${followSongTracksEnabled ? "is-active" : ""}`}
+              aria-label={
+                followSongTracksEnabled
+                  ? t("timelineToolbar.disableFollowSongTracks")
+                  : t("timelineToolbar.enableFollowSongTracks")
+              }
+              aria-pressed={followSongTracksEnabled}
+              title={t("timelineToolbar.followSongTracksTitle")}
+              disabled={isProjectEmpty}
+              onClick={toggleFollowSongTracks}
+            >
+              <span className="material-symbols-outlined">vertical_align_top</span>
+            </button>
+          ) : null}
+
+          {isMobileApp ? cancelJumpButton : null}
 
           <ControlGroup
             title={t("timelineToolbar.vampModeLabel")}
@@ -1141,26 +1195,7 @@ export function TimelineToolbar({
             }
           />
 
-          <MidiMappable target="action:cancel_jump">
-          <button
-            type="button"
-            className={`lt-global-cancel-button ${pendingMarkerJumpLabel ? "is-warning" : ""}`}
-            aria-label={t("timelineToolbar.cancelJump")}
-            title={pendingMarkerJumpLabel ?? t("timelineToolbar.cancelJump")}
-            disabled={!pendingMarkerJumpLabel && !learnModeActive}
-            onClick={() => {
-              if (learnModeActive) {
-                onMidiLearnTarget("action:cancel_jump");
-                return;
-              }
-
-              onCancelPendingJump();
-            }}
-          >
-            <span className="material-symbols-outlined">close</span>
-            <span>{t("timelineToolbar.cancelJump")}</span>
-          </button>
-          </MidiMappable>
+          {isMobileApp ? null : cancelJumpButton}
         </div>
         <div className="lt-timeline-stats">
           <span>{t("timelineToolbar.tracksCount", { count: trackCount })}</span>
