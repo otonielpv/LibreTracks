@@ -1,4 +1,4 @@
-/* Mobile view switcher: one button with the current view, the four views in a
+/* View switcher: one button with the current view, the four views in a
    menu. The button keeps the toolbar's icon-button look but grows to fit the
    view's name. */
 .lt-view-mode-menu-button.lt-icon-button {
@@ -41,6 +41,16 @@
 
 .lt-view-mode-menu-item .material-symbols-outlined {
   font-size: 20px;
+}
+
+/* Hover/focus marks the view a click would open; the current one keeps its
+   accent so the two never look alike. */
+.lt-view-mode-menu-item:hover,
+.lt-view-mode-menu-item:focus-visible {
+  border-color: rgb(186 202 197 / 0.25);
+  background: rgb(186 202 197 / 0.1);
+  color: #e6f0ed;
+  outline: none;
 }
 
 .lt-view-mode-menu-item.is-active {

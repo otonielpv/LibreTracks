@@ -2,7 +2,6 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
-import { isMobileApp } from "../desktopApi";
 import { PopoverShell } from "../panels/PopoverShell";
 import type { ViewMode } from "../uiStore";
 import "./ViewModeSwitcher.css";
@@ -24,42 +23,10 @@ const VIEW_MODES: Array<{
   { mode: "live", icon: "stadium", labelKey: "liveView.open", nameKey: "liveView.live" },
 ];
 
+// One button shows the current view and opens the four views in a menu. It
+// started on the phone, where four view buttons were a lot of toolbar, and the
+// desktop followed so both look the same.
 export function ViewModeSwitcher({ value, onChange }: ViewModeSwitcherProps) {
-  const { t } = useTranslation();
-
-  // In the mobile app four view buttons are a lot of toolbar for a phone: one
-  // button shows the current view and opens the others in a menu.
-  if (isMobileApp) {
-    return <ViewModeMenuButton value={value} onChange={onChange} />;
-  }
-
-  return (
-    <div
-      className="lt-view-mode-switcher lt-bottom-controls"
-      data-lt-tour={TOUR_TARGETS.viewModeSwitcher}
-      role="group"
-      aria-label={t("liveView.chooseView")}
-    >
-      {VIEW_MODES.map(({ mode, icon, labelKey }) => (
-        <button
-          type="button"
-          key={mode}
-          className={`lt-icon-button${value === mode ? " is-active" : ""}`}
-          aria-label={t(labelKey)}
-          title={t(labelKey)}
-          aria-pressed={value === mode}
-          onClick={() => onChange(mode)}
-        >
-          <span className="material-symbols-outlined" aria-hidden="true">
-            {icon}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function ViewModeMenuButton({ value, onChange }: ViewModeSwitcherProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
@@ -103,6 +70,7 @@ function ViewModeMenuButton({ value, onChange }: ViewModeSwitcherProps) {
             role="menuitemradio"
             aria-checked={value === mode}
             aria-label={t(labelKey)}
+            title={t(labelKey)}
             className={`lt-view-mode-menu-item${value === mode ? " is-active" : ""}`}
             onClick={() => {
               setOpen(false);

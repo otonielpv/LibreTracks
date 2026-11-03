@@ -39,7 +39,8 @@ import {
   getLibraryAssetButton,
   mockTrackRowDragGeometry,
   setMockNativeWebviewPosition,
-  acceptConfirmDialog
+  acceptConfirmDialog,
+  chooseView,
 } from "../test/testUtils";
 import { useTimelineUIStore } from "../features/transport/uiStore";
 
@@ -154,13 +155,9 @@ describe("App / timeline-clips", () => {
       useTimelineUIStore.getState().setCameraX(6300);
     });
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: textMatcher(en.liveView.openCompact) }));
-    });
+    await chooseView(en.liveView.openCompact);
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: textMatcher(en.liveView.openDaw) }));
-    });
+    await chooseView(en.liveView.openDaw);
 
     await waitFor(() => {
       expect(container.querySelector(".lt-ruler-track")).toBeTruthy();

@@ -39,7 +39,8 @@ import {
   getLibraryAssetButton,
   mockTrackRowDragGeometry,
   setMockNativeWebviewPosition,
-  submitPromptDialog
+  submitPromptDialog,
+  chooseView,
 } from "../test/testUtils";
 
 describe("App / library", () => {
@@ -197,9 +198,7 @@ describe("App / library", () => {
 
     await renderApp();
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: textMatcher(en.liveView.openCompact) }));
-    });
+    await chooseView(en.liveView.openCompact);
 
     const compactSongHeader = document.querySelector(".lt-compact-song-header");
     expect(compactSongHeader).toBeTruthy();

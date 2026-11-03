@@ -40,7 +40,8 @@ import {
   getTrackLaneRow,
   getLibraryAssetButton,
   mockTrackRowDragGeometry,
-  setMockNativeWebviewPosition
+  setMockNativeWebviewPosition,
+  chooseView,
 } from "../test/testUtils";
 
 describe("App / app.render", () => {
@@ -65,21 +66,13 @@ describe("App / app.render", () => {
     });
     const { container } = await renderApp();
 
-    await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: textMatcher(en.liveView.open) }),
-      );
-    });
+    await chooseView(en.liveView.open);
 
     expect(screen.getByRole("main", { name: textMatcher(en.liveView.title) })).toBeTruthy();
     expect(container.querySelectorAll(".lt-live-cue-row")).toHaveLength(4);
     expect(container.querySelector(".lt-ruler-canvas-layer")).toBeNull();
 
-    await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: textMatcher(en.liveView.openDaw) }),
-      );
-    });
+    await chooseView(en.liveView.openDaw);
 
     expect(container.querySelector(".lt-ruler-canvas-layer")).toBeTruthy();
   });

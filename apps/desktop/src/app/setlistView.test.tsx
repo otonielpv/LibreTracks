@@ -12,6 +12,7 @@ import {
   textMatcher,
   waitFor,
   within,
+  chooseView,
 } from "../test/testUtils";
 
 async function openSetlist() {
@@ -20,11 +21,7 @@ async function openSetlist() {
     value: vi.fn(),
   });
   const view = await renderApp();
-  await act(async () => {
-    fireEvent.click(
-      screen.getByRole("button", { name: textMatcher(en.liveView.openSetlist) }),
-    );
-  });
+  await chooseView(en.liveView.openSetlist);
   return view;
 }
 

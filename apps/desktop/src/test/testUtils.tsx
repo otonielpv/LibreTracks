@@ -271,6 +271,16 @@ export function textMatcher(text: string) {
   return new RegExp(escapeRegExp(text), "i");
 }
 
+/** Switches view through the toolbar's view menu, by the item's "Open … view" label. */
+export async function chooseView(label: string) {
+  await rtlAct(async () => {
+    rtlFireEvent.click(rtlScreen.getByRole("button", { name: textMatcher(en.liveView.chooseView) }));
+  });
+  await rtlAct(async () => {
+    rtlFireEvent.click(rtlScreen.getByRole("menuitemradio", { name: textMatcher(label) }));
+  });
+}
+
 export function clipAddedMatcher(name: string) {
   return textMatcher(interpolate(en.transport.status.clipAdded, { name }));
 }
