@@ -390,6 +390,11 @@ impl DesktopSession {
             });
         }
 
+        // «Nueva canción» appends a one-bar region after the last one, past
+        // every clip: without this the duration stayed behind, the session
+        // saved, and reopening it failed with "Region X is outside its song"
+        // (2026-11-03, five empty songs after the last one with audio).
+        refresh_song_duration(&mut song);
         audio.update_live_song_regions(&song)?;
         let impact = if laid_out {
             AudioChangeImpact::StructureRebuild

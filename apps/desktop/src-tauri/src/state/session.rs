@@ -757,7 +757,8 @@ impl DesktopSession {
         let folder_access = crate::platform::macos_bookmarks::acquire_folder(app, &song_dir);
 
         emit_project_load_progress(app, 5, "Leyendo archivo de proyecto...".into(), 0, 0, 0, 0);
-        let song = load_song_from_file(&song_file)?;
+        let mut song = load_song_from_file(&song_file)?;
+        heal_song_duration_for_regions(&mut song);
 
         emit_project_load_progress(app, 10, "Proyecto leido.".into(), 0, 0, 0, 0);
         // Align the engine rate with this session's audio BEFORE registering
@@ -856,4 +857,19 @@ pub(super) fn template_mix_scenes(template_path: &Path) -> Vec<MixScene> {
         .and_then(|document| document.get("mixScenes").cloned())
         .and_then(|scenes| serde_json::from_value(scenes).ok())
         .unwrap_or_default()
+}
+
+/// Sessions saved by «Nueva canción» before it refreshed the duration have
+/// regions past `duration_seconds`, and the engine refuses the whole load with
+/// "Region X is outside its song". Only grows the duration: a session whose
+/// saved duration already covers its regions loads exactly as before.
+pub(super) fn heal_song_duration_for_regions(song: &mut Song) {
+    let max_region_end = song
+        .regions
+        .iter()
+        .map(|region| region.end_seconds)
+        .fold(0.0_f64, f64::max);
+    if max_region_end > song.duration_seconds {
+        song.duration_seconds = max_region_end;
+    }
 }

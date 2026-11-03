@@ -89,6 +89,43 @@ fn new_song_without_a_template_comes_out_empty_as_always() {
 }
 
 #[test]
+fn new_songs_after_the_last_clip_stay_inside_the_song() {
+    let mut session = empty_session("tpl-new-song-duration");
+    let audio = audio_with(None, None);
+    // A one-bar song each: forty of them reach past the empty set's 60 s.
+    for _ in 0..40 {
+        session.create_empty_song(None, None, &audio).expect("new song");
+    }
+    let song = loaded(&session);
+    let last_end = song.regions.iter().map(|r| r.end_seconds).fold(0.0_f64, f64::max);
+    assert!(
+        song.duration_seconds + 1e-9 >= last_end,
+        "duration {} must envelop the last song ending at {}",
+        song.duration_seconds,
+        last_end
+    );
+}
+
+#[test]
+fn a_saved_session_with_songs_past_its_duration_is_healed_on_open() {
+    let mut song = loaded(&{
+        let mut session = empty_session("tpl-heal-duration");
+        let audio = audio_with(None, None);
+        session.create_empty_song(None, None, &audio).expect("song");
+        session
+    });
+    let end = song.regions[0].end_seconds;
+    song.duration_seconds = end - 0.5;
+    crate::state::session::heal_song_duration_for_regions(&mut song);
+    assert!((song.duration_seconds - end).abs() < 1e-9);
+
+    // Never shrinks a duration that already covers the regions.
+    song.duration_seconds = end + 10.0;
+    crate::state::session::heal_song_duration_for_regions(&mut song);
+    assert!((song.duration_seconds - (end + 10.0)).abs() < 1e-9);
+}
+
+#[test]
 fn new_song_is_laid_out_from_the_default_template() {
     let mut session = empty_session("tpl-new-song-default");
     let audio = audio_with(Some(BUILTIN_BAND_TEMPLATE), None);
