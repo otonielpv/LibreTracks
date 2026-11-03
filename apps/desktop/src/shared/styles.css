@@ -8130,12 +8130,14 @@ html.lt-ios body {
   background: rgb(8 10 11);
 }
 
+/* Sin margen exterior (2026-11-03); entre canciones sí queda el hueco del
+   asa de ancho, que el usuario quiere ahí. */
 .lt-compact-songs {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
-  gap: 0.25rem;
-  padding: 1rem;
+  gap: 0;
+  padding: 0;
   overflow-x: auto;
   overflow-y: hidden;
   align-items: stretch;
@@ -8164,7 +8166,7 @@ html.lt-ios body {
   width: var(--lt-compact-column-width, 14rem);
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0;
   min-height: 0;
   overflow: hidden;
 }
@@ -8231,6 +8233,7 @@ html.lt-ios body {
   font-size: 0.85rem;
   line-height: 1;
 }
+
 
 .lt-mobile .lt-compact-column-resize-slot {
   flex-basis: 1.4rem;
@@ -8333,8 +8336,9 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   gap: 0.4rem;
   padding: 0.55rem 0.7rem;
   background: rgb(20 26 25 / 0.85);
-  border: 1px solid rgba(186, 202, 197, 0.12);
-  border-radius: 2px;
+  border: 0;
+  border-bottom: 1px solid rgba(186, 202, 197, 0.12);
+  border-radius: 0;
   /* A flex item's default min-width is `auto` (its content), which would let
      a long song name hold the header — and therefore the column — wider than
      the width the user dragged to. Overriding it is what actually lets the
@@ -8511,8 +8515,8 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   gap: 0.25rem;
   padding: 0.4rem;
   background: rgb(14 17 18 / 0.5);
-  border: 1px solid rgba(186, 202, 197, 0.08);
-  border-radius: 2px;
+  border: 0;
+  border-radius: 0;
 }
 
 .lt-compact-song-clip-stack-empty {
@@ -8805,7 +8809,7 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
      1-px strip at the top. */
   flex: 0 0 16rem;
   border-top: 1px solid rgba(186, 202, 197, 0.12);
-  padding: 0.5rem 1rem;
+  padding: 0;
   background: rgb(11 13 14);
   overflow: hidden;
 }

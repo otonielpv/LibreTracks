@@ -157,9 +157,11 @@ function SongOverviewStripComponent({
   // canvas for the whole zoomed song blew past canvas limits and had to be
   // stretched). Re-rendered when the view nears the stretch's edge.
   const zoomWindow = useContext(ZoomWindowContext);
-  const [drawRange, setDrawRange] = useState<{ start: number; width: number } | null>(null);
+  // `layer` is the width the stretch was picked for: after a resize its
+  // pixels point at the wrong part of the song, so it is dropped.
+  const [drawRange, setDrawRange] = useState<{ start: number; width: number; layer: number } | null>(null);
   const range =
-    drawRange && drawRange.start + drawRange.width <= size.width + 0.5
+    drawRange && drawRange.layer === size.width
       ? drawRange
       : zoomWindow
         ? drawWindowFor(zoomWindow, size.width)
@@ -255,7 +257,7 @@ function SongOverviewStripComponent({
           (wanted.width === width && drawn.width !== width) ||
           (wanted.width !== width && drawn.width === width);
         if (outside) {
-          setDrawRange(wanted);
+          setDrawRange({ ...wanted, layer: width });
           markFrameActivity();
         }
       }

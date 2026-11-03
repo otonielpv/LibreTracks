@@ -2973,6 +2973,8 @@ const en = {
     lyrics: {
       button: "Lyrics",
       toggleTitle: "Show or hide the song's lyrics and chords",
+      resize: "Lyrics width",
+      resizeTitle: "Drag to change the lyrics width; double click for the automatic one",
     },
     daw: {
       open: "Open in the DAW",

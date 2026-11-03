@@ -14,6 +14,7 @@ import { SongOverviewStrip } from "./SongOverviewStrip";
 import { SetlistMixer } from "./SetlistMixer";
 import { MIXER_HEIGHT_VAR, useMixerResize } from "./useMixerResize";
 import { SONGS_HEIGHT_VAR, useSongsRowResize } from "./useSongsRowResize";
+import { useLyricsWidthResize } from "./useLyricsWidthResize";
 import type { VideoLaneBindings } from "../video/VideoClipHotspots";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { OverviewZoom } from "./OverviewZoom";
@@ -405,6 +406,7 @@ function SetlistViewComponent({
   const songsZoneRef = useRef<HTMLElement | null>(null);
   const songsHeightPx = useSetlistStore((state) => state.songsHeightPx);
   const songsResize = useSongsRowResize(rootRef, songsZoneRef);
+  const lyricsResize = useLyricsWidthResize(rootRef);
   const paneButtons = (
     <SetlistPaneButtons layout={layout} lyricsActive={lyricsOpen || lyricsPane} lyricsPane={lyricsPane} />
   );
@@ -665,6 +667,15 @@ function SetlistViewComponent({
             // call for Live); the console stays below.
             <div className="lt-setlist-band-row">
               {overview}
+              <div
+                className="lt-setlist-lyrics-resize"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label={t("setlistView.lyrics.resize")}
+                title={t("setlistView.lyrics.resizeTitle")}
+                onPointerDown={lyricsResize.begin}
+                onDoubleClick={lyricsResize.reset}
+              />
               {lyrics}
             </div>
           ) : layout === "medium" && lyricsOpen ? (

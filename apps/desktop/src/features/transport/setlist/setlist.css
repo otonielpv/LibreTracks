@@ -114,8 +114,29 @@
   overflow: hidden;
 }
 
+/* Letra y Editar flotan en la esquina superior derecha de la fila de
+   canciones (2026-11-03): en una fila propia se comían alto y en una columna
+   propia, ancho. El degradado deja claro que van encima de las tarjetas, y el
+   hueco final de la fila (::after, del ancho de los botones) deja sacar de
+   debajo la última tarjeta, con su ▶ y su ⋯, desplazando hasta el final. */
 .lt-setlist-view:not(.is-short) > .lt-setlist-zone.is-songs {
-  flex-direction: column;
+  --lt-setlist-song-toolbar-width: 11.5rem;
+  position: relative;
+}
+
+.lt-setlist-view:not(.is-short) > .lt-setlist-zone.is-songs > .lt-setlist-song-toolbar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 3;
+  padding-left: 1.25rem;
+  padding-bottom: 0.45rem;
+  background: linear-gradient(to right, transparent, var(--lt-setlist-surface) 1.25rem);
+}
+
+.lt-setlist-view:not(.is-short) > .lt-setlist-zone.is-songs .lt-setlist-songs.is-horizontal::after {
+  content: "";
+  flex: 0 0 var(--lt-setlist-song-toolbar-width);
 }
 
 .lt-setlist-song-toolbar {
@@ -124,7 +145,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 0.35rem;
-  padding: 0.25rem 0.45rem 0;
+  padding: 0.45rem 0.45rem 0;
 }
 
 .lt-setlist-view .lt-setlist-song-toolbar > button {
@@ -3830,9 +3851,30 @@ html.lt-mobile .lt-setlist-meter-marker {
 
 .lt-setlist-band-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 34%);
+  grid-template-columns: minmax(0, 1fr) var(--lt-setlist-lyrics-width, minmax(18rem, 34%));
   gap: var(--lt-setlist-gap);
   min-height: 0;
+}
+
+/* Asa en la unión de la onda y la letra (useLyricsWidthResize): comparte la
+   celda de la letra pegada a su borde izquierdo, por encima. */
+.lt-setlist-band-row > .lt-setlist-zone.is-lyrics,
+.lt-setlist-lyrics-resize {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.lt-setlist-lyrics-resize {
+  z-index: 3;
+  justify-self: start;
+  width: 7px;
+  margin-left: -4px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.lt-setlist-lyrics-resize:hover {
+  background: rgb(87 241 219 / 0.25);
 }
 
 .lt-setlist-zone.is-lyrics {
@@ -5211,4 +5253,24 @@ html.lt-mobile .lt-setlist-view:not(.is-short) .lt-setlist-song-tile .lt-setlist
   min-width: 1.75rem;
   height: 1.6rem;
   min-height: 1.6rem;
+}
+
+/* ---- Pegado con divisores (2026-11-03): sin margen exterior ni huecos
+   negros entre zonas, como una DAW. Las zonas quedan a 1 px y una sombra sin
+   desenfoque pinta esa línea (ambos vecinos la pintan del mismo color), así
+   el fondo de la vista y la zona segura del notch siguen oscuros. Va al final
+   para ganar a los ajustes de hueco de medium y short. ---- */
+.lt-setlist-view,
+.lt-setlist-view.is-medium,
+.lt-setlist-view.is-short,
+.lt-setlist-view .lt-setlist-bottom {
+  --lt-setlist-gap: 1px;
+  --lt-setlist-pad: 0px;
+}
+
+.lt-setlist-view .lt-setlist-zone,
+.lt-setlist-view.is-short .lt-setlist-zone {
+  border: 0;
+  border-radius: 0;
+  box-shadow: 0 0 0 1px var(--lt-setlist-border-solid, #222826);
 }

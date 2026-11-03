@@ -160,6 +160,32 @@ export function OverviewZoom({
     );
     if (offsetRef.current > maxOffset) applyOffset(maxOffset);
   }, [minLayerWidthRem, zoom]);
+  // Measured before the first frame: mounted at a stored deep zoom (back from
+  // another view), the strip's first render saw width 0, asked for the whole
+  // 32x song, skipped the oversized canvas, and the gate parked it blank.
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (viewport) windowRef.current.width = viewport.clientWidth;
+  }, []);
+  // The offset is in pixels and the layer a percentage of the viewport: a
+  // narrower viewport left the offset past the song's end (blank waveform).
+  // Only clamps; the zoom itself is never touched here. Recomputing it on
+  // every resize chained one estimate onto the last and, in a real session,
+  // bounced between 1x and 32x mid-drag. The lyrics seam keeps pixels per
+  // second by freezing the layer instead (useLyricsWidthResize).
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const layer = layerRef.current;
+      const layerWidth = layer ? layer.offsetWidth : baseLayerWidth(viewport) * zoomRef.current;
+      const maxOffset = Math.max(0, layerWidth - viewport.clientWidth);
+      if (offsetRef.current > maxOffset) applyOffset(maxOffset);
+    });
+    observer.observe(viewport);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minLayerWidthRem]);
   windowRef.current.panBy = (deltaPx) => {
     const viewport = viewportRef.current;
     const viewportWidth = viewport?.clientWidth ?? windowRef.current.width;
@@ -183,6 +209,9 @@ export function OverviewZoom({
       const viewport = viewportRef.current;
       const position = positionSecondsRef.current;
       if (viewport) {
+        // A new width means the strip needs another frame to pick its
+        // stretch: keep the gate open rather than park on a blank canvas.
+        if (windowRef.current.width !== viewport.clientWidth) markFrameActivity();
         windowRef.current.width = viewport.clientWidth;
         windowRef.current.left = viewport.getBoundingClientRect().left;
       }

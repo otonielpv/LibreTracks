@@ -949,3 +949,34 @@
 .lt-live-cue-row.is-readonly {
   cursor: default;
 }
+
+/* ---- Pegado con divisores (2026-11-03): sin margen exterior ni huecos
+   negros entre paneles, como una DAW. Los paneles quedan a 1 px y una sombra
+   sin desenfoque pinta esa línea. Va al final para ganar a los media queries
+   de teléfono. ---- */
+.lt-live-view {
+  --lt-live-page-padding: 0px;
+  --lt-live-divider: #222826;
+  gap: 1px;
+  padding: 0;
+}
+
+.lt-live-header,
+.lt-live-settings,
+.lt-live-cue-panel,
+.lt-live-view .lt-live-chart {
+  border: 0;
+  border-radius: 0;
+  box-shadow: 0 0 0 1px var(--lt-live-divider);
+}
+
+.lt-live-settings {
+  gap: 1px;
+  padding: 0;
+  background: var(--lt-live-divider);
+}
+
+.lt-live-setting-card {
+  border: 0;
+  border-radius: 0;
+}

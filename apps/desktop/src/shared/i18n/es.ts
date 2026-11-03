@@ -3004,6 +3004,8 @@ const es = {
     lyrics: {
       button: "Letra",
       toggleTitle: "Mostrar u ocultar la letra y los acordes de la canción",
+      resize: "Ancho de la letra",
+      resizeTitle: "Arrastra para cambiar el ancho de la letra; doble clic para volver al automático",
     },
     daw: {
       open: "Abrir en la DAW",
