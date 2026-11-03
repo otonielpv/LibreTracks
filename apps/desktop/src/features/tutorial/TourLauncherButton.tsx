@@ -149,7 +149,8 @@ export function TourLauncherButton() {
                 role="menuitem"
                 data-tour-choice={tourId}
                 onClick={() => {
-                  setMenuOpen(false);
+                  // `startTour` ya cierra el menú; pasar antes por
+                  // `setMenuOpen(false)` contaría la elección como un rechazo.
                   startTour(tourId);
                 }}
               >

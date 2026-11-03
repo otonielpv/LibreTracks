@@ -302,6 +302,13 @@ export function autoStartTourOnLanding(options: {
  * Y dos frenos más: nunca encima de un recorrido en marcha, y una sola vez por
  * arranque de la app (`alreadyOffered`).
  *
+ * Y un tercero que persiste entre arranques: `declined`, los recorridos que
+ * estaban sin ver cuando el usuario cerró el menú ofrecido sin elegir ninguno.
+ * Cerrar el menú también es un no; sin esto, quien había hecho todos menos uno
+ * —el caso de cada recorrido nuevo, como el de Setlist— veía el menú en la
+ * primera sesión de CADA arranque. Sólo un recorrido que no estuviera en esa
+ * lista vuelve a abrirlo.
+ *
  * "Empezar de cero" borra el progreso entero, así que también devuelve la
  * oferta a quien la apagó y se arrepintió.
  */
@@ -311,11 +318,20 @@ export function shouldOfferToursOnSessionOpen(options: {
   alreadyOffered: boolean;
   isWebDriver: boolean;
   isTestRun: boolean;
+  declined?: readonly TourId[];
 }): boolean {
   if (options.isWebDriver || options.isTestRun) return false;
   if (options.isTourActive || options.alreadyOffered) return false;
   if (Object.values(options.progress).includes("dismissed")) return false;
-  return toursForContext(true).some(
-    (tourId) => options.progress[tourId] === undefined,
+  const declined = options.declined ?? [];
+  return unseenSessionTours(options.progress).some(
+    (tourId) => !declined.includes(tourId),
+  );
+}
+
+/** Los recorridos del área de trabajo que el usuario no ha visto todavía. */
+export function unseenSessionTours(progress: TourProgress): TourId[] {
+  return toursForContext(true).filter(
+    (tourId) => progress[tourId] === undefined,
   );
 }

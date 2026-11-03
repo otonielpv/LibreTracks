@@ -13,7 +13,9 @@ import {
   type TourProgress,
   type TourStep,
   contextFor,
-  nextUnseenTour,} from "./tourModel";
+  nextUnseenTour,
+  unseenSessionTours,
+} from "./tourModel";
 import { TOURS } from "./tours";
 
 // Estado de la guía interactiva.
@@ -145,6 +147,48 @@ export function applyDawMobileRevision(
   return next;
 }
 
+/**
+ * Recorridos que estaban sin ver cuando el usuario cerró, sin elegir, el menú
+ * que la app abrió sola al cargar una sesión. Ver
+ * `shouldOfferToursOnSessionOpen`.
+ *
+ * Clave aparte por lo mismo que la revisión de la DAW: `TourProgress` se valida
+ * clave a clave y no admite otra forma de valor.
+ */
+const SESSION_OFFER_DECLINED_KEY = "lt.tutorial.sessionOfferDeclined";
+
+function readSessionOfferDeclined(): TourId[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(SESSION_OFFER_DECLINED_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (value): value is TourId =>
+        typeof value === "string" && VALID_TOUR_IDS.has(value),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function persistSessionOfferDeclined(declined: TourId[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (declined.length === 0) {
+      window.localStorage.removeItem(SESSION_OFFER_DECLINED_KEY);
+    } else {
+      window.localStorage.setItem(
+        SESSION_OFFER_DECLINED_KEY,
+        JSON.stringify(declined),
+      );
+    }
+  } catch {
+    // Sin almacenamiento el menú volverá a ofrecerse en el próximo arranque.
+  }
+}
+
 export function currentTourPlatform(): TourPlatform {
   return isMobileApp ? "mobile" : "desktop";
 }
@@ -177,7 +221,16 @@ type TourState = {
    * `TourLauncherButton` porque también lo abre la app al cargar una sesión.
    */
   isMenuOpen: boolean;
+  /**
+   * El menú abierto lo abrió la app al cargar una sesión, no el usuario. Si se
+   * cierra sin arrancar un recorrido, lo que se ofrecía queda en
+   * `sessionOfferDeclined`.
+   */
+  menuOpenedByOffer: boolean;
+  sessionOfferDeclined: TourId[];
   setMenuOpen: (open: boolean) => void;
+  /** Abre el menú como oferta automática (ver `menuOpenedByOffer`). */
+  offerMenu: () => void;
   /**
    * Olvida lo visto y vuelve a ofrecerlo todo desde cero.
    *
@@ -215,10 +268,30 @@ export const useTourStore = create<TourState>()((set, get) => ({
   steps: [],
   progress: readInitialProgress(),
   isMenuOpen: false,
-  setMenuOpen: (isMenuOpen) => set({ isMenuOpen }),
+  menuOpenedByOffer: false,
+  sessionOfferDeclined: readSessionOfferDeclined(),
+  setMenuOpen: (isMenuOpen) => {
+    const { menuOpenedByOffer, progress, sessionOfferDeclined } = get();
+    if (isMenuOpen || !menuOpenedByOffer) {
+      set({ isMenuOpen, menuOpenedByOffer: false });
+      return;
+    }
+    // Cerrado sin elegir: elegir pasa por `startTour`, que no llega aquí.
+    const declined = Array.from(
+      new Set([...sessionOfferDeclined, ...unseenSessionTours(progress)]),
+    );
+    persistSessionOfferDeclined(declined);
+    set({
+      isMenuOpen: false,
+      menuOpenedByOffer: false,
+      sessionOfferDeclined: declined,
+    });
+  },
+  offerMenu: () => set({ isMenuOpen: true, menuOpenedByOffer: true }),
   resetProgress: () => {
     persistProgress({});
-    set({ progress: {} });
+    persistSessionOfferDeclined([]);
+    set({ progress: {}, sessionOfferDeclined: [], menuOpenedByOffer: false });
   },
   startTour: (tourId, platform = currentTourPlatform()) => {
     const tour = TOURS[tourId];
@@ -232,7 +305,13 @@ export const useTourStore = create<TourState>()((set, get) => ({
     if (steps.length === 0) return;
     // Arrancar un recorrido cierra el menú: no tiene sentido dejarlo abierto
     // debajo del escudo.
-    set({ activeTourId: tourId, stepIndex: 0, steps, isMenuOpen: false });
+    set({
+      activeTourId: tourId,
+      stepIndex: 0,
+      steps,
+      isMenuOpen: false,
+      menuOpenedByOffer: false,
+    });
   },
   endTour: (outcome = "dismissed") => {
     const { activeTourId, progress } = get();
@@ -311,12 +390,13 @@ export function subscribeSessionTourOffer(options: {
           alreadyOffered,
           isWebDriver: options.isWebDriver,
           isTestRun: options.isTestRun,
+          declined: store.sessionOfferDeclined,
         })
       ) {
         return;
       }
       alreadyOffered = true;
-      store.setMenuOpen(true);
+      store.offerMenu();
     },
   );
 }

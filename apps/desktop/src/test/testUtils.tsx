@@ -391,6 +391,8 @@ beforeEach(async () => {
       live: "dismissed",
     },
     isMenuOpen: false,
+    menuOpenedByOffer: false,
+    sessionOfferDeclined: [],
   });
 
   // Un store sobrevive al desmontaje, asi que sin esto una prueba que conecte

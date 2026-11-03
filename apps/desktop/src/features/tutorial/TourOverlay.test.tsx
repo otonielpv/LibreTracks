@@ -580,4 +580,67 @@ describe("oferta al abrir una sesión", () => {
     expect(document.querySelector(".lt-tour-menu")).toBeNull();
     unsubscribe();
   });
+
+  /** Los cuatro de siempre hechos: sólo queda el recorrido nuevo de Setlist. */
+  const allButSetlist: TourProgress = {
+    workspace: "completed",
+    daw: "completed",
+    live: "completed",
+    cloud: "completed",
+  };
+
+  /** Otro arranque de la app: suscripción nueva, sesión cerrada. */
+  function relaunchAndOpenSession(): () => void {
+    act(() => {
+      useSongStore.setState({ song: null });
+    });
+    const unsubscribe = subscribeSessionTourOffer({
+      isWebDriver: false,
+      isTestRun: false,
+    });
+    act(() => {
+      useSongStore.setState({ song: { id: "s2" } as never });
+    });
+    return unsubscribe;
+  }
+
+  it("cerrar el menú sin elegir no lo vuelve a abrir en el siguiente arranque", () => {
+    const first = openSessionWith(allButSetlist);
+    expect(document.querySelector(".lt-tour-menu")).not.toBeNull();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(document.querySelector(".lt-tour-menu")).toBeNull();
+    expect(useTourStore.getState().sessionOfferDeclined).toEqual(["setlist"]);
+    first();
+
+    const second = relaunchAndOpenSession();
+    expect(document.querySelector(".lt-tour-menu")).toBeNull();
+    second();
+  });
+
+  it("elegir un recorrido del menú no cuenta como rechazo", () => {
+    const unsubscribe = openSessionWith({});
+
+    fireEvent.click(
+      document.querySelector('[data-tour-choice="workspace"]') as Element,
+    );
+    expect(useTourStore.getState().sessionOfferDeclined).toEqual([]);
+    unsubscribe();
+  });
+
+  it("un recorrido que no se había rechazado vuelve a abrir el menú", () => {
+    const first = openSessionWith(allButSetlist);
+    fireEvent.keyDown(window, { key: "Escape" });
+    first();
+
+    // Llega una versión con otro recorrido nuevo: `daw` deja de estar visto.
+    act(() => {
+      useTourStore.setState({
+        progress: { ...allButSetlist, daw: undefined },
+      });
+    });
+    const second = relaunchAndOpenSession();
+    expect(document.querySelector(".lt-tour-menu")).not.toBeNull();
+    second();
+  });
 });
