@@ -17,7 +17,12 @@
 # were measured off real screenshots of this app on this device, and every tap
 # verifies that the screen actually changed instead of assuming it landed.
 #
-# The three view modes need no tap at all: the app cycles them with Tab.
+# The view modes need no tap at all: the app cycles them with Tab, in the
+# order of VIEW_MODE_CYCLE (uiStore.ts): daw → setlist → compact → live.
+#
+# TOUR=setlist runs a different, shorter walk: the app is launched with a real
+# session already open (the workflow unpacks it and passes its .ltsession as a
+# launch argument), and the one shot is the Setlist view's waveform.
 #
 # Every step screenshots whatever is on screen, including after a tap that
 # missed. A tour that goes wrong should leave evidence of what it saw, not six
@@ -30,6 +35,10 @@ set -uo pipefail
 UDID="${1:?usage: ios-shots-tour.sh <udid> <output-dir>}"
 OUT="${2:?usage: ios-shots-tour.sh <udid> <output-dir>}"
 BUNDLE_ID="com.libretracks.app"
+TOUR="${TOUR:-store}"
+# How long the opened session gets to load its stems and waveforms before the
+# Setlist shot. A real set of fifty-odd stems takes a while in a simulator.
+SETLIST_SETTLE="${SETLIST_SETTLE:-90}"
 
 mkdir -p "$OUT"
 failures=0
@@ -224,10 +233,16 @@ log "── Despachando el tutorial y el aviso de estadísticas ─────�
 # Si el tutorial no se cierra, todo lo que viene despues toca contra el y
 # sale una tanda de capturas del mismo dialogo. Mejor parar aqui.
 if ! tap_control "Skip tutorial" skip; then
-  shot "tutorial-NO-CERRADO"
-  log "El tutorial sigue abierto: sin cerrarlo, el resto del recorrido es ruido."
-  rm -f "$OUT/.probe.png"
-  exit 1
+  if [ "$TOUR" = "setlist" ]; then
+    # Con una sesion ya abierta puede que el tutorial ni salga: el toque no
+    # cambia nada y eso no es motivo para parar.
+    shot "tutorial-sin-cambio"
+  else
+    shot "tutorial-NO-CERRADO"
+    log "El tutorial sigue abierto: sin cerrarlo, el resto del recorrido es ruido."
+    rm -f "$OUT/.probe.png"
+    exit 1
+  fi
 fi
 # El aviso de estadisticas aparece DESPUES de cerrar el tutorial y tarda un
 # momento en montarse. Tocar antes da en el fondo — y el toque lo daba por
@@ -244,6 +259,20 @@ tap_control "No, thanks" consent
 sleep 2
 tap_control "No, thanks (2o intento)" consent || true
 shot "after-consent"
+
+if [ "$TOUR" = "setlist" ]; then
+  log "── Setlist con la sesión abierta ──────────────────────────"
+  # Si el aviso no estaba, su toque cayo sobre la linea de tiempo: Escape
+  # deshace la seleccion que haya podido dejar.
+  key 41
+  key 43   # daw → setlist
+  log "  esperando ${SETLIST_SETTLE}s a que carguen las pistas y las ondas"
+  sleep "$SETLIST_SETTLE"
+  shot "setlist"
+  rm -f "$OUT/.probe.png"
+  log "Recorrido de Setlist completo"
+  exit 0
+fi
 
 log "── 01 Portada ──────────────────────────────────────────────"
 shot "home"
@@ -273,7 +302,8 @@ else
 fi
 
 log "── 04 y 05 Vista compacta, con y sin mixer ─────────────────"
-key 43   # daw → compact
+key 43   # daw → setlist
+key 43   # setlist → compact
 # Which of the two comes first depends on the device: CompactView opens the
 # mixer band by default only when the window is at least 1000 points wide, so
 # the iPad starts with it open and the phone with it closed. Same two shots,

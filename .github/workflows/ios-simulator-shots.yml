@@ -38,6 +38,11 @@ on:
         type: choice
         options: ["en", "es"]
         default: "en"
+      tour:
+        description: "store = the six App Store screens on the demo song; setlist = the Setlist waveform of a real set"
+        type: choice
+        options: ["store", "setlist"]
+        default: "store"
 
 permissions:
   contents: read
@@ -289,6 +294,33 @@ jobs:
           fi
           echo "path=$GITHUB_WORKSPACE/$app" >> "$GITHUB_OUTPUT"
 
+      # The setlist tour needs a real multi-song set, and the only honest one
+      # is the user's: real stems of real songs. They are copyrighted, so the
+      # set lives in the user's Google Drive and this repo — which is public —
+      # holds only a secret with its file id, never the file or a link to it.
+      # drive.usercontent with confirm=t skips the "too large to scan" page
+      # that a plain download link answers with for a 2 GB+ file.
+      - name: Download the session for the Setlist shot
+        if: inputs.tour == 'setlist'
+        shell: bash
+        env:
+          DRIVE_ID: ${{ secrets.SHOTS_SESSION_DRIVE_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DRIVE_ID" ]; then
+            echo "::error::The setlist tour needs the SHOTS_SESSION_DRIVE_ID secret (the Drive file id of a .ltset shared with anyone who has the link)."
+            exit 1
+          fi
+          curl -fL --retry 3 -o "$RUNNER_TEMP/shots.ltset"             "https://drive.usercontent.google.com/download?id=${DRIVE_ID}&export=download&confirm=t"
+          # Drive answers a missing permission or a quota with an HTML page and
+          # a 200; unzip would only say "not a zip" much later.
+          if [ "$(head -c 2 "$RUNNER_TEMP/shots.ltset")" != "PK" ]; then
+            echo "::error::Drive did not return a .ltset. Is the file shared with anyone who has the link?"
+            head -c 600 "$RUNNER_TEMP/shots.ltset"; echo
+            exit 1
+          fi
+          ls -lh "$RUNNER_TEMP/shots.ltset"
+
       - name: Boot the simulator
         shell: bash
         env:
@@ -337,9 +369,24 @@ jobs:
           APP_PATH: ${{ steps.app.outputs.path }}
           SETTLE: ${{ inputs.settle_seconds }}
           LANG_CODE: ${{ inputs.language }}
+          TOUR: ${{ inputs.tour }}
         run: |
           set -euo pipefail
           xcrun simctl install "$SIM_UDID" "$APP_PATH"
+
+          # Setlist tour: unpack the set inside the app's own container and
+          # hand its .ltsession over as a launch argument. The app opens a
+          # session file passed that way (commands/open_with.rs) on every
+          # platform, which spares a document picker no script can drive.
+          session_args=()
+          if [ "$TOUR" = "setlist" ]; then
+            data="$(xcrun simctl get_app_container "$SIM_UDID" com.libretracks.app data)"
+            session="$(python3 -I scripts/extract-ltset.py "$RUNNER_TEMP/shots.ltset" "$data/Documents/shots")"
+            rm -f "$RUNNER_TEMP/shots.ltset"
+            echo "Session: $session"
+            session_args=("$session")
+          fi
+
           # The runner's simulator is English. These launch arguments are the
           # standard way to ask for another language per launch, and the store
           # takes a separate screenshot set per language anyway.
@@ -348,13 +395,14 @@ jobs:
             *)  locale="en_US" ;;
           esac
           xcrun simctl launch "$SIM_UDID" com.libretracks.app \
-            -AppleLanguages "($LANG_CODE)" -AppleLocale "$locale"
+            -AppleLanguages "($LANG_CODE)" -AppleLocale "$locale"             ${session_args[@]+"${session_args[@]}"}
           sleep "$SETTLE"
 
-      - name: Walk the app and take the six shots
+      - name: Walk the app and take the shots
         shell: bash
         env:
           SIM_UDID: ${{ steps.sim.outputs.udid }}
+          TOUR: ${{ inputs.tour }}
         run: bash scripts/ios-shots-tour.sh "$SIM_UDID" "$GITHUB_WORKSPACE/simulator-shots"
 
       # The app's own log is the difference between "it is still loading" and

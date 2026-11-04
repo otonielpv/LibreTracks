@@ -56,19 +56,16 @@ export function confirmSongExport(
  * original. This only spends that answer.
  */
 export function confirmSessionExport<TMode>(
-  session: Pick<SongView, "title" | "bpm" | "timeSignature"> | null,
+  session: Pick<SongView, "title"> | null,
   runExport: (mode: TMode, writePath?: string, includeVideo?: boolean) => Promise<void> | void,
   closeModal: () => void,
 ) {
   return (mode: TMode, includeVideo = false) => {
     closeModal();
-    // No key: a set spans many songs in many keys, so declaring one would be a
-    // lie. Tempo and meter are the project defaults, which is what someone
-    // scanning a list of sets is actually after.
-    const fileName = buildPackageFileName(session?.title ?? "sesion", ".ltset", {
-      bpm: session?.bpm,
-      timeSignature: session?.timeSignature,
-    });
+    // Just the title. A set spans many songs, each with its own tempo, key
+    // and meter; the project's bpm and timeSignature are only those of the
+    // first song, so naming the set after them would mislabel all the rest.
+    const fileName = buildPackageFileName(session?.title ?? "sesion", ".ltset", {});
     void finishExportWithChoice(fileName, (path) => runExport(mode, path, includeVideo));
   };
 }
