@@ -53,16 +53,23 @@ SWIFT_LIBRARY_PATHS = [
   '$(SDKROOT)/usr/lib/swift'
 ].freeze
 
-# The toolchain's Swift directory, resolved from the compiler this build will
-# actually use.
+# The toolchain's Swift directory per platform, resolved from the compiler
+# this build will actually use.
+#
+# Each one goes under its own `[sdk=...]` condition, never both in the plain
+# setting: both directories hold a libswiftCompatibility56.a, ld takes the
+# first one it finds, and with iphoneos listed first the simulator build
+# linked the DEVICE archive and died with "building for 'iOS-simulator', but
+# linking in object file ... built for 'iOS'". The IPA never noticed because
+# its platform happened to come first.
 def resolved_swift_library_dirs
   swiftc = `xcrun -f swiftc 2>/dev/null`.strip
-  return [] if swiftc.empty?
+  return {} if swiftc.empty?
 
   toolchain_lib = File.expand_path('../../lib/swift', swiftc)
   %w[iphoneos iphonesimulator]
-    .map { |platform| File.join(toolchain_lib, platform) }
-    .select { |dir| Dir.exist?(dir) }
+    .to_h { |platform| [platform, File.join(toolchain_lib, platform)] }
+    .select { |_, dir| Dir.exist?(dir) }
 end
 
 project_path = ARGV[0]
@@ -77,18 +84,38 @@ abort 'no application target in the generated project' if target.nil?
 
 changed = false
 
-wanted = SWIFT_LIBRARY_PATHS + resolved_swift_library_dirs
+platform_dirs = resolved_swift_library_dirs
+
+def search_paths(settings, key)
+  value = settings[key]
+  value.is_a?(Array) ? value : [value].compact
+end
 
 target.build_configurations.each do |config|
-  existing = config.build_settings['LIBRARY_SEARCH_PATHS']
-  existing = [existing].compact unless existing.is_a?(Array)
+  settings = config.build_settings
+  existing = search_paths(settings, 'LIBRARY_SEARCH_PATHS')
+  # A run of the older version of this script put both platform directories
+  # in the plain setting; take them back out.
+  base = existing - platform_dirs.values
+  base += SWIFT_LIBRARY_PATHS - base
+  if base != existing
+    settings['LIBRARY_SEARCH_PATHS'] = base
+    changed = true
+    puts "#{config.name}: LIBRARY_SEARCH_PATHS = #{base.join(' ')}"
+  end
 
-  missing = wanted - existing
-  next if missing.empty?
+  # A conditional setting replaces the plain one for that SDK rather than
+  # adding to it ($(inherited) there means the project level), so it repeats
+  # the whole list.
+  platform_dirs.each do |platform, dir|
+    key = "LIBRARY_SEARCH_PATHS[sdk=#{platform}*]"
+    wanted = base + [dir]
+    next if search_paths(settings, key) == wanted
 
-  config.build_settings['LIBRARY_SEARCH_PATHS'] = existing + missing
-  changed = true
-  puts "#{config.name}: added #{missing.join(' ')}"
+    settings[key] = wanted
+    changed = true
+    puts "#{config.name}: #{key} += #{dir}"
+  end
 end
 
 if changed
