@@ -94,9 +94,14 @@ runs:
         fi
         pod --version
 
-    - name: Cache Bungee iOS build
+    # restore + save rather than the combined action, here and for FFmpeg:
+    # the combined one only writes the cache when the WHOLE job succeeds. A
+    # job that built both and then failed at the app link threw the builds
+    # away, and the next attempt had to fetch FFmpeg from ffmpeg.org again,
+    # which times out on GitHub runners often enough to block a run on its own.
+    - name: Restore Bungee iOS build
       id: bungee-cache
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: ${{ steps.layout.outputs.bungee-dir }}
         key: bungee-ios-${{ inputs.bungee-version }}-${{ steps.layout.outputs.suffix }}-ios${{ inputs.deployment-target }}
@@ -132,9 +137,16 @@ runs:
         lipo -info "$BUNGEE_DIR/ios-arm64/libbungee.a"
         lipo -info "$BUNGEE_DIR/ios-arm64/libpffft.a"
 
-    - name: Cache FFmpeg iOS build
+    - name: Save Bungee iOS build
+      if: steps.bungee-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.layout.outputs.bungee-dir }}
+        key: bungee-ios-${{ inputs.bungee-version }}-${{ steps.layout.outputs.suffix }}-ios${{ inputs.deployment-target }}
+
+    - name: Restore FFmpeg iOS build
       id: ffmpeg-cache
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: ${{ steps.layout.outputs.ffmpeg-dir }}
         key: ffmpeg-ios-${{ inputs.ffmpeg-version }}-${{ steps.layout.outputs.suffix }}-ios${{ inputs.deployment-target }}-static-lgpl-v1
@@ -148,6 +160,13 @@ runs:
         IOS_SDK: ${{ inputs.sdk }}
         FFMPEG_DIR: ${{ steps.layout.outputs.ffmpeg-dir }}
       run: bash scripts/build-ffmpeg-ios.sh "$PWD/$FFMPEG_DIR"
+
+    - name: Save FFmpeg iOS build
+      if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.layout.outputs.ffmpeg-dir }}
+        key: ffmpeg-ios-${{ inputs.ffmpeg-version }}-${{ steps.layout.outputs.suffix }}-ios${{ inputs.deployment-target }}-static-lgpl-v1
 
     # The engine is ~10 minutes of C++ that changes far less often than the
     # app around it. The SDK version goes in the key because a cached object
