@@ -49,11 +49,13 @@ const TITLES = {
 /** The fixes card: the user-visible fixes of the release, shown, not narrated one by one. */
 const FIXES = [
   "La canción vuelve a sonar bien tras cambiar a una tarjeta de sonido con otra frecuencia",
+  "En Windows vuelve a sonar todo si tu nombre de usuario lleva tildes",
   "Los automatismos ya no borran las carpetas de la biblioteca",
+  "Las sesiones con una canción nueva vacía vuelven a abrirse",
+  "Cancelar una descarga de la nube funciona al momento",
+  "El móvil se calienta menos con sesiones grandes",
   "En Android se puede usar el audio de cualquier carpeta de la biblioteca",
-  "Analizar canción ya no pone dos marcas de la guía en el mismo sitio",
-  "Las listas de canciones del móvil se mueven con más fluidez",
-  "La hoja Archivo del móvil cabe entera en pantalla",
+  "Los menús del iPhone ya no quedan bajo la barra de inicio",
   "F11 pone y quita la pantalla completa",
 ];
 
@@ -340,7 +342,14 @@ describe("release video (desktop scenes)", function () {
     };
     const play = `.lt-transport-buttons button[aria-label="${L("Reproducir")}"]`;
     const stop = `.lt-transport-buttons button[aria-label="${L("Detener")}"]`;
-    const viewBtn = (n: number) => `${tour("view-mode-switcher")} button:nth-of-type(${n})`;
+    // The view selector is one button with the four views in a menu, in this
+    // order: DAW, Setlist, Compact, Live.
+    const viewMenu = `${tour("view-mode-switcher")} .lt-view-mode-menu-button`;
+    const viewItem = (n: number) => `.lt-view-mode-menu-panel .lt-view-mode-menu-item:nth-of-type(${n})`;
+    const chooseView = async (rec: Recorder, n: number, ms: number) => {
+      await rec.click(viewMenu, 700);
+      await rec.click(viewItem(n), ms);
+    };
     const fileMenu = `${tour("topbar-file-menu")} .lt-top-menu-trigger`;
     const fileItem = async (rec: Recorder, text: string, tag: string) => {
       await rec.click(fileMenu, 700);
@@ -348,6 +357,9 @@ describe("release video (desktop scenes)", function () {
     };
     const zone = (name: string) => `[data-setlist-zone="${name}"]`;
 
+    // The one-off «tracks are shared between songs» notice covers half the
+    // Setlist mixer; it is read when the mixer mounts, so set it beforehand.
+    await browser.execute(() => window.localStorage.setItem("lt.setlistView.sharedTracksHintDismissed", "true"));
     await fitSong();
     await invoke("seek_transport", { positionSeconds: song.startSeconds + 20 });
     await browser.pause(800);
@@ -365,9 +377,11 @@ describe("release video (desktop scenes)", function () {
     // 02 — the Setlist View: the button, then its three zones.
     {
       const { rec, done } = scene("02-setlist");
-      await rec.moveTo(viewBtn(2), 700);
-      await rec.hold(1.5);
-      await rec.click(viewBtn(2), 2000);
+      await rec.moveTo(viewMenu, 700);
+      await rec.hold(1);
+      await rec.click(viewMenu, 900);
+      await rec.hold(0.8);
+      await rec.click(viewItem(2), 2000);
       for (const name of ["songs", "overview", "mixer"]) {
         if (!(await rectOf(zone(name)))) continue;
         await rec.zoomTo(zone(name), { margin: 20, maxZoom: 1.5 });
@@ -416,7 +430,7 @@ describe("release video (desktop scenes)", function () {
     // 05 — mix scenes: File › Mix scenes…, the quick «band down» scene.
     {
       const { rec, done } = scene("05-escenas");
-      await rec.click(viewBtn(1), 1500);
+      await chooseView(rec, 1, 1500);
       await fileItem(rec, "Escenas de mezcla", "rv-scenes");
       await rec.zoomTo(".lt-scene-modal", { margin: 30, maxZoom: 1.3 });
       await rec.hold(1.5);
@@ -439,7 +453,7 @@ describe("release video (desktop scenes)", function () {
     {
       const { rec, done } = scene("06-escenas-directo");
       await invoke("seek_transport", { positionSeconds: song.startSeconds + 40 });
-      await rec.click(viewBtn(4), 1800);
+      await chooseView(rec, 4, 1800);
       await rec.click(play, 300);
       await rec.realtimeWithAudio(2500, loopback);
       const sceneButton = ".lt-live-scenes .lt-scene-button";
@@ -452,7 +466,7 @@ describe("release video (desktop scenes)", function () {
         console.log("[release-video] 06: no scene button in Live");
       }
       await rec.click(stop, 600);
-      await rec.click(viewBtn(1), 1500);
+      await chooseView(rec, 1, 1500);
       await done();
     }
 
@@ -545,7 +559,7 @@ describe("release video (desktop scenes)", function () {
       await showField("Pistas de cada canción", "rv-layout-field");
       await rec.key("Escape", 600);
       await AppPage.resetShell();
-      await rec.click(viewBtn(3), 1800);
+      await chooseView(rec, 3, 1800);
       const arrow = ".lt-new-song-template-toggle";
       if (await rectOf(arrow)) {
         await runInPage((sel: string) => document.querySelector(sel)?.scrollIntoView({ inline: "center", block: "nearest" }), arrow);
@@ -566,7 +580,7 @@ describe("release video (desktop scenes)", function () {
       } else {
         console.log("[release-video] 10: no template arrow");
       }
-      await rec.click(viewBtn(1), 1500);
+      await chooseView(rec, 1, 1500);
       await done();
     }
 
