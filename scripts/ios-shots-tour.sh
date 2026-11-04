@@ -144,6 +144,9 @@ coords() {
     tablet:demo)     echo "0.683 0.341" ;;
     phone:demo)      echo "0.700 0.597" ;;
     tablet:mixer)    echo "0.520 0.278" ;;
+    # "Got it" del aviso "Tracks are shared between songs" sobre la consola de
+    # Setlist; medido en 04-setlist.png del run 41802112424.
+    tablet:shared-hint) echo "0.5045 0.6207" ;;
     # Pegado al borde inferior, pero no tanto como para caer en la zona del
     # indicador de inicio: ahi el gesto se lo queda el sistema.
     phone:mixer)     echo "0.561 0.950" ;;
@@ -262,12 +265,19 @@ shot "after-consent"
 
 if [ "$TOUR" = "setlist" ]; then
   log "── Setlist con la sesión abierta ──────────────────────────"
-  # Si el aviso no estaba, su toque cayo sobre la linea de tiempo: Escape
-  # deshace la seleccion que haya podido dejar.
+  # Con una sesion abierta el tutorial vuelve a salir DESPUES del aviso de
+  # estadisticas (run 41802112424: tutorial, aviso, tutorial otra vez).
+  sleep 3
+  tap_control "Skip tutorial (2a vez)" skip || true
+  # Escape cierra lo que quede abierto y deshace la seleccion que un toque
+  # caido sobre la linea de tiempo haya podido dejar.
   key 41
   key 43   # daw → setlist
   log "  esperando ${SETLIST_SETTLE}s a que carguen las pistas y las ondas"
   sleep "$SETLIST_SETTLE"
+  # Aviso de una sola vez sobre la consola; tapa media fila en la captura.
+  tap_control "Got it (pistas compartidas)" shared-hint || true
+  sleep 2
   shot "setlist"
   rm -f "$OUT/.probe.png"
   log "Recorrido de Setlist completo"
