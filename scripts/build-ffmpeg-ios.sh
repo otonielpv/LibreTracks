@@ -17,6 +17,8 @@ set -euo pipefail
 
 FFMPEG_VERSION="${FFMPEG_VERSION:-7.1.1}"
 FFMPEG_SHA256="${FFMPEG_SHA256:-733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1}"
+# github.com/FFmpeg/FFmpeg/archive/refs/tags/n$FFMPEG_VERSION.tar.gz (fallback).
+FFMPEG_GITHUB_SHA256="${FFMPEG_GITHUB_SHA256:-f117507dc501f2a6c11f9241d8d0c3213846cfad91764361af37befd6b6c523d}"
 IOS_DEPLOYMENT_TARGET="${IOS_DEPLOYMENT_TARGET:-15.0}"
 IOS_SDK="${IOS_SDK:-iphoneos}"
 
@@ -54,14 +56,31 @@ fi
 
 mkdir -p "$WORK"
 if [[ ! -d "$SRC" ]]; then
-  if [[ ! -f "$TARBALL" ]]; then
-    curl -fSL --retry 5 --retry-delay 3 --retry-all-errors \
+  if [[ -f "$TARBALL" ]] || curl -fSL --retry 3 --retry-delay 3 --retry-all-errors \
       --connect-timeout 20 \
       "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" \
-      -o "$TARBALL"
+      -o "$TARBALL"; then
+    echo "$FFMPEG_SHA256  $TARBALL" | shasum -a 256 -c -
+    tar -xJf "$TARBALL" -C "$WORK"
+  else
+    # ffmpeg.org times out on GitHub runners often enough to block whole runs
+    # (three in a row on 2026-11-04). Fallback: the same tag from the
+    # project's own GitHub mirror. GitHub keeps tag archives byte-stable, but
+    # they are NOT the release tarball's bytes, so they carry their own pinned
+    # hash; a new FFMPEG_VERSION needs FFMPEG_GITHUB_SHA256 updated with it.
+    # The release tarball is that tag plus a VERSION file, written here so
+    # the build reports the same version either way.
+    rm -f "$TARBALL"
+    github_tarball="$WORK/ffmpeg-n$FFMPEG_VERSION.tar.gz"
+    curl -fSL --retry 5 --retry-delay 3 --retry-all-errors \
+      --connect-timeout 20 \
+      "https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n$FFMPEG_VERSION.tar.gz" \
+      -o "$github_tarball"
+    echo "$FFMPEG_GITHUB_SHA256  $github_tarball" | shasum -a 256 -c -
+    tar -xzf "$github_tarball" -C "$WORK"
+    mv "$WORK/FFmpeg-n$FFMPEG_VERSION" "$SRC"
+    printf '%s\n' "$FFMPEG_VERSION" > "$SRC/VERSION"
   fi
-  echo "$FFMPEG_SHA256  $TARBALL" | shasum -a 256 -c -
-  tar -xJf "$TARBALL" -C "$WORK"
 fi
 
 SDK_PATH="$(xcrun --sdk "$IOS_SDK" --show-sdk-path)"
