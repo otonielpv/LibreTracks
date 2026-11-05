@@ -50,7 +50,7 @@ describe("layout editor", () => {
     render(<App />);
     // The control deck (Vamp/Loop) and the mixer filter are part of the default
     // layout, so both must be present without entering edit mode.
-    expect(screen.getByText("Vamp / Loop")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^vamp \/ loop:/i })).toBeTruthy();
   });
 
   it("opens control configuration in a floating layer outside the widget", () => {

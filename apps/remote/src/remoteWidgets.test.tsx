@@ -189,3 +189,27 @@ describe("header status", () => {
     expect(screen.getByRole("status").textContent).toMatch(/no connection/i);
   });
 });
+
+describe("compact control deck", () => {
+  it("turns the jump key into cancel only while a jump is pending", () => {
+    layoutWith("controlDeck");
+    render(<App />);
+    connect();
+
+    // No pending jump: no cancel key taking space, the jump key opens its settings.
+    expect(screen.queryByRole("button", { name: /cancel jump/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /^jump config:/i }).getAttribute("aria-expanded")).toBe("false");
+
+    act(() =>
+      socket!.message("transportSnapshot", {
+        playbackState: "playing",
+        positionSeconds: 10,
+        projectRevision: 1,
+        isNativeRuntime: true,
+        pendingMarkerJump: { targetMarkerId: "m2", targetMarkerName: "Chorus", trigger: "immediate" },
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel jump: Chorus" }));
+    expect(sent.some((command) => command.cmd === "cancelMarkerJump")).toBe(true);
+  });
+});

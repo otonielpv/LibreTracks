@@ -257,7 +257,8 @@ export function defaultLayout(profile: LayoutPresetProfile = "standard"): Remote
   // Heights measured on a 390-px phone and a 1024×768 tablet: each block
   // shows all of its content (the deck down to its song strip and transpose).
   const deckY = phone ? 13 : tablet ? 12 : 16;
-  const deckH = phone ? 14 : tablet ? 9 : 9;
+  // The deck is a compact grid of keys over the song strip (see ControlDeck).
+  const deckH = phone ? 9 : tablet ? 7 : 8;
   /** Columns reserved for the jump button beside the deck (0 = its own row). */
   const jumpW = phone ? LAYOUT_COLUMNS : 5;
   const jumpH = phone ? 6 : deckH;

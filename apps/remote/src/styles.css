@@ -6373,3 +6373,123 @@ button {
     display: none;
   }
 }
+
+/* ── Compact control deck ────────────────────────────────────────────────
+   The whole deck as keys: VAMP, then one key per setting showing its value
+   (tap = its settings), the jump key turning amber into "cancel" while a jump
+   is pending, and the song strip with transpose below. Two by two on a
+   phone, one row of four when there is width. Keys grow if the widget is
+   given more height than they need. */
+.deck-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.deck-compact-keys {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(3.1rem, 1fr);
+  gap: 0.35rem;
+}
+
+@container widget (min-width: 34rem) {
+  .deck-compact-keys {
+    grid-template-columns: minmax(0, 0.7fr) repeat(3, minmax(0, 1fr));
+  }
+}
+
+.deck-compact-key {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.35rem 1.6rem 0.35rem 0.65rem;
+  border: 1px solid rgb(255 255 255 / 0.09);
+  border-radius: 0.5rem;
+  background: linear-gradient(180deg, #2a2e2e, #1c1f1f);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.deck-compact-key small {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.deck-compact-key strong {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(0.8rem, 3.6cqi, 1rem);
+  font-weight: 700;
+}
+
+.deck-compact-chevron,
+.deck-compact-cancel {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  color: var(--accent);
+}
+
+.deck-compact-key.is-open {
+  border-color: rgb(87 241 219 / 0.5);
+  background: rgb(87 241 219 / 0.1);
+}
+
+.deck-compact-key.is-open .deck-compact-chevron {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+/* VAMP is an action, not a setting: centred, lit amber while vamping. */
+.deck-compact-vamp {
+  align-items: center;
+  padding-right: 0.65rem;
+  text-align: center;
+}
+
+.deck-compact-vamp strong {
+  color: #ffc46b;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.deck-compact-vamp.is-active {
+  border-color: transparent;
+  background: linear-gradient(180deg, #ffd76a, #f59e0b);
+  box-shadow: 0 0 14px rgb(255 215 106 / 0.35);
+}
+
+.deck-compact-vamp.is-active strong,
+.deck-compact-vamp.is-active small {
+  color: #3f2200;
+}
+
+.deck-compact-key.is-pending {
+  border-color: #f59e0b;
+  background: rgb(245 158 11 / 0.16);
+}
+
+.deck-compact-key.is-pending small,
+.deck-compact-key.is-pending .deck-compact-cancel {
+  color: #ffc46b;
+}
+
+.deck-compact > .transport-control-card-region {
+  flex: 0 0 auto;
+  min-height: 3rem;
+}

@@ -2265,6 +2265,157 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
   const showPanel =
     ownedPanel !== null && activePanelAnchor !== null && (!section || section === ownedPanel);
 
+  const regionCard = (
+    <div className="transport-control-card transport-control-card-region">
+          <div className="region-actions-row">
+            <div className="region-carousel">
+              {regions.map((region) => (
+                <button
+                  key={region.id}
+                  className={`region-chip ${selectedRegionId === region.id ? "is-active" : ""}`}
+                  onClick={() => {
+                    setSelectedRegionId(region.id);
+                  }}
+                >
+                  <span>{region.name}</span>
+                  {regionKeySummary(region) ? (
+                    <em className="region-chip-key">
+                      {regionKeySummary(region)}
+                    </em>
+                  ) : null}
+                  {region.transposeSemitones !== 0 ? (
+                    <em>{formatTransposeSemitones(region.transposeSemitones)} st</em>
+                  ) : null}
+                  {appliedArrangementName(region) ? (
+                    <em className="region-chip-arrangement">
+                      ⇄ {appliedArrangementName(region)}
+                    </em>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+            {/* "Saltar a canción" used to sit here, at the end of this row.
+                It is now its own `jumpToSongButton` widget so it can be placed
+                (and sized) where the player can actually reach it. */}
+            {selectedRegion ? (
+              <div className="selected-region-actions">
+                <div className="selected-region-transpose">
+                  <span>{STRINGS.transpose}</span>
+                  <div className="selected-region-transpose-controls">
+                    <button type="button" onClick={() => updateSelectedRegionTranspose(-1)}>-</button>
+                    <strong>{formatTransposeSemitones(selectedRegion.transposeSemitones)} st</strong>
+                    <button type="button" onClick={() => updateSelectedRegionTranspose(1)}>+</button>
+                  </div>
+                  {regionKeySummary(selectedRegion) ? (
+                    <span className="selected-region-key">
+                      {regionKeySummary(selectedRegion)}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+  );
+
+  const floatingPanel = (
+    <>
+        {showPanel && activePanelAnchor ? (
+          <RemoteFloatingPanel anchor={activePanelAnchor} onClose={closeActivePanel}>
+            <>
+            <button
+              type="button"
+              className="remote-inline-panel-close"
+              aria-label={STRINGS.close}
+              onClick={closeActivePanel}
+            >
+              ×
+            </button>
+            {ownedPanel === "jump" ? renderJumpControls() : null}
+            {ownedPanel === "vamp" ? renderVampControls() : null}
+            {ownedPanel === "song" ? renderSongControls() : null}
+            </>
+          </RemoteFloatingPanel>
+        ) : null}
+    </>
+  );
+
+  // The whole deck (no `section`): a compact grid. The cards below stacked
+  // four tall rows (vamp, jump, transition, and a cancel button that is
+  // disabled almost all the time), which on a phone filled the screen. Here
+  // each setting is one key showing its value that opens its settings, and
+  // the jump key turns into "cancel" only while a jump is pending.
+  if (!section) {
+    const chevron = (
+      <svg className="deck-compact-chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
+        <path d="M7 9.5 12 14.5 17 9.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+    return (
+      <div className="deck-compact">
+        <div className="deck-compact-keys">
+          <button
+            type="button"
+            className={`deck-compact-key deck-compact-vamp ${activeVamp ? "is-active" : ""}`}
+            aria-pressed={activeVamp !== null}
+            onClick={toggleVamp}
+          >
+            <strong>{STRINGS.vamp}</strong>
+            <small>{activeVamp ? STRINGS.on : STRINGS.off}</small>
+          </button>
+          <button
+            type="button"
+            className={`deck-compact-key ${ownedPanel === "vamp" ? "is-open" : ""}`}
+            aria-expanded={ownedPanel === "vamp"}
+            aria-label={`${STRINGS.widgetDeckVamp}: ${vampSummary}`}
+            onClick={(event) => togglePanel("vamp", event)}
+          >
+            <small>{STRINGS.deckKeyVamp}</small>
+            <strong>{vampSummary}</strong>
+            {chevron}
+          </button>
+          {pendingJump ? (
+            <button
+              type="button"
+              className="deck-compact-key is-pending"
+              aria-label={`${STRINGS.cancelJump}: ${pendingJump.targetMarkerName}`}
+              onClick={cancelJump}
+            >
+              <small>{STRINGS.cancelJump}</small>
+              <strong>→ {pendingJump.targetMarkerName}</strong>
+              <span className="deck-compact-cancel" aria-hidden="true">✕</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`deck-compact-key ${ownedPanel === "jump" ? "is-open" : ""}`}
+              aria-expanded={ownedPanel === "jump"}
+              aria-label={`${STRINGS.widgetDeckJump}: ${jumpModeSummary}`}
+              onClick={(event) => togglePanel("jump", event)}
+            >
+              <small>{STRINGS.deckKeyJump}</small>
+              <strong>{jumpModeSummary}</strong>
+              {chevron}
+            </button>
+          )}
+          <button
+            type="button"
+            className={`deck-compact-key ${ownedPanel === "song" ? "is-open" : ""}`}
+            aria-expanded={ownedPanel === "song"}
+            aria-label={`${STRINGS.widgetDeckSong}: ${songSummary}`}
+            onClick={(event) => togglePanel("song", event)}
+          >
+            <small>{STRINGS.deckKeySong}</small>
+            <strong>{songSummary}</strong>
+            {chevron}
+          </button>
+        </div>
+        {regionCard}
+        {floatingPanel}
+      </div>
+    );
+  }
+
   return (
     <div className={`transport-control-deck ${section ? "is-section" : ""}`}>
         {show("vamp") ? (
@@ -2351,76 +2502,9 @@ function ControlDeck({ section }: { section?: ControlDeckSection } = {}) {
         </button>
         ) : null}
 
-        {show("region") ? (
-        <div className="transport-control-card transport-control-card-region">
-          <div className="region-actions-row">
-            <div className="region-carousel">
-              {regions.map((region) => (
-                <button
-                  key={region.id}
-                  className={`region-chip ${selectedRegionId === region.id ? "is-active" : ""}`}
-                  onClick={() => {
-                    setSelectedRegionId(region.id);
-                  }}
-                >
-                  <span>{region.name}</span>
-                  {regionKeySummary(region) ? (
-                    <em className="region-chip-key">
-                      {regionKeySummary(region)}
-                    </em>
-                  ) : null}
-                  {region.transposeSemitones !== 0 ? (
-                    <em>{formatTransposeSemitones(region.transposeSemitones)} st</em>
-                  ) : null}
-                  {appliedArrangementName(region) ? (
-                    <em className="region-chip-arrangement">
-                      ⇄ {appliedArrangementName(region)}
-                    </em>
-                  ) : null}
-                </button>
-              ))}
-            </div>
-            {/* "Saltar a canción" used to sit here, at the end of this row.
-                It is now its own `jumpToSongButton` widget so it can be placed
-                (and sized) where the player can actually reach it. */}
-            {selectedRegion ? (
-              <div className="selected-region-actions">
-                <div className="selected-region-transpose">
-                  <span>{STRINGS.transpose}</span>
-                  <div className="selected-region-transpose-controls">
-                    <button type="button" onClick={() => updateSelectedRegionTranspose(-1)}>-</button>
-                    <strong>{formatTransposeSemitones(selectedRegion.transposeSemitones)} st</strong>
-                    <button type="button" onClick={() => updateSelectedRegionTranspose(1)}>+</button>
-                  </div>
-                  {regionKeySummary(selectedRegion) ? (
-                    <span className="selected-region-key">
-                      {regionKeySummary(selectedRegion)}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-        ) : null}
+        {show("region") ? regionCard : null}
 
-        {showPanel && activePanelAnchor ? (
-          <RemoteFloatingPanel anchor={activePanelAnchor} onClose={closeActivePanel}>
-            <>
-            <button
-              type="button"
-              className="remote-inline-panel-close"
-              aria-label={STRINGS.close}
-              onClick={closeActivePanel}
-            >
-              ×
-            </button>
-            {ownedPanel === "jump" ? renderJumpControls() : null}
-            {ownedPanel === "vamp" ? renderVampControls() : null}
-            {ownedPanel === "song" ? renderSongControls() : null}
-            </>
-          </RemoteFloatingPanel>
-        ) : null}
+        {floatingPanel}
       </div>
   );
 }
@@ -4268,6 +4352,7 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
  * scrolls, or scales its content to its own rectangle with container units,
  * and keeps its exact size. */
 const CONTENT_HEIGHT_WIDGETS: ReadonlySet<WidgetType> = new Set<WidgetType>([
+  "controlDeck",
   "jumpToSongButton",
   "metronomeSettings",
   "voiceGuideSettings",

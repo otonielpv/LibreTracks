@@ -88,9 +88,9 @@ describe("remoteLayout", () => {
       ["readouts", 0, 4],
       ["transportButtons", 4, 4],
       ["timeline", 8, 4],
-      ["controlDeck", 12, 9],
-      ["jumpToSongButton", 12, 9],
-      ["markerGrid", 21, 10],
+      ["controlDeck", 12, 7],
+      ["jumpToSongButton", 12, 7],
+      ["markerGrid", 19, 10],
     ]);
   });
 
