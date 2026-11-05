@@ -6655,3 +6655,58 @@ button {
   border-radius: 0 0 0.5rem 0.5rem;
   color: var(--muted);
 }
+
+/* ── Current marker ──────────────────────────────────────────────────────
+   The card the playhead is in: lit in its own colour with a NOW badge and
+   a thin bar filling up to the next marker. NEXT keeps its outline. */
+.marker-card.is-current {
+  background:
+    linear-gradient(180deg, rgb(20 20 20 / 0.45), rgb(14 14 14 / 0.6)),
+    var(--marker-color, #bacac5);
+  box-shadow:
+    0 0 0 2px var(--marker-color, #bacac5),
+    0 0 18px rgb(255 255 255 / 0.12);
+}
+
+.marker-card.is-current .marker-card-jump strong {
+  color: #fff;
+}
+
+.marker-card.is-current .marker-card-jump span {
+  color: rgb(255 255 255 / 0.8);
+}
+
+.marker-card-jump .marker-card-now {
+  align-self: flex-start;
+  padding: 0.08rem 0.38rem;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font-size: 0.52rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.marker-card-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 0 0 6px 6px;
+  background: rgb(0 0 0 / 0.35);
+  pointer-events: none;
+}
+
+.marker-card-progress::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  transform-origin: left center;
+  transform: scaleX(var(--marker-progress, 0));
+  transition: transform 1s linear;
+}

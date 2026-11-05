@@ -65,6 +65,11 @@ export type LiveMusicalContext = {
   currentRegion: SongRegionSummary | null;
   /** The next region that starts after the playhead, or null if last. */
   nextRegion: SongRegionSummary | null;
+  /** The marker the playhead is in (the last one passed inside the song that
+   * is playing), and how far through it the playhead is, 0..1 up to the next
+   * marker or the song's end. Null between songs. */
+  currentMarkerId: string | null;
+  currentMarkerProgress: number | null;
   /** Identity and display data of the next section marker ahead of the playhead. */
   nextMarkerId: string | null;
   nextMarkerName: string | null;
@@ -83,6 +88,8 @@ export type LiveMusicalContext = {
 const EMPTY_CONTEXT: LiveMusicalContext = {
   currentRegion: null,
   nextRegion: null,
+  currentMarkerId: null,
+  currentMarkerProgress: null,
   nextMarkerId: null,
   nextMarkerName: null,
   nextMarkerColor: null,
@@ -128,6 +135,30 @@ export function deriveLiveMusicalContext(
   const nextMarker =
     markers.find((marker) => marker.startSeconds > position + 0.001) ?? null;
 
+  // The last marker passed, only inside the song that is playing: between
+  // songs (or before the first marker of one) nothing is "current".
+  let currentMarker: (typeof markers)[number] | null = null;
+  if (currentRegion) {
+    for (const marker of markers) {
+      if (marker.startSeconds > position + 0.001) break;
+      if (marker.startSeconds >= currentRegion.startSeconds - 0.001) currentMarker = marker;
+    }
+  }
+  const currentMarkerEnd = currentMarker
+    ? Math.min(
+        nextMarker?.startSeconds ?? Number.POSITIVE_INFINITY,
+        currentRegion?.endSeconds ?? Number.POSITIVE_INFINITY,
+      )
+    : null;
+  const currentMarkerProgress =
+    currentMarker && currentMarkerEnd !== null && Number.isFinite(currentMarkerEnd) &&
+    currentMarkerEnd > currentMarker.startSeconds
+      ? Math.min(
+          1,
+          Math.max(0, (position - currentMarker.startSeconds) / (currentMarkerEnd - currentMarker.startSeconds)),
+        )
+      : null;
+
   const secondsToMarker = nextMarker
     ? Math.max(0, nextMarker.startSeconds - position)
     : null;
@@ -167,6 +198,8 @@ export function deriveLiveMusicalContext(
   return {
     currentRegion,
     nextRegion,
+    currentMarkerId: currentMarker?.id ?? null,
+    currentMarkerProgress,
     nextMarkerId: nextMarker?.id ?? null,
     nextMarkerName: nextMarker?.name ?? null,
     nextMarkerColor: nextMarker ? markerColor(nextMarker) : null,
@@ -212,6 +245,7 @@ export function useLiveMusicalContext(
           current.currentRegion?.id !== next.currentRegion?.id ||
           current.nextRegion?.id !== next.nextRegion?.id ||
           current.nextMarkerId !== next.nextMarkerId ||
+          current.currentMarkerId !== next.currentMarkerId ||
           current.nextMarkerName !== next.nextMarkerName ||
           current.currentKey !== next.currentKey ||
           roundedSecond(current.secondsToMarker) !== roundedSecond(next.secondsToMarker) ||

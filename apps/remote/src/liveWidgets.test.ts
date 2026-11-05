@@ -142,3 +142,35 @@ describe("deriveLiveMusicalContext", () => {
     expect(context.currentKey).toBeNull();
   });
 });
+
+describe("current marker", () => {
+  it("is the last marker passed, with progress up to the next one", () => {
+    const song = makeSong();
+    // Chorus 8s → Build 12s: at 10s, halfway through the chorus.
+    const context = deriveLiveMusicalContext(song, 10);
+    expect(context.currentMarkerId).toBe("chorus-a");
+    expect(context.currentMarkerProgress).toBeCloseTo(0.5);
+    expect(context.nextMarkerId).toBe("build");
+  });
+
+  it("runs the last marker of a song up to the song's end", () => {
+    const song = makeSong();
+    // Build 12s, song A ends at 20s: at 16s, halfway.
+    const context = deriveLiveMusicalContext(song, 16);
+    expect(context.currentMarkerId).toBe("build");
+    expect(context.currentMarkerProgress).toBeCloseTo(0.5);
+  });
+
+  it("names none before a song's first marker, even right after the previous song's last", () => {
+    const song = makeSong();
+    expect(deriveLiveMusicalContext(song, 4).currentMarkerId).toBeNull();
+    // 22s: inside song B, before its verse at 24s; the Build of song A is not current.
+    expect(deriveLiveMusicalContext(song, 22).currentMarkerId).toBeNull();
+    expect(deriveLiveMusicalContext(song, 25).currentMarkerId).toBe("verse-b");
+  });
+
+  it("names none between or after songs", () => {
+    const song = makeSong();
+    expect(deriveLiveMusicalContext(song, 45).currentMarkerId).toBeNull();
+  });
+});

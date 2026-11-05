@@ -2722,6 +2722,7 @@ function MarkerGrid() {
           const marker = entry.marker;
           const isHidden = hiddenMarkerIds.has(entry.id);
           const isNext = liveContext.nextMarkerId === entry.id;
+          const isCurrent = liveContext.currentMarkerId === entry.id;
           // A cue is a jump destination like any section; it only READS
           // differently (dashed frame, "cue" badge) so the player can tell the
           // two apart at a glance on stage.
@@ -2730,8 +2731,16 @@ function MarkerGrid() {
             <div
               key={entry.id}
               ref={isNext ? nextCardRef : undefined}
-              className={`marker-card ${isCue ? "is-cue-card" : ""} ${isNext ? "is-next" : ""} ${pendingJumpTargetId === entry.id ? "is-pending" : ""} ${isHidden ? "is-hidden-marker" : ""} ${revealHiddenMarkers ? "is-managing" : ""}`}
-              style={{ "--marker-color": markerColor(marker) } as CSSProperties}
+              className={`marker-card ${isCue ? "is-cue-card" : ""} ${isNext ? "is-next" : ""} ${isCurrent ? "is-current" : ""} ${pendingJumpTargetId === entry.id ? "is-pending" : ""} ${isHidden ? "is-hidden-marker" : ""} ${revealHiddenMarkers ? "is-managing" : ""}`}
+              style={
+                {
+                  "--marker-color": markerColor(marker),
+                  ...(isCurrent && liveContext.currentMarkerProgress !== null
+                    ? { "--marker-progress": liveContext.currentMarkerProgress }
+                    : {}),
+                } as CSSProperties
+              }
+              aria-current={isCurrent ? "true" : undefined}
             >
               <button
                 type="button"
@@ -2750,6 +2759,9 @@ function MarkerGrid() {
                   scheduleJump(entry.id);
                 }}
               >
+                {isCurrent ? (
+                  <small className="marker-card-now">{STRINGS.nowPlaying}</small>
+                ) : null}
                 {isNext ? (
                   <small className="marker-card-next">{STRINGS.next}</small>
                 ) : null}
@@ -2773,6 +2785,7 @@ function MarkerGrid() {
                 ) : null}
                 <em>{formatJumpModeLabel(jumpMode, jumpBars)}</em>
               </button>
+              {isCurrent ? <span className="marker-card-progress" aria-hidden="true" /> : null}
               {revealHiddenMarkers ? (
                 <span className="marker-card-visibility" aria-hidden="true">
                   {isHidden ? STRINGS.markerHidden : STRINGS.markerShown}
