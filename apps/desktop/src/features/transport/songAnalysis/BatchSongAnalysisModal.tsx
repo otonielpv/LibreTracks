@@ -445,7 +445,11 @@ function BatchDialog({
               <p className="lt-render-notice">{t("transport.songAnalysis.batch.stopped")}</p>
             ) : null}
             {applyError ? <p className="lt-render-warning">{applyError}</p> : null}
-            <p className="lt-render-hint">{t("transport.songAnalysis.batch.resultsHint")}</p>
+            {readyToApply === 0 && items.some((item) => item.status === "applied") ? (
+              <p className="lt-render-status">{t("transport.songAnalysis.batch.allApplied")}</p>
+            ) : (
+              <p className="lt-render-hint">{t("transport.songAnalysis.batch.resultsHint")}</p>
+            )}
             <ul className="lt-batch-analysis-list" aria-label={t("transport.songAnalysis.batch.title")}>
               {items
                 .filter((item) => item.status !== "pending" || selected.has(item.regionId))
@@ -492,17 +496,20 @@ function BatchDialog({
               >
                 {t("transport.songAnalysis.back")}
               </button>
-              <button type="button" className="lt-secondary-button" onClick={onClose}>
-                {t("transport.songAnalysis.close")}
-              </button>
+              {/* Nothing left to apply (all applied, or nothing changes): no
+                  "Aplicar todas (0)" button; closing is the way on. */}
               <button
                 type="button"
-                className="is-primary"
-                disabled={readyToApply === 0}
-                onClick={() => void applyAll()}
+                className={readyToApply > 0 ? "lt-secondary-button" : "is-primary"}
+                onClick={onClose}
               >
-                {t("transport.songAnalysis.batch.applyAll", { count: readyToApply })}
+                {t("transport.songAnalysis.close")}
               </button>
+              {readyToApply > 0 ? (
+                <button type="button" className="is-primary" onClick={() => void applyAll()}>
+                  {t("transport.songAnalysis.batch.applyAll", { count: readyToApply })}
+                </button>
+              ) : null}
             </>
           ) : null}
         </div>

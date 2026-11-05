@@ -837,6 +837,7 @@ const es = {
         stopped: "Análisis detenido. Lo ya analizado se puede revisar y aplicar.",
         resultsHint:
           "Revisa una canción para ajustar su propuesta antes de aplicarla, o aplica todas tal cual.",
+        allApplied: "Aplicado. Revisa cualquier canción para cambiarla; cada una se deshace por separado.",
         undoHint: "Cada canción se aplica como un paso que se puede deshacer.",
         review: "Revisar",
         applyAll_one: "Aplicar {{count}} canción",

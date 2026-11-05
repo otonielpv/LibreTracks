@@ -822,6 +822,7 @@ const en = {
         applying: "Applying {{done}} of {{total}}…",
         stopped: "Analysis stopped. What was analyzed can still be reviewed and applied.",
         resultsHint: "Review a song to adjust its proposal before applying it, or apply them all as they are.",
+        allApplied: "Applied. Review any song to change it; each one undoes on its own.",
         undoHint: "Each song is applied as its own undoable step.",
         review: "Review",
         applyAll_one: "Apply {{count}} song",

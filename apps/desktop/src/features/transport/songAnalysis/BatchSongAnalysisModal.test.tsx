@@ -248,6 +248,9 @@ describe("BatchSongAnalysisModal", () => {
     expect(second[2]).toBe("G");
     expect(onApplied).toHaveBeenCalledTimes(2);
     expect(await within(row("Uno")).findByText("transport.songAnalysis.batch.statusApplied")).toBeTruthy();
+    // Nothing left: no "apply all (0)" button, a notice instead.
+    expect(screen.queryByText(/batch\.applyAll/)).toBeNull();
+    expect(screen.getByText("transport.songAnalysis.batch.allApplied")).toBeTruthy();
   });
 
   it("keeps the markers a song already has when applying them all", async () => {
