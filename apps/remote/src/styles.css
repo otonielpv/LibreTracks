@@ -6330,3 +6330,104 @@ button {
     width: auto;
   }
 }
+
+/* ── Header ──────────────────────────────────────────────────────────────
+   Status with a coloured dot (green playing, amber paused, grey stopped,
+   red without connection), A−/A+ for the interface size instead of a bare
+   number, and Edit as a pencil (icon only on a phone). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.remote-shell .status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 1.9rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  color: var(--text);
+  white-space: nowrap;
+  letter-spacing: 0.08em;
+}
+
+.status-dot {
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: #8b9693;
+}
+
+.status-pill.is-playing .status-dot {
+  background: #4ade80;
+  box-shadow: 0 0 6px #4ade80;
+}
+
+.status-pill.is-paused .status-dot {
+  background: #fbbf24;
+}
+
+.status-pill.is-offline {
+  border-color: rgb(248 113 113 / 0.5);
+  color: #ffb3a7;
+}
+
+.status-pill.is-offline .status-dot {
+  background: #f87171;
+  animation: status-blink 1.2s steps(2, start) infinite;
+}
+
+@keyframes status-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.remote-shell .layout-edit-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 2.4rem;
+  min-height: 2.2rem;
+  padding: 0.3rem 0.7rem;
+}
+
+.remote-shell .remote-size-stepper {
+  grid-template-columns: 2.2rem 2.2rem;
+}
+
+.remote-shell .remote-size-stepper button {
+  min-height: 2.2rem;
+  font-size: 0.95rem;
+}
+
+.remote-shell .remote-size-stepper button .size-sign {
+  margin-left: 0.05rem;
+  font-size: 0.7rem;
+}
+
+@media (max-width: 600px) {
+  .remote-shell .layout-edit-button-label {
+    display: none;
+  }
+
+  .remote-shell .layout-edit-button {
+    padding: 0.3rem;
+  }
+
+  .remote-shell .status-pill {
+    min-height: 1.7rem;
+    padding: 0.2rem 0.5rem;
+  }
+
+  .remote-shell .remote-size-stepper button {
+    min-height: 2rem;
+  }
+}

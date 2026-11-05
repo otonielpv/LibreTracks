@@ -5395,6 +5395,7 @@ export function App() {
   // every change made during the session. null when not editing.
   const editBaselineRef = useRef<RemoteLayout | null>(null);
   const snapshot = useRemoteSyncStore((state) => state.snapshot);
+  const connectionStatus = useRemoteConnectionStore((state) => state.status);
   // Both editor preferences are rendered by the header toolbar but consumed by
   // the canvas, so they are read from the layout here as well.
   const placementMode: LayoutPlacementMode = layout.placementMode ?? "free";
@@ -5572,8 +5573,17 @@ export function App() {
             />
           </div>
         ) : null}
-        <div className="status-pill">
-          {snapshot?.playbackState ? STRINGS[snapshot.playbackState] : STRINGS.idle}
+        {/* Connection first: a remote that lost the desktop must say so, not
+            keep showing the last playback state it heard. */}
+        <div className={`status-pill is-${connectionStatus === "connected" ? (snapshot?.playbackState ?? "idle") : "offline"}`} role="status">
+          <span className="status-dot" aria-hidden="true" />
+          {connectionStatus === "connected"
+            ? snapshot?.playbackState
+              ? STRINGS[snapshot.playbackState]
+              : STRINGS.idle
+            : connectionStatus === "connecting"
+              ? STRINGS.connecting
+              : STRINGS.offline}
         </div>
         {/* Only the entry point lives here. While editing, the toolbar's own
             "Done" is the single way out — two of them read as two actions. */}
@@ -5582,9 +5592,14 @@ export function App() {
             type="button"
             className="layout-edit-button"
             aria-pressed={false}
+            aria-label={STRINGS.editLayout}
+            title={STRINGS.editLayout}
             onClick={startEditing}
           >
-            {STRINGS.editLayout}
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M4 17.2V20h2.8L17.1 9.7l-2.8-2.8zm15.7-9.9a1 1 0 0 0 0-1.4l-1.6-1.6a1 1 0 0 0-1.4 0l-1.3 1.3 2.8 2.8z" />
+            </svg>
+            <span className="layout-edit-button-label">{STRINGS.editLayout}</span>
           </button>
         )}
         <div className="remote-size-stepper" role="group" aria-label={STRINGS.size}>
@@ -5594,9 +5609,9 @@ export function App() {
             disabled={sizeLevel === 0}
             onClick={() => setSizeLevel((current) => Math.max(0, current - 1))}
           >
-            -
+            A<span className="size-sign">−</span>
           </button>
-          <span>{sizeLevel + 1}</span>
+          <span className="visually-hidden">{sizeLevel + 1}</span>
           <button
             type="button"
             className={sizeLevel > 0 ? "is-active" : ""}
@@ -5604,7 +5619,7 @@ export function App() {
             disabled={sizeLevel === MAX_REMOTE_SIZE_LEVEL}
             onClick={() => setSizeLevel((current) => Math.min(MAX_REMOTE_SIZE_LEVEL, current + 1))}
           >
-            +
+            A<span className="size-sign">+</span>
           </button>
         </div>
       </header>

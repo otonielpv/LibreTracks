@@ -178,3 +178,14 @@ describe("hiding markers", () => {
     expect(screen.getByRole("button", { name: /hide markers.*1 hidden/i })).toBeTruthy();
   });
 });
+
+describe("header status", () => {
+  it("says it is connecting or offline before showing the playback state", () => {
+    render(<App />);
+    expect(screen.getByRole("status").textContent).toMatch(/connecting/i);
+    connect();
+    expect(screen.getByRole("status").textContent).toMatch(/idle/i);
+    act(() => socket!.emit("close", {}));
+    expect(screen.getByRole("status").textContent).toMatch(/no connection/i);
+  });
+});
