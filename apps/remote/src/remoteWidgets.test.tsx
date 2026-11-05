@@ -61,7 +61,10 @@ function connect() {
       durationSeconds: 200,
       tracks: [],
       clips: [],
-      sectionMarkers: [],
+      sectionMarkers: [
+        { id: "m1", name: "Intro", kind: "intro", startSeconds: 0 },
+        { id: "m2", name: "Chorus", kind: "chorus", startSeconds: 30 },
+      ],
       tempoMarkers: [],
       timeSignatureMarkers: [],
       regions: [region("r1", "Oceans", 0), region("r2", "Way Maker", 100)],
@@ -149,5 +152,29 @@ describe("folding settings panels", () => {
     fireEvent.click(screen.getByRole("button", { name: "Metronome" }));
     fireEvent.click(screen.getByRole("button", { name: /edit layout/i }));
     expect(document.querySelector(".layout-widget.is-collapsed")).toBeNull();
+  });
+});
+
+describe("hiding markers", () => {
+  it("hides markers in their own mode, where a tap never jumps", () => {
+    // The grid shows the selected song's markers; the UI store outlives a test.
+    layoutWith("jumpToSongButton", "markerGrid");
+    render(<App />);
+    connect();
+    fireEvent.change(screen.getByLabelText("Song"), { target: { value: "r1" } });
+
+    // Outside the mode there is no hide button and a tap jumps.
+    expect(screen.queryByRole("button", { name: /^hide marker$/i })).toBeNull();
+    fireEvent.click(screen.getByText("Chorus"));
+    expect(sent.filter((command) => command.cmd === "scheduleMarkerJump")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /hide markers/i }));
+    fireEvent.click(screen.getByText("Chorus"));
+    expect(sent.filter((command) => command.cmd === "scheduleMarkerJump")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: /done/i }));
+
+    // Out of the mode the hidden marker is gone; the button counts it.
+    expect(screen.queryByText("Chorus")).toBeNull();
+    expect(screen.getByRole("button", { name: /hide markers.*1 hidden/i })).toBeTruthy();
   });
 });

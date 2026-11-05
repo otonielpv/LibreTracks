@@ -6191,3 +6191,142 @@ button {
 .remote-shell .mixer-scroll-widget .volume-fader {
   width: clamp(2.2rem, 10cqi, 3.5rem);
 }
+
+/* ── Marker cards ────────────────────────────────────────────────────────
+   Shorter cards (two rows fit where one and a half did), no room kept for
+   the old ✕, and in a narrow card no jump-mode line (JUMP CONFIG shows it).
+   Hiding markers is a mode (see MarkerGrid): the cards show their state and
+   a tap toggles it. */
+.remote-shell .layout-widget-type-markerGrid .marker-grid {
+  grid-auto-rows: minmax(4.4rem, max-content);
+}
+
+.remote-shell.remote-size-1 .layout-widget-type-markerGrid .marker-grid {
+  grid-auto-rows: minmax(5rem, max-content);
+}
+
+.remote-shell.remote-size-2 .layout-widget-type-markerGrid .marker-grid {
+  grid-auto-rows: minmax(5.8rem, max-content);
+}
+
+.remote-shell.remote-size-3 .layout-widget-type-markerGrid .marker-grid {
+  grid-auto-rows: minmax(6.8rem, max-content);
+}
+
+.remote-shell .marker-card-jump,
+.remote-shell .layout-widget-type-markerGrid .marker-card-jump {
+  padding-right: 0.6rem;
+}
+
+@container (max-width: 12rem) {
+  .remote-shell .marker-card-jump > em {
+    display: none;
+  }
+}
+
+.marker-grid-header {
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.marker-grid-toggle {
+  min-height: 2.1rem;
+}
+
+.marker-grid-toggle.is-on {
+  border-color: rgb(87 241 219 / 0.5);
+  background: rgb(87 241 219 / 0.12);
+  color: var(--accent);
+}
+
+.marker-grid-hint {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.marker-card.is-managing {
+  outline: 1px dashed rgb(255 255 255 / 0.25);
+  outline-offset: -1px;
+}
+
+.marker-card.is-managing.is-hidden-marker {
+  opacity: 0.45;
+}
+
+.marker-card-visibility {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.45);
+  color: var(--text);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.marker-card.is-hidden-marker .marker-card-visibility {
+  color: #ffb3a7;
+}
+
+/* Song strip and transpose side by side in a narrow deck: stacked, the
+   transpose block fell below the deck's song row and was cut off. The strip
+   scrolls sideways; transpose keeps a compact −/value/+ with its label. */
+@container (max-width: 34rem) {
+  .remote-shell .layout-widget .region-actions-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .remote-shell .layout-widget .region-actions-row > .region-carousel {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .remote-shell .layout-widget .region-actions-row > .selected-region-actions {
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  .remote-shell .layout-widget .selected-region-transpose {
+    padding: 0.25rem 0.35rem;
+    gap: 0.15rem;
+  }
+
+  .remote-shell .layout-widget .selected-region-transpose > span:first-child {
+    font-size: 0.5rem;
+  }
+
+  .remote-shell .layout-widget .selected-region-transpose .selected-region-key {
+    display: none;
+  }
+}
+
+@container (max-width: 34rem) {
+  .remote-shell .layout-widget-type-controlDeck .region-actions-row {
+    flex-wrap: nowrap;
+  }
+
+  .remote-shell .layout-widget-type-controlDeck .region-actions-row > .region-carousel,
+  .remote-shell .layout-widget-type-controlDeck .region-actions-row > .selected-region-actions {
+    flex-basis: auto;
+  }
+
+  .remote-shell .layout-widget-type-controlDeck .region-actions-row > .region-carousel {
+    flex-grow: 1;
+  }
+
+  .remote-shell .layout-widget-type-controlDeck .region-actions-row > .selected-region-actions {
+    flex-grow: 0;
+  }
+
+  .remote-shell .layout-widget-type-controlDeck .selected-region-transpose {
+    width: auto;
+  }
+}

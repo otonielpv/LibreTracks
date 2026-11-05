@@ -2604,7 +2604,11 @@ function MarkerGrid() {
 
   return (
     <div className="marker-grid-shell">
-      {hiddenVisibleMarkers.length > 0 ? (
+      {/* Hiding markers is a mode, not a ✕ on every card: on a phone the ✕
+          was hit by accident mid-song. In the mode every marker shows (the
+          hidden ones dimmed) and a tap on a card hides or shows it; it never
+          jumps. */}
+      {visibleMarkers.length > 0 ? (
         <div className="marker-grid-header">
           <button
             type="button"
@@ -2613,9 +2617,14 @@ function MarkerGrid() {
             onClick={() => setRevealHiddenMarkers(!revealHiddenMarkers)}
           >
             {revealHiddenMarkers
-              ? STRINGS.hideHiddenMarkers
-              : `${STRINGS.showHiddenMarkers} (${hiddenVisibleMarkers.length})`}
+              ? `✓ ${STRINGS.doneHidingMarkers}`
+              : hiddenVisibleMarkers.length > 0
+                ? `${STRINGS.manageMarkers} (${STRINGS.hiddenCount.replace("{count}", String(hiddenVisibleMarkers.length))})`
+                : STRINGS.manageMarkers}
           </button>
+          {revealHiddenMarkers ? (
+            <span className="marker-grid-hint">{STRINGS.manageMarkersHint}</span>
+          ) : null}
         </div>
       ) : null}
 
@@ -2637,13 +2646,18 @@ function MarkerGrid() {
             <div
               key={entry.id}
               ref={isNext ? nextCardRef : undefined}
-              className={`marker-card ${isCue ? "is-cue-card" : ""} ${isNext ? "is-next" : ""} ${pendingJumpTargetId === entry.id ? "is-pending" : ""} ${isHidden ? "is-hidden-marker" : ""}`}
+              className={`marker-card ${isCue ? "is-cue-card" : ""} ${isNext ? "is-next" : ""} ${pendingJumpTargetId === entry.id ? "is-pending" : ""} ${isHidden ? "is-hidden-marker" : ""} ${revealHiddenMarkers ? "is-managing" : ""}`}
               style={{ "--marker-color": markerColor(marker) } as CSSProperties}
             >
               <button
                 type="button"
                 className="marker-card-jump"
+                aria-pressed={revealHiddenMarkers ? !isHidden : undefined}
                 onClick={() => {
+                  if (revealHiddenMarkers) {
+                    toggleMarkerHidden(entry.id);
+                    return;
+                  }
                   if (pendingJump?.targetMarkerId === entry.id) {
                     cancelJump();
                     return;
@@ -2675,17 +2689,11 @@ function MarkerGrid() {
                 ) : null}
                 <em>{formatJumpModeLabel(jumpMode, jumpBars)}</em>
               </button>
-              <button
-                type="button"
-                className="marker-card-hide"
-                aria-label={
-                  isHidden ? STRINGS.showMarker : STRINGS.hideMarker
-                }
-                title={isHidden ? STRINGS.showMarker : STRINGS.hideMarker}
-                onClick={() => toggleMarkerHidden(entry.id)}
-              >
-                {isHidden ? "+" : "×"}
-              </button>
+              {revealHiddenMarkers ? (
+                <span className="marker-card-visibility" aria-hidden="true">
+                  {isHidden ? STRINGS.markerHidden : STRINGS.markerShown}
+                </span>
+              ) : null}
             </div>
           );
         })}
