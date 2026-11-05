@@ -6710,3 +6710,44 @@ button {
   transform: scaleX(var(--marker-progress, 0));
   transition: transform 1s linear;
 }
+
+/* A lit (current) card with cues on its beat: the chips are drawn in the
+   cue's colour, often the section's own, so on the lit card they vanished
+   (orange on orange). Here they are dark with white text, and the card
+   keeps room at the bottom so the progress bar never sits on them. */
+.marker-card.is-current .marker-card-jump {
+  padding-bottom: 0.75rem;
+}
+
+.marker-card.is-current .marker-card-cues .marker-card-cue-chip {
+  border-color: rgb(255 255 255 / 0.55);
+  background: rgb(0 0 0 / 0.45);
+  color: #fff;
+}
+
+/* Rows sized to their content. minmax(floor, max-content) never grew past the
+   floor: the grid has a fixed height and scrolls, so there is never "free
+   space" to grow into, and a card with an extra line (cue chips, the NOW
+   badge) was clipped at the bottom. The floor moves to the card itself. */
+.remote-shell .layout-widget-type-markerGrid .marker-grid,
+.remote-shell.remote-size-1 .layout-widget-type-markerGrid .marker-grid,
+.remote-shell.remote-size-2 .layout-widget-type-markerGrid .marker-grid,
+.remote-shell.remote-size-3 .layout-widget-type-markerGrid .marker-grid {
+  grid-auto-rows: max-content;
+}
+
+.remote-shell .layout-widget-type-markerGrid .marker-card {
+  min-height: 4.4rem;
+}
+
+.remote-shell.remote-size-1 .layout-widget-type-markerGrid .marker-card {
+  min-height: 5rem;
+}
+
+.remote-shell.remote-size-2 .layout-widget-type-markerGrid .marker-card {
+  min-height: 5.8rem;
+}
+
+.remote-shell.remote-size-3 .layout-widget-type-markerGrid .marker-card {
+  min-height: 6.8rem;
+}
