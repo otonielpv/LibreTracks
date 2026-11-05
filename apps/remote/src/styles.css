@@ -2953,74 +2953,6 @@ button {
   min-height: 0;
 }
 
-/* Preserve the original phone remote for the untouched default Controls tab.
-   Its content used natural block heights and the existing mobile component
-   breakpoints, which is more useful than projecting the desktop grid onto a
-   narrow screen. Any actual customization removes this exact-layout marker
-   and returns to the free-position grid. */
-@media (max-width: 600px) {
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget {
-    display: block;
-    width: 100%;
-    height: auto;
-    min-height: 0;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .layout-widget-body {
-    display: block;
-    height: auto;
-    min-height: 1px;
-    overflow: visible;
-    container-type: inline-size;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .transport-readouts-inline,
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .transport-controls-inline,
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .transport-control-deck,
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .marker-grid {
-    height: auto;
-    min-height: max-content;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget-type-readouts {
-    min-height: 7rem;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget-type-transportButtons {
-    min-height: 0;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget-type-controlDeck {
-    min-height: 9rem;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget-type-markerGrid {
-    min-height: 12rem;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .timeline-widget-host,
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .timeline-shell-shared {
-    height: 4rem !important;
-    max-height: none;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) > .layout-widget-type-timeline {
-    display: block;
-    height: 4rem;
-    min-height: 4rem;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing) .transport-control-deck {
-    position: static;
-  }
-}
-
 /* Editing controls float over the real viewport. They no longer shrink the
    canvas, so the rectangles being arranged have the same available space as
    they will after pressing Done. */
@@ -3181,12 +3113,9 @@ button {
   white-space: nowrap;
 }
 
-.layout-canvas:not(.is-classic-mobile-controls)
-  .layout-widget-type-transportButtons .transport-controls-inline,
-.layout-canvas:not(.is-classic-mobile-controls)
-  .layout-widget-type-transportButtons .pill-button-split,
-.layout-canvas:not(.is-classic-mobile-controls)
-  .layout-widget-type-transportButtons .pill-button {
+.layout-canvas-wrap .layout-canvas .layout-widget-type-transportButtons .transport-controls-inline,
+.layout-canvas-wrap .layout-canvas .layout-widget-type-transportButtons .pill-button-split,
+.layout-canvas-wrap .layout-canvas .layout-widget-type-transportButtons .pill-button {
   height: 100%;
 }
 
@@ -4168,59 +4097,6 @@ button {
   gap: 0.25rem;
   margin-top: 0.2rem;
   padding-bottom: 0.2rem;
-}
-
-@media (max-width: 600px) {
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
-    .layout-widget-type-markerGrid .marker-grid-shell {
-    height: 100%;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
-    .layout-widget-type-markerGrid .marker-grid {
-    overflow-y: auto;
-    grid-auto-rows: minmax(6.25rem, max-content);
-  }
-
-  /* The untouched phone preset is a one-screen dashboard. Control settings
-     and marker cards keep readable intrinsic sizes, but scroll inside their
-     own fixed-height widgets instead of pushing the whole page downward. */
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
-    > .layout-widget-type-controlDeck {
-    display: flex;
-    height: 10rem;
-    min-height: 10rem;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
-    > .layout-widget-type-markerGrid {
-    display: flex;
-    height: 12rem;
-    min-height: 12rem;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
-    > .layout-widget-type-controlDeck .layout-widget-body,
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
-    > .layout-widget-type-markerGrid .layout-widget-body {
-    display: block;
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .layout-canvas.is-classic-mobile-controls:not(.is-editing)
-    .layout-widget-type-controlDeck .transport-control-deck {
-    display: flex;
-    height: 100%;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    touch-action: pan-y;
-    -webkit-overflow-scrolling: touch;
-    align-content: flex-start;
-    padding-right: 0.15rem;
-  }
 }
 
 /* Composite controls normally stay sticky while the remote scrolls. Inside an
