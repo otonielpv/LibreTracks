@@ -254,11 +254,13 @@ function placement(
 export function defaultLayout(profile: LayoutPresetProfile = "standard"): RemoteLayout {
   const phone = profile === "phone";
   const tablet = profile === "tablet";
-  const deckY = phone ? 13 : tablet ? 10 : 16;
-  const deckH = phone ? 8 : tablet ? 7 : 9;
+  // Heights measured on a 390-px phone and a 1024×768 tablet: each block
+  // shows all of its content (the deck down to its song strip and transpose).
+  const deckY = phone ? 13 : tablet ? 12 : 16;
+  const deckH = phone ? 14 : tablet ? 9 : 9;
   /** Columns reserved for the jump button beside the deck (0 = its own row). */
   const jumpW = phone ? LAYOUT_COLUMNS : 5;
-  const jumpH = phone ? 4 : deckH;
+  const jumpH = phone ? 6 : deckH;
   // Beside the deck it shares the deck's row; on a phone it opens a new one.
   const jumpX = phone ? 0 : LAYOUT_COLUMNS - jumpW;
   const jumpY = phone ? deckY + deckH : deckY;
@@ -267,20 +269,14 @@ export function defaultLayout(profile: LayoutPresetProfile = "standard"): Remote
     id: newTabId(),
     name: getRemoteStrings().defaultTabControls,
     widgets: [
-      placement("readouts", 0, 0, LAYOUT_COLUMNS, phone ? 6 : tablet ? 3 : 4),
-      placement("transportButtons", 0, phone ? 6 : tablet ? 3 : 4, LAYOUT_COLUMNS, phone ? 3 : tablet ? 3 : 5),
-      placement("timeline", 0, phone ? 9 : tablet ? 6 : 9, LAYOUT_COLUMNS, phone ? 4 : tablet ? 4 : 7),
+      placement("readouts", 0, 0, LAYOUT_COLUMNS, phone ? 6 : 4),
+      placement("transportButtons", 0, phone ? 6 : 4, LAYOUT_COLUMNS, phone ? 3 : tablet ? 4 : 5),
+      placement("timeline", 0, phone ? 9 : tablet ? 8 : 9, LAYOUT_COLUMNS, phone ? 4 : tablet ? 4 : 7),
       placement("controlDeck", 0, deckY, phone ? LAYOUT_COLUMNS : LAYOUT_COLUMNS - jumpW, deckH),
       placement("jumpToSongButton", jumpX, jumpY, jumpW, jumpH),
       placement("markerGrid", 0, belowY, LAYOUT_COLUMNS, phone ? 10 : tablet ? 10 : 12),
-      // Emergency black for the projector (video plan, paso 13).
-      placement(
-        "videoBlackButton",
-        0,
-        belowY + (phone ? 10 : tablet ? 10 : 12),
-        phone ? LAYOUT_COLUMNS : 6,
-        4,
-      ),
+      // The projector's emergency black (video plan, paso 13) is not here:
+      // few sessions use video, so it waits in the palette.
     ],
   };
   const mixer: LayoutTab = {
@@ -311,6 +307,62 @@ export function defaultLayout(profile: LayoutPresetProfile = "standard"): Remote
     placementMode: "free",
     tabHeightRem: DEFAULT_TAB_HEIGHT_REM,
   };
+}
+
+/** Default tab names in every locale: a renamed tab means the user touched it. */
+const DEFAULT_TAB_NAMES = new Set([
+  "Controls", "Controles", "Mixer", "Tools", "Herramientas", "Main", "Principal",
+]);
+
+/** Controls tabs of earlier presets, which still count as untouched. */
+const LEGACY_CONTROLS_SHAPES: readonly (readonly WidgetType[])[] = [
+  ["readouts", "transportButtons", "timeline", "controlDeck", "jumpToSongButton", "markerGrid", "videoBlackButton"],
+  ["readouts", "transportButtons", "timeline", "controlDeck", "jumpToSongButton", "markerGrid"],
+  ["readouts", "transportButtons", "timeline", "controlDeck", "markerGrid"],
+];
+
+const sameTypes = (a: readonly WidgetType[], b: readonly WidgetType[]) =>
+  a.length === b.length && a.every((type, index) => type === b[index]);
+
+const geometry = (layout: RemoteLayout) =>
+  layout.tabs.map((tab) => tab.widgets.map(({ type, x, y, w, h }) => [type, x, y, w, h].join(":")).join("|"));
+
+/**
+ * Whether a stored layout is a preset nobody edited: never customised, the
+ * preset's tabs under their default names, each with the preset's widgets
+ * (or an earlier preset's controls). The current preset is computed, not
+ * listed, so adding a widget to it cannot make every fresh device look
+ * edited again (that is how phones got the desktop preset after the video
+ * button joined it).
+ */
+export function isUntouchedPreset(stored: RemoteLayout): boolean {
+  if (stored.customized === true) return false;
+  const fresh = defaultLayout("standard");
+  if (stored.tabs.length > fresh.tabs.length || stored.tabs.length === 0) return false;
+  return stored.tabs.every((tab, index) => {
+    if (!DEFAULT_TAB_NAMES.has(tab.name)) return false;
+    const types = tab.widgets.map((widget) => widget.type);
+    const expected = fresh.tabs[index].widgets.map((widget) => widget.type);
+    return (
+      sameTypes(types, expected) ||
+      (index === 0 && LEGACY_CONTROLS_SHAPES.some((shape) => sameTypes(types, shape)))
+    );
+  });
+}
+
+/**
+ * The layout to start with: the stored one, or this device's preset when the
+ * stored one is an untouched preset that differs from it (made on another
+ * kind of device, or before the preset changed).
+ */
+export function resolveStartupLayout(stored: RemoteLayout, profile: LayoutPresetProfile): RemoteLayout {
+  if (!isUntouchedPreset(stored)) return stored;
+  const fresh = defaultLayout(profile);
+  const same =
+    stored.presetProfile === profile &&
+    stored.tabs.length === fresh.tabs.length &&
+    geometry(stored).join("/") === geometry(fresh).join("/");
+  return same ? stored : { ...fresh, tabHeightRem: stored.tabHeightRem ?? fresh.tabHeightRem };
 }
 
 /**

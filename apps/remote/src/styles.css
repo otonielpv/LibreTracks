@@ -5742,3 +5742,249 @@ button {
   font: 500 0.9em/1.3 ui-monospace, monospace;
   white-space: pre;
 }
+
+/* ── Widgets that fit their content (view only) ──────────────────────────
+   The view's rows are minmax(row, auto): a widget of controls stretches its
+   rows instead of cutting off its last fields. The rest keep their exact
+   rectangle (size containment: they never push a row). See
+   CONTENT_HEIGHT_WIDGETS in App.tsx. */
+.layout-canvas:not(.is-editing) > .layout-widget.is-fixed-height {
+  contain: size;
+}
+
+.layout-canvas:not(.is-editing) > .layout-widget.fits-content > .layout-widget-body {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+  container-type: inline-size;
+}
+
+.layout-canvas:not(.is-editing) > .layout-widget.fits-content > .layout-widget-body > * {
+  flex: 1 0 auto;
+}
+
+/* The settings panels are their own size containers with a scroller; when
+   the widget fits its content they must size to it instead. */
+.layout-canvas:not(.is-editing) > .layout-widget.fits-content .performance-settings-widget,
+.layout-canvas:not(.is-editing) > .layout-widget.fits-content .pads-widget {
+  height: auto;
+  overflow: visible;
+  container-type: inline-size;
+}
+
+/* A one-section panel (metronome or voice guide on its own): the widget is
+   already the card, so the section drops its own frame. */
+.performance-settings-widget-metronome > .performance-settings-section,
+.performance-settings-widget-guide > .performance-settings-section {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+/* ── Transport buttons ───────────────────────────────────────────────────
+   Icon over label. Off, every button is the same dark key with its icon in
+   its own colour; on, it lights in that colour: Play green while playing,
+   Pause amber while paused, the switches (Fade, Click, Guía) in the accent.
+   The old look (all solid turquoise, amber when on) read "on" for every
+   button. Sizes come from the widget (container units). */
+.remote-shell .pill-button.transport-button {
+  --tone: var(--muted);
+  --tone-fill: linear-gradient(180deg, #57f1db, #2dd4bf);
+  --tone-ink: #003731;
+  --tone-glow: rgb(87 241 219 / 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.12rem, 4cqh, 0.45rem);
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(0.2rem, 4cqh, 0.6rem) clamp(0.15rem, 1cqi, 0.5rem);
+  border: 1px solid rgb(255 255 255 / 0.09);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #2c3030, #1d2020);
+  color: #dfe6e4;
+  box-shadow:
+    0 2px 6px rgb(0 0 0 / 0.35),
+    inset 0 1px 0 rgb(255 255 255 / 0.07);
+  font-size: clamp(0.6rem, min(2.6cqi, 16cqh), 1.05rem);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.remote-shell .pill-button.transport-button.tone-play {
+  --tone: #4ade80;
+  --tone-fill: linear-gradient(180deg, #5ee08f, #22a35a);
+  --tone-ink: #03230f;
+  --tone-glow: rgb(74 222 128 / 0.4);
+}
+
+.remote-shell .pill-button.transport-button.tone-pause {
+  --tone: #fbbf24;
+  --tone-fill: linear-gradient(180deg, #ffd76a, #f59e0b);
+  --tone-ink: #3f2200;
+  --tone-glow: rgb(255 215 106 / 0.4);
+}
+
+.remote-shell .pill-button.transport-button.tone-stop {
+  --tone: #f87171;
+}
+
+.remote-shell .pill-button.transport-button.tone-toggle {
+  --tone: var(--accent);
+}
+
+.remote-shell .pill-button.transport-button .transport-icon {
+  flex: none;
+  width: clamp(1.1rem, min(9cqi, 40cqh), 2.6rem);
+  height: clamp(1.1rem, min(9cqi, 40cqh), 2.6rem);
+  color: var(--tone);
+}
+
+.transport-controls-solo .pill-button.transport-button .transport-icon {
+  width: clamp(1.2rem, min(30cqi, 42cqh), 3.2rem);
+  height: clamp(1.2rem, min(30cqi, 42cqh), 3.2rem);
+}
+
+.transport-controls-solo .pill-button.transport-button {
+  font-size: clamp(0.62rem, min(11cqi, 15cqh), 1.3rem);
+}
+
+.transport-button-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.remote-shell .pill-button.transport-button.is-active {
+  border-color: transparent;
+  background: var(--tone-fill);
+  color: var(--tone-ink);
+  box-shadow:
+    0 0 16px var(--tone-glow),
+    inset 0 1px 0 rgb(255 255 255 / 0.3);
+}
+
+.remote-shell .pill-button.transport-button.is-active .transport-icon {
+  color: var(--tone-ink);
+}
+
+.remote-shell .pill-button.transport-button:disabled {
+  opacity: 0.4;
+}
+
+/* Too short for icon and label: the icon alone. */
+@container widget (max-height: 46px) {
+  .remote-shell .pill-button.transport-button .transport-button-label {
+    display: none;
+  }
+}
+
+/* ── Folding settings panels ─────────────────────────────────────────────
+   The title is the fold button; folded, only the header (with its on/off
+   switch) stays. */
+.panel-collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  min-height: 2.75rem;
+  margin: -0.3rem 0 -0.3rem -0.35rem;
+  padding: 0.3rem 0.5rem 0.3rem 0.35rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.panel-collapse-toggle:active {
+  background: rgb(255 255 255 / 0.05);
+}
+
+.panel-collapse-toggle:focus-visible {
+  outline: 2px solid rgb(87 241 219 / 0.7);
+}
+
+.panel-collapse-chevron {
+  flex: none;
+  color: var(--accent);
+  transition: transform 0.15s ease;
+}
+
+.panel-collapse-toggle[aria-expanded="false"] .panel-collapse-chevron {
+  transform: rotate(-90deg);
+}
+
+.layout-widget.is-collapsed .performance-settings-section > :not(header),
+.layout-widget.is-collapsed .pads-widget > :not(header) {
+  display: none;
+}
+
+.layout-widget.is-collapsed .performance-settings-section > header,
+.layout-widget.is-collapsed .pads-widget > header {
+  margin: 0;
+}
+
+/* ── Saltar a canción: picker + action ───────────────────────────────────
+   Wide (a phone row): the song select and the button side by side. Narrow
+   (beside the deck on a tablet): stacked. */
+.layout-widget-type-jumpToSongButton .jump-to-song-host {
+  flex-direction: column;
+  gap: clamp(0.25rem, 3cqh, 0.6rem);
+}
+
+.jump-to-song-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.jump-to-song-picker select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.5rem;
+  background: var(--panel-2);
+  color: var(--accent);
+  font-size: clamp(0.85rem, 2.6cqi, 1.1rem);
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.layout-widget-type-jumpToSongButton .jump-to-song-button {
+  flex: 1 1 auto;
+  min-height: 2.75rem;
+}
+
+@container widget (min-width: 26rem) {
+  .layout-widget-type-jumpToSongButton .jump-to-song-host {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .layout-widget-type-jumpToSongButton .jump-to-song-picker {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .layout-widget-type-jumpToSongButton .jump-to-song-button {
+    flex: 0 0 auto;
+    min-width: 9rem;
+  }
+}

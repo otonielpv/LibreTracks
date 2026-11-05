@@ -25,6 +25,29 @@
   );
 }
 
+/* Volumen (ajustes de metrónomo, guía y pads): la escala de los faders de
+   volumen, −36 / −12 / 0 dB en 0.3 / 0.6 / 0.75 del recorrido. El centro del
+   pulgar va de cap/2 a 100% - cap/2, de ahí el cálculo. */
+.lt-fader.is-volume {
+  --lt-fader-tick: #3c4443;
+  --lt-fader-ticks: linear-gradient(
+    to right,
+    transparent calc(var(--lt-fader-cap-w) / 2 + (100% - var(--lt-fader-cap-w)) * 0.3 - 0.5px),
+    var(--lt-fader-tick) 0 calc(var(--lt-fader-cap-w) / 2 + (100% - var(--lt-fader-cap-w)) * 0.3 + 0.5px),
+    transparent 0 calc(var(--lt-fader-cap-w) / 2 + (100% - var(--lt-fader-cap-w)) * 0.6 - 0.5px),
+    var(--lt-fader-tick) 0 calc(var(--lt-fader-cap-w) / 2 + (100% - var(--lt-fader-cap-w)) * 0.6 + 0.5px),
+    transparent 0 calc(var(--lt-fader-cap-w) / 2 + (100% - var(--lt-fader-cap-w)) * 0.75 - 0.5px),
+    var(--lt-fader-tick-unity) 0 calc(var(--lt-fader-cap-w) / 2 + (100% - var(--lt-fader-cap-w)) * 0.75 + 0.5px),
+    transparent 0
+  );
+}
+
+/* Sin escala que marcar (tiempo de fundido de los pads). Bipolar (semitonos
+   del metrónomo) usa la marca central por defecto. */
+.lt-fader.is-plain {
+  --lt-fader-ticks: none;
+}
+
 .lt-fader.is-pan {
   --lt-fader-index: #74b8ff;
   --lt-fader-index-glow: rgb(116 184 255 / 0.35);
@@ -53,6 +76,15 @@ input[type="range"].lt-fader {
   background-size: 100% var(--lt-fader-tick-len);
   background-repeat: no-repeat;
   touch-action: none;
+}
+
+input[type="range"].lt-fader:focus {
+  outline: none;
+}
+
+input[type="range"].lt-fader:focus-visible {
+  outline: 2px solid rgb(87 241 219 / 0.7);
+  outline-offset: 2px;
 }
 
 input[type="range"].lt-fader:disabled {

@@ -61,6 +61,16 @@ import {
   gainToPosition,
   positionToGain,
 } from "@libretracks/shared/faderScale";
+import { PanelTitle, WidgetInstanceContext, useCollapsedWidgets } from "./collapsibleWidgets";
+import {
+  BlackScreenIcon,
+  FadeStopIcon,
+  MetronomeIcon,
+  PauseIcon,
+  PlayIcon,
+  StopIcon,
+  VoiceIcon,
+} from "./transportIcons";
 import { currentScreenSize, isPhoneShapedScreen } from "./deviceShape";
 import { getRemoteStrings } from "./i18n";
 import { buildMarkerCards, buildTimelineMarkerChips } from "./markerCards";
@@ -101,6 +111,7 @@ import {
   parseLayoutFile,
   pushWidgetsDown,
   readStoredLayout,
+  resolveStartupLayout,
   reconcileWidgetGroup,
   rectContainsPoint,
   serializeLayoutFile,
@@ -1673,145 +1684,191 @@ const SharedTimeline = memo(function SharedTimeline({
   );
 });
 
-function TransportControlButtons() {
-  const settings = useRemoteSyncStore((state) => state.settings);
-  const metronomeEnabled = settings?.metronomeEnabled ?? false;
-  const voiceGuideEnabled = settings?.voiceGuideEnabled ?? false;
+type TransportTone = "play" | "pause" | "stop" | "toggle";
 
+/**
+ * One transport action: icon over its label. Off, every button is the same
+ * dark key; on, it lights in its own colour (Play green while it plays,
+ * Pause amber while paused, the toggles in the accent), so the state reads
+ * from across the stage.
+ */
+function TransportButton({
+  icon,
+  label,
+  tone,
+  active = false,
+  toggle = false,
+  disabled = false,
+  onClick,
+}: {
+  icon: ReactElement;
+  label: string;
+  tone: TransportTone;
+  active?: boolean;
+  /** A switch (Click, Guía, Fade, Negro): exposes its state as pressed. */
+  toggle?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`pill-button transport-button tone-${tone} ${active ? "is-active" : ""}`}
+      aria-pressed={toggle ? active : undefined}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {icon}
+      <span className="transport-button-label">{label}</span>
+    </button>
+  );
+}
+
+function usePlaybackState() {
+  return useRemoteSyncStore((state) => state.snapshot?.playbackState ?? null);
+}
+
+function PlayPill() {
+  const playing = usePlaybackState() === "playing";
+  return (
+    <TransportButton
+      icon={<PlayIcon />}
+      label={STRINGS.play}
+      tone="play"
+      active={playing}
+      onClick={() => sendCommand({ cmd: "play" })}
+    />
+  );
+}
+
+function PausePill() {
+  const paused = usePlaybackState() === "paused";
+  return (
+    <TransportButton
+      icon={<PauseIcon />}
+      label={STRINGS.pause}
+      tone="pause"
+      active={paused}
+      onClick={() => sendCommand({ cmd: "pause" })}
+    />
+  );
+}
+
+function StopPill() {
+  return (
+    <TransportButton
+      icon={<StopIcon />}
+      label={STRINGS.stop}
+      tone="stop"
+      onClick={() => sendCommand({ cmd: "stop" })}
+    />
+  );
+}
+
+/** «Fade out y parar»: the desktop fades the song out and stops; pressing it
+ * again during the fade stops at once. Lit while the fade runs. */
+function FadeStopPill() {
+  const fading = useRemoteSyncStore((state) => state.snapshot?.fadingToStop === true);
+  return (
+    <TransportButton
+      icon={<FadeStopIcon />}
+      label={STRINGS.fadeStop}
+      tone="toggle"
+      toggle
+      active={fading}
+      onClick={() => sendCommand({ cmd: "fadeOutStop" })}
+    />
+  );
+}
+
+function ClickPill() {
+  const metronomeEnabled = useRemoteSyncStore((state) => state.settings?.metronomeEnabled ?? false);
+  return (
+    <TransportButton
+      icon={<MetronomeIcon />}
+      label={STRINGS.click}
+      tone="toggle"
+      toggle
+      active={metronomeEnabled}
+      onClick={() => sendMetronomePatch({ enabled: !metronomeEnabled })}
+    />
+  );
+}
+
+function GuidePill() {
+  const settings = useRemoteSyncStore((state) => state.settings);
+  const voiceGuideEnabled = settings?.voiceGuideEnabled ?? false;
+  return (
+    <TransportButton
+      icon={<VoiceIcon />}
+      label={STRINGS.guide}
+      tone="toggle"
+      toggle
+      active={voiceGuideEnabled}
+      disabled={!settings}
+      onClick={() => {
+        if (!settings) return;
+        sendSettingsUpdate({ ...settings, voiceGuideEnabled: !voiceGuideEnabled });
+      }}
+    />
+  );
+}
+
+function TransportControlButtons() {
   return (
     <div className="transport-controls transport-controls-inline">
-      <button className="pill-button" onClick={() => sendCommand({ cmd: "play" })}>
-        {STRINGS.play}
-      </button>
-      <button className="pill-button" onClick={() => sendCommand({ cmd: "pause" })}>
-        {STRINGS.pause}
-      </button>
-      <button className="pill-button" onClick={() => sendCommand({ cmd: "stop" })}>
-        {STRINGS.stop}
-      </button>
+      <PlayPill />
+      <PausePill />
+      <StopPill />
       <FadeStopPill />
       {/* Keep Click + Voice guide grouped while giving each a full action slot. */}
       <div className="pill-button-split">
-        <button
-          className={`pill-button ${metronomeEnabled ? "is-active" : ""}`}
-          onClick={() => sendMetronomePatch({ enabled: !metronomeEnabled })}
-        >
-          {STRINGS.click}
-        </button>
-        <button
-          className={`pill-button ${voiceGuideEnabled ? "is-active" : ""}`}
-          disabled={!settings}
-          onClick={() => {
-            if (!settings) {
-              return;
-            }
-            sendSettingsUpdate({
-              ...settings,
-              voiceGuideEnabled: !voiceGuideEnabled,
-            });
-          }}
-        >
-          {STRINGS.guide}
-        </button>
+        <ClickPill />
+        <GuidePill />
       </div>
     </div>
   );
 }
 
 /** Individual transport buttons, so each can be placed as its own widget. */
-function PlayButtonWidget() {
+function SoloTransport({ children }: { children: ReactElement }) {
   return (
     <div className="transport-controls transport-controls-inline transport-controls-solo">
-      <button className="pill-button" onClick={() => sendCommand({ cmd: "play" })}>
-        {STRINGS.play}
-      </button>
+      {children}
     </div>
   );
+}
+function PlayButtonWidget() {
+  return <SoloTransport><PlayPill /></SoloTransport>;
 }
 function PauseButtonWidget() {
-  return (
-    <div className="transport-controls transport-controls-inline transport-controls-solo">
-      <button className="pill-button" onClick={() => sendCommand({ cmd: "pause" })}>
-        {STRINGS.pause}
-      </button>
-    </div>
-  );
+  return <SoloTransport><PausePill /></SoloTransport>;
 }
 function StopButtonWidget() {
-  return (
-    <div className="transport-controls transport-controls-inline transport-controls-solo">
-      <button className="pill-button" onClick={() => sendCommand({ cmd: "stop" })}>
-        {STRINGS.stop}
-      </button>
-    </div>
-  );
-}
-/** «Fade out y parar»: the desktop fades the song out and stops; pressing it
- * again during the fade stops at once. Lit while the fade runs. */
-function FadeStopPill() {
-  const fading = useRemoteSyncStore((state) => state.snapshot?.fadingToStop === true);
-  return (
-    <button
-      className={`pill-button ${fading ? "is-active" : ""}`}
-      aria-pressed={fading}
-      onClick={() => sendCommand({ cmd: "fadeOutStop" })}
-    >
-      {STRINGS.fadeStop}
-    </button>
-  );
+  return <SoloTransport><StopPill /></SoloTransport>;
 }
 function FadeStopButtonWidget() {
-  return (
-    <div className="transport-controls transport-controls-inline transport-controls-solo">
-      <FadeStopPill />
-    </div>
-  );
+  return <SoloTransport><FadeStopPill /></SoloTransport>;
 }
 function ClickButtonWidget() {
-  const settings = useRemoteSyncStore((state) => state.settings);
-  const metronomeEnabled = settings?.metronomeEnabled ?? false;
-  return (
-    <div className="transport-controls transport-controls-inline transport-controls-solo">
-      <button
-        className={`pill-button ${metronomeEnabled ? "is-active" : ""}`}
-        onClick={() => sendMetronomePatch({ enabled: !metronomeEnabled })}
-      >
-        {STRINGS.click}
-      </button>
-    </div>
-  );
+  return <SoloTransport><ClickPill /></SoloTransport>;
 }
 /** Emergency black on the projector (paso 13). Toggles; the desktop badge
- * shows "NEGRO" while it is on. */
+ * shows "NEGRO" while it is on (the snapshot does not carry that state). */
 function VideoBlackButtonWidget() {
   return (
-    <div className="transport-controls transport-controls-inline transport-controls-solo">
-      <button
-        className="pill-button"
+    <SoloTransport>
+      <TransportButton
+        icon={<BlackScreenIcon />}
+        label={STRINGS.videoBlack}
+        tone="stop"
         onClick={() => sendCommand({ cmd: "videoLiveAction", action: "black" })}
-      >
-        {STRINGS.videoBlack}
-      </button>
-    </div>
+      />
+    </SoloTransport>
   );
 }
 function GuideButtonWidget() {
-  const settings = useRemoteSyncStore((state) => state.settings);
-  const voiceGuideEnabled = settings?.voiceGuideEnabled ?? false;
-  return (
-    <div className="transport-controls transport-controls-inline transport-controls-solo">
-      <button
-        className={`pill-button ${voiceGuideEnabled ? "is-active" : ""}`}
-        disabled={!settings}
-        onClick={() => {
-          if (!settings) return;
-          sendSettingsUpdate({ ...settings, voiceGuideEnabled: !voiceGuideEnabled });
-        }}
-      >
-        {STRINGS.guide}
-      </button>
-    </div>
-  );
+  return <SoloTransport><GuidePill /></SoloTransport>;
 }
 
 /** Which slice of the control deck to render. Undefined = the whole deck. */
@@ -3519,6 +3576,7 @@ function SettingsRange({
       <span>{label}<strong>{formatGainDb(gain)}</strong></span>
       <input
         type="range"
+        className="lt-fader is-volume"
         min={0}
         max={1}
         step={0.001}
@@ -3543,6 +3601,7 @@ function SettingsPitchRange({
       <span>{label}<strong>{pitch > 0 ? "+" : ""}{pitch} st</strong></span>
       <input
         type="range"
+        className="lt-fader is-bipolar"
         min={-24}
         max={24}
         step={1}
@@ -3565,7 +3624,7 @@ function PerformanceSettingsWidget({ mode = "combined" }: { mode?: "combined" | 
       {mode !== "guide" ? (
       <section className="performance-settings-section">
         <header>
-          <strong>{STRINGS.metronomeSettings}</strong>
+          <PanelTitle title={STRINGS.metronomeSettings} expandLabel={STRINGS.expandPanel} collapseLabel={STRINGS.collapsePanel} />
           <label className="performance-switch">
             <input type="checkbox" checked={settings.metronomeEnabled} onChange={(event) => patch({ metronomeEnabled: event.currentTarget.checked })} />
             <span>{settings.metronomeEnabled ? STRINGS.on : STRINGS.off}</span>
@@ -3625,7 +3684,7 @@ function PerformanceSettingsWidget({ mode = "combined" }: { mode?: "combined" | 
       {mode !== "metronome" ? (
       <section className="performance-settings-section">
         <header>
-          <strong>{STRINGS.voiceGuideSettings}</strong>
+          <PanelTitle title={STRINGS.voiceGuideSettings} expandLabel={STRINGS.expandPanel} collapseLabel={STRINGS.collapsePanel} />
           <label className="performance-switch">
             <input type="checkbox" checked={settings.voiceGuideEnabled} onChange={(event) => patch({ voiceGuideEnabled: event.currentTarget.checked })} />
             <span>{settings.voiceGuideEnabled ? STRINGS.on : STRINGS.off}</span>
@@ -3706,7 +3765,7 @@ function PadsWidget() {
   return (
     <div className="pads-widget">
       <header>
-        <div><strong>{STRINGS.padsTitle}</strong><small>{currentPad?.name || settings.padId || STRINGS.padsNoPack}</small></div>
+        <div><PanelTitle title={STRINGS.padsTitle} expandLabel={STRINGS.expandPanel} collapseLabel={STRINGS.collapsePanel} /><small>{currentPad?.name || settings.padId || STRINGS.padsNoPack}</small></div>
         <label className="performance-switch"><input type="checkbox" checked={settings.padEnabled} disabled={!settings.padId} onChange={(event) => patch({ padEnabled: event.currentTarget.checked })} /><span>{settings.padEnabled ? STRINGS.on : STRINGS.off}</span></label>
       </header>
       <label className="performance-setting-field">
@@ -3775,6 +3834,7 @@ function PadFadeControl({
       {enabled ? (
         <input
           type="range"
+          className="lt-fader is-plain"
           min={0.5}
           max={8}
           step={0.1}
@@ -3892,15 +3952,35 @@ function RegionSectionWidget() {
 function JumpToSongButtonWidget() {
   const songView = useRemoteSyncStore((state) => state.songView);
   const selectedRegionId = useRemoteUiStore((state) => state.selectedRegionId);
+  const setSelectedRegionId = useRemoteUiStore((state) => state.setSelectedRegionId);
   const regions = songView?.regions ?? [];
   const selectedRegion =
     regions.find((region) => region.id === selectedRegionId) ?? regions[0] ?? null;
 
   return (
+    // The song to jump to is chosen right here: the deck's song strip used to
+    // be the only place, and a layout without it (or a phone, where the deck
+    // cut it off) left this button jumping to the first song. Both share the
+    // selection, so they stay in step.
+    //
     // Deliberately NOT a `pill-button`: that is the transport family (Play,
-    // Pause, Stop) and this action is not transport. It keeps the flat,
-    // uppercase `jump-cancel-button` look it had inside the region deck.
+    // Pause, Stop) and this action is not transport.
     <div className="jump-to-song-host">
+      <label className="jump-to-song-picker">
+        <span>{STRINGS.jumpToSongTarget}</span>
+        <select
+          aria-label={STRINGS.jumpToSongTarget}
+          value={selectedRegion?.id ?? ""}
+          disabled={regions.length === 0}
+          onChange={(event) => setSelectedRegionId(event.currentTarget.value)}
+        >
+          {regions.map((region, index) => (
+            <option key={region.id} value={region.id}>
+              {index + 1}. {region.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <button
         className="jump-cancel-button jump-to-song-button"
         disabled={!selectedRegion}
@@ -3912,9 +3992,6 @@ function JumpToSongButtonWidget() {
         }}
       >
         {STRINGS.jumpToSong}
-        {selectedRegion ? (
-          <em className="jump-to-song-target">{selectedRegion.name}</em>
-        ) : null}
       </button>
     </div>
   );
@@ -4171,6 +4248,28 @@ function widgetDefaultSize(type: WidgetType, canvasWidth: number): WidgetDefault
   }
 }
 
+/** Widgets that are a column of form controls (settings panels, a note):
+ * in the view (never while editing) they may grow past the height the layout
+ * gives them, so their last fields are never cut off. Every other widget
+ * scrolls, or scales its content to its own rectangle with container units,
+ * and keeps its exact size. */
+const CONTENT_HEIGHT_WIDGETS: ReadonlySet<WidgetType> = new Set<WidgetType>([
+  "jumpToSongButton",
+  "metronomeSettings",
+  "voiceGuideSettings",
+  "pads",
+  "performanceSettings",
+  "layoutNote",
+]);
+
+/** Settings panels that fold down to their header (see collapsibleWidgets). */
+const COLLAPSIBLE_WIDGETS: ReadonlySet<WidgetType> = new Set<WidgetType>([
+  "metronomeSettings",
+  "voiceGuideSettings",
+  "pads",
+  "performanceSettings",
+]);
+
 /** Fixed pixel height of one grid row in the absolute (X/Y) layout. The grid
  * uses fixed-height rows so a widget's row-span maps to a predictable size and
  * drag math stays simple. */
@@ -4302,18 +4401,23 @@ function LayoutWidgetHost({
   isGroupDropTarget: boolean;
 }) {
   const definition = WIDGET_REGISTRY[placement.type];
+  const collapsed = useCollapsedWidgets((state) => state.collapsed.has(placement.id));
   if (!definition) {
     return null;
   }
   const { Component } = definition;
   const label = STRINGS[definition.labelKey];
+  const folds = !editing && collapsed && COLLAPSIBLE_WIDGETS.has(placement.type);
 
   return (
     <div
-      className={`layout-widget layout-widget-type-${placement.type} ${editing ? "is-editing" : ""} ${isDragging ? "is-dragging" : ""} ${isGroupDropTarget ? "is-group-drop-target" : ""}`}
+      className={`layout-widget layout-widget-type-${placement.type} ${CONTENT_HEIGHT_WIDGETS.has(placement.type) ? "fits-content" : "is-fixed-height"} ${folds ? "is-collapsed" : ""} ${editing ? "is-editing" : ""} ${isDragging ? "is-dragging" : ""} ${isGroupDropTarget ? "is-group-drop-target" : ""}`}
       style={{
         gridColumn: `${placement.x + 1} / span ${Math.min(LAYOUT_COLUMNS, placement.w)}`,
         gridRow: `${placement.y + 1} / span ${placement.h}`,
+        // The view's rows have no height of their own: each widget holds its
+        // rectangle open, except a folded panel, which gives the space back.
+        minHeight: editing || folds ? undefined : placement.h * ROW_HEIGHT_PX + (placement.h - 1) * GRID_GAP_PX,
       }}
     >
       {editing ? (
@@ -4380,7 +4484,9 @@ function LayoutWidgetHost({
         </div>
       ) : null}
       <div className={`layout-widget-body ${editing ? "is-inert" : ""}`}>
-        <Component placement={placement} />
+        <WidgetInstanceContext.Provider value={COLLAPSIBLE_WIDGETS.has(placement.type) && !editing ? placement.id : null}>
+          <Component placement={placement} />
+        </WidgetInstanceContext.Provider>
       </div>
       {editing ? (
         <>
@@ -5175,7 +5281,11 @@ function LayoutCanvas({
           className={`layout-canvas ${editing ? "is-editing" : ""} ${pendingAddType ? "is-adding" : ""} ${singleFullHeightMixer ? "is-single-full-height-mixer" : ""}`}
           style={{
             gridTemplateColumns: `repeat(${LAYOUT_COLUMNS}, minmax(0, 1fr))`,
-            gridTemplateRows: `repeat(${gridRows}, ${ROW_HEIGHT_PX}px)`,
+            // Editing needs rows of one known height for the drag math; the
+            // view lets a row grow when a widget's content needs it.
+            gridTemplateRows: editing
+              ? `repeat(${gridRows}, ${ROW_HEIGHT_PX}px)`
+              : `repeat(${usedRows}, auto)`,
           }}
           onPointerMove={editing ? onGridPointerMove : undefined}
           onPointerUp={editing ? onGridPointerUp : undefined}
@@ -5261,64 +5371,11 @@ export function App() {
   const [sizeLevel, setSizeLevel] = useState(readRemoteSizeLevel);
   const { showRotateGuard, dismissRotateGuard } = useRotateGuard();
   const presetProfile = currentLayoutPresetProfile();
-  const [layout, setLayout] = useState<RemoteLayout>(() => {
-    const stored = readStoredLayout();
-    // Layouts saved before the tab names were translated say "Controles".
-    const controlsNames: string[] = [STRINGS.defaultTabControls, "Controles", "Controls"];
-    const controls = stored.tabs.find((tab) => controlsNames.includes(tab.name)) ?? stored.tabs[0];
-    // Both the current preset and the previous one (which had no standalone
-    // jumpToSongButton row) count as "untouched", so a user who never edited
-    // their layout regenerates onto the new shape instead of silently losing
-    // the "Saltar a canción" button that used to live inside the region deck.
-    const controlsPresetShapes = [
-      ["readouts", "transportButtons", "timeline", "controlDeck", "jumpToSongButton", "markerGrid"],
-      ["readouts", "transportButtons", "timeline", "controlDeck", "markerGrid"],
-    ] as const;
-    const isUntouchedControlsPreset =
-      stored.customized !== true &&
-      controlsPresetShapes.some(
-        (shape) =>
-          controls?.widgets.length === shape.length &&
-          shape.every((type, index) => controls.widgets[index]?.type === type),
-      );
-    // Not just "is it there" but "is it where this preset puts it": an earlier
-    // build gave the button a full-width row of its own on every profile, and
-    // an untouched layout from that build should regenerate onto the current
-    // shape (beside the deck on roomy screens) rather than keep the old row.
-    const expectedJump = defaultLayout(presetProfile).tabs[0].widgets.find(
-      (widget) => widget.type === "jumpToSongButton",
-    );
-    const storedJump = (controls?.widgets ?? []).find(
-      (widget) => widget.type === "jumpToSongButton",
-    );
-    const hasJumpToSongPreset =
-      storedJump !== undefined &&
-      expectedJump !== undefined &&
-      storedJump.x === expectedJump.x &&
-      storedJump.w === expectedJump.w;
-    const presetWidgetTypes = new Set(stored.tabs.flatMap((tab) => tab.widgets.map((widget) => widget.type)));
-    const storedMetronome = stored.tabs
-      .flatMap((tab) => tab.widgets)
-      .find((widget) => widget.type === "metronomeSettings");
-    const storedPads = stored.tabs
-      .flatMap((tab) => tab.widgets)
-      .find((widget) => widget.type === "pads");
-    // The height checks make an untouched preset that predates a widget
-    // growing (new control added) regenerate instead of clipping its content.
-    const hasToolsPreset =
-      presetWidgetTypes.has("pads") &&
-      presetWidgetTypes.has("metronomeSettings") &&
-      presetWidgetTypes.has("voiceGuideSettings") &&
-      storedMetronome?.h === DEFAULT_METRONOME_WIDGET_HEIGHT &&
-      storedPads?.h === DEFAULT_PADS_WIDGET_HEIGHT;
-    if (
-      isUntouchedControlsPreset &&
-      (stored.presetProfile !== presetProfile || !hasToolsPreset || !hasJumpToSongPreset)
-    ) {
-      return defaultLayout(presetProfile);
-    }
-    return stored;
-  });
+  // An untouched preset follows the device (and the preset's own changes);
+  // an edited layout is kept as it is.
+  const [layout, setLayout] = useState<RemoteLayout>(() =>
+    resolveStartupLayout(readStoredLayout(), presetProfile),
+  );
   const [editing, setEditing] = useState(false);
   // Snapshot of the layout taken when edit mode opens, so "Cancel" can revert
   // every change made during the session. null when not editing.

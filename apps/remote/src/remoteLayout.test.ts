@@ -18,6 +18,8 @@ import {
   pushWidgetsDown,
   rectContainsPoint,
   readStoredLayout,
+  isUntouchedPreset,
+  resolveStartupLayout,
   reconcileWidgetGroup,
   serializeLayoutFile,
   clampTabHeight,
@@ -83,13 +85,12 @@ describe("remoteLayout", () => {
   it("uses a compact intermediate geometry for the tablet preset", () => {
     const widgets = defaultLayout("tablet").tabs[0].widgets;
     expect(widgets.map(({ type, y, h }) => [type, y, h])).toEqual([
-      ["readouts", 0, 3],
-      ["transportButtons", 3, 3],
-      ["timeline", 6, 4],
-      ["controlDeck", 10, 7],
-      ["jumpToSongButton", 10, 7],
-      ["markerGrid", 17, 10],
-      ["videoBlackButton", 27, 4],
+      ["readouts", 0, 4],
+      ["transportButtons", 4, 4],
+      ["timeline", 8, 4],
+      ["controlDeck", 12, 9],
+      ["jumpToSongButton", 12, 9],
+      ["markerGrid", 21, 10],
     ]);
   });
 
@@ -777,5 +778,65 @@ describe("computeFoldRow", () => {
   it("returns null for a degenerate row height or an unmeasured shell", () => {
     expect(computeFoldRow({ ...phone, rowHeight: 0 }, 50)).toBeNull();
     expect(computeFoldRow({ ...phone, shellHeight: 0 }, 50)).toBeNull();
+  });
+});
+
+describe("resolveStartupLayout", () => {
+  it("never stacks one preset widget over another", () => {
+    for (const profile of ["standard", "tablet", "phone"] as const) {
+      for (const tab of defaultLayout(profile).tabs) {
+        tab.widgets.forEach((a, i) =>
+          tab.widgets.slice(i + 1).forEach((b) => {
+            const overlaps = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+            expect(overlaps, `${profile}: ${a.type} / ${b.type}`).toBe(false);
+          }),
+        );
+      }
+    }
+  });
+
+  const types = (layout: ReturnType<typeof defaultLayout>) =>
+    layout.tabs.map((tab) => tab.widgets.map((widget) => [widget.type, widget.x, widget.w]));
+
+  it("gives a fresh phone the phone preset, not the desktop one", () => {
+    // Nothing stored reads as the standard preset.
+    const resolved = resolveStartupLayout(defaultLayout("standard"), "phone");
+    expect(resolved.presetProfile).toBe("phone");
+    expect(types(resolved)).toEqual(types(defaultLayout("phone")));
+  });
+
+  it("keeps a preset that already is this device's", () => {
+    const phone = defaultLayout("phone");
+    expect(resolveStartupLayout(phone, "phone")).toBe(phone);
+  });
+
+  it("moves an untouched preset from before a preset change onto the current one", () => {
+    const old = defaultLayout("phone");
+    old.tabs[0].widgets = old.tabs[0].widgets.filter(
+      (widget) => widget.type !== "videoBlackButton" && widget.type !== "jumpToSongButton",
+    );
+    expect(isUntouchedPreset(old)).toBe(true);
+    expect(types(resolveStartupLayout(old, "phone"))).toEqual(types(defaultLayout("phone")));
+  });
+
+  it("drops the video black button from an untouched preset that had it", () => {
+    const old = defaultLayout("phone");
+    old.tabs[0].widgets.push({ id: "vb", type: "videoBlackButton", x: 0, y: 40, w: 24, h: 4 });
+    const resolved = resolveStartupLayout(old, "phone");
+    expect(resolved.tabs[0].widgets.some((widget) => widget.type === "videoBlackButton")).toBe(false);
+    // Someone who placed it on purpose keeps it.
+    const edited = { ...old, customized: true };
+    expect(resolveStartupLayout(edited, "phone")).toBe(edited);
+  });
+
+  it("never replaces an edited layout", () => {
+    const edited = { ...defaultLayout("standard"), customized: true };
+    expect(resolveStartupLayout(edited, "phone")).toBe(edited);
+    const renamed = defaultLayout("standard");
+    renamed.tabs[1] = { ...renamed.tabs[1], name: "Monitores" };
+    expect(resolveStartupLayout(renamed, "phone")).toBe(renamed);
+    const extraTab = defaultLayout("standard");
+    extraTab.tabs.push({ id: "x", name: "Mixer", widgets: [] });
+    expect(resolveStartupLayout(extraTab, "phone")).toBe(extraTab);
   });
 });
