@@ -26,6 +26,8 @@ import { NetworkSessionBadge } from "../../network/NetworkSessionBadge";
 import { requestAppClose } from "../../appClose/appCloseService";
 import { FadeStopButton } from "./FadeStopButton";
 import { openLevelSongs } from "../levelSongs/levelSongsStore";
+import { openBatchSongAnalysis } from "../songAnalysis/songAnalysisStore";
+import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { openMixSceneEditor } from "../panels/mixScenes/mixSceneEditorStore";
 import { openRenderSong } from "../render/renderStore";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
@@ -503,6 +505,16 @@ export function TimelineTopbar({
                 >
                   <span>{t("transport.menu.levelSongs")}</span>
                 </button>
+                {FEATURE_FLAGS.songAnalysis ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={!canPersistProject}
+                    onClick={() => onTopMenuAction(openBatchSongAnalysis)}
+                  >
+                    <span>{t("transport.songAnalysis.batch.menu")}</span>
+                  </button>
+                ) : null}
                 {/* Scenes belong to the session, not to the automation lane:
                     they are triggered by hand too (plan live-scenes). */}
                 <button

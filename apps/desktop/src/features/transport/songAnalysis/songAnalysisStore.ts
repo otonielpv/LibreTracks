@@ -21,3 +21,19 @@ export const useSongAnalysisStore = create<SongAnalysisStore>()((set) => ({
 
 export const openSongAnalysis = (target: SongAnalysisTarget) =>
   useSongAnalysisStore.getState().show(target);
+
+/** Whether "Analizar todas las canciones" is open: a store so the File menu
+ * (desktop and mobile) opens it without threading state through the panel. */
+type BatchSongAnalysisStore = {
+  open: boolean;
+  show: () => void;
+  close: () => void;
+};
+
+export const useBatchSongAnalysisStore = create<BatchSongAnalysisStore>()((set) => ({
+  open: false,
+  show: () => set({ open: true }),
+  close: () => set({ open: false }),
+}));
+
+export const openBatchSongAnalysis = () => useBatchSongAnalysisStore.getState().show();

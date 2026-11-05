@@ -814,6 +814,51 @@ const es = {
         "No se pueden poner dos marcas de sección juntas. ¿Quieres ponerla como aviso?",
     },
     songAnalysis: {
+      batch: {
+        menu: "Analizar todas las canciones…",
+        title: "Analizar todas las canciones",
+        intro:
+          "Analiza cada canción de la sesión, una tras otra, con las pistas que se elegirían para ella. Después revisa cada propuesta o aplícalas todas de una vez.",
+        cpuNotice:
+          "Cada canción tarda unos segundos (más si reconoce la guía) y usa bastante procesador. Mejor no lanzarlo durante una actuación.",
+        noSongs: "La sesión no tiene canciones.",
+        selectAll: "Todas las canciones",
+        nothing: "Sin pistas que analizar",
+        readsClick: "Click",
+        readsMusic: "Tempo de la música",
+        readsKey: "Nota",
+        readsGuide: "Guía",
+        setupHint:
+          "Se usan las pistas que el análisis de cada canción elige por su nombre. Para escoger otras, revisa esa canción después o analízala desde su menú.",
+        analyze_one: "Analizar {{count}} canción",
+        analyze_other: "Analizar {{count}} canciones",
+        progress: "Canción {{current}} de {{total}}: {{song}}",
+        applying: "Aplicando {{done}} de {{total}}…",
+        stopped: "Análisis detenido. Lo ya analizado se puede revisar y aplicar.",
+        resultsHint:
+          "Revisa una canción para ajustar su propuesta antes de aplicarla, o aplica todas tal cual.",
+        undoHint: "Cada canción se aplica como un paso que se puede deshacer.",
+        review: "Revisar",
+        applyAll_one: "Aplicar {{count}} canción",
+        applyAll_other: "Aplicar todas ({{count}})",
+        applyFailed: "No se pudo aplicar «{{song}}»: {{error}}",
+        statusApplied: "Aplicada",
+        statusFailed: "Error",
+        statusPending: "Sin analizar",
+        statusUnchanged: "Sin cambios",
+        tempo: "{{bpm}} BPM",
+        tempoChanges_one: "{{bpm}} BPM (+{{count}} cambio)",
+        tempoChanges_other: "{{bpm}} BPM (+{{count}} cambios)",
+        key: "Nota {{key}}",
+        keyChanges_one: "Nota {{key}} (+{{count}} modulación)",
+        keyChanges_other: "Nota {{key}} (+{{count}} modulaciones)",
+        markers_one: "{{count}} marca",
+        markers_other: "{{count}} marcas",
+        keepsMarkers_one:
+          "Ya tiene {{count}} marca: se conserva. Revisa la canción para reemplazarla con la guía.",
+        keepsMarkers_other:
+          "Ya tiene {{count}} marcas: se conservan. Revisa la canción para reemplazarlas con la guía.",
+      },
       title: "Analizar canción",
       intro:
         "Lee el click (tempo y compás), las pistas armónicas (nota) y la pista de guía (marcas de sección). Revisa la propuesta antes de aplicarla; se puede deshacer.",

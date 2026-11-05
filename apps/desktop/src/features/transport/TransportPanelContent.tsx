@@ -189,8 +189,9 @@ import {
 import { RenderSongModal } from "./render/RenderSongModal";
 import { openRenderSong } from "./render/renderStore";
 import { LevelSongsModal } from "./levelSongs/LevelSongsModal";
-import { SongAnalysisModal } from "./songAnalysis/SongAnalysisModal";
+import { SongAnalysisModals } from "./songAnalysis/SongAnalysisModals";
 import { LevelSongsMenuItem } from "./levelSongs/LevelSongsMenuItem";
+import { BatchSongAnalysisMenuItem } from "./songAnalysis/BatchSongAnalysisMenuItem";
 import { ExportSessionModal } from "./panels/ExportSessionModal";
 import { TemplateDropToast } from "./templates/TemplateDropToast";
 import { beginExportWithChoice, cancelExportChoice, CloudLandingButton, CloudMenuItem, CloudSurfaces, confirmSessionExport, confirmSongExport, importSessionWithChoice, importSongWithChoice, useCloudStore } from "./cloud";
@@ -6807,6 +6808,7 @@ export function TransportPanelContent() {
                   disabled={!song}
                   onSelected={() => setIsMobileFileActionsOpen(false)}
                 />
+                <BatchSongAnalysisMenuItem disabled={!song} onSelected={() => setIsMobileFileActionsOpen(false)} />
                 <MixScenesMenuItem disabled={!song} onSelected={() => setIsMobileFileActionsOpen(false)} />
               </div>
             </div>
@@ -7776,7 +7778,7 @@ export function TransportPanelContent() {
             <RenderSongModal />
             <LevelSongsModal onApplied={applyPlaybackSnapshot} />
             {FEATURE_FLAGS.songAnalysis ? (
-              <SongAnalysisModal onApplied={applyPlaybackSnapshot} />
+              <SongAnalysisModals onApplied={applyPlaybackSnapshot} />
             ) : null}
 
             <ExportSessionModal

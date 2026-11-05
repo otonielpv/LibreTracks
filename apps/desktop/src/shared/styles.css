@@ -2798,6 +2798,90 @@ html.lt-ios body {
   list-style: none;
 }
 
+/* "Analizar todas las canciones": one row per song (name, what it reads or
+   what it found, Revisar). */
+.lt-batch-analysis-list {
+  display: grid;
+  max-height: 22rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.lt-batch-analysis-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.82rem;
+}
+
+.lt-batch-analysis-row + .lt-batch-analysis-row {
+  border-top: 1px solid rgb(255 255 255 / 0.06);
+}
+
+.lt-batch-analysis-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.lt-batch-analysis-name > span:not(.lt-batch-analysis-status),
+.lt-batch-analysis-name > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-batch-analysis-status {
+  flex: none;
+  padding: 0.05rem 0.4rem;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.08);
+  color: rgb(186 202 197 / 0.85);
+  font-size: 0.7rem;
+}
+
+.lt-batch-analysis-row.is-applied .lt-batch-analysis-status {
+  background: rgb(87 241 219 / 0.14);
+  color: #57f1db;
+}
+
+.lt-batch-analysis-row.is-failed .lt-batch-analysis-status {
+  background: rgb(255 120 100 / 0.14);
+  color: #ff9f8f;
+}
+
+.lt-batch-analysis-reads {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  color: rgb(186 202 197 / 0.85);
+}
+
+.lt-batch-analysis-row > .lt-batch-analysis-reads:last-child {
+  grid-column: 2 / -1;
+}
+
+.lt-batch-analysis-all {
+  font-size: 0.82rem;
+}
+
+@media (max-width: 640px) {
+  .lt-batch-analysis-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .lt-batch-analysis-reads {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
 .lt-level-songs-change {
   color: #57f1db;
   font-weight: 700;
