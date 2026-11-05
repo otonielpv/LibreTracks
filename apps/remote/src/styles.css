@@ -6431,3 +6431,69 @@ button {
     min-height: 2rem;
   }
 }
+
+/* ── Editor on a phone ───────────────────────────────────────────────────
+   The edit toolbar wraps onto two lines (it was a sideways scroller with a
+   hidden scrollbar: Export/Import/Reset were off screen with nothing saying
+   so), and each widget's edit bar fits one line: title, the two steppers,
+   and Remove as a ✕. */
+.layout-widget-remove-icon {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .remote-shell.is-editing-layout .layout-edit-toolbar {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  .remote-shell.is-editing-layout .layout-edit-toolbar-actions {
+    flex-wrap: wrap;
+  }
+
+  .layout-canvas-wrap.is-editing .layout-widget-chrome {
+    flex-wrap: nowrap;
+    gap: 0.2rem;
+  }
+
+  .layout-canvas-wrap.is-editing .layout-widget-drag {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0.3rem 0.4rem;
+  }
+
+  .layout-canvas-wrap.is-editing .layout-widget-sizers {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 0.2rem;
+  }
+
+  .layout-canvas-wrap.is-editing .layout-widget-stepper {
+    gap: 0.1rem;
+    padding: 0.1rem;
+  }
+
+  .layout-canvas-wrap.is-editing .layout-widget-stepper > span {
+    padding: 0;
+    font-size: 0.6rem;
+  }
+
+  .layout-canvas-wrap.is-editing .layout-widget-stepper button {
+    min-width: 1.9rem;
+    min-height: 1.9rem;
+  }
+
+  .layout-canvas-wrap.is-editing .layout-widget-remove {
+    min-width: 1.9rem;
+    min-height: 1.9rem;
+    padding: 0;
+  }
+
+  .layout-canvas-wrap.is-editing .layout-widget-remove-icon {
+    display: inline;
+  }
+
+  .layout-canvas-wrap.is-editing .layout-widget-remove-label {
+    display: none;
+  }
+}

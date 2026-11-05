@@ -4491,8 +4491,15 @@ function LayoutWidgetHost({
                 {STRINGS.configureWidget}
               </button>
             ) : null}
-            <button type="button" className="layout-widget-remove" onClick={onRemove}>
-              {STRINGS.removeWidget}
+            <button
+              type="button"
+              className="layout-widget-remove"
+              aria-label={`${STRINGS.removeWidget}: ${label}`}
+              title={STRINGS.removeWidget}
+              onClick={onRemove}
+            >
+              <span className="layout-widget-remove-icon" aria-hidden="true">✕</span>
+              <span className="layout-widget-remove-label">{STRINGS.removeWidget}</span>
             </button>
           </div>
         </div>
