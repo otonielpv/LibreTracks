@@ -213,3 +213,32 @@ describe("compact control deck", () => {
     expect(sent.some((command) => command.cmd === "cancelMarkerJump")).toBe(true);
   });
 });
+
+describe("one bar and full screen", () => {
+  it("puts the tabs in the header outside edit mode, and back in the canvas while editing", () => {
+    render(<App />);
+    connect();
+    const header = document.querySelector(".remote-header") as HTMLElement;
+    expect(within(header).getAllByRole("tab").length).toBeGreaterThan(1);
+    fireEvent.click(screen.getByRole("button", { name: /edit layout/i }));
+    expect(within(header).queryAllByRole("tab")).toHaveLength(0);
+    expect(screen.getAllByRole("tab").length).toBeGreaterThan(1);
+  });
+
+  it("hides the bar in full screen, switches tabs from the pill and comes back", () => {
+    render(<App />);
+    connect();
+    fireEvent.click(screen.getByRole("button", { name: "Full screen" }));
+    expect((document.querySelector(".remote-header") as HTMLElement).hidden).toBe(true);
+    expect(window.localStorage.getItem("libretracks.remote.immersive")).toBe("1");
+
+    fireEvent.click(screen.getByRole("button", { name: /controls/i, expanded: false }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Mixer" }));
+    expect(screen.getByRole("button", { name: /mixer/i, expanded: false })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /mixer/i, expanded: false }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Show the bar" }));
+    expect((document.querySelector(".remote-header") as HTMLElement).hidden).toBe(false);
+    expect(window.localStorage.getItem("libretracks.remote.immersive")).toBe("0");
+  });
+});

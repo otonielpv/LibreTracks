@@ -6493,3 +6493,165 @@ button {
   flex: 0 0 auto;
   min-height: 3rem;
 }
+
+/* ── One bar: tabs in the header ─────────────────────────────────────────
+   Outside edit mode the tabs ride in the header (portalled into
+   .remote-header-tabs), so the remote has one bar instead of two. On a
+   phone the brand goes, the status is its dot (its text only when the
+   connection is lost), and A−/A+ move to the edit toolbar. */
+.remote-shell:not(.is-editing-layout) .remote-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.remote-header-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.remote-header-tabs .layout-tabbar {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  position: static;
+  scrollbar-width: none;
+}
+
+.remote-header-tabs .layout-tabbar::-webkit-scrollbar {
+  display: none;
+}
+
+.remote-shell .remote-header-tabs .layout-tab {
+  min-height: max(2.1rem, var(--tab-height));
+}
+
+.remote-header[hidden] {
+  display: none !important;
+}
+
+.immersive-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 2.2rem;
+  min-height: 2.2rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.5rem;
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+@media (max-width: 600px) {
+  .remote-shell:not(.is-editing-layout) .remote-header-brand {
+    display: none;
+  }
+
+  .remote-shell .status-pill:not(.is-offline) .status-label {
+    display: none;
+  }
+
+  .remote-shell .status-pill:not(.is-offline) {
+    min-width: 1.9rem;
+    justify-content: center;
+    padding: 0.2rem;
+  }
+
+  .remote-shell:not(.is-editing-layout) .remote-size-stepper {
+    display: none;
+  }
+
+  .remote-shell:not(.is-editing-layout) .remote-header {
+    padding: 0.3rem 0.5rem;
+  }
+
+  .remote-header-tabs .layout-tab-select {
+    padding-inline: 0.6rem;
+  }
+}
+
+/* ── Full screen ─────────────────────────────────────────────────────────
+   No header at all; the current tab's name floats in the top-right corner,
+   small and translucent, and opens the tab list and the way back. */
+.remote-shell.is-immersive .remote-content {
+  padding-top: env(safe-area-inset-top);
+}
+
+.immersive-pill {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 0.35rem);
+  right: calc(env(safe-area-inset-right) + 0.35rem);
+  z-index: 300;
+}
+
+.immersive-pill-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.55rem 0.25rem 0.7rem;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 999px;
+  background: rgb(18 20 20 / 0.82);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0.85;
+}
+
+.immersive-pill.is-open .immersive-pill-toggle {
+  opacity: 1;
+}
+
+.immersive-pill-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+}
+
+.immersive-pill-menu {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 11rem;
+  padding: 0.3rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.7rem;
+  background: var(--panel);
+  box-shadow: 0 0.6rem 1.8rem rgb(0 0 0 / 0.55);
+}
+
+.immersive-pill-menu button {
+  min-height: 2.6rem;
+  padding: 0 0.8rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: none;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.immersive-pill-menu button.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.immersive-pill-menu .immersive-pill-exit {
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--outline);
+  border-radius: 0 0 0.5rem 0.5rem;
+  color: var(--muted);
+}

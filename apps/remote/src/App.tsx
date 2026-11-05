@@ -4811,10 +4811,14 @@ function LayoutCanvas({
   layout,
   editing,
   onChange,
+  tabSlot = null,
 }: {
   layout: RemoteLayout;
   editing: boolean;
   onChange: (next: RemoteLayout) => void;
+  /** The header's slot for the tabs: outside edit mode they ride in the
+   * header instead of a strip of their own (one bar, not two). */
+  tabSlot?: HTMLElement | null;
 }) {
   // Active pointer gesture: moving an existing widget, resizing it, or dragging
   // a new one in from the palette. All share the same pointer-move/up handlers
@@ -5350,17 +5354,22 @@ function LayoutCanvas({
 
   return (
     <div className={`layout-canvas-wrap ${editing ? "is-editing" : ""}`}>
-      <LayoutTabBar
-        tabs={layout.tabs}
-        activeTabId={activeTab?.id ?? layout.activeTabId}
-        editing={editing}
-        heightRem={tabHeightRem}
-        onSelect={selectTab}
-        onAdd={addTab}
-        onRename={renameTab}
-        onDelete={deleteTab}
-        onMove={moveTab}
-      />
+      {(() => {
+        const tabBar = (
+          <LayoutTabBar
+            tabs={layout.tabs}
+            activeTabId={activeTab?.id ?? layout.activeTabId}
+            editing={editing}
+            heightRem={tabHeightRem}
+            onSelect={selectTab}
+            onAdd={addTab}
+            onRename={renameTab}
+            onDelete={deleteTab}
+            onMove={moveTab}
+          />
+        );
+        return !editing && tabSlot ? createPortal(tabBar, tabSlot) : tabBar;
+      })()}
       {editing && paletteOpen ? (
         <WidgetPalette
           onAdd={appendWidget}
@@ -5472,6 +5481,134 @@ function LayoutCanvas({
   );
 }
 
+const IMMERSIVE_STORAGE_KEY = "libretracks.remote.immersive";
+
+/**
+ * Full screen: the header (and its tabs) hide, and where the browser allows
+ * it the page goes full screen too (Android; iPhone Safari cannot). Leaving
+ * the browser's full screen (the back gesture) brings the header back.
+ * Remembered per device; the browser's full screen is not, it needs a tap.
+ */
+function useImmersive() {
+  const [immersive, setImmersive] = useState(() => {
+    try {
+      return window.localStorage.getItem(IMMERSIVE_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const enteredFullscreenRef = useRef(false);
+
+  const persist = useCallback((value: boolean) => {
+    setImmersive(value);
+    try {
+      window.localStorage.setItem(IMMERSIVE_STORAGE_KEY, value ? "1" : "0");
+    } catch {
+      // Storage blocked: lasts this session.
+    }
+  }, []);
+
+  useEffect(() => {
+    const onChange = () => {
+      if (!document.fullscreenElement && enteredFullscreenRef.current) {
+        enteredFullscreenRef.current = false;
+        persist(false);
+      }
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, [persist]);
+
+  const enterImmersive = () => {
+    persist(true);
+    const root = document.documentElement;
+    if (!document.fullscreenElement && typeof root.requestFullscreen === "function") {
+      root
+        .requestFullscreen()
+        .then(() => {
+          enteredFullscreenRef.current = true;
+        })
+        .catch(() => {});
+    }
+  };
+
+  const exitImmersive = () => {
+    enteredFullscreenRef.current = false;
+    persist(false);
+    if (document.fullscreenElement && typeof document.exitFullscreen === "function") {
+      void document.exitFullscreen().catch(() => {});
+    }
+  };
+
+  return { immersive, enterImmersive, exitImmersive };
+}
+
+/** In full screen, the one piece of chrome left: the current tab's name,
+ * which opens the tab list and the way back. Small and in a corner. */
+function ImmersivePill({
+  tabs,
+  activeTabId,
+  onSelect,
+  onExit,
+}: {
+  tabs: LayoutTab[];
+  activeTabId: string;
+  onSelect: (tabId: string) => void;
+  onExit: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const active = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  return (
+    <div className={`immersive-pill ${open ? "is-open" : ""}`}>
+      <button
+        type="button"
+        className="immersive-pill-toggle"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen(!open)}
+      >
+        {active?.name}
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
+          <path d="M7 9.5 12 14.5 17 9.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open ? (
+        <>
+          <div className="immersive-pill-scrim" onPointerDown={() => setOpen(false)} />
+          <div className="immersive-pill-menu" role="menu">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={tab.id === activeTabId}
+                className={tab.id === activeTabId ? "is-active" : ""}
+                onClick={() => {
+                  onSelect(tab.id);
+                  setOpen(false);
+                }}
+              >
+                {tab.name}
+              </button>
+            ))}
+            <button
+              type="button"
+              role="menuitem"
+              className="immersive-pill-exit"
+              onClick={() => {
+                setOpen(false);
+                onExit();
+              }}
+            >
+              {STRINGS.immersiveExit}
+            </button>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export function App() {
   useRemoteBridge();
   const [sizeLevel, setSizeLevel] = useState(readRemoteSizeLevel);
@@ -5483,6 +5620,9 @@ export function App() {
     resolveStartupLayout(readStoredLayout(), presetProfile),
   );
   const [editing, setEditing] = useState(false);
+  const [tabSlot, setTabSlot] = useState<HTMLDivElement | null>(null);
+  const { immersive, enterImmersive, exitImmersive } = useImmersive();
+  const chromeHidden = immersive && !editing;
   // Snapshot of the layout taken when edit mode opens, so "Cancel" can revert
   // every change made during the session. null when not editing.
   const editBaselineRef = useRef<RemoteLayout | null>(null);
@@ -5573,8 +5713,16 @@ export function App() {
 
   return (
     <main
-      className={`remote-shell remote-profile-${presetProfile} remote-size-${sizeLevel} ${sizeLevel > 0 ? "is-large-controls" : ""} ${editing ? "is-editing-layout" : ""} ${showRotateGuard ? "is-rotate-locked" : ""}`}
+      className={`remote-shell remote-profile-${presetProfile} remote-size-${sizeLevel} ${sizeLevel > 0 ? "is-large-controls" : ""} ${editing ? "is-editing-layout" : ""} ${showRotateGuard ? "is-rotate-locked" : ""} ${chromeHidden ? "is-immersive" : ""}`}
     >
+      {chromeHidden ? (
+        <ImmersivePill
+          tabs={layout.tabs}
+          activeTabId={layout.activeTabId}
+          onSelect={(tabId) => updateLayout({ ...layout, activeTabId: tabId })}
+          onExit={exitImmersive}
+        />
+      ) : null}
       {/* Phone-shaped screens in landscape are too short to fit the transport
           view; this overlay hides the shell content and prompts a rotate to
           portrait. Tablets are unaffected -- see isPhoneShapedScreen. */}
@@ -5589,11 +5737,12 @@ export function App() {
         </div>
       ) : null}
 
-      <header className="remote-header">
+      <header className="remote-header" hidden={chromeHidden}>
         <div className="remote-header-brand">
           <small>LibreTracks</small>
           <h1>{STRINGS.appTitle}</h1>
         </div>
+        {editing ? null : <div className="remote-header-tabs" ref={setTabSlot} />}
         {/* Edit actions live in the header's centre gap. Previously they sat in
             their own bar below, which overlapped the tab strip on a tablet. */}
         {editing ? (
@@ -5669,16 +5818,31 @@ export function App() {
             keep showing the last playback state it heard. */}
         <div className={`status-pill is-${connectionStatus === "connected" ? (snapshot?.playbackState ?? "idle") : "offline"}`} role="status">
           <span className="status-dot" aria-hidden="true" />
-          {connectionStatus === "connected"
-            ? snapshot?.playbackState
-              ? STRINGS[snapshot.playbackState]
-              : STRINGS.idle
-            : connectionStatus === "connecting"
-              ? STRINGS.connecting
-              : STRINGS.offline}
+          <span className="status-label">
+            {connectionStatus === "connected"
+              ? snapshot?.playbackState
+                ? STRINGS[snapshot.playbackState]
+                : STRINGS.idle
+              : connectionStatus === "connecting"
+                ? STRINGS.connecting
+                : STRINGS.offline}
+          </span>
         </div>
         {/* Only the entry point lives here. While editing, the toolbar's own
             "Done" is the single way out — two of them read as two actions. */}
+        {editing ? null : (
+          <button
+            type="button"
+            className="immersive-button"
+            aria-label={STRINGS.immersiveEnter}
+            title={STRINGS.immersiveEnter}
+            onClick={enterImmersive}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z" />
+            </svg>
+          </button>
+        )}
         {editing ? null : (
           <button
             type="button"
@@ -5717,7 +5881,7 @@ export function App() {
       </header>
 
       <div className="remote-content">
-        <LayoutCanvas layout={layout} editing={editing} onChange={updateLayout} />
+        <LayoutCanvas layout={layout} editing={editing} onChange={updateLayout} tabSlot={tabSlot} />
       </div>
     </main>
   );
