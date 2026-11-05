@@ -2978,12 +2978,17 @@ function MixerStrip({
       </header>
 
       <div className="pan-section">
-        <div className="pan-section-head">
-          <button className="mini-action" onClick={() => commitTrackUpdate({ pan: 0 })}>
-            {STRINGS.center}
-          </button>
-          <span className="pan-value">{formatRemotePan(draftPan)}</span>
-        </div>
+        {/* The readout is the Center button: one tap target instead of a
+            "Centro" chip next to a value, which a narrow strip had no room for. */}
+        <button
+          type="button"
+          className={`pan-value-button ${Math.abs(draftPan) < 0.005 ? "is-centered" : ""}`}
+          aria-label={`${STRINGS.center} (${formatRemotePan(draftPan)})`}
+          title={STRINGS.center}
+          onClick={() => commitTrackUpdate({ pan: 0 })}
+        >
+          {formatRemotePan(draftPan)}
+        </button>
         <input
           className="lt-fader is-pan"
           type="range"
@@ -2999,6 +3004,7 @@ function MixerStrip({
           onPointerUp={(event) => commitDraftPan(Number(event.currentTarget.value))}
           onPointerCancel={(event) => commitDraftPan(Number(event.currentTarget.value))}
           onLostPointerCapture={(event) => commitDraftPan(Number(event.currentTarget.value))}
+          onDoubleClick={() => commitTrackUpdate({ pan: 0 })}
         />
         <div className="pan-scale" aria-hidden="true">
           <span>L</span>

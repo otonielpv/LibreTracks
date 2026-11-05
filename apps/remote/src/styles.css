@@ -5988,3 +5988,206 @@ button {
     min-width: 9rem;
   }
 }
+
+/* ── Mixer ───────────────────────────────────────────────────────────────
+   Narrower strips (about four on a phone, where there were two and a half),
+   no AUDIO/CARPETA caption (a folder already shows by its colour), the pan
+   readout doubles as the Center button, and compact M/S/T. Transpose is on
+   by default, so lit T is a quiet outline, not a solid key on every strip. */
+.remote-shell .mixer-scroll-widget {
+  gap: clamp(0.25rem, 1.2cqi, 0.6rem);
+}
+
+.remote-shell .mixer-scroll-widget .mixer-strip,
+.remote-shell .mixer-scroll-widget .mixer-strip.is-colored,
+.remote-shell .mixer-scroll-widget .mixer-strip.is-folder {
+  flex: 0 0 clamp(5.1rem, 23.5cqi, 8.25rem);
+  width: clamp(5.1rem, 23.5cqi, 8.25rem);
+  max-width: clamp(5.1rem, 23.5cqi, 8.25rem);
+  gap: clamp(0.3rem, 1.6cqh, 0.6rem);
+  padding: 0.5rem 0.4rem;
+  border-radius: 0.6rem;
+}
+
+.remote-shell .mixer-strip-header small {
+  display: none;
+}
+
+.remote-shell .mixer-strip-header {
+  min-height: 0;
+}
+
+.remote-shell .mixer-strip-header strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin: 0;
+  overflow: hidden;
+  font-size: clamp(0.72rem, 3.2cqi, 0.95rem);
+  line-height: 1.15;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.pan-value-button {
+  align-self: center;
+  min-width: 2.6rem;
+  min-height: 1.6rem;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid rgb(116 184 255 / 0.25);
+  border-radius: 999px;
+  background: rgb(116 184 255 / 0.08);
+  color: #9fcbff;
+  font: 700 0.68rem/1 "Space Grotesk", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.pan-value-button.is-centered {
+  border-color: rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.04);
+  color: var(--muted);
+}
+
+.remote-shell .mixer-scroll-widget .pan-section {
+  gap: 0.3rem;
+}
+
+.remote-shell .mixer-scroll-widget .volume-value {
+  font-size: 0.72rem;
+}
+
+.remote-shell .mixer-scroll-widget .toggle-row {
+  gap: 0.25rem;
+}
+
+.remote-shell .mixer-scroll-widget .toggle-row button {
+  min-height: 2.4rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.remote-shell .toggle-row button.is-active.is-transpose {
+  border-color: rgb(87 241 219 / 0.45);
+  background: rgb(87 241 219 / 0.1);
+  color: var(--accent);
+}
+
+.remote-shell .toggle-row button.is-active.is-mute {
+  background: #e5533f;
+  color: #fff;
+}
+
+.remote-shell .toggle-row button.is-active.is-solo {
+  background: #ffd76a;
+  color: #3f2200;
+}
+
+/* Song master: label and value over the fader and its 0 dB reset whenever
+   the row is narrow (a phone, a song card), instead of a label broken into
+   four lines beside the fader. */
+.song-master {
+  container-type: inline-size;
+}
+
+@container (max-width: 30rem) {
+  .song-master {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "label label"
+      "fader reset";
+    align-items: center;
+    gap: 0.25rem 0.5rem;
+  }
+
+  .song-master > .song-master-label {
+    grid-area: label;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  .song-master > .song-master-fader-area {
+    grid-area: fader;
+  }
+
+  .song-master > .song-master-reset {
+    grid-area: reset;
+  }
+}
+
+/* «Solo canción activa»: a compact switch, not a button the size of a pad. */
+.remote-shell .mixer-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.5rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+}
+
+.remote-shell .mixer-filter-toggle::before {
+  content: "";
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.18);
+}
+
+.remote-shell .mixer-filter-toggle.is-active {
+  border-color: rgb(87 241 219 / 0.45);
+  background: rgb(87 241 219 / 0.1);
+  color: var(--accent);
+}
+
+.remote-shell .mixer-filter-toggle.is-active::before {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+
+.remote-shell .mixer-filter-widget .mixer-filter-toggle {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+}
+
+.remote-shell .mixer-filter-widget {
+  justify-content: flex-start;
+}
+
+@media (max-width: 600px) {
+  .remote-shell .mixer-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .remote-shell .mixer-filter-bar .mixer-filter-widget {
+    padding: 0;
+  }
+}
+
+/* Scale, meter and fader inside a narrow strip: they used to add up wider
+   than the strip and the dB numbers spilled into the neighbour. */
+.remote-shell .mixer-scroll-widget .volume-fader-area {
+  gap: clamp(0.2rem, 1cqi, 0.6rem);
+  max-width: 100%;
+}
+
+.remote-shell .mixer-scroll-widget .volume-scale {
+  min-width: 1.6em;
+  font-size: 0.5rem;
+  letter-spacing: 0;
+}
+
+.remote-shell .mixer-scroll-widget .mixer-meter {
+  width: 0.5rem;
+}
+
+.remote-shell .mixer-scroll-widget .volume-fader {
+  width: clamp(2.2rem, 10cqi, 3.5rem);
+}
