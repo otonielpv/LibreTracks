@@ -98,14 +98,19 @@ export function createTrackHandlers(deps: TrackHandlerDeps) {
       if (plan.kind === "automation") {
         // The automation lane is synthetic (not in getTracksById), so its
         // reorder can't go through moveTrack. Persist its position instead.
+        // Settle BEFORE the refresh: the preview is dropped when the new order
+        // renders (useTrackDragPreview), and settling after it left the rows
+        // offset on top of the new order until the safety timeout.
+        clearTrackDragVisuals({ settle: true });
         await runAction(async () => {
           try {
             const snapshot = await setAutomationTrackPosition(plan.afterTrackId);
             applyPlaybackSnapshot(snapshot);
             await refreshSongView({ includeWaveforms: false });
             setStatus(t("transport.automation.statusTrackReordered"));
-          } finally {
-            clearTrackDragVisuals({ settle: true });
+          } catch (error) {
+            clearTrackDragVisuals({ revert: true });
+            throw error;
           }
         });
         return;

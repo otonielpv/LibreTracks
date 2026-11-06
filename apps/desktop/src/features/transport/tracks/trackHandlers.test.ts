@@ -201,6 +201,29 @@ describe("createTrackHandlers", () => {
     ]);
   });
 
+  // Settling after the refresh left the rows offset over the new order: the
+  // preview is dropped when the new order renders, which had already happened.
+  it("moving the automation lane settles the preview before the refresh", async () => {
+    const calls: string[] = [];
+    const { handlers, deps } = setup({
+      getVisibleTrackIds: () => ["__automation__", "parent-1", "target", "dragged", "other"],
+      clearTrackDragVisuals: vi.fn((options) => {
+        calls.push(`clear:${JSON.stringify(options ?? {})}`);
+      }),
+      refreshSongView: vi.fn(async () => {
+        calls.push("refresh");
+        return null;
+      }),
+    });
+    await handlers.handleTrackDrop("__automation__", {
+      targetTrackId: "dragged",
+      mode: "after",
+    });
+
+    expect(deps.setAutomationTrackPosition).toHaveBeenCalledWith("dragged");
+    expect(calls).toEqual(['clear:{"settle":true}', "refresh"]);
+  });
+
   it("create track is cancelled when the name prompt is empty", async () => {
     const { handlers, deps } = setup({ prompt: vi.fn(async () =>"   ") });
     await handlers.handleCreateTrack("audio", null);
