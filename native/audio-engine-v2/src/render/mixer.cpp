@@ -1016,6 +1016,20 @@ void Mixer::render(float** output_channels,
     auto t0 = std::chrono::steady_clock::now();
     callback_count_.fetch_add(1, std::memory_order_relaxed);
 
+    // Redundancy (docs/plans/redundancy step 02): WHEN the transport was at
+    // the first frame of this block, taken before anything advances it. Atomic
+    // stores only.
+    if (audio_clock_stamp_) {
+        const auto position = clock_->position();
+        audio_clock_stamp_->publish(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count(),
+            block_host_time_ns_,
+            position.frame,
+            clock_->sample_rate(),
+            position.state == TransportState::Playing && !clock_->pending_start());
+        block_host_time_ns_ = 0;
+    }
+
     render_output_channel_count_ = std::clamp(
         active_output_channel_count_.load(std::memory_order_acquire), 0,
         std::min(num_channels, kMaxOutputChannels));

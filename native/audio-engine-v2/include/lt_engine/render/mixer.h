@@ -12,6 +12,7 @@
 #include <lt_engine/render/render_thread_pool.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
+#include <lt_engine/transport/audio_clock_stamp.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
 #include <array>
 #include <atomic>
@@ -60,6 +61,12 @@ public:
 
     // Called by the JUCE audio thread.
     void set_active_output_channels(const std::vector<int>& channels) noexcept override;
+    void set_block_host_time_ns(std::uint64_t host_time_ns) noexcept override {
+        block_host_time_ns_ = host_time_ns;
+    }
+    // Where render() publishes (instant, frame) at the top of every block.
+    // Set once before the device opens; null = no stamps.
+    void set_audio_clock_stamp(AudioClockStamp* stamp) noexcept { audio_clock_stamp_ = stamp; }
     void render(float** output_channels,
                 int     num_channels,
                 int     num_frames,
@@ -212,6 +219,9 @@ private:
     const SourceManager* sources_;
     TransportClock*      clock_;
     JumpScheduler*       scheduler_;
+    AudioClockStamp*     audio_clock_stamp_ = nullptr;
+    // Audio thread only: the driver instant handed in before this block.
+    std::uint64_t        block_host_time_ns_ = 0;
     class BungeeVoiceManager* bungee_voices_ = nullptr;
 
     // Physical device channel for each dense callback slot. JUCE/ASIO packs

@@ -59,7 +59,7 @@ public:
         float* const*         output_channels,
         int                   num_output_channels,
         int                   num_sample_frames,
-        const juce::AudioIODeviceCallbackContext& /*ctx*/) override
+        const juce::AudioIODeviceCallbackContext& ctx) override
     {
         // ── Realtime rules: no alloc, no lock, no I/O ──────────────────
 #if defined(_WIN32)
@@ -84,6 +84,8 @@ public:
             std::fill(output_channels[ch], output_channels[ch] + num_sample_frames, 0.f);
 
         if (render_cb_) {
+            if (ctx.hostTimeNs != nullptr)
+                render_cb_->set_block_host_time_ns(*ctx.hostTimeNs);
             render_cb_->render(const_cast<float**>(output_channels),
                                num_output_channels,
                                num_sample_frames,
@@ -1036,6 +1038,20 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     impl_->sample_rate  = static_cast<int>(dev->getCurrentSampleRate());
     impl_->buffer_size  = dev->getCurrentBufferSizeSamples();
     impl_->output_latency_samples = dev->getOutputLatencyInSamples();
+    // Redundancy (docs/plans/redundancy step 02) needs this on every open, not
+    // only with the diag flag: it is how long a rendered sample takes to be
+    // HEARD. JUCE's figure already includes the buffer on every backend we
+    // ship (DirectSound reports bufferSize*1.5, WASAPI/ASIO/CoreAudio/ALSA the
+    // driver's own latency + buffer), so nothing is added here. A backend that
+    // reports 0 is treated as "not reported".
+    lt_debug_log("[LT_DEVICE] output latency backend=%s sr=%d buffer=%d latency=%d samples "
+                 "(%.2f ms) reported=%d\n",
+                 impl_->backend.c_str(), impl_->sample_rate, impl_->buffer_size,
+                 impl_->output_latency_samples,
+                 impl_->sample_rate > 0
+                     ? 1000.0 * impl_->output_latency_samples / impl_->sample_rate
+                     : 0.0,
+                 impl_->output_latency_samples > 0 ? 1 : 0);
     // What the listener actually waits through. The transport moves in a couple
     // of milliseconds, but everything already handed to the driver keeps playing
     // first, so THIS is the floor on how instant a jump can feel — no amount of
@@ -1154,6 +1170,15 @@ DeviceInfo AudioDeviceManager::device_info() const {
     if (impl_->adaptor && impl_->adaptor->has_error())
         info.last_error = impl_->adaptor->last_error();
     info.fallback_active = impl_->fallback_active.load(std::memory_order_relaxed);
+    // While the fallback clock drives render nothing reaches a speaker: no
+    // latency to report.
+    const bool real_stream = !info.fallback_active && !impl_->device_name.empty();
+    info.output_latency_samples = real_stream ? impl_->output_latency_samples : 0;
+    info.latency_reported = real_stream && impl_->output_latency_samples > 0;
+    info.output_latency_seconds =
+        (info.latency_reported && impl_->sample_rate > 0)
+            ? static_cast<double>(impl_->output_latency_samples) / impl_->sample_rate
+            : 0.0;
     return info;
 }
 

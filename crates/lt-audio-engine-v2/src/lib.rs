@@ -316,6 +316,18 @@ impl Engine {
         serde_json::from_str(&s).map_err(|e| EngineError::Serialization(e.to_string()))
     }
 
+    /// Last rendered block's (instant, frame) and the output latency, read
+    /// through a plain C struct: no JSON, no locks (redundancy step 02).
+    /// None until the engine has rendered a block.
+    pub fn audio_clock(&self) -> Option<AudioClockReading> {
+        let mut raw = ffi::LtAudioClock::default();
+        let result = unsafe { ffi::lt_audio_engine_get_audio_clock(self.handle, &mut raw) };
+        if result != ffi::LT_OK || raw.valid == 0 {
+            return None;
+        }
+        Some(AudioClockReading::from_raw(&raw))
+    }
+
     pub fn list_devices(&self) -> Result<Vec<DeviceInfo>, EngineError> {
         self.list_devices_ext(false)
     }

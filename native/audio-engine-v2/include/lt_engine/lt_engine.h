@@ -104,6 +104,27 @@ LT_API const char* lt_audio_engine_get_snapshot(LtEngine* engine);
  *  The pointer is valid until the next call on this thread. */
 LT_API const char* lt_audio_engine_get_meter_snapshot(LtEngine* engine);
 
+/** Where the transport was at the start of the last rendered block and WHEN
+ *  (docs/plans/redundancy step 02). Plain struct, no JSON, no locks: cheap
+ *  enough for 20 Hz. `steady_now_ns` is this engine's steady clock at the
+ *  moment of the read, so the caller can age `callback_steady_ns` without
+ *  assuming its own clock shares steady_clock's epoch. */
+typedef struct LtAudioClock {
+    int64_t  frame;                  /* transport frame at block start (clock rate) */
+    int64_t  callback_steady_ns;     /* steady_clock at block start */
+    uint64_t host_time_ns;           /* driver hardware instant, 0 = none */
+    int64_t  steady_now_ns;          /* steady_clock at this read */
+    uint64_t blocks;                 /* blocks rendered so far, 0 = never */
+    int32_t  sample_rate;            /* the clock's (timeline) rate */
+    int32_t  moving;                 /* playing and advancing */
+    int32_t  output_latency_samples; /* 0 when not reported / fallback */
+    int32_t  latency_reported;
+    int32_t  fallback_active;
+    int32_t  valid;                  /* 0 = nothing rendered yet */
+} LtAudioClock;
+
+LT_API LtResult lt_audio_engine_get_audio_clock(LtEngine* engine, LtAudioClock* out);
+
 // ---------------------------------------------------------------------------
 // Device enumeration helpers (convenience wrappers)
 // ---------------------------------------------------------------------------

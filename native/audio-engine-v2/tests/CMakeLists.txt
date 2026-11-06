@@ -51,6 +51,7 @@ add_executable(lt_engine_tests
     test_offline_renderer.cpp
     test_loudness_meter.cpp
     test_region_envelope.cpp
+    test_audio_clock_stamp.cpp
 )
 
 target_link_libraries(lt_engine_tests

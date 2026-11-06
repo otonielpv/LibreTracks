@@ -94,6 +94,10 @@ public:
     // indices so explicit routes such as ext:14-15 can be translated back to
     // callback slots 2-3 when channels 12-15 are enabled.
     virtual void set_active_output_channels(const std::vector<int>& /*channels*/) noexcept {}
+    // The driver's hardware instant for the block about to render (CoreAudio's
+    // hostTimeNs), called on the audio thread right before render(). Backends
+    // without one never call it. Redundancy (docs/plans/redundancy step 02).
+    virtual void set_block_host_time_ns(std::uint64_t /*host_time_ns*/) noexcept {}
     virtual void render(float** output_channels,
                         int     num_channels,
                         int     num_frames,

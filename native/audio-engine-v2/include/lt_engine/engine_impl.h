@@ -8,6 +8,7 @@
 // through the FFI wrapper.
 // ---------------------------------------------------------------------------
 
+#include <lt_engine/lt_engine.h>
 #include <lt_engine/core/commands.h>
 #include <lt_engine/core/events.h>
 #include <lt_engine/core/snapshot.h>
@@ -53,6 +54,8 @@ public:
     /// get_snapshot() without the per-source state (source_states and the
     /// disk-cache total stay empty). For the meter thread's 30 Hz reads.
     std::string  get_meter_snapshot()  const;
+    /// Redundancy: last block's (instant, frame) + output latency. Lock-free.
+    void         get_audio_clock(LtAudioClock& out) const;
     std::string  list_devices(bool force_rescan = false)  const;
     std::string  get_source_peaks(const std::string& source_id,
                                   int resolution_frames) const;
@@ -91,6 +94,8 @@ private:
     // so the "same device already open" guard lets the reopen through.
     bool force_device_reopen_ = false;
     std::unique_ptr<TransportClock>     clock_;
+    // Redundancy: (instant, frame) of the last rendered block, lock-free.
+    AudioClockStamp                     audio_clock_stamp_;
     std::unique_ptr<JumpScheduler>      scheduler_;
     std::unique_ptr<SourceManager>      source_manager_;
     std::unique_ptr<DecodeWorkerPool>   worker_pool_;

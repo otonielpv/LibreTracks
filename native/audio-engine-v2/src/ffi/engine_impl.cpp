@@ -761,6 +761,7 @@ Result<void> EngineImpl::initialize() {
         scheduler_.get());
     mixer_->set_metronome_config(metronome_config_);
     mixer_->set_bungee_voice_manager(bungee_voices_.get());
+    mixer_->set_audio_clock_stamp(&audio_clock_stamp_);
 
 #if defined(_WIN32)
     // Keep the audio thread's pages resident through import memory bursts.
@@ -988,6 +989,31 @@ std::string EngineImpl::get_snapshot() const {
 // diagnostics of EVERY source, file paths included) is what makes a full
 // snapshot cost more the bigger the session, and it took the same locks as the
 // preparation workers. See docs: project-engine-snapshot-cost.
+void EngineImpl::get_audio_clock(LtAudioClock& out) const {
+    out = LtAudioClock{};
+    AudioClockStampData stamp;
+    const bool read = audio_clock_stamp_.read(stamp);
+    out.steady_now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (!read || stamp.blocks == 0)
+        return;
+    out.frame              = stamp.frame;
+    out.callback_steady_ns = stamp.steady_ns;
+    out.host_time_ns       = stamp.host_time_ns;
+    out.blocks             = stamp.blocks;
+    out.sample_rate        = stamp.sample_rate;
+    out.moving             = stamp.moving ? 1 : 0;
+    if (device_manager_) {
+        // Plain reads, no stream lock: this runs at 20 Hz next to playback.
+        const bool fallback = device_manager_->fallback_active();
+        const int latency = fallback ? 0 : device_manager_->actual_output_latency_samples();
+        out.fallback_active        = fallback ? 1 : 0;
+        out.output_latency_samples = latency > 0 ? latency : 0;
+        out.latency_reported       = latency > 0 ? 1 : 0;
+    }
+    out.valid = 1;
+}
+
 std::string EngineImpl::get_meter_snapshot() const {
     return build_snapshot(/*include_sources=*/false);
 }

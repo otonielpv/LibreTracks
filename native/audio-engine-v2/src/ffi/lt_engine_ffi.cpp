@@ -127,6 +127,12 @@ LT_API const char* lt_audio_engine_get_meter_snapshot(LtEngine* engine) {
     return buf.c_str();
 }
 
+LT_API LtResult lt_audio_engine_get_audio_clock(LtEngine* engine, LtAudioClock* out) {
+    if (!engine || !out) return LT_ERR_INVALID_HANDLE;
+    as_impl(engine)->get_audio_clock(*out);
+    return LT_OK;
+}
+
 LT_API const char* lt_audio_engine_list_devices(LtEngine* engine,
                                                 int32_t force_rescan) {
     if (!engine) return "[]";

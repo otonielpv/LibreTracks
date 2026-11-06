@@ -43,6 +43,12 @@ struct DeviceInfo {
     bool        fallback_active = false;
     // Stream paused on purpose while idle (CmdSetOutputSuspended).
     bool        output_suspended = false;
+    // How long a rendered sample takes to be heard, as the backend reports it
+    // (docs/plans/redundancy step 02). 0 and latency_reported=false when the
+    // backend reports nothing or the fallback clock is driving.
+    int         output_latency_samples = 0;
+    double      output_latency_seconds = 0.0;
+    bool        latency_reported = false;
 };
 
 struct CpuDiagnostics {

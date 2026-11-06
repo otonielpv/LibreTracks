@@ -125,6 +125,51 @@ pub struct DeviceInfo {
     /// (`EngineCommand::SetOutputSuspended`); not a device failure.
     #[serde(default)]
     pub output_suspended: bool,
+    /// How long a rendered sample takes to be heard, as the backend reports
+    /// it (redundancy step 02). 0 with `latency_reported: false` when the
+    /// backend reports nothing or the fallback clock is driving.
+    #[serde(default)]
+    pub output_latency_samples: i32,
+    #[serde(default)]
+    pub output_latency_seconds: f64,
+    #[serde(default)]
+    pub latency_reported: bool,
+}
+
+/// The engine's audio clock as Rust sees it (redundancy step 02).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AudioClockReading {
+    /// Transport frame at the start of the last rendered block, at
+    /// `sample_rate` (the timeline's rate).
+    pub frame: i64,
+    pub sample_rate: u32,
+    /// How long ago that block started, measured on the engine's own
+    /// steady clock at the moment of the read.
+    pub callback_age_ns: u64,
+    /// Driver hardware instant (CoreAudio), 0 = none.
+    pub host_time_ns: u64,
+    pub moving: bool,
+    pub output_latency_samples: u32,
+    pub latency_reported: bool,
+    pub fallback_active: bool,
+    pub blocks: u64,
+}
+
+impl AudioClockReading {
+    pub(crate) fn from_raw(raw: &crate::ffi::LtAudioClock) -> Self {
+        Self {
+            frame: raw.frame,
+            sample_rate: raw.sample_rate.max(0) as u32,
+            callback_age_ns: raw.steady_now_ns.saturating_sub(raw.callback_steady_ns).max(0)
+                as u64,
+            host_time_ns: raw.host_time_ns,
+            moving: raw.moving != 0,
+            output_latency_samples: raw.output_latency_samples.max(0) as u32,
+            latency_reported: raw.latency_reported != 0,
+            fallback_active: raw.fallback_active != 0,
+            blocks: raw.blocks,
+        }
+    }
 }
 
 fn default_output_channel_count() -> i32 {

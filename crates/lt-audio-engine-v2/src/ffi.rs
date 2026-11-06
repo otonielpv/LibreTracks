@@ -61,6 +61,23 @@ pub struct LtSourcePeaksWindowView {
     pub ok: i32,
 }
 
+/// Mirrors `LtAudioClock` in lt_engine.h (docs/plans/redundancy step 02).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LtAudioClock {
+    pub frame: i64,
+    pub callback_steady_ns: i64,
+    pub host_time_ns: u64,
+    pub steady_now_ns: i64,
+    pub blocks: u64,
+    pub sample_rate: i32,
+    pub moving: i32,
+    pub output_latency_samples: i32,
+    pub latency_reported: i32,
+    pub fallback_active: i32,
+    pub valid: i32,
+}
+
 // ── Real FFI (C++ library present) ─────────────────────────────────────────
 #[cfg(not(any(
     feature = "no-link",
@@ -82,6 +99,8 @@ extern "C" {
     pub fn lt_audio_engine_poll_event(engine: *mut LtEngine) -> *const c_char;
     pub fn lt_audio_engine_get_snapshot(engine: *mut LtEngine) -> *const c_char;
     pub fn lt_audio_engine_get_meter_snapshot(engine: *mut LtEngine) -> *const c_char;
+    pub fn lt_audio_engine_get_audio_clock(engine: *mut LtEngine, out: *mut LtAudioClock)
+        -> LtResult;
     pub fn lt_audio_engine_list_devices(engine: *mut LtEngine, force_rescan: i32) -> *const c_char;
     pub fn lt_audio_engine_get_source_peaks(
         engine: *mut LtEngine,
@@ -241,6 +260,35 @@ pub unsafe fn lt_audio_engine_get_snapshot(_: *mut LtEngine) -> *const c_char {
 ))]
 pub unsafe fn lt_audio_engine_get_meter_snapshot(engine: *mut LtEngine) -> *const c_char {
     lt_audio_engine_get_snapshot(engine)
+}
+/// Stub: a fixed, recognisable reading (frame 48 000 at 48 kHz, stamped
+/// 2 ms before "now", 480 samples of latency) so the Rust reading path is
+/// tested without the engine.
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
+pub unsafe fn lt_audio_engine_get_audio_clock(
+    engine: *mut LtEngine,
+    out: *mut LtAudioClock,
+) -> LtResult {
+    if engine.is_null() || out.is_null() {
+        return LT_ERR_INVALID_HANDLE;
+    }
+    *out = LtAudioClock {
+        frame: 48_000,
+        callback_steady_ns: 1_000_000_000,
+        host_time_ns: 0,
+        steady_now_ns: 1_002_000_000,
+        blocks: 1,
+        sample_rate: 48_000,
+        moving: 1,
+        output_latency_samples: 480,
+        latency_reported: 1,
+        fallback_active: 0,
+        valid: 1,
+    };
+    LT_OK
 }
 #[cfg(any(
     feature = "no-link",

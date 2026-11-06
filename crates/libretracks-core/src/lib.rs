@@ -1,3 +1,4 @@
+pub mod audio_clock;
 pub mod automation;
 pub mod key_changes;
 pub mod midi_control;

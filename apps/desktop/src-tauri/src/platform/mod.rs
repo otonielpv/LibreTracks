@@ -143,6 +143,9 @@ mod tests {
             last_error: String::new(),
             fallback_active: false,
             output_suspended: false,
+            output_latency_samples: 0,
+            output_latency_seconds: 0.0,
+            latency_reported: false,
         }
     }
 
