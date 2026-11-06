@@ -78,6 +78,7 @@ pub fn install(app_data_dir: &Path) {
     let _ = fs::create_dir_all(&crashes);
     let marker = logs.join(MARKER_FILE);
 
+    PREVIOUS_RUN_UNCLEAN.store(marker.exists(), std::sync::atomic::Ordering::Relaxed);
     report_previous_run(&marker, &crashes);
     prune_reports(&crashes);
     let _ = fs::write(
@@ -98,6 +99,19 @@ pub fn install(app_data_dir: &Path) {
 }
 
 static MARKER: Mutex<Option<PathBuf>> = Mutex::new(None);
+static PREVIOUS_RUN_UNCLEAN: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the previous run left its marker behind (it did not exit
+/// cleanly). Valid after [`install`].
+pub fn previous_run_was_unclean() -> bool {
+    PREVIOUS_RUN_UNCLEAN.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Whether `logs/session.running` is present under `app_data_dir`.
+pub fn unclean_marker_present(app_data_dir: &Path) -> bool {
+    app_data_dir.join("logs").join(MARKER_FILE).exists()
+}
 
 /// The app is exiting normally.
 pub fn mark_clean_exit() {

@@ -556,11 +556,11 @@ impl FollowTarget for CountingTarget {
 #[test]
 fn a_different_session_blocks_every_transport_action() {
     let mut core = fresh_main_view_core("mine", "theirs");
-    assert_eq!(core.phase(), FollowerPhase::SessionMismatch);
     let mut target = CountingTarget::default();
     for step in 0..50 {
         tick(&mut core, &mut target, step * 20 * MS, &stopped_local(), None);
     }
+    assert_eq!(core.phase(), FollowerPhase::SessionMismatch);
     assert_eq!(target.applied, 0);
     assert!(!core.locks_local_inputs());
 }
@@ -591,9 +591,9 @@ fn only_a_mix_difference_does_not_block() {
     let mut fresh = fresh_main_view_core("same", "same");
     std::mem::swap(&mut fresh.main, &mut core.main);
     core.main = fresh.main.take().or(core.main.take());
-    assert_eq!(core.phase(), FollowerPhase::Following, "{:?}", core.diffs());
     let mut target = CountingTarget::default();
     tick(&mut core, &mut target, 0, &stopped_local(), None);
+    assert_eq!(core.phase(), FollowerPhase::Following, "{:?}", core.diffs());
     assert_eq!(target.applied, 1, "the main plays and we do not: play");
 }
 

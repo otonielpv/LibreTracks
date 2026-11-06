@@ -253,6 +253,12 @@ pub fn run() {
             // file here. The feed goes first: the remote subscribes to it.
             session_feed::initialize_session_feed(app);
             link::initialize_link(app);
+            // Redundancy (step 07, R4): a main that crashed comes back as
+            // main with its pilot tone off.
+            redundancy::role::resume_at_startup(
+                app.handle(),
+                infra::crash_report::previous_run_was_unclean(),
+            );
 
             let state = app.state::<DesktopState>();
             state.audio.attach_app_handle(app.handle().clone());
@@ -469,6 +475,12 @@ pub fn run() {
             redundancy::fingerprint::get_session_fingerprint,
             redundancy::role::set_redundancy_role,
             redundancy::role::get_redundancy_role,
+            redundancy::role::get_redundancy_status,
+            redundancy::role::redundancy_take_command,
+            redundancy::role::redundancy_follow_again,
+            redundancy::role::redundancy_become_main,
+            redundancy::role::accept_redundancy_role_change,
+            redundancy::role::dismiss_redundancy_role_change,
             commands::transport::play_transport,
             commands::transport::pause_transport,
             commands::transport::stop_transport,

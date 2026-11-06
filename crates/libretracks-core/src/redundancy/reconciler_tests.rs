@@ -686,3 +686,56 @@ fn a_main_that_comes_back_stopped_is_left_to_the_lifecycle() {
     );
     assert!(sim.b.playing, "not applied on its own");
 }
+
+#[test]
+fn with_the_main_lost_nothing_touches_the_transport() {
+    use crate::redundancy::lifecycle::{
+        BackupLifecycle, BackupObservation, BackupState, LifecyclePolicy, SessionCheck,
+    };
+    let mut sim = Sim::new(11);
+    sim.start_in_step(0.0);
+    let mut life = BackupLifecycle::new(LifecyclePolicy::default());
+    life.enable();
+    let mut transport_actions_while_lost = 0;
+    let mut lost_at = None;
+    for step in 0..(70_000 / 20) {
+        if step == 3_000 / 20 {
+            // The cable comes out in the middle of the song.
+            sim.silent = true;
+        }
+        sim.run_ms(20);
+        let mut local = sim.local_view();
+        local.main_lost = life.main_lost();
+        let decision = reconcile(sim.now, sim.main.as_ref(), &local, &sim.policy);
+        let alive = sim
+            .main
+            .as_ref()
+            .is_some_and(|main| sim.now - main.received_at_ns <= sim.policy.stale_after_seconds as u64 * 1_000_000_000);
+        life.observe(&BackupObservation {
+            now_ns: sim.now,
+            connected: true,
+            main_alive: alive,
+            main_audio_ok: true,
+            main_fallback_active: false,
+            session: SessionCheck::Same,
+            offset_seconds: decision.offset_seconds,
+            resynced: false,
+            main_matches: None,
+        });
+        if life.main_lost() {
+            lost_at.get_or_insert(sim.now);
+            if !matches!(decision.action, Action::None | Action::Freewheel(_)) {
+                transport_actions_while_lost += 1;
+            }
+        }
+        if life.applies_actions() {
+            sim.apply(decision);
+        }
+    }
+    assert!(matches!(life.state(), BackupState::MainLost { .. }));
+    let lost_at = lost_at.expect("lost");
+    assert!(lost_at <= 4_100 * MS, "noticed within ~1 s: {lost_at}");
+    assert_eq!(transport_actions_while_lost, 0);
+    assert!(sim.b.playing, "still playing after a minute alone");
+    assert!(sim.b.position > 69.0);
+}

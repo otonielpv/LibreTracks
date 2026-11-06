@@ -1,5 +1,5 @@
-//! Which redundancy role this device plays, and the server the main uses
-//! (redundancy step 04; the follower comes in step 06, the UI in step 10).
+//! Which redundancy role this device plays, the server the main uses and
+//! the lifecycle commands (redundancy steps 04, 06, 07; the UI is step 10).
 //!
 //! The main reuses the network-session server when the user is hosting one
 //! (same port, R1) and runs its own, guests refused, when not (R2). Hosting
@@ -9,12 +9,16 @@
 
 use std::sync::Mutex;
 
+use libretracks_link::redundancy::RedundancyMessage;
 use libretracks_link::{start_host, HostConfig, HostHandle};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
+use tokio::sync::mpsc;
 
-use super::follower_runtime::{self, FollowerTask};
+use super::follower_runtime::{self, FollowerCommand, FollowerTask};
+use super::main_monitor::MainMonitorCore;
 use super::publisher::{self, PublisherTask};
+use super::status::{main_state_name, RedundancyStatus, REDUNDANCY_STATUS_EVENT};
 use crate::link::redundancy_config::{self, RedundancyConfig};
 use crate::link::LinkState;
 
@@ -46,13 +50,13 @@ impl ServerSlot {
 struct MainRuntime {
     server: Option<ServerSlot>,
     publisher: Option<PublisherTask>,
-    persist: Option<tauri::async_runtime::JoinHandle<()>>,
+    tasks: Vec<tauri::async_runtime::JoinHandle<()>>,
 }
 
 impl MainRuntime {
     fn shut_down(&mut self) {
         self.publisher = None;
-        if let Some(task) = self.persist.take() {
+        for task in self.tasks.drain(..) {
             task.abort();
         }
         match self.server.take() {
@@ -68,12 +72,36 @@ pub struct RedundancyState {
     role: Mutex<RedundancyRole>,
     main: Mutex<MainRuntime>,
     follower: Mutex<Option<FollowerTask>>,
+    status: Mutex<RedundancyStatus>,
+    /// The old main's address, kept when this backup becomes the main, to
+    /// offer it the swap.
+    pending_offer: Mutex<Option<String>>,
+    /// The role-change offer this main received.
+    received_offer: Mutex<Option<libretracks_core::redundancy::lifecycle::RoleOffer>>,
 }
 
 impl RedundancyState {
     pub fn role(&self) -> RedundancyRole {
         self.role.lock().map(|role| *role).unwrap_or_default()
     }
+
+    pub fn status(&self) -> RedundancyStatus {
+        self.status.lock().map(|status| status.clone()).unwrap_or_default()
+    }
+}
+
+/// Replace the shared status and tell the UI.
+pub fn publish_status(app: &AppHandle, update: impl FnOnce(&mut RedundancyStatus)) {
+    let state = app.state::<RedundancyState>();
+    let status = {
+        let Ok(mut status) = state.status.lock() else {
+            return;
+        };
+        update(&mut status);
+        status.role = state.role();
+        status.clone()
+    };
+    let _ = app.emit(REDUNDANCY_STATUS_EVENT, status);
 }
 
 /// What a link server needs to take a backup, from `redundancy.json`.
@@ -106,10 +134,58 @@ fn spawn_persist(app: &AppHandle, handle: &HostHandle) -> tauri::async_runtime::
     })
 }
 
-fn attach(app: &AppHandle, main: &mut MainRuntime, slot: ServerSlot) {
+/// The main's lifecycle: what the backup says, 4 times a second.
+fn spawn_monitor(
+    app: &AppHandle,
+    handle: &HostHandle,
+    mut messages: mpsc::Receiver<RedundancyMessage>,
+) -> tauri::async_runtime::JoinHandle<()> {
+    let app = app.clone();
+    let handle = handle.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut core = MainMonitorCore::default();
+        let mut tick = tokio::time::interval(std::time::Duration::from_millis(250));
+        loop {
+            tokio::select! {
+                message = messages.recv() => {
+                    let Some(message) = message else { return };
+                    core.on_message(message, handle.monotonic_ms());
+                    if let Some(offer) = core.lifecycle.accept_offer() {
+                        let name = offer.new_main_name.clone();
+                        if let Ok(mut slot) = app.state::<RedundancyState>().received_offer.lock() {
+                            *slot = Some(offer);
+                        }
+                        publish_status(&app, |status| status.role_offer = Some(name));
+                    }
+                }
+                _ = tick.tick() => {
+                    let backup = handle.backup();
+                    core.tick(backup.is_some(), handle.monotonic_ms());
+                    let state = main_state_name(core.lifecycle.state()).to_string();
+                    let offset = core.offset_ms;
+                    publish_status(&app, |status| {
+                        status.state = state;
+                        status.offset_ms = offset;
+                        status.other_name = backup.map(|backup| backup.device_name);
+                    });
+                }
+            }
+        }
+    })
+}
+
+fn attach(
+    app: &AppHandle,
+    main: &mut MainRuntime,
+    slot: ServerSlot,
+    messages: Option<mpsc::Receiver<RedundancyMessage>>,
+) {
     let handle = slot.handle().clone();
     main.publisher = publisher::spawn(app, handle.clone());
-    main.persist = Some(spawn_persist(app, &handle));
+    main.tasks.push(spawn_persist(app, &handle));
+    if let Some(messages) = messages {
+        main.tasks.push(spawn_monitor(app, &handle, messages));
+    }
     main.server = Some(slot);
 }
 
@@ -117,7 +193,10 @@ fn hosting_handle(app: &AppHandle) -> Option<HostHandle> {
     crate::link::host::with_handle(app, HostHandle::clone)
 }
 
-async fn start_own_server(app: &AppHandle, config: &RedundancyConfig) -> Result<HostHandle, String> {
+async fn start_own_server(
+    app: &AppHandle,
+    config: &RedundancyConfig,
+) -> Result<(HostHandle, mpsc::Receiver<RedundancyMessage>), String> {
     let link = app.state::<LinkState>();
     let (device_id, device_name) = {
         let link_config = link.config.lock().map_err(|_| "state poisoned")?;
@@ -132,7 +211,15 @@ async fn start_own_server(app: &AppHandle, config: &RedundancyConfig) -> Result<
     let runtime = start_host(host)
         .await
         .map_err(|error| format!("no se pudo abrir el puerto: {error}"))?;
-    Ok(runtime.handle)
+    Ok((runtime.handle, runtime.backup_messages))
+}
+
+fn remember_role(app: &AppHandle, role: RedundancyRole) {
+    let mut config = redundancy_config::load(app);
+    if config.last_role != role {
+        config.last_role = role;
+        redundancy_config::save(app, &config);
+    }
 }
 
 /// `main_address`/`pin` only matter for `Backup` (the address is
@@ -156,6 +243,9 @@ pub async fn set_role(
         // Dropping it stops it and unlocks the local transport.
         *follower = None;
     };
+    if role != RedundancyRole::Main {
+        super::pilot::set_armed(app, false);
+    }
     if role == RedundancyRole::Backup {
         let mut config = redundancy_config::load(app);
         if let Some(address) = main_address.filter(|address| !address.trim().is_empty()) {
@@ -172,18 +262,44 @@ pub async fn set_role(
     }
     if role == RedundancyRole::Main {
         let config = redundancy_config::load(app);
-        let slot = match hosting_handle(app) {
+        let (slot, messages) = match hosting_handle(app) {
             Some(handle) => {
                 configure_shared(&handle, &config);
-                ServerSlot::Shared(handle)
+                // The network session owns this server's backup messages;
+                // `hosting_started` attaches the monitor when hosting starts
+                // while this device is the main.
+                (ServerSlot::Shared(handle), None)
             }
-            None => ServerSlot::Own(start_own_server(app, &config).await?),
+            None => {
+                let (handle, messages) = start_own_server(app, &config).await?;
+                (ServerSlot::Own(handle), Some(messages))
+            }
         };
         let mut main = state.main.lock().map_err(|_| "state poisoned")?;
-        attach(app, &mut main, slot);
+        attach(app, &mut main, slot, messages);
     }
     if let Ok(mut current) = state.role.lock() {
         *current = role;
+    }
+    remember_role(app, role);
+    publish_status(app, |status| {
+        *status = RedundancyStatus {
+            unclean_exit_warning: status.unclean_exit_warning,
+            pilot_tone_on: status.pilot_tone_on,
+            state: if role == RedundancyRole::Off {
+                "off".into()
+            } else {
+                String::new()
+            },
+            ..RedundancyStatus::default()
+        };
+    });
+    // A backup that became the main offers the swap to its old main.
+    if role == RedundancyRole::Main {
+        let old_main = state.pending_offer.lock().ok().and_then(|mut slot| slot.take());
+        if let Some(address) = old_main {
+            follower_runtime::offer_role_change(app, &address);
+        }
     }
     Ok(role)
 }
@@ -202,7 +318,13 @@ pub fn before_hosting_starts(app: &AppHandle) {
 }
 
 /// Hosting started while this device is the main: the publisher moves to it.
-pub fn hosting_started(app: &AppHandle, handle: &HostHandle) {
+/// `backup_messages` is the hosting server's redundancy feed (only read when
+/// this device is the main).
+pub fn hosting_started(
+    app: &AppHandle,
+    handle: &HostHandle,
+    backup_messages: mpsc::Receiver<RedundancyMessage>,
+) {
     let state = app.state::<RedundancyState>();
     if state.role() != RedundancyRole::Main {
         return;
@@ -211,7 +333,12 @@ pub fn hosting_started(app: &AppHandle, handle: &HostHandle) {
     configure_shared(handle, &config);
     if let Ok(mut main) = state.main.lock() {
         main.shut_down();
-        attach(app, &mut main, ServerSlot::Shared(handle.clone()));
+        attach(
+            app,
+            &mut main,
+            ServerSlot::Shared(handle.clone()),
+            Some(backup_messages),
+        );
     };
 }
 
@@ -224,21 +351,55 @@ pub fn hosting_stopped(app: &AppHandle) {
     if let Ok(mut main) = state.main.lock() {
         // The shared server is gone already; just forget it.
         main.publisher = None;
+        for task in main.tasks.drain(..) {
+            task.abort();
+        }
         main.server = None;
     };
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let config = redundancy_config::load(&app);
-        if let Ok(handle) = start_own_server(&app, &config).await {
+        if let Ok((handle, messages)) = start_own_server(&app, &config).await {
             let state = app.state::<RedundancyState>();
             if let Ok(mut main) = state.main.lock() {
                 if state.role() == RedundancyRole::Main && main.server.is_none() {
-                    attach(&app, &mut main, ServerSlot::Own(handle));
+                    attach(&app, &mut main, ServerSlot::Own(handle), Some(messages));
                 } else {
                     handle.stop();
                 }
             };
         }
+    });
+}
+
+fn send_to_follower(app: &AppHandle, command: FollowerCommand) -> Result<(), String> {
+    let state = app.state::<RedundancyState>();
+    let follower = state.follower.lock().map_err(|_| "state poisoned")?;
+    follower
+        .as_ref()
+        .ok_or_else(|| "notBackup".to_string())?
+        .send(command)
+}
+
+/// At launch (R4): resume the main role if it was the last one, with the
+/// pilot tone off after an unclean exit.
+pub fn resume_at_startup(app: &AppHandle, unclean_exit: bool) {
+    let config = redundancy_config::load(app);
+    let plan = libretracks_core::redundancy::lifecycle::startup_plan(
+        config.last_role == RedundancyRole::Main,
+        unclean_exit,
+        config.pilot_tone_enabled,
+    );
+    if !plan.resume_main {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = set_role(&app, RedundancyRole::Main, None, None).await;
+        super::pilot::set_armed(&app, plan.pilot_tone_armed);
+        publish_status(&app, |status| {
+            status.unclean_exit_warning = plan.warn_unclean_exit;
+        });
     });
 }
 
@@ -255,4 +416,126 @@ pub async fn set_redundancy_role(
 #[tauri::command]
 pub fn get_redundancy_role(app: AppHandle) -> RedundancyRole {
     app.state::<RedundancyState>().role()
+}
+
+#[tauri::command]
+pub fn get_redundancy_status(app: AppHandle) -> RedundancyStatus {
+    let state = app.state::<RedundancyState>();
+    let mut status = state.status();
+    status.role = state.role();
+    status
+}
+
+/// «Ahora mando yo» (D1: the only way into standalone).
+#[tauri::command]
+pub fn redundancy_take_command(app: AppHandle) -> Result<(), String> {
+    send_to_follower(&app, FollowerCommand::TakeCommand)
+}
+
+/// From `Diverged`: follow the main again.
+#[tauri::command]
+pub fn redundancy_follow_again(app: AppHandle) -> Result<(), String> {
+    send_to_follower(&app, FollowerCommand::FollowAgain)
+}
+
+/// From standalone or diverged: this machine becomes the main (publisher,
+/// pilot tone) and offers the swap to the old main.
+#[tauri::command]
+pub async fn redundancy_become_main(app: AppHandle) -> Result<RedundancyRole, String> {
+    let state = app.state::<RedundancyState>();
+    if state.role() != RedundancyRole::Backup {
+        return Err("notBackup".into());
+    }
+    let config = redundancy_config::load(&app);
+    if let Ok(mut slot) = state.pending_offer.lock() {
+        *slot = (!config.main_address.is_empty()).then_some(config.main_address.clone());
+    };
+    let role = set_role(&app, RedundancyRole::Main, None, None).await?;
+    super::pilot::set_armed(&app, config.pilot_tone_enabled);
+    Ok(role)
+}
+
+/// The old main accepts the offer of the backup that took over: it becomes
+/// that machine's backup (its pilot tone goes off).
+#[tauri::command]
+pub async fn accept_redundancy_role_change(app: AppHandle) -> Result<RedundancyRole, String> {
+    let offer = app
+        .state::<RedundancyState>()
+        .received_offer
+        .lock()
+        .map_err(|_| "state poisoned")?
+        .take()
+        .ok_or_else(|| "noOffer".to_string())?;
+    let address = offer
+        .new_main_address
+        .ok_or_else(|| "missingMainAddress".to_string())?;
+    set_role(&app, RedundancyRole::Backup, Some(address), None).await
+}
+
+#[tauri::command]
+pub fn dismiss_redundancy_role_change(app: AppHandle) {
+    if let Ok(mut slot) = app.state::<RedundancyState>().received_offer.lock() {
+        *slot = None;
+    }
+    publish_status(&app, |status| status.role_offer = None);
+}
+
+/// The startup plan from what is on disk (`redundancy.json` in `dir`) and
+/// whether the previous run exited uncleanly.
+pub fn startup_plan_in(
+    dir: &std::path::Path,
+    unclean_exit: bool,
+) -> libretracks_core::redundancy::lifecycle::StartupPlan {
+    let config = redundancy_config::load_from(dir);
+    libretracks_core::redundancy::lifecycle::startup_plan(
+        config.last_role == RedundancyRole::Main,
+        unclean_exit,
+        config.pilot_tone_enabled,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn data_dir(last_role: RedundancyRole, pilot: bool, crashed: bool) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        redundancy_config::save_to(
+            dir.path(),
+            &RedundancyConfig {
+                last_role,
+                pilot_tone_enabled: pilot,
+                ..RedundancyConfig::default()
+            },
+        )
+        .unwrap();
+        if crashed {
+            std::fs::create_dir_all(dir.path().join("logs")).unwrap();
+            std::fs::write(dir.path().join("logs").join("session.running"), "pid=1").unwrap();
+        }
+        dir
+    }
+
+    fn plan(dir: &tempfile::TempDir) -> libretracks_core::redundancy::lifecycle::StartupPlan {
+        let unclean = crate::infra::crash_report::unclean_marker_present(dir.path());
+        startup_plan_in(dir.path(), unclean)
+    }
+
+    #[test]
+    fn a_main_that_crashed_comes_back_without_pilot_tone_and_warns() {
+        let plan = plan(&data_dir(RedundancyRole::Main, true, true));
+        assert!(plan.resume_main);
+        assert!(!plan.pilot_tone_armed);
+        assert!(plan.warn_unclean_exit);
+    }
+
+    #[test]
+    fn a_clean_start_follows_the_pilot_setting() {
+        let on = plan(&data_dir(RedundancyRole::Main, true, false));
+        assert!(on.resume_main && on.pilot_tone_armed && !on.warn_unclean_exit);
+        let off = plan(&data_dir(RedundancyRole::Main, false, false));
+        assert!(!off.pilot_tone_armed);
+        let backup = plan(&data_dir(RedundancyRole::Backup, true, true));
+        assert!(!backup.resume_main && !backup.warn_unclean_exit);
+    }
 }

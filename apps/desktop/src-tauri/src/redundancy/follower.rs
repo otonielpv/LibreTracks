@@ -18,15 +18,18 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use libretracks_core::audio_clock::AudioClockSample;
+use libretracks_core::redundancy::lifecycle::{
+    BackupLifecycle, BackupObservation, BackupState, LifecyclePolicy, SessionCheck, Transition,
+};
 use libretracks_core::redundancy::reconciler::{
-    reconcile, Action, Decision, FreewheelReason, LocalView, MainIntent, MainView,
-    PendingJump as CoreJump, Policy,
+    reconcile, Action, Decision, LocalView, MainIntent, MainView, PendingJump as CoreJump, Policy,
 };
 use libretracks_core::session_fingerprint::{compare, FingerprintDiff, SessionFingerprint};
 use libretracks_core::warp::{source_seconds_at_view, warp_timeline_seconds_at};
 use libretracks_core::Song;
 use libretracks_link::redundancy::{
-    BackupPhase, PendingJump as LinkJump, RedundancyMessage, SeqGate, TransportIntent,
+    BackupPhase, HealthSummary, HeartbeatMonitor, PendingJump as LinkJump, RedundancyMessage,
+    SeqGate, TransportIntent, DEFAULT_HEARTBEAT_TIMEOUT_MS,
 };
 use serde::Serialize;
 
@@ -35,26 +38,52 @@ pub const TICK: Duration = Duration::from_millis(20);
 /// Status to the main this often.
 pub const STATUS_INTERVAL: Duration = Duration::from_millis(250);
 
-/// Where the follower stands, for the UI (step 10) and `BackupStatus`.
+/// Where the follower stands, for the UI (step 10) and `BackupStatus`: the
+/// backup lifecycle (step 07) without its timestamps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum FollowerPhase {
-    /// No fingerprint from the main yet.
+    Disabled,
+    Pairing,
     CheckingSession,
     /// Blocking differences: nothing is applied.
     SessionMismatch,
     Following,
-    /// The main went quiet: the backup carries on alone.
+    Armed,
+    /// The main went quiet or lost its audio: the backup carries on alone,
+    /// local inputs unlocked.
     MainLost,
+    Standalone,
+    Diverged,
+}
+
+impl From<BackupState> for FollowerPhase {
+    fn from(state: BackupState) -> Self {
+        match state {
+            BackupState::Disabled => FollowerPhase::Disabled,
+            BackupState::Pairing => FollowerPhase::Pairing,
+            BackupState::CheckingSession => FollowerPhase::CheckingSession,
+            BackupState::SessionMismatch => FollowerPhase::SessionMismatch,
+            BackupState::Following => FollowerPhase::Following,
+            BackupState::Armed => FollowerPhase::Armed,
+            BackupState::MainLost { .. } => FollowerPhase::MainLost,
+            BackupState::Standalone => FollowerPhase::Standalone,
+            BackupState::Diverged => FollowerPhase::Diverged,
+        }
+    }
 }
 
 impl FollowerPhase {
     pub fn as_backup_phase(self) -> BackupPhase {
         match self {
+            FollowerPhase::Disabled | FollowerPhase::Pairing => BackupPhase::Pairing,
             FollowerPhase::CheckingSession => BackupPhase::CheckingSession,
             FollowerPhase::SessionMismatch => BackupPhase::SessionMismatch,
             FollowerPhase::Following => BackupPhase::Following,
+            FollowerPhase::Armed => BackupPhase::Armed,
             FollowerPhase::MainLost => BackupPhase::MainLost,
+            FollowerPhase::Standalone => BackupPhase::Standalone,
+            FollowerPhase::Diverged => BackupPhase::Diverged,
         }
     }
 }
@@ -69,9 +98,14 @@ pub struct LocalInputs {
     pub pending_jump: Option<CoreJump>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct FollowerCore {
     pub policy: Policy,
+    lifecycle: BackupLifecycle,
+    monitor: HeartbeatMonitor,
+    main_health: HealthSummary,
+    connected: bool,
+    last_transition: Option<Transition>,
     pub manual_offset_seconds: f64,
     gate: SeqGate,
     main: Option<MainView>,
@@ -89,7 +123,6 @@ pub struct FollowerCore {
     last_correction_seconds: Option<f64>,
     playing_since_ns: Option<u64>,
     pub corrections: u32,
-    main_lost: bool,
     last_offset_seconds: Option<f64>,
     main_sample_rate: u32,
 }
@@ -122,11 +155,83 @@ pub fn region_at(song: Option<&Song>, seconds: f64) -> Option<(String, f64, f64)
 
 impl FollowerCore {
     pub fn new(policy: Policy, manual_offset_seconds: f64) -> Self {
+        let mut lifecycle = BackupLifecycle::new(LifecyclePolicy {
+            correction_threshold_seconds: policy.correction_threshold_seconds,
+            ..LifecyclePolicy::default()
+        });
+        lifecycle.enable();
         Self {
             policy,
+            lifecycle,
+            monitor: HeartbeatMonitor::new(DEFAULT_HEARTBEAT_TIMEOUT_MS),
+            main_health: HealthSummary {
+                audio_ok: true,
+                fallback_active: false,
+                pilot_tone_on: false,
+            },
+            connected: false,
+            last_transition: None,
             manual_offset_seconds,
-            ..Self::default()
+            gate: SeqGate::default(),
+            main: None,
+            main_name: None,
+            jump_specs: HashMap::new(),
+            vamp_mode: None,
+            main_may_forward: false,
+            main_fingerprint: None,
+            own_fingerprint: None,
+            diffs: Vec::new(),
+            last_applied_intent: 0,
+            last_correction_ns: None,
+            last_correction_seconds: None,
+            playing_since_ns: None,
+            corrections: 0,
+            last_offset_seconds: None,
+            main_sample_rate: 0,
         }
+    }
+
+    /// The link connection went up or down (the client tells).
+    pub fn set_connected(&mut self, connected: bool) {
+        self.connected = connected;
+    }
+
+    /// Heartbeat timeout, 0.5-5 s (step 07).
+    pub fn set_heartbeat_timeout_ms(&mut self, timeout_ms: u64) {
+        self.monitor.set_timeout_ms(timeout_ms.clamp(500, 5_000));
+    }
+
+    /// The operator moved the transport locally (only possible while the
+    /// main is lost): coming back to it is no longer automatic.
+    pub fn local_order(&mut self) {
+        self.lifecycle.local_order();
+    }
+
+    /// «Ahora mando yo».
+    pub fn take_command(&mut self) -> Option<Transition> {
+        let transition = self.lifecycle.take_command();
+        self.last_transition = transition.or(self.last_transition);
+        transition
+    }
+
+    /// From `Diverged`: follow the main again.
+    pub fn follow_again(&mut self) -> Option<Transition> {
+        let transition = self.lifecycle.follow_again();
+        self.last_transition = transition.or(self.last_transition);
+        transition
+    }
+
+    /// The transition the last tick caused, once.
+    pub fn take_transition(&mut self) -> Option<Transition> {
+        self.last_transition.take()
+    }
+
+    pub fn last_reason(&self) -> &'static str {
+        self.lifecycle.last_reason()
+    }
+
+    pub fn lifecycle_state(&self) -> BackupState {
+        self.lifecycle.state()
     }
 
     pub fn main_name(&self) -> Option<&str> {
@@ -150,15 +255,16 @@ impl FollowerCore {
     }
 
     pub fn phase(&self) -> FollowerPhase {
-        if self.main_lost {
-            return FollowerPhase::MainLost;
-        }
+        self.lifecycle.state().into()
+    }
+
+    fn session_check(&self) -> SessionCheck {
         match (&self.main_fingerprint, &self.own_fingerprint) {
             (Some(_), Some(_)) if self.diffs.iter().any(FingerprintDiff::blocks_arming) => {
-                FollowerPhase::SessionMismatch
+                SessionCheck::Different
             }
-            (Some(_), Some(_)) => FollowerPhase::Following,
-            _ => FollowerPhase::CheckingSession,
+            (Some(_), Some(_)) => SessionCheck::Same,
+            _ => SessionCheck::Unknown,
         }
     }
 
@@ -292,6 +398,9 @@ impl FollowerCore {
         let to_local = |main_ns: u64| -> Option<u64> {
             host_offset_ns.map(|offset| (main_ns as f64 - offset).max(0.0) as u64)
         };
+        // Anything from the main means it is there.
+        self.monitor.observe(now_ns / 1_000_000);
+        self.connected = true;
         if let Some(seq) = message.seq() {
             if !self.gate.accept(seq) {
                 return;
@@ -349,7 +458,8 @@ impl FollowerCore {
                     main.received_at_ns = now_ns;
                 }
             }
-            RedundancyMessage::Heartbeat { .. } => {
+            RedundancyMessage::Heartbeat { health, .. } => {
+                self.main_health = health;
                 if let Some(main) = &mut self.main {
                     main.received_at_ns = now_ns;
                 }
@@ -360,12 +470,13 @@ impl FollowerCore {
                     self.recompare();
                 }
             }
-            RedundancyMessage::BackupStatus { .. } => {}
+            RedundancyMessage::BackupStatus { .. } | RedundancyMessage::RoleChange { .. } => {}
         }
     }
 
-    /// The action for now. With a blocking session difference (or before
-    /// knowing), nothing is applied to the transport.
+    /// The action for now. Transport actions only reach the session while
+    /// the lifecycle follows (`Following`/`Armed`): not before the session is
+    /// checked, not with a blocking difference, never with the main lost.
     pub fn decide(&mut self, now_ns: u64, local: &LocalInputs, song: Option<&Song>) -> Decision {
         let Some(clock) = local.clock else {
             return Decision {
@@ -386,15 +497,48 @@ impl FollowerCore {
             playing_since_ns: self.playing_since_ns,
             region_bounds: region.map(|(_, start, end)| (start, end)),
             manual_offset_seconds: self.manual_offset_seconds,
-            main_lost: self.main_lost,
+            main_lost: self.lifecycle.main_lost(),
         };
         let decision = reconcile(now_ns, self.main.as_ref(), &view, &self.policy);
         if let Some(offset) = decision.offset_seconds {
             self.last_offset_seconds = Some(offset);
         }
+
+        // Is the main, when fresh, where we are?
+        let fresh = self.main.as_ref().filter(|main| {
+            (now_ns.saturating_sub(main.received_at_ns) as f64) / 1e9
+                <= self.policy.stale_after_seconds
+        });
+        let main_matches = fresh.map(|main| {
+            let same_play = main.clock.playing == view.clock.playing;
+            let same_song = main.song_id.is_none()
+                || view.song_id.is_none()
+                || main.song_id == view.song_id;
+            let offset = main.clock.audible_position_at(now_ns)
+                - view.clock.audible_position_at(now_ns)
+                - self.manual_offset_seconds;
+            same_play && same_song && offset.abs() < self.policy.hard_resync_threshold_seconds
+        });
+        let observation = BackupObservation {
+            now_ns,
+            connected: self.connected,
+            main_alive: self.monitor.is_alive(now_ns / 1_000_000),
+            main_audio_ok: self.main_health.audio_ok,
+            main_fallback_active: self.main_health.fallback_active,
+            session: self.session_check(),
+            offset_seconds: decision.offset_seconds,
+            resynced: matches!(
+                decision.action,
+                Action::Play { .. } | Action::Pause { .. } | Action::SeekAbsolute { .. }
+            ) && decision.applied_intent.is_none(),
+            main_matches,
+        };
+        if let Some(transition) = self.lifecycle.observe(&observation) {
+            self.last_transition = Some(transition);
+        }
+
         let freewheel = matches!(decision.action, Action::Freewheel(_));
-        if !freewheel && self.phase() != FollowerPhase::Following {
-            // Not following (yet, or not this session): consume nothing.
+        if !freewheel && !self.lifecycle.applies_actions() {
             return Decision {
                 action: Action::None,
                 applied_intent: None,
@@ -420,11 +564,6 @@ impl FollowerCore {
             }
             _ => {}
         }
-        match decision.action {
-            Action::Freewheel(FreewheelReason::Stale) => self.main_lost = true,
-            Action::Freewheel(_) => {}
-            _ => self.main_lost = false,
-        }
     }
 
     pub fn status(&self, include_fingerprint: bool) -> RedundancyMessage {
@@ -442,10 +581,10 @@ impl FollowerCore {
         }
     }
 
-    /// Whether the backup's own transport must stay locked (following). Not
-    /// while the main is lost (R6) or the sessions differ.
+    /// Whether the backup's own transport must stay locked (following or
+    /// armed). Not while the main is lost (R6) or the sessions differ.
     pub fn locks_local_inputs(&self) -> bool {
-        self.phase() == FollowerPhase::Following
+        self.lifecycle.locks_local_inputs()
     }
 }
 

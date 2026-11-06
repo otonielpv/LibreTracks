@@ -162,7 +162,7 @@ pub struct RedundancySettingsInfo {
 }
 
 /// Health in one line, for the other end's indicator.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthSummary {
     pub audio_ok: bool,
@@ -170,16 +170,31 @@ pub struct HealthSummary {
     pub pilot_tone_on: bool,
 }
 
+/// Healthy until told otherwise: a heartbeat sent before the app reported
+/// anything must not read as "no audio" (the backup would declare the main
+/// lost).
+impl Default for HealthSummary {
+    fn default() -> Self {
+        Self {
+            audio_ok: true,
+            fallback_active: false,
+            pilot_tone_on: false,
+        }
+    }
+}
+
 /// The backup's lifecycle as the main shows it (step 07 drives it).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum BackupPhase {
+    Pairing,
     CheckingSession,
     SessionMismatch,
     Following,
     Armed,
     MainLost,
     Standalone,
+    Diverged,
 }
 
 /// Every message of the channel. Travels inside
@@ -229,6 +244,14 @@ pub enum RedundancyMessage {
         monotonic_ns: u64,
         health: HealthSummary,
     },
+    /// A backup that became the main, to its old main when it reconnects:
+    /// «I am the main now; become my backup?». Never applied on its own: the
+    /// old main's user accepts (step 07).
+    RoleChange {
+        new_main_name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        new_main_address: Option<String>,
+    },
     /// B → A.
     BackupStatus {
         phase: BackupPhase,
@@ -250,6 +273,7 @@ impl RedundancyMessage {
             | RedundancyMessage::Heartbeat { seq, .. } => Some(*seq),
             RedundancyMessage::Welcome { .. }
             | RedundancyMessage::Fingerprint { .. }
+            | RedundancyMessage::RoleChange { .. }
             | RedundancyMessage::BackupStatus { .. } => None,
         }
     }
@@ -505,6 +529,27 @@ mod tests {
             last_correction_ms: None,
             fingerprint: Some("f".into()),
         });
+    }
+
+    #[test]
+    fn default_health_is_healthy() {
+        assert!(HealthSummary::default().audio_ok);
+        assert!(!HealthSummary::default().fallback_active);
+    }
+
+    #[test]
+    fn role_change_round_trips() {
+        let value = round_trip(&RedundancyMessage::RoleChange {
+            new_main_name: "PC B".into(),
+            new_main_address: Some("10.0.0.2:3040".into()),
+        });
+        assert_eq!(value["kind"], "roleChange");
+        assert_eq!(value["newMainName"], "PC B");
+        assert_eq!(value["newMainAddress"], "10.0.0.2:3040");
+        assert_eq!(
+            serde_json::to_value(BackupPhase::Diverged).unwrap(),
+            "diverged"
+        );
     }
 
     #[test]

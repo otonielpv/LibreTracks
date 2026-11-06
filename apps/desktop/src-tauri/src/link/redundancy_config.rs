@@ -33,6 +33,17 @@ pub struct RedundancyConfig {
     /// Backup side: calibration from step 11, how much later the backup
     /// should sound, in ms.
     pub manual_offset_ms: f64,
+    /// The role this device had last (step 07: a main that crashed resumes
+    /// as main with the pilot tone off).
+    pub last_role: crate::redundancy::role::RedundancyRole,
+    /// Main side: emit the pilot tone (step 08).
+    pub pilot_tone_enabled: bool,
+    /// Backup side: 2 or 3 raw MIDI bytes sent once on losing the main (a
+    /// program change or CC for switchers that listen to MIDI). Empty = off.
+    pub on_main_lost_midi: Vec<u8>,
+    /// Backup side: silence after which the main counts as lost, 500-5000
+    /// ms. 0 = the default (1 s).
+    pub heartbeat_timeout_ms: u64,
 }
 
 fn path_in(dir: &Path) -> PathBuf {

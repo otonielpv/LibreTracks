@@ -1,6 +1,8 @@
-//! The follower's async loop (redundancy step 06): the connection to the
-//! main, the 20 ms reconcile tick and the 250 ms status. The decisions are
-//! in `follower.rs`; this only feeds them and applies the result.
+//! The follower's async loop (redundancy steps 06-07): the connection to
+//! the main, the 20 ms reconcile tick, the 250 ms status to the main, the
+//! lifecycle commands and the `redundancy:status` events. The decisions are
+//! in `follower.rs` and `libretracks_core::redundancy`; this only feeds them
+//! and applies the result.
 //!
 //! Session lock: never on a tick whose action is `None`/`Freewheel` (local
 //! inputs come from the audio clock and the session feed); only to apply a
@@ -10,22 +12,44 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use libretracks_core::redundancy::lifecycle::{BackupState, StatusThrottle};
 use libretracks_core::redundancy::reconciler::PendingJump as CoreJump;
 use libretracks_core::Song;
+use libretracks_link::redundancy::RedundancyMessage;
 use libretracks_link::{connect_as_backup, GuestConfig, GuestEvent, GuestRuntime, GuestState};
 use tauri::{AppHandle, Manager};
+use tokio::sync::{broadcast, mpsc};
 
 use super::follower::{tick, FollowerCore, LocalInputs, SessionTarget, STATUS_INTERVAL, TICK};
-use crate::link::redundancy_config;
+use super::role::publish_status;
+use super::status::{backup_state_name, main_lost_midi};
+use crate::link::redundancy_config::{self, RedundancyConfig};
 use crate::link::LinkState;
 use crate::session_feed::SessionFeed;
-use crate::state::{DesktopState, Forwarder};
+use crate::state::{DesktopState, Forwarder, IntentOrigin, OriginatedIntent};
+
+/// What the UI asks the running follower.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FollowerCommand {
+    /// «Ahora mando yo».
+    TakeCommand,
+    FollowAgain,
+}
 
 /// Running follower, stopped (and the local transport unlocked) on drop.
 pub struct FollowerTask {
     task: tauri::async_runtime::JoinHandle<()>,
     app: AppHandle,
     guest: libretracks_link::GuestHandle,
+    commands: mpsc::UnboundedSender<FollowerCommand>,
+}
+
+impl FollowerTask {
+    pub fn send(&self, command: FollowerCommand) -> Result<(), String> {
+        self.commands
+            .send(command)
+            .map_err(|_| "follower stopped".to_string())
+    }
 }
 
 impl Drop for FollowerTask {
@@ -50,38 +74,100 @@ pub fn main_url(address: &str) -> String {
         .strip_prefix("ws://")
         .unwrap_or(address)
         .trim_end_matches('/');
-    if address.rsplit_once(':').is_some_and(|(_, port)| port.parse::<u16>().is_ok()) {
+    if address
+        .rsplit_once(':')
+        .is_some_and(|(_, port)| port.parse::<u16>().is_ok())
+    {
         format!("ws://{address}")
     } else {
         format!("ws://{address}:{}", libretracks_link::server::DEFAULT_LINK_PORT)
     }
 }
 
-pub fn spawn(app: &AppHandle, address: &str, pin: Option<String>) -> Result<FollowerTask, String> {
-    let config = redundancy_config::load(app);
-    let (device_id, device_name) = {
-        let link = app.state::<LinkState>();
-        let link_config = link.config.lock().map_err(|_| "state poisoned")?;
-        (link_config.device_id.clone(), link_config.device_name.clone())
-    };
-    let url = main_url(address);
-    let token = config.main_tokens.get(&url).cloned();
-    let guest = connect_as_backup(GuestConfig {
+fn device_identity(app: &AppHandle) -> Result<(String, String), String> {
+    let link = app.state::<LinkState>();
+    let link_config = link.config.lock().map_err(|_| "state poisoned")?;
+    Ok((link_config.device_id.clone(), link_config.device_name.clone()))
+}
+
+fn backup_client(
+    app: &AppHandle,
+    url: &str,
+    pin: Option<String>,
+    config: &RedundancyConfig,
+) -> Result<GuestRuntime, String> {
+    let (device_id, device_name) = device_identity(app)?;
+    connect_as_backup(GuestConfig {
         device_name,
         platform: std::env::consts::OS.into(),
         app_version: app.package_info().version.to_string(),
         pin,
         remember: true,
-        token,
-        ..GuestConfig::new(url.clone(), device_id)
-    })?;
+        token: config.main_tokens.get(url).cloned(),
+        ..GuestConfig::new(url.to_string(), device_id)
+    })
+}
+
+pub fn spawn(app: &AppHandle, address: &str, pin: Option<String>) -> Result<FollowerTask, String> {
+    let config = redundancy_config::load(app);
+    let url = main_url(address);
+    let guest = backup_client(app, &url, pin, &config)?;
     let handle = guest.handle.clone();
-    let task = tauri::async_runtime::spawn(run(app.clone(), guest, url));
+    let (commands, commands_rx) = mpsc::unbounded_channel();
+    let intents = app
+        .state::<DesktopState>()
+        .session
+        .lock()
+        .map_err(|_| "state poisoned")?
+        .subscribe_intents();
+    let task = tauri::async_runtime::spawn(run(app.clone(), guest, url, commands_rx, intents));
     Ok(FollowerTask {
         task,
         app: app.clone(),
         guest: handle,
+        commands,
     })
+}
+
+/// This machine became the main: tell the old one (when it is reachable)
+/// that it can become our backup. Connects as a backup only to deliver the
+/// offer, then leaves.
+pub fn offer_role_change(app: &AppHandle, old_main_address: &str) {
+    let config = redundancy_config::load(app);
+    let url = main_url(old_main_address);
+    let Ok(mut guest) = backup_client(app, &url, None, &config) else {
+        return;
+    };
+    let (_, name) = device_identity(app).unwrap_or_default();
+    let address = local_address_hint(app);
+    tauri::async_runtime::spawn(async move {
+        // The old main may still be down: keep trying for a while.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(600);
+        while tokio::time::Instant::now() < deadline {
+            match tokio::time::timeout(Duration::from_secs(5), guest.events.recv()).await {
+                Ok(Some(GuestEvent::State(GuestState::Connected))) => {
+                    guest.handle.send_redundancy(RedundancyMessage::RoleChange {
+                        new_main_name: name.clone(),
+                        new_main_address: address.clone(),
+                    });
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    break;
+                }
+                Ok(Some(GuestEvent::State(GuestState::Rejected { .. }))) | Ok(None) => break,
+                _ => {}
+            }
+        }
+        guest.handle.leave();
+    });
+}
+
+/// `ip:port` other machines can reach this one at, best effort.
+fn local_address_hint(app: &AppHandle) -> Option<String> {
+    let port = crate::link::host::with_handle(app, |handle| handle.port())
+        .unwrap_or(libretracks_link::server::DEFAULT_LINK_PORT);
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    Some(format!("{}:{port}", socket.local_addr().ok()?.ip()))
 }
 
 fn local_inputs(app: &AppHandle, origin: Instant, feed: &FeedCache) -> LocalInputs {
@@ -120,12 +206,25 @@ fn refresh_session(app: &AppHandle, core: &mut FollowerCore) -> Option<Song> {
     Some(source.song)
 }
 
-async fn run(app: AppHandle, mut guest: GuestRuntime, url: String) {
+fn engine_sample_rate(app: &AppHandle) -> u32 {
+    app.state::<DesktopState>()
+        .audio
+        .audio_clock_reading()
+        .map_or(0, |reading| reading.sample_rate)
+}
+
+async fn run(
+    app: AppHandle,
+    mut guest: GuestRuntime,
+    url: String,
+    mut commands: mpsc::UnboundedReceiver<FollowerCommand>,
+    mut intents: broadcast::Receiver<OriginatedIntent>,
+) {
     let config = redundancy_config::load(&app);
-    let mut core = FollowerCore::new(
-        Default::default(),
-        config.manual_offset_ms / 1000.0,
-    );
+    let mut core = FollowerCore::new(Default::default(), config.manual_offset_ms / 1000.0);
+    if config.heartbeat_timeout_ms > 0 {
+        core.set_heartbeat_timeout_ms(config.heartbeat_timeout_ms);
+    }
     let origin = guest.handle.clock_origin();
     let now_ns = || Instant::now().saturating_duration_since(origin).as_nanos() as u64;
     let mut song = refresh_session(&app, &mut core);
@@ -135,12 +234,14 @@ async fn run(app: AppHandle, mut guest: GuestRuntime, url: String) {
     ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut status = tokio::time::interval(STATUS_INTERVAL);
     status.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut throttle = StatusThrottle::four_hz();
     let mut refresh_due: Option<tokio::time::Instant> = None;
     let mut fingerprint_unsent = true;
     let mut locked = false;
     let mut target = SessionTarget { app: app.clone() };
 
     loop {
+        let mut state_changed = false;
         tokio::select! {
             event = guest.events.recv() => {
                 let Some(event) = event else { break };
@@ -154,11 +255,31 @@ async fn run(app: AppHandle, mut guest: GuestRuntime, url: String) {
                         config.main_tokens.insert(url.clone(), token);
                         redundancy_config::save(&app, &config);
                     }
-                    GuestEvent::State(GuestState::Connected) => fingerprint_unsent = true,
-                    // Lost, rejected or closed: nothing to do here. The
-                    // reconciler sees the silence and freewheels; the backup
-                    // keeps playing (never stops for lack of network).
+                    GuestEvent::State(GuestState::Connected) => {
+                        fingerprint_unsent = true;
+                        core.set_connected(true);
+                    }
+                    // Lost, rejected or closed: the lifecycle sees the silence
+                    // and the reconciler freewheels. The backup keeps playing
+                    // (never stops for lack of network).
+                    GuestEvent::State(_) => core.set_connected(false),
                     _ => {}
+                }
+            }
+            command = commands.recv() => {
+                let Some(command) = command else { break };
+                match command {
+                    FollowerCommand::TakeCommand => { core.take_command(); }
+                    FollowerCommand::FollowAgain => { core.follow_again(); }
+                }
+            }
+            intent = intents.recv() => {
+                // The operator moved the transport while it was unlocked
+                // (main lost): following again is no longer automatic.
+                if let Ok(intent) = intent {
+                    if intent.origin != IntentOrigin::Follower {
+                        core.local_order();
+                    }
                 }
             }
             _ = ticks.tick() => {
@@ -205,6 +326,29 @@ async fn run(app: AppHandle, mut guest: GuestRuntime, url: String) {
                     cache.revisions = Some(revisions);
                 }
             }
+        }
+
+        if let Some(transition) = core.take_transition() {
+            state_changed = true;
+            if let Some(message) = main_lost_midi(&transition, &config.on_main_lost_midi) {
+                app.state::<DesktopState>().midi_output.send(&[message]);
+            }
+            if matches!(transition.to, BackupState::MainLost { .. }) {
+                crate::infra::crash_report::breadcrumb("redundancy: main lost");
+            }
+        }
+        if throttle.should_emit(now_ns(), state_changed) {
+            let main_rate = core.main_sample_rate();
+            let own_rate = engine_sample_rate(&app);
+            publish_status(&app, |status| {
+                status.state = backup_state_name(core.lifecycle_state()).into();
+                status.offset_ms = core.last_offset_seconds().map(|offset| offset * 1000.0);
+                status.corrections = core.corrections;
+                status.other_name = core.main_name().map(str::to_string);
+                status.diffs = core.diffs().to_vec();
+                status.reason = core.last_reason().into();
+                status.sample_rate_differs = main_rate > 0 && own_rate > 0 && main_rate != own_rate;
+            });
         }
     }
 }

@@ -285,7 +285,7 @@ async fn start_on(app: &AppHandle, preferred_port: Option<u16>) -> Result<HostSt
     }
     let port = runtime.handle.port();
     set_phase(app, HostPhase::Hosting { port });
-    crate::redundancy::role::hosting_started(app, &runtime.handle);
+    crate::redundancy::role::hosting_started(app, &runtime.handle, runtime.backup_messages);
     discovery::advertise(&Advertisement {
         port,
         ..advertisement
