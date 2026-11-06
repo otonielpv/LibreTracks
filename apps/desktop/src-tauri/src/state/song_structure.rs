@@ -130,7 +130,7 @@ pub(super) fn built_for_region(
 /// su sitio, el que ya no está se quita, y los nuevos (copias `~n`) se añaden
 /// tras el último de la región. Así aplicar el orden original deja la lista
 /// idéntica, byte a byte. Devuelve, por posición final, si es de la región.
-fn replace_region_items<T>(
+pub(super) fn replace_region_items<T>(
     list: &mut Vec<T>,
     built: Vec<T>,
     id_of: impl Fn(&T) -> &str,
@@ -422,7 +422,7 @@ pub(super) fn rebuild_applied_structures(
 /// Ordena por inicio las listas de marcas que lo necesiten. Las de sección se
 /// validan en orden por categoría (sección y cue cada una en su carril), así
 /// que una lista válida se deja tal cual aunque mezcle carriles.
-fn sort_markers_if_needed(song: &mut Song) {
+pub(super) fn sort_markers_if_needed(song: &mut Song) {
     let by_start = |l: f64, r: f64| l.total_cmp(&r);
     let section_lanes_sorted = [MarkerCategory::Section, MarkerCategory::Cue]
         .iter()

@@ -40,39 +40,215 @@ fn assert_locked<T: std::fmt::Debug>(result: Result<T, DesktopError>, what: &str
     }
 }
 
-/// C1: mover, recortar, cambiar la ganancia de un clip, mover una marca y
-/// añadir un clip en la canción arreglada se rechazan y el `Song` no cambia.
+// ── Editar un bloque (plan arrangement-block-edits, paso 03) ────────────────
+//
+// "largo" = A B B C: el 2.º verso (bloque `largo-2`) está en [32, 48) con la
+// copia `xb~2`; el 1.º (`largo-1`) en [16, 32) con `xb`.
+
+fn r2_structure(song: &Song) -> &libretracks_core::SongStructure {
+    song.regions[1].structure.as_ref().expect("estructura")
+}
+
+fn block<'a>(song: &'a Song, block_id: &str) -> &'a libretracks_core::ArrangementBlock {
+    r2_structure(song)
+        .applied_arrangement()
+        .expect("aplicado")
+        .blocks
+        .iter()
+        .find(|b| b.id == block_id)
+        .unwrap_or_else(|| panic!("bloque {block_id}"))
+}
+
+fn clip_of<'a>(song: &'a Song, id: &str) -> &'a libretracks_core::Clip {
+    song.clips
+        .iter()
+        .find(|c| c.id == id)
+        .unwrap_or_else(|| panic!("clip {id}"))
+}
+
+/// C1: mover, recortar y cambiar la ganancia de un clip, añadir un clip y un
+/// aviso, y un arrastre en vivo en el 2.º verso se aceptan; solo ese bloque
+/// guarda contenido propio y ni el 1.º verso ni el original cambian.
 #[test]
-fn clip_and_marker_edits_in_an_arranged_song_are_rejected_untouched() {
+fn edits_in_the_second_copy_stay_in_its_block() {
+    let (mut session, audio) = applied();
+    let original_before = r2_structure(&song_of(&session)).original.clone();
+    let first_copy_before: Vec<_> = song_of(&session)
+        .clips
+        .iter()
+        .filter(|c| c.timeline_start_seconds >= 16.0 && c.timeline_start_seconds < 32.0)
+        .cloned()
+        .collect();
+
+    session.move_clip("xb~2", 34.0, &audio).expect("mover clip");
+    let song = song_of(&session);
+    let content = block(&song, "largo-2").content.as_ref().expect("bloque editado");
+    close(clip_of(&song, "xb~2").timeline_start_seconds, 34.0, "en el timeline");
+    assert!(content.clips.iter().any(|c| c.id == "xb~2"), "en su bloque");
+
+    // Recortar (la ventana se valida contra el WAV de prueba, de 1 s: aquí
+    // interesa la guardia, así que se edita el `Song` directamente).
+    let mut trimmed = song_of(&session);
+    let clip = trimmed.clips.iter_mut().find(|c| c.id == "xb~2").unwrap();
+    clip.source_start_seconds = 0.5;
+    clip.duration_seconds = 4.0;
+    session
+        .persist_song_update(trimmed, &audio, AudioChangeImpact::TimelineWindow, true)
+        .expect("recortar clip");
+    let mut louder = song_of(&session);
+    louder.clips.iter_mut().find(|c| c.id == "xb~2").unwrap().gain = 0.5;
+    session
+        .persist_song_update(louder, &audio, AudioChangeImpact::TimelineWindow, true)
+        .expect("ganancia");
+    session
+        .create_clip("a1", "audio/test.wav", 40.0, &audio)
+        .expect("añadir clip");
+    let mut with_cue = song_of(&session);
+    with_cue
+        .section_markers
+        .push(marker("todos", 44.0, MarkerKind::AllIn));
+    session
+        .persist_song_update(with_cue, &audio, AudioChangeImpact::TransportOnly, true)
+        .expect("añadir aviso");
+    session
+        .move_clip_live("xb~2", 35.0, &audio)
+        .expect("arrastre en vivo");
+
+    let song = song_of(&session);
+    let content = block(&song, "largo-2").content.as_ref().expect("bloque editado");
+    let moved = content.clips.iter().find(|c| c.id == "xb~2").expect("xb~2");
+    close(moved.timeline_start_seconds, 3.0, "relativo al bloque");
+    assert_eq!(moved.gain, 0.5);
+    close(moved.duration_seconds, 4.0, "recortado");
+    assert_eq!(content.clips.len(), 2, "con el clip nuevo: {:?}", content.clips);
+    assert!(content.cue_markers.iter().any(|m| m.id == "todos"));
+    assert!(block(&song, "largo-1").content.is_none(), "el 1.º verso sigue al original");
+    assert_eq!(r2_structure(&song).original, original_before, "el original no cambia");
+    let first_copy: Vec<_> = song
+        .clips
+        .iter()
+        .filter(|c| c.timeline_start_seconds >= 16.0 && c.timeline_start_seconds < 32.0)
+        .cloned()
+        .collect();
+    assert_eq!(first_copy, first_copy_before);
+}
+
+/// C2: reordenar los bloques después lleva el cambio con su bloque.
+#[test]
+fn an_edit_travels_with_its_block_when_reordering() {
+    let (mut session, audio) = applied();
+    session.move_clip("xb~2", 34.0, &audio).expect("mover clip");
+
+    let mut reordered = r2_structure(&song_of(&session))
+        .applied_arrangement()
+        .unwrap()
+        .clone();
+    reordered.blocks.swap(1, 2); // el verso editado pasa delante
+    session
+        .save_song_arrangement("r2", reordered, true, &audio)
+        .expect("reordenar");
+
+    let song = song_of(&session);
+    close(clip_of(&song, "xb~2").timeline_start_seconds, 18.0, "con su bloque");
+    close(clip_of(&song, "xb").timeline_start_seconds, 32.0, "el otro, en su sitio");
+}
+
+/// C3: deshacer la edición deja el bloque como estaba, en un solo paso.
+#[test]
+fn undoing_an_edit_restores_the_block() {
     let (mut session, audio) = applied();
     let before = song_of(&session);
+    session.move_clip("xb~2", 34.0, &audio).expect("mover clip");
+    session.move_clip("xb~2", 36.0, &audio).expect("otra vez");
 
-    assert_locked(session.move_clip("xa", 9.0, &audio), "mover clip");
-    assert_locked(
-        session.update_clip_window("xb", 16.0, 0.0, 0.5, &audio),
-        "recortar clip",
+    session.undo_action(&audio).expect("undo");
+    let song = song_of(&session);
+    close(clip_of(&song, "xb~2").timeline_start_seconds, 34.0, "un paso atrás");
+    let content = block(&song, "largo-2").content.as_ref().expect("editado");
+    close(
+        content.clips.iter().find(|c| c.id == "xb~2").unwrap().timeline_start_seconds,
+        2.0,
+        "contenido del paso anterior",
     );
-    let mut louder = song_of(&session);
-    louder.clips.iter_mut().find(|c| c.id == "xc").unwrap().gain = 0.5;
-    assert_locked(
-        session.persist_song_update(louder, &audio, AudioChangeImpact::TimelineWindow, true),
-        "ganancia de clip",
-    );
+
+    session.undo_action(&audio).expect("undo");
+    assert_eq!(song_of(&session), before, "como antes de editar");
+}
+
+/// C4: lo que cambia la forma de la canción sigue pidiendo editar el
+/// original, y no se guarda nada.
+#[test]
+fn shape_edits_in_an_arranged_song_are_still_rejected() {
+    let (mut session, audio) = applied();
+    let before = song_of(&session);
     assert_locked(
         session.update_section_marker("b", "b", 18.0, None, &audio),
-        "mover marca",
+        "mover marca de sección",
     );
     assert_locked(
-        session.create_clip("a1", "audio/test.wav", 30.0, &audio),
-        "añadir clip",
+        session.upsert_song_tempo_marker(40.0, 90.0, &audio),
+        "marca de tempo",
     );
-    // Arrastre en vivo: también pasa por la guardia.
+    let mut longer = song_of(&session);
+    longer.regions[1].end_seconds += 2.0;
     assert_locked(
-        session.move_clip_live("xa", 9.5, &audio),
-        "arrastre en vivo",
+        session.persist_song_update(longer, &audio, AudioChangeImpact::TimelineWindow, true),
+        "duración",
     );
-
     assert_eq!(song_of(&session), before, "nada cambió");
+}
+
+/// C5: alargar un clip más allá del final de su bloque lo deja partido en el
+/// borde: el resto pasa al bloque siguiente, que también queda editado.
+#[test]
+fn a_clip_stretched_past_its_block_is_cut_at_the_edge() {
+    let (mut session, audio) = applied();
+    let mut stretched = song_of(&session);
+    let clip = stretched.clips.iter_mut().find(|c| c.id == "xb~2").unwrap();
+    clip.timeline_start_seconds = 40.0;
+    clip.source_start_seconds = 8.0;
+    clip.duration_seconds = 12.0;
+    session
+        .persist_song_update(stretched, &audio, AudioChangeImpact::TimelineWindow, true)
+        .expect("alargar");
+
+    let song = song_of(&session);
+    let clip = clip_of(&song, "xb~2");
+    close(clip.timeline_start_seconds, 40.0, "inicio");
+    close(clip.timeline_start_seconds + clip.duration_seconds, 48.0, "corta en el borde");
+    let content = block(&song, "largo-2").content.as_ref().expect("editado");
+    let stored = content.clips.iter().find(|c| c.id == "xb~2").unwrap();
+    close(stored.duration_seconds, 8.0, "guardado ya cortado");
+    // La cola, en el coro (bloque siguiente), que guarda lo que ahora tiene.
+    assert!(block(&song, "largo-3").content.is_some(), "la cola edita el coro");
+    assert!(
+        song.clips
+            .iter()
+            .any(|c| (c.timeline_start_seconds - 48.0).abs() < 1e-6 && c.file_path == clip.file_path
+                && (c.source_start_seconds - 16.0).abs() < 1e-6),
+        "la cola del clip sigue sonando en el coro: {:?}",
+        song.clips
+    );
+}
+
+/// C6: editar el 1.º verso no cambia el 2.º (que sigue al original) ni el
+/// original.
+#[test]
+fn editing_the_first_copy_leaves_the_second_and_the_original_alone() {
+    let (mut session, audio) = applied();
+    let original_before = r2_structure(&song_of(&session)).original.clone();
+    // Sin salirse de su bloque (moverlo haría que su cola entrase en el 2.º).
+    let mut louder = song_of(&session);
+    louder.clips.iter_mut().find(|c| c.id == "xb").unwrap().gain = 0.5;
+    session
+        .persist_song_update(louder, &audio, AudioChangeImpact::TimelineWindow, true)
+        .expect("ganancia");
+
+    let song = song_of(&session);
+    assert!(block(&song, "largo-1").content.is_some());
+    assert!(block(&song, "largo-2").content.is_none());
+    close(clip_of(&song, "xb~2").timeline_start_seconds, 32.0, "el 2.º, como el original");
+    assert_eq!(r2_structure(&song).original, original_before);
 }
 
 /// Las cues de la canción arreglada también están protegidas (viven fuera
@@ -388,4 +564,56 @@ fn the_key_of_an_arranged_song_that_does_not_modulate_can_change() {
     // Volver al original no la deshace: se apuntó también en él.
     session.apply_song_arrangement("r2", None, &audio).expect("original");
     assert_eq!(r2_keys(&session), (Some("G".into()), vec![]));
+}
+
+/// Renombrar un aviso dentro de un bloque editado es cosa de ese bloque: ni
+/// sus copias ni el original cambian.
+#[test]
+fn renaming_a_cue_marker_in_an_edited_block_stays_in_it() {
+    let (mut session, audio) = applied();
+    // Un aviso en el verso del original, para que tenga copias.
+    session
+        .apply_song_arrangement("r2", None, &audio)
+        .expect("original");
+    let mut with_cue = song_of(&session);
+    with_cue
+        .section_markers
+        .push(marker("todos", 20.0, MarkerKind::AllIn));
+    with_cue
+        .section_markers
+        .sort_by(|a, b| a.start_seconds.total_cmp(&b.start_seconds));
+    session
+        .persist_song_update(with_cue, &audio, AudioChangeImpact::TransportOnly, true)
+        .expect("aviso");
+    session
+        .apply_song_arrangement("r2", Some("largo"), &audio)
+        .expect("reaplicar");
+    // Editar el 2.º verso para que tenga contenido propio.
+    session.move_clip("xb~2", 34.0, &audio).expect("editar");
+
+    session
+        .update_section_marker("todos~2", "Solo yo", 36.0, None, &audio)
+        .expect("renombrar en el bloque editado");
+
+    let song = song_of(&session);
+    let name = |id: &str| {
+        song.section_markers
+            .iter()
+            .find(|m| m.id == id)
+            .unwrap_or_else(|| panic!("marca {id}"))
+            .name
+            .clone()
+    };
+    assert_eq!(name("todos~2"), "Solo yo");
+    assert_eq!(name("todos"), "todos", "la copia del 1.º verso no cambia");
+    let original = &r2_structure(&song).original;
+    assert_eq!(
+        original
+            .section_markers
+            .iter()
+            .find(|m| m.id == "todos")
+            .unwrap()
+            .name,
+        "todos"
+    );
 }
