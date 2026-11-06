@@ -5881,8 +5881,10 @@ html.lt-ios body {
   justify-content: space-between;
   gap: 0.5rem;
   opacity: 1;
-  visibility: visible;
-  transition: opacity 120ms linear, visibility 0s linear 0s;
+  /* No `visibility: visible` here: it overrides the ancestor's
+     `.lt-shell-body.is-hidden` and the track controls leaked through the
+     loading overlay while a session was opening. */
+  transition: opacity 120ms linear;
 }
 
 .lt-track-mix-controls {
