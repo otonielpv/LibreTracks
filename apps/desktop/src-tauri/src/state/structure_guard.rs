@@ -560,40 +560,116 @@ fn values_close(left: &Value, right: &Value) -> bool {
     }
 }
 
-/// Las cues viven fuera del `Song`: crear, editar o borrar una cue dentro de
-/// una canción con arreglo aplicado también se bloquea (se perdería al
-/// reaplicar).
-pub(super) fn ensure_cue_editable(song: &Song, position: f64) -> Result<(), DesktopError> {
-    let Some(region) = owning_region_id(song, position)
-        .and_then(|id| song.regions.iter().find(|region| region.id == id))
-    else {
-        return Ok(());
-    };
-    match region
-        .structure
-        .as_ref()
-        .and_then(|structure| structure.applied_arrangement())
-    {
-        Some(arrangement) => Err(DesktopError::SongStructureLocked {
-            region_id: region.id.clone(),
+/// Las cues viven fuera del `Song` (en `automation.ltautomation`). Crear,
+/// editar, mover o borrar una cue dentro de una canción con arreglo aplicado
+/// se queda en el bloque donde cae, como un clip: `new_cues` es la lista
+/// completa tras la edición; los bloques cuyas cues cambiaron guardan su
+/// contenido, la región se reescribe con lo construido y las cues de la
+/// región pasan a ser las construidas. Devuelve si tocó alguna canción
+/// arreglada (entonces `song` cambió y hay que persistirlo con las cues).
+pub(super) fn absorb_cue_edits(
+    song: &mut Song,
+    old_cues: &[AutomationCue],
+    new_cues: &mut Vec<AutomationCue>,
+) -> Result<bool, DesktopError> {
+    let applied: Vec<String> = song
+        .regions
+        .iter()
+        .filter(|region| {
+            region
+                .structure
+                .as_ref()
+                .is_some_and(|structure| structure.applied_arrangement_id.is_some())
+        })
+        .map(|region| region.id.clone())
+        .collect();
+    let mut touched = false;
+    for region_id in applied {
+        let owned = |cues: &[AutomationCue], song: &Song| -> Vec<AutomationCue> {
+            cues.iter()
+                .filter(|cue| owning_region_id(song, cue.at_seconds) == Some(region_id.as_str()))
+                .cloned()
+                .collect()
+        };
+        let old_owned = owned(old_cues, song);
+        let new_owned = owned(new_cues, song);
+        if old_owned == new_owned {
+            continue;
+        }
+        let region = song
+            .regions
+            .iter()
+            .find(|r| r.id == region_id)
+            .expect("región");
+        let structure = region.structure.as_ref().expect("estructura");
+        let arrangement = structure.applied_arrangement().expect("aplicado");
+        let locked = || DesktopError::SongStructureLocked {
+            region_id: region_id.clone(),
             arrangement_name: arrangement.name.clone(),
-        }),
-        None => Ok(()),
+        };
+        let expected = built_for_region(structure, region.start_seconds).map_err(|_| locked())?;
+        let windows =
+            block_windows(&structure.sections, &arrangement.blocks).map_err(|_| locked())?;
+        let last = windows.len().saturating_sub(1);
+        let start = region.start_seconds;
+        let mut updated = arrangement.blocks.clone();
+        let mut changed = false;
+        for (index, window) in windows.iter().enumerate() {
+            let extract = |cues: &[AutomationCue]| {
+                extract_block_content(
+                    window,
+                    start,
+                    index == last,
+                    &expected.clips,
+                    &expected.midi_clips,
+                    &expected.video_clips,
+                    &expected.section_markers,
+                    cues,
+                )
+            };
+            let now = extract(&new_owned);
+            if !contents_close(&now, &extract(&expected.automation_cues)) {
+                updated[index].content = Some(now);
+                changed = true;
+            }
+        }
+        if !changed {
+            continue;
+        }
+        let arrangement_id = arrangement.id.clone();
+        let region = song
+            .regions
+            .iter_mut()
+            .find(|r| r.id == region_id)
+            .expect("región");
+        let structure = region.structure.as_mut().expect("estructura");
+        if let Some(target) = structure
+            .arrangements
+            .iter_mut()
+            .find(|a| a.id == arrangement_id)
+        {
+            target.blocks = updated;
+        }
+        let rebuilt = built_for_region(structure, region.start_seconds).map_err(|_| {
+            DesktopError::SongStructureLocked {
+                region_id: region_id.clone(),
+                arrangement_name: structure
+                    .applied_arrangement()
+                    .map(|a| a.name.clone())
+                    .unwrap_or_default(),
+            }
+        })?;
+        let cues = rebuilt.automation_cues.clone();
+        let snapshot = song.clone();
+        new_cues.retain(|cue| owning_region_id(&snapshot, cue.at_seconds) != Some(region_id.as_str()));
+        new_cues.extend(cues);
+        write_region_content(song, &region_id, rebuilt);
+        touched = true;
     }
-}
-
-/// Igual que [`ensure_cue_editable`] para una cue existente (su posición
-/// vieja también cuenta: sacar una cue de la canción arreglada la borra de
-/// allí).
-pub(super) fn ensure_existing_cue_editable(
-    song: &Song,
-    cues: &[AutomationCue],
-    cue_id: &str,
-) -> Result<(), DesktopError> {
-    match cues.iter().find(|cue| cue.id == cue_id) {
-        Some(cue) => ensure_cue_editable(song, cue.at_seconds),
-        None => Ok(()),
+    if touched {
+        new_cues.sort_by(|left, right| left.at_seconds.total_cmp(&right.at_seconds));
     }
+    Ok(touched)
 }
 
 #[cfg(test)]

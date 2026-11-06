@@ -24,7 +24,7 @@ use crate::models::TransportSnapshot;
 
 use super::{
     automation_target_source_seconds, validate_automation_cue, ActiveAutomationJob, ActiveMixRamp,
-    DesktopSession, PendingAutomationJump,
+    AudioChangeImpact, DesktopSession, PendingAutomationJump, UpdatePhase,
 };
 
 /// Margin a jump needs ahead of the playhead to be armed natively: the native
@@ -97,35 +97,64 @@ impl DesktopSession {
             }
         }
         validate_automation_cue(&song, &self.automation, &cue)?;
-        // Una cue dentro de una canción con arreglo aplicado se perdería al
-        // reaplicarlo: se bloquea como editar un clip.
-        super::structure_guard::ensure_cue_editable(&song, cue.at_seconds)?;
-        super::structure_guard::ensure_existing_cue_editable(&song, &self.automation.cues, &cue.id)?;
         cue.name = cue.name.trim().to_string();
         if cue.name.is_empty() {
             cue.name = "Automation cue".into();
         }
 
-        if let Some(existing) = self
-            .automation
-            .cues
-            .iter_mut()
-            .find(|existing| existing.id == cue.id)
-        {
+        let mut cues = self.automation.cues.clone();
+        if let Some(existing) = cues.iter_mut().find(|existing| existing.id == cue.id) {
             *existing = cue;
         } else {
-            self.automation.cues.push(cue);
+            cues.push(cue);
         }
-        // Creating a cue implies the automation track is present: a cue with no
-        // visible lane would be a ghost jump. Keep the two invariants together.
-        self.automation.track_present = true;
-        self.automation.cues.sort_by(|left, right| {
+        cues.sort_by(|left, right| {
             left.at_seconds
                 .partial_cmp(&right.at_seconds)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        self.persist_automation(audio)?;
+        // Creating a cue implies the automation track is present: a cue with no
+        // visible lane would be a ghost jump. Keep the two invariants together.
+        self.commit_cue_edit(song, cues, true, audio)?;
         Ok(self.snapshot())
+    }
+
+    /// Guarda la lista de cues tras una edición. Si la edición cae en una
+    /// canción con arreglo aplicado, se queda en su bloque
+    /// (`absorb_cue_edits`) y la canción y las cues se persisten juntas, como
+    /// un paso de deshacer; si no, como siempre.
+    fn commit_cue_edit(
+        &mut self,
+        mut song: Song,
+        mut cues: Vec<AutomationCue>,
+        track_present: bool,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        let in_arrangement = super::structure_guard::absorb_cue_edits(
+            &mut song,
+            &self.automation.cues,
+            &mut cues,
+        )?;
+        if !in_arrangement {
+            self.automation.cues = cues;
+            if track_present {
+                self.automation.track_present = true;
+            }
+            return self.persist_automation(audio);
+        }
+        let mut automation = self.automation.clone();
+        automation.cues = cues;
+        if track_present {
+            automation.track_present = true;
+        }
+        self.persist_song_and_automation(
+            song,
+            Some(automation),
+            audio,
+            AudioChangeImpact::TimelineWindow,
+            true,
+            UpdatePhase::Commit,
+        )
     }
 
     /// Turn the automation lane on or off without deleting its cues.
@@ -196,12 +225,9 @@ impl DesktopSession {
         cue_id: &str,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        if let Some(song) = self.engine.song() {
-            super::structure_guard::ensure_existing_cue_editable(song, &self.automation.cues, cue_id)?;
-        }
-        let before = self.automation.cues.len();
-        self.automation.cues.retain(|cue| cue.id != cue_id);
-        if self.automation.cues.len() != before {
+        let mut cues = self.automation.cues.clone();
+        cues.retain(|cue| cue.id != cue_id);
+        if cues.len() != self.automation.cues.len() {
             if self
                 .pending_automation_jump
                 .as_ref()
@@ -211,7 +237,12 @@ impl DesktopSession {
                 self.active_automation_job = None;
                 self.cancel_native_scheduled_jumps(audio)?;
             }
-            self.persist_automation(audio)?;
+            let song = self
+                .engine
+                .song()
+                .cloned()
+                .ok_or(DesktopError::NoSongLoaded)?;
+            self.commit_cue_edit(song, cues, false, audio)?;
         }
         Ok(self.snapshot())
     }

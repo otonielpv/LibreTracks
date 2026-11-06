@@ -251,22 +251,126 @@ fn editing_the_first_copy_leaves_the_second_and_the_original_alone() {
     assert_eq!(r2_structure(&song).original, original_before);
 }
 
-/// Las cues de la canción arreglada también están protegidas (viven fuera
-/// del `Song`, pero se perderían igual al reaplicar).
+// ── Cues por bloque (paso 04) ───────────────────────────────────────────────
+//
+// k2 está en 20 (1.º verso) y su copia k2~2 en 36 (2.º verso, [32, 48)).
+
+fn cue_ids_between(session: &DesktopSession, from: f64, to: f64) -> Vec<String> {
+    cue_positions(session)
+        .into_iter()
+        .filter(|(_, at)| *at >= from && *at < to)
+        .map(|(id, _)| id)
+        .collect()
+}
+
+fn jump_cue(id: &str, at: f64, target: f64) -> crate::audio::automation::AutomationCue {
+    use crate::audio::automation::{AutomationAction, AutomationJumpTarget};
+    crate::audio::automation::AutomationCue {
+        actions: vec![AutomationAction::Jump {
+            target: AutomationJumpTarget::Frame { seconds: target },
+            transition: Default::default(),
+            mix_scene_id: None,
+        }],
+        ..mute_cue(id, at)
+    }
+}
+
+/// C1: una cue nueva en el 2.º verso se crea y se queda en su bloque; el 1.º
+/// no la tiene.
 #[test]
-fn cue_edits_in_an_arranged_song_are_rejected() {
+fn a_cue_added_to_the_second_copy_stays_in_its_block() {
     let (mut session, audio) = applied();
-    let before = cue_positions(&session);
-    assert_locked(
-        session.upsert_automation_cue(mute_cue("nueva", 30.0), &audio),
-        "crear cue",
-    );
-    assert_locked(session.delete_automation_cue("k2", &audio), "borrar cue");
-    assert_eq!(cue_positions(&session), before);
-    // Fuera de la canción arreglada, libre.
+    session
+        .upsert_automation_cue(mute_cue("nueva", 40.0), &audio)
+        .expect("crear cue");
+
+    assert_eq!(cue_ids_between(&session, 32.0, 48.0), vec!["k2~2", "nueva"]);
+    assert_eq!(cue_ids_between(&session, 16.0, 32.0), vec!["k2"]);
+    let song = song_of(&session);
+    let content = block(&song, "largo-2").content.as_ref().expect("bloque editado");
+    let ids: Vec<_> = content.automation_cues.iter().map(|c| c.id.as_str()).collect();
+    assert_eq!(ids, vec!["k2~2", "nueva"]);
+    close(content.automation_cues[1].at_seconds, 8.0, "relativa al bloque");
+    assert!(block(&song, "largo-1").content.is_none());
+    // Fuera de la canción arreglada, como siempre.
     session
         .upsert_automation_cue(mute_cue("fuera", 3.0), &audio)
         .expect("cue en r1");
+}
+
+/// C2: volver al original y reaplicar el arreglo conserva la cue en su bloque.
+#[test]
+fn a_block_cue_survives_switching_arrangements() {
+    let (mut session, audio) = applied();
+    session
+        .upsert_automation_cue(mute_cue("nueva", 40.0), &audio)
+        .expect("crear cue");
+    session
+        .apply_song_arrangement("r2", None, &audio)
+        .expect("original");
+    assert!(
+        cue_positions(&session).iter().all(|(id, _)| id != "nueva"),
+        "el original no la tiene"
+    );
+    session
+        .apply_song_arrangement("r2", Some("largo"), &audio)
+        .expect("reaplicar");
+    assert_eq!(cue_ids_between(&session, 32.0, 48.0), vec!["k2~2", "nueva"]);
+}
+
+/// C3: deshacer la creación la quita del timeline y del bloque.
+#[test]
+fn undoing_a_block_cue_removes_it_from_the_timeline_and_the_block() {
+    let (mut session, audio) = applied();
+    let before = cue_positions(&session);
+    session
+        .upsert_automation_cue(mute_cue("nueva", 40.0), &audio)
+        .expect("crear cue");
+    session.undo_action(&audio).expect("undo");
+    assert_eq!(cue_positions(&session), before);
+    assert!(block(&song_of(&session), "largo-2").content.is_none());
+}
+
+/// C4: un salto dentro del bloque editado sigue apuntando a su bloque tras
+/// reordenar; borrar una copia solo la quita de su bloque.
+#[test]
+fn block_cues_keep_their_jumps_and_deletes_stay_local() {
+    let (mut session, audio) = applied();
+    session
+        .upsert_automation_cue(jump_cue("vuelta", 44.0, 34.0), &audio)
+        .expect("cue con salto");
+    session
+        .delete_automation_cue("k2~2", &audio)
+        .expect("borrar la copia");
+    assert_eq!(cue_ids_between(&session, 32.0, 48.0), vec!["vuelta"]);
+    assert_eq!(cue_ids_between(&session, 16.0, 32.0), vec!["k2"], "el 1.º la conserva");
+
+    let mut reordered = r2_structure(&song_of(&session))
+        .applied_arrangement()
+        .unwrap()
+        .clone();
+    reordered.blocks.swap(1, 2);
+    session
+        .save_song_arrangement("r2", reordered, true, &audio)
+        .expect("reordenar");
+
+    let cue = session
+        .automation
+        .cues
+        .iter()
+        .find(|c| c.id == "vuelta")
+        .expect("cue");
+    close(cue.at_seconds, 28.0, "con su bloque");
+    match &cue.actions[0] {
+        crate::audio::automation::AutomationAction::Jump {
+            target: crate::audio::automation::AutomationJumpTarget::Frame { seconds },
+            ..
+        } => close(*seconds, 18.0, "salto dentro de su bloque"),
+        other => panic!("{other:?}"),
+    }
+    // El verso que sigue al original es ahora la primera aparición: su cue
+    // vuelve a llamarse k2.
+    assert_eq!(cue_ids_between(&session, 32.0, 48.0), vec!["k2"], "el otro verso, como el original");
 }
 
 /// Editar otra canción no dispara la guardia.
