@@ -6,6 +6,7 @@ import {
   applySongAnalysis,
   cancelAnalyzeSong,
   downloadSpeechModel,
+  getSongView,
   listenToSongAnalysisProgress,
   listenToSpeechModelProgress,
   speechModelStatus,
@@ -32,6 +33,7 @@ import {
   batchReview,
   defaultSetup,
   markersInSong,
+  rebaseResult,
   setupHasWork,
   type AnalysisSetup,
 } from "./songAnalysisReview";
@@ -231,10 +233,15 @@ function BatchDialog({
     setApplyError(null);
     setStage({ kind: "applying", done: 0, total: ready.length });
     let done = 0;
+    // The song store refreshes from the backend asynchronously after an
+    // apply, so right after one it still holds the session before it: the
+    // next song is planned against the song as the backend has it now.
+    let fresh: SongView | null = null;
     for (const item of ready) {
-      const current = useSongStore.getState().song;
-      const result = item.result;
-      if (!current || !result || !current.regions.some((r) => r.id === item.regionId)) continue;
+      const current = fresh ?? useSongStore.getState().song;
+      if (!current || !item.result || !current.regions.some((r) => r.id === item.regionId)) continue;
+      // The songs applied before this one may have moved it.
+      const result = rebaseResult(current, item.result);
       const review = batchReview(current, item.regionId, item.setup, result);
       const plan = applyPlan(current, item.regionId, result, review);
       if (!plan.canApply) continue;
@@ -246,6 +253,7 @@ function BatchDialog({
           await applySongAnalysis(item.regionId, args.tempo, args.key, args.sections, args.keyChanges),
         );
         patchItem(item.regionId, { status: "applied" });
+        fresh = await getSongView({ includeWaveforms: false }).catch(() => null);
       } catch (error) {
         const raw = error instanceof Error ? error.message : String(error);
         const message = applyErrorMessage(raw, error, t, current);
@@ -270,7 +278,7 @@ function BatchDialog({
         song={song}
         regionId={reviewing.regionId}
         regionName={reviewing.name}
-        initial={{ setup: reviewing.setup, result: reviewing.result }}
+        initial={{ setup: reviewing.setup, result: rebaseResult(song, reviewing.result) }}
         onLeaveReview={leave}
         onClose={() => leave(false)}
         onApplied={onApplied}
@@ -290,7 +298,8 @@ function BatchDialog({
 
   const readyToApply = items.filter((item) => {
     if (item.status !== "ready" || !item.result) return false;
-    return applyPlan(song, item.regionId, item.result, batchReview(song, item.regionId, item.setup, item.result))
+    const result = rebaseResult(song, item.result);
+    return applyPlan(song, item.regionId, result, batchReview(song, item.regionId, item.setup, result))
       .canApply;
   }).length;
 

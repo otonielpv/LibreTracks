@@ -25,6 +25,7 @@ type TempoChange = {
 };
 const analyzeSong = vi.fn<(request: AnalyzeSongRequest) => Promise<AnalyzeSongResult>>();
 const cancelAnalyzeSong = vi.fn(async () => {});
+const getSongView = vi.fn<() => Promise<SongView | null>>();
 const applySongAnalysis =
   vi.fn<
     (
@@ -47,6 +48,7 @@ vi.mock("@libretracks/shared/desktopApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@libretracks/shared/desktopApi")>()),
   analyzeSong: (request: AnalyzeSongRequest) => analyzeSong(request),
   cancelAnalyzeSong: () => cancelAnalyzeSong(),
+  getSongView: () => getSongView(),
   listenToSongAnalysisProgress: async () => () => {},
   applySongAnalysis: (
     regionId: string,
@@ -181,6 +183,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   analyzeSong.mockImplementation(async (request) => results[request.regionId]);
   applySongAnalysis.mockImplementation(async () => ({}) as TransportSnapshot);
+  getSongView.mockImplementation(async () => useSongStore.getState().song);
   useSongStore.setState({ song: song() });
   useBatchSongAnalysisStore.setState({ open: true });
 });
@@ -251,6 +254,38 @@ describe("BatchSongAnalysisModal", () => {
     // Nothing left: no "apply all (0)" button, a notice instead.
     expect(screen.queryByText(/batch\.applyAll/)).toBeNull();
     expect(screen.getByText("transport.songAnalysis.batch.allApplied")).toBeTruthy();
+  });
+
+  it("applies each song where it is after the songs before it moved it", async () => {
+    // Applying "Uno"'s tempo realigns the songs after it: "Dos" now starts
+    // 2 s later. The song store only catches up later (it refetches after
+    // the snapshot renders), so the batch must ask the backend.
+    const moved = song();
+    moved.regions = moved.regions.map((region) =>
+      region.id === "a"
+        ? { ...region, endSeconds: 102 }
+        : { ...region, startSeconds: region.startSeconds + 2, endSeconds: region.endSeconds + 2 },
+    );
+    moved.clips = moved.clips.map((c) =>
+      (c as { timelineStartSeconds: number }).timelineStartSeconds >= 100
+        ? ({ ...(c as object), timelineStartSeconds: 102 } as never)
+        : c,
+    );
+    applySongAnalysis.mockImplementation(async () => {
+      getSongView.mockImplementation(async () => moved);
+      return {} as TransportSnapshot;
+    });
+    render(<BatchSongAnalysisModal onApplied={() => {}} />);
+    await analyzeAll();
+    fireEvent.click(screen.getByText(/batch\.applyAll/));
+
+    await waitFor(() => expect(applySongAnalysis).toHaveBeenCalledTimes(2));
+    const second = applySongAnalysis.mock.calls[1];
+    expect(second[0]).toBe("b");
+    expect(second[1]?.tempoMarkers).toEqual([{ startSeconds: 102, bpm: 140 }]);
+    // "Coro" said 4-5 s into the song: on the first downbeat after it of
+    // its 140 BPM grid (bar 3, 12/7 s a bar) counted from where it is now.
+    expect(second[3]?.[0].startSeconds).toBeCloseTo(102 + ((4 * 60) / 140) * 3, 3);
   });
 
   it("keeps the markers a song already has when applying them all", async () => {

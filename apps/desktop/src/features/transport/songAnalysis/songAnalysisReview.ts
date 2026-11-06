@@ -7,6 +7,8 @@ import type {
   ProposedTempoMarker,
   SectionChange,
   SongView,
+  TempoProposal,
+  TempoReading,
 } from "../desktopApi";
 import { markerCategory } from "../markerKinds";
 import {
@@ -111,6 +113,47 @@ export type ReviewState = {
 export function tempoReading(result: AnalyzeSongResult, eighths: boolean) {
   if (!result.tempo) return null;
   return (eighths ? result.tempo.asEighths : null) ?? result.tempo;
+}
+
+/**
+ * An analysis made earlier, moved to where its song is now. Applying a tempo
+ * map realigns the songs after it (`realign_regions_after_warp_tempo_change`),
+ * so in "Analizar todas" every song analysed before the ones above it were
+ * applied may have shifted: its absolute times (the region, the guide's
+ * origin, the proposed tempo markers) would land where the song used to be.
+ * Times from the song start (segments, warnings, announcements) stay.
+ */
+export function rebaseResult(song: SongView, result: AnalyzeSongResult): AnalyzeSongResult {
+  const region = song.regions.find((r) => r.id === result.regionId);
+  if (!region) return result;
+  const delta = region.startSeconds - result.regionStartSeconds;
+  if (Math.abs(delta) < 1e-9) return result;
+  const shiftProposal = (proposal: TempoProposal): TempoProposal => ({
+    ...proposal,
+    tempoMarkers: proposal.tempoMarkers.map((m) => ({ ...m, startSeconds: m.startSeconds + delta })),
+    signatureMarkers: proposal.signatureMarkers.map((m) => ({
+      ...m,
+      startSeconds: m.startSeconds + delta,
+    })),
+  });
+  const shiftReading = (reading: TempoReading): TempoReading => ({
+    ...reading,
+    proposal: shiftProposal(reading.proposal),
+    simplified: { ...reading.simplified, proposal: shiftProposal(reading.simplified.proposal) },
+    initial: { ...reading.initial, proposal: shiftProposal(reading.initial.proposal) },
+  });
+  return {
+    ...result,
+    regionStartSeconds: result.regionStartSeconds + delta,
+    regionEndSeconds: result.regionEndSeconds + delta,
+    renderStartSeconds: result.renderStartSeconds + delta,
+    tempo: result.tempo
+      ? {
+          ...shiftReading(result.tempo),
+          asEighths: result.tempo.asEighths ? shiftReading(result.tempo.asEighths) : null,
+        }
+      : null,
+  };
 }
 
 /** Section and cue markers already inside the song. */
