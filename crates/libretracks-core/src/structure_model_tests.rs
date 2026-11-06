@@ -113,14 +113,17 @@ fn full_structure() -> SongStructure {
                 ArrangementBlock {
                     id: "b1".into(),
                     section_marker_id: "verso".into(),
+                    content: None,
                 },
                 ArrangementBlock {
                     id: "b2".into(),
                     section_marker_id: "coro".into(),
+                    content: None,
                 },
                 ArrangementBlock {
                     id: "b3".into(),
                     section_marker_id: "coro".into(),
+                    content: None,
                 },
             ],
         }],
@@ -445,4 +448,131 @@ fn validate_song_checks_the_structure_of_every_region() {
         crate::validate_song(&song),
         Err(DomainError::EmptyArrangement { .. })
     ));
+}
+
+// ── Contenido propio de un bloque (plan arrangement-block-edits, paso 01) ──
+
+/// Lo que hay en el 2.º coro editado: un clip de cada tipo, un aviso y una cue,
+/// en posiciones relativas al bloque.
+fn edited_chorus() -> BlockContent {
+    let original = full_structure().original;
+    let mut clip = original.clips[0].clone();
+    clip.id = "c1~3".into();
+    clip.timeline_start_seconds = 0.0;
+    clip.duration_seconds = 8.0;
+    let mut midi = original.midi_clips[0].clone();
+    midi.id = "midi_nuevo".into();
+    midi.track_id = "midi".into();
+    midi.timeline_start_seconds = 1.0;
+    let mut video = original.video_clips[0].clone();
+    video.id = "v1~2".into();
+    video.fit = Some(VideoFit::Cover);
+    let mut cue = original.automation_cues[0].clone();
+    cue.id = "k_bloque".into();
+    cue.at_seconds = 4.0;
+    BlockContent {
+        duration_seconds: 8.0,
+        clips: vec![clip],
+        midi_clips: vec![midi],
+        video_clips: vec![video],
+        cue_markers: vec![marker("build~2", 4.0, MarkerKind::Build)],
+        automation_cues: vec![cue],
+    }
+}
+
+fn structure_with_edited_block() -> SongStructure {
+    let mut structure = full_structure();
+    structure.arrangements[0].blocks[2].content = Some(edited_chorus());
+    structure
+}
+
+/// C2: un bloque con contenido propio hace ida y vuelta sin perder nada, y
+/// solo él escribe el campo.
+#[test]
+fn an_edited_block_round_trips_and_only_it_writes_content() {
+    let region = region_with(Some(structure_with_edited_block()));
+    let json = serde_json::to_string(&region).expect("serialize");
+    assert_eq!(json.matches("\"content\"").count(), 1, "{json}");
+    assert!(json.contains("\"cueMarkers\""));
+    let back: SongRegion = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(back, region);
+}
+
+/// C1: un bloque sin contenido propio no escribe el campo, y un fichero sin él
+/// se lee como `None`.
+#[test]
+fn a_block_without_content_does_not_write_the_field() {
+    let region = region_with(Some(full_structure()));
+    let json = serde_json::to_string(&region).expect("serialize");
+    assert!(!json.contains("\"content\""), "{json}");
+    let old = r#"{"id":"b1","sectionMarkerId":"verso"}"#;
+    let block: ArrangementBlock = serde_json::from_str(old).expect("bloque viejo");
+    assert_eq!(block.content, None);
+}
+
+#[test]
+fn a_structure_with_an_edited_block_is_valid() {
+    validate_song_structure("r1", &structure_with_edited_block()).expect("valid");
+}
+
+#[test]
+fn rejects_block_content_outside_the_block() {
+    let mut late = edited_chorus();
+    late.midi_clips[0].timeline_start_seconds = 8.0;
+    let mut long = edited_chorus();
+    long.clips[0].duration_seconds = 9.0;
+    let mut nan = edited_chorus();
+    nan.automation_cues[0].at_seconds = f64::NAN;
+    let mut no_length = edited_chorus();
+    no_length.duration_seconds = 0.0;
+    for content in [late, long, nan, no_length] {
+        let mut structure = full_structure();
+        structure.arrangements[0].blocks[2].content = Some(content);
+        assert!(
+            matches!(
+                validate_song_structure("r1", &structure),
+                Err(DomainError::InvalidOriginalSnapshot { .. })
+            ),
+            "debía rechazarse"
+        );
+    }
+}
+
+/// C3 (base): quien reescribe clips en bloque por `stored_*_mut` alcanza
+/// también los de los bloques editados.
+#[test]
+fn stored_clips_include_the_edited_blocks() {
+    let mut structure = structure_with_edited_block();
+    let ids = |s: &SongStructure| -> Vec<String> { s.stored_clips().map(|c| c.id.clone()).collect() };
+    assert_eq!(ids(&structure), vec!["c1".to_string(), "c1~3".to_string()]);
+    for clip in structure.stored_clips_mut() {
+        clip.file_path = "audio/movido.wav".into();
+    }
+    for clip in structure.stored_video_clips_mut() {
+        clip.file_path = "video/movido.mp4".into();
+    }
+    for clip in structure.stored_midi_clips_mut() {
+        clip.track_id = "midi2".into();
+    }
+    for cue in structure.stored_automation_cues_mut() {
+        cue.name = "renombrada".into();
+    }
+    let content = structure.arrangements[0].blocks[2].content.as_ref().unwrap();
+    assert_eq!(content.clips[0].file_path, "audio/movido.wav");
+    assert_eq!(content.video_clips[0].file_path, "video/movido.mp4");
+    assert_eq!(content.midi_clips[0].track_id, "midi2");
+    assert_eq!(content.automation_cues[0].name, "renombrada");
+    assert_eq!(structure.original.clips[0].file_path, "audio/movido.wav");
+}
+
+/// C4 (base): quitar una pista la saca del original y de los bloques editados.
+#[test]
+fn retain_tracks_also_cleans_the_edited_blocks() {
+    let mut structure = structure_with_edited_block();
+    structure.retain_tracks(|track| track != "a1" && track != "midi");
+    let content = structure.arrangements[0].blocks[2].content.as_ref().unwrap();
+    assert!(content.clips.is_empty());
+    assert!(content.midi_clips.is_empty());
+    assert_eq!(content.video_clips.len(), 1);
+    assert!(structure.original.clips.is_empty());
 }

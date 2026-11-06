@@ -423,7 +423,7 @@ fn plan_audio_sources(
         .iter()
         .filter_map(|region| region.structure.as_ref().map(|s| (region, s)))
         .flat_map(|(region, structure)| {
-            structure.original.clips.iter().map(move |clip| {
+            structure.stored_clips().map(move |clip| {
                 (
                     clip.file_path.clone(),
                     audio_folder_for_seconds(song, region.start_seconds),
@@ -930,8 +930,8 @@ pub fn export_session_as_package_with_options(
                     clip.file_path = relative_path.clone();
                 }
             }
-            for snapshot in portable.structure_snapshots_mut() {
-                for clip in &mut snapshot.clips {
+            for structure in portable.structures_mut() {
+                for clip in structure.stored_clips_mut() {
                     if let Some(relative_path) = relative_by_clip_path.get(&clip.file_path) {
                         clip.file_path = relative_path.clone();
                     }
@@ -945,8 +945,8 @@ pub fn export_session_as_package_with_options(
                 clip.file_path = relative_path.clone();
             }
         }
-        for snapshot in portable.structure_snapshots_mut() {
-            for clip in &mut snapshot.video_clips {
+        for structure in portable.structures_mut() {
+            for clip in structure.stored_video_clips_mut() {
                 if let Some(relative_path) =
                     bundled_video_by_stored_path.get(&stored_path_key(&clip.file_path))
                 {

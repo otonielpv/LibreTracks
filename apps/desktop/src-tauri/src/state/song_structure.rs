@@ -105,6 +105,7 @@ fn original_blocks(sections: &[OriginalSection]) -> Vec<ArrangementBlock> {
         .map(|(index, section)| ArrangementBlock {
             id: format!("original-{index}"),
             section_marker_id: section.marker_id.clone(),
+            content: None,
         })
         .collect()
 }
@@ -839,7 +840,21 @@ impl DesktopSession {
             .iter_mut()
             .find(|existing| existing.id == arrangement_id)
         {
-            Some(existing) => *existing = arrangement,
+            Some(existing) => {
+                // El editor de bloques solo manda ids y secciones: el
+                // contenido propio de un bloque editado se conserva por su id.
+                // Quitarlo es «Restablecer», que tiene su propio comando.
+                for block in &mut arrangement.blocks {
+                    if block.content.is_none() {
+                        block.content = existing
+                            .blocks
+                            .iter()
+                            .find(|old| old.id == block.id)
+                            .and_then(|old| old.content.clone());
+                    }
+                }
+                *existing = arrangement;
+            }
             None => structure.arrangements.push(arrangement),
         }
 

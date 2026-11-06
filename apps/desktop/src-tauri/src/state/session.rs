@@ -404,14 +404,15 @@ impl DesktopSession {
                 clip.file_path = new_path.to_string();
             }
         }
-        // El original de un arreglo guarda sus propios clips.
-        for snapshot in song.structure_snapshots_mut() {
-            for clip in snapshot.clips.iter_mut() {
+        // El original de un arreglo y sus bloques editados guardan sus
+        // propios clips.
+        for structure in song.structures_mut() {
+            for clip in structure.stored_clips_mut() {
                 if clip.file_path == old_path {
                     clip.file_path = new_path.to_string();
                 }
             }
-            for clip in snapshot.video_clips.iter_mut() {
+            for clip in structure.stored_video_clips_mut() {
                 if clip.file_path == old_path {
                     clip.file_path = new_path.to_string();
                 }

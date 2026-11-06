@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use thiserror::Error;
 
 use crate::model::{
-    MidiEvent, MidiEventKind, Song, SongStructure, TrackKind, MAX_MIDI_CHANNEL, MAX_MIDI_DATA_VALUE,
+    BlockContent, MidiEvent, MidiEventKind, Song, SongStructure, TrackKind, MAX_MIDI_CHANNEL, MAX_MIDI_DATA_VALUE,
     MIN_MIDI_CHANNEL,
 };
 
@@ -1563,6 +1563,56 @@ mod tests {
 /// pertenencia que mover canciones).
 const SNAPSHOT_EDGE_TOLERANCE_SECONDS: f64 = 0.001;
 
+/// El contenido propio de un bloque: posiciones relativas al bloque, finitas y
+/// dentro de `[0, duración)`. Devuelve qué elemento falla.
+fn validate_block_content(content: &BlockContent) -> Result<(), String> {
+    let duration = content.duration_seconds;
+    if !duration.is_finite() || duration <= 0.0 {
+        return Err("duration".into());
+    }
+    let inside = |position: f64| {
+        position.is_finite()
+            && position >= -SNAPSHOT_EDGE_TOLERANCE_SECONDS
+            && position < duration
+    };
+    for clip in &content.clips {
+        if !inside(clip.timeline_start_seconds)
+            || !clip.source_start_seconds.is_finite()
+            || !clip.duration_seconds.is_finite()
+            || clip.duration_seconds < 0.0
+            || clip.timeline_start_seconds + clip.duration_seconds
+                > duration + CLIP_REGION_BOUNDARY_EPSILON_SECONDS
+        {
+            return Err(format!("clip {}", clip.id));
+        }
+    }
+    for clip in &content.video_clips {
+        if !inside(clip.timeline_start_seconds)
+            || !clip.source_start_seconds.is_finite()
+            || !clip.duration_seconds.is_finite()
+            || clip.end_seconds() > duration + CLIP_REGION_BOUNDARY_EPSILON_SECONDS
+        {
+            return Err(format!("video clip {}", clip.id));
+        }
+    }
+    for clip in &content.midi_clips {
+        if !inside(clip.timeline_start_seconds) {
+            return Err(format!("midi clip {}", clip.id));
+        }
+    }
+    for marker in &content.cue_markers {
+        if !inside(marker.start_seconds) {
+            return Err(format!("marker {}", marker.id));
+        }
+    }
+    for cue in &content.automation_cues {
+        if !inside(cue.at_seconds) {
+            return Err(format!("automation cue {}", cue.id));
+        }
+    }
+    Ok(())
+}
+
 /// Reglas del original y de los arreglos de una región.
 pub fn validate_song_structure(
     region_id: &str,
@@ -1683,6 +1733,10 @@ pub fn validate_song_structure(
                     arrangement_id: arrangement.id.clone(),
                     section_marker_id: block.section_marker_id.clone(),
                 });
+            }
+            if let Some(content) = &block.content {
+                validate_block_content(content)
+                    .map_err(|item| invalid(format!("block {} {item}", block.id)))?;
             }
         }
     }

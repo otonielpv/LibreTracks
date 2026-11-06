@@ -365,6 +365,36 @@ pub struct Arrangement {
 pub struct ArrangementBlock {
     pub id: String,
     pub section_marker_id: String,
+    /// Contenido propio: el bloque se editó y ya no sigue al original.
+    /// `None` = al construir se copia la sección del original.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<BlockContent>,
+}
+
+/// Lo que hay en el tramo de un bloque editado, RELATIVO a su inicio (0 = donde
+/// empieza el bloque en el arreglo), en tiempo de fuente (sin warp). Los
+/// destinos `Frame` de los saltos de sus cues también son relativos.
+///
+/// Solo guarda lo que se puede editar bloque a bloque. Las marcas de sección,
+/// el tempo, el compás y la nota definen la forma de la canción y salen
+/// siempre del original.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockContent {
+    /// Duración de la sección cuando se guardó: si el original cambia, lo que
+    /// pase del final nuevo se recorta al construir.
+    pub duration_seconds: f64,
+    #[serde(default)]
+    pub clips: Vec<Clip>,
+    #[serde(default)]
+    pub midi_clips: Vec<MidiClip>,
+    #[serde(default)]
+    pub video_clips: Vec<VideoClip>,
+    /// Solo marcas de categoría Cue (avisos).
+    #[serde(default)]
+    pub cue_markers: Vec<Marker>,
+    #[serde(default)]
+    pub automation_cues: Vec<crate::automation::AutomationCue>,
 }
 
 /// Id estable de la sección implícita "Inicio" de una región: el tramo entre
@@ -383,6 +413,123 @@ impl SongStructure {
         self.sections
             .iter()
             .find(|section| section.marker_id == marker_id)
+    }
+
+    /// Contenido propio de los bloques editados, de todos los arreglos.
+    pub fn block_contents(&self) -> impl Iterator<Item = &BlockContent> {
+        self.arrangements
+            .iter()
+            .flat_map(|arrangement| arrangement.blocks.iter())
+            .filter_map(|block| block.content.as_ref())
+    }
+
+    pub fn block_contents_mut(&mut self) -> impl Iterator<Item = &mut BlockContent> {
+        self.arrangements
+            .iter_mut()
+            .flat_map(|arrangement| arrangement.blocks.iter_mut())
+            .filter_map(|block| block.content.as_mut())
+    }
+
+    /// Todos los clips de audio que guarda la estructura fuera del timeline:
+    /// los del original y los de los bloques editados. Quien reescriba rutas o
+    /// pistas en bloque tiene que pasar por aquí (y los equivalentes de MIDI,
+    /// vídeo y cues), o el original o un bloque quedarían apuntando a ficheros
+    /// o pistas que no existen.
+    pub fn stored_clips(&self) -> impl Iterator<Item = &Clip> {
+        self.original
+            .clips
+            .iter()
+            .chain(self.block_contents().flat_map(|content| content.clips.iter()))
+    }
+
+    pub fn stored_clips_mut(&mut self) -> impl Iterator<Item = &mut Clip> {
+        let Self {
+            original,
+            arrangements,
+            ..
+        } = self;
+        original.clips.iter_mut().chain(
+            arrangements
+                .iter_mut()
+                .flat_map(|arrangement| arrangement.blocks.iter_mut())
+                .filter_map(|block| block.content.as_mut())
+                .flat_map(|content| content.clips.iter_mut()),
+        )
+    }
+
+    pub fn stored_midi_clips(&self) -> impl Iterator<Item = &MidiClip> {
+        self.original
+            .midi_clips
+            .iter()
+            .chain(self.block_contents().flat_map(|content| content.midi_clips.iter()))
+    }
+
+    pub fn stored_midi_clips_mut(&mut self) -> impl Iterator<Item = &mut MidiClip> {
+        let Self {
+            original,
+            arrangements,
+            ..
+        } = self;
+        original.midi_clips.iter_mut().chain(
+            arrangements
+                .iter_mut()
+                .flat_map(|arrangement| arrangement.blocks.iter_mut())
+                .filter_map(|block| block.content.as_mut())
+                .flat_map(|content| content.midi_clips.iter_mut()),
+        )
+    }
+
+    pub fn stored_video_clips(&self) -> impl Iterator<Item = &VideoClip> {
+        self.original
+            .video_clips
+            .iter()
+            .chain(self.block_contents().flat_map(|content| content.video_clips.iter()))
+    }
+
+    pub fn stored_video_clips_mut(&mut self) -> impl Iterator<Item = &mut VideoClip> {
+        let Self {
+            original,
+            arrangements,
+            ..
+        } = self;
+        original.video_clips.iter_mut().chain(
+            arrangements
+                .iter_mut()
+                .flat_map(|arrangement| arrangement.blocks.iter_mut())
+                .filter_map(|block| block.content.as_mut())
+                .flat_map(|content| content.video_clips.iter_mut()),
+        )
+    }
+
+    pub fn stored_automation_cues_mut(
+        &mut self,
+    ) -> impl Iterator<Item = &mut crate::automation::AutomationCue> {
+        let Self {
+            original,
+            arrangements,
+            ..
+        } = self;
+        original.automation_cues.iter_mut().chain(
+            arrangements
+                .iter_mut()
+                .flat_map(|arrangement| arrangement.blocks.iter_mut())
+                .filter_map(|block| block.content.as_mut())
+                .flat_map(|content| content.automation_cues.iter_mut()),
+        )
+    }
+
+    /// Quita del original y de los bloques editados los clips de las pistas
+    /// que ya no existen.
+    pub fn retain_tracks(&mut self, keep: impl Fn(&str) -> bool) {
+        let original = &mut self.original;
+        original.clips.retain(|clip| keep(&clip.track_id));
+        original.midi_clips.retain(|clip| keep(&clip.track_id));
+        original.video_clips.retain(|clip| keep(&clip.track_id));
+        for content in self.block_contents_mut() {
+            content.clips.retain(|clip| keep(&clip.track_id));
+            content.midi_clips.retain(|clip| keep(&clip.track_id));
+            content.video_clips.retain(|clip| keep(&clip.track_id));
+        }
     }
 }
 
@@ -1150,17 +1297,17 @@ fn stereo_pair(start_channel: usize, available_channels: usize) -> Vec<usize> {
 }
 
 impl Song {
-    /// La instantánea del original de cada canción que tenga una. Quien
-    /// reescriba clips en todo el `Song` (rutas de audio al importar o
+    /// La estructura (original + arreglos) de cada canción que tenga una.
+    /// Quien reescriba clips en todo el `Song` (rutas de audio al importar o
     /// reenlazar, pistas al importar un paquete) tiene que pasar también por
-    /// aquí: la instantánea guarda sus propios clips, y si se queda atrás, al
-    /// volver al original o reaplicar un arreglo el clip apuntaría a un fichero
-    /// o a una pista que ya no existen.
-    pub fn structure_snapshots_mut(&mut self) -> impl Iterator<Item = &mut OriginalSnapshot> {
+    /// sus `stored_*_mut`: el original y los bloques editados guardan sus
+    /// propios clips, y si se quedan atrás, al volver al original o reaplicar
+    /// un arreglo el clip apuntaría a un fichero o a una pista que ya no
+    /// existen.
+    pub fn structures_mut(&mut self) -> impl Iterator<Item = &mut SongStructure> {
         self.regions
             .iter_mut()
             .filter_map(|region| region.structure.as_mut())
-            .map(|structure| &mut structure.original)
     }
 
     pub fn sorted_markers(&self) -> Vec<&Marker> {

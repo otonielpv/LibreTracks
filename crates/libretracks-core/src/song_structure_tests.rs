@@ -239,6 +239,7 @@ fn blocks(names: &[&str]) -> Vec<ArrangementBlock> {
         .map(|(index, name)| ArrangementBlock {
             id: format!("b{index}"),
             section_marker_id: (*name).into(),
+            content: None,
         })
         .collect()
 }

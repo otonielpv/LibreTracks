@@ -766,8 +766,8 @@ pub(super) fn place_bundled_audio_and_repoint(
         let folder = folder_for_clip.get(&clip.id).cloned().flatten();
         place(&mut clip.file_path, folder)?;
     }
-    for (snapshot, folder) in song.structure_snapshots_mut().zip(snapshot_folders) {
-        for clip in &mut snapshot.clips {
+    for (structure, folder) in song.structures_mut().zip(snapshot_folders) {
+        for clip in structure.stored_clips_mut() {
             place(&mut clip.file_path, folder.clone())?;
         }
     }

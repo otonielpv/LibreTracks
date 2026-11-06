@@ -64,24 +64,12 @@ pub(super) fn reconcile_song_structures(
     check_applied_regions(previous, song)
 }
 
-/// Borrar una pista saca sus clips del original: reaplicar no la resucita.
+/// Borrar una pista saca sus clips del original y de los bloques editados:
+/// reaplicar no la resucita.
 fn drop_deleted_tracks_from_originals(song: &mut Song) {
     let tracks: HashSet<String> = song.tracks.iter().map(|track| track.id.clone()).collect();
-    for structure in song
-        .regions
-        .iter_mut()
-        .filter_map(|region| region.structure.as_mut())
-    {
-        let original = &mut structure.original;
-        original
-            .clips
-            .retain(|clip| tracks.contains(&clip.track_id));
-        original
-            .midi_clips
-            .retain(|clip| tracks.contains(&clip.track_id));
-        original
-            .video_clips
-            .retain(|clip| tracks.contains(&clip.track_id));
+    for structure in song.structures_mut() {
+        structure.retain_tracks(|track_id| tracks.contains(track_id));
     }
 }
 

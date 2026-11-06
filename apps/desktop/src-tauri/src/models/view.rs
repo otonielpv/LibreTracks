@@ -410,6 +410,8 @@ pub struct ArrangementSummary {
 pub struct ArrangementBlockSummary {
     pub id: String,
     pub section_marker_id: String,
+    /// El bloque tiene contenido propio (se editó y ya no sigue al original).
+    pub edited: bool,
 }
 
 /// Respuesta de las órdenes de arreglos: el snapshot de siempre más lo que el
@@ -1358,6 +1360,7 @@ pub(crate) fn song_structure_to_summary(
                     .map(|block| ArrangementBlockSummary {
                         id: block.id.clone(),
                         section_marker_id: block.section_marker_id.clone(),
+                        edited: block.content.is_some(),
                     })
                     .collect(),
             })

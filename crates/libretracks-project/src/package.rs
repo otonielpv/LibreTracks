@@ -390,7 +390,7 @@ pub fn export_region_as_package_with_progress(
     let structure = region.structure.clone();
     let snapshot_clips: Vec<Clip> = structure
         .as_ref()
-        .map(|s| s.original.clips.clone())
+        .map(|s| s.stored_clips().cloned().collect())
         .unwrap_or_default();
     let used_track_ids = clips
         .iter()
@@ -398,13 +398,10 @@ pub fn export_region_as_package_with_progress(
         .chain(midi_clips.iter().map(|clip| clip.track_id.as_str()))
         .chain(video_clips.iter().map(|clip| clip.track_id.as_str()))
         .chain(structure.iter().flat_map(|s| {
-            let original = &s.original;
-            original
-                .clips
-                .iter()
+            s.stored_clips()
                 .map(|clip| clip.track_id.as_str())
-                .chain(original.midi_clips.iter().map(|clip| clip.track_id.as_str()))
-                .chain(original.video_clips.iter().map(|clip| clip.track_id.as_str()))
+                .chain(s.stored_midi_clips().map(|clip| clip.track_id.as_str()))
+                .chain(s.stored_video_clips().map(|clip| clip.track_id.as_str()))
         }))
         .collect::<HashSet<_>>();
     let tracks = song
@@ -1004,22 +1001,22 @@ fn remap_structure_ids(
             .cloned()
             .ok_or_else(|| ProjectError::AudioDecode(format!("package track not found: {id}")))
     };
-    let original = &mut structure.original;
-    for clip in &mut original.clips {
+    // The original and every edited block (`stored_*`) keep their own clips.
+    for clip in structure.stored_clips_mut() {
         clip.track_id = track(&clip.track_id)?;
         if let Some(id) = clip_ids.get(&clip.id) {
             clip.id = id.clone();
         }
     }
-    for clip in &mut original.midi_clips {
+    for clip in structure.stored_midi_clips_mut() {
         clip.track_id = track(&clip.track_id)?;
     }
-    for clip in &mut original.video_clips {
+    for clip in structure.stored_video_clips_mut() {
         clip.track_id = track(&clip.track_id)?;
     }
     // Cue actions that address a track by id; a track the package does not
     // carry keeps its id (the action then targets nothing, as it would have).
-    for cue in &mut original.automation_cues {
+    for cue in structure.stored_automation_cues_mut() {
         for action in &mut cue.actions {
             match action {
                 AutomationAction::SetTrackMute { track_id, .. }
@@ -2474,5 +2471,53 @@ mod tests {
         )
         .expect("merge mobile");
         assert_eq!(result.song.video_clips.len(), 2);
+    }
+
+    /// Importar una canción remapea pistas e ids también en los bloques
+    /// editados de sus arreglos, no solo en el original.
+    #[test]
+    fn importing_remaps_tracks_and_clip_ids_inside_edited_blocks() {
+        use libretracks_core::{
+            Arrangement, ArrangementBlock, BlockContent, OriginalSection, OriginalSnapshot,
+            SongStructure,
+        };
+        let structure = SongStructure {
+            original: OriginalSnapshot {
+                origin_seconds: 0.0,
+                duration_seconds: 8.0,
+                base_bpm: 120.0,
+                base_time_signature: "4/4".into(),
+                clips: vec![clip("c1", "t1", 0.0, 8.0)],
+                ..Default::default()
+            },
+            sections: vec![OriginalSection {
+                marker_id: "coro".into(),
+                start_seconds: 0.0,
+                end_seconds: 8.0,
+            }],
+            arrangements: vec![Arrangement {
+                id: "a".into(),
+                name: "a".into(),
+                blocks: vec![ArrangementBlock {
+                    id: "b".into(),
+                    section_marker_id: "coro".into(),
+                    content: Some(BlockContent {
+                        duration_seconds: 8.0,
+                        clips: vec![clip("c1~2", "t1", 0.0, 4.0)],
+                        ..Default::default()
+                    }),
+                }],
+            }],
+            applied_arrangement_id: None,
+        };
+        let tracks = HashMap::from([("t1".to_string(), "nueva".to_string())]);
+        let clips = HashMap::from([("c1~2".to_string(), "c1~2-importado".to_string())]);
+
+        let remapped = remap_structure_ids(structure, &tracks, &clips).expect("remap");
+
+        let content = remapped.arrangements[0].blocks[0].content.as_ref().unwrap();
+        assert_eq!(content.clips[0].track_id, "nueva");
+        assert_eq!(content.clips[0].id, "c1~2-importado");
+        assert_eq!(remapped.original.clips[0].track_id, "nueva");
     }
 }

@@ -183,6 +183,7 @@ pub(crate) fn arrangement(id: &str, sections: &[&str]) -> Arrangement {
             .map(|(index, section)| ArrangementBlock {
                 id: format!("{id}-{index}"),
                 section_marker_id: (*section).into(),
+                content: None,
             })
             .collect(),
     }
@@ -1009,4 +1010,107 @@ fn reordering_without_changing_the_length_keeps_markers_in_order() {
     sorted.sort_by(f64::total_cmp);
     assert_eq!(starts, sorted);
     libretracks_core::validate_song(&song).expect("válida");
+}
+
+// ── Contenido propio de un bloque (plan arrangement-block-edits, paso 01) ──
+
+/// Pone contenido propio en un bloque del arreglo `arrangement_id` de r2, como
+/// si se hubiera editado (el paso 03 lo hará la guardia).
+fn give_block_content(session: &mut DesktopSession, arrangement_id: &str, block_id: &str) {
+    let mut song = song_of(session);
+    let structure = song.regions[1].structure.as_mut().expect("estructura");
+    let original_clip = structure.original.clips[0].clone();
+    let block = structure
+        .arrangements
+        .iter_mut()
+        .find(|a| a.id == arrangement_id)
+        .expect("arreglo")
+        .blocks
+        .iter_mut()
+        .find(|b| b.id == block_id)
+        .expect("bloque");
+    block.content = Some(libretracks_core::BlockContent {
+        duration_seconds: 16.0,
+        clips: vec![Clip {
+            id: "propio".into(),
+            timeline_start_seconds: 1.0,
+            duration_seconds: 2.0,
+            ..original_clip
+        }],
+        ..Default::default()
+    });
+    session.engine.load_song(song).expect("load");
+}
+
+fn block_content<'a>(
+    song: &'a Song,
+    arrangement_id: &str,
+    block_id: &str,
+) -> Option<&'a libretracks_core::BlockContent> {
+    song.regions[1]
+        .structure
+        .as_ref()?
+        .arrangements
+        .iter()
+        .find(|a| a.id == arrangement_id)?
+        .blocks
+        .iter()
+        .find(|b| b.id == block_id)?
+        .content
+        .as_ref()
+}
+
+/// El editor de bloques manda solo ids y secciones: guardar el arreglo no
+/// borra el contenido propio de un bloque que sigue ahí, y un bloque nuevo
+/// empieza siguiendo al original.
+#[test]
+fn saving_an_arrangement_keeps_the_content_of_its_edited_blocks() {
+    let (mut session, audio) = captured(base_song(), base_cues());
+    session
+        .save_song_arrangement("r2", arrangement("largo", &["a", "b", "b", "c"]), false, &audio)
+        .expect("guardar");
+    give_block_content(&mut session, "largo", "largo-2");
+
+    // Reordenado y con un bloque más, como lo manda el editor.
+    let mut edited = arrangement("largo", &["a", "b", "b", "c", "c"]);
+    edited.blocks.swap(1, 2);
+    edited.blocks[4].id = "nuevo".into();
+    session
+        .save_song_arrangement("r2", edited, false, &audio)
+        .expect("guardar otra vez");
+
+    let song = song_of(&session);
+    let content = block_content(&song, "largo", "largo-2").expect("se conserva");
+    assert_eq!(content.clips[0].id, "propio");
+    assert!(block_content(&song, "largo", "largo-1").is_none());
+    assert!(block_content(&song, "largo", "nuevo").is_none());
+}
+
+/// C4: borrar una pista saca sus clips también de los bloques editados.
+#[test]
+fn deleting_a_track_also_removes_its_clips_from_edited_blocks() {
+    let mut song = base_song();
+    let mut second = song.tracks[0].clone();
+    second.id = "a2".into();
+    second.name = "a2".into();
+    song.tracks.push(second);
+    let (mut session, audio) = captured(song, base_cues());
+    session
+        .save_song_arrangement("r2", arrangement("largo", &["a", "b", "b", "c"]), false, &audio)
+        .expect("guardar");
+    give_block_content(&mut session, "largo", "largo-2");
+    // El clip propio del bloque, en la pista que se va a borrar.
+    let mut song = song_of(&session);
+    for structure in song.structures_mut() {
+        for content in structure.block_contents_mut() {
+            content.clips[0].track_id = "a2".into();
+        }
+    }
+    session.engine.load_song(song).expect("load");
+
+    session.delete_track("a2", &audio).expect("borrar pista");
+
+    let song = song_of(&session);
+    let content = block_content(&song, "largo", "largo-2").expect("bloque");
+    assert!(content.clips.is_empty(), "{:?}", content.clips);
 }

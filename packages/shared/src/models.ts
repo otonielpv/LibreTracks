@@ -419,6 +419,8 @@ export type StructureSectionSummary = {
 export type ArrangementBlockSummary = {
   id: string;
   sectionMarkerId: string;
+  /** Has its own content: it was edited and no longer follows the original. */
+  edited?: boolean;
 };
 
 export type ArrangementSummary = {
