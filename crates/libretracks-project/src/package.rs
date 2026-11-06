@@ -1611,6 +1611,98 @@ mod tests {
         assert!(validate_song(&result.song).is_ok());
     }
 
+    /// Un bloque editado que usa una pista que solo está en él: exportar la
+    /// canción lleva esa pista, e importarla deja el bloque apuntando a una
+    /// pista que existe en la sesión de destino.
+    #[test]
+    fn an_edited_block_survives_a_song_package_round_trip() {
+        use libretracks_core::{
+            Arrangement, ArrangementBlock, BlockContent, OriginalSection, OriginalSnapshot,
+            SongStructure,
+        };
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let mut source = song();
+        source.tracks.push(track("t2", "Solo coro 2"));
+        let marker = source.section_markers[0].clone();
+        source.regions[0].structure = Some(SongStructure {
+            original: OriginalSnapshot {
+                origin_seconds: 0.0,
+                duration_seconds: 30.0,
+                base_bpm: 120.0,
+                base_time_signature: "4/4".into(),
+                clips: vec![clip("c1", "t1", 4.0, 8.0)],
+                section_markers: vec![libretracks_core::Marker {
+                    start_seconds: 0.0,
+                    kind: MarkerKind::Chorus,
+                    ..marker
+                }],
+                ..Default::default()
+            },
+            sections: vec![OriginalSection {
+                marker_id: "m1".into(),
+                start_seconds: 0.0,
+                end_seconds: 30.0,
+            }],
+            arrangements: vec![Arrangement {
+                id: "doble".into(),
+                name: "Doble".into(),
+                blocks: vec![
+                    ArrangementBlock {
+                        id: "b1".into(),
+                        section_marker_id: "m1".into(),
+                        content: None,
+                    },
+                    ArrangementBlock {
+                        id: "b2".into(),
+                        section_marker_id: "m1".into(),
+                        content: Some(BlockContent {
+                            duration_seconds: 30.0,
+                            clips: vec![clip("propio", "t2", 2.0, 4.0)],
+                            ..Default::default()
+                        }),
+                    },
+                ],
+            }],
+            applied_arrangement_id: None,
+        });
+        let package_path = song_dir.join("coro.ltsong");
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
+            .expect("export region");
+
+        let empty = Song {
+            tracks: vec![],
+            clips: vec![],
+            regions: vec![],
+            section_markers: vec![],
+            ..song()
+        };
+        let result = import_song_package(
+            song_dir,
+            &empty,
+            &package_path,
+            0.0,
+            SongImportTrackMode::default(),
+        )
+        .expect("import package");
+
+        let structure = result.song.regions[0].structure.as_ref().expect("estructura");
+        let content = structure.arrangements[0].blocks[1]
+            .content
+            .as_ref()
+            .expect("el bloque editado llega con lo suyo");
+        assert_eq!(content.clips.len(), 1);
+        let track_id = &content.clips[0].track_id;
+        let track = result
+            .song
+            .tracks
+            .iter()
+            .find(|t| &t.id == track_id)
+            .expect("la pista del bloque existe en el destino");
+        assert_eq!(track.name, "Solo coro 2");
+        assert!(validate_song(&result.song).is_ok());
+    }
+
     #[test]
     fn export_includes_only_midi_events_triggered_inside_the_region() {
         let dir = tempdir().expect("tempdir");

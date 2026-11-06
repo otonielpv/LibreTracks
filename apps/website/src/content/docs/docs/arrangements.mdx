@@ -86,12 +86,30 @@ and the ruler slightly shades the sections that are repeats.
 
 ## Editing a song with an arrangement
 
-Track volume, mute, pan and outputs change as usual. To move, trim or add
-**clips or markers**, LibreTracks asks first: *This song has an arrangement*.
-**Edit original** takes the song back to the original (the arrangement is
-kept), you edit whatever you need and, when you press **Apply** again, the
-arrangement is rebuilt on the edited song. If you removed a section that an
-arrangement used, it tells you which arrangements it was removed from.
+Track volume, mute, pan and outputs change as usual.
+
+**Each block can be edited on its own.** If you repeat the chorus, the copy
+brings everything the original chorus has: clips, MIDI, automation, cues and
+video settings. But you can move, trim or add clips, create an automation,
+send a special MIDI message or change the video in the second chorus only:
+the change stays in that block and leaves the first one and the original
+alone. In the arrangement editor that block shows as **edited**, and **Reset
+to the original** makes it a copy of the original chorus again.
+
+What shapes the song is changed in the original: **section markers**,
+**tempo**, **meter**, **key** and the song's length. For those, LibreTracks
+asks first: *This song has an arrangement*. **Edit original** takes the song
+back to the original (the arrangement is kept), you edit whatever you need
+and, when you press **Apply** again, the arrangement is rebuilt on the edited
+song:
+
+- Blocks that follow the original get the changes.
+- Edited blocks keep their own content and do not get them.
+- If you removed a section that an arrangement used, it tells you which
+  arrangements it was removed from and whether an edited block was lost
+  with it.
+- If a section got shorter, whatever its edited blocks had past the new end
+  is trimmed, and it tells you.
 
 ## Where the arrangement shows
 
@@ -105,7 +123,8 @@ arrangement used, it tells you which arrangements it was removed from.
 
 If you open the session with an older version of LibreTracks, you will see the
 arrangement written on the timeline and it will sound the same, but saving
-from that version loses the arrangement's original.
+from that version loses the arrangement's original, and applying the
+arrangement again there loses the changes of edited blocks.
 
 ## On phones and tablets
 

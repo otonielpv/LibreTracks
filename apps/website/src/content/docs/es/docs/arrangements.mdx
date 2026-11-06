@@ -88,12 +88,29 @@ regla sombrea un poco las secciones que son repeticiones.
 ## Editar una canción con arreglo
 
 El volumen, el mute, el pan o las salidas de las pistas se cambian como
-siempre. Para mover, recortar o añadir **clips o marcas**, LibreTracks te
-pregunta antes: *Esta canción tiene un arreglo*. **Editar original** devuelve
-la canción al original (el arreglo se guarda), editas lo que quieras y, al
-volver a pulsar **Aplicar**, el arreglo se monta sobre la canción editada. Si
-quitaste una sección que usaba algún arreglo, te dice de qué arreglos la ha
-quitado.
+siempre.
+
+**Cada bloque se puede editar por separado.** Si repites el coro, la copia
+trae todo lo que tenga el coro original: clips, MIDI, automatizaciones, avisos
+y ajustes del vídeo. Pero puedes mover, recortar o añadir clips, crear una
+automatización, lanzar un MIDI especial o cambiar el vídeo solo en el segundo
+coro: el cambio se queda en ese bloque y no toca el primero ni el original.
+En el editor de arreglos, ese bloque aparece como **editado**, y con
+**Restablecer como el original** vuelve a ser una copia del coro original.
+
+Lo que da forma a la canción sí se cambia en el original: las **marcas de
+sección**, el **tempo**, el **compás**, la **nota** y la duración de la
+canción. Para eso, LibreTracks te pregunta antes: *Esta canción tiene un
+arreglo*. **Editar original** devuelve la canción al original (el arreglo se
+guarda), editas lo que quieras y, al volver a pulsar **Aplicar**, el arreglo se
+monta sobre la canción editada:
+
+- Los bloques que siguen al original reciben los cambios.
+- Los bloques editados conservan lo suyo y no los reciben.
+- Si quitaste una sección que usaba algún arreglo, te dice de qué arreglos la
+  ha quitado y si algún bloque editado se ha perdido con ella.
+- Si una sección se ha quedado más corta, lo que sobraba de sus bloques
+  editados se recorta y te avisa.
 
 ## Dónde se ve el arreglo
 
@@ -107,7 +124,8 @@ quitado.
 
 Si abres la sesión con una versión anterior de LibreTracks, verás el arreglo
 escrito en la línea de tiempo y sonará igual, pero si guardas desde esa versión
-se pierde el original del arreglo.
+se pierde el original del arreglo, y si vuelves a aplicar el arreglo allí, los
+bloques editados pierden sus cambios.
 
 ## En el móvil y la tablet
 
