@@ -8,6 +8,7 @@ pub mod midi_wire;
 pub mod mix_scene;
 pub mod model;
 pub mod net_clock;
+pub mod redundancy;
 pub mod session_fingerprint;
 pub mod song_structure;
 pub mod tempo_ramp;
