@@ -13,14 +13,15 @@
 //! `s - origin_seconds`. Las secciones y los tramos se razonan en relativo
 //! (`posición - origin`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 use thiserror::Error;
 
 use crate::automation::{AutomationAction, AutomationCue, AutomationJumpTarget};
 use crate::model::{
-    implicit_start_section_id, ArrangementBlock, Clip, Marker, MarkerCategory, MidiClip,
+    implicit_start_section_id, ArrangementBlock, BlockContent, Clip, Marker, MarkerCategory,
+    MidiClip,
     KeyChange, KeyMap, MidiEventKind, OriginalSection, OriginalSnapshot, Song, TempoMarker,
     TimeSignatureMarker, VideoClip,
 };
@@ -452,7 +453,7 @@ fn midi_crossing_warnings(
 /// Se copia de una pieza, así que el orden original es un solo tramo y no
 /// corta nada.
 #[derive(Debug, Clone)]
-struct Span {
+struct Span<'a> {
     /// Inicio y fin relativos en el original.
     start: f64,
     end: f64,
@@ -464,9 +465,25 @@ struct Span {
     /// Acaba en la última sección: no tiene borde derecho (la cola de un clip
     /// o una nota que pase del final se conserva, como en el original).
     closes_song: bool,
+    /// El bloque editado que forma este tramo (un bloque editado va siempre
+    /// solo): sus clips, avisos y cues salen de aquí, no del original.
+    edited: Option<(&'a str, &'a BlockContent)>,
 }
 
-impl Span {
+impl<'a> Span<'a> {
+    /// El tramo de un bloque editado visto desde su propio contenido: sus
+    /// posiciones son relativas al bloque (0 = su inicio).
+    fn local(&self) -> Span<'a> {
+        Span {
+            start: 0.0,
+            end: self.end - self.start,
+            destination: self.destination,
+            opens_song: false,
+            closes_song: self.closes_song,
+            edited: None,
+        }
+    }
+
     /// Desplazamiento que lleva una posición del original a la arreglada.
     fn shift(&self) -> f64 {
         self.destination - self.start
@@ -482,19 +499,82 @@ impl Span {
 /// Numerador de apariciones: la primera conserva el id original (la identidad
 /// y los saltos a "Coro" dependen de ello); las siguientes reciben
 /// `"{id}~{n}"`, determinista para que aplicar dos veces dé el mismo `Song`.
+///
+/// Los ids que traen los bloques editados están reservados: una copia del
+/// original nunca recibe uno de ellos (salta al siguiente `~n`).
 #[derive(Default)]
-struct Appearances(HashMap<String, u32>);
+struct Appearances {
+    counts: HashMap<String, u32>,
+    reserved: HashSet<String>,
+}
 
 impl Appearances {
-    fn next(&mut self, id: &str) -> String {
-        let count = self.0.entry(id.to_string()).or_insert(0);
-        *count += 1;
-        if *count == 1 {
-            id.to_string()
-        } else {
-            format!("{id}~{count}")
+    fn reserving(reserved: HashSet<String>) -> Self {
+        Self {
+            counts: HashMap::new(),
+            reserved,
         }
     }
+
+    fn next(&mut self, id: &str) -> String {
+        let count = self.counts.entry(id.to_string()).or_insert(0);
+        loop {
+            *count += 1;
+            let candidate = if *count == 1 {
+                id.to_string()
+            } else {
+                format!("{id}~{count}")
+            };
+            if !self.reserved.contains(&candidate) {
+                return candidate;
+            }
+        }
+    }
+}
+
+/// Ids de los elementos de los bloques editados. Dos bloques pueden traer el
+/// mismo (se guardaron en momentos distintos): el segundo sale como
+/// `{id}@{bloque}`, determinista.
+#[derive(Default)]
+struct ContentIds(HashSet<String>);
+
+impl ContentIds {
+    fn take(&mut self, id: &str, block_id: &str) -> String {
+        if self.0.insert(id.to_string()) {
+            return id.to_string();
+        }
+        let renamed = format!("{id}@{block_id}");
+        self.0.insert(renamed.clone());
+        renamed
+    }
+}
+
+/// Id base de una copia: `"coro~2"` o `"coro@b3"` → `"coro"`.
+pub fn base_copy_id(id: &str) -> &str {
+    let id = id.split('@').next().unwrap_or(id);
+    match id.rsplit_once('~') {
+        Some((base, suffix))
+            if !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit()) =>
+        {
+            base
+        }
+        _ => id,
+    }
+}
+
+/// Lo que los bloques editados ya usan, de un tipo, para reservarlo.
+fn reserved_ids<T>(
+    spans: &[Span<'_>],
+    items: impl Fn(&BlockContent) -> &[T],
+    id_of: impl Fn(&T) -> &str,
+) -> HashSet<String> {
+    let mut ids = HashSet::new();
+    for (_, content) in spans.iter().filter_map(|span| span.edited) {
+        for item in items(content) {
+            ids.insert(id_of(item).to_string());
+        }
+    }
+    ids
 }
 
 /// Construye el contenido de la región para una lista de bloques. Ver §6 del
@@ -530,10 +610,66 @@ pub fn build_arrangement(
     };
 
     // 1. Clips de audio y vídeo, recortados al tramo.
-    let mut clip_ids = Appearances::default();
-    let mut video_ids = Appearances::default();
-    let mut midi_ids = Appearances::default();
+    let mut clip_ids = Appearances::reserving(reserved_ids(&spans, |c| &c.clips, |c| &c.id));
+    let mut video_ids =
+        Appearances::reserving(reserved_ids(&spans, |c| &c.video_clips, |c| &c.id));
+    let mut midi_ids =
+        Appearances::reserving(reserved_ids(&spans, |c| &c.midi_clips, |c| &c.id));
+    let (mut own_clip_ids, mut own_video_ids, mut own_midi_ids) =
+        (ContentIds::default(), ContentIds::default(), ContentIds::default());
     for span in &spans {
+        if let Some((block_id, content)) = span.edited {
+            // Bloque editado: lo suyo, en relativo al bloque y recortado a lo
+            // que mide ahora su sección.
+            let local = span.local();
+            for clip in &content.clips {
+                let start = clip.timeline_start_seconds;
+                if let Some(cut) = cut_window(&local, start, clip.duration_seconds) {
+                    let mut copy = clip.clone();
+                    copy.id = own_clip_ids.take(&clip.id, block_id);
+                    copy.timeline_start_seconds += origin;
+                    apply_cut(
+                        &cut,
+                        &local,
+                        origin,
+                        &mut copy.timeline_start_seconds,
+                        &mut copy.source_start_seconds,
+                        &mut copy.duration_seconds,
+                        &mut copy.fade_in_seconds,
+                        &mut copy.fade_out_seconds,
+                    );
+                    built.clips.push(copy);
+                }
+            }
+            for clip in &content.video_clips {
+                let start = clip.timeline_start_seconds;
+                if let Some(cut) = cut_window(&local, start, clip.duration_seconds) {
+                    let mut copy = clip.clone();
+                    copy.id = own_video_ids.take(&clip.id, block_id);
+                    copy.timeline_start_seconds += origin;
+                    apply_cut(
+                        &cut,
+                        &local,
+                        origin,
+                        &mut copy.timeline_start_seconds,
+                        &mut copy.source_start_seconds,
+                        &mut copy.duration_seconds,
+                        &mut copy.fade_in_seconds,
+                        &mut copy.fade_out_seconds,
+                    );
+                    built.video_clips.push(copy);
+                }
+            }
+            for clip in &content.midi_clips {
+                let mut placed = clip.clone();
+                placed.timeline_start_seconds += origin;
+                if let Some(mut copy) = midi_copy(&placed, &local, origin) {
+                    copy.id = own_midi_ids.take(&clip.id, block_id);
+                    built.midi_clips.push(copy);
+                }
+            }
+            continue;
+        }
         for clip in &snapshot.clips {
             let start = relative(clip.timeline_start_seconds);
             if let Some(cut) = cut_window(span, start, clip.duration_seconds) {
@@ -581,11 +717,13 @@ pub fn build_arrangement(
 
     // 3. Marcas (sección y cue), tempo y compás. Se apunta qué copia de cada
     // marca quedó en cada tramo para redirigir los saltos.
-    let mut marker_ids = Appearances::default();
+    let mut marker_ids =
+        Appearances::reserving(reserved_ids(&spans, |c| &c.cue_markers, |m| &m.id));
+    let mut own_marker_ids = ContentIds::default();
     let mut tempo_ids = Appearances::default();
     let mut signature_ids = Appearances::default();
-    let mut marker_copy_in_span: HashMap<(usize, &str), String> = HashMap::new();
-    let mut first_marker_copy: HashMap<&str, String> = HashMap::new();
+    let mut marker_copy_in_span: HashMap<(usize, String), String> = HashMap::new();
+    let mut first_marker_copy: HashMap<String, String> = HashMap::new();
     // Marcas de tempo y compás generadas (copias `~n` o insertadas al
     // arrancar un tramo): son las únicas que se pueden quitar por redundantes.
     let mut generated_tempo: Vec<bool> = Vec::new();
@@ -600,11 +738,16 @@ pub fn build_arrangement(
 
     for (span_index, span) in spans.iter().enumerate() {
         for marker in &snapshot.section_markers {
+            // Un bloque editado trae sus propios avisos; sus marcas de
+            // sección son siempre las del original.
+            if span.edited.is_some() && marker.category() != MarkerCategory::Section {
+                continue;
+            }
             if span.contains(relative(marker.start_seconds)) {
                 let id = marker_ids.next(&marker.id);
-                marker_copy_in_span.insert((span_index, marker.id.as_str()), id.clone());
+                marker_copy_in_span.insert((span_index, marker.id.clone()), id.clone());
                 first_marker_copy
-                    .entry(marker.id.as_str())
+                    .entry(marker.id.clone())
                     .or_insert_with(|| id.clone());
                 // El atajo numérico (1-9) es de la primera aparición: dos
                 // marcas con el mismo atajo no son válidas y el atajo saltaría
@@ -614,6 +757,26 @@ pub fn build_arrangement(
                     id,
                     start_seconds: marker.start_seconds + span.shift(),
                     digit,
+                    ..marker.clone()
+                });
+            }
+        }
+        if let Some((block_id, content)) = span.edited {
+            let local = span.local();
+            let mut own: Vec<&Marker> = content
+                .cue_markers
+                .iter()
+                .filter(|marker| local.contains(marker.start_seconds))
+                .collect();
+            own.sort_by(|a, b| a.start_seconds.total_cmp(&b.start_seconds));
+            for marker in own {
+                let id = own_marker_ids.take(&marker.id, block_id);
+                let base = base_copy_id(&marker.id).to_string();
+                marker_copy_in_span.insert((span_index, base.clone()), id.clone());
+                first_marker_copy.entry(base).or_insert_with(|| id.clone());
+                built.section_markers.push(Marker {
+                    id,
+                    start_seconds: origin + span.destination + marker.start_seconds,
                     ..marker.clone()
                 });
             }
@@ -713,8 +876,46 @@ pub fn build_arrangement(
     );
 
     // 4. Cues de automatización, con los saltos redirigidos.
-    let mut cue_ids = Appearances::default();
+    let mut cue_ids =
+        Appearances::reserving(reserved_ids(&spans, |c| &c.automation_cues, |c| &c.id));
+    let mut own_cue_ids = ContentIds::default();
     for (span_index, span) in spans.iter().enumerate() {
+        if let Some((block_id, content)) = span.edited {
+            let local = span.local();
+            for cue in &content.automation_cues {
+                if !local.contains(cue.at_seconds) {
+                    continue;
+                }
+                let mut copy = cue.clone();
+                copy.id = own_cue_ids.take(&cue.id, block_id);
+                copy.at_seconds = origin + span.destination + cue.at_seconds;
+                for action in &mut copy.actions {
+                    let AutomationAction::Jump { target, .. } = action else {
+                        continue;
+                    };
+                    match target {
+                        // A la copia de la marca en este mismo bloque, o a su
+                        // primera aparición.
+                        AutomationJumpTarget::Marker { marker_id } => {
+                            let base = base_copy_id(marker_id).to_string();
+                            let redirected = marker_copy_in_span
+                                .get(&(span_index, base.clone()))
+                                .or_else(|| first_marker_copy.get(&base));
+                            if let Some(id) = redirected {
+                                *marker_id = id.clone();
+                            }
+                        }
+                        // Guardados relativos al bloque.
+                        AutomationJumpTarget::Frame { seconds } => {
+                            *seconds += origin + span.destination;
+                        }
+                        AutomationJumpTarget::Region { .. } => {}
+                    }
+                }
+                built.automation_cues.push(copy);
+            }
+            continue;
+        }
         for cue in &snapshot.automation_cues {
             if !span.contains(relative(cue.at_seconds)) {
                 continue;
@@ -731,7 +932,7 @@ pub fn build_arrangement(
                     // de su mismo tramo; si no la hay, a la primera aparición.
                     AutomationJumpTarget::Marker { marker_id } => {
                         let redirected = marker_copy_in_span
-                            .get(&(span_index, marker_id.as_str()))
+                            .get(&(span_index, marker_id.clone()))
                             .or_else(|| first_marker_copy.get(marker_id.as_str()));
                         if let Some(id) = redirected {
                             *marker_id = id.clone();
@@ -750,11 +951,158 @@ pub fn build_arrangement(
     Ok(built)
 }
 
-/// Agrupa los bloques en tramos.
-fn spans_of(
+// ── Contenido propio de los bloques ────────────────────────────────────────
+
+/// Dónde cae un bloque en la canción arreglada, relativo a su inicio.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlockWindow {
+    pub block_id: String,
+    pub section_marker_id: String,
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+}
+
+/// La ventana de cada bloque en la canción arreglada, en orden.
+pub fn block_windows(
     sections: &[OriginalSection],
     blocks: &[ArrangementBlock],
-) -> Result<Vec<Span>, StructureError> {
+) -> Result<Vec<BlockWindow>, StructureError> {
+    let mut windows = Vec::with_capacity(blocks.len());
+    let mut cursor = 0.0;
+    for block in blocks {
+        let section = sections
+            .iter()
+            .find(|section| section.marker_id == block.section_marker_id)
+            .ok_or_else(|| StructureError::UnknownSection(block.section_marker_id.clone()))?;
+        let length = section.end_seconds - section.start_seconds;
+        windows.push(BlockWindow {
+            block_id: block.id.clone(),
+            section_marker_id: block.section_marker_id.clone(),
+            start_seconds: cursor,
+            end_seconds: cursor + length,
+        });
+        cursor += length;
+    }
+    Ok(windows)
+}
+
+/// Lo que la canción arreglada (o el timeline) tiene en la ventana de un
+/// bloque, como contenido propio: relativo al bloque y recortado a él, con la
+/// misma regla con la que se construye (un clip que cruza un borde se parte).
+/// Solo los avisos (marcas de categoría Cue): las marcas de sección son del
+/// original. Las posiciones de entrada están en el mismo sistema que
+/// `region_start`; la primera ventana no tiene borde izquierdo y la última no
+/// tiene borde derecho, como el tramo que abre o cierra la canción.
+#[allow(clippy::too_many_arguments)]
+pub fn extract_block_content(
+    window: &BlockWindow,
+    region_start: f64,
+    is_last: bool,
+    clips: &[Clip],
+    midi_clips: &[MidiClip],
+    video_clips: &[VideoClip],
+    markers: &[Marker],
+    cues: &[AutomationCue],
+) -> BlockContent {
+    let span = Span {
+        start: region_start + window.start_seconds,
+        end: region_start + window.end_seconds,
+        destination: 0.0,
+        opens_song: window.start_seconds <= 0.0,
+        closes_song: is_last,
+        edited: None,
+    };
+    let mut content = BlockContent {
+        duration_seconds: window.end_seconds - window.start_seconds,
+        ..BlockContent::default()
+    };
+    for clip in clips {
+        if let Some(cut) = cut_window(&span, clip.timeline_start_seconds, clip.duration_seconds) {
+            let mut copy = clip.clone();
+            apply_cut(
+                &cut,
+                &span,
+                0.0,
+                &mut copy.timeline_start_seconds,
+                &mut copy.source_start_seconds,
+                &mut copy.duration_seconds,
+                &mut copy.fade_in_seconds,
+                &mut copy.fade_out_seconds,
+            );
+            content.clips.push(copy);
+        }
+    }
+    for clip in video_clips {
+        if let Some(cut) = cut_window(&span, clip.timeline_start_seconds, clip.duration_seconds) {
+            let mut copy = clip.clone();
+            apply_cut(
+                &cut,
+                &span,
+                0.0,
+                &mut copy.timeline_start_seconds,
+                &mut copy.source_start_seconds,
+                &mut copy.duration_seconds,
+                &mut copy.fade_in_seconds,
+                &mut copy.fade_out_seconds,
+            );
+            content.video_clips.push(copy);
+        }
+    }
+    for clip in midi_clips {
+        if let Some(copy) = midi_copy(clip, &span, 0.0) {
+            content.midi_clips.push(copy);
+        }
+    }
+    for marker in markers {
+        if marker.category() == MarkerCategory::Cue && span.contains(marker.start_seconds) {
+            content.cue_markers.push(Marker {
+                start_seconds: marker.start_seconds - span.start,
+                ..marker.clone()
+            });
+        }
+    }
+    for cue in cues {
+        if !span.contains(cue.at_seconds) {
+            continue;
+        }
+        let mut copy = cue.clone();
+        copy.at_seconds -= span.start;
+        for action in &mut copy.actions {
+            if let AutomationAction::Jump {
+                target: AutomationJumpTarget::Frame { seconds },
+                ..
+            } = action
+            {
+                *seconds -= span.start;
+            }
+        }
+        content.automation_cues.push(copy);
+    }
+    content
+}
+
+/// Los bloques editados cuya sección mide ahora menos que cuando se guardó su
+/// contenido: al construir se pierde lo que pasaba del final nuevo.
+pub fn trimmed_blocks(sections: &[OriginalSection], blocks: &[ArrangementBlock]) -> Vec<String> {
+    blocks
+        .iter()
+        .filter_map(|block| {
+            let content = block.content.as_ref()?;
+            let section = sections
+                .iter()
+                .find(|section| section.marker_id == block.section_marker_id)?;
+            let length = section.end_seconds - section.start_seconds;
+            (content.duration_seconds > length + EDGE_EPS).then(|| block.id.clone())
+        })
+        .collect()
+}
+
+/// Agrupa los bloques en tramos. Un bloque editado forma siempre su propio
+/// tramo, y el que le sigue empieza otro.
+fn spans_of<'a>(
+    sections: &[OriginalSection],
+    blocks: &'a [ArrangementBlock],
+) -> Result<Vec<Span<'a>>, StructureError> {
     let mut indexes = Vec::with_capacity(blocks.len());
     for block in blocks {
         let index = sections
@@ -766,10 +1114,16 @@ fn spans_of(
     let last_section = sections.len() - 1;
     let mut spans: Vec<Span> = Vec::new();
     let mut previous: Option<usize> = None;
-    for index in indexes {
+    for (block, index) in blocks.iter().zip(indexes) {
         let section = &sections[index];
+        let edited = block
+            .content
+            .as_ref()
+            .map(|content| (block.id.as_str(), content));
         match (previous, spans.last_mut()) {
-            (Some(prev), Some(span)) if index == prev + 1 => {
+            (Some(prev), Some(span))
+                if index == prev + 1 && edited.is_none() && span.edited.is_none() =>
+            {
                 span.end = section.end_seconds;
                 span.closes_song = index == last_section;
             }
@@ -784,6 +1138,7 @@ fn spans_of(
                     destination,
                     opens_song: index == 0,
                     closes_song: index == last_section,
+                    edited,
                 });
             }
         }
