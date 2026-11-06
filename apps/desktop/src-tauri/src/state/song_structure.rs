@@ -15,7 +15,7 @@ use std::collections::HashSet;
 
 use libretracks_core::song_structure::{
     beats_per_bar, build_arrangement, capture_original, governing_bpm_at, owning_region_id,
-    BuiltRegion, CaptureWarning, StructureError,
+    trimmed_blocks, BuiltRegion, CaptureWarning, StructureError,
 };
 use libretracks_core::{
     warp_timeline_seconds_at, Arrangement, ArrangementBlock, MarkerCategory, OriginalSection, Song,
@@ -676,12 +676,18 @@ fn capture_into(
     let mut dropped = Vec::new();
     for mut arrangement in old_arrangements {
         let mut missing: Vec<String> = Vec::new();
+        // De lo que se quita, los bloques que tenían cambios propios: esos
+        // cambios se pierden, y el aviso lo dice.
+        let mut missing_edited: Vec<String> = Vec::new();
         arrangement.blocks.retain(|block| {
             let exists = sections
                 .iter()
                 .any(|section| section.marker_id == block.section_marker_id);
             if !exists {
                 let name = section_name(&block.section_marker_id);
+                if block.content.is_some() && !missing_edited.contains(&name) {
+                    missing_edited.push(name.clone());
+                }
                 if !missing.contains(&name) {
                     missing.push(name);
                 }
@@ -693,6 +699,7 @@ fn capture_into(
                 arrangement_id: arrangement.id.clone(),
                 arrangement_name: arrangement.name.clone(),
                 section_names: missing,
+                edited_section_names: missing_edited,
                 arrangement_removed: arrangement.blocks.is_empty(),
             });
         }
@@ -709,6 +716,23 @@ fn capture_into(
     };
     let mut warnings = off_beat_warnings(song, region_start, &structure);
     warnings.extend(capture_warnings.iter().map(StructureWarningSummary::from));
+    // Bloques editados cuya sección encogió: lo que pasaba del final nuevo se
+    // pierde al construir. Uno por sección, aunque esté en varios arreglos.
+    let mut trimmed_sections: Vec<String> = Vec::new();
+    for arrangement in &structure.arrangements {
+        for block_id in trimmed_blocks(&structure.sections, &arrangement.blocks) {
+            if let Some(block) = arrangement.blocks.iter().find(|b| b.id == block_id) {
+                if !trimmed_sections.contains(&block.section_marker_id) {
+                    trimmed_sections.push(block.section_marker_id.clone());
+                }
+            }
+        }
+    }
+    warnings.extend(
+        trimmed_sections
+            .iter()
+            .map(|marker_id| StructureWarningSummary::edited_block_trimmed(marker_id)),
+    );
     if let Some(region) = song
         .regions
         .iter_mut()

@@ -2271,7 +2271,7 @@ export async function reorderSongRegion(
 /** A capture warning. `offBeatSection` carries the nearest downbeat (view
  * seconds) so the UI can offer to snap the marker. */
 export type StructureWarning = {
-  kind: "offBeatSection" | "midiClipCrossesSection";
+  kind: "offBeatSection" | "midiClipCrossesSection" | "editedBlockTrimmed";
   markerId: string;
   clipId: string | null;
   suggestedStartSeconds: number | null;
@@ -2283,6 +2283,8 @@ export type DroppedArrangementBlocks = {
   arrangementId: string;
   arrangementName: string;
   sectionNames: string[];
+  /** Of `sectionNames`, those with an edited block (its own changes are lost). */
+  editedSectionNames?: string[];
   arrangementRemoved: boolean;
 };
 

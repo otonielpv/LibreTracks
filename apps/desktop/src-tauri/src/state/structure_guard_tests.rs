@@ -748,3 +748,108 @@ fn resetting_a_block_makes_it_follow_the_original_again() {
     assert!(block(&song, "largo-2").content.is_some());
     assert_eq!(clip_of(&song, "xb~2").gain, 0.5, "editado otra vez");
 }
+
+// ── «Editar original» y reaplicar (paso 06) ─────────────────────────────────
+
+/// Da contenido propio al 2.º verso (ganancia 0.5 en `xb~2`) sin salirse
+/// del bloque.
+fn edit_second_verse(session: &mut DesktopSession, audio: &AudioController) {
+    let mut louder = song_of(session);
+    louder.clips.iter_mut().find(|c| c.id == "xb~2").unwrap().gain = 0.5;
+    session
+        .persist_song_update(louder, audio, AudioChangeImpact::TimelineWindow, true)
+        .expect("editar el 2.º verso");
+}
+
+fn arrangement_block<'a>(
+    song: &'a Song,
+    block_id: &str,
+) -> &'a libretracks_core::ArrangementBlock {
+    r2_structure(song).arrangements[0]
+        .blocks
+        .iter()
+        .find(|b| b.id == block_id)
+        .unwrap_or_else(|| panic!("bloque {block_id}"))
+}
+
+/// C1 + C4: volver al original conserva el contenido propio; un cambio del
+/// original llega al 1.º verso al reaplicar y no al 2.º, que conserva lo suyo.
+#[test]
+fn editing_the_original_reaches_the_copies_that_follow_it_but_not_edited_ones() {
+    let (mut session, audio) = applied();
+    edit_second_verse(&mut session, &audio);
+
+    session
+        .apply_song_arrangement("r2", None, &audio)
+        .expect("editar original");
+    let song = song_of(&session);
+    assert!(
+        arrangement_block(&song, "largo-2").content.is_some(),
+        "el bloque conserva lo suyo con el arreglo quitado"
+    );
+
+    // En el original, el verso más bajo.
+    let mut quieter = song_of(&session);
+    quieter.clips.iter_mut().find(|c| c.id == "xb").unwrap().gain = 0.7;
+    session
+        .persist_song_update(quieter, &audio, AudioChangeImpact::TimelineWindow, true)
+        .expect("editar el original");
+    session
+        .apply_song_arrangement("r2", Some("largo"), &audio)
+        .expect("reaplicar");
+
+    let song = song_of(&session);
+    assert_eq!(clip_of(&song, "xb").gain, 0.7, "el 1.º verso recibe el cambio");
+    assert_eq!(clip_of(&song, "xb~2").gain, 0.5, "el 2.º conserva lo suyo");
+}
+
+/// C2: si la sección del bloque editado desaparece, el aviso lo nombra.
+#[test]
+fn removing_the_section_of_an_edited_block_reports_the_lost_changes() {
+    let (mut session, audio) = applied();
+    edit_second_verse(&mut session, &audio);
+    session
+        .apply_song_arrangement("r2", None, &audio)
+        .expect("editar original");
+    let mut without_b = song_of(&session);
+    without_b.section_markers.retain(|m| m.id != "b");
+    session
+        .persist_song_update(without_b, &audio, AudioChangeImpact::TransportOnly, true)
+        .expect("quitar la marca del verso");
+
+    let result = session
+        .apply_song_arrangement("r2", Some("largo"), &audio)
+        .expect("reaplicar");
+    assert_eq!(result.dropped_blocks.len(), 1);
+    assert_eq!(result.dropped_blocks[0].edited_section_names, vec!["b".to_string()]);
+}
+
+/// C3: si la sección del bloque editado encoge, lo suyo se recorta y se avisa.
+#[test]
+fn shortening_the_section_of_an_edited_block_trims_it_and_warns() {
+    let (mut session, audio) = applied();
+    edit_second_verse(&mut session, &audio);
+    session
+        .apply_song_arrangement("r2", None, &audio)
+        .expect("editar original");
+    // El estribillo (c) empieza antes: el verso pasa de 16 a 12 s.
+    session
+        .update_section_marker("c", "c", 28.0, None, &audio)
+        .expect("acortar el verso");
+
+    let result = session
+        .apply_song_arrangement("r2", Some("largo"), &audio)
+        .expect("reaplicar");
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|w| w.kind == "editedBlockTrimmed" && w.marker_id == "b"),
+        "{:?}",
+        result.warnings
+    );
+    let song = song_of(&session);
+    let clip = clip_of(&song, "xb~2");
+    assert_eq!(clip.gain, 0.5, "conserva lo suyo");
+    close(clip.duration_seconds, 12.0, "recortado al verso nuevo");
+}

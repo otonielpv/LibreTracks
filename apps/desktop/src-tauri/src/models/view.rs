@@ -428,7 +428,7 @@ pub struct SongStructureResult {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct StructureWarningSummary {
-    /// `offBeatSection` o `midiClipCrossesSection`.
+    /// `offBeatSection`, `midiClipCrossesSection` o `editedBlockTrimmed`.
     pub kind: String,
     pub marker_id: String,
     pub clip_id: Option<String>,
@@ -438,6 +438,17 @@ pub struct StructureWarningSummary {
 }
 
 impl StructureWarningSummary {
+    /// Un bloque editado de esta sección pasa del final nuevo de la sección
+    /// (se editó el original): lo que sobra se recorta.
+    pub(crate) fn edited_block_trimmed(marker_id: &str) -> Self {
+        StructureWarningSummary {
+            kind: "editedBlockTrimmed".into(),
+            marker_id: marker_id.to_string(),
+            clip_id: None,
+            suggested_start_seconds: None,
+        }
+    }
+
     pub(crate) fn off_beat(marker_id: &str, suggested_start_seconds: f64) -> Self {
         StructureWarningSummary {
             kind: "offBeatSection".into(),
@@ -458,6 +469,9 @@ pub struct DroppedArrangementBlocksSummary {
     pub arrangement_id: String,
     pub arrangement_name: String,
     pub section_names: Vec<String>,
+    /// De `section_names`, las que tenían un bloque con cambios propios (esos
+    /// cambios se pierden).
+    pub edited_section_names: Vec<String>,
     /// Se quedó sin bloques y se borró.
     pub arrangement_removed: bool,
 }

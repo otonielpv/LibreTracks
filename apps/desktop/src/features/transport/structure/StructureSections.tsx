@@ -100,9 +100,13 @@ export function StructureWarnings({
           <span>
             {warning.kind === "offBeatSection"
               ? t("transport.structure.warnings.offBeat", { name: sectionName(warning.markerId) })
-              : t("transport.structure.warnings.midiCrosses", {
-                  name: sectionName(warning.markerId),
-                })}
+              : warning.kind === "editedBlockTrimmed"
+                ? t("transport.structure.warnings.editedTrimmed", {
+                    name: sectionName(warning.markerId),
+                  })
+                : t("transport.structure.warnings.midiCrosses", {
+                    name: sectionName(warning.markerId),
+                  })}
           </span>
           {warning.kind === "offBeatSection" && warning.suggestedStartSeconds !== null ? (
             <button

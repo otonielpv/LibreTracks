@@ -1727,11 +1727,15 @@ const es = {
         snapToBar: "Ajustar al compás",
         midiCrosses:
           "Un clip MIDI cruza el inicio de «{{name}}»: sus eventos no viajan con la otra sección. Pártelo si te importa.",
+        editedTrimmed:
+          "«{{name}}» es ahora más corta y un bloque editado de esa sección pasaba del final: lo que sobraba se ha recortado.",
       },
       dropped:
         "Se quitó {{sections}} del arreglo «{{arrangement}}» porque la marca ya no existe.",
       droppedRemoved:
         "El arreglo «{{arrangement}}» se quedó sin secciones ({{sections}}) y se eliminó.",
+      droppedEdited:
+        "{{sections}} tenía cambios propios en el arreglo «{{arrangement}}»; se han perdido con el bloque.",
       lockedStatus:
         "La canción tiene el arreglo «{{name}}» aplicado: vuelve al original para cambiar secciones, tempo, compás o nota.",
       edited: "editado",

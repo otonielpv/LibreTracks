@@ -1699,11 +1699,15 @@ const en = {
         snapToBar: "Snap to bar",
         midiCrosses:
           "A MIDI clip crosses the start of “{{name}}”: its events do not travel with the other section. Split it if that matters.",
+        editedTrimmed:
+          "“{{name}}” is now shorter and an edited block of that section went past its end: the rest was trimmed.",
       },
       dropped:
         "Removed {{sections}} from the arrangement “{{arrangement}}” because its marker no longer exists.",
       droppedRemoved:
         "The arrangement “{{arrangement}}” was left without sections ({{sections}}) and was deleted.",
+      droppedEdited:
+        "{{sections}} had its own changes in the arrangement “{{arrangement}}”; they were lost with the block.",
       lockedStatus:
         "The song has the arrangement “{{name}}” applied: go back to the original to change sections, tempo, meter or key.",
       edited: "edited",

@@ -50,6 +50,15 @@ export function createStructureHandlers(deps: StructureHandlerDeps) {
           },
         ),
       );
+      const edited = dropped.editedSectionNames ?? [];
+      if (edited.length > 0) {
+        deps.setStatus(
+          deps.t("transport.structure.droppedEdited", {
+            sections: edited.map((name) => `«${name}»`).join(", "),
+            arrangement: dropped.arrangementName,
+          }),
+        );
+      }
     }
   };
 
