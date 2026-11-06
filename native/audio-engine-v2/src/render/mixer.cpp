@@ -1520,6 +1520,10 @@ void Mixer::render(float** output_channels,
     // not the transport rendered anything.
     end_master_fade_block(num_frames);
     apply_output_limiter(output_channels, num_channels, num_frames);
+    // Redundancy pilot tone: after the master fade and the limiter, replacing
+    // its channel (exclusive while armed).
+    pilot_tone_.render(output_channels, num_channels, num_frames, clock_->sample_rate(),
+                       render_output_channels_.data(), render_output_channel_count_);
 
     update_region_meters(num_frames, session.get(), timeline_frame);
 

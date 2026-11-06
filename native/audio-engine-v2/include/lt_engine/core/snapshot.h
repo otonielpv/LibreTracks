@@ -49,6 +49,10 @@ struct DeviceInfo {
     int         output_latency_samples = 0;
     double      output_latency_seconds = 0.0;
     bool        latency_reported = false;
+    // Redundancy pilot tone really on an output (step 08), and why not when
+    // armed ("channelMissing": the device has no such output).
+    bool        pilot_tone_active = false;
+    std::string pilot_tone_error;
 };
 
 struct CpuDiagnostics {

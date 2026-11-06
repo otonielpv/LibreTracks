@@ -52,6 +52,7 @@ add_executable(lt_engine_tests
     test_loudness_meter.cpp
     test_region_envelope.cpp
     test_audio_clock_stamp.cpp
+    test_pilot_tone.cpp
 )
 
 target_link_libraries(lt_engine_tests

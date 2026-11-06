@@ -41,6 +41,8 @@ pub trait PublisherIo {
     fn audio_clock(&self) -> Option<TransportClock>;
     /// Whether the engine runs on its fallback clock (no real output).
     fn fallback_active(&self) -> bool;
+    /// The pilot tone really on an output (step 08).
+    fn pilot_tone_on(&self) -> bool;
     fn set_health(&self, health: HealthSummary);
     /// An `Instant` on the link's monotonic base, in ns.
     fn monotonic_ns_of(&self, at: Instant) -> u64;
@@ -86,6 +88,8 @@ impl FeedView {
 pub struct PublisherCore {
     feed: FeedView,
     last_fingerprint: Option<String>,
+    ticks: u64,
+    pilot_tone_on: bool,
 }
 
 impl PublisherCore {
@@ -119,10 +123,15 @@ impl PublisherCore {
             return false;
         }
         let fallback = io.fallback_active();
+        // The tone state costs a light snapshot: 4 times a second is plenty.
+        if self.ticks % 5 == 0 {
+            self.pilot_tone_on = io.pilot_tone_on();
+        }
+        self.ticks += 1;
         io.set_health(HealthSummary {
             audio_ok: !fallback,
             fallback_active: fallback,
-            pilot_tone_on: false,
+            pilot_tone_on: self.pilot_tone_on,
         });
         self.send_state(io)
     }
@@ -211,6 +220,10 @@ impl PublisherIo for LiveIo {
             .audio
             .audio_clock_reading()
             .is_some_and(|reading| reading.fallback_active)
+    }
+
+    fn pilot_tone_on(&self) -> bool {
+        super::pilot::engine_state(&self.app).is_some_and(|(active, _)| active)
     }
 
     fn set_health(&self, health: HealthSummary) {

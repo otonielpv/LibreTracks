@@ -84,6 +84,8 @@ pub fn enumerate_output_devices() -> Vec<DeviceInfo> {
                 output_latency_samples: 0,
                 output_latency_seconds: 0.0,
                 latency_reported: false,
+                pilot_tone_active: false,
+                pilot_tone_error: String::new(),
             })
             .collect(),
         Err(err) => {

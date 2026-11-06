@@ -81,6 +81,15 @@ pub enum EngineCommand {
         duration_seconds: f64,
     },
 
+    /// Redundancy pilot tone (step 08): a sine on one physical output,
+    /// replacing the mix there. `channel` is 1-based, as on the interface.
+    SetPilotTone {
+        enabled: bool,
+        channel: i32,
+        frequency_hz: f64,
+        level_db: f32,
+    },
+
     SetMetronomeEnabled {
         enabled: bool,
     },

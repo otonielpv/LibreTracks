@@ -134,6 +134,12 @@ pub struct DeviceInfo {
     pub output_latency_seconds: f64,
     #[serde(default)]
     pub latency_reported: bool,
+    /// The redundancy pilot tone is really on an output (step 08).
+    #[serde(default)]
+    pub pilot_tone_active: bool,
+    /// Why not, when armed: `channelMissing`. Empty = no error.
+    #[serde(default)]
+    pub pilot_tone_error: String,
 }
 
 /// The engine's audio clock as Rust sees it (redundancy step 02).

@@ -54,6 +54,9 @@ impl PublisherIo for FakeIo {
     fn fallback_active(&self) -> bool {
         false
     }
+    fn pilot_tone_on(&self) -> bool {
+        false
+    }
     fn set_health(&self, _health: HealthSummary) {}
     fn monotonic_ns_of(&self, _at: Instant) -> u64 {
         42
@@ -170,6 +173,9 @@ impl PublisherIo for ServerIo {
         })
     }
     fn fallback_active(&self) -> bool {
+        false
+    }
+    fn pilot_tone_on(&self) -> bool {
         false
     }
     fn set_health(&self, health: HealthSummary) {

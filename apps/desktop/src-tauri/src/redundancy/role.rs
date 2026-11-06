@@ -244,7 +244,14 @@ pub async fn set_role(
         *follower = None;
     };
     if role != RedundancyRole::Main {
-        super::pilot::set_armed(app, false);
+        // The backup only emits it when the user asked for that there.
+        let config = redundancy_config::load(app);
+        super::pilot::set_armed(
+            app,
+            role == RedundancyRole::Backup
+                && config.pilot_tone_enabled
+                && config.pilot_tone_on_backup,
+        );
     }
     if role == RedundancyRole::Backup {
         let mut config = redundancy_config::load(app);

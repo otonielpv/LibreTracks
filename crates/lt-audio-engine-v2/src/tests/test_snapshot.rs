@@ -84,6 +84,8 @@ fn device_info_round_trips() {
         output_latency_samples: 0,
         output_latency_seconds: 0.0,
         latency_reported: false,
+        pilot_tone_active: false,
+        pilot_tone_error: String::new(),
     };
     let rt = round_trip(&snap);
     assert_eq!(rt.device.backend, "WASAPI");

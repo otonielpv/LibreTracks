@@ -2208,6 +2208,21 @@ impl AudioController {
         })
     }
 
+    /// Send one engine command (redundancy pilot tone, step 08).
+    pub fn send_engine_command(&self, command: &EngineCommand, kind: &str) -> Result<(), DesktopError> {
+        self.with_engine_state(kind, None, |engine, _state| {
+            engine.send_command(command)?;
+            Ok(())
+        })
+    }
+
+    /// The light engine snapshot (no per-source state), without waiting for
+    /// the state lock. None when a command holds it.
+    pub fn light_snapshot(&self) -> Option<EngineSnapshot> {
+        let state = self.state.try_lock().ok()?;
+        state.engine.as_ref()?.get_meter_snapshot().ok()
+    }
+
     /// Redundancy: a short relative seek with the engine's 128-frame fade
     /// (`SeekRelative`), to correct a backup's drift. No session reload, no
     /// re-preparation, no anchor reset beyond shifting it by the same delta.

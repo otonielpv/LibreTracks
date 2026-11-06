@@ -1114,6 +1114,14 @@ std::string EngineImpl::build_snapshot(bool include_sources) const {
     }
 
     snap.device = device_manager_->device_info();
+    if (mixer_) {
+        // The fallback clock reaches no output: no tone on the wire then.
+        snap.device.pilot_tone_active =
+            mixer_->pilot_tone().active() && !snap.device.fallback_active;
+        snap.device.pilot_tone_error =
+            mixer_->pilot_tone().error() == PilotTone::Error::ChannelMissing
+                ? "channelMissing" : "";
+    }
     snap.device.output_suspended = output_suspended_.load(std::memory_order_relaxed);
 
     // Surface the last command error through device.last_error so the
@@ -2140,6 +2148,11 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackSolo>) {
             if (mixer_) mixer_->set_track_solo(c.track_id, c.solo);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetPilotTone>) {
+            if (mixer_)
+                mixer_->pilot_tone().configure(c.enabled, c.channel, c.frequency_hz, c.level_db);
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdStartMasterFade>) {

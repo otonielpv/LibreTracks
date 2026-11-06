@@ -13,6 +13,7 @@
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/transport/audio_clock_stamp.h>
+#include <lt_engine/render/pilot_tone.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
 #include <array>
 #include <atomic>
@@ -67,6 +68,10 @@ public:
     // Where render() publishes (instant, frame) at the top of every block.
     // Set once before the device opens; null = no stamps.
     void set_audio_clock_stamp(AudioClockStamp* stamp) noexcept { audio_clock_stamp_ = stamp; }
+    // Redundancy pilot tone (step 08): configured from the control thread,
+    // written by render() after the final mix.
+    PilotTone& pilot_tone() noexcept { return pilot_tone_; }
+    const PilotTone& pilot_tone() const noexcept { return pilot_tone_; }
     void render(float** output_channels,
                 int     num_channels,
                 int     num_frames,
@@ -220,6 +225,7 @@ private:
     TransportClock*      clock_;
     JumpScheduler*       scheduler_;
     AudioClockStamp*     audio_clock_stamp_ = nullptr;
+    PilotTone            pilot_tone_;
     // Audio thread only: the driver instant handed in before this block.
     std::uint64_t        block_host_time_ns_ = 0;
     class BungeeVoiceManager* bungee_voices_ = nullptr;

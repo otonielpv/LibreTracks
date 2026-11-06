@@ -82,6 +82,8 @@ struct CmdSetTrackSolo              { Id track_id; bool solo; };
 struct CmdSetTrackAudioRoute        { Id track_id; std::string audio_to; };
 struct CmdSetTrackTransposeEnabled  { Id track_id; bool enabled; };
 struct CmdStartMasterFade           { float target_gain; double duration_seconds; };
+// Redundancy pilot tone (step 08). `channel` is the 1-based physical output.
+struct CmdSetPilotTone              { bool enabled; int channel; double frequency_hz; float level_db; };
 
 // ---------------------------------------------------------------------------
 // Metronome
@@ -406,7 +408,7 @@ using EngineCommand = std::variant<
     CmdCancelAllScheduledJumps, CmdReplaceScheduledJump,
     CmdSetTrackGain, CmdSetTrackPan, CmdSetTrackMute, CmdSetTrackSolo,
     CmdSetTrackAudioRoute,
-    CmdSetTrackTransposeEnabled, CmdStartMasterFade,
+    CmdSetTrackTransposeEnabled, CmdStartMasterFade, CmdSetPilotTone,
     CmdSetMetronomeEnabled, CmdSetMetronomeVolume, CmdSetMetronomeOutputRoute,
     CmdSetRenderThreads,
     CmdSetMetronomeConfig,

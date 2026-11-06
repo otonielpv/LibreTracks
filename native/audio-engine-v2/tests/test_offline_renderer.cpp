@@ -2,7 +2,10 @@
 
 #include "test_audio_fixtures.h"
 
+#include <lt_engine/render/mixer.h>
 #include <lt_engine/render/offline_renderer.h>
+#include <lt_engine/scheduler/jump_scheduler.h>
+#include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/source_manager.h>
 
@@ -660,5 +663,34 @@ TEST_CASE("offline render: concurrent measurements match sequential ones") {
               == seq_a.unwrap().files[0].loudness.loud_lufs);
         CHECK(par_b.unwrap().files[0].loudness.integrated_lufs
               == seq_b.unwrap().files[0].loudness.integrated_lufs);
+    }
+}
+
+// Redundancy step 08: the pilot tone lives only in the live mixer. An export
+// made while it is armed contains none of it.
+TEST_CASE("offline render never contains the redundancy pilot tone") {
+    TempDir dir;
+    const std::string a = dir.file("a.wav");
+    write_float_wav(a, constant_stereo(48000, 0.1f), 2, 48000);
+    const json song = song_json(json::array({track_json("ta", 1.0)}),
+                                json::array({clip_json("ca", "ta", a, 0.0, 1.0)}));
+
+    // A live mixer with the tone armed on output 2 (the export's right side).
+    SourceManager sources;
+    TransportClock clock(48000);
+    JumpScheduler scheduler;
+    Mixer live(std::make_shared<Session>(), &sources, &clock, &scheduler);
+    live.set_active_output_channels({0, 1});
+    live.pilot_tone().configure(true, 2, 1000.0, -12.0f);
+
+    auto req = base_request(song, 0.0, 1.0);
+    req.outputs.push_back({dir.file("mix.wav"), {"ta"}});
+    req.normalize = false;
+    REQUIRE(render_offline(req).is_ok());
+    const auto out = read_wav(dir.file("mix.wav"));
+    // Constant 0.1 on both sides: no 1 kHz anywhere.
+    for (Frame frame = 100; frame < out.frames() - 100; frame += 37) {
+        CHECK(out.at(frame, 0) == doctest::Approx(0.1f));
+        CHECK(out.at(frame, 1) == doctest::Approx(0.1f));
     }
 }

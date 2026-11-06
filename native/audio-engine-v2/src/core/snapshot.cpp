@@ -52,6 +52,8 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"output_latency_samples", snap.device.output_latency_samples},
         {"output_latency_seconds", snap.device.output_latency_seconds},
         {"latency_reported", snap.device.latency_reported},
+        {"pilot_tone_active", snap.device.pilot_tone_active},
+        {"pilot_tone_error", snap.device.pilot_tone_error},
         {"output_suspended", snap.device.output_suspended},
     };
 

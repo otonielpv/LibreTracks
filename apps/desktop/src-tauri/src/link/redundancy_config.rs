@@ -38,6 +38,15 @@ pub struct RedundancyConfig {
     pub last_role: crate::redundancy::role::RedundancyRole,
     /// Main side: emit the pilot tone (step 08).
     pub pilot_tone_enabled: bool,
+    /// Physical output for the tone, 1-based as on the interface. 0 = none.
+    pub pilot_tone_channel: u32,
+    /// None = 1 kHz.
+    pub pilot_tone_frequency_hz: Option<f64>,
+    /// None = -12 dBFS.
+    pub pilot_tone_level_db: Option<f32>,
+    /// Also emit it while this device is the backup (off by default: useful
+    /// when the switcher watches both, or right before a role swap).
+    pub pilot_tone_on_backup: bool,
     /// Backup side: 2 or 3 raw MIDI bytes sent once on losing the main (a
     /// program change or CC for switchers that listen to MIDI). Empty = off.
     pub on_main_lost_midi: Vec<u8>,
