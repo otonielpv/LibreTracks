@@ -215,6 +215,12 @@ impl GuestHandle {
         self.shared.now_ms()
     }
 
+    /// The instant this client's monotonic clock counts from, to put local
+    /// engine instants on the same base as `host_offset_ms`.
+    pub fn clock_origin(&self) -> Instant {
+        self.shared.started
+    }
+
     /// host clock − this client's clock, once there is a sample.
     pub fn host_offset_ms(&self) -> Option<f64> {
         self.shared.clock.lock().ok()?.offset()

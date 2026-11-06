@@ -13,6 +13,7 @@ use libretracks_link::{start_host, HostConfig, HostHandle};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
+use super::follower_runtime::{self, FollowerTask};
 use super::publisher::{self, PublisherTask};
 use crate::link::redundancy_config::{self, RedundancyConfig};
 use crate::link::LinkState;
@@ -66,6 +67,7 @@ impl MainRuntime {
 pub struct RedundancyState {
     role: Mutex<RedundancyRole>,
     main: Mutex<MainRuntime>,
+    follower: Mutex<Option<FollowerTask>>,
 }
 
 impl RedundancyState {
@@ -133,15 +135,41 @@ async fn start_own_server(app: &AppHandle, config: &RedundancyConfig) -> Result<
     Ok(runtime.handle)
 }
 
-pub async fn set_role(app: &AppHandle, role: RedundancyRole) -> Result<RedundancyRole, String> {
+/// `main_address`/`pin` only matter for `Backup` (the address is
+/// remembered in `redundancy.json`; the PIN is only needed until the main
+/// trusts this device).
+pub async fn set_role(
+    app: &AppHandle,
+    role: RedundancyRole,
+    main_address: Option<String>,
+    pin: Option<String>,
+) -> Result<RedundancyRole, String> {
     let state = app.state::<RedundancyState>();
     let current = state.role();
-    if current == role {
+    if current == role && role != RedundancyRole::Backup {
         return Ok(role);
     }
     if let Ok(mut main) = state.main.lock() {
         main.shut_down();
     };
+    if let Ok(mut follower) = state.follower.lock() {
+        // Dropping it stops it and unlocks the local transport.
+        *follower = None;
+    };
+    if role == RedundancyRole::Backup {
+        let mut config = redundancy_config::load(app);
+        if let Some(address) = main_address.filter(|address| !address.trim().is_empty()) {
+            config.main_address = address.trim().to_string();
+            redundancy_config::save(app, &config);
+        }
+        if config.main_address.is_empty() {
+            return Err("missingMainAddress".into());
+        }
+        let task = follower_runtime::spawn(app, &config.main_address, pin)?;
+        if let Ok(mut follower) = state.follower.lock() {
+            *follower = Some(task);
+        };
+    }
     if role == RedundancyRole::Main {
         let config = redundancy_config::load(app);
         let slot = match hosting_handle(app) {
@@ -218,8 +246,10 @@ pub fn hosting_stopped(app: &AppHandle) {
 pub async fn set_redundancy_role(
     app: AppHandle,
     role: RedundancyRole,
+    main_address: Option<String>,
+    pin: Option<String>,
 ) -> Result<RedundancyRole, String> {
-    set_role(&app, role).await
+    set_role(&app, role, main_address, pin).await
 }
 
 #[tauri::command]

@@ -75,7 +75,7 @@ mod video_library;
 mod video_audio;
 mod redundancy;
 mod regions;
-pub use redundancy::{FingerprintSource, IntentOrigin, OriginatedIntent};
+pub use redundancy::{FingerprintSource, Forwarder, IntentOrigin, OriginatedIntent};
 pub use regions::KeyChangeInput;
 use regions::set_region_key_changes;
 mod ruler_markers;

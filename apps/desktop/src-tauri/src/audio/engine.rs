@@ -2208,6 +2208,24 @@ impl AudioController {
         })
     }
 
+    /// Redundancy: a short relative seek with the engine's 128-frame fade
+    /// (`SeekRelative`), to correct a backup's drift. No session reload, no
+    /// re-preparation, no anchor reset beyond shifting it by the same delta.
+    pub fn nudge(&self, delta_seconds: f64) -> Result<(), DesktopError> {
+        self.with_engine_state("nudge", None, |engine, state| {
+            let rate = engine_frame_rate(engine);
+            let delta_frames = (delta_seconds * rate).round() as i64;
+            if delta_frames == 0 {
+                return Ok(());
+            }
+            engine.send_command(&EngineCommand::SeekRelative { delta_frames })?;
+            if let Some(anchor) = state.anchor_position_seconds.as_mut() {
+                *anchor += delta_frames as f64 / rate;
+            }
+            Ok(())
+        })
+    }
+
     pub fn start_master_fade(
         &self,
         target_gain: f32,

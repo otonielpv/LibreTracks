@@ -18,6 +18,7 @@ use libretracks_audio::{JumpTrigger, TransitionType, VampMode};
 use libretracks_core::automation::AutomationCue;
 use libretracks_core::Song;
 use libretracks_link::redundancy::TransportIntent;
+use libretracks_link::LinkCommand;
 use tokio::sync::broadcast;
 
 use super::{DesktopError, DesktopSession};
@@ -85,12 +86,22 @@ pub struct OriginatedIntent {
 /// periodic state catches it up).
 pub const INTENT_CHANNEL_CAPACITY: usize = 64;
 
+/// Where a locked backup sends a local order instead of applying it.
+pub type Forwarder = Arc<dyn Fn(LinkCommand) + Send + Sync>;
+
 pub struct IntentBus {
     tx: broadcast::Sender<OriginatedIntent>,
     origin: Arc<AtomicU8>,
     /// Nesting of public transport calls (a fade's second press calls
     /// `stop`): only the outermost one emits.
     depth: u32,
+    /// Redundancy backup following its main (step 06): only the follower
+    /// may move the transport.
+    locked: bool,
+    /// With `forward_local_inputs_to_main`, a locked order goes to the main
+    /// instead. Off by default: a MIDI controller wired to both machines
+    /// already reaches the main, and forwarding would double every order.
+    forwarder: Option<Forwarder>,
 }
 
 impl Default for IntentBus {
@@ -99,6 +110,8 @@ impl Default for IntentBus {
             tx: broadcast::channel(INTENT_CHANNEL_CAPACITY).0,
             origin: Arc::new(AtomicU8::new(IntentOrigin::Local.to_u8())),
             depth: 0,
+            locked: false,
+            forwarder: None,
         }
     }
 }
@@ -171,6 +184,28 @@ impl DesktopSession {
         self.intents.tx.subscribe()
     }
 
+    /// Backup following its main: refuse (or forward) every transport order
+    /// that does not come from the follower.
+    pub fn set_transport_locked(&mut self, locked: bool, forwarder: Option<Forwarder>) {
+        self.intents.locked = locked;
+        self.intents.forwarder = if locked { forwarder } else { None };
+    }
+
+    pub fn transport_locked(&self) -> bool {
+        self.intents.locked
+    }
+
+    /// Redundancy drift correction (step 06): shift the engine by
+    /// `delta_seconds` with `SeekRelative`. Only the follower calls it; no
+    /// intent, no session reload.
+    pub fn nudge_transport(
+        &mut self,
+        delta_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        audio.nudge(delta_seconds)
+    }
+
     /// Tag every transport change as `origin` while the returned scope lives.
     pub fn intent_origin_scope(&self, origin: IntentOrigin) -> OriginScope {
         let cell = self.intents.origin.clone();
@@ -180,9 +215,18 @@ impl DesktopSession {
 
     fn published(
         &mut self,
+        request: impl FnOnce() -> LinkCommand,
         run: impl FnOnce(&mut Self) -> Result<TransportSnapshot, DesktopError>,
         intent: impl FnOnce(&Self, &TransportSnapshot) -> Option<TransportIntent>,
     ) -> Result<TransportSnapshot, DesktopError> {
+        let origin = IntentOrigin::from_u8(self.intents.origin.load(Ordering::Relaxed));
+        if self.intents.locked && origin != IntentOrigin::Follower && self.intents.depth == 0 {
+            if let Some(forward) = self.intents.forwarder.clone() {
+                forward(request());
+                return Ok(self.snapshot());
+            }
+            return Err(DesktopError::TransportLockedByRedundancy);
+        }
         self.intents.depth += 1;
         let result = run(self);
         self.intents.depth -= 1;
@@ -198,6 +242,7 @@ impl DesktopSession {
 
     pub fn play(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
         self.published(
+            || LinkCommand::Play,
             |session| session.apply_play(audio),
             |_, snapshot| {
                 Some(TransportIntent::Play {
@@ -209,6 +254,7 @@ impl DesktopSession {
 
     pub fn pause(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
         self.published(
+            || LinkCommand::Pause,
             |session| session.apply_pause(audio),
             |_, snapshot| {
                 Some(TransportIntent::Pause {
@@ -220,6 +266,7 @@ impl DesktopSession {
 
     pub fn stop(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
         self.published(
+            || LinkCommand::Stop,
             |session| session.apply_stop(audio),
             |_, _| Some(TransportIntent::Stop),
         )
@@ -234,6 +281,7 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         let was_fading = self.fade_stop.is_some();
         self.published(
+            || LinkCommand::FadeOutStop,
             |session| session.apply_fade_out_and_stop(duration_seconds, audio),
             move |session, _| {
                 if was_fading {
@@ -261,6 +309,7 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         self.published(
+            || LinkCommand::Seek { position_seconds },
             |session| session.apply_seek(position_seconds, audio),
             |_, _| {
                 Some(TransportIntent::Seek {
@@ -283,7 +332,13 @@ impl DesktopSession {
         let (trigger_name, bars) = jump_trigger_parts(&trigger);
         let (transition_name, duration_seconds) = transition_parts(&transition);
         let marker_id = target_marker_id.to_string();
+        let request_marker = marker_id.clone();
         self.published(
+            move || LinkCommand::JumpToMarker {
+                marker_id: request_marker,
+                trigger: trigger_name.into(),
+                bars,
+            },
             |session| session.apply_schedule_marker_jump(target_marker_id, trigger, transition, audio),
             move |_, _| {
                 Some(TransportIntent::ScheduleMarkerJump {
@@ -307,7 +362,15 @@ impl DesktopSession {
         let (trigger_name, bars) = jump_trigger_parts(&trigger);
         let (transition_name, duration_seconds) = transition_parts(&transition);
         let region_id = target_region_id.to_string();
+        let request_region = region_id.clone();
         self.published(
+            move || LinkCommand::JumpToSong {
+                region_id: request_region,
+                trigger: trigger_name.into(),
+                bars,
+                transition: Some(transition_name.into()),
+                duration_seconds,
+            },
             |session| session.apply_schedule_region_jump(target_region_id, trigger, transition, audio),
             move |_, _| {
                 Some(TransportIntent::ScheduleRegionJump {
@@ -326,6 +389,7 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         self.published(
+            || LinkCommand::CancelJump,
             |session| session.apply_cancel_marker_jump(audio),
             |_, _| Some(TransportIntent::CancelJump),
         )
@@ -339,6 +403,10 @@ impl DesktopSession {
     ) -> Result<TransportSnapshot, DesktopError> {
         let (mode_name, bars) = vamp_mode_parts(&mode);
         self.published(
+            move || LinkCommand::ToggleVamp {
+                mode: mode_name.into(),
+                bars,
+            },
             |session| session.apply_toggle_vamp(mode, audio),
             move |_, snapshot| {
                 Some(TransportIntent::ToggleVamp {

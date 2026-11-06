@@ -24,6 +24,15 @@ pub struct RedundancyConfig {
     pub backup_trusted: Vec<TrustedDevice>,
     /// Backup side: token per main host id, from a `welcome` with remember.
     pub main_tokens: HashMap<String, String>,
+    /// Backup side: `host:port` of the main.
+    pub main_address: String,
+    /// Backup side: send local transport orders to the main instead of
+    /// refusing them. Off by default: a MIDI controller wired to both
+    /// machines (the usual rig) would reach the main twice.
+    pub forward_local_inputs_to_main: bool,
+    /// Backup side: calibration from step 11, how much later the backup
+    /// should sound, in ms.
+    pub manual_offset_ms: f64,
 }
 
 fn path_in(dir: &Path) -> PathBuf {
@@ -75,6 +84,7 @@ mod tests {
                 token_hash: "deadbeef".into(),
             }],
             main_tokens: HashMap::from([("main-1".into(), "secret-token".into())]),
+            ..Default::default()
         }
     }
 
