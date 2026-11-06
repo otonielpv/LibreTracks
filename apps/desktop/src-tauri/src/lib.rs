@@ -12,6 +12,7 @@ mod infra;
 mod link;
 mod models;
 mod platform;
+mod redundancy;
 mod session_feed;
 mod state;
 mod video;
@@ -464,6 +465,7 @@ pub fn run() {
             commands::project::start_import_external_project_from_path,
             commands::project::pick_and_import_external_project_from_dialog,
             commands::project::pick_and_import_external_project_into_session_from_dialog,
+            redundancy::fingerprint::get_session_fingerprint,
             commands::transport::play_transport,
             commands::transport::pause_transport,
             commands::transport::stop_transport,
