@@ -1,0 +1,111 @@
+//! What a device remembers about redundancy (docs/plans/redundancy), in its
+//! own `redundancy.json` next to `network-session.json`. NOT inside
+//! `AppSettings`: the settings are published to the remote's browser clients,
+//! and the backup PIN or trusted-backup hashes must not be.
+
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
+
+use libretracks_link::TrustedDevice;
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Manager};
+
+pub const REDUNDANCY_FILE_NAME: &str = "redundancy.json";
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct RedundancyConfig {
+    /// Main side: PIN a backup needs. Empty = only a trusted backup.
+    pub backup_pin: String,
+    /// Main side: backups that may reconnect without the PIN.
+    pub backup_trusted: Vec<TrustedDevice>,
+    /// Backup side: token per main host id, from a `welcome` with remember.
+    pub main_tokens: HashMap<String, String>,
+}
+
+fn path_in(dir: &Path) -> PathBuf {
+    dir.join(REDUNDANCY_FILE_NAME)
+}
+
+pub fn load_from(dir: &Path) -> RedundancyConfig {
+    fs::read_to_string(path_in(dir))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_to(dir: &Path, config: &RedundancyConfig) -> std::io::Result<()> {
+    fs::create_dir_all(dir)?;
+    let text = serde_json::to_string_pretty(config).map_err(std::io::Error::other)?;
+    fs::write(path_in(dir), text)
+}
+
+fn data_dir(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_data_dir().ok()
+}
+
+pub fn load(app: &AppHandle) -> RedundancyConfig {
+    data_dir(app).map(|dir| load_from(&dir)).unwrap_or_default()
+}
+
+pub fn save(app: &AppHandle, config: &RedundancyConfig) {
+    let Some(dir) = data_dir(app) else {
+        return;
+    };
+    if let Err(error) = save_to(&dir, config) {
+        eprintln!("[redundancy] could not save {REDUNDANCY_FILE_NAME}: {error}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libretracks_link::Role;
+
+    fn sample() -> RedundancyConfig {
+        RedundancyConfig {
+            backup_pin: "4321".into(),
+            backup_trusted: vec![TrustedDevice {
+                device_id: "b1".into(),
+                device_name: "Portátil B".into(),
+                role: Role::Controller,
+                token_hash: "deadbeef".into(),
+            }],
+            main_tokens: HashMap::from([("main-1".into(), "secret-token".into())]),
+        }
+    }
+
+    #[test]
+    fn pin_and_tokens_round_trip_through_redundancy_json() {
+        let dir = tempfile::tempdir().unwrap();
+        save_to(dir.path(), &sample()).unwrap();
+        let text = fs::read_to_string(dir.path().join(REDUNDANCY_FILE_NAME)).unwrap();
+        assert!(text.contains("\"backupPin\": \"4321\""), "{text}");
+        assert!(text.contains("deadbeef"));
+        assert_eq!(load_from(dir.path()), sample());
+    }
+
+    #[test]
+    fn secrets_never_reach_settings_json() {
+        // AppSettings is what goes to settings.json AND to the remote's
+        // clients: none of the redundancy secrets may have a field there.
+        let settings =
+            serde_json::to_string(&crate::infra::settings::AppSettings::default()).unwrap();
+        for key in ["backupPin", "backupTrusted", "mainTokens", "tokenHash"] {
+            assert!(!settings.contains(key), "{key} leaked into AppSettings");
+        }
+    }
+
+    #[test]
+    fn missing_or_older_file_gives_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(load_from(dir.path()), RedundancyConfig::default());
+        fs::write(dir.path().join(REDUNDANCY_FILE_NAME), r#"{ "backupPin": "1" }"#).unwrap();
+        let config = load_from(dir.path());
+        assert_eq!(config.backup_pin, "1");
+        assert!(config.backup_trusted.is_empty());
+    }
+}

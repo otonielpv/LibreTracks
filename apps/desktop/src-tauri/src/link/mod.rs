@@ -15,6 +15,7 @@ pub mod lifecycle;
 pub mod proxy;
 #[rustfmt::skip]
 pub mod proxy_dispatch;
+pub mod redundancy_config;
 
 use std::sync::Mutex;
 

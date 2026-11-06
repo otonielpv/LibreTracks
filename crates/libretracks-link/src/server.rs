@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -24,9 +24,13 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::pairing::{HelloOutcome, HelloRequest, Pairing, TrustedDevice};
-use crate::permissions::{is_allowed, Grants, Role};
+use crate::permissions::{backup_may_send, is_allowed, Grants, Role};
 use crate::protocol::{
     ClientMessage, CommandRejection, LinkCommand, PeerInfo, RejectReason, ServerMessage,
+};
+use crate::redundancy::{
+    HealthSummary, PeerKind, RedundancyMessage, RedundancySettingsInfo,
+    DEFAULT_HEARTBEAT_TIMEOUT_MS, HEARTBEAT_INTERVAL_MS, REDUNDANCY_PROTOCOL_VERSION,
 };
 use crate::version::PROTOCOL_VERSION;
 
@@ -54,6 +58,20 @@ pub struct HostConfig {
     /// How long the app has to apply a command before the guest is told it
     /// failed.
     pub command_timeout: Duration,
+    /// Guests (viewer/controller/editor). Off when the server only runs for
+    /// a redundancy backup (docs/plans/redundancy R2).
+    pub accept_guests: bool,
+    /// Redundancy: let ONE backup in. Off by default; the app turns it on.
+    pub accept_backup: bool,
+    /// PIN a backup needs (its own, not the guests'). None = only a trusted
+    /// backup token gets in.
+    pub backup_pin: Option<String>,
+    pub backup_trusted: Vec<TrustedDevice>,
+    /// The backup may forward transport commands to this host.
+    pub backup_may_forward: bool,
+    /// New on every launch of the app (not of hosting): sent to the backup
+    /// so it knows when the main restarted.
+    pub instance_id: String,
 }
 
 impl HostConfig {
@@ -72,6 +90,12 @@ impl HostConfig {
             heartbeat: Duration::from_secs(1),
             // Generous: an `invoke` can be a whole song view with peaks.
             command_timeout: Duration::from_secs(30),
+            accept_guests: true,
+            accept_backup: false,
+            backup_pin: None,
+            backup_trusted: Vec::new(),
+            backup_may_forward: false,
+            instance_id: random_hex(16),
         }
     }
 }
@@ -105,6 +129,8 @@ pub struct IncomingCommand {
     pub base_revision: Option<u64>,
     pub command: LinkCommand,
     pub reply: oneshot::Sender<CommandReply>,
+    /// Forwarded by the redundancy backup, not sent by a guest.
+    pub from_backup: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -123,6 +149,8 @@ pub struct GuestSummary {
 pub struct HostRuntime {
     pub handle: HostHandle,
     pub commands: mpsc::Receiver<IncomingCommand>,
+    /// Redundancy messages from the backup (heartbeats, status), in order.
+    pub backup_messages: mpsc::Receiver<RedundancyMessage>,
 }
 
 #[derive(Debug)]
@@ -133,6 +161,12 @@ enum Control {
 }
 
 struct GuestConn {
+    conn_id: u64,
+    summary: GuestSummary,
+    control: mpsc::Sender<Control>,
+}
+
+struct BackupConn {
     conn_id: u64,
     summary: GuestSummary,
     control: mpsc::Sender<Control>,
@@ -162,6 +196,20 @@ struct Shared {
     /// Relayed app events, in order. A guest that falls this far behind
     /// skips the oldest (it will catch up from the next snapshot).
     events_tx: tokio::sync::broadcast::Sender<Arc<str>>,
+    accept_guests: AtomicBool,
+    // --- redundancy (docs/plans/redundancy) ---
+    accept_backup: AtomicBool,
+    backup_may_forward: AtomicBool,
+    instance_id: String,
+    backup_pairing: Mutex<Pairing>,
+    backup: Mutex<Option<BackupConn>>,
+    backup_tx: watch::Sender<Option<GuestSummary>>,
+    backup_trusted_tx: watch::Sender<Vec<TrustedDevice>>,
+    backup_in_tx: mpsc::Sender<RedundancyMessage>,
+    /// One counter for every numbered message to the backup (states,
+    /// intents, heartbeats), so one gate on the backup orders them all.
+    redundancy_seq: AtomicU64,
+    health_tx: watch::Sender<HealthSummary>,
 }
 
 #[derive(Clone)]
@@ -221,6 +269,13 @@ pub async fn start_host(config: HostConfig) -> std::io::Result<HostRuntime> {
     let (commands_tx, commands) = mpsc::channel(64);
     let (shutdown_tx, _) = watch::channel(false);
     let trusted = pairing.trusted_devices();
+    let backup_pairing = Pairing::new(
+        config.backup_pin.clone(),
+        None,
+        config.backup_trusted.clone(),
+    );
+    let backup_trusted = backup_pairing.trusted_devices();
+    let (backup_in_tx, backup_messages) = mpsc::channel(256);
 
     let shared = Arc::new(Shared {
         port,
@@ -244,12 +299,24 @@ pub async fn start_host(config: HostConfig) -> std::io::Result<HostRuntime> {
         commands_tx,
         shutdown_tx,
         events_tx: tokio::sync::broadcast::channel(512).0,
+        accept_guests: AtomicBool::new(config.accept_guests),
+        accept_backup: AtomicBool::new(config.accept_backup),
+        backup_may_forward: AtomicBool::new(config.backup_may_forward),
+        instance_id: config.instance_id.clone(),
+        backup_pairing: Mutex::new(backup_pairing),
+        backup: Mutex::new(None),
+        backup_tx: watch::channel(None).0,
+        backup_trusted_tx: watch::channel(backup_trusted).0,
+        backup_in_tx,
+        redundancy_seq: AtomicU64::new(1),
+        health_tx: watch::channel(HealthSummary::default()).0,
     });
 
     tokio::spawn(accept_loop(listener, shared.clone()));
     Ok(HostRuntime {
         handle: HostHandle { shared },
         commands,
+        backup_messages,
     })
 }
 
@@ -417,6 +484,7 @@ impl HostHandle {
         if let Some(text) = to_text(&ServerMessage::Rejected {
             reason: RejectReason::Kicked,
             expected_protocol: None,
+            detail: None,
         }) {
             let _ = guest.control.try_send(Control::Close(text));
         }
@@ -444,13 +512,153 @@ impl HostHandle {
         if let Ok(mut guests) = self.shared.guests.lock() {
             guests.clear();
         }
+        if let Ok(mut backup) = self.shared.backup.lock() {
+            *backup = None;
+        }
         self.shared.publish_guests();
+        self.shared.backup_tx.send_replace(None);
+    }
+
+    pub fn set_accept_guests(&self, accept: bool) {
+        self.shared.accept_guests.store(accept, Ordering::Relaxed);
+    }
+
+    // --- redundancy ---
+
+    pub fn instance_id(&self) -> &str {
+        &self.shared.instance_id
+    }
+
+    pub fn set_accept_backup(&self, accept: bool) {
+        self.shared.accept_backup.store(accept, Ordering::Relaxed);
+        if !accept {
+            self.kick_backup();
+        }
+    }
+
+    pub fn set_backup_may_forward(&self, allow: bool) {
+        self.shared.backup_may_forward.store(allow, Ordering::Relaxed);
+    }
+
+    pub fn set_backup_pin(&self, pin: Option<String>) {
+        if let Ok(mut pairing) = self.shared.backup_pairing.lock() {
+            pairing.set_pins(pin, None);
+        }
+    }
+
+    /// The connected backup, if any. Never part of [`guests`](Self::guests).
+    pub fn backup(&self) -> Option<GuestSummary> {
+        self.shared.backup_tx.borrow().clone()
+    }
+
+    pub fn subscribe_backup(&self) -> watch::Receiver<Option<GuestSummary>> {
+        self.shared.backup_tx.subscribe()
+    }
+
+    pub fn backup_trusted_devices(&self) -> Vec<TrustedDevice> {
+        self.shared.backup_trusted_tx.borrow().clone()
+    }
+
+    pub fn subscribe_backup_trusted(&self) -> watch::Receiver<Vec<TrustedDevice>> {
+        self.shared.backup_trusted_tx.subscribe()
+    }
+
+    pub fn revoke_backup_trusted(&self, device_id: &str) -> bool {
+        let revoked = self
+            .shared
+            .backup_pairing
+            .lock()
+            .map(|mut pairing| pairing.revoke(device_id))
+            .unwrap_or(false);
+        self.shared.publish_backup_trusted();
+        revoked
+    }
+
+    /// Disconnect the backup (to let another one in). Returns whether there
+    /// was one.
+    pub fn kick_backup(&self) -> bool {
+        let removed = self
+            .shared
+            .backup
+            .lock()
+            .ok()
+            .and_then(|mut backup| backup.take());
+        let Some(backup) = removed else {
+            return false;
+        };
+        if let Some(text) = to_text(&ServerMessage::Rejected {
+            reason: RejectReason::Kicked,
+            expected_protocol: None,
+            detail: None,
+        }) {
+            let _ = backup.control.try_send(Control::Close(text));
+        }
+        self.shared.backup_tx.send_replace(None);
+        true
+    }
+
+    /// Next number for a state or intent to the backup (heartbeats draw from
+    /// the same counter).
+    pub fn next_redundancy_seq(&self) -> u64 {
+        self.shared.next_redundancy_seq()
+    }
+
+    /// Send one message to the backup. False when there is none or its queue
+    /// is full (it is behind; the next state catches it up).
+    pub fn send_to_backup(&self, message: &RedundancyMessage) -> bool {
+        let control = self
+            .shared
+            .backup
+            .lock()
+            .ok()
+            .and_then(|backup| backup.as_ref().map(|backup| backup.control.clone()));
+        let (Some(control), Some(text)) = (
+            control,
+            to_text(&ServerMessage::Redundancy {
+                message: message.clone(),
+            }),
+        ) else {
+            return false;
+        };
+        control.try_send(Control::Send(text)).is_ok()
+    }
+
+    /// Health carried by the heartbeats to the backup.
+    pub fn set_health(&self, health: HealthSummary) {
+        self.shared.health_tx.send_replace(health);
+    }
+
+    /// The link's monotonic clock, in ms: the base of clock pongs, so of
+    /// every `monotonicNs` the backup receives (divided by 1e6).
+    pub fn monotonic_ms(&self) -> u64 {
+        self.shared.now_ms()
+    }
+
+    /// Same clock as [`monotonic_ms`](Self::monotonic_ms), in ns.
+    pub fn monotonic_ns(&self) -> u64 {
+        self.shared.started.elapsed().as_nanos() as u64
+    }
+
+    /// The instant this host's link clock counts from, to translate an
+    /// engine `Instant` into link ns.
+    pub fn clock_origin(&self) -> Instant {
+        self.shared.started
     }
 }
 
 impl Shared {
     fn now_ms(&self) -> u64 {
         self.started.elapsed().as_millis() as u64
+    }
+
+    fn next_redundancy_seq(&self) -> u64 {
+        self.redundancy_seq.fetch_add(1, Ordering::Relaxed)
+    }
+
+    fn publish_backup_trusted(&self) {
+        if let Ok(pairing) = self.backup_pairing.lock() {
+            self.backup_trusted_tx.send_replace(pairing.trusted_devices());
+        }
     }
 
     fn publish_trusted(&self) {
@@ -534,9 +742,19 @@ impl Shared {
 type WsStream = tokio_tungstenite::WebSocketStream<TcpStream>;
 
 async fn reject_and_close(ws: &mut WsStream, reason: RejectReason, expected: Option<u32>) {
+    reject_and_close_with(ws, reason, expected, None).await
+}
+
+async fn reject_and_close_with(
+    ws: &mut WsStream,
+    reason: RejectReason,
+    expected: Option<u32>,
+    detail: Option<String>,
+) {
     if let Some(text) = to_text(&ServerMessage::Rejected {
         reason,
         expected_protocol: expected,
+        detail,
     }) {
         let _ = ws.send(Message::Text(text.to_string())).await;
     }
@@ -574,11 +792,31 @@ async fn handle_connection(stream: TcpStream, addr: SocketAddr, shared: Arc<Shar
         pin,
         remember,
         token,
+        peer_kind,
     }) = read_hello(&mut ws, shared.hello_timeout).await
     else {
         reject_and_close(&mut ws, RejectReason::BadHello, None).await;
         return;
     };
+
+    if peer_kind == PeerKind::Backup {
+        let hello = BackupHello {
+            protocol_version,
+            device_id,
+            device_name,
+            platform,
+            app_version,
+            pin,
+            remember,
+            token,
+        };
+        handle_backup(ws, addr, shared, hello).await;
+        return;
+    }
+    if !shared.accept_guests.load(Ordering::Relaxed) {
+        reject_and_close(&mut ws, RejectReason::HostFull, None).await;
+        return;
+    }
 
     let full = shared
         .guests
@@ -733,7 +971,7 @@ async fn handle_connection(stream: TcpStream, addr: SocketAddr, shared: Arc<Shar
                     let _ = control_tx.try_send(Control::Send(text));
                 }
             }
-            ClientMessage::Hello { .. } => {}
+            ClientMessage::Hello { .. } | ClientMessage::Redundancy { .. } => {}
         }
     }
 
@@ -793,7 +1031,19 @@ fn handle_command(
         base_revision,
         command,
         reply: reply_tx,
+        from_backup: false,
     };
+    forward_command(shared, control, request_id, incoming, reply_rx);
+}
+
+/// Hand an allowed command to the app and answer the peer when it is done.
+fn forward_command(
+    shared: &Arc<Shared>,
+    control: &mpsc::Sender<Control>,
+    request_id: u64,
+    incoming: IncomingCommand,
+    reply_rx: oneshot::Receiver<CommandReply>,
+) {
     let control = control.clone();
     let commands_tx = shared.commands_tx.clone();
     let timeout = shared.command_timeout;
@@ -928,3 +1178,304 @@ async fn run_writer(
 #[cfg(test)]
 #[path = "server_tests.rs"]
 mod tests;
+
+// --- redundancy backup connection (docs/plans/redundancy step 01) ---
+
+struct BackupHello {
+    protocol_version: u32,
+    device_id: String,
+    device_name: String,
+    platform: String,
+    app_version: String,
+    pin: Option<String>,
+    remember: bool,
+    token: Option<String>,
+}
+
+/// Name of the current backup when it is not this device.
+fn other_backup_name(shared: &Shared, device_id: &str) -> Option<String> {
+    shared.backup.lock().ok().and_then(|backup| {
+        backup
+            .as_ref()
+            .filter(|backup| backup.summary.device_id != device_id)
+            .map(|backup| backup.summary.device_name.clone())
+    })
+}
+
+async fn handle_backup(
+    mut ws: WsStream,
+    addr: SocketAddr,
+    shared: Arc<Shared>,
+    hello: BackupHello,
+) {
+    if !shared.accept_backup.load(Ordering::Relaxed) {
+        reject_and_close(&mut ws, RejectReason::BackupNotAccepted, None).await;
+        return;
+    }
+    // Only one backup. The same device reconnecting replaces its old socket.
+    if let Some(current) = other_backup_name(&shared, &hello.device_id) {
+        reject_and_close_with(
+            &mut ws,
+            RejectReason::BackupAlreadyConnected,
+            None,
+            Some(current),
+        )
+        .await;
+        return;
+    }
+
+    let outcome = {
+        let Ok(mut pairing) = shared.backup_pairing.lock() else {
+            return;
+        };
+        pairing.evaluate(
+            addr.ip(),
+            shared.now_ms(),
+            PROTOCOL_VERSION,
+            &HelloRequest {
+                protocol_version: hello.protocol_version,
+                device_id: &hello.device_id,
+                device_name: &hello.device_name,
+                pin: hello.pin.as_deref(),
+                remember: hello.remember,
+                token: hello.token.as_deref(),
+            },
+            || random_hex(32),
+        )
+    };
+    // The backup pairing has one PIN, in the controller slot: anything below
+    // that (no PIN, no valid token) is not a paired backup.
+    let (protocol_version, grants, new_token) = match outcome {
+        HelloOutcome::Accepted {
+            protocol_version,
+            grants,
+            new_token,
+        } if grants.role >= Role::Controller => (protocol_version, grants, new_token),
+        HelloOutcome::Accepted { .. } => {
+            reject_and_close(&mut ws, RejectReason::BadPin, None).await;
+            return;
+        }
+        HelloOutcome::Rejected {
+            reason,
+            expected_protocol,
+        } => {
+            reject_and_close(&mut ws, reason, expected_protocol).await;
+            return;
+        }
+    };
+    if new_token.is_some() {
+        shared.publish_backup_trusted();
+    }
+
+    let conn_id = shared.next_conn.fetch_add(1, Ordering::Relaxed);
+    let (control_tx, control_rx) = mpsc::channel::<Control>(256);
+    let summary = GuestSummary {
+        device_id: hello.device_id.clone(),
+        device_name: hello.device_name.clone(),
+        platform: hello.platform,
+        app_version: hello.app_version,
+        grants,
+        connected_at_ms: shared.now_ms(),
+        rtt_ms: None,
+        trusted: hello.token.is_some() || new_token.is_some(),
+    };
+    // Checked again under the lock: two backups may pass the PIN at once.
+    let inserted = shared.backup.lock().ok().map(|mut backup| {
+        if let Some(current) = backup
+            .as_ref()
+            .filter(|backup| backup.summary.device_id != hello.device_id)
+        {
+            return Err(current.summary.device_name.clone());
+        }
+        Ok(backup.replace(BackupConn {
+            conn_id,
+            summary: summary.clone(),
+            control: control_tx.clone(),
+        }))
+    });
+    match inserted {
+        Some(Ok(Some(old))) => {
+            let _ = old.control.try_send(Control::Close(Arc::from("")));
+        }
+        Some(Ok(None)) => {}
+        Some(Err(current)) => {
+            reject_and_close_with(
+                &mut ws,
+                RejectReason::BackupAlreadyConnected,
+                None,
+                Some(current),
+            )
+            .await;
+            return;
+        }
+        None => return,
+    }
+    shared.backup_tx.send_replace(Some(summary));
+
+    let welcome = to_text(&ServerMessage::Welcome {
+        protocol_version,
+        session_id: shared.session_id.clone(),
+        host_id: shared.host_id.clone(),
+        host_name: shared.host_name.clone(),
+        grants,
+        token: new_token,
+        host_monotonic_ms: shared.now_ms(),
+    });
+    let redundancy_welcome = to_text(&ServerMessage::Redundancy {
+        message: RedundancyMessage::Welcome {
+            version: REDUNDANCY_PROTOCOL_VERSION,
+            main_name: shared.host_name.clone(),
+            instance_id: shared.instance_id.clone(),
+            settings: RedundancySettingsInfo {
+                backup_may_forward: shared.backup_may_forward.load(Ordering::Relaxed),
+                heartbeat_timeout_ms: DEFAULT_HEARTBEAT_TIMEOUT_MS,
+            },
+        },
+    });
+    for text in [welcome, redundancy_welcome].into_iter().flatten() {
+        if ws.send(Message::Text(text.to_string())).await.is_err() {
+            drop_backup(&shared, conn_id);
+            return;
+        }
+    }
+
+    let (sink, mut source) = ws.split();
+    let writer = tokio::spawn(run_backup_writer(sink, control_rx, shared.clone()));
+
+    while let Some(Ok(message)) = source.next().await {
+        let text = match message {
+            Message::Text(text) => text,
+            Message::Close(_) => break,
+            _ => continue,
+        };
+        let Ok(message) = serde_json::from_str::<ClientMessage>(&text) else {
+            continue;
+        };
+        match message {
+            ClientMessage::Redundancy { message } => {
+                let _ = shared.backup_in_tx.try_send(message);
+            }
+            ClientMessage::ClockPing { t0, rtt_ms } => {
+                let t1 = shared.now_ms();
+                if rtt_ms.is_some() {
+                    let changed = shared.backup.lock().ok().and_then(|mut backup| {
+                        let backup = backup.as_mut()?;
+                        (backup.conn_id == conn_id && backup.summary.rtt_ms != rtt_ms).then(|| {
+                            backup.summary.rtt_ms = rtt_ms;
+                            backup.summary.clone()
+                        })
+                    });
+                    if let Some(summary) = changed {
+                        shared.backup_tx.send_replace(Some(summary));
+                    }
+                }
+                if let Some(text) = to_text(&ServerMessage::ClockPong {
+                    t0,
+                    t1,
+                    t2: shared.now_ms(),
+                }) {
+                    let _ = control_tx.try_send(Control::Send(text));
+                }
+            }
+            ClientMessage::Command {
+                request_id,
+                base_revision,
+                command,
+            } => {
+                let allowed = shared.backup_may_forward.load(Ordering::Relaxed)
+                    && backup_may_send(&command);
+                if !allowed {
+                    if let Some(text) = to_text(&result_message(
+                        request_id,
+                        Err(CommandRejection::Forbidden.into()),
+                    )) {
+                        let _ = control_tx.try_send(Control::Send(text));
+                    }
+                    continue;
+                }
+                let (reply, reply_rx) = oneshot::channel();
+                let incoming = IncomingCommand {
+                    device_id: hello.device_id.clone(),
+                    device_name: hello.device_name.clone(),
+                    grants,
+                    base_revision,
+                    command,
+                    reply,
+                    from_backup: true,
+                };
+                forward_command(&shared, &control_tx, request_id, incoming, reply_rx);
+            }
+            ClientMessage::Hello { .. } => {}
+        }
+    }
+
+    drop(control_tx);
+    drop_backup(&shared, conn_id);
+    writer.abort();
+}
+
+fn drop_backup(shared: &Shared, conn_id: u64) {
+    let removed = shared
+        .backup
+        .lock()
+        .map(|mut backup| {
+            if backup.as_ref().is_some_and(|backup| backup.conn_id == conn_id) {
+                *backup = None;
+                true
+            } else {
+                false
+            }
+        })
+        .unwrap_or(false);
+    if removed {
+        shared.backup_tx.send_replace(None);
+    }
+}
+
+/// The backup's writer: its control queue plus a heartbeat every
+/// [`HEARTBEAT_INTERVAL_MS`]. No transport/song/peers feeds: a backup gets
+/// only redundancy messages (and pongs and command results).
+async fn run_backup_writer(
+    mut sink: futures_util::stream::SplitSink<WsStream, Message>,
+    mut control: mpsc::Receiver<Control>,
+    shared: Arc<Shared>,
+) {
+    let mut shutdown = shared.shutdown_tx.subscribe();
+    let mut heartbeat = tokio::time::interval(Duration::from_millis(HEARTBEAT_INTERVAL_MS));
+    heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        let outgoing: Option<Arc<str>> = tokio::select! {
+            message = control.recv() => match message {
+                Some(Control::Send(text)) => Some(text),
+                Some(Control::Close(text)) => {
+                    if !text.is_empty() {
+                        let _ = sink.send(Message::Text(text.to_string())).await;
+                    }
+                    let _ = sink.close().await;
+                    return;
+                }
+                None => return,
+            },
+            _ = heartbeat.tick() => to_text(&ServerMessage::Redundancy {
+                message: RedundancyMessage::Heartbeat {
+                    seq: shared.next_redundancy_seq(),
+                    monotonic_ns: shared.started.elapsed().as_nanos() as u64,
+                    health: *shared.health_tx.borrow(),
+                },
+            }),
+            _ = shutdown.changed() => {
+                let _ = sink.close().await;
+                return;
+            }
+        };
+        if let Some(text) = outgoing {
+            if sink.send(Message::Text(text.to_string())).await.is_err() {
+                return;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "redundancy_tests.rs"]
+mod redundancy_tests;

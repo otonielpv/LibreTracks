@@ -375,6 +375,9 @@ async fn relay(
                 with_guest(&app, |guest| guest.live_settings = Some(settings.clone()));
                 let _ = app.emit(GUEST_LIVE_SETTINGS_EVENT, settings);
             }
+            // Only a redundancy backup receives these, and a backup does not
+            // run through the guest flow.
+            GuestEvent::Redundancy(_) => {}
             GuestEvent::Transport {
                 snapshot,
                 host_monotonic_ms,

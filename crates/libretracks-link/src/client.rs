@@ -27,6 +27,7 @@ use crate::permissions::{is_allowed, Grants};
 use crate::protocol::{
     ClientMessage, CommandRejection, LinkCommand, PeerInfo, RejectReason, ServerMessage,
 };
+use crate::redundancy::{HealthSummary, PeerKind, RedundancyMessage, HEARTBEAT_INTERVAL_MS};
 use crate::version::PROTOCOL_VERSION;
 
 #[derive(Debug, Clone)]
@@ -44,6 +45,9 @@ pub struct GuestConfig {
     pub silence_timeout: Duration,
     pub connect_timeout: Duration,
     pub command_timeout: Duration,
+    /// `Backup` = redundancy backup (docs/plans/redundancy): gets redundancy
+    /// messages instead of the guest feeds and sends heartbeats.
+    pub peer_kind: PeerKind,
 }
 
 impl GuestConfig {
@@ -62,6 +66,7 @@ impl GuestConfig {
             connect_timeout: Duration::from_secs(3),
             // Generous: an `invoke` can be a whole song view with peaks.
             command_timeout: Duration::from_secs(30),
+            peer_kind: PeerKind::Guest,
         }
     }
 }
@@ -113,6 +118,8 @@ pub enum GuestEvent {
         payload: Value,
         host_monotonic_ms: u64,
     },
+    /// Backup mode: a redundancy message from the main, decoded.
+    Redundancy(RedundancyMessage),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,6 +176,9 @@ struct ClientShared {
     clock: Mutex<ClockEstimator>,
     grants: Mutex<Option<Grants>>,
     state_tx: watch::Sender<GuestState>,
+    /// Backup mode: health carried by its heartbeats.
+    health_tx: watch::Sender<HealthSummary>,
+    heartbeat_seq: std::sync::atomic::AtomicU64,
 }
 
 impl ClientShared {
@@ -181,6 +191,7 @@ impl ClientShared {
 pub struct GuestHandle {
     shared: Arc<ClientShared>,
     commands: mpsc::Sender<Outgoing>,
+    redundancy: mpsc::Sender<RedundancyMessage>,
     shutdown: watch::Sender<bool>,
     command_timeout: Duration,
 }
@@ -248,6 +259,25 @@ impl GuestHandle {
     pub fn leave(&self) {
         self.shutdown.send_replace(true);
     }
+
+    /// Backup mode: send a redundancy message (status) to the main. False
+    /// when not connected or the queue is full; heartbeats go on their own.
+    pub fn send_redundancy(&self, message: RedundancyMessage) -> bool {
+        self.state() == GuestState::Connected && self.redundancy.try_send(message).is_ok()
+    }
+
+    /// Backup mode: health carried by the heartbeats to the main.
+    pub fn set_health(&self, health: HealthSummary) {
+        self.shared.health_tx.send_replace(health);
+    }
+}
+
+/// Connect to a main as its redundancy BACKUP: same reconnection as a guest,
+/// redundancy messages arrive as [`GuestEvent::Redundancy`], heartbeats go
+/// out every [`HEARTBEAT_INTERVAL_MS`]. Same runtime rule as [`join`].
+pub fn connect_as_backup(mut config: GuestConfig) -> Result<GuestRuntime, String> {
+    config.peer_kind = PeerKind::Backup;
+    join(config)
 }
 
 /// Start joining. Must be called from inside a Tokio runtime: the connection
@@ -259,20 +289,31 @@ pub fn join(config: GuestConfig) -> Result<GuestRuntime, String> {
         .map_err(|_| "no async runtime to run the connection".to_string())?;
     let (events_tx, events) = mpsc::channel(256);
     let (commands_tx, commands_rx) = mpsc::channel(64);
+    let (redundancy_tx, redundancy_rx) = mpsc::channel(64);
     let (shutdown, _) = watch::channel(false);
     let shared = Arc::new(ClientShared {
         started: Instant::now(),
         clock: Mutex::new(ClockEstimator::default()),
         grants: Mutex::new(None),
         state_tx: watch::channel(GuestState::Connecting { attempt: 0 }).0,
+        health_tx: watch::channel(HealthSummary::default()).0,
+        heartbeat_seq: std::sync::atomic::AtomicU64::new(1),
     });
     let handle = GuestHandle {
         shared: shared.clone(),
         commands: commands_tx,
+        redundancy: redundancy_tx,
         shutdown: shutdown.clone(),
         command_timeout: config.command_timeout,
     };
-    runtime.spawn(run(config, shared, events_tx, commands_rx, shutdown));
+    runtime.spawn(run(
+        config,
+        shared,
+        events_tx,
+        commands_rx,
+        redundancy_rx,
+        shutdown,
+    ));
     Ok(GuestRuntime { handle, events })
 }
 
@@ -295,6 +336,7 @@ async fn run(
     shared: Arc<ClientShared>,
     events: mpsc::Sender<GuestEvent>,
     mut commands: mpsc::Receiver<Outgoing>,
+    mut redundancy: mpsc::Receiver<RedundancyMessage>,
     shutdown: watch::Sender<bool>,
 ) {
     let mut shutdown_rx = shutdown.subscribe();
@@ -308,6 +350,7 @@ async fn run(
             &shared,
             &events,
             &mut commands,
+            &mut redundancy,
             &mut shutdown_rx,
         )
         .await;
@@ -360,6 +403,7 @@ async fn connect_and_serve(
     shared: &Arc<ClientShared>,
     events: &mpsc::Sender<GuestEvent>,
     commands: &mut mpsc::Receiver<Outgoing>,
+    redundancy: &mut mpsc::Receiver<RedundancyMessage>,
     shutdown: &mut watch::Receiver<bool>,
 ) -> Ended {
     let lost = Ended::Lost {
@@ -387,6 +431,7 @@ async fn connect_and_serve(
         pin: config.pin.clone(),
         remember: config.remember,
         token: config.token.clone(),
+        peer_kind: config.peer_kind,
     };
     if sink.send(text(&hello)).await.is_err() {
         return lost;
@@ -416,6 +461,7 @@ async fn connect_and_serve(
         Ok(Some(ServerMessage::Rejected {
             reason,
             expected_protocol,
+            ..
         })) => return Ended::Rejected(reason, expected_protocol),
         _ => return lost,
     };
@@ -448,6 +494,11 @@ async fn connect_and_serve(
     ping.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut last_heard = Instant::now();
     let silence = config.silence_timeout;
+    let is_backup = config.peer_kind == PeerKind::Backup;
+    let mut heartbeat = tokio::time::interval(Duration::from_millis(HEARTBEAT_INTERVAL_MS));
+    heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // Anything queued while disconnected is stale.
+    while redundancy.try_recv().is_ok() {}
 
     let ended = loop {
         tokio::select! {
@@ -501,10 +552,31 @@ async fn connect_and_serve(
                     ServerMessage::Event { name, payload, host_monotonic_ms } => {
                         let _ = events.send(GuestEvent::Event { name, payload, host_monotonic_ms }).await;
                     }
-                    ServerMessage::Rejected { reason, expected_protocol } => {
+                    ServerMessage::Rejected { reason, expected_protocol, .. } => {
                         break Ended::Rejected(reason, expected_protocol);
                     }
+                    ServerMessage::Redundancy { message } => {
+                        let _ = events.send(GuestEvent::Redundancy(message)).await;
+                    }
                     ServerMessage::Welcome { .. } => {}
+                }
+            }
+            message = redundancy.recv(), if is_backup => {
+                let Some(message) = message else { break Ended::Shutdown };
+                if sink.send(text(&ClientMessage::Redundancy { message })).await.is_err() {
+                    break Ended::Lost { was_connected: true };
+                }
+            }
+            _ = heartbeat.tick(), if is_backup => {
+                let message = RedundancyMessage::Heartbeat {
+                    seq: shared
+                        .heartbeat_seq
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+                    monotonic_ns: shared.started.elapsed().as_nanos() as u64,
+                    health: *shared.health_tx.borrow(),
+                };
+                if sink.send(text(&ClientMessage::Redundancy { message })).await.is_err() {
+                    break Ended::Lost { was_connected: true };
                 }
             }
             outgoing = commands.recv() => {

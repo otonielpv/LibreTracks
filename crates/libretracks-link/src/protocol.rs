@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::permissions::Grants;
+use crate::redundancy::{PeerKind, RedundancyMessage};
 
 /// Guest → host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -39,6 +40,10 @@ pub enum ClientMessage {
         /// Token from an earlier `welcome` (trusted device).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         token: Option<String>,
+        /// `backup` for a redundancy backup (docs/plans/redundancy). Absent
+        /// in old guests, which stay guests.
+        #[serde(default, skip_serializing_if = "PeerKind::is_guest")]
+        peer_kind: PeerKind,
     },
     Command {
         request_id: u64,
@@ -55,6 +60,10 @@ pub enum ClientMessage {
         t0: u64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rtt_ms: Option<u32>,
+    },
+    /// Only from a backup peer; the host ignores it from a guest.
+    Redundancy {
+        message: RedundancyMessage,
     },
 }
 
@@ -85,6 +94,9 @@ pub enum ServerMessage {
         /// For `incompatibleVersion`: the version the host speaks.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         expected_protocol: Option<u32>,
+        /// For `backupAlreadyConnected`: the name of the current backup.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
     },
     GrantsChanged {
         grants: Grants,
@@ -133,6 +145,11 @@ pub enum ServerMessage {
         payload: Value,
         host_monotonic_ms: u64,
     },
+    /// Only to a backup peer (never to a guest, so old guests never see an
+    /// unknown variant).
+    Redundancy {
+        message: RedundancyMessage,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -145,6 +162,10 @@ pub enum RejectReason {
     HostFull,
     /// No valid hello in time, or a malformed one.
     BadHello,
+    /// Redundancy: there is already a backup (its name is in `detail`).
+    BackupAlreadyConnected,
+    /// Redundancy: this host is not taking a backup right now.
+    BackupNotAccepted,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -322,6 +343,7 @@ mod tests {
                 pin: Some("1234".into()),
                 remember: true,
                 token: None,
+                peer_kind: PeerKind::Guest,
             },
             json!({
                 "type": "hello",
@@ -419,6 +441,7 @@ mod tests {
             ServerMessage::Rejected {
                 reason: RejectReason::IncompatibleVersion,
                 expected_protocol: Some(2),
+                detail: None,
             },
             json!({ "type": "rejected", "reason": "incompatibleVersion", "expectedProtocol": 2 }),
         );
@@ -426,6 +449,7 @@ mod tests {
             ServerMessage::Rejected {
                 reason: RejectReason::BadPin,
                 expected_protocol: None,
+                detail: None,
             },
             json!({ "type": "rejected", "reason": "badPin" }),
         );

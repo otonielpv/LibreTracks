@@ -75,6 +75,32 @@ pub fn required_permission(command: &LinkCommand) -> Permission {
     }
 }
 
+/// What a redundancy backup may forward to its main (docs/plans/redundancy,
+/// step 06: "forward local inputs to the main"), and only while the main
+/// allows forwarding. Transport only: a backup never edits nor mixes the
+/// main. No `_` arm, like `required_permission`.
+pub fn backup_may_send(command: &LinkCommand) -> bool {
+    match command {
+        LinkCommand::Play
+        | LinkCommand::Pause
+        | LinkCommand::Stop
+        | LinkCommand::FadeOutStop
+        | LinkCommand::Seek { .. }
+        | LinkCommand::JumpToMarker { .. }
+        | LinkCommand::JumpToSong { .. }
+        | LinkCommand::ToggleVamp { .. }
+        | LinkCommand::CancelJump => true,
+        LinkCommand::SetJumpSettings { .. }
+        | LinkCommand::ReorderSong { .. }
+        | LinkCommand::Invoke { .. }
+        | LinkCommand::SetSongChart { .. }
+        | LinkCommand::SetSongTranspose { .. }
+        | LinkCommand::SetTrackMix { .. }
+        | LinkCommand::SetSongMasterGain { .. }
+        | LinkCommand::SetMetronome { .. } => false,
+    }
+}
+
 pub fn is_allowed(grants: &Grants, command: &LinkCommand) -> bool {
     grants.role.allows(required_permission(command))
 }

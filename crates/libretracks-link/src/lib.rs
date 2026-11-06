@@ -18,6 +18,7 @@ pub mod pairing;
 pub mod permissions;
 pub mod probe;
 pub mod protocol;
+pub mod redundancy;
 pub mod server;
 pub mod version;
 
@@ -33,7 +34,7 @@ pub fn websocket_config() -> tokio_tungstenite::tungstenite::protocol::WebSocket
 }
 
 pub use client::{
-    join, CommandError, GuestConfig, GuestEvent, GuestHandle, GuestRuntime, GuestState,
+    connect_as_backup, join, CommandError, GuestConfig, GuestEvent, GuestHandle, GuestRuntime, GuestState,
 };
 pub use pairing::TrustedDevice;
 pub use permissions::{is_allowed, required_permission, Grants, Permission, Role};
