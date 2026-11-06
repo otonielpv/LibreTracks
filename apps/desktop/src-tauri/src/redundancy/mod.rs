@@ -6,6 +6,7 @@ pub mod fingerprint;
 pub mod follower;
 pub mod follower_runtime;
 pub mod main_monitor;
+pub mod mix;
 pub mod pilot;
 pub mod publisher;
 pub mod role;

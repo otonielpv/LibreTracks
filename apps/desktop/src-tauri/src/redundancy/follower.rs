@@ -28,8 +28,8 @@ use libretracks_core::session_fingerprint::{compare, FingerprintDiff, SessionFin
 use libretracks_core::warp::{source_seconds_at_view, warp_timeline_seconds_at};
 use libretracks_core::Song;
 use libretracks_link::redundancy::{
-    BackupPhase, HealthSummary, HeartbeatMonitor, PendingJump as LinkJump, RedundancyMessage,
-    SeqGate, TransportIntent, DEFAULT_HEARTBEAT_TIMEOUT_MS,
+    BackupPhase, HealthSummary, HeartbeatMonitor, MixControl, PendingJump as LinkJump,
+    RedundancyMessage, SeqGate, TransportIntent, DEFAULT_HEARTBEAT_TIMEOUT_MS,
 };
 use serde::Serialize;
 
@@ -125,6 +125,10 @@ pub struct FollowerCore {
     pub corrections: u32,
     last_offset_seconds: Option<f64>,
     main_sample_rate: u32,
+    /// Mix messages from the main waiting to be applied (step 09): `true` =
+    /// a whole snapshot.
+    pending_mix: Vec<(bool, Vec<MixControl>)>,
+    mix_diverged: bool,
 }
 
 /// `marker:<id>` / `region:<id>`.
@@ -188,7 +192,29 @@ impl FollowerCore {
             corrections: 0,
             last_offset_seconds: None,
             main_sample_rate: 0,
+            pending_mix: Vec::new(),
+            mix_diverged: false,
         }
+    }
+
+    /// Mix messages to apply, oldest first. Only while following: a backup
+    /// with another session (or lost) keeps its own mix.
+    pub fn take_mix(&mut self) -> Vec<(bool, Vec<MixControl>)> {
+        let pending = std::mem::take(&mut self.pending_mix);
+        if self.lifecycle.applies_actions() {
+            pending
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// The backup's mix differs from the main's last whole mix.
+    pub fn set_mix_diverged(&mut self, diverged: bool) {
+        self.mix_diverged = diverged;
+    }
+
+    pub fn mix_diverged(&self) -> bool {
+        self.mix_diverged
     }
 
     /// The link connection went up or down (the client tells).
@@ -470,6 +496,9 @@ impl FollowerCore {
                     self.recompare();
                 }
             }
+            RedundancyMessage::Mix { full, controls, .. } => {
+                self.pending_mix.push((full, controls));
+            }
             RedundancyMessage::BackupStatus { .. } | RedundancyMessage::RoleChange { .. } => {}
         }
     }
@@ -578,6 +607,7 @@ impl FollowerCore {
                         .and_then(|own| serde_json::to_string(own).ok())
                 })
                 .flatten(),
+            mix_diverged: self.mix_diverged,
         }
     }
 

@@ -97,6 +97,7 @@ mod tests {
                 offset_ms: Some(0.7),
                 last_correction_ms: None,
                 fingerprint: None,
+                mix_diverged: false,
             },
             100,
         );

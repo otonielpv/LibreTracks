@@ -364,6 +364,7 @@ async fn heartbeats_and_messages_flow_both_ways() {
         offset_ms: Some(1.0),
         last_correction_ms: None,
         fingerprint: None,
+        mix_diverged: false,
     };
     assert!(backup.handle.send_redundancy(status.clone()));
     let got = tokio::time::timeout(WAIT, async {

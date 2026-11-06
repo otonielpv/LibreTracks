@@ -197,6 +197,45 @@ pub enum BackupPhase {
     Diverged,
 }
 
+/// One live-mix control, as the RESULTING value (never a delta). Partial
+/// track changes carry only the fields that moved; a full snapshot carries
+/// them all.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "control",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum MixControl {
+    Track {
+        track_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        volume: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pan: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        muted: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        solo: Option<bool>,
+    },
+    SongMaster {
+        region_id: String,
+        gain: f64,
+    },
+    Metronome {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        enabled: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        volume: Option<f64>,
+    },
+    VoiceGuide {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        enabled: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        volume: Option<f64>,
+    },
+}
+
 /// Every message of the channel. Travels inside
 /// `ServerMessage::Redundancy` / `ClientMessage::Redundancy`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -225,6 +264,14 @@ pub enum RedundancyMessage {
         vamp: Option<VampState>,
         #[serde(default)]
         pending_jumps: Vec<PendingJump>,
+    },
+    /// A → B: live mix (step 09). `full` = the whole mix (on connect and
+    /// periodically); otherwise coalesced changes.
+    Mix {
+        seq: u64,
+        #[serde(default)]
+        full: bool,
+        controls: Vec<MixControl>,
     },
     /// A → B, one per transport change.
     Intent {
@@ -261,7 +308,15 @@ pub enum RedundancyMessage {
         last_correction_ms: Option<f64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         fingerprint: Option<String>,
+        /// The backup's live mix differs from the main's last full mix (a
+        /// local change: the next snapshot overwrites it).
+        #[serde(default, skip_serializing_if = "is_false")]
+        mix_diverged: bool,
     },
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 impl RedundancyMessage {
@@ -269,6 +324,7 @@ impl RedundancyMessage {
     pub fn seq(&self) -> Option<u64> {
         match self {
             RedundancyMessage::State { seq, .. }
+            | RedundancyMessage::Mix { seq, .. }
             | RedundancyMessage::Intent { seq, .. }
             | RedundancyMessage::Heartbeat { seq, .. } => Some(*seq),
             RedundancyMessage::Welcome { .. }
@@ -528,6 +584,7 @@ mod tests {
             offset_ms: Some(0.8),
             last_correction_ms: None,
             fingerprint: Some("f".into()),
+            mix_diverged: false,
         });
     }
 
@@ -585,6 +642,7 @@ mod tests {
             offset_ms: Some(1.5),
             last_correction_ms: Some(-0.5),
             fingerprint: None,
+            mix_diverged: false,
         };
         assert_eq!(
             serde_json::to_value(&status).unwrap(),

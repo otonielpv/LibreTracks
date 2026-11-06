@@ -21,6 +21,7 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::{broadcast, mpsc};
 
 use super::follower::{tick, FollowerCore, LocalInputs, SessionTarget, STATUS_INTERVAL, TICK};
+use super::mix::{self, MixSnapshot};
 use super::role::publish_status;
 use super::status::{backup_state_name, main_lost_midi};
 use crate::link::redundancy_config::{self, RedundancyConfig};
@@ -206,6 +207,74 @@ fn refresh_session(app: &AppHandle, core: &mut FollowerCore) -> Option<Song> {
     Some(source.song)
 }
 
+/// Apply the main's mix messages to this session (step 09). Live changes go
+/// to the engine; a whole snapshot is committed (model and settings) where
+/// it differs. Never touches the transport. Returns the main's last whole
+/// mix when one arrived.
+fn apply_mix(
+    app: &AppHandle,
+    batches: Vec<(bool, Vec<libretracks_link::redundancy::MixControl>)>,
+) -> Option<MixSnapshot> {
+    use libretracks_link::redundancy::MixControl;
+    let state = app.state::<DesktopState>();
+    let store = app.state::<crate::infra::settings::AppSettingsStore>();
+    let mut latest_full = None;
+    let mut session = state.session.lock().ok()?;
+    for (full, controls) in batches {
+        let mut settings = store.current().ok()?;
+        let mut settings_changed = false;
+        for control in &controls {
+            match control {
+                MixControl::Track { .. } | MixControl::SongMaster { .. } => {
+                    let _ = mix::apply_to_session(&mut session, &state.audio, control, full);
+                }
+                MixControl::Metronome { enabled, volume } if !full => {
+                    if let Some(enabled) = enabled {
+                        let _ = state.audio.set_metronome_enabled_realtime(*enabled);
+                    }
+                    if let Some(volume) = volume {
+                        let _ = state.audio.set_metronome_volume_realtime(*volume);
+                    }
+                }
+                MixControl::VoiceGuide { volume, .. } if !full => {
+                    if let Some(volume) = volume {
+                        let _ = state.audio.set_voice_guide_volume_realtime(*volume);
+                    }
+                }
+                _ => settings_changed |= mix::apply_to_settings(&mut settings, control),
+            }
+        }
+        if settings_changed {
+            if let Ok(saved) = session.update_audio_settings(settings, &state.audio) {
+                let _ = store.set(saved.clone());
+                let _ = crate::infra::settings::save_app_settings(app, &saved);
+                let _ = tauri::Emitter::emit(app, "settings:updated", saved);
+            }
+        }
+        if full {
+            latest_full = Some(MixSnapshot::from_controls(&controls));
+        }
+    }
+    latest_full
+}
+
+/// Whether this session's mix differs from the main's last whole mix.
+fn local_mix_diverged(app: &AppHandle, main_mix: &MixSnapshot) -> bool {
+    let state = app.state::<DesktopState>();
+    let Some(song) = state
+        .session
+        .lock()
+        .ok()
+        .and_then(|session| session.engine.song().cloned())
+    else {
+        return false;
+    };
+    let Ok(settings) = app.state::<crate::infra::settings::AppSettingsStore>().current() else {
+        return false;
+    };
+    !MixSnapshot::from_song(&song, &settings).matches(main_mix)
+}
+
 fn engine_sample_rate(app: &AppHandle) -> u32 {
     app.state::<DesktopState>()
         .audio
@@ -239,6 +308,7 @@ async fn run(
     let mut fingerprint_unsent = true;
     let mut locked = false;
     let mut target = SessionTarget { app: app.clone() };
+    let mut main_mix: Option<MixSnapshot> = None;
 
     loop {
         let mut state_changed = false;
@@ -322,12 +392,24 @@ async fn run(
                     let revisions = (snapshot.project_revision, snapshot.mix_revision, frame.settings_seq);
                     if cache.revisions.is_some_and(|last| last != revisions) {
                         refresh_due = Some(tokio::time::Instant::now() + Duration::from_secs(1));
+                        // A local mix change shows as a divergence until the
+                        // main's next whole mix overwrites it.
+                        if let Some(main_mix) = &main_mix {
+                            core.set_mix_diverged(local_mix_diverged(&app, main_mix));
+                        }
                     }
                     cache.revisions = Some(revisions);
                 }
             }
         }
 
+        let batches = core.take_mix();
+        if !batches.is_empty() {
+            if let Some(full) = apply_mix(&app, batches) {
+                core.set_mix_diverged(local_mix_diverged(&app, &full));
+                main_mix = Some(full);
+            }
+        }
         if let Some(transition) = core.take_transition() {
             state_changed = true;
             if let Some(message) = main_lost_midi(&transition, &config.on_main_lost_midi) {

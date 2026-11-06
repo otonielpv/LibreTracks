@@ -492,6 +492,9 @@ async fn connect_and_serve(
             token,
         })
         .await;
+    // Anything queued while disconnected is stale. Dropped BEFORE saying
+    // we are connected: a message sent right after that must go out.
+    while redundancy.try_recv().is_ok() {}
     set_state(shared, events, GuestState::Connected).await;
 
     let mut pending: HashMap<u64, oneshot::Sender<Result<Value, CommandError>>> = HashMap::new();
@@ -503,8 +506,6 @@ async fn connect_and_serve(
     let is_backup = config.peer_kind == PeerKind::Backup;
     let mut heartbeat = tokio::time::interval(Duration::from_millis(HEARTBEAT_INTERVAL_MS));
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    // Anything queued while disconnected is stale.
-    while redundancy.try_recv().is_ok() {}
 
     let ended = loop {
         tokio::select! {

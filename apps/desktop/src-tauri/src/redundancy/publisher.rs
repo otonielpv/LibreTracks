@@ -16,8 +16,10 @@
 use std::time::{Duration, Instant};
 
 use libretracks_link::redundancy::{
-    HealthSummary, PendingJump, RedundancyMessage, TransportClock, VampState,
+    HealthSummary, MixControl, PendingJump, RedundancyMessage, TransportClock, VampState,
 };
+
+use super::mix::{MixCoalescer, MixSnapshot};
 use libretracks_link::HostHandle;
 use tauri::{AppHandle, Manager};
 use tokio::sync::broadcast;
@@ -28,6 +30,10 @@ use crate::state::{DesktopState, IntentOrigin, OriginatedIntent};
 
 /// State to the backup this often (and right after every intent).
 pub const STATE_INTERVAL: Duration = Duration::from_millis(50);
+/// The whole mix goes to the backup this often (in state ticks: 2 s), so a
+/// local change there never lasts.
+pub const FULL_MIX_EVERY_TICKS: u64 = 40;
+
 /// Wait this long after the session or settings change before recomputing
 /// the fingerprint (step 03 §4).
 pub const FINGERPRINT_DEBOUNCE: Duration = Duration::from_secs(1);
@@ -90,6 +96,8 @@ pub struct PublisherCore {
     last_fingerprint: Option<String>,
     ticks: u64,
     pilot_tone_on: bool,
+    mix: MixCoalescer,
+    full_mix: Option<MixSnapshot>,
 }
 
 impl PublisherCore {
@@ -99,6 +107,47 @@ impl PublisherCore {
 
     pub fn set_feed(&mut self, feed: FeedView) {
         self.feed = feed;
+    }
+
+    /// The main's current whole mix (from the session feed).
+    pub fn set_full_mix(&mut self, mix: MixSnapshot) {
+        self.full_mix = Some(mix);
+    }
+
+    fn send_mix(&self, io: &impl PublisherIo, full: bool, controls: Vec<MixControl>) -> bool {
+        if controls.is_empty() || !io.backup_connected() {
+            return false;
+        }
+        io.send(&RedundancyMessage::Mix {
+            seq: io.next_seq(),
+            full,
+            controls,
+        })
+    }
+
+    /// A live mix change: sent now, or folded until its 30 ms window passes.
+    pub fn on_mix(&mut self, io: &impl PublisherIo, control: MixControl, now_ns: u64) -> bool {
+        if !io.backup_connected() {
+            return false;
+        }
+        match self.mix.push(control, now_ns) {
+            Some(control) => self.send_mix(io, false, vec![control]),
+            None => false,
+        }
+    }
+
+    /// Held mix changes whose window passed (call often: every tick).
+    pub fn flush_mix(&mut self, io: &impl PublisherIo, now_ns: u64) -> bool {
+        let due = self.mix.flush(now_ns);
+        self.send_mix(io, false, due)
+    }
+
+    /// The whole mix, now.
+    pub fn send_full_mix(&mut self, io: &impl PublisherIo) -> bool {
+        let Some(controls) = self.full_mix.as_ref().map(MixSnapshot::controls) else {
+            return false;
+        };
+        self.send_mix(io, true, controls)
     }
 
     /// A transport change at the session. Followers' changes never go back.
@@ -127,6 +176,9 @@ impl PublisherCore {
         if self.ticks % 5 == 0 {
             self.pilot_tone_on = io.pilot_tone_on();
         }
+        if self.ticks % FULL_MIX_EVERY_TICKS == 0 {
+            self.send_full_mix(io);
+        }
         self.ticks += 1;
         io.set_health(HealthSummary {
             audio_ok: !fallback,
@@ -152,6 +204,7 @@ impl PublisherCore {
     /// A (re)connected backup gets the fingerprint at once, even unchanged.
     pub fn on_backup_connected(&mut self, io: &impl PublisherIo, fingerprint: Option<String>) {
         self.last_fingerprint = None;
+        self.send_full_mix(io);
         if let Some(fingerprint) = fingerprint {
             self.on_fingerprint(io, fingerprint);
         }
@@ -256,12 +309,21 @@ pub async fn run(
     };
     let mut core = PublisherCore::new();
     let mut backup = handle.subscribe_backup();
+    let mut mix = super::mix::subscribe();
     loop {
         // Idle: wait for a backup, draining intents so they do not pile up.
         while backup.borrow_and_update().is_none() {
             tokio::select! {
                 changed = backup.changed() => if changed.is_err() { return },
                 received = intents.recv() => if let Err(broadcast::error::RecvError::Closed) = received { return },
+                _ = mix.recv() => {}
+            }
+        }
+        if let Some(frame) = Some(app.state::<SessionFeed>().subscribe().borrow().clone()) {
+            if let (Some(song), Some(settings)) =
+                (frame.song.as_deref().and_then(Option::as_ref), frame.settings.as_deref())
+            {
+                core.set_full_mix(MixSnapshot::from_view(song, settings));
             }
         }
         core.on_backup_connected(&io, current_fingerprint(&app));
@@ -283,7 +345,13 @@ pub async fn run(
                     Err(broadcast::error::RecvError::Lagged(_)) => {}
                     Err(broadcast::error::RecvError::Closed) => return,
                 },
+                received = mix.recv() => {
+                    if let Ok(control) = received {
+                        core.on_mix(&io, control, io.monotonic_ns_of(Instant::now()));
+                    }
+                }
                 _ = tick.tick() => {
+                    core.flush_mix(&io, io.monotonic_ns_of(Instant::now()));
                     core.on_tick(&io);
                     if fingerprint_due.is_some_and(|due| tokio::time::Instant::now() >= due) {
                         fingerprint_due = None;
@@ -298,6 +366,9 @@ pub async fn run(
                     if let Some(snapshot) = frame.snapshot.as_deref() {
                         let song = frame.song.as_deref().and_then(Option::as_ref);
                         core.set_feed(FeedView::from_snapshot(snapshot, song));
+                        if let (Some(song), Some(settings)) = (song, frame.settings.as_deref()) {
+                            core.set_full_mix(MixSnapshot::from_view(song, settings));
+                        }
                         let revisions = (
                             snapshot.project_revision,
                             snapshot.mix_revision,

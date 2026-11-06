@@ -990,6 +990,10 @@ impl AudioController {
         region_id: &str,
         master_gain: f32,
     ) -> Result<(), DesktopError> {
+        crate::redundancy::mix::emit(libretracks_link::redundancy::MixControl::SongMaster {
+            region_id: region_id.to_string(),
+            gain: f64::from(master_gain),
+        });
         self.with_engine_state("set_region_master_gain", None, |engine, _state| {
             engine.send_command(&EngineCommand::SetRegionMasterGain {
                 region_id: region_id.into(),
@@ -1442,6 +1446,16 @@ impl AudioController {
     ) -> Result<(), DesktopError> {
         self.live_mix_realtime_command_count
             .fetch_add(1, Ordering::Relaxed);
+        // Redundancy mirror mix (step 09): the live value, to the backup.
+        if volume.is_some() || pan.is_some() || muted.is_some() || solo.is_some() {
+            crate::redundancy::mix::emit(libretracks_link::redundancy::MixControl::Track {
+                track_id: track_id.to_string(),
+                volume,
+                pan,
+                muted,
+                solo,
+            });
+        }
         self.with_engine_state("update_live_track_mix", None, |engine, _state| {
             if let Some(volume) = volume {
                 engine.send_command(&EngineCommand::SetTrackGain {
@@ -1519,6 +1533,10 @@ impl AudioController {
     pub fn set_metronome_enabled_realtime(&self, enabled: bool) -> Result<(), DesktopError> {
         self.metronome_realtime_toggle_count
             .fetch_add(1, Ordering::Relaxed);
+        crate::redundancy::mix::emit(libretracks_link::redundancy::MixControl::Metronome {
+            enabled: Some(enabled),
+            volume: None,
+        });
         self.with_engine_state("set_metronome_enabled_realtime", None, |engine, _state| {
             engine.send_command(&EngineCommand::SetMetronomeEnabled { enabled })?;
             Ok(())
@@ -1528,6 +1546,10 @@ impl AudioController {
     pub fn set_metronome_volume_realtime(&self, volume: f64) -> Result<(), DesktopError> {
         self.metronome_realtime_volume_count
             .fetch_add(1, Ordering::Relaxed);
+        crate::redundancy::mix::emit(libretracks_link::redundancy::MixControl::Metronome {
+            enabled: None,
+            volume: Some(volume),
+        });
         self.with_engine_state("set_metronome_volume_realtime", None, |engine, _state| {
             engine.send_command(&EngineCommand::SetMetronomeVolume {
                 volume: metronome_engine_volume(volume),
@@ -1582,6 +1604,10 @@ impl AudioController {
     /// deliberately does not replace or persist settings; pointer-up commits
     /// the full config once, matching the metronome volume path.
     pub fn set_voice_guide_volume_realtime(&self, volume: f64) -> Result<(), DesktopError> {
+        crate::redundancy::mix::emit(libretracks_link::redundancy::MixControl::VoiceGuide {
+            enabled: None,
+            volume: Some(volume),
+        });
         let settings = self.current_settings()?;
         self.with_engine_state("set_voice_guide_volume_realtime", None, |engine, _state| {
             engine.send_command(&EngineCommand::SetVoiceGuideConfig {
