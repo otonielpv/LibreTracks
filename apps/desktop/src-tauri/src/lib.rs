@@ -160,6 +160,7 @@ pub fn run() {
 
     let builder = builder
         .manage(EngineV2State::new())
+        .manage(redundancy::role::RedundancyState::default())
         .manage(commands::app_close::AppCloseState::default());
 
     // La X de la ventana pasa por la interfaz para guardar y avisar de que se
@@ -466,6 +467,8 @@ pub fn run() {
             commands::project::pick_and_import_external_project_from_dialog,
             commands::project::pick_and_import_external_project_into_session_from_dialog,
             redundancy::fingerprint::get_session_fingerprint,
+            redundancy::role::set_redundancy_role,
+            redundancy::role::get_redundancy_role,
             commands::transport::play_transport,
             commands::transport::pause_transport,
             commands::transport::stop_transport,

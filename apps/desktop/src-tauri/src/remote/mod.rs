@@ -166,6 +166,7 @@ async fn run_remote_command_bridge(
             Err(_) => continue,
         };
 
+        let _origin = session.intent_origin_scope(crate::state::IntentOrigin::Remote);
         let snapshot_result = match &command {
             RemoteCommand::Play => session.play(&state.audio),
             RemoteCommand::Pause => session.pause(&state.audio),

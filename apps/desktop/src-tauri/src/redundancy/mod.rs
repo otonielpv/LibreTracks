@@ -3,3 +3,5 @@
 //! `libretracks-core` and the channel in `libretracks-link`.
 
 pub mod fingerprint;
+pub mod publisher;
+pub mod role;

@@ -45,7 +45,9 @@ pub(crate) fn sanitize_fade_stop_seconds(seconds: f64) -> f64 {
 
 impl DesktopSession {
     /// The «Fade out y parar» action. Does nothing unless playing.
-    pub fn fade_out_and_stop(
+    /// Applies the change without telling redundancy; the public wrapper in
+    /// `state/redundancy.rs` calls this and emits the intent.
+    pub(super) fn apply_fade_out_and_stop(
         &mut self,
         duration_seconds: f64,
         audio: &AudioController,

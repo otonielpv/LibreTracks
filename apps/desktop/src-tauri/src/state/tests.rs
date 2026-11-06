@@ -239,7 +239,7 @@ fn musical_position_summary_restarts_the_bar_at_a_time_signature_marker_off_the_
     assert_eq!(musical_position_summary(&song, 5.0).display, "3.3.00");
 }
 
-fn demo_song_with_two_sections() -> Song {
+pub(crate) fn demo_song_with_two_sections() -> Song {
     let mut song = demo_song_with_section();
     song.section_markers.push(Marker {
         id: "section_2".into(),
@@ -269,7 +269,7 @@ fn demo_song_with_three_sections() -> Song {
     song
 }
 
-fn demo_song_with_region_changes_and_sections() -> Song {
+pub(crate) fn demo_song_with_region_changes_and_sections() -> Song {
     let mut song = demo_song();
     song.duration_seconds = 18.0;
     song.regions = vec![
@@ -408,7 +408,7 @@ pub(super) fn write_silent_test_wav(path: &Path, duration_seconds: u32) {
     writer.finalize().expect("wav should finalize");
 }
 
-pub(super) fn session_with_song_dir(song_name: &str, song: Song) -> DesktopSession {
+pub(crate) fn session_with_song_dir(song_name: &str, song: Song) -> DesktopSession {
     let root = tempdir().expect("temp dir should exist");
     let root_path = root.keep();
     let song_dir = create_song_folder(&root_path, song_name).expect("song dir should exist");

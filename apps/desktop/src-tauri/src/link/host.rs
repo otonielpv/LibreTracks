@@ -246,6 +246,18 @@ async fn start_on(app: &AppHandle, preferred_port: Option<u16>) -> Result<HostSt
         }
         (host_config, advertisement)
     };
+    // Redundancy main: this server also takes the backup, and our own
+    // backup-only server must give the port back first.
+    let mut host_config = host_config;
+    if app.state::<crate::redundancy::role::RedundancyState>().role()
+        == crate::redundancy::role::RedundancyRole::Main
+    {
+        crate::redundancy::role::apply_backup_settings(
+            &super::redundancy_config::load(app),
+            &mut host_config,
+        );
+    }
+    crate::redundancy::role::before_hosting_starts(app);
     let runtime = start_host(host_config)
         .await
         .map_err(|error| format!("no se pudo abrir el puerto: {error}"))?;
@@ -273,6 +285,7 @@ async fn start_on(app: &AppHandle, preferred_port: Option<u16>) -> Result<HostSt
     }
     let port = runtime.handle.port();
     set_phase(app, HostPhase::Hosting { port });
+    crate::redundancy::role::hosting_started(app, &runtime.handle);
     discovery::advertise(&Advertisement {
         port,
         ..advertisement
@@ -304,6 +317,7 @@ fn shut_down_server(app: &AppHandle) {
 
 pub fn stop(app: &AppHandle) {
     shut_down_server(app);
+    crate::redundancy::role::hosting_stopped(app);
     set_phase(app, HostPhase::Stopped);
     super::keep_awake("link-host", false);
     set_was_hosting(app, false);
@@ -534,6 +548,9 @@ fn apply(app: &AppHandle, incoming: &IncomingCommand) -> Result<(), CommandRejec
         .map_err(|_| CommandRejection::Invalid)?;
     let audio = &state.audio;
     let invalid = |_| CommandRejection::Invalid;
+    // Redundancy: a guest's (or a backup's forwarded) change still goes to
+    // the backup, tagged as coming from the link.
+    let _origin = session.intent_origin_scope(crate::state::IntentOrigin::Link);
 
     if checks_revision(&incoming.command) {
         let current = session.snapshot_with_sync(audio).map_err(invalid)?;

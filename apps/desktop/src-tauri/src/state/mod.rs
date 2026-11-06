@@ -75,7 +75,7 @@ mod video_library;
 mod video_audio;
 mod redundancy;
 mod regions;
-pub use redundancy::FingerprintSource;
+pub use redundancy::{FingerprintSource, IntentOrigin, OriginatedIntent};
 pub use regions::KeyChangeInput;
 use regions::set_region_key_changes;
 mod ruler_markers;
@@ -424,6 +424,9 @@ pub struct DesktopSession {
     /// Marker jumps never had this problem because they are scheduled once.
     pub(super) scheduled_native_vamp_loop: Option<(f64, f64)>,
     pub(super) automation: AutomationDocument,
+    /// Redundancy (docs/plans/redundancy step 04): every transport change
+    /// leaves here as one intent, see `state/redundancy.rs`.
+    pub(super) intents: redundancy::IntentBus,
     pub(super) pending_automation_jump: Option<PendingAutomationJump>,
     /// In-flight jobs without a terminal jump (pure mix/scene/wait sequences).
     pub(super) active_automation_job: Option<ActiveAutomationJob>,
@@ -595,6 +598,7 @@ impl Default for DesktopSession {
             song_gap_vamp_holding: false,
             scheduled_native_vamp_loop: None,
             automation: AutomationDocument::default(),
+            intents: redundancy::IntentBus::default(),
             pending_automation_jump: None,
             active_automation_job: None,
             automation_run_counts: HashMap::new(),
@@ -1974,7 +1978,9 @@ impl DesktopSession {
         Ok(next_settings)
     }
 
-    pub fn play(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
+    /// Applies the change without telling redundancy; the public wrapper in
+    /// `state/redundancy.rs` calls this and emits the intent.
+    pub(super) fn apply_play(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
         self.cancel_fade_stop(audio)?;
         self.sync_position(audio)?;
         let song = self
@@ -2020,7 +2026,9 @@ impl DesktopSession {
         Ok(self.snapshot_with_runtime_transport(audio))
     }
 
-    pub fn pause(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
+    /// Applies the change without telling redundancy; the public wrapper in
+    /// `state/redundancy.rs` calls this and emits the intent.
+    pub(super) fn apply_pause(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
         self.sync_position(audio)?;
         self.cancel_fade_stop(audio)?;
         self.end_song_gap_vamp(audio)?;
@@ -2037,7 +2045,9 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    pub fn stop(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
+    /// Applies the change without telling redundancy; the public wrapper in
+    /// `state/redundancy.rs` calls this and emits the intent.
+    pub(super) fn apply_stop(&mut self, audio: &AudioController) -> Result<TransportSnapshot, DesktopError> {
         self.end_song_gap_vamp(audio)?;
         audio.stop()?;
         // After the audio stops, so lifting the gain back to 1 is never heard.
@@ -2060,7 +2070,9 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    pub fn seek(
+    /// Applies the change without telling redundancy; the public wrapper in
+    /// `state/redundancy.rs` calls this and emits the intent.
+    pub(super) fn apply_seek(
         &mut self,
         position_seconds: f64,
         audio: &AudioController,
@@ -2127,7 +2139,9 @@ impl DesktopSession {
         audio.on_timeline_hover_or_drag(song_dir, song, position_seconds.max(0.0))
     }
 
-    pub fn schedule_marker_jump(
+    /// Applies the change without telling redundancy; the public wrapper in
+    /// `state/redundancy.rs` calls this and emits the intent.
+    pub(super) fn apply_schedule_marker_jump(
         &mut self,
         target_marker_id: &str,
         trigger: JumpTrigger,
@@ -2221,7 +2235,9 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    pub fn schedule_region_jump(
+    /// Applies the change without telling redundancy; the public wrapper in
+    /// `state/redundancy.rs` calls this and emits the intent.
+    pub(super) fn apply_schedule_region_jump(
         &mut self,
         target_region_id: &str,
         trigger: JumpTrigger,
@@ -2334,7 +2350,9 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    pub fn cancel_marker_jump(
+    /// Applies the change without telling redundancy; the public wrapper in
+    /// `state/redundancy.rs` calls this and emits the intent.
+    pub(super) fn apply_cancel_marker_jump(
         &mut self,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
@@ -2348,7 +2366,9 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    pub fn toggle_vamp(
+    /// Applies the change without telling redundancy; the public wrapper in
+    /// `state/redundancy.rs` calls this and emits the intent.
+    pub(super) fn apply_toggle_vamp(
         &mut self,
         mode: VampMode,
         audio: &AudioController,
@@ -4831,7 +4851,7 @@ pub(super) fn copy_project_audio_files(
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 #[cfg(test)]
 mod video_tests;
 #[cfg(test)]

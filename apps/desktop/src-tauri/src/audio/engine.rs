@@ -2270,27 +2270,13 @@ impl AudioController {
     }
 
     /// The engine's audio clock (redundancy step 02): where the transport was
-    /// at the start of the last rendered block and when, on the caller's
-    /// monotonic base `origin` (ns since that instant). Cheap: a plain C
-    /// struct, no JSON. Like the meter thread, never waits for the state
-    /// lock: None when a command holds it (skip this sample) or before the
-    /// engine has rendered anything.
-    pub fn audio_clock_sample(
-        &self,
-        origin: Instant,
-    ) -> Option<libretracks_core::audio_clock::AudioClockSample> {
+    /// at the start of the last rendered block and how long ago, plus the
+    /// output latency. Cheap: a plain C struct, no JSON. Like the meter
+    /// thread, never waits for the state lock: None when a command holds it
+    /// (skip this sample) or before the engine has rendered anything.
+    pub fn audio_clock_reading(&self) -> Option<lt_audio_engine_v2::AudioClockReading> {
         let state = self.state.try_lock().ok()?;
-        let reading = state.engine.as_ref()?.audio_clock()?;
-        drop(state);
-        let now_ns = Instant::now().saturating_duration_since(origin).as_nanos() as u64;
-        libretracks_core::audio_clock::AudioClockSample::from_engine(
-            reading.frame,
-            reading.sample_rate,
-            reading.callback_age_ns,
-            now_ns,
-            reading.moving,
-            reading.output_latency_samples,
-        )
+        state.engine.as_ref()?.audio_clock()
     }
 
     pub fn project_audio_preparation_snapshot(&self) -> Result<EngineSnapshot, DesktopError> {

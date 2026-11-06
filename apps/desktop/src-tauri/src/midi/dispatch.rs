@@ -199,6 +199,7 @@ fn dispatch_midi_action(
         .session
         .lock()
         .map_err(|_| "desktop session lock poisoned".to_string())?;
+    let _origin = session.intent_origin_scope(crate::state::IntentOrigin::Midi);
 
     if let Some(marker_index) = parse_dynamic_jump_index(action_key, "action:jump_marker_") {
         let song = session
