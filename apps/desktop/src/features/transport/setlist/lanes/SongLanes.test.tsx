@@ -231,7 +231,7 @@ describe("SongLanes gestures", () => {
     expect(api.updateClipWindow).toHaveBeenCalledWith("c1", 10, 0, 14);
   });
 
-  it("a song with an applied arrangement asks «Edit the original?» and does not move", async () => {
+  it("a song with an applied arrangement moves the clip without asking (it stays in its block)", async () => {
     const arranged = {
       ...song,
       regions: [{ ...region, structure: { sections: [], arrangements: [{ id: "x", name: "Corto", blocks: [] }], appliedArrangementId: "x" } }],
@@ -242,8 +242,8 @@ describe("SongLanes gestures", () => {
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 200 });
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 200 });
     await flush();
-    expect(api.moveClipsBatch).not.toHaveBeenCalled();
-    expect(useStructureStore.getState().guard).toMatchObject({ arrangementName: "Corto" });
+    expect(api.moveClipsBatch).toHaveBeenCalledTimes(1);
+    expect(useStructureStore.getState().guard).toBeNull();
   });
 
   it("split, duplicate and delete are the DAW's shortcut actions on the selection", () => {

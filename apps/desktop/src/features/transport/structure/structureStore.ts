@@ -29,6 +29,10 @@ export type StructureGuardRequest = {
 export type DraftBlock = {
   id: string;
   sectionMarkerId: string;
+  /** It has its own content (it was edited on the timeline): it no longer
+   * follows the original. Not part of the draft's changes: the backend keeps
+   * it by block id. */
+  edited?: boolean;
 };
 
 export type ArrangementDraft = {

@@ -2,6 +2,7 @@ import { useCallback } from "react";
 
 import type { SongRegionSummary, SongView } from "@libretracks/shared/models";
 
+import { markerCategory } from "../markerKinds";
 import { getSong, useSongStore } from "../songStore";
 import { appliedArrangementName } from "./arrangementName";
 import { openStructureGuard, type StructureGuardRequest } from "./structureStore";
@@ -9,15 +10,16 @@ import { openStructureGuard, type StructureGuardRequest } from "./structureStore
 /**
  * Edit guard for songs with an applied arrangement.
  *
- * While an arrangement is applied, the song's content on the timeline IS
- * `build(original, blocks)`. Editing a clip or marker there would be lost the
- * next time the arrangement is applied, so the backend rejects it
- * (`song structure locked: …`) and the UI asks first: "This song has an
- * arrangement. Edit the original?".
+ * Clips, MIDI, video, cue markers and automation cues are free: an edit there
+ * stays in the block it falls in (the backend keeps it as that block's own
+ * content). What changes the song's SHAPE is not: section markers, tempo,
+ * meter, key and the song's length come from the original, so the backend
+ * rejects them (`song structure locked: …`) and the UI asks first: "This song
+ * has an arrangement. Edit the original?".
  *
- * Edits check here BEFORE they start (a live drag must not get halfway and fail
- * on commit). The backend error is the safety net for paths the UI does not
- * cover (MIDI, the remote…), and opens the same dialog.
+ * Shape edits check here BEFORE they start (a live drag must not get halfway
+ * and fail on commit). The backend error is the safety net for paths the UI
+ * does not cover (menus, MIDI, the remote…), and opens the same dialog.
  */
 
 /** Must match `DesktopError::SongStructureLocked` in infra/error.rs. */
@@ -57,24 +59,6 @@ export function lockedRegionAt(
   return region ? requestFor(region) : null;
 }
 
-/** The first locked song among these clips, if any. */
-export function lockedRegionForClips(
-  song: SongView | null,
-  clipIds: readonly string[],
-): StructureGuardRequest | null {
-  if (!song) return null;
-  for (const clipId of clipIds) {
-    const clip =
-      song.clips.find((candidate) => candidate.id === clipId) ??
-      song.midiClips?.find((candidate) => candidate.id === clipId) ??
-      song.videoClips?.find((candidate) => candidate.id === clipId);
-    if (!clip) continue;
-    const locked = lockedRegionAt(song, clip.timelineStartSeconds);
-    if (locked) return locked;
-  }
-  return null;
-}
-
 /**
  * Ask before editing content at these positions. Returns `true` when the edit
  * may go ahead; otherwise opens the guard dialog and returns `false`.
@@ -91,14 +75,16 @@ export function requestStructureEdit(seconds: readonly number[]): boolean {
   return true;
 }
 
-/** Same as `requestStructureEdit`, for clips by id. */
-export function requestClipEdit(clipIds: readonly string[]): boolean {
-  const locked = lockedRegionForClips(getSong(), clipIds);
-  if (locked) {
-    openStructureGuard(locked);
-    return false;
-  }
-  return true;
+/** Same as `requestStructureEdit`, for markers by id: only SECTION markers
+ * are guarded (they are the blocks); cue markers are free. */
+export function requestMarkerEdit(markerIds: readonly string[]): boolean {
+  const song = getSong();
+  const sectionStarts = markerIds
+    .map((id) => song?.sectionMarkers.find((marker) => marker.id === id))
+    .filter((marker): marker is NonNullable<typeof marker> => Boolean(marker))
+    .filter((marker) => markerCategory(marker) === "section")
+    .map((marker) => marker.startSeconds);
+  return requestStructureEdit(sectionStarts);
 }
 
 /** Parses the backend's `SongStructureLocked` error. */

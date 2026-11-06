@@ -134,6 +134,7 @@
     "delete_ruler_markers",
     "delete_section_marker",
     "delete_song_arrangement",
+    "reset_arrangement_block",
     "delete_song_region",
     "delete_song_tempo_marker",
     "delete_song_time_signature_marker",

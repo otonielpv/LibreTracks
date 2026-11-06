@@ -19,6 +19,7 @@ import {
   lockedRegionAt,
   parseStructureLocked,
   regionAt,
+  requestMarkerEdit,
   requestStructureEdit,
 } from "./structureGuard";
 import { useStructureStore } from "./structureStore";
@@ -112,12 +113,9 @@ describe("structure guard", () => {
 
   /** C5: dragging a clip of a locked song opens the dialog and sends no
    * move command at all — not even the live preview ones. */
-  it("dragging a clip in a song with an applied arrangement opens the dialog and moves nothing", async () => {
+  it("dragging a clip in a song with an applied arrangement moves it without asking (it stays in its block)", async () => {
     const desktopApi = await import("../desktopApi");
     const moveClip = vi.spyOn(desktopApi, "moveClip");
-    const moveClipLive = vi.spyOn(desktopApi, "moveClipLive");
-    const moveClipsBatch = vi.spyOn(desktopApi, "moveClipsBatch");
-    const moveClipsLiveBatch = vi.spyOn(desktopApi, "moveClipsLiveBatch");
     setRegionStructureForTest("region-1", APPLIED);
 
     const { container } = await renderApp();
@@ -127,33 +125,37 @@ describe("structure guard", () => {
     await act(async () => {
       fireEvent(window, new Event("resize"));
     });
-
     const drumsLane = getTrackLaneRow(container, "Drums")?.querySelector(
       ".lt-track-lane",
-    ) as HTMLElement | null;
-    expect(drumsLane).toBeTruthy();
-
+    ) as HTMLElement;
     await act(async () => {
-      fireEvent.mouseDown(drumsLane as HTMLElement, {
-        button: 0,
-        clientX: 320,
-        clientY: 140,
-      });
+      fireEvent.mouseDown(drumsLane, { button: 0, clientX: 320, clientY: 140 });
       fireEvent.mouseMove(window, { clientX: 440, clientY: 140 });
-      fireEvent.mouseMove(window, { clientX: 480, clientY: 140 });
-      fireEvent.mouseUp(window, { button: 0, clientX: 480, clientY: 140 });
+      fireEvent.mouseUp(window, { button: 0, clientX: 440, clientY: 140 });
     });
+    await waitFor(() => {
+      expect(moveClip).toHaveBeenCalled();
+    });
+    expect(useStructureStore.getState().guard).toBeNull();
+    expect(screen.queryByRole("dialog", { name: /Domingo/ })).toBeNull();
+  });
 
-    const dialog = await screen.findByRole("dialog", {
+  it("a shape edit in an arranged song opens the dialog, and «Edit original» goes back to the original", async () => {
+    const desktopApi = await import("../desktopApi");
+    setRegionStructureForTest("region-1", APPLIED);
+    await renderApp();
+    const region = useSongStore.getState().song?.regions.find((r) => r.id === "region-1");
+    expect(region).toBeTruthy();
+
+    let allowed = true;
+    await act(async () => {
+      allowed = requestStructureEdit([(region?.startSeconds ?? 0) + 0.5]);
+    });
+    expect(allowed).toBe(false);
+    await screen.findByRole("dialog", {
       name: en.transport.structure.guard.title.replace("{{name}}", "Domingo"),
     });
-    expect(dialog).toBeTruthy();
-    expect(moveClip).not.toHaveBeenCalled();
-    expect(moveClipLive).not.toHaveBeenCalled();
-    expect(moveClipsBatch).not.toHaveBeenCalled();
-    expect(moveClipsLiveBatch).not.toHaveBeenCalled();
 
-    // "Edit original" goes back to the original (and keeps the arrangement).
     const applySpy = vi.spyOn(desktopApi, "applySongArrangement");
     await act(async () => {
       fireEvent.click(
@@ -164,6 +166,32 @@ describe("structure guard", () => {
       expect(applySpy).toHaveBeenCalledWith("region-1", null);
     });
     expect(screen.queryByRole("dialog", { name: /Domingo/ })).toBeNull();
+  });
+
+  it("only section markers ask: a cue marker in an arranged song is free", async () => {
+    setRegionStructureForTest("region-1", APPLIED);
+    await renderApp();
+    const song = useSongStore.getState().song;
+    const region = song?.regions.find((r) => r.id === "region-1");
+    const at = (region?.startSeconds ?? 0) + 0.5;
+    useSongStore.setState({
+      song: song
+        ? {
+            ...song,
+            sectionMarkers: [
+              ...song.sectionMarkers,
+              { id: "aviso", name: "Todos", startSeconds: at, digit: null, kind: "all_in" } as never,
+              { id: "seccion", name: "Coro", startSeconds: at + 0.1, digit: null, kind: "chorus" } as never,
+            ],
+          }
+        : song,
+    });
+    expect(requestMarkerEdit(["aviso"])).toBe(true);
+    expect(useStructureStore.getState().guard).toBeNull();
+    await act(async () => {
+      expect(requestMarkerEdit(["aviso", "seccion"])).toBe(false);
+    });
+    expect(useStructureStore.getState().guard).toMatchObject({ arrangementName: "Domingo" });
   });
 
   it("the same drag without an applied arrangement still moves the clip", async () => {

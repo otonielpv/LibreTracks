@@ -7,6 +7,7 @@ import {
   closeStructureEditor,
   draftForArrangement,
   draftFromOriginal,
+  withEditedFlags,
   originalDraft,
   initialDraft,
   isDraftDirty,
@@ -48,6 +49,18 @@ export function useArrangementActions(handlers: StructureHandlers) {
   useEffect(() => {
     if (regionId && song && !region) closeStructureEditor();
   }, [region, regionId, song]);
+
+  // A block edited on the timeline (or reset) while the editor is open: show
+  // it in the working copy and in the saved one, without touching the order.
+  useEffect(() => {
+    if (!structure) return;
+    const state = useStructureStore.getState();
+    const nextDraft = withEditedFlags(state.draft, structure.arrangements);
+    const nextSaved = withEditedFlags(state.savedDraft, structure.arrangements);
+    if (nextDraft !== state.draft || nextSaved !== state.savedDraft) {
+      useStructureStore.setState({ draft: nextDraft, savedDraft: nextSaved });
+    }
+  }, [structure]);
 
   // First open, or the original was just captured: start a working copy.
   useEffect(() => {
@@ -155,6 +168,17 @@ export function useArrangementActions(handlers: StructureHandlers) {
     useStructureStore.setState({ draft: null, savedDraft: null });
   };
 
+  /** "Reset to the original" for an edited block of a saved arrangement. */
+  const resetBlock = async (blockId: string) => {
+    if (!regionId || !draft?.arrangementId || draft.isOriginal) return;
+    await handlers.resetBlock(regionId, draft.arrangementId, blockId);
+  };
+  const selectedBlockEdited = Boolean(
+    draft?.arrangementId &&
+      !draft.isOriginal &&
+      draft.blocks.find((block) => block.id === selectedBlockId)?.edited,
+  );
+
   return {
     t,
     regionId,
@@ -162,6 +186,8 @@ export function useArrangementActions(handlers: StructureHandlers) {
     structure,
     draft,
     selectedBlockId,
+    selectedBlockEdited,
+    resetBlock,
     dirty,
     appliedId,
     draftIsApplied,

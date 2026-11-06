@@ -2330,6 +2330,19 @@ export async function deleteSongArrangement(
   });
 }
 
+/** «Reset to the original»: an edited block follows its section again. */
+export async function resetArrangementBlock(
+  regionId: string,
+  arrangementId: string,
+  blockId: string,
+): Promise<SongStructureResult> {
+  return invokeCommand<SongStructureResult>("reset_arrangement_block", {
+    regionId,
+    arrangementId,
+    blockId,
+  });
+}
+
 /** Apply a saved arrangement, or `null` to go back to the original. */
 export async function applySongArrangement(
   regionId: string,

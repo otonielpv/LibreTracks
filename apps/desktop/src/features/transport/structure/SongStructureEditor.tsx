@@ -188,6 +188,14 @@ export function SongStructureEditor({
               >
                 <span className="lt-structure-block-index">{index + 1}</span>
                 <span className="lt-structure-block-name">{label}</span>
+                {block.edited ? (
+                  <span
+                    className="lt-structure-block-edited"
+                    title={t("transport.structure.editedHint")}
+                  >
+                    {t("transport.structure.edited")}
+                  </span>
+                ) : null}
                 {section ? (
                   <span className="lt-structure-block-bars">{formatBars(section.bars, t)}</span>
                 ) : null}

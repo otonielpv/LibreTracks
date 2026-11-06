@@ -66,6 +66,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "delete_ruler_markers"
         | "delete_section_marker"
         | "delete_song_arrangement"
+        | "reset_arrangement_block"
         | "delete_song_region"
         | "delete_song_tempo_marker"
         | "delete_song_time_signature_marker"
@@ -212,6 +213,7 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "delete_ruler_markers",
     "delete_section_marker",
     "delete_song_arrangement",
+    "reset_arrangement_block",
     "delete_song_region",
     "delete_song_tempo_marker",
     "delete_song_time_signature_marker",
@@ -640,6 +642,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::timeline::delete_song_arrangement(arg(&args, "regionId")?, arg(&args, "arrangementId")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "reset_arrangement_block" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::reset_arrangement_block(arg(&args, "regionId")?, arg(&args, "arrangementId")?, arg(&args, "blockId")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?

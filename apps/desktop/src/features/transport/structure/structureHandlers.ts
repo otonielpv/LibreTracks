@@ -9,6 +9,7 @@ import {
   captureSongStructure,
   deleteSongArrangement,
   discardSongStructure,
+  resetArrangementBlock,
   saveSongArrangement,
   updateSectionMarker,
 } from "../desktopApi";
@@ -121,6 +122,13 @@ export function createStructureHandlers(deps: StructureHandlerDeps) {
         ok = true;
       });
       return { ok, error: failure };
+    },
+
+    /** "Reset to the original": an edited block follows its section again. */
+    async resetBlock(regionId: string, arrangementId: string, blockId: string) {
+      await deps.runAction(async () => {
+        finish(regionId, await resetArrangementBlock(regionId, arrangementId, blockId));
+      });
     },
 
     async deleteArrangement(regionId: string, arrangementId: string) {

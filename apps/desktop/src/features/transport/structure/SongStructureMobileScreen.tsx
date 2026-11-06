@@ -538,6 +538,16 @@ export function SongStructureMobileScreen({
               setMenuBlockId(null);
             }}
           />
+          {menuBlock.edited && draft?.arrangementId && !draft.isOriginal ? (
+            <SheetItem
+              icon="undo"
+              label={t("transport.structure.resetBlock")}
+              onSelect={() => {
+                setMenuBlockId(null);
+                void actions.resetBlock(menuBlock.id);
+              }}
+            />
+          ) : null}
           <SheetItem
             icon="delete"
             label={t("transport.structure.removeBlock")}

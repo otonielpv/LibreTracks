@@ -1705,12 +1705,16 @@ const en = {
       droppedRemoved:
         "The arrangement “{{arrangement}}” was left without sections ({{sections}}) and was deleted.",
       lockedStatus:
-        "The song has the arrangement “{{name}}” applied: go back to the original to edit clips or markers.",
+        "The song has the arrangement “{{name}}” applied: go back to the original to change sections, tempo, meter or key.",
+      edited: "edited",
+      editedHint:
+        "This block has its own changes: it no longer follows the original, and changes to the original do not reach it.",
+      resetBlock: "Reset to the original",
       guard: {
         eyebrow: "Song with an arrangement",
         title: "This song has an arrangement (“{{name}}”)",
         description:
-          "To edit clips or markers you have to go back to the original; the arrangement is kept and you can apply it again.",
+          "Sections, tempo, meter and key shape the song and are changed in the original. The arrangement is kept and you can apply it again. Clips, MIDI, video, cues and automation can be edited here: the change stays in that block.",
         editOriginal: "Edit original",
         cancel: "Cancel",
       },

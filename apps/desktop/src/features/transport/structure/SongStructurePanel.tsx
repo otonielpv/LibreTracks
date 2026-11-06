@@ -102,6 +102,11 @@ function DesktopPanel({
             <button type="button" onClick={() => void actions.recaptureOriginal()}>
               {t("transport.structure.recapture")}
             </button>
+            {actions.selectedBlockEdited && selectedBlockId ? (
+              <button type="button" onClick={() => void actions.resetBlock(selectedBlockId)}>
+                {t("transport.structure.resetBlock")}
+              </button>
+            ) : null}
           </div>
           <SongStructureEditor
             sections={structure.sections}

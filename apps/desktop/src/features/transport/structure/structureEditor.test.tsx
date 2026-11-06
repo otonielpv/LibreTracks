@@ -524,3 +524,58 @@ describe("structure editor — the original as one more choice", () => {
     expect(capture).not.toHaveBeenCalled();
   });
 });
+
+describe("structure editor — edited blocks", () => {
+  const withEdited = (ids: string[]): SongStructureSummary => ({
+    ...STRUCTURE,
+    arrangements: STRUCTURE.arrangements.map((arrangement) => ({
+      ...arrangement,
+      blocks: arrangement.blocks.map((block) => ({ ...block, edited: ids.includes(block.id) })),
+    })),
+  });
+
+  /** C3 (desktop): an edited block shows it, and «Reset to the original»
+   * runs the command for that block of the saved arrangement. */
+  it("marks an edited block and resets it from the toolbar", async () => {
+    const desktopApi = await import("../desktopApi");
+    const reset = vi.spyOn(desktopApi, "resetArrangementBlock").mockResolvedValue({
+      snapshot: null as never,
+      warnings: [],
+      droppedBlocks: [],
+    });
+    useSongStore.setState({ song: songWith(withEdited(["b4"])) });
+    openStructureEditor("r1");
+    render(<SongStructurePanel handlers={handlersSpy()} />);
+    const strip = await screen.findByRole("list", { name: en.transport.structure.strip });
+
+    const edited = strip.querySelectorAll(".lt-structure-block-edited");
+    expect(edited).toHaveLength(1);
+    expect(edited[0].closest("[data-block-id]")?.getAttribute("data-block-id")).toBe("b4");
+    expect(screen.queryByRole("button", { name: en.transport.structure.resetBlock })).toBeNull();
+
+    await act(async () => {
+      useStructureStore.setState({ selectedBlockId: "b4" });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: en.transport.structure.resetBlock }));
+    });
+    await waitFor(() => expect(reset).toHaveBeenCalledWith("r1", "domingo", "b4"));
+  });
+
+  /** Editing on the timeline while the editor is open shows up without
+   * marking the working copy as changed. */
+  it("picks up a block edited on the timeline while the editor is open", async () => {
+    useSongStore.setState({ song: songWith(STRUCTURE) });
+    openStructureEditor("r1");
+    render(<SongStructurePanel handlers={handlersSpy()} />);
+    const strip = await screen.findByRole("list", { name: en.transport.structure.strip });
+    expect(strip.querySelectorAll(".lt-structure-block-edited")).toHaveLength(0);
+
+    await act(async () => {
+      useSongStore.setState({ song: songWith(withEdited(["b3"])) });
+    });
+
+    expect(strip.querySelectorAll(".lt-structure-block-edited")).toHaveLength(1);
+    expect(isDraftDirty()).toBe(false);
+  });
+});

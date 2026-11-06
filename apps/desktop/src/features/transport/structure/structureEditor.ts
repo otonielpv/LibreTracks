@@ -50,7 +50,28 @@ export function draftForArrangement(
     blocks: arrangement.blocks.map((block) => ({
       id: block.id,
       sectionMarkerId: block.sectionMarkerId,
+      edited: Boolean(block.edited),
     })),
+  };
+}
+
+/**
+ * The draft with each block's `edited` as the song has it now: editing on the
+ * timeline (or "Reset to the original") changes it while the editor is open.
+ * Returns the same object when nothing changes.
+ */
+export function withEditedFlags(
+  draft: ArrangementDraft | null,
+  arrangements: readonly ArrangementSummary[],
+): ArrangementDraft | null {
+  if (!draft?.arrangementId || draft.isOriginal) return draft;
+  const saved = arrangements.find((arrangement) => arrangement.id === draft.arrangementId);
+  if (!saved) return draft;
+  const edited = new Set(saved.blocks.filter((block) => block.edited).map((block) => block.id));
+  if (draft.blocks.every((block) => Boolean(block.edited) === edited.has(block.id))) return draft;
+  return {
+    ...draft,
+    blocks: draft.blocks.map((block) => ({ ...block, edited: edited.has(block.id) })),
   };
 }
 

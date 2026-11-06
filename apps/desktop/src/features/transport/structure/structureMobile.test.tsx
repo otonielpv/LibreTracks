@@ -206,6 +206,69 @@ describe("arrangement editor on mobile — C1", () => {
   });
 });
 
+describe("arrangement editor on a phone: edited blocks", () => {
+  /** C3 (mobile): the block menu offers «Reset to the original» only for an
+   * edited block. */
+  it("an edited block shows it and its menu resets it", async () => {
+    const desktopApi = await import("../desktopApi");
+    const reset = vi.spyOn(desktopApi, "resetArrangementBlock").mockResolvedValue({
+      snapshot: null as never,
+      warnings: [],
+      droppedBlocks: [],
+    });
+    const edited = song();
+    const structure = edited.regions[0].structure!;
+    edited.regions[0] = {
+      ...edited.regions[0],
+      structure: {
+        ...structure,
+        arrangements: structure.arrangements.map((arrangement) => ({
+          ...arrangement,
+          blocks: arrangement.blocks.map((block) => ({ ...block, edited: block.id === "b3" })),
+        })),
+      },
+    };
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await renderMobile();
+    await act(async () => {
+      useSongStore.setState({ song: edited });
+    });
+    expect(document.querySelector('[data-block-id="b3"] .lt-structure-block-edited')).not.toBeNull();
+
+    // Not edited: no reset in its menu.
+    await act(async () => {
+      pointer(rowOf("b2"), "pointerdown", { pointerId: 1, clientX: 100, clientY: 70 });
+      vi.advanceTimersByTime(LONG_PRESS_MS + 10);
+    });
+    await act(async () => {
+      pointer(window, "pointerup", { pointerId: 1, clientX: 100, clientY: 70 });
+    });
+    let menu = screen.getByRole("menu", { name: "Verso" });
+    expect(within(menu).queryByRole("menuitem", { name: en.transport.structure.resetBlock })).toBeNull();
+    await act(async () => {
+      fireEvent.keyDown(menu, { key: "Escape" });
+    });
+    useStructureStore.setState({});
+
+    // Edited: reset.
+    await act(async () => {
+      pointer(rowOf("b3"), "pointerdown", { pointerId: 2, clientX: 100, clientY: 140 });
+      vi.advanceTimersByTime(LONG_PRESS_MS + 10);
+    });
+    await act(async () => {
+      pointer(window, "pointerup", { pointerId: 2, clientX: 100, clientY: 140 });
+    });
+    menu = screen.getAllByRole("menu", { name: "Coro" }).at(-1)!;
+    await act(async () => {
+      fireEvent.click(
+        within(menu).getByRole("menuitem", { name: en.transport.structure.resetBlock }),
+      );
+    });
+    await waitFor(() => expect(reset).toHaveBeenCalledWith("r1", "domingo", "b3"));
+    vi.useRealTimers();
+  });
+});
+
 describe("arrangement editor on a phone: a row of cards", () => {
   it("lays the sections side by side, with an insert line before each and Add at the end", async () => {
     await renderMobile();

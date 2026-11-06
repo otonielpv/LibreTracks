@@ -132,6 +132,7 @@ export const GUEST_COMMAND_ROUTES: Readonly<Record<string, GuestCommandRoute>> =
   delete_ruler_markers: "edit",
   delete_section_marker: "edit",
   delete_song_arrangement: "edit",
+  reset_arrangement_block: "edit",
   delete_song_region: "edit",
   delete_song_tempo_marker: "edit",
   delete_song_time_signature_marker: "edit",

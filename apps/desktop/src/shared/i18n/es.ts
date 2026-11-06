@@ -1733,12 +1733,16 @@ const es = {
       droppedRemoved:
         "El arreglo «{{arrangement}}» se quedó sin secciones ({{sections}}) y se eliminó.",
       lockedStatus:
-        "La canción tiene el arreglo «{{name}}» aplicado: vuelve al original para editar clips o marcas.",
+        "La canción tiene el arreglo «{{name}}» aplicado: vuelve al original para cambiar secciones, tempo, compás o nota.",
+      edited: "editado",
+      editedHint:
+        "Este bloque tiene cambios propios: ya no sigue al original. Los cambios del original no le llegan.",
+      resetBlock: "Restablecer como el original",
       guard: {
         eyebrow: "Canción con arreglo",
         title: "Esta canción tiene un arreglo («{{name}}»)",
         description:
-          "Para editar clips o marcas hay que volver al original; el arreglo se guarda y lo puedes volver a aplicar.",
+          "Las secciones, el tempo, el compás y la nota forman la canción y se cambian en el original. El arreglo se guarda y lo puedes volver a aplicar. Los clips, el MIDI, el vídeo, los avisos y las automatizaciones sí se editan aquí: el cambio se queda en ese bloque.",
         editOriginal: "Editar original",
         cancel: "Cancelar",
       },

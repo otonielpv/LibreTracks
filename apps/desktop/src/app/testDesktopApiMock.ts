@@ -1924,6 +1924,24 @@ export const testDesktopApiMock = {
     updateRegionStructure(regionId, (structure) =>
       structure ? { ...structure, appliedArrangementId: arrangementId } : structure,
     ),
+  resetArrangementBlock: async (regionId: string, arrangementId: string, blockId: string) =>
+    updateRegionStructure(regionId, (structure) =>
+      structure
+        ? {
+            ...structure,
+            arrangements: structure.arrangements.map((arrangement) =>
+              arrangement.id === arrangementId
+                ? {
+                    ...arrangement,
+                    blocks: arrangement.blocks.map((block) =>
+                      block.id === blockId ? { ...block, edited: false } : block,
+                    ),
+                  }
+                : arrangement,
+            ),
+          }
+        : structure,
+    ),
   deleteSongArrangement: async (regionId: string, arrangementId: string) =>
     updateRegionStructure(regionId, (structure) =>
       structure

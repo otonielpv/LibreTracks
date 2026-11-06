@@ -872,6 +872,42 @@ impl DesktopSession {
         self.commit_structure_change(song, cues, change, audio, warnings, dropped)
     }
 
+    /// «Restablecer como el original»: el bloque deja de tener contenido
+    /// propio y vuelve a copiar su sección del original. Si su arreglo está
+    /// aplicado, se reescribe en el timeline. Un paso de deshacer.
+    pub fn reset_arrangement_block(
+        &mut self,
+        region_id: &str,
+        arrangement_id: &str,
+        block_id: &str,
+        audio: &AudioController,
+    ) -> Result<SongStructureResult, DesktopError> {
+        let mut song = self.structure_song()?;
+        let mut cues = self.automation.cues.clone();
+        let structure = song
+            .regions
+            .iter_mut()
+            .find(|region| region.id == region_id)
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?
+            .structure
+            .as_mut()
+            .ok_or_else(|| DesktopError::SongStructure("la canción no tiene original".into()))?;
+        let block = structure
+            .arrangements
+            .iter_mut()
+            .find(|arrangement| arrangement.id == arrangement_id)
+            .and_then(|arrangement| arrangement.blocks.iter_mut().find(|b| b.id == block_id))
+            .ok_or_else(|| DesktopError::SongStructure(format!("bloque {block_id} no encontrado")))?;
+        block.content = None;
+        let applied = structure.applied_arrangement_id.as_deref() == Some(arrangement_id);
+        let change = if applied {
+            Some(apply_structure(&mut song, &mut cues, region_id, Some(arrangement_id))?)
+        } else {
+            None
+        };
+        self.commit_structure_change(song, cues, change, audio, Vec::new(), Vec::new())
+    }
+
     /// Borra un arreglo. Si estaba aplicado, antes vuelve al original.
     pub fn delete_song_arrangement(
         &mut self,

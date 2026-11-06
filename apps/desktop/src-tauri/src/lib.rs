@@ -503,6 +503,7 @@ pub fn run() {
             commands::timeline::capture_song_structure,
             commands::timeline::save_song_arrangement,
             commands::timeline::delete_song_arrangement,
+            commands::timeline::reset_arrangement_block,
             commands::timeline::apply_song_arrangement,
             commands::timeline::discard_song_structure,
             commands::timeline::update_song_region_transpose,

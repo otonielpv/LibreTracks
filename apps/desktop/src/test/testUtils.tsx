@@ -214,6 +214,7 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     saveSongArrangement: vi.fn(testDesktopApiMock.saveSongArrangement),
     applySongArrangement: vi.fn(testDesktopApiMock.applySongArrangement),
     deleteSongArrangement: vi.fn(testDesktopApiMock.deleteSongArrangement),
+    resetArrangementBlock: vi.fn(testDesktopApiMock.resetArrangementBlock),
     discardSongStructure: vi.fn(testDesktopApiMock.discardSongStructure),
     updateLiveRegionMasterGain: vi.fn(testDesktopApiMock.updateLiveRegionMasterGain),
     updateSongRegionMasterGain: vi.fn(testDesktopApiMock.updateSongRegionMasterGain),

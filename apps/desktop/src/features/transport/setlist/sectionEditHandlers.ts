@@ -4,7 +4,7 @@ import type { RulerMarkerRef, SongRegionSummary, SongView } from "../desktopApi"
 import type { TimelineMenus } from "../menus/timelineMenus";
 import type { RulerMarkerHandlers } from "../rulerMarkers/rulerMarkerHandlers";
 import { groupContaining, handleRulerMarkerClick } from "../rulerMarkers/rulerMarkerSelection";
-import { requestStructureEdit } from "../structure/structureGuard";
+import { requestMarkerEdit, requestStructureEdit } from "../structure/structureGuard";
 import { selectedRulerMarkers, useTimelineUIStore } from "../uiStore";
 import { clampRegionResizeEdge, regionResizeBounds } from "../timeline/regionResize";
 import { placeSectionSeconds } from "./sectionEditModel";
@@ -16,7 +16,8 @@ import { snapSecondsToSongGrid } from "./sectionScrubModel";
  * moving, duplicating and deleting through the ruler marker handlers
  * (`moveRulerMarkers`, `duplicateRulerMarkers`, `deleteRulerMarkers`), the
  * menu is the section menu, and the selection is the project's marker
- * selection. Everything that edits asks the arrangement guard first.
+ * selection. What edits sections asks the arrangement guard first; cue
+ * markers are free (they stay in their block).
  *
  * Created once; the volatile state comes through `getDeps` on every call.
  */
@@ -68,7 +69,9 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
   function openMenuAt(event: ReactMouseEvent<HTMLElement>, seconds: number) {
     const deps = getDeps();
     const target = place(seconds);
-    if (target === null || !requestStructureEdit([target])) return;
+    // The menu also creates cues: the section and tempo entries meet the
+    // backend's guard, which opens the dialog.
+    if (target === null) return;
     deps.menus.openMenu(
       event,
       deps.t("transport.menu.createMarker"),
@@ -91,7 +94,7 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
     const deps = getDeps();
     const region = deps.getRegion();
     const target = place(seconds);
-    if (!region || target === null || !requestStructureEdit([target])) return;
+    if (!region || target === null) return;
     const ruler = deps.menus.rulerContextMenu(target, null);
     const timing = [
       ruler.find((action) => action.label === deps.t("transport.menu.changeTimelineBpm")),
@@ -138,7 +141,7 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
    * or All in, Drums…) at that bar; picking one creates it, named. */
   function createKindAt(seconds: number, lane: "section" | "cue") {
     const target = place(seconds);
-    if (target === null || !requestStructureEdit([target])) return;
+    if (target === null || (lane === "section" && !requestStructureEdit([target]))) return;
     const { menus } = getDeps();
     if (lane === "section") menus.openCreateSectionKindMenu(target);
     else menus.openCreateCueKindMenu(target);
@@ -147,11 +150,7 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
   /** One commit when the drag ends: `moveRulerMarkers` for the group. */
   function commitMove(markerIds: readonly string[], deltaSeconds: number) {
     if (markerIds.length === 0 || Math.abs(deltaSeconds) < 1e-6) return false;
-    const song = getDeps().getSong();
-    const starts = markerIds
-      .map((id) => song.sectionMarkers.find((marker) => marker.id === id)?.startSeconds)
-      .filter((value): value is number => value !== undefined);
-    if (!requestStructureEdit(starts)) return false;
+    if (!requestMarkerEdit(markerIds)) return false;
     getDeps().rulerMarkers.moveGroup(markerIds.map(sectionRef), deltaSeconds);
     return true;
   }
@@ -177,22 +176,14 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
   function duplicateSelection() {
     const markers = selection();
     if (markers.length === 0) return;
-    const song = getDeps().getSong();
-    const starts = markers
-      .map((marker) => song.sectionMarkers.find((entry) => entry.id === marker.id)?.startSeconds)
-      .filter((value): value is number => value !== undefined);
-    if (!requestStructureEdit(starts)) return;
+    if (!requestMarkerEdit(markers.map((marker) => marker.id))) return;
     getDeps().rulerMarkers.duplicate(markers);
   }
 
   function deleteSelection() {
     const markers = selection();
     if (markers.length === 0) return;
-    const song = getDeps().getSong();
-    const starts = markers
-      .map((marker) => song.sectionMarkers.find((entry) => entry.id === marker.id)?.startSeconds)
-      .filter((value): value is number => value !== undefined);
-    if (!requestStructureEdit(starts)) return;
+    if (!requestMarkerEdit(markers.map((marker) => marker.id))) return;
     getDeps().rulerMarkers.remove(markers);
   }
 

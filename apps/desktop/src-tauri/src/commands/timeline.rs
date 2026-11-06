@@ -540,6 +540,23 @@ pub fn delete_song_arrangement(
         .map_err(|error| error.to_string())
 }
 
+/// «Restablecer como el original» de un bloque editado.
+#[tauri::command(async)]
+pub fn reset_arrangement_block(
+    region_id: String,
+    arrangement_id: String,
+    block_id: String,
+    state: State<'_, DesktopState>,
+) -> Result<SongStructureResult, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .reset_arrangement_block(&region_id, &arrangement_id, &block_id, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 /// Aplica un arreglo guardado; `null` vuelve al original.
 #[tauri::command(async)]
 pub fn apply_song_arrangement(

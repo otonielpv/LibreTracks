@@ -721,3 +721,30 @@ fn renaming_a_cue_marker_in_an_edited_block_stays_in_it() {
         "todos"
     );
 }
+
+/// «Restablecer como el original»: el bloque vuelve a seguir a su sección y el
+/// timeline lo refleja; deshacer lo devuelve editado.
+#[test]
+fn resetting_a_block_makes_it_follow_the_original_again() {
+    let (mut session, audio) = applied();
+    let before = song_of(&session);
+    // Sin salirse del bloque (moverlo haría que su cola entrase en el coro,
+    // que también quedaría editado).
+    let mut louder = song_of(&session);
+    louder.clips.iter_mut().find(|c| c.id == "xb~2").unwrap().gain = 0.5;
+    session
+        .persist_song_update(louder, &audio, AudioChangeImpact::TimelineWindow, true)
+        .expect("editar");
+
+    session
+        .reset_arrangement_block("r2", "largo", "largo-2", &audio)
+        .expect("restablecer");
+    let song = song_of(&session);
+    assert!(block(&song, "largo-2").content.is_none());
+    assert_eq!(song.clips, before.clips, "como el original");
+
+    session.undo_action(&audio).expect("undo");
+    let song = song_of(&session);
+    assert!(block(&song, "largo-2").content.is_some());
+    assert_eq!(clip_of(&song, "xb~2").gain, 0.5, "editado otra vez");
+}

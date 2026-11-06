@@ -20,7 +20,6 @@ import {
   resolveMemberTargetTrackId,
 } from "../timeline/clipVerticalDrag";
 import { snapToTimelineGrid } from "../timeline/useTimelineGrid";
-import { requestClipEdit } from "../structure/structureGuard";
 
 import type { TimelineTrackSummary } from "../library/pendingAudioImports";
 import type {
@@ -232,16 +231,8 @@ export function useDragListeners({
           Math.abs(deltaLocalX) > DRAG_THRESHOLD_PX ||
           Math.abs(deltaLocalY) > DRAG_THRESHOLD_PX;
         if (!clipDrag.hasMoved && exceededThreshold) {
-          // Una canción con arreglo aplicado no se edita a mano: se pregunta
-          // al EMPEZAR el arrastre (no al soltar) y el arrastre no sigue.
-          // Sólo se comprueba una vez, al cruzar el umbral.
-          if (!requestClipEdit(clipDrag.members.map((member) => member.clipId))) {
-            clipDragRef.current = null;
-            clipPreviewSecondsRef.current = {};
-            clipPreviewTrackIdRef.current = {};
-            setClipDragSnapIndicatorSeconds(null);
-            return;
-          }
+          // En una canción con arreglo aplicado el clip se mueve igual: la
+          // edición se queda en el bloque donde cae (lo guarda el backend).
           restoreConfirmedTransportVisualRef.current?.();
         }
 
