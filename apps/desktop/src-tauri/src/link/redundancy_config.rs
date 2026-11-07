@@ -24,6 +24,10 @@ pub struct RedundancyConfig {
     pub backup_trusted: Vec<TrustedDevice>,
     /// Backup side: token per main host id, from a `welcome` with remember.
     pub main_tokens: HashMap<String, String>,
+    /// Main side: the backup may forward transport orders here.
+    pub backup_may_forward: bool,
+    /// Backup side: drift correction threshold, 2-20 ms. None = 5 ms.
+    pub correction_threshold_ms: Option<f64>,
     /// Backup side: `host:port` of the main.
     pub main_address: String,
     /// Backup side: send local transport orders to the main instead of

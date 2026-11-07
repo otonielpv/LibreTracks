@@ -23,6 +23,8 @@ import {
 import { AudioDeviceStatusBadge } from "../AudioDeviceStatusBadge";
 import { MidiDeviceStatusBadge } from "../MidiDeviceStatusBadge";
 import { NetworkSessionBadge } from "../../network/NetworkSessionBadge";
+import { RedundancyBadge } from "../../redundancy/RedundancyBadge";
+import { useTransportGuard } from "../../redundancy/useTransportGuard";
 import { requestAppClose } from "../../appClose/appCloseService";
 import { FadeStopButton } from "./FadeStopButton";
 import { openLevelSongs } from "../levelSongs/levelSongsStore";
@@ -165,6 +167,9 @@ export function TimelineTopbar({
   onMidiLearnTarget,
 }: TimelineTopbarProps) {
   const { t } = useTranslation();
+  // Redundancy backup following its main: transport buttons locked.
+  const transportGuard = useTransportGuard();
+  const lockedClass = transportGuard.locked ? " is-redundancy-locked" : "";
   const { canEdit, canUseFiles } = useNetworkPermissions();
   // Narrow selectors: the topbar only needs the base tempo and whether a
   // project is loaded, so unrelated mutations of `song` no longer re-render it.
@@ -671,6 +676,9 @@ export function TimelineTopbar({
             <button
               type="button"
               aria-label={t("timelineTopbar.stop")}
+              className={lockedClass.trim() || undefined}
+              aria-disabled={transportGuard.locked || undefined}
+              title={transportGuard.lockTitle}
               disabled={isProjectEmpty && !learnModeActive}
               onClick={() => {
                 if (learnModeActive) {
@@ -678,7 +686,7 @@ export function TimelineTopbar({
                   return;
                 }
 
-                onStopTransport();
+                transportGuard.guard(onStopTransport)();
               }}
             >
               <span className="material-symbols-outlined">stop</span>
@@ -693,7 +701,9 @@ export function TimelineTopbar({
             <button
               type="button"
               aria-label={t("timelineTopbar.play")}
-              className={isPlaying ? "is-play is-active" : "is-play"}
+              className={(isPlaying ? "is-play is-active" : "is-play") + lockedClass}
+              aria-disabled={transportGuard.locked || undefined}
+              title={transportGuard.lockTitle}
               aria-pressed={isPlaying}
               disabled={isProjectEmpty && !learnModeActive}
               onClick={() => {
@@ -702,7 +712,7 @@ export function TimelineTopbar({
                   return;
                 }
 
-                onPlayTransport();
+                transportGuard.guard(onPlayTransport)();
               }}
             >
               <span className="material-symbols-outlined">play_arrow</span>
@@ -712,7 +722,9 @@ export function TimelineTopbar({
             <button
               type="button"
               aria-label={t("timelineTopbar.pause")}
-              className={isPaused ? "is-active" : undefined}
+              className={(isPaused ? "is-active" : "") + lockedClass || undefined}
+              aria-disabled={transportGuard.locked || undefined}
+              title={transportGuard.lockTitle}
               aria-pressed={isPaused}
               disabled={isProjectEmpty && !learnModeActive}
               onClick={() => {
@@ -721,7 +733,7 @@ export function TimelineTopbar({
                   return;
                 }
 
-                onPauseTransport();
+                transportGuard.guard(onPauseTransport)();
               }}
             >
               <span className="material-symbols-outlined">pause</span>
@@ -908,6 +920,7 @@ export function TimelineTopbar({
             <AudioDeviceStatusBadge />
             <MidiDeviceStatusBadge />
             <NetworkSessionBadge />
+            <RedundancyBadge />
             {isMobileApp ? null : <VideoOutputBadge />}
           </div>
         </div>

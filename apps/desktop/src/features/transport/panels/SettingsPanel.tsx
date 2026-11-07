@@ -33,6 +33,7 @@ import { UpdateCheckField } from "./UpdateCheckField";
 import { LibraryModeField } from "../library/folders/LibraryModeField";
 import { ShortcutsSettingsTab } from "./ShortcutsSettingsTab";
 import { VideoSettingsTab } from "./VideoSettingsTab";
+import { RedundancySettingsTab } from "../../redundancy/RedundancySettingsTab";
 import {
   MidiSettingsTab,
   type MidiOutputSettings,
@@ -974,6 +975,7 @@ export function SettingsPanel({
 
               {activeTab === "shortcuts" ? <ShortcutsSettingsTab /> : null}
               {activeTab === "video" ? <VideoSettingsTab /> : null}
+              {activeTab === "redundancy" ? <RedundancySettingsTab /> : null}
 
               {activeTab === "diagnostics" ? (
                 <section

@@ -1,0 +1,107 @@
+/* Redundancy (docs/plans/redundancy step 10). Readable from a distance and
+   under stage light: colour + icon + text, never colour alone. */
+
+.lt-redundancy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  color: #fff;
+  background: #5b5f66;
+}
+.lt-redundancy-badge .material-symbols-outlined { font-size: 16px; }
+.lt-redundancy-badge.is-idle { background: #5b5f66; }
+.lt-redundancy-badge.is-pending { background: #b7791f; }
+.lt-redundancy-badge.is-ok { background: #2f855a; }
+.lt-redundancy-badge.is-error { background: #c53030; }
+.lt-redundancy-badge.is-standalone { background: #2b6cb0; }
+.lt-redundancy-badge.is-lost {
+  background: #c53030;
+  animation: lt-redundancy-blink 0.8s steps(2, start) infinite;
+}
+@keyframes lt-redundancy-blink {
+  to { background: #6b1414; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lt-redundancy-badge.is-lost { animation: none; outline: 2px solid #fff; }
+}
+
+.lt-redundancy-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  color: #fff;
+  font-size: 15px;
+}
+.lt-redundancy-banner.is-lost { background: #c53030; font-size: 18px; }
+.lt-redundancy-banner.is-info { background: #2b6cb0; }
+.lt-redundancy-banner.is-warning { background: #975a16; }
+.lt-redundancy-banner button {
+  margin-left: auto;
+  padding: 6px 14px;
+  font-weight: 700;
+  background: #fff;
+  color: #1a202c;
+  border: 0;
+  cursor: pointer;
+}
+.lt-redundancy-banner button + button { margin-left: 0; }
+.lt-redundancy-banner-time { font-variant-numeric: tabular-nums; }
+
+.lt-redundancy-dialog {
+  min-width: 320px;
+  max-width: 520px;
+  padding: 20px;
+  background: var(--lt-surface, #1f2328);
+  color: var(--lt-text, #e6e6e6);
+}
+.lt-redundancy-dialog h2 { margin: 0 0 12px; font-size: 18px; }
+.lt-redundancy-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+.lt-redundancy-detail { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; }
+.lt-redundancy-detail dt { opacity: 0.7; }
+.lt-redundancy-detail dd { margin: 0; font-variant-numeric: tabular-nums; }
+.lt-redundancy-diffs { margin: 12px 0 0; padding-left: 18px; }
+.lt-redundancy-warning { color: #f6ad55; }
+
+.lt-redundancy-notice {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 61;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #2d3748;
+  color: #fff;
+}
+
+.lt-redundancy-settings h3 { margin: 18px 0 6px; font-size: 14px; }
+.lt-redundancy-roles { display: flex; gap: 16px; }
+.lt-redundancy-row { display: flex; gap: 8px; align-items: center; }
+.lt-redundancy-trusted { margin: 0; padding: 0; list-style: none; }
+.lt-redundancy-trusted li { display: flex; gap: 8px; align-items: center; }
+.lt-redundancy-help, .lt-redundancy-intro { opacity: 0.8; }
+
+/* Transport buttons on a following backup. */
+.is-redundancy-locked { opacity: 0.45; position: relative; }
+.is-redundancy-locked::after {
+  content: "lock";
+  font-family: "Material Symbols Outlined";
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  font-size: 11px;
+}

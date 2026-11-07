@@ -290,7 +290,14 @@ async fn run(
     mut intents: broadcast::Receiver<OriginatedIntent>,
 ) {
     let config = redundancy_config::load(&app);
-    let mut core = FollowerCore::new(Default::default(), config.manual_offset_ms / 1000.0);
+    let policy = libretracks_core::redundancy::reconciler::Policy {
+        correction_threshold_seconds: config
+            .correction_threshold_ms
+            .unwrap_or(super::settings::DEFAULT_CORRECTION_THRESHOLD_MS)
+            / 1000.0,
+        ..Default::default()
+    };
+    let mut core = FollowerCore::new(policy, config.manual_offset_ms / 1000.0);
     if config.heartbeat_timeout_ms > 0 {
         core.set_heartbeat_timeout_ms(config.heartbeat_timeout_ms);
     }

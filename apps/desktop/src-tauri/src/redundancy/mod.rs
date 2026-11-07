@@ -10,4 +10,5 @@ pub mod mix;
 pub mod pilot;
 pub mod publisher;
 pub mod role;
+pub mod settings;
 pub mod status;

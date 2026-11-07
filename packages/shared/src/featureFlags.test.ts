@@ -20,4 +20,8 @@ describe("feature flags", () => {
   it("song templates stay hidden until 1.16.0", () => {
     expect(FEATURE_FLAGS.songTemplates).toBe(true);
   });
+
+  it("redundancy stays hidden until validated with two machines", () => {
+    expect(FEATURE_FLAGS.redundancy).toBe(false);
+  });
 });

@@ -109,13 +109,40 @@ pub fn apply_backup_settings(config: &RedundancyConfig, host: &mut HostConfig) {
     host.accept_backup = true;
     host.backup_pin = crate::link::config::NetworkSessionConfig::pin(&config.backup_pin);
     host.backup_trusted = config.backup_trusted.clone();
+    host.backup_may_forward = config.backup_may_forward;
 }
 
 fn configure_shared(handle: &HostHandle, config: &RedundancyConfig) {
     handle.set_backup_pin(crate::link::config::NetworkSessionConfig::pin(
         &config.backup_pin,
     ));
+    handle.set_backup_may_forward(config.backup_may_forward);
     handle.set_accept_backup(true);
+}
+
+/// The settings tab saved `redundancy.json`: what a running main serves
+/// changes at once.
+pub fn settings_changed(app: &AppHandle, config: &RedundancyConfig) {
+    let state = app.state::<RedundancyState>();
+    if let Ok(main) = state.main.lock() {
+        if let Some(server) = &main.server {
+            let handle = server.handle();
+            handle.set_backup_pin(crate::link::config::NetworkSessionConfig::pin(
+                &config.backup_pin,
+            ));
+            handle.set_backup_may_forward(config.backup_may_forward);
+        }
+    };
+}
+
+/// Forget a trusted backup on the running server too.
+pub fn revoke_trusted(app: &AppHandle, device_id: &str) {
+    let state = app.state::<RedundancyState>();
+    if let Ok(main) = state.main.lock() {
+        if let Some(server) = &main.server {
+            server.handle().revoke_backup_trusted(device_id);
+        }
+    };
 }
 
 /// Keep the trusted backups in `redundancy.json` as the server learns them.

@@ -28,6 +28,10 @@ import {
   useNetworkSessionStore,
 } from "../features/network/networkSessionStore";
 import { useCloudStore } from "../features/transport/cloud/cloudStore";
+import {
+  INITIAL_REDUNDANCY_STATE,
+  useRedundancyStore,
+} from "../features/redundancy/redundancyStore";
 import { useLevelSongsStore } from "../features/transport/levelSongs/levelSongsStore";
 import { useMixSceneEditorStore } from "../features/transport/panels/mixScenes/mixSceneEditorStore";
 import { useRenderStore } from "../features/transport/render/renderStore";
@@ -410,6 +414,7 @@ beforeEach(async () => {
   useSongAnalysisStore.setState({ target: null });
   useBatchSongAnalysisStore.setState({ open: false });
   useNetworkSessionStore.setState(INITIAL_NETWORK_SESSION_STATE);
+  useRedundancyStore.setState(INITIAL_REDUNDANCY_STATE);
   // Video selection and library, and the canvas thumbnail/preview registry.
   useVideoStore.setState(INITIAL_VIDEO_STATE);
   resetVideoCanvasState();

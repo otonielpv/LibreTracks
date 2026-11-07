@@ -211,6 +211,7 @@ import { MixScenesMenuItem } from "./panels/mixScenes/MixScenesMenuItem";
 import { setMixSceneEditorOpen, useMixSceneEditorStore } from "./panels/mixScenes/mixSceneEditorStore";
 import { RemotePanel } from "./panels/RemotePanel";
 import { NetworkSessionRoot } from "../network/NetworkSessionRoot";
+import { RedundancyRoot } from "../redundancy/RedundancyRoot";
 import { MobileLanding } from "./compact/MobileLanding";
 import { TOUR_TARGETS } from "../tutorial/tourTargets";
 import {
@@ -6411,6 +6412,9 @@ export function TransportPanelContent() {
       }),
     },
     { id: "video", label: t("transport.video.settings.tab") },
+    ...(FEATURE_FLAGS.redundancy
+      ? [{ id: "redundancy" as const, label: t("redundancy.settings.tab") }]
+      : []),
     {
       id: "shortcuts",
       label: t("transport.settingsModal.tabShortcuts", {
@@ -7699,6 +7703,7 @@ export function TransportPanelContent() {
               remoteServerInfo={remoteServerInfo}
             />
             <NetworkSessionRoot />
+            <RedundancyRoot />
 
             {isMobileSessionsModalOpen ? (
               <div
