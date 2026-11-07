@@ -1,0 +1,171 @@
+---
+title: Redundancy
+description: "Two LibreTracks with the same session: the backup follows the main and plays along, so you can switch to it if the main fails. Free, like all of LibreTracks."
+---
+
+**Redundancy** runs two LibreTracks at once with the same session. The
+**Main** plays the show; the **Backup** follows it and plays along, in step,
+with its own audio engine. If the main machine hangs, crashes or loses its
+audio interface, you switch to the backup **without stopping the song**.
+
+What LibreTracks does: keeps the backup in step with the main (a few
+milliseconds by cable), tells you at a glance whether it is ready, and emits a
+**pilot tone** that a hardware switcher can listen to.
+
+What it does not do: it does not move the audio by itself (a switcher or the
+mixing desk does that), and it does not copy the session from one machine to
+the other.
+
+It is free, like all of LibreTracks.
+
+## Requirements
+
+- The **same LibreTracks version** on both machines.
+- The **same session** on both: save it on the main and open it on the backup
+  (export a session package `.ltset`, or use cloud sync). Same songs, same
+  audio files, same settings that change timing (jump modes, vamp, fade out).
+  The backup checks this and tells you exactly what differs.
+- A **network cable**: directly between the two machines or through a switch.
+  Wi-Fi works for trying it out, not for a show.
+
+## Three rigs
+
+### Without a switcher (recommended, and the one we have tested)
+
+```
+  Main ── outputs ──► desk channels 1-2   (open)
+  Backup ─ outputs ──► desk channels 3-4  (muted)
+        └──── network cable ────┘
+```
+
+Both machines go to the desk on different channels; the backup's channels
+stay muted. If the main fails, the sound engineer mutes 1-2 and opens 3-4.
+The backup was already playing at the same place, so the song goes on.
+
+### Analogue switcher (Radial SW8 or similar)
+
+```
+  Main ── outputs 1-7 ─► switcher input A ─┐
+         output 8 (pilot tone) ─► A ch. 8 ─┤
+  Backup ─ outputs 1-7 ─► switcher input B ┼─► desk / PA
+```
+
+Turn on the pilot tone on the main, on the output the switcher watches (for
+example output 8), and set the switcher's threshold so the tone keeps it on A.
+When the main dies the tone stops and the switcher moves to B.
+
+> Set up from the manufacturer's documentation; we have not been able to test
+> it with the unit. If you try it, tell us whether it works on
+> [GitHub](https://github.com/otonielpv/LibreTracks/issues).
+
+### Redundant interface (iConnectivity PlayAUDIO1U / 12)
+
+One machine on each USB port of the interface. Pilot tone on the main, on the
+output the unit asks for in its manual.
+
+> Set up from the manufacturer's documentation; we have not been able to test
+> it with the unit (its "LifeSine" signal is not documented: the pilot tone
+> may need a different frequency or level). If you try it, tell us whether it
+> works on [GitHub](https://github.com/otonielpv/LibreTracks/issues).
+
+## Step by step
+
+Open **Settings → Redundancy** on each machine.
+
+**On the main**
+
+1. **This machine's role**: **Main**.
+2. Note the **Backup PIN** (or press **New PIN**). The backup asks for it the
+   first time; then it is remembered (it shows under **Trusted backups**,
+   where **Forget** removes it).
+3. With a switcher: turn on **Emit the pilot tone** and choose the **Physical
+   output** (the interface's output number; that output is kept for the tone
+   only). Defaults: 1000 Hz at -12 dBFS.
+
+**On the backup**
+
+1. Type the **Main's address** (its IP, with the port if it is not 3040) and
+   the **Main's PIN**.
+2. Press **Connect as backup**.
+3. Wait for the pill at the top to show **Armed: 0.8 ms** in green.
+
+## What the pill means
+
+| On the main | On the backup | Meaning |
+| --- | --- | --- |
+| No backup (grey) | Backup: connecting (grey) | Not connected yet |
+| Backup: syncing (amber) | Following: 3.4 ms (amber) | Connected, getting in step |
+| Backup armed (green) | Armed: 0.8 ms (green) | Ready to switch |
+| Backup: different session (red) | Different session (red) | The sessions differ: the backup does not follow. Tap the pill to see what differs |
+| Backup lost (blinking red) | MAIN LOST (blinking red) | They cannot see each other |
+|  | Standalone (blue) | The backup is in charge |
+
+Tap the pill for the details: the other machine, the offset, the
+corrections, the pilot tone, and the differences between the sessions.
+
+## If the main fails
+
+On the backup you see a big red **Main lost** banner. The backup **keeps
+playing** where it was, and its controls respond again at once: you can stop
+or pause the song from the backup.
+
+- Press **I'm in charge now** when you decide the backup leads the show
+  (**Standalone**). It never happens on its own.
+- If the main comes back in the same state and nobody touched the backup, the
+  backup simply follows it again.
+- If something changed in between, the backup asks: **Follow the main again**
+  or **Make this machine the main**.
+
+There is no automatic way back. When the old main restarts, it offers to
+become the backup of the new main (**Become the backup**); it only switches if
+you accept, because the switcher might be sending it to the PA.
+
+A main that closed unexpectedly comes back with the pilot tone **off** and the
+warning "This machine closed unexpectedly. Re-arm the pilot tone when it is
+the main again." Press **Re-arm the pilot tone** when it is really the main.
+
+## A MIDI controller wired to both machines
+
+That is the usual rig, and it means every press reaches both machines. While
+the backup follows the main it **ignores its own transport inputs** (keyboard,
+MIDI, the Remote, guests) and shows "This machine is the backup of …", so a
+play/pause or a vamp never arrives twice.
+
+**Forward my inputs to the main** is for the opposite case: a controller wired
+only to the backup. Leave it off when the controller reaches both machines.
+On the main, **Let the backup forward orders** must be on for it to work.
+
+The live mix (volumes, mute, solo, song master, click and guide) is copied
+from the main to the backup, so switching sounds the same.
+
+## Test it before the show
+
+1. Both machines open the same session, and the backup shows **Armed**.
+2. Play a song on the main: the backup follows it (one earphone on each).
+3. Jump to a section and toggle the vamp on the main: the backup does the same.
+4. With a switcher: **Cut the tone for 3 s** and check that it moves to B and
+   back.
+5. Pull the network cable: the backup keeps playing and shows **MAIN LOST**.
+   Plug it back: it goes back to **Armed**.
+6. Close LibreTracks on the main in the middle of a song: the backup keeps
+   playing, and **I'm in charge now** gives it the show.
+
+## Calibrate (optional)
+
+To know the real offset on your cables, record the main's output on the left
+and the backup's on the right of a third interface, and measure the recording
+(the method is in the repository, `docs/plans/redundancy/mediciones.md`). If
+the backup is consistently late or early, set **Manual compensation (ms)** on
+the backup.
+
+## Known limits
+
+- Structural edits on the main (clips, markers, songs, tracks, arrangements)
+  are not copied: the backup shows **Different session** until you save on
+  the main and open the session again on the backup.
+- Phones and tablets cannot be a main or a backup yet.
+- Hardware switchers have not been tested with LibreTracks (see the rigs).
+
+Looking for something else? [Network sessions](/docs/network-sessions/) let
+other apps follow and control one LibreTracks, without playing audio
+themselves.

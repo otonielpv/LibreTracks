@@ -198,6 +198,7 @@ export default defineConfig({
           items: [
             { slug: "docs/integration-ecosystem" },
             { slug: "docs/network-sessions" },
+            { slug: "docs/redundancy" },
             { slug: "docs/tasks/midi" },
             { slug: "docs/compact-view" },
             { slug: "docs/core-concepts" },

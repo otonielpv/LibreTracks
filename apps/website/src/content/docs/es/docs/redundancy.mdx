@@ -1,0 +1,174 @@
+---
+title: Redundancia
+description: "Dos LibreTracks con la misma sesión: el respaldo sigue al principal y suena a la vez, para pasar a él si el principal falla. Gratis, como todo LibreTracks."
+---
+
+La **redundancia** lleva dos LibreTracks a la vez con la misma sesión. El
+**Principal** toca el concierto; el **Respaldo** lo sigue y suena a la vez,
+en el mismo sitio, con su propio motor de audio. Si el equipo principal se
+cuelga, se cierra o pierde su interfaz de audio, pasas al respaldo **sin parar
+la canción**.
+
+Lo que hace LibreTracks: mantener el respaldo alineado con el principal (unos
+pocos milisegundos por cable), decirte de un vistazo si está listo y emitir un
+**tono piloto** que puede escuchar un conmutador hardware.
+
+Lo que no hace: no cambia el audio de un equipo a otro por sí solo (eso lo hace
+un conmutador o la mesa) y no copia la sesión de un equipo al otro.
+
+Es gratis, como todo LibreTracks.
+
+## Requisitos
+
+- La **misma versión de LibreTracks** en los dos equipos.
+- La **misma sesión** en los dos: guárdala en el principal y ábrela en el
+  respaldo (exporta un paquete de sesión `.ltset`, o usa la sincronización en
+  la nube). Mismas canciones, mismos audios, mismos ajustes que cambian el
+  tiempo (modos de salto, vamp, fundido de parada). El respaldo lo comprueba y
+  te dice exactamente qué es distinto.
+- Un **cable de red**: directo entre los dos equipos o a través de un switch.
+  El Wi-Fi sirve para probar, no para un concierto.
+
+## Tres montajes
+
+### Sin conmutador (el recomendado, y el que hemos probado)
+
+```
+  Principal ─ salidas ─► canales 1-2 de la mesa  (abiertos)
+  Respaldo ── salidas ─► canales 3-4 de la mesa  (silenciados)
+          └──── cable de red ────┘
+```
+
+Los dos equipos van a la mesa en canales distintos; los del respaldo, en
+silencio. Si el principal falla, el técnico silencia 1-2 y abre 3-4. El
+respaldo ya sonaba en el mismo sitio, así que la canción sigue.
+
+### Conmutador analógico (Radial SW8 o similar)
+
+```
+  Principal ─ salidas 1-7 ─► entrada A del conmutador ─┐
+            salida 8 (tono piloto) ─► canal 8 de A ────┤
+  Respaldo ── salidas 1-7 ─► entrada B del conmutador ─┼─► mesa / PA
+```
+
+Enciende el tono piloto en el principal, en la salida que vigila el
+conmutador (por ejemplo la 8), y ajusta su umbral para que el tono lo
+mantenga en A. Si el principal muere, el tono se corta y el conmutador pasa a B.
+
+> Montado según la documentación del fabricante; no lo hemos podido probar con
+> el aparato. Si lo pruebas, cuéntanos si funciona en
+> [GitHub](https://github.com/otonielpv/LibreTracks/issues).
+
+### Interfaz redundante (iConnectivity PlayAUDIO1U / 12)
+
+Un equipo en cada puerto USB de la interfaz. Tono piloto en el principal, en la
+salida que pida el aparato en su manual.
+
+> Montado según la documentación del fabricante; no lo hemos podido probar con
+> el aparato (su señal «LifeSine» no está documentada: puede que el tono piloto
+> necesite otra frecuencia u otro nivel). Si lo pruebas, cuéntanos si funciona
+> en [GitHub](https://github.com/otonielpv/LibreTracks/issues).
+
+## Paso a paso
+
+Abre **Ajustes → Redundancia** en cada equipo.
+
+**En el principal**
+
+1. **Papel de este equipo**: **Principal**.
+2. Apunta el **PIN del respaldo** (o pulsa **Nuevo PIN**). El respaldo lo pide
+   la primera vez; después se recuerda (aparece en **Respaldos de confianza**,
+   donde **Olvidar** lo quita).
+3. Con conmutador: activa **Emitir el tono piloto** y elige la **Salida
+   física** (el número de salida de la interfaz; esa salida queda sólo para el
+   tono). Por defecto: 1000 Hz a -12 dBFS.
+
+**En el respaldo**
+
+1. Escribe la **Dirección del principal** (su IP, con el puerto si no es 3040)
+   y el **PIN del principal**.
+2. Pulsa **Conectar como respaldo**.
+3. Espera a que la pastilla de arriba diga **Armado: 0,8 ms** en verde.
+
+## Qué significa la pastilla
+
+| En el principal | En el respaldo | Qué quiere decir |
+| --- | --- | --- |
+| Sin respaldo (gris) | Respaldo: conectando (gris) | Todavía no están conectados |
+| Respaldo: sincronizando (ámbar) | Siguiendo: 3,4 ms (ámbar) | Conectados, alineándose |
+| Respaldo armado (verde) | Armado: 0,8 ms (verde) | Listo para conmutar |
+| Respaldo: sesión distinta (rojo) | Sesión distinta (rojo) | Las sesiones no son iguales: el respaldo no sigue. Toca la pastilla para ver qué cambia |
+| Respaldo perdido (rojo parpadeante) | PRINCIPAL PERDIDO (rojo parpadeante) | No se ven |
+|  | En solitario (azul) | El respaldo manda |
+
+Al tocar la pastilla ves el detalle: el otro equipo, el desfase, las
+correcciones, el tono piloto y las diferencias entre las sesiones.
+
+## Si el principal falla
+
+En el respaldo aparece un banner rojo grande de **Principal perdido**. El
+respaldo **sigue sonando** donde iba y sus controles vuelven a responder al
+instante: puedes parar o pausar la canción desde el respaldo.
+
+- Pulsa **Ahora mando yo** cuando decidas que el respaldo lleva el concierto
+  (**En solitario**). Nunca pasa solo.
+- Si el principal vuelve en el mismo estado y nadie tocó el respaldo, el
+  respaldo simplemente vuelve a seguirlo.
+- Si algo cambió entretanto, el respaldo pregunta: **Volver a seguir al
+  principal** o **Convertir este equipo en principal**.
+
+No hay vuelta atrás automática. Cuando el antiguo principal arranca de nuevo,
+ofrece pasar a respaldo del nuevo principal (**Pasar a respaldo**); sólo cambia
+si aceptas, porque el conmutador podría estar mandándolo a la PA.
+
+Un principal que se cerró de forma inesperada vuelve con el tono piloto
+**apagado** y el aviso «Este equipo se cerró de forma inesperada. Rearma el
+tono piloto cuando vuelva a ser el principal.» Pulsa **Rearmar el tono
+piloto** cuando de verdad vuelva a ser el principal.
+
+## Un controlador MIDI cableado a los dos equipos
+
+Es el montaje habitual, y significa que cada pulsación llega a los dos. Mientras
+el respaldo sigue al principal **ignora sus propias órdenes de transporte**
+(teclado, MIDI, el Remote, invitados) y muestra «Este equipo es el respaldo de
+…», así que un play/pausa o un vamp nunca llega dos veces.
+
+**Reenviar mis entradas al principal** es para el caso contrario: un
+controlador conectado sólo al respaldo. Déjalo apagado si el controlador llega
+a los dos equipos. En el principal tiene que estar activado **Permitir que el
+respaldo reenvíe órdenes**.
+
+La mezcla en vivo (volúmenes, mute, solo, master de canción, clic y guía) se
+copia del principal al respaldo, así que al conmutar suena igual.
+
+## Pruébalo antes del concierto
+
+1. Los dos equipos abren la misma sesión y el respaldo dice **Armado**.
+2. Reproduce una canción en el principal: el respaldo la sigue (un auricular
+   en cada equipo).
+3. Salta a una sección y activa el vamp en el principal: el respaldo hace lo
+   mismo.
+4. Con conmutador: **Cortar el tono 3 s** y comprueba que pasa a B y vuelve.
+5. Desenchufa el cable de red: el respaldo sigue sonando y dice **PRINCIPAL
+   PERDIDO**. Vuelve a enchufarlo: vuelve a **Armado**.
+6. Cierra LibreTracks en el principal a mitad de canción: el respaldo sigue
+   sonando y **Ahora mando yo** le da el concierto.
+
+## Calibrar (opcional)
+
+Para saber el desfase real con tus cables, graba la salida del principal en la
+izquierda y la del respaldo en la derecha de una tercera interfaz y mide la
+grabación (el método está en el repositorio,
+`docs/plans/redundancy/mediciones.md`). Si el respaldo va siempre tarde o
+pronto, ajusta **Compensación manual (ms)** en el respaldo.
+
+## Limitaciones conocidas
+
+- Las ediciones estructurales en el principal (clips, marcas, canciones,
+  pistas, arreglos) no se copian: el respaldo muestra **Sesión distinta** hasta
+  que guardas en el principal y vuelves a abrir la sesión en el respaldo.
+- Los móviles y tablets todavía no pueden ser principal ni respaldo.
+- Los conmutadores hardware no se han probado con LibreTracks (ver los montajes).
+
+¿Buscas otra cosa? Las [sesiones de red](/es/docs/network-sessions/) permiten
+que otras apps sigan y controlen un LibreTracks, sin sonar ellas.
