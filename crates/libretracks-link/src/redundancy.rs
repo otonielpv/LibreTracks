@@ -18,6 +18,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::pairing::TrustedDevice;
+
 /// Bumped when a backup of an older version would misread a message.
 pub const REDUNDANCY_PROTOCOL_VERSION: u32 = 1;
 
@@ -311,6 +313,28 @@ pub enum RedundancyMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         remote_url: Option<String>,
     },
+    /// B → A, on connecting: where clients can reach the backup if the main
+    /// goes (step 16-17).
+    BackupInfo {
+        /// `ip:port` the backup hosts its network session on when it takes
+        /// over.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        link_address: Option<String>,
+        /// The backup's remote (browser) address.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        remote_url: Option<String>,
+    },
+    /// A → B: the main's network-session access (PINs and trusted guests,
+    /// token HASHES only), so its guests can join the backup with the same
+    /// role and no PIN when it takes over (step 16).
+    GuestAccess {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        control_pin: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        edit_pin: Option<String>,
+        #[serde(default)]
+        trusted: Vec<TrustedDevice>,
+    },
     /// B → A.
     BackupStatus {
         phase: BackupPhase,
@@ -343,6 +367,8 @@ impl RedundancyMessage {
             | RedundancyMessage::Fingerprint { .. }
             | RedundancyMessage::RoleChange { .. }
             | RedundancyMessage::Handover { .. }
+            | RedundancyMessage::BackupInfo { .. }
+            | RedundancyMessage::GuestAccess { .. }
             | RedundancyMessage::BackupStatus { .. } => None,
         }
     }
@@ -605,6 +631,43 @@ mod tests {
     fn default_health_is_healthy() {
         assert!(HealthSummary::default().audio_ok);
         assert!(!HealthSummary::default().fallback_active);
+    }
+
+    #[test]
+    fn failover_messages_round_trip_in_camel_case() {
+        let info = round_trip(&RedundancyMessage::BackupInfo {
+            link_address: Some("10.0.0.2:3040".into()),
+            remote_url: Some("http://10.0.0.2:3030".into()),
+        });
+        assert_eq!(info["kind"], "backupInfo");
+        assert_eq!(info["linkAddress"], "10.0.0.2:3040");
+        let access = round_trip(&RedundancyMessage::GuestAccess {
+            control_pin: Some("1111".into()),
+            edit_pin: None,
+            trusted: vec![TrustedDevice {
+                device_id: "tablet".into(),
+                device_name: "Tablet".into(),
+                role: crate::permissions::Role::Controller,
+                token_hash: "abc".into(),
+            }],
+        });
+        assert_eq!(access["kind"], "guestAccess");
+        assert_eq!(access["controlPin"], "1111");
+        assert_eq!(access["trusted"][0]["tokenHash"], "abc");
+        let failover = crate::protocol::ServerMessage::Failover {
+            address: Some("10.0.0.2:3040".into()),
+        };
+        assert_eq!(
+            serde_json::to_value(&failover).unwrap(),
+            serde_json::json!({ "type": "failover", "address": "10.0.0.2:3040" })
+        );
+        let redirect = crate::protocol::ServerMessage::Redirect {
+            address: "10.0.0.2:3040".into(),
+        };
+        assert_eq!(
+            serde_json::to_value(&redirect).unwrap(),
+            serde_json::json!({ "type": "redirect", "address": "10.0.0.2:3040" })
+        );
     }
 
     #[test]

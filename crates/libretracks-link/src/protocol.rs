@@ -150,6 +150,17 @@ pub enum ServerMessage {
     Redundancy {
         message: RedundancyMessage,
     },
+    /// Redundancy (step 16): where to go if this host disappears (its
+    /// backup), `null` = nowhere. Sent on joining and when it changes. An
+    /// old guest does not know it and skips it.
+    Failover {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        address: Option<String>,
+    },
+    /// Redundancy (step 16): this host handed over; reconnect there now.
+    Redirect {
+        address: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

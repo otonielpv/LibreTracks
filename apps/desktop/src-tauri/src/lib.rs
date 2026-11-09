@@ -161,6 +161,7 @@ pub fn run() {
     let builder = builder
         .manage(EngineV2State::new())
         .manage(redundancy::role::RedundancyState::default())
+        .manage(redundancy::failover::FailoverState::default())
         .manage(commands::app_close::AppCloseState::default());
 
     // La X de la ventana pasa por la interfaz para guardar y avisar de que se

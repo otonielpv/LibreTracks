@@ -327,7 +327,9 @@ pub async fn run(
             }
         }
         core.on_backup_connected(&io, current_fingerprint(&app));
+        send_guest_access(&app, &handle);
         let mut feed = app.state::<SessionFeed>().subscribe();
+        let mut access_ticks = 0u64;
         let mut tick = tokio::time::interval(STATE_INTERVAL);
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let mut fingerprint_due: Option<tokio::time::Instant> = None;
@@ -353,6 +355,10 @@ pub async fn run(
                 _ = tick.tick() => {
                     core.flush_mix(&io, io.monotonic_ns_of(Instant::now()));
                     core.on_tick(&io);
+                    access_ticks += 1;
+                    if access_ticks % FULL_MIX_EVERY_TICKS == 0 {
+                        send_guest_access(&app, &handle);
+                    }
                     if fingerprint_due.is_some_and(|due| tokio::time::Instant::now() >= due) {
                         fingerprint_due = None;
                         if let Some(fingerprint) = current_fingerprint(&app) {
@@ -383,6 +389,13 @@ pub async fn run(
                 }
             }
         }
+    }
+}
+
+/// The main's guest access, to the backup (step 16).
+fn send_guest_access(app: &AppHandle, handle: &HostHandle) {
+    if let Some(message) = super::failover::guest_access_message(app) {
+        handle.send_to_backup(&message);
     }
 }
 

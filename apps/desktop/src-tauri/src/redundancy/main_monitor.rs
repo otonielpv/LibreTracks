@@ -17,6 +17,8 @@ pub struct MainMonitorCore {
     pub offset_ms: Option<f64>,
     /// The backup took over (step 15): who, and its remote, once.
     handover: Option<Handover>,
+    /// Where the backup said it can be reached (step 16), once.
+    backup_addresses: Option<super::failover::BackupAddresses>,
 }
 
 /// The backup told this main it took over.
@@ -35,6 +37,7 @@ impl Default for MainMonitorCore {
             reported: None,
             offset_ms: None,
             handover: None,
+            backup_addresses: None,
         }
     }
 }
@@ -68,6 +71,15 @@ impl MainMonitorCore {
                 new_main_name,
                 new_main_address,
             }),
+            RedundancyMessage::BackupInfo {
+                link_address,
+                remote_url,
+            } => {
+                self.backup_addresses = Some(super::failover::BackupAddresses {
+                    link_address,
+                    remote_url,
+                });
+            }
             RedundancyMessage::Handover {
                 new_main_name,
                 new_main_address,
@@ -88,6 +100,11 @@ impl MainMonitorCore {
             }
             _ => {}
         }
+    }
+
+    /// The backup's addresses, when they arrived since the last call.
+    pub fn take_backup_addresses(&mut self) -> Option<super::failover::BackupAddresses> {
+        self.backup_addresses.take()
     }
 
     /// A handover that arrived since the last call.

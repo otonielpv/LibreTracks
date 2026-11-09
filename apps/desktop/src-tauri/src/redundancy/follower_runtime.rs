@@ -347,6 +347,13 @@ async fn run(
             event = guest.events.recv() => {
                 let Some(event) = event else { break };
                 match event {
+                    GuestEvent::Redundancy(RedundancyMessage::GuestAccess { control_pin, edit_pin, trusted }) => {
+                        super::failover::store_replicated_access(&app, super::failover::GuestAccess {
+                            control_pin,
+                            edit_pin,
+                            trusted,
+                        });
+                    }
                     GuestEvent::Redundancy(message) => {
                         let offset = guest.handle.host_offset_ms().map(|ms| ms * 1e6);
                         core.on_message(message, now_ns(), offset, song.as_ref());
@@ -359,6 +366,11 @@ async fn run(
                     GuestEvent::State(GuestState::Connected) => {
                         fingerprint_unsent = true;
                         core.set_connected(true);
+                        // Where the main's clients can find this machine (step 16-17).
+                        guest.handle.send_redundancy(RedundancyMessage::BackupInfo {
+                            link_address: local_address_hint(&app),
+                            remote_url: local_remote_url(&app),
+                        });
                     }
                     // Lost, rejected or closed: the lifecycle sees the silence
                     // and the reconciler freewheels. The backup keeps playing
@@ -450,6 +462,11 @@ async fn run(
         }
         if let Some(transition) = core.take_transition() {
             state_changed = true;
+            if super::failover::hosts_for_failover(transition.to)
+                && !super::failover::hosts_for_failover(transition.from)
+            {
+                super::failover::start_hosting_for_failover(&app);
+            }
             if let Some(message) = main_lost_midi(&transition, &config.on_main_lost_midi) {
                 app.state::<DesktopState>().midi_output.send(&[message]);
             }

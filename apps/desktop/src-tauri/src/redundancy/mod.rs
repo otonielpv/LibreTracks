@@ -10,6 +10,7 @@ pub mod main_monitor;
 pub mod mix;
 pub mod pilot;
 pub mod publisher;
+pub mod remote_failover;
 pub mod role;
 pub mod settings;
 pub mod status;

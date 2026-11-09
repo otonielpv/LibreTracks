@@ -257,6 +257,11 @@ async fn start_on(app: &AppHandle, preferred_port: Option<u16>) -> Result<HostSt
             &mut host_config,
         );
     }
+    // Redundancy backup carrying the show: the main's guests get in with
+    // the main's PINs and trusted tokens (step 16).
+    if let Some(access) = crate::redundancy::failover::replicated_access(app) {
+        crate::redundancy::failover::merge_access(&mut host_config, &access);
+    }
     crate::redundancy::role::before_hosting_starts(app);
     let runtime = start_host(host_config)
         .await
@@ -285,6 +290,7 @@ async fn start_on(app: &AppHandle, preferred_port: Option<u16>) -> Result<HostSt
     }
     let port = runtime.handle.port();
     set_phase(app, HostPhase::Hosting { port });
+    crate::redundancy::failover::hosting_started(app, &runtime.handle);
     crate::redundancy::role::hosting_started(app, &runtime.handle, runtime.backup_messages);
     discovery::advertise(&Advertisement {
         port,

@@ -210,6 +210,8 @@ struct Shared {
     /// intents, heartbeats), so one gate on the backup orders them all.
     redundancy_seq: AtomicU64,
     health_tx: watch::Sender<HealthSummary>,
+    /// The `failover` message every guest gets (step 16).
+    failover_tx: watch::Sender<Option<Arc<str>>>,
 }
 
 #[derive(Clone)]
@@ -219,6 +221,10 @@ pub struct HostHandle {
 
 fn to_text<T: Serialize>(value: &T) -> Option<Arc<str>> {
     serde_json::to_string(value).ok().map(Arc::from)
+}
+
+fn failover_text(address: Option<String>) -> Option<Arc<str>> {
+    to_text(&ServerMessage::Failover { address })
 }
 
 pub fn random_hex(bytes: usize) -> String {
@@ -310,6 +316,7 @@ pub async fn start_host(config: HostConfig) -> std::io::Result<HostRuntime> {
         backup_in_tx,
         redundancy_seq: AtomicU64::new(1),
         health_tx: watch::channel(HealthSummary::default()).0,
+        failover_tx: watch::channel(failover_text(None)).0,
     });
 
     tokio::spawn(accept_loop(listener, shared.clone()));
@@ -517,6 +524,32 @@ impl HostHandle {
         }
         self.shared.publish_guests();
         self.shared.backup_tx.send_replace(None);
+    }
+
+    /// Redundancy (step 16): tell every guest, now and on joining, where to go
+    /// if this host disappears. None = nowhere.
+    pub fn set_failover_address(&self, address: Option<String>) {
+        self.shared.failover_tx.send_replace(failover_text(address));
+    }
+
+    /// Redundancy (step 16): this host handed over; every guest is told to
+    /// reconnect to `address` and is disconnected. Returns how many.
+    pub fn redirect_guests(&self, address: &str) -> usize {
+        let Some(text) = to_text(&ServerMessage::Redirect {
+            address: address.to_string(),
+        }) else {
+            return 0;
+        };
+        let guests: Vec<mpsc::Sender<Control>> = self
+            .shared
+            .guests
+            .lock()
+            .map(|guests| guests.values().map(|guest| guest.control.clone()).collect())
+            .unwrap_or_default();
+        for control in &guests {
+            let _ = control.try_send(Control::Close(text.clone()));
+        }
+        guests.len()
     }
 
     pub fn set_accept_guests(&self, accept: bool) {
@@ -1094,6 +1127,7 @@ async fn run_writer(
     let mut peers = shared.peers_tx.subscribe();
     let mut shutdown = shared.shutdown_tx.subscribe();
     let mut events = shared.events_tx.subscribe();
+    let mut failover = shared.failover_tx.subscribe();
     let mut heartbeat = tokio::time::interval(shared.heartbeat);
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
@@ -1108,6 +1142,7 @@ async fn run_writer(
     initial.extend(song.borrow_and_update().clone());
     initial.extend(live.borrow_and_update().clone());
     initial.extend(transport.borrow_and_update().clone());
+    initial.extend(failover.borrow_and_update().clone());
     let initial_peers = peers.borrow_and_update().clone();
     if is_editor(&shared) {
         initial.extend(initial_peers);
@@ -1143,6 +1178,10 @@ async fn run_writer(
             changed = live.changed() => {
                 if changed.is_err() { return; }
                 live.borrow_and_update().clone()
+            }
+            changed = failover.changed() => {
+                if changed.is_err() { return; }
+                failover.borrow_and_update().clone()
             }
             changed = peers.changed() => {
                 if changed.is_err() { return; }

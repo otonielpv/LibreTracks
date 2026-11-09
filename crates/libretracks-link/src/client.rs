@@ -178,6 +178,9 @@ struct ClientShared {
     state_tx: watch::Sender<GuestState>,
     /// Backup mode: health carried by its heartbeats.
     health_tx: watch::Sender<HealthSummary>,
+    /// Redundancy (step 16): where to try when the host disappears, as the
+    /// host announced it (`ws://…`).
+    failover: Mutex<Option<String>>,
     heartbeat_seq: std::sync::atomic::AtomicU64,
 }
 
@@ -303,6 +306,7 @@ pub fn join(config: GuestConfig) -> Result<GuestRuntime, String> {
         grants: Mutex::new(None),
         state_tx: watch::channel(GuestState::Connecting { attempt: 0 }).0,
         health_tx: watch::channel(HealthSummary::default()).0,
+        failover: Mutex::new(None),
         heartbeat_seq: std::sync::atomic::AtomicU64::new(1),
     });
     let handle = GuestHandle {
@@ -326,7 +330,31 @@ pub fn join(config: GuestConfig) -> Result<GuestRuntime, String> {
 enum Ended {
     Rejected(RejectReason, Option<u32>),
     Lost { was_connected: bool },
+    /// The host handed over (redundancy): go there now.
+    Redirect(String),
     Shutdown,
+}
+
+/// `ip:port` (or a `ws://` URL) → `ws://ip:port`.
+pub fn address_url(address: &str) -> String {
+    if address.starts_with("ws://") || address.starts_with("wss://") {
+        address.to_string()
+    } else {
+        format!("ws://{address}")
+    }
+}
+
+/// Failed attempts on the host before trying its failover address too.
+pub const ATTEMPTS_BEFORE_FAILOVER: u32 = 2;
+
+/// Which URL the next attempt goes to: the host until it failed
+/// [`ATTEMPTS_BEFORE_FAILOVER`] times, then alternating with the failover
+/// address (if the host announced one). Pure.
+pub fn next_url<'a>(primary: &'a str, failover: Option<&'a str>, failed: u32) -> &'a str {
+    match failover {
+        Some(failover) if failed >= ATTEMPTS_BEFORE_FAILOVER && failed % 2 == 0 => failover,
+        _ => primary,
+    }
 }
 
 async fn set_state(shared: &ClientShared, events: &mpsc::Sender<GuestEvent>, state: GuestState) {
@@ -348,6 +376,10 @@ async fn run(
     let mut shutdown_rx = shutdown.subscribe();
     let mut backoff = Backoff::new();
     let mut attempt = 0u32;
+    // Redundancy failover (step 16): the host we belong to, and failed
+    // attempts since the last connection.
+    let mut primary = config.url.clone();
+    let mut failed = 0u32;
     loop {
         attempt += 1;
         set_state(&shared, &events, GuestState::Connecting { attempt }).await;
@@ -381,11 +413,32 @@ async fn run(
                 .await;
                 return;
             }
+            Ended::Redirect(url) => {
+                // No way back to the old host: it handed over.
+                primary = url.clone();
+                config.url = url;
+                failed = 0;
+                if let Ok(mut failover) = shared.failover.lock() {
+                    *failover = None;
+                }
+                backoff.reset();
+                attempt = 0;
+                set_state(&shared, &events, GuestState::Lost).await;
+                continue;
+            }
             Ended::Lost { was_connected } => {
                 if was_connected {
                     backoff.reset();
                     attempt = 0;
+                    failed = 0;
+                    // Connected to the failover host: that is home now (no
+                    // automatic way back).
+                    primary = config.url.clone();
+                } else {
+                    failed += 1;
                 }
+                let failover = shared.failover.lock().ok().and_then(|slot| slot.clone());
+                config.url = next_url(&primary, failover.as_deref(), failed).to_string();
                 set_state(&shared, &events, GuestState::Lost).await;
                 let delay = backoff.next_delay();
                 tokio::select! {
@@ -564,6 +617,14 @@ async fn connect_and_serve(
                     }
                     ServerMessage::Redundancy { message } => {
                         let _ = events.send(GuestEvent::Redundancy(message)).await;
+                    }
+                    ServerMessage::Failover { address } => {
+                        if let Ok(mut failover) = shared.failover.lock() {
+                            *failover = address.as_deref().map(address_url);
+                        }
+                    }
+                    ServerMessage::Redirect { address } => {
+                        break Ended::Redirect(address_url(&address));
                     }
                     ServerMessage::Welcome { .. } => {}
                 }

@@ -501,7 +501,9 @@ impl FollowerCore {
             }
             RedundancyMessage::BackupStatus { .. }
             | RedundancyMessage::RoleChange { .. }
-            | RedundancyMessage::Handover { .. } => {}
+            | RedundancyMessage::Handover { .. }
+            | RedundancyMessage::BackupInfo { .. }
+            | RedundancyMessage::GuestAccess { .. } => {}
         }
     }
 

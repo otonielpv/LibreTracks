@@ -177,6 +177,9 @@ fn spawn_monitor(
                 message = messages.recv() => {
                     let Some(message) = message else { return };
                     core.on_message(message, handle.monotonic_ms());
+                    if let Some(addresses) = core.take_backup_addresses() {
+                        super::failover::backup_announced(&app, addresses);
+                    }
                     if let Some(handover) = core.take_handover() {
                         on_handover(&app, &handle, &handover);
                     }
@@ -191,6 +194,9 @@ fn spawn_monitor(
                 _ = tick.tick() => {
                     let backup = handle.backup();
                     core.tick(backup.is_some(), handle.monotonic_ms());
+                    if backup.is_none() {
+                        super::failover::backup_gone(&app);
+                    }
                     let state = main_state_name(core.lifecycle.state()).to_string();
                     let offset = core.offset_ms;
                     publish_status(&app, |status| {

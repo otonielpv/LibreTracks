@@ -379,3 +379,111 @@ async fn heartbeats_and_messages_flow_both_ways() {
     .unwrap();
     assert_eq!(got, status);
 }
+
+// --- step 16: guests move to the backup ---
+
+fn guest_host_config(name: &str) -> HostConfig {
+    HostConfig {
+        bind_ip: IpAddr::from(Ipv4Addr::LOCALHOST),
+        preferred_port: 0,
+        port_attempts: 1,
+        control_pin: Some("1111".into()),
+        ..HostConfig::new(name)
+    }
+}
+
+/// A guest with role Control and a trusted token on `port`, and the trusted
+/// list the host now has (what the main replicates to its backup).
+async fn trusted_guest(host: &HostRuntime) -> (GuestRuntime, Vec<crate::TrustedDevice>) {
+    let mut guest = join(GuestConfig {
+        pin: Some("1111".into()),
+        remember: true,
+        ping_interval: Duration::from_millis(50),
+        ..GuestConfig::new(format!("ws://127.0.0.1:{}", host.handle.port()), "tablet")
+    })
+    .unwrap();
+    let GuestEvent::Welcome { grants, .. } =
+        next_event(&mut guest, |event| matches!(event, GuestEvent::Welcome { .. })).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(grants.role, crate::Role::Controller);
+    tokio::time::timeout(WAIT, async {
+        while host.handle.trusted_devices().is_empty() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    (guest, host.handle.trusted_devices())
+}
+
+async fn welcome_from(guest: &mut GuestRuntime, wait: Duration) -> (String, crate::Grants) {
+    tokio::time::timeout(wait, async {
+        loop {
+            match guest.events.recv().await.expect("events") {
+                GuestEvent::Welcome {
+                    host_name, grants, ..
+                } => return (host_name, grants),
+                _ => continue,
+            }
+        }
+    })
+    .await
+    .expect("a welcome")
+}
+
+#[tokio::test]
+async fn a_redirect_moves_a_guest_to_the_backup_with_its_role_and_no_pin() {
+    let main = start_host(guest_host_config("PC A")).await.unwrap();
+    let (mut guest, trusted) = trusted_guest(&main).await;
+    // The backup hosts with the main's replicated access (no PIN typed).
+    let backup = start_host(HostConfig {
+        trusted,
+        ..guest_host_config("PC B")
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        main.handle
+            .redirect_guests(&format!("127.0.0.1:{}", backup.handle.port())),
+        1
+    );
+    let (host, grants) = welcome_from(&mut guest, WAIT).await;
+    assert_eq!(host, "PC B");
+    assert_eq!(grants.role, crate::Role::Controller);
+    assert_eq!(backup.handle.guests().len(), 1);
+}
+
+#[tokio::test]
+async fn a_guest_with_a_failover_address_ends_on_the_backup_when_the_main_dies() {
+    let main = start_host(guest_host_config("PC A")).await.unwrap();
+    let (mut guest, trusted) = trusted_guest(&main).await;
+    let backup = start_host(HostConfig {
+        trusted,
+        ..guest_host_config("PC B")
+    })
+    .await
+    .unwrap();
+    main.handle
+        .set_failover_address(Some(format!("127.0.0.1:{}", backup.handle.port())));
+    // Let the guest hear the failover address before the main dies.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    main.handle.stop();
+    // Bounded by the client's backoff (0.5 + 1 + 2 s) plus connect attempts.
+    let (host, grants) = welcome_from(&mut guest, Duration::from_secs(20)).await;
+    assert_eq!(host, "PC B");
+    assert_eq!(grants.role, crate::Role::Controller);
+}
+
+#[test]
+fn the_failover_address_is_tried_after_two_failures_then_alternates() {
+    use crate::client::next_url;
+    let (a, b) = ("ws://a", "ws://b");
+    assert_eq!(next_url(a, Some(b), 0), a);
+    assert_eq!(next_url(a, Some(b), 1), a);
+    assert_eq!(next_url(a, Some(b), 2), b);
+    assert_eq!(next_url(a, Some(b), 3), a);
+    assert_eq!(next_url(a, Some(b), 4), b);
+    assert_eq!(next_url(a, None, 4), a, "no failover: only the host");
+}
