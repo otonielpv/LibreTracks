@@ -326,3 +326,23 @@ impl TempoMarkerFixture {
         }
     }
 }
+
+#[test]
+fn differences_are_explained_field_by_field() {
+    let main: Song = serde_json::from_value(serde_json::json!({
+        "id": "s", "title": "S", "durationSeconds": 100.0,
+        "regions": [{ "id": "r1", "name": "Uno", "startSeconds": 0.0, "endSeconds": 100.0 }],
+        "tracks": [{ "id": "t1", "name": "Drums", "kind": "audio", "parentTrackId": null, "volume": 1.0, "pan": 0.0, "muted": false, "solo": false }],
+        "clips": [{ "id": "c1", "trackId": "t1", "filePath": "audio/Drums.wav", "timelineStartSeconds": 0.0, "sourceStartSeconds": 0.0, "durationSeconds": 50.0, "gain": 1.0 }],
+        "sectionMarkers": []
+    }))
+    .unwrap();
+    let mut other = main.clone();
+    assert!(explain_song_differences(&main, &other, 10).is_empty());
+    other.clips[0].duration_seconds = 49.5;
+    other.tracks[0].volume = 0.5;
+    let lines = explain_song_differences(&main, &other, 10);
+    assert!(lines.iter().any(|line| line.contains("timeline.clips[c1].durationSeconds") && line.contains("50.000000")), "{lines:?}");
+    assert!(lines.iter().any(|line| line.contains("mix.tracks[t1].volume")), "{lines:?}");
+    assert!(lines.iter().all(|line| line.starts_with("«Uno» ")));
+}

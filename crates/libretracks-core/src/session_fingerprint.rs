@@ -220,6 +220,23 @@ fn song_fingerprint(
     automation_cues: &[AutomationCue],
     audio_info: &impl Fn(&str) -> Option<AudioFileInfo>,
 ) -> SongFingerprint {
+    let (timeline, audio, mix) = song_parts(song, region, automation_cues, audio_info);
+    SongFingerprint {
+        song_id: region.id.clone(),
+        title: region.name.clone(),
+        timeline: digest_of(&timeline),
+        audio: digest_of(&audio),
+        mix: digest_of(&mix),
+    }
+}
+
+/// The values one song's digests are computed from: timeline, audio, mix.
+fn song_parts(
+    song: &Song,
+    region: &SongRegion,
+    automation_cues: &[AutomationCue],
+    audio_info: &impl Fn(&str) -> Option<AudioFileInfo>,
+) -> (Value, Value, Value) {
     let inside = |seconds: f64| {
         seconds >= region.start_seconds - EPSILON_SECONDS
             && seconds < region.end_seconds - EPSILON_SECONDS
@@ -367,12 +384,104 @@ fn song_fingerprint(
         "tracks": tracks.iter().map(|track| track_part(track, true)).collect::<Vec<_>>(),
     });
 
-    SongFingerprint {
-        song_id: region.id.clone(),
-        title: region.name.clone(),
-        timeline: digest_of(&timeline),
-        audio: digest_of(&audio),
-        mix: digest_of(&mix),
+    (timeline, audio, mix)
+}
+
+/// Field by field, what makes the timeline or the mix of each song differ
+/// between two whole songs (diagnosis of a «different session»). Lines like
+/// `«Song» timeline.clips[c1].durationSeconds: 12.5 ≠ 12.49`. Automation
+/// cues and file sizes are left out (they do not travel in a song).
+pub fn explain_song_differences(reference: &Song, other: &Song, limit: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let none = |_: &str| None;
+    for region in &reference.regions {
+        let Some(theirs) = other.regions.iter().find(|candidate| candidate.id == region.id) else {
+            continue;
+        };
+        let (timeline_a, _, mix_a) = song_parts(reference, region, &[], &none);
+        let (timeline_b, _, mix_b) = song_parts(other, theirs, &[], &none);
+        let mut found = Vec::new();
+        diff_values("timeline", &timeline_a, &timeline_b, &mut found, limit);
+        diff_values("mix", &mix_a, &mix_b, &mut found, limit);
+        for line in found {
+            if lines.len() >= limit {
+                return lines;
+            }
+            lines.push(format!("«{}» {line}", region.name));
+        }
+    }
+    lines
+}
+
+fn short(value: Option<&Value>) -> String {
+    match value {
+        None | Some(Value::Null) => "–".into(),
+        Some(Value::Number(number)) => number.as_f64().map(round).unwrap_or_else(|| number.to_string()),
+        Some(other) => {
+            let text = other.to_string();
+            if text.chars().count() > 60 {
+                format!("{}…", text.chars().take(60).collect::<String>())
+            } else {
+                text
+            }
+        }
+    }
+}
+
+fn same_leaf(a: Option<&Value>, b: Option<&Value>) -> bool {
+    match (a, b) {
+        (Some(Value::Number(x)), Some(Value::Number(y))) => match (x.as_f64(), y.as_f64()) {
+            (Some(x), Some(y)) => round(x) == round(y),
+            _ => x == y,
+        },
+        (None, Some(Value::Null)) | (Some(Value::Null), None) => true,
+        _ => a == b,
+    }
+}
+
+fn diff_values(path: &str, a: &Value, b: &Value, out: &mut Vec<String>, limit: usize) {
+    if out.len() >= limit {
+        return;
+    }
+    match (a, b) {
+        (Value::Object(left), Value::Object(right)) => {
+            let keys: BTreeSet<&String> = left.keys().chain(right.keys()).collect();
+            for key in keys {
+                if VIEW_ONLY_KEYS.contains(&key.as_str()) {
+                    continue;
+                }
+                let (x, y) = (left.get(key), right.get(key));
+                match (x, y) {
+                    (Some(x), Some(y)) => diff_values(&format!("{path}.{key}"), x, y, out, limit),
+                    _ if same_leaf(x, y) => {}
+                    _ => out.push(format!("{path}.{key}: {} ≠ {}", short(x), short(y))),
+                }
+            }
+        }
+        (Value::Array(left), Value::Array(right)) => {
+            let id = |value: &Value| value.get("id").and_then(Value::as_str).map(str::to_string);
+            if left.iter().chain(right.iter()).all(|value| id(value).is_some()) {
+                let ids: BTreeSet<String> = left.iter().chain(right.iter()).filter_map(id).collect();
+                for key in ids {
+                    let x = left.iter().find(|value| id(value).as_deref() == Some(&key));
+                    let y = right.iter().find(|value| id(value).as_deref() == Some(&key));
+                    match (x, y) {
+                        (Some(x), Some(y)) => diff_values(&format!("{path}[{key}]"), x, y, out, limit),
+                        (Some(_), None) => out.push(format!("{path}[{key}]: solo en el principal")),
+                        (None, Some(_)) => out.push(format!("{path}[{key}]: solo en este equipo")),
+                        (None, None) => {}
+                    }
+                }
+            } else if left.len() != right.len() {
+                out.push(format!("{path}: {} elementos ≠ {}", left.len(), right.len()));
+            } else {
+                for (index, (x, y)) in left.iter().zip(right).enumerate() {
+                    diff_values(&format!("{path}[{index}]"), x, y, out, limit);
+                }
+            }
+        }
+        _ if same_leaf(Some(a), Some(b)) => {}
+        _ => out.push(format!("{path}: {} ≠ {}", short(Some(a)), short(Some(b)))),
     }
 }
 

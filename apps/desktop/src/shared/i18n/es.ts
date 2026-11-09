@@ -3585,7 +3585,11 @@ const es = {
       confirmPlaying: "Este equipo está sonando: abrir la copia cambia lo que suena. ¿Copiar igualmente?",
       yes: "Sí, copiar",
       failed: "No se pudo copiar la sesión: {{reason}}",
-      errors: { connectionLost: "Se perdió la conexión con el principal durante la copia." },
+      done: "Sesión copiada y abierta en este equipo ({{name}}).",
+      errors: {
+        connectionLost: "Se perdió la conexión con el principal durante la copia.",
+        noAnswer: "El principal no responde a la copia. Comprueba que sigue abierto y vuelve a intentarlo.",
+      },
     },
     disconnect: "Dejar de ser respaldo",
     waiting: {
@@ -3631,6 +3635,10 @@ const es = {
       sampleRateDiffers: "Los dos equipos van a distinta frecuencia de muestreo. Funciona, pero conviene igualarla.",
     },
     adoptTiming: "Usar los ajustes de tiempo del principal",
+    explain: {
+      button: "Ver detalles de las diferencias",
+      loading: "Pidiendo la canción al principal…",
+    },
     timingNames: {
       globalJumpMode: "modo de salto",
       globalJumpBars: "compases del salto",

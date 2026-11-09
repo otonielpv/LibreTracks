@@ -41,6 +41,8 @@ pub enum FollowerCommand {
     /// Use the main's timing settings here (they are per machine, not per
     /// session, and a mismatch keeps the backup from arming).
     AdoptMainTiming,
+    /// Ask the main for its song and list what differs, field by field.
+    ExplainDiffs,
 }
 
 /// Running follower, stopped (and the local transport unlocked) on drop.
@@ -241,33 +243,84 @@ fn start_copy(
     )
 }
 
+/// The last copy request sent, to send it again when no answer comes (a
+/// message can be dropped when a queue is full; the copy must not hang).
+pub struct CopyWatch {
+    message: RedundancyMessage,
+    sent_at: Instant,
+    retries: u32,
+}
+
+/// No answer for this long: ask again.
+const COPY_RETRY_AFTER: Duration = Duration::from_secs(4);
+/// Asked this many times without an answer: the copy fails.
+const COPY_MAX_RETRIES: u32 = 5;
+
+impl CopyWatch {
+    pub fn new(message: RedundancyMessage) -> Self {
+        Self {
+            message,
+            sent_at: Instant::now(),
+            retries: 0,
+        }
+    }
+
+    /// What to send again now, or Err when it gave up.
+    pub fn due(&mut self, now: Instant) -> Result<Option<RedundancyMessage>, ()> {
+        if now.duration_since(self.sent_at) < COPY_RETRY_AFTER {
+            return Ok(None);
+        }
+        if self.retries >= COPY_MAX_RETRIES {
+            return Err(());
+        }
+        self.retries += 1;
+        self.sent_at = now;
+        Ok(Some(self.message.clone()))
+    }
+}
+
 fn handle_copy_step(
     app: &AppHandle,
     guest: &libretracks_link::GuestHandle,
     step: super::session_copy::CopyStep,
     copy: &mut Option<super::session_copy::CopyJob>,
     requested: &mut Option<u64>,
+    watch: &mut Option<CopyWatch>,
 ) {
     use super::session_copy::CopyStep;
     match step {
         CopyStep::Request(message) => {
-            guest.send_redundancy(message);
+            guest.send_redundancy(message.clone());
+            *watch = Some(CopyWatch::new(message));
         }
         CopyStep::Done(song_file) => {
             *copy = None;
             *requested = None;
-            publish_status(app, |status| {
-                status.copy = None;
-                status.copy_error = None;
-            });
-            let _ = crate::commands::project::start_open_project_from_path(
+            *watch = None;
+            let name = song_file
+                .parent()
+                .and_then(|dir| dir.file_name())
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let opened = crate::commands::project::start_open_project_from_path(
                 app.clone(),
                 song_file.to_string_lossy().to_string(),
             );
+            publish_status(app, |status| {
+                status.copy = None;
+                match opened {
+                    Ok(_) => {
+                        status.copy_error = None;
+                        status.copy_done = Some(name);
+                    }
+                    Err(error) => status.copy_error = Some(error),
+                }
+            });
         }
         CopyStep::Failed(error) => {
             *copy = None;
             *requested = None;
+            *watch = None;
             publish_status(app, |status| {
                 status.copy = None;
                 status.copy_error = Some(error);
@@ -345,6 +398,32 @@ fn refresh_session(app: &AppHandle, core: &mut FollowerCore) -> Option<Song> {
     let settings = state.audio.current_settings().ok()?;
     core.set_own_fingerprint(super::fingerprint::compute(&source, &settings));
     Some(source.song)
+}
+
+/// The main's song document against this machine's song, field by field.
+fn explain_differences(app: &AppHandle, song_document: &str) -> Vec<String> {
+    #[derive(serde::Deserialize)]
+    struct Document {
+        song: Song,
+    }
+    let main = match serde_json::from_str::<Document>(song_document) {
+        Ok(document) => document.song,
+        Err(error) => return vec![format!("No se pudo leer la canción del principal: {error}")],
+    };
+    let Some(own) = app
+        .state::<DesktopState>()
+        .session
+        .lock()
+        .ok()
+        .and_then(|session| session.engine.song().cloned())
+    else {
+        return vec!["No hay sesión abierta en este equipo.".into()];
+    };
+    let mut lines = libretracks_core::session_fingerprint::explain_song_differences(&main, &own, 60);
+    if lines.is_empty() {
+        lines.push("Las canciones coinciden; si siguen saliendo distintas, la diferencia está en las automatizaciones o en el tamaño de los audios.".into());
+    }
+    lines
 }
 
 /// Write the main's timing settings into this machine's settings.
@@ -482,6 +561,8 @@ async fn run(
     let mut copy_ids = 0u64;
     let preparing: Arc<std::sync::Mutex<Option<super::session_copy::CopyProgress>>> = Arc::default();
     let (ready_tx, mut ready_rx) = mpsc::unbounded_channel::<CopyReady>();
+    let mut copy_watch: Option<CopyWatch> = None;
+    let mut explain_requested: Option<u64> = None;
 
     loop {
         let mut state_changed = false;
@@ -497,7 +578,13 @@ async fn run(
                         });
                     }
                     GuestEvent::Redundancy(RedundancyMessage::SessionManifest { request_id, name, song_document, files }) => {
-                        if copy_requested == Some(request_id) {
+                        if explain_requested == Some(request_id) {
+                            explain_requested = None;
+                            let lines = explain_differences(&app, &song_document);
+                            publish_status(&app, |status| status.diff_details = Some(lines));
+                        } else if copy_requested == Some(request_id) && copy.is_none() && copy_watch.is_some() {
+                            // Preparing now: a repeated manifest is ignored.
+                            copy_watch = None;
                             spawn_copy_start(
                                 &app,
                                 request_id,
@@ -511,9 +598,12 @@ async fn run(
                         }
                     }
                     GuestEvent::Redundancy(RedundancyMessage::FileChunk { request_id, path, offset, data, error }) => {
-                        if let Some(job) = copy.as_mut().filter(|job| job.request_id == request_id) {
+                        if let Some(job) = copy
+                            .as_mut()
+                            .filter(|job| job.request_id == request_id && job.expects(&path, offset))
+                        {
                             let step = job.on_chunk(&path, offset, &data, error.as_deref());
-                            handle_copy_step(&app, &guest.handle, step, &mut copy, &mut copy_requested);
+                            handle_copy_step(&app, &guest.handle, step, &mut copy, &mut copy_requested, &mut copy_watch);
                         }
                     }
                     GuestEvent::Redundancy(message) => {
@@ -544,6 +634,7 @@ async fn run(
                         if let Some(error) = connection_error(&state) {
                             publish_status(&app, |status| status.connection_error = Some(error));
                         }
+                        copy_watch = None;
                         if copy.take().is_some() || copy_requested.take().is_some() {
                             publish_status(&app, |status| {
                                 status.copy = None;
@@ -570,16 +661,26 @@ async fn run(
                         copy_ids += 1;
                         copy = None;
                         copy_requested = Some(copy_ids);
-                        guest.handle.send_redundancy(RedundancyMessage::SessionRequest { request_id: copy_ids });
+                        let request = RedundancyMessage::SessionRequest { request_id: copy_ids };
+                        guest.handle.send_redundancy(request.clone());
+                        copy_watch = Some(CopyWatch::new(request));
                         publish_status(&app, |status| {
                             status.copy = Some(Default::default());
                             status.copy_error = None;
+                            status.copy_done = None;
                         });
                     }
                     FollowerCommand::CancelCopy => {
                         copy = None;
                         copy_requested = None;
+                        copy_watch = None;
                         publish_status(&app, |status| status.copy = None);
+                    }
+                    FollowerCommand::ExplainDiffs => {
+                        copy_ids += 1;
+                        explain_requested = Some(copy_ids);
+                        guest.handle.send_redundancy(RedundancyMessage::SessionRequest { request_id: copy_ids });
+                        publish_status(&app, |status| status.diff_details = Some(Vec::new()));
                     }
                     FollowerCommand::AdoptMainTiming => {
                         if let Some(timing) = core.main_timing() {
@@ -614,6 +715,23 @@ async fn run(
                     song = refresh_session(&app, &mut core).or(song);
                     fingerprint_unsent = true;
                 }
+                if let Some(watch) = copy_watch.as_mut() {
+                    match watch.due(Instant::now()) {
+                        Ok(Some(message)) => {
+                            guest.handle.send_redundancy(message);
+                        }
+                        Ok(None) => {}
+                        Err(()) => {
+                            copy_watch = None;
+                            copy = None;
+                            copy_requested = None;
+                            publish_status(&app, |status| {
+                                status.copy = None;
+                                status.copy_error = Some("noAnswer".into());
+                            });
+                        }
+                    }
+                }
                 // No session here yet (or it was opened after connecting):
                 // look again every second instead of waiting for a change.
                 if !core.has_own_fingerprint() && refresh_due.is_none() {
@@ -631,7 +749,7 @@ async fn run(
                             step
                         })
                         .unwrap_or_else(super::session_copy::CopyStep::Failed);
-                    handle_copy_step(&app, &guest.handle, step, &mut copy, &mut copy_requested);
+                    handle_copy_step(&app, &guest.handle, step, &mut copy, &mut copy_requested, &mut copy_watch);
                 }
             }
             _ = status.tick() => {

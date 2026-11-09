@@ -10,6 +10,7 @@ import {
   acceptRoleChange,
   adoptMainTiming,
   becomeMain,
+  explainDiffs,
   setRedundancyRole,
   cancelCopy,
   copySession,
@@ -190,6 +191,11 @@ export function CopySession() {
           {t("redundancy.copy.button")}
         </button>
       )}
+      {status?.copyDone ? (
+        <p className="lt-redundancy-ok" role="status">
+          {t("redundancy.copy.done", { name: status.copyDone })}
+        </p>
+      ) : null}
       {status?.copyError ? (
         <p className="lt-redundancy-warning">
           {t(`redundancy.copy.errors.${status.copyError}`, {
@@ -208,8 +214,14 @@ export function SessionDiffs() {
   const { t } = useTranslation();
   const status = useRedundancyStore((state) => state.status);
   if (!status || status.role !== "backup") return null;
-  const canCopy = ["checkingSession", "sessionMismatch", "following", "armed"].includes(status.state);
+  // While a copy runs (or just ended) it stays visible whatever the state.
+  const canCopy =
+    ["checkingSession", "sessionMismatch", "following", "armed"].includes(status.state) ||
+    Boolean(status.copy || status.copyDone || status.copyError);
   const timingDiffers = status.diffs.some((diff) => diff.kind === "timingSettingsDiffer");
+  const songDiffers = status.diffs.some(
+    (diff) => diff.kind === "timelineDiffers" || diff.kind === "mixDiffers",
+  );
   return (
     <>
       {status.diffs.length > 0 ? (
@@ -218,6 +230,24 @@ export function SessionDiffs() {
             <li key={index}>{diffText(diff, t)}</li>
           ))}
         </ul>
+      ) : null}
+      {songDiffers ? (
+        <div className="lt-redundancy-copy">
+          <button type="button" onClick={() => void explainDiffs()}>
+            {t("redundancy.explain.button")}
+          </button>
+        </div>
+      ) : null}
+      {status.diffDetails ? (
+        status.diffDetails.length === 0 ? (
+          <p>{t("redundancy.explain.loading")}</p>
+        ) : (
+          <ul className="lt-redundancy-details">
+            {status.diffDetails.map((line, index) => (
+              <li key={index}>{line}</li>
+            ))}
+          </ul>
+        )
       ) : null}
       {timingDiffers ? (
         <div className="lt-redundancy-copy">

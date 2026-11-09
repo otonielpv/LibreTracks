@@ -3553,7 +3553,11 @@ const en = {
       confirmPlaying: "This machine is playing: opening the copy changes what sounds. Copy anyway?",
       yes: "Yes, copy",
       failed: "Could not copy the session: {{reason}}",
-      errors: { connectionLost: "The connection with the main was lost during the copy." },
+      done: "Session copied and opened on this machine ({{name}}).",
+      errors: {
+        connectionLost: "The connection with the main was lost during the copy.",
+        noAnswer: "The main does not answer the copy. Check that it is still open and try again.",
+      },
     },
     disconnect: "Stop being the backup",
     waiting: {
@@ -3599,6 +3603,10 @@ const en = {
       sampleRateDiffers: "The two machines run at different sample rates. It works, but matching them is better.",
     },
     adoptTiming: "Use the main's timing settings",
+    explain: {
+      button: "See what differs in detail",
+      loading: "Asking the main for its song…",
+    },
     timingNames: {
       globalJumpMode: "jump mode",
       globalJumpBars: "jump bars",

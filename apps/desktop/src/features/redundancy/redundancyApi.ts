@@ -42,6 +42,10 @@ export type RedundancyStatus = {
   /** Backup side: why it cannot connect (badPin, backupNotAccepted,
    * backupAlreadyConnected, incompatibleVersion, unreachable). */
   connectionError?: string | null;
+  /** Backup side: the last copy finished and opened (folder name). */
+  copyDone?: string | null;
+  /** Backup side: field-by-field differences (after «See details»). */
+  diffDetails?: string[] | null;
   /** Backup side: what it waits for (ownSession, mainSession, audioClock). */
   waitingFor?: string | null;
   /** Main side: what its backup reports (checkingSession, following...). */
@@ -105,6 +109,10 @@ export function copySession(force: boolean) {
 
 export function cancelCopy() {
   return invokeCommand<void>("redundancy_cancel_copy");
+}
+
+export function explainDiffs() {
+  return invokeCommand<void>("redundancy_explain_diffs");
 }
 
 export function adoptMainTiming() {

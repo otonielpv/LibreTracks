@@ -372,6 +372,14 @@ impl CopyJob {
         }
     }
 
+    /// Whether a chunk is the one this job waits for. A late duplicate (the
+    /// request was sent again) is ignored instead of failing the copy.
+    pub fn expects(&self, path: &str, offset: u64) -> bool {
+        self.current
+            .as_ref()
+            .is_some_and(|(file, _, expected)| file.path == path && *expected == offset)
+    }
+
     /// A chunk arrived.
     pub fn on_chunk(&mut self, path: &str, offset: u64, data: &str, error: Option<&str>) -> CopyStep {
         if let Some(error) = error {

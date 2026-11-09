@@ -599,6 +599,11 @@ pub fn redundancy_cancel_copy(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn redundancy_explain_diffs(app: AppHandle) -> Result<(), String> {
+    send_to_follower(&app, FollowerCommand::ExplainDiffs)
+}
+
+#[tauri::command]
 pub fn redundancy_adopt_main_timing(app: AppHandle) -> Result<(), String> {
     send_to_follower(&app, FollowerCommand::AdoptMainTiming)
 }

@@ -75,6 +75,16 @@
 .lt-redundancy-detail dd { margin: 0; font-variant-numeric: tabular-nums; }
 .lt-redundancy-diffs { margin: 12px 0 0; padding-left: 18px; }
 .lt-redundancy-warning { color: #f6ad55; }
+.lt-redundancy-ok { color: #68d391; }
+.lt-redundancy-details {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  max-height: 220px;
+  overflow: auto;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  user-select: text;
+}
 
 .lt-redundancy-notice {
   position: fixed;

@@ -42,6 +42,11 @@ pub struct RedundancyStatus {
     pub copy: Option<super::session_copy::CopyProgress>,
     /// Backup side: why the last copy failed.
     pub copy_error: Option<String>,
+    /// Backup side: the last copy finished and opened (its folder name).
+    pub copy_done: Option<String>,
+    /// Backup side: field-by-field differences with the main's song, after
+    /// «See details» (diagnosis).
+    pub diff_details: Option<Vec<String>>,
     /// Backup side: why it cannot connect to the main: `badPin`,
     /// `backupNotAccepted`, `backupAlreadyConnected`, `incompatibleVersion`,
     /// `unreachable` (wrong address, firewall, main not running).

@@ -9,7 +9,7 @@
 use std::cell::RefCell;
 use std::net::{IpAddr, Ipv4Addr};
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use libretracks_core::session_fingerprint::SessionFingerprint;
 use libretracks_link::redundancy::{
@@ -784,6 +784,21 @@ fn without_an_audio_clock_the_lifecycle_still_moves_and_says_why() {
     core.decide(20 * MS, &no_clock, None);
     assert_eq!(core.phase(), FollowerPhase::Following);
     assert_eq!(core.waiting_for(), Some("audioClock"));
+}
+
+#[test]
+fn an_unanswered_copy_request_is_sent_again_then_given_up() {
+    use super::super::follower_runtime::CopyWatch;
+    let start = Instant::now();
+    let mut watch = CopyWatch::new(RedundancyMessage::SessionRequest { request_id: 1 });
+    assert_eq!(watch.due(start), Ok(None), "just sent");
+    let mut now = start;
+    for _ in 0..5 {
+        now += Duration::from_secs(5);
+        assert!(matches!(watch.due(now), Ok(Some(RedundancyMessage::SessionRequest { request_id: 1 }))));
+    }
+    now += Duration::from_secs(5);
+    assert_eq!(watch.due(now), Err(()));
 }
 
 #[test]
