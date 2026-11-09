@@ -62,6 +62,7 @@ mod arrangement;
 mod audio_prep;
 mod charts;
 mod covers;
+mod disk_space_notice;
 mod automation_runtime;
 mod cue_follow;
 mod external_import;

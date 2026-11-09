@@ -194,6 +194,7 @@ import { LevelSongsMenuItem } from "./levelSongs/LevelSongsMenuItem";
 import { BatchSongAnalysisMenuItem } from "./songAnalysis/BatchSongAnalysisMenuItem";
 import { ExportSessionModal } from "./panels/ExportSessionModal";
 import { TemplateDropToast } from "./templates/TemplateDropToast";
+import { DiskSpaceToast } from "./storage/DiskSpaceToast";
 import { beginExportWithChoice, cancelExportChoice, CloudLandingButton, CloudMenuItem, CloudSurfaces, confirmSessionExport, confirmSongExport, importSessionWithChoice, importSongWithChoice, useCloudStore } from "./cloud";
 import {
   AutomationCueModal,
@@ -7795,6 +7796,7 @@ export function TransportPanelContent() {
             />
 
             <CloudSurfaces />
+            <DiskSpaceToast />
             {FEATURE_FLAGS.songTemplates ? (
               <TemplateDropToast onUndone={applyPlaybackSnapshot} />
             ) : null}

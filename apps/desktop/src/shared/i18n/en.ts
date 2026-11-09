@@ -2276,6 +2276,13 @@ const en = {
       selectOrCreate: "Select or create a scene to edit it.",
     },
   },
+  diskSpace: {
+    low_one:
+      "Not enough disk space to prepare the audio: {{count}} track will play silence. It needs about {{needed}} and {{free}} are free. Free up space and reopen the session.",
+    low_other:
+      "Not enough disk space to prepare the audio: {{count}} tracks will play silence. They need about {{needed}} and {{free}} are free. Free up space and reopen the session.",
+    dismiss: "Got it",
+  },
   songTemplates: {
     defaultTemplate: "Template for new songs",
     none: "None",

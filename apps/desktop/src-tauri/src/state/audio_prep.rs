@@ -189,6 +189,7 @@ impl DesktopSession {
         const SOURCES_BASE: u8 = 18;
         const SOURCES_SPAN: u8 = 62;
         let started_at = Instant::now();
+        let mut disk_notice_sent = false;
         let mut last_ready = usize::MAX;
         let mut last_total = usize::MAX;
         let mut last_percent = u8::MAX;
@@ -222,6 +223,11 @@ impl DesktopSession {
                     continue;
                 }
             };
+            super::disk_space_notice::emit_disk_space_notice_once(
+                app,
+                &snapshot.source_states,
+                &mut disk_notice_sent,
+            );
             let total = snapshot.source_states.len();
             let ready = snapshot
                 .source_states
@@ -374,6 +380,7 @@ impl DesktopSession {
             .clone();
         let started_at = Instant::now();
         let mut last_progress_at = started_at;
+        let mut disk_notice_sent = false;
         let mut last_ready = usize::MAX;
         let mut last_total = usize::MAX;
         let mut last_percent = u8::MAX;
@@ -401,6 +408,11 @@ impl DesktopSession {
                     continue;
                 }
             };
+            super::disk_space_notice::emit_disk_space_notice_once(
+                app,
+                &snapshot.source_states,
+                &mut disk_notice_sent,
+            );
             let total = snapshot.source_states.len();
             let ready = snapshot
                 .source_states

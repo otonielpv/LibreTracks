@@ -232,6 +232,26 @@ export async function listenToTemplateDropSummary(
   });
 }
 
+/** Sources the engine could not prepare because the disk is full. */
+export interface DiskSpaceLowNotice {
+  failedSources: number;
+  neededMb: number;
+  freeMb: number;
+}
+
+/**
+ * Fired once per open/import when the PCM cache volume cannot take the
+ * conversions the session needs; those tracks play silence until there is room.
+ */
+export async function listenToDiskSpaceLow(
+  handler: (notice: DiskSpaceLowNotice) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<DiskSpaceLowNotice>("audio:disk-space-low", (event) => {
+    handler(event.payload);
+  });
+}
+
 /** Quit the app. The backend still flushes the session on the way out. */
 export async function exitApp(): Promise<void> {
   return invokeCommand<void>("exit_app");

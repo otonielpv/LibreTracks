@@ -361,6 +361,19 @@ size_t source_disk_cache_limit_bytes() {
     return lt::lt_disk_cache_limit_for(free_bytes, lt::lt_device_profile().device_class);
 }
 
+#if LT_ENGINE_USE_LIBSNDFILE
+// Can the cache volume take a conversion of this length? Empty when it can, or
+// when free space cannot be read; otherwise the failure reason the source gets.
+std::string cache_disk_shortfall(Frame out_frames, int channel_count) {
+    const unsigned long long bytes_per_sample =
+        (cache_sample_format() == SF_FORMAT_FLOAT) ? 4ull : 2ull;
+    const unsigned long long needed =
+        static_cast<unsigned long long>(std::max<Frame>(0, out_frames)) *
+        static_cast<unsigned long long>(std::max(1, channel_count)) * bytes_per_sample;
+    return disk_shortfall_message(needed, free_disk_bytes_for(source_cache_dir()));
+}
+#endif
+
 struct CacheEntryStat {
     std::string path;
     long long   size_bytes = 0;
@@ -1067,6 +1080,14 @@ Result<void> SourceManager::store_decoded_source(const Id& source_id,
         report_progress(86);
         if (!create_directories_compat(parent_path_compat(cache_file)))
             return Result<void>::err("Could not create PCM cache directory: " + cache_file);
+#if LT_ENGINE_USE_LIBSNDFILE
+        // A full disk used to fail halfway through the write with a bare I/O
+        // error, or not at all until the next file. Say it up front, in a form
+        // the app recognises and turns into a warning.
+        if (auto shortfall = cache_disk_shortfall(duration_frames, channel_count);
+            !shortfall.empty())
+            return Result<void>::err(shortfall);
+#endif
         // Keep the on-disk cache under the configured budget before we add
         // another file to it. Protects the path we're about to write so it
         // can't be evicted by itself if it happened to be the oldest entry.
@@ -1244,6 +1265,10 @@ Result<void> SourceManager::decode_and_store_streaming(
 
     if (!create_directories_compat(parent_path_compat(cache_file)))
         return Result<void>::err("Could not create PCM cache directory: " + cache_file);
+    // See the sibling writer: refuse up front when the disk cannot take it.
+    if (auto shortfall = cache_disk_shortfall(projected_out_frames, channel_count);
+        !shortfall.empty())
+        return Result<void>::err(shortfall);
     {
         std::lock_guard eviction_lock(g_cache_eviction_mtx);
         std::unordered_set<std::string> protected_paths;
@@ -2540,6 +2565,20 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
     }
     if (!retain_reader)
         reader.close();
+}
+
+std::string disk_shortfall_message(unsigned long long needed_bytes,
+                                  unsigned long long free_bytes) {
+    // 0 means the query failed: better to try the write than to refuse it.
+    if (free_bytes == 0)
+        return {};
+    if (free_bytes >= needed_bytes + kCacheDiskMarginBytes)
+        return {};
+    constexpr unsigned long long kMb = 1024ull * 1024ull;
+    return std::string(kDiskFullErrorTag) + " needs_mb=" +
+           std::to_string((needed_bytes + kMb - 1) / kMb) +
+           " free_mb=" + std::to_string(free_bytes / kMb) +
+           ": not enough disk space to prepare this audio";
 }
 
 std::string pcm_cache_file_for(const Id& source_id,

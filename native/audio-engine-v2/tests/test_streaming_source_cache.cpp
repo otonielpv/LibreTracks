@@ -2114,3 +2114,30 @@ TEST_CASE("a native WAV keeps streaming in place when the cache is on a slow dis
 
     std::remove(wav_path.c_str());
 }
+
+// ---------------------------------------------------------------------------
+// Free space before a cache conversion: the app turns the tagged error into a
+// warning, so the tag and the numbers must be there exactly when the disk
+// cannot take the file plus the margin.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("disk_shortfall_message is empty while the conversion fits with margin") {
+    constexpr unsigned long long kMb = 1024ull * 1024ull;
+    const unsigned long long needed = 300 * kMb;
+    CHECK(disk_shortfall_message(needed, needed + kCacheDiskMarginBytes).empty());
+    CHECK(disk_shortfall_message(needed, 50'000 * kMb).empty());
+}
+
+TEST_CASE("disk_shortfall_message tags a conversion that does not fit") {
+    constexpr unsigned long long kMb = 1024ull * 1024ull;
+    // Fits on its own, not with the margin: still refused.
+    const auto message = disk_shortfall_message(300 * kMb, 600 * kMb);
+    REQUIRE_FALSE(message.empty());
+    CHECK(message.rfind(kDiskFullErrorTag, 0) == 0);
+    CHECK(message.find("needs_mb=300") != std::string::npos);
+    CHECK(message.find("free_mb=600") != std::string::npos);
+}
+
+TEST_CASE("disk_shortfall_message does not refuse when free space is unknown") {
+    CHECK(disk_shortfall_message(1ull << 40, 0).empty());
+}

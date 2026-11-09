@@ -134,6 +134,19 @@ bool native_stream_in_place_allowed(bool source_has_seek_penalty,
 std::string pcm_cache_file_for(const Id& source_id, const std::string& file_path,
                                int sample_rate);
 
+// Prefix of the error a source gets when the disk cannot take its conversion
+// into the PCM cache. The app matches it to warn the user; keep it stable.
+inline constexpr const char* kDiskFullErrorTag = "LT_DISK_FULL";
+// Room left on top of the conversion itself, so the system and the session
+// writes that follow do not run the disk to zero.
+inline constexpr unsigned long long kCacheDiskMarginBytes = 512ull * 1024ull * 1024ull;
+
+// "LT_DISK_FULL needs_mb=N free_mb=M: ..." when `free_bytes` cannot hold
+// `needed_bytes` plus the margin; empty when it can, or when `free_bytes` is 0
+// (free space unknown).
+std::string disk_shortfall_message(unsigned long long needed_bytes,
+                                  unsigned long long free_bytes);
+
 // True while this process is writing `path` into the PCM cache. A reader
 // outside SourceManager must not take a conversion that is still growing.
 bool pcm_cache_write_in_progress(const std::string& path);

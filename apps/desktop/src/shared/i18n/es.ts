@@ -2305,6 +2305,13 @@ const es = {
       selectOrCreate: "Selecciona o crea una escena para editarla.",
     },
   },
+  diskSpace: {
+    low_one:
+      "No queda espacio en disco para preparar el audio: {{count}} pista sonará en silencio. Hacen falta unos {{needed}} y quedan {{free}}. Libera espacio y vuelve a abrir la sesión.",
+    low_other:
+      "No queda espacio en disco para preparar el audio: {{count}} pistas sonarán en silencio. Hacen falta unos {{needed}} y quedan {{free}}. Libera espacio y vuelve a abrir la sesión.",
+    dismiss: "Entendido",
+  },
   songTemplates: {
     defaultTemplate: "Plantilla para canciones nuevas",
     none: "Ninguna",
