@@ -13,18 +13,19 @@ milliseconds by cable), tells you at a glance whether it is ready, and emits a
 **pilot tone** that a hardware switcher can listen to.
 
 What it does not do: it does not move the audio by itself (a switcher or the
-mixing desk does that), and it does not copy the session from one machine to
-the other.
+mixing desk does that).
 
 It is free, like all of LibreTracks.
 
 ## Requirements
 
 - The **same LibreTracks version** on both machines.
-- The **same session** on both: save it on the main and open it on the backup
-  (export a session package `.ltset`, or use cloud sync). Same songs, same
-  audio files, same settings that change timing (jump modes, vamp, fade out).
-  The backup checks this and tells you exactly what differs.
+- The **same session** on both. The easiest way: connect the backup and press
+  **Copy the main's session** (tap the pill at the top). Only the audio files
+  the backup does not have yet travel; a second copy after a small edit takes
+  seconds. You can also export a session package `.ltset` or use cloud sync.
+  The backup checks that the sessions match (songs, audio, and the settings
+  that change timing: jump modes, vamp, fade out) and tells you what differs.
 - A **network cable**: directly between the two machines or through a switch.
   Wi-Fi works for trying it out, not for a show.
 
@@ -116,6 +117,11 @@ or pause the song from the backup.
 - If something changed in between, the backup asks: **Follow the main again**
   or **Make this machine the main**.
 
+**Switching on purpose.** The main does not have to crash: if its audio
+interface fails or crackles, open the pill on the backup and press **Switch to
+this machine** (it asks you to confirm). The main turns its pilot tone off, so
+a switcher moves to the backup, and shows that the backup took over.
+
 There is no automatic way back. When the old main restarts, it offers to
 become the backup of the new main (**Become the backup**); it only switches if
 you accept, because the switcher might be sending it to the PA.
@@ -123,6 +129,18 @@ you accept, because the switcher might be sending it to the PA.
 A main that closed unexpectedly comes back with the pilot tone **off** and the
 warning "This machine closed unexpectedly. Re-arm the pilot tone when it is
 the main again." Press **Re-arm the pilot tone** when it is really the main.
+
+## Tablets and phones follow the backup
+
+When the backup takes over (main lost, or **Switch to this machine**):
+
+- **Network session guests** (other LibreTracks apps) move to the backup on
+  their own, with the same role and without typing the PIN again. The main
+  tells them where the backup is beforehand.
+- **The Remote** (browser) shows "The backup took over" or "Lost the
+  connection with the main" with a **Go to the backup's remote** button. If
+  someone reloads the page while the main is down, they have to open the
+  backup's address by hand.
 
 ## A MIDI controller wired to both machines
 
@@ -161,8 +179,8 @@ the backup.
 ## Known limits
 
 - Structural edits on the main (clips, markers, songs, tracks, arrangements)
-  are not copied: the backup shows **Different session** until you save on
-  the main and open the session again on the backup.
+  are not followed live: the backup shows **Different session** until you
+  press **Copy the main's session** again.
 - Phones and tablets cannot be a main or a backup yet.
 - Hardware switchers have not been tested with LibreTracks (see the rigs).
 

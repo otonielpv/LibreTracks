@@ -14,18 +14,20 @@ pocos milisegundos por cable), decirte de un vistazo si está listo y emitir un
 **tono piloto** que puede escuchar un conmutador hardware.
 
 Lo que no hace: no cambia el audio de un equipo a otro por sí solo (eso lo hace
-un conmutador o la mesa) y no copia la sesión de un equipo al otro.
+un conmutador o la mesa).
 
 Es gratis, como todo LibreTracks.
 
 ## Requisitos
 
 - La **misma versión de LibreTracks** en los dos equipos.
-- La **misma sesión** en los dos: guárdala en el principal y ábrela en el
-  respaldo (exporta un paquete de sesión `.ltset`, o usa la sincronización en
-  la nube). Mismas canciones, mismos audios, mismos ajustes que cambian el
-  tiempo (modos de salto, vamp, fundido de parada). El respaldo lo comprueba y
-  te dice exactamente qué es distinto.
+- La **misma sesión** en los dos. Lo más fácil: conecta el respaldo y pulsa
+  **Copiar la sesión del principal** (tocando la pastilla de arriba). Sólo
+  viajan los audios que el respaldo todavía no tiene; una segunda copia tras
+  un cambio pequeño tarda segundos. También puedes exportar un paquete de
+  sesión `.ltset` o usar la sincronización en la nube. El respaldo comprueba
+  que las sesiones coinciden (canciones, audio y los ajustes que cambian el
+  tiempo: modos de salto, vamp, fundido de parada) y te dice qué cambia.
 - Un **cable de red**: directo entre los dos equipos o a través de un switch.
   El Wi-Fi sirve para probar, no para un concierto.
 
@@ -117,6 +119,11 @@ instante: puedes parar o pausar la canción desde el respaldo.
 - Si algo cambió entretanto, el respaldo pregunta: **Volver a seguir al
   principal** o **Convertir este equipo en principal**.
 
+**Cambiar a propósito.** El principal no tiene que caerse: si su interfaz de
+audio falla o petardea, abre la pastilla en el respaldo y pulsa **Cambiar a
+este equipo** (pide confirmación). El principal apaga su tono piloto, así que
+un conmutador pasa al respaldo, y muestra que el respaldo ha tomado el mando.
+
 No hay vuelta atrás automática. Cuando el antiguo principal arranca de nuevo,
 ofrece pasar a respaldo del nuevo principal (**Pasar a respaldo**); sólo cambia
 si aceptas, porque el conmutador podría estar mandándolo a la PA.
@@ -125,6 +132,19 @@ Un principal que se cerró de forma inesperada vuelve con el tono piloto
 **apagado** y el aviso «Este equipo se cerró de forma inesperada. Rearma el
 tono piloto cuando vuelva a ser el principal.» Pulsa **Rearmar el tono
 piloto** cuando de verdad vuelva a ser el principal.
+
+## Las tablets y los móviles pasan al respaldo
+
+Cuando el respaldo toma el mando (principal perdido o **Cambiar a este
+equipo**):
+
+- Los **invitados de la sesión de red** (otras apps de LibreTracks) se pasan
+  solos al respaldo, con el mismo rol y sin volver a teclear el PIN. El
+  principal ya les ha dicho antes dónde está el respaldo.
+- El **Remote** (navegador) muestra «Se ha activado el respaldo» o «Se ha
+  perdido la conexión con el principal» con un botón **Ir al remote del
+  respaldo**. Si alguien recarga la página con el principal caído, tiene que
+  abrir a mano la dirección del respaldo.
 
 ## Un controlador MIDI cableado a los dos equipos
 
@@ -165,8 +185,8 @@ pronto, ajusta **Compensación manual (ms)** en el respaldo.
 ## Limitaciones conocidas
 
 - Las ediciones estructurales en el principal (clips, marcas, canciones,
-  pistas, arreglos) no se copian: el respaldo muestra **Sesión distinta** hasta
-  que guardas en el principal y vuelves a abrir la sesión en el respaldo.
+  pistas, arreglos) no se siguen en vivo: el respaldo muestra **Sesión
+  distinta** hasta que vuelves a pulsar **Copiar la sesión del principal**.
 - Los móviles y tablets todavía no pueden ser principal ni respaldo.
 - Los conmutadores hardware no se han probado con LibreTracks (ver los montajes).
 
