@@ -216,6 +216,13 @@ fn spawn_copy_start(
     });
 }
 
+/// The song id inside a session document (None if unreadable).
+pub fn main_song_id(song_document: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(song_document).ok()?;
+    // The song's fields sit at the document's top level (beside `version`).
+    value.get("id")?.as_str().map(str::to_string)
+}
+
 fn start_copy(
     app: &AppHandle,
     request_id: u64,
@@ -234,11 +241,12 @@ fn start_copy(
         .map(|session| (session.song_dir.clone(), session.song_file_name()))
         .unwrap_or_default();
     let candidates = super::session_copy::local_candidates(song_dir.as_deref(), song);
-    // With a session open here, the copy updates it in place (only what
+    // With the same session open here (same song id), the copy updates it in place (only what
     // differs travels, the document is replaced): it is what the user
     // reopens later. Without one, it goes to its own folder.
+    let same_session = song.is_some_and(|own| main_song_id(&song_document).as_deref() == Some(own.id.as_str()));
     let (target, file_name) = match (song_dir, song_file_name) {
-        (Some(dir), Some(file)) => (dir, file),
+        (Some(dir), Some(file)) if same_session => (dir, file),
         _ => (
             super::session_copy::target_dir(&root, name),
             libretracks_project::SONG_FILE_NAME.to_string(),
@@ -428,14 +436,6 @@ fn refresh_session(app: &AppHandle, core: &mut FollowerCore) -> Option<Song> {
 
 /// The main's song document against this machine's song, field by field.
 fn explain_differences(app: &AppHandle, song_document: &str) -> Vec<String> {
-    #[derive(serde::Deserialize)]
-    struct Document {
-        song: Song,
-    }
-    let main = match serde_json::from_str::<Document>(song_document) {
-        Ok(document) => document.song,
-        Err(error) => return vec![format!("No se pudo leer la canción del principal: {error}")],
-    };
     let Some(own) = app
         .state::<DesktopState>()
         .session
@@ -445,7 +445,17 @@ fn explain_differences(app: &AppHandle, song_document: &str) -> Vec<String> {
     else {
         return vec!["No hay sesión abierta en este equipo.".into()];
     };
-    let mut lines = libretracks_core::session_fingerprint::explain_song_differences(&main, &own, 60);
+    explain_against(song_document, &own)
+}
+
+/// Pure part of `explain_differences`.
+pub fn explain_against(song_document: &str, own: &Song) -> Vec<String> {
+    // The song's fields sit at the document's top level (beside `version`).
+    let main = match serde_json::from_str::<Song>(song_document) {
+        Ok(song) => song,
+        Err(error) => return vec![format!("No se pudo leer la canción del principal: {error}")],
+    };
+    let mut lines = libretracks_core::session_fingerprint::explain_song_differences(&main, own, 60);
     if lines.is_empty() {
         lines.push("Las canciones coinciden; si siguen saliendo distintas, la diferencia está en las automatizaciones o en el tamaño de los audios.".into());
     }

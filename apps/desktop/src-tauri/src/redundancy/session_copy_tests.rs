@@ -312,3 +312,28 @@ fn a_copy_over_the_open_session_updates_it_in_place() {
     assert_eq!(fs::read_to_string(&song_file).unwrap(), served.song_document);
     assert!(!backup.path().join(libretracks_project::SONG_FILE_NAME).exists());
 }
+
+#[test]
+fn the_main_song_id_is_read_from_its_document() {
+    let main = main_session();
+    let served = build_manifest("Domingo", &main.song, &main.dir, libretracks_project::SONG_FILE_NAME).unwrap();
+    assert_eq!(
+        crate::redundancy::follower_runtime::main_song_id(&served.song_document).as_deref(),
+        Some("s")
+    );
+    assert_eq!(crate::redundancy::follower_runtime::main_song_id("nope"), None);
+}
+
+#[test]
+fn the_details_read_the_main_song_document() {
+    let main = main_session();
+    let served = build_manifest("Domingo", &main.song, &main.dir, libretracks_project::SONG_FILE_NAME).unwrap();
+    let explain = crate::redundancy::follower_runtime::explain_against;
+    let same = explain(&served.song_document, &main.song);
+    assert_eq!(same.len(), 1, "{same:?}");
+    assert!(same[0].starts_with("Las canciones coinciden"), "{same:?}");
+    let mut other = main.song.clone();
+    other.clips[0].duration_seconds = 10.0;
+    let lines = explain(&served.song_document, &other);
+    assert!(lines.iter().any(|line| line.contains("durationSeconds")), "{lines:?}");
+}
