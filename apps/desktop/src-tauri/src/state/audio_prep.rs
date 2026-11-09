@@ -357,7 +357,12 @@ impl DesktopSession {
         #[cfg(target_os = "android")]
         crate::platform::android_memory::resume_preparation_after_pressure();
 
-        const TIMEOUT: Duration = Duration::from_secs(120);
+        // Measured from the last change in progress, not from the start: a big
+        // session that keeps decoding (4 GB converted on a slow disk) can take
+        // well over two minutes, and timing out on wall clock left the
+        // indicator frozen at that percent and skipped the waveform/prearm
+        // step below. Only a preparation that stops moving gives up.
+        const STALL_TIMEOUT: Duration = Duration::from_secs(120);
         const POLL_INTERVAL: Duration = Duration::from_millis(50);
         const SOURCES_BASE: u8 = 18;
         const SOURCES_SPAN: u8 = 62;
@@ -368,6 +373,7 @@ impl DesktopSession {
             .song_dir
             .clone();
         let started_at = Instant::now();
+        let mut last_progress_at = started_at;
         let mut last_ready = usize::MAX;
         let mut last_total = usize::MAX;
         let mut last_percent = u8::MAX;
@@ -384,7 +390,7 @@ impl DesktopSession {
             let snapshot = match audio.project_audio_preparation_snapshot() {
                 Ok(s) => s,
                 Err(_) => {
-                    if started_at.elapsed() >= TIMEOUT {
+                    if last_progress_at.elapsed() >= STALL_TIMEOUT {
                         let mut session = state
                             .session
                             .lock()
@@ -436,6 +442,7 @@ impl DesktopSession {
             };
 
             if ready != last_ready || total != last_total || percent != last_percent {
+                last_progress_at = Instant::now();
                 last_ready = ready;
                 last_total = total;
                 last_percent = percent;
@@ -525,10 +532,13 @@ impl DesktopSession {
                 return Ok(session.snapshot());
             }
 
-            if started_at.elapsed() >= TIMEOUT {
+            if last_progress_at.elapsed() >= STALL_TIMEOUT {
+                // 100 so the frontend releases the project indicator: anything
+                // less left it frozen for good, hiding the live per-source
+                // indicator that keeps polling the engine.
                 emit_project_load_progress(
                     app,
-                    percent,
+                    100,
                     "El proyecto se abrio; la preparacion continua en segundo plano.".into(),
                     ready,
                     total,
