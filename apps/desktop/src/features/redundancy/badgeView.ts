@@ -8,7 +8,7 @@ export type BadgeView = {
   tone: BadgeTone;
   icon: string;
   labelKey: string;
-  /** The live offset goes into the text («Armado: 0,8 ms»). */
+  /** The live offset goes into the text (none today: it flickered). */
   withOffset: boolean;
 };
 
@@ -34,9 +34,9 @@ export function badgeView(status: RedundancyStatus | null): BadgeView | null {
   }
   switch (status.state) {
     case "following":
-      return { tone: "pending", icon: "sync", labelKey: "redundancy.badge.following", withOffset: true };
+      return { tone: "pending", icon: "sync", labelKey: "redundancy.badge.following", withOffset: false };
     case "armed":
-      return { tone: "ok", icon: "verified", labelKey: "redundancy.badge.armed", withOffset: true };
+      return { tone: "ok", icon: "verified", labelKey: "redundancy.badge.armed", withOffset: false };
     case "sessionMismatch":
       return { tone: "error", icon: "difference", labelKey: "redundancy.badge.sessionMismatch", withOffset: false };
     case "mainLost":

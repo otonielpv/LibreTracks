@@ -205,8 +205,9 @@ fn a_session_copies_over_loopback_and_ends_with_the_same_fingerprint() {
         (song_file, progress.total_bytes)
     });
 
-    // Two files travelled (Drums + Click); Bass was copied locally.
-    assert_eq!(fetched_bytes, (3 * 1024 * 1024 + 17) + 70_000);
+    // Two files travelled (Drums + Click); Bass was copied locally, and the
+    // progress counts it too (it was stuck at 0 % while copying locally).
+    assert_eq!(fetched_bytes, (3 * 1024 * 1024 + 17) + 70_000 + 5000);
     let target = song_file.parent().unwrap().to_path_buf();
     assert!(target.join("audio").join("Bass.wav").exists());
     assert!(!target.join("cache").exists(), "caches are regenerated, not copied");

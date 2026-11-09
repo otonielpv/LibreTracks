@@ -2,6 +2,8 @@
    under stage light: colour + icon + text, never colour alone. */
 
 .lt-redundancy-badge {
+  /* Its slot (.lt-device-status-slot) has pointer-events: none. */
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   gap: 4px;

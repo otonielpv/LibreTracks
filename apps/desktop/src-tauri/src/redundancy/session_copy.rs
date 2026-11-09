@@ -286,24 +286,46 @@ impl CopyJob {
         target: PathBuf,
         candidates: &HashMap<(String, u64), PathBuf>,
     ) -> Result<(CopyJob, CopyStep), String> {
+        Self::start_with_progress(request_id, manifest_files, song_document, target, candidates, &|_| {})
+    }
+
+    /// Like `start`, reporting progress during the local copies. Those can
+    /// take minutes on another drive: run it off the connection's loop. A
+    /// hard link is tried first (instant on the same drive).
+    pub fn start_with_progress(
+        request_id: u64,
+        manifest_files: &[SessionFile],
+        song_document: String,
+        target: PathBuf,
+        candidates: &HashMap<(String, u64), PathBuf>,
+        report: &dyn Fn(CopyProgress),
+    ) -> Result<(CopyJob, CopyStep), String> {
         fs::create_dir_all(&target).map_err(|error| error.to_string())?;
         let plan = plan_copy(manifest_files, &target, candidates);
+        let reuse_bytes: u64 = plan.reuse.iter().map(|(file, _)| file.size).sum();
+        let mut progress = CopyProgress {
+            done_bytes: 0,
+            total_bytes: plan.fetch_bytes() + reuse_bytes,
+        };
+        report(progress);
         for (file, local) in &plan.reuse {
             let part = part_path(&target, &file.path);
             if let Some(parent) = part.parent() {
                 fs::create_dir_all(parent).map_err(|error| error.to_string())?;
             }
-            fs::copy(local, &part).map_err(|error| error.to_string())?;
+            let _ = fs::remove_file(&part);
+            if fs::hard_link(local, &part).is_err() {
+                fs::copy(local, &part).map_err(|error| error.to_string())?;
+            }
             finish_file(&target, &file.path)?;
+            progress.done_bytes += file.size;
+            report(progress);
         }
         let mut job = CopyJob {
             request_id,
             target,
             song_document,
-            progress: CopyProgress {
-                done_bytes: 0,
-                total_bytes: plan.fetch_bytes(),
-            },
+            progress,
             queue: plan.fetch.into_iter().collect(),
             current: None,
         };

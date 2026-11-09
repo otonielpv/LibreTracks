@@ -187,6 +187,33 @@ fn copies_root(app: &AppHandle) -> Option<std::path::PathBuf> {
     app.path().app_data_dir().ok().map(|dir| dir.join("redundancy-sessions"))
 }
 
+type CopyReady = (u64, Result<(super::session_copy::CopyJob, super::session_copy::CopyStep), String>);
+
+/// Prepare a copy off the connection's loop: the local copies of files this
+/// machine already has can take long, and the loop must keep answering
+/// heartbeats meanwhile (or the copy looks like a lost connection).
+fn spawn_copy_start(
+    app: &AppHandle,
+    request_id: u64,
+    name: String,
+    song_document: String,
+    files: Vec<libretracks_link::redundancy::SessionFile>,
+    song: Option<Song>,
+    progress: Arc<std::sync::Mutex<Option<super::session_copy::CopyProgress>>>,
+    ready: mpsc::UnboundedSender<CopyReady>,
+) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let report = |value| {
+            if let Ok(mut slot) = progress.lock() {
+                *slot = Some(value);
+            }
+        };
+        let result = start_copy(&app, request_id, &name, song_document, &files, song.as_ref(), &report);
+        let _ = ready.send((request_id, result));
+    });
+}
+
 fn start_copy(
     app: &AppHandle,
     request_id: u64,
@@ -194,6 +221,7 @@ fn start_copy(
     song_document: String,
     files: &[libretracks_link::redundancy::SessionFile],
     song: Option<&Song>,
+    report: &dyn Fn(super::session_copy::CopyProgress),
 ) -> Result<(super::session_copy::CopyJob, super::session_copy::CopyStep), String> {
     let root = copies_root(app).ok_or("no data folder")?;
     let song_dir = app
@@ -203,12 +231,13 @@ fn start_copy(
         .ok()
         .and_then(|session| session.song_dir.clone());
     let candidates = super::session_copy::local_candidates(song_dir.as_deref(), song);
-    super::session_copy::CopyJob::start(
+    super::session_copy::CopyJob::start_with_progress(
         request_id,
         files,
         song_document,
         super::session_copy::target_dir(&root, name),
         &candidates,
+        report,
     )
 }
 
@@ -451,6 +480,8 @@ async fn run(
     let mut copy: Option<super::session_copy::CopyJob> = None;
     let mut copy_requested: Option<u64> = None;
     let mut copy_ids = 0u64;
+    let preparing: Arc<std::sync::Mutex<Option<super::session_copy::CopyProgress>>> = Arc::default();
+    let (ready_tx, mut ready_rx) = mpsc::unbounded_channel::<CopyReady>();
 
     loop {
         let mut state_changed = false;
@@ -467,13 +498,16 @@ async fn run(
                     }
                     GuestEvent::Redundancy(RedundancyMessage::SessionManifest { request_id, name, song_document, files }) => {
                         if copy_requested == Some(request_id) {
-                            let step = start_copy(&app, request_id, &name, song_document, &files, song.as_ref())
-                                .map(|(job, step)| {
-                                    copy = Some(job);
-                                    step
-                                })
-                                .unwrap_or_else(super::session_copy::CopyStep::Failed);
-                            handle_copy_step(&app, &guest.handle, step, &mut copy, &mut copy_requested);
+                            spawn_copy_start(
+                                &app,
+                                request_id,
+                                name,
+                                song_document,
+                                files,
+                                song.clone(),
+                                preparing.clone(),
+                                ready_tx.clone(),
+                            );
                         }
                     }
                     GuestEvent::Redundancy(RedundancyMessage::FileChunk { request_id, path, offset, data, error }) => {
@@ -586,6 +620,20 @@ async fn run(
                     refresh_due = Some(tokio::time::Instant::now() + Duration::from_secs(1));
                 }
             }
+            Some((request_id, result)) = ready_rx.recv() => {
+                if let Ok(mut slot) = preparing.lock() {
+                    *slot = None;
+                }
+                if copy_requested == Some(request_id) {
+                    let step = result
+                        .map(|(job, step)| {
+                            copy = Some(job);
+                            step
+                        })
+                        .unwrap_or_else(super::session_copy::CopyStep::Failed);
+                    handle_copy_step(&app, &guest.handle, step, &mut copy, &mut copy_requested);
+                }
+            }
             _ = status.tick() => {
                 if guest.handle.send_redundancy(core.status(fingerprint_unsent)) {
                     fingerprint_unsent = false;
@@ -643,7 +691,9 @@ async fn run(
             }
         }
         if throttle.should_emit(now_ns(), state_changed) {
-            let copy_progress = copy.as_ref().map(|job| job.progress);
+            let copy_progress = copy.as_ref().map(|job| job.progress).or_else(|| {
+                copy_requested.and_then(|_| preparing.lock().ok().and_then(|slot| *slot))
+            });
             let main_rate = core.main_sample_rate();
             let own_rate = engine_sample_rate(&app);
             publish_status(&app, |status| {
