@@ -53,6 +53,8 @@ export function NetworkSessionModal() {
   const [pin, setPin] = useState("");
   const [remember, setRemember] = useState(true);
   const discovery = useHostDiscovery(isOpen && tab === "join" && !guest.joined);
+  // A redundancy main without a network session takes its backup only.
+  const joinableHosts = discovery.hosts.filter((found) => found.acceptsGuests !== false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -295,13 +297,13 @@ export function NetworkSessionModal() {
               <div className="lt-network-column">
                 <div className="lt-network-card">
                   <h3 className="lt-network-heading">{t("networkSession.discovery.title")}</h3>
-                  {discovery.hosts.length === 0 ? (
+                  {joinableHosts.length === 0 ? (
                     <p className="lt-settings-field-hint lt-network-searching">
                       {t("networkSession.discovery.searching")}
                     </p>
                   ) : (
                     <ul className="lt-network-list" aria-label={t("networkSession.discovery.title")}>
-                      {discovery.hosts.map((found) => (
+                      {joinableHosts.map((found) => (
                         <li key={found.hostId} className="lt-network-row">
                           <span className="lt-network-row-name">
                             {found.name}

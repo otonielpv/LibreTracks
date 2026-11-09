@@ -13,6 +13,7 @@ import {
   type RedundancySettings,
   type RedundancySettingsPatch,
 } from "./redundancyApi";
+import { useHostDiscovery } from "../network/useHostDiscovery";
 import { useRedundancyStore } from "./redundancyStore";
 
 /** Raw MIDI bytes as the user types them: "C0 05" or "B0 14 7F". */
@@ -101,6 +102,10 @@ export function RedundancySettingsTab() {
   const [error, setError] = useState<string | null>(null);
   const [midiText, setMidiText] = useState("");
   const status = useRedundancyStore((state) => state.status);
+  // Look for mains on the LAN (same discovery as network sessions) unless
+  // this machine is the main.
+  const discovery = useHostDiscovery(settings !== null && settings.role !== "main");
+  const mains = discovery.hosts.filter((found) => found.redundancyMain);
 
   useEffect(() => {
     let cancelled = false;
@@ -257,6 +262,34 @@ export function RedundancySettingsTab() {
       />
 
       <h3>{t("redundancy.settings.backupSection")}</h3>
+      {role !== "main" ? (
+        <div className="lt-settings-field">
+          <span>{t("redundancy.discovery.title")}</span>
+          {mains.length === 0 ? (
+            <small>{t("redundancy.discovery.searching")}</small>
+          ) : (
+            <ul className="lt-redundancy-trusted" aria-label={t("redundancy.discovery.title")}>
+              {mains.map((found) => (
+                <li key={found.hostId}>
+                  <span>
+                    <strong>{found.name}</strong> · {found.addresses[0]}
+                    {found.requiresPin ? ` · ${t("redundancy.discovery.pin")}` : ""}
+                    {found.compatible ? "" : ` · ${t("redundancy.discovery.needsUpdate")}`}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`${t("redundancy.discovery.use")}: ${found.name}`}
+                    disabled={!found.compatible}
+                    onClick={() => setAddress(found.addresses[0] ?? "")}
+                  >
+                    {t("redundancy.discovery.use")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
       <label className="lt-settings-field">
         <span>{t("redundancy.settings.mainAddress")}</span>
         <input
@@ -281,6 +314,11 @@ export function RedundancySettingsTab() {
           {t("redundancy.settings.connect")}
         </button>
       </div>
+      {role === "backup" && status?.connectionError ? (
+        <p className="lt-redundancy-warning" role="alert">
+          {t(`redundancy.connectionErrors.${status.connectionError}`, { defaultValue: status.connectionError })}
+        </p>
+      ) : null}
       <NumberField
         label={t("redundancy.settings.threshold")}
         help={t("redundancy.settings.thresholdHelp")}

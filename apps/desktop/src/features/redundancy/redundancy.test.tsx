@@ -6,7 +6,7 @@ vi.mock("@libretracks/shared/featureFlags", () => ({ FEATURE_FLAGS: flags }));
 
 const api = vi.hoisted(() => ({
   getRedundancySettings: vi.fn(async () => ({
-    role: "main" as const,
+    role: "main" as "off" | "main" | "backup",
     backupPin: "4321",
     backupTrusted: [],
     backupMayForward: false,
@@ -32,6 +32,13 @@ const api = vi.hoisted(() => ({
   }),
   cancelCopy: vi.fn(async () => undefined),
 }));
+const discovery = vi.hoisted(() => ({
+  hosts: [] as Array<Record<string, unknown>>,
+}));
+vi.mock("../network/useHostDiscovery", () => ({
+  useHostDiscovery: () => ({ hosts: discovery.hosts, showNotFoundHints: false }),
+}));
+
 vi.mock("./redundancyApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./redundancyApi")>();
   return { ...actual, ...api };
@@ -84,7 +91,6 @@ const TABLE: Array<{
   icon: string;
   tone: string;
 }> = [
-  { partial: { role: "main", state: "noBackup" }, es: "Sin respaldo", en: "No backup", icon: "shield", tone: "is-idle" },
   { partial: { role: "main", state: "backupConnected" }, es: "Respaldo: sincronizando", en: "Backup: syncing", icon: "sync", tone: "is-pending" },
   { partial: { role: "main", state: "backupArmed" }, es: "Respaldo armado", en: "Backup armed", icon: "verified", tone: "is-ok" },
   { partial: { role: "main", state: "backupMismatch" }, es: "Respaldo: sesión distinta", en: "Backup: different session", icon: "difference", tone: "is-error" },
@@ -95,6 +101,7 @@ const TABLE: Array<{
   { partial: { state: "sessionMismatch" }, es: "Sesión distinta", en: "Different session", icon: "difference", tone: "is-error" },
   { partial: { state: "mainLost" }, es: "PRINCIPAL PERDIDO", en: "MAIN LOST", icon: "warning", tone: "is-lost" },
   { partial: { state: "standalone" }, es: "En solitario", en: "Standalone", icon: "person", tone: "is-standalone" },
+  { partial: { state: "pairing", connectionError: "badPin" }, es: "Respaldo: no conecta", en: "Backup: cannot connect", icon: "link_off", tone: "is-error" },
 ];
 
 describe("redundancy pill", () => {
@@ -112,6 +119,12 @@ describe("redundancy pill", () => {
       });
     }
   }
+
+  it("is hidden on a main without a backup", () => {
+    useRedundancyStore.setState({ status: status({ role: "main", state: "noBackup" }) });
+    const { container } = render(<RedundancyBadge />);
+    expect(container.innerHTML).toBe("");
+  });
 
   it("is hidden with redundancy off", () => {
     useRedundancyStore.setState({ status: status({ role: "off", state: "off" }) });
@@ -248,5 +261,31 @@ describe("copy the main's session", () => {
     useRedundancyStore.setState({ status: status({ state: "mainLost" }), detailOpen: true });
     render(<RedundancyRoot />);
     expect(screen.queryByRole("button", { name: "Copiar la sesión del principal" })).toBeNull();
+  });
+});
+
+describe("finding the main", () => {
+  it("lists the mains found on the network and fills the address", async () => {
+    await i18n.changeLanguage("es");
+    api.getRedundancySettings.mockResolvedValueOnce({ ...(await api.getRedundancySettings()), role: "off" });
+    discovery.hosts = [
+      { hostId: "a", name: "PC A", addresses: ["192.168.1.20:3040"], protocol: 1, appVersion: "1", requiresPin: true, compatible: true, redundancyMain: true, acceptsGuests: false },
+      { hostId: "b", name: "Tablet", addresses: ["192.168.1.30:3040"], protocol: 1, appVersion: "1", requiresPin: false, compatible: true, redundancyMain: false },
+    ];
+    render(<RedundancySettingsTab />);
+    const use = await screen.findByRole("button", { name: "Usar: PC A" });
+    expect(screen.queryByRole("button", { name: "Usar: Tablet" })).toBeNull();
+    fireEvent.click(use);
+    expect((screen.getByRole("textbox", { name: "Dirección del principal" }) as HTMLInputElement).value).toBe(
+      "192.168.1.20:3040",
+    );
+    discovery.hosts = [];
+  });
+
+  it("explains why it cannot connect", async () => {
+    await i18n.changeLanguage("es");
+    useRedundancyStore.setState({ status: status({ state: "pairing", connectionError: "unreachable" }), detailOpen: true });
+    render(<RedundancyRoot />);
+    expect(screen.getByRole("alert").textContent).toContain("No hay respuesta del principal");
   });
 });

@@ -32,6 +32,11 @@ struct Beacon {
     proto: String,
     ver: String,
     pin: String,
+    /// Redundancy main / takes guests (older apps send neither).
+    #[serde(default)]
+    red: String,
+    #[serde(default)]
+    guests: String,
 }
 
 pub fn encode(ad: &Advertisement) -> Vec<u8> {
@@ -45,6 +50,8 @@ pub fn encode(ad: &Advertisement) -> Vec<u8> {
         proto: field("proto"),
         ver: field("ver"),
         pin: field("pin"),
+        red: field("red"),
+        guests: field("guests"),
     })
     .unwrap_or_default()
 }
@@ -63,6 +70,8 @@ pub fn decode(bytes: &[u8], source: IpAddr) -> Option<DiscoveredHost> {
             "proto" => beacon.proto.clone(),
             "ver" => beacon.ver.clone(),
             "pin" => beacon.pin.clone(),
+            "red" => beacon.red.clone(),
+            "guests" => beacon.guests.clone(),
             _ => return None,
         })
     };
@@ -225,6 +234,8 @@ mod tests {
             port: 3040,
             app_version: "1.15.0".into(),
             requires_pin: false,
+            redundancy_main: false,
+            accepts_guests: true,
         }
     }
 

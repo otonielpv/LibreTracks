@@ -25,6 +25,12 @@ pub struct Advertisement {
     pub port: u16,
     pub app_version: String,
     pub requires_pin: bool,
+    /// Redundancy (docs/plans/redundancy): this machine is a MAIN a backup
+    /// can follow.
+    pub redundancy_main: bool,
+    /// False for a redundancy main that only takes its backup (no network
+    /// session): the guests' join list leaves it out.
+    pub accepts_guests: bool,
 }
 
 impl Advertisement {
@@ -39,6 +45,14 @@ impl Advertisement {
             (
                 "pin".into(),
                 if self.requires_pin { "1" } else { "0" }.into(),
+            ),
+            (
+                "red".into(),
+                if self.redundancy_main { "1" } else { "0" }.into(),
+            ),
+            (
+                "guests".into(),
+                if self.accepts_guests { "1" } else { "0" }.into(),
             ),
         ]
     }
@@ -66,6 +80,16 @@ pub struct DiscoveredHost {
     /// False when this app cannot talk to it: shown as «needs updating», not
     /// hidden, so the musician knows why it does not connect.
     pub compatible: bool,
+    /// A redundancy main (the backup's search lists these).
+    #[serde(default)]
+    pub redundancy_main: bool,
+    /// Old hosts do not say: they take guests.
+    #[serde(default = "default_true")]
+    pub accepts_guests: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Build a host from a resolved record. `txt` looks a key up. None when the
@@ -107,6 +131,8 @@ pub fn parse_record(
         protocol,
         app_version: txt("ver").unwrap_or_default(),
         requires_pin: txt("pin").as_deref() == Some("1"),
+        redundancy_main: txt("red").as_deref() == Some("1"),
+        accepts_guests: txt("guests").as_deref() != Some("0"),
     })
 }
 
@@ -415,12 +441,39 @@ mod tests {
             port: 3040,
             app_version: "1.15.0".into(),
             requires_pin: true,
+            redundancy_main: false,
+            accepts_guests: true,
         }
     }
 
     fn txt_of(ad: &Advertisement) -> impl Fn(&str) -> Option<String> {
         let map: HashMap<String, String> = ad.txt().into_iter().collect();
         move |key| map.get(key).cloned()
+    }
+
+    #[test]
+    fn a_redundancy_main_says_so_by_mdns_and_by_beacon() {
+        let main = Advertisement {
+            redundancy_main: true,
+            accepts_guests: false,
+            ..ad()
+        };
+        let ip: std::net::IpAddr = "192.168.1.20".parse().unwrap();
+        let host = parse_record(txt_of(&main), &[ip], main.port).unwrap();
+        assert!(host.redundancy_main);
+        assert!(!host.accepts_guests);
+        let from_beacon = crate::beacon::decode(&crate::beacon::encode(&main), ip).unwrap();
+        assert!(from_beacon.redundancy_main);
+        assert!(!from_beacon.accepts_guests);
+        // An older host sends neither key: a normal host that takes guests.
+        let old = |key: &str| match key {
+            "id" => Some("old".to_string()),
+            "proto" => Some(crate::PROTOCOL_VERSION.to_string()),
+            _ => None,
+        };
+        let old_host = parse_record(old, &[ip], 3040).unwrap();
+        assert!(!old_host.redundancy_main);
+        assert!(old_host.accepts_guests);
     }
 
     fn host(id: &str, name: &str, address: &str) -> DiscoveredHost {
@@ -431,6 +484,8 @@ mod tests {
             protocol: PROTOCOL_VERSION,
             app_version: "1".into(),
             requires_pin: false,
+            redundancy_main: false,
+            accepts_guests: true,
             compatible: true,
         }
     }
@@ -555,6 +610,8 @@ mod real_network {
             port: 3999,
             app_version: "test".into(),
             requires_pin: false,
+            redundancy_main: false,
+            accepts_guests: true,
         };
         discovery.advertise(&ad).unwrap();
         let (tx, rx) = mpsc::channel();

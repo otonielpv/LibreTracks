@@ -740,6 +740,31 @@ fn with_forwarding_the_main_gets_the_order_and_the_backup_does_not_apply_it() {
 }
 
 #[test]
+fn the_backup_says_why_it_cannot_connect() {
+    use super::super::follower_runtime::connection_error;
+    use libretracks_link::{GuestState, RejectReason};
+    let rejected = |reason| GuestState::Rejected {
+        reason,
+        expected_protocol: None,
+    };
+    assert_eq!(connection_error(&rejected(RejectReason::BadPin)).as_deref(), Some("badPin"));
+    assert_eq!(
+        connection_error(&rejected(RejectReason::BackupNotAccepted)).as_deref(),
+        Some("backupNotAccepted")
+    );
+    assert_eq!(
+        connection_error(&rejected(RejectReason::BackupAlreadyConnected)).as_deref(),
+        Some("backupAlreadyConnected")
+    );
+    assert_eq!(connection_error(&GuestState::Connecting { attempt: 1 }), None);
+    assert_eq!(
+        connection_error(&GuestState::Connecting { attempt: 3 }).as_deref(),
+        Some("unreachable")
+    );
+    assert_eq!(connection_error(&GuestState::Lost), None);
+}
+
+#[test]
 fn main_urls_default_the_link_port() {
     use super::super::follower_runtime::main_url;
     assert_eq!(main_url("192.168.1.20"), "ws://192.168.1.20:3040");

@@ -25,7 +25,8 @@ export function badgeView(status: RedundancyStatus | null): BadgeView | null {
       case "backupLost":
         return { tone: "lost", icon: "link_off", labelKey: "redundancy.badge.mainLostBackup", withOffset: false };
       default:
-        return { tone: "idle", icon: "shield", labelKey: "redundancy.badge.mainNoBackup", withOffset: false };
+        // No backup (yet): nothing to say on the main, no pill in the way.
+        return null;
     }
   }
   switch (status.state) {
@@ -42,6 +43,9 @@ export function badgeView(status: RedundancyStatus | null): BadgeView | null {
     case "diverged":
       return { tone: "error", icon: "call_split", labelKey: "redundancy.badge.diverged", withOffset: false };
     default:
+      if (status.connectionError) {
+        return { tone: "error", icon: "link_off", labelKey: "redundancy.badge.cannotConnect", withOffset: false };
+      }
       return { tone: "idle", icon: "shield", labelKey: "redundancy.badge.connecting", withOffset: false };
   }
 }

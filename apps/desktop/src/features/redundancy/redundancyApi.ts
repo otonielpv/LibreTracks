@@ -39,6 +39,9 @@ export type RedundancyStatus = {
   /** Backup side: copying the main's session. */
   copy?: { doneBytes: number; totalBytes: number } | null;
   copyError?: string | null;
+  /** Backup side: why it cannot connect (badPin, backupNotAccepted,
+   * backupAlreadyConnected, incompatibleVersion, unreachable). */
+  connectionError?: string | null;
 };
 
 export type RedundancySettings = {

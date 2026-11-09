@@ -306,6 +306,31 @@ async fn start_own_server(
     Ok((runtime.handle, runtime.backup_messages))
 }
 
+/// Announce this machine on the LAN as a redundancy main so a backup can
+/// find it without typing the IP (same mDNS / beacon / probe as network
+/// sessions). With its own server it takes no guests and the guests' join
+/// list leaves it out.
+fn advertise_main(app: &AppHandle, port: u16, accepts_guests: bool, redundancy_main: bool) {
+    let link = app.state::<LinkState>();
+    let Ok(config) = link.config.lock() else {
+        return;
+    };
+    let requires_pin = if accepts_guests {
+        !config.control_pin.trim().is_empty() || !config.edit_pin.trim().is_empty()
+    } else {
+        true
+    };
+    crate::link::discovery::advertise(&libretracks_link::discovery::Advertisement {
+        host_id: config.device_id.clone(),
+        name: config.device_name.clone(),
+        port,
+        app_version: app.package_info().version.to_string(),
+        requires_pin,
+        redundancy_main,
+        accepts_guests,
+    });
+}
+
 fn remember_role(app: &AppHandle, role: RedundancyRole) {
     let mut config = redundancy_config::load(app);
     if config.last_role != role {
@@ -329,12 +354,22 @@ pub async fn set_role(
         return Ok(role);
     }
     if let Ok(mut main) = state.main.lock() {
+        let had_own = matches!(main.server, Some(ServerSlot::Own(_)));
         main.shut_down();
+        if had_own {
+            crate::link::discovery::stop_advertising();
+        }
     };
     if let Ok(mut follower) = state.follower.lock() {
         // Dropping it stops it and unlocks the local transport.
         *follower = None;
     };
+    // A network session being hosted stops announcing itself as a main.
+    if current == RedundancyRole::Main && role != RedundancyRole::Main {
+        if let Some(handle) = hosting_handle(app) {
+            advertise_main(app, handle.port(), true, false);
+        }
+    }
     if role != RedundancyRole::Main {
         // The backup only emits it when the user asked for that there.
         let config = redundancy_config::load(app);
@@ -360,10 +395,17 @@ pub async fn set_role(
         };
     }
     if role == RedundancyRole::Main {
-        let config = redundancy_config::load(app);
+        let mut config = redundancy_config::load(app);
+        // Without a backup PIN no new backup could ever get in: make one the
+        // user can read in the Redundancy tab.
+        if config.backup_pin.trim().is_empty() {
+            config.backup_pin = super::settings::new_pin();
+            redundancy_config::save(app, &config);
+        }
         let (slot, messages) = match hosting_handle(app) {
             Some(handle) => {
                 configure_shared(&handle, &config);
+                advertise_main(app, handle.port(), true, true);
                 // The network session owns this server's backup messages;
                 // `hosting_started` attaches the monitor when hosting starts
                 // while this device is the main.
@@ -371,6 +413,7 @@ pub async fn set_role(
             }
             None => {
                 let (handle, messages) = start_own_server(app, &config).await?;
+                advertise_main(app, handle.port(), false, true);
                 (ServerSlot::Own(handle), Some(messages))
             }
         };
@@ -462,6 +505,7 @@ pub fn hosting_stopped(app: &AppHandle) {
             let state = app.state::<RedundancyState>();
             if let Ok(mut main) = state.main.lock() {
                 if state.role() == RedundancyRole::Main && main.server.is_none() {
+                    advertise_main(&app, handle.port(), false, true);
                     attach(&app, &mut main, ServerSlot::Own(handle), Some(messages));
                 } else {
                     handle.stop();

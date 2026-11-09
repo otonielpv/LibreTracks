@@ -191,6 +191,8 @@ mod tests {
             port: 3040,
             app_version: "t".into(),
             requires_pin: false,
+            redundancy_main: false,
+            accepts_guests: true,
         };
         let Ok(_responder) = ProbeResponder::start(&ad) else {
             eprintln!("probe port busy; skipped");

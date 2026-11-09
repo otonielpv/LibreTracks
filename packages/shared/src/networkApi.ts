@@ -62,6 +62,10 @@ export type NetworkDiscoveredHost = {
   requiresPin: boolean;
   /** False: this app and that host cannot talk (one needs updating). */
   compatible: boolean;
+  /** A redundancy main a backup can follow (docs/plans/redundancy). */
+  redundancyMain?: boolean;
+  /** False for a redundancy main without a network session: no guests. */
+  acceptsGuests?: boolean;
 };
 
 export type NetworkPeer = {

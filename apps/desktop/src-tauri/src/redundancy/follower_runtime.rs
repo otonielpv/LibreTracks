@@ -165,6 +165,20 @@ pub fn offer_role_change(app: &AppHandle, old_main_address: &str) {
     });
 }
 
+/// Why the backup cannot reach its main, for the UI. None while still
+/// trying normally.
+pub fn connection_error(state: &GuestState) -> Option<String> {
+    match state {
+        GuestState::Rejected { reason, .. } => serde_json::to_value(reason)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string)),
+        // A few failed attempts in a row: the address is wrong, a firewall
+        // blocks it, or LibreTracks is not the main over there.
+        GuestState::Connecting { attempt } if *attempt >= 3 => Some("unreachable".into()),
+        _ => None,
+    }
+}
+
 /// Where copied sessions live on this machine.
 fn copies_root(app: &AppHandle) -> Option<std::path::PathBuf> {
     app.path().app_data_dir().ok().map(|dir| dir.join("redundancy-sessions"))
@@ -456,6 +470,7 @@ async fn run(
                     GuestEvent::State(GuestState::Connected) => {
                         fingerprint_unsent = true;
                         core.set_connected(true);
+                        publish_status(&app, |status| status.connection_error = None);
                         // Where the main's clients can find this machine (step 16-17).
                         guest.handle.send_redundancy(RedundancyMessage::BackupInfo {
                             link_address: local_address_hint(&app),
@@ -466,8 +481,11 @@ async fn run(
                     // and the reconciler freewheels. The backup keeps playing
                     // (never stops for lack of network). A copy in progress
                     // stops here; nothing half-copied is opened.
-                    GuestEvent::State(_) => {
+                    GuestEvent::State(state) => {
                         core.set_connected(false);
+                        if let Some(error) = connection_error(&state) {
+                            publish_status(&app, |status| status.connection_error = Some(error));
+                        }
                         if copy.take().is_some() || copy_requested.take().is_some() {
                             publish_status(&app, |status| {
                                 status.copy = None;

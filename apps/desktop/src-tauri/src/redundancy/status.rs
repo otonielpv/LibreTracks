@@ -42,6 +42,10 @@ pub struct RedundancyStatus {
     pub copy: Option<super::session_copy::CopyProgress>,
     /// Backup side: why the last copy failed.
     pub copy_error: Option<String>,
+    /// Backup side: why it cannot connect to the main: `badPin`,
+    /// `backupNotAccepted`, `backupAlreadyConnected`, `incompatibleVersion`,
+    /// `unreachable` (wrong address, firewall, main not running).
+    pub connection_error: Option<String>,
 }
 
 pub fn backup_state_name(state: BackupState) -> &'static str {

@@ -233,6 +233,10 @@ async fn start_on(app: &AppHandle, preferred_port: Option<u16>) -> Result<HostSt
             app_version: app.package_info().version.to_string(),
             requires_pin: !config.control_pin.trim().is_empty()
                 || !config.edit_pin.trim().is_empty(),
+            // A redundancy main also announces itself to backups here.
+            redundancy_main: app.state::<crate::redundancy::role::RedundancyState>().role()
+                == crate::redundancy::role::RedundancyRole::Main,
+            accepts_guests: true,
         };
         let mut host_config = HostConfig {
             host_id: config.device_id.clone(),

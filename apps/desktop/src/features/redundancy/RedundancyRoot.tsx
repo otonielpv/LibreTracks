@@ -238,6 +238,13 @@ function DetailPanel() {
             </>
           ) : null}
         </dl>
+        {status.connectionError ? (
+          <p className="lt-redundancy-warning" role="alert">
+            {t(`redundancy.connectionErrors.${status.connectionError}`, {
+              defaultValue: status.connectionError,
+            })}
+          </p>
+        ) : null}
         {status.sampleRateDiffers ? (
           <p className="lt-redundancy-warning">{t("redundancy.detail.sampleRateDiffers")}</p>
         ) : null}

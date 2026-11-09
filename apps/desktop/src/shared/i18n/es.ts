@@ -3554,6 +3554,7 @@ const es = {
       mainMismatch: "Respaldo: sesión distinta",
       mainLostBackup: "Respaldo perdido",
       connecting: "Respaldo: conectando",
+      cannotConnect: "Respaldo: no conecta",
       following: "Siguiendo: {{offset}} ms",
       armed: "Armado: {{offset}} ms",
       sessionMismatch: "Sesión distinta",
@@ -3583,6 +3584,20 @@ const es = {
       yes: "Sí, copiar",
       failed: "No se pudo copiar la sesión: {{reason}}",
       errors: { connectionLost: "Se perdió la conexión con el principal durante la copia." },
+    },
+    connectionErrors: {
+      badPin: "El principal no acepta ese PIN. Mira el «PIN del respaldo» en Ajustes → Redundancia del principal y vuelve a conectar.",
+      backupNotAccepted: "Ese equipo no está como principal. Ponlo en «Principal» en Ajustes → Redundancia.",
+      backupAlreadyConnected: "El principal ya tiene otro respaldo conectado.",
+      incompatibleVersion: "Los dos equipos tienen versiones de LibreTracks que no se entienden. Actualiza los dos a la misma.",
+      unreachable: "No hay respuesta del principal. Comprueba la dirección, que los dos estén en la misma red y que el cortafuegos de Windows deje pasar a LibreTracks en el principal.",
+    },
+    discovery: {
+      title: "Principales en la red",
+      searching: "Buscando principales…",
+      use: "Usar",
+      pin: "pide PIN",
+      needsUpdate: "versión distinta",
     },
     switchHere: {
       button: "Cambiar a este equipo",

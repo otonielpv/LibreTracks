@@ -3522,6 +3522,7 @@ const en = {
       mainMismatch: "Backup: different session",
       mainLostBackup: "Backup lost",
       connecting: "Backup: connecting",
+      cannotConnect: "Backup: cannot connect",
       following: "Following: {{offset}} ms",
       armed: "Armed: {{offset}} ms",
       sessionMismatch: "Different session",
@@ -3551,6 +3552,20 @@ const en = {
       yes: "Yes, copy",
       failed: "Could not copy the session: {{reason}}",
       errors: { connectionLost: "The connection with the main was lost during the copy." },
+    },
+    connectionErrors: {
+      badPin: "The main does not accept that PIN. Check the «Backup PIN» in the main's Settings → Redundancy and connect again.",
+      backupNotAccepted: "That machine is not set as the main. Set it to «Main» in Settings → Redundancy.",
+      backupAlreadyConnected: "The main already has another backup connected.",
+      incompatibleVersion: "The two machines run LibreTracks versions that cannot talk. Update both to the same one.",
+      unreachable: "No answer from the main. Check the address, that both are on the same network, and that the firewall lets LibreTracks through on the main.",
+    },
+    discovery: {
+      title: "Mains on the network",
+      searching: "Looking for mains…",
+      use: "Use",
+      pin: "asks for a PIN",
+      needsUpdate: "different version",
     },
     switchHere: {
       button: "Switch to this machine",
