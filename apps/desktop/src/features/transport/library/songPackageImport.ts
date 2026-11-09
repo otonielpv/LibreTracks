@@ -6,6 +6,7 @@ import {
   pickAndImportSong,
 } from "../desktopApi";
 import { formatClock } from "../helpers";
+import { getSong } from "../songStore";
 import type { LibraryDragDropDeps } from "./libraryDragDrop";
 
 type SongPackageImportDeps = Pick<
@@ -19,6 +20,22 @@ type SongPackageImportDeps = Pick<
   | "setStatus"
   | "formatErrorStatus"
 >;
+
+function currentRegionIds(): Set<string> {
+  return new Set(getSong()?.regions.map((region) => region.id) ?? []);
+}
+
+/**
+ * Where an import actually landed: the earliest region the refreshed song has
+ * that it did not have before. The backend moves a song that does not fit at
+ * the requested spot to the end of the setlist, so the requested position is
+ * only the fallback (nothing new found, or the song view did not refresh).
+ */
+export function landedAtSeconds(regionIdsBefore: Set<string>, requestedSeconds: number): number {
+  const added = (getSong()?.regions ?? []).filter((region) => !regionIdsBefore.has(region.id));
+  if (added.length === 0) return requestedSeconds;
+  return Math.min(...added.map((region) => region.startSeconds));
+}
 
 /**
  * Non-blocking song imports (`.ltpkg` and Reaper/Ableton projects) with the
@@ -66,6 +83,7 @@ export function createSongPackageImport(getDeps: () => SongPackageImportDeps) {
     // (the percent is fed by the load-progress listener). Cleared in `finally`
     // whether the import succeeds, is cancelled, or throws.
     deps().setPackageUnpackUiState({ active: true, percent: 0 });
+    const regionIdsBefore = currentRegionIds();
     try {
       const snapshot = await load();
       if (!snapshot) {
@@ -83,7 +101,7 @@ export function createSongPackageImport(getDeps: () => SongPackageImportDeps) {
       await deps().refreshSongView();
       deps().setStatus(
         deps().t("transport.status.packageImportedAt", {
-          time: formatClock(dropSeconds),
+          time: formatClock(landedAtSeconds(regionIdsBefore, dropSeconds)),
         }),
       );
     } catch (error) {
@@ -102,6 +120,7 @@ export function createSongPackageImport(getDeps: () => SongPackageImportDeps) {
     dropSeconds: number,
   ) {
     deps().setPackageUnpackUiState({ active: true, percent: 0 });
+    const regionIdsBefore = currentRegionIds();
     try {
       const snapshot = await importExternalProjectFromPathWithProgress(
         projectPath,
@@ -117,7 +136,7 @@ export function createSongPackageImport(getDeps: () => SongPackageImportDeps) {
       await deps().refreshSongView({ sync: true });
       deps().setStatus(
         deps().t("transport.status.externalProjectImportedAt", {
-          time: formatClock(dropSeconds),
+          time: formatClock(landedAtSeconds(regionIdsBefore, dropSeconds)),
           defaultValue: "Proyecto Reaper/Ableton importado en {{time}}.",
         }),
       );
