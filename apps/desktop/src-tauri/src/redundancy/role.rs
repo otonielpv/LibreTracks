@@ -177,6 +177,9 @@ fn spawn_monitor(
                 message = messages.recv() => {
                     let Some(message) = message else { return };
                     core.on_message(message, handle.monotonic_ms());
+                    if let Some(handover) = core.take_handover() {
+                        on_handover(&app, &handle, &handover);
+                    }
                     if let Some(offer) = core.lifecycle.accept_offer() {
                         let name = offer.new_main_name.clone();
                         if let Ok(mut slot) = app.state::<RedundancyState>().received_offer.lock() {
@@ -199,6 +202,16 @@ fn spawn_monitor(
             }
         }
     })
+}
+
+/// The backup took over: the switcher must go to it (tone off) and the
+/// clients follow (steps 16-17). The audio is not stopped here: whether this
+/// machine is still on the PA is the desk's or the switcher's call.
+fn on_handover(app: &AppHandle, handle: &HostHandle, handover: &super::main_monitor::Handover) {
+    super::pilot::set_armed(app, false);
+    super::failover::main_handed_over(app, handle, handover);
+    let name = handover.new_main_name.clone();
+    publish_status(app, |status| status.handover_by = Some(name));
 }
 
 fn attach(

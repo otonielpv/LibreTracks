@@ -34,6 +34,8 @@ export type RedundancyStatus = {
   uncleanExitWarning: boolean;
   sampleRateDiffers: boolean;
   pilotToneOn: boolean;
+  /** Main side: the backup took over (lost main or planned handover). */
+  handoverBy: string | null;
 };
 
 export type RedundancySettings = {

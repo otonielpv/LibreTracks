@@ -499,7 +499,9 @@ impl FollowerCore {
             RedundancyMessage::Mix { full, controls, .. } => {
                 self.pending_mix.push((full, controls));
             }
-            RedundancyMessage::BackupStatus { .. } | RedundancyMessage::RoleChange { .. } => {}
+            RedundancyMessage::BackupStatus { .. }
+            | RedundancyMessage::RoleChange { .. }
+            | RedundancyMessage::Handover { .. } => {}
         }
     }
 

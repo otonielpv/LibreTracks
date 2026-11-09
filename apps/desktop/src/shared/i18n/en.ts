@@ -3543,7 +3543,14 @@ const en = {
       body: "While it was lost, the main or this machine changed song, position or state. Choose what to do: this machine does not move on its own.",
       followAgain: "Follow the main again",
     },
+    switchHere: {
+      button: "Switch to this machine",
+      confirm: "Move the show to this machine? The main turns its pilot tone off.",
+      yes: "Yes, switch",
+      no: "Cancel",
+    },
     offer: {
+      handover: "The backup ({{name}}) took over. This machine no longer emits the pilot tone. Make this machine its backup?",
       body: "{{name}} is the main now. Make this machine its backup?",
       accept: "Become the backup",
       dismiss: "Not now",

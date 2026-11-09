@@ -26,6 +26,7 @@ const api = vi.hoisted(() => ({
   getRedundancyStatus: vi.fn(async () => {
     throw new Error("not in tests");
   }),
+  takeCommand: vi.fn(async () => undefined),
 }));
 vi.mock("./redundancyApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./redundancyApi")>();
@@ -39,6 +40,7 @@ import {
 } from "../transport/settings/visibleSettingsTabs";
 import type { RedundancyStatus } from "./redundancyApi";
 import { RedundancyBadge } from "./RedundancyBadge";
+import { RedundancyRoot } from "./RedundancyRoot";
 import { RedundancySettingsTab, formatMidiBytes, parseMidiBytes } from "./RedundancySettingsTab";
 import { INITIAL_REDUNDANCY_STATE, useRedundancyStore } from "./redundancyStore";
 import { useTransportGuard } from "./useTransportGuard";
@@ -56,6 +58,7 @@ function status(partial: Partial<RedundancyStatus>): RedundancyStatus {
     uncleanExitWarning: false,
     sampleRateDiffers: false,
     pilotToneOn: false,
+    handoverBy: null,
     ...partial,
   };
 }
@@ -182,5 +185,35 @@ describe("settings go through their own commands", () => {
     expect(parseMidiBytes("")).toEqual([]);
     expect(parseMidiBytes("C0")).toBeNull();
     expect(formatMidiBytes([0xc0, 5])).toBe("C0 05");
+  });
+});
+
+describe("planned handover", () => {
+  it("offers «Cambiar a este equipo» only while following or armed, with a confirmation", async () => {
+    await i18n.changeLanguage("es");
+    for (const [state, shown] of [["following", true], ["armed", true], ["mainLost", false], ["sessionMismatch", false]] as const) {
+      useRedundancyStore.setState({ status: status({ state }), detailOpen: true });
+      const { unmount } = render(<RedundancyRoot />);
+      const button = screen.queryByRole("button", { name: "Cambiar a este equipo" });
+      expect(Boolean(button), state).toBe(shown);
+      if (button) {
+        fireEvent.click(button);
+        expect(screen.getByText(/Pasar el concierto a este equipo/)).toBeTruthy();
+        expect(api.takeCommand).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "Sí, cambiar" }));
+        expect(api.takeCommand).toHaveBeenCalledTimes(1);
+        api.takeCommand.mockClear();
+      }
+      unmount();
+    }
+  });
+
+  it("tells the old main the backup took over", async () => {
+    await i18n.changeLanguage("es");
+    useRedundancyStore.setState({
+      status: status({ role: "main", state: "backupConnected", roleOffer: "PC B", handoverBy: "PC B" }),
+    });
+    render(<RedundancyRoot />);
+    expect(screen.getByRole("alert").textContent).toContain("El respaldo (PC B) ha tomado el mando");
   });
 });

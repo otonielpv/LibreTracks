@@ -105,3 +105,5 @@
   bottom: 0;
   font-size: 11px;
 }
+
+.lt-redundancy-confirm { display: inline-flex; gap: 8px; align-items: center; }

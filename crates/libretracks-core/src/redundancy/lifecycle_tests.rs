@@ -128,6 +128,37 @@ fn main_lost_stays_for_an_hour_without_becoming_standalone() {
 }
 
 #[test]
+fn a_planned_handover_works_while_following_or_armed_only() {
+    let mut following = following();
+    let transition = following.take_command().unwrap();
+    assert_eq!(transition.to, BackupState::Standalone);
+    assert_eq!(transition.reason, "planned handover");
+    assert!(!following.locks_local_inputs());
+
+    let mut armed = following_then_armed();
+    assert_eq!(armed.take_command().unwrap().to, BackupState::Standalone);
+
+    let mut machine = BackupLifecycle::new(LifecyclePolicy::default());
+    assert_eq!(machine.take_command(), None, "disabled");
+    machine.enable();
+    assert_eq!(machine.take_command(), None, "pairing");
+    let mut obs = healthy(0, None);
+    obs.session = SessionCheck::Unknown;
+    machine.observe(&obs);
+    assert_eq!(machine.take_command(), None, "checking session");
+    obs.session = SessionCheck::Different;
+    machine.observe(&obs);
+    assert_eq!(machine.take_command(), None, "session mismatch");
+}
+
+fn following_then_armed() -> BackupLifecycle {
+    let mut machine = following();
+    in_step(&mut machine, S, 5 * S);
+    assert_eq!(machine.state(), BackupState::Armed);
+    machine
+}
+
+#[test]
 fn a_main_without_audio_for_600_ms_is_lost_400_ms_is_not() {
     for (unhealthy_ms, lost) in [(400, false), (600, true)] {
         let mut machine = following();

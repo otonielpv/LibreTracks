@@ -162,6 +162,30 @@ pub fn offer_role_change(app: &AppHandle, old_main_address: &str) {
     });
 }
 
+/// What the main is told when this backup takes over.
+pub fn handover_message(app: &AppHandle) -> RedundancyMessage {
+    let (_, name) = device_identity(app).unwrap_or_default();
+    RedundancyMessage::Handover {
+        new_main_name: name,
+        new_main_address: local_address_hint(app),
+        remote_url: local_remote_url(app),
+    }
+}
+
+/// This machine's remote (browser) address, when it runs one.
+pub fn local_remote_url(app: &AppHandle) -> Option<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let info = crate::remote::remote_server_info(app);
+        return (!info.origin.is_empty()).then_some(info.origin);
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = app;
+        None
+    }
+}
+
 /// `ip:port` other machines can reach this one at, best effort.
 fn local_address_hint(app: &AppHandle) -> Option<String> {
     let port = crate::link::host::with_handle(app, |handle| handle.port())
@@ -346,7 +370,14 @@ async fn run(
             command = commands.recv() => {
                 let Some(command) = command else { break };
                 match command {
-                    FollowerCommand::TakeCommand => { core.take_command(); }
+                    FollowerCommand::TakeCommand => {
+                        // Lost main or planned handover: tell the main if it
+                        // still hears us (it turns its tone off and sends its
+                        // clients here, step 15).
+                        if core.take_command().is_some() {
+                            guest.handle.send_redundancy(handover_message(&app));
+                        }
+                    }
                     FollowerCommand::FollowAgain => { core.follow_again(); }
                 }
             }

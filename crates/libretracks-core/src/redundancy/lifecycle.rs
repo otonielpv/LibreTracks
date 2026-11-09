@@ -169,11 +169,17 @@ impl BackupLifecycle {
         }
     }
 
-    /// «Ahora mando yo» (D1: the ONLY way into `Standalone`).
+    /// «Ahora mando yo» (D1: the ONLY way into `Standalone`). Also from
+    /// `Following`/`Armed`: a planned handover with the main still alive (its
+    /// interface fails, a cable goes). Not before the backup follows: there
+    /// is nothing in step to take over.
     pub fn take_command(&mut self) -> Option<Transition> {
         match self.state {
             BackupState::MainLost { .. } | BackupState::Diverged => {
                 self.go(BackupState::Standalone, "operator took command")
+            }
+            BackupState::Following | BackupState::Armed => {
+                self.go(BackupState::Standalone, "planned handover")
             }
             _ => None,
         }

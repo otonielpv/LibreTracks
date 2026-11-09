@@ -3575,7 +3575,14 @@ const es = {
       body: "Mientras estaba perdido, el principal o este equipo cambiaron de canción, de posición o de estado. Elige qué hacer: este equipo no se mueve solo.",
       followAgain: "Volver a seguir al principal",
     },
+    switchHere: {
+      button: "Cambiar a este equipo",
+      confirm: "¿Pasar el concierto a este equipo? El principal apagará su tono piloto.",
+      yes: "Sí, cambiar",
+      no: "Cancelar",
+    },
     offer: {
+      handover: "El respaldo ({{name}}) ha tomado el mando. Este equipo ya no emite el tono piloto. ¿Pasar este equipo a respaldo?",
       body: "{{name}} es ahora el principal. ¿Pasar este equipo a respaldo?",
       accept: "Pasar a respaldo",
       dismiss: "Ahora no",

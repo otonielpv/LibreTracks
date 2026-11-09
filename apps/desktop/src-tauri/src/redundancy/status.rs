@@ -36,6 +36,8 @@ pub struct RedundancyStatus {
     /// everything is in seconds).
     pub sample_rate_differs: bool,
     pub pilot_tone_on: bool,
+    /// Main side: the backup took over (lost main or planned handover).
+    pub handover_by: Option<String>,
 }
 
 pub fn backup_state_name(state: BackupState) -> &'static str {

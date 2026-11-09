@@ -19,6 +19,7 @@ describe("redundancy store between App tests", () => {
       uncleanExitWarning: false,
       sampleRateDiffers: false,
       pilotToneOn: false,
+      handoverBy: null,
     });
     expect(useRedundancyStore.getState().mainLostAt).not.toBeNull();
   });

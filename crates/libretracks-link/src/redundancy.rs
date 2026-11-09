@@ -299,6 +299,18 @@ pub enum RedundancyMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         new_main_address: Option<String>,
     },
+    /// B → A: the backup took over («Ahora mando yo»), whether the main is
+    /// lost or a planned handover with the main alive. The main turns its
+    /// pilot tone off and sends its clients to the new main (step 15).
+    Handover {
+        new_main_name: String,
+        /// `ip:port` of the new main's link server.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        new_main_address: Option<String>,
+        /// The new main's remote (browser) address.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        remote_url: Option<String>,
+    },
     /// B → A.
     BackupStatus {
         phase: BackupPhase,
@@ -330,6 +342,7 @@ impl RedundancyMessage {
             RedundancyMessage::Welcome { .. }
             | RedundancyMessage::Fingerprint { .. }
             | RedundancyMessage::RoleChange { .. }
+            | RedundancyMessage::Handover { .. }
             | RedundancyMessage::BackupStatus { .. } => None,
         }
     }
@@ -592,6 +605,23 @@ mod tests {
     fn default_health_is_healthy() {
         assert!(HealthSummary::default().audio_ok);
         assert!(!HealthSummary::default().fallback_active);
+    }
+
+    #[test]
+    fn handover_round_trips() {
+        let value = round_trip(&RedundancyMessage::Handover {
+            new_main_name: "PC B".into(),
+            new_main_address: Some("10.0.0.2:3040".into()),
+            remote_url: Some("http://10.0.0.2:3030".into()),
+        });
+        assert_eq!(value["kind"], "handover");
+        assert_eq!(value["newMainAddress"], "10.0.0.2:3040");
+        assert_eq!(value["remoteUrl"], "http://10.0.0.2:3030");
+        round_trip(&RedundancyMessage::Handover {
+            new_main_name: "PC B".into(),
+            new_main_address: None,
+            remote_url: None,
+        });
     }
 
     #[test]

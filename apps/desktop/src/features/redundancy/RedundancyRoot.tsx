@@ -111,11 +111,44 @@ function DivergedDialog() {
   );
 }
 
+/** Planned handover from a following backup: two presses, so a stray tap
+ * in the middle of a song switches nothing. */
+export function SwitchToThisMachine() {
+  const { t } = useTranslation();
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <button type="button" onClick={() => setConfirming(true)}>
+        {t("redundancy.switchHere.button")}
+      </button>
+    );
+  }
+  return (
+    <span className="lt-redundancy-confirm" role="group" aria-label={t("redundancy.switchHere.button")}>
+      <span>{t("redundancy.switchHere.confirm")}</span>
+      <button
+        type="button"
+        onClick={() => {
+          setConfirming(false);
+          void takeCommand();
+        }}
+      >
+        {t("redundancy.switchHere.yes")}
+      </button>
+      <button type="button" onClick={() => setConfirming(false)}>
+        {t("redundancy.switchHere.no")}
+      </button>
+    </span>
+  );
+}
+
 function DetailPanel() {
   const { t, i18n } = useTranslation();
   const status = useRedundancyStore((state) => state.status);
   const close = useRedundancyStore((state) => state.closeDetail);
   if (!status) return null;
+  const canSwitchHere =
+    status.role === "backup" && (status.state === "following" || status.state === "armed");
   const offset = formatOffset(status.offsetMs, i18n.language);
   const canBecomeMain =
     status.role === "backup" && (status.state === "standalone" || status.state === "diverged");
@@ -158,6 +191,7 @@ function DetailPanel() {
           </ul>
         ) : null}
         <div className="lt-redundancy-dialog-actions">
+          {canSwitchHere ? <SwitchToThisMachine /> : null}
           {canBecomeMain ? (
             <button type="button" onClick={() => void becomeMain()}>
               {t("redundancy.becomeMain")}
@@ -210,7 +244,11 @@ export function RedundancyRoot() {
       {backup && status?.state === "diverged" ? <DivergedDialog /> : null}
       {status?.roleOffer ? (
         <div className="lt-redundancy-banner is-info" role="alert">
-          <span>{t("redundancy.offer.body", { name: status.roleOffer })}</span>
+          <span>
+            {status.handoverBy
+              ? t("redundancy.offer.handover", { name: status.handoverBy })
+              : t("redundancy.offer.body", { name: status.roleOffer })}
+          </span>
           <button type="button" onClick={() => void acceptRoleChange()}>
             {t("redundancy.offer.accept")}
           </button>
