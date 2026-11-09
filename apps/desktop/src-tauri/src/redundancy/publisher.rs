@@ -210,6 +210,10 @@ impl PublisherCore {
         }
     }
 
+    pub fn fingerprint_sent(&self) -> bool {
+        self.last_fingerprint.is_some()
+    }
+
     /// Sends the fingerprint when it differs from the last one sent.
     pub fn on_fingerprint(&mut self, io: &impl PublisherIo, fingerprint: String) -> bool {
         if self.last_fingerprint.as_deref() == Some(fingerprint.as_str()) || !io.backup_connected()
@@ -358,6 +362,14 @@ pub async fn run(
                     access_ticks += 1;
                     if access_ticks % FULL_MIX_EVERY_TICKS == 0 {
                         send_guest_access(&app, &handle);
+                    }
+                    // No session to describe when the backup connected (or
+                    // the fingerprint could not be computed): try again every
+                    // second until it goes out.
+                    if !core.fingerprint_sent() && access_ticks % 20 == 0 {
+                        if let Some(fingerprint) = current_fingerprint(&app) {
+                            core.on_fingerprint(&io, fingerprint);
+                        }
                     }
                     if fingerprint_due.is_some_and(|due| tokio::time::Instant::now() >= due) {
                         fingerprint_due = None;

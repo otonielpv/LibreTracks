@@ -765,6 +765,28 @@ fn the_backup_says_why_it_cannot_connect() {
 }
 
 #[test]
+fn without_an_audio_clock_the_lifecycle_still_moves_and_says_why() {
+    let mut core = FollowerCore::new(Policy::default(), 0.0);
+    core.on_message(
+        RedundancyMessage::Fingerprint {
+            version: 1,
+            fingerprint: serde_json::to_string(&fingerprint("same")).unwrap(),
+        },
+        0,
+        Some(0.0),
+        None,
+    );
+    let no_clock = LocalInputs::default();
+    core.decide(0, &no_clock, None);
+    assert_eq!(core.phase(), FollowerPhase::CheckingSession, "connected, not stuck in pairing");
+    assert_eq!(core.waiting_for(), Some("ownSession"));
+    core.set_own_fingerprint(fingerprint("same"));
+    core.decide(20 * MS, &no_clock, None);
+    assert_eq!(core.phase(), FollowerPhase::Following);
+    assert_eq!(core.waiting_for(), Some("audioClock"));
+}
+
+#[test]
 fn main_urls_default_the_link_port() {
     use super::super::follower_runtime::main_url;
     assert_eq!(main_url("192.168.1.20"), "ws://192.168.1.20:3040");

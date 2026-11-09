@@ -216,7 +216,9 @@ fn spawn_monitor(
                     }
                     let state = main_state_name(core.lifecycle.state()).to_string();
                     let offset = core.offset_ms;
+                    let backup_phase = core.reported_name().map(str::to_string);
                     publish_status(&app, |status| {
+                        status.backup_phase = backup_phase;
                         status.state = state;
                         status.offset_ms = offset;
                         status.other_name = backup.map(|backup| backup.device_name);

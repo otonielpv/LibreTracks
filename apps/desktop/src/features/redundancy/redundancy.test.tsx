@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
     throw new Error("not in tests");
   }),
   takeCommand: vi.fn(async () => undefined),
+  setRedundancyRole: vi.fn(async (role: string) => role),
   copySession: vi.fn(async (force: boolean) => {
     if (!force) throw new Error("confirmPlaying");
   }),
@@ -101,6 +102,8 @@ const TABLE: Array<{
   { partial: { state: "sessionMismatch" }, es: "Sesión distinta", en: "Different session", icon: "difference", tone: "is-error" },
   { partial: { state: "mainLost" }, es: "PRINCIPAL PERDIDO", en: "MAIN LOST", icon: "warning", tone: "is-lost" },
   { partial: { state: "standalone" }, es: "En solitario", en: "Standalone", icon: "person", tone: "is-standalone" },
+  { partial: { state: "checkingSession" }, es: "Respaldo: comprobando la sesión", en: "Backup: checking the session", icon: "fact_check", tone: "is-pending" },
+  { partial: { role: "main", state: "backupConnected", backupPhase: "checkingSession" }, es: "Respaldo: comprobando la sesión", en: "Backup: checking the session", icon: "fact_check", tone: "is-pending" },
   { partial: { state: "pairing", connectionError: "badPin" }, es: "Respaldo: no conecta", en: "Backup: cannot connect", icon: "link_off", tone: "is-error" },
 ];
 
@@ -287,5 +290,16 @@ describe("finding the main", () => {
     useRedundancyStore.setState({ status: status({ state: "pairing", connectionError: "unreachable" }), detailOpen: true });
     render(<RedundancyRoot />);
     expect(screen.getByRole("alert").textContent).toContain("No hay respuesta del principal");
+  });
+});
+
+describe("connecting and disconnecting the backup", () => {
+  it("says what it waits for and can stop being the backup", async () => {
+    await i18n.changeLanguage("es");
+    useRedundancyStore.setState({ status: status({ state: "checkingSession", waitingFor: "ownSession" }), detailOpen: true });
+    render(<RedundancyRoot />);
+    expect(screen.getByText(/Falta abrir la sesión en este equipo/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Dejar de ser respaldo" }));
+    expect(api.setRedundancyRole).toHaveBeenCalledWith("off");
   });
 });

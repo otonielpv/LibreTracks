@@ -9,6 +9,7 @@ import { formatOffset } from "./badgeView";
 import {
   acceptRoleChange,
   becomeMain,
+  setRedundancyRole,
   cancelCopy,
   copySession,
   dismissRoleChange,
@@ -238,6 +239,11 @@ function DetailPanel() {
             </>
           ) : null}
         </dl>
+        {status.waitingFor ? (
+          <p className="lt-redundancy-warning">
+            {t(`redundancy.waiting.${status.waitingFor}`, { defaultValue: status.waitingFor })}
+          </p>
+        ) : null}
         {status.connectionError ? (
           <p className="lt-redundancy-warning" role="alert">
             {t(`redundancy.connectionErrors.${status.connectionError}`, {
@@ -261,6 +267,11 @@ function DetailPanel() {
           {canBecomeMain ? (
             <button type="button" className="is-primary" onClick={() => void becomeMain()}>
               {t("redundancy.becomeMain")}
+            </button>
+          ) : null}
+          {status.role === "backup" ? (
+            <button type="button" onClick={() => void setRedundancyRole("off").then(close)}>
+              {t("redundancy.disconnect")}
             </button>
           ) : null}
           <button type="button" onClick={close}>

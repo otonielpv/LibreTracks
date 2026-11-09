@@ -129,6 +129,8 @@ pub struct FollowerCore {
     /// a whole snapshot.
     pending_mix: Vec<(bool, Vec<MixControl>)>,
     mix_diverged: bool,
+    /// The last tick had no local audio clock.
+    clock_missing: bool,
 }
 
 /// `marker:<id>` / `region:<id>`.
@@ -194,7 +196,31 @@ impl FollowerCore {
             main_sample_rate: 0,
             pending_mix: Vec::new(),
             mix_diverged: false,
+            clock_missing: false,
         }
+    }
+
+    /// What the backup is waiting for, in plain terms for the UI:
+    /// `ownSession` (no session open here), `mainSession` (the main has not
+    /// sent its session yet), `audioClock` (this engine is not running).
+    pub fn waiting_for(&self) -> Option<&'static str> {
+        if !self.connected {
+            return None;
+        }
+        if self.own_fingerprint.is_none() {
+            return Some("ownSession");
+        }
+        if self.main_fingerprint.is_none() {
+            return Some("mainSession");
+        }
+        if self.clock_missing {
+            return Some("audioClock");
+        }
+        None
+    }
+
+    pub fn has_own_fingerprint(&self) -> bool {
+        self.own_fingerprint.is_some()
     }
 
     /// Mix messages to apply, oldest first. Only while following: a backup
@@ -517,12 +543,31 @@ impl FollowerCore {
     /// checked, not with a blocking difference, never with the main lost.
     pub fn decide(&mut self, now_ns: u64, local: &LocalInputs, song: Option<&Song>) -> Decision {
         let Some(clock) = local.clock else {
+            // No audio clock here (engine not running yet): nothing can be
+            // aligned, but the lifecycle still moves (connected, session
+            // checked), or the backup would sit at «connecting» forever.
+            self.clock_missing = true;
+            let observation = BackupObservation {
+                now_ns,
+                connected: self.connected,
+                main_alive: self.monitor.is_alive(now_ns / 1_000_000),
+                main_audio_ok: self.main_health.audio_ok,
+                main_fallback_active: self.main_health.fallback_active,
+                session: self.session_check(),
+                offset_seconds: None,
+                resynced: false,
+                main_matches: None,
+            };
+            if let Some(transition) = self.lifecycle.observe(&observation) {
+                self.last_transition = Some(transition);
+            }
             return Decision {
                 action: Action::None,
                 applied_intent: None,
                 offset_seconds: None,
             };
         };
+        self.clock_missing = false;
         let position = clock.rendered_position_at(now_ns);
         let region = region_at(song, position);
         let view = LocalView {

@@ -42,6 +42,10 @@ export type RedundancyStatus = {
   /** Backup side: why it cannot connect (badPin, backupNotAccepted,
    * backupAlreadyConnected, incompatibleVersion, unreachable). */
   connectionError?: string | null;
+  /** Backup side: what it waits for (ownSession, mainSession, audioClock). */
+  waitingFor?: string | null;
+  /** Main side: what its backup reports (checkingSession, following...). */
+  backupPhase?: string | null;
 };
 
 export type RedundancySettings = {

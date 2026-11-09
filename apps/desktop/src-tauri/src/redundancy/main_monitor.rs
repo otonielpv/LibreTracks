@@ -102,6 +102,19 @@ impl MainMonitorCore {
         }
     }
 
+    /// What the backup last reported, camelCase, for the UI.
+    pub fn reported_name(&self) -> Option<&'static str> {
+        self.reported.map(|phase| match phase {
+            ReportedPhase::CheckingSession => "checkingSession",
+            ReportedPhase::SessionMismatch => "sessionMismatch",
+            ReportedPhase::Following => "following",
+            ReportedPhase::Armed => "armed",
+            ReportedPhase::MainLost => "mainLost",
+            ReportedPhase::Standalone => "standalone",
+            ReportedPhase::Diverged => "diverged",
+        })
+    }
+
     /// The backup's addresses, when they arrived since the last call.
     pub fn take_backup_addresses(&mut self) -> Option<super::failover::BackupAddresses> {
         self.backup_addresses.take()

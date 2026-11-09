@@ -17,6 +17,9 @@ export function badgeView(status: RedundancyStatus | null): BadgeView | null {
   if (status.role === "main") {
     switch (status.state) {
       case "backupConnected":
+        if (status.backupPhase === "checkingSession") {
+          return { tone: "pending", icon: "fact_check", labelKey: "redundancy.badge.mainChecking", withOffset: false };
+        }
         return { tone: "pending", icon: "sync", labelKey: "redundancy.badge.mainSyncing", withOffset: false };
       case "backupArmed":
         return { tone: "ok", icon: "verified", labelKey: "redundancy.badge.mainArmed", withOffset: false };
@@ -42,6 +45,8 @@ export function badgeView(status: RedundancyStatus | null): BadgeView | null {
       return { tone: "standalone", icon: "person", labelKey: "redundancy.badge.standalone", withOffset: false };
     case "diverged":
       return { tone: "error", icon: "call_split", labelKey: "redundancy.badge.diverged", withOffset: false };
+    case "checkingSession":
+      return { tone: "pending", icon: "fact_check", labelKey: "redundancy.badge.checking", withOffset: false };
     default:
       if (status.connectionError) {
         return { tone: "error", icon: "link_off", labelKey: "redundancy.badge.cannotConnect", withOffset: false };

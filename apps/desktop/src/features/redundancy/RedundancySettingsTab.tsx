@@ -101,6 +101,7 @@ export function RedundancySettingsTab() {
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [midiText, setMidiText] = useState("");
+  const [busy, setBusy] = useState(false);
   const status = useRedundancyStore((state) => state.status);
   // Look for mains on the LAN (same discovery as network sessions) unless
   // this machine is the main.
@@ -135,11 +136,14 @@ export function RedundancySettingsTab() {
       .catch((reason) => setError(String(reason)));
   };
   const changeRole = (role: RedundancyRole) => {
+    if (busy) return;
     setError(null);
+    setBusy(true);
     const isBackup = role === "backup";
     void setRedundancyRole(role, isBackup ? address : undefined, isBackup && pin ? pin : undefined)
       .then((applied) => setSettings({ ...settings, role: applied }))
-      .catch((reason) => setError(t(`redundancy.errors.${String(reason)}`, { defaultValue: String(reason) })));
+      .catch((reason) => setError(t(`redundancy.errors.${String(reason)}`, { defaultValue: String(reason) })))
+      .finally(() => setBusy(false));
   };
   const role = settings.role;
 
@@ -310,10 +314,25 @@ export function RedundancySettingsTab() {
         />
       </label>
       <div className="lt-redundancy-row">
-        <button type="button" className="is-primary" disabled={!address.trim()} onClick={() => changeRole("backup")}>
-          {t("redundancy.settings.connect")}
+        <button
+          type="button"
+          className="is-primary"
+          disabled={!address.trim() || busy}
+          onClick={() => changeRole("backup")}
+        >
+          {role === "backup" ? t("redundancy.settings.reconnect") : t("redundancy.settings.connect")}
         </button>
+        {role === "backup" ? (
+          <button type="button" disabled={busy} onClick={() => changeRole("off")}>
+            {t("redundancy.disconnect")}
+          </button>
+        ) : null}
       </div>
+      {role === "backup" && status?.waitingFor ? (
+        <p className="lt-redundancy-warning">
+          {t(`redundancy.waiting.${status.waitingFor}`, { defaultValue: status.waitingFor })}
+        </p>
+      ) : null}
       {role === "backup" && status?.connectionError ? (
         <p className="lt-redundancy-warning" role="alert">
           {t(`redundancy.connectionErrors.${status.connectionError}`, { defaultValue: status.connectionError })}

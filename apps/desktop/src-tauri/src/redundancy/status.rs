@@ -46,6 +46,11 @@ pub struct RedundancyStatus {
     /// `backupNotAccepted`, `backupAlreadyConnected`, `incompatibleVersion`,
     /// `unreachable` (wrong address, firewall, main not running).
     pub connection_error: Option<String>,
+    /// Backup side: what it waits for while it does not follow yet
+    /// (`ownSession`, `mainSession`, `audioClock`).
+    pub waiting_for: Option<String>,
+    /// Main side: what its backup reports (`checkingSession`, `following`…).
+    pub backup_phase: Option<String>,
 }
 
 pub fn backup_state_name(state: BackupState) -> &'static str {

@@ -549,6 +549,11 @@ async fn run(
                     song = refresh_session(&app, &mut core).or(song);
                     fingerprint_unsent = true;
                 }
+                // No session here yet (or it was opened after connecting):
+                // look again every second instead of waiting for a change.
+                if !core.has_own_fingerprint() && refresh_due.is_none() {
+                    refresh_due = Some(tokio::time::Instant::now() + Duration::from_secs(1));
+                }
             }
             _ = status.tick() => {
                 if guest.handle.send_redundancy(core.status(fingerprint_unsent)) {
@@ -618,6 +623,7 @@ async fn run(
                 status.diffs = core.diffs().to_vec();
                 status.reason = core.last_reason().into();
                 status.sample_rate_differs = main_rate > 0 && own_rate > 0 && main_rate != own_rate;
+                status.waiting_for = core.waiting_for().map(str::to_string);
                 if copy_progress.is_some() {
                     status.copy = copy_progress;
                 }
