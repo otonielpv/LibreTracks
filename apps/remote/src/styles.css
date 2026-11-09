@@ -6751,3 +6751,33 @@ button {
 .remote-shell.remote-size-3 .layout-widget-type-markerGrid .marker-card {
   min-height: 6.8rem;
 }
+
+/* Redundancy (step 17): the main went away or handed over. */
+.remote-redundancy-notice {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #c53030;
+  color: #fff;
+  font-weight: 700;
+}
+.remote-redundancy-notice a.remote-redundancy-go {
+  padding: 8px 14px;
+  background: #fff;
+  color: #1a202c;
+  text-decoration: none;
+}
+.remote-redundancy-notice button {
+  margin-left: auto;
+  background: transparent;
+  color: #fff;
+  border: 1px solid #fff;
+  padding: 6px 12px;
+}

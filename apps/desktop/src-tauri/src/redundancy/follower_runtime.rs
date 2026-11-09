@@ -176,8 +176,10 @@ pub fn handover_message(app: &AppHandle) -> RedundancyMessage {
 pub fn local_remote_url(app: &AppHandle) -> Option<String> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        let info = crate::remote::remote_server_info(app);
-        return (!info.origin.is_empty()).then_some(info.origin);
+        use tauri::Manager;
+        let state = app.try_state::<crate::remote::RemoteServiceState>()?;
+        let origin = state.handle.info().origin.clone();
+        return (!origin.is_empty()).then_some(origin);
     }
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {

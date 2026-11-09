@@ -162,6 +162,9 @@ enum ServerEvent {
     Settings(Value),
     PadsCatalog(Value),
     Meters(Vec<u8>),
+    /// Redundancy (step 17): where the backup's remote is, and whether it
+    /// took over.
+    Redundancy(Value),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -170,6 +173,7 @@ struct RemoteStateCache {
     latest_song_view: Option<Value>,
     latest_settings: Option<Value>,
     latest_pads_catalog: Option<Value>,
+    latest_redundancy: Option<Value>,
 }
 
 #[derive(Debug, Clone)]
@@ -297,6 +301,17 @@ impl RemoteServerHandle {
         }
     }
 
+    /// Redundancy (step 17): `{ backupRemoteUrl, handover }`. Cached, so a
+    /// browser that connects later learns where the backup is too.
+    pub fn publish_redundancy<T: Serialize>(&self, info: &T) {
+        if let Ok(value) = serde_json::to_value(info) {
+            if let Ok(mut cache) = self.cache.write() {
+                cache.latest_redundancy = Some(value.clone());
+            }
+            let _ = self.events_tx.send(ServerEvent::Redundancy(value));
+        }
+    }
+
     pub fn publish_meters<T: Serialize>(&self, meters: &T) {
         let Ok(mut guard) = self.last_meter_emit_at.write() else {
             return;
@@ -373,17 +388,30 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let (mut sender, mut receiver) = socket.split();
     let mut events_rx = state.events_tx.subscribe();
 
-    let (latest_snapshot, latest_song_view, latest_settings, latest_pads_catalog) =
+    let (latest_snapshot, latest_song_view, latest_settings, latest_pads_catalog, latest_redundancy) =
         if let Ok(cache) = state.cache.read() {
             (
                 cache.latest_snapshot.clone(),
                 cache.latest_song_view.clone(),
                 cache.latest_settings.clone(),
                 cache.latest_pads_catalog.clone(),
+                cache.latest_redundancy.clone(),
             )
         } else {
-            (None, None, None, None)
+            (None, None, None, None, None)
         };
+
+    if let Some(redundancy) = latest_redundancy {
+        let _ = sender
+            .send(Message::Text(
+                serde_json::to_string(&OutboundEnvelope {
+                    event: "redundancy",
+                    payload: redundancy,
+                })
+                .unwrap_or_default(),
+            ))
+            .await;
+    }
 
     if let Some(snapshot) = latest_snapshot {
         let _ = sender
@@ -466,6 +494,17 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         ))
                         .await;
                 }
+                Ok(ServerEvent::Redundancy(payload)) => {
+                    let _ = sender
+                        .send(Message::Text(
+                            serde_json::to_string(&OutboundEnvelope {
+                                event: "redundancy",
+                                payload,
+                            })
+                            .unwrap_or_default(),
+                        ))
+                        .await;
+                }
                 Ok(ServerEvent::PadsCatalog(payload)) => {
                     let _ = sender
                         .send(Message::Text(
@@ -540,6 +579,35 @@ fn resolve_hostname() -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Redundancy step 17 C1: a browser that connects after the backup's
+    /// remote was published still learns it (from the cache).
+    #[tokio::test]
+    async fn a_late_client_gets_the_backup_remote_from_the_cache() {
+        use futures_util::StreamExt;
+        let runtime = spawn_remote_server(0, None).await.expect("server");
+        runtime.handle.publish_redundancy(&serde_json::json!({
+            "backupRemoteUrl": "http://10.0.0.2:3030",
+            "handover": false
+        }));
+        let url = format!("ws://127.0.0.1:{}/ws", runtime.handle.info().port);
+        let (mut socket, _) = tokio_tungstenite::connect_async(url).await.expect("connect");
+        let message = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let message = socket.next().await.expect("open").expect("message");
+                if let tokio_tungstenite::tungstenite::Message::Text(text) = message {
+                    let value: Value = serde_json::from_str(&text).unwrap();
+                    if value["event"] == "redundancy" {
+                        return value;
+                    }
+                }
+            }
+        })
+        .await
+        .expect("redundancy event");
+        assert_eq!(message["payload"]["backupRemoteUrl"], "http://10.0.0.2:3030");
+        assert_eq!(message["payload"]["handover"], false);
+    }
 
     // The RemoteCommand enum is the wire contract between the web remote and
     // the desktop. These tests pin the `cmd`-tagged, camelCase JSON shape so a

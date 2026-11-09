@@ -140,6 +140,7 @@ import {
   timelineTapPositionSeconds,
   type PendingSeek,
 } from "./timelineSeek";
+import { RedundancyNoticeBanner, useRedundancyNoticeStore } from "./redundancyNotice";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 type JumpMode = AppSettings["globalJumpMode"];
@@ -299,6 +300,12 @@ const TIMELINE_MANUAL_HOLD_MS = 6000;
 const TIMELINE_MANUAL_RETURN_PER_SECOND = 4;
 const READOUT_MIN_UPDATE_INTERVAL_MS = 1000 / 30;
 const STRINGS = getRemoteStrings();
+const REDUNDANCY_NOTICE_STRINGS = {
+  handover: STRINGS.redundancyHandover,
+  lost: STRINGS.redundancyLost,
+  goToBackup: STRINGS.redundancyGoToBackup,
+  dismiss: STRINGS.redundancyDismiss,
+};
 
 function isTimelineDebugEnabled() {
   if (typeof window === "undefined") {
@@ -913,6 +920,7 @@ function useRemoteBridge() {
 
       socket.addEventListener("open", () => {
         useRemoteConnectionStore.getState().setConnection(socket, "connected");
+        useRedundancyNoticeStore.getState().connected();
         socket.send(JSON.stringify({ cmd: "requestPadsCatalog" }));
       });
 
@@ -956,6 +964,13 @@ function useRemoteBridge() {
           return;
         }
 
+        if (message.event === "redundancy") {
+          useRedundancyNoticeStore
+            .getState()
+            .setInfo(message.payload as { backupRemoteUrl?: string | null; handover?: boolean });
+          return;
+        }
+
         if (message.event === "meters") {
           useRemoteSyncStore.getState().setMeters(message.payload as AudioMeterLevel[]);
         }
@@ -963,6 +978,7 @@ function useRemoteBridge() {
 
       socket.addEventListener("close", () => {
         useRemoteConnectionStore.getState().setConnection(null, "disconnected");
+        useRedundancyNoticeStore.getState().disconnected(Date.now());
         retryTimer = window.setTimeout(connect, 900);
       });
 
@@ -5725,6 +5741,8 @@ export function App() {
   );
 
   return (
+    <>
+    <RedundancyNoticeBanner strings={REDUNDANCY_NOTICE_STRINGS} />
     <main
       className={`remote-shell remote-profile-${presetProfile} remote-size-${sizeLevel} ${sizeLevel > 0 ? "is-large-controls" : ""} ${editing ? "is-editing-layout" : ""} ${showRotateGuard ? "is-rotate-locked" : ""} ${chromeHidden ? "is-immersive" : ""}`}
     >
@@ -5897,5 +5915,6 @@ export function App() {
         <LayoutCanvas layout={layout} editing={editing} onChange={updateLayout} tabSlot={tabSlot} />
       </div>
     </main>
+    </>
   );
 }

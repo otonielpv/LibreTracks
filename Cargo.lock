@@ -2704,12 +2704,14 @@ version = "0.0.1"
 dependencies = [
  "axum",
  "futures",
+ "futures-util",
  "hyper",
  "hyper-util",
  "libretracks-core",
  "serde",
  "serde_json",
  "tokio",
+ "tokio-tungstenite",
  "tower-http 0.5.2",
 ]
 
