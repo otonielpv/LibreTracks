@@ -10,6 +10,10 @@
 //!
 //! Blocking is safe here: Tauri commands never run on the Android UI thread,
 //! and the SAF activity result arrives on the UI thread, which stays free.
+//! That only holds for code that runs in the command's thread: a Kotlin plugin
+//! method (`tauri_plugin_fs::Fs::open` included) runs on the UI thread, so
+//! documents are opened through `android_content_uri` instead (see
+//! `open_picked`).
 
 #![cfg(target_os = "android")]
 
@@ -18,7 +22,7 @@ use std::sync::mpsc;
 
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
-use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
+use tauri_plugin_fs::FilePath;
 
 use super::document_name::{self, percent_decode};
 
@@ -99,14 +103,46 @@ pub fn save_file(app: &AppHandle, title: &str, suggested_name: &str) -> Option<F
 /// soon as the read finishes: leaving it to the JVM finalizer is what produced
 /// the `ParcelFileDescriptor.finalize() timed out` crash.
 pub fn open_picked_file_for_read(
-    app: &AppHandle,
+    _app: &AppHandle,
     picked: &FilePath,
 ) -> Result<std::fs::File, String> {
-    let mut options = OpenOptions::new();
-    options.read(true);
-    app.fs()
-        .open(picked.clone(), options)
+    open_picked(picked, PickedMode::Read)
         .map_err(|error| format!("No se pudo abrir el archivo seleccionado: {error}"))
+}
+
+enum PickedMode {
+    Read,
+    /// Escribir desde cero: el destino de un "guardar como".
+    WriteTruncate,
+}
+
+/// Abre un documento elegido en SAF sin pasar por el hilo de interfaz.
+///
+/// `tauri_plugin_fs::Fs::open` delega en `FsPlugin.getFileDescriptor`, que se
+/// ejecuta en el hilo de interfaz de Android: con un proveedor lento (Drive,
+/// nube, USB) lo bloqueaba más de 5 s y Play lo registró como ANR (1.16.0,
+/// Galaxy Tab S7). [`android_content_uri::open_content_file`] hace la misma
+/// llamada al `ContentResolver` desde el hilo que llama, que es el del comando
+/// y puede esperar.
+fn open_picked(picked: &FilePath, mode: PickedMode) -> Result<std::fs::File, String> {
+    match picked {
+        FilePath::Url(url) => {
+            let uri = url.as_str();
+            match mode {
+                PickedMode::Read => super::android_content_uri::open_content_file(uri, "r"),
+                // "wt" trunca; algunos proveedores no lo aceptan y sólo dan "w".
+                // Un destino recién creado por el selector está vacío, así que
+                // "w" basta como alternativa.
+                PickedMode::WriteTruncate => super::android_content_uri::open_content_file(uri, "wt")
+                    .or_else(|_| super::android_content_uri::open_content_file(uri, "w")),
+            }
+        }
+        FilePath::Path(path) => match mode {
+            PickedMode::Read => std::fs::File::open(path),
+            PickedMode::WriteTruncate => std::fs::File::create(path),
+        }
+        .map_err(|error| error.to_string()),
+    }
 }
 
 /// A document the user picked for a library audio import, with the display name
@@ -272,11 +308,7 @@ pub fn stage_picked_file_to_temp(
     std::fs::create_dir_all(&staging_dir).map_err(|error| error.to_string())?;
     let dest_path = staging_dir.join(format!("{}-{}", unique_stamp(), name_hint));
 
-    let mut options = OpenOptions::new();
-    options.read(true);
-    let mut source = app
-        .fs()
-        .open(picked.clone(), options)
+    let mut source = open_picked(picked, PickedMode::Read)
         .map_err(|error| format!("No se pudo abrir el archivo seleccionado: {error}"))?;
     let mut dest = std::fs::File::create(&dest_path).map_err(|error| error.to_string())?;
     std::io::copy(&mut source, &mut dest).map_err(|error| error.to_string())?;
@@ -286,15 +318,11 @@ pub fn stage_picked_file_to_temp(
 /// Copy a finished private file (an export we just wrote) into the SAF
 /// destination the user picked.
 pub fn copy_path_to_picked_target(
-    app: &AppHandle,
+    _app: &AppHandle,
     source: &std::path::Path,
     target: &FilePath,
 ) -> Result<(), String> {
-    let mut options = OpenOptions::new();
-    options.write(true).truncate(true);
-    let mut dest = app
-        .fs()
-        .open(target.clone(), options)
+    let mut dest = open_picked(target, PickedMode::WriteTruncate)
         .map_err(|error| format!("No se pudo escribir en el destino: {error}"))?;
     let mut src = std::fs::File::open(source).map_err(|error| error.to_string())?;
     std::io::copy(&mut src, &mut dest).map_err(|error| error.to_string())?;

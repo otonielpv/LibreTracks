@@ -318,6 +318,17 @@ fn proc_path(fd: RawFd) -> PathBuf {
 /// produjo el cuelgue `ParcelFileDescriptor.finalize() timed out` que ya
 /// documenta `mobile_files`.
 fn open_content_fd(uri: &str) -> Result<File, String> {
+    open_content_file(uri, "r")
+}
+
+/// `contentResolver.openFileDescriptor(Uri.parse(uri), mode).detachFd()` en el
+/// hilo que llama, con `mode` de `ParcelFileDescriptor` ("r", "w", "wt"...).
+///
+/// Existe para no usar `tauri_plugin_fs::Fs::open` en Android: su parte Kotlin
+/// (`FsPlugin.getFileDescriptor`) corre en el hilo de interfaz, y un proveedor
+/// lento (Drive, nube, USB) lo bloqueaba más de 5 s. Play lo registró como ANR
+/// en 1.16.0. Aquí la espera la paga el hilo del comando, que puede esperar.
+pub fn open_content_file(uri: &str, mode: &str) -> Result<File, String> {
     let ctx = ndk_context::android_context();
     let vm = unsafe { JavaVM::from_raw(ctx.vm().cast()) }
         .map_err(|e| format!("JavaVM::from_raw: {e}"))?;
@@ -325,7 +336,7 @@ fn open_content_fd(uri: &str) -> Result<File, String> {
     let mut env = vm
         .attach_current_thread()
         .map_err(|e| format!("attach_current_thread: {e}"))?;
-    let result = open_content_fd_with(&mut env, &activity, uri);
+    let result = open_content_fd_with(&mut env, &activity, uri, mode);
     // Un fichero movido o un acceso revocado hacen lanzar a
     // `openFileDescriptor`: es el caso normal, no un accidente. Sin limpiar,
     // la excepción envenena el resto de llamadas JNI de este hilo.
@@ -339,8 +350,8 @@ fn open_content_fd_with(
     env: &mut jni::JNIEnv,
     activity: &JObject,
     uri: &str,
+    mode: &str,
 ) -> Result<File, String> {
-
     let resolver = env
         .call_method(
             activity,
@@ -364,7 +375,7 @@ fn open_content_fd_with(
         .and_then(|value| value.l())
         .map_err(|e| format!("Uri.parse: {e}"))?;
 
-    let mode = env.new_string("r").map_err(|e| format!("new_string: {e}"))?;
+    let mode = env.new_string(mode).map_err(|e| format!("new_string: {e}"))?;
     let descriptor = env
         .call_method(
             &resolver,
