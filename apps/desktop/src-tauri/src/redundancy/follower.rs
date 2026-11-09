@@ -503,7 +503,12 @@ impl FollowerCore {
             | RedundancyMessage::RoleChange { .. }
             | RedundancyMessage::Handover { .. }
             | RedundancyMessage::BackupInfo { .. }
-            | RedundancyMessage::GuestAccess { .. } => {}
+            | RedundancyMessage::GuestAccess { .. }
+            // The session copy is handled by the runtime (step 18).
+            | RedundancyMessage::SessionRequest { .. }
+            | RedundancyMessage::SessionManifest { .. }
+            | RedundancyMessage::FileChunkRequest { .. }
+            | RedundancyMessage::FileChunk { .. } => {}
         }
     }
 

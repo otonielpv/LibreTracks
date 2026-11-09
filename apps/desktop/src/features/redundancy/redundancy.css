@@ -151,3 +151,6 @@
 .lt-redundancy-settings input[inputmode] {
   max-width: 12rem;
 }
+
+.lt-redundancy-copy { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.lt-redundancy-copy progress { flex: 1 1 8rem; }

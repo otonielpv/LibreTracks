@@ -238,6 +238,15 @@ pub enum MixControl {
     },
 }
 
+/// One file of a session being copied to the backup (step 18): its path
+/// inside the session folder (`/`-separated) and size.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionFile {
+    pub path: String,
+    pub size: u64,
+}
+
 /// Every message of the channel. Travels inside
 /// `ServerMessage::Redundancy` / `ClientMessage::Redundancy`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -335,6 +344,35 @@ pub enum RedundancyMessage {
         #[serde(default)]
         trusted: Vec<TrustedDevice>,
     },
+    /// B → A: send me your session (step 18).
+    SessionRequest {
+        request_id: u64,
+    },
+    /// A → B: the session document (its audio paths already relative to the
+    /// folder) and every file of the folder with its size.
+    SessionManifest {
+        request_id: u64,
+        name: String,
+        song_document: String,
+        files: Vec<SessionFile>,
+    },
+    /// B → A: one piece of one file.
+    FileChunkRequest {
+        request_id: u64,
+        path: String,
+        offset: u64,
+        length: u64,
+    },
+    /// A → B: that piece, base64. `error` when it could not be read.
+    FileChunk {
+        request_id: u64,
+        path: String,
+        offset: u64,
+        #[serde(default)]
+        data: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     /// B → A.
     BackupStatus {
         phase: BackupPhase,
@@ -369,6 +407,10 @@ impl RedundancyMessage {
             | RedundancyMessage::Handover { .. }
             | RedundancyMessage::BackupInfo { .. }
             | RedundancyMessage::GuestAccess { .. }
+            | RedundancyMessage::SessionRequest { .. }
+            | RedundancyMessage::SessionManifest { .. }
+            | RedundancyMessage::FileChunkRequest { .. }
+            | RedundancyMessage::FileChunk { .. }
             | RedundancyMessage::BackupStatus { .. } => None,
         }
     }
@@ -668,6 +710,37 @@ mod tests {
             serde_json::to_value(&redirect).unwrap(),
             serde_json::json!({ "type": "redirect", "address": "10.0.0.2:3040" })
         );
+    }
+
+    #[test]
+    fn session_copy_messages_round_trip() {
+        let manifest = round_trip(&RedundancyMessage::SessionManifest {
+            request_id: 1,
+            name: "Domingo".into(),
+            song_document: "{}".into(),
+            files: vec![SessionFile {
+                path: "audio/drums.wav".into(),
+                size: 42,
+            }],
+        });
+        assert_eq!(manifest["kind"], "sessionManifest");
+        assert_eq!(manifest["songDocument"], "{}");
+        assert_eq!(manifest["files"][0]["path"], "audio/drums.wav");
+        round_trip(&RedundancyMessage::SessionRequest { request_id: 1 });
+        round_trip(&RedundancyMessage::FileChunkRequest {
+            request_id: 1,
+            path: "audio/drums.wav".into(),
+            offset: 0,
+            length: 1 << 20,
+        });
+        let chunk = round_trip(&RedundancyMessage::FileChunk {
+            request_id: 1,
+            path: "audio/drums.wav".into(),
+            offset: 0,
+            data: "AAEC".into(),
+            error: None,
+        });
+        assert_eq!(chunk["kind"], "fileChunk");
     }
 
     #[test]

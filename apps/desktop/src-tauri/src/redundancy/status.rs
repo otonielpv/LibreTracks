@@ -38,6 +38,10 @@ pub struct RedundancyStatus {
     pub pilot_tone_on: bool,
     /// Main side: the backup took over (lost main or planned handover).
     pub handover_by: Option<String>,
+    /// Backup side: copying the main's session (step 18).
+    pub copy: Option<super::session_copy::CopyProgress>,
+    /// Backup side: why the last copy failed.
+    pub copy_error: Option<String>,
 }
 
 pub fn backup_state_name(state: BackupState) -> &'static str {

@@ -36,6 +36,9 @@ export type RedundancyStatus = {
   pilotToneOn: boolean;
   /** Main side: the backup took over (lost main or planned handover). */
   handoverBy: string | null;
+  /** Backup side: copying the main's session. */
+  copy?: { doneBytes: number; totalBytes: number } | null;
+  copyError?: string | null;
 };
 
 export type RedundancySettings = {
@@ -86,6 +89,15 @@ export function regenerateBackupPin() {
 
 export function revokeTrustedBackup(deviceId: string) {
   return invokeCommand<RedundancySettings>("revoke_trusted_backup", { deviceId });
+}
+
+/** Rejects with "confirmPlaying" while this machine plays, unless `force`. */
+export function copySession(force: boolean) {
+  return invokeCommand<void>("redundancy_copy_session", { force });
+}
+
+export function cancelCopy() {
+  return invokeCommand<void>("redundancy_cancel_copy");
 }
 
 export function takeCommand() {

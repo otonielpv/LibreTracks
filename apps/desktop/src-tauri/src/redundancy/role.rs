@@ -171,11 +171,28 @@ fn spawn_monitor(
     let handle = handle.clone();
     tauri::async_runtime::spawn(async move {
         let mut core = MainMonitorCore::default();
+        let mut served: Option<super::session_copy::ServedSession> = None;
         let mut tick = tokio::time::interval(std::time::Duration::from_millis(250));
         loop {
             tokio::select! {
                 message = messages.recv() => {
                     let Some(message) = message else { return };
+                    // The session copy (step 18) is served here, off the
+                    // session lock but for one clone of the song.
+                    let message = match message {
+                        RedundancyMessage::SessionRequest { request_id } => {
+                            served = serve_session(&app, &handle, request_id);
+                            continue;
+                        }
+                        RedundancyMessage::FileChunkRequest { request_id, path, offset, length } => {
+                            if let Some(served) = &served {
+                                let chunk = super::session_copy::chunk_message(served, request_id, &path, offset, length);
+                                handle.send_to_backup(&chunk);
+                            }
+                            continue;
+                        }
+                        other => other,
+                    };
                     core.on_message(message, handle.monotonic_ms());
                     if let Some(addresses) = core.take_backup_addresses() {
                         super::failover::backup_announced(&app, addresses);
@@ -208,6 +225,35 @@ fn spawn_monitor(
             }
         }
     })
+}
+
+/// Answer a backup's `SessionRequest` with this machine's session.
+fn serve_session(
+    app: &AppHandle,
+    handle: &HostHandle,
+    request_id: u64,
+) -> Option<super::session_copy::ServedSession> {
+    let (song, song_dir, song_file_name) = {
+        let state = app.state::<crate::state::DesktopState>();
+        let session = state.session.lock().ok()?;
+        (
+            session.engine.song()?.clone(),
+            session.song_dir.clone()?,
+            session.song_file_name()?,
+        )
+    };
+    let name = song_dir
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| song.title.clone());
+    let served = super::session_copy::build_manifest(&name, &song, &song_dir, &song_file_name).ok()?;
+    handle.send_to_backup(&RedundancyMessage::SessionManifest {
+        request_id,
+        name: served.name.clone(),
+        song_document: served.song_document.clone(),
+        files: served.files.clone(),
+    });
+    Some(served)
 }
 
 /// The backup took over: the switcher must go to it (tone off) and the
@@ -483,6 +529,27 @@ pub fn get_redundancy_status(app: AppHandle) -> RedundancyStatus {
 #[tauri::command]
 pub fn redundancy_take_command(app: AppHandle) -> Result<(), String> {
     send_to_follower(&app, FollowerCommand::TakeCommand)
+}
+
+/// Copy the main's session here (step 18). While this machine plays, it
+/// asks first (`confirmPlaying`): opening the copy replaces what sounds.
+#[tauri::command]
+pub fn redundancy_copy_session(app: AppHandle, force: bool) -> Result<(), String> {
+    let playing = app
+        .state::<crate::state::DesktopState>()
+        .session
+        .lock()
+        .map(|mut session| session.snapshot().playback_state == "playing")
+        .unwrap_or(false);
+    if playing && !force {
+        return Err("confirmPlaying".into());
+    }
+    send_to_follower(&app, FollowerCommand::CopySession)
+}
+
+#[tauri::command]
+pub fn redundancy_cancel_copy(app: AppHandle) -> Result<(), String> {
+    send_to_follower(&app, FollowerCommand::CancelCopy)
 }
 
 /// From `Diverged`: follow the main again.

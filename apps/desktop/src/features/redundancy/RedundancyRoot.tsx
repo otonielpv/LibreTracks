@@ -9,6 +9,8 @@ import { formatOffset } from "./badgeView";
 import {
   acceptRoleChange,
   becomeMain,
+  cancelCopy,
+  copySession,
   dismissRoleChange,
   followAgain,
   getRedundancyStatus,
@@ -143,6 +145,58 @@ export function SwitchToThisMachine() {
   );
 }
 
+/** Step 18: bring the main's session here (only what is missing travels). */
+export function CopySession() {
+  const { t } = useTranslation();
+  const status = useRedundancyStore((state) => state.status);
+  const [confirming, setConfirming] = useState(false);
+  const copy = status?.copy ?? null;
+  const start = (force: boolean) => {
+    setConfirming(false);
+    void copySession(force).catch((error) => {
+      if (String(error).includes("confirmPlaying")) setConfirming(true);
+    });
+  };
+  if (copy) {
+    const percent = copy.totalBytes > 0 ? Math.floor((copy.doneBytes / copy.totalBytes) * 100) : 0;
+    return (
+      <div className="lt-redundancy-copy" role="status">
+        <span>{t("redundancy.copy.progress", { percent })}</span>
+        <progress max={100} value={percent} aria-label={t("redundancy.copy.button")} />
+        <button type="button" onClick={() => void cancelCopy()}>
+          {t("redundancy.copy.cancel")}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="lt-redundancy-copy">
+      {confirming ? (
+        <span className="lt-redundancy-confirm" role="group" aria-label={t("redundancy.copy.button")}>
+          <span>{t("redundancy.copy.confirmPlaying")}</span>
+          <button type="button" className="is-primary" onClick={() => start(true)}>
+            {t("redundancy.copy.yes")}
+          </button>
+          <button type="button" onClick={() => setConfirming(false)}>
+            {t("redundancy.switchHere.no")}
+          </button>
+        </span>
+      ) : (
+        <button type="button" onClick={() => start(false)}>
+          {t("redundancy.copy.button")}
+        </button>
+      )}
+      {status?.copyError ? (
+        <p className="lt-redundancy-warning">
+          {t(`redundancy.copy.errors.${status.copyError}`, {
+            defaultValue: t("redundancy.copy.failed", { reason: status.copyError }),
+          })}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function DetailPanel() {
   const { t, i18n } = useTranslation();
   const status = useRedundancyStore((state) => state.status);
@@ -150,6 +204,9 @@ function DetailPanel() {
   if (!status) return null;
   const canSwitchHere =
     status.role === "backup" && (status.state === "following" || status.state === "armed");
+  const canCopy =
+    status.role === "backup" &&
+    ["checkingSession", "sessionMismatch", "following", "armed"].includes(status.state);
   const offset = formatOffset(status.offsetMs, i18n.language);
   const canBecomeMain =
     status.role === "backup" && (status.state === "standalone" || status.state === "diverged");
@@ -191,6 +248,7 @@ function DetailPanel() {
             ))}
           </ul>
         ) : null}
+        {canCopy ? <CopySession /> : null}
         <div className="lt-redundancy-dialog-actions">
           {canSwitchHere ? <SwitchToThisMachine /> : null}
           {canBecomeMain ? (

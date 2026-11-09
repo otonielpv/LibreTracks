@@ -3575,6 +3575,15 @@ const es = {
       body: "Mientras estaba perdido, el principal o este equipo cambiaron de canción, de posición o de estado. Elige qué hacer: este equipo no se mueve solo.",
       followAgain: "Volver a seguir al principal",
     },
+    copy: {
+      button: "Copiar la sesión del principal",
+      progress: "Copiando la sesión del principal… {{percent}} %",
+      cancel: "Cancelar la copia",
+      confirmPlaying: "Este equipo está sonando: abrir la copia cambia lo que suena. ¿Copiar igualmente?",
+      yes: "Sí, copiar",
+      failed: "No se pudo copiar la sesión: {{reason}}",
+      errors: { connectionLost: "Se perdió la conexión con el principal durante la copia." },
+    },
     switchHere: {
       button: "Cambiar a este equipo",
       confirm: "¿Pasar el concierto a este equipo? El principal apagará su tono piloto.",

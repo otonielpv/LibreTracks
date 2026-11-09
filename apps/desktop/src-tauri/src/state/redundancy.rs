@@ -428,6 +428,14 @@ pub struct FingerprintSource {
 }
 
 impl DesktopSession {
+    /// The open session's file name inside its folder (step 18).
+    pub fn song_file_name(&self) -> Option<String> {
+        self.song_file_path
+            .as_ref()
+            .and_then(|path| path.file_name())
+            .map(|name| name.to_string_lossy().to_string())
+    }
+
     pub fn fingerprint_source(&self) -> Option<FingerprintSource> {
         Some(FingerprintSource {
             song: self.engine.song()?.clone(),

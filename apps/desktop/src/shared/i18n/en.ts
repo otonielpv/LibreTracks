@@ -3543,6 +3543,15 @@ const en = {
       body: "While it was lost, the main or this machine changed song, position or state. Choose what to do: this machine does not move on its own.",
       followAgain: "Follow the main again",
     },
+    copy: {
+      button: "Copy the main's session",
+      progress: "Copying the main's session… {{percent}} %",
+      cancel: "Cancel the copy",
+      confirmPlaying: "This machine is playing: opening the copy changes what sounds. Copy anyway?",
+      yes: "Yes, copy",
+      failed: "Could not copy the session: {{reason}}",
+      errors: { connectionLost: "The connection with the main was lost during the copy." },
+    },
     switchHere: {
       button: "Switch to this machine",
       confirm: "Move the show to this machine? The main turns its pilot tone off.",

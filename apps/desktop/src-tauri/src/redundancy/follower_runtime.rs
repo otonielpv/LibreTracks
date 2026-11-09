@@ -35,6 +35,9 @@ pub enum FollowerCommand {
     /// «Ahora mando yo».
     TakeCommand,
     FollowAgain,
+    /// Copy the main's session here (step 18).
+    CopySession,
+    CancelCopy,
 }
 
 /// Running follower, stopped (and the local transport unlocked) on drop.
@@ -160,6 +163,71 @@ pub fn offer_role_change(app: &AppHandle, old_main_address: &str) {
         }
         guest.handle.leave();
     });
+}
+
+/// Where copied sessions live on this machine.
+fn copies_root(app: &AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_data_dir().ok().map(|dir| dir.join("redundancy-sessions"))
+}
+
+fn start_copy(
+    app: &AppHandle,
+    request_id: u64,
+    name: &str,
+    song_document: String,
+    files: &[libretracks_link::redundancy::SessionFile],
+    song: Option<&Song>,
+) -> Result<(super::session_copy::CopyJob, super::session_copy::CopyStep), String> {
+    let root = copies_root(app).ok_or("no data folder")?;
+    let song_dir = app
+        .state::<DesktopState>()
+        .session
+        .lock()
+        .ok()
+        .and_then(|session| session.song_dir.clone());
+    let candidates = super::session_copy::local_candidates(song_dir.as_deref(), song);
+    super::session_copy::CopyJob::start(
+        request_id,
+        files,
+        song_document,
+        super::session_copy::target_dir(&root, name),
+        &candidates,
+    )
+}
+
+fn handle_copy_step(
+    app: &AppHandle,
+    guest: &libretracks_link::GuestHandle,
+    step: super::session_copy::CopyStep,
+    copy: &mut Option<super::session_copy::CopyJob>,
+    requested: &mut Option<u64>,
+) {
+    use super::session_copy::CopyStep;
+    match step {
+        CopyStep::Request(message) => {
+            guest.send_redundancy(message);
+        }
+        CopyStep::Done(song_file) => {
+            *copy = None;
+            *requested = None;
+            publish_status(app, |status| {
+                status.copy = None;
+                status.copy_error = None;
+            });
+            let _ = crate::commands::project::start_open_project_from_path(
+                app.clone(),
+                song_file.to_string_lossy().to_string(),
+            );
+        }
+        CopyStep::Failed(error) => {
+            *copy = None;
+            *requested = None;
+            publish_status(app, |status| {
+                status.copy = None;
+                status.copy_error = Some(error);
+            });
+        }
+    }
 }
 
 /// What the main is told when this backup takes over.
@@ -342,6 +410,9 @@ async fn run(
     let mut locked = false;
     let mut target = SessionTarget { app: app.clone() };
     let mut main_mix: Option<MixSnapshot> = None;
+    let mut copy: Option<super::session_copy::CopyJob> = None;
+    let mut copy_requested: Option<u64> = None;
+    let mut copy_ids = 0u64;
 
     loop {
         let mut state_changed = false;
@@ -355,6 +426,23 @@ async fn run(
                             edit_pin,
                             trusted,
                         });
+                    }
+                    GuestEvent::Redundancy(RedundancyMessage::SessionManifest { request_id, name, song_document, files }) => {
+                        if copy_requested == Some(request_id) {
+                            let step = start_copy(&app, request_id, &name, song_document, &files, song.as_ref())
+                                .map(|(job, step)| {
+                                    copy = Some(job);
+                                    step
+                                })
+                                .unwrap_or_else(super::session_copy::CopyStep::Failed);
+                            handle_copy_step(&app, &guest.handle, step, &mut copy, &mut copy_requested);
+                        }
+                    }
+                    GuestEvent::Redundancy(RedundancyMessage::FileChunk { request_id, path, offset, data, error }) => {
+                        if let Some(job) = copy.as_mut().filter(|job| job.request_id == request_id) {
+                            let step = job.on_chunk(&path, offset, &data, error.as_deref());
+                            handle_copy_step(&app, &guest.handle, step, &mut copy, &mut copy_requested);
+                        }
                     }
                     GuestEvent::Redundancy(message) => {
                         let offset = guest.handle.host_offset_ms().map(|ms| ms * 1e6);
@@ -376,8 +464,17 @@ async fn run(
                     }
                     // Lost, rejected or closed: the lifecycle sees the silence
                     // and the reconciler freewheels. The backup keeps playing
-                    // (never stops for lack of network).
-                    GuestEvent::State(_) => core.set_connected(false),
+                    // (never stops for lack of network). A copy in progress
+                    // stops here; nothing half-copied is opened.
+                    GuestEvent::State(_) => {
+                        core.set_connected(false);
+                        if copy.take().is_some() || copy_requested.take().is_some() {
+                            publish_status(&app, |status| {
+                                status.copy = None;
+                                status.copy_error = Some("connectionLost".into());
+                            });
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -393,6 +490,21 @@ async fn run(
                         }
                     }
                     FollowerCommand::FollowAgain => { core.follow_again(); }
+                    FollowerCommand::CopySession => {
+                        copy_ids += 1;
+                        copy = None;
+                        copy_requested = Some(copy_ids);
+                        guest.handle.send_redundancy(RedundancyMessage::SessionRequest { request_id: copy_ids });
+                        publish_status(&app, |status| {
+                            status.copy = Some(Default::default());
+                            status.copy_error = None;
+                        });
+                    }
+                    FollowerCommand::CancelCopy => {
+                        copy = None;
+                        copy_requested = None;
+                        publish_status(&app, |status| status.copy = None);
+                    }
                 }
             }
             intent = intents.recv() => {
@@ -477,6 +589,7 @@ async fn run(
             }
         }
         if throttle.should_emit(now_ns(), state_changed) {
+            let copy_progress = copy.as_ref().map(|job| job.progress);
             let main_rate = core.main_sample_rate();
             let own_rate = engine_sample_rate(&app);
             publish_status(&app, |status| {
@@ -487,6 +600,9 @@ async fn run(
                 status.diffs = core.diffs().to_vec();
                 status.reason = core.last_reason().into();
                 status.sample_rate_differs = main_rate > 0 && own_rate > 0 && main_rate != own_rate;
+                if copy_progress.is_some() {
+                    status.copy = copy_progress;
+                }
             });
         }
     }

@@ -27,6 +27,10 @@ const api = vi.hoisted(() => ({
     throw new Error("not in tests");
   }),
   takeCommand: vi.fn(async () => undefined),
+  copySession: vi.fn(async (force: boolean) => {
+    if (!force) throw new Error("confirmPlaying");
+  }),
+  cancelCopy: vi.fn(async () => undefined),
 }));
 vi.mock("./redundancyApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./redundancyApi")>();
@@ -215,5 +219,34 @@ describe("planned handover", () => {
     });
     render(<RedundancyRoot />);
     expect(screen.getByRole("alert").textContent).toContain("El respaldo (PC B) ha tomado el mando");
+  });
+});
+
+describe("copy the main's session", () => {
+  it("asks before copying onto a playing backup, then copies", async () => {
+    await i18n.changeLanguage("es");
+    useRedundancyStore.setState({ status: status({ state: "sessionMismatch" }), detailOpen: true });
+    render(<RedundancyRoot />);
+    fireEvent.click(screen.getByRole("button", { name: "Copiar la sesión del principal" }));
+    expect(await screen.findByText(/Este equipo está sonando/)).toBeTruthy();
+    expect(api.copySession).toHaveBeenLastCalledWith(false);
+    fireEvent.click(screen.getByRole("button", { name: "Sí, copiar" }));
+    expect(api.copySession).toHaveBeenLastCalledWith(true);
+  });
+
+  it("shows the progress with a cancel button, and is not offered when lost", async () => {
+    await i18n.changeLanguage("es");
+    useRedundancyStore.setState({
+      status: status({ state: "following", copy: { doneBytes: 50, totalBytes: 200 } }),
+      detailOpen: true,
+    });
+    const { unmount } = render(<RedundancyRoot />);
+    expect(screen.getByText(/Copiando la sesión del principal… 25 %/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar la copia" }));
+    expect(api.cancelCopy).toHaveBeenCalled();
+    unmount();
+    useRedundancyStore.setState({ status: status({ state: "mainLost" }), detailOpen: true });
+    render(<RedundancyRoot />);
+    expect(screen.queryByRole("button", { name: "Copiar la sesión del principal" })).toBeNull();
   });
 });

@@ -12,5 +12,6 @@ pub mod pilot;
 pub mod publisher;
 pub mod remote_failover;
 pub mod role;
+pub mod session_copy;
 pub mod settings;
 pub mod status;
