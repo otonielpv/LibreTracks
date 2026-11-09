@@ -272,3 +272,43 @@ fn real_session_copy_keeps_the_fingerprint() {
     println!("DIFFS: {diffs:?}");
     assert!(diffs.is_empty());
 }
+
+#[test]
+fn a_copy_over_the_open_session_updates_it_in_place() {
+    let main = main_session();
+    let served = build_manifest("Domingo", &main.song, &main.dir, libretracks_project::SONG_FILE_NAME).unwrap();
+    // The backup's own copy of the session: same audio, an older document
+    // under another file name.
+    let backup = tempfile::tempdir().unwrap();
+    fs::create_dir_all(backup.path().join("audio")).unwrap();
+    fs::write(backup.path().join("audio").join("Drums.wav"), vec![1u8; 3 * 1024 * 1024 + 17]).unwrap();
+    fs::write(backup.path().join("audio").join("Bass.wav"), vec![2u8; 5000]).unwrap();
+    fs::write(backup.path().join("Domingo.svvrep"), "old").unwrap();
+    let candidates = local_candidates(Some(backup.path()), None);
+    let (mut job, mut step) = CopyJob::start_with_progress(
+        1,
+        &served.files,
+        served.song_document.clone(),
+        backup.path().to_path_buf(),
+        "Domingo.svvrep",
+        &candidates,
+        &|_| {},
+    )
+    .unwrap();
+    let song_file = loop {
+        match step {
+            CopyStep::Request(RedundancyMessage::FileChunkRequest { path, offset, length, .. }) => {
+                assert_eq!(path, "audio/Click.wav", "only the missing file travels");
+                let RedundancyMessage::FileChunk { data, .. } = chunk_message(&served, 1, &path, offset, length) else {
+                    unreachable!()
+                };
+                step = job.on_chunk(&path, offset, &data, None);
+            }
+            CopyStep::Done(file) => break file,
+            other => panic!("{other:?}"),
+        }
+    };
+    assert_eq!(song_file, backup.path().join("Domingo.svvrep"));
+    assert_eq!(fs::read_to_string(&song_file).unwrap(), served.song_document);
+    assert!(!backup.path().join(libretracks_project::SONG_FILE_NAME).exists());
+}

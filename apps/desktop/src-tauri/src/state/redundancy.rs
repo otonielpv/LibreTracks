@@ -436,6 +436,25 @@ impl DesktopSession {
             .map(|name| name.to_string_lossy().to_string())
     }
 
+    /// The session in `folder` stops being saved (its folder was just
+    /// replaced by a copy of the main's): returns the folder to `reattach`.
+    pub fn detach_if_in(&mut self, folder: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
+        let folder = folder?;
+        let same = self.song_dir.as_deref().is_some_and(|dir| {
+            dir == folder
+                || (dir.canonicalize().ok().is_some() && dir.canonicalize().ok() == folder.canonicalize().ok())
+        });
+        if same {
+            self.song_dir.take()
+        } else {
+            None
+        }
+    }
+
+    pub fn reattach(&mut self, folder: std::path::PathBuf) {
+        self.song_dir = Some(folder);
+    }
+
     pub fn fingerprint_source(&self) -> Option<FingerprintSource> {
         Some(FingerprintSource {
             song: self.engine.song()?.clone(),

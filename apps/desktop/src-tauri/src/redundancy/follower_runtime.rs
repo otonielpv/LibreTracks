@@ -226,18 +226,30 @@ fn start_copy(
     report: &dyn Fn(super::session_copy::CopyProgress),
 ) -> Result<(super::session_copy::CopyJob, super::session_copy::CopyStep), String> {
     let root = copies_root(app).ok_or("no data folder")?;
-    let song_dir = app
+    let (song_dir, song_file_name) = app
         .state::<DesktopState>()
         .session
         .lock()
         .ok()
-        .and_then(|session| session.song_dir.clone());
+        .map(|session| (session.song_dir.clone(), session.song_file_name()))
+        .unwrap_or_default();
     let candidates = super::session_copy::local_candidates(song_dir.as_deref(), song);
+    // With a session open here, the copy updates it in place (only what
+    // differs travels, the document is replaced): it is what the user
+    // reopens later. Without one, it goes to its own folder.
+    let (target, file_name) = match (song_dir, song_file_name) {
+        (Some(dir), Some(file)) => (dir, file),
+        _ => (
+            super::session_copy::target_dir(&root, name),
+            libretracks_project::SONG_FILE_NAME.to_string(),
+        ),
+    };
     super::session_copy::CopyJob::start_with_progress(
         request_id,
         files,
         song_document,
-        super::session_copy::target_dir(&root, name),
+        target,
+        &file_name,
         &candidates,
         report,
     )
@@ -302,10 +314,24 @@ fn handle_copy_step(
                 .and_then(|dir| dir.file_name())
                 .map(|name| name.to_string_lossy().to_string())
                 .unwrap_or_default();
+            // Opening saves the current session first: if it is the folder
+            // just updated, that save would write the old song over the
+            // copied one. Detach it so nothing is saved on the way.
+            let detached = app
+                .state::<DesktopState>()
+                .session
+                .lock()
+                .ok()
+                .and_then(|mut session| session.detach_if_in(song_file.parent()));
             let opened = crate::commands::project::start_open_project_from_path(
                 app.clone(),
                 song_file.to_string_lossy().to_string(),
             );
+            if opened.is_err() {
+                if let (Some(dir), Ok(mut session)) = (detached, app.state::<DesktopState>().session.lock()) {
+                    session.reattach(dir);
+                }
+            }
             publish_status(app, |status| {
                 status.copy = None;
                 match opened {

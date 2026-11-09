@@ -3585,7 +3585,7 @@ const es = {
       confirmPlaying: "Este equipo está sonando: abrir la copia cambia lo que suena. ¿Copiar igualmente?",
       yes: "Sí, copiar",
       failed: "No se pudo copiar la sesión: {{reason}}",
-      done: "Sesión copiada y abierta en este equipo ({{name}}).",
+      done: "Sesión del principal copiada sobre la de este equipo y abierta ({{name}}).",
       errors: {
         connectionLost: "Se perdió la conexión con el principal durante la copia.",
         noAnswer: "El principal no responde a la copia. Comprueba que sigue abierto y vuelve a intentarlo.",

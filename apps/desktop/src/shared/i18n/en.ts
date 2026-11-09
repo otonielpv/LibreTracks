@@ -3553,7 +3553,7 @@ const en = {
       confirmPlaying: "This machine is playing: opening the copy changes what sounds. Copy anyway?",
       yes: "Yes, copy",
       failed: "Could not copy the session: {{reason}}",
-      done: "Session copied and opened on this machine ({{name}}).",
+      done: "The main's session was copied over this machine's and opened ({{name}}).",
       errors: {
         connectionLost: "The connection with the main was lost during the copy.",
         noAnswer: "The main does not answer the copy. Check that it is still open and try again.",

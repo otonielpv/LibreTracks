@@ -250,6 +250,8 @@ pub struct CopyJob {
     pub request_id: u64,
     target: PathBuf,
     song_document: String,
+    /// The session document's file name inside `target`.
+    song_file_name: String,
     queue: VecDeque<SessionFile>,
     current: Option<(SessionFile, File, u64)>,
     pub progress: CopyProgress,
@@ -286,7 +288,15 @@ impl CopyJob {
         target: PathBuf,
         candidates: &HashMap<(String, u64), PathBuf>,
     ) -> Result<(CopyJob, CopyStep), String> {
-        Self::start_with_progress(request_id, manifest_files, song_document, target, candidates, &|_| {})
+        Self::start_with_progress(
+            request_id,
+            manifest_files,
+            song_document,
+            target,
+            libretracks_project::SONG_FILE_NAME,
+            candidates,
+            &|_| {},
+        )
     }
 
     /// Like `start`, reporting progress during the local copies. Those can
@@ -297,6 +307,7 @@ impl CopyJob {
         manifest_files: &[SessionFile],
         song_document: String,
         target: PathBuf,
+        song_file_name: &str,
         candidates: &HashMap<(String, u64), PathBuf>,
         report: &dyn Fn(CopyProgress),
     ) -> Result<(CopyJob, CopyStep), String> {
@@ -325,6 +336,7 @@ impl CopyJob {
             request_id,
             target,
             song_document,
+            song_file_name: song_file_name.to_string(),
             progress,
             queue: plan.fetch.into_iter().collect(),
             current: None,
@@ -353,7 +365,7 @@ impl CopyJob {
             }
             let Some(file) = self.queue.pop_front() else {
                 // Last: the document that makes it a session.
-                let song_file = self.target.join(libretracks_project::SONG_FILE_NAME);
+                let song_file = self.target.join(&self.song_file_name);
                 return match fs::write(&song_file, &self.song_document) {
                     Ok(()) => CopyStep::Done(song_file),
                     Err(error) => CopyStep::Failed(error.to_string()),
