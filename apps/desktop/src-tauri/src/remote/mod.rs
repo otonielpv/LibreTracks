@@ -20,11 +20,55 @@ pub struct RemoteServiceState {
     pub handle: RemoteServerHandle,
 }
 
+/// Ports tried in order: the usual one, a few neighbours, then any free port
+/// the system hands out (0). The remote shows its own URL and QR, so a phone
+/// still finds it on another port.
+fn remote_port_candidates() -> impl Iterator<Item = u16> {
+    (DEFAULT_REMOTE_PORT..DEFAULT_REMOTE_PORT + 10).chain(std::iter::once(0))
+}
+
+/// A bind error worth retrying on another port: taken (10048 on Windows) or
+/// forbidden, which is what Windows answers for a port inside a range Hyper-V
+/// or WSL reserved (10013).
+fn port_unavailable(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::AddrInUse | std::io::ErrorKind::PermissionDenied
+    )
+}
+
 pub fn initialize_remote(app: &App) -> Result<(), String> {
     let static_dir = resolve_remote_static_dir(app);
-    let runtime =
-        tauri::async_runtime::block_on(spawn_remote_server(DEFAULT_REMOTE_PORT, static_dir))
-            .map_err(|error| error.to_string())?;
+    // A busy 3030 used to abort the whole setup: the app panicked on launch and
+    // could not be opened at all. A field log showed seven launches in a row
+    // dying like that while a previous LibreTracks, stuck closing, still held
+    // the port. Falling back keeps the app usable; only the remote moves.
+    let mut last_error = None;
+    let mut runtime = None;
+    for port in remote_port_candidates() {
+        match tauri::async_runtime::block_on(spawn_remote_server(port, static_dir.clone())) {
+            Ok(started) => {
+                runtime = Some(started);
+                break;
+            }
+            Err(error) if port_unavailable(&error) => {
+                last_error = Some(error);
+            }
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    let Some(runtime) = runtime else {
+        return Err(last_error
+            .map(|error| error.to_string())
+            .unwrap_or_else(|| "no port available for the remote".into()));
+    };
+    let bound_port = runtime.handle.info().port;
+    if bound_port != DEFAULT_REMOTE_PORT {
+        crate::infra::error_log::write_error(&format!(
+            "remote: port {DEFAULT_REMOTE_PORT} unavailable ({}); serving on {bound_port}",
+            last_error.map(|error| error.to_string()).unwrap_or_default()
+        ));
+    }
     let handle = runtime.handle.clone();
 
     app.manage(RemoteServiceState {
@@ -403,5 +447,30 @@ async fn run_remote_command_bridge(
         if let Ok(song_view) = session.song_view_with_options(false) {
             handle.publish_song_view(&song_view);
         }
+    }
+}
+
+#[cfg(test)]
+mod port_fallback_tests {
+    use super::*;
+
+    #[test]
+    fn tries_the_usual_port_first_then_neighbours_then_any() {
+        let ports: Vec<u16> = remote_port_candidates().collect();
+        assert_eq!(ports.first(), Some(&DEFAULT_REMOTE_PORT));
+        assert_eq!(ports.last(), Some(&0));
+        assert_eq!(ports.len(), 11);
+    }
+
+    #[test]
+    fn a_taken_port_is_retried_but_other_errors_are_not() {
+        // A real "address in use", the error the field log showed (10048).
+        let squatter = std::net::TcpListener::bind(("0.0.0.0", 0)).expect("squatter");
+        let port = squatter.local_addr().expect("addr").port();
+        let taken = std::net::TcpListener::bind(("0.0.0.0", port)).expect_err("port is taken");
+        assert!(port_unavailable(&taken), "{taken:?}");
+
+        let other = std::io::Error::new(std::io::ErrorKind::InvalidInput, "bad address");
+        assert!(!port_unavailable(&other));
     }
 }

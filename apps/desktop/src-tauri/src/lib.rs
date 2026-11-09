@@ -136,8 +136,9 @@ pub fn run() {
 
     // Instancia unica, y el primero de todos los plugins como pide el suyo.
     //
-    // Dos LibreTracks a la vez nunca han funcionado: el segundo muere en
-    // `initialize_remote` al no poder tomar el puerto 3030. Asi que abrir un
+    // Dos LibreTracks a la vez nunca han funcionado (el segundo moria en
+    // `initialize_remote` sin el puerto 3030; hoy pasaria a otro puerto, pero
+    // seguirian peleando por la sesion y el audio). Asi que abrir un
     // fichero con la app ya arrancada tiene que reenviarselo a la que ya corre
     // en lugar de lanzar un proceso condenado.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
