@@ -463,7 +463,10 @@ TEST_CASE("try_install_native_file streams a native WAV without writing the PCM 
     std::remove(wav_path.c_str());
 }
 
-TEST_CASE("try_install_native_file rejects a sample-rate mismatch") {
+// Plan realtime-resample: a file at another rate streams in place too, and the
+// DecodedSource resamples while it reads. It used to be rejected here and sent
+// through decode + resample + a full copy into the PCM cache.
+TEST_CASE("try_install_native_file streams a sample-rate mismatch in place") {
     constexpr int kChannels = 2;
     constexpr int kFileRate = 44100;   // engine wants 48000 below
     constexpr Frame kFrames = 1024;
@@ -474,7 +477,12 @@ TEST_CASE("try_install_native_file rejects a sample-rate mismatch") {
     SourceManager manager;
     const Id source_id = "native-sr-mismatch-source";
     manager.register_source(source_id, wav_path);
-    CHECK_FALSE(manager.try_install_native_file(source_id, 48000));
+    REQUIRE(manager.try_install_native_file(source_id, 48000));
+    const auto source = manager.get_shared(source_id);
+    REQUIRE(static_cast<bool>(source));
+    CHECK(source->is_resampled());
+    CHECK(source->native_sample_rate() == kFileRate);
+    CHECK(manager.diagnostics()[0].disk_cache_bytes == 0);
 
     std::remove(wav_path.c_str());
 }
@@ -533,10 +541,12 @@ TEST_CASE("native-file eligibility ignores bit depth (24-bit stems stream in pla
     std::remove(wav_path.c_str());
 }
 
-TEST_CASE("sample rate alone decides the route for an otherwise identical stem") {
+TEST_CASE("sample rate no longer decides the route for an otherwise identical stem") {
     // Same file content, same channels, same bit depth — only the engine rate
-    // differs. This is the whole reason the reported multitrack was slow: the
-    // stems are 44.1kHz and the engine commonly runs at 48kHz.
+    // differs. This used to be the whole reason the reported multitrack was
+    // slow: the stems are 44.1kHz, the engine commonly runs at 48kHz, and every
+    // stem was converted into the cache. Now both stream in place, and only the
+    // mismatched one is resampled while it is read.
     constexpr int kChannels = 2;
     constexpr int kFileRate = 44100;
     constexpr Frame kFrames = kDefaultBlockFrames * 2 + 13;
@@ -548,13 +558,16 @@ TEST_CASE("sample rate alone decides the route for an otherwise identical stem")
         SourceManager manager;
         const Id source_id = "route-matching-sr";
         manager.register_source(source_id, wav_path);
-        CHECK(manager.try_install_native_file(source_id, kFileRate));
+        REQUIRE(manager.try_install_native_file(source_id, kFileRate));
+        CHECK_FALSE(manager.get_shared(source_id)->is_resampled());
     }
     {
         SourceManager manager;
         const Id source_id = "route-mismatched-sr";
         manager.register_source(source_id, wav_path);
-        CHECK_FALSE(manager.try_install_native_file(source_id, 48000));
+        REQUIRE(manager.try_install_native_file(source_id, 48000));
+        CHECK(manager.get_shared(source_id)->is_resampled());
+        CHECK(manager.diagnostics()[0].disk_cache_bytes == 0);
     }
 
     std::remove(wav_path.c_str());

@@ -100,12 +100,11 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
         impl_->push_event(EvSourcePrepared{ source_id });
     };
 
-    // With realtime resampling a file at another rate streams in place too, so
-    // try that before a conversion left over from before the flag: otherwise
-    // an existing cache copy would keep winning and the flag would change
-    // nothing for any file already played once.
-    if (realtime_resample_enabled()
-        && impl_->source_manager->try_install_native_file(source_id, sr)) {
+    // Stream the original in place whenever libsndfile can, at any rate (the
+    // DecodedSource resamples while reading). Tried BEFORE an existing cache
+    // copy: a conversion left over from an older version must not keep winning
+    // over the file itself.
+    if (impl_->source_manager->try_install_native_file(source_id, sr)) {
         mark_ready(/*publishes_peaks=*/false);
         return;
     }
@@ -116,14 +115,6 @@ void SourcePreparationQueue::enqueue_source(const Source& source) {
     if (impl_->source_manager->try_install_from_cache_file(source_id, sr)) {
         // Installed from an existing cache file: no decode ran in THIS session,
         // so there are no same-pass peaks to hand over.
-        mark_ready(/*publishes_peaks=*/false);
-        return;
-    }
-
-    // Fast path 2: if the original file is already a libsndfile-readable
-    // container at the engine sample rate, stream it in place — no decode,
-    // no cache write. This is the common case for native WAV stems.
-    if (impl_->source_manager->try_install_native_file(source_id, sr)) {
         mark_ready(/*publishes_peaks=*/false);
         return;
     }

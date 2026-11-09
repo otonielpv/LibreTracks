@@ -24,7 +24,7 @@ using namespace lt;
 
 // ---------------------------------------------------------------------------
 // Plan realtime-resample, step 3: a file whose rate differs from the engine's
-// streams in place behind LIBRETRACKS_REALTIME_RESAMPLE=1. The DecodedSource
+// streams in place, resampled while it is read. The DecodedSource
 // keeps native frames in the block cache and answers in engine frames, so
 // everything above it (clips, timeline, Bungee, prepared jumps) is unchanged.
 // These tests pin that boundary: what comes out of the real cache path must be
@@ -35,23 +35,6 @@ namespace {
 
 constexpr int kFileRate = 44100;
 constexpr int kEngineRate = 48000;
-
-// Sets or clears the flag for one scope; the old tests that expect a rate
-// mismatch to be rejected depend on it being off again afterwards.
-class RealtimeResampleFlag {
-public:
-    explicit RealtimeResampleFlag(bool on) { set(on ? "1" : ""); }
-    ~RealtimeResampleFlag() { set(""); }
-private:
-    static void set(const char* value) {
-#if defined(_WIN32)
-        _putenv_s("LIBRETRACKS_REALTIME_RESAMPLE", value);
-#else
-        if (*value) setenv("LIBRETRACKS_REALTIME_RESAMPLE", value, 1);
-        else unsetenv("LIBRETRACKS_REALTIME_RESAMPLE");
-#endif
-    }
-};
 
 std::string temp_wav(const char* tag) {
 #if defined(_WIN32)
@@ -140,18 +123,10 @@ bool identical(const std::vector<float>& a, const std::vector<float>& b) {
 // file to the PCM cache instead (see path_has_seek_penalty).
 static bool fast_disk(const std::string&) { return false; }
 
-TEST_CASE("realtime resample: the flag decides whether a 44.1k file streams in place") {
+TEST_CASE("realtime resample: a 44.1k file streams in place on a 48k engine") {
     const auto path = temp_wav("flag");
     REQUIRE(write_float_wav(path, make_audio(4096, 2), 2, kFileRate));
     {
-        RealtimeResampleFlag off(false);
-        SourceManager manager;
-        manager.set_seek_penalty_probe(fast_disk);
-        manager.register_source("a", path);
-        CHECK_FALSE(manager.try_install_native_file("a", kEngineRate));
-    }
-    {
-        RealtimeResampleFlag on(true);
         SourceManager manager;
         manager.set_seek_penalty_probe(fast_disk);
         manager.register_source("b", path);
@@ -172,7 +147,6 @@ TEST_CASE("realtime resample: the flag decides whether a 44.1k file streams in p
 }
 
 TEST_CASE("realtime resample: reads through the block cache match the interpolator exactly") {
-    RealtimeResampleFlag on(true);
     // 96k -> 48k reads two source frames per output frame, so a callback is
     // split into several cache reads; 48k -> 44.1k downsamples.
     struct Rates { int file, engine; };
@@ -211,7 +185,6 @@ TEST_CASE("realtime resample: reads through the block cache match the interpolat
 TEST_CASE("realtime resample: positions stay exact across the file") {
     // An impulse on every second of the file must land on exactly that second
     // at the engine rate: 44100 * k -> 48000 * k, with no drift.
-    RealtimeResampleFlag on(true);
     constexpr int kSeconds = 20;
     std::vector<float> file(static_cast<std::size_t>(kFileRate) * kSeconds, 0.0f);
     for (int k = 1; k < kSeconds; ++k)
@@ -240,7 +213,6 @@ TEST_CASE("realtime resample: a jump renders the same samples as playing through
     // TrackRenderer (Direct path) on a 44.1k clip in a 48k engine. Playing
     // block after block and jumping straight to a block must give identical
     // output: the property r8brain could not offer.
-    RealtimeResampleFlag on(true);
     const Frame file_frames = kFileRate * 3;
     const auto file = make_audio(file_frames, 2);
     const auto path = temp_wav("jump");
@@ -292,7 +264,6 @@ TEST_CASE("realtime resample: a warp voice seeking into a resampled source does 
     // frames by the block size, i.e. the wrong blocks for a source whose cache
     // holds native frames, then waited on the right ones — nobody had asked
     // for them — until its 750 ms deadline, voice after voice.
-    RealtimeResampleFlag on(true);
     BungeeVoiceManager mgr;
     if (!mgr.prepare(kEngineRate, 2, 480)) return;
 

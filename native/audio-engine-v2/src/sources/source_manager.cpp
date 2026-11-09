@@ -2542,10 +2542,6 @@ void SourceManager::fill_blocks_from_disk(const Id& source_id,
         reader.close();
 }
 
-bool realtime_resample_enabled() {
-    return lt_env_flag_enabled("LIBRETRACKS_REALTIME_RESAMPLE");
-}
-
 std::string pcm_cache_file_for(const Id& source_id,
                                const std::string& file_path,
                                int sample_rate) {
@@ -2606,9 +2602,10 @@ bool SourceManager::try_install_native_file(const Id& source_id,
     if (!sf)
         return false;
 
-    // Only short-circuit when libsndfile can stream the file as-is at the
-    // engine's working rate. Mismatched SR → resample → still need decode.
-    // Channel counts beyond 2 go through the decode path so the existing
+    // Short-circuit when libsndfile can stream the file as-is. The rate does
+    // not have to match the engine's: the DecodedSource resamples while it
+    // reads (plan realtime-resample), so a 44.1k WAV on a 48k engine streams
+    // in place instead of being copied to the cache. Channel counts beyond 2 go through the decode path so the existing
     // downmix logic in the worker handles them.
     //
     // `seekable` matters as much as the rate: the fill worker reads arbitrary
@@ -2616,14 +2613,9 @@ bool SourceManager::try_install_native_file(const Id& source_id,
     // start-to-finish (some compressed payloads inside WAV) would play the
     // head and then stutter. Those keep the decode route, which turns them
     // into a cache file that IS seekable.
-    //
-    // LIBRETRACKS_REALTIME_RESAMPLE=1 (plan realtime-resample) lifts the rate
-    // condition: the DecodedSource resamples while it reads, so a 44.1k WAV on
-    // a 48k engine streams in place instead of being copied to the cache.
-    const bool rate_ok = info.samplerate == engine_sample_rate ||
-        (info.samplerate > 0 && realtime_resample_enabled());
+    (void)engine_sample_rate;
     const bool eligible =
-        rate_ok &&
+        info.samplerate > 0 &&
         info.frames > 0 &&
         info.seekable != 0 &&
         (info.channels == 1 || info.channels == 2);

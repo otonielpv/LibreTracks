@@ -134,12 +134,6 @@ bool native_stream_in_place_allowed(bool source_has_seek_penalty,
 std::string pcm_cache_file_for(const Id& source_id, const std::string& file_path,
                                int sample_rate);
 
-// LIBRETRACKS_REALTIME_RESAMPLE=1: stream files whose rate differs from the
-// engine's in place, resampling while reading, instead of converting them into
-// the PCM cache (plan realtime-resample, step 3). Read on every call so tests
-// can toggle it.
-bool realtime_resample_enabled();
-
 // True while this process is writing `path` into the PCM cache. A reader
 // outside SourceManager must not take a conversion that is still growing.
 bool pcm_cache_write_in_progress(const std::string& path);
