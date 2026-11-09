@@ -77,6 +77,7 @@ import {
   toNativeDropDebugRect,
 } from "../helpers";
 import { createSongPackageImport } from "./songPackageImport";
+import type { PackageUnpackUiState } from "./packageUnpackProgress";
 import {
   DOM_EXTERNAL_DROP_PREVIEW_TTL_MS,
   DRAG_THRESHOLD_PX,
@@ -179,7 +180,7 @@ export type LibraryDragDropDeps = {
           | null),
   ) => void;
   setNativeDropDebugCandidates: (next: NativeDropCandidateDebug[]) => void;
-  setPackageUnpackUiState: (next: { active: boolean; percent: number }) => void;
+  setPackageUnpackUiState: (next: PackageUnpackUiState) => void;
   setExternalDropPreview: (
     next:
       | ExternalDropPreview

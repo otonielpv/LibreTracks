@@ -332,6 +332,11 @@ import { createMetronomeDeviceHandlers } from "./settings/metronomeDeviceHandler
 import { visibleSettingsTabs } from "./settings/visibleSettingsTabs";
 import { createLibraryHandlers } from "./library/libraryHandlers";
 import {
+  nextPackageUnpackState,
+  PACKAGE_UNPACK_IDLE,
+  type PackageUnpackUiState,
+} from "./library/packageUnpackProgress";
+import {
   createLibraryDragDrop,
   type LibraryDragDropDeps,
 } from "./library/libraryDragDrop";
@@ -745,10 +750,8 @@ export function TransportPanelContent() {
   // happen while a large package decompresses and thinks the import failed.
   // `active` is owned by handleDroppedSongPackagePath (the common entry point);
   // `percent` is fed by the project:load-progress listener.
-  const [packageUnpackUiState, setPackageUnpackUiState] = useState<{
-    active: boolean;
-    percent: number;
-  }>({ active: false, percent: 0 });
+  const [packageUnpackUiState, setPackageUnpackUiState] =
+    useState<PackageUnpackUiState>(PACKAGE_UNPACK_IDLE);
   // Non-modal progress while a whole-session .ltset export runs (can be slow for
   // a large full export). `message` carries the live backend status.
   const [sessionExportUiState, setSessionExportUiState] = useState<{
@@ -1662,13 +1665,9 @@ export function TransportPanelContent() {
         detail,
       });
       // Feed the non-modal unpack indicator while a non-blocking package import
-      // is in flight (the modal overlay isn't shown for those). Only updates the
-      // percent when active; visibility is owned by handleDroppedSongPackagePath.
-      setPackageUnpackUiState((prev) =>
-        prev.active
-          ? { active: true, percent: Math.max(prev.percent, event.percent) }
-          : prev,
-      );
+      // is in flight (the modal overlay isn't shown for those). Visibility is
+      // owned by the import flow; see packageUnpackProgress for the rules.
+      setPackageUnpackUiState((prev) => nextPackageUnpackState(prev, event));
     });
   }, []);
 
@@ -7885,7 +7884,8 @@ export function TransportPanelContent() {
               >
                 <div className="lt-source-prep-line">
                   <span className="lt-source-prep-label">
-                    {t("transport.status.unpackingPackage")}
+                    {packageUnpackUiState.message ||
+                      t("transport.status.unpackingPackage")}
                   </span>
                   <span className="lt-source-prep-detail">
                     {Math.round(packageUnpackUiState.percent)}%

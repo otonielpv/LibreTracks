@@ -46,6 +46,17 @@ export function landedAtSeconds(regionIdsBefore: Set<string>, requestedSeconds: 
 export function createSongPackageImport(getDeps: () => SongPackageImportDeps) {
   const deps = getDeps;
 
+  // The unzip is over once the call resolves; what is left (library and song
+  // view refresh) can still wait on the session. «Descomprimiendo» there
+  // would be untrue.
+  const finishingImportState = () => ({
+    active: true,
+    percent: 100,
+    message: deps().t("transport.shell.importingProject", {
+      defaultValue: "Importing project...",
+    }),
+  });
+
   function handleDroppedSongPackagePath(
     packagePath: string,
     dropSeconds: number,
@@ -94,7 +105,7 @@ export function createSongPackageImport(getDeps: () => SongPackageImportDeps) {
       // when the import call resolves the unpack phase is done — show 100% so it
       // doesn't visibly vanish at 40%. The refreshes below give it a frame to
       // paint before `finally` clears it.
-      deps().setPackageUnpackUiState({ active: true, percent: 100 });
+      deps().setPackageUnpackUiState(finishingImportState());
       deps().applyPlaybackSnapshot(snapshot);
       const refreshedAssets = await deps().refreshLibraryState();
       deps().mergeLibraryAssets(refreshedAssets);
@@ -129,7 +140,7 @@ export function createSongPackageImport(getDeps: () => SongPackageImportDeps) {
       if (!snapshot) {
         return;
       }
-      deps().setPackageUnpackUiState({ active: true, percent: 100 });
+      deps().setPackageUnpackUiState(finishingImportState());
       deps().applyPlaybackSnapshot(snapshot);
       const refreshedAssets = await deps().refreshLibraryState();
       deps().mergeLibraryAssets(refreshedAssets);

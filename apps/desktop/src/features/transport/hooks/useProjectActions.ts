@@ -40,6 +40,7 @@ import {
 import { useOpenWithFile } from "./useOpenWithFile";
 import { templateDroppedRuleCount } from "../panels/mixScenes/sceneRules";
 import { getSong } from "../songStore";
+import type { PackageUnpackUiState } from "../library/packageUnpackProgress";
 
 type UseProjectActionsProps = {
   runAction: (
@@ -61,9 +62,7 @@ type UseProjectActionsProps = {
   t: (key: string, options?: Record<string, unknown>) => string;
   setStatus: (status: string) => void;
   setActiveSidebarTab: (tab: SidebarTab | null) => void;
-  setPackageUnpackUiState: (
-    state: { active: boolean; percent: number },
-  ) => void;
+  setPackageUnpackUiState: (state: PackageUnpackUiState) => void;
   setSessionExportUiState: (
     state: { active: boolean; percent: number; message: string },
   ) => void;
@@ -438,7 +437,13 @@ export function useProjectActions({
         // Backend emits up to ~50% (decompress + merge); source decode is async
         // and shown by the "Preparing audio…" indicator. The unpack phase is
         // done once the call resolves — show 100% so it doesn't vanish mid-bar.
-        setPackageUnpackUiState({ active: true, percent: 100 });
+        setPackageUnpackUiState({
+          active: true,
+          percent: 100,
+          message: t("transport.shell.importingProject", {
+            defaultValue: "Importing project...",
+          }),
+        });
         const nextSong = await refreshSongView({ sync: true });
         applyPlaybackSnapshot(nextSnapshot);
         await refreshLibraryState();
