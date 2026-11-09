@@ -20,8 +20,6 @@ import {
   getSongView,
   importAudioFilesFromBytes,
   importAudioFilesFromPaths,
-  importExternalProjectFromPathWithProgress,
-  importSongPackageFromPathWithProgress,
   importStagedAudioFiles,
   isMobileApp,
   isTauriApp,
@@ -78,6 +76,7 @@ import {
   selectNativeDropCandidate,
   toNativeDropDebugRect,
 } from "../helpers";
+import { createSongPackageImport } from "./songPackageImport";
 import {
   DOM_EXTERNAL_DROP_PREVIEW_TTL_MS,
   DRAG_THRESHOLD_PX,
@@ -1495,87 +1494,11 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     );
   }
 
-  async function handleDroppedSongPackagePath(
-    packagePath: string,
-    dropSeconds: number,
-  ) {
-    // Non-blocking .ltpkg import for every path-based entry point (compact view
-    // picker, compact OS drag, timeline drop from the file explorer). The
-    // backend returns as soon as the package is unzipped + the structure is
-    // persisted — it no longer waits for source decode — so we do NOT raise the
-    // blocking shell overlay. The new tracks appear immediately, waveforms fill
-    // in as sources decode, and play is progressive (decoded head audible, rest
-    // silent). The user keeps full use of the UI throughout, like the audio
-    // import. (Previously this sat behind the busy overlay until every source
-    // finished decoding.)
-    // Show the non-modal "Descomprimiendo paquete…" indicator for the duration
-    // (the percent is fed by the load-progress listener). Cleared in `finally`
-    // whether the import succeeds, is cancelled, or throws.
-    deps().setPackageUnpackUiState({ active: true, percent: 0 });
-    try {
-      const snapshot = await importSongPackageFromPathWithProgress(
-        packagePath,
-        dropSeconds,
-      );
-      if (!snapshot) {
-        return;
-      }
-      // The backend only emits up to ~50% (decompress + merge); decode of the
-      // sources is async and handed off to the "Preparing audio…" indicator. So
-      // when the import call resolves the unpack phase is done — show 100% so it
-      // doesn't visibly vanish at 40%. The refreshes below give it a frame to
-      // paint before `finally` clears it.
-      deps().setPackageUnpackUiState({ active: true, percent: 100 });
-      deps().applyPlaybackSnapshot(snapshot);
-      const refreshedAssets = await deps().refreshLibraryState();
-      deps().mergeLibraryAssets(refreshedAssets);
-      await deps().refreshSongView();
-      deps().setStatus(
-        deps().t("transport.status.packageImportedAt", {
-          time: formatClock(dropSeconds),
-        }),
-      );
-    } catch (error) {
-      deps().setStatus(deps().formatErrorStatus(error));
-    } finally {
-      deps().setPackageUnpackUiState({ active: false, percent: 0 });
-    }
-  }
-
-  // A Reaper/Ableton project dropped on the timeline from the OS file explorer.
-  // Mirrors handleDroppedSongPackagePath (non-blocking, progress in the status
-  // bar). The backend lands it at dropSeconds unless that overlaps an existing
-  // song, in which case it appends after the setlist.
-  async function handleDroppedExternalProjectPath(
-    projectPath: string,
-    dropSeconds: number,
-  ) {
-    deps().setPackageUnpackUiState({ active: true, percent: 0 });
-    try {
-      const snapshot = await importExternalProjectFromPathWithProgress(
-        projectPath,
-        dropSeconds,
-      );
-      if (!snapshot) {
-        return;
-      }
-      deps().setPackageUnpackUiState({ active: true, percent: 100 });
-      deps().applyPlaybackSnapshot(snapshot);
-      const refreshedAssets = await deps().refreshLibraryState();
-      deps().mergeLibraryAssets(refreshedAssets);
-      await deps().refreshSongView({ sync: true });
-      deps().setStatus(
-        deps().t("transport.status.externalProjectImportedAt", {
-          time: formatClock(dropSeconds),
-          defaultValue: "Proyecto Reaper/Ableton importado en {{time}}.",
-        }),
-      );
-    } catch (error) {
-      deps().setStatus(deps().formatErrorStatus(error));
-    } finally {
-      deps().setPackageUnpackUiState({ active: false, percent: 0 });
-    }
-  }
+  const {
+    handleDroppedSongPackagePath,
+    pickAndImportSongPackageAt,
+    handleDroppedExternalProjectPath,
+  } = createSongPackageImport(getDeps);
 
   /** Tell the user which files were left out of an import that otherwise
    * worked. A modal, not just the status bar: the good files land on the
@@ -2279,6 +2202,7 @@ export function createLibraryDragDrop(getDeps: () => LibraryDragDropDeps) {
     placeLibraryAssetsOnTimeline,
     dropLibraryFolder,
     handleDroppedSongPackagePath,
+    pickAndImportSongPackageAt,
     handleDroppedExternalProjectPath,
     handleDroppedAudioFiles,
     handleDroppedAudioPaths,

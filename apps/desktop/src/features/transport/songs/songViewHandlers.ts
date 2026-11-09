@@ -60,6 +60,8 @@ export type SongViewHandlerDeps = {
   streamRegionMasterGain: (regionId: string, gain: number) => Promise<unknown>;
   /** The DAW's own `.ltpkg` import at an explicit timeline position. */
   importSongPackageAt: (packagePath: string, insertAt: number) => Promise<void>;
+  /** Native picker + import at `insertAt` (mobile: no usable path). */
+  pickAndImportSongPackageAt: (insertAt: number) => Promise<void>;
   isPlaying: () => boolean;
   seek: (positionSeconds: number) => Promise<void>;
   /** The global song-jump scheduler (same path as Shift+digit). */
@@ -275,6 +277,19 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
   // blocking shell overlay would freeze the UI for a large package.
   function importSongPackageFromDialog(sourcePath?: string) {
     if (sourcePath) return runSongPackageImport(sourcePath);
+    if (isMobileApp) {
+      // The WebView dialog returns a `content://` URI on Android, not a path
+      // the path-based import can open; the backend picker reads the document
+      // itself. iOS takes the same route as the file menu.
+      return getDeps().runAction(async () => {
+        const deps = getDeps();
+        const song = deps.getSong();
+        if (!song) return;
+        await deps.pickAndImportSongPackageAt(
+          resolveFolderSongAnchorSeconds(song),
+        );
+      });
+    }
     return getDeps().runAction(async () => {
       const picked = await open({
         multiple: false,

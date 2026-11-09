@@ -19,11 +19,15 @@ const api = vi.hoisted(() => ({
   updateSongRegionMasterGain: vi.fn(),
 }));
 const dialog = vi.hoisted(() => ({ open: vi.fn() }));
+const platform = vi.hoisted(() => ({ mobile: false }));
 
 vi.mock("../desktopApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../desktopApi")>()),
   ...api,
   isTauriApp: false,
+  get isMobileApp() {
+    return platform.mobile;
+  },
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => dialog);
 
@@ -67,6 +71,7 @@ function setup(overrides: Partial<SongViewHandlerDeps> = {}) {
     refreshLibraryState: vi.fn(async () => undefined),
     streamRegionMasterGain: vi.fn(async () => undefined),
     importSongPackageAt: vi.fn(async () => undefined),
+    pickAndImportSongPackageAt: vi.fn(async () => undefined),
     isPlaying: () => false,
     getLaneViewportWidth: () => 1000,
     selectRegion: vi.fn(),
@@ -85,6 +90,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 beforeEach(() => {
   for (const fn of Object.values(api)) fn.mockReset();
   dialog.open.mockReset();
+  platform.mobile = false;
   useTransportStore.setState({ optimisticRegionMaster: {} });
 });
 
@@ -190,6 +196,19 @@ describe("song package import", () => {
 
     expect(deps.importSongPackageAt).toHaveBeenCalledWith("/cache/song.ltpkg", 70);
     expect(dialog.open).not.toHaveBeenCalled();
+  });
+
+  // Android's WebView dialog returns a content:// URI that the path-based
+  // import cannot open ("No such file or directory"); mobile must use the
+  // backend picker, still anchored after the last song.
+  it("on mobile, picks natively at the end anchor instead of the WebView dialog", async () => {
+    platform.mobile = true;
+    const { deps, handlers } = setup();
+    await handlers.importSongPackageFromDialog();
+
+    expect(deps.pickAndImportSongPackageAt).toHaveBeenCalledWith(70);
+    expect(dialog.open).not.toHaveBeenCalled();
+    expect(deps.importSongPackageAt).not.toHaveBeenCalled();
   });
 });
 

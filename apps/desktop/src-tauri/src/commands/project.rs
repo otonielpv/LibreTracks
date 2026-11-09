@@ -201,6 +201,23 @@ pub fn get_song_view(
         .map_err(|error| error.to_string())
 }
 
+/// Where a picked `.ltpkg` lands: the caller's offset when it computed one (the
+/// compact and setlist views append after the last song), else the playhead
+/// (the file menu). Read under a brief lock; the heavy work runs unlocked.
+fn resolve_pick_insert_at(
+    state: &DesktopState,
+    insert_at_seconds: Option<f64>,
+) -> Result<f64, String> {
+    if let Some(seconds) = insert_at_seconds {
+        return Ok(seconds);
+    }
+    let session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    Ok(session.current_position())
+}
+
 /// Pick a `.ltpkg` and import it.
 ///
 /// Split by platform because the picker has different threading needs. Only iOS
@@ -210,7 +227,10 @@ pub fn get_song_view(
 /// a plain synchronous command. See `tauriCommandsOffMainThread.test.ts`.
 #[cfg(not(target_os = "ios"))]
 #[tauri::command]
-pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, String> {
+pub fn start_pick_and_import_song_from_dialog(
+    app: AppHandle,
+    insert_at_seconds: Option<f64>,
+) -> Result<bool, String> {
     #[cfg(target_os = "android")]
     {
         // SAF picker → content:// URI, read STRAIGHT from the descriptor.
@@ -230,13 +250,7 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
         // end in an opaque id ("msf:28"), not the display name. The package
         // reader validates the zip structure and reports a clear error.
         spawn_project_work_with_audio_prep(&app, move |worker_app, state| {
-            let insert_at = {
-                let session = state
-                    .session
-                    .lock()
-                    .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-                session.current_position()
-            };
+            let insert_at = resolve_pick_insert_at(state, insert_at_seconds)?;
             let handle =
                 crate::platform::mobile_files::open_picked_file_for_read(worker_app, &picked)?;
             // Dropped by the end of this closure rather than left to the JVM
@@ -261,13 +275,7 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
         spawn_project_work_with_audio_prep(&app, move |worker_app, state| {
             // The file-menu import inserts at the current playhead. Read it under a
             // brief lock, then do the heavy decompression unlocked.
-            let insert_at = {
-                let session = state
-                    .session
-                    .lock()
-                    .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-                session.current_position()
-            };
+            let insert_at = resolve_pick_insert_at(state, insert_at_seconds)?;
             import_package_off_lock(worker_app, state, package_file, insert_at)
         });
 
@@ -281,7 +289,10 @@ pub fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, St
 /// already uses), so the package takes the ordinary path-based route.
 #[cfg(target_os = "ios")]
 #[tauri::command]
-pub async fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bool, String> {
+pub async fn start_pick_and_import_song_from_dialog(
+    app: AppHandle,
+    insert_at_seconds: Option<f64>,
+) -> Result<bool, String> {
     {
         let Some(picked) = libretracks_ios_folder_picker::pick_file(app.clone()).await? else {
             return Ok(false);
@@ -293,13 +304,7 @@ pub async fn start_pick_and_import_song_from_dialog(app: AppHandle) -> Result<bo
         // packages. The zip reader validates the structure and says so clearly,
         // the same reasoning the Android branch above spells out.
         spawn_project_work_with_audio_prep(&app, move |worker_app, state| {
-            let insert_at = {
-                let session = state
-                    .session
-                    .lock()
-                    .map_err(|_| DesktopError::StatePoisoned.to_string())?;
-                session.current_position()
-            };
+            let insert_at = resolve_pick_insert_at(state, insert_at_seconds)?;
             import_package_off_lock(worker_app, state, package_file.clone(), insert_at)
         });
         Ok(true)

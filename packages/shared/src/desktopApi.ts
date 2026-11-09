@@ -1260,8 +1260,15 @@ export async function openProjectFromPath(
   return runProjectLoadCommand("start_open_project_from_path", { songFile });
 }
 
-export async function pickAndImportSong(): Promise<TransportSnapshot | null> {
-  return runProjectLoadCommand("start_pick_and_import_song_from_dialog");
+// Native picker + import. Without `insertAtSeconds` the song lands at the
+// playhead (file menu); the compact and setlist views pass their own offset.
+export async function pickAndImportSong(
+  insertAtSeconds?: number,
+): Promise<TransportSnapshot | null> {
+  return runProjectLoadCommand(
+    "start_pick_and_import_song_from_dialog",
+    insertAtSeconds === undefined ? undefined : { insertAtSeconds },
+  );
 }
 
 export async function pickAndImportExternalProject(): Promise<SongPackageImportResponse | null> {
