@@ -247,3 +247,28 @@ fn an_interrupted_copy_never_leaves_a_session_to_open() {
     assert!(!target.join(&path).exists(), "no half file under its real name");
     assert!(target.join(format!("{path}.part")).exists());
 }
+
+/// Diagnóstico manual: LT_SESSION_DIR=<carpeta de sesión real>.
+#[test]
+#[ignore]
+fn real_session_copy_keeps_the_fingerprint() {
+    let Ok(dir) = std::env::var("LT_SESSION_DIR") else { return };
+    let dir = PathBuf::from(dir);
+    let file = std::env::var("LT_SESSION_FILE").unwrap();
+    let song = libretracks_project::load_song_from_file(dir.join(&file)).unwrap();
+    let served = build_manifest("Real", &song, &dir, &file).unwrap();
+    println!("FILES: {:?}", served.files.iter().map(|f| &f.path).collect::<Vec<_>>());
+    let copies = tempfile::tempdir().unwrap();
+    let candidates = local_candidates(Some(&dir), Some(&song));
+    let (_job, step) =
+        CopyJob::start(1, &served.files, served.song_document.clone(), target_dir(copies.path(), "Real"), &candidates)
+            .unwrap();
+    let CopyStep::Done(song_file) = step else { panic!("not all local: {step:?}") };
+    let target = song_file.parent().unwrap().to_path_buf();
+    let copied = libretracks_project::load_song(&target).unwrap();
+    let main = fingerprint_of(song, &dir);
+    let backup = fingerprint_of(copied, &target);
+    let diffs = libretracks_core::session_fingerprint::compare(&main, &backup);
+    println!("DIFFS: {diffs:?}");
+    assert!(diffs.is_empty());
+}
