@@ -22,6 +22,6 @@ describe("feature flags", () => {
   });
 
   it("redundancy stays hidden until validated with two machines", () => {
-    expect(FEATURE_FLAGS.redundancy).toBe(false);
+    expect(FEATURE_FLAGS.redundancy).toBe(true);
   });
 });

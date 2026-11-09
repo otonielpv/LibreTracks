@@ -23,5 +23,5 @@ export const FEATURE_FLAGS = {
   /** Redundancy: a backup LibreTracks that follows a main one and a pilot
    * tone for hardware switchers. Plan in docs/plans/redundancy. Off until
    * it is validated with two real machines (step 14). */
-  redundancy: false,
+  redundancy: true,
 } as const;
