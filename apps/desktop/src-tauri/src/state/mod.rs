@@ -2479,6 +2479,15 @@ impl DesktopSession {
             .song()
             .cloned()
             .ok_or(DesktopError::NoSongLoaded)?;
+        // "Importar canción" passes the playhead. Inside an existing song the
+        // new region would overlap it and the engine rejects the whole
+        // session ("regions are out of order or overlap") after the package
+        // was unzipped for nothing; a user building a setlist song by song
+        // hits it on the second import, with the playhead still on the first.
+        // Same rule as a dropped Reaper/Ableton project: where it fits, else
+        // after the setlist.
+        let insert_at_seconds =
+            self.resolve_external_insert_seconds(insert_at_seconds, extracted.region_span_seconds());
         // The package is already decompressed (see `extract_song_package`, run
         // off the lock by the caller, which owns the 7..40% progress band);
         // merging it into the song is fast, so this phase owns 42..50%.

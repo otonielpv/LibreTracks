@@ -866,6 +866,32 @@ pub struct ExtractedSongPackage {
     pub videos_left_out: bool,
 }
 
+impl ExtractedSongPackage {
+    /// How long the song region this package becomes will be, read from the
+    /// manifest alone: its nominal length, stretched to the furthest clip it
+    /// carries. Same rule as the region [`merge_extracted_song_package`]
+    /// builds, so the caller can pick a spot where the song fits BEFORE
+    /// merging (the engine rejects a region that overlaps another song).
+    pub fn region_span_seconds(&self) -> f64 {
+        let furthest_clip_end = self
+            .manifest
+            .clips
+            .iter()
+            .map(|clip| clip.timeline_start_seconds + clip.duration_seconds)
+            .fold(0.0_f64, f64::max);
+        let furthest_video_end = self
+            .manifest
+            .video_clips
+            .iter()
+            .map(|clip| clip.timeline_start_seconds + clip.duration_seconds)
+            .fold(0.0_f64, f64::max);
+        self.manifest
+            .duration_seconds
+            .max(furthest_clip_end)
+            .max(furthest_video_end)
+    }
+}
+
 /// How an import resolves a package track whose name and kind already exist in
 /// the destination session.
 ///
@@ -2094,6 +2120,40 @@ mod tests {
         // should now sit at 104s.
         assert!((result.song.clips[0].timeline_start_seconds - 104.0).abs() < 1e-6);
         assert!(result.song.regions[0].start_seconds >= 100.0);
+    }
+
+    #[test]
+    fn region_span_matches_the_region_the_merge_builds() {
+        // The desktop import picks where the song goes from this number before
+        // merging; if it disagreed with the merge, a song could be placed
+        // where it does not fit and the engine would reject the session.
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let mut source = song();
+        // A clip running past the region's nominal end stretches the span.
+        let region_end = source.regions[0].end_seconds;
+        source.clips[0].duration_seconds = region_end + 3.0;
+        let package_path = song_dir.join("verse.ltpkg");
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
+            .expect("export");
+
+        let extracted = extract_song_package(song_dir, &package_path, |_, _| {}).expect("extract");
+        let span = extracted.region_span_seconds();
+        assert!(span > region_end - source.regions[0].start_seconds, "span {span}");
+
+        let empty = Song {
+            tracks: vec![],
+            clips: vec![],
+            regions: vec![],
+            section_markers: vec![],
+            ..song()
+        };
+        let merged = merge_extracted_song_package(&empty, extracted, 50.0, SongImportTrackMode::default())
+            .expect("merge")
+            .song;
+        let region = &merged.regions[0];
+        assert!((region.start_seconds - 50.0).abs() < 1e-6);
+        assert!(((region.end_seconds - region.start_seconds) - span).abs() < 1e-6);
     }
 
     #[test]
