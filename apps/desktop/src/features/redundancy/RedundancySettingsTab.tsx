@@ -15,6 +15,7 @@ import {
 } from "./redundancyApi";
 import { useHostDiscovery } from "../network/useHostDiscovery";
 import { useRedundancyStore } from "./redundancyStore";
+import { SessionDiffs } from "./RedundancyRoot";
 
 /** Raw MIDI bytes as the user types them: "C0 05" or "B0 14 7F". */
 export function parseMidiBytes(text: string): number[] | null {
@@ -338,6 +339,7 @@ export function RedundancySettingsTab() {
           {t(`redundancy.connectionErrors.${status.connectionError}`, { defaultValue: status.connectionError })}
         </p>
       ) : null}
+      {role === "backup" ? <SessionDiffs /> : null}
       <NumberField
         label={t("redundancy.settings.threshold")}
         help={t("redundancy.settings.thresholdHelp")}

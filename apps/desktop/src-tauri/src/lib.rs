@@ -481,6 +481,7 @@ pub fn run() {
             redundancy::role::redundancy_follow_again,
             redundancy::role::redundancy_copy_session,
             redundancy::role::redundancy_cancel_copy,
+            redundancy::role::redundancy_adopt_main_timing,
             redundancy::role::redundancy_become_main,
             redundancy::role::accept_redundancy_role_change,
             redundancy::role::dismiss_redundancy_role_change,

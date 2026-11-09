@@ -107,6 +107,10 @@ export function cancelCopy() {
   return invokeCommand<void>("redundancy_cancel_copy");
 }
 
+export function adoptMainTiming() {
+  return invokeCommand<void>("redundancy_adopt_main_timing");
+}
+
 export function takeCommand() {
   return invokeCommand<void>("redundancy_take_command");
 }

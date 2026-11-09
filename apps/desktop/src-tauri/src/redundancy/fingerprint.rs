@@ -37,6 +37,43 @@ pub fn timing_settings(settings: &AppSettings) -> TimingSettings {
     }
 }
 
+/// Copy the main's timing settings (the fingerprint's canonical map) into
+/// this machine's settings. Unknown keys and unparsable values are skipped.
+/// Returns whether anything changed.
+pub fn apply_timing(
+    settings: &mut AppSettings,
+    timing: &std::collections::BTreeMap<String, String>,
+) -> bool {
+    let before = timing_settings(settings);
+    for (key, value) in timing {
+        let value = value.as_str();
+        match key.as_str() {
+            "globalJumpMode" => settings.global_jump_mode = value.to_string(),
+            "globalJumpBars" => set_parsed(&mut settings.global_jump_bars, value),
+            "songJumpTrigger" => settings.song_jump_trigger = value.to_string(),
+            "songJumpBars" => set_parsed(&mut settings.song_jump_bars, value),
+            "songTransitionMode" => settings.song_transition_mode = value.to_string(),
+            "fadeOutStopSeconds" => set_parsed(&mut settings.fade_out_stop_seconds, value),
+            "vampMode" => settings.vamp_mode = value.to_string(),
+            "vampBars" => set_parsed(&mut settings.vamp_bars, value),
+            "pauseAtSongEnd" => set_parsed(&mut settings.pause_at_song_end, value),
+            "vampBetweenSongs" => set_parsed(&mut settings.vamp_between_songs, value),
+            "voiceGuideLeadBars" => set_parsed(&mut settings.voice_guide_lead_bars, value),
+            "voiceGuideCountInEnabled" => {
+                set_parsed(&mut settings.voice_guide_count_in_enabled, value)
+            }
+            _ => {}
+        }
+    }
+    timing_settings(settings).canonical() != before.canonical()
+}
+
+fn set_parsed<T: std::str::FromStr>(target: &mut T, value: &str) {
+    if let Ok(parsed) = value.parse() {
+        *target = parsed;
+    }
+}
+
 /// Size of a clip's file: relative paths resolve against the session folder.
 /// Content is never read (multi-GB sessions).
 pub fn file_info(song_dir: Option<&Path>, file_path: &str) -> Option<AudioFileInfo> {
@@ -91,6 +128,21 @@ pub fn get_session_fingerprint(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_main_timing_settings_can_be_adopted() {
+        let mut main = AppSettings::default();
+        main.global_jump_bars += 3;
+        main.pause_at_song_end = !main.pause_at_song_end;
+        main.fade_out_stop_seconds = 2.5;
+        main.vamp_mode = "custom".into();
+        let canonical = timing_settings(&main).canonical();
+        let mut backup = AppSettings::default();
+        assert_ne!(timing_settings(&backup).canonical(), canonical);
+        assert!(apply_timing(&mut backup, &canonical));
+        assert_eq!(timing_settings(&backup).canonical(), canonical);
+        assert!(!apply_timing(&mut backup, &canonical), "nothing left to change");
+    }
 
     #[test]
     fn timing_settings_follow_the_app_settings() {

@@ -598,6 +598,11 @@ pub fn redundancy_cancel_copy(app: AppHandle) -> Result<(), String> {
     send_to_follower(&app, FollowerCommand::CancelCopy)
 }
 
+#[tauri::command]
+pub fn redundancy_adopt_main_timing(app: AppHandle) -> Result<(), String> {
+    send_to_follower(&app, FollowerCommand::AdoptMainTiming)
+}
+
 /// From `Diverged`: follow the main again.
 #[tauri::command]
 pub fn redundancy_follow_again(app: AppHandle) -> Result<(), String> {

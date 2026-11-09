@@ -32,6 +32,7 @@ const api = vi.hoisted(() => ({
     if (!force) throw new Error("confirmPlaying");
   }),
   cancelCopy: vi.fn(async () => undefined),
+  adoptMainTiming: vi.fn(async () => undefined),
 }));
 const discovery = vi.hoisted(() => ({
   hosts: [] as Array<Record<string, unknown>>,
@@ -301,5 +302,20 @@ describe("connecting and disconnecting the backup", () => {
     expect(screen.getByText(/Falta abrir la sesión en este equipo/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Dejar de ser respaldo" }));
     expect(api.setRedundancyRole).toHaveBeenCalledWith("off");
+  });
+});
+
+describe("same session reported as different", () => {
+  it("names the setting in words and offers the main's timing and the copy", async () => {
+    await i18n.changeLanguage("es");
+    useRedundancyStore.setState({
+      status: status({ state: "sessionMismatch", diffs: [{ kind: "timingSettingsDiffer", which: "vampBars" }] }),
+      detailOpen: true,
+    });
+    render(<RedundancyRoot />);
+    expect(screen.getByText("Ajuste distinto: compases del vamp.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Usar los ajustes de tiempo del principal" }));
+    expect(api.adoptMainTiming).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Copiar la sesión del principal" })).toBeTruthy();
   });
 });

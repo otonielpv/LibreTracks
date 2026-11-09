@@ -95,7 +95,7 @@ pub struct TimingSettings {
 }
 
 impl TimingSettings {
-    fn canonical(&self) -> BTreeMap<String, String> {
+    pub fn canonical(&self) -> BTreeMap<String, String> {
         let mut map = BTreeMap::new();
         let mut put = |key: &str, value: String| {
             map.insert(key.to_string(), value);

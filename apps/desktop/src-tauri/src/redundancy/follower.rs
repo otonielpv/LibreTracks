@@ -320,6 +320,13 @@ impl FollowerCore {
         }
     }
 
+    /// The main's timing settings, once its fingerprint arrived.
+    pub fn main_timing(&self) -> Option<std::collections::BTreeMap<String, String>> {
+        self.main_fingerprint
+            .as_ref()
+            .map(|fingerprint| fingerprint.timing_settings.clone())
+    }
+
     pub fn set_own_fingerprint(&mut self, fingerprint: SessionFingerprint) {
         self.own_fingerprint = Some(fingerprint);
         self.recompare();

@@ -38,6 +38,9 @@ pub enum FollowerCommand {
     /// Copy the main's session here (step 18).
     CopySession,
     CancelCopy,
+    /// Use the main's timing settings here (they are per machine, not per
+    /// session, and a mismatch keeps the backup from arming).
+    AdoptMainTiming,
 }
 
 /// Running follower, stopped (and the local transport unlocked) on drop.
@@ -315,6 +318,27 @@ fn refresh_session(app: &AppHandle, core: &mut FollowerCore) -> Option<Song> {
     Some(source.song)
 }
 
+/// Write the main's timing settings into this machine's settings.
+fn adopt_timing(app: &AppHandle, timing: &std::collections::BTreeMap<String, String>) {
+    let state = app.state::<DesktopState>();
+    let store = app.state::<crate::infra::settings::AppSettingsStore>();
+    let Ok(mut settings) = store.current() else {
+        return;
+    };
+    if !super::fingerprint::apply_timing(&mut settings, timing) {
+        return;
+    }
+    let Ok(mut session) = state.session.lock() else {
+        return;
+    };
+    if let Ok(saved) = session.update_audio_settings(settings, &state.audio) {
+        drop(session);
+        let _ = store.set(saved.clone());
+        let _ = crate::infra::settings::save_app_settings(app, &saved);
+        let _ = tauri::Emitter::emit(app, "settings:updated", saved);
+    }
+}
+
 /// Apply the main's mix messages to this session (step 09). Live changes go
 /// to the engine; a whole snapshot is committed (model and settings) where
 /// it differs. Never touches the transport. Returns the main's last whole
@@ -522,6 +546,13 @@ async fn run(
                         copy = None;
                         copy_requested = None;
                         publish_status(&app, |status| status.copy = None);
+                    }
+                    FollowerCommand::AdoptMainTiming => {
+                        if let Some(timing) = core.main_timing() {
+                            adopt_timing(&app, &timing);
+                            song = refresh_session(&app, &mut core).or(song);
+                            fingerprint_unsent = true;
+                        }
                     }
                 }
             }

@@ -8,6 +8,7 @@ import { isMobileApp, isTauriApp } from "@libretracks/shared/desktopApi";
 import { formatOffset } from "./badgeView";
 import {
   acceptRoleChange,
+  adoptMainTiming,
   becomeMain,
   setRedundancyRole,
   cancelCopy,
@@ -51,7 +52,9 @@ function useRedundancyEvents() {
 export function diffText(diff: FingerprintDiff, t: TFunction) {
   switch (diff.kind) {
     case "timingSettingsDiffer":
-      return t("redundancy.diff.timingSettingsDiffer", { which: diff.which });
+      return t("redundancy.diff.timingSettingsDiffer", {
+        which: t(`redundancy.timingNames.${diff.which}`, { defaultValue: diff.which }),
+      });
     case "algorithmVersion":
     case "setlistOrder":
       return t(`redundancy.diff.${diff.kind}`);
@@ -198,6 +201,36 @@ export function CopySession() {
   );
 }
 
+/** Backup side: what differs from the main and how to fix it (copy the
+ * session, use the main's timing settings). In the pill's panel and in
+ * Settings → Redundancy. */
+export function SessionDiffs() {
+  const { t } = useTranslation();
+  const status = useRedundancyStore((state) => state.status);
+  if (!status || status.role !== "backup") return null;
+  const canCopy = ["checkingSession", "sessionMismatch", "following", "armed"].includes(status.state);
+  const timingDiffers = status.diffs.some((diff) => diff.kind === "timingSettingsDiffer");
+  return (
+    <>
+      {status.diffs.length > 0 ? (
+        <ul className="lt-redundancy-diffs">
+          {status.diffs.map((diff, index) => (
+            <li key={index}>{diffText(diff, t)}</li>
+          ))}
+        </ul>
+      ) : null}
+      {timingDiffers ? (
+        <div className="lt-redundancy-copy">
+          <button type="button" onClick={() => void adoptMainTiming()}>
+            {t("redundancy.adoptTiming")}
+          </button>
+        </div>
+      ) : null}
+      {canCopy ? <CopySession /> : null}
+    </>
+  );
+}
+
 function DetailPanel() {
   const { t, i18n } = useTranslation();
   const status = useRedundancyStore((state) => state.status);
@@ -205,9 +238,6 @@ function DetailPanel() {
   if (!status) return null;
   const canSwitchHere =
     status.role === "backup" && (status.state === "following" || status.state === "armed");
-  const canCopy =
-    status.role === "backup" &&
-    ["checkingSession", "sessionMismatch", "following", "armed"].includes(status.state);
   const offset = formatOffset(status.offsetMs, i18n.language);
   const canBecomeMain =
     status.role === "backup" && (status.state === "standalone" || status.state === "diverged");
@@ -254,14 +284,15 @@ function DetailPanel() {
         {status.sampleRateDiffers ? (
           <p className="lt-redundancy-warning">{t("redundancy.detail.sampleRateDiffers")}</p>
         ) : null}
-        {status.diffs.length > 0 ? (
+        {status.role === "backup" ? (
+          <SessionDiffs />
+        ) : status.diffs.length > 0 ? (
           <ul className="lt-redundancy-diffs">
             {status.diffs.map((diff, index) => (
               <li key={index}>{diffText(diff, t)}</li>
             ))}
           </ul>
         ) : null}
-        {canCopy ? <CopySession /> : null}
         <div className="lt-redundancy-dialog-actions">
           {canSwitchHere ? <SwitchToThisMachine /> : null}
           {canBecomeMain ? (
