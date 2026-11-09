@@ -277,7 +277,7 @@ export function RedundancySettingsTab() {
         />
       </label>
       <div className="lt-redundancy-row">
-        <button type="button" disabled={!address.trim()} onClick={() => changeRole("backup")}>
+        <button type="button" className="is-primary" disabled={!address.trim()} onClick={() => changeRole("backup")}>
           {t("redundancy.settings.connect")}
         </button>
       </div>

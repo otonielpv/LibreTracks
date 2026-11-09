@@ -107,3 +107,47 @@
 }
 
 .lt-redundancy-confirm { display: inline-flex; gap: 8px; align-items: center; }
+
+/* Buttons of the settings tab, the dialogs and the confirmation: the app's
+   secondary look (Tailwind 4 has no preflight, so a bare <button> would fall
+   back to the browser's grey default). Banner buttons keep their own look. */
+.lt-redundancy-settings button,
+.lt-redundancy-dialog button,
+.lt-redundancy-confirm button {
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.05);
+  color: #f3f0ef;
+  padding: 0.45rem 0.75rem;
+  font: 700 0.75rem/1 "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+.lt-redundancy-settings button:hover:not(:disabled),
+.lt-redundancy-dialog button:hover:not(:disabled),
+.lt-redundancy-confirm button:hover:not(:disabled) {
+  border-color: rgb(87 241 219 / 0.28);
+  color: #57f1db;
+}
+.lt-redundancy-settings button:disabled,
+.lt-redundancy-dialog button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.lt-redundancy-settings button.is-primary,
+.lt-redundancy-dialog button.is-primary,
+.lt-redundancy-confirm button.is-primary {
+  border-color: transparent;
+  background: linear-gradient(180deg, #57f1db, #2dd4bf);
+  color: #003731;
+}
+.lt-redundancy-settings button.is-primary:hover:not(:disabled),
+.lt-redundancy-dialog button.is-primary:hover:not(:disabled),
+.lt-redundancy-confirm button.is-primary:hover:not(:disabled) {
+  color: #003731;
+  filter: brightness(1.08);
+}
+.lt-redundancy-settings input[type="number"],
+.lt-redundancy-settings input:not([type]),
+.lt-redundancy-settings input[inputmode] {
+  max-width: 12rem;
+}

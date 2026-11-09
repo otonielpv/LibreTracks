@@ -99,7 +99,7 @@ function DivergedDialog() {
         <h2 id="lt-redundancy-diverged-title">{t("redundancy.diverged.title")}</h2>
         <p>{t("redundancy.diverged.body")}</p>
         <div className="lt-redundancy-dialog-actions">
-          <button type="button" onClick={() => void followAgain()}>
+          <button type="button" className="is-primary" onClick={() => void followAgain()}>
             {t("redundancy.diverged.followAgain")}
           </button>
           <button type="button" onClick={() => void becomeMain()}>
@@ -128,6 +128,7 @@ export function SwitchToThisMachine() {
       <span>{t("redundancy.switchHere.confirm")}</span>
       <button
         type="button"
+        className="is-primary"
         onClick={() => {
           setConfirming(false);
           void takeCommand();
@@ -193,7 +194,7 @@ function DetailPanel() {
         <div className="lt-redundancy-dialog-actions">
           {canSwitchHere ? <SwitchToThisMachine /> : null}
           {canBecomeMain ? (
-            <button type="button" onClick={() => void becomeMain()}>
+            <button type="button" className="is-primary" onClick={() => void becomeMain()}>
               {t("redundancy.becomeMain")}
             </button>
           ) : null}
