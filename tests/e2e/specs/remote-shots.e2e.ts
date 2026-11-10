@@ -176,18 +176,18 @@ return (${fn.toString()}).apply(null, arguments);`;
       await shot("remote-controls", [
         { selector: ".layout-tabbar", n: 1, pad: 2 },
         { selector: ".status-pill", n: 2 },
-        { selector: ".layout-edit-button", n: 3 },
-        { selector: ".remote-size-stepper", n: 4 },
-        { selector: ".layout-widget-type-readouts", n: 5, pad: -2 },
-        { selector: ".layout-widget-type-transportButtons", n: 6, pad: -2 },
-        { selector: ".layout-widget-type-timeline", n: 7, pad: -2 },
-        { selector: ".transport-control-card-group", nth: 0, n: 8, pad: -2 },
-        { selector: ".transport-control-card-group", nth: 1, n: 9, pad: -2 },
-        { selector: ".transport-control-card-song", n: 10, pad: -2 },
-        { selector: ".remote-global-cancel-button", n: 11, pad: -2 },
-        { selector: ".region-actions-row", n: 12, pad: -2 },
-        { selector: ".jump-to-song-button", n: 13, pad: -2 },
-        { selector: ".layout-widget-type-markerGrid", n: 14, pad: -2 },
+        { selector: ".immersive-button", n: 3 },
+        { selector: ".layout-edit-button", n: 4 },
+        { selector: ".remote-size-stepper", n: 5 },
+        { selector: ".layout-widget-type-readouts", n: 6, pad: -2 },
+        { selector: ".layout-widget-type-transportButtons", n: 7, pad: -2 },
+        { selector: ".layout-widget-type-timeline", n: 8, pad: -2 },
+        { selector: ".deck-compact-keys", n: 9, pad: -2 },
+        { selector: ".region-actions-row", n: 10, pad: -2 },
+        { selector: ".selected-region-transpose", n: 11, pad: -2 },
+        { selector: ".layout-widget-type-jumpToSongButton", n: 12, pad: -2 },
+        { selector: ".marker-grid-toggle", n: 13 },
+        { selector: ".marker-grid", n: 14, pad: -2 },
       ]);
 
       // Mixer.
@@ -199,7 +199,9 @@ return (${fn.toString()}).apply(null, arguments);`;
         { selector: ".pan-section", n: 4 },
         { selector: ".volume-section", n: 5 },
         { selector: ".toggle-row", n: 6 },
-        { selector: ".mixer-strip.is-folder", n: 7, pad: -2 },
+        // Only when the session has a folder track (the guide explains
+        // folders below the legend, so the number is optional).
+        ...((await rectIn(".mixer-strip.is-folder")) ? [{ selector: ".mixer-strip.is-folder", n: 7, pad: -2 }] : []),
       ]);
 
       // Tools.

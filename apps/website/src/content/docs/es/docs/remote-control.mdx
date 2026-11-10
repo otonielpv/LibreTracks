@@ -54,43 +54,55 @@ Es lo primero que ves. Así la monta LibreTracks en una tablet:
 
 1. **Pestañas**: Controles, Mixer y Herramientas. Puedes cambiarlas, crear
    más y renombrarlas (ver [Diseñar tus pestañas](#diseñar-tus-pestañas)).
-2. **Estado**: Detenido, Reproduciendo o Pausado.
-3. **Editar layout**: entra en el editor para mover, añadir o quitar
-   bloques.
-4. **Tamaño**: `−` y `+` agrandan o encogen todo el Remote (cuatro niveles),
-   sin cambiar dónde está cada cosa. Útil si lo miras desde lejos.
-5. **Lecturas**: tiempo, compás y pulso, BPM, compás musical y la canción
+2. **Estado**: un punto verde si suena, ámbar en pausa y gris parado. Si se
+   pierde la conexión con el ordenador dice **Conectando…** o **Sin
+   conexión**, en vez de seguir mostrando lo último que oyó.
+3. **Pantalla completa**: oculta esta barra para dejar todo el sitio a los
+   controles (en Android, además, pide la pantalla completa del navegador).
+   Queda una píldora con la pestaña actual: tócala para cambiar de pestaña o
+   para volver a mostrar la barra.
+4. **Editar layout**: entra en el editor para mover, añadir o quitar
+   bloques. En el móvil es solo el lápiz.
+5. **Tamaño**: **A−** y **A+** agrandan o encogen todo el Remote (cuatro
+   niveles), sin cambiar dónde está cada cosa. Útil si lo miras desde lejos.
+   En el móvil están en la barra del editor.
+6. **Lecturas**: tiempo, compás y pulso, BPM, compás musical y la canción
    que suena.
-6. **Transporte**: Reproducir, Pausa, Detener, **Fade out** (apaga la canción
+7. **Transporte**: Reproducir, Pausa, Detener, **Fade out** (apaga la canción
    con un fundido y para; tócalo otra vez para parar en seco; ver
    [Fade out y parar](/es/docs/interface/main-screen/#fade-out-y-parar)), y los
-   interruptores del **Click** y la **Guía** de voz.
-7. **Línea de tiempo** de la canción, con sus marcas y el cursor. Arrastra
+   interruptores del **Click** y la **Guía** de voz. Reproducir se pone verde
+   mientras suena y Pausa ámbar en pausa.
+8. **Línea de tiempo** de la canción, con sus marcas y el cursor. Arrastra
    para moverte. El botón de la esquina activa **Saltar al tocar**: con él
    encendido, un toque en la línea lleva el cursor ahí.
-8. **Vamp / Loop**: cómo se repite (la sección actual o unos compases).
-   **VAMP** lo activa; **CONFIG** abre sus ajustes.
-9. **Config de salto**: cuándo ocurre un salto a una marca: **Inmediato**, al
-   cabo de unos **Compases**, o en la **Siguiente** marca.
-10. **Transición de canción**: cuándo se pasa a otra canción (al momento, al
-    cabo de unos compases, en la siguiente marca o al final de la canción) y
-    cómo (con **corte limpio** o con **fade out**).
-11. **Cancelar salto**: anula el salto que está esperando.
-12. **Canciones** del repertorio, con su tonalidad si la tienen. Toca una para
-    seleccionarla. A la derecha, **Transponer** cambia el tono de la canción
-    seleccionada en semitonos.
-13. **Saltar a canción**: salta a la canción seleccionada, con la transición
-    que tengas configurada.
-14. **Marcas** de la canción. Toca una para saltar a ella según la Config de
-    salto; la que va a sonar lleva la etiqueta **SIGUIENTE**. Los **avisos**
-    aparecen con borde discontinuo, para que la banda los vea venir. La `×`
-    oculta una marca en este dispositivo (la quita del Remote, no de la
-    sesión); **Mostrar ocultas** las vuelve a enseñar.
+9. **Teclas de directo**: **VAMP** lo enciende y lo apaga. **Modo vamp**
+   (repetir la sección actual o unos compases), **Salto** (cuándo ocurre un
+   salto a una marca: **Inmediato**, al cabo de unos **Compases** o en la
+   **Siguiente** marca) y **Canción** (cuándo y cómo se pasa a otra canción:
+   al momento, tras unos compases, en la siguiente marca o al final, con
+   **corte limpio** o con **fade out**) muestran su valor y abren sus opciones
+   al tocarlas. Mientras hay un salto esperando, la tecla de Salto pasa a ser
+   **Cancelar salto** y dice a dónde iba.
+10. **Canciones** del repertorio, con su tonalidad si la tienen. Toca una para
+    seleccionarla.
+11. **Transponer** cambia el tono de la canción seleccionada en semitonos.
+12. **Saltar a canción**: elige la canción en su lista y salta a ella con la
+    transición que tengas configurada.
+13. **Ocultar marcas…**: entra en un modo en el que también se ven las marcas
+    ocultas; un toque oculta o muestra una marca en este dispositivo (sin
+    saltar nunca, y sin quitarla de la sesión). **Listo** sale, y el botón
+    cuenta cuántas hay ocultas.
+14. **Marcas** de la canción. Toca una para saltar a ella según el Salto. La
+    sección que está sonando se enciende en su color con la etiqueta
+    **AHORA** y una barra que se llena hasta la siguiente; la que va a sonar
+    lleva **SIGUIENTE**. Los **avisos** aparecen con borde discontinuo, para
+    que la banda los vea venir.
 
 </Legend>
 
-Los tres **CONFIG** abren un panel flotante encima del diseño; se cierra
-tocando fuera, con su `×` o con `Escape`.
+Las opciones de cada tecla se abren en un panel flotante encima del diseño;
+se cierra tocando fuera, con su `×` o con `Escape`.
 
 Saltos, Vamp y transiciones funcionan igual que en el ordenador: los detalles
 están en [Control en vivo](/es/docs/live-control-flow/).
@@ -105,17 +117,21 @@ están en [Control en vivo](/es/docs/live-control-flow/).
    actual. Apagado, salen todas.
 2. **Master de la canción**: el volumen de la canción seleccionada (el mismo
    que en el ordenador). No afecta al click ni a la guía.
-3. **Pista**: su tipo (Audio, Carpeta, MIDI) y su nombre, con su color.
-4. **Panorama**: izquierda, centro o derecha. Toca **Centro** para volver al
-   centro.
+3. **Pista**: su nombre, con su color (las carpetas se distinguen por el
+   suyo).
+4. **Panorama**: izquierda, centro o derecha. El valor encima del fader es
+   también el botón de centrar; un doble toque en el fader hace lo mismo.
 5. **Volumen** en dB, con su medidor.
 6. **M** (mute), **S** (solo) y **T** (si la pista sigue la
    [transposición](/es/docs/pitch-and-warp/)).
-7. Una **carpeta**: su fader mueve todas las pistas que tiene dentro.
 
 </Legend>
 
-Las tiras se desplazan en horizontal con el dedo cuando no caben.
+Las **carpetas** tienen su propia tira: su fader mueve todas las pistas que
+tienen dentro.
+
+Las tiras se desplazan en horizontal con el dedo cuando no caben: en un móvil
+caben unas cuatro y en una tablet siete u ocho.
 
 ## La pestaña Herramientas
 
@@ -133,6 +149,9 @@ Las tiras se desplazan en horizontal con el dedo cuando no caben.
    reproducción. Ver [Pads de ambiente](/es/docs/ambient-pads/).
 
 </Legend>
+
+Cada panel se **pliega** tocando su título: plegado, deja solo el interruptor
+de encendido y libera el sitio. Se recuerda en cada dispositivo.
 
 Los packs de pads se descargan y se gestionan en el ordenador; el Remote
 muestra los que ya tienes instalados.

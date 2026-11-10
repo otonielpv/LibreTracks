@@ -34,11 +34,11 @@ features that are built but hidden (no UI at all while their flag is
 `false`). Check it every release: a feature planned for this version is
 turned on here, together with the guard test next to it
 (`featureFlags.test.ts`), in the release commit. Commits of a hidden feature
-do NOT go in the release notes. As of 1.16.0 every flag is on:
+do NOT go in the release notes. As of 1.17.0 every flag is on:
 `lyrics` and `songAnalysis` shipped in 1.15.0, `networkSessions`
 (LibreTracks apps joining a host over the LAN) and `songTemplates` (songs
 from a template, stems organised on drop, «one folder per song» layout) in
-1.16.0.
+1.16.0, `redundancy` (a backup LibreTracks following a main one) in 1.17.0.
 
 ## 2. Commit pending work (optional)
 

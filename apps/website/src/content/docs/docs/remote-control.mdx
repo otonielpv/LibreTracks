@@ -54,43 +54,53 @@ It is the first thing you see. This is how LibreTracks lays it out on a tablet:
 
 1. **Tabs**: Controls, Mixer and Tools. You can change them, add more and
    rename them (see [Designing your tabs](#designing-your-tabs)).
-2. **Status**: Stopped, Playing or Paused.
-3. **Edit layout**: opens the editor to move, add or remove blocks.
-4. **Size**: `−` and `+` make the whole Remote bigger or smaller (four
+2. **Status**: a green dot while playing, amber when paused and grey when
+   stopped. If the connection to the computer drops it says **Connecting…**
+   or **No connection** instead of showing the last thing it heard.
+3. **Full screen**: hides this bar to give the controls all the room (on
+   Android it also asks the browser for full screen). A pill with the current
+   tab stays: tap it to switch tabs or to bring the bar back.
+4. **Edit layout**: opens the editor to move, add or remove blocks. On a
+   phone it is just the pencil.
+5. **Size**: **A−** and **A+** make the whole Remote bigger or smaller (four
    levels), without changing where anything is. Useful when you look at it
-   from a distance.
-5. **Readouts**: time, bar and beat, BPM, time signature and the song that is
+   from a distance. On a phone they live in the editor's bar.
+6. **Readouts**: time, bar and beat, BPM, time signature and the song that is
    playing.
-6. **Transport**: Play, Pause, Stop, **Fade out** (fades the song out and
+7. **Transport**: Play, Pause, Stop, **Fade out** (fades the song out and
    stops; tap it again to stop at once; see
    [Fade out and stop](/docs/interface/main-screen/#fade-out-and-stop)), and
-   the **Click** and voice **Guide** switches.
-7. **Timeline** of the song, with its markers and the cursor. Drag to move
+   the **Click** and voice **Guide** switches. Play turns green while playing
+   and Pause amber while paused.
+8. **Timeline** of the song, with its markers and the cursor. Drag to move
    around. The button in the corner turns **Tap to seek** on: with it on, a tap
    on the timeline moves the cursor there.
-8. **Vamp / Loop**: how it repeats (the current section or a number of bars).
-   **VAMP** turns it on; **CONFIG** opens its settings.
-9. **Jump config**: when a jump to a marker happens: **Immediate**, after a few
-   **Bars**, or at the **Next** marker.
-10. **Song transition**: when you move to another song (right away, after a
-    few bars, at the next marker or at the end of the song) and how (with a
-    **Clean cut** or a **Fade out**).
-11. **Cancel jump**: cancels the jump that is waiting.
-12. The setlist's **songs**, with their key if they have one. Tap one to
-    select it. On the right, **Transpose** changes the key of the selected
-    song in semitones.
-13. **Jump to Song**: jumps to the selected song, with the transition you
-    have set.
-14. The song's **markers**. Tap one to jump to it according to the Jump
-    config; the one that will play next is tagged **NEXT**. **Cues** show with a
-    dashed border, so the band sees them coming. The `×` hides a marker on
-    this device (it removes it from the Remote, not from the session); **Show
-    hidden** brings them back.
+9. **Live keys**: **VAMP** turns it on and off. **Vamp mode** (repeat the
+   current section or a number of bars), **Jump** (when a jump to a marker
+   happens: **Immediate**, after a few **Bars** or at the **Next** marker) and
+   **Song** (when and how you move to another song: right away, after a few
+   bars, at the next marker or at the end, with a **Clean cut** or a **Fade
+   out**) show their value and open their options when tapped. While a jump is
+   waiting, the Jump key becomes **Cancel jump** and says where it was going.
+10. The setlist's **songs**, with their key if they have one. Tap one to
+    select it.
+11. **Transpose** changes the key of the selected song in semitones.
+12. **Jump to Song**: pick the song in its list and jump to it with the
+    transition you have set.
+13. **Hide markers…**: enters a mode where hidden markers show too; a tap
+    hides or shows a marker on this device (never jumping, and without
+    removing it from the session). **Done** leaves, and the button counts how
+    many are hidden.
+14. The song's **markers**. Tap one to jump to it according to Jump. The
+    section that is playing lights up in its colour with a **NOW** tag and a
+    bar that fills up until the next one; the one that will play next is
+    tagged **NEXT**. **Cues** show with a dashed border, so the band sees them
+    coming.
 
 </Legend>
 
-The three **CONFIG** buttons open a floating panel above the layout; it closes
-by tapping outside, with its `×` or with `Escape`.
+Each key's options open in a floating panel above the layout; it closes by
+tapping outside, with its `×` or with `Escape`.
 
 Jumps, Vamp and transitions work as on the computer: the details are in
 [Live control](/docs/live-control-flow/).
@@ -105,16 +115,19 @@ Jumps, Vamp and transitions work as on the computer: the details are in
    Off, they all show.
 2. **Song master**: the volume of the selected song (the same as on the
    computer). It does not affect the click or the guide.
-3. **Track**: its type (Audio, Folder, MIDI) and name, in its colour.
-4. **Pan**: left, center or right. Tap **Center** to return to the center.
+3. **Track**: its name, in its colour (folders stand out by theirs).
+4. **Pan**: left, center or right. The value above the fader is also the
+   centre button; a double tap on the fader does the same.
 5. **Volume** in dB, with its meter.
 6. **M** (mute), **S** (solo) and **T** (whether the track follows the
    [transposition](/docs/pitch-and-warp/)).
-7. A **folder**: its fader moves every track inside it.
 
 </Legend>
 
-The strips scroll sideways with your finger when they do not fit.
+**Folders** have their own strip: its fader moves every track inside them.
+
+The strips scroll sideways with your finger when they do not fit: about four
+fit on a phone and seven or eight on a tablet.
 
 ## The Tools tab
 
@@ -132,6 +145,9 @@ The strips scroll sideways with your finger when they do not fit.
    [Ambient pads](/docs/ambient-pads/).
 
 </Legend>
+
+Each panel **folds** away when you tap its title: folded, it keeps only its
+on/off switch and frees the space. Each device remembers it.
 
 Pad packs are downloaded and managed on the computer; the Remote shows the
 ones you already have installed.

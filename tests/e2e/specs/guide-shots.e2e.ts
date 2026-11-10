@@ -2346,6 +2346,78 @@ describe("user guide screenshots", function () {
     await AppPage.resetShell();
   });
 
+  it("novedades 1.17: redundancy settings, analyze all songs", async () => {
+    await ensureSession();
+    await AppPage.resetShell();
+
+    // Redundancy: the settings tab, one capture per screenful (it is long:
+    // role, main, pilot tone and backup sections). Not added to the
+    // «settings tabs» step so settings-overview keeps its numbering.
+    await AppPage.openSettings();
+    const tab = await AppPage.settingsTab("redundancy");
+    if (await tab.isExisting()) {
+      await tab.click();
+      await browser.pause(1200);
+      // The PINs, addresses and trusted machine names are the REAL ones of
+      // whoever runs this.
+      await runInPage(() => {
+        document
+          .querySelectorAll<HTMLElement>(".lt-redundancy-settings input:not([type]), .lt-redundancy-settings input[type='text'], .lt-redundancy-settings input[inputmode], .lt-redundancy-trusted li")
+          .forEach((el) => {
+            el.style.filter = "blur(5px)";
+          });
+      });
+      const pages = await runInPage(() => {
+        const scroller = document.querySelector(".lt-settings-tab-panels");
+        if (!scroller) return 1;
+        scroller.scrollTop = 0;
+        const overflow = scroller.scrollHeight - scroller.clientHeight;
+        if (overflow <= 8) return 1;
+        return Math.min(4, 1 + Math.ceil(overflow / (scroller.clientHeight - 80)));
+      });
+      for (let page = 0; page < pages; page++) {
+        await runInPage((p: number) => {
+          const scroller = document.querySelector(".lt-settings-tab-panels");
+          if (scroller) scroller.scrollTop = p * (scroller.clientHeight - 80);
+        }, page);
+        await browser.pause(400);
+        await shot(`redundancy-settings-${page + 1}`, { selector: ".lt-settings-tab-panels", margin: 4 });
+      }
+    } else {
+      console.log("[guideshots] SKIPPED redundancy-settings: no tab");
+    }
+    await browser.keys(["Escape"]);
+    await browser.pause(600);
+    await AppPage.resetShell();
+
+    // Analyze all songs: the setup, from the File menu (never run here: it
+    // would rewrite the session copy's markers and take minutes).
+    const fileMenu = `${tour("topbar-file-menu")} .lt-top-menu-trigger`;
+    await (await $(fileMenu)).click();
+    await browser.pause(600);
+    await (
+      await $(await tagByText(".lt-top-menu-dropdown button", L("Analizar todas las canciones"), "analyze-all-item"))
+    ).click();
+    await browser.pause(1200);
+    const batch = ".lt-batch-analysis-modal";
+    if (await rectOf(batch)) {
+      await annotatedShot(
+        "song-analysis-batch",
+        [
+          { selector: `${batch} .lt-batch-analysis-all`, n: 1, pad: 3 },
+          { selector: `${batch} .lt-batch-analysis-list`, n: 2, pad: 3 },
+          { selector: `${batch} .lt-export-modal-actions .is-primary`, n: 3, pad: 3 },
+        ],
+        { crop: { selector: batch, margin: 12 } },
+      );
+      await browser.keys(["Escape"]);
+      await browser.pause(600);
+    } else {
+      console.log("[guideshots] SKIPPED song-analysis-batch: no modal");
+    }
+    await AppPage.resetShell();
+  });
+
   it("mobile 1.15: selection bar (phone layout)", async () => {
     const phoneDir = path.join(repoRoot, "apps", "website", "public", "guide", UI_LANG === "en" ? "mobile-en" : "mobile");
     mkdirSync(phoneDir, { recursive: true });
