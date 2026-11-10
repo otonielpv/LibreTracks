@@ -49,6 +49,14 @@
 .lt-redundancy-banner.is-lost { background: #c53030; font-size: 18px; }
 .lt-redundancy-banner.is-info { background: #2b6cb0; }
 .lt-redundancy-banner.is-warning { background: #975a16; }
+/* Only the «main lost» alarm takes the top edge. The others are notices
+   that stay until answered: at the top they covered the File menu and the
+   transport bar for as long as they were up. */
+.lt-redundancy-banner.is-info,
+.lt-redundancy-banner.is-warning {
+  top: auto;
+  bottom: 0;
+}
 .lt-redundancy-banner button {
   margin-left: auto;
   padding: 6px 14px;

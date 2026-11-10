@@ -432,7 +432,9 @@ pub fn startup_plan(last_role_was_main: bool, unclean_exit: bool, pilot_setting:
         // A main that crashed must not start emitting the tone as if nothing
         // happened: some switchers would go back to it.
         pilot_tone_armed: pilot_setting && !unclean_exit,
-        warn_unclean_exit: unclean_exit,
+        // The warning asks to re-arm the tone: without one there is nothing
+        // to re-arm, and the banner would only sit on top of the window.
+        warn_unclean_exit: unclean_exit && pilot_setting,
     }
 }
 

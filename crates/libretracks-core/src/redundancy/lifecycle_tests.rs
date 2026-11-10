@@ -304,3 +304,15 @@ fn startup_after_an_unclean_exit_keeps_the_pilot_tone_off() {
     assert!(!startup_plan(true, false, false).pilot_tone_armed);
     assert!(!startup_plan(false, true, true).resume_main);
 }
+
+#[test]
+fn an_unclean_exit_without_pilot_tone_has_nothing_to_rearm() {
+    assert_eq!(
+        startup_plan(true, true, false),
+        StartupPlan {
+            resume_main: true,
+            pilot_tone_armed: false,
+            warn_unclean_exit: false
+        }
+    );
+}
