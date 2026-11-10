@@ -1,0 +1,67 @@
+{
+  "title": "Novedades de LibreTracks 1.17.0",
+  "voice": "es-ES-AlvaroNeural",
+  "rate": "+5%",
+  "display": {
+    "Libre Tracks": "LibreTracks",
+    "uno punto diecisiete punto cero": "1.17.0",
+    "libretracks punto com": "libretracks.com"
+  },
+  "scenes": [
+    {
+      "id": "01-intro",
+      "text": "Libre Tracks uno punto diecisiete punto cero llega con redundancia entre dos ordenadores, arreglos que se editan bloque a bloque, un Remote renovado y el análisis de todas las canciones de una vez."
+    },
+    {
+      "id": "02-redundancia",
+      "text": "La redundancia lleva dos Libre Tracks con la misma sesión. En Configuración, pestaña Redundancia, elige en cada equipo si es el principal o el respaldo. El principal tiene un PIN, que el respaldo pide la primera vez."
+    },
+    {
+      "id": "03-redundancia-estado",
+      "text": "El respaldo se conecta con la dirección y el PIN del principal, lo sigue y suena a la vez, en el mismo sitio. Una pastilla arriba dice si está listo, y si el principal falla, pasas al respaldo sin parar la canción. Para los conmutadores hay un tono piloto."
+    },
+    {
+      "id": "04-arreglo",
+      "text": "En los arreglos, abre el editor con clic derecho sobre la canción, Arreglo. Aquí añadimos un coro más al final y aplicamos.",
+      "subtitles": "top"
+    },
+    {
+      "id": "05-arreglo-bloque",
+      "text": "Ahora cada bloque se edita por separado. Quitamos la batería solo en el último coro: el cambio se queda en ese bloque, sin tocar el primer coro ni la canción original."
+    },
+    {
+      "id": "06-arreglo-editado",
+      "text": "En el editor, ese bloque aparece como editado. Y con Restablecer como el original, vuelve a ser una copia del coro.",
+      "subtitles": "top"
+    },
+    {
+      "id": "07-remote",
+      "text": "El Remote se renueva. En el móvil y la tablet sale por fin su propio diseño, con teclas compactas para el vamp y los saltos, y la sección que suena marcada en su color."
+    },
+    {
+      "id": "08-remote-mezcla",
+      "text": "El mezclador es más compacto, los paneles de herramientas se pliegan, y un botón pone el Remote a pantalla completa."
+    },
+    {
+      "id": "09-analizar",
+      "text": "Y para preparar una sesión entera, Archivo, Analizar todas las canciones. Elige las canciones y pulsa Analizar: cada una usa las pistas que su análisis elegiría por el nombre."
+    },
+    {
+      "id": "10-analizar-aplicar",
+      "text": "Al terminar, revisa la propuesta de cualquier canción, o aplícalas todas de una vez. Cada canción se deshace por separado."
+    },
+    {
+      "id": "11-movil",
+      "text": "En el móvil, Analizar todas las canciones está en la hoja Archivo del carril lateral.",
+      "subtitles": "mobile"
+    },
+    {
+      "id": "12-correcciones",
+      "text": "Y además, el audio se prepara mucho más rápido, la app avisa si no queda espacio en el disco, y llega un buen montón de correcciones."
+    },
+    {
+      "id": "13-final",
+      "text": "Descarga Libre Tracks gratis en libretracks punto com."
+    }
+  ]
+}
