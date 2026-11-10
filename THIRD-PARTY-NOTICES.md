@@ -84,10 +84,10 @@ These ship inside the desktop application (`.app` / `.exe` / `.deb` / `.rpm` /
   built with.
 - **Binary:** `libmpv-2.dll` from the prebuilt
   [mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake)
-  release `20260926` (`mpv-dev-x86_64-20260926-git-35af06172b.7z`, mpv commit
-  `35af06172b`), pinned by SHA-256 in
+  release `20261110` (`mpv-dev-x86_64-20261110-git-a61f6c3abd.7z`, mpv commit
+  `a61f6c3abd`), pinned by SHA-256 in
   [`scripts/libmpv-fetch.mjs`](./scripts/libmpv-fetch.mjs).
-- **What it contains:** mpv plus a static FFmpeg (`N-126870-g243dfa399`) and the
+- **What it contains:** mpv plus a static FFmpeg (`N-128718-gb2b543c07`) and the
   libraries listed in that release's build recipe (libplacebo, libass, FreeType,
   HarfBuzz, FriBidi, Rubber Band, libbluray, libdvdnav, LuaJIT, MuJS, uchardet,
   lcms2, zimg, libarchive, libcurl, shaderc, SPIRV-Cross, Vulkan headers, among
@@ -201,10 +201,10 @@ run time, a user may replace it with their own build of the same API.
 ### mpv (GPL)
 
 The Windows build distributes `libmpv-2.dll` in object-code form. Its
-Corresponding Source is the mpv source at commit `35af06172b` together with the
+Corresponding Source is the mpv source at commit `a61f6c3abd` together with the
 sources of every library it statically contains, at the exact revisions pinned
-by the build recipe of the mpv-winbuild-cmake release `20260926`
-(https://github.com/shinchiro/mpv-winbuild-cmake, tag `20260926`). For at least
+by the build recipe of the mpv-winbuild-cmake release `20261110`
+(https://github.com/shinchiro/mpv-winbuild-cmake, tag `20261110`). For at least
 three years from the last release of LibreTracks that ships this binary, the
 LibreTracks maintainers will provide that complete Corresponding Source to
 anyone who requests it through the project's public repository, at no charge

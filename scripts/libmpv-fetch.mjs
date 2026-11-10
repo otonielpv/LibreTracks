@@ -35,10 +35,10 @@ import { fileURLToPath } from "node:url";
 // Windows, y actualizar la entrada de mpv en THIRD-PARTY-NOTICES.md con el
 // commit de mpv y la versión de FFmpeg que imprime. Ver docs/RELEASE_PROCESS.md.
 export const LIBMPV_WINDOWS = {
-  tag: "20260926",
-  asset: "mpv-dev-x86_64-20260926-git-35af06172b.7z",
-  sha256: "b32107527c9fe60e2a032933379625428c32cb594c47a91acf1e4bb46b2bfc57",
-  mpvCommit: "35af06172b",
+  tag: "20261110",
+  asset: "mpv-dev-x86_64-20261110-git-a61f6c3abd.7z",
+  sha256: "f07b97a72f2394a7798d6e1d36d952bbfd63577e25cef051f716751ea5dc9688",
+  mpvCommit: "a61f6c3abd",
 };
 
 // Espejo opcional: si el release de upstream desaparece, se sube el mismo .7z
