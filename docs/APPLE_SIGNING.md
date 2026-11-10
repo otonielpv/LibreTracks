@@ -353,10 +353,11 @@ seis son obligatorios.
   pegaría detrás de `1.11.1` y produciría un cuarto componente que Apple
   rechaza).
 
-También se dispara en cada etiqueta `v*`, pero **solo construye**: para que una
-etiqueta suba a TestFlight hay que poner la variable de repositorio
-`IOS_UPLOAD_ON_TAG` a `true` (*Settings → Secrets and variables → Actions →
-Variables*).
+También se dispara en cada etiqueta `v*`, y desde 1.17.0 **construye y sube** a
+App Store Connect / TestFlight (nada llega a los usuarios hasta enviarlo a
+revisión a mano). Para que una etiqueta solo construya, pon la variable de
+repositorio `IOS_UPLOAD_ON_TAG` a `false` (*Settings → Secrets and variables →
+Actions → Variables*).
 
 Antes de subir nada, el workflow pasa el IPA por
 [scripts/verify-ios-ipa.sh](../scripts/verify-ios-ipa.sh) —el mismo que usa la

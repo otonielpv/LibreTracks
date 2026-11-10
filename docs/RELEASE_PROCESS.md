@@ -459,8 +459,8 @@ fix it, or drop it from the release, before you tag.
 
 `cargo check --all-targets` on desktop does **not** compile anything behind
 `#[cfg(target_os = "android")]` (`platform/android_audio_devices.rs`,
-`platform/mobile_files.rs`), and `android-release.yml` only runs by hand. So an
-Android-only compile error is invisible until you are mid-release.
+`platform/mobile_files.rs`), and `android-release.yml` only runs once the tag is
+pushed. So an Android-only compile error is invisible until you are mid-release.
 
 v1.10.0 hit exactly this: a field added to `DeviceInfo` was wired into the JUCE
 path but not into the Android enumeration that builds the struct by hand →
@@ -672,19 +672,26 @@ git tag -f v<NEW>
 git push origin v<NEW> --force
 ```
 
-### The iOS and Android builds are started by hand
+### The iOS and Android builds start with the tag
 
-The tag only starts `release.yml`. `ios-smoke.yml` (the unsigned AltStore
-IPA), `ios-release.yml` (the signed App Store build) and `android-release.yml`
-(the signed Play build) are `workflow_dispatch` only: run them from the tag,
-`gh workflow run <file> --ref v<NEW>`. None of them blocks the desktop release:
+Since 1.17.0 the tag starts `ios-release.yml` (the signed App Store build) and
+`android-release.yml` (the signed Play build) alongside `release.yml`; watch
+all three. `ios-smoke.yml` (the unsigned AltStore IPA) is still
+`workflow_dispatch` only. Both store workflows can also be re-run by hand from
+the tag (`gh workflow run <file> --ref v<NEW>`), e.g. after a store rejection.
+None of them blocks the desktop release:
 
 - `ios-release.yml` **skips itself with a warning** when the Apple secrets are
-  missing. With them it builds, verifies and validates the IPA, and its
-  `upload` input (on by default) sends it to TestFlight. Setup lives in
-  [APPLE_SIGNING.md](./APPLE_SIGNING.md).
+  missing. With them it builds, verifies and validates the IPA and sends it to
+  App Store Connect / TestFlight: on a tag unless the repository variable
+  `IOS_UPLOAD_ON_TAG` is `false`, by hand through its `upload` input (on by
+  default). Setup lives in [APPLE_SIGNING.md](./APPLE_SIGNING.md).
 - `android-release.yml` checks the `versionCode` against Play first, then
-  builds the AAB and sends it to the chosen `track` (see step 14).
+  builds the AAB and sends it to Play: on a tag to `production` (a **draft**
+  release in Play Console), by hand to the chosen `track` (see step 14).
+
+Nothing reaches users from either: the Play draft and the App Store build wait
+until they are submitted for review by hand.
 
 For a release that goes to the App Store, upload the build made **from the
 tag**, not one from a later commit on `main`: the version App Store Connect
@@ -1219,7 +1226,10 @@ release (review takes days), push `main` WITHOUT the tag and build the store
 artifacts by hand: *Android Release* (`android-release.yml`) builds the signed
 AAB and sends it to the chosen Play `track`, and *iOS Release*
 (`ios-release.yml`) with `upload` sends the IPA to TestFlight. Neither is part
-of `release.yml`, so the desktop release never waits for them.
+of `release.yml`, so the desktop release never waits for them. When the tag
+goes out later, both run again on their own: the Android one stops at the
+`versionCode` check (Play already has that build) and the iOS one uploads a
+second build of the same version. Cancel both runs if you do not want them.
 
 The Play upload goes through `scripts/google-play.mjs` (service account
 `github-play-upload@libretracks.iam.gserviceaccount.com`, secret

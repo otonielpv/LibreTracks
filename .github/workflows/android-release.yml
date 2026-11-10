@@ -25,6 +25,11 @@ env:
   LIBRETRACKS_DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
 
 on:
+  # A release tag (the same push that starts release.yml) builds and uploads
+  # to the production track as a draft, like a manual run with the default.
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       track:
@@ -66,7 +71,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          TRACK: ${{ inputs.track }}
+          TRACK: ${{ inputs.track || 'production' }}
         run: |
           set -euo pipefail
           for required in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD                           ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
@@ -313,10 +318,10 @@ jobs:
 
       # After the artifact upload, so a rejected bundle is still downloadable.
       - name: Upload to Google Play
-        if: inputs.track != 'none'
+        if: (inputs.track || 'production') != 'none'
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          PLAY_TRACK: ${{ inputs.track }}
+          PLAY_TRACK: ${{ inputs.track || 'production' }}
         run: node scripts/google-play.mjs upload LibreTracks-*-play-store.aab "$PLAY_TRACK"
 
       - name: Scrub keystore
@@ -324,6 +329,6 @@ jobs:
         run: rm -f apps/desktop/src-tauri/gen/android/release.jks apps/desktop/src-tauri/gen/android/keystore.properties
 
       - name: Report the skipped upload
-        if: inputs.track == 'none'
+        if: (inputs.track || 'production') == 'none'
         run: |
           echo "::notice::Signed AAB/APK built and kept as workflow artifacts but NOT uploaded to Google Play. Re-run with a track to upload."

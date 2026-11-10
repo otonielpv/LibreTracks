@@ -24,6 +24,11 @@ env:
   LIBRETRACKS_DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
 
 on:
+  # A release tag (the same push that starts release.yml) builds and uploads
+  # to App Store Connect; see the preflight for the IOS_UPLOAD_ON_TAG opt-out.
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       upload:
@@ -100,12 +105,13 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             upload="${UPLOAD_INPUT:-false}"
           else
-            # On a tag, uploading is opt-in through the repository variable
-            # IOS_UPLOAD_ON_TAG. Off by default: cutting a desktop release
-            # should not silently push a build to TestFlight reviewers.
-            upload="false"
-            if [ "${UPLOAD_ON_TAG:-}" = "true" ]; then
-              upload="true"
+            # On a release tag the build goes up to App Store Connect, like
+            # the Android build goes to Play: nothing reaches users until it is
+            # submitted for review by hand. Set the repository variable
+            # IOS_UPLOAD_ON_TAG to "false" to build without uploading.
+            upload="true"
+            if [ "${UPLOAD_ON_TAG:-}" = "false" ]; then
+              upload="false"
             fi
           fi
 
