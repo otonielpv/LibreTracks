@@ -82,7 +82,8 @@ try {
   }
   const all = (await response.json()) as Release[];
   // Hide drafts; keep prereleases (clearly labelled) so testers can grab them.
-  releases = all.filter((r) => !r.draft);
+  // Only app versions (v*): other releases mirror build dependencies.
+  releases = all.filter((r) => !r.draft && r.tag_name.startsWith("v"));
 } catch (caught) {
   error = caught instanceof Error ? caught.message : "Unknown error";
 }

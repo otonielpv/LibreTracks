@@ -233,6 +233,12 @@ spike -- info` prints both). Upstream deletes old releases: if the pinned asset
 is gone and the CI cache is cold, upload the same `.7z` to a release of ours and
 point `LT_LIBMPV_ARCHIVE` at it — the SHA-256 still has to match.
 
+Since 1.17.0 that mirror is the default: the script downloads from our own
+release `libmpv-<tag>` (a prerelease, never «latest»; the download page and
+`website-deploy.yml` ignore tags that are not `v*`). A bump therefore also
+creates that release with the new `.7z`:
+`gh release create libmpv-<tag> <file.7z> --prerelease --latest=false --title "libmpv <tag> (mirror)" --notes "..."`.
+
 Linux uses the distro's libmpv (`recommends` in the .deb/.rpm), so it needs
 nothing here.
 

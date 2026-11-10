@@ -41,11 +41,14 @@ export const LIBMPV_WINDOWS = {
   mpvCommit: "a61f6c3abd",
 };
 
-// Espejo opcional: si el release de upstream desaparece, se sube el mismo .7z
-// a un release propio y se apunta aquí (el SHA-256 sigue mandando).
+// Upstream solo conserva sus builds recientes (la 20260926 desapareció y rompió
+// la release de 1.17.0), así que el .7z fijado se sirve desde un release propio
+// `libmpv-<tag>` (prerelease, nunca «latest»). Al subir de versión: crear ese
+// release con el .7z nuevo. El SHA-256 sigue mandando; LT_LIBMPV_ARCHIVE
+// fuerza otra URL.
 const archiveUrl =
   process.env.LT_LIBMPV_ARCHIVE ||
-  `https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/${LIBMPV_WINDOWS.tag}/${LIBMPV_WINDOWS.asset}`;
+  `https://github.com/otonielpv/LibreTracks/releases/download/libmpv-${LIBMPV_WINDOWS.tag}/${LIBMPV_WINDOWS.asset}`;
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);

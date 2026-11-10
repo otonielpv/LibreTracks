@@ -25,6 +25,10 @@ permissions:
 jobs:
   deploy:
     name: Trigger Cloudflare Pages build
+    # Only app releases (v*): the repository also holds releases that mirror
+    # build dependencies (libmpv-*), and publishing one of those must not put
+    # the website of an unreleased version online.
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     steps:
       - name: Send Deploy Hook to Cloudflare
