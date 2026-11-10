@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import { confirmDialog, promptDialog } from "../../../shared/dialog/dialogService";
@@ -61,6 +61,25 @@ export function useArrangementActions(handlers: StructureHandlers) {
       useStructureStore.setState({ draft: nextDraft, savedDraft: nextSaved });
     }
   }, [structure]);
+
+  // An original saved before its section markers were replaced (re-analysing
+  // the song rebuilds them with new ids) would build blocks of sections the
+  // song no longer has. Save it again first; once per opening.
+  const refreshedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!regionId) {
+      refreshedFor.current = null;
+      return;
+    }
+    if (!structure || structure.appliedArrangementId || refreshedFor.current === regionId) return;
+    const markers = song?.sectionMarkers ?? [];
+    const stale = structure.sections.some(
+      (section) => !section.implicit && !markers.some((marker) => marker.id === section.markerId),
+    );
+    if (!stale) return;
+    refreshedFor.current = regionId;
+    void handlers.refreshOriginal(regionId);
+  }, [handlers, regionId, song, structure]);
 
   // First open, or the original was just captured: start a working copy.
   useEffect(() => {

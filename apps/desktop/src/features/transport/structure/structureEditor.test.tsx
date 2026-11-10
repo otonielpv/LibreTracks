@@ -81,12 +81,15 @@ function region(structure?: SongStructureSummary): SongRegionSummary {
   };
 }
 
-function songWith(structure?: SongStructureSummary): SongView {
+function songWith(structure?: SongStructureSummary, markerIds?: string[]): SongView {
+  // The song's section markers are the ones its original was saved from,
+  // unless a test says otherwise (a stale original).
+  const ids = markerIds ?? (structure?.sections ?? []).filter((s) => !s.implicit).map((s) => s.markerId);
   return {
     regions: [region(structure)],
     clips: [],
     tracks: [],
-    sectionMarkers: [],
+    sectionMarkers: ids.map((id, index) => ({ id, name: id, startSeconds: index * 8, kind: "section" })),
   } as unknown as SongView;
 }
 
@@ -505,6 +508,31 @@ describe("structure editor — the original as one more choice", () => {
       fireEvent.click(screen.getByRole("button", { name: en.transport.structure.recapture }));
     });
     await waitFor(() => expect(capture).toHaveBeenCalledWith("r1"));
+  });
+
+  it("an original whose section markers were replaced is saved again on opening", async () => {
+    const desktopApi = await import("../desktopApi");
+    const capture = vi.spyOn(desktopApi, "captureSongStructure").mockResolvedValue({
+      snapshot: null as never,
+      warnings: [],
+      droppedBlocks: [],
+    });
+    const stale = { ...STRUCTURE, appliedArrangementId: null };
+    useSongStore.setState({ song: songWith(stale, ["intro_nuevo", "verso_nuevo", "coro_nuevo"]) });
+    openStructureEditor("r1");
+    render(<SongStructurePanel handlers={handlersSpy()} variant="desktop" />);
+    await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+    expect(capture).toHaveBeenCalledWith("r1");
+  });
+
+  it("an original that matches the song is not saved again on opening", async () => {
+    const desktopApi = await import("../desktopApi");
+    const capture = vi.spyOn(desktopApi, "captureSongStructure");
+    await renderPanel({ ...STRUCTURE, appliedArrangementId: null });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(capture).not.toHaveBeenCalled();
   });
 
   it("with an arrangement applied it offers to go back to the original first", async () => {

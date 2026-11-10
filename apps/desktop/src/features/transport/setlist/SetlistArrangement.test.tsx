@@ -79,6 +79,7 @@ function handlers(): StructureHandlers {
     saveArrangement: vi.fn(async () => ({ ok: true, error: null })),
     deleteArrangement: vi.fn(async () => undefined),
     captureOriginal: vi.fn(async () => undefined),
+    refreshOriginal: vi.fn(async () => undefined),
     editOriginal: vi.fn(async () => undefined),
     snapSectionToBar: vi.fn(async () => undefined),
   } as unknown as StructureHandlers;

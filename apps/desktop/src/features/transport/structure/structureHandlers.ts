@@ -73,6 +73,17 @@ export function createStructureHandlers(deps: StructureHandlerDeps) {
       });
     },
 
+    /** The editor opened on an original whose section markers no longer
+     * exist (they were replaced after it was saved, e.g. by re-analysing the
+     * song): save it again before editing, so the blocks point at the
+     * sections the song has now. The working copy restarts from it. */
+    async refreshOriginal(regionId: string) {
+      await deps.runAction(async () => {
+        finish(regionId, await captureSongStructure(regionId));
+        useStructureStore.setState({ draft: null, savedDraft: null, selectedBlockId: null });
+      });
+    },
+
     async captureOriginal(regionId: string) {
       await deps.runAction(async () => {
         useStructureStore.setState({ report: null });

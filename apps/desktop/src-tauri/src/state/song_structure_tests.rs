@@ -1114,3 +1114,34 @@ fn deleting_a_track_also_removes_its_clips_from_edited_blocks() {
     let content = block_content(&song, "largo", "largo-2").expect("bloque");
     assert!(content.clips.is_empty(), "{:?}", content.clips);
 }
+
+/// El original se guardó y después se cambiaron las marcas (reanalizar la
+/// canción las rehace con ids nuevos). Un arreglo hecho con las secciones del
+/// original viejo no puede quedarse en «Inicio»: antes la recaptura quitaba
+/// en silencio sus bloques y la canción quedaba en un par de compases.
+#[test]
+fn an_arrangement_from_a_stale_original_is_refused_and_the_song_is_untouched() {
+    let (session, _) = captured(base_song(), base_cues());
+    let mut song = song_of(&session);
+    for marker in &mut song.section_markers {
+        // La primera conserva su id (en la app es el inicio de la canción):
+        // es la que sobrevivía y dejaba la canción en ese único bloque.
+        if ["b", "c"].contains(&marker.id.as_str()) {
+            marker.id = format!("{}_nuevo", marker.id);
+        }
+    }
+    assert!(song.regions[1].structure.is_some(), "el original viejo sigue guardado");
+    let before = serde_json::to_string(&song).expect("json");
+    let mut session = session_with(song, base_cues());
+    let audio = AudioController::default();
+
+    let result = session.save_song_arrangement(
+        "r2",
+        arrangement("viejo", &["a", "b", "b", "c"]),
+        true,
+        &audio,
+    );
+
+    assert!(result.is_err(), "no se aplica un arreglo con bloques perdidos");
+    assert_eq!(serde_json::to_string(&song_of(&session)).expect("json"), before);
+}

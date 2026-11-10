@@ -851,10 +851,22 @@ impl DesktopSession {
             .structure
             .as_mut()
             .ok_or_else(|| DesktopError::SongStructure("la canción no tiene original".into()))?;
-        // Bloques de secciones que la recaptura ya no encuentra: fuera.
-        arrangement
+        // Un bloque cuya sección la recaptura ya no encuentra no se quita en
+        // silencio: el editor trabajaba con un original viejo (las marcas se
+        // cambiaron después, p. ej. al reanalizar) y aplicar lo que queda
+        // dejaba la canción en un par de compases. Nada se toca; el editor
+        // refresca el original al abrirse y el usuario vuelve a intentarlo.
+        let missing = arrangement
             .blocks
-            .retain(|block| structure.section(&block.section_marker_id).is_some());
+            .iter()
+            .filter(|block| structure.section(&block.section_marker_id).is_none())
+            .count();
+        if missing > 0 {
+            return Err(DesktopError::SongStructure(format!(
+                "{missing} bloque(s) del arreglo son de secciones que la canción ya no tiene \
+                 (sus marcas cambiaron); cierra y vuelve a abrir el arreglo"
+            )));
+        }
         if arrangement.blocks.is_empty() {
             return Err(StructureError::EmptyArrangement.into());
         }
