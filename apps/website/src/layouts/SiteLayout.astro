@@ -126,7 +126,7 @@ const pageSchemas = structuredData
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#131313" />
+    <meta name="theme-color" content="#0a0b0b" />
     {/* Ownership proof for Google Search Console. Must stay on every page and
         outside the noIndex guard: Google reads it wherever it lands, and
         removing it un-verifies the property. */}
@@ -175,19 +175,18 @@ const pageSchemas = structuredData
       <a class="skip-link" href="#main-content">
         {isSpanish ? "Saltar al contenido" : "Skip to content"}
       </a>
-      <header class="site-shell site-nav">
+      <header class="site-header"><div class="site-shell site-nav">
         <a class="brand" href={`${prefix}/`}>
           <img src="/icon.svg" alt="" width="32" height="32" />
           <span translate="no">LibreTracks</span>
         </a>
         <nav class="nav-links" aria-label={isSpanish ? "Navegación principal" : "Primary navigation"}>
-          <a href={`${prefix}/download/`}>{isSpanish ? "Descargas" : "Downloads"}</a>
           <a href={`${prefix}/docs/`}>{isSpanish ? "Documentación" : "Docs"}</a>
-          <a href={`${prefix}/${isSpanish ? "alternativas" : "alternatives"}/`}>
-            {isSpanish ? "Alternativas" : "Alternatives"}
-          </a>
           <a href={`${prefix}/${isSpanish ? "guias" : "guides"}/`}>
             {isSpanish ? "Guías" : "Guides"}
+          </a>
+          <a href={`${prefix}/${isSpanish ? "alternativas" : "alternatives"}/`}>
+            {isSpanish ? "Alternativas" : "Alternatives"}
           </a>
           <a href={switchHref} hreflang={isSpanish ? "en" : "es"}>{isSpanish ? "English" : "Español"}</a>
           <a
@@ -238,8 +237,9 @@ const pageSchemas = structuredData
               />
             </svg>
           </a>
+          <a class="nav-cta" href={`${prefix}/download/`}>{isSpanish ? "Descargar" : "Download"}</a>
         </nav>
-      </header>
+      </div></header>
       <div id="main-content" tabindex="-1">
         <slot />
       </div>

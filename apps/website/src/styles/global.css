@@ -4,16 +4,28 @@
 
 :root {
   color-scheme: dark;
-  --lt-surface: #131313;
-  --lt-surface-low: #0e0e0e;
-  --lt-surface-container: #201f1f;
-  --lt-surface-high: #2a2a2a;
+  --lt-surface: #111212;
+  --lt-surface-low: #0a0b0b;
+  --lt-surface-container: #191a1a;
+  --lt-surface-high: #232525;
   --lt-primary: #57f1db;
   --lt-primary-container: #2dd4bf;
   --lt-secondary: #ffe2ab;
   --lt-outline: #859490;
-  --lt-text: #e5e2e1;
-  --lt-muted: #bacac5;
+  --lt-text: #e4e9e7;
+  --lt-muted: #a9b9b4;
+  /* One hairline colour for every card, table and divider, so the borders
+     read as a system instead of a dozen slightly different greys. */
+  --lt-border: rgb(169 185 180 / 0.14);
+  --lt-border-strong: rgb(169 185 180 / 0.26);
+  /* Section-marker colours, lifted from the app's Live View: the site labels
+     its own sections the way the app labels the parts of a song. */
+  --lt-mark-intro: #9aa6b2;
+  --lt-mark-verse: #5aa9e6;
+  --lt-mark-chorus: #f4a259;
+  --lt-mark-solo: #e6c84f;
+  --lt-mark-bridge: #a78bfa;
+  --lt-mark-outro: #6fcf97;
   --sl-color-accent-low: #003731;
   --sl-color-accent: #2dd4bf;
   --sl-color-accent-high: #62fae3;
@@ -40,7 +52,7 @@
      letter spacing that reads correct at 16px reads loose at 60px. */
   --lt-font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
   --lt-font-label: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --lt-heading: #f3f0ef;
+  --lt-heading: #f5f8f7;
 
   --lt-display: clamp(2.35rem, 1.6rem + 2.35vw, 3.25rem); /* hero h1: 37 → 52px */
   --lt-h1: clamp(2.25rem, 1.45rem + 2.5vw, 3.5rem);       /* page h1: 36 → 56px */
@@ -57,8 +69,8 @@
   /* Comfortable reading measure. Anything long-form is capped at this. */
   --lt-measure: 68ch;
 
-  --lt-radius: 3px;
-  --lt-radius-lg: 5px;
+  --lt-radius: 2px;
+  --lt-radius-lg: 3px;
 }
 
 body {
@@ -149,6 +161,19 @@ h6 {
   min-height: 100vh;
   background: var(--lt-surface);
   color: var(--lt-text);
+}
+
+html {
+  /* In-page anchors would otherwise land underneath the sticky header. */
+  scroll-padding-top: 5.5rem;
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid var(--lt-border-strong);
+  background: var(--lt-surface-low);
 }
 
 .site-page > #main-content {
@@ -245,9 +270,10 @@ h6 {
   display: inline-flex;
   align-items: center;
   gap: 0.65rem;
-  font-weight: 800;
   color: var(--lt-primary);
-  letter-spacing: -0.01em;
+  font: 700 1.05rem/1 var(--lt-font-label);
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
   text-decoration: none;
 }
 
@@ -264,28 +290,42 @@ h6 {
   justify-content: flex-end;
 }
 
-.nav-links a,
-.button-link {
+.nav-links a {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
   min-height: 2.4rem;
-  border-radius: var(--lt-radius);
-  padding: 0 0.85rem;
+  padding: 0 0.75rem;
   color: var(--lt-muted);
-  background: transparent;
   text-decoration: none;
-  font: 700 0.78rem/1 var(--lt-font-label);
-  letter-spacing: 0.06em;
+  font: 700 0.74rem/1 var(--lt-font-label);
+  letter-spacing: 0.09em;
   text-transform: uppercase;
-  transition: color 0.15s ease, background 0.15s ease;
+  white-space: nowrap;
+  transition: color 0.12s ease;
 }
 
-.nav-links a:hover,
-.button-link:hover {
-  color: var(--lt-primary);
-  background: color-mix(in srgb, var(--lt-primary) 12%, transparent);
+.nav-links a:hover {
+  color: var(--lt-heading);
+}
+
+/* A marker under the link instead of a pill behind it. */
+.nav-links a:not(.social-link):not(.nav-cta)::after {
+  content: "";
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.35rem;
+  height: 2px;
+  background: var(--lt-primary);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.15s ease;
+}
+
+.nav-links a:not(.social-link):not(.nav-cta):hover::after {
+  transform: scaleX(1);
 }
 
 .nav-links .social-link {
@@ -294,13 +334,60 @@ h6 {
 }
 
 .social-link svg {
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+/* The one action the header exists for, shaped like the app's play button. */
+.nav-links .nav-cta {
+  margin-left: 0.5rem;
+  padding: 0 1rem;
+  border-radius: var(--lt-radius);
+  color: #003731;
+  background: var(--lt-primary);
+}
+
+.nav-links .nav-cta:hover {
+  color: #003731;
+  background: var(--lt-heading);
+}
+
+/* Buttons are the app's transport keys: square, labelled in capitals, and
+   they change colour when pressed instead of floating or glowing. */
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  min-height: 3rem;
+  border: 1px solid var(--lt-border-strong);
+  border-radius: var(--lt-radius);
+  padding: 0 1.35rem;
+  color: var(--lt-heading);
+  background: transparent;
+  text-decoration: none;
+  font: 700 0.8rem/1 var(--lt-font-label);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.button-link:hover {
+  border-color: var(--lt-primary);
+  color: var(--lt-primary);
+  background: transparent;
 }
 
 .button-link.primary {
+  border-color: var(--lt-primary);
   color: #003731;
-  background: linear-gradient(180deg, var(--lt-primary), var(--lt-primary-container));
+  background: var(--lt-primary);
+}
+
+.button-link.primary:hover {
+  border-color: var(--lt-heading);
+  color: #0a0b0b;
+  background: var(--lt-heading);
 }
 
 .support-panel .button-link.primary,
@@ -341,7 +428,9 @@ h1 {
   margin: 0.75rem 0 1.1rem;
   color: var(--lt-heading);
   font-size: var(--lt-h1);
-  font-weight: 800;
+  /* Display type is the app's own label face, not the body sans. */
+  font-family: var(--lt-font-label);
+  font-weight: 700;
   line-height: var(--lt-leading-display);
   letter-spacing: var(--lt-tracking-display);
   text-wrap: balance;
@@ -373,11 +462,10 @@ h1 {
    a broken image rather than a deliberate crop. Let the screenshot set its own
    height instead. */
 .product-shot {
-  border: 1px solid color-mix(in srgb, var(--lt-muted) 18%, transparent);
+  border: 1px solid var(--lt-border-strong);
   border-radius: var(--lt-radius-lg);
   background: var(--lt-surface-low);
   overflow: hidden;
-  box-shadow: 0 28px 80px rgb(0 0 0 / 0.34);
 }
 
 .product-shot img {
@@ -387,15 +475,27 @@ h1 {
 }
 
 .band {
-  padding: 5rem 0;
-  border-top: 1px solid color-mix(in srgb, var(--lt-muted) 12%, transparent);
+  padding: clamp(3.5rem, 7vw, 6rem) 0;
+  border-top: 1px solid var(--lt-border);
+}
+
+/* A page whose <main> is the band starts right under the header, which
+   already draws the dividing line. */
+main.band {
+  border-top: 0;
+}
+
+/* `.section-heading p` outranks `.eyebrow`, which left every section label
+   in body grey instead of the accent. */
+.section-heading .eyebrow {
+  color: var(--lt-primary);
 }
 
 .section-heading {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.75rem;
   max-width: 52rem;
-  margin-bottom: 2rem;
+  margin-bottom: 2.5rem;
 }
 
 /* The grid gap already separates the eyebrow / title / lead, so the base h1
@@ -408,7 +508,9 @@ h1 {
   margin: 0;
   color: var(--lt-heading);
   font-size: var(--lt-h2);
-  font-weight: 800;
+  /* Display type is the app's own label face, not the body sans. */
+  font-family: var(--lt-font-label);
+  font-weight: 700;
   line-height: var(--lt-leading-heading);
   letter-spacing: var(--lt-tracking-heading);
   text-wrap: balance;
@@ -432,10 +534,18 @@ h1 {
 .download-panel,
 .workflow-card,
 .docs-list article {
-  border: 1px solid color-mix(in srgb, var(--lt-muted) 14%, transparent);
+  border: 1px solid var(--lt-border);
+  border-top: 2px solid var(--lt-border-strong);
   border-radius: var(--lt-radius-lg);
-  background: linear-gradient(180deg, var(--lt-surface-container), #161515);
-  padding: 1.15rem;
+  background: var(--lt-surface-container);
+  padding: 1.35rem;
+  transition: border-color 0.15s ease;
+}
+
+.feature-card:hover,
+.workflow-card:hover,
+.docs-list article:hover {
+  border-top-color: var(--lt-primary);
 }
 
 /* Card titles are headings, not emphasis. The old rule matched every <strong>
@@ -1706,15 +1816,30 @@ button.analytics-ranked-row:hover span,
 }
 
 .compare-table th {
-  color: var(--lt-primary);
-  background: var(--lt-surface-low);
-  font: 700 0.82rem/1.2 var(--lt-font-label);
+  color: var(--lt-muted);
+  background: rgb(255 255 255 / 0.03);
+  font: 700 0.78rem/1.2 var(--lt-font-label);
   letter-spacing: var(--lt-tracking-label);
   text-transform: uppercase;
 }
 
+/* The last column is always LibreTracks: mark it as the answer. */
+.compare-table th:last-child {
+  color: var(--lt-primary);
+}
+
+.compare-table td:last-child {
+  background: color-mix(in srgb, var(--lt-primary) 6%, transparent);
+  color: var(--lt-text);
+}
+
+.compare-table td:first-child {
+  color: var(--lt-heading);
+  font-weight: 600;
+}
+
 .compare-table td {
-  background: var(--lt-surface-container);
+  background: transparent;
   color: color-mix(in srgb, var(--lt-text) 82%, transparent);
   line-height: 1.6;
 }
@@ -1722,11 +1847,6 @@ button.analytics-ranked-row:hover span,
 .compare-table tr:last-child th,
 .compare-table tr:last-child td {
   border-bottom: 0;
-}
-
-.download-list {
-  display: grid;
-  gap: 0.5rem;
 }
 
 .support-panel {
@@ -1941,96 +2061,6 @@ button.analytics-ranked-row:hover span,
   flex-shrink: 0;
 }
 
-.download-card {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 0.85rem 1rem;
-  border-radius: 4px;
-  background: var(--lt-surface-low);
-  border: 1px solid color-mix(in srgb, var(--lt-muted) 14%, transparent);
-  text-decoration: none;
-  color: var(--lt-text);
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.download-card:hover {
-  border-color: var(--lt-primary);
-  background: color-mix(in srgb, var(--lt-primary) 6%, var(--lt-surface-low));
-}
-
-.download-icon {
-  font-size: 1.5rem;
-  flex-shrink: 0;
-}
-
-.download-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
-}
-
-.download-info strong {
-  color: #f3f0ef;
-  font-size: 0.88rem;
-  word-break: break-all;
-}
-
-.download-size {
-  color: var(--lt-muted);
-  font-size: 0.75rem;
-}
-
-.download-arrow {
-  margin-left: auto;
-  font-size: 1.25rem;
-  color: var(--lt-primary);
-  flex-shrink: 0;
-}
-
-.release-header {
-  text-align: center;
-  margin-bottom: 2.5rem;
-}
-
-.release-version {
-  margin: 0.25rem 0 0.5rem;
-  color: var(--lt-heading);
-  font-size: clamp(2.25rem, 1.45rem + 2.5vw, 3.5rem);
-  font-weight: 800;
-  line-height: 1.1;
-  letter-spacing: var(--lt-tracking-display);
-  font-variant-numeric: tabular-nums;
-}
-
-.release-date {
-  color: var(--lt-muted);
-  margin: 0;
-}
-
-.release-badge {
-  display: inline-block;
-  vertical-align: middle;
-  margin-left: 0.6rem;
-  padding: 0.2rem 0.55rem;
-  border-radius: 999px;
-  font: 700 0.72rem/1 var(--lt-font-label);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.release-badge.latest {
-  color: #0c0c0c;
-  background: var(--lt-primary);
-}
-
-.release-badge.pre {
-  color: #ffe2ab;
-  background: color-mix(in srgb, #ffae3b 22%, transparent);
-  border: 1px solid color-mix(in srgb, #ffae3b 45%, transparent);
-}
-
 /* ── Older versions switcher ─────────────────────────────────────────────── */
 .older-releases {
   margin-top: 2rem;
@@ -2139,71 +2169,10 @@ button.analytics-ranked-row:hover span,
   background: color-mix(in srgb, #ffae3b 28%, transparent);
 }
 
-.release-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-  /* stretch so the notes column matches the height of the downloads column
-     and both panels stay aligned at the bottom. */
-  align-items: stretch;
-}
-
-.release-section-title {
-  color: var(--lt-primary);
-  font: 700 0.78rem/1.2 var(--lt-font-label);
-  letter-spacing: var(--lt-tracking-label);
-  text-transform: uppercase;
-  margin: 0 0 0.85rem;
-}
-
-.release-assets,
-.release-notes-panel {
-  border: 1px solid color-mix(in srgb, var(--lt-muted) 14%, transparent);
-  border-radius: 4px;
-  background: linear-gradient(180deg, #201f1f, #161515);
-  padding: 1.25rem;
-}
-
-/* Lay the notes panel out as a column so its scrollable body fills the
-   height the grid gives it (matching the downloads column), instead of
-   collapsing to its content height and leaving a gap below. */
-.release-notes-panel {
-  display: flex;
-  flex-direction: column;
-  /* min-height:0 lets the flex child (.release-notes-body) shrink and scroll
-     rather than overflow the panel. */
-  min-height: 0;
-}
-
-/* Fills the remaining panel height and anchors the absolutely-positioned
-   body, so the notes column matches the downloads column height instead of
-   growing the grid row to fit all the text. */
-.release-notes-scroll {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-}
-
 .release-notes-body {
-  position: absolute;
-  inset: 0;
   color: color-mix(in srgb, var(--lt-text) 85%, transparent);
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   line-height: 1.7;
-  overflow-y: auto;
-  /* Keep scrolled content from sitting flush against the scrollbar. */
-  padding-right: 0.5rem;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--lt-muted) 40%, transparent) transparent;
-}
-
-.release-notes-body::-webkit-scrollbar {
-  width: 8px;
-}
-
-.release-notes-body::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--lt-muted) 40%, transparent);
-  border-radius: 4px;
 }
 
 /* Release bodies are authored as Markdown and every heading in them is
@@ -2259,29 +2228,6 @@ button.analytics-ranked-row:hover span,
 
 .release-notes-body a:hover {
   color: var(--lt-primary-container);
-}
-
-@media (max-width: 720px) {
-  .release-layout {
-    grid-template-columns: 1fr;
-  }
-
-  /* Once the layout stacks, the notes panel no longer borrows a definite
-     height from the (now non-existent) sibling column, so `flex: 1` on the
-     scroll wrapper collapses to 0 and the absolutely-positioned body becomes
-     invisible. Drop the equal-height/inner-scroll trick on mobile and let the
-     notes flow naturally so they're actually readable. */
-  .release-notes-scroll {
-    position: static;
-    flex: none;
-  }
-
-  .release-notes-body {
-    position: static;
-    inset: auto;
-    overflow-y: visible;
-    padding-right: 0;
-  }
 }
 
 .sl-markdown-content img {
@@ -2717,7 +2663,9 @@ button.analytics-ranked-row:hover span,
   margin: 0.5rem 0;
   color: var(--lt-heading);
   font-size: var(--lt-h2);
-  font-weight: 800;
+  /* Display type is the app's own label face, not the body sans. */
+  font-family: var(--lt-font-label);
+  font-weight: 700;
   line-height: var(--lt-leading-heading);
   letter-spacing: var(--lt-tracking-heading);
   text-wrap: balance;
@@ -2785,27 +2733,43 @@ button.analytics-ranked-row:hover span,
     width: min(100% - 1rem, 1180px);
   }
 
+  /* Two rows of header would eat a fifth of a phone screen if they stuck. */
+  .site-header {
+    position: static;
+  }
+
   .site-nav {
     align-items: flex-start;
     flex-direction: column;
+    gap: 0.35rem;
   }
 
   .nav-links {
     width: 100%;
     justify-content: flex-start;
-    gap: 0.15rem;
+    gap: 0.1rem;
   }
 
-  .nav-links a,
-  .button-link {
+  .nav-links a {
     min-height: 2.2rem;
-    padding-inline: 0.35rem;
-    font-size: 0.66rem;
+    padding-inline: 0.5rem;
+    font-size: 0.68rem;
   }
 
   .nav-links .social-link {
     width: 2.2rem;
     padding: 0;
+  }
+
+  .nav-links .nav-cta {
+    margin-left: 0;
+    padding-inline: 0.9rem;
+  }
+
+  .button-link {
+    min-height: 2.8rem;
+    padding-inline: 1rem;
+    font-size: 0.74rem;
   }
 
   .hero {
@@ -2838,11 +2802,6 @@ button.analytics-ranked-row:hover span,
   .compare-table td {
     min-width: 13rem;
     padding: 0.8rem;
-  }
-
-  .download-row {
-    align-items: flex-start;
-    flex-direction: column;
   }
 
   .site-footer-inner {

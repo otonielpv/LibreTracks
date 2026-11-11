@@ -521,11 +521,34 @@ function ranked(title: AnalyticsMetric, rows: RankedRow[], filterKey?: FilterKey
   return card;
 }
 
+// The server groups without ordering, so buckets arrive alphabetically
+// ("31_plus" between "2_3" and "4_7"). They are ranges, not a ranking: show
+// them shortest to longest. An unknown label sorts last instead of vanishing.
+const BUCKET_ORDER = [
+  "day_0",
+  "days_1_7",
+  "days_8_30",
+  "days_31_90",
+  "days_91_plus",
+  "1",
+  "2_3",
+  "4_7",
+  "8_30",
+  "31_plus",
+];
+
+function bucketRank(label: string): number {
+  const index = BUCKET_ORDER.indexOf(label);
+  return index === -1 ? BUCKET_ORDER.length : index;
+}
+
 function maturity(title: AnalyticsMetric, rows: Bucket[], filterKey: FilterKey): HTMLElement {
   const total = rows.reduce((sum, row) => sum + row.devices, 0);
   return ranked(
     title,
-    rows.map((row) => ({
+    [...rows]
+      .sort((a, b) => bucketRank(a.label) - bucketRank(b.label))
+      .map((row) => ({
       key: row.label,
       value: row.label,
       devices: row.devices,

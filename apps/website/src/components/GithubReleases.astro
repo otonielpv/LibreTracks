@@ -1,6 +1,8 @@
 ---
+import "../styles/download.css";
 import { marked } from "marked";
 import StoreBadges from "./StoreBadges.astro";
+import { osIcons } from "./osIcons";
 
 interface Props {
   owner?: string;
@@ -115,6 +117,21 @@ const labels = {
     : "Releases could not be loaded during the build. You can open GitHub Releases directly.",
   noAssets: isSpanish ? "Esta release no contiene instaladores publicados." : "This release has no published installers.",
   open: isSpanish ? "Abrir en GitHub" : "Open on GitHub",
+  price: isSpanish ? "Precio" : "Price",
+  free: isSpanish ? "Gratis" : "Free",
+  license: isSpanish ? "Licencia" : "License",
+  downloadFor: isSpanish ? "Descargar para" : "Download for",
+  allInstallers: isSpanish ? "Todos los instaladores" : "All installers",
+  perks: isSpanish
+    ? ["Sin cuenta ni suscripción", "Funciona sin conexión", "Código abierto, licencia AGPL-3.0"]
+    : ["No account, no subscription", "Works offline", "Open source, AGPL-3.0 licensed"],
+  shotAlt: isSpanish
+    ? "Vista Compacta de LibreTracks con una columna por canción y el mezclador"
+    : "LibreTracks Compact View with one column per song and the mixer",
+  mobile: isSpanish ? "Móvil y tablet" : "Phone and tablet",
+  mobileNote: isSpanish
+    ? "En iPhone, iPad y Android, LibreTracks se instala desde las tiendas."
+    : "On iPhone, iPad, and Android, LibreTracks installs from the stores.",
 };
 
 // Android assets never reach the download cards. The APK is not a supported
@@ -133,12 +150,18 @@ function formatDate(value: string | null): string | null {
 
 const sizeFormatter = new Intl.NumberFormat(isSpanish ? "es" : "en");
 
-function iconForAsset(name: string): string {
-  if (/\.msi$|\.exe$/i.test(name)) return "🪟";
-  if (/\.dmg$/i.test(name)) return "🍎";
-  if (/\.deb$|\.AppImage$|\.rpm$/i.test(name)) return "🐧";
-  if (/\.apk$/i.test(name)) return "🤖";
-  return "📦";
+// What the file is, in words: a visitor picks ".deb · Debian, Ubuntu" faster
+// than they parse `LibreTracks_1.16.0_amd64.deb`.
+function describeAsset(name: string): string {
+  if (/\.exe$/i.test(name)) return isSpanish ? "Instalador · .exe" : "Installer · .exe";
+  if (/\.msi$/i.test(name)) return isSpanish ? "Instalador · .msi" : "Installer · .msi";
+  if (/\.dmg$/i.test(name)) {
+    return /universal/i.test(name) ? "Universal · .dmg" : isSpanish ? "Imagen de disco · .dmg" : "Disk image · .dmg";
+  }
+  if (/\.deb$/i.test(name)) return "Debian, Ubuntu · .deb";
+  if (/\.rpm$/i.test(name)) return "Fedora, openSUSE · .rpm";
+  if (/\.appimage$/i.test(name)) return isSpanish ? "Cualquier distro · AppImage" : "Any distro · AppImage";
+  return name;
 }
 
 // Render only the current release in the page. Older release notes are useful
@@ -164,68 +187,121 @@ const panels = await Promise.all(
     };
   }),
 );
+
+const latest = panels[0];
+
+const PLATFORMS = [
+  { id: "windows", name: "Windows", match: /\.(exe|msi)$/i },
+  { id: "macos", name: "macOS", match: /\.dmg$/i },
+  { id: "linux", name: "Linux", match: /\.(deb|rpm|appimage)$/i },
+];
+// The installer the big button offers for each system: the one that works
+// for the most people on it.
+const PREFERRED = [/\.exe$/i, /\.msi$/i, /\.dmg$/i, /\.appimage$/i, /\.deb$/i];
+const platforms = PLATFORMS.map((platform) => {
+  const assets = latest ? latest.assets.filter((asset) => platform.match.test(asset.name)) : [];
+  const primary = PREFERRED.map((kind) => assets.find((asset) => kind.test(asset.name))).find(Boolean);
+  return { ...platform, assets, primary };
+});
+const mains = platforms.flatMap((platform) =>
+  platform.primary ? [{ ...platform, primary: platform.primary }] : [],
+);
+
+function megabytes(bytes: number): string {
+  return `${sizeFormatter.format(Math.max(1, Math.round(bytes / 1024 / 1024)))}\u00a0MB`;
+}
+
+function extension(name: string): string {
+  return /\.appimage$/i.test(name) ? "AppImage" : name.slice(name.lastIndexOf("."));
+}
 ---
 
-<section class="download-panel">
-  {panels.length > 0 ? (
+<section class="dl">
+  {latest ? (
     <>
-      {panels.map((panel) => (
-        <div
-          class="release-view"
-          data-release-view
-          data-release-tag={panel.release.tag_name}
-          hidden={!panel.isLatest}
-        >
-          <div class="release-header">
-            <p class="eyebrow">{labels.currentVersion}</p>
-            <h2 class="release-version">
-              {panel.release.tag_name}
-              {panel.isLatest ? <span class="release-badge latest">{labels.latestBadge}</span> : null}
-              {panel.release.prerelease ? <span class="release-badge pre">{labels.prereleaseBadge}</span> : null}
-            </h2>
-            {panel.date ? <p class="release-date">{labels.published}: {panel.date}</p> : null}
-          </div>
-
-          <div class="release-layout">
-            {/* ── Assets column ── */}
-            <div class="release-assets">
-              <h3 class="release-section-title">{labels.assets}</h3>
-              {panel.assets.length > 0 ? (
-                <div class="download-list">
-                  {panel.assets.map((asset) => (
-                    <a class="download-card" href={asset.browser_download_url} target="_blank" rel="noopener noreferrer" data-download-asset>
-                      <span class="download-icon" aria-hidden="true">{iconForAsset(asset.name)}</span>
-                      <span class="download-info">
-                        <strong>{asset.name}</strong>
-                        <span class="download-size">{`${sizeFormatter.format(Math.max(1, Math.round(asset.size / 1024 / 1024)))}\u00a0MB`}</span>
-                      </span>
-                      <span class="download-arrow" aria-hidden="true">↓</span>
-                    </a>
-                  ))}
-                </div>
-              ) : <p>{labels.noAssets}</p>}
-              <StoreBadges lang={lang} />
-              <div class="hero-actions" style="margin-top: 1.25rem;">
-                <a class="button-link" href={panel.release.html_url}>{labels.open}</a>
-              </div>
-            </div>
-
-            {/* ── Release notes column ── */}
-            {panel.bodyHtml ? (
-              <div class="release-notes-panel">
-                <h3 class="release-section-title">{labels.notes}</h3>
-                <div class="release-notes-scroll">
-                  <div class="release-notes-body" set:html={panel.bodyHtml} />
-                </div>
-              </div>
-            ) : null}
-          </div>
+      {/* One big button for the visitor's own system. Every desktop button is
+          in the page; the script below shows the right one, and without
+          JavaScript the first stays visible with the full list underneath. */}
+      <div class="dl-hero">
+        <div class="dl-hero-action">
+        {mains.map((platform) => (
+          <a
+            class="dl-main"
+            data-main={platform.id}
+            hidden={platform.id !== mains[0].id}
+            href={platform.primary.browser_download_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-download-asset
+          >
+            <svg class="dl-main-os" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" set:html={osIcons[platform.id]} />
+            <span class="dl-main-text">
+              <span class="dl-main-label">{labels.downloadFor} {platform.name}</span>
+              <span class="dl-main-meta">
+                {latest.release.tag_name} · {megabytes(platform.primary.size)} · {extension(platform.primary.name)}
+              </span>
+            </span>
+            <svg class="dl-ico dl-main-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12M6.5 11 12 16.5 17.5 11M5 20h14" /></svg>
+          </a>
+        ))}
+        <div class="dl-main-mobile" data-main="mobile" hidden>
+          <p>{labels.mobileNote}</p>
+          <StoreBadges lang={lang} />
         </div>
-      ))}
+        {latest.date ? <p class="dl-hero-note">{labels.published}: {latest.date}</p> : null}
+        <ul class="dl-perks">
+          {labels.perks.map((perk) => (
+            <li><svg class="dl-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>{perk}</li>
+          ))}
+        </ul>
+        </div>
+        <img
+          class="dl-hero-shot"
+          src={`/screenshots/home/${lang}/compact.webp`}
+          alt={labels.shotAlt}
+          width="1200"
+          height="750"
+          decoding="async"
+        />
+      </div>
+
+      <div class="dl-all">
+        <h2>{labels.allInstallers}</h2>
+        <dl>
+          {platforms.map((platform) => (
+            <div>
+              <dt><svg class="dl-os" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" set:html={osIcons[platform.id]} />{platform.name}</dt>
+              <dd>
+                {platform.assets.length > 0 ? platform.assets.map((asset) => (
+                  <a class="dl-file" href={asset.browser_download_url} target="_blank" rel="noopener noreferrer" data-download-asset title={asset.name}>
+                    <svg class="dl-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12M6.5 11 12 16.5 17.5 11M5 20h14" /></svg>
+                    {describeAsset(asset.name)}
+                    <span>{megabytes(asset.size)}</span>
+                  </a>
+                )) : <span class="dl-empty">{labels.noAssets}</span>}
+              </dd>
+            </div>
+          ))}
+          <div>
+            <dt><svg class="dl-os" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" set:html={osIcons.mobile} />{labels.mobile}</dt>
+            <dd><StoreBadges lang={lang} /></dd>
+          </div>
+        </dl>
+        <p class="dl-source">
+          <a href={latest.release.html_url}>{labels.open}<span aria-hidden="true">→</span></a>
+        </p>
+      </div>
+
+      {latest.bodyHtml ? (
+        <details class="dl-fold">
+          <summary><svg class="dl-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" /></svg>{labels.notes} <span>{latest.release.tag_name}</span></summary>
+          <div class="release-notes-body" set:html={latest.bodyHtml} />
+        </details>
+      ) : null}
 
       {releases.length > 1 ? (
-        <div class="older-releases">
-          <h3 class="release-section-title">{labels.olderTitle}</h3>
+        <details class="dl-fold">
+          <summary><svg class="dl-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1M3.5 4.5v4h4M12 7.5V12l3 2" /></svg>{labels.olderTitle} <span>{releases.length - 1}</span></summary>
           <p class="older-hint">{labels.olderHint}</p>
           <div class="version-chip-list">
             {releases.slice(1).map((release) => (
@@ -240,25 +316,27 @@ const panels = await Promise.all(
               </a>
             ))}
           </div>
-        </div>
+        </details>
       ) : null}
 
       <aside class="support-panel" aria-labelledby="support-title">
-        <h3 id="support-title">{labels.supportTitle}</h3>
-        <p>{labels.supportText}</p>
-        <p class="support-disclaimer">{labels.supportDisclaimer}</p>
-        <a class="button-link primary" href={donationUrl} target="_blank" rel="noopener noreferrer"><span aria-hidden="true">☕</span> {labels.supportAction}</a>
+        <div>
+          <h2 id="support-title">{labels.supportTitle}</h2>
+          <p>{labels.supportText}</p>
+          <p class="support-disclaimer">{labels.supportDisclaimer}</p>
+        </div>
+        <a class="button-link" href={donationUrl} target="_blank" rel="noopener noreferrer"><svg class="dl-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" /></svg>{labels.supportAction}</a>
       </aside>
     </>
   ) : (
-    <>
+    <div>
       <p>{labels.fallback}</p>
       {error ? <p style="color: #ffe2ab;">{error}</p> : null}
       <div class="hero-actions">
         <a class="button-link primary" href={releaseUrl}>{labels.open}</a>
       </div>
       <StoreBadges lang={lang} />
-    </>
+    </div>
   )}
 </section>
 
@@ -304,6 +382,25 @@ const panels = await Promise.all(
   }
 
   bindDownloadLinks();
+
+  // Show the big button for the system the visitor is on. Purely a
+  // shortcut: every installer is listed right below whatever this guesses.
+  const agent = navigator.userAgent;
+  const system = /android|iphone|ipad|ipod/i.test(agent) || (/macintosh/i.test(agent) && navigator.maxTouchPoints > 1)
+    ? "mobile"
+    : /windows/i.test(agent)
+      ? "windows"
+      : /macintosh|mac os x/i.test(agent)
+        ? "macos"
+        : /linux|x11/i.test(agent)
+          ? "linux"
+          : null;
+  const mains = document.querySelectorAll<HTMLElement>("[data-main]");
+  if (system && [...mains].some((main) => main.dataset.main === system)) {
+    mains.forEach((main) => {
+      main.hidden = main.dataset.main !== system;
+    });
+  }
 
   const closeButtons = document.querySelectorAll("[data-donation-close]");
   closeButtons.forEach((button) => {

@@ -1,0 +1,393 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+import StoreBadges from "./StoreBadges.astro";
+import "../styles/home.css";
+
+// Both locales used to be two hand-synced copies of the same 200-line page.
+// The markup lives here once; only the copy differs.
+interface Props {
+  lang: "en" | "es";
+}
+
+const { lang } = Astro.props;
+const es = lang === "es";
+const prefix = es ? "/es" : "";
+const shots = `/screenshots/home/${lang}`;
+
+const t = es
+  ? {
+      title: "Reproductor Multitrack Gratis para Directo | LibreTracks",
+      description:
+        "Reproductor multitrack gratis y de código abierto para directo, con stems, click, voz guía, MIDI, cambios de tono y tempo, y control remoto móvil.",
+      badge: "Gratis y de código abierto",
+      h1: "Reproductor multitrack para tocar en directo",
+      lead: "LibreTracks organiza el concierto por canciones: pistas, click, voz guía, marcas y rutas de salida. Prepáralo en el timeline, ensáyalo en Vista Compacta y ejecuta el directo con saltos musicales, cambio de tono y tempo, MIDI y control remoto desde el móvil.",
+      download: "Descargar gratis",
+      howTo: "Cómo se usa",
+      heroAlt: "Timeline de LibreTracks con tres canciones, marcas de sección y pistas con forma de onda",
+      phoneAlt: "Vista Live de LibreTracks en un móvil con las marcas de la canción",
+      facts: [
+        ["Precio", "Gratis"],
+        ["Licencia", "AGPL-3.0"],
+        ["Cuenta", "Sin registro"],
+        ["Funciona en", "Windows · macOS · Linux · Android · iOS"],
+      ],
+      purposeEyebrow: "Para qué sirve",
+      purposeTitle: "Convierte tus multitracks en un directo controlado.",
+      purposeLead:
+        "LibreTracks no intenta reemplazar tu DAW de producción. Es una herramienta de escenario que toma pistas terminadas, las organiza por canciones y da al operador controles predecibles para ensayo y directo.",
+      capabilities: [
+        ["Multitracks organizados por canción", "Organiza el concierto como canciones con sus propias regiones, clips, tempo, nivel principal, marcas y paquetes reutilizables."],
+        ["Control musical en vivo", "Usa saltos de marca, saltos de canción, bucles Vamp, modos de transición, atajos y mapeos MIDI desde una superficie enfocada."],
+        ["Cambio de tono y tempo", "Transpone canciones, ajusta el audio al tempo del timeline con Warp y decide qué pistas siguen el cambio de tono con el control T por pista."],
+        ["Salidas y control remoto", "Envía pistas, click, cues, voz guía y buses de carpeta a las salidas correctas, y controla transporte o mezcla desde el móvil o la tablet."],
+      ],
+      viewsEyebrow: "Una sesión, cinco superficies",
+      viewsTitle: "Prepara en el timeline. Toca desde la lista de canciones.",
+      viewsLead:
+        "Todas las vistas son proyecciones del mismo proyecto: clips, salidas, canciones, colores y mezcla se mantienen sincronizados.",
+      views: [
+        ["timeline", "Timeline lineal", "Construye el concierto", "Una vista tipo DAW para organizar pistas, editar clips, revisar marcas y preparar la estructura del concierto.", "Timeline de LibreTracks con regiones de canción y marcas", 1440, 900],
+        ["setlist", "Vista Setlist", "Toca el repertorio", "Tus canciones en tarjetas arriba, el mapa de secciones sobre la onda y el mezclador de la canción abajo. Salta de sección con un toque y cambia de canción sin salir de la vista.", "Vista Setlist de LibreTracks con las canciones en tarjetas, las secciones sobre la onda y el mezclador", 1200, 750],
+        ["compact", "Vista Compacta", "Ensaya canción a canción", "Una vista orientada a canciones para ensayo y directo, con columnas, controles de reproducción, faders master y mezclador compartido.", "Vista Compacta de LibreTracks con una columna por canción y el mezclador", 1200, 750],
+        ["live", "Vista Live", "Legible desde el escenario", "Las secciones de la canción en botones grandes, con la marca actual, la siguiente y el modo de salto a la vista. Un toque dispara la sección.", "Vista Live de LibreTracks con las marcas de la canción en botones grandes", 1200, 750],
+        ["remote", "Remote", "Controla desde otro dispositivo", "Abre el control remoto en un móvil o una tablet para manejar el transporte, saltar entre secciones y ajustar la mezcla sin tocar el ordenador.", "Controles del Remote de LibreTracks: transporte, saltos, canciones y marcas", 1200, 659],
+      ],
+      viewsPrimary: "Tu primera canción (vídeo)",
+      viewsSecondary: "Todas las guías",
+      workflowEyebrow: "Flujo",
+      workflowTitle: "De las pistas al repertorio listo para tocar.",
+      workflow: [
+        ["Construye la biblioteca", "Importa WAVs preparados, organiza recursos en carpetas virtuales y reutiliza canciones con paquetes LibreTracks."],
+        ["Da forma al repertorio", "Organiza clips en un timeline musical, crea regiones de canción, colorea sesiones densas y coloca marcas donde ocurren las decisiones en vivo."],
+        ["Ensaya y toca", "Cambia a Vista Compacta para ver una columna por canción, ajustar la mezcla compartida, disparar canciones y leer el repertorio bajo presión."],
+      ],
+      videoLabel: "Importación de audio a la biblioteca de LibreTracks",
+      pause: "Pausar animación",
+      play: "Reproducir animación",
+      controlEyebrow: "Control en vivo",
+      controlTitle: "Haz flexible el directo sin convertirlo en una sesión de producción.",
+      controlLead:
+        "LibreTracks mantiene las operaciones de escenario cerca de la intención musical: saltar a secciones, sostener un Vamp, moverse entre canciones, transponer el repertorio, enviar cues y delegar la mezcla a otro dispositivo.",
+      control: [
+        ["Saltos en vivo", "Dispara secciones inmediatamente, en la siguiente marca, después de varios compases o en límites de canción con transiciones opcionales."],
+        ["Warp y transposición", "Cambia tempo o tonalidad por región de canción mientras mantienes click, voz guía o referencias bajo control explícito."],
+        ["Salidas de escenario", "Usa pistas de audio, pistas de carpeta, ruteo heredado, metrónomo, salidas hardware, MIDI Learn y control remoto móvil."],
+      ],
+      fitEyebrow: "Dónde encaja",
+      fitTitle: "Usa tu DAW para producir. Usa LibreTracks para el concierto.",
+      fitLead:
+        "LibreTracks complementa herramientas como Reaper, Ableton Live, Logic o Cubase llevando audio preparado a un flujo dedicado de playback en directo.",
+      fitLabel: "Comparativa: DAW de estudio frente a LibreTracks",
+      fitHead: ["Necesidad", "DAW de estudio", "LibreTracks"],
+      fit: [
+        ["Producción", "Compone, graba, edita, mezcla y diseña sonido en tu DAW de estudio.", "Trae el audio terminado a una sesión de playback enfocada en directo."],
+        ["Preparación del repertorio", "Un DAW general puede hacerlo, pero suele depender de escenas, acciones o plantillas de ruteo personalizadas.", "Construye canciones, marcas, clips, salidas, paquetes y controles en vivo alrededor del repertorio."],
+        ["Decisiones en vivo", "Flexible, pero normalmente atado a la complejidad de una sesión de producción.", "Usa controles dedicados para Vamp, saltos, transiciones, transposición, salidas, MIDI y mezcla remota."],
+        ["Superficie de escenario", "Potente para operadores que necesitan todo el entorno de producción.", "Enfocado para músicos, directores musicales y operadores de playback que ejecutan directos preparados."],
+      ],
+      alternatives: [
+        ["/es/alternativas/", "Explorar alternativas gratuitas"],
+        ["/es/alternativa-ableton-live/", "Frente a Ableton Live"],
+        ["/es/alternativa-reaper-directo/", "Frente a Reaper"],
+        ["/es/alternativa-playback-multitracks/", "Frente a Playback"],
+        ["/es/alternativa-prime-worship/", "Frente a Prime"],
+      ],
+      ctaTitle: "Lleva tus pistas al próximo directo.",
+      ctaLead: "Descarga LibreTracks, importa tus multitracks y ten el repertorio listo para ensayar hoy.",
+      ctaDocs: "Leer la documentación",
+      guidesPath: "/es/guias/",
+    }
+  : {
+      title: "Free Multitrack Playback Software | LibreTracks",
+      description:
+        "Free, open-source multitrack playback software for live shows, with stems, click, guide vocals, MIDI, pitch and tempo changes, and mobile remote control.",
+      badge: "Free and open source",
+      h1: "Multitrack playback software for live performance",
+      lead: "LibreTracks prepares a show as songs, stems, click, guide tracks, markers, cues, and routes. Arrange it on a timeline, rehearse it in Compact View, and run the performance with musical jumps, pitch tools, MIDI, and a mobile remote.",
+      download: "Download free",
+      howTo: "How to use it",
+      heroAlt: "LibreTracks timeline with three songs, section markers, and waveform tracks",
+      phoneAlt: "LibreTracks Live View on a phone showing the song's markers",
+      facts: [
+        ["Price", "Free"],
+        ["License", "AGPL-3.0"],
+        ["Account", "No sign-up"],
+        ["Runs on", "Windows · macOS · Linux · Android · iOS"],
+      ],
+      purposeEyebrow: "What it is for",
+      purposeTitle: "A focused place to turn prepared audio into a controlled live show.",
+      purposeLead:
+        "LibreTracks is not trying to replace your production DAW. It is the stage workstation that takes finished stems, organizes them by song, and gives the operator predictable controls for rehearsal and performance.",
+      capabilities: [
+        ["Song-based show building", "Organize the show as songs with their own regions, clips, tempo, master level, markers, and reusable packages."],
+        ["Musical live control", "Use marker jumps, song jumps, Vamp loops, transition modes, keyboard shortcuts, and MIDI mappings from one focused surface."],
+        ["Pitch and tempo tools", "Transpose songs, warp audio to the timeline tempo, and choose which tracks follow pitch with the per-track T control."],
+        ["Routing and remote operation", "Route stems, click, cues, guide tracks, and folder buses to the right outputs, then control transport and mix from a phone or tablet."],
+      ],
+      viewsEyebrow: "One session, five surfaces",
+      viewsTitle: "Arrange like a timeline. Perform like a set list.",
+      viewsLead:
+        "Every view is a projection of the same project, so changes to clips, routing, songs, colors, and mix state stay in sync.",
+      views: [
+        ["timeline", "Linear timeline", "Build the show", "A DAW-like view for arranging stems, editing clips, checking markers, and preparing the structure of the show.", "LibreTracks timeline with song regions and markers", 1440, 900],
+        ["setlist", "Setlist View", "Play the set", "Your songs as cards at the top, the section map over the waveform, and the song's mixer at the bottom. Jump between sections with a tap and change songs without leaving the view.", "LibreTracks Setlist View with songs as cards, sections over the waveform, and the mixer", 1200, 750],
+        ["compact", "Compact View", "Rehearse song by song", "A song-first view for rehearsal and performance, with song columns, play controls, masters, and a shared mixer.", "LibreTracks Compact View with one column per song and the mixer", 1200, 750],
+        ["live", "Live View", "Readable from the stage", "The song's sections as large buttons, with the current marker, the next one, and the jump mode in plain sight. One tap fires the section.", "LibreTracks Live View with the song's markers as large buttons", 1200, 750],
+        ["remote", "Remote", "Control it from another device", "Open the remote on a phone or tablet to run the transport, jump between sections, and adjust the mix without touching the computer.", "LibreTracks Remote controls: transport, jumps, songs, and markers", 1200, 659],
+      ],
+      viewsPrimary: "Your first song (video)",
+      viewsSecondary: "All the guides",
+      workflowEyebrow: "Workflow",
+      workflowTitle: "From stems to a playable set.",
+      workflow: [
+        ["Build the library", "Import prepared WAV files, keep assets organized in virtual folders, and reuse songs through LibreTracks packages."],
+        ["Shape the set", "Arrange clips on a musical timeline, create song regions, color-code dense sessions, and place markers where live decisions happen."],
+        ["Rehearse and perform", "Switch to Compact View to see one column per song, adjust the shared mix, trigger songs, and keep the set readable under pressure."],
+      ],
+      videoLabel: "Importing audio into the LibreTracks library",
+      pause: "Pause animation",
+      play: "Play animation",
+      controlEyebrow: "Live control",
+      controlTitle: "Make the show flexible without turning it into a production session.",
+      controlLead:
+        "LibreTracks keeps stage operations close to musical intent: jump to sections, hold a Vamp, move between songs, transpose the set, route cue material, and hand mixer control to another device.",
+      control: [
+        ["Live jumps", "Trigger sections immediately, at the next marker, after a bar count, or at song boundaries with optional fade transitions."],
+        ["Warp and transpose", "Change tempo or key per song region while keeping click, guide, or reference tracks under explicit control."],
+        ["Stage routing", "Use audio tracks, folder tracks, inherited routing, metronome routing, hardware outputs, MIDI Learn, and the mobile remote."],
+      ],
+      fitEyebrow: "Where it fits",
+      fitTitle: "Use your DAW for production. Use LibreTracks for the gig.",
+      fitLead:
+        "LibreTracks complements tools like Reaper, Ableton Live, Logic, and Cubase by taking prepared audio into a dedicated live playback workflow.",
+      fitLabel: "Feature comparison: studio DAW versus LibreTracks",
+      fitHead: ["Need", "Studio DAW", "LibreTracks"],
+      fit: [
+        ["Production", "Write, record, edit, mix, and sound-design stems in your studio DAW.", "Bring finished audio into a show-focused playback session."],
+        ["Set preparation", "General DAWs can do it, but often through custom scenes, actions, or routing templates.", "Build songs, markers, clips, routing, packages, and live controls around the set list."],
+        ["Live decisions", "Flexible, but usually tied to production-session complexity.", "Use dedicated controls for Vamp, marker jumps, song jumps, transitions, transpose, routing, MIDI, and remote mixing."],
+        ["On-stage surface", "Powerful for operators who need the full production environment.", "Focused for musicians, music directors, and playback engineers running prepared shows."],
+      ],
+      alternatives: [
+        ["/alternatives/", "Explore free alternatives"],
+        ["/ableton-live-alternative/", "vs Ableton Live"],
+        ["/reaper-live-alternative/", "vs Reaper"],
+        ["/playback-multitracks-alternative/", "vs Playback"],
+        ["/prime-worship-alternative/", "vs Prime"],
+      ],
+      ctaTitle: "Take your stems to the next show.",
+      ctaLead: "Download LibreTracks, import your multitracks, and have the set ready to rehearse today.",
+      ctaDocs: "Read the docs",
+      guidesPath: "/guides/",
+    };
+
+---
+
+<SiteLayout title={t.title} description={t.description} lang={lang} schema>
+  <main class="home">
+    <section class="home-hero">
+      <div class="site-shell home-hero-grid">
+        <div class="home-hero-copy">
+          <p class="home-kicker">{t.badge}</p>
+          <h1>{t.h1}</h1>
+          <p class="home-lead">{t.lead}</p>
+          <div class="hero-actions">
+            <a class="button-link primary" href={`${prefix}/download/`}>
+              <span class="home-play" aria-hidden="true"></span>{t.download}
+            </a>
+            <a class="button-link" href={t.guidesPath}>{t.howTo}</a>
+          </div>
+          <StoreBadges lang={lang} />
+        </div>
+        <div class="home-stage">
+          <img
+            class="home-stage-app"
+            src={`${shots}/timeline.webp`}
+            srcset={`${shots}/timeline-800.webp 800w, ${shots}/timeline.webp 1440w`}
+            sizes="(max-width: 900px) 100vw, 860px"
+            alt={t.heroAlt}
+            width="1440"
+            height="900"
+            fetchpriority="high"
+            decoding="async"
+          />
+          <div class="home-phone">
+            <img src={`${shots}/phone.webp`} alt={t.phoneAlt} width="1000" height="450" decoding="async" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="home-readouts" aria-label={t.badge}>
+      <dl class="site-shell">
+        {t.facts.map(([label, value]) => (
+          <div>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+
+    <section class="band home-band">
+      <div class="site-shell">
+        <div class="section-heading home-marker">
+          <p class="eyebrow">{t.purposeEyebrow}</p>
+          <h2>{t.purposeTitle}</h2>
+          <p>{t.purposeLead}</p>
+        </div>
+        <div class="home-strips">
+          {t.capabilities.map(([title, body], index) => (
+            <article>
+              <span class="home-strip-label" aria-hidden="true">CH {String(index + 1).padStart(2, "0")}</span>
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="band home-band">
+      <div class="site-shell">
+        <div class="section-heading home-marker">
+          <p class="eyebrow">{t.viewsEyebrow}</p>
+          <h2>{t.viewsTitle}</h2>
+          <p>{t.viewsLead}</p>
+        </div>
+        <div class="home-views">
+          {t.views.map(([file, name, title, body, alt, width, height], index) => (
+            <article class="home-view">
+              <div class="home-view-copy">
+                <p class="home-view-name">
+                  <span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>{name}
+                </p>
+                <h3>{title}</h3>
+                <p>{body}</p>
+              </div>
+              <div class="home-view-shot">
+                <img src={`${shots}/${file}.webp`} alt={alt} width={width} height={height} loading="lazy" decoding="async" />
+              </div>
+            </article>
+          ))}
+        </div>
+        <div class="hero-actions home-actions">
+          <a class="button-link primary" href={`${prefix}/docs/start/first-song/`}>{t.viewsPrimary}</a>
+          <a class="button-link" href={t.guidesPath}>{t.viewsSecondary}</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="band home-band">
+      <div class="site-shell">
+        <div class="section-heading home-marker">
+          <p class="eyebrow">{t.workflowEyebrow}</p>
+          <h2>{t.workflowTitle}</h2>
+        </div>
+        <div class="home-workflow">
+          <div class="media-frame home-workflow-media">
+            <video
+              autoplay
+              loop
+              muted
+              playsinline
+              preload="none"
+              poster="/screenshots/Library-Assets-Import-poster.webp"
+              width="820"
+              height="442"
+              aria-label={t.videoLabel}
+              data-decorative-loop
+            >
+              {/* Safari could not play the VP9 WebM and fell back to the
+                  poster; the H.264 build is also the smaller file. */}
+              <source src="/screenshots/Library-Assets-Import.mp4" type="video/mp4" />
+              <source src="/screenshots/Library-Assets-Import.webm" type="video/webm" />
+            </video>
+            {/* WCAG 2.2.2: motion that plays for more than five seconds
+                next to other content needs a way to stop it. */}
+            <button
+              type="button"
+              class="media-toggle"
+              data-media-toggle
+              data-label-pause={t.pause}
+              data-label-play={t.play}
+              aria-label={t.pause}
+            >
+              <span class="media-toggle-glyph" aria-hidden="true">❚❚</span>
+            </button>
+          </div>
+          <ol class="home-steps">
+            {t.workflow.map(([title, body]) => (
+              <li>
+                <h3>{title}</h3>
+                <p>{body}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="band home-band">
+      <div class="site-shell">
+        <div class="section-heading home-marker">
+          <p class="eyebrow">{t.controlEyebrow}</p>
+          <h2>{t.controlTitle}</h2>
+          <p>{t.controlLead}</p>
+        </div>
+        <div class="home-strips home-strips-plain">
+          {t.control.map(([title, body]) => (
+            <article>
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="band home-band">
+      <div class="site-shell">
+        <div class="section-heading home-marker">
+          <p class="eyebrow">{t.fitEyebrow}</p>
+          <h2>{t.fitTitle}</h2>
+          <p>{t.fitLead}</p>
+        </div>
+        <div class="table-scroll" role="region" tabindex="0" aria-label={t.fitLabel}>
+          <table class="compare-table">
+            <thead>
+              <tr>{t.fitHead.map((head) => <th>{head}</th>)}</tr>
+            </thead>
+            <tbody>
+              {t.fit.map(([need, daw, libretracks]) => (
+                <tr><td>{need}</td><td>{daw}</td><td>{libretracks}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <ul class="home-links">
+          {t.alternatives.map(([href, text]) => (
+            <li><a href={href}>{text}<span aria-hidden="true">→</span></a></li>
+          ))}
+        </ul>
+      </div>
+    </section>
+
+    <section class="site-shell home-cta">
+      <div>
+        <h2>{t.ctaTitle}</h2>
+        <p>{t.ctaLead}</p>
+      </div>
+      <div class="home-cta-actions">
+        <div class="hero-actions">
+          <a class="button-link primary" href={`${prefix}/download/`}>
+            <span class="home-play" aria-hidden="true"></span>{t.download}
+          </a>
+          <a class="button-link" href={`${prefix}/docs/`}>{t.ctaDocs}</a>
+        </div>
+        <StoreBadges lang={lang} />
+      </div>
+    </section>
+  </main>
+</SiteLayout>

@@ -1,4 +1,4 @@
-import { browser, $, $$ } from "@wdio/globals";
+import { browser, $ } from "@wdio/globals";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -136,14 +136,21 @@ async function setLocale(locale: Locale) {
   await browser.pause(400);
 }
 
-/** DAW / Compact / Live buttons, in that order — addressed by position. */
-async function switchView(mode: "daw" | "compact" | "live") {
-  const buttons = await $$(".lt-view-mode-switcher button").getElements();
-  if (buttons.length !== 3) {
-    throw new Error(`expected 3 view-mode buttons, found ${buttons.length}`);
-  }
-  await buttons[{ daw: 0, compact: 1, live: 2 }[mode]]!.click();
-  await browser.pause(1200);
+/**
+ * Switch view through the E2E hook. The three-button switcher this used to
+ * click by position became a single button with a menu in 1.16, and the menu
+ * items are translated; the hook is the language-proof way in, and it knows
+ * the Setlist view the old switcher never had.
+ */
+async function switchView(mode: "daw" | "setlist" | "compact" | "live") {
+  await browser.execute(
+    (target: string) =>
+      (
+        window as unknown as { __ltE2E: { setViewMode: (mode: string) => void } }
+      ).__ltE2E.setViewMode(target),
+    mode,
+  );
+  await browser.pause(1500);
 }
 
 /**
@@ -282,7 +289,7 @@ describe("readme screenshots", function () {
     }
   });
 
-  it("captures the DAW, compact and live views", async () => {
+  it("captures the DAW, compact, setlist and live views", async () => {
     await AppPage.reopenSessionUntil(
       demoSession,
       (song) => song.tracks.length >= 5 && song.clips.length >= 5,
@@ -307,6 +314,9 @@ describe("readme screenshots", function () {
       await playUntilAudible();
       await shot(locale, "Compacta");
       await stopPlayback();
+
+      await switchView("setlist");
+      await shot(locale, "Setlist");
 
       await switchView("live");
       await shot(locale, "Live");

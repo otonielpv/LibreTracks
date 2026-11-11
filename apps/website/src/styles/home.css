@@ -1,0 +1,558 @@
+/* Home page only. Shared pieces (buttons, bands, the comparison table) stay in
+   global.css.
+
+   The page borrows its furniture from the app instead of from a landing-page
+   kit: the readouts of the transport bar, the channel strips of the mixer, and the numbered,
+   colour-coded section markers of Live View. Corners are square because the
+   app's are. */
+
+.home {
+  counter-reset: marker;
+}
+
+/* ── Hero ──────────────────────────────────────────────────────────────── */
+.home-hero {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--lt-border-strong);
+  background: var(--lt-surface-low);
+}
+
+.home-hero-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: clamp(2rem, 4vw, 3.5rem);
+  align-items: center;
+  padding-block: clamp(2.5rem, 6vw, 5rem) clamp(3rem, 6vw, 5rem);
+}
+
+.home-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  color: var(--lt-primary);
+  font: 700 0.75rem/1.2 var(--lt-font-label);
+  letter-spacing: var(--lt-tracking-label);
+  text-transform: uppercase;
+}
+
+.home-kicker::before {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  background: var(--lt-primary);
+}
+
+.home-hero h1 {
+  max-width: 13ch;
+  margin: 1.4rem 0 0;
+  color: var(--lt-heading);
+  font-family: var(--lt-font-label);
+  font-size: clamp(2.5rem, 1.1rem + 4.2vw, 4.4rem);
+  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+}
+
+.home-lead {
+  max-width: 50ch;
+  margin: 1.5rem 0 0;
+  color: color-mix(in srgb, var(--lt-text) 76%, transparent);
+  font-size: 1.05rem;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+.home-hero .hero-actions {
+  margin-top: 2rem;
+}
+
+/* The transport's play triangle, in the button that starts everything. */
+.home-play {
+  width: 0;
+  height: 0;
+  border-block: 0.36rem solid transparent;
+  border-left: 0.58rem solid currentColor;
+}
+
+/* The app runs off the right edge of the page on purpose: a timeline has no
+   right edge either. */
+.home-stage {
+  position: relative;
+  margin-right: calc(-1 * clamp(4rem, 14vw, 16rem));
+}
+
+.home-stage-app {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--lt-border-strong);
+  border-radius: var(--lt-radius-lg);
+}
+
+.home-phone {
+  position: absolute;
+  left: -7%;
+  bottom: -9%;
+  width: 46%;
+  padding: 0.3rem;
+  border: 1px solid var(--lt-border-strong);
+  border-radius: 10px;
+  background: #050606;
+  box-shadow: 0 18px 40px rgb(0 0 0 / 0.6);
+}
+
+.home-phone img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+/* ── Readouts ──────────────────────────────────────────────────────────── */
+.home-readouts {
+  border-bottom: 1px solid var(--lt-border-strong);
+  background: var(--lt-surface);
+}
+
+.home-readouts dl {
+  display: grid;
+  grid-template-columns: repeat(3, auto) minmax(0, 1fr);
+  margin-block: 0;
+}
+
+.home-readouts div {
+  padding: 1.1rem clamp(1rem, 2.4vw, 2rem);
+  border-left: 1px solid var(--lt-border);
+}
+
+.home-readouts div:last-child {
+  border-right: 1px solid var(--lt-border);
+}
+
+.home-readouts dt {
+  color: color-mix(in srgb, var(--lt-muted) 80%, transparent);
+  font: 700 0.64rem/1 var(--lt-font-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.home-readouts dd {
+  margin: 0.5rem 0 0;
+  color: var(--lt-primary);
+  font: 700 1.2rem/1.15 var(--lt-font-label);
+  letter-spacing: -0.01em;
+}
+
+/* ── Section markers ───────────────────────────────────────────────────── */
+.home-band {
+  border-top: 0;
+  counter-increment: marker;
+  --mark: var(--lt-mark-intro);
+}
+
+.home-band + .home-band {
+  border-top: 1px solid var(--lt-border);
+}
+
+.home-band:nth-of-type(4n + 3) { --mark: var(--lt-mark-verse); }
+.home-band:nth-of-type(4n) { --mark: var(--lt-mark-chorus); }
+.home-band:nth-of-type(4n + 1) { --mark: var(--lt-mark-solo); }
+.home-band:nth-of-type(4n + 2) { --mark: var(--lt-mark-bridge); }
+
+/* A Live View marker: coloured edge, coloured number, then the name. */
+.home-marker {
+  padding-left: 1.25rem;
+  border-left: 3px solid var(--mark);
+}
+
+.section-heading.home-marker .eyebrow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  color: var(--lt-muted);
+}
+
+.home-marker .eyebrow::before {
+  content: counter(marker, decimal-leading-zero);
+  color: var(--mark);
+  font-size: 1.15rem;
+  letter-spacing: 0;
+}
+
+.home-marker h2 {
+  font-family: var(--lt-font-label);
+  font-weight: 700;
+  letter-spacing: -0.028em;
+}
+
+.home-actions {
+  margin-top: 2.5rem;
+}
+
+/* ── Channel strips ────────────────────────────────────────────────────── */
+/* One ruled panel divided into strips, like the mixer, instead of a row of
+   separate cards. */
+.home-strips {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--lt-border-strong);
+  border-radius: var(--lt-radius-lg);
+  background: var(--lt-surface-container);
+}
+
+.home-strips-plain {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.home-strips article {
+  --strip: var(--lt-border-strong);
+  padding: 1.4rem 1.35rem 1.6rem;
+  border-left: 1px solid var(--lt-border);
+  border-top: 3px solid var(--strip);
+}
+
+.home-strips article:first-child {
+  border-left: 0;
+}
+
+.home-strips article:nth-child(1) { --strip: var(--lt-mark-outro); }
+.home-strips article:nth-child(2) { --strip: var(--lt-mark-chorus); }
+.home-strips article:nth-child(3) { --strip: var(--lt-primary); }
+.home-strips article:nth-child(4) { --strip: var(--lt-mark-verse); }
+
+.home-strip-label {
+  display: block;
+  margin-bottom: 1.1rem;
+  color: var(--strip);
+  font: 700 0.68rem/1 var(--lt-font-label);
+  letter-spacing: 0.12em;
+}
+
+.home-strips h3 {
+  margin: 0 0 0.6rem;
+  color: var(--lt-heading);
+  font-size: 1.05rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.home-strips p {
+  margin: 0;
+  color: color-mix(in srgb, var(--lt-text) 72%, transparent);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* ── Product tour ──────────────────────────────────────────────────────── */
+.home-views {
+  display: grid;
+  gap: clamp(3rem, 7vw, 5.5rem);
+  margin-top: 3.5rem;
+}
+
+.home-view {
+  --view: var(--lt-mark-verse);
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  gap: clamp(1.5rem, 4vw, 3.5rem);
+  align-items: center;
+}
+
+.home-view:nth-child(2) { --view: var(--lt-mark-chorus); }
+.home-view:nth-child(3) { --view: var(--lt-mark-solo); }
+.home-view:nth-child(4) { --view: var(--lt-mark-bridge); }
+.home-view:nth-child(5) { --view: var(--lt-mark-outro); }
+
+/* Alternate sides so the eye zig-zags down the page instead of scanning a
+   column of identical rows. */
+.home-view:nth-child(even) {
+  grid-template-columns: minmax(0, 1.28fr) minmax(0, 0.72fr);
+}
+
+.home-view:nth-child(even) .home-view-copy {
+  order: 2;
+}
+
+.home-view-name {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+  margin: 0;
+  color: var(--lt-muted);
+  font: 700 0.75rem/1 var(--lt-font-label);
+  letter-spacing: var(--lt-tracking-label);
+  text-transform: uppercase;
+}
+
+/* The big coloured numeral of a Live View marker button. */
+.home-view-name span {
+  color: var(--view);
+  font-size: 2.6rem;
+  letter-spacing: -0.04em;
+}
+
+.home-view-copy h3 {
+  margin: 1rem 0 0.8rem;
+  color: var(--lt-heading);
+  font-family: var(--lt-font-label);
+  font-size: clamp(1.4rem, 1.1rem + 1vw, 1.9rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+.home-view-copy > p:last-child {
+  max-width: 42ch;
+  margin: 0;
+  color: color-mix(in srgb, var(--lt-text) 74%, transparent);
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+.home-view-shot {
+  border: 1px solid var(--lt-border-strong);
+  border-radius: var(--lt-radius-lg);
+  background: var(--lt-surface-low);
+}
+
+
+.home-view-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* ── Workflow ──────────────────────────────────────────────────────────── */
+.home-workflow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: clamp(1.5rem, 4vw, 3.5rem);
+  align-items: start;
+}
+
+.home-workflow-media {
+  border: 1px solid var(--lt-border-strong);
+  border-radius: var(--lt-radius-lg);
+}
+
+.home-workflow-media video {
+  border-bottom: 0;
+  aspect-ratio: 820 / 442;
+}
+
+.home-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  border-top: 1px solid var(--lt-border-strong);
+}
+
+.home-steps li {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr);
+  padding: 1.3rem 0;
+  border-bottom: 1px solid var(--lt-border);
+  counter-increment: step;
+}
+
+.home-steps li::before {
+  content: counter(step, decimal-leading-zero);
+  grid-row: span 2;
+  color: var(--lt-primary);
+  font: 700 1.5rem/1.1 var(--lt-font-label);
+  letter-spacing: -0.03em;
+}
+
+.home-steps h3 {
+  margin: 0 0 0.4rem;
+  color: var(--lt-heading);
+  font-size: 1.08rem;
+  line-height: 1.3;
+}
+
+.home-steps p {
+  margin: 0;
+  color: color-mix(in srgb, var(--lt-text) 72%, transparent);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* ── Alternative links ─────────────────────────────────────────────────── */
+.home-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 2rem;
+  margin: 1.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.4rem;
+  border-bottom: 1px solid var(--lt-border-strong);
+  color: var(--lt-text);
+  font: 700 0.76rem/1 var(--lt-font-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.home-links a span {
+  transition: transform 0.12s ease;
+}
+
+.home-links a:hover {
+  border-color: var(--lt-primary);
+  color: var(--lt-primary);
+}
+
+.home-links a:hover span {
+  transform: translateX(3px);
+}
+
+/* ── Closing call to action ────────────────────────────────────────────── */
+/* The "now playing" marker: the one block on the page that is lit. */
+.home-cta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2rem clamp(2rem, 5vw, 4rem);
+  align-items: center;
+  margin-top: 1rem;
+  padding: clamp(2rem, 4vw, 3rem);
+  border: 1px solid var(--lt-primary);
+  border-left-width: 4px;
+  border-radius: var(--lt-radius-lg);
+  background: color-mix(in srgb, var(--lt-primary) 7%, var(--lt-surface));
+}
+
+.home-cta h2 {
+  max-width: 18ch;
+  margin: 0;
+  color: var(--lt-heading);
+  font-family: var(--lt-font-label);
+  font-size: var(--lt-h2);
+  font-weight: 700;
+  line-height: var(--lt-leading-heading);
+  letter-spacing: -0.028em;
+}
+
+.home-cta p {
+  max-width: 48ch;
+  margin: 0.9rem 0 0;
+  color: color-mix(in srgb, var(--lt-text) 76%, transparent);
+  line-height: 1.6;
+}
+
+.home-cta .hero-actions {
+  margin-top: 0;
+}
+
+.home-cta .store-badges {
+  margin-top: 1rem;
+}
+
+@media (max-width: 1100px) {
+  .home-strips {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .home-strips article:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .home-strips-plain {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .home-strips-plain article:nth-child(odd) {
+    border-left: 1px solid var(--lt-border);
+  }
+
+  .home-strips-plain article:first-child {
+    border-left: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .home-hero-grid,
+  .home-view,
+  .home-view:nth-child(even),
+  .home-workflow,
+  .home-cta {
+    grid-template-columns: 1fr;
+  }
+
+  .home-hero h1 {
+    max-width: 16ch;
+  }
+
+  /* Stacked, the screenshot keeps to the page and the phone tucks inside. */
+  .home-stage {
+    margin: 0 0 1.5rem;
+  }
+
+  .home-phone {
+    left: auto;
+    right: 0;
+    bottom: -8%;
+  }
+
+  /* Stacked, the copy always introduces its screenshot. */
+  .home-view:nth-child(even) .home-view-copy {
+    order: 0;
+  }
+
+
+
+  .home-readouts dl {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .home-readouts div:last-child {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--lt-border);
+  }
+
+  .home-readouts div:nth-child(3) {
+    border-right: 1px solid var(--lt-border);
+  }
+}
+
+@media (max-width: 640px) {
+  .home-strips,
+  .home-strips-plain {
+    grid-template-columns: 1fr;
+  }
+
+  .home-strips article,
+  .home-strips-plain article:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .home-readouts dd {
+    font-size: 1rem;
+  }
+
+  .home-readouts div {
+    padding: 0.9rem 0.75rem;
+  }
+
+  .home-hero .hero-actions .button-link {
+    flex: 1 1 100%;
+  }
+}
+
+/* The store badges sit under the hero buttons: recognisable at a glance, and
+   the only way to install on a phone or tablet. */
+.home-hero .store-badges {
+  margin-top: 1.1rem;
+}
