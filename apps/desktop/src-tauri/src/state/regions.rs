@@ -4,7 +4,7 @@
 //! loaded `Song` and persists it; the pure geometry lives in `timeline_math`.
 
 use libretracks_core::{
-    effective_bpm_at, source_seconds_at_view, KeyChange, KeyMap, Marker, MarkerCategory,
+    effective_bpm_at, source_seconds_at_view, AutomationAction, KeyChange, KeyMap, Marker, MarkerCategory,
     MarkerKind, Song, SongRegion,
     TempoMarker, TimeSignatureMarker, MAX_COMPACT_COLUMN_WIDTH_REM, MAX_TRANSPOSE_SEMITONES,
     MIN_COMPACT_COLUMN_WIDTH_REM, MIN_TRANSPOSE_SEMITONES,
@@ -1491,11 +1491,43 @@ impl DesktopSession {
         song.regions[region_index].end_seconds = split_seconds;
         song.regions[region_index].structure = None;
         song.regions[region_index].rebase_key_changes(region.start_seconds);
+        let right_id = right.id.clone();
         song.regions.push(right);
         sort_song_regions(&mut song.regions);
+        // In the per-song layouts the right half gets its own copy of the
+        // song's tracks, and its clips and cues move to them.
+        let new_track_ids =
+            super::song_templates::split_song_tracks(&mut song, region_id, &right_id, split_seconds);
+        let automation = (!new_track_ids.is_empty()).then(|| {
+            let mut automation = self.automation.clone();
+            for cue in automation.cues.iter_mut().filter(|cue| {
+                cue.at_seconds >= split_seconds - 1e-9 && cue.at_seconds < region.end_seconds
+            }) {
+                for action in &mut cue.actions {
+                    match action {
+                        AutomationAction::SetTrackMute { track_id, .. }
+                        | AutomationAction::SetTrackSolo { track_id, .. }
+                        | AutomationAction::SetTrackMix { track_id, .. } => {
+                            if let Some(id) = new_track_ids.get(track_id.as_str()) {
+                                *track_id = id.clone();
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            automation
+        });
 
         audio.update_live_song_regions(&song)?;
-        self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
+        self.persist_song_and_automation(
+            song,
+            automation,
+            audio,
+            AudioChangeImpact::StructureRebuild,
+            true,
+            UpdatePhase::Commit,
+        )?;
 
         Ok(self.snapshot())
     }

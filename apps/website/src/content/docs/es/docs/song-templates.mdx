@@ -159,6 +159,31 @@ Después, suelta los stems en la canción. Un aviso cuenta cuántos se han
 organizado y cuántos no tenían regla; **Deshacer** (o `Ctrl+Z`) deshace el
 lote entero. Los audios que no coinciden con nada se colocan como siempre.
 
+## Canciones importadas
+
+Al importar un paquete `.ltpkg` (del disco, de la nube o desde la Setlist) o
+un proyecto de Reaper o Ableton, sus pistas se ordenan con la plantilla igual
+que si soltaras sus audios: cada una va a su carpeta según su nombre, con sus
+clips y su mezcla. Las que no coinciden con nada se quedan como vienen.
+
+## Cuándo se aplica la plantilla
+
+| Qué haces | ¿Se aplica la plantilla? |
+| --- | --- |
+| **+ Nueva canción** | Sí: la canción sale con sus pistas y carpetas. |
+| Soltar audios en una canción (timeline o Compacta) | Sí: cada audio va a su sitio según su nombre. |
+| Arrastrar una carpeta de la Biblioteca | Sí, una sola vez por canción. |
+| Importar un `.ltpkg` (disco, nube o Setlist) | Sí: sus pistas se ordenan con ella. |
+| Importar un proyecto de Reaper o Ableton de una canción | Sí, y respeta **Pistas de cada canción**. |
+| Importar un proyecto de Reaper o Ableton con varias canciones | No: sus pistas cruzan todas las canciones y quedan compartidas. |
+| Partir una canción en dos | No se vuelve a aplicar. En los modos por canción, la segunda mitad recibe una copia de las pistas de la primera. |
+| Abrir una sesión que ya tenías | No: sus canciones se quedan como estaban. |
+| **Nueva canción desde plantilla › Sin plantilla** | No, solo para esa canción. |
+
+Con las pistas **compartidas entre canciones**, si la sesión ya tiene pistas
+con reglas (porque la creaste desde una plantilla), la plantilla no añade
+otra copia: solo suma sus reglas a las pistas que se llaman igual.
+
 ## Reglas de coincidencia
 
 Clic derecho en una pista o carpeta › **Reglas de coincidencia…**: las
@@ -186,3 +211,6 @@ segunda canción y las siguientes:
   sus pistas dentro.
 - **Sueltas por canción**: cada canción tiene su propia copia de las pistas en
   la raíz.
+
+En los dos modos por canción, al partir una canción en dos, la segunda mitad
+recibe su propia copia de las pistas, con sus clips.

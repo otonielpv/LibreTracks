@@ -22,7 +22,8 @@ use crate::models::SongPackageImportResponse;
 
 use super::{
     import_audio_files_from_paths_to_library, list_library_assets, reconcile_regions_and_clips,
-    slugify, timestamp_suffix, AudioChangeImpact, AudioFilePathImportPayload, DesktopSession,
+    slugify, song_templates, timestamp_suffix, AudioChangeImpact, AudioFilePathImportPayload,
+    DesktopSession,
 };
 
 impl DesktopSession {
@@ -533,6 +534,46 @@ impl DesktopSession {
         // straddles a region boundary, then grow each region's end to cover the
         // clips that start inside it (bounded by the next region's start).
         reconcile_regions_and_clips(&mut next_song);
+
+        // Un proyecto de una sola canción (lo normal en un multitrack de
+        // Ableton o Reaper) sigue el modo de pistas y la plantilla de Ajustes,
+        // igual que un `.ltpkg`. Con varias canciones sus pistas las cruzan
+        // todas y se quedan compartidas, como siempre.
+        let previous_regions: HashSet<&str> = current_song
+            .regions
+            .iter()
+            .map(|region| region.id.as_str())
+            .collect();
+        let new_regions: Vec<String> = next_song
+            .regions
+            .iter()
+            .filter(|region| !previous_regions.contains(region.id.as_str()))
+            .map(|region| region.id.clone())
+            .collect();
+        if let [region_id] = new_regions.as_slice() {
+            let layout = audio
+                .current_settings()
+                .map(|settings| settings.track_layout())
+                .unwrap_or_default();
+            let before: HashSet<String> = current_song
+                .tracks
+                .iter()
+                .map(|track| track.id.clone())
+                .collect();
+            song_templates::assign_imported_tracks_to_song(
+                &mut next_song,
+                &before,
+                region_id,
+                layout,
+            );
+            song_templates::organise_imported_song(
+                &mut next_song,
+                &before,
+                region_id,
+                layout,
+                audio,
+            )?;
+        }
 
         eprintln!("[libretracks-import] persisting song update (structure rebuild)");
         self.persist_song_update(next_song, audio, AudioChangeImpact::StructureRebuild, true)?;

@@ -157,6 +157,31 @@ Then drop the stems into the song. A notice counts how many were organised and
 how many had no rule; **Undo** (or `Ctrl+Z`) takes the whole drop back. Audio
 that matches nothing is placed as usual.
 
+## Imported songs
+
+When you import a `.ltpkg` package (from disk, from the cloud or from the
+Setlist) or a Reaper or Ableton project, its tracks are organised by the
+template just as if you dropped its files: each one goes to its folder by its
+name, with its clips and its mix. Tracks that match nothing stay as they come.
+
+## When the template applies
+
+| What you do | Does the template apply? |
+| --- | --- |
+| **+ New song** | Yes: the song comes with its tracks and folders. |
+| Drop files into a song (timeline or Compact) | Yes: each file goes to its place by its name. |
+| Drag a folder from the Library | Yes, once per song. |
+| Import a `.ltpkg` (disk, cloud or Setlist) | Yes: its tracks are organised by it. |
+| Import a one-song Reaper or Ableton project | Yes, and it follows **Each song's tracks**. |
+| Import a Reaper or Ableton project with several songs | No: its tracks span every song and stay shared. |
+| Split a song in two | It is not applied again. In the per-song modes, the second half gets a copy of the first half's tracks. |
+| Open a session you already had | No: its songs stay as they were. |
+| **New song from template › No template** | No, for that song only. |
+
+With tracks **shared between songs**, if the session already has tracks with
+rules (because you created it from a template), the template does not add
+another copy: it only adds its rules to the tracks with the same name.
+
 ## Matching rules
 
 Right-click a track or folder › **Matching rules…**: the words, separated by
@@ -183,3 +208,6 @@ second song and the ones after it:
 - **One folder per song**: each song has a folder with its name and its tracks
   inside.
 - **Separate per song**: each song has its own copy of the tracks at the root.
+
+In both per-song modes, when you split a song in two, the second half gets its
+own copy of the tracks, with its clips.

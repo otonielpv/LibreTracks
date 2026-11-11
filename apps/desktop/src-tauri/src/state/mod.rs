@@ -876,6 +876,35 @@ pub(crate) fn song_import_track_mode(app: &AppHandle) -> SongImportTrackMode {
         .unwrap_or(SongImportTrackMode::MergeIntoExisting)
 }
 
+/// Con plantilla por defecto, las pistas de la canción que `imported` añadió a
+/// `before` (la sesión antes de importar) se ordenan como si se hubieran
+/// soltado sus stems. La canción nueva es la región que no estaba antes.
+pub(super) fn organise_imported_with_template(
+    before: &Song,
+    imported: &mut Song,
+    track_mode: SongImportTrackMode,
+    audio: &AudioController,
+) -> Result<(), DesktopError> {
+    let previous_regions: HashSet<&str> = before.regions.iter().map(|r| r.id.as_str()).collect();
+    let Some(region_id) = imported
+        .regions
+        .iter()
+        .find(|region| !previous_regions.contains(region.id.as_str()))
+        .map(|region| region.id.clone())
+    else {
+        return Ok(());
+    };
+    let previous_tracks: HashSet<String> = before.tracks.iter().map(|t| t.id.clone()).collect();
+    song_templates::organise_imported_song(
+        imported,
+        &previous_tracks,
+        &region_id,
+        track_mode,
+        audio,
+    )?;
+    Ok(())
+}
+
 fn waveform_job_key(song_dir: &Path, waveform_key: &str) -> String {
     format!("{}\n{waveform_key}", song_dir.to_string_lossy())
 }
@@ -2415,6 +2444,7 @@ impl DesktopSession {
             insert_at_seconds,
             track_mode,
         )?;
+        organise_imported_with_template(&song, &mut imported.song, track_mode, audio)?;
         // Self-contained packages carry their audio: copy it into this project's
         // audio/ folder and re-point the imported clips before anything else
         // touches the source paths.
@@ -2492,12 +2522,10 @@ impl DesktopSession {
         // The package is already decompressed (see `extract_song_package`, run
         // off the lock by the caller, which owns the 7..40% progress band);
         // merging it into the song is fast, so this phase owns 42..50%.
-        let mut imported = merge_extracted_song_package(
-            &song,
-            extracted,
-            insert_at_seconds,
-            song_import_track_mode(app),
-        )?;
+        let track_mode = song_import_track_mode(app);
+        let mut imported =
+            merge_extracted_song_package(&song, extracted, insert_at_seconds, track_mode)?;
+        organise_imported_with_template(&song, &mut imported.song, track_mode, audio)?;
         emit_project_load_progress(app, 42, "Copiando audio del paquete...".into(), 0, 0, 0, 0);
         place_bundled_audio_and_repoint(&song_dir, &mut imported.song, &imported.bundled_audio)?;
         video_library::place_bundled_videos_and_register(

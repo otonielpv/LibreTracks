@@ -23,6 +23,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use libretracks_core::automation::AutomationAction;
 use libretracks_core::track_matching::match_stems;
 use libretracks_core::{Song, SongRegion, Track, TrackKind};
 use libretracks_project::{load_song_from_file, SongImportTrackMode};
@@ -754,6 +755,463 @@ pub(crate) fn organise_stem_drop_with(
         }
     }
     Ok(placements.into_iter().flatten().collect())
+}
+
+/// Ordena con la plantilla por defecto las pistas que acaba de traer una
+/// canción importada (`.ltpkg`, Reaper, Ableton). `before` son los ids de
+/// pista que había antes de importar: las demás son las importadas. `layout`
+/// es el modo de pistas con que se importó. `None` si no había nada que
+/// ordenar.
+pub(crate) fn organise_imported_song(
+    song: &mut Song,
+    before: &HashSet<String>,
+    region_id: &str,
+    layout: SongImportTrackMode,
+    audio: &AudioController,
+) -> Result<Option<TemplateDropSummary>, DesktopError> {
+    let locale = ui_locale(audio);
+    let template = audio
+        .current_settings()
+        .ok()
+        .and_then(|settings| default_template_tracks(&settings, locale.as_deref()))
+        .unwrap_or_default();
+    organise_imported_tracks(
+        song,
+        before,
+        region_id,
+        &template,
+        layout,
+        auto_color_enabled(audio),
+    )
+}
+
+/// Al partir la canción `left_id` en `split_seconds`, la mitad derecha
+/// (`right_id`) recibe su propia copia de las pistas de la canción (modos por
+/// canción) y se lleva a ella los clips que empiezan desde el corte. La copia
+/// de la carpeta de la canción toma el nombre de la mitad derecha. Devuelve
+/// id viejo → id nuevo, para que quien llama reapunte la automatización de la
+/// mitad derecha. Vacío si la canción usaba las pistas compartidas.
+pub(crate) fn split_song_tracks(
+    song: &mut Song,
+    left_id: &str,
+    right_id: &str,
+    split_seconds: f64,
+) -> HashMap<String, String> {
+    let owned: Vec<Track> = song
+        .tracks
+        .iter()
+        .filter(|track| track.song_region_id.as_deref() == Some(left_id))
+        .cloned()
+        .collect();
+    let mut new_id: HashMap<String, String> = HashMap::new();
+    if owned.is_empty() {
+        return new_id;
+    }
+    let right_name = song
+        .regions
+        .iter()
+        .find(|region| region.id == right_id)
+        .map(|region| region.name.clone());
+    let left_folder = song_folder_id(song, left_id);
+    let mut ids = TrackIdAllocator::new(song);
+    for track in &owned {
+        new_id.insert(track.id.clone(), ids.allocate());
+    }
+    let copies: Vec<Track> = owned
+        .iter()
+        .map(|track| {
+            let mut copy = track.clone();
+            copy.id = new_id[&track.id].clone();
+            copy.song_region_id = Some(right_id.to_string());
+            copy.parent_track_id = track
+                .parent_track_id
+                .as_ref()
+                .map(|parent| new_id.get(parent).cloned().unwrap_or_else(|| parent.clone()));
+            if Some(&track.id) == left_folder.as_ref() {
+                if let Some(name) = &right_name {
+                    copy.name = name.clone();
+                }
+            }
+            copy
+        })
+        .collect();
+    // Justo después de la última pista de la mitad izquierda.
+    let at = song
+        .tracks
+        .iter()
+        .rposition(|track| track.song_region_id.as_deref() == Some(left_id))
+        .map(|index| index + 1)
+        .unwrap_or(song.tracks.len());
+    song.tracks.splice(at..at, copies);
+    for clip in song.clips.iter_mut() {
+        if clip.timeline_start_seconds >= split_seconds - 1e-9 {
+            if let Some(id) = new_id.get(&clip.track_id) {
+                clip.track_id = id.clone();
+            }
+        }
+    }
+    new_id
+}
+
+/// Da a la canción `region_id` las pistas que trajo una importación que no
+/// sabe de modos (Reaper, Ableton), como hace un `.ltpkg`: en «carpeta por
+/// canción» las mete en una carpeta con el nombre de la canción, y en los dos
+/// modos por canción las marca con ella. En el compartido no hace nada.
+pub(crate) fn assign_imported_tracks_to_song(
+    song: &mut Song,
+    before: &HashSet<String>,
+    region_id: &str,
+    layout: SongImportTrackMode,
+) {
+    if layout == SongImportTrackMode::MergeIntoExisting {
+        return;
+    }
+    let Some(region_name) = song
+        .regions
+        .iter()
+        .find(|region| region.id == region_id)
+        .map(|region| region.name.clone())
+    else {
+        return;
+    };
+    let folder_id = (layout == SongImportTrackMode::SongFolder).then(|| {
+        let id = TrackIdAllocator::new(song).allocate();
+        // Delante de las importadas, para que la carpeta quede donde empezaban.
+        let at = song
+            .tracks
+            .iter()
+            .position(|track| !before.contains(&track.id))
+            .unwrap_or(song.tracks.len());
+        song.tracks
+            .insert(at, song_folder_track(id.clone(), region_name, region_id));
+        id
+    });
+    for track in song.tracks.iter_mut() {
+        if before.contains(&track.id) || Some(&track.id) == folder_id.as_ref() {
+            continue;
+        }
+        track.song_region_id = Some(region_id.to_string());
+        if track.parent_track_id.is_none() {
+            if let Some(folder_id) = &folder_id {
+                track.parent_track_id = Some(folder_id.clone());
+                if track.audio_to.trim().eq_ignore_ascii_case("master") {
+                    track.audio_to = "inherit".to_string();
+                }
+            }
+        }
+    }
+}
+
+/// El corazón de [`organise_imported_song`], sin ajustes.
+///
+/// Es el mismo reparto que al soltar stems, pero con pistas que ya existen:
+/// - a una **pista** libre en la canción le pasan los clips de la importada
+///   (y su mezcla, si la pista no tenía audio en ninguna canción), y la
+///   importada desaparece;
+/// - a una pista ocupada, la importada se queda como hermana suya, con su
+///   color y su salida;
+/// - en una **carpeta**, la importada entra dentro (o, si hay una hija libre
+///   con su nombre, le pasa los clips).
+///
+/// Las que no coinciden con nada quedan donde las pone el modo de pistas. Al
+/// conservar su id, la mezcla y la automatización de la importada siguen
+/// valiendo; cuando sus clips pasan a otra pista, la automatización de la
+/// canción se va con ellos.
+pub(crate) fn organise_imported_tracks(
+    song: &mut Song,
+    before: &HashSet<String>,
+    region_id: &str,
+    template: &[Track],
+    layout: SongImportTrackMode,
+    auto_color: bool,
+) -> Result<Option<TemplateDropSummary>, DesktopError> {
+    let has_rules = !template.is_empty()
+        || song
+            .tracks
+            .iter()
+            .any(|track| before.contains(&track.id) && !track.match_aliases.is_empty());
+    if !has_rules || !song.tracks.iter().any(|track| !before.contains(&track.id)) {
+        return Ok(None);
+    }
+    let per_song = layout != SongImportTrackMode::MergeIntoExisting;
+
+    // La plantilla se aplica como si las importadas no estuvieran: en los
+    // modos por canción, porque no se aplica a una canción que ya tiene sus
+    // pistas; en el compartido, porque una importada que se llamara como una
+    // pista de la plantilla («Click») se quedaría con su color y su salida.
+    // Siguen en la sesión mientras tanto, para que sus ids no se repitan; luego
+    // se apartan y se recolocan una a una.
+    let imported_before_template: Vec<String> = song
+        .tracks
+        .iter()
+        .filter(|track| !before.contains(&track.id))
+        .map(|track| track.id.clone())
+        .collect();
+    // La carpeta de la canción que creó la importación: la plantilla trae la
+    // suya.
+    let import_folder = per_song
+        .then(|| song_folder_id(song, region_id))
+        .flatten()
+        .filter(|id| !song.clips.iter().any(|clip| &clip.track_id == id));
+    const DETACHED: &str = "__importing__";
+    for track in song.tracks.iter_mut() {
+        if !before.contains(&track.id) {
+            track.song_region_id = Some(DETACHED.to_string());
+        }
+    }
+    let session_has_layout = !per_song
+        && song
+            .tracks
+            .iter()
+            .any(|track| before.contains(&track.id) && !track.match_aliases.is_empty());
+    if session_has_layout {
+        merge_template_aliases(song, template);
+    } else {
+        apply_template_to_region(song, template, region_id, layout, auto_color)?;
+    }
+    let mut imported: Vec<Track> = Vec::new();
+    let mut kept = Vec::with_capacity(song.tracks.len());
+    for mut track in std::mem::take(&mut song.tracks) {
+        if track.song_region_id.as_deref() == Some(DETACHED) {
+            track.song_region_id = per_song.then(|| region_id.to_string());
+            if Some(&track.id) != import_folder.as_ref() {
+                imported.push(track);
+            }
+        } else {
+            kept.push(track);
+        }
+    }
+    song.tracks = kept;
+
+    let (region_name, region_span) = song
+        .regions
+        .iter()
+        .find(|region| region.id == region_id)
+        .map(|region| {
+            (
+                region.name.clone(),
+                (region.start_seconds, region.end_seconds),
+            )
+        })
+        .ok_or_else(|| DesktopError::AudioCommand(format!("song {region_id} not found")))?;
+    // En los modos por canción las importadas están apartadas, así que los
+    // destinos son solo la plantilla y la sesión.
+    let targets = {
+        let own = alias_targets(song, Some(region_id));
+        if own.is_empty() {
+            alias_targets(song, None)
+        } else {
+            own
+        }
+    };
+    let audio_tracks: Vec<&Track> = imported
+        .iter()
+        .filter(|track| track.kind == TrackKind::Audio)
+        .collect();
+    let names: Vec<&str> = audio_tracks.iter().map(|track| track.name.as_str()).collect();
+    let alias_lists: Vec<&[String]> = targets
+        .iter()
+        .map(|(_, aliases)| aliases.as_slice())
+        .collect();
+    let matches = match_stems(&names, Some(&region_name), &alias_lists);
+    let target_of: HashMap<String, String> = audio_tracks
+        .iter()
+        .zip(&matches)
+        .filter_map(|(track, target)| target.map(|index| (track.id.clone(), targets[index].0.clone())))
+        .collect();
+
+    let mut used: HashSet<String> = HashSet::new();
+    let mut last_sibling: HashMap<String, String> = HashMap::new();
+    let mut summary = TemplateDropSummary::default();
+    for track in imported {
+        let is_audio = track.kind == TrackKind::Audio;
+        let placed = match target_of.get(&track.id) {
+            Some(target_id) => adopt_imported_track(
+                song,
+                &track,
+                target_id,
+                region_span,
+                &mut used,
+                &mut last_sibling,
+            )?,
+            None => false,
+        };
+        if !placed {
+            // Donde la habría dejado la importación, pero en la carpeta de la
+            // canción que trajo la plantilla.
+            let parent = (layout == SongImportTrackMode::SongFolder)
+                .then(|| song_folder_id(song, region_id))
+                .flatten();
+            let parent = match track.parent_track_id.as_ref() {
+                Some(own)
+                    if imported_before_template.contains(own)
+                        && song.tracks.iter().any(|t| &t.id == own) =>
+                {
+                    Some(own.clone())
+                }
+                _ => parent,
+            };
+            let mut track = track;
+            track.parent_track_id = parent.clone();
+            insert_track(&mut song.tracks, track, None, parent.as_deref())?;
+        }
+        if is_audio {
+            if placed {
+                summary.matched += 1;
+            } else {
+                summary.unmatched += 1;
+            }
+        }
+    }
+    // Las carpetas que trajo la importación y se han quedado sin nada (sus
+    // pistas se fueron a las de la plantilla). De dentro afuera, por si una
+    // vacía estaba dentro de otra.
+    loop {
+        let empty = song.tracks.iter().position(|track| {
+            imported_before_template.contains(&track.id)
+                && track.kind == TrackKind::Folder
+                && !song
+                    .tracks
+                    .iter()
+                    .any(|child| child.parent_track_id.as_deref() == Some(track.id.as_str()))
+                && !song.clips.iter().any(|clip| clip.track_id == track.id)
+        });
+        match empty {
+            Some(index) => {
+                song.tracks.remove(index);
+            }
+            None => break,
+        }
+    }
+    Ok(Some(summary))
+}
+
+/// Coloca la pista importada `track` en el destino `target_id`. Devuelve si la
+/// colocó; si el destino no admite audio, quien llama la deja como estaba.
+/// La importada ya no está en `song.tracks`.
+fn adopt_imported_track(
+    song: &mut Song,
+    track: &Track,
+    target_id: &str,
+    (region_start, region_end): (f64, f64),
+    used: &mut HashSet<String>,
+    last_sibling: &mut HashMap<String, String>,
+) -> Result<bool, DesktopError> {
+    let Some(target) = song.tracks.iter().find(|t| t.id == target_id).cloned() else {
+        return Ok(false);
+    };
+    let busy = |song: &Song, used: &HashSet<String>, track_id: &str| {
+        used.contains(track_id)
+            || song.clips.iter().any(|clip| {
+                clip.track_id == track_id
+                    && clip.timeline_start_seconds < region_end
+                    && clip.timeline_start_seconds + clip.duration_seconds > region_start
+            })
+    };
+    // (la pista que recibe los clips, o None para meter la importada entera
+    // bajo `parent` después de `after`).
+    let (receiver, parent, after, audio_to, region) = match target.kind {
+        TrackKind::Folder => {
+            let reusable = song
+                .tracks
+                .iter()
+                .find(|child| {
+                    child.parent_track_id.as_deref() == Some(target.id.as_str())
+                        && child.kind == TrackKind::Audio
+                        && child.id != track.id
+                        && child.name.trim().eq_ignore_ascii_case(track.name.trim())
+                        && !busy(song, used, &child.id)
+                })
+                .map(|child| child.id.clone());
+            (
+                reusable,
+                Some(target.id.clone()),
+                None,
+                "inherit".to_string(),
+                target.song_region_id.clone(),
+            )
+        }
+        TrackKind::Audio if !busy(song, used, &target.id) => (
+            Some(target.id.clone()),
+            None,
+            None,
+            String::new(),
+            None,
+        ),
+        TrackKind::Audio => (
+            None,
+            target.parent_track_id.clone(),
+            Some(
+                last_sibling
+                    .get(&target.id)
+                    .cloned()
+                    .unwrap_or_else(|| target.id.clone()),
+            ),
+            target.audio_to.clone(),
+            target.song_region_id.clone(),
+        ),
+        _ => return Ok(false),
+    };
+
+    match receiver {
+        Some(receiver_id) => {
+            let fresh = !song.clips.iter().any(|clip| clip.track_id == receiver_id);
+            move_track_content(song, &track.id, &receiver_id);
+            if let Some(receiver) = song.tracks.iter_mut().find(|t| t.id == receiver_id) {
+                if fresh {
+                    // La pista no sonaba en ninguna canción: hereda la mezcla
+                    // con que venía la importada.
+                    receiver.volume = track.volume;
+                    receiver.pan = track.pan;
+                }
+            }
+            used.insert(receiver_id);
+        }
+        None => {
+            let mut adopted = track.clone();
+            adopted.parent_track_id = parent.clone();
+            adopted.audio_to = audio_to;
+            adopted.song_region_id = region;
+            if target.color.is_some() {
+                adopted.color = target.color.clone();
+            }
+            insert_track(&mut song.tracks, adopted, after.as_deref(), parent.as_deref())?;
+            if target.kind == TrackKind::Audio {
+                last_sibling.insert(target.id.clone(), track.id.clone());
+            }
+            used.insert(track.id.clone());
+        }
+    }
+    Ok(true)
+}
+
+/// Pasa a `to` los clips de `from`, en la línea de tiempo y en el original y
+/// los arreglos guardados, y las acciones de automatización que la nombran.
+fn move_track_content(song: &mut Song, from: &str, to: &str) {
+    for clip in song.clips.iter_mut().filter(|clip| clip.track_id == from) {
+        clip.track_id = to.to_string();
+    }
+    for structure in song.structures_mut() {
+        for clip in structure.stored_clips_mut() {
+            if clip.track_id == from {
+                clip.track_id = to.to_string();
+            }
+        }
+        for cue in structure.stored_automation_cues_mut() {
+            for action in &mut cue.actions {
+                match action {
+                    AutomationAction::SetTrackMute { track_id, .. }
+                    | AutomationAction::SetTrackSolo { track_id, .. }
+                    | AutomationAction::SetTrackMix { track_id, .. }
+                        if track_id == from =>
+                    {
+                        *track_id = to.to_string();
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
 }
 
 /// Las pistas con alias, en el orden del arreglo (que es la prioridad), de la

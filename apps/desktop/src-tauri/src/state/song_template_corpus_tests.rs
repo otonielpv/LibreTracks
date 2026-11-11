@@ -531,7 +531,7 @@ fn check_invariants(
     song: &Song,
     layout: SongImportTrackMode,
     template: Template,
-    entry: Entry,
+    _entry: Entry,
     stems: &[(String, String, String)],
     problems: &mut Vec<String>,
 ) {
@@ -648,7 +648,7 @@ fn check_invariants(
     }
 
     // Copias de la plantilla: una por canción (o una en total si se comparte).
-    if template != Template::None && entry != Entry::Ltpkg {
+    if template != Template::None {
         let marker = "Guitarras";
         let copies = song.tracks.iter().filter(|t| t.kind == TrackKind::Folder && t.name == marker).count();
         let expected = if layout == SongImportTrackMode::MergeIntoExisting { 1 } else { SETLIST.len() };
