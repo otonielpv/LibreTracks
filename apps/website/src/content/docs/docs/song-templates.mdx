@@ -3,6 +3,8 @@ title: Song templates
 description: "Song templates in LibreTracks: new songs come with their tracks and folders, and a multitrack's stems land in their place by name (Click, EG, Keys, BGV…)."
 ---
 
+import Clip from "../../../components/guide/Clip.astro";
+
 A template keeps tracks, folders, colours and outputs. Besides creating
 sessions, it creates **songs** and **organises the audio you drop**: drop
 `Way Maker - EG 1.wav`, `Way Maker - Keys.wav`… into a song and each one lands
@@ -25,6 +27,123 @@ The built-in template sends Click and Guide to the master. If your in-ears use
 another output, change their outputs and save your own template with **File ›
 Save as template…**.
 :::
+
+## Build your own template
+
+The built-in template is a starting point. If your band has a different
+line-up, or you want Click and Guide on the in-ear output, build yours once and
+every song comes out organised the same way.
+
+### 1. Set up the folders and tracks
+
+In an empty session (**File › New project**), create one folder per instrument
+family and leave as loose tracks the parts that are always a single file.
+Right-click a track header: **Insert Folder Track**, **Insert Track**,
+**Indent Into Previous Folder** and **Select colour…**.
+
+![The layout of a band template](/guide/desktop-en/template-structure.png)
+
+1. A **folder** (Guitars): takes every guitar file, one per track, however
+   many the multitrack has.
+2. A **track** inside a folder (Click): takes a single file.
+
+### 2. Route the outputs
+
+Routing does go into the template, so this is the moment to decide what goes
+to the desk and what goes to the in-ears. On each track's or folder's header,
+the output selector:
+
+![A track's output selector](/guide/desktop-en/track-route-list.png)
+
+- Send the **folder** to its output and leave its tracks on **Inherited
+  (Folder)**. The tracks the template creates inside that folder when you drop
+  files go out there too.
+- The usual setup: the Guides folder (Click and Guide) to the in-ear output,
+  for example **Out 3/4**, and everything else to **Master**.
+- If a stereo file goes to a mono output, turn on **Sum to mono**
+  (right-click the track): it is saved too.
+
+The outputs you see depend on your audio interface. How to turn them on is in
+[Audio outputs and metronome](/docs/audio-routing-metronome/).
+
+### 3. Give each one its rules
+
+Rules are the words in a file name that send it to that track or folder.
+Right-click the header › **Matching rules…**:
+
+![Matching rules in the folder's menu](/guide/desktop-en/template-rules-menu.png)
+
+Type the words separated by commas. Think of how the multitracks you use name
+that part, in English and in Spanish:
+
+![The rules of the Guitars folder](/guide/desktop-en/template-rules-dialog.png)
+
+1. With `eg, ag, guitar, guitarra, gtr`, files such as `EG 1.wav`, `AG.wav`
+   or `Rhythm Guitar.wav` land in Guitars.
+
+Rules that work with most multitracks:
+
+| Track or folder | Rules |
+| --- | --- |
+| Click | `click, metronome, metronomo` |
+| Guide | `guide, guia, cues` |
+| Drums | `drums, bateria, perc, loop` |
+| Bass | `bass, bajo` |
+| Guitars | `eg, ag, guitar, guitarra, gtr` |
+| Keys | `keys, key, piano, synth, pad, organ` |
+| Vocals | `alto, tenor, soprano, bgv, bgvs, choir, coro` |
+| FX | `fx, efectos` |
+
+### 4. Save it as a template
+
+**File › Save as template…** and give it a name. It saves a `.lttemplate`
+file.
+
+![Save as template in the File menu](/guide/desktop-en/template-save-menu.png)
+
+The template keeps the layout, not the mix:
+
+| Saved | Back to its default |
+| --- | --- |
+| Names, folders and their order | Volume (0 dB) |
+| Colours | Pan (center) |
+| Outputs and **Sum to mono** | Mute and solo (off) |
+| Matching rules | **T** (follow transposition: on) |
+
+Clips, songs, markers and tempo are not saved either. Each track's volume and
+pan are set in the session, after creating the songs.
+
+:::caution[Click and Guide with transposition]
+Since **T** comes back on, check the Click and the Guide in the first song: if
+you transpose a song with warp, turn their **T** off so they do not go out of
+tune. See [the T button](/docs/pitch-and-warp/).
+:::
+
+:::tip
+A `.lttemplate` file works on any computer. Send it to another musician in the
+band and they get the same layout.
+:::
+
+### 5. Pick it and drop a multitrack
+
+In **Settings › General › Template for new songs**, pick yours (see
+[Pick the template](#pick-the-template)). Then drag a multitrack's folder from
+the [Library](/docs/tasks/library/) to the timeline, or drop its files: each
+one goes to its place.
+
+<Clip
+  src="/guide/desktop-en/template-drop.mp4"
+  poster="/guide/desktop-en/template-drop.webp"
+  caption="The 14 files of «Rey de Reyes» each land in their folder: Drums and Loop in Drums, EG 1-3 in Guitars, Alto and Tenor in Vocals."
+/>
+
+The result: each folder with one track per file, in the folder's colour and
+with its output.
+
+![The files organised in their folders](/guide/desktop-en/template-drop-result.png)
+
+If a file is left out, add its word to the rules of the folder it belongs in
+and save the template again.
 
 ## Create a song with the template
 

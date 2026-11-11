@@ -1,5 +1,5 @@
 import { browser, $ } from "@wdio/globals";
-import { cpSync, mkdirSync, rmSync } from "node:fs";
+import { copyFileSync, cpSync, linkSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
@@ -2416,6 +2416,250 @@ describe("user guide screenshots", function () {
       console.log("[guideshots] SKIPPED song-analysis-batch: no modal");
     }
     await AppPage.resetShell();
+  });
+
+  // How-to «Crea tu propia plantilla» (song-templates.mdx): a small session
+  // with the band's folders and their rules, then a real multitrack dropped on
+  // it. Its own session, because the shots session has 58 flat tracks and no
+  // folders: a template drawn on it reads as a mess, not as an example.
+  it("how-to: own song template", async () => {
+    const es = UI_LANG !== "en";
+    const goldenAudio = path.join(path.dirname(golden), "audio");
+    const songDirs = readdirSync(goldenAudio, { withFileTypes: true }).filter((d) => d.isDirectory());
+    const source =
+      songDirs.find((d) => d.name.startsWith("Rey de Reyes")) ??
+      songDirs.sort(
+        (a, b) => readdirSync(path.join(goldenAudio, b.name)).length - readdirSync(path.join(goldenAudio, a.name)).length,
+      )[0];
+    if (!source) throw new Error("own template: the shots session has no song folder under audio/");
+    const songName = source.name.startsWith("Rey de Reyes") ? "Rey de Reyes" : source.name;
+
+    // The demo: a library place with the song's stems, and a session with the
+    // template's tracks only. Hard links: the stems are hundreds of MB.
+    const demoDir = path.join(os.tmpdir(), "lt-guide-template-demo");
+    rmSync(demoDir, { recursive: true, force: true });
+    const stemsRoot = path.join(demoDir, "Multitracks");
+    const stemsDir = path.join(stemsRoot, songName);
+    mkdirSync(stemsDir, { recursive: true });
+    mkdirSync(path.join(demoDir, "session"), { recursive: true });
+    for (const file of readdirSync(path.join(goldenAudio, source.name))) {
+      if (!/\.(wav|mp3|flac|aif+|m4a|ogg)$/i.test(file)) continue;
+      const from = path.join(goldenAudio, source.name, file);
+      const to = path.join(stemsDir, file.trim().replace(/\s+(\.[^.]+)$/, "$1"));
+      try {
+        linkSync(from, to);
+      } catch {
+        copyFileSync(from, to);
+      }
+    }
+    const stemCount = readdirSync(stemsDir).length;
+
+    let n = 0;
+    const id = () => `track_template_demo_${n++}`;
+    const track = (
+      name: string,
+      kind: "audio" | "folder",
+      color: string,
+      matchAliases: string[],
+      parentTrackId: string | null = null,
+    ) => ({
+      id: id(),
+      name,
+      kind,
+      parentTrackId,
+      volume: 1,
+      pan: 0,
+      muted: false,
+      solo: false,
+      transposeEnabled: true,
+      audioTo: parentTrackId ? "inherit" : "master",
+      color,
+      autoCreated: false,
+      matchAliases,
+    });
+    const guides = track(es ? "Guías" : "Guides", "folder", "#94A3B8", []);
+    const tracks = [
+      guides,
+      track("Click", "audio", "#94A3B8", ["click", "metronome", "metronomo"], guides.id),
+      track(es ? "Guía" : "Guide", "audio", "#94A3B8", ["guide", "guia", "cues"], guides.id),
+      track(es ? "Batería" : "Drums", "folder", "#E35D5B", ["drums", "bateria", "perc", "loop"]),
+      track(es ? "Bajo" : "Bass", "audio", "#F59E0B", ["bass", "bajo"]),
+      track(es ? "Guitarras" : "Guitars", "folder", "#EAB308", ["eg", "ag", "guitar", "guitarra", "gtr"]),
+      track(es ? "Teclados" : "Keys", "folder", "#3B82F6", ["keys", "key", "piano", "synth", "pad", "organ"]),
+      track(es ? "Voces" : "Vocals", "folder", "#A855F7", ["alto", "tenor", "soprano", "bgv", "bgvs", "choir", "coro"]),
+      track(es ? "Efectos" : "FX", "folder", "#14B8A6", ["fx", "efectos"]),
+    ];
+    const demoSession = path.join(demoDir, "session", "Plantilla demo.ltsession");
+    writeFileSync(
+      demoSession,
+      JSON.stringify(
+        {
+          version: 7,
+          id: "song_template_demo",
+          title: es ? "Plantilla de banda" : "Band template",
+          artist: null,
+          key: null,
+          bpm: 70,
+          timeSignature: "4/4",
+          durationSeconds: 60,
+          tempoMarkers: [],
+          timeSignatureMarkers: [],
+          regions: [],
+          tracks,
+          clips: [],
+          midiClips: [],
+          sectionMarkers: [],
+        },
+        null,
+        2,
+      ),
+    );
+
+    const invoke = (cmd: string, args: Record<string, unknown> = {}) =>
+      browser.executeAsync(
+        (c: string, a: Record<string, unknown>, done: (v: unknown) => void) => {
+          const w = window as unknown as {
+            __TAURI_INTERNALS__: { invoke: (c: string, a: unknown) => Promise<unknown> };
+          };
+          w.__TAURI_INTERNALS__.invoke(c, a).then(done, (e) => done({ __error: String(e) }));
+        },
+        cmd,
+        args,
+      );
+    const original = (await invoke("get_settings")) as Record<string, unknown>;
+    const locale = UI_LANG === "en" ? "en" : original.locale;
+    try {
+      // Shared tracks: the session's rules organise the drop on their own,
+      // with no default template that would add its own tracks.
+      await invoke("save_settings", {
+        settings: {
+          ...original,
+          locale,
+          songTrackLayout: "shared",
+          defaultSongTemplate: null,
+          libraryMode: "folders",
+          libraryPlaces: [stemsRoot],
+        },
+      });
+      await AppPage.reopenSessionUntil(demoSession, (s) => s.tracks.length === tracks.length && s.regions.length === 0);
+      await AppPage.resetShell();
+      await browser.pause(2500);
+      const vp = await viewport();
+      const headersBox = async (extra: number) => {
+        const box = await runInPage(() => {
+          const rects = Array.from(document.querySelectorAll(".lt-track-header"))
+            .map((el) => el.getBoundingClientRect())
+            .filter((r) => r.width > 0 && r.height > 0);
+          if (!rects.length) return null;
+          const x = Math.min(...rects.map((r) => r.left));
+          const y = Math.min(...rects.map((r) => r.top));
+          return {
+            x,
+            y,
+            w: Math.max(...rects.map((r) => r.right)) - x,
+            h: Math.max(...rects.map((r) => r.bottom)) - y,
+          };
+        });
+        if (!box) throw new Error("own template: no track headers");
+        const x = Math.max(0, box.x - 8);
+        const y = Math.max(0, box.y - 8);
+        return { x, y, w: Math.min(vp.w - x, box.w + 16 + extra), h: Math.min(vp.h - y, box.h + 16) };
+      };
+
+      // 1) The structure: folders and loose tracks, with their colours.
+      const guitarsName = es ? "Guitarras" : "Guitars";
+      const guitars = await tagByText(".lt-track-header.is-folder", guitarsName, "tpl-guitars");
+      const click = await tagByText(".lt-track-header:not(.is-folder)", "Click", "tpl-click");
+      await annotatedShot(
+        "template-structure",
+        [
+          { selector: guitars, n: 1, pad: 2 },
+          { selector: click, n: 2, pad: 2 },
+        ],
+        { crop: await headersBox(0) },
+      );
+
+      // 2) The rules of a folder: its context menu, then the dialog.
+      await rightClick(guitars);
+      const rulesItem = await tagByText(".lt-context-menu button", L("Reglas de coincidencia"), "tpl-rules-item");
+      await annotatedShot("template-rules-menu", [{ selector: rulesItem, n: 1, pad: 2 }], {
+        crop: { selector: ".lt-context-menu", margin: 40 },
+      });
+      await (await $(rulesItem)).click();
+      await (await $("#lt-dialog-input")).waitForDisplayed({ timeout: 5000 });
+      await browser.pause(500);
+      const dialog = await runInPage(() => {
+        const input = document.querySelector("#lt-dialog-input");
+        const box = input?.closest("[role=dialog], dialog, .lt-dialog, .lt-modal") as HTMLElement | null;
+        box?.setAttribute("data-guide", "tpl-rules-dialog");
+        return Boolean(box);
+      });
+      await annotatedShot("template-rules-dialog", [{ selector: "#lt-dialog-input", n: 1, pad: 3 }], {
+        crop: dialog ? { selector: '[data-guide="tpl-rules-dialog"]', margin: 12 } : { marks: 140 },
+      });
+      await browser.keys(["Escape"]);
+      await browser.pause(500);
+
+      // 3) File › Save as template… (not clicked: it opens the system dialog).
+      const fileMenu = `${tour("topbar-file-menu")} .lt-top-menu-trigger`;
+      await (await $(fileMenu)).click();
+      await browser.pause(600);
+      const saveItem = await tagByText(".lt-top-menu-dropdown button", L("Guardar como plantilla"), "tpl-save-item");
+      await annotatedShot("template-save-menu", [{ selector: saveItem, n: 1, pad: 2 }], {
+        crop: { selector: ".lt-top-menu-dropdown", margin: 16 },
+      });
+      await browser.keys(["Escape"]);
+      await browser.pause(400);
+      await AppPage.resetShell();
+
+      // 4) The payoff: drag the multitrack folder from the library and every
+      // stem falls into its folder.
+      await AppPage.openLibrary();
+      await browser.pause(1200);
+      if (await rectOf(".lt-folder-library-session-toggle")) {
+        await (await $(".lt-folder-library-session-toggle")).click();
+        await browser.pause(800);
+      }
+      if (!(await rectOf(".lt-folder-library-row.is-folder"))) {
+        await (await $(await tag(".lt-folder-library-place-toggle", "tpl-place"))).click();
+        await browser.pause(1200);
+      }
+      const songRow = await tagByText(".lt-folder-library-row.is-folder", songName, "tpl-song-row");
+      const lanes = await rectOf(".lt-track-layers");
+      if (!lanes) throw new Error("own template: no lanes");
+      const panel = await rectOf(".lt-library-panel, .lt-folder-library");
+      const rec = new Recorder(cdp, "template-drop", { x: 0, y: 0, w: vp.w, h: vp.h }, outDir, {
+        x: (panel?.x ?? 0) + (panel?.w ?? 300) * 0.6,
+        y: 600,
+      });
+      await rec.hold(0.6);
+      await rec.dragTo({ x: lanes.x + 120, y: lanes.y + 160 }, 1600, { from: songRow });
+      await rec.hold(1.2);
+      const toastSeen = Boolean(await rectOf(".lt-template-drop-toast"));
+      await rec.hold(2.4);
+      const view = await AppPage.songView();
+      const byId = new Map((view?.tracks ?? []).map((t) => [t.id, t]));
+      const looseOk = new Set(["Click", es ? "Guía" : "Guide", es ? "Bajo" : "Bass"]);
+      const misplaced = (view?.clips ?? []).filter((c) => {
+        const t = byId.get(c.trackId);
+        return !t || (!t.parentTrackId && !looseOk.has(t.name));
+      });
+      if ((view?.clips.length ?? 0) < stemCount || misplaced.length || !toastSeen) {
+        throw new Error(
+          `own template: ${view?.clips.length ?? 0}/${stemCount} clips, ${misplaced.length} outside a folder, toast ${toastSeen}`,
+        );
+      }
+      await rec.encode();
+
+      // 5) The result as a still: the folders with their new tracks.
+      await AppPage.resetShell();
+      await browser.pause(1200);
+      await shot("template-drop-result", await headersBox(520));
+    } finally {
+      await invoke("save_settings", { settings: { ...original, locale } });
+      await AppPage.reopenSessionUntil(session, (s) => s.regions.length >= 2, 180_000).catch(() => undefined);
+      await AppPage.resetShell().catch(() => undefined);
+    }
   });
 
   it("mobile 1.15: selection bar (phone layout)", async () => {

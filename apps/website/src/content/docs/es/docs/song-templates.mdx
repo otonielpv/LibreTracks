@@ -3,6 +3,8 @@ title: Plantillas de canción
 description: "Plantillas de canción en LibreTracks: canciones nuevas con sus pistas y carpetas, y los stems de un multitrack que caen solos en su sitio según su nombre (Click, EG, Keys, BGV…)."
 ---
 
+import Clip from "../../../../components/guide/Clip.astro";
+
 Una plantilla guarda pistas, carpetas, colores y salidas. Además de para crear
 sesiones, sirve para crear **canciones** y para **ordenar los audios que
 sueltas**: si sueltas `Way Maker - EG 1.wav`, `Way Maker - Keys.wav`… en una
@@ -26,6 +28,124 @@ La plantilla incluida manda Click y Guía al master. Si tus cascos van por otra
 salida, cambia sus salidas y guarda tu propia plantilla con **Archivo ›
 Guardar como plantilla…**.
 :::
+
+## Crea tu propia plantilla
+
+La plantilla incluida es un punto de partida. Si tu banda tiene otra
+formación, o quieres el Click y la Guía en la salida de los cascos, monta la
+tuya una vez y todas las canciones saldrán ordenadas igual.
+
+### 1. Monta las carpetas y las pistas
+
+En una sesión vacía (**Archivo › Nuevo proyecto**), crea una carpeta por
+familia de instrumentos y deja sueltas las pistas que siempre son una sola.
+Clic derecho en la cabecera de una pista: **Insertar carpeta**, **Insertar
+track**, **Meter en la carpeta anterior** y **Seleccionar color…**.
+
+![La estructura de una plantilla de banda](/guide/desktop/template-structure.png)
+
+1. Una **carpeta** (Guitarras): recibe todos los audios de guitarra, uno por
+   pista, por muchos que traiga el multitrack.
+2. Una **pista** dentro de una carpeta (Click): recibe un solo audio.
+
+### 2. Rutea las salidas
+
+El routing sí va en la plantilla, así que es el momento de decidir qué sale
+por la mesa y qué por los cascos. En la cabecera de cada pista o carpeta, el
+selector de salida:
+
+![Selector de salida de una pista](/guide/desktop/track-route-list.png)
+
+- Manda la **carpeta** a su salida y deja sus pistas en **Heredado
+  (Carpeta)**. Las pistas que cree la plantilla dentro de esa carpeta al soltar
+  audios salen también por ahí.
+- Lo típico: la carpeta Guías (Click y Guía) a la salida de los cascos, por
+  ejemplo **Out 3/4**, y el resto a **Master**.
+- Si un audio estéreo va a una salida mono, activa **Sumar a mono** (clic
+  derecho en la pista): también se guarda.
+
+Las salidas que veas dependen de tu interfaz de audio. Cómo activarlas está en
+[Salidas de audio y metrónomo](/es/docs/audio-routing-metronome/).
+
+### 3. Dale a cada una sus reglas
+
+Las reglas son las palabras del nombre del archivo que mandan un audio a esa
+pista o carpeta. Clic derecho en la cabecera › **Reglas de coincidencia…**:
+
+![Reglas de coincidencia en el menú de la carpeta](/guide/desktop/template-rules-menu.png)
+
+Escribe las palabras separadas por comas. Piensa en cómo llaman a esa parte
+los multitracks que usas, en inglés y en español:
+
+![Las reglas de la carpeta Guitarras](/guide/desktop/template-rules-dialog.png)
+
+1. Con `eg, ag, guitar, guitarra, gtr`, los archivos `EG 1.wav`, `AG.wav` o
+   `Guitarra rítmica.wav` caen en Guitarras.
+
+Unas reglas que funcionan con la mayoría de multitracks:
+
+| Pista o carpeta | Reglas |
+| --- | --- |
+| Click | `click, metronome, metronomo` |
+| Guía | `guide, guia, cues` |
+| Batería | `drums, bateria, perc, loop` |
+| Bajo | `bass, bajo` |
+| Guitarras | `eg, ag, guitar, guitarra, gtr` |
+| Teclados | `keys, key, piano, synth, pad, organ` |
+| Voces | `alto, tenor, soprano, bgv, bgvs, choir, coro` |
+| Efectos | `fx, efectos` |
+
+### 4. Guárdala como plantilla
+
+**Archivo › Guardar como plantilla…** y ponle un nombre. Se guarda un archivo
+`.lttemplate`.
+
+![Guardar como plantilla en el menú Archivo](/guide/desktop/template-save-menu.png)
+
+La plantilla guarda la estructura, no la mezcla:
+
+| Se guarda | Vuelve al valor por defecto |
+| --- | --- |
+| Nombres, carpetas y su orden | Volumen (0 dB) |
+| Colores | Paneo (centro) |
+| Salidas y **Sumar a mono** | Mute y solo (apagados) |
+| Reglas de coincidencia | **T** (seguir la transposición: encendido) |
+
+Los clips, las canciones, las marcas y el tempo tampoco se guardan. El
+volumen y el paneo de cada pista se ajustan en la sesión, después de crear las
+canciones.
+
+:::caution[Click y Guía con la transposición]
+Como **T** vuelve a encenderse, revisa el Click y la Guía en la primera
+canción: si transpones una canción con warp, apaga su **T** para que no se
+desafinen. Ver [el botón T](/es/docs/pitch-and-warp/).
+:::
+
+:::tip
+El archivo `.lttemplate` sirve en cualquier ordenador. Pásaselo a otro músico
+de la banda y tendrá la misma estructura.
+:::
+
+### 5. Elígela y suelta un multitrack
+
+En **Configuración › General › Plantilla para canciones nuevas**, elige la
+tuya (ver [Elegir la plantilla](#elegir-la-plantilla)). Después arrastra la
+carpeta de un multitrack desde la [Biblioteca](/es/docs/tasks/library/) al
+timeline, o suelta sus audios: cada uno va a su sitio.
+
+<Clip
+  src="/guide/desktop/template-drop.mp4"
+  poster="/guide/desktop/template-drop.webp"
+  caption="Los 14 audios de «Rey de Reyes» caen cada uno en su carpeta: Drums y Loop en Batería, EG 1-3 en Guitarras, Alto y Tenor en Voces."
+/>
+
+El resultado: cada carpeta con una pista por audio, con el color de la
+carpeta y su salida.
+
+![Los audios organizados en sus carpetas](/guide/desktop/template-drop-result.png)
+
+Si un audio se queda fuera, añade su palabra a las reglas de la carpeta donde
+debía ir y vuelve a guardar la plantilla.
 
 ## Crear una canción con la plantilla
 
