@@ -72,11 +72,17 @@ jobs:
       - name: Install Linux test dependencies
         if: runner.os == 'Linux'
         run: |
-          # The runners' Azure mirror (azure.archive.ubuntu.com) intermittently
-          # fails DNS, and apt then waits ~40 s per package before falling back
-          # to the next mirror: on 2026-11-11 the 199 packages here took over two
-          # hours. Point apt at archive.ubuntu.com and fail fast on a dead host.
-          sudo sed -i 's#http://azure.archive.ubuntu.com#https://archive.ubuntu.com#g' /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
+          # The runner's DNS server stopped resolving *.ubuntu.com (2026-11-11:
+          # «Temporary failure resolving» for azure.archive, archive and
+          # security.ubuntu.com, while packages.microsoft.com worked), and apt
+          # waits ~40 s per package before giving up on a host: 199 packages,
+          # over two hours. Ask public resolvers as well, and fail fast.
+          sudo mkdir -p /etc/systemd/resolved.conf.d
+          echo '[Resolve]' | sudo tee /etc/systemd/resolved.conf.d/public-dns.conf >/dev/null
+          echo 'DNS=1.1.1.1 8.8.8.8' | sudo tee -a /etc/systemd/resolved.conf.d/public-dns.conf >/dev/null
+          echo 'Domains=~.' | sudo tee -a /etc/systemd/resolved.conf.d/public-dns.conf >/dev/null
+          sudo systemctl restart systemd-resolved || true
+          getent hosts azure.archive.ubuntu.com archive.ubuntu.com || echo '::warning::ubuntu.com still does not resolve'
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-network-retries >/dev/null
           echo 'Acquire::http::Timeout "20";' | sudo tee -a /etc/apt/apt.conf.d/99-network-retries >/dev/null
           echo 'Acquire::https::Timeout "20";' | sudo tee -a /etc/apt/apt.conf.d/99-network-retries >/dev/null
@@ -345,11 +351,17 @@ jobs:
       - name: Install Linux system dependencies
         if: matrix.platform == 'linux'
         run: |
-          # The runners' Azure mirror (azure.archive.ubuntu.com) intermittently
-          # fails DNS, and apt then waits ~40 s per package before falling back
-          # to the next mirror: on 2026-11-11 the 199 packages here took over two
-          # hours. Point apt at archive.ubuntu.com and fail fast on a dead host.
-          sudo sed -i 's#http://azure.archive.ubuntu.com#https://archive.ubuntu.com#g' /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
+          # The runner's DNS server stopped resolving *.ubuntu.com (2026-11-11:
+          # «Temporary failure resolving» for azure.archive, archive and
+          # security.ubuntu.com, while packages.microsoft.com worked), and apt
+          # waits ~40 s per package before giving up on a host: 199 packages,
+          # over two hours. Ask public resolvers as well, and fail fast.
+          sudo mkdir -p /etc/systemd/resolved.conf.d
+          echo '[Resolve]' | sudo tee /etc/systemd/resolved.conf.d/public-dns.conf >/dev/null
+          echo 'DNS=1.1.1.1 8.8.8.8' | sudo tee -a /etc/systemd/resolved.conf.d/public-dns.conf >/dev/null
+          echo 'Domains=~.' | sudo tee -a /etc/systemd/resolved.conf.d/public-dns.conf >/dev/null
+          sudo systemctl restart systemd-resolved || true
+          getent hosts azure.archive.ubuntu.com archive.ubuntu.com || echo '::warning::ubuntu.com still does not resolve'
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-network-retries >/dev/null
           echo 'Acquire::http::Timeout "20";' | sudo tee -a /etc/apt/apt.conf.d/99-network-retries >/dev/null
           echo 'Acquire::https::Timeout "20";' | sudo tee -a /etc/apt/apt.conf.d/99-network-retries >/dev/null
