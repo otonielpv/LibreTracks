@@ -7,6 +7,9 @@
 #include <lt_engine/sources/decoded_source.h>
 #include <lt_engine/sources/source_manager.h>
 #include <lt_engine/sources/preparation_queue.h>
+#include <lt_engine/core/audio_thread_context.h>
+#include <lt_engine/diagnostics/rt_guard.h>
+#include <lt_engine/sources/block_request_ring.h>
 
 #include <algorithm>
 #include <atomic>
@@ -2140,4 +2143,223 @@ TEST_CASE("disk_shortfall_message tags a conversion that does not fit") {
 
 TEST_CASE("disk_shortfall_message does not refuse when free space is unknown") {
     CHECK(disk_shortfall_message(1ull << 40, 0).empty());
+}
+
+// ── Audio-thread block requests: the lock-free ring ─────────────────────────
+//
+// request_blocks from inside a render (Mixer::render, render-pool workers)
+// goes through BlockRequestRing instead of taking fill_mtx_ and allocating.
+// The lane policy must come out exactly as on the locked path, and a request
+// must never be lost or wait on a missed wake-up.
+
+namespace {
+
+// What a real source id looks like (normalize_source_id: the file path).
+std::string path_like_id(const char* stem) {
+    return std::string("C:/Users/musician/Music/LibreTracks/Sessions/Sunday Service/Stems/")
+        + stem + ".wav";
+}
+
+} // namespace
+
+TEST_CASE("BlockRequestRing keeps FIFO order, reports full, rejects oversized ids") {
+    BlockRequestRing ring;
+    CHECK_FALSE(ring.has_pending());
+    const std::string id = path_like_id("Bass");
+    for (int i = 0; i < static_cast<int>(BlockRequestRing::kCapacity); ++i)
+        REQUIRE(ring.try_push(id, i, 1, (i % 3) == 0));
+    CHECK(ring.has_pending());
+    CHECK_FALSE(ring.try_push(id, 9999, 1, false));  // full
+
+    BlockRequest r;
+    for (int i = 0; i < static_cast<int>(BlockRequestRing::kCapacity); ++i) {
+        REQUIRE(ring.try_pop(r));
+        CHECK(r.first_block == i);
+        CHECK(r.urgent == ((i % 3) == 0));
+        CHECK(r.source_id() == id);
+    }
+    CHECK_FALSE(ring.try_pop(r));
+    CHECK_FALSE(ring.has_pending());
+
+    const std::string too_long(BlockRequest::kMaxIdBytes + 1, 'x');
+    CHECK_FALSE(ring.try_push(too_long, 0, 1, false));
+    const std::string fits(BlockRequest::kMaxIdBytes, 'y');
+    CHECK(ring.try_push(fits, 0, 1, false));
+    REQUIRE(ring.try_pop(r));
+    CHECK(r.source_id() == fits);
+}
+
+TEST_CASE("BlockRequestRing delivers every request exactly once under concurrent producers") {
+    BlockRequestRing ring;
+    constexpr int kProducers = 4;
+    constexpr int kPerProducer = 20000;
+    std::atomic<int> started{0};
+    std::vector<std::thread> producers;
+    for (int p = 0; p < kProducers; ++p) {
+        producers.emplace_back([&, p] {
+            const std::string id = "producer-" + std::to_string(p);
+            started.fetch_add(1);
+            while (started.load() < kProducers) {}
+            for (int i = 0; i < kPerProducer; ++i)
+                while (!ring.try_push(id, i, p + 1, false))
+                    std::this_thread::yield();  // full: the consumer catches up
+        });
+    }
+    std::vector<int> expected(kProducers, 0);
+    int received = 0;
+    bool in_order = true;
+    BlockRequest r;
+    while (received < kProducers * kPerProducer) {
+        if (!ring.try_pop(r)) {
+            std::this_thread::yield();
+            continue;
+        }
+        const int p = r.block_count - 1;
+        REQUIRE(p >= 0);
+        REQUIRE(p < kProducers);
+        REQUIRE(r.source_id() == "producer-" + std::to_string(p));
+        // Per producer, requests arrive in the order they were pushed.
+        in_order = in_order && r.first_block == expected[p];
+        ++expected[p];
+        ++received;
+    }
+    for (auto& t : producers) t.join();
+    CHECK(in_order);
+    for (int p = 0; p < kProducers; ++p)
+        CHECK(expected[p] == kPerProducer);
+    CHECK_FALSE(ring.try_pop(r));
+}
+
+TEST_CASE("render-thread requests keep the lane policy (read-ahead, urgent, promotion)") {
+    ScopedCacheDir scope("ring_lane_policy");
+    ScopedEnv no_fill("LIBRETRACKS_FILL_THREADS", "0");
+    SourceManager manager;
+    const Id source_id = path_like_id("Keys");
+    {
+        audio_context::ScopedRender render;
+        manager.request_blocks(source_id, 0, 4, /*urgent=*/false);
+    }
+    const auto queued = manager.take_fill_io_stats();
+    CHECK(queued.queue_normal == 4);
+    CHECK(queued.queue_urgent == 0);
+
+    {
+        audio_context::ScopedRender render;
+        // Starving for a block read-ahead already queued: promoted.
+        manager.request_blocks(source_id, 2, 1, /*urgent=*/true);
+        // A duplicate read-ahead request changes nothing.
+        manager.request_blocks(source_id, 1, 1, /*urgent=*/false);
+    }
+    const auto promoted = manager.take_fill_io_stats();
+    CHECK(promoted.queue_urgent == 1);
+    CHECK(promoted.queue_normal == 4);
+}
+
+TEST_CASE("a render-thread block request allocates nothing") {
+    ScopedCacheDir scope("ring_no_alloc");
+    ScopedEnv no_fill("LIBRETRACKS_FILL_THREADS", "0");
+    SourceManager manager;
+    const Id source_id = path_like_id("Drums Overhead Left");
+
+    lt::rt::reset_violations();
+    {
+        lt::rt::ScopedRealtimeSection realtime;
+        audio_context::ScopedRender render;
+        manager.request_blocks(source_id, 0, 16, /*urgent=*/false);
+        manager.request_blocks(source_id, 16, 1, /*urgent=*/true);
+    }
+    const auto found = lt::rt::violations();
+    CAPTURE(found.allocations);
+    // The locked path allocated here: the CacheKey copy of the id, a
+    // queued_blocks_ node and a queue entry per block.
+    CHECK(found.allocations == 0);
+    CHECK(found.deallocations == 0);
+
+    const auto queued = manager.take_fill_io_stats();
+    CHECK(queued.queue_normal == 16);
+    CHECK(queued.queue_urgent == 1);
+}
+
+TEST_CASE("an id too long for a ring slot still reaches the queue") {
+    ScopedCacheDir scope("ring_fallback");
+    ScopedEnv no_fill("LIBRETRACKS_FILL_THREADS", "0");
+    SourceManager manager;
+    const Id huge(BlockRequest::kMaxIdBytes + 100, 'z');
+    {
+        audio_context::ScopedRender render;
+        manager.request_blocks(huge, 0, 3, /*urgent=*/true);
+    }
+    CHECK(manager.take_fill_io_stats().queue_urgent == 3);
+}
+
+TEST_CASE("dropping read-ahead also drops read-ahead still in the ring") {
+    ScopedCacheDir scope("ring_drop_readahead");
+    ScopedEnv no_fill("LIBRETRACKS_FILL_THREADS", "0");
+    SourceManager manager;
+    const Id source_id = path_like_id("Pad");
+    {
+        audio_context::ScopedRender render;
+        manager.request_blocks(source_id, 0, 8, /*urgent=*/false);
+        manager.request_blocks(source_id, 20, 2, /*urgent=*/true);
+    }
+    CHECK(manager.drop_pending_readahead() == 8);
+    const auto after = manager.take_fill_io_stats();
+    CHECK(after.queue_normal == 0);
+    CHECK(after.queue_urgent == 2);
+}
+
+TEST_CASE("urgent render-thread requests wake an idle fill pool every time") {
+    // The no-lost-wake-up handshake, exercised for real: each request lands
+    // while the workers are idle (all blocks served, pool asleep), so a missed
+    // notify would leave the block unfilled and the wait below would time out.
+    ScopedCacheDir scope("ring_wakeups");
+    ScopedEnv no_eager("LIBRETRACKS_SOURCE_EAGER_BLOCKS", "0");
+
+    constexpr int kChannels = 2;
+    constexpr int kSampleRate = 48000;
+    constexpr int kBlocks = 48;
+    constexpr Frame kFrames = kDefaultBlockFrames * kBlocks;
+
+    SourceManager manager;
+    const Id source_id = path_like_id("Click Track");
+    manager.register_source(source_id, "ring-wakeups.wav");
+    REQUIRE(manager.store_decoded_source(
+        source_id, make_reference_audio(kFrames, kChannels),
+        kChannels, kSampleRate, kFrames).is_ok());
+    auto source = manager.get_shared(source_id);
+    REQUIRE(static_cast<bool>(source));
+
+    int requested = 0, served = 0;
+    double worst_ms = 0.0;
+    std::vector<double> latencies_ms;
+    for (int block = 0; block < kBlocks; ++block) {
+        const Frame frame = static_cast<Frame>(block) * kDefaultBlockFrames;
+        if (source->is_range_ready(frame, kDefaultBlockFrames))
+            continue;
+        // Let the pool go back to sleep before the next request.
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        const auto t0 = std::chrono::steady_clock::now();
+        {
+            audio_context::ScopedRender render;
+            manager.request_blocks(source_id, block, 1, /*urgent=*/true);
+        }
+        ++requested;
+        while (!source->is_range_ready(frame, kDefaultBlockFrames)
+               && std::chrono::steady_clock::now() - t0 < std::chrono::seconds(3)) {
+            std::this_thread::yield();  // sleep_for would add the timer granularity
+        }
+        if (source->is_range_ready(frame, kDefaultBlockFrames)) {
+            ++served;
+            const double ms = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - t0).count();
+            worst_ms = std::max(worst_ms, ms);
+            latencies_ms.push_back(ms);
+        }
+    }
+    std::sort(latencies_ms.begin(), latencies_ms.end());
+    const double median_ms = latencies_ms.empty() ? 0.0 : latencies_ms[latencies_ms.size() / 2];
+    MESSAGE("ring wake-ups: " << served << "/" << requested << " served, median "
+            << median_ms << " ms, worst " << worst_ms << " ms");
+    CHECK(requested > 0);
+    CHECK(served == requested);
 }

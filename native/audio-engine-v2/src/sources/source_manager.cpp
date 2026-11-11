@@ -1,4 +1,5 @@
 #include <lt_engine/sources/source_manager.h>
+#include <lt_engine/core/audio_thread_context.h>
 #include <lt_engine/core/denormals.h>
 #include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/io_throttle.h>
@@ -908,6 +909,7 @@ static unsigned fill_thread_count_from_env() {
 
 SourceManager::SourceManager()
     : entries_(std::make_shared<EntryMap>())
+    , audio_requests_(std::make_unique<BlockRequestRing>())
     , block_cache_(kDefaultBlockFrames,
                    source_cache_blocks_from_env(),
                    // Read-ahead window per source. Streaming playback spends
@@ -1618,21 +1620,78 @@ void SourceManager::request_blocks(const Id& source_id,
     fill_requests_.fetch_add(static_cast<uint64_t>(block_count),
                              std::memory_order_relaxed);
 
-    // Deliberately NOT calling block_cache_.has_block() here. Most callers are
-    // the AUDIO THREAD (DecodedSource::read read-ahead), and has_block takes
-    // the very mutex the callback reads its samples under — one extra
-    // acquisition per read-ahead block, on every track, forever. The
-    // already-cached blocks that now reach the queue are dropped by
-    // fill_blocks_from_disk, which filters a whole batch under a single lock
-    // held off the audio thread.
+    // Audio render threads (callback, render-pool workers): hand the request to
+    // the lock-free ring and return. No allocation and, while the fill pool is
+    // busy, no lock. The workers apply the same logic below when they drain it.
     //
-    // One CacheKey is reused across the window so the source id is copied once
-    // rather than per block: Id is a std::string longer than the small-string
-    // buffer, so a copy per block is a malloc per block on the audio thread.
-    CacheKey key{source_id, first_block};
+    // Wake-up without losing one: a worker announces itself in fill_sleepers_
+    // (seq_cst) BEFORE it checks the ring and blocks; try_push publishes with a
+    // seq_cst store BEFORE this reads the counter. In that single total order
+    // either the worker sees the request or this sees the sleeper. Taking and
+    // dropping fill_mtx_ then guarantees the sleeper is really inside wait()
+    // (or has not checked yet) when notify fires.
+    if (audio_context::in_render()) {
+        if (audio_requests_->try_push(source_id, first_block, block_count, urgent)) {
+            if (fill_sleepers_.load(std::memory_order_seq_cst) > 0) {
+                { std::lock_guard lock(fill_mtx_); }
+                if (block_count > 1)
+                    fill_cv_.notify_all();
+                else
+                    fill_cv_.notify_one();
+            }
+            return;
+        }
+        // Full ring or an id longer than a slot: the locked path below is
+        // still correct, just not allocation-free.
+        audio_requests_fallback_.fetch_add(1, std::memory_order_relaxed);
+    }
+
     int enqueued = 0;
     {
         std::lock_guard lock(fill_mtx_);
+        enqueued = enqueue_blocks_locked(source_id, first_block, block_count, urgent);
+    }
+    // Only when there is new work. The unconditional notify woke a worker for
+    // every already-queued block too, which on a starving session is a futex
+    // storm raised by the audio thread against the very threads meant to feed
+    // it. A whole window's worth of new work wakes the entire pool, though:
+    // waking one would leave the other workers asleep on work they could take.
+    if (enqueued > 1)
+        fill_cv_.notify_all();
+    else if (enqueued == 1)
+        fill_cv_.notify_one();
+}
+
+void SourceManager::drain_audio_requests_locked() const {
+    BlockRequest request;
+    int enqueued = 0;
+    while (audio_requests_->try_pop(request)) {
+        const Id source_id(request.source_id());
+        enqueued += enqueue_blocks_locked(source_id, request.first_block,
+                                          request.block_count, request.urgent);
+    }
+    // The caller takes one block; others asleep may take the rest.
+    if (enqueued > 1)
+        fill_cv_.notify_all();
+}
+
+int SourceManager::enqueue_blocks_locked(const Id& source_id,
+                                         int first_block,
+                                         int block_count,
+                                         bool urgent) const {
+    // Runs with fill_mtx_ held: on a control thread (direct request) or on a
+    // fill worker draining the audio ring. No longer on the audio thread.
+    //
+    // Deliberately NOT calling block_cache_.has_block() here: it takes the
+    // mutex the callback reads its samples under. The already-cached blocks
+    // that reach the queue are dropped by fill_blocks_from_disk, which filters
+    // a whole batch under a single lock.
+    //
+    // One CacheKey is reused across the window so the source id is copied once
+    // rather than per block.
+    CacheKey key{source_id, first_block};
+    int enqueued = 0;
+    {
         for (int offset = 0; offset < block_count; ++offset) {
             key.block_index = first_block + offset;
             auto it = queued_blocks_.find(key);
@@ -1658,15 +1717,7 @@ void SourceManager::request_blocks(const Id& source_id,
             fill_enqueued_.fetch_add(1, std::memory_order_relaxed);
         }
     }
-    // Only when there is new work. The unconditional notify woke a worker for
-    // every already-queued block too, which on a starving session is a futex
-    // storm raised by the audio thread against the very threads meant to feed
-    // it. A whole window's worth of new work wakes the entire pool, though:
-    // waking one would leave the other workers asleep on work they could take.
-    if (enqueued > 1)
-        fill_cv_.notify_all();
-    else if (enqueued == 1)
-        fill_cv_.notify_one();
+    return enqueued;
 }
 
 void SourceManager::request_range(const Id& source_id,
@@ -1725,6 +1776,8 @@ void SourceManager::request_range(const Id& source_id,
 
 size_t SourceManager::drop_pending_readahead() const noexcept {
     std::lock_guard lock(fill_mtx_);
+    // Read-ahead still in the ring is as stale as the queued kind.
+    drain_audio_requests_locked();
     const size_t dropped = fill_queue_.size();
     while (!fill_queue_.empty()) {
         const CacheKey& key = fill_queue_.front();
@@ -1756,6 +1809,7 @@ FillIoStats SourceManager::take_fill_io_stats() noexcept {
     stats.enqueued = fill_enqueued_.exchange(0, std::memory_order_relaxed);
     {
         std::lock_guard lock(fill_mtx_);
+        drain_audio_requests_locked();
         stats.queue_urgent = fill_queue_urgent_.size();
         stats.queue_normal = fill_queue_.size();
     }
@@ -1798,6 +1852,7 @@ void SourceManager::preload_clip_heads(
 
 size_t SourceManager::fill_queue_depth() const noexcept {
     std::lock_guard lock(fill_mtx_);
+    drain_audio_requests_locked();
     return fill_queue_urgent_.size() + fill_queue_.size();
 }
 
@@ -2161,6 +2216,9 @@ void SourceManager::clear() {
     publish_locked(EntryMap{});
     {
         std::lock_guard fill_lock(fill_mtx_);
+        // Requests for the sources being cleared: drop them with the queues.
+        BlockRequest discarded;
+        while (audio_requests_->try_pop(discarded)) {}
         std::queue<CacheKey> empty;
         fill_queue_.swap(empty);
         fill_queue_urgent_.clear();
@@ -2333,11 +2391,17 @@ void SourceManager::fill_worker_loop() const {
         std::vector<int> block_batch;
         {
             std::unique_lock lock(fill_mtx_);
+            // Announce before the predicate reads the ring: the other half of
+            // the handshake in request_blocks.
+            fill_sleepers_.fetch_add(1, std::memory_order_seq_cst);
             fill_cv_.wait(lock, [this, &reader_generation] {
-                return fill_stop_ || !fill_queue_urgent_.empty() || !fill_queue_.empty()
+                return fill_stop_ || audio_requests_->has_pending()
+                    || !fill_queue_urgent_.empty() || !fill_queue_.empty()
                     || reader_generation !=
                            fill_generation_.load(std::memory_order_acquire);
             });
+            fill_sleepers_.fetch_sub(1, std::memory_order_seq_cst);
+            drain_audio_requests_locked();
             if (fill_stop_ && fill_queue_urgent_.empty() && fill_queue_.empty()) {
                 close_all_readers();
                 return;

@@ -1,5 +1,6 @@
 #include <lt_engine/render/render_thread_pool.h>
 #include <lt_engine/core/denormals.h>
+#include <lt_engine/core/audio_thread_context.h>
 #include <lt_engine/core/realtime_thread.h>
 #include <lt_engine/diagnostics/rt_guard.h>
 #include <lt_engine/render/render_block_admission.h>
@@ -65,6 +66,7 @@ struct RenderThreadPool::Impl {
     // trabajadores: es lo que hace que con un hilo no haya reparto que pagar.
     void drain() noexcept {
         lt::rt::ScopedRealtimeSection realtime;
+        lt::audio_context::ScopedRender render_scope;
         const int n = total.load(std::memory_order_acquire);
         const RenderJobRef* j = job;
         if (!j) return;

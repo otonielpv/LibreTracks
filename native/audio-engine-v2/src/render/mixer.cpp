@@ -1,5 +1,6 @@
 #include <lt_engine/render/mixer.h>
 #include <lt_engine/core/denormals.h>
+#include <lt_engine/core/audio_thread_context.h>
 #include <lt_engine/render/mix_math.h>
 #include <lt_engine/devices/device_channel_layout.h>
 #include <lt_engine/debug/logging.h>
@@ -1054,6 +1055,9 @@ void Mixer::render(float** output_channels,
                    int     num_frames,
                    double  /*sample_rate*/) noexcept {
     lt::rt::ScopedRealtimeSection rt_section;
+    // Tells realtime-aware callees (SourceManager::request_blocks) to take
+    // their lock-free path.
+    lt::audio_context::ScopedRender render_scope;
     // FTZ/DAZ on the callback thread. Not scoped: restoring the mode at the
     // end of every block costs two MXCSR writes, and a write serialises the
     // pipeline (measured ~1 us per block, +4% on a 24-track callback). This

@@ -3,6 +3,7 @@
 #include <lt_engine/core/types.h>
 #include <lt_engine/core/result.h>
 #include <lt_engine/sources/block_cache.h>
+#include <lt_engine/sources/block_request_ring.h>
 #include <lt_engine/sources/decoded_source.h>
 #include <atomic>
 #include <condition_variable>
@@ -425,6 +426,17 @@ private:
     // wanted urgently is promoted rather than skipped.
     mutable std::unordered_map<CacheKey, bool, CacheKeyHash> queued_blocks_;
     mutable bool                    fill_stop_ = false;
+    // Block requests from the audio render threads (block_request_ring.h).
+    // Drained into the queues above by whoever holds fill_mtx_, so every
+    // reader of those queues sees them too.
+    std::unique_ptr<BlockRequestRing> audio_requests_;
+    // Fill workers inside fill_cv_.wait. A ring producer touches fill_mtx_
+    // only when this is non-zero (to wake one); with the pool busy, the audio
+    // thread never takes the lock. seq_cst on both sides: see request_blocks.
+    mutable std::atomic<int>        fill_sleepers_{0};
+    // Ring was full or the id did not fit a slot: the request took the locked
+    // path. Diagnostic; expected to stay 0.
+    mutable std::atomic<uint64_t>   audio_requests_fallback_{0};
     // Pool of block-fill workers. A single worker can't repopulate evicted
     // blocks from the WAV cache fast enough on a modest CPU with several tracks
     // playing — the playhead outruns it and the audio thread plays silence
@@ -437,6 +449,12 @@ private:
     std::shared_ptr<const EntryMap> load_entries() const noexcept;
     void store_entries(std::shared_ptr<const EntryMap> entries) noexcept;
     void fill_worker_loop() const;
+    // fill_mtx_ held. Moves every pending ring request into the queues.
+    void drain_audio_requests_locked() const;
+    // fill_mtx_ held. The dedupe / urgent / promotion logic shared by both
+    // request paths; returns how many blocks were newly queued.
+    int enqueue_blocks_locked(const Id& source_id, int first_block, int block_count,
+                              bool urgent) const;
 
     // Per-worker reader handle kept open across fill batches.
     //
