@@ -1,4 +1,5 @@
 #include <lt_engine/render/mixer.h>
+#include <lt_engine/core/denormals.h>
 #include <lt_engine/render/mix_math.h>
 #include <lt_engine/devices/device_channel_layout.h>
 #include <lt_engine/debug/logging.h>
@@ -89,6 +90,10 @@ inline void place_track_source(bool mono_downmix,
 struct TrackMeterReading {
     float peak_l = 0.f, peak_r = 0.f;
     float rms_l = 0.f, rms_r = 0.f;
+    // The block holds NaN/Inf. Found for free: the RMS sums already touch
+    // every sample, and a NaN or Inf makes them non-finite (squares are summed
+    // in double, so no real float sample can overflow them).
+    bool non_finite = false;
 };
 
 // Medidor de pista en el punto que pide `mode` (ver TrackMeterMode en
@@ -106,8 +111,13 @@ TrackMeterReading measure_track(const float* mix_l, const float* mix_r,
                                 bool mono_downmix, TrackMeterMode mode,
                                 float fader_gain) noexcept {
     TrackMeterReading out;
-    if (mode == TrackMeterMode::PostFader && fader_gain <= 0.0f)
+    if (mode == TrackMeterMode::PostFader && fader_gain <= 0.0f) {
+        // The meter loop is skipped, but a muted track still reaches phase B
+        // (NaN * 0 is NaN), so scan it explicitly. Costs what the skipped loop
+        // would have.
+        out.non_finite = has_non_finite(mix_l, num_frames) || has_non_finite(mix_r, num_frames);
         return out;
+    }
     const bool raw = mode == TrackMeterMode::PreFader;
     double sum_l = 0.0, sum_r = 0.0;
     for (int f = 0; f < num_frames; ++f) {
@@ -124,6 +134,10 @@ TrackMeterReading measure_track(const float* mix_l, const float* mix_r,
         out.peak_r = std::max(out.peak_r, std::abs(r));
         sum_l += static_cast<double>(l) * l;
         sum_r += static_cast<double>(r) * r;
+    }
+    if (!std::isfinite(sum_l + sum_r)) {
+        out.non_finite = true;
+        return out;
     }
     out.rms_l = static_cast<float>(std::sqrt(sum_l / std::max(1, num_frames)));
     out.rms_r = static_cast<float>(std::sqrt(sum_r / std::max(1, num_frames)));
@@ -403,10 +417,29 @@ std::shared_ptr<const Session> Mixer::load_session() const noexcept {
 
 void Mixer::store_session(std::shared_ptr<const Session> session) noexcept {
 #if !defined(_MSC_VER)
-    std::atomic_store_explicit(&session_, std::move(session), std::memory_order_release);
+    auto previous = std::atomic_exchange_explicit(&session_, std::move(session),
+                                                  std::memory_order_acq_rel);
 #else
-    session_.store(std::move(session), std::memory_order_release);
+    auto previous = session_.exchange(std::move(session), std::memory_order_acq_rel);
 #endif
+    retire_session(std::move(previous));
+}
+
+void Mixer::retire_session(std::shared_ptr<const Session> previous) noexcept {
+    // Runs on the control thread. A retired session is no longer published, so
+    // nothing can take a new reference to it: once use_count() reads 1, the
+    // list is its only owner and it is safe to free it HERE. One the audio
+    // thread still holds (count > 1) waits for the next swap.
+    std::lock_guard lock(retired_sessions_mtx_);
+    std::erase_if(retired_sessions_,
+                  [](const std::shared_ptr<const Session>& s) { return s.use_count() == 1; });
+    if (previous && previous.use_count() > 1) {
+        try {
+            retired_sessions_.push_back(std::move(previous));
+        } catch (...) {
+            // Out of memory: fall back to the old behaviour for this one.
+        }
+    }
 }
 
 bool Mixer::any_solo_active_in_slots() const noexcept {
@@ -863,12 +896,20 @@ void Mixer::render_timeline_span(float** output_channels,
                                    /*track_gain_override=*/1.0f);
             ++rendered_this_block;
 
-            const TrackMeterReading meter = measure_track(
+            TrackMeterReading meter = measure_track(
                 mix_l, mix_r, num_frames, start_pan, end_pan, track.mono_downmix,
                 meter_mode,
                 track_meter_fader_gain(control->gain.load(std::memory_order_relaxed),
                                        control->mute.load(std::memory_order_relaxed),
                                        target_solo_gain));
+            if (meter.non_finite) {
+                // A NaN/Inf block from the DSP: silence this track for the block
+                // instead of letting it poison the bus, the meters and the device.
+                sanitize_non_finite(mix_l, num_frames);
+                sanitize_non_finite(mix_r, num_frames);
+                meter = TrackMeterReading{};
+                non_finite_track_blocks_.fetch_add(1, std::memory_order_relaxed);
+            }
             track_meters_[ti]->left_peak.store(meter.peak_l, std::memory_order_relaxed);
             track_meters_[ti]->right_peak.store(meter.peak_r, std::memory_order_relaxed);
             track_meters_[ti]->left_rms.store(meter.rms_l, std::memory_order_relaxed);
@@ -1013,6 +1054,13 @@ void Mixer::render(float** output_channels,
                    int     num_frames,
                    double  /*sample_rate*/) noexcept {
     lt::rt::ScopedRealtimeSection rt_section;
+    // FTZ/DAZ on the callback thread. Not scoped: restoring the mode at the
+    // end of every block costs two MXCSR writes, and a write serialises the
+    // pipeline (measured ~1 us per block, +4% on a 24-track callback). This
+    // reads the register and writes it only when the flag is missing, i.e.
+    // on the first block a thread renders. Hosts leave FTZ on the driver
+    // thread the same way; nothing in the drivers relies on denormals.
+    lt::disable_denormals_for_current_thread();
     auto t0 = std::chrono::steady_clock::now();
     callback_count_.fetch_add(1, std::memory_order_relaxed);
 
@@ -1340,12 +1388,20 @@ void Mixer::render(float** output_channels,
                                        /*track_gain_override=*/1.0f);
                 rendered_atomic.fetch_add(1, std::memory_order_relaxed);
 
-                const TrackMeterReading meter = measure_track(
+                TrackMeterReading meter = measure_track(
                     mix_l, mix_r, num_frames, start_pan, end_pan, track.mono_downmix,
                     meter_mode,
                     track_meter_fader_gain(control->gain.load(std::memory_order_relaxed),
                                            control->mute.load(std::memory_order_relaxed),
                                            target_solo_gain));
+                if (meter.non_finite) {
+                    // A NaN/Inf block from the DSP: silence this track for the block
+                    // instead of letting it poison the bus, the meters and the device.
+                    sanitize_non_finite(mix_l, num_frames);
+                    sanitize_non_finite(mix_r, num_frames);
+                    meter = TrackMeterReading{};
+                    non_finite_track_blocks_.fetch_add(1, std::memory_order_relaxed);
+                }
                 track_meters_[ti]->left_peak.store(meter.peak_l, std::memory_order_relaxed);
                 track_meters_[ti]->right_peak.store(meter.peak_r, std::memory_order_relaxed);
                 track_meters_[ti]->left_rms.store(meter.rms_l, std::memory_order_relaxed);
@@ -2273,6 +2329,7 @@ std::uint64_t Mixer::callback_over_budget_count() const noexcept { return callba
 std::uint64_t Mixer::callback_deadline_miss_count() const noexcept { return callback_deadline_miss_count_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::rendered_track_count() const noexcept { return rendered_track_count_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::skipped_track_count() const noexcept { return skipped_track_count_.load(std::memory_order_relaxed); }
+std::uint64_t Mixer::non_finite_track_blocks() const noexcept { return non_finite_track_blocks_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::scheduled_jump_executed_count() const noexcept { return scheduled_jump_executed_count_.load(std::memory_order_relaxed); }
 std::uint64_t Mixer::song_end_pause_count() const noexcept { return song_end_pause_count_.load(std::memory_order_relaxed); }
 

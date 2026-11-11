@@ -52,7 +52,7 @@ bool BlockCache::read(const Id&  source_id,
                       int        frames_needed,
                       float**    out,
                       int        num_channels) noexcept {
-    CacheKey key{ source_id, block_index };
+    const CacheKeyView key{ source_id, block_index };
 
     std::shared_ptr<CacheBlock> blk;
     {
@@ -177,7 +177,7 @@ void BlockCache::fill(const Id&    source_id,
 }
 
 bool BlockCache::has_block(const Id& source_id, int block_index) const {
-    CacheKey key{ source_id, block_index };
+    const CacheKeyView key{ source_id, block_index };
     std::lock_guard<std::mutex> lk(mtx_);
     auto it = blocks_.find(key);
     if (it == blocks_.end()) return false;
@@ -192,7 +192,7 @@ void BlockCache::append_missing_blocks(const Id& source_id,
         return;
     std::lock_guard<std::mutex> lk(mtx_);
     for (int block = std::max(0, first_block); block <= last_block; ++block) {
-        CacheKey key{ source_id, block };
+        const CacheKeyView key{ source_id, block };
         auto it = blocks_.find(key);
         if (it == blocks_.end() ||
             !it->second->ready.load(std::memory_order_acquire)) {
@@ -208,7 +208,7 @@ void BlockCache::append_missing_blocks(const Id& source_id,
     for (int block : block_indices) {
         if (block < 0)
             continue;
-        CacheKey key{ source_id, block };
+        const CacheKeyView key{ source_id, block };
         auto it = blocks_.find(key);
         if (it == blocks_.end() ||
             !it->second->ready.load(std::memory_order_acquire)) {

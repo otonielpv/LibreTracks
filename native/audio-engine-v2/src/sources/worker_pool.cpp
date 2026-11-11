@@ -1,4 +1,5 @@
 #include <lt_engine/sources/worker_pool.h>
+#include <lt_engine/core/denormals.h>
 #include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/io_throttle.h>
 #include <lt_engine/core/device_profile.h>
@@ -28,6 +29,8 @@ namespace lt {
 namespace {
 
 void configure_decode_worker_thread() {
+    // Decode workers run the offline resampler (r8brain filter tails).
+    lt::disable_denormals_for_current_thread();
 #if defined(_WIN32)
     // Keep cold project opens from starving the WebView/UI thread while large
     // compressed sources are decoded and written to the WAV cache. With R3

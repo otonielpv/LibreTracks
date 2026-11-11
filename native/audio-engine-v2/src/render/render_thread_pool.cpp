@@ -1,4 +1,5 @@
 #include <lt_engine/render/render_thread_pool.h>
+#include <lt_engine/core/denormals.h>
 #include <lt_engine/core/realtime_thread.h>
 #include <lt_engine/diagnostics/rt_guard.h>
 #include <lt_engine/render/render_block_admission.h>
@@ -79,6 +80,10 @@ struct RenderThreadPool::Impl {
 
     void worker_loop(std::uint64_t seen) noexcept {
         promote_render_worker_thread();
+        // Same floating-point mode as the callback thread, which runs its share
+        // of phase A under ScopedNoDenormals: output stays bit-identical
+        // whichever thread renders a track.
+        disable_denormals_for_current_thread();
 
         for (;;) {
             spinning.fetch_add(1, std::memory_order_relaxed);

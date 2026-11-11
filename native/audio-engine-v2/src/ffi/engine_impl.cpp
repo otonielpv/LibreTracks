@@ -1157,6 +1157,7 @@ std::string EngineImpl::build_snapshot(bool include_sources) const {
         snap.cpu.callback_deadline_miss_count = mixer_->callback_deadline_miss_count();
         snap.cpu.mixer_rendered_track_count = mixer_->rendered_track_count();
         snap.cpu.mixer_skipped_track_count = mixer_->skipped_track_count();
+        snap.cpu.mixer_non_finite_track_blocks = mixer_->non_finite_track_blocks();
         auto tr = TrackRenderer::diagnostics();
         snap.cpu.track_renderer_prepare_count = tr.prepare_count;
         snap.cpu.warp_feed_gap_frames     = tr.stretched_feed_gap_frames;

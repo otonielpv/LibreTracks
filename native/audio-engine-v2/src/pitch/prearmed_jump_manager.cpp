@@ -1,4 +1,5 @@
 #include <lt_engine/pitch/prearmed_jump_manager.h>
+#include <lt_engine/core/denormals.h>
 
 #include <lt_engine/core/device_profile.h>
 #include <lt_engine/debug/logging.h>
@@ -103,6 +104,7 @@ int prearm_build_threads() {
 }
 
 void set_prearm_worker_thread_priority() {
+    lt::disable_denormals_for_current_thread();
 #ifdef _WIN32
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
 #elif defined(__APPLE__) || defined(__linux__)
@@ -926,6 +928,7 @@ void PrearmedJumpManager::prepare_all_targets_async(
             setpriority(PRIO_PROCESS, 0, 10);
   #endif
 #endif
+            lt::disable_denormals_for_current_thread();
             for (;;) {
                 std::optional<Impl::PendingJob> job;
                 {

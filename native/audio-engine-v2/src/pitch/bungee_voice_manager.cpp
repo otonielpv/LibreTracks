@@ -1,4 +1,5 @@
 #include <lt_engine/pitch/bungee_voice_manager.h>
+#include <lt_engine/core/denormals.h>
 #include <lt_engine/pitch/voice_priming.h>
 
 #include <lt_engine/debug/logging.h>
@@ -529,6 +530,8 @@ std::vector<std::shared_ptr<BungeePitchVoice>> build_voices_parallel(
     if (specs.empty()) return out;
     std::atomic<std::size_t> next{0};
     auto drain = [&] {
+        // Scoped: the calling (control) thread drains too.
+        lt::ScopedNoDenormals no_denormals;
         for (std::size_t i = next.fetch_add(1); i < specs.size();
              i = next.fetch_add(1)) {
             out[i] = build_voice_for_spec(*specs[i], sources, sample_rate,
@@ -827,6 +830,7 @@ BungeeVoiceManager::build_seek_voice_map(Frame target_frame,
 #elif defined(__linux__)
             setpriority(PRIO_PROCESS, 0, 10);
 #endif
+            lt::disable_denormals_for_current_thread();
 
             const auto& spec = specs[i];
             auto& result = results[i];
@@ -1007,6 +1011,7 @@ void BungeeVoiceManager::ensure_async_worker() {
       #elif defined(__linux__)
         setpriority(PRIO_PROCESS, 0, 10);
       #endif
+        lt::disable_denormals_for_current_thread();
         for (;;) {
             Impl::AsyncJob job;
             {

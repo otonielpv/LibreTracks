@@ -19,6 +19,14 @@ int streaming_read_ahead_blocks() {
     return value;
 }
 
+// Read once: this is checked on every cache miss on the audio thread, and an
+// uncached getenv takes the CRT environment lock on Windows and builds a
+// std::string, right when the callback is already starving.
+bool jump_debug_enabled() {
+    static const bool value = lt_env_flag_enabled("LIBRETRACKS_JUMP_DEBUG");
+    return value;
+}
+
 } // namespace
 
 DecodedSource::DecodedSource(std::vector<float> samples,
@@ -182,7 +190,7 @@ int DecodedSource::read_stored(Frame offset_frames, int frame_count,
                 shifted[ch] = out[ch] + copied;
             if (!cache_->read(source_id_, block_index, block_offset, chunk,
                               shifted, channels)) {
-                if (lt_env_flag_enabled("LIBRETRACKS_JUMP_DEBUG")) {
+                if (jump_debug_enabled()) {
                     lt_debug_log(
                         "[LT_JUMP_DEBUG][source] cache_miss source=%s frame=%lld block=%d offset=%d frames=%d\n",
                         source_id_.c_str(),

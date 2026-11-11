@@ -53,6 +53,7 @@ add_executable(lt_engine_tests
     test_region_envelope.cpp
     test_audio_clock_stamp.cpp
     test_pilot_tone.cpp
+    test_engine_hardening.cpp
 )
 
 target_link_libraries(lt_engine_tests

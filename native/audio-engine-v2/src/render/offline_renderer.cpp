@@ -1,4 +1,5 @@
 #include <lt_engine/render/offline_renderer.h>
+#include <lt_engine/core/denormals.h>
 
 #include <lt_engine/core/fs_path.h>
 #include <lt_engine/pitch/bungee_pitch_voice.h>
@@ -623,6 +624,10 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
         }
 
         if (any) {
+            // Same guard as the live mixer's phase A: a NaN/Inf block from the
+            // DSP is silenced for this track instead of poisoning the render.
+            sanitize_non_finite(s.bus_l.data(), n);
+            sanitize_non_finite(s.bus_r.data(), n);
             // Mixer phase B for one track, without the per-block ramps (the
             // controls do not move during a render). A mono source is already
             // on both sides (decode_window duplicates it); a stereo one is kept
@@ -862,6 +867,9 @@ void collect_audio_tracks(const Session& session, const Id& id,
 
 Result<OfflineRenderReport> render_offline(const OfflineRenderRequest& request,
                                            const OfflineRenderProgress& progress) {
+    // The same floating-point mode as the live callback, so an export sounds
+    // (and diffs) like playback.
+    lt::ScopedNoDenormals no_denormals;
     using R = Result<OfflineRenderReport>;
     if (request.sample_rate < 8000 || request.sample_rate > 384000)
         return R::err("unsupported sample rate");

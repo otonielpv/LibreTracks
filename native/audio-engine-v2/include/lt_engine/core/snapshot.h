@@ -71,6 +71,7 @@ struct CpuDiagnostics {
     uint64_t callback_deadline_miss_count = 0; // render >100%; not a driver xrun
     uint64_t mixer_rendered_track_count = 0;
     uint64_t mixer_skipped_track_count = 0;
+    uint64_t mixer_non_finite_track_blocks = 0;
     uint64_t track_renderer_prepare_count = 0;
     uint64_t track_renderer_scratch_resize_count = 0;
     uint64_t track_renderer_scratch_resize_in_audio_thread_count = 0;

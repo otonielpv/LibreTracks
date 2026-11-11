@@ -1,4 +1,5 @@
 #include <lt_engine/sources/source_manager.h>
+#include <lt_engine/core/denormals.h>
 #include <lt_engine/sources/audio_decoder.h>
 #include <lt_engine/sources/io_throttle.h>
 #include <lt_engine/sources/resampler.h>
@@ -2294,6 +2295,7 @@ bool SourceManager::FillReader::open_for(const Id& id,
 }
 
 void SourceManager::fill_worker_loop() const {
+    lt::disable_denormals_for_current_thread();
 #if defined(_WIN32)
     // This thread serves the blocks the *playing* tracks need right now. Lift it
     // above the decode workers (THREAD_PRIORITY_BELOW_NORMAL) so a heavy decode

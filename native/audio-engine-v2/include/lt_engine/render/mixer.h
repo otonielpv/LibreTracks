@@ -23,6 +23,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <mutex>
 #include <vector>
 
 namespace lt {
@@ -171,6 +172,9 @@ public:
     std::uint64_t callback_deadline_miss_count() const noexcept;
     std::uint64_t rendered_track_count() const noexcept;
     std::uint64_t skipped_track_count() const noexcept;
+    // Track blocks that came out of the renderer with NaN/Inf and were
+    // silenced. Should stay 0; anything else is a DSP bug worth a report.
+    std::uint64_t non_finite_track_blocks() const noexcept;
     std::uint64_t scheduled_jump_executed_count() const noexcept;
     // Times render() paused the transport at a song end (set_pause_at_song_end).
     std::uint64_t song_end_pause_count() const noexcept;
@@ -221,6 +225,12 @@ private:
 #else
     std::atomic<std::shared_ptr<const Session>> session_;
 #endif
+    // Sessions replaced while the audio thread may still hold its per-block
+    // copy. Without this, a swap landing mid-callback left the callback with
+    // the last reference, and the whole Session (songs, tracks, clips, ids)
+    // was freed on the audio thread. Control thread only; swept on each swap.
+    std::mutex                                  retired_sessions_mtx_;
+    std::vector<std::shared_ptr<const Session>> retired_sessions_;
     const SourceManager* sources_;
     TransportClock*      clock_;
     JumpScheduler*       scheduler_;
@@ -453,6 +463,7 @@ private:
     std::atomic<std::uint64_t> callback_deadline_miss_count_{0};
     std::atomic<std::uint64_t> rendered_track_count_{0};
     std::atomic<std::uint64_t> skipped_track_count_{0};
+    std::atomic<std::uint64_t> non_finite_track_blocks_{0};
     std::atomic<std::uint64_t> scheduled_jump_executed_count_{0};
     std::atomic<bool> pause_at_song_end_{false};
     std::atomic<std::uint64_t> song_end_pause_count_{0};
@@ -572,6 +583,7 @@ private:
                                      int control_count) noexcept;
     std::shared_ptr<const Session> load_session() const noexcept;
     void store_session(std::shared_ptr<const Session> session) noexcept;
+    void retire_session(std::shared_ptr<const Session> previous) noexcept;
 };
 
 } // namespace lt

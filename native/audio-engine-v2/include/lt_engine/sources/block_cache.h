@@ -24,6 +24,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -41,11 +42,44 @@ struct CacheKey {
     }
 };
 
+// A non-owning key for lookups. The source id is the file path, far longer
+// than the small-string buffer, so building a CacheKey to search the map
+// copied it: one heap allocation per read, per track, per callback, on the
+// audio thread. Hash and equality below are transparent so a lookup can use
+// this view and never copy.
+struct CacheKeyView {
+    std::string_view source_id;
+    int              block_index = 0;
+};
+
 struct CacheKeyHash {
-    std::size_t operator()(const CacheKey& k) const noexcept {
-        std::size_t h = std::hash<std::string>{}(k.source_id);
-        h ^= std::hash<int>{}(k.block_index) + 0x9e3779b9u + (h << 6) + (h >> 2);
+    using is_transparent = void;
+
+    static std::size_t combine(std::string_view source_id, int block_index) noexcept {
+        // std::hash<std::string_view> and std::hash<std::string> agree on the
+        // same characters (guaranteed by the standard), so owning and view
+        // keys land in the same bucket.
+        std::size_t h = std::hash<std::string_view>{}(source_id);
+        h ^= std::hash<int>{}(block_index) + 0x9e3779b9u + (h << 6) + (h >> 2);
         return h;
+    }
+    std::size_t operator()(const CacheKey& k) const noexcept {
+        return combine(k.source_id, k.block_index);
+    }
+    std::size_t operator()(const CacheKeyView& k) const noexcept {
+        return combine(k.source_id, k.block_index);
+    }
+};
+
+struct CacheKeyEqual {
+    using is_transparent = void;
+
+    bool operator()(const CacheKey& a, const CacheKey& b) const noexcept { return a == b; }
+    bool operator()(const CacheKeyView& a, const CacheKey& b) const noexcept {
+        return a.block_index == b.block_index && a.source_id == b.source_id;
+    }
+    bool operator()(const CacheKey& a, const CacheKeyView& b) const noexcept {
+        return (*this)(b, a);
     }
 };
 
@@ -185,7 +219,7 @@ private:
     // try_lock and keep publishing blocks instead of queueing behind a global
     // prune. The audio thread never touches this mutex.
     std::mutex                                             eviction_mtx_;
-    std::unordered_map<CacheKey, std::shared_ptr<CacheBlock>, CacheKeyHash> blocks_;
+    std::unordered_map<CacheKey, std::shared_ptr<CacheBlock>, CacheKeyHash, CacheKeyEqual> blocks_;
     // Keys that must stay resident. Kept separately from the blocks themselves
     // so a block can be pinned before it has been loaded.
     std::unordered_set<CacheKey, CacheKeyHash>                              pinned_keys_;

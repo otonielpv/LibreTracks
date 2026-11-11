@@ -68,6 +68,7 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"callback_deadline_miss_count", snap.cpu.callback_deadline_miss_count},
         {"mixer_rendered_track_count", snap.cpu.mixer_rendered_track_count},
         {"mixer_skipped_track_count", snap.cpu.mixer_skipped_track_count},
+        {"mixer_non_finite_track_blocks", snap.cpu.mixer_non_finite_track_blocks},
         {"track_renderer_prepare_count", snap.cpu.track_renderer_prepare_count},
         {"warp_feed_gap_frames", snap.cpu.warp_feed_gap_frames},
         {"warp_feed_gap_events", snap.cpu.warp_feed_gap_events},
