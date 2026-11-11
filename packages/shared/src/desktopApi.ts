@@ -976,6 +976,29 @@ export async function saveSessionAsTemplateAt(
   return invokeCommand<boolean>("save_session_as_template_at", { templatePath });
 }
 
+/**
+ * «Importar plantilla…» from this device: pick a `.lttemplate` and copy it into
+ * the templates folder. Null if the user cancels the picker.
+ */
+export async function pickAndImportSessionTemplate(): Promise<SessionTemplateSummary | null> {
+  return invokeCommand<SessionTemplateSummary | null>("pick_and_import_session_template");
+}
+
+/**
+ * Copy a `.lttemplate` already on disk (a cloud download, a staged save) into
+ * the templates folder. `nameHint` is the name to list it under when the
+ * file's own name is not it. The same template twice is not duplicated.
+ */
+export async function importSessionTemplateFrom(
+  sourcePath: string,
+  nameHint?: string | null,
+): Promise<SessionTemplateSummary> {
+  return invokeCommand<SessionTemplateSummary>("import_session_template_from", {
+    sourcePath,
+    nameHint: nameHint ?? null,
+  });
+}
+
 /** Create a new session from a template listed on the landing (known by path). */
 export async function createSongFromTemplatePath(
   templatePath: string,
@@ -3140,8 +3163,8 @@ export async function deleteTracks(
 /** Stable provider key, as the backend sends and expects it. */
 export type CloudProviderId = "google-drive" | "onedrive" | "dropbox";
 
-/** Which of the two cloud folders a listing refers to. */
-export type CloudFolder = "songs" | "sessions";
+/** Which of the cloud folders a listing refers to. */
+export type CloudFolder = "songs" | "sessions" | "templates";
 
 export type CloudStatus = {
   provider: CloudProviderId;
@@ -3221,7 +3244,7 @@ export async function listCloudFiles(
   return invokeCommand<CloudFile[]>("cloud_list", { provider, folder });
 }
 
-/** Upload a package, filed under Songs or Sessions by its extension. */
+/** Upload a package or template, filed under Songs, Sessions or Templates by its extension. */
 export async function uploadToCloud(
   provider: CloudProviderId,
   localPath: string,

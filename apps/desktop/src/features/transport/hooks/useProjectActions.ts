@@ -24,7 +24,6 @@ import {
   pickAndImportSong,
   saveProject,
   saveProjectAs,
-  saveSessionAsTemplate,
 } from "../desktopApi";
 import { nextPaint } from "../library/pendingAudioImports";
 import {
@@ -608,12 +607,18 @@ export function useProjectActions({
   }
 
   // Save the current session's organizational structure (tracks, folders,
-  // routing) as a reusable `.lttemplate`. No session reload — just a save
-  // dialog + write — so this does NOT go through runProjectLoadFlow.
+  // routing) as a reusable `.lttemplate`, on this device or in the cloud. No
+  // session reload, so this does NOT go through runProjectLoadFlow.
   function handleSaveAsTemplateClick() {
     void runAction(
       async () => {
-        const saved = await saveSessionAsTemplate();
+        // Loaded on demand, like the other template entry points: the
+        // transport tree is timing-sensitive in tests, and the cloud flows
+        // are only needed once someone saves a template.
+        const { saveTemplateWithChoice } = await import("../templates/templateTransfer");
+        const saved = await saveTemplateWithChoice(
+          getSong()?.title ?? t("transport.cloud.kindTemplate"),
+        );
         if (!saved) {
           return;
         }
@@ -628,7 +633,9 @@ export function useProjectActions({
               }),
         );
       },
-      { busy: true },
+      // Not busy: the first step is the «este equipo o la nube» question, and
+      // the busy overlay would cover it. Writing a template is kilobytes, and
+      // the upload has its own progress toast.
     );
   }
 

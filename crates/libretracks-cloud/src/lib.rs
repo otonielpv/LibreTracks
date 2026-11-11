@@ -95,17 +95,19 @@ impl Quota {
 /// ```text
 /// Drive/
 /// └── LibreTracks/
-///     ├── Songs/      .ltpkg  (one song)
-///     └── Sessions/   .ltset  (a whole session)
+///     ├── Songs/      .ltpkg       (one song)
+///     ├── Sessions/   .ltset       (a whole session)
+///     └── Templates/  .lttemplate  (track layout, no audio)
 /// ```
 ///
-/// Templates (`.lttemplate`) are deliberately absent: they are kilobytes, and
-/// mixing them into the session list makes that list harder to read for no
-/// gain. Adding a third variant later is additive.
+/// Templates get a folder of their own rather than sharing Sessions: they are
+/// kilobytes, and mixed into the session list they would make it harder to
+/// read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RemoteFolder {
     Songs,
     Sessions,
+    Templates,
 }
 
 impl RemoteFolder {
@@ -117,6 +119,7 @@ impl RemoteFolder {
         match self {
             RemoteFolder::Songs => "Songs",
             RemoteFolder::Sessions => "Sessions",
+            RemoteFolder::Templates => "Templates",
         }
     }
 
@@ -125,6 +128,7 @@ impl RemoteFolder {
         match self {
             RemoteFolder::Songs => ".ltpkg",
             RemoteFolder::Sessions => ".ltset",
+            RemoteFolder::Templates => ".lttemplate",
         }
     }
 
@@ -138,6 +142,8 @@ impl RemoteFolder {
             Some(RemoteFolder::Songs)
         } else if name.ends_with(".ltset") {
             Some(RemoteFolder::Sessions)
+        } else if name.ends_with(".lttemplate") {
+            Some(RemoteFolder::Templates)
         } else {
             None
         }
@@ -288,6 +294,8 @@ mod tests {
         assert_eq!(RemoteFolder::Songs.extension(), ".ltpkg");
         assert_eq!(RemoteFolder::Sessions.folder_name(), "Sessions");
         assert_eq!(RemoteFolder::Sessions.extension(), ".ltset");
+        assert_eq!(RemoteFolder::Templates.folder_name(), "Templates");
+        assert_eq!(RemoteFolder::Templates.extension(), ".lttemplate");
     }
 
     #[test]
@@ -318,8 +326,8 @@ mod tests {
             None
         );
         assert_eq!(
-            RemoteFolder::for_path(&PathBuf::from("/x/plantilla.lttemplate")),
-            None
+            RemoteFolder::for_path(&PathBuf::from("/x/Plantilla.LTTEMPLATE")),
+            Some(RemoteFolder::Templates)
         );
     }
 }

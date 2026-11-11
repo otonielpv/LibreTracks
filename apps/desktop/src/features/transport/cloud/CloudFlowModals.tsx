@@ -53,7 +53,7 @@ function StorageChoiceModal() {
 
   const cancel = () => pending.resolve(null);
   const importing = pending.intent === "import";
-  const pickingAccount = accountStepFor === pending;
+  const pickingAccount = accountStepFor === pending || pending.cloudOnly === true;
   // Providers this build cannot reach are left out entirely: a card that can
   // never be pressed is noise. Before the first probe answers, `statuses` is
   // null and the cloud card says it is loading; treating that as "nothing
@@ -121,7 +121,9 @@ function StorageChoiceModal() {
             <span className="lt-settings-modal-eyebrow">
               {pending.kind === "song"
                 ? t("transport.cloud.kindSong", { defaultValue: "Canción" })
-                : t("transport.cloud.kindSession", { defaultValue: "Sesión" })}
+                : pending.kind === "template"
+                  ? t("transport.cloud.kindTemplate", { defaultValue: "Plantilla" })
+                  : t("transport.cloud.kindSession", { defaultValue: "Sesión" })}
             </span>
             <h2 id="lt-storage-choice-title">
               {pickingAccount
@@ -178,13 +180,15 @@ function StorageChoiceModal() {
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                className="lt-link-button lt-storage-choice-back"
-                onClick={() => setAccountStepFor(null)}
-              >
-                {t("common.back", { defaultValue: "Atrás" })}
-              </button>
+              {pending.cloudOnly ? null : (
+                <button
+                  type="button"
+                  className="lt-link-button lt-storage-choice-back"
+                  onClick={() => setAccountStepFor(null)}
+                >
+                  {t("common.back", { defaultValue: "Atrás" })}
+                </button>
+              )}
             </>
           ) : (
             <div className="lt-storage-choice-options">
@@ -270,9 +274,13 @@ function CloudPickerModal() {
                 ? t("transport.cloud.pickSession", {
                     defaultValue: "Elige una sesión",
                   })
-                : t("transport.cloud.pickSong", {
-                    defaultValue: "Elige una canción",
-                  })}
+                : pending.folder === "templates"
+                  ? t("transport.cloud.pickTemplate", {
+                      defaultValue: "Elige una plantilla",
+                    })
+                  : t("transport.cloud.pickSong", {
+                      defaultValue: "Elige una canción",
+                    })}
             </h2>
           </div>
           <button

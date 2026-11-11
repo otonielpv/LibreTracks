@@ -357,6 +357,7 @@ const en = {
       empty: "You have not uploaded anything here yet.",
       songs: "Songs",
       sessions: "Sessions",
+      templates: "Templates",
       cancelling: "Cancelling…",
       transferring: "{{name}} — {{percent}}%",
       quotaHint: "Google shares this space with Gmail and Photos, so not all of it is available to LibreTracks.",
@@ -378,6 +379,7 @@ const en = {
       emptyPicker: "Nothing uploaded yet. Export something to the cloud first.",
       pickSong: "Choose a song",
       pickSession: "Choose a session",
+      pickTemplate: "Choose a template",
       cloudExportHint: "Upload to your account",
       cloudImportHint: "Pick from what you have uploaded",
       cloudImportFrom: "Choose from what you have in {{providers}}",
@@ -393,6 +395,7 @@ const en = {
       chooseExportTarget: "Where do you want to save it?",
       chooseImportSource: "Where do you want to import from?",
       kindSession: "Session",
+      kindTemplate: "Template",
       kindSong: "Song",
       filterCount: "{{shown}} of {{total}}",
       clearFilters: "Clear filters",
@@ -2305,6 +2308,14 @@ const en = {
     dropUnmatched_other: "{{count}} without a rule",
     undo: "Undo",
     dismiss: "Close",
+    library: "My templates",
+    libraryEmpty: "You have no saved templates yet.",
+    libraryHint:
+      "Import templates from another computer or from your cloud, and upload yours to have them on every device.",
+    importTemplate: "Import template…",
+    uploadTemplate: "Upload to cloud",
+    imported: "Template “{{name}}” imported.",
+    uploaded: "Template “{{name}}” uploaded to the cloud.",
   },
   colorPicker: {
     presets: {

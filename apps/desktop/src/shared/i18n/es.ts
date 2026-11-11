@@ -357,6 +357,7 @@ const es = {
       empty: "Todavía no has subido nada aquí.",
       songs: "Canciones",
       sessions: "Sesiones",
+      templates: "Plantillas",
       cancelling: "Cancelando…",
       transferring: "{{name}} — {{percent}}%",
       quotaHint: "Google comparte este espacio con Gmail y Fotos, así que no todo está disponible para LibreTracks.",
@@ -378,6 +379,7 @@ const es = {
       emptyPicker: "No hay nada subido todavía. Exporta algo a la nube primero.",
       pickSong: "Elige una canción",
       pickSession: "Elige una sesión",
+      pickTemplate: "Elige una plantilla",
       cloudExportHint: "Subir a tu cuenta",
       cloudImportHint: "Elegir de lo que tienes subido",
       cloudImportFrom: "Elegir de lo que tienes en {{providers}}",
@@ -393,6 +395,7 @@ const es = {
       chooseExportTarget: "¿Dónde quieres guardarlo?",
       chooseImportSource: "¿Desde dónde quieres importar?",
       kindSession: "Sesión",
+      kindTemplate: "Plantilla",
       kindSong: "Canción",
       filterCount: "{{shown}} de {{total}}",
       clearFilters: "Quitar filtros",
@@ -2334,6 +2337,14 @@ const es = {
     dropUnmatched_other: "{{count}} sin regla",
     undo: "Deshacer",
     dismiss: "Cerrar",
+    library: "Mis plantillas",
+    libraryEmpty: "Todavía no tienes plantillas guardadas.",
+    libraryHint:
+      "Importa plantillas de otro equipo o de tu nube, y sube las tuyas para tenerlas en todos tus dispositivos.",
+    importTemplate: "Importar plantilla…",
+    uploadTemplate: "Subir a la nube",
+    imported: "Plantilla «{{name}}» importada.",
+    uploaded: "Plantilla «{{name}}» subida a la nube.",
   },
   colorPicker: {
     presets: {

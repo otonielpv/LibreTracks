@@ -1,9 +1,10 @@
 //! Cloud transfer commands: sign in to the user's own Google Drive, OneDrive or
-//! Dropbox and move `.ltpkg` / `.ltset` packages in and out of it.
+//! Dropbox and move `.ltpkg` / `.ltset` packages and `.lttemplate`
+//! files in and out of it.
 //!
 //! LibreTracks stores nothing and hosts nothing. The files land in an account
-//! the user owns, under a folder of the app's own with `Songs/` and `Sessions/`
-//! inside, reached with a token that never leaves this device. See
+//! the user owns, under a folder of the app's own with `Songs/`, `Sessions/` and
+//! `Templates/` inside, reached with a token that never leaves this device. See
 //! [`libretracks_cloud`] for the shape of all that.
 //!
 //! Every command but the status takes the provider's key (`google-drive`,
@@ -187,6 +188,7 @@ fn folder_from(name: &str) -> Result<RemoteFolder, String> {
     match name {
         "songs" => Ok(RemoteFolder::Songs),
         "sessions" => Ok(RemoteFolder::Sessions),
+        "templates" => Ok(RemoteFolder::Templates),
         other => Err(format!("unknown cloud folder: {other}")),
     }
 }
@@ -484,7 +486,7 @@ pub async fn cloud_list(
         .collect())
 }
 
-/// Upload a local package, routed to `Songs` or `Sessions` by its extension.
+/// Upload a local package, routed to `Songs`, `Sessions` or `Templates` by its extension.
 #[tauri::command]
 pub async fn cloud_upload(
     app: AppHandle,
@@ -493,7 +495,7 @@ pub async fn cloud_upload(
 ) -> Result<CloudFile, String> {
     let path = PathBuf::from(&local_path);
     let folder = RemoteFolder::for_path(&path)
-        .ok_or_else(|| "only .ltpkg and .ltset packages can be uploaded".to_string())?;
+        .ok_or_else(|| "only .ltpkg, .ltset and .lttemplate files can be uploaded".to_string())?;
     let name = path
         .file_name()
         .and_then(|n| n.to_str())
@@ -566,10 +568,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn folder_names_from_the_frontend_map_to_the_two_folders() {
+    fn folder_names_from_the_frontend_map_to_the_three_folders() {
         assert_eq!(folder_from("songs").unwrap(), RemoteFolder::Songs);
         assert_eq!(folder_from("sessions").unwrap(), RemoteFolder::Sessions);
-        assert!(folder_from("templates").is_err());
+        assert_eq!(folder_from("templates").unwrap(), RemoteFolder::Templates);
+        assert!(folder_from("plantillas").is_err());
         assert!(folder_from("").is_err());
     }
 

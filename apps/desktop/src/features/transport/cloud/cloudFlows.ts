@@ -18,6 +18,7 @@ import {
   useCloudStore,
   type ProviderFile,
   type StorageChoice,
+  type StorageKind,
 } from "./cloudStore";
 
 /**
@@ -46,12 +47,14 @@ import {
  */
 export function chooseStorage(
   intent: "import" | "export",
-  kind: "song" | "session",
+  kind: StorageKind,
+  options: { cloudOnly?: boolean } = {},
 ): Promise<StorageChoice | null> {
   return new Promise((resolve) => {
     useCloudStore.getState().setPendingChoice({
       intent,
       kind,
+      cloudOnly: options.cloudOnly,
       resolve: (choice) => {
         useCloudStore.getState().setPendingChoice(null);
         if (isCloudTarget(choice)) {
@@ -161,6 +164,12 @@ export async function importFromCloud(
   }
 }
 
+const CLOUD_FOLDER_FOR_KIND: Record<StorageKind, CloudFolder> = {
+  song: "songs",
+  session: "sessions",
+  template: "templates",
+};
+
 /**
  * Wrap an existing local import so it first asks where to import from.
  *
@@ -169,7 +178,7 @@ export async function importFromCloud(
  * logic — the repo rule for anything new.
  */
 export async function importWithStorageChoice(
-  kind: "song" | "session",
+  kind: StorageKind,
   runLocalImport: () => Promise<void> | void,
   runCloudImport: (localPath: string) => Promise<void>,
 ): Promise<void> {
@@ -179,7 +188,7 @@ export async function importWithStorageChoice(
     return;
   }
   if (choice) {
-    await importFromCloud(kind === "song" ? "songs" : "sessions", runCloudImport);
+    await importFromCloud(CLOUD_FOLDER_FOR_KIND[kind], runCloudImport);
   }
 }
 

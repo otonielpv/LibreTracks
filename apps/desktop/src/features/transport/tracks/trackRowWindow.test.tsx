@@ -47,6 +47,25 @@ function nextFrame() {
   return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+/**
+ * Espera a que la app deje de renderizar: tres tandas seguidas de 20 ms sin
+ * renders nuevos. Lo que el arranque deja pendiente (promesas del mock,
+ * efectos diferidos) llega antes o despues segun la carga de la maquina, y
+ * con la suite entera en paralelo podia caer dentro del bucle que cuenta los
+ * renders del scroll y pasar por uno de el.
+ */
+async function settleRenders(read: () => number) {
+  let last = read();
+  for (let quiet = 0, round = 0; quiet < 3 && round < 50; round += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    const now = read();
+    quiet = now === last ? quiet + 1 : 0;
+    last = now;
+  }
+}
+
 let scrollTop = 0;
 async function scrollViewportTo(value: number) {
   const element = viewport();
@@ -191,6 +210,7 @@ describe("virtualized track rows", () => {
     await scrollViewportTo(2000);
     const rendersAt = () =>
       readPerfSnapshot().renderCounts.find(([name]) => name === "TrackHeadersPane")?.[1] ?? 0;
+    await settleRenders(rendersAt);
     const before = rendersAt();
     let publications = 0;
     const unsubscribe = useTrackRowWindowStore.subscribe(() => {

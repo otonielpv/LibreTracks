@@ -1149,6 +1149,11 @@ export const testDesktopApiMock = {
   saveProjectAs: async () => clone(buildSnapshot()),
   listSessionTemplates: async () => [],
   saveSessionAsTemplate: async () => false,
+  pickAndImportSessionTemplate: async () => null,
+  importSessionTemplateFrom: async (sourcePath: string, nameHint?: string | null) => ({
+    name: nameHint ?? sourcePath.split(/[\\/]/).pop()?.replace(/\.lttemplate$/i, "") ?? "Plantilla",
+    path: sourcePath,
+  }),
   createSongFromTemplateFile: async () => clone(buildSnapshot()),
   createSongFromTemplatePath: async (_templatePath: string) =>
     clone(buildSnapshot()),

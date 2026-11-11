@@ -41,9 +41,18 @@ import {
  */
 export type PendingChoice = {
   intent: "import" | "export";
-  kind: "song" | "session";
+  kind: StorageKind;
+  /**
+   * Skip "this device or the cloud?" and go straight to the account. For an
+   * action that only makes sense in the cloud (uploading a template that is
+   * already on this device).
+   */
+  cloudOnly?: boolean;
   resolve: (choice: StorageChoice | null) => void;
 };
+
+/** What an import or export moves, for the question's eyebrow. */
+export type StorageKind = "song" | "session" | "template";
 
 /**
  * Where an import comes from or an export goes.
@@ -187,7 +196,16 @@ export function newTransfer(
 const EMPTY_FILES: Record<CloudFolder, CloudFile[]> = {
   songs: [],
   sessions: [],
+  templates: [],
 };
+
+/** The folder a file lands in, by extension, as the backend routes it. */
+export function folderForFileName(name: string): CloudFolder {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".ltset")) return "sessions";
+  if (lower.endsWith(".lttemplate")) return "templates";
+  return "songs";
+}
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -343,10 +361,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       recordProductEvent("feature_cloud");
       // The folder it landed in follows from the extension, exactly as the
       // backend routed it, so the listing refreshes without a second guess.
-      const folder: CloudFolder = name.toLowerCase().endsWith(".ltset")
-        ? "sessions"
-        : "songs";
-      await get().refreshFiles(folder);
+      await get().refreshFiles(folderForFileName(name));
       await get().refreshQuota();
       return uploaded;
     } catch (error) {

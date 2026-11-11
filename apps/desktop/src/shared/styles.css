@@ -2041,6 +2041,51 @@ html.lt-ios body {
   font: 700 0.92rem/1.2 "Space Grotesk", sans-serif;
 }
 
+.lt-template-library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.lt-template-library-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 12rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.lt-template-library-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0;
+  border-top: 1px solid rgb(255 255 255 / 0.06);
+}
+
+.lt-template-library-name {
+  min-width: 0;
+  overflow: hidden;
+  color: #f3f0ef;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-template-library-list .lt-link-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.lt-template-library-list .material-symbols-outlined {
+  font-size: 1rem;
+}
+
 .lt-settings-field select {
   width: 100%;
   border-radius: 2px;

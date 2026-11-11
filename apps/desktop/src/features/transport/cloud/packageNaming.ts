@@ -89,7 +89,7 @@ const METER_TOKEN = /^(\d{1,2}-\d{1,2})$/;
  * before this existed.
  */
 export function parsePackageFileName(fileName: string): ParsedPackageName {
-  const withoutExtension = fileName.replace(/\.(ltpkg|ltset)$/i, "");
+  const withoutExtension = fileName.replace(/\.(ltpkg|ltset|lttemplate)$/i, "");
   const match = withoutExtension.match(/^(.*?)\s*\[([^\]]*)\]\s*$/);
   if (!match) {
     return { title: withoutExtension.trim() };

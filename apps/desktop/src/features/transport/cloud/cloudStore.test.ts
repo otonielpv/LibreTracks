@@ -125,7 +125,11 @@ describe("cuenta activa", () => {
     useCloudStore.setState({
       provider: "google-drive",
       quota: { usedBytes: 1, limitBytes: 2, freeBytes: 1 },
-      files: { songs: [{ id: "g1", name: "a.ltpkg", sizeBytes: 1, modified: null }], sessions: [] },
+      files: {
+        songs: [{ id: "g1", name: "a.ltpkg", sizeBytes: 1, modified: null }],
+        sessions: [],
+        templates: [],
+      },
     });
     useCloudStore.getState().setProvider("dropbox");
     const state = useCloudStore.getState();

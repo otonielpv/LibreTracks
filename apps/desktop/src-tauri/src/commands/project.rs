@@ -1062,7 +1062,29 @@ pub fn start_save_session_as_template(
         return Ok(true);
     }
 
-    #[cfg(not(target_os = "android"))]
+    // iOS has no save dialog wired here (the shim answers every pick as a
+    // cancel, so this used to do nothing at all). Templates are kilobytes and
+    // only ever used from the templates folder, so it saves straight there,
+    // under the session's name; carrying them to another device is what the
+    // cloud is for.
+    #[cfg(target_os = "ios")]
+    {
+        let template_name = sanitize_session_name(&song_title)?;
+        let catalog_dir = crate::state::templates_default_directory(&app);
+        std::fs::create_dir_all(&catalog_dir).map_err(|error| error.to_string())?;
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+        return session
+            .save_current_as_template(catalog_dir.join(format!("{template_name}.lttemplate")))
+            .map(|_| true)
+            .map_err(|error| {
+                crate::infra::error_log::log_command_err("start_save_session_as_template", error)
+            });
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         let default_directory = crate::state::templates_default_directory(&app);
         // Ensure the suggested folder exists so the dialog can open there.
@@ -1225,6 +1247,94 @@ pub fn start_create_song_from_template_file(app: AppHandle) -> Result<bool, Stri
     });
 
     Ok(true)
+}
+
+/// Bring a `.lttemplate` already on disk into the templates folder (a cloud
+/// download staged by the frontend, or a file the user dropped). `name_hint`
+/// is the name the user knows it by, used when the staged file's own name is
+/// not that.
+#[tauri::command(async)]
+pub fn import_session_template_from(
+    app: AppHandle,
+    source_path: String,
+    name_hint: Option<String>,
+) -> Result<crate::state::TemplateSummary, String> {
+    crate::state::import_template_into_catalog(
+        std::path::Path::new(&source_path),
+        &crate::state::templates_default_directory(&app),
+        name_hint.as_deref(),
+    )
+    .map_err(|error| {
+        crate::infra::error_log::log_command_err("import_session_template_from", error)
+    })
+}
+
+/// «Importar plantilla…» from this device: pick a `.lttemplate` and copy it
+/// into the templates folder. `None` when the user cancels the picker.
+///
+/// Synchronous because the desktop picker (rfd) must open on the main thread.
+/// The copy afterwards is a few kilobytes, nothing worth a worker.
+#[cfg(not(target_os = "ios"))]
+#[tauri::command]
+pub fn pick_and_import_session_template(
+    app: AppHandle,
+) -> Result<Option<crate::state::TemplateSummary>, String> {
+    let catalog_dir = crate::state::templates_default_directory(&app);
+
+    #[cfg(target_os = "android")]
+    {
+        let Some(picked) =
+            crate::platform::mobile_files::pick_file(&app, "Importar plantilla (.lttemplate)")
+        else {
+            return Ok(None);
+        };
+        let name = crate::platform::mobile_files::picked_file_name(&picked);
+        let staged =
+            crate::platform::mobile_files::stage_picked_file_to_temp(&app, &picked, &name)?;
+        let result =
+            crate::state::import_template_into_catalog(&staged, &catalog_dir, Some(&name));
+        let _ = std::fs::remove_file(&staged);
+        return result.map(Some).map_err(|error| {
+            crate::infra::error_log::log_command_err("pick_and_import_session_template", error)
+        });
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let Some(source) = FileDialog::new()
+            .set_title("Importar plantilla")
+            .add_filter("LibreTracks Template", &["lttemplate"])
+            .pick_file()
+        else {
+            return Ok(None);
+        };
+        crate::state::import_template_into_catalog(&source, &catalog_dir, None)
+            .map(Some)
+            .map_err(|error| {
+                crate::infra::error_log::log_command_err("pick_and_import_session_template", error)
+            })
+    }
+}
+
+/// iOS has no rfd dialog: the document picker hands back a sandbox path, as in
+/// [`start_pick_and_import_song_from_dialog`].
+#[cfg(target_os = "ios")]
+#[tauri::command]
+pub async fn pick_and_import_session_template(
+    app: AppHandle,
+) -> Result<Option<crate::state::TemplateSummary>, String> {
+    let Some(picked) = libretracks_ios_folder_picker::pick_file(app.clone()).await? else {
+        return Ok(None);
+    };
+    crate::state::import_template_into_catalog(
+        std::path::Path::new(&picked),
+        &crate::state::templates_default_directory(&app),
+        None,
+    )
+    .map(Some)
+    .map_err(|error| {
+        crate::infra::error_log::log_command_err("pick_and_import_session_template", error)
+    })
 }
 
 #[tauri::command(async)]

@@ -47,6 +47,8 @@ const EXCEPTIONS: Record<string, string> = {
   start_save_session_as_template: "rfd dialog",
   start_create_song_from_template_path: "rfd dialog",
   start_create_song_from_template_file: "rfd dialog",
+  // Copia unos KB tras el dialogo: no hay trabajo pesado que mandar a un hilo.
+  pick_and_import_session_template: "rfd dialog",
   start_save_project_as: "rfd dialog",
   open_project_from_dialog: "rfd dialog",
   pick_library_files: "rfd dialog",

@@ -7,6 +7,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { AppSettings, AudioDeviceDescriptor, MidiBinding } from "@libretracks/shared/models";
 import { AUTO_SAVE_INTERVAL_PRESETS, isSongTrackLayout } from "@libretracks/shared/models";
 import { DefaultSongTemplateField } from "../templates/DefaultSongTemplateField";
+import { TemplateLibraryField } from "../templates/TemplateLibraryField";
 import type { DecodingCacheInfo } from "@libretracks/shared/desktopApi";
 import {
   getDecodingCacheInfo,
@@ -824,6 +825,8 @@ export function SettingsPanel({
                         onChange={onDefaultSongTemplateChange}
                       />
                     ) : null}
+
+                    <TemplateLibraryField disabled={isLoading || isSaving} />
 
                     {/* Solo móvil: escritorio referencia desde siempre y
                         no tiene nada que elegir aqui. */}

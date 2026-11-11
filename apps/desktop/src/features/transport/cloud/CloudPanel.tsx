@@ -38,7 +38,7 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 100 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
-const FOLDERS: CloudFolder[] = ["sessions", "songs"];
+const FOLDERS: CloudFolder[] = ["sessions", "songs", "templates"];
 
 /**
  * One row per configured provider: its state and the action that makes sense.
@@ -365,11 +365,11 @@ export function CloudPanel() {
               <CloudFileFilters
                 filters={filters}
                 onChange={setFilters}
-                all={withMeta([...files.sessions, ...files.songs])}
-                shownCount={
-                  filterCloudFiles(files.sessions, filters).length +
-                  filterCloudFiles(files.songs, filters).length
-                }
+                all={withMeta(FOLDERS.flatMap((folder) => files[folder]))}
+                shownCount={FOLDERS.reduce(
+                  (count, folder) => count + filterCloudFiles(files[folder], filters).length,
+                  0,
+                )}
               />
 
               {FOLDERS.map((folder) => {
@@ -379,7 +379,9 @@ export function CloudPanel() {
                     <h3>
                       {folder === "sessions"
                         ? t("transport.cloud.sessions", { defaultValue: "Sesiones" })
-                        : t("transport.cloud.songs", { defaultValue: "Canciones" })}
+                        : folder === "templates"
+                          ? t("transport.cloud.templates", { defaultValue: "Plantillas" })
+                          : t("transport.cloud.songs", { defaultValue: "Canciones" })}
                     </h3>
                     {loadingFolder === folder ? (
                       <p className="lt-cloud-note">

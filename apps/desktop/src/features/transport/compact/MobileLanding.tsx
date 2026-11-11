@@ -19,8 +19,9 @@ import {
   removeRecentSession,
   type RecentSessionEntry,
 } from "../recentSessions";
+import { useTemplateCatalogStore } from "../templates/templateCatalogStore";
 import { CloudLandingButton } from "../cloud";
-import { confirmDialog } from "../../../shared/dialog/dialogService";
+import { alertDialog, confirmDialog } from "../../../shared/dialog/dialogService";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 
 type MobileLandingProps = {
@@ -72,6 +73,8 @@ export function MobileLanding({
   const [isPickingFolder, setIsPickingFolder] = useState(false);
   const [templates, setTemplates] = useState<SessionTemplateSummary[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
+  const templateCatalogVersion = useTemplateCatalogStore((state) => state.version);
+  const [importingTemplate, setImportingTemplate] = useState(false);
   const [recentSessions, setRecentSessions] = useState<RecentSessionEntry[]>(
     () => loadRecentSessions(),
   );
@@ -214,7 +217,7 @@ export function MobileLanding({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [templateCatalogVersion]);
 
   const trimmedName = sessionName.trim();
 
@@ -354,6 +357,24 @@ export function MobileLanding({
           <div className="lt-empty-state-templates">
             <div className="lt-empty-state-templates-header">
               <span>{t("transport.shell.templatesHeading")}</span>
+              <button
+                type="button"
+                className="lt-link-button"
+                disabled={importingTemplate}
+                onClick={() => {
+                  setImportingTemplate(true);
+                  // Loaded on demand: the cloud flows bring the app's i18n with
+                  // them, and the landing renders in tests that mock it.
+                  void import("../templates/templateTransfer")
+                    .then(({ importTemplateWithChoice }) => importTemplateWithChoice())
+                    .catch((error: unknown) => {
+                      void alertDialog(error instanceof Error ? error.message : String(error));
+                    })
+                    .finally(() => setImportingTemplate(false));
+                }}
+              >
+                {t("songTemplates.importTemplate")}
+              </button>
             </div>
             {templates.length > 0 ? (
               <ul className="lt-empty-state-template-list">
