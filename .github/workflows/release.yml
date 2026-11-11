@@ -72,6 +72,14 @@ jobs:
       - name: Install Linux test dependencies
         if: runner.os == 'Linux'
         run: |
+          # The runners' Azure mirror (azure.archive.ubuntu.com) intermittently
+          # fails DNS, and apt then waits ~40 s per package before falling back
+          # to the next mirror: on 2026-11-11 the 199 packages here took over two
+          # hours. Point apt at archive.ubuntu.com and fail fast on a dead host.
+          sudo sed -i 's#http://azure.archive.ubuntu.com#https://archive.ubuntu.com#g' /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-network-retries >/dev/null
+          echo 'Acquire::http::Timeout "20";' | sudo tee -a /etc/apt/apt.conf.d/99-network-retries >/dev/null
+          echo 'Acquire::https::Timeout "20";' | sudo tee -a /etc/apt/apt.conf.d/99-network-retries >/dev/null
           sudo apt-get update
           # `npm test` compiles libretracks-desktop as well as the native
           # engine. Keep its development dependencies aligned with the Linux
@@ -337,6 +345,14 @@ jobs:
       - name: Install Linux system dependencies
         if: matrix.platform == 'linux'
         run: |
+          # The runners' Azure mirror (azure.archive.ubuntu.com) intermittently
+          # fails DNS, and apt then waits ~40 s per package before falling back
+          # to the next mirror: on 2026-11-11 the 199 packages here took over two
+          # hours. Point apt at archive.ubuntu.com and fail fast on a dead host.
+          sudo sed -i 's#http://azure.archive.ubuntu.com#https://archive.ubuntu.com#g' /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-network-retries >/dev/null
+          echo 'Acquire::http::Timeout "20";' | sudo tee -a /etc/apt/apt.conf.d/99-network-retries >/dev/null
+          echo 'Acquire::https::Timeout "20";' | sudo tee -a /etc/apt/apt.conf.d/99-network-retries >/dev/null
           sudo apt-get update
           # NOTE: no libav*-dev here on purpose. The engine builds with
           # LT_ENGINE_USE_FFMPEG=ON and links our own LGPL FFmpeg built from
