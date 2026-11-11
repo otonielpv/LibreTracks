@@ -2616,14 +2616,19 @@ fn strip_song_to_template_keeps_structure_and_drops_content() {
     assert_eq!(child.parent_track_id.as_deref(), Some("folder_1"));
     assert_eq!(child.audio_to, "bus_a");
 
-    // Mix is reset and every track is pinned as explicit so the layout is
-    // not eroded by the empty-auto-track cleanup.
+    // Pan and T belong to the part and travel with the template (a click
+    // with T off must stay off in every new song).
+    assert_eq!(folder.pan, -0.3);
+    assert!(!folder.transpose_enabled);
+    assert_eq!(child.pan, 0.2);
+    assert!(child.transpose_enabled);
+
+    // Level and mute/solo are reset, and every track is pinned as explicit
+    // so the layout is not eroded by the empty-auto-track cleanup.
     for track in &template.tracks {
         assert_eq!(track.volume, 1.0);
-        assert_eq!(track.pan, 0.0);
         assert!(!track.muted);
         assert!(!track.solo);
-        assert!(track.transpose_enabled);
         assert!(!track.auto_created);
     }
 }

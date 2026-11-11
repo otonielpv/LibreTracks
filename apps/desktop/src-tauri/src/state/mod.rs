@@ -3783,13 +3783,13 @@ pub(super) fn strip_song_to_template(mut song: Song) -> Song {
     song.section_markers.clear();
 
     for track in song.tracks.iter_mut() {
-        // Structure/routing survive; the mix is reset to defaults so the
-        // template is a neutral starting point rather than a saved mix.
+        // Structure/routing survive, and so do pan and T: where a part sits in
+        // the stereo image and whether it follows the transposition (the
+        // click and the guide must not) belong to the part, not to one song.
+        // Level and mute/solo are the mix of the night: back to defaults.
         track.volume = 1.0;
-        track.pan = 0.0;
         track.muted = false;
         track.solo = false;
-        track.transpose_enabled = true;
         // Auto-created tracks vanish once empty; a template has no clips, so
         // pin every track as explicit to preserve the whole layout.
         track.auto_created = false;

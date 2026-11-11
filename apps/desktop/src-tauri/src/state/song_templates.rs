@@ -202,7 +202,9 @@ pub(crate) fn builtin_band_template(locale: Option<&str>) -> Vec<Track> {
             pan: 0.0,
             muted: false,
             solo: false,
-            transpose_enabled: true,
+            // Transposing a warped song must not detune the click or the
+            // spoken guide.
+            transpose_enabled: !matches!(id, "click" | "guide"),
             audio_to: "master".to_string(),
             mono_downmix: false,
             color: Some(color.to_string()),
@@ -1120,6 +1122,11 @@ mod tests {
         assert!(es.iter().all(|track| !track.match_aliases.is_empty()));
         // Nothing assumes a headphone output.
         assert!(es.iter().all(|track| track.audio_to == "master"));
+        // Click and guide never follow the transposition; the music does.
+        for track in &es {
+            let guide_like = track.id == "builtin_click" || track.id == "builtin_guide";
+            assert_eq!(track.transpose_enabled, !guide_like, "{}", track.name);
+        }
     }
 
     #[test]
