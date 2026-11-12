@@ -39,6 +39,8 @@ import {
 import type { SongReorderHandleProps } from "../songs/SongReorderHandle";
 import type { SongViewBindings } from "../songs/songViewBindings";
 import { isMobileApp } from "../desktopApi";
+import { useCompactMixerResize } from "./useCompactMixerResize";
+import "./compactMixerResize.css";
 import { SceneBar } from "../scenes/SceneMenuButton";
 import { LIBRARY_ASSET_DRAG_MIME } from "../library/dragDrop";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
@@ -322,13 +324,19 @@ function CompactViewComponent({
   // routing were unreadable sharing the height with the song columns on a
   // phone); the toggle flips between songs and mixer rather than stacking.
   const mixerTakesFullHeight = isMobileApp && isMixerVisible;
+  // Desktop: the mixer's top edge drags its height, like Setlist's console.
+  const viewRef = useRef<HTMLDivElement | null>(null);
+  const mixerResize = useCompactMixerResize(viewRef);
+  const canResizeMixer = !isMobileApp && isMixerVisible;
 
   return (
     <div
+      ref={viewRef}
       data-lt-view="compact"
       className={`lt-compact-view${mixerTakesFullHeight ? " is-mixer-full" : ""}${
         resizingRegionId ? " is-resizing-column" : ""
-      }`}
+      }${canResizeMixer && mixerResize.heightPx !== null ? " is-mixer-sized" : ""}`}
+      style={canResizeMixer ? mixerResize.style : undefined}
     >
       {/* Top zone: songs + master + clip stacks. Horizontal scroll when
           the project has more songs than fit on screen. Accepts OS drag
@@ -452,6 +460,15 @@ function CompactViewComponent({
 
       {/* Bottom zone: global mixer over all tracks. Reusable so the DAW
           view can mount it later without forking the component. */}
+      {canResizeMixer ? (
+        <div
+          className="lt-compact-mixer-resize"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={t("setlistView.mixer.resize")}
+          onPointerDown={mixerResize.onPointerDown}
+        />
+      ) : null}
       {isMixerVisible ? (
         <CompactMixer
           tracks={tracks}

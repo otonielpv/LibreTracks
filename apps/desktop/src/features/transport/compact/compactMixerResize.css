@@ -1,0 +1,26 @@
+/* Compacta's mixer height, dragged from its top edge (useCompactMixerResize).
+   Scoped to the view's own mixer: Setlist mounts the same CompactMixer. */
+.lt-compact-view.is-mixer-sized > .lt-compact-mixer {
+  flex-basis: var(--lt-compact-mixer-height, 16rem);
+  max-height: 60%;
+}
+
+.lt-compact-mixer-resize {
+  position: relative;
+  flex: 0 0 6px;
+  margin: -3px 0;
+  z-index: 2;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.lt-compact-mixer-resize:hover,
+.lt-compact-view.is-resizing-mixer > .lt-compact-mixer-resize {
+  background: rgb(87 241 219 / 0.25);
+}
+
+.lt-compact-view.is-resizing-mixer,
+.lt-compact-view.is-resizing-mixer * {
+  cursor: ns-resize !important;
+  user-select: none;
+}

@@ -207,3 +207,56 @@ describe("CompactView clip stacks far from the visible band", () => {
     expect(screen.queryByText(clip.clipName)).not.toBeNull();
   });
 });
+
+describe("CompactView mixer height", () => {
+  afterEach(() => {
+    window.localStorage.removeItem("lt.compactView.mixerHeightPx");
+  });
+
+  function rect(height: number) {
+    return { height, width: 800, top: 0, left: 0, right: 800, bottom: height, x: 0, y: 0, toJSON: () => ({}) };
+  }
+
+  it("drags the mixer's top edge, clamps it and remembers the height", () => {
+    const { container } = renderCompactView(vi.fn());
+    const view = container.querySelector<HTMLElement>(".lt-compact-view")!;
+    const mixer = view.querySelector<HTMLElement>(":scope > .lt-compact-mixer")!;
+    vi.spyOn(view, "getBoundingClientRect").mockReturnValue(rect(1000) as DOMRect);
+    vi.spyOn(mixer, "getBoundingClientRect").mockReturnValue(rect(256) as DOMRect);
+    expect(view.classList.contains("is-mixer-sized")).toBe(false);
+
+    const grip = screen.getByRole("separator", { name: "setlistView.mixer.resize" });
+    const down = new MouseEvent("pointerdown", { bubbles: true, clientY: 500, button: 0 });
+    Object.defineProperty(down, "pointerId", { value: 1 });
+    act(() => {
+      grip.dispatchEvent(down);
+    });
+    const move = (clientY: number) => {
+      const event = new MouseEvent("pointermove", { clientY });
+      Object.defineProperty(event, "pointerId", { value: 1 });
+      act(() => {
+        window.dispatchEvent(event);
+      });
+    };
+    move(400); // 100 px up → taller
+    expect(view.style.getPropertyValue("--lt-compact-mixer-height")).toBe("356px");
+    move(-500); // way past 60 % of the view
+    expect(view.style.getPropertyValue("--lt-compact-mixer-height")).toBe("600px");
+    const up = new MouseEvent("pointerup");
+    Object.defineProperty(up, "pointerId", { value: 1 });
+    act(() => {
+      window.dispatchEvent(up);
+    });
+
+    expect(view.classList.contains("is-mixer-sized")).toBe(true);
+    expect(window.localStorage.getItem("lt.compactView.mixerHeightPx")).toBe("600");
+  });
+
+  it("restores the remembered height on mount", () => {
+    window.localStorage.setItem("lt.compactView.mixerHeightPx", "320");
+    const { container } = renderCompactView(vi.fn());
+    const view = container.querySelector<HTMLElement>(".lt-compact-view")!;
+    expect(view.classList.contains("is-mixer-sized")).toBe(true);
+    expect(view.style.getPropertyValue("--lt-compact-mixer-height")).toBe("320px");
+  });
+});
