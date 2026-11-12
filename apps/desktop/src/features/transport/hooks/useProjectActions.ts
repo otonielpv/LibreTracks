@@ -39,6 +39,8 @@ import {
 import { useOpenWithFile } from "./useOpenWithFile";
 import { templateDroppedRuleCount } from "../panels/mixScenes/sceneRules";
 import { getSong } from "../songStore";
+import { readStoredDefaultViewMode } from "../defaultViewMode";
+import { DEFAULT_VIEW_MODE, useTimelineUIStore } from "../uiStore";
 import type { PackageUnpackUiState } from "../library/packageUnpackProgress";
 
 type UseProjectActionsProps = {
@@ -201,6 +203,13 @@ export function useProjectActions({
           const nextSong = await refreshSongView({ sync: true });
           applyPlaybackSnapshot(nextSnapshot);
           recordProductEvent(successEvent);
+          if (successEvent === "project_opened") {
+            // Read on every open, not once at app start: the user may change
+            // the preference in Settings right before opening a session.
+            useTimelineUIStore
+              .getState()
+              .setViewMode(readStoredDefaultViewMode(DEFAULT_VIEW_MODE));
+          }
           setActiveSidebarTab(null);
           setBusyFeedback({
             message: t("transport.shell.projectReady", {

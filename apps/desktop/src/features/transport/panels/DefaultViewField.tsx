@@ -11,7 +11,7 @@ const VIEW_NAME_KEYS: Record<ViewMode, string> = {
   live: "liveView.live",
 };
 
-/** La vista con la que arranca la app. No cambia la vista actual. */
+/** La vista en la que se abren las sesiones. No cambia la vista actual. */
 export function DefaultViewField() {
   const { t } = useTranslation();
   const [value, setValue] = useState<ViewMode>(() =>
@@ -40,7 +40,7 @@ export function DefaultViewField() {
       </select>
       <small>
         {t("transport.settingsModal.defaultViewHelp", {
-          defaultValue: "The view LibreTracks opens in when it starts.",
+          defaultValue: "The view sessions open in.",
         })}
       </small>
     </label>

@@ -677,7 +677,7 @@ const es = {
       interfaceZoomHelp:
         "Escala toda la interfaz. Bájalo si la app es más ancha que tu pantalla. Atajo: Cmd/Ctrl +, − y 0 para restablecer.",
       defaultView: "Vista al abrir",
-      defaultViewHelp: "La vista con la que se abre LibreTracks al arrancar.",
+      defaultViewHelp: "La vista en la que se abren las sesiones.",
       metronomeTitle: "Metronomo",
       metronomeDescription:
         "Añade una claqueta sintetizada y la mantiene bloqueada muestra a muestra con el timeline del transporte.",
