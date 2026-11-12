@@ -364,6 +364,7 @@ function LivePerformanceViewComponent({
 
   return (
     <main
+      data-lt-view="live"
       className={`lt-live-view${chartOpen ? " has-chart" : ""}${chartOpen && chartExpanded ? " is-chart-expanded" : ""}`}
       aria-label={t("liveView.title")}
     >

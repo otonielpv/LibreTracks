@@ -325,6 +325,7 @@ function CompactViewComponent({
 
   return (
     <div
+      data-lt-view="compact"
       className={`lt-compact-view${mixerTakesFullHeight ? " is-mixer-full" : ""}${
         resizingRegionId ? " is-resizing-column" : ""
       }`}

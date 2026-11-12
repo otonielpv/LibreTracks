@@ -623,6 +623,7 @@ function SetlistViewComponent({
   return (
     <main
       ref={rootRef}
+      data-lt-view="setlist"
       className={`lt-setlist-view is-${layout}${editMode ? " is-editing" : ""}${waveEditing ? " is-wave-editing" : ""}${
         mixerCollapsed && layout === "medium" ? " is-mixer-collapsed" : ""
       }${lyricsOpen ? " has-lyrics" : ""}${layout === "wide" && songsHeightPx !== null ? " has-songs-height" : ""

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { recordProductEvent } from "../telemetry/telemetry";
+import { readStoredDefaultViewMode } from "./defaultViewMode";
 import type { RulerMarkerRef } from "@libretracks/shared/desktopApi";
 
 export type GlobalJumpMode = "immediate" | "after_bars" | "next_marker" | "next_section" | "next_cue";
@@ -122,10 +123,6 @@ function storeTrackHeight(trackHeight: number): void {
   } catch {
     // Sin almacenamiento (modo privado, cuota): la altura vale para esta sesión.
   }
-}
-
-function recordViewMode(viewMode: ViewMode): void {
-  recordProductEvent(`feature_${viewMode}_view`);
 }
 
 function readNavigationCollapsed(): boolean {
@@ -272,24 +269,21 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     selectionMixOpen: false,
     missingMediaOpen: false,
     areaSelectMode: false,
-    viewMode: DEFAULT_VIEW_MODE,
+    viewMode: readStoredDefaultViewMode(DEFAULT_VIEW_MODE),
     returnViewMode: null,
     setReturnViewMode: (returnViewMode) => set({ returnViewMode }),
     setViewMode: (viewMode) => {
-      recordViewMode(viewMode);
       set({ viewMode, returnViewMode: null });
     },
     toggleViewMode: () => {
       set((state) => {
         const viewMode = stepViewMode(state.viewMode, 1);
-        recordViewMode(viewMode);
         return { viewMode, returnViewMode: null };
       });
     },
     toggleViewModeBackward: () => {
       set((state) => {
         const viewMode = stepViewMode(state.viewMode, -1);
-        recordViewMode(viewMode);
         return { viewMode, returnViewMode: null };
       });
     },

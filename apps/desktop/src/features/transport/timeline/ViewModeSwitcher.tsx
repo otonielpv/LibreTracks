@@ -35,6 +35,7 @@ export function ViewModeSwitcher({ value, onChange }: ViewModeSwitcherProps) {
   return (
     <div
       className="lt-view-mode-switcher lt-view-mode-menu lt-bottom-controls"
+      data-lt-view-usage-ignore=""
       data-lt-tour={TOUR_TARGETS.viewModeSwitcher}
     >
       <button

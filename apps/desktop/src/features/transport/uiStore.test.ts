@@ -61,10 +61,6 @@ describe("useTimelineUIStore", () => {
       expect(get().viewMode).toBe("live");
       get().toggleViewMode();
       expect(get().viewMode).toBe("daw");
-
-      expect(recordProductEvent).toHaveBeenCalledWith("feature_compact_view");
-      expect(recordProductEvent).toHaveBeenCalledWith("feature_live_view");
-      expect(recordProductEvent).toHaveBeenCalledWith("feature_daw_view");
     });
 
     it("cycles backward through DAW, Live, Compact and Setlist", () => {
@@ -76,33 +72,16 @@ describe("useTimelineUIStore", () => {
       expect(get().viewMode).toBe("setlist");
       get().toggleViewModeBackward();
       expect(get().viewMode).toBe("daw");
-
-      expect(recordProductEvent).toHaveBeenCalledWith("feature_live_view");
-      expect(recordProductEvent).toHaveBeenCalledWith("feature_compact_view");
-      expect(recordProductEvent).toHaveBeenCalledWith("feature_daw_view");
     });
 
-    it("records the setlist view through explicit selection and keyboard cycling", () => {
+    it("does not count a view as used just because it is shown", () => {
       get().setViewMode("setlist");
-      expect(recordProductEvent).toHaveBeenLastCalledWith("feature_setlist_view");
-      get().toggleViewModeBackward();
-      expect(recordProductEvent).toHaveBeenLastCalledWith("feature_daw_view");
       get().toggleViewMode();
-
-      expect(get().viewMode).toBe("setlist");
-      expect(recordProductEvent).toHaveBeenLastCalledWith("feature_setlist_view");
-    });
-
-    it("records use of the live performance view", () => {
+      get().toggleViewModeBackward();
       get().setViewMode("live");
-
-      expect(recordProductEvent).toHaveBeenCalledWith("feature_live_view");
-    });
-
-    it("records an explicit return to the DAW view", () => {
       get().setViewMode("daw");
 
-      expect(recordProductEvent).toHaveBeenCalledWith("feature_daw_view");
+      expect(recordProductEvent).not.toHaveBeenCalled();
     });
   });
 

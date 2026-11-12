@@ -25,6 +25,7 @@ import type {
 import { formatUserFacingError } from "../errors/formatTransportError";
 import { UI_ZOOM_STEPS, setUiZoom, useUiZoom } from "../../../shared/uiZoom";
 import { TelemetrySettingsField } from "../../telemetry/TelemetryController";
+import { DefaultViewField } from "./DefaultViewField";
 import { DiagnosticsSettingsTab } from "./DiagnosticsSettingsTab";
 import { MulticoreAudioField } from "./MulticoreAudioField";
 import { TrackMeterModeField } from "./TrackMeterModeField";
@@ -964,6 +965,8 @@ export function SettingsPanel({
                     </> : null}
 
                     <InterfaceZoomField />
+
+                    <DefaultViewField />
 
                     {!isGuest ? <SessionStorageVolumeField /> : null}
 

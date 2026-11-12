@@ -685,6 +685,8 @@ const en = {
       interfaceZoom: "Interface size",
       interfaceZoomHelp:
         "Scale the whole interface. Lower it if the app is wider than your screen. Shortcut: Cmd/Ctrl +, − and 0 to reset.",
+      defaultView: "Startup view",
+      defaultViewHelp: "The view LibreTracks opens in when it starts.",
       metronomeTitle: "Metronome",
       metronomeDescription:
         "Adds a synthesized click and keeps it sample-locked to the transport timeline.",

@@ -7140,6 +7140,7 @@ export function TransportPanelContent() {
                   {viewMode === "daw" ? (
                   <div
                     className="lt-timeline-shell"
+                    data-lt-view="daw"
                     ref={timelineShellRef}
                     style={{ position: "relative" }}
                   >
