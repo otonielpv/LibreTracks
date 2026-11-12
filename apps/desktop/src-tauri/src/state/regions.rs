@@ -614,6 +614,47 @@ impl DesktopSession {
             }
         }
 
+        // Cascade-push following regions only where the moved region's
+        // NEW span actually lands on top of them. The test is a real
+        // interval overlap ([new_start, new_end] vs the other region),
+        // not "does the move reach past this region's start": a song
+        // dropped into free space beyond its neighbours flies over
+        // them without disturbing them, which is what makes "drop song
+        // 3 beyond song 4" leave song 4 where it was.
+        //
+        // Only the FIRST region the new span collides with matters:
+        // pushing from its start with shift_song_suffix translates it
+        // and everything after it by the same delta, so the spacing
+        // the user arranged between the trailing songs is preserved.
+        //
+        // shift_song_suffix moves regions/clips/markers from anchor
+        // onward. It runs BEFORE the moved song's content is translated:
+        // the region and its content are still at their OLD position, all
+        // before the anchor, so nothing of the moved song is touched.
+        // Translating first left the content that lands past the anchor to
+        // be pushed a second time: clips spanning the boundary and markers
+        // crossing the neighbour's ("markers are out of order").
+        if delta_seconds > 0.0 {
+            let first_collision = song
+                .regions
+                .iter()
+                .filter(|other| other.id != existing_region.id)
+                .filter(|other| other.start_seconds > old_start)
+                .filter(|other| {
+                    new_start < other.end_seconds - EDGE_EPS
+                        && new_end > other.start_seconds + EDGE_EPS
+                })
+                .min_by(|left, right| {
+                    left.start_seconds
+                        .partial_cmp(&right.start_seconds)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .map(|other| other.start_seconds);
+            if let Some(anchor) = first_collision {
+                shift_song_suffix(&mut song, anchor, new_end - anchor + EDGE_EPS);
+            }
+        }
+
         // Translate everything that lived inside the old region by
         // the same offset: clips by timeline_start, markers by
         // start_seconds. We treat "inside" with a 1ms tolerance on
@@ -654,44 +695,6 @@ impl DesktopSession {
         for marker in &mut song.time_signature_markers {
             if inside_old(marker.start_seconds) {
                 marker.start_seconds = (marker.start_seconds + delta_seconds).max(0.0);
-            }
-        }
-
-        // Cascade-push following regions only where the moved region's
-        // NEW span actually lands on top of them. The test is a real
-        // interval overlap ([new_start, new_end] vs the other region),
-        // not "does the move reach past this region's start": a song
-        // dropped into free space beyond its neighbours flies over
-        // them without disturbing them, which is what makes "drop song
-        // 3 beyond song 4" leave song 4 where it was.
-        //
-        // Only the FIRST region the new span collides with matters:
-        // pushing from its start with shift_song_suffix translates it
-        // and everything after it by the same delta, so the spacing
-        // the user arranged between the trailing songs is preserved.
-        //
-        // shift_song_suffix moves regions/clips/markers from anchor
-        // onward; the moved region itself is excluded because at this
-        // point song still contains it at its OLD position (we
-        // haven't replaced it yet).
-        if delta_seconds > 0.0 {
-            let first_collision = song
-                .regions
-                .iter()
-                .filter(|other| other.id != existing_region.id)
-                .filter(|other| other.start_seconds > old_start)
-                .filter(|other| {
-                    new_start < other.end_seconds - EDGE_EPS
-                        && new_end > other.start_seconds + EDGE_EPS
-                })
-                .min_by(|left, right| {
-                    left.start_seconds
-                        .partial_cmp(&right.start_seconds)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .map(|other| other.start_seconds);
-            if let Some(anchor) = first_collision {
-                shift_song_suffix(&mut song, anchor, new_end - anchor + EDGE_EPS);
             }
         }
 

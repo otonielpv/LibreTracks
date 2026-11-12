@@ -242,6 +242,7 @@ type TimelineCanvasPaneProps = {
    * release.
    */
   onRegionMoveCommit?: (regionId: string, deltaSeconds: number) => void;
+  onRegionReorderCommit?: (regionId: string, targetIndex: number) => void;
   /**
    * Fires once when the user finishes dragging a section/cue marker flag
    * along the ruler. Delivers the marker id and its new absolute start in
@@ -393,6 +394,7 @@ export function TimelineCanvasPane({
   onAutomationLaneContextMenu,
   onRegionResizeCommit,
   onRegionMoveCommit,
+  onRegionReorderCommit,
   onMarkerMoveCommit,
   onAutomationCueMoveCommit,
   snapEnabled,
@@ -555,6 +557,7 @@ export function TimelineCanvasPane({
     snapEnabled,
     onRegionResizeCommit,
     onRegionMoveCommit,
+    onRegionReorderCommit,
   });
 
   // ── Section-marker / automation-cue move drag ───────────────────────────
@@ -956,7 +959,7 @@ export function TimelineCanvasPane({
                     onRegionContextMenu(event, region.id);
                   }}
                 >
-                  <span className="lt-sr-only">{region.name}</span>
+                  <span className="lt-sr-only lt-region-hotspot-name">{region.name}</span>
                   <div
                     className="lt-region-resize-handle is-start"
                     role="presentation"

@@ -1176,6 +1176,8 @@ const en = {
       changeTimelineBpm: "Change Timeline BPM",
       clearTimelineSelection: "Clear Timeline Selection",
       renameSong: "Rename Song",
+      moveSongEarlier: "Move earlier",
+      moveSongLater: "Move later",
       songKey: "Song key",
       songKeyNone: "No key",
       changeBpm: "Change BPM",
@@ -3342,7 +3344,7 @@ const en = {
         },
         moveSong: {
           title: "Move a song",
-          body: "Drag the region by its middle to put it somewhere else on the timeline. Its clips and markers travel with it, so reordering the set does not scramble anything inside.",
+          body: "Drag the region by its middle to put it somewhere else on the timeline. Its clips and markers travel with it, so reordering the set does not scramble anything inside. To change the order, drag it past the middle of another song: the others shift to show how it will end up, and dropping applies it. «Move earlier» and «Move later» in the song menu do the same one place at a time.",
         },
         createMarker: {
           title: "Add markers",

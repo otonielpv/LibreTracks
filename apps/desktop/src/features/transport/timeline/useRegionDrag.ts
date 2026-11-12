@@ -1,4 +1,4 @@
-import { useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 
 import type { SongRegionSummary, SongView } from "../desktopApi";
 import type { TimelineClipSummary } from "../library/pendingAudioImports";
@@ -13,6 +13,11 @@ import { buildSongTempoRegions } from "@libretracks/shared/models";
 import {
   applyRegionHotspotBounds,
 } from "./regionHotspotBounds";
+import { reorderedSongLayout, songDragReorderIndex } from "./songDropReorder";
+
+/** Si el orden nuevo no llega (un error), la vista previa se deshace. */
+const REORDER_SETTLE_FALLBACK_MS = 1500;
+const REORDERING_BODY_CLASS = "lt-daw-song-reordering";
 
 /**
  * Arrastre y redimensionado de las bandas de canción del ruler.
@@ -65,6 +70,8 @@ export type RegionDragDeps = {
     endSeconds: number,
   ) => void;
   onRegionMoveCommit?: (regionId: string, deltaSeconds: number) => void;
+  /** Soltar la canción dentro de otra la reordena en vez de moverla. */
+  onRegionReorderCommit?: (regionId: string, targetIndex: number) => void;
 };
 
 export function useRegionDrag({
@@ -75,6 +82,7 @@ export function useRegionDrag({
   snapEnabled,
   onRegionResizeCommit,
   onRegionMoveCommit,
+  onRegionReorderCommit,
 }: RegionDragDeps) {
   // Local-only state for the in-flight resize. Backend is touched once on
   // pointer-up via onRegionResizeCommit; everything else is optimistic. Kept
@@ -123,6 +131,9 @@ export function useRegionDrag({
     maxStartSeconds: number;
     previewStartSeconds: number;
     previewEndSeconds: number;
+    /** Posición final en la lista si soltar ahora reordena (ver
+     *  `songDropReorder.ts`); null = movimiento normal. */
+    reorderIndex: number | null;
   };
   const regionMoveDragRef = useRef<RegionMoveDrag | null>(null);
 
@@ -146,6 +157,46 @@ export function useRegionDrag({
       pixelsPerSecond,
     );
   }
+
+  // Vista previa del reordenado: las demás bandas se colocan donde quedarán.
+  // Escritura directa al DOM, como el resto del arrastre (sin setState).
+  function previewReorder(draggedId: string, targetIndex: number | null) {
+    if (!song) return;
+    // Las bandas son casi invisibles (el canvas pinta la canción): mientras se
+    // reordena se ven, con su nombre, y se deslizan a su sitio nuevo.
+    document.body.classList.toggle(REORDERING_BODY_CLASS, targetIndex !== null);
+    const layout =
+      targetIndex === null ? null : reorderedSongLayout(song.regions, draggedId, targetIndex);
+    for (const region of song.regions) {
+      if (region.id === draggedId) continue;
+      const placed = layout?.get(region.id);
+      if (!placed) {
+        restoreRegionHotspot(region.id);
+        continue;
+      }
+      applyRegionHotspotBounds(
+        regionHotspotElements.current.get(region.id) ?? null,
+        placed.startSeconds,
+        placed.endSeconds,
+        pixelsPerSecond,
+      );
+    }
+  }
+
+  // Tras soltar un reordenado la vista previa se queda hasta que llega el
+  // orden nuevo, para que las bandas no vuelvan un instante a su sitio viejo.
+  const reorderSettlingRef = useRef<number | null>(null);
+  const restoreAllRef = useRef<() => void>(() => {});
+  restoreAllRef.current = () => {
+    document.body.classList.remove(REORDERING_BODY_CLASS);
+    for (const region of song?.regions ?? []) restoreRegionHotspot(region.id);
+  };
+  useLayoutEffect(() => {
+    if (reorderSettlingRef.current === null) return;
+    window.clearTimeout(reorderSettlingRef.current);
+    reorderSettlingRef.current = null;
+    restoreAllRef.current();
+  }, [song]);
 
   function beginRegionResize(
     event: ReactPointerEvent<HTMLDivElement>,
@@ -322,6 +373,7 @@ export function useRegionDrag({
       maxStartSeconds: Math.max(minStart, maxStart),
       previewStartSeconds: region.startSeconds,
       previewEndSeconds: region.endSeconds,
+      reorderIndex: null,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
     event.currentTarget.classList.add("is-moving");
@@ -359,8 +411,18 @@ export function useRegionDrag({
       );
     }
 
+    // Passing another song's center reorders: the band then follows the
+    // pointer over the neighbours, and they show where they will land.
+    const reorderIndex = onRegionReorderCommit
+      ? songDragReorderIndex(song.regions, drag.regionId, nextStart)
+      : null;
+    if (reorderIndex !== drag.reorderIndex) {
+      drag.reorderIndex = reorderIndex;
+      previewReorder(drag.regionId, reorderIndex);
+    }
+
     // Clamp to neighbour bounds — no overlap with adjacent songs.
-    nextStart = Math.max(
+    if (drag.reorderIndex === null) nextStart = Math.max(
       drag.minStartSeconds,
       Math.min(nextStart, drag.maxStartSeconds),
     );
@@ -387,6 +449,33 @@ export function useRegionDrag({
       event.currentTarget.releasePointerCapture(event.pointerId);
     } catch {
       // Pointer was already released — ignore.
+    }
+
+    if (drag.reorderIndex !== null) {
+      regionMoveDragRef.current = null;
+      if (event.type === "pointercancel" || !onRegionReorderCommit || !song) {
+        restoreAllRef.current();
+        return;
+      }
+      // The dragged band drops into its slot and everything waits there.
+      const placed = reorderedSongLayout(song.regions, drag.regionId, drag.reorderIndex).get(
+        drag.regionId,
+      );
+      if (placed) {
+        applyRegionHotspotBounds(
+          event.currentTarget,
+          placed.startSeconds,
+          placed.endSeconds,
+          pixelsPerSecond,
+        );
+      }
+      if (reorderSettlingRef.current !== null) window.clearTimeout(reorderSettlingRef.current);
+      reorderSettlingRef.current = window.setTimeout(() => {
+        reorderSettlingRef.current = null;
+        restoreAllRef.current();
+      }, REORDER_SETTLE_FALLBACK_MS);
+      onRegionReorderCommit(drag.regionId, drag.reorderIndex);
+      return;
     }
 
     // On commit, re-snap using the PREVIOUS region's grid (with the

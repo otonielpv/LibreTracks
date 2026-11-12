@@ -1193,6 +1193,8 @@ const es = {
       changeTimelineBpm: "Cambiar BPM del timeline",
       clearTimelineSelection: "Limpiar seleccion del timeline",
       renameSong: "Renombrar Cancion",
+      moveSongEarlier: "Mover antes",
+      moveSongLater: "Mover después",
       songKey: "Nota de la cancion",
       songKeyNone: "Sin nota",
       changeBpm: "Cambiar BPM",
@@ -3374,7 +3376,7 @@ const es = {
         },
         moveSong: {
           title: "Mover una canción",
-          body: "Arrastra la región por el centro para llevarla a otro punto del timeline. Sus clips y sus marcas se mueven con ella, así que reordenar el repertorio no descoloca nada por dentro.",
+          body: "Arrastra la región por el centro para llevarla a otro punto del timeline. Sus clips y sus marcas se mueven con ella, así que reordenar el repertorio no descoloca nada por dentro. Para cambiar el orden, arrástrala más allá de la mitad de otra canción: las demás se recolocan para enseñarte cómo quedará y, al soltar, se aplica. «Mover antes» y «Mover después», en el menú de la canción, hacen lo mismo de una en una.",
         },
         createMarker: {
           title: "Añadir marcas",

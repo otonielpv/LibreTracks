@@ -24,6 +24,7 @@ import {
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
 import { songSettingsSubmenus } from "../songs/songSubmenus";
 import { createAutomationMenus } from "./automationMenus";
+import { songStepReorderIndex } from "../timeline/songDropReorder";
 import {
   parseBpmDraft,
   parseTimeSignatureDraft,
@@ -39,6 +40,7 @@ import {
   deleteTracks,
   isMobileApp,
   moveTrack,
+  reorderSongRegion,
   scheduleMarkerJump,
   setSectionMarkerColor,
   setSectionMarkerKind,
@@ -512,6 +514,20 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
             await d.refreshSongView({ includeWaveforms: false, sync: true });
           }),
         }] : []),
+        ...([-1, 1] as const).map((step) => {
+          const regions = (d.songRef.current ?? d.song)?.regions ?? [];
+          const targetIndex = songStepReorderIndex(regions, region.id, step);
+          return {
+            label: t(step < 0 ? "transport.menu.moveSongEarlier" : "transport.menu.moveSongLater"),
+            disabled: targetIndex === null,
+            onSelect: () => {
+              if (targetIndex === null) return;
+              void d.runAction(async () => {
+                d.applyPlaybackSnapshot(await reorderSongRegion(region.id, targetIndex));
+              });
+            },
+          };
+        }),
       ]),
       ...menuSection(t("transport.menu.groups.keyTempo"), [
         {

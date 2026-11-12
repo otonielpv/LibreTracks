@@ -7479,6 +7479,7 @@ export function TransportPanelContent() {
                           }}
                           onRegionResizeCommit={songViewHandlers.resizeSong}
                           onRegionMoveCommit={songViewHandlers.moveSong}
+                          onRegionReorderCommit={songViewHandlers.reorderSong}
                           onMarkerMoveCommit={handleMarkerMoveCommit}
                           onRulerMarkersMoveCommit={rulerMarkers.moveGroup}
                           onRulerMarkersContextMenu={(event, markers) =>

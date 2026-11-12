@@ -239,6 +239,65 @@ fn moving_a_song_carries_its_cue_and_the_cues_of_the_songs_it_pushes() {
     );
 }
 
+/// Empujar no traslada dos veces lo de la canción movida. Su contenido ya
+/// estaba en la posición nueva cuando se empujaba la vecina «desde su inicio en
+/// adelante», y lo que caía pasado ese inicio se empujaba otra vez: el clip
+/// cruzaba la frontera y las marcas se cruzaban con las de la vecina
+/// (`song is invalid: markers are out of order`, 2026-11-12).
+#[test]
+fn pushing_a_neighbour_moves_the_moved_song_s_content_once() {
+    let mut song = three_songs();
+    // Contenido al final de r2: tras moverla 4 s cae pasado el inicio de r3.
+    song.clips[1] = clip("c2", 14.0);
+    song.section_markers = vec![
+        libretracks_core::Marker {
+            id: "m2".into(),
+            name: "m2".into(),
+            start_seconds: 14.0,
+            digit: None,
+            kind: libretracks_core::MarkerKind::Custom,
+            variant: None,
+            color: None,
+            category_override: None,
+        },
+        libretracks_core::Marker {
+            id: "m3".into(),
+            name: "m3".into(),
+            start_seconds: 17.0,
+            digit: None,
+            kind: libretracks_core::MarkerKind::Custom,
+            variant: None,
+            color: None,
+            category_override: None,
+        },
+    ];
+    let mut session = session_with(song, vec![]);
+    let audio = AudioController::default();
+
+    session.move_song_region("r2", 4.0, &audio).expect("move");
+
+    let song = session.engine.song().cloned().expect("song");
+    let r3 = region_start(&session, "r3");
+    let clip_at = |id: &str| {
+        song.clips
+            .iter()
+            .find(|clip| clip.id == id)
+            .map(|clip| clip.timeline_start_seconds)
+            .expect("clip")
+    };
+    let marker_at = |id: &str| {
+        song.section_markers
+            .iter()
+            .find(|marker| marker.id == id)
+            .map(|marker| marker.start_seconds)
+            .expect("marker")
+    };
+    assert_close(clip_at("c2"), 18.0, "el clip de r2 se mueve 4 s, no más");
+    assert_close(marker_at("m2"), 18.0, "la marca de r2 se mueve 4 s, no más");
+    assert_close(clip_at("c3"), r3 + 1.0, "el clip de r3 viaja con el empuje");
+    assert_close(marker_at("m3"), r3 + 1.0, "la marca de r3 viaja con el empuje");
+}
+
 /// C2 (izquierda): mover a la izquierda a un hueco también arrastra la cue.
 #[test]
 fn moving_a_song_left_carries_its_cue() {
