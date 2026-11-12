@@ -61,16 +61,16 @@ describe("documentation screenshots", function () {
     await browser.setWindowSize(1440, 900);
   });
 
-  // v1.10.0 — autosave lives in Settings > General and is otherwise invisible,
+  // v1.10.0 — autosave lives in Settings > Editing and is otherwise invisible,
   // so the docs need a picture of where the control actually is.
-  it("captures the General settings tab with auto-save", async () => {
+  it("captures the Editing settings tab with auto-save", async () => {
     await AppPage.openSettings();
-    const general = await AppPage.settingsTab("general");
-    await general.waitForClickable({ timeout: 15_000 });
-    await general.click();
-    const panel = await AppPage.settingsPanel("general");
+    const editing = await AppPage.settingsTab("editing");
+    await editing.waitForClickable({ timeout: 15_000 });
+    await editing.click();
+    const panel = await AppPage.settingsPanel("editing");
     await panel.waitForDisplayed({ timeout: 15_000 });
-    // The auto-save controls sit below the fold of the General panel, so a
+    // The auto-save controls sit below the fold of the Editing panel, so a
     // plain capture photographs the top of the tab and misses the feature the
     // shot exists for. Scroll the panel to the control itself.
     await browser.execute(() => {

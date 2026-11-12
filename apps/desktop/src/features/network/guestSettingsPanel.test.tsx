@@ -18,7 +18,9 @@ function settingsProps(activeTab: Props["activeTab"] = "general"): Props {
   return {
     isOpen: true, onClose: noop, activeTab, onTabChange: noop,
     settingsTabs: [
-      { id: "general", label: "General" }, { id: "audio", label: "Audio" },
+      { id: "general", label: "General" }, { id: "timeline", label: "Timeline" },
+      { id: "playback", label: "Playback" }, { id: "editing", label: "Editing" },
+      { id: "storage", label: "Storage" }, { id: "audio", label: "Audio" },
       { id: "midi", label: "MIDI" }, { id: "midiLearn", label: "MIDI Learn" },
       { id: "video", label: "Video" },
     ],
@@ -80,27 +82,32 @@ describe("guest settings panel", () => {
   it("keeps viewer preferences available but hides hardware and disables playback changes", () => {
     setRole("viewer");
     const props = settingsProps("video");
-    render(<SettingsPanel {...props} />);
-    expect(screen.queryByRole("tab", { name: /MIDI|Video/ })).toBeNull();
+    const { rerender } = render(<SettingsPanel {...props} />);
+    expect(screen.queryByRole("tab", { name: /MIDI|Video|Editing/ })).toBeNull();
+    // A hidden tab falls back to General.
     const language = screen.getByRole("combobox", { name: "transport.settingsModal.language" });
     expect(language.matches(":disabled")).toBe(false);
     fireEvent.change(language, { target: { value: "en" } });
     expect(props.onLocaleChange).toHaveBeenCalledWith("en");
+    rerender(<SettingsPanel {...props} activeTab="timeline" />);
     for (const field of ["timelineNavigationScheme", "timelinePlayheadFollowMode"]) {
       expect(screen.getByRole("combobox", { name: new RegExp(`transport.settingsModal.${field}`) }).matches(":disabled")).toBe(false);
     }
+    rerender(<SettingsPanel {...props} activeTab="playback" />);
     const pause = screen.getByRole("checkbox", { name: /transport.settingsModal.pauseAtSongEnd/ });
     expect(pause.matches(":disabled")).toBe(true);
     pause.click();
     expect(props.onPauseAtSongEndChange).not.toHaveBeenCalled();
     expect(screen.getByRole("spinbutton", { name: /transport.settingsModal.fadeOutStopSeconds/ }).matches(":disabled")).toBe(true);
-    expect(screen.queryByText("transport.settingsModal.autoSaveEnabled")).toBeNull();
+    // Editing is hidden: asking for it lands on General, without its fields.
+    rerender(<SettingsPanel {...props} activeTab="editing" />);
+    expect(screen.queryByText("transport.settingsModal.autoSave")).toBeNull();
     expect(screen.queryByText("transport.settingsModal.songTrackLayout")).toBeNull();
   });
 
   it("enables controller playback settings and revokes them live", () => {
     setRole("controller");
-    const props = settingsProps();
+    const props = settingsProps("playback");
     render(<SettingsPanel {...props} />);
     const pause = screen.getByRole("checkbox", { name: /transport.settingsModal.pauseAtSongEnd/ });
     expect(pause.matches(":disabled")).toBe(false);

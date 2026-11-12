@@ -414,10 +414,6 @@ const steps: Record<string, () => Promise<void>> = {
     // The library is a docked panel, not an overlay: Back would leave the
     // session instead of closing it. Its own button toggles it shut.
     await tap(tour("side-nav-library"));
-    await tap(tour("side-nav-settings"));
-    await sleep(900);
-    await shot("settings");
-    await back();
   },
 
   async views() {
@@ -446,9 +442,18 @@ const steps: Record<string, () => Promise<void>> = {
     await sleep(1200);
     await shot("sessions");
   },
-  /** The two settings only a phone has: low latency output and import without copying. */
+  /**
+   * Settings on a phone (the overview, with the General group open) and the
+   * two settings only a phone has: low latency output and import without
+   * copying.
+   */
   async mobileSettings() {
     const toggle = async (tab: string, text: string, name: string) => {
+      // Tabs under a folded sidebar group (General, MIDI) need it open first.
+      if (!(await rectOf(`#lt-settings-tab-${tab}`))) {
+        await tap(`[data-lt-settings-group-tabs~="${tab}"]`);
+        await sleep(400);
+      }
       await tap(`#lt-settings-tab-${tab}`);
       await sleep(700);
       await run(
@@ -469,8 +474,13 @@ const steps: Record<string, () => Promise<void>> = {
     await sleep(500);
     await tap(tour("side-nav-settings"));
     await sleep(900);
+    if ((await run(() => document.querySelector("#lt-settings-group-general")?.getAttribute("aria-expanded"))) !== "true") {
+      await tap("#lt-settings-group-general");
+      await sleep(700);
+    }
+    await shot("settings");
     await toggle("audio", L("Baja latencia"), "settings-low-latency");
-    await toggle("general", L("Importar sin copiar"), "settings-import-no-copy");
+    await toggle("editing", L("Importar sin copiar"), "settings-import-no-copy");
     await back();
   },
 };

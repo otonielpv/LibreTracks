@@ -45,7 +45,7 @@ vi.mock("@libretracks/shared/desktopApi", async (importOriginal) => ({
   setDecodingCacheMaxGb: (gb: number | null) => setDecodingCacheMaxGb(gb),
 }));
 
-const { DecodingCacheField } = await import("./SettingsPanel");
+const { DecodingCacheField } = await import("./DecodingCacheField");
 
 describe("DecodingCacheField / móvil", () => {
   beforeEach(() => {

@@ -1,38 +1,23 @@
-import type { ReactNode } from "react";
-import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
-import { open } from "@tauri-apps/plugin-dialog";
 import type { AppSettings, AudioDeviceDescriptor, MidiBinding } from "@libretracks/shared/models";
-import { AUTO_SAVE_INTERVAL_PRESETS, isSongTrackLayout } from "@libretracks/shared/models";
-import { DefaultSongTemplateField } from "../templates/DefaultSongTemplateField";
-import { TemplateLibraryField } from "../templates/TemplateLibraryField";
-import type { DecodingCacheInfo } from "@libretracks/shared/desktopApi";
-import {
-  getDecodingCacheInfo,
-  isAndroidApp,
-  isMobileApp,
-  purgeDecodingCache,
-  setDecodingCacheDir,
-  setDecodingCacheMaxGb,
-} from "@libretracks/shared/desktopApi";
+import { isAndroidApp, isMobileApp } from "@libretracks/shared/desktopApi";
 import type {
   MidiLearnCommandRow,
   MidiLearnFeedback,
   SettingsTab,
 } from "../types";
-import { formatUserFacingError } from "../errors/formatTransportError";
-import { UI_ZOOM_STEPS, setUiZoom, useUiZoom } from "../../../shared/uiZoom";
-import { TelemetrySettingsField } from "../../telemetry/TelemetryController";
-import { DefaultViewField } from "./DefaultViewField";
 import { DiagnosticsSettingsTab } from "./DiagnosticsSettingsTab";
 import { MulticoreAudioField } from "./MulticoreAudioField";
 import { TrackMeterModeField } from "./TrackMeterModeField";
 import { PlaybackSettingsFields } from "./PlaybackSettingsFields";
-import { SessionStorageVolumeField } from "./SessionStorageVolumeField";
-import { UpdateCheckField } from "./UpdateCheckField";
-import { LibraryModeField } from "../library/folders/LibraryModeField";
+import { SettingsTabSection } from "./SettingsTabSection";
+import { SettingsTabNav, settingsGroupLabel, type SettingsTabItem } from "./SettingsTabNav";
+import { GeneralSettingsTab } from "./GeneralSettingsTab";
+import { TimelineSettingsTab } from "./TimelineSettingsTab";
+import { EditingSettingsTab } from "./EditingSettingsTab";
+import { StorageSettingsTab } from "./StorageSettingsTab";
+import { SystemSettingsTab } from "./SystemSettingsTab";
 import { ShortcutsSettingsTab } from "./ShortcutsSettingsTab";
 import { VideoSettingsTab } from "./VideoSettingsTab";
 import { RedundancySettingsTab } from "../../redundancy/RedundancySettingsTab";
@@ -46,13 +31,19 @@ import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
 type AudioRoutingOption = { value: string; label: string };
 
+/**
+ * A network guest drives the host's session, not its own hardware or the
+ * session's editing defaults: those tabs would show nothing they may change.
+ */
+const GUEST_HIDDEN_SETTINGS_TABS: readonly SettingsTab[] = ["midi", "midiLearn", "video", "editing"];
+
 type SettingsPanelProps = {
   isOpen: boolean;
   onClose: () => void;
 
   activeTab: SettingsTab;
   onTabChange: (tab: SettingsTab) => void;
-  settingsTabs: Array<{ id: SettingsTab; label: string }>;
+  settingsTabs: SettingsTabItem[];
 
   isLoading: boolean;
   isSaving: boolean;
@@ -218,9 +209,10 @@ export function SettingsPanel({
   const { t } = useTranslation();
   const { isGuest, canControl, canEdit } = useNetworkPermissions();
   const settingsTabs = isGuest
-    ? allTabs.filter((tab) => tab.id !== "midi" && tab.id !== "midiLearn" && tab.id !== "video")
+    ? allTabs.filter((tab) => !GUEST_HIDDEN_SETTINGS_TABS.includes(tab.id))
     : allTabs;
   const activeTab = settingsTabs.some((tab) => tab.id === requestedTab) ? requestedTab : "general";
+  const activeTabMeta = settingsTabs.find((tab) => tab.id === activeTab);
 
   if (!isOpen) {
     return null;
@@ -241,8 +233,11 @@ export function SettingsPanel({
             {/* The active section, not a fixed "Audio": the eyebrow used to
                 read "Audio" on every tab. */}
             <span className="lt-settings-modal-eyebrow">
-              {settingsTabs.find((tab) => tab.id === activeTab)?.label ??
-                t("transport.settingsModal.eyebrow")}
+              {activeTabMeta
+                ? activeTabMeta.group
+                  ? `${settingsGroupLabel(t, activeTabMeta.group)} · ${activeTabMeta.label}`
+                  : activeTabMeta.label
+                : t("transport.settingsModal.eyebrow")}
             </span>
             <h2 id="lt-settings-modal-title">
               {t("transport.settingsModal.title")}
@@ -262,32 +257,11 @@ export function SettingsPanel({
 
         <div className="lt-settings-modal-body">
           <div className="lt-settings-tabs">
-            <div
-              className="lt-settings-tablist"
-              role="tablist"
-              aria-label={t("transport.settingsModal.tabListLabel", {
-                defaultValue: "Settings sections",
-              })}
-            >
-              {settingsTabs.map((tab) => {
-                const isActive = activeTab === tab.id;
-
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    role="tab"
-                    id={`lt-settings-tab-${tab.id}`}
-                    className={`lt-settings-tab-button ${isActive ? "is-active" : ""}`}
-                    aria-selected={isActive}
-                    aria-controls={`lt-settings-panel-${tab.id}`}
-                    onClick={() => onTabChange(tab.id)}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
+            <SettingsTabNav
+              tabs={settingsTabs}
+              activeTab={activeTab}
+              onTabChange={onTabChange}
+            />
 
             <div className="lt-settings-tab-panels">
               {activeTab === "audio" ? (
@@ -650,334 +624,51 @@ export function SettingsPanel({
               ) : null}
 
               {activeTab === "general" ? (
-                <section
-                  className="lt-settings-tab-panel"
-                  role="tabpanel"
-                  id="lt-settings-panel-general"
-                  aria-labelledby="lt-settings-tab-general"
-                >
-                  <div className="lt-settings-section-grid">
-                    <label className="lt-settings-field">
-                      <span className="lt-settings-field-label">
-                        {t("transport.settingsModal.language")}
-                      </span>
-                      <select
-                        value={selectedLocale}
-                        disabled={isLoading || isSaving}
-                        onChange={(event) =>
-                          onLocaleChange(event.target.value)
-                        }
-                      >
-                        <option value="">
-                          {t(
-                            "transport.settingsModal.languageSystemDefault",
-                          )}
-                        </option>
-                        <option value="en">
-                          {t("transport.settingsModal.languageEnglish")}
-                        </option>
-                        <option value="es">
-                          {t("transport.settingsModal.languageSpanish")}
-                        </option>
-                      </select>
-                    </label>
-
-                    <label className="lt-settings-field">
-                      <span className="lt-settings-field-label">
-                        {t("transport.settingsModal.timelineNavigationScheme", {
-                          defaultValue: "Timeline navigation",
-                        })}
-                      </span>
-                      <select
-                        value={appSettings.timelineNavigationScheme}
-                        disabled={isLoading || isSaving}
-                        onChange={(event) =>
-                          onTimelineNavigationSchemeChange(
-                            event.target.value === "libretracks"
-                              ? "libretracks"
-                              : "ableton",
-                          )
-                        }
-                      >
-                        <option value="ableton">
-                          {t(
-                            "transport.settingsModal.timelineNavigationSchemeAbleton",
-                            {
-                              defaultValue:
-                                "Ableton / Audacity (pinch to zoom, scroll to pan)",
-                            },
-                          )}
-                        </option>
-                        <option value="libretracks">
-                          {t(
-                            "transport.settingsModal.timelineNavigationSchemeLibreTracks",
-                            {
-                              defaultValue:
-                                "LibreTracks classic (scroll wheel zooms)",
-                            },
-                          )}
-                        </option>
-                      </select>
-                      <small>
-                        {t(
-                          "transport.settingsModal.timelineNavigationSchemeHelp",
-                          {
-                            defaultValue:
-                              "Choose how the trackpad / mouse wheel moves around the timeline. In Ableton mode, pinch (or Ctrl + scroll) zooms toward the cursor and Alt + scroll resizes track height.",
-                          },
-                        )}
-                      </small>
-                    </label>
-
-                    <label className="lt-settings-field">
-                      <span className="lt-settings-field-label">
-                        {t(
-                          "transport.settingsModal.timelinePlayheadFollowMode",
-                          {
-                            defaultValue: "Playhead follow",
-                          },
-                        )}
-                      </span>
-                      <select
-                        value={appSettings.timelinePlayheadFollowMode}
-                        disabled={isLoading || isSaving}
-                        onChange={(event) =>
-                          onTimelinePlayheadFollowModeChange(
-                            event.target.value === "center"
-                              ? "center"
-                              : "ahead",
-                          )
-                        }
-                      >
-                        <option value="ahead">
-                          {t(
-                            "transport.settingsModal.timelinePlayheadFollowModeAhead",
-                            {
-                              defaultValue: "Keep ahead (75% of the view)",
-                            },
-                          )}
-                        </option>
-                        <option value="center">
-                          {t(
-                            "transport.settingsModal.timelinePlayheadFollowModeCenter",
-                            {
-                              defaultValue: "Centered",
-                            },
-                          )}
-                        </option>
-                      </select>
-                      <small>
-                        {t(
-                          "transport.settingsModal.timelinePlayheadFollowModeHelp",
-                          {
-                            defaultValue:
-                              "Choose where the cursor sits when follow is enabled in the timeline toolbar.",
-                          },
-                        )}
-                      </small>
-                    </label>
-
-                    <PlaybackSettingsFields
-                      settings={appSettings}
-                      disabled={isLoading || isSaving || !canControl}
-                      onPauseAtSongEndChange={onPauseAtSongEndChange}
-                      onVampBetweenSongsChange={onVampBetweenSongsChange}
-                      onFadeOutStopSecondsChange={onFadeOutStopSecondsChange}
-                    />
-
-                    {!isGuest ? <>
-                    <label className="lt-settings-field">
-                      <span className="lt-settings-field-label">
-                        {t("transport.settingsModal.songTrackLayout")}
-                      </span>
-                      <select
-                        value={appSettings.songTrackLayout}
-                        disabled={isLoading || isSaving}
-                        onChange={(event) => {
-                          if (isSongTrackLayout(event.target.value)) {
-                            onSongTrackLayoutChange(event.target.value);
-                          }
-                        }}
-                      >
-                        <option value="shared">
-                          {t("transport.settingsModal.songTrackLayoutShared")}
-                        </option>
-                        {FEATURE_FLAGS.songTemplates ||
-                        appSettings.songTrackLayout === "songFolder" ? (
-                          <option value="songFolder">
-                            {t("transport.settingsModal.songTrackLayoutSongFolder")}
-                          </option>
-                        ) : null}
-                        <option value="separate">
-                          {t("transport.settingsModal.songTrackLayoutSeparate")}
-                        </option>
-                      </select>
-                      <small>
-                        {t(
-                          `transport.settingsModal.songTrackLayoutHint_${appSettings.songTrackLayout}`,
-                        )}
-                      </small>
-                    </label>
-
-                    {FEATURE_FLAGS.songTemplates ? (
-                      <DefaultSongTemplateField
-                        value={appSettings.defaultSongTemplate}
-                        disabled={isLoading || isSaving}
-                        onChange={onDefaultSongTemplateChange}
-                      />
-                    ) : null}
-
-                    <TemplateLibraryField disabled={isLoading || isSaving} />
-
-                    {/* Solo móvil: escritorio referencia desde siempre y
-                        no tiene nada que elegir aqui. */}
-                    {isMobileApp ? (
-                      <label className="lt-settings-toggle">
-                        <input
-                          type="checkbox"
-                          checked={appSettings.referenceImportedAudio}
-                          disabled={isLoading || isSaving}
-                          onChange={(event) =>
-                            onReferenceImportedAudioChange(event.target.checked)
-                          }
-                        />
-                        <span className="lt-settings-toggle-copy">
-                          <span>
-                            {t("transport.settingsModal.referenceImportedAudio", {
-                              defaultValue:
-                                "Importar sin copiar el audio a la sesión",
-                            })}
-                          </span>
-                          <small>
-                            {t("transport.settingsModal.referenceImportedAudioHint", {
-                              defaultValue:
-                                "La sesión apunta a tus archivos originales en vez de duplicarlos, como en escritorio. Ocupa mucho menos. Si mueves o borras un original, la pista deja de sonar y aparece en «Archivos que faltan».",
-                            })}
-                          </small>
-                        </span>
-                      </label>
-                    ) : null}
-
-                    <label className="lt-settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={appSettings.autoColorNewTracks}
-                        disabled={isLoading || isSaving}
-                        onChange={(event) =>
-                          onAutoColorNewTracksChange(event.target.checked)
-                        }
-                      />
-                      <span className="lt-settings-toggle-copy">
-                        <span>
-                          {t("transport.settingsModal.autoColorNewTracks", {
-                            defaultValue:
-                              "Colorear las pistas nuevas automáticamente",
-                          })}
-                        </span>
-                        <small>
-                          {t("transport.settingsModal.autoColorNewTracksHint", {
-                            defaultValue:
-                              "Cada pista nueva toma un color de la paleta, recorriéndola en orden, para distinguirlas de un vistazo. Desactívalo si prefieres colorearlas a mano. No repinta las pistas que ya existen.",
-                          })}
-                        </small>
-                      </span>
-                    </label>
-
-                    <label className="lt-settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={appSettings.autoWarp}
-                        disabled={isLoading || isSaving}
-                        onChange={(event) => onAutoWarpChange(event.target.checked)}
-                      />
-                      <span className="lt-settings-toggle-copy">
-                        <span>{t("transport.settingsModal.autoWarp")}</span>
-                        <small>{t("transport.settingsModal.autoWarpHint")}</small>
-                      </span>
-                    </label>
-
-                    <label className="lt-settings-toggle">
-                      <input
-                        type="checkbox"
-                        checked={appSettings.autoSaveEnabled}
-                        disabled={isLoading || isSaving}
-                        onChange={(event) =>
-                          onAutoSaveEnabledChange(event.target.checked)
-                        }
-                      />
-                      <span className="lt-settings-toggle-copy">
-                        <span>
-                          {t("transport.settingsModal.autoSave", {
-                            defaultValue: "Guardar automáticamente",
-                          })}
-                        </span>
-                        <small>
-                          {t("transport.settingsModal.autoSaveHint", {
-                            defaultValue:
-                              "Guarda la sesión abierta cada cierto tiempo para que un fallo inesperado no se lleve tu trabajo. Solo guarda si has cambiado algo, y nunca durante la reproducción.",
-                          })}
-                        </small>
-                      </span>
-                    </label>
-
-                    <label className="lt-settings-field">
-                      <span className="lt-settings-field-label">
-                        {t("transport.settingsModal.autoSaveInterval", {
-                          defaultValue: "Guardar cada",
-                        })}
-                      </span>
-                      <select
-                        value={appSettings.autoSaveIntervalMinutes}
-                        disabled={
-                          isLoading || isSaving || !appSettings.autoSaveEnabled
-                        }
-                        onChange={(event) =>
-                          onAutoSaveIntervalMinutesChange(
-                            Number(event.target.value),
-                          )
-                        }
-                      >
-                        {/* A settings file may hold a value that is not one of
-                            the presets (hand-edited, or a preset we dropped);
-                            surface it so the select still shows the truth. */}
-                        {!AUTO_SAVE_INTERVAL_PRESETS.includes(
-                          appSettings.autoSaveIntervalMinutes,
-                        ) ? (
-                          <option value={appSettings.autoSaveIntervalMinutes}>
-                            {t("transport.settingsModal.autoSaveIntervalMinutes", {
-                              defaultValue: "{{count}} min",
-                              count: appSettings.autoSaveIntervalMinutes,
-                            })}
-                          </option>
-                        ) : null}
-                        {AUTO_SAVE_INTERVAL_PRESETS.map((minutes) => (
-                          <option key={minutes} value={minutes}>
-                            {t("transport.settingsModal.autoSaveIntervalMinutes", {
-                              defaultValue: "{{count}} min",
-                              count: minutes,
-                            })}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <LibraryModeField />
-                    </> : null}
-
-                    <InterfaceZoomField />
-
-                    <DefaultViewField />
-
-                    {!isGuest ? <SessionStorageVolumeField /> : null}
-
-                    <DecodingCacheField />
-
-                    <UpdateCheckField />
-
-                    <TelemetrySettingsField />
-                  </div>
-                </section>
+                <GeneralSettingsTab
+                  selectedLocale={selectedLocale}
+                  onLocaleChange={onLocaleChange}
+                  disabled={isLoading || isSaving}
+                />
               ) : null}
+
+              {activeTab === "timeline" ? (
+                <TimelineSettingsTab
+                  settings={appSettings}
+                  disabled={isLoading || isSaving}
+                  onTimelineNavigationSchemeChange={onTimelineNavigationSchemeChange}
+                  onTimelinePlayheadFollowModeChange={onTimelinePlayheadFollowModeChange}
+                />
+              ) : null}
+
+              {activeTab === "playback" ? (
+                <SettingsTabSection id="playback">
+                  <PlaybackSettingsFields
+                    settings={appSettings}
+                    disabled={isLoading || isSaving || !canControl}
+                    onPauseAtSongEndChange={onPauseAtSongEndChange}
+                    onVampBetweenSongsChange={onVampBetweenSongsChange}
+                    onFadeOutStopSecondsChange={onFadeOutStopSecondsChange}
+                  />
+                </SettingsTabSection>
+              ) : null}
+
+              {activeTab === "editing" ? (
+                <EditingSettingsTab
+                  appSettings={appSettings}
+                  disabled={isLoading || isSaving}
+                  onSongTrackLayoutChange={onSongTrackLayoutChange}
+                  onDefaultSongTemplateChange={onDefaultSongTemplateChange}
+                  onReferenceImportedAudioChange={onReferenceImportedAudioChange}
+                  onAutoColorNewTracksChange={onAutoColorNewTracksChange}
+                  onAutoWarpChange={onAutoWarpChange}
+                  onAutoSaveEnabledChange={onAutoSaveEnabledChange}
+                  onAutoSaveIntervalMinutesChange={onAutoSaveIntervalMinutesChange}
+                />
+              ) : null}
+
+              {activeTab === "storage" ? <StorageSettingsTab isGuest={isGuest} /> : null}
+
+              {activeTab === "system" ? <SystemSettingsTab /> : null}
 
               {activeTab === "shortcuts" ? <ShortcutsSettingsTab /> : null}
               {activeTab === "video" ? <VideoSettingsTab /> : null}
@@ -1024,270 +715,6 @@ export function SettingsPanel({
           </div>
         </div>
       </section>
-    </div>
-  );
-}
-
-function formatCacheBytes(bytes: number): string {
-  if (bytes <= 0) return "0 MB";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  const rounded = value >= 100 || unit <= 1 ? Math.round(value) : Math.round(value * 10) / 10;
-  return `${rounded} ${units[unit]}`;
-}
-
-/**
- * Ableton-style "Decoding Cache" controls: the folder where decoded `.rf64`
- * PCM caches live, the maximum size cap, the current on-disk size, and a manual
- * cleanup. Changing the folder does not migrate existing files (matches Ableton)
- * — old files stay until evicted or purged.
- */
-function InterfaceZoomField() {
-  const { t } = useTranslation();
-  const zoom = useUiZoom();
-
-  return (
-    <label className="lt-settings-field">
-      <span className="lt-settings-field-label">
-        {t("transport.settingsModal.interfaceZoom", {
-          defaultValue: "Interface size",
-        })}
-      </span>
-      <select
-        value={String(zoom)}
-        onChange={(event) => setUiZoom(Number.parseFloat(event.target.value))}
-      >
-        {UI_ZOOM_STEPS.map((step) => (
-          <option key={step} value={String(step)}>
-            {`${Math.round(step * 100)}%`}
-          </option>
-        ))}
-      </select>
-      <small>
-        {t("transport.settingsModal.interfaceZoomHelp", {
-          defaultValue:
-            "Scale the whole interface. Lower it if the app is wider than your screen. Shortcut: Cmd/Ctrl +, − and 0 to reset.",
-        })}
-      </small>
-    </label>
-  );
-}
-
-/** Exported for the mobile-contract test; rendered only from this panel. */
-export function DecodingCacheField() {
-  const { t } = useTranslation();
-  const [info, setInfo] = useState<DecodingCacheInfo | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [maxGbDraft, setMaxGbDraft] = useState("");
-
-  const refresh = useCallback(async () => {
-    const next = await getDecodingCacheInfo();
-    setInfo(next);
-    setMaxGbDraft(next.maxGb != null ? String(next.maxGb) : "");
-  }, []);
-
-  useEffect(() => {
-    void refresh().catch((err) =>
-      setError(formatUserFacingError(err, t)),
-    );
-  }, [refresh, t]);
-
-  const run = useCallback(
-    async (action: () => Promise<unknown>) => {
-      setBusy(true);
-      setError(null);
-      try {
-        await action();
-        await refresh();
-      } catch (err) {
-        setError(formatUserFacingError(err, t));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [refresh, t],
-  );
-
-  const handleChangeFolder = () =>
-    void run(async () => {
-      const picked = await open({ multiple: false, directory: true });
-      const path = typeof picked === "string" ? picked : null;
-      if (!path) return;
-      await setDecodingCacheDir(path);
-    });
-
-  const handleResetFolder = () => void run(() => setDecodingCacheDir(null));
-
-  const handleApplyMaxGb = () =>
-    void run(() => {
-      const trimmed = maxGbDraft.trim();
-      if (trimmed === "") return setDecodingCacheMaxGb(null);
-      const parsed = Number(trimmed);
-      if (!Number.isFinite(parsed) || parsed < 1) {
-        throw new Error(
-          t("transport.settingsModal.decodingCacheMaxInvalid", {
-            defaultValue: "Enter a whole number of GB (1 or more), or leave empty for automatic.",
-          }),
-        );
-      }
-      return setDecodingCacheMaxGb(Math.floor(parsed));
-    });
-
-  // A purge that frees nothing because the files are open must not look like a
-  // successful one. The engine streams audio straight out of the PCM cache, so
-  // with a session loaded every file is held open and (on Windows) undeletable.
-  const handlePurge = () =>
-    void run(async () => {
-      const result = await purgeDecodingCache();
-      if (result.filesInUse > 0) {
-        throw new Error(
-          t("transport.settingsModal.decodingCacheInUse", {
-            count: result.filesInUse,
-            defaultValue:
-              "{{count}} cache file(s) are in use by the open session and could not be deleted. Close the session (or the app) and clear the cache again.",
-          }),
-        );
-      }
-    });
-
-  return (
-    <div className="lt-settings-field">
-      <span className="lt-settings-field-label">
-        {t("transport.settingsModal.decodingCacheTitle", {
-          defaultValue: "Audio cache",
-        })}
-      </span>
-      <small>
-        {isMobileApp
-          ? t("transport.settingsModal.decodingCacheDescriptionMobile", {
-              defaultValue:
-                "Non-WAV audio (MP3, FLAC…) is decoded once and stored here so it loads instantly next time. The location is fixed to the app's own storage.",
-            })
-          : t("transport.settingsModal.decodingCacheDescription", {
-              defaultValue:
-                "Non-WAV audio (MP3, FLAC…) is decoded once and stored here so it loads instantly next time. Changing the folder leaves old files behind until you clear the cache.",
-            })}
-      </small>
-
-      <div className="lt-cache-control-row">
-        <input
-          type="text"
-          readOnly
-          value={info?.dir ?? ""}
-          title={info?.dir ?? ""}
-          aria-label={t("transport.settingsModal.decodingCacheLocation", {
-            defaultValue: "Cache location",
-          })}
-        />
-        {/* No folder picking on a phone. Two reasons, either one enough:
-            `tauri-plugin-dialog` returns FolderPickerNotImplemented for
-            `directory: true` on mobile, so the button could only ever fail;
-            and writing outside the app's own storage would need
-            MANAGE_EXTERNAL_STORAGE, which Play grants to file managers and
-            backup tools, not to a DAW (see AndroidManifest.xml). The size cap
-            and Clear cache below are the parts that still mean something. */}
-        {!isMobileApp ? (
-          <>
-            <button
-              type="button"
-              className="lt-secondary-button"
-              disabled={busy}
-              onClick={handleChangeFolder}
-            >
-              {t("transport.settingsModal.decodingCacheChange", {
-                defaultValue: "Change…",
-              })}
-            </button>
-            <button
-              type="button"
-              className="lt-secondary-button lt-cache-reset-button"
-              disabled={busy}
-              title={t("transport.settingsModal.decodingCacheResetHint", {
-                defaultValue: "Use the default location",
-              })}
-              onClick={handleResetFolder}
-            >
-              {t("transport.settingsModal.decodingCacheReset", {
-                defaultValue: "Default",
-              })}
-            </button>
-          </>
-        ) : null}
-      </div>
-
-      <div className="lt-cache-max-row">
-        <span className="lt-cache-max-label">
-          {t("transport.settingsModal.decodingCacheMaxLabel", {
-            defaultValue: "Maximum size",
-          })}
-        </span>
-        <span className="lt-cache-max-input">
-          <input
-            type="number"
-            min={1}
-            step={1}
-            value={maxGbDraft}
-            disabled={busy}
-            placeholder={t("transport.settingsModal.decodingCacheMaxAuto", {
-              defaultValue: "Auto",
-            })}
-            aria-label={t("transport.settingsModal.decodingCacheMaxLabel", {
-              defaultValue: "Maximum size",
-            })}
-            onChange={(event) => setMaxGbDraft(event.target.value)}
-          />
-          <span className="lt-cache-max-unit" aria-hidden="true">
-            GB
-          </span>
-        </span>
-        <button
-          type="button"
-          className="lt-secondary-button"
-          disabled={busy}
-          onClick={handleApplyMaxGb}
-        >
-          {t("transport.settingsModal.decodingCacheApplyMax", {
-            defaultValue: "Set limit",
-          })}
-        </button>
-      </div>
-      <small>
-        {t("transport.settingsModal.decodingCacheMaxHelp", {
-          defaultValue:
-            "Leave empty for automatic (10% of free disk space, at least 4 GB).",
-        })}
-      </small>
-
-      <div className="lt-inline-actions">
-        <span className="lt-settings-field-label">
-          {t("transport.settingsModal.decodingCacheCurrentSize", {
-            defaultValue: "On disk: {{size}}",
-            size: formatCacheBytes(info?.sizeBytes ?? 0),
-          })}
-        </span>
-        <button
-          type="button"
-          className="lt-secondary-button"
-          disabled={busy || (info?.sizeBytes ?? 0) === 0}
-          onClick={handlePurge}
-        >
-          {t("transport.settingsModal.decodingCacheClear", {
-            defaultValue: "Clear cache",
-          })}
-        </button>
-      </div>
-
-      {error ? (
-        <small className="lt-update-check-status lt-update-check-status--error">
-          {error}
-        </small>
-      ) : null}
     </div>
   );
 }

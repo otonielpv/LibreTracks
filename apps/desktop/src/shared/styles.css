@@ -1628,6 +1628,11 @@ html.lt-ios body {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  /* Folded groups keep it short, but an open group on a short screen (a
+     phone in landscape) may still overflow: the list scrolls on its own,
+     beside the panels' scroller, never inside it. */
+  min-height: 0;
+  overflow-y: auto;
   padding: 0.4rem;
   border-radius: 2px;
   border: 1px solid rgb(255 255 255 / 0.06);
@@ -1662,6 +1667,47 @@ html.lt-ios body {
   border-color: rgb(87 241 219 / 0.28);
   background: rgb(87 241 219 / 0.12);
   color: #57f1db;
+}
+
+.lt-settings-tablist > .lt-settings-tab-button,
+.lt-settings-tab-group {
+  flex-shrink: 0;
+}
+
+.lt-settings-tab-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.lt-settings-tab-group-toggle .material-symbols-outlined {
+  margin-left: auto;
+  font-size: 16px;
+  transition: transform 120ms ease;
+}
+
+.lt-settings-tab-group-toggle[aria-expanded="true"] .material-symbols-outlined {
+  transform: rotate(90deg);
+}
+
+/* Folded with the selected tab inside: the row says where you are. */
+.lt-settings-tab-group-toggle.holds-active[aria-expanded="false"] {
+  color: #57f1db;
+}
+
+.lt-settings-tab-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-left: 0.55rem;
+  padding-left: 0.4rem;
+  border-left: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.lt-settings-tab-button--sub {
+  min-height: 2rem;
+  padding: 0.5rem 0.6rem;
+  letter-spacing: 0.08em;
 }
 
 .lt-settings-tab-panels {
@@ -3750,11 +3796,35 @@ html.lt-ios body {
     width: 100%;
     flex-direction: row;
     flex-wrap: wrap;
+    /* Stacked above the panels the modal itself scrolls (see
+       .lt-settings-modal--fixed above): one scroller, not two. */
+    overflow-y: visible;
   }
 
   .lt-settings-tab-button {
     width: auto;
     flex: 1 1 8.5rem;
+  }
+
+  .lt-settings-tab-group {
+    flex: 1 1 8.5rem;
+  }
+
+  /* An open group takes a full row so its tabs sit together under it. */
+  .lt-settings-tab-group.is-open {
+    flex-basis: 100%;
+  }
+
+  /* The row-mode basis above is a width; inside the group's column it would
+     become a height and stretch the toggle. */
+  .lt-settings-tab-group > .lt-settings-tab-button {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .lt-settings-tab-group-items {
+    flex-direction: row;
+    flex-wrap: wrap;
   }
 
   .lt-settings-toggle {
@@ -12129,6 +12199,22 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   padding: 0.48rem 0.55rem;
   font-size: 9px;
   letter-spacing: 0.08em;
+}
+
+/* Sub-tabs stay a comfortable touch target (~30 px) while being visibly
+   lighter than the rows they hang from. */
+.lt-mobile .lt-settings-modal--fixed .lt-settings-tab-button--sub {
+  min-height: 1.9rem;
+  padding: 0.42rem 0.5rem;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-tab-group-items {
+  margin-left: 0.35rem;
+  padding-left: 0.3rem;
+}
+
+.lt-mobile .lt-settings-modal--fixed .lt-settings-tab-group-toggle .material-symbols-outlined {
+  font-size: 14px;
 }
 
 .lt-mobile .lt-settings-modal--fixed .lt-settings-field {

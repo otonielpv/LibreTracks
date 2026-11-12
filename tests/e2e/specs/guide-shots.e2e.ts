@@ -682,12 +682,22 @@ describe("user guide screenshots", function () {
   it("settings tabs", async () => {
     await ensureSession();
     await AppPage.openSettings();
-    const tabs = ["audio", "general", "video", "shortcuts", "diagnostics", "midi", "midiLearn"];
+    const tabs = [
+      "general", "timeline", "playback", "editing", "storage", "audio",
+      "midi", "midiLearn", "video", "shortcuts", "system", "diagnostics",
+    ];
+    // The overview numbers the sidebar's top rows: the General and MIDI
+    // groups (folded) and the standalone tabs.
+    const topRows = [
+      "#lt-settings-group-general", "#lt-settings-tab-audio", "#lt-settings-group-midi",
+      "#lt-settings-tab-video", "#lt-settings-tab-redundancy", "#lt-settings-tab-shortcuts",
+      "#lt-settings-tab-diagnostics",
+    ];
     await annotatedShot(
       "settings-overview",
       [
-        ...tabs.map((id, i) => ({ selector: `#lt-settings-tab-${id}`, n: i + 1, pad: 1 })),
-        { selector: ".lt-settings-modal-close", n: tabs.length + 1, pad: 2 },
+        ...topRows.map((selector, i) => ({ selector, n: i + 1, pad: 1 })),
+        { selector: ".lt-settings-modal-close", n: topRows.length + 1, pad: 2 },
       ],
       { crop: { selector: ".lt-settings-modal", margin: 12 } },
     );
@@ -2298,10 +2308,10 @@ describe("user guide screenshots", function () {
     await browser.keys(["Escape"]);
     await AppPage.resetShell();
 
-    // Settings › General: the template for new songs and «Automatic warp»,
+    // Settings › Editing: the template for new songs and «Automatic warp»,
     // each cropped to its own field.
     await AppPage.openSettings();
-    await (await AppPage.settingsTab("general")).click();
+    await (await AppPage.settingsTab("editing")).click();
     await browser.pause(900);
     const fieldShot = async (selector: string, text: string, name: string, tag: string) => {
       const target = await tagByText(selector, text, tag);

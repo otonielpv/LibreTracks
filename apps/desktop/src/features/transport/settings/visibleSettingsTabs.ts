@@ -1,4 +1,33 @@
-import type { SettingsTab } from "../types";
+import type { TFunction } from "i18next";
+import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
+import type { SettingsTab, SettingsTabGroup } from "../types";
+
+/**
+ * Every Settings tab, in sidebar order. App-wide preferences fold under
+ * "General" and the two MIDI tabs under "MIDI" (see SettingsTabNav), so the
+ * sidebar has seven rows and fits a phone in landscape.
+ */
+export function allSettingsTabs(
+  t: TFunction,
+): Array<{ id: SettingsTab; label: string; group?: SettingsTabGroup }> {
+  return [
+    { id: "general", group: "general", label: t("transport.settingsModal.tabInterface", { defaultValue: "Interface" }) },
+    { id: "timeline", group: "general", label: t("transport.settingsModal.tabTimeline", { defaultValue: "Timeline" }) },
+    { id: "playback", group: "general", label: t("transport.settingsModal.tabPlayback", { defaultValue: "Playback" }) },
+    { id: "editing", group: "general", label: t("transport.settingsModal.tabEditing", { defaultValue: "Editing" }) },
+    { id: "storage", group: "general", label: t("transport.settingsModal.tabStorage", { defaultValue: "Storage" }) },
+    { id: "system", group: "general", label: t("transport.settingsModal.tabSystem", { defaultValue: "System" }) },
+    { id: "audio", label: t("transport.settingsModal.tabAudio", { defaultValue: "Audio" }) },
+    { id: "midi", group: "midi", label: t("transport.settingsModal.tabMidiDevices", { defaultValue: "Devices" }) },
+    { id: "midiLearn", group: "midi", label: t("transport.settingsModal.tabMidiLearn", { defaultValue: "MIDI Learn" }) },
+    { id: "video", label: t("transport.video.settings.tab") },
+    ...(FEATURE_FLAGS.redundancy
+      ? [{ id: "redundancy" as const, label: t("redundancy.settings.tab") }]
+      : []),
+    { id: "shortcuts", label: t("transport.settingsModal.tabShortcuts", { defaultValue: "Atajos" }) },
+    { id: "diagnostics", label: t("transport.settingsModal.tabDiagnostics", { defaultValue: "Diagnostics" }) },
+  ];
+}
 
 /**
  * Tabs a phone or tablet never shows: no physical keyboard by default for

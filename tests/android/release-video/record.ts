@@ -227,7 +227,9 @@ await scene("15-movil-midi-pista", async () => {
 
 await scene("16-movil-midi", async () => {
   await tap(tour("side-nav-settings"), { settle: 1500 });
-  await tap("#lt-settings-tab-midi", { settle: 1500 });
+  // MIDI folds under its own sidebar group; opening it shows the MIDI tab.
+  if (await rectOf("#lt-settings-tab-midi")) await tap("#lt-settings-tab-midi", { settle: 1500 });
+  else await tap("#lt-settings-group-midi", { settle: 1500 });
   const bluetooth = { text: L("Buscar dispositivos Bluetooth") };
   if (await rectOf("button", bluetooth)) {
     await run((needle: string) => {

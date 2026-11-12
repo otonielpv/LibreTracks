@@ -57,7 +57,7 @@ describe("App / settings", () => {
     expect(await screen.findByText(textMatcher(en.transport.settingsModal.description))).toBeTruthy();
   });
 
-  it("pause at song end is off by default and the General toggle persists it", async () => {
+  it("pause at song end is off by default and the Playback toggle persists it", async () => {
     const desktopApi = await import("../features/transport/desktopApi");
     const updateSpy = vi.mocked(desktopApi.updateAudioSettings);
     updateSpy.mockClear();
@@ -67,7 +67,11 @@ describe("App / settings", () => {
       fireEvent.click(screen.getByRole("button", { name: /^Settings$/i }));
     });
     await act(async () => {
-      fireEvent.click(await screen.findByRole("tab", { name: /^General$/i }));
+      // Playback folds under General in the sidebar: open the group first.
+      fireEvent.click(await screen.findByRole("button", { name: /^General/i }));
+    });
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("tab", { name: /^Playback$/i }));
     });
 
     const toggle = (await screen.findByRole("checkbox", {

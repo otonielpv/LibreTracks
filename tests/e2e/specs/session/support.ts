@@ -329,16 +329,16 @@ export async function setRegionWarp(enabled: boolean, regionIndex = 0) {
 }
 
 /**
- * Turn «Warp automático» on or off the way a user does, in Settings › General,
+ * Turn «Warp automático» on or off the way a user does, in Settings › Editing,
  * so both the UI and the engine see it. These are the machine's real settings:
  * the spec puts the original value back in its `after`.
  */
 export async function setAutoWarp(enabled: boolean) {
   if (((await AppPage.settings()).autoWarp ?? true) === enabled) return;
   await AppPage.openSettings();
-  const generalTab = await AppPage.settingsTab("general");
-  await generalTab.waitForClickable({ timeout: 15_000 });
-  await generalTab.click();
+  const editingTab = await AppPage.settingsTab("editing");
+  await editingTab.waitForClickable({ timeout: 15_000 });
+  await editingTab.click();
   const toggle = await $(
     "//label[contains(@class,'lt-settings-toggle')][.//span[normalize-space()='Warp automático']]//input",
   );

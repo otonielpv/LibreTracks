@@ -53,8 +53,10 @@ const BUDGETS: Record<string, number> = {
   // secciones, 13 avisos y variantes- vive ahora aparte.
   "menus/timelineMenus.ts": 1450,
   // Bajado de 1500 tras extraer panels/MidiLearnSettingsTab.tsx (paso 05 de
-  // docs/plans/mobile-midi).
-  "panels/SettingsPanel.tsx": 1300,
+  // docs/plans/mobile-midi), y de 1300 tras partir la antigua pestaña General
+  // en General/Timeline/Playback/Editing/Storage/System, cada una en su
+  // fichero.
+  "panels/SettingsPanel.tsx": 800,
   "timeline/TimelineToolbar.tsx": 1250,
   "compact/CompactView.tsx": 1150,
   // La raíz de la vista Setlist sólo reparte zonas por clase de tamaño; la

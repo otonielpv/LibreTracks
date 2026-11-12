@@ -204,17 +204,30 @@ class AppPage {
   // --- Settings modal ------------------------------------------------------
   // Opened from the side-nav; a role="tablist" with stable per-tab ids
   // (lt-settings-tab-<id>) and matching role="tabpanel" panels
-  // (lt-settings-panel-<id>). Desktop tabs: audio, general, shortcuts,
-  // diagnostics, midi, midiLearn. Default tab on open is "audio".
+  // (lt-settings-panel-<id>). Default tab on open is "audio". Some tabs fold
+  // under a sidebar group (General: general, timeline, playback, editing,
+  // storage, system; MIDI: midi, midiLearn) and only exist while it is open.
 
   /** The Settings modal's tablist container. */
   get settingsTabList() {
     return $('[role="tablist"].lt-settings-tablist');
   }
 
-  /** A Settings tab button by id (e.g. "audio", "shortcuts"). */
-  settingsTab(id: string) {
-    return $(`#lt-settings-tab-${id}`);
+  /**
+   * A Settings tab button by id (e.g. "audio", "editing"). If the tab folds
+   * under a closed sidebar group, the group is opened first, the way a user
+   * would, so the returned button is clickable.
+   */
+  async settingsTab(id: string) {
+    const tab = $(`#lt-settings-tab-${id}`);
+    if (!(await tab.isExisting())) {
+      const group = $(`[data-lt-settings-group-tabs~="${id}"]`);
+      if ((await group.isExisting()) && (await group.getAttribute("aria-expanded")) !== "true") {
+        await group.click();
+        await tab.waitForExist({ timeout: 5_000 });
+      }
+    }
+    return tab;
   }
 
   /** A Settings tab panel by id — the visible section for the active tab. */

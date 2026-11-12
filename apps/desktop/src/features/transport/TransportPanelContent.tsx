@@ -271,7 +271,6 @@ import type {
   NativeDropCoordinateMode,
   OptimisticClipOperation,
   PlayheadDragState,
-  SettingsTab,
   SidebarTab,
   TimelinePanState,
   TimelineRangeSelection,
@@ -330,7 +329,7 @@ import {
 } from "./helpers";
 import { createSettingsHandlers } from "./settings/settingsHandlers";
 import { createMetronomeDeviceHandlers } from "./settings/metronomeDeviceHandlers";
-import { visibleSettingsTabs } from "./settings/visibleSettingsTabs";
+import { allSettingsTabs, visibleSettingsTabs } from "./settings/visibleSettingsTabs";
 import { createLibraryHandlers } from "./library/libraryHandlers";
 import {
   nextPackageUnpackState,
@@ -6402,45 +6401,7 @@ export function TransportPanelContent() {
     !midiInputDevices.includes(appSettings.selectedMidiDevice),
   );
   const midiCapabilities = useMidiCapabilities();
-  const allSettingsTabs: Array<{ id: SettingsTab; label: string }> = [
-    {
-      id: "audio",
-      label: t("transport.settingsModal.tabAudio", { defaultValue: "Audio" }),
-    },
-    {
-      id: "general",
-      label: t("transport.settingsModal.tabGeneral", {
-        defaultValue: "General",
-      }),
-    },
-    { id: "video", label: t("transport.video.settings.tab") },
-    ...(FEATURE_FLAGS.redundancy
-      ? [{ id: "redundancy" as const, label: t("redundancy.settings.tab") }]
-      : []),
-    {
-      id: "shortcuts",
-      label: t("transport.settingsModal.tabShortcuts", {
-        defaultValue: "Atajos",
-      }),
-    },
-    {
-      id: "diagnostics",
-      label: t("transport.settingsModal.tabDiagnostics", {
-        defaultValue: "Diagnostics",
-      }),
-    },
-    {
-      id: "midi",
-      label: t("transport.settingsModal.tabMidi", { defaultValue: "MIDI" }),
-    },
-    {
-      id: "midiLearn",
-      label: t("transport.settingsModal.tabMidiLearn", {
-        defaultValue: "MIDI Learn",
-      }),
-    },
-  ];
-  const settingsTabs = visibleSettingsTabs(allSettingsTabs, {
+  const settingsTabs = visibleSettingsTabs(allSettingsTabs(t), {
     isMobile: isMobileApp,
     midiAvailable: midiCapabilities?.available ?? false,
   });

@@ -107,7 +107,7 @@ async function setLocale(locale: Locale) {
     await nav.waitForClickable({ timeout: 20_000 });
     await nav.click();
 
-    const generalTab = await $("#lt-settings-tab-general");
+    const generalTab = await AppPage.settingsTab("general");
     await generalTab.waitForClickable({ timeout: 15_000 });
     await generalTab.click();
     const panel = await $("#lt-settings-panel-general");

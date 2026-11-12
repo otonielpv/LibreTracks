@@ -161,10 +161,18 @@ export type PlayheadDragState = {
   currentSeconds: number;
 } | null;
 
+/** Sidebar folds in Settings: tabs of one group open and close together. */
+export type SettingsTabGroup = "general" | "midi";
+
 export type SettingsTab =
   | "audio"
   | "midi"
   | "general"
+  | "timeline"
+  | "playback"
+  | "editing"
+  | "storage"
+  | "system"
   | "shortcuts"
   | "midiLearn"
   | "diagnostics"
