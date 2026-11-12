@@ -48,7 +48,7 @@ o el Remote saltan de canción. *Transición de canción* decide cuándo y cómo
 - **Cómo**: **Corte limpio** o **Fade out** de la canción que suena.
 
 Si prefieres que la reproducción se pare entre canciones, activa *Pausar al
-terminar cada canción* en Configuración › General.
+terminar cada canción* en Configuración › General › Reproducción.
 
 ## Atajos
 

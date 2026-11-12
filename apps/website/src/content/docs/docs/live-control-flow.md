@@ -48,7 +48,7 @@ Remote jump between songs. *Song Transition* decides when and how:
 - **How**: **Clean cut** or **Fade out** of the song that is playing.
 
 If you would rather playback stopped between songs, turn on *Pause at the end
-of each song* in Settings › General.
+of each song* in Settings › General › Playback.
 
 ## Keyboard shortcuts
 

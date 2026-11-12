@@ -15,17 +15,103 @@ tienen su propio botón *Aplicar*.
 
 <Legend>
 
-1. [**Audio**](#audio): tarjeta de sonido, salidas y rendimiento.
-2. [**General**](#general): idioma, manejo de la línea de tiempo, guardado
-   automático y caché.
-3. [**Vídeo**](#vídeo): la pantalla o proyector para las pistas de vídeo.
-4. [**Atajos**](#atajos): las teclas de cada acción.
-5. [**Diagnóstico**](#diagnóstico): registros para cuando algo falla.
-6. [**MIDI**](#midi): controlador de entrada y puerto de salida.
-7. [**MIDI Learn**](#midi-learn): asignar pedales y botones a acciones.
+1. [**General**](#general): se despliega en Interfaz, Timeline,
+   Reproducción, Edición, Almacenamiento y Sistema.
+2. [**Audio**](#audio): tarjeta de sonido, salidas y rendimiento.
+3. [**MIDI**](#midi): se despliega en Dispositivos y MIDI Learn.
+4. [**Vídeo**](#vídeo): la pantalla o proyector para las pistas de vídeo.
+5. [**Redundancia**](/es/docs/redundancy/): un segundo equipo de respaldo
+   sincronizado.
+6. [**Atajos**](#atajos): las teclas de cada acción.
+7. [**Diagnóstico**](#diagnóstico): registros para cuando algo falla.
 8. **Cerrar**. También con <kbd>Esc</kbd>.
 
+General y MIDI son grupos: al pulsarlos se despliegan y se abre su primera
+pestaña. Puedes tener los dos abiertos a la vez.
+
 </Legend>
+
+## General
+
+Los ajustes de la app, repartidos en seis pestañas.
+
+### Interfaz
+
+![Pestaña Interfaz](/guide/desktop/settings-general.png)
+
+- **Idioma** de la app.
+- **Tamaño de la interfaz**: hazla más pequeña si no cabe en tu pantalla, o
+  más grande para verla de lejos. Atajos: <kbd>Ctrl</kbd>+<kbd>+</kbd>,
+  <kbd>Ctrl</kbd>+<kbd>−</kbd> y <kbd>Ctrl</kbd>+<kbd>0</kbd>.
+- **Vista al abrir**: la vista en la que se abren las sesiones.
+
+### Timeline
+
+![Pestaña Timeline](/guide/desktop/settings-timeline.png)
+
+- **Navegación de la línea de tiempo**: cómo responden la rueda del ratón y el
+  trackpad. En modo *Ableton*, pellizcar o <kbd>Ctrl</kbd>+rueda hace zoom;
+  <kbd>Alt</kbd>+rueda cambia el alto de la pista bajo el ratón.
+- **Seguimiento del cursor**: dónde se queda el cursor cuando la línea de
+  tiempo lo sigue.
+
+### Reproducción
+
+![Pestaña Reproducción](/guide/desktop/settings-playback.png)
+
+- **Pausar al terminar cada canción**: en vez de pasar sola a la siguiente,
+  la reproducción se para al final de cada canción. Ideal cuando hay que
+  hablar entre canciones.
+- **Vamp entre canciones (click y pad)**: como la pausa, pero entre canción y
+  canción el click sigue al tempo de la que acaba y el pad sigue sonando hasta
+  que pulses *Play*. Ver
+  [Pasar de una canción a otra](/es/docs/tasks/songs/#pasar-de-una-canción-a-otra-en-directo).
+- **Duración de «Fade out y parar»**: cuántos segundos tarda en apagarse la
+  canción con ese botón (5 por defecto). Ver
+  [Fade out y parar](/es/docs/interface/main-screen/#fade-out-y-parar).
+
+### Edición
+
+![Pestaña Edición: canciones y plantillas](/guide/desktop/settings-editing-1.png)
+
+- **Pistas de cada canción**: si las canciones comparten pistas, cada una
+  tiene una carpeta propia o su propia copia de las pistas. Ver
+  [Plantillas de canción](/es/docs/song-templates/#pistas-de-cada-canción).
+- **Plantilla para canciones nuevas**: con qué pistas y carpetas salen las
+  canciones nuevas y dónde caen los audios que sueltas. Ver
+  [Plantillas de canción](/es/docs/song-templates/).
+- **Mis plantillas**: las plantillas de este equipo, para importarlas o
+  subirlas a la nube.
+
+![Pestaña Edición: color, warp y guardado](/guide/desktop/settings-editing-2.png)
+
+- **Colorear las pistas nuevas automáticamente**.
+- **Warp automático**: enciende el warp al cambiar el tono o el tempo. Ver
+  [Warp automático](/es/docs/pitch-and-warp/#warp-automático).
+- **Guardar automáticamente**: guarda la sesión cada cierto tiempo, nunca
+  mientras reproduces. **Guardar cada**: cada cuántos minutos.
+
+### Almacenamiento
+
+![Pestaña Almacenamiento](/guide/desktop/settings-storage.png)
+
+- **Usar la biblioteca clásica**: la Biblioteca muestra solo el audio importado
+  a la sesión, con sus carpetas virtuales, como antes, en lugar de tus carpetas
+  del disco. Ver [La Biblioteca](/es/docs/interface/side-nav-library/#la-biblioteca).
+- **Caché de audio**: el MP3, FLAC y demás audio comprimido se descomprime
+  una vez y se guarda aquí, para que la próxima vez la sesión cargue al
+  instante. Puedes cambiar la carpeta, ponerle un tamaño máximo o vaciarla
+  para liberar espacio.
+
+### Sistema
+
+![Pestaña Sistema](/guide/desktop/settings-system.png)
+
+- **Buscar actualizaciones**: comprueba si hay una versión nueva. La app
+  también avisa sola al arrancar.
+- **Estadísticas opcionales de uso**: datos agregados y anónimos que ayudan a
+  mejorar LibreTracks. Nunca se envía audio, nombres ni contenido de tus
+  sesiones.
 
 ## Audio
 
@@ -56,64 +142,48 @@ tienen su propio botón *Aplicar*.
   Ableton): una pista muteada marca cero. **Post-paneo** mide antes del
   volumen y **Pre-fader**, lo que entra en la pista.
 
-## General
+## MIDI
 
-![Pestaña General: idioma y navegación](/guide/desktop/settings-general-1.png)
+El grupo MIDI tiene dos pestañas.
 
-- **Idioma** de la app.
-- **Navegación de la línea de tiempo**: cómo responden la rueda del ratón y el
-  trackpad. En modo *Ableton*, pellizcar o <kbd>Ctrl</kbd>+rueda hace zoom;
-  <kbd>Alt</kbd>+rueda cambia el alto de la pista bajo el ratón.
-- **Seguimiento del cursor**: dónde se queda el cursor cuando la línea de
-  tiempo lo sigue.
+### Dispositivos
 
-![Pestaña General: reproducción y pistas de cada canción](/guide/desktop/settings-general-2.png)
+![Pestaña Dispositivos: entrada y salidas](/guide/desktop/settings-midi-1.png)
 
-- **Pausar al terminar cada canción**: en vez de pasar sola a la siguiente,
-  la reproducción se para al final de cada canción. Ideal cuando hay que
-  hablar entre canciones.
-- **Vamp entre canciones (click y pad)**: como la pausa, pero entre canción y
-  canción el click sigue al tempo de la que acaba y el pad sigue sonando hasta
-  que pulses *Play*. Ver
-  [Pasar de una canción a otra](/es/docs/tasks/songs/#pasar-de-una-canción-a-otra-en-directo).
-- **Duración de «Fade out y parar»**: cuántos segundos tarda en apagarse la
-  canción con ese botón (5 por defecto). Ver
-  [Fade out y parar](/es/docs/interface/main-screen/#fade-out-y-parar).
-- **Pistas de cada canción**: si las canciones comparten pistas, cada una
-  tiene una carpeta propia o su propia copia de las pistas. Ver
-  [Plantillas de canción](/es/docs/song-templates/#pistas-de-cada-canción).
+- **Dispositivo de entrada MIDI**: el pedal, pad o controlador con el que
+  quieres manejar LibreTracks. El botón de la derecha vuelve a buscar
+  dispositivos.
+- **Salida MIDI**: el puerto por el que las pistas MIDI envían notas y
+  cambios de programa a teclados, mesas de luces o software de letras.
+  **Enviar nota de prueba** comprueba que llega.
+- **Salida del controlador (LEDs)**: el puerto por el que tu controlador de
+  faders recibe el estado de mute, solo, play y vamp. Suele llamarse como su
+  entrada.
 
-![Pestaña General: plantilla, color y warp](/guide/desktop/settings-general-3.png)
+![Pestaña Dispositivos: tiras y recogida](/guide/desktop/settings-midi-2.png)
 
-- **Plantilla para canciones nuevas**: con qué pistas y carpetas salen las
-  canciones nuevas y dónde caen los audios que sueltas. Ver
-  [Plantillas de canción](/es/docs/song-templates/).
-- **Colorear las pistas nuevas automáticamente**.
-- **Warp automático**: enciende el warp al cambiar el tono o el tempo. Ver
-  [Warp automático](/es/docs/pitch-and-warp/#warp-automático).
+- **Las tiras siguen a la canción activa**: los 8 faders del controlador
+  mueven solo las pistas de la canción que suena y vuelven al primer banco al
+  cambiar de canción.
+- **Modo de recogida**: qué pasa cuando el fader físico no está donde está la
+  pista. Ver [Controladores de faders](/es/docs/tasks/midi/#tiras-1-8-perfiles-y-faders-motorizados).
 
-![Pestaña General: guardado, biblioteca e interfaz](/guide/desktop/settings-general-4.png)
+### MIDI Learn
 
-- **Guardar automáticamente**: guarda la sesión cada cierto tiempo, nunca
-  mientras reproduces. **Guardar cada**: cada cuántos minutos.
-- **Usar la biblioteca clásica**: la Biblioteca muestra solo el audio importado
-  a la sesión, con sus carpetas virtuales, como antes, en lugar de tus carpetas
-  del disco. Ver [La Biblioteca](/es/docs/interface/side-nav-library/#la-biblioteca).
-- **Tamaño de la interfaz**: hazla más pequeña si no cabe en tu pantalla, o
-  más grande para verla de lejos. Atajos: <kbd>Ctrl</kbd>+<kbd>+</kbd>,
-  <kbd>Ctrl</kbd>+<kbd>−</kbd> y <kbd>Ctrl</kbd>+<kbd>0</kbd>.
+![Pestaña MIDI Learn](/guide/desktop/settings-midiLearn-1.png)
 
-![Pestaña General: caché y actualizaciones](/guide/desktop/settings-general-5.png)
+Hay dos formas de asignar un pedal o un botón de tu controlador a una acción:
 
-- **Caché de audio**: el MP3, FLAC y demás audio comprimido se descomprime
-  una vez y se guarda aquí, para que la próxima vez la sesión cargue al
-  instante. Puedes cambiar la carpeta, ponerle un tamaño máximo o vaciarla
-  para liberar espacio.
-- **Buscar actualizaciones**: comprueba si hay una versión nueva. La app
-  también avisa sola al arrancar.
-- **Estadísticas opcionales de uso** (más abajo): datos agregados y anónimos
-  que ayudan a mejorar LibreTracks. Nunca se envía audio, nombres ni contenido
-  de tus sesiones.
+- **Desde la lista**: pulsa **Reaprender** en la fila de la acción y después
+  pisa el pedal.
+- **Desde la pantalla**: pulsa **Aprendizaje MIDI**, cierra la Configuración,
+  haz clic en el botón que quieras controlar (*Reproducir*, *Vamp*, una
+  marca, el BPM…) y pisa el pedal. Vuelve a pulsar *Aprendizaje MIDI* para
+  salir.
+
+La asignación aparece en la columna **Asignación MIDI actual**, y la última
+que has hecho, arriba. **Resetear mapeos MIDI** las borra todas. Las pestañas
+**Marcas** y **Canciones** asignan saltos a marcas y canciones concretas.
 
 ## Vídeo
 
@@ -157,42 +227,3 @@ Si la app se cierra, se congela o una pista se queda muda, aquí están los
 registros que nos ayudan a encontrar la causa. **Guardar registro…** crea un
 archivo que puedes enviar al pedir ayuda. Los registros no incluyen audio ni
 datos personales.
-
-## MIDI
-
-![Pestaña MIDI: entrada y salidas](/guide/desktop/settings-midi-1.png)
-
-- **Dispositivo de entrada MIDI**: el pedal, pad o controlador con el que
-  quieres manejar LibreTracks. El botón de la derecha vuelve a buscar
-  dispositivos.
-- **Salida MIDI**: el puerto por el que las pistas MIDI envían notas y
-  cambios de programa a teclados, mesas de luces o software de letras.
-  **Enviar nota de prueba** comprueba que llega.
-- **Salida del controlador (LEDs)**: el puerto por el que tu controlador de
-  faders recibe el estado de mute, solo, play y vamp. Suele llamarse como su
-  entrada.
-
-![Pestaña MIDI: tiras y recogida](/guide/desktop/settings-midi-2.png)
-
-- **Las tiras siguen a la canción activa**: los 8 faders del controlador
-  mueven solo las pistas de la canción que suena y vuelven al primer banco al
-  cambiar de canción.
-- **Modo de recogida**: qué pasa cuando el fader físico no está donde está la
-  pista. Ver [Controladores de faders](/es/docs/tasks/midi/#tiras-1-8-perfiles-y-faders-motorizados).
-
-## MIDI Learn
-
-![Pestaña MIDI Learn](/guide/desktop/settings-midiLearn-1.png)
-
-Hay dos formas de asignar un pedal o un botón de tu controlador a una acción:
-
-- **Desde la lista**: pulsa **Reaprender** en la fila de la acción y después
-  pisa el pedal.
-- **Desde la pantalla**: pulsa **Aprendizaje MIDI**, cierra la Configuración,
-  haz clic en el botón que quieras controlar (*Reproducir*, *Vamp*, una
-  marca, el BPM…) y pisa el pedal. Vuelve a pulsar *Aprendizaje MIDI* para
-  salir.
-
-La asignación aparece en la columna **Asignación MIDI actual**, y la última
-que has hecho, arriba. **Resetear mapeos MIDI** las borra todas. Las pestañas
-**Marcas** y **Canciones** asignan saltos a marcas y canciones concretas.

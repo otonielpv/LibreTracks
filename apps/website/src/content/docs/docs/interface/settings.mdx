@@ -15,16 +15,99 @@ on their own straight away, except the hardware outputs, which have their own
 
 <Legend>
 
-1. [**Audio**](#audio): sound card, outputs and performance.
-2. [**General**](#general): language, timeline handling, autosave and cache.
-3. [**Video**](#video): the screen or projector for video tracks.
-4. [**Shortcuts**](#shortcuts): the keys for each action.
-5. [**Diagnostics**](#diagnostics): logs for when something goes wrong.
-6. [**MIDI**](#midi): input controller and output port.
-7. [**MIDI Learn**](#midi-learn): assign pedals and buttons to actions.
+1. [**General**](#general): opens into Interface, Timeline, Playback,
+   Editing, Storage and System.
+2. [**Audio**](#audio): sound card, outputs and performance.
+3. [**MIDI**](#midi): opens into Devices and MIDI Learn.
+4. [**Video**](#video): the screen or projector for video tracks.
+5. [**Redundancy**](/docs/redundancy/): a second, synchronised backup
+   computer.
+6. [**Shortcuts**](#shortcuts): the keys for each action.
+7. [**Diagnostics**](#diagnostics): logs for when something goes wrong.
 8. **Close**. Also with <kbd>Esc</kbd>.
 
+General and MIDI are groups: clicking one opens it and shows its first tab.
+Both can be open at the same time.
+
 </Legend>
+
+## General
+
+The app's settings, split across six tabs.
+
+### Interface
+
+![The Interface tab](/guide/desktop-en/settings-general.png)
+
+- The app's **Language**.
+- **Interface size**: make it smaller if it doesn't fit your screen, or bigger
+  to read it from a distance. Shortcuts: <kbd>Ctrl</kbd>+<kbd>+</kbd>,
+  <kbd>Ctrl</kbd>+<kbd>−</kbd> and <kbd>Ctrl</kbd>+<kbd>0</kbd>.
+- **Startup view**: the view sessions open in.
+
+### Timeline
+
+![The Timeline tab](/guide/desktop-en/settings-timeline.png)
+
+- **Timeline navigation**: how the mouse wheel and the trackpad respond. In
+  *Ableton* mode, pinching or <kbd>Ctrl</kbd>+wheel zooms;
+  <kbd>Alt</kbd>+wheel changes the height of the track under the mouse.
+- **Playhead follow**: where the cursor stays when the timeline follows it.
+
+### Playback
+
+![The Playback tab](/guide/desktop-en/settings-playback.png)
+
+- **Pause at the end of each song**: instead of moving on to the next one by
+  itself, playback stops at the end of each song. Ideal when someone has to
+  speak between songs.
+- **Vamp between songs (click and pad)**: like the pause, but between songs
+  the click keeps going at the tempo of the one that ended and the pad keeps
+  sounding until you press *Play*. See
+  [Going from one song to the next](/docs/tasks/songs/#going-from-one-song-to-the-next-live).
+- **"Fade out and stop" length**: how many seconds that button takes to fade
+  the song out (5 by default). See
+  [Fade out and stop](/docs/interface/main-screen/#fade-out-and-stop).
+
+### Editing
+
+![The Editing tab: songs and templates](/guide/desktop-en/settings-editing-1.png)
+
+- **Each song's tracks**: whether songs share tracks, each gets its own
+  folder, or its own copy of the tracks. See
+  [Song templates](/docs/song-templates/#each-songs-tracks).
+- **Template for new songs**: which tracks and folders new songs come with
+  and where the audio you drop lands. See [Song templates](/docs/song-templates/).
+- **My templates**: the templates on this computer, to import them or upload
+  them to the cloud.
+
+![The Editing tab: colour, warp and saving](/guide/desktop-en/settings-editing-2.png)
+
+- **Colour new tracks automatically**.
+- **Automatic warp**: turns warp on when you change the pitch or the tempo.
+  See [Automatic warp](/docs/pitch-and-warp/#automatic-warp).
+- **Autosave**: saves the session every so often, never while you play.
+  **Save every**: how many minutes.
+
+### Storage
+
+![The Storage tab](/guide/desktop-en/settings-storage.png)
+
+- **Use the classic library**: the Library shows only the audio imported into
+  the session, with its virtual folders, as before, instead of the folders on
+  your disk. See [The Library](/docs/interface/side-nav-library/#the-library).
+- **Audio cache**: MP3, FLAC and other compressed audio is decompressed once
+  and kept here, so the session loads instantly next time. You can change the
+  folder, give it a maximum size or empty it to free up space.
+
+### System
+
+![The System tab](/guide/desktop-en/settings-system.png)
+
+- **Check for updates**: checks whether there is a new version. The app also
+  tells you by itself when it starts.
+- **Optional usage statistics**: aggregated, anonymous data that helps improve
+  LibreTracks. Audio, names and the content of your sessions are never sent.
 
 ## Audio
 
@@ -55,61 +138,46 @@ on their own straight away, except the hardware outputs, which have their own
   track reads zero. **Post-pan** measures before the volume and
   **Pre-fader**, what comes into the track.
 
-## General
+## MIDI
 
-![The General tab: language and navigation](/guide/desktop-en/settings-general-1.png)
+The MIDI group has two tabs.
 
-- The app's **Language**.
-- **Timeline navigation**: how the mouse wheel and the trackpad respond. In
-  *Ableton* mode, pinching or <kbd>Ctrl</kbd>+wheel zooms;
-  <kbd>Alt</kbd>+wheel changes the height of the track under the mouse.
-- **Playhead follow**: where the cursor stays when the timeline follows it.
+### Devices
 
-![The General tab: playback and each song's tracks](/guide/desktop-en/settings-general-2.png)
+![The Devices tab: input and outputs](/guide/desktop-en/settings-midi-1.png)
 
-- **Pause at the end of each song**: instead of moving on to the next one by
-  itself, playback stops at the end of each song. Ideal when someone has to
-  speak between songs.
-- **Vamp between songs (click and pad)**: like the pause, but between songs
-  the click keeps going at the tempo of the one that ended and the pad keeps
-  sounding until you press *Play*. See
-  [Going from one song to the next](/docs/tasks/songs/#going-from-one-song-to-the-next-live).
-- **"Fade out and stop" length**: how many seconds that button takes to fade
-  the song out (5 by default). See
-  [Fade out and stop](/docs/interface/main-screen/#fade-out-and-stop).
-- **Each song's tracks**: whether songs share tracks, each gets its own
-  folder, or its own copy of the tracks. See
-  [Song templates](/docs/song-templates/#each-songs-tracks).
+- **MIDI input device**: the pedal, pad or controller you want to drive
+  LibreTracks with. The button on the right looks for devices again.
+- **MIDI output**: the port MIDI tracks send notes and program changes
+  through, to keyboards, lighting desks or lyrics software. **Send test note**
+  checks that it gets there.
+- **Controller output (LEDs)**: the port your fader controller listens on for
+  mute, solo, play and vamp state. Usually named like its input.
 
-![The General tab: template, colour and warp](/guide/desktop-en/settings-general-3.png)
+![The Devices tab: strips and takeover](/guide/desktop-en/settings-midi-2.png)
 
-- **Template for new songs**: which tracks and folders new songs come with
-  and where the audio you drop lands. See [Song templates](/docs/song-templates/).
-- **Colour new tracks automatically**.
-- **Automatic warp**: turns warp on when you change the pitch or the tempo.
-  See [Automatic warp](/docs/pitch-and-warp/#automatic-warp).
+- **Strips follow the active song**: the controller's 8 faders move only the
+  tracks of the playing song and go back to the first bank when the song
+  changes.
+- **Takeover mode**: what happens when the physical fader isn't where the
+  track is. See [Fader controllers](/docs/tasks/midi/#strips-1-8-profiles-and-motorized-faders).
 
-![The General tab: saving, library and interface](/guide/desktop-en/settings-general-4.png)
+### MIDI Learn
 
-- **Autosave**: saves the session every so often, never while you play.
-  **Save every**: how many minutes.
-- **Use the classic library**: the Library shows only the audio imported into
-  the session, with its virtual folders, as before, instead of the folders on
-  your disk. See [The Library](/docs/interface/side-nav-library/#the-library).
-- **Interface size**: make it smaller if it doesn't fit your screen, or bigger
-  to read it from a distance. Shortcuts: <kbd>Ctrl</kbd>+<kbd>+</kbd>,
-  <kbd>Ctrl</kbd>+<kbd>−</kbd> and <kbd>Ctrl</kbd>+<kbd>0</kbd>.
+![The MIDI Learn tab](/guide/desktop-en/settings-midiLearn-1.png)
 
-![The General tab: cache and updates](/guide/desktop-en/settings-general-5.png)
+There are two ways to assign a pedal or a button on your controller to an
+action:
 
-- **Audio cache**: MP3, FLAC and other compressed audio is decompressed once
-  and kept here, so the session loads instantly next time. You can change the
-  folder, give it a maximum size or empty it to free up space.
-- **Check for updates**: checks whether there is a new version. The app also
-  tells you by itself when it starts.
-- **Optional usage statistics** (further down): aggregated, anonymous data
-  that helps improve LibreTracks. Audio, names and the content of your
-  sessions are never sent.
+- **From the list**: press **Relearn** on the action's row and then step on
+  the pedal.
+- **From the screen**: press **MIDI Learn**, close Settings, click the button
+  you want to control (*Play*, *Vamp*, a marker, the BPM…) and step on the
+  pedal. Press *MIDI Learn* again to leave.
+
+The assignment shows in the **Current MIDI binding** column, and the last one
+you made, at the top. **Reset MIDI mappings** clears them all. The **Markers**
+and **Songs** tabs assign jumps to specific markers and songs.
 
 ## Video
 
@@ -151,40 +219,3 @@ of default shortcuts is in [Keyboard shortcuts](/docs/live-control-flow/#keyboar
 If the app closes, freezes or a track goes silent, here are the logs that help
 us find the cause. **Save log...** creates a file you can send when you ask
 for help. The logs contain no audio and no personal data.
-
-## MIDI
-
-![The MIDI tab: input and outputs](/guide/desktop-en/settings-midi-1.png)
-
-- **MIDI input device**: the pedal, pad or controller you want to drive
-  LibreTracks with. The button on the right looks for devices again.
-- **MIDI output**: the port MIDI tracks send notes and program changes
-  through, to keyboards, lighting desks or lyrics software. **Send test note**
-  checks that it gets there.
-- **Controller output (LEDs)**: the port your fader controller listens on for
-  mute, solo, play and vamp state. Usually named like its input.
-
-![The MIDI tab: strips and takeover](/guide/desktop-en/settings-midi-2.png)
-
-- **Strips follow the active song**: the controller's 8 faders move only the
-  tracks of the playing song and go back to the first bank when the song
-  changes.
-- **Takeover mode**: what happens when the physical fader isn't where the
-  track is. See [Fader controllers](/docs/tasks/midi/#strips-1-8-profiles-and-motorized-faders).
-
-## MIDI Learn
-
-![The MIDI Learn tab](/guide/desktop-en/settings-midiLearn-1.png)
-
-There are two ways to assign a pedal or a button on your controller to an
-action:
-
-- **From the list**: press **Relearn** on the action's row and then step on
-  the pedal.
-- **From the screen**: press **MIDI Learn**, close Settings, click the button
-  you want to control (*Play*, *Vamp*, a marker, the BPM…) and step on the
-  pedal. Press *MIDI Learn* again to leave.
-
-The assignment shows in the **Current MIDI binding** column, and the last one
-you made, at the top. **Reset MIDI mappings** clears them all. The **Markers**
-and **Songs** tabs assign jumps to specific markers and songs.
