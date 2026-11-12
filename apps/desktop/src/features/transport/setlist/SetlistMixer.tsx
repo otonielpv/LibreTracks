@@ -162,7 +162,7 @@ function SetlistMixerComponent({
     () => (region ? computeSongTrackContent(song, region).trackIds : null),
     // The content only depends on the clip lists and the song's bounds.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [song.clips, song.midiClips, song.videoClips, region?.startSeconds, region?.endSeconds],
+    [song.clips, song.midiClips, song.videoClips, song.regions, region?.startSeconds, region?.endSeconds],
   );
   const masterGain = optimisticMaster ?? region?.master?.gain ?? 1;
   const masterStrip = region ? (

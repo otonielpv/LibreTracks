@@ -93,7 +93,7 @@ function SetlistTrackListComponent({
   const content = useMemo(
     () => computeSongTrackContent(song, region),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [song.clips, song.midiClips, song.videoClips, song.automationCues, region.startSeconds, region.endSeconds],
+    [song.clips, song.midiClips, song.videoClips, song.automationCues, song.regions, region.startSeconds, region.endSeconds],
   );
   const { tracks: rows, hiddenCountByFolderId } = useMemo(
     () => resolveMixerRows(tracks, content.trackIds, true, collapsedFolders),

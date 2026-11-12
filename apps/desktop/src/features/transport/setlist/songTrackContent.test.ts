@@ -26,6 +26,28 @@ describe("computeSongTrackContent", () => {
     expect([...content.trackIds].sort()).toEqual(["in", "spills-in"]);
   });
 
+  it("gives a clip that spills into the next song only to the song it mostly lives in", () => {
+    const previous = testRegion("r0", { startSeconds: 0, endSeconds: 100 });
+    const next = testRegion("r2", { startSeconds: 200, endSeconds: 300 });
+    const content = computeSongTrackContent(
+      song({
+        regions: [previous, region, next],
+        clips: [
+          // A folder of stems from the previous song whose tails run 5 s in.
+          { trackId: "prev-tail", timelineStartSeconds: 0, durationSeconds: 105 },
+          // Starts a hair early, but it is this song's.
+          { trackId: "early", timelineStartSeconds: 99.9, durationSeconds: 100 },
+          { trackId: "in", timelineStartSeconds: 150, durationSeconds: 10 },
+          // This song's tail running into the next one still counts here.
+          { trackId: "own-tail", timelineStartSeconds: 120, durationSeconds: 90 },
+        ] as SongView["clips"],
+        videoClips: [{ trackId: "prev-video", timelineStartSeconds: 10, durationSeconds: 95 }] as SongView["videoClips"],
+      }),
+      region,
+    );
+    expect([...content.trackIds].sort()).toEqual(["early", "in", "own-tail"]);
+  });
+
   it("counts MIDI clips by their start and video clips by overlap", () => {
     const content = computeSongTrackContent(
       song({

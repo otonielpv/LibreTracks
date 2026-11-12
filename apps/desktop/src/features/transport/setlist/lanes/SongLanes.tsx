@@ -157,7 +157,7 @@ function SongLanesComponent({
           row.type !== null && (content.trackIds.has(row.track.id) || row.type.showEmpty === true),
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [laneTypes, region.endSeconds, region.startSeconds, song.clips, song.midiClips, song.videoClips, tracks]);
+  }, [laneTypes, region.endSeconds, region.startSeconds, song.clips, song.midiClips, song.regions, song.videoClips, tracks]);
 
   const clipHandlersDepsRef = useRef<LaneClipHandlerDeps>({ runAction, applySnapshot: onSnapshotApplied });
   clipHandlersDepsRef.current = { runAction, applySnapshot: onSnapshotApplied };

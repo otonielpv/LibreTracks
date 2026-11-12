@@ -8,8 +8,30 @@ export type SongTrackContent = {
   hasAutomation: boolean;
 };
 
-function overlaps(start: number, end: number, region: SongRegionSummary) {
-  return start < region.endSeconds && end > region.startSeconds;
+function overlapSeconds(start: number, end: number, region: SongRegionSummary) {
+  return Math.min(end, region.endSeconds) - Math.max(start, region.startSeconds);
+}
+
+/**
+ * A clip belongs to ONE song: the one it overlaps the most. Counting every
+ * song it touches made a stem whose tail (or a whole folder of them) runs a
+ * little into the next song show up in that song's filtered mixer too. Ties
+ * go to the earlier song, which is where the clip starts.
+ */
+function belongsTo(
+  start: number,
+  end: number,
+  region: SongRegionSummary,
+  regions: readonly SongRegionSummary[],
+) {
+  const own = overlapSeconds(start, end, region);
+  if (own <= 0) return false;
+  for (const other of regions) {
+    if (other.id === region.id) continue;
+    const theirs = overlapSeconds(start, end, other);
+    if (theirs > own || (theirs === own && other.startSeconds < region.startSeconds)) return false;
+  }
+  return true;
 }
 
 /**
@@ -19,12 +41,14 @@ function overlaps(start: number, end: number, region: SongRegionSummary) {
  * MIDI and video clips and the automation lane.
  */
 export function computeSongTrackContent(
-  song: Pick<SongView, "clips" | "midiClips" | "videoClips" | "automationCues">,
+  song: Pick<SongView, "clips" | "midiClips" | "videoClips" | "automationCues"> &
+    Partial<Pick<SongView, "regions">>,
   region: SongRegionSummary,
 ): SongTrackContent {
   const trackIds = new Set<string>();
+  const regions = song.regions ?? [];
   for (const clip of song.clips) {
-    if (overlaps(clip.timelineStartSeconds, clip.timelineStartSeconds + clip.durationSeconds, region)) {
+    if (belongsTo(clip.timelineStartSeconds, clip.timelineStartSeconds + clip.durationSeconds, region, regions)) {
       trackIds.add(clip.trackId);
     }
   }
@@ -35,7 +59,7 @@ export function computeSongTrackContent(
     }
   }
   for (const clip of song.videoClips ?? []) {
-    if (overlaps(clip.timelineStartSeconds, clip.timelineStartSeconds + clip.durationSeconds, region)) {
+    if (belongsTo(clip.timelineStartSeconds, clip.timelineStartSeconds + clip.durationSeconds, region, regions)) {
       trackIds.add(clip.trackId);
     }
   }
