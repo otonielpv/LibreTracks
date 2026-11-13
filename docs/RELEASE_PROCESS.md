@@ -1248,6 +1248,50 @@ App Store Connect is done by hand.
 When desktop ships, tag that same commit `v<NEW>` so the three platforms carry
 the same build.
 
+## 15. Hand back a WhatsApp announcement draft
+
+Same rule as steps 12 and 13: hand back the text, publish nothing. It goes in
+`marketing/poster-<NEW>/mensaje-whatsapp.txt` (or `marketing/video-<NEW>/`
+when the release got a video) and is pasted by hand into the WhatsApp
+group/community.
+
+Same audience and voice as the Facebook post (step 12), Spanish by default, but
+WhatsApp is read on a phone screen, in a chat, between other messages. So it is
+**shorter** and uses WhatsApp's own formatting:
+
+```
+*LibreTracks v<NEW>* 🎉
+
+<one sentence: the headline change, the same one the poster/video leads with>
+
+<emoji> <change 1, one line>
+<emoji> <change 2>
+<emoji> <change 3>
+<emoji> <change 4, optional, max 4>
+
+🔧 Además: <the 2-3 most noticeable fixes, one line, comma-separated>
+
+Descárgala aquí 👉 https://libretracks.com/es/download/
+```
+
+Rules:
+- **WhatsApp formatting, not markdown.** Bold is `*single asterisks*`, italic
+  `_underscores_`; `**double**`, `#` headings and `[text](url)` links show up
+  literally. Use bold only for the title line.
+- **Max 4 change lines**, each one line on a phone (~60-70 characters), same
+  emoji as the item in `docs/releases/v<NEW>.md`. No "how" clauses: the poster
+  or video and the Facebook post carry them; here a line that wraps three
+  times is not read.
+- **One "🔧 Además" line** for the fixes, not a list. Omit it if there are no
+  user-visible fixes. Never call them "Arreglos" (feature name since 1.14.0).
+- **The URL alone on the last line, with `https://`**, so WhatsApp builds the
+  link preview from it and nothing runs into it.
+- **Attach the piece from step 11** (Spanish poster or the video) and paste the
+  text as its caption. A caption is cut behind "Leer más" after a few lines, so
+  the title and the first sentence must say what the release is on their own.
+- No greeting with `@todos` (that is the Facebook group's voice), no signature,
+  no hashtags.
+
 ---
 
 ## Common pitfalls
