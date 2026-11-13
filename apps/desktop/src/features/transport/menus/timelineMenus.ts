@@ -51,7 +51,6 @@ import {
   updateSongTempo,
   updateSongTimeSignature,
   updateTrack,
-  updateTrackMonoDownmix,
   upsertSongTempoMarker,
   upsertSongTimeSignatureMarker,
   SONG_KEY_OPTIONS,
@@ -89,6 +88,7 @@ import type { MidiClipDraft } from "../panels/MidiClipModal";
 import { createMidiMenus } from "./midiMenus";
 import { createMarkerKindMenus } from "./markerKindMenus";
 import { createTrackFolderMenus } from "./trackFolderMenus";
+import { createChannelModeMenu } from "./channelModeMenu";
 import { colorPickerActions } from "./colorPickerMenu";
 import { clipContextMenuActions } from "./clipMenu";
 import { menuSection } from "./menuSections";
@@ -813,6 +813,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     getDeps,
     bumpContextMenuPosition,
   );
+  const { channelModeEntry } = createChannelModeMenu(getDeps, openSubMenu);
 
   function sectionContextMenu(
     section: SectionMarkerSummary,
@@ -1035,31 +1036,9 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
         },
         // Las palabras con las que una plantilla manda stems aquí al soltarlos.
         ...(FEATURE_FLAGS.songTemplates ? [matchAliasesAction(track, d)] : []),
-        // Sumar a mono: solo pistas de audio (una carpeta no tiene canales
-        // propios que sumar). No toca el fichero, asi que es reversible.
-        ...(isFolder
-          ? []
-          : [
-              {
-                label: track.channelMode === "mono"
-                  ? t("transport.menu.trackMonoOff", {
-                      defaultValue: "Volver a estereo",
-                    })
-                  : t("transport.menu.trackMonoOn", {
-                      defaultValue: "Sumar a mono",
-                    }),
-                onSelect: async () => {
-                  await d.runAction(async () => {
-                    const nextSnapshot = await updateTrackMonoDownmix({
-                      trackId: track.id,
-                      monoDownmix: track.channelMode !== "mono",
-                    });
-                    d.applyPlaybackSnapshot(nextSnapshot);
-                    await d.refreshSongView({ includeWaveforms: false });
-                  });
-                },
-              } satisfies ContextMenuAction,
-            ]),
+        // Modo de canal (estereo, mono, solo L, solo R): solo pistas de
+        // audio (una carpeta no tiene canales propios). No toca el fichero.
+        ...(isFolder ? [] : [channelModeEntry(track)]),
         {
           // Alcanzable tambien sin puntero: en movil la franja de 4 px del
           // borde de la fila -y con ella su doble clic- no existe, porque se

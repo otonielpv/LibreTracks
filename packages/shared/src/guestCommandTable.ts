@@ -204,6 +204,7 @@ export const GUEST_COMMAND_ROUTES: Readonly<Record<string, GuestCommandRoute>> =
   update_track_height_offset: "edit",
   update_track_mix_realtime: "edit",
   update_track_match_aliases: "edit",
+  update_track_channel_mode: "edit",
   update_track_mono_downmix: "edit",
   update_track_transpose_enabled: "edit",
   update_video_clip: "edit",

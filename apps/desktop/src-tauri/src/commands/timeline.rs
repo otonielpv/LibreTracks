@@ -1375,6 +1375,24 @@ pub fn update_track_match_aliases(
 }
 
 #[tauri::command(async)]
+pub fn update_track_channel_mode(
+    track_id: String,
+    channel_mode: libretracks_core::ChannelMode,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .update_track_channel_mode(&track_id, channel_mode, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+/// Alias del conmutador «Mono» anterior al modo de canal, para invitados de
+/// versiones viejas: `true` = Mono, `false` = Stereo.
+#[tauri::command(async)]
 pub fn update_track_mono_downmix(
     track_id: String,
     mono_downmix: bool,

@@ -383,7 +383,7 @@ export function TrackHeadersPane({
                 trackMuted={track.muted}
                 trackSolo={track.solo}
                 trackTransposeEnabled={track.transposeEnabled}
-                trackMonoDownmix={track.channelMode === "mono"}
+                trackChannelMode={track.channelMode ?? "stereo"}
                 volumeValue={track.volume}
                 audioTo={track.audioTo}
                 audioRoutingOptions={audioRoutingOptions}

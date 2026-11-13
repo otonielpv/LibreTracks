@@ -29,7 +29,7 @@ function renderHeader(overrides: Overrides = {}) {
     trackMuted: false,
     trackSolo: false,
     trackTransposeEnabled: false,
-    trackMonoDownmix: false,
+    trackChannelMode: "stereo" as const,
     volumeValue: 1,
     audioTo: "master",
     audioRoutingOptions: [{ value: "master", label: "Master" }],
@@ -200,21 +200,30 @@ describe("cabeceras finas y expansion en fila", () => {
   // Paso 10 del plan de feedback de testers: una pista sumada a mono suena
   // distinto, asi que tiene que notarse en la cabecera sin abrir el menu.
   it("marca en la cabecera la pista sumada a mono", () => {
-    renderHeader({ trackMonoDownmix: true });
+    renderHeader({ trackChannelMode: "mono" });
     tapHeader();
 
     expect(
-      screen.getByTitle(i18n.t("trackHeader.monoDownmix")),
-    ).toBeTruthy();
+      screen.getByTitle(i18n.t("trackHeader.monoDownmix")).textContent,
+    ).toBe("mono");
+  });
+
+  // Plan channel-split: Solo izquierdo / Solo derecho se marcan con L / R.
+  it.each([
+    ["left", "trackHeader.channelLeft", "L"],
+    ["right", "trackHeader.channelRight", "R"],
+  ] as const)("marca %s en la cabecera", (mode, titleKey, tag) => {
+    renderHeader({ trackChannelMode: mode });
+    tapHeader();
+
+    expect(screen.getByTitle(i18n.t(titleKey)).textContent).toBe(tag);
   });
 
   it("no marca nada cuando la pista esta en estereo", () => {
-    renderHeader({ trackMonoDownmix: false });
+    renderHeader({ trackChannelMode: "stereo" });
     tapHeader();
 
-    expect(
-      screen.queryByTitle(i18n.t("trackHeader.monoDownmix")),
-    ).toBeNull();
+    expect(document.querySelector(".lt-track-mono-tag")).toBeNull();
   });
 
   // El desplegable de salida se pinta en `document.body`, fuera del panel. El

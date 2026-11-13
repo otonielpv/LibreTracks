@@ -206,6 +206,7 @@
     "update_track_height_offset",
     "update_track_mix_realtime",
     "update_track_match_aliases",
+    "update_track_channel_mode",
     "update_track_mono_downmix",
     "update_track_transpose_enabled",
     "update_video_clip",

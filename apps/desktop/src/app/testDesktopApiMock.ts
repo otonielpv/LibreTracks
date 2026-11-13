@@ -2513,6 +2513,18 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
+  updateTrackChannelMode: async (args: {
+    trackId: string;
+    channelMode: "stereo" | "mono" | "left" | "right";
+  }) => {
+    replaceSong({
+      ...state.song,
+      tracks: state.song.tracks.map((track) =>
+        track.id === args.trackId ? { ...track, channelMode: args.channelMode } : track,
+      ),
+    });
+    return clone(buildSnapshot());
+  },
   updateTrackMatchAliases: async (args: { trackId: string; aliases: string[] }) => {
     replaceSong({
       ...state.song,

@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 
 import { TrackMixControls } from "./TrackMixControls";
 import { TrackMeter } from "./TrackMeter";
-import type { TrackKind } from "../desktopApi";
+import type { TrackChannelMode, TrackKind } from "../desktopApi";
 import { useTransportStore } from "../store";
 import { useTimelineUIStore } from "../uiStore";
 import { isMobileApp } from "../desktopApi";
@@ -31,6 +31,31 @@ import { MidiMappable } from "../midi/MidiMappable";
  * SUBIERA por encima de esto.
  */
 const BOTTOM_RESERVED_PX = 140;
+
+/** Etiqueta de la cabecera por modo de canal (en estéreo no hay ninguna). */
+const CHANNEL_TAG: Record<
+  Exclude<TrackChannelMode, "stereo">,
+  { tagKey: string; tag: string; titleKey: string; title: string }
+> = {
+  mono: {
+    tagKey: "trackHeader.monoDownmixTag",
+    tag: "mono",
+    titleKey: "trackHeader.monoDownmix",
+    title: "Sumada a mono",
+  },
+  left: {
+    tagKey: "trackHeader.channelLeftTag",
+    tag: "L",
+    titleKey: "trackHeader.channelLeft",
+    title: "Solo el canal izquierdo, por los dos lados",
+  },
+  right: {
+    tagKey: "trackHeader.channelRightTag",
+    tag: "R",
+    titleKey: "trackHeader.channelRight",
+    title: "Solo el canal derecho, por los dos lados",
+  },
+};
 
 /**
  * Interactive controls inside the header that own their own pointer gestures:
@@ -61,7 +86,8 @@ type TrackHeaderItemProps = {
   /** Pista sumada a mono: se marca en la cabecera para que se vea sin abrir
    * el menu. Una pista sumada suena distinto; el usuario tiene que poder
    * saber por que. */
-  trackMonoDownmix: boolean;
+  /** Modo de canal; la cabecera muestra «mono» / «L» / «R» (nada en estéreo). */
+  trackChannelMode: TrackChannelMode;
   volumeValue: number;
   audioTo: string;
   audioRoutingOptions: Array<{ value: string; label: string }>;
@@ -101,7 +127,7 @@ function TrackHeaderItemComponent({
   trackMuted,
   trackSolo,
   trackTransposeEnabled,
-  trackMonoDownmix,
+  trackChannelMode,
   volumeValue,
   audioTo,
   audioRoutingOptions,
@@ -384,14 +410,16 @@ function TrackHeaderItemComponent({
                     justo donde se cortaba; y una "M" al lado de la "M" de
                     silenciar es confusa. Aqui es una etiqueta, no un control:
                     sin caja, sin color de acento y sin poder pulsarse. */}
-                {trackMonoDownmix ? (
+                {trackChannelMode !== "stereo" ? (
                   <span
                     className="lt-track-mono-tag"
-                    title={t("trackHeader.monoDownmix", {
-                      defaultValue: "Sumada a mono",
+                    title={t(CHANNEL_TAG[trackChannelMode].titleKey, {
+                      defaultValue: CHANNEL_TAG[trackChannelMode].title,
                     })}
                   >
-                    {t("trackHeader.monoDownmixTag", { defaultValue: "mono" })}
+                    {t(CHANNEL_TAG[trackChannelMode].tagKey, {
+                      defaultValue: CHANNEL_TAG[trackChannelMode].tag,
+                    })}
                   </span>
                 ) : null}
                 {/* En la MISMA linea que el nombre: colgando debajo estiraban
@@ -432,7 +460,7 @@ function areTrackHeaderPropsEqual(previous: TrackHeaderItemProps, next: TrackHea
     previous.trackMuted === next.trackMuted &&
     previous.trackSolo === next.trackSolo &&
     previous.trackTransposeEnabled === next.trackTransposeEnabled &&
-    previous.trackMonoDownmix === next.trackMonoDownmix &&
+    previous.trackChannelMode === next.trackChannelMode &&
     previous.volumeValue === next.volumeValue &&
     previous.audioTo === next.audioTo &&
     previous.audioRoutingOptions === next.audioRoutingOptions &&

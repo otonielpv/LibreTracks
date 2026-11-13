@@ -4,6 +4,7 @@ import { createGuestSettingsBridge } from "./guestSettings";
 import type { NetworkRole } from "./networkRoles";
 import type {
   AppSettings,
+  TrackChannelMode,
   AudioDeviceStatusEvent,
   AudioFileImportPayload,
   AudioFilePathImportPayload,
@@ -2993,11 +2994,20 @@ export async function updateTrackMatchAliases(args: {
 }
 
 /**
- * Sumar (o dejar de sumar) los dos canales de una pista a uno solo.
- *
- * Suma con ley (L+R)/2: no sube el nivel, así que no puede saturar por sí
- * sola, y una señal correlacionada —lo normal en un estéreo que alguien quiere
- * en mono— queda exactamente igual de alta.
+ * Qué canales de su fuente saca una pista: estéreo, mono (suma (L+R)/2, no
+ * sube el nivel), solo izquierdo o solo derecho (centrados por los dos lados,
+ * sin compensar ganancia). Se aplica antes del paneo; no toca el fichero.
+ */
+export async function updateTrackChannelMode(args: {
+  trackId: string;
+  channelMode: TrackChannelMode;
+}): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_track_channel_mode", args);
+}
+
+/**
+ * El conmutador «Mono» de antes del modo de canal (`true` = mono, `false` =
+ * estéreo). Se mantiene para invitados de versiones anteriores.
  */
 export async function updateTrackMonoDownmix(args: {
   trackId: string;

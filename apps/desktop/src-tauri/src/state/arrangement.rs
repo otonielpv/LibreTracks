@@ -426,17 +426,18 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
-    /// Sumar (o dejar de sumar) los dos canales de una pista a uno solo.
+    /// Qué canales de su fuente saca una pista: estéreo, mono (suma), solo
+    /// izquierdo o solo derecho (ver [`ChannelMode`]).
     ///
     /// `StructureRebuild` y no `MixerOnly` a propósito: el motor lee
     /// `channel_mode` de su `Track`, y lo que lo actualiza es el camino de
     /// sesión (`UpsertSongTracks` / carga). No hay comando en tiempo real para
     /// esto porque no es un mando que se arrastre: es un interruptor que se
-    /// pulsa una vez.
-    pub fn update_track_mono_downmix(
+    /// pulsa una vez. Mandar el modo que ya tiene no crea paso de deshacer.
+    pub fn update_track_channel_mode(
         &mut self,
         track_id: &str,
-        mono_downmix: bool,
+        channel_mode: ChannelMode,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
         let mut song = self
@@ -450,11 +451,6 @@ impl DesktopSession {
             .find(|track| track.id == track_id)
             .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
 
-        let channel_mode = if mono_downmix {
-            ChannelMode::Mono
-        } else {
-            ChannelMode::Stereo
-        };
         if track.channel_mode == channel_mode {
             return Ok(self.snapshot());
         }
@@ -462,6 +458,23 @@ impl DesktopSession {
 
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
         Ok(self.snapshot())
+    }
+
+    /// El conmutador «Mono» de antes del modo de canal: `true` = Mono,
+    /// `false` = Stereo. Se mantiene para invitados del remote / app↔app de
+    /// versiones anteriores.
+    pub fn update_track_mono_downmix(
+        &mut self,
+        track_id: &str,
+        mono_downmix: bool,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let channel_mode = if mono_downmix {
+            ChannelMode::Mono
+        } else {
+            ChannelMode::Stereo
+        };
+        self.update_track_channel_mode(track_id, channel_mode, audio)
     }
 
     pub fn create_clip(

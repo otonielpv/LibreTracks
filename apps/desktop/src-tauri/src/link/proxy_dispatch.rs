@@ -136,6 +136,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "update_track_height_offset"
         | "update_track_mix_realtime"
         | "update_track_match_aliases"
+        | "update_track_channel_mode"
         | "update_track_mono_downmix"
         | "update_track_transpose_enabled"
         | "update_video_clip"
@@ -283,6 +284,7 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "update_track_height_offset",
     "update_track_mix_realtime",
     "update_track_match_aliases",
+    "update_track_channel_mode",
     "update_track_mono_downmix",
     "update_track_transpose_enabled",
     "update_video_clip",
@@ -1197,6 +1199,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::timeline::update_track_match_aliases(arg(&args, "trackId")?, arg(&args, "aliases")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "update_track_channel_mode" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::update_track_channel_mode(arg(&args, "trackId")?, arg(&args, "channelMode")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?
