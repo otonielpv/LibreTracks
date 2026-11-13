@@ -180,6 +180,7 @@ export const GUEST_COMMAND_ROUTES: Readonly<Record<string, GuestCommandRoute>> =
   set_voice_guide_volume_realtime: "edit",
   split_clip: "edit",
   split_clips: "edit",
+  split_track_channels: "edit",
   split_song_region: "edit",
   split_video_clips: "edit",
   trim_video_clip: "edit",

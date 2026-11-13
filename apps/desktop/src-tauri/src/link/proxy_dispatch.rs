@@ -112,6 +112,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "set_voice_guide_volume_realtime"
         | "split_clip"
         | "split_clips"
+        | "split_track_channels"
         | "split_song_region"
         | "split_video_clips"
         | "trim_video_clip"
@@ -260,6 +261,7 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "set_voice_guide_volume_realtime",
     "split_clip",
     "split_clips",
+    "split_track_channels",
     "split_song_region",
     "split_video_clips",
     "trim_video_clip",
@@ -1005,6 +1007,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::timeline::split_clips(arg(&args, "clipIds")?, arg(&args, "splitSeconds")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "split_track_channels" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::split_track_channels(arg(&args, "trackId")?, arg(&args, "leftName")?, arg(&args, "rightName")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?

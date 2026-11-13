@@ -2513,6 +2513,26 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
+  splitTrackChannels: async (args: { trackId: string; leftName: string; rightName: string }) => {
+    const index = state.song.tracks.findIndex((track) => track.id === args.trackId);
+    if (index < 0) {
+      throw new Error(`track not found: ${args.trackId}`);
+    }
+    const original = state.song.tracks[index];
+    const rightId = `${original.id}-r`;
+    const tracks = [...state.song.tracks];
+    tracks.splice(
+      index,
+      1,
+      { ...original, name: args.leftName, channelMode: "left" },
+      { ...original, id: rightId, name: args.rightName, channelMode: "right" },
+    );
+    const copies = state.song.clips
+      .filter((clip) => clip.trackId === args.trackId)
+      .map((clip) => ({ ...clip, id: `${clip.id}-r`, trackId: rightId }));
+    replaceSong({ ...state.song, tracks, clips: [...state.song.clips, ...copies] });
+    return clone(buildSnapshot());
+  },
   updateTrackChannelMode: async (args: {
     trackId: string;
     channelMode: "stereo" | "mono" | "left" | "right";

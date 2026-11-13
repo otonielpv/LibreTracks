@@ -3,15 +3,25 @@ import { createChannelModeMenu } from "./channelModeMenu";
 import type { TimelineMenuDeps } from "./timelineMenus";
 import type { ContextMenuAction } from "../types";
 import type { TrackSummary } from "../desktopApi";
-import { updateTrackChannelMode } from "../desktopApi";
+import { splitTrackChannels, updateTrackChannelMode } from "../desktopApi";
 
 vi.mock("../desktopApi", async (original) => ({
   ...(await original<object>()),
   updateTrackChannelMode: vi.fn(async () => ({ projectRevision: 1 })),
+  splitTrackChannels: vi.fn(async () => ({ projectRevision: 2 })),
 }));
 
-function track(channelMode?: TrackSummary["channelMode"]): TrackSummary {
-  return { id: "t1", name: "Pista", kind: "audio", channelMode } as unknown as TrackSummary;
+function track(
+  channelMode?: TrackSummary["channelMode"],
+  hasStereoAudio = true,
+): TrackSummary {
+  return {
+    id: "t1",
+    name: "Pista",
+    kind: "audio",
+    channelMode,
+    hasStereoAudio,
+  } as unknown as TrackSummary;
 }
 
 function setup() {
@@ -33,13 +43,22 @@ function setup() {
 }
 
 describe("submenú Canales", () => {
-  beforeEach(() => vi.mocked(updateTrackChannelMode).mockClear());
+  beforeEach(() => {
+    vi.mocked(updateTrackChannelMode).mockClear();
+    vi.mocked(splitTrackChannels).mockClear();
+  });
 
   it("marca el modo actual y ofrece los cuatro", () => {
     const { menu, opened } = setup();
     menu.channelModeEntry(track("left")).onSelect();
     const labels = opened()!.actions.map((action) => action.label);
-    expect(labels).toEqual(["Estéreo", "Mono (suma)", "✓ Solo izquierdo", "Solo derecho"]);
+    expect(labels).toEqual([
+      "Estéreo",
+      "Mono (suma)",
+      "✓ Solo izquierdo",
+      "Solo derecho",
+      "Separar canales L/R",
+    ]);
   });
 
   it("sin modo guardado marca estéreo", () => {
@@ -65,5 +84,23 @@ describe("submenú Canales", () => {
     const extra = { label: "Separar", onSelect: () => undefined };
     menu.channelModeEntry(track(), [extra]).onSelect();
     expect(opened()!.actions.at(-1)).toBe(extra);
+  });
+
+  it("separar canales llama a la acción con los nombres L y R", async () => {
+    const { menu } = setup();
+    await menu.splitChannelsAction(track("stereo")).onSelect();
+    expect(splitTrackChannels).toHaveBeenCalledWith({
+      trackId: "t1",
+      leftName: "Pista L",
+      rightName: "Pista R",
+    });
+  });
+
+  it("separar canales está deshabilitada en una pista sin audio estéreo", async () => {
+    const { menu } = setup();
+    const action = menu.splitChannelsAction(track("stereo", false));
+    expect(action.disabled).toBe(true);
+    await action.onSelect();
+    expect(splitTrackChannels).not.toHaveBeenCalled();
   });
 });

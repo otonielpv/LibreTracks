@@ -1,5 +1,5 @@
 import type { TrackChannelMode, TrackSummary } from "@libretracks/shared/models";
-import { updateTrackChannelMode } from "../desktopApi";
+import { splitTrackChannels, updateTrackChannelMode } from "../desktopApi";
 import type { ContextMenuAction } from "../types";
 import type { TimelineMenuDeps } from "./timelineMenus";
 
@@ -50,9 +50,47 @@ export function createChannelModeMenu(
     }));
   }
 
+  /**
+   * «Separar canales L/R»: deshabilitada si la pista no tiene audio estéreo
+   * (ningún clip con canal derecho en su onda).
+   */
+  function splitChannelsAction(track: TrackSummary): ContextMenuAction {
+    const d = getDeps();
+    const hasStereo = track.hasStereoAudio !== false;
+    return {
+      label: hasStereo
+        ? d.t("transport.menu.channelMode.split", { defaultValue: "Separar canales L/R" })
+        : d.t("transport.menu.channelMode.splitNoStereo", {
+            defaultValue: "Separar canales L/R (la pista no tiene audio estéreo)",
+          }),
+      section: "split",
+      disabled: !hasStereo,
+      onSelect: async () => {
+        if (!hasStereo) {
+          return;
+        }
+        await d.runAction(async () => {
+          const nextSnapshot = await splitTrackChannels({
+            trackId: track.id,
+            leftName: d.t("transport.menu.channelMode.leftName", {
+              name: track.name,
+              defaultValue: `${track.name} L`,
+            }),
+            rightName: d.t("transport.menu.channelMode.rightName", {
+              name: track.name,
+              defaultValue: `${track.name} R`,
+            }),
+          });
+          d.applyPlaybackSnapshot(nextSnapshot);
+          await d.refreshSongView({ includeWaveforms: false });
+        });
+      },
+    };
+  }
+
   function channelModeEntry(
     track: TrackSummary,
-    extraActions: ContextMenuAction[] = [],
+    extraActions: ContextMenuAction[] = [splitChannelsAction(track)],
   ): ContextMenuAction {
     const d = getDeps();
     const title = d.t("transport.menu.channelMode.title", { defaultValue: "Canales" });
@@ -62,5 +100,5 @@ export function createChannelModeMenu(
     };
   }
 
-  return { modeActions, channelModeEntry };
+  return { modeActions, splitChannelsAction, channelModeEntry };
 }

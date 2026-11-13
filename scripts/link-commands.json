@@ -182,6 +182,7 @@
     "set_voice_guide_volume_realtime",
     "split_clip",
     "split_clips",
+    "split_track_channels",
     "split_song_region",
     "split_video_clips",
     "trim_video_clip",

@@ -106,6 +106,8 @@ pub(crate) use video_library::{
 pub(crate) use video_library::free_space_near;
 pub(crate) use self::TransportClockMirror as VideoTransportClock;
 mod track_colors;
+mod track_split;
+pub(crate) use track_split::track_has_stereo_audio;
 mod track_tree;
 
 use library::*;
@@ -4408,6 +4410,30 @@ fn playback_state_label(state: PlaybackState) -> &'static str {
 impl WaveformMemoryCache {
     pub(crate) fn summary(&self, waveform_key: &str) -> Option<&WaveformSummary> {
         self.entries.get(waveform_key).map(|cached| &cached.summary)
+    }
+
+    /// Si la fuente es estéreo: los picos del canal derecho están vacíos en
+    /// las mono. `None` = su onda aún no está en la caché.
+    pub(crate) fn is_stereo(&self, waveform_key: &str) -> Option<bool> {
+        self.summary(waveform_key)
+            .and_then(|summary| summary.primary_lod())
+            .map(|lod| !lod.max_peaks_right.is_empty())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn insert_for_test(&mut self, waveform_key: &str, summary: WaveformSummary) {
+        self.entries.insert(
+            waveform_key.to_string(),
+            CachedWaveformSummary {
+                token: WaveformCacheToken {
+                    audio_size: 0,
+                    audio_modified_millis: 0,
+                    waveform_size: 0,
+                    waveform_modified_millis: 0,
+                },
+                summary,
+            },
+        );
     }
 
     pub(crate) fn source_duration_seconds(&self, waveform_key: &str) -> Option<f64> {

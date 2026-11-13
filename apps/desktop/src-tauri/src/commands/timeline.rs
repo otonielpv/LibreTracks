@@ -1390,6 +1390,25 @@ pub fn update_track_channel_mode(
         .map_err(|error| error.to_string())
 }
 
+/// «Separar canales L/R»: duplica la pista (mismos ficheros) y deja la
+/// original en Solo izquierdo y la nueva en Solo derecho. Un paso de deshacer.
+#[tauri::command(async)]
+pub fn split_track_channels(
+    track_id: String,
+    left_name: String,
+    right_name: String,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    session
+        .split_track_channels(&track_id, &left_name, &right_name, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 /// Alias del conmutador «Mono» anterior al modo de canal, para invitados de
 /// versiones viejas: `true` = Mono, `false` = Stereo.
 #[tauri::command(async)]

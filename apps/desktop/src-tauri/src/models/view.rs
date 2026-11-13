@@ -519,6 +519,9 @@ pub struct TrackSummary {
     pub audio_to: String,
     /// Qué canales de la fuente suenan (estéreo, mono, solo L, solo R).
     pub channel_mode: libretracks_core::ChannelMode,
+    /// Si tiene algún clip estéreo (o aún sin onda analizada): habilita
+    /// «Separar canales L/R».
+    pub has_stereo_audio: bool,
     pub color: Option<String>,
     pub auto_created: bool,
     /// MIDI routing, meaningful only on `kind == "midi"` tracks. `midi_port`
@@ -869,6 +872,8 @@ pub(crate) fn song_to_view(
                 transpose_enabled: track.transpose_enabled,
                 audio_to: track.audio_to.clone(),
                 channel_mode: track.channel_mode,
+                has_stereo_audio: track.kind == TrackKind::Audio
+                    && crate::state::track_has_stereo_audio(song, &track.id, waveform_cache),
                 color: track.color.clone(),
                 auto_created: track.auto_created,
                 midi_port: track.midi_port.clone(),

@@ -3006,6 +3006,20 @@ export async function updateTrackChannelMode(args: {
 }
 
 /**
+ * «Separar canales L/R»: duplica la pista con sus clips apuntando a los mismos
+ * ficheros (no copia audio) y deja la original en Solo izquierdo con
+ * `leftName` y la nueva, justo debajo, en Solo derecho con `rightName`. Un
+ * solo paso de deshacer.
+ */
+export async function splitTrackChannels(args: {
+  trackId: string;
+  leftName: string;
+  rightName: string;
+}): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("split_track_channels", args);
+}
+
+/**
  * El conmutador «Mono» de antes del modo de canal (`true` = mono, `false` =
  * estéreo). Se mantiene para invitados de versiones anteriores.
  */

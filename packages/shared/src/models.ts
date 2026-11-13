@@ -639,6 +639,9 @@ export type TrackSummary = {
    * del paneo. No toca el fichero: es reversible. Opcional; ausente = estéreo.
    */
   channelMode?: TrackChannelMode;
+  /** Tiene algún clip estéreo (o aún sin onda analizada): habilita «Separar
+   * canales L/R». */
+  hasStereoAudio?: boolean;
   color?: string | null;
   /** True for tracks the system conjured because a clip needed a home (e.g.
    * drop into the compact view's song column). Auto-tracks are removed

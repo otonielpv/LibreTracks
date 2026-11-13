@@ -620,6 +620,7 @@ pub fn run() {
             commands::timeline::update_track_transpose_enabled,
             commands::timeline::update_track_mono_downmix,
             commands::timeline::update_track_channel_mode,
+            commands::timeline::split_track_channels,
             commands::timeline::update_track_match_aliases,
             commands::timeline::update_track_collapsed,
             commands::timeline::update_track_height_offset,
