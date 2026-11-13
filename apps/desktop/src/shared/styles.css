@@ -14803,9 +14803,12 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 .lt-compact-mixer-strip.is-fader-strip .lt-compact-mixer-strip-toggles .lt-compact-mixer-toggle {
   flex: 0 0 auto;
   box-sizing: border-box;
-  width: calc(2rem * var(--lt-mixer-fader-scale, 1));
-  max-width: calc(2rem * var(--lt-mixer-fader-scale, 1));
-  height: calc(1.7rem * var(--lt-mixer-fader-scale, 1));
+  /* M/S/T crecen menos que el fader: a escala completa (×1.35 en tablet)
+     quedaban enormes al lado de la tapa. Solo el 40 % del aumento. */
+  --lt-mixer-toggle-scale: calc(0.6 + 0.4 * var(--lt-mixer-fader-scale, 1));
+  width: calc(2rem * var(--lt-mixer-toggle-scale));
+  max-width: calc(2rem * var(--lt-mixer-toggle-scale));
+  height: calc(1.7rem * var(--lt-mixer-toggle-scale));
   min-height: 0;
   border-top: 1px solid rgba(186, 202, 197, 0.18);
 }
