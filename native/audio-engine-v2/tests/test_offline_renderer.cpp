@@ -338,6 +338,52 @@ TEST_CASE("offline render: el modo de canal suena igual que en directo") {
     }
 }
 
+TEST_CASE("offline render: sin apply_mixer el modo de canal se aplica igual") {
+    // Lo que pide el analisis de cancion: apply_mixer=false y channels=1. Una
+    // pista en Solo derecho con L = seno A y R = seno B tiene que dar solo B,
+    // a la amplitud de B; ganancia, paneo y fundido siguen sin aplicarse.
+    TempDir dir;
+    const std::string file = dir.file("ab.wav");
+    std::vector<float> ab(static_cast<std::size_t>(48000) * 2);
+    for (std::size_t f = 0; f < 48000; ++f) {
+        const double t = static_cast<double>(f) / 48000.0;
+        ab[f * 2] = 0.5f * static_cast<float>(std::sin(2.0 * 3.14159265358979 * 440.0 * t));
+        ab[f * 2 + 1] = 0.25f * static_cast<float>(std::sin(2.0 * 3.14159265358979 * 660.0 * t));
+    }
+    write_float_wav(file, ab, 2, 48000);
+    const auto render = [&](const char* mode, double gain, double pan) {
+        json track = track_json("t", gain, pan);
+        track["channelMode"] = mode;
+        const json song = song_json(json::array({track}),
+                                    json::array({clip_json("c", "t", file, 0.0, 1.0)}));
+        auto req = base_request(song, 0.0, 1.0);
+        req.apply_mixer = false;
+        req.channels = 1;
+        req.outputs.push_back({dir.file(std::string(mode) + ".wav"), {"t"}});
+        REQUIRE(render_offline(req).is_ok());
+        return read_wav(dir.file(std::string(mode) + ".wav"));
+    };
+
+    SUBCASE("Right a mono = solo el derecho") {
+        const auto out = render("right", 0.3, -1.0);
+        REQUIRE(out.channels == 1);
+        for (Frame f = 1000; f < 1100; ++f)
+            CHECK(out.at(f, 0) == doctest::Approx(ab[static_cast<std::size_t>(f) * 2 + 1]).epsilon(1e-4));
+    }
+    SUBCASE("Left a mono = solo el izquierdo") {
+        const auto out = render("left", 0.3, 1.0);
+        for (Frame f = 1000; f < 1100; ++f)
+            CHECK(out.at(f, 0) == doctest::Approx(ab[static_cast<std::size_t>(f) * 2]).epsilon(1e-4));
+    }
+    SUBCASE("Stereo a mono sigue siendo (L+R)/2, sin ganancia ni paneo") {
+        const auto out = render("stereo", 0.3, 1.0);
+        for (Frame f = 1000; f < 1100; ++f) {
+            const auto i = static_cast<std::size_t>(f) * 2;
+            CHECK(out.at(f, 0) == doctest::Approx(0.5f * (ab[i] + ab[i + 1])).epsilon(1e-4));
+        }
+    }
+}
+
 TEST_CASE("offline render: a folder expands to its tracks and carries its gain") {
     TempDir dir;
     const std::string a = dir.file("a.wav");

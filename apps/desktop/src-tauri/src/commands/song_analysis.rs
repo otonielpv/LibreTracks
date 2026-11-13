@@ -1255,4 +1255,77 @@ mod tests {
         assert!(!tempo.from_music);
         assert_eq!(tempo.track_ids, vec!["click".to_string()]);
     }
+
+    /// Plan channel-split, paso 05 (C3): el click está solo en el canal
+    /// derecho (120 BPM) y el izquierdo trae otro click a 90 BPM. Con la pista
+    /// en Solo derecho el análisis tiene que oír solo el derecho, aunque pida
+    /// el render con `apply_mixer: false`. Necesita el motor real.
+    #[test]
+    #[cfg_attr(feature = "no-link", ignore = "requires the real engine")]
+    fn a_right_only_click_track_is_analysed_from_its_right_channel() {
+        const RATE: u32 = 48_000;
+        let dir = tempfile::tempdir().expect("dir");
+        std::fs::create_dir_all(dir.path().join("audio")).expect("audio dir");
+        let path = dir.path().join("audio").join("lr.wav");
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate: RATE,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        let burst = |t: f64, period: f64, amp: f32| -> f32 {
+            let phase = t % period;
+            if phase < 0.01 {
+                amp * (2.0 * std::f64::consts::PI * 1000.0 * phase).sin() as f32
+            } else {
+                0.0
+            }
+        };
+        let mut writer = hound::WavWriter::create(&path, spec).expect("wav");
+        for frame in 0..(RATE * 16) {
+            let t = f64::from(frame) / f64::from(RATE);
+            writer.write_sample(burst(t + 0.2, 60.0 / 90.0, 0.9)).unwrap();
+            writer.write_sample(burst(t, 0.5, 0.8)).unwrap();
+        }
+        writer.finalize().expect("finalize");
+
+        let mut song = song();
+        song.regions = vec![region("a", 0.0, 16.0)];
+        song.time_signature_markers.clear();
+        song.duration_seconds = 16.0;
+        let mut click = track("click", false);
+        click.channel_mode = libretracks_core::ChannelMode::Right;
+        song.tracks = vec![click];
+        song.clips = vec![libretracks_core::Clip {
+            id: "c".into(),
+            track_id: "click".into(),
+            file_path: "audio/lr.wav".into(),
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 16.0,
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        }];
+        let job = prepare_job(
+            dir.path(),
+            &song,
+            &AnalyzeSongRequest {
+                region_id: "a".into(),
+                click_track_ids: vec!["click".into()],
+                music_tempo_track_ids: vec![],
+                key_track_ids: vec![],
+                guide_track_ids: vec![],
+            },
+        )
+        .expect("job");
+        let scratch = tempfile::tempdir().expect("scratch");
+        let result = run_job(&job, RATE, scratch.path(), None, None, &mut |_| true).expect("run");
+        let segments = &result.tempo.expect("tempo").reading.analysis.segments;
+        assert!(!segments.is_empty());
+        for segment in segments {
+            assert!((segment.bpm - 120.0).abs() < 0.5, "{segments:?}");
+        }
+    }
 }

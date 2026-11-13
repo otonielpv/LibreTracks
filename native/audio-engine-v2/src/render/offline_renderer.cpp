@@ -746,9 +746,12 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
             // on both sides (decode_window duplicates it); a stereo one is kept
             // as it is even when one side is silent, as playback does.
             // Modo de canal (channel_mode.h), una vez por bloque sobre el bus
-            // de la pista, que es scratch. Por ahora solo con apply_mixer.
-            if (apply_mixer)
-                place_track_source_block(track.channel_mode, s.bus_l.data(), s.bus_r.data(), n);
+            // de la pista, que es scratch. SIEMPRE, tambien sin apply_mixer:
+            // es una propiedad de la fuente, no de la mezcla. El analisis de
+            // una pista en Solo derecho tiene que oir solo el derecho, y la
+            // bajada a channels=1 de write_wav llega despues (Left a mono = L,
+            // no (L+R)/2). Ganancia, paneo y envolvente siguen tras apply_mixer.
+            place_track_source_block(track.channel_mode, s.bus_l.data(), s.bus_r.data(), n);
             float left_gain = pan_left_gain(track_pan);
             float right_gain = pan_right_gain(track_pan);
             float* out_l = acc_l + out_frame;
