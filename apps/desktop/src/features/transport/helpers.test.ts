@@ -591,6 +591,21 @@ describe("buildMemoizedClipsByTrack", () => {
     const second = buildMemoizedClipsByTrack(song, first);
     expect(second).toBe(first);
   });
+
+  // Plan channel-split: volver a Estéreo tiene que llegar a la onda.
+  it("does not reuse a clip whose channel mode changed", () => {
+    const left = makeSong({
+      tracks: [makeTrack({ id: "t1" })],
+      clips: [makeClip({ id: "c1", trackId: "t1", channelMode: "left" })],
+    });
+    const first = buildMemoizedClipsByTrack(left, {});
+    const stereo = makeSong({
+      tracks: [makeTrack({ id: "t1" })],
+      clips: [makeClip({ id: "c1", trackId: "t1" })],
+    });
+    const second = buildMemoizedClipsByTrack(stereo, first);
+    expect(second.t1[0].channelMode ?? "stereo").toBe("stereo");
+  });
 });
 
 describe("mergeOptimisticClipsByTrack", () => {

@@ -600,7 +600,10 @@ function isClipStructurallyEqual(left: ClipSummary, right: ClipSummary) {
     left.sourceWindowDurationSeconds === right.sourceWindowDurationSeconds &&
     left.sourceDurationSeconds === right.sourceDurationSeconds &&
     left.durationSeconds === right.durationSeconds &&
-    left.color === right.color
+    left.color === right.color &&
+    // La onda pinta según el modo de canal: sin esto, volver a Estéreo
+    // reutilizaba el clip viejo y seguía pintando un solo canal.
+    (left.channelMode ?? "stereo") === (right.channelMode ?? "stereo")
   );
 }
 
