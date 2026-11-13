@@ -143,9 +143,31 @@ LibreTracks remembers which folders you left folded.
   change all of them at once, and a double-click goes back to the normal
   height. Also <kbd>Alt</kbd>+mouse wheel over the track (with
   <kbd>Alt</kbd>+<kbd>Shift</kbd>+wheel, all of them).
-- **Sum to mono**: mixes the two channels of a stereo track into one. Handy
-  for a track that goes out of a mono output on your interface. A *mono* tag
-  appears next to the name; **Back to stereo** undoes it.
+- **Channels**: right-click › **Channels…** and choose **Stereo**, **Mono
+  (sum)**, **Left only** or **Right only**. *Mono* mixes both channels into
+  one, handy for a track that goes out of a mono output on your interface.
+  *Left only* and *Right only* play a single channel of the audio on both
+  sides, centred. A *mono*, *L* or *R* tag appears next to the name;
+  **Stereo** puts it back. The file is not touched.
 - **Delete**: right-click › **Delete**, or <kbd>Del</kbd> with the track
   selected. If it has clips, the app asks whether you want to delete it along
   with them.
+
+## A file with the click on one side
+
+Some songs come as **a single stereo file** with the whole multitrack on one
+channel and the click and the voice guide on the other. To use it:
+
+1. Drag the file to a track, like any audio.
+2. Right-click the track › **Channels…** › **Split L/R channels**.
+3. You get two tracks, one under the other: the original in **Left only** and
+   a new one in **Right only**. Both use the same file, so it takes no extra
+   disk space, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it in one go.
+4. Name them (for example "Multitrack" and "Click + Guide") and send the
+   click one to your in-ear output.
+
+The click and the guide stay on the same track: when you
+[analyze the song](/docs/song-analysis/), choose that track as the click and
+as the guide, and LibreTracks separates them to read each one.
+
+The option is greyed out if the track has no stereo audio.

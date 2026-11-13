@@ -144,9 +144,31 @@ LibreTracks recuerda qué carpetas dejaste plegadas.
   cambias todas a la vez, y con doble clic vuelve al alto normal. También
   <kbd>Alt</kbd>+rueda del ratón sobre la pista (con
   <kbd>Alt</kbd>+<kbd>Mayús</kbd>+rueda, todas).
-- **Sumar a mono**: mezcla los dos canales de una pista estéreo en uno. Útil
-  para una pista que sale por una salida mono de tu interfaz. Aparece la
-  etiqueta *mono* junto al nombre; **Volver a estéreo** lo deshace.
+- **Canales**: clic derecho › **Canales…** y elige **Estéreo**, **Mono
+  (suma)**, **Solo izquierdo** o **Solo derecho**. *Mono* mezcla los dos
+  canales en uno, útil para una pista que sale por una salida mono de tu
+  interfaz. *Solo izquierdo* y *Solo derecho* sacan un solo canal del audio
+  por los dos lados, centrado. Junto al nombre aparece la etiqueta *mono*,
+  *L* o *R*; **Estéreo** lo deja como estaba. No toca el fichero.
 - **Borrar**: clic derecho › **Borrar**, o <kbd>Supr</kbd> con la pista
   seleccionada. Si tiene clips, la app te pregunta si quieres borrarla junto
   con ellos.
+
+## Un audio con el click en un lado
+
+Algunas canciones vienen en **un solo fichero estéreo** con todo el
+multitrack en un canal y el click y la voz guía en el otro. Para usarlo:
+
+1. Arrastra el fichero a una pista, como cualquier audio.
+2. Clic derecho en la pista › **Canales…** › **Separar canales L/R**.
+3. Quedan dos pistas, una debajo de otra: la original en **Solo izquierdo**
+   y una nueva en **Solo derecho**. Las dos usan el mismo fichero, así que no
+   ocupa más disco, y se deshace de una vez con <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
+4. Ponles nombre (por ejemplo «Multitrack» y «Click + Guía») y manda la del
+   click a la salida de tus cascos.
+
+El click y la guía se quedan en la misma pista: al
+[analizar la canción](/es/docs/song-analysis/) elige esa pista como click y
+como guía, y LibreTracks los separa para leer cada uno.
+
+La opción sale desactivada si la pista no tiene ningún audio estéreo.
