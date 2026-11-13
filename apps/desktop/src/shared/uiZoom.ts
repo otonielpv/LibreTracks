@@ -21,10 +21,12 @@ const VIEWPORT_COMPENSATION_CLASS = "lt-ui-zoom-compensate-viewport";
 export const UI_ZOOM_STATUS_EVENT = "lt:ui-zoom-status";
 
 export const UI_ZOOM_MIN = 0.7;
-export const UI_ZOOM_MAX = 1.3;
+// 150% for tablets: on an iPad at 125% the mixer faders were still too small
+// to work on stage.
+export const UI_ZOOM_MAX = 1.5;
 export const UI_ZOOM_DEFAULT = 1;
 // Discrete steps the keyboard shortcuts and the picker move between.
-export const UI_ZOOM_STEPS = [0.7, 0.8, 0.9, 1, 1.1, 1.25] as const;
+export const UI_ZOOM_STEPS = [0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.5] as const;
 
 const clamp = (value: number): number =>
   Math.min(UI_ZOOM_MAX, Math.max(UI_ZOOM_MIN, value));

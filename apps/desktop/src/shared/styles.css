@@ -9082,16 +9082,16 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   --track-accent: rgba(186, 202, 197, 0.35);
   --parent-accent: transparent;
   position: relative;
-  flex: 0 0 6.5rem;
+  flex: 0 0 var(--lt-mixer-strip-width, 6.5rem);
   /* The 6.5rem basis is only a *preferred* size: a flex item's automatic
      minimum size (min-width: auto) is its content's intrinsic minimum, and
      the routing <select> below reports the width of its widest <option>.
      A user who names a folder after a song ("Rindo Mis Coronas - Gateway
      Worship - F - 72 Bpm") therefore stretched every strip that could route
      to it. Pin the strip to its basis so long names never widen it. */
-  width: 6.5rem;
+  width: var(--lt-mixer-strip-width, 6.5rem);
   min-width: 0;
-  max-width: 6.5rem;
+  max-width: var(--lt-mixer-strip-width, 6.5rem);
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -14803,9 +14803,9 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
 .lt-compact-mixer-strip.is-fader-strip .lt-compact-mixer-strip-toggles .lt-compact-mixer-toggle {
   flex: 0 0 auto;
   box-sizing: border-box;
-  width: 2rem;
-  max-width: 2rem;
-  height: 1.7rem;
+  width: calc(2rem * var(--lt-mixer-fader-scale, 1));
+  max-width: calc(2rem * var(--lt-mixer-fader-scale, 1));
+  height: calc(1.7rem * var(--lt-mixer-fader-scale, 1));
   min-height: 0;
   border-top: 1px solid rgba(186, 202, 197, 0.18);
 }

@@ -353,14 +353,14 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
   );
   position: relative;
   /* As wide as the cap: the whole column takes the finger. */
-  width: 34px;
+  width: calc(34px * var(--lt-mixer-fader-scale, 1));
   height: 100%;
   margin: 0 auto;
   padding: 0;
   background-color: transparent;
   background-image: var(--lt-vfader-ticks), var(--lt-vfader-ticks);
   background-position: left top, right top;
-  background-size: 7px 100%;
+  background-size: calc(7px * var(--lt-mixer-fader-scale, 1)) 100%;
   background-repeat: no-repeat;
   cursor: ns-resize;
   touch-action: none;
@@ -373,7 +373,7 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
   top: 0;
   bottom: 0;
   left: 50%;
-  width: 4px;
+  width: calc(4px * var(--lt-mixer-fader-scale, 1));
   transform: translateX(-50%);
   border-radius: 1px;
   background: #070808;
@@ -396,8 +396,8 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
   transform: translate(-50%, 50%);
   box-sizing: border-box;
   /* Big enough to grab with a finger (the iPhone report: the cap was tiny). */
-  width: 34px;
-  height: 22px;
+  width: calc(34px * var(--lt-mixer-fader-scale, 1));
+  height: calc(22px * var(--lt-mixer-fader-scale, 1));
   border: 1px solid #000;
   border-radius: 3px;
   background:
@@ -434,5 +434,22 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
 
 .lt-compact-mixer-fader-wrap {
   /* Medio cap (22px / 2) arriba y abajo. */
-  padding: 11px 0;
+  padding: calc(11px * var(--lt-mixer-fader-scale, 1)) 0;
+}
+
+/* Faders del mezclador más grandes en tablet (iPad, tablets Android): con la
+   escala de interfaz al 125% el cap seguía siendo pequeño para el dedo en el
+   escenario. Solo tablet: en el teléfono en horizontal (alto <= ~430px) no
+   cabe una tira más ancha. Las media queries miden el viewport real, sin el
+   `zoom` del shell, así que el corte no depende de la escala elegida. */
+:root {
+  --lt-mixer-fader-scale: 1;
+  --lt-mixer-strip-width: 6.5rem;
+}
+
+@media (min-height: 600px) and (min-width: 900px) {
+  html.lt-mobile {
+    --lt-mixer-fader-scale: 1.35;
+    --lt-mixer-strip-width: 7.75rem;
+  }
 }

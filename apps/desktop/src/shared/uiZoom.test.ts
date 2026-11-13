@@ -3,8 +3,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   UI_ZOOM_STATUS_EVENT,
   dispatchUiZoomStatus,
+  getUiZoom,
   resetUiZoom,
   setUiZoom,
+  stepUiZoom,
   shouldCompensateUiZoomViewport,
 } from "./uiZoom";
 
@@ -28,6 +30,16 @@ describe("uiZoom", () => {
     expect(document.documentElement.style.getPropertyValue("--lt-ui-zoom")).toBe(
       "0.7",
     );
+  });
+
+  it("reaches 150% for tablets, stepping through 140%", () => {
+    setUiZoom(1.25);
+    stepUiZoom(1);
+    expect(getUiZoom()).toBe(1.4);
+    stepUiZoom(1);
+    expect(getUiZoom()).toBe(1.5);
+    stepUiZoom(1);
+    expect(getUiZoom()).toBe(1.5);
   });
 
   it("uses viewport compensation on Blink WebViews (Windows + Android), not WebKit", () => {
