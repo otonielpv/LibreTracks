@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 
-use libretracks_core::{source_seconds_at_view, Song, Track, TrackKind};
+use libretracks_core::{source_seconds_at_view, ChannelMode, Song, Track, TrackKind};
 
 use crate::audio::engine::AudioController;
 use crate::infra::error::DesktopError;
@@ -429,7 +429,7 @@ impl DesktopSession {
     /// Sumar (o dejar de sumar) los dos canales de una pista a uno solo.
     ///
     /// `StructureRebuild` y no `MixerOnly` a propósito: el motor lee
-    /// `mono_downmix` de su `Track`, y lo que lo actualiza es el camino de
+    /// `channel_mode` de su `Track`, y lo que lo actualiza es el camino de
     /// sesión (`UpsertSongTracks` / carga). No hay comando en tiempo real para
     /// esto porque no es un mando que se arrastre: es un interruptor que se
     /// pulsa una vez.
@@ -450,10 +450,15 @@ impl DesktopSession {
             .find(|track| track.id == track_id)
             .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
 
-        if track.mono_downmix == mono_downmix {
+        let channel_mode = if mono_downmix {
+            ChannelMode::Mono
+        } else {
+            ChannelMode::Stereo
+        };
+        if track.channel_mode == channel_mode {
             return Ok(self.snapshot());
         }
-        track.mono_downmix = mono_downmix;
+        track.channel_mode = channel_mode;
 
         self.persist_song_update(song, audio, AudioChangeImpact::StructureRebuild, true)?;
         Ok(self.snapshot())
@@ -578,7 +583,7 @@ impl DesktopSession {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "master".to_string(),
-                mono_downmix: false,
+                channel_mode: Default::default(),
                 color,
                 auto_created: true,
                 midi_port: None,
@@ -678,7 +683,7 @@ impl DesktopSession {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "master".to_string(),
-                mono_downmix: false,
+                channel_mode: Default::default(),
                 color,
                 auto_created: false,
                 midi_port: None,
@@ -750,7 +755,7 @@ impl DesktopSession {
                         } else {
                             "master".to_string()
                         },
-                        mono_downmix: false,
+                        channel_mode: Default::default(),
                         color,
                         auto_created,
                         midi_port: None,
@@ -1268,7 +1273,7 @@ pub(super) fn new_track(
         solo: false,
         transpose_enabled: true,
         audio_to,
-        mono_downmix: false,
+        channel_mode: Default::default(),
         color,
         auto_created: false,
         midi_port: None,

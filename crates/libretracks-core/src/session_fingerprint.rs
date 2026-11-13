@@ -181,6 +181,7 @@ const TRACK_MIX_KEYS: &[&str] = &[
     "audioTo",
     "outputBusId",
     "monoDownmix",
+    "channelMode",
     "midiPort",
     "midiChannel",
     "midiEnabled",

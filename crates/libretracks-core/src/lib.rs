@@ -22,7 +22,7 @@ pub use automation::{
     AutomationTransitionMode, SceneMode,
 };
 pub use model::{
-    default_audio_to, implicit_start_section_id, Arrangement, ArrangementBlock, BlockContent, OriginalSection,
+    default_audio_to, implicit_start_section_id, Arrangement, ArrangementBlock, BlockContent, ChannelMode, OriginalSection,
     OriginalSnapshot, SongStructure, SongChart, ChartLink, chart_link_marker_id, parse_audio_output_route, Clip, Marker, MarkerCategory, MarkerKind, MidiClip,
     KeyChange, KeyMap, MidiEvent, MidiEventKind, Project, Song, SongMaster, SongRegion, TempoMarker, TempoMetadata,
     is_video_file_path, TempoSource, TimeSignatureMarker, Track, TrackKind, VideoAssetInfo, VideoClip,
@@ -87,7 +87,7 @@ mod tests {
                     solo: false,
                     transpose_enabled: true,
                     audio_to: "master".into(),
-                    mono_downmix: false,
+                    channel_mode: Default::default(),
                     color: None,
                     auto_created: false,
                     midi_port: None,
@@ -109,7 +109,7 @@ mod tests {
                     solo: false,
                     transpose_enabled: true,
                     audio_to: "ext:2-3".into(),
-                    mono_downmix: false,
+                    channel_mode: Default::default(),
                     color: None,
                     auto_created: false,
                     midi_port: None,

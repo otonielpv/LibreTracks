@@ -59,7 +59,7 @@ fn new_video_track(song: &Song, name: &str, auto_color: bool) -> libretracks_cor
         solo: false,
         transpose_enabled: true,
         audio_to: "master".to_string(),
-        mono_downmix: false,
+        channel_mode: Default::default(),
         color: super::track_colors::auto_color_for_new_track(
             &song.tracks,
             TrackKind::Video,

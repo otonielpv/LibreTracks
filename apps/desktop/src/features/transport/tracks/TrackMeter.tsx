@@ -195,7 +195,7 @@ function StereoMeterComponent({ source, id, orientation, className }: StereoMete
   // «Convertir a mono» de la pista: un solo canal en el medidor. El master de
   // una canción no tiene esa opción.
   const mono = useSongStore(
-    (state) => source === "track" && trackById(state.song, id)?.monoDownmix === true,
+    (state) => source === "track" && (trackById(state.song, id)?.channelMode ?? "stereo") !== "stereo",
   );
   const monoRef = useRef(mono);
   monoRef.current = mono;

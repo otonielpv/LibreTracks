@@ -9,6 +9,8 @@ import {
 /** Max linear gain the click / voice-guide aux faders reach (+20 dB ≈ 10×). */
 const AUX_MAX_GAIN = positionToGain(1, AUX_FADER_SCALE);
 
+export type TrackChannelMode = "stereo" | "mono" | "left" | "right";
+
 export type PlaybackState = "empty" | "stopped" | "playing" | "paused";
 export type TrackKind = "audio" | "folder" | "midi" | "video";
 export type JumpTriggerLabel =
@@ -632,12 +634,11 @@ export type TrackSummary = {
   audioTo: string;
   transposeEnabled: boolean;
   /**
-   * Sumar los dos canales de la pista a uno y colocarlo por el paneo, como el
-   * botón de mono de un canal de mezcla. No toca el fichero: es reversible.
-   * Opcional y por defecto `false` para las sesiones anteriores, que se abren
-   * en estéreo como estaban.
+   * Qué canales de la fuente suenan, como el Utility de Ableton: estéreo,
+   * mono (suma) o solo un lado centrado por los dos altavoces. Se aplica antes
+   * del paneo. No toca el fichero: es reversible. Opcional; ausente = estéreo.
    */
-  monoDownmix?: boolean;
+  channelMode?: TrackChannelMode;
   color?: string | null;
   /** True for tracks the system conjured because a clip needed a home (e.g.
    * drop into the compact view's song column). Auto-tracks are removed

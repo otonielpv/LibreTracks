@@ -46,7 +46,7 @@ fn track(id: &str, kind: TrackKind) -> Track {
         solo: false,
         transpose_enabled: true,
         audio_to: "master".into(),
-        mono_downmix: false,
+        channel_mode: Default::default(),
         color: None,
         auto_created: false,
         midi_port: None,

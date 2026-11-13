@@ -28,8 +28,8 @@ describe("TrackMeter", () => {
 
   // «Convertir a mono»: one bar, back to two when the track returns to stereo.
   it("shows one channel for a track converted to mono", () => {
-    const songWith = (monoDownmix: boolean) =>
-      ({ tracks: [{ id: "drums", monoDownmix }] }) as never;
+    const songWith = (mono: boolean) =>
+      ({ tracks: [{ id: "drums", channelMode: mono ? "mono" : "stereo" }] }) as never;
     useSongStore.setState({ song: songWith(true) });
     const { container } = render(<TrackMeter trackId="drums" />);
     expect(channels(container)).toHaveLength(1);

@@ -588,6 +588,93 @@ impl TrackKind {
     }
 }
 
+/// Qué canales de su fuente saca una pista, antes del paneo. Ver
+/// [`Track::channel_mode`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ChannelMode {
+    #[default]
+    Stereo,
+    /// (L + R) / 2 por los dos lados.
+    Mono,
+    /// El canal izquierdo por los dos lados, sin compensar ganancia.
+    Left,
+    /// El canal derecho por los dos lados, sin compensar ganancia.
+    Right,
+}
+
+impl ChannelMode {
+    pub fn is_stereo(&self) -> bool {
+        matches!(self, ChannelMode::Stereo)
+    }
+
+    /// Nombre en el formato de la sesión y de los comandos (`"left"`…).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ChannelMode::Stereo => "stereo",
+            ChannelMode::Mono => "mono",
+            ChannelMode::Left => "left",
+            ChannelMode::Right => "right",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "stereo" => Some(ChannelMode::Stereo),
+            "mono" => Some(ChannelMode::Mono),
+            "left" => Some(ChannelMode::Left),
+            "right" => Some(ChannelMode::Right),
+            _ => None,
+        }
+    }
+}
+
+/// Las dos claves con que [`Track::channel_mode`] vive en disco.
+///
+/// - Lectura: manda `channelMode`; si falta, `monoDownmix: true` es `Mono`
+///   (sesiones anteriores al modo de canal).
+/// - Escritura: `monoDownmix` = modo `Mono`, para que una versión vieja que
+///   abra la sesión conserve al menos el mono, y `channelMode` solo si no es
+///   estéreo.
+mod channel_mode_wire {
+    use super::ChannelMode;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Out {
+        mono_downmix: bool,
+        #[serde(skip_serializing_if = "ChannelMode::is_stereo")]
+        channel_mode: ChannelMode,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct In {
+        #[serde(default)]
+        mono_downmix: bool,
+        #[serde(default)]
+        channel_mode: Option<ChannelMode>,
+    }
+
+    pub fn serialize<S: Serializer>(mode: &ChannelMode, serializer: S) -> Result<S::Ok, S::Error> {
+        Out {
+            mono_downmix: *mode == ChannelMode::Mono,
+            channel_mode: *mode,
+        }
+        .serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<ChannelMode, D::Error> {
+        let wire = In::deserialize(deserializer)?;
+        Ok(wire.channel_mode.unwrap_or(if wire.mono_downmix {
+            ChannelMode::Mono
+        } else {
+            ChannelMode::Stereo
+        }))
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Track {
@@ -603,14 +690,18 @@ pub struct Track {
     pub transpose_enabled: bool,
     #[serde(default = "default_audio_to", alias = "outputBusId")]
     pub audio_to: String,
-    /// Sumar los dos canales de la pista a uno solo y colocarlo por el paneo,
-    /// como el botón de mono de un canal de mezcla.
+    /// Qué canales de la fuente suenan, como el Utility de Ableton: estéreo,
+    /// mono (suma), solo izquierdo o solo derecho (centrados por los dos
+    /// lados). Se aplica antes del paneo.
     ///
-    /// **No toca el fichero**: es reversible y no hay nada destructivo. Por
-    /// defecto `false`, así que las sesiones creadas antes de que esto
-    /// existiera se abren en estéreo, que es como estaban.
-    #[serde(default)]
-    pub mono_downmix: bool,
+    /// **No toca el fichero**: es reversible y no hay nada destructivo.
+    ///
+    /// En disco son dos claves (ver [`channel_mode_wire`]): `monoDownmix`,
+    /// que es lo único que entienden las versiones anteriores, y
+    /// `channelMode`, omitida en estéreo para que las sesiones sin cambios se
+    /// escriban byte a byte igual que antes.
+    #[serde(flatten, with = "channel_mode_wire")]
+    pub channel_mode: ChannelMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
     /// Tracks marked auto_created are removed automatically the moment they
@@ -1679,5 +1770,80 @@ mod video_media_tests {
         assert!(!info.has_slow_seeks());
         info.keyframe_interval_seconds = None;
         assert!(!info.has_slow_seeks());
+    }
+}
+
+#[cfg(test)]
+mod channel_mode_tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    fn track_json(extra: Value) -> Value {
+        let mut base = json!({
+            "id": "t1",
+            "name": "Pista",
+            "kind": "audio",
+            "parentTrackId": null,
+            "volume": 1.0,
+            "pan": 0.0,
+            "muted": false,
+            "solo": false,
+        });
+        base.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        base
+    }
+
+    fn read(extra: Value) -> Track {
+        serde_json::from_value(track_json(extra)).unwrap()
+    }
+
+    #[test]
+    fn stereo_writes_only_the_old_key() {
+        let track = read(json!({}));
+        assert_eq!(track.channel_mode, ChannelMode::Stereo);
+        let written = serde_json::to_value(&track).unwrap();
+        assert_eq!(written["monoDownmix"], json!(false));
+        assert!(written.get("channelMode").is_none(), "{written}");
+    }
+
+    #[test]
+    fn old_mono_downmix_reads_as_mono_and_writes_both_keys() {
+        let track = read(json!({ "monoDownmix": true }));
+        assert_eq!(track.channel_mode, ChannelMode::Mono);
+        let written = serde_json::to_value(&track).unwrap();
+        assert_eq!(written["monoDownmix"], json!(true));
+        assert_eq!(written["channelMode"], json!("mono"));
+    }
+
+    #[test]
+    fn left_and_right_round_trip() {
+        for (mode, name) in [(ChannelMode::Left, "left"), (ChannelMode::Right, "right")] {
+            let track = read(json!({ "channelMode": name }));
+            assert_eq!(track.channel_mode, mode);
+            let written = serde_json::to_value(&track).unwrap();
+            assert_eq!(written["channelMode"], json!(name));
+            assert_eq!(written["monoDownmix"], json!(false));
+            let back: Track = serde_json::from_value(written).unwrap();
+            assert_eq!(back.channel_mode, mode);
+        }
+    }
+
+    #[test]
+    fn channel_mode_wins_over_mono_downmix() {
+        let track = read(json!({ "monoDownmix": true, "channelMode": "right" }));
+        assert_eq!(track.channel_mode, ChannelMode::Right);
+        let track = read(json!({ "monoDownmix": true, "channelMode": "stereo" }));
+        assert_eq!(track.channel_mode, ChannelMode::Stereo);
+    }
+
+    #[test]
+    fn parse_and_as_str_agree() {
+        for mode in [ChannelMode::Stereo, ChannelMode::Mono, ChannelMode::Left, ChannelMode::Right] {
+            assert_eq!(ChannelMode::parse(mode.as_str()), Some(mode));
+            assert_eq!(serde_json::to_value(mode).unwrap(), json!(mode.as_str()));
+        }
+        assert_eq!(ChannelMode::parse("both"), None);
     }
 }

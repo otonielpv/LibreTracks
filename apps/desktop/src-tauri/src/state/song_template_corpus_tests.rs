@@ -185,7 +185,7 @@ fn track(id: &str, name: &str, kind: TrackKind, parent: Option<&str>, color: &st
         solo: false,
         transpose_enabled: true,
         audio_to: audio_to.into(),
-        mono_downmix: false,
+        channel_mode: Default::default(),
         color: Some(color.into()),
         auto_created: false,
         midi_port: None,

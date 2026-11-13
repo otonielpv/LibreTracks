@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use serde_json::json;
 
 use super::*;
+use crate::model::ChannelMode;
 
 /// Two songs (regions), three tracks (one folder), clips with relative and
 /// absolute paths, markers, a tempo change inside the second song.
@@ -257,6 +258,18 @@ fn a_track_volume_is_only_a_mix_difference_and_does_not_block() {
         }]
     );
     assert!(FingerprintDiff::TimelineDiffers { title: title("x") }.blocks_arming());
+}
+
+#[test]
+fn a_track_channel_mode_is_only_a_mix_difference() {
+    for mode in [ChannelMode::Left, ChannelMode::Right, ChannelMode::Mono] {
+        let diffs = diffs_after(|song, _, _| song.tracks[1].channel_mode = mode);
+        assert!(!diffs.is_empty(), "{mode:?} debe cambiar la huella");
+        assert!(
+            diffs.iter().all(|diff| matches!(diff, FingerprintDiff::MixDiffers { .. })),
+            "{mode:?}: {diffs:?}"
+        );
+    }
 }
 
 #[test]

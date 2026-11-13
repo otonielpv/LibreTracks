@@ -93,7 +93,7 @@ mod tests {
             solo: false,
             transpose_enabled: true,
             audio_to: "master".to_string(),
-            mono_downmix: false,
+            channel_mode: Default::default(),
             color: None,
             auto_created: false,
             midi_port: None,

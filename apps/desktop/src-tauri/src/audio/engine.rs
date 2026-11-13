@@ -1255,7 +1255,7 @@ impl AudioController {
                     gain: track.volume as f32,
                     pan: track.pan as f32,
                     audio_to: track.audio_to.clone(),
-                    mono_downmix: track.mono_downmix,
+                    mono_downmix: track.channel_mode == libretracks_core::ChannelMode::Mono,
                     mute: track.muted,
                     solo: track.solo,
                     // transpose_enabled=false maps to NeverTranspose; default
@@ -3770,7 +3770,7 @@ mod tests {
                 solo: false,
                 transpose_enabled: true,
                 audio_to: "master".into(),
-                mono_downmix: false,
+                channel_mode: Default::default(),
                 color: None,
                 auto_created: false,
                 midi_port: None,

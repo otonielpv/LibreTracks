@@ -1041,7 +1041,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
           ? []
           : [
               {
-                label: track.monoDownmix
+                label: track.channelMode === "mono"
                   ? t("transport.menu.trackMonoOff", {
                       defaultValue: "Volver a estereo",
                     })
@@ -1052,7 +1052,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
                   await d.runAction(async () => {
                     const nextSnapshot = await updateTrackMonoDownmix({
                       trackId: track.id,
-                      monoDownmix: !track.monoDownmix,
+                      monoDownmix: track.channelMode !== "mono",
                     });
                     d.applyPlaybackSnapshot(nextSnapshot);
                     await d.refreshSongView({ includeWaveforms: false });

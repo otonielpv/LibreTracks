@@ -149,7 +149,7 @@ describe("shared meter ticker", () => {
     const ids = trackIds(100);
     let trackReads = 0;
     const songWithCountedTracks = (volume: number) => {
-      const tracks = ids.map((id) => ({ id, monoDownmix: false, volume }));
+      const tracks = ids.map((id) => ({ id, channelMode: "stereo", volume }));
       return {
         get tracks() {
           trackReads += 1;

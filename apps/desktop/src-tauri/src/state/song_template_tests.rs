@@ -778,7 +778,7 @@ fn plain_track(
         solo: false,
         transpose_enabled: true,
         audio_to: if parent.is_some() { "inherit" } else { "master" }.into(),
-        mono_downmix: false,
+        channel_mode: Default::default(),
         color: None,
         auto_created: false,
         midi_port: None,
