@@ -10,7 +10,7 @@ import {
 } from "../tracks/useVisibleTrackRows";
 
 /**
- * The strips the compact mixer mounts (`docs/plans/track-virtualization`,
+ * The strips the compact mixer mounts (`docs/plans/completed/track-virtualization`,
  * step 06). With the active-song filter off, a 138-track session mounted 138
  * strips — fader, pan, buttons, routing select and meter each — and the whole
  * view slowed down.

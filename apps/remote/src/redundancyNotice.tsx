@@ -1,5 +1,5 @@
 /**
- * Redundancy (docs/plans/redundancy step 17): when the main LibreTracks
+ * Redundancy (docs/plans/completed/redundancy step 17): when the main LibreTracks
  * goes away or hands over to its backup, tell the person holding the remote
  * and give them a button to the backup's remote. The page itself comes from
  * the main, so it cannot simply reconnect elsewhere after a reload: the last

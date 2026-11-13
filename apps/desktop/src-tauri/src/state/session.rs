@@ -604,7 +604,7 @@ impl DesktopSession {
     /// Android's import uses this: the SAF gives us a descriptor, not a
     /// filesystem path, and copying the whole archive into private storage just
     /// to get a path cost 2.02 GiB of writes on a real set.
-    /// See docs/plans/android-low-end/04-import-sin-staging.md.
+    /// See docs/plans/completed/android-low-end/04-import-sin-staging.md.
     // Only the Android import calls this, and a desktop `cargo check` does not
     // compile that branch — so it looks dead here while being load-bearing there.
     #[cfg_attr(not(target_os = "android"), allow(dead_code))]

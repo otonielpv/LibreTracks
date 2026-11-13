@@ -11,7 +11,7 @@ export const FEATURE_FLAGS = {
   lyrics: true,
   /** Network sessions: LibreTracks apps joining a host LibreTracks over the
    * LAN with roles (viewer / control / edit). Plan in
-   * docs/plans/network-sessions. Ships in 1.16.0. */
+   * docs/plans/completed/network-sessions. Ships in 1.16.0. */
   networkSessions: true,
   /** «Analizar canción…»: tempo, key and section markers read from a song's
    * click, guide and audio. Ships in 1.15.0. */
@@ -21,7 +21,7 @@ export const FEATURE_FLAGS = {
    * 1.16.0. */
   songTemplates: true,
   /** Redundancy: a backup LibreTracks that follows a main one and a pilot
-   * tone for hardware switchers. Plan in docs/plans/redundancy. Off until
+   * tone for hardware switchers. Plan in docs/plans/completed/redundancy. Off until
    * it is validated with two real machines (step 14). */
   redundancy: true,
 } as const;

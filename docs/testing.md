@@ -188,7 +188,7 @@ See [`testing-engine-v2.md`](testing-engine-v2.md) for engine-specific notes.
 ## Android device bench (manual)
 
 `scripts/android-bench.mjs` measures what the low-end Android plan
-(`docs/plans/android-low-end/`) claims to improve: process memory, system
+(`docs/plans/completed/android-low-end/`) claims to improve: process memory, system
 memory, disk consumed, and process kills from memory pressure. It is **run by
 hand** with a phone on USB — never in CI (no device on the runner, and this repo
 has a history of timing-dependent tests taking down releases).

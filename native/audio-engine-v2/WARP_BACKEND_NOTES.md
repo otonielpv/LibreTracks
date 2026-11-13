@@ -32,7 +32,7 @@ to A/B directly, and Bungee was preferred by ear.
 > | `bench_render_callback` | `Mixer::render` entera, con desglose por fases |
 >
 > La línea base medida está en
-> `docs/plans/audio-thread-parallelism/baseline.md`.
+> `docs/plans/completed/audio-thread-parallelism/baseline.md`.
 
 Cifras históricas: 44,1 kHz, ratio `1.213`, 3 voces:
 

@@ -1,5 +1,5 @@
 /**
- * Network sessions between LibreTracks apps (docs/plans/network-sessions):
+ * Network sessions between LibreTracks apps (docs/plans/completed/network-sessions):
  * one device hosts, others join with a role. Not the remote.
  *
  * Mirrors `apps/desktop/src-tauri/src/link/`. Every call here is behind
@@ -62,7 +62,7 @@ export type NetworkDiscoveredHost = {
   requiresPin: boolean;
   /** False: this app and that host cannot talk (one needs updating). */
   compatible: boolean;
-  /** A redundancy main a backup can follow (docs/plans/redundancy). */
+  /** A redundancy main a backup can follow (docs/plans/completed/redundancy). */
   redundancyMain?: boolean;
   /** False for a redundancy main without a network session: no guests. */
   acceptsGuests?: boolean;

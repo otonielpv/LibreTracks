@@ -1,6 +1,6 @@
 // Banco de pruebas de LibreTracks en un dispositivo Android real.
 //
-// Mide lo que el plan docs/plans/android-low-end/ afirma que va a mejorar:
+// Mide lo que el plan docs/plans/completed/android-low-end/ afirma que va a mejorar:
 // memoria del proceso, memoria disponible del sistema, espacio consumido en
 // disco y muertes de procesos por presion de memoria (el fallo que motivo el
 // plan reinicio el system_server del Oppo CPH1931).

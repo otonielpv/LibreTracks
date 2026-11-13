@@ -2,7 +2,7 @@
 //!
 //! Used by network-session guests to place the host's playhead (lyrics must
 //! scroll in time with the host's audio) and, later, by the remote video
-//! receiver (docs/plans/video-mobile/12). Pure: times come in as numbers, so
+//! receiver (docs/plans/completed/video-mobile/12). Pure: times come in as numbers, so
 //! skew, drift and jitter are tested with simulated clocks.
 //!
 //! NTP-style sample: the guest sends at `t0` (its clock), the host receives at

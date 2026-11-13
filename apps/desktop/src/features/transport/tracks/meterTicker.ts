@@ -7,7 +7,7 @@ import { useMeterStore, type TrackMeterState } from "../meterStore";
  * Antes cada medidor tenía su propia suscripción al store y su propio
  * `requestAnimationFrame`: con 138 pistas eran 138 selectores por publicación
  * de `setMeters` y hasta 138 callbacks de rAF por frame
- * (`docs/plans/track-virtualization/00-DIAGNOSTICO.md`, E2). Aquí hay UNA
+ * (`docs/plans/completed/track-virtualization/00-DIAGNOSTICO.md`, E2). Aquí hay UNA
  * suscripción y UN bucle, que recorre sólo los medidores en movimiento.
  *
  * El contrato por medidor no cambia: el bucle arranca cuando un medidor recibe

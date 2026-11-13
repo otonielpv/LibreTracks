@@ -1,5 +1,5 @@
 //! What redundancy reads from and hears from the session
-//! (docs/plans/redundancy).
+//! (docs/plans/completed/redundancy).
 //!
 //! - The single door for transport (step 04): the public transport methods
 //!   live HERE, wrap the `apply_*` ones in `state/mod.rs` and emit exactly one

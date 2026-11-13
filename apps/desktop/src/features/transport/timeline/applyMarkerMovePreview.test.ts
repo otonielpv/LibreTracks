@@ -5,7 +5,7 @@ import type { SectionMarkerSummary } from "../desktopApi";
 
 /**
  * El arrastre de una marca llega al canvas por un REF y se aplica al dibujar,
- * no por props (docs/plans/ui-performance, paso 02). Esta función es ese punto
+ * no por props (docs/plans/completed/ui-performance, paso 02). Esta función es ese punto
  * de aplicación: si se equivoca, la bandera no sigue al puntero — o peor, se
  * mueve la marca que no era.
  */

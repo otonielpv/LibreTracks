@@ -4,7 +4,7 @@
 //! The tempo proposal comes from `libretracks_analysis::propose_tempo_markers`,
 //! reviewed (and maybe edited) by the user. Applying replaces every tempo and
 //! time signature marker inside the song with it and writes the key, in one
-//! undoable edit. See `docs/plans/song-analysis/00-DISENO.md`.
+//! undoable edit. See `docs/plans/completed/song-analysis/00-DISENO.md`.
 
 use libretracks_analysis::{ProposedSignatureMarker, ProposedTempoMarker};
 use libretracks_core::{

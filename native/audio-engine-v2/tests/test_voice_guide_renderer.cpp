@@ -1070,7 +1070,7 @@ TEST_CASE("dragged markers still resolve a voice clip") {
     CHECK(!build_as_section->samples.empty());
 }
 
-// Arreglos de canción (docs/plans/song-arrangement, paso 08): un arreglo se
+// Arreglos de canción (docs/plans/completed/song-arrangement, paso 08): un arreglo se
 // escribe en el timeline como marcas reales, una por bloque, y un verso
 // repetido es otra marca con el mismo tipo ("verso" y "verso~2"). La voz guía
 // tiene que anunciarlas todas, en orden y con su cuenta, como cualquier marca.

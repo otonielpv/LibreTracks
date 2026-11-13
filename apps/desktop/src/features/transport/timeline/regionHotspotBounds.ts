@@ -5,7 +5,7 @@
  * Antes, cada `pointermove` hacía `setRegionMovePreview(...)`, y el único
  * consumidor de ese estado eran el `left` y el `width` de un botón invisible.
  * El precio de esa comodidad, medido en el build de medición
- * (docs/plans/ui-performance/state/01.md): **144 renders por segundo** de
+ * (docs/plans/completed/ui-performance/state/01.md): **144 renders por segundo** de
  * `TimelineCanvasPane` mientras el puntero se mueve, uno por frame.
  *
  * El arrastre de clips ya evitaba eso escribiendo refs que lee el canvas

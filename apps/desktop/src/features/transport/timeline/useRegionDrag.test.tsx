@@ -9,7 +9,7 @@ import { regionHotspotBounds } from "./regionHotspotBounds";
 /**
  * Arrastre completo a través del hook real, con eventos de puntero.
  *
- * Cubre las dos cosas que el paso 02 de `docs/plans/ui-performance` promete, y
+ * Cubre las dos cosas que el paso 02 de `docs/plans/completed/ui-performance` promete, y
  * que son independientes entre sí:
  *
  * 1. **Que siga funcionando.** La banda sigue al puntero y el commit recibe el
@@ -17,7 +17,7 @@ import { regionHotspotBounds } from "./regionHotspotBounds";
  *    extraerlo de `TimelineCanvasPane`; sólo lo rozaba un E2E de Windows.
  * 2. **Que no pase por React.** Cero renders del componente durante los
  *    `pointermove`. Medido antes del cambio: 144 renders/segundo, uno por
- *    frame (docs/plans/ui-performance/state/01.md).
+ *    frame (docs/plans/completed/ui-performance/state/01.md).
  */
 
 const PPS = 100;

@@ -1,5 +1,5 @@
 /**
- * The redundancy commands and events (docs/plans/redundancy). Settings live
+ * The redundancy commands and events (docs/plans/completed/redundancy). Settings live
  * in `redundancy.json` through their own commands, never in AppSettings
  * (which the remote receives): the backup PIN included.
  */

@@ -416,7 +416,7 @@ export function createSongViewHandlers(getDeps: () => SongViewHandlerDeps) {
   }
 
   /** Setlist's "Open in the DAW" shortcut. Wired in step 17 of
-   * docs/plans/setlist-view; a no-op until then. */
+   * docs/plans/completed/setlist-view; a no-op until then. */
   /** Setlist's «Open in the DAW»: the song selected and framed there. */
   function openInDaw(regionId: string) {
     const deps = getDeps();

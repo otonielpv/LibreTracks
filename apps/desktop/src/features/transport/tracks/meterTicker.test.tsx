@@ -7,7 +7,7 @@ import { meterTickerStats, registerMeter } from "./meterTicker";
 import { TrackMeter } from "./TrackMeter";
 
 /**
- * Paso 02 de `docs/plans/track-virtualization`: N medidores, un solo bucle de
+ * Paso 02 de `docs/plans/completed/track-virtualization`: N medidores, un solo bucle de
  * animación y una sola suscripción al store.
  */
 

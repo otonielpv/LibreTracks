@@ -887,7 +887,7 @@ export function useEmptySongForTest() {
 /**
  * Replace the song's tracks with `count` plain audio tracks named
  * "Track 1".."Track N" and no clips: a session as big as the 138-track one
- * from docs/plans/track-virtualization, for the row-window tests.
+ * from docs/plans/completed/track-virtualization, for the row-window tests.
  */
 export function useManyTracksSongForTest(
   count: number,

@@ -12,7 +12,7 @@ import { useTrackRowWindowStore } from "./useTrackRowWindow";
 import { resolveVisibleTrackRows } from "./useVisibleTrackRows";
 
 /**
- * Paso 05 de `docs/plans/track-virtualization`, sobre la app entera: con una
+ * Paso 05 de `docs/plans/completed/track-virtualization`, sobre la app entera: con una
  * sesion de 138 pistas (como `TestMultiplesAnalisis`) y un viewport con alto,
  * solo se montan las cabeceras y carriles cercanos, con la geometria exacta.
  */

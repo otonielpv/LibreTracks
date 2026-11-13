@@ -1038,7 +1038,7 @@ Result<void> AudioDeviceManager::open_device(const DeviceOpenRequest& request,
     impl_->sample_rate  = static_cast<int>(dev->getCurrentSampleRate());
     impl_->buffer_size  = dev->getCurrentBufferSizeSamples();
     impl_->output_latency_samples = dev->getOutputLatencyInSamples();
-    // Redundancy (docs/plans/redundancy step 02) needs this on every open, not
+    // Redundancy (docs/plans/completed/redundancy step 02) needs this on every open, not
     // only with the diag flag: it is how long a rendered sample takes to be
     // HEARD. JUCE's figure already includes the buffer on every backend we
     // ship (DirectSound reports bufferSize*1.5, WASAPI/ASIO/CoreAudio/ALSA the

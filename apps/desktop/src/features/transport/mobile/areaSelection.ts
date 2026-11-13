@@ -27,7 +27,7 @@ export type AreaRow = { id: string; top: number; bottom: number };
  * Las filas como DATOS: el layout dice donde esta cada una y una fila montada
  * cualquiera (`anchor`) lo clava en pantalla. Antes se buscaban todas en el DOM
  * y se median una a una; con las filas virtualizadas
- * (`docs/plans/track-virtualization`) las que no estan montadas no existen en
+ * (`docs/plans/completed/track-virtualization`) las que no estan montadas no existen en
  * el DOM, y un recuadro con auto-scroll las dejaba sin seleccionar sin ningun
  * error.
  */

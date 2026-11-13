@@ -457,7 +457,7 @@ TEST_CASE("region transpose enrolls voices for clips that had none") {
 // por clip (todos dejan de ser warp neutro). Ese comando corre con el cerrojo
 // de sesión cogido en el lado Rust: medido en el emulador, ~180 ms con 28
 // pistas mientras el feed y las órdenes de los invitados esperaban detrás
-// (docs/plans/song-patches/state/09.md). Las voces son independientes, así que
+// (docs/plans/completed/song-patches/state/09.md). Las voces son independientes, así que
 // se construyen en paralelo como en build_seek_voice_map. El test exige el
 // resultado (todas enroladas, ancladas) e imprime el tiempo para el banco.
 TEST_CASE("region transpose enrolls many voices and reports the time") {

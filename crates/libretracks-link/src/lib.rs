@@ -3,7 +3,7 @@
 //!
 //! This is deliberately NOT the remote (`libretracks-remote`, the browser
 //! SPA). It has its own protocol, port and commands, and the two evolve
-//! separately. Plan and design: `docs/plans/network-sessions/`.
+//! separately. Plan and design: `docs/plans/completed/network-sessions/`.
 //!
 //! The host is the single source of truth: guests send [`LinkCommand`]s and
 //! the host applies them with the same session functions its own UI uses.

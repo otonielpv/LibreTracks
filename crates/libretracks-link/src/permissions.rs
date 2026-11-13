@@ -75,7 +75,7 @@ pub fn required_permission(command: &LinkCommand) -> Permission {
     }
 }
 
-/// What a redundancy backup may forward to its main (docs/plans/redundancy,
+/// What a redundancy backup may forward to its main (docs/plans/completed/redundancy,
 /// step 06: "forward local inputs to the main"), and only while the main
 /// allows forwarding. Transport only: a backup never edits nor mixes the
 /// main. No `_` arm, like `required_permission`.
@@ -111,7 +111,7 @@ mod tests {
     use serde_json::json;
 
     /// One sample of every command, named as in the design table
-    /// (docs/plans/network-sessions/00-DISENO.md §4), with the minimum role
+    /// (docs/plans/completed/network-sessions/00-DISENO.md §4), with the minimum role
     /// that table gives it. Written as data so the test reads like the table.
     fn table() -> Vec<(&'static str, LinkCommand, Role)> {
         vec![

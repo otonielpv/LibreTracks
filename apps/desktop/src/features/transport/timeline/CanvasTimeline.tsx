@@ -286,7 +286,7 @@ function buildWaveformCacheSignature(
  *
  * Se aplica al dibujar y no en props a propósito: la posición cambia en cada
  * `pointermove` y pasarla por React costaba un render del panel por frame
- * (144/s medidos, docs/plans/ui-performance/state/01.md).
+ * (144/s medidos, docs/plans/completed/ui-performance/state/01.md).
  *
  * Devuelve la MISMA lista cuando no hay arrastre, para no asignar por frame.
  */

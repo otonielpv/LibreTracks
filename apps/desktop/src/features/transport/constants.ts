@@ -74,10 +74,10 @@ export const NATIVE_DND_DEBUG_ENABLED =
 
 /**
  * Rows at or below which the track headers and lanes mount every row, exactly
- * as before `docs/plans/track-virtualization`. Above it only the rows near the
+ * as before `docs/plans/completed/track-virtualization`. Above it only the rows near the
  * viewport are mounted. Provisional starting value of that plan: the baseline
  * that should confirm it (S1 ~27 rows vs. TM 138) is pending, see
- * `docs/plans/track-virtualization/state/01.md`.
+ * `docs/plans/completed/track-virtualization/state/01.md`.
  */
 export const TRACK_VIRTUALIZATION_MIN_ROWS = 48;
 /** Height of the sticky ruler on top of the track rows, inside the same

@@ -2,7 +2,7 @@
 //
 // Mide lo que de verdad paga el hilo de audio: `Mixer::render` ENTERA, no sólo
 // el coste de Bungee. Es la línea base contra la que se compara cada paso del
-// plan docs/plans/audio-thread-parallelism/.
+// plan docs/plans/completed/audio-thread-parallelism/.
 //
 // Por qué existe, y por qué reporta cola y no sólo media:
 //

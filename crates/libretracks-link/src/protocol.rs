@@ -40,7 +40,7 @@ pub enum ClientMessage {
         /// Token from an earlier `welcome` (trusted device).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         token: Option<String>,
-        /// `backup` for a redundancy backup (docs/plans/redundancy). Absent
+        /// `backup` for a redundancy backup (docs/plans/completed/redundancy). Absent
         /// in old guests, which stay guests.
         #[serde(default, skip_serializing_if = "PeerKind::is_guest")]
         peer_kind: PeerKind,

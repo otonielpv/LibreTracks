@@ -1,6 +1,6 @@
 //! A fingerprint of a session that is stable BETWEEN MACHINES, to prove a
 //! redundancy backup has the same session and timing settings as its main
-//! (docs/plans/redundancy/03-huella-de-sesion.md). A backup with another
+//! (docs/plans/completed/redundancy/03-huella-de-sesion.md). A backup with another
 //! session is worse than no backup: it gives false confidence.
 //!
 //! Not one hash but one digest per thing that can differ, so the UI can say

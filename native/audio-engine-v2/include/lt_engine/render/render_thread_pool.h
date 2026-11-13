@@ -9,7 +9,7 @@
 // son ~30 % en una máquina rápida y el 96 % que reportó un usuario en la suya.
 // Medido, repartir esas voces escala ~3,8x con 4 hilos, y sigue escalando con
 // buffers de 128 frames. Ver los hechos 2 y 3 de
-// docs/plans/audio-thread-parallelism/00-DIAGNOSTICO.md.
+// docs/plans/completed/audio-thread-parallelism/00-DIAGNOSTICO.md.
 //
 // ── Las reglas que lo hacen viable ─────────────────────────────────────────
 //

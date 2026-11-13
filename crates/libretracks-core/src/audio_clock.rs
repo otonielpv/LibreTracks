@@ -1,5 +1,5 @@
 //! Where the transport is SOUNDING at a given instant, from one stamp the
-//! audio callback left (docs/plans/redundancy/02-reloj-de-audio.md).
+//! audio callback left (docs/plans/completed/redundancy/02-reloj-de-audio.md).
 //!
 //! Pure: the caller passes every instant, in nanoseconds of ONE local
 //! monotonic base (whatever it is, as long as it is always the same). No

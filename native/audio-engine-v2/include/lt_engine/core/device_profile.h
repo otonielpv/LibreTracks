@@ -14,7 +14,7 @@
 //     desktop annoys the user; on a phone it makes the low-memory killer shoot
 //     everything else, which is exactly how a 2 GB .ltset import took the
 //     device's system_server down with it.
-//     See docs/plans/android-low-end/00-DIAGNOSTICO.md.
+//     See docs/plans/completed/android-low-end/00-DIAGNOSTICO.md.
 //
 // So: classify the machine once, and derive a budget from AVAILABLE memory on
 // handhelds while leaving desktop behaviour byte-for-byte identical.

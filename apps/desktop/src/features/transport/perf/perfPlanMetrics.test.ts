@@ -13,7 +13,7 @@ import {
 } from "./perfMetrics";
 
 /**
- * Métricas añadidas para `docs/plans/ui-performance` (paso 01).
+ * Métricas añadidas para `docs/plans/completed/ui-performance` (paso 01).
  *
  * Lo que estos tests protegen no es el rendimiento: es que **el banco de
  * medición mida algo**. Una instrumentación silenciosamente rota daría cero en

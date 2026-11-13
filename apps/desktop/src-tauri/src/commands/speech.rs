@@ -5,7 +5,7 @@
 //! quantised (57 MB), downloaded once on demand from the whisper.cpp model
 //! repository and checked against its SHA-256. Desktop only for now: on
 //! Android and iOS whisper.cpp is not built yet, and the guide analysis falls
-//! back to the app's voice clips. See docs/plans/song-analysis/04.
+//! back to the app's voice clips. See docs/plans/completed/song-analysis/04.
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager};

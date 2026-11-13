@@ -2,7 +2,7 @@
 //!
 //! Pure functions over decoded audio, with no I/O and no knowledge of the
 //! session: the desktop crate renders the song, hands the samples here and
-//! turns the result into markers. See `docs/plans/song-analysis/`.
+//! turns the result into markers. See `docs/plans/completed/song-analysis/`.
 
 mod bar_phase;
 pub mod click;

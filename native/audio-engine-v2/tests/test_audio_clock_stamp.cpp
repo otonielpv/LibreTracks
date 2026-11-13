@@ -1,4 +1,4 @@
-// Redundancy step 02 (docs/plans/redundancy/02-reloj-de-audio.md): the
+// Redundancy step 02 (docs/plans/completed/redundancy/02-reloj-de-audio.md): the
 // (instant, frame) stamp the mixer publishes at the top of every block.
 
 #include "test_audio_fixtures.h"

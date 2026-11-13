@@ -117,7 +117,7 @@ export function setIpcObserver(observer: IpcObserver | null) {
   ipcObserver = observer;
 }
 
-// --- Network sessions, guest mirror mode (docs/plans/network-sessions) ---
+// --- Network sessions, guest mirror mode (docs/plans/completed/network-sessions) ---
 //
 // A device that joined a host runs this same UI against the HOST's session:
 // session commands go to the host (which checks the guest's role), the ones
@@ -1618,7 +1618,7 @@ export async function listenToLevelSongsProgress(
 }
 
 // "Analizar canción": tempo and meter from the song's click track, and the key
-// from its harmonic tracks. See docs/plans/song-analysis/. Positions in
+// from its harmonic tracks. See docs/plans/completed/song-analysis/. Positions in
 // `segments` and `warnings` are seconds from the song start; the proposal's
 // markers are absolute session seconds.
 
@@ -3344,7 +3344,7 @@ export async function discardStagedPackage(path: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Video (docs/plans/video-output). Positions are view seconds, like every
+// Video (docs/plans/completed/video-output). Positions are view seconds, like every
 // other timeline command; the backend stores them in source time.
 // ---------------------------------------------------------------------------
 

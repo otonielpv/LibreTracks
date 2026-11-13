@@ -2,7 +2,7 @@
 //! its own (the caller passes `now_ms`), no randomness of its own (the caller
 //! passes the token generator), so every rule is tested.
 //!
-//! Rules (docs/plans/network-sessions/00-DISENO.md §4.2):
+//! Rules (docs/plans/completed/network-sessions/00-DISENO.md §4.2):
 //! 1. incompatible protocol → rejected with the version the host speaks;
 //! 2. an IP that failed too many PINs is locked out for a while;
 //! 3. a valid trusted-device token for that device id → its stored role;

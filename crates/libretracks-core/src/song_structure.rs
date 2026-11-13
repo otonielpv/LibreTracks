@@ -578,7 +578,7 @@ fn reserved_ids<T>(
 }
 
 /// Construye el contenido de la región para una lista de bloques. Ver §6 del
-/// diseño (`docs/plans/song-arrangement/00-DISENO.md`).
+/// diseño (`docs/plans/completed/song-arrangement/00-DISENO.md`).
 pub fn build_arrangement(
     snapshot: &OriginalSnapshot,
     sections: &[OriginalSection],

@@ -10,7 +10,7 @@ import { CompactMixer } from "./CompactMixer";
 import { getCompactStripLayout, resetMixerStripWindowForTest } from "./useMixerStripWindow";
 
 /**
- * Paso 06 de `docs/plans/track-virtualization`: el mezclador compacto sin el
+ * Paso 06 de `docs/plans/completed/track-virtualization`: el mezclador compacto sin el
  * filtro de cancion activa montaba las 138 tiras de la sesion. Ahora monta las
  * cercanas a lo visible, con el ancho total exacto.
  */

@@ -13,7 +13,7 @@ import type { TrackSceneSnapshot } from "./TimelineRenderer";
  *
  * Thumbnails are drawn in the canvas, not as HTML over the lane: the lane area
  * has no camera wrapper, so overlays would have to chase the camera on rAF
- * (see the ruler-vs-lane coordinate note in docs/plans/video-output/00-DISENO.md).
+ * (see the ruler-vs-lane coordinate note in docs/plans/completed/video-output/00-DISENO.md).
  */
 
 /** Teal: distinct from audio (track colour), MIDI (violet) and automation (pink). */

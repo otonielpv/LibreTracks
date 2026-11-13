@@ -27,7 +27,7 @@ const REORDERING_BODY_CLASS = "lt-daw-song-reordering";
  * 1. **Rendimiento.** El preview en vuelo pasó de `setState` por
  *    `pointermove` a escritura directa del estilo del elemento. Medido antes
  *    del cambio: 144 renders/segundo del panel entero mientras el puntero se
- *    mueve, uno por frame (docs/plans/ui-performance/state/01.md). El
+ *    mueve, uno por frame (docs/plans/completed/ui-performance/state/01.md). El
  *    arrastre de clips ya funcionaba así; los del ruler no.
  * 2. **Presupuesto de tamaño.** `TimelineCanvasPane.tsx` estaba a una línea de
  *    su límite y la regla del repo es extraer, no subir el número.

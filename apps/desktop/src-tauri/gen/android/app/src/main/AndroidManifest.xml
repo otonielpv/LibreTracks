@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Network sessions (docs/plans/network-sessions, paso 04): finding a
+    <!-- Network sessions (docs/plans/completed/network-sessions, paso 04): finding a
          host by mDNS needs a Wi-Fi MulticastLock, or Android drops the
          multicast answers. Normal permission, granted at install. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />

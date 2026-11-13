@@ -5,7 +5,7 @@
 //! Backends feed it: `MdnsDiscovery` (crate `mdns-sd`, feature `mdns`) on
 //! Windows, macOS, Linux and Android; on iOS the app uses the system's
 //! Bonjour from Swift, because raw multicast sockets there need an Apple
-//! entitlement granted by hand (docs/plans/network-sessions/00-DISENO.md §6).
+//! entitlement granted by hand (docs/plans/completed/network-sessions/00-DISENO.md §6).
 
 use std::collections::HashMap;
 
@@ -25,7 +25,7 @@ pub struct Advertisement {
     pub port: u16,
     pub app_version: String,
     pub requires_pin: bool,
-    /// Redundancy (docs/plans/redundancy): this machine is a MAIN a backup
+    /// Redundancy (docs/plans/completed/redundancy): this machine is a MAIN a backup
     /// can follow.
     pub redundancy_main: bool,
     /// False for a redundancy main that only takes its backup (no network

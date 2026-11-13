@@ -1,4 +1,4 @@
-// Redundancy step 08 (docs/plans/redundancy/08-tono-piloto.md): the pilot
+// Redundancy step 08 (docs/plans/completed/redundancy/08-tono-piloto.md): the pilot
 // tone a hardware switcher listens to.
 
 #include "test_audio_fixtures.h"

@@ -440,7 +440,7 @@ if ($useFFmpeg -eq "ON") {
   }
 }
 
-# Video output (docs/plans/video-output): the loop above just cleared
+# Video output (docs/plans/completed/video-output): the loop above just cleared
 # vendor\bin\native, so put libmpv back where the resources glob bundles it
 # (and where the debug exe finds it below), like the release workflow does.
 # Not fatal: offline, the app builds and runs with video unavailable.
@@ -502,7 +502,7 @@ switch ($Mode) {
   "build" {
     npm --prefix apps/desktop run tauri:build
   }
-  # Build de MEDICION (docs/plans/ui-performance/PROTOCOLO.md).
+  # Build de MEDICION (docs/plans/completed/ui-performance/PROTOCOLO.md).
   #
   # `tauri build --debug` empaqueta el bundle de frontend de PRODUCCION (sin
   # React en modo dev, sin Vite/HMR - los artefactos que ya invalidaron una

@@ -88,7 +88,7 @@ function Zone({
 }
 
 /**
- * The Setlist view, Playback-style (docs/plans/setlist-view): a row of song
+ * The Setlist view, Playback-style (docs/plans/completed/setlist-view): a row of song
  * cards, the selected song's section map over its waveform, and a mixer
  * console underneath. A pure projection of the same snapshot the DAW shows;
  * every action comes from the bindings or the DAW's own `menus`.

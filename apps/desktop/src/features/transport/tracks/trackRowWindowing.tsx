@@ -9,7 +9,7 @@ import type { VisibleTrackRows } from "./useVisibleTrackRows";
  * sits at the same height in both columns.
  *
  * The spacers come straight from `layout.tops`/`heights`, so the content keeps
- * exactly `layout.totalHeight` (rule 5 of docs/plans/track-virtualization): a
+ * exactly `layout.totalHeight` (rule 5 of docs/plans/completed/track-virtualization): a
  * pinned row outside the window splits a spacer in two and stays in place.
  */
 

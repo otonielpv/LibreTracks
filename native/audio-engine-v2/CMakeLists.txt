@@ -428,7 +428,7 @@ if(LT_ENGINE_BUILD_BENCHES)
     # Los dos bench_bungee_* enlazan DIRECTAMENTE contra bungee.lib y no contra
     # lt_audio_engine_v2: es a propósito, aíslan el coste de la librería del de
     # nuestro código. Por eso sólo se construyen si Bungee está disponible.
-    # Ver docs/plans/audio-thread-parallelism/01-banco-y-linea-base.md
+    # Ver docs/plans/completed/audio-thread-parallelism/01-banco-y-linea-base.md
     if(LT_ENGINE_USE_LIBSNDFILE)
         add_executable(bench_prepare_warp bench/bench_prepare_warp.cpp)
         target_compile_features(bench_prepare_warp PRIVATE cxx_std_20)
@@ -445,7 +445,7 @@ if(LT_ENGINE_BUILD_BENCHES)
             target_link_libraries(bench_streaming_playback PRIVATE psapi)
         endif()
         # Compara el DSP vivo con el audio preparado tras arrancar, saltar y
-        # reanudar. Ver docs/plans/audio-engine-performance/07-fidelidad-saltos.md
+        # reanudar. Ver docs/plans/completed/audio-engine-performance/07-fidelidad-saltos.md
         add_executable(bench_fidelity_jump bench/bench_fidelity_jump.cpp)
         target_compile_features(bench_fidelity_jump PRIVATE cxx_std_20)
         target_link_libraries(bench_fidelity_jump PRIVATE lt_audio_engine_v2)

@@ -241,7 +241,7 @@ pub fn start_pick_and_import_song_from_dialog(
         // on it before the progress bar left 0%. tauri-plugin-fs hands back a
         // real std::fs::File over the content:// fd, and a fd is seekable, so
         // the zip reader can work on it directly — the same fix `.ltset` got in
-        // docs/plans/android-low-end/04-import-sin-staging.md.
+        // docs/plans/completed/android-low-end/04-import-sin-staging.md.
         let Some(picked) = crate::platform::mobile_files::pick_file(&app, "Selecciona un paquete .ltpkg")
         else {
             return Ok(false);

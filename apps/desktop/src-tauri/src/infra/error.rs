@@ -8,7 +8,7 @@ pub enum DesktopError {
     #[error("no song is loaded")]
     NoSongLoaded,
     /// This device is a redundancy backup following its main: local transport
-    /// orders are refused (docs/plans/redundancy, decision R5).
+    /// orders are refused (docs/plans/completed/redundancy, decision R5).
     #[error("transport is following the main (redundancy backup)")]
     TransportLockedByRedundancy,
     #[error("audio command failed: {0}")]

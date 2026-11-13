@@ -1,7 +1,7 @@
 //! "Analizar canción": read a song's audio and propose its tempo and time
 //! signature markers (from the click track, or the music without one), its
 //! key (from the harmonic tracks) and its section markers (from the guide
-//! track). See `docs/plans/song-analysis/`.
+//! track). See `docs/plans/completed/song-analysis/`.
 //!
 //! Both are bounced in one pass of the engine's offline renderer (one output
 //! file each), so clip offsets, trims and fades are already resolved, and with

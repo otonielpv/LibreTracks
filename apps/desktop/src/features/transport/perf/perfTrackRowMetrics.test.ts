@@ -11,7 +11,7 @@ import {
 } from "./perfMetrics";
 
 /**
- * Contadores del plan `docs/plans/track-virtualization` (paso 01).
+ * Contadores del plan `docs/plans/completed/track-virtualization` (paso 01).
  *
  * Igual que los del plan de UI: lo que protegen es que el banco mida algo y
  * que fuera del build de medición no cueste nada.

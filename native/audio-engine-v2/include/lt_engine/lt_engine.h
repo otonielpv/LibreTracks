@@ -105,7 +105,7 @@ LT_API const char* lt_audio_engine_get_snapshot(LtEngine* engine);
 LT_API const char* lt_audio_engine_get_meter_snapshot(LtEngine* engine);
 
 /** Where the transport was at the start of the last rendered block and WHEN
- *  (docs/plans/redundancy step 02). Plain struct, no JSON, no locks: cheap
+ *  (docs/plans/completed/redundancy step 02). Plain struct, no JSON, no locks: cheap
  *  enough for 20 Hz. `steady_now_ns` is this engine's steady clock at the
  *  moment of the read, so the caller can age `callback_steady_ns` without
  *  assuming its own clock shares steady_clock's epoch. */

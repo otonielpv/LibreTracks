@@ -1,7 +1,7 @@
 //! The host side: a WebSocket server on the LAN that lets guests in with a
 //! role, mirrors the session to them and forwards their commands to the app.
 //!
-//! Design points (docs/plans/network-sessions/02-servidor-anfitrion.md):
+//! Design points (docs/plans/completed/network-sessions/02-servidor-anfitrion.md):
 //! - Only runs while the user hosts; `stop()` closes every guest.
 //! - Each published payload is serialized ONCE and shared as `Arc<str>`.
 //! - Each guest has its own writer that follows the latest transport / song /
@@ -59,7 +59,7 @@ pub struct HostConfig {
     /// failed.
     pub command_timeout: Duration,
     /// Guests (viewer/controller/editor). Off when the server only runs for
-    /// a redundancy backup (docs/plans/redundancy R2).
+    /// a redundancy backup (docs/plans/completed/redundancy R2).
     pub accept_guests: bool,
     /// Redundancy: let ONE backup in. Off by default; the app turns it on.
     pub accept_backup: bool,
@@ -197,7 +197,7 @@ struct Shared {
     /// skips the oldest (it will catch up from the next snapshot).
     events_tx: tokio::sync::broadcast::Sender<Arc<str>>,
     accept_guests: AtomicBool,
-    // --- redundancy (docs/plans/redundancy) ---
+    // --- redundancy (docs/plans/completed/redundancy) ---
     accept_backup: AtomicBool,
     backup_may_forward: AtomicBool,
     instance_id: String,
@@ -1218,7 +1218,7 @@ async fn run_writer(
 #[path = "server_tests.rs"]
 mod tests;
 
-// --- redundancy backup connection (docs/plans/redundancy step 01) ---
+// --- redundancy backup connection (docs/plans/completed/redundancy step 01) ---
 
 struct BackupHello {
     protocol_version: u32,

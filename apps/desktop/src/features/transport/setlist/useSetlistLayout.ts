@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 
 /**
- * Size class of the Setlist view (docs/plans/setlist-view/00-DISENO.md §4).
+ * Size class of the Setlist view (docs/plans/completed/setlist-view/00-DISENO.md §4).
  * It depends on the view's own area, not on the device: the library and the
  * side panel take width away. Touch behaviour is a separate axis
  * (`isMobileApp`); resizing a desktop window changes the layout, never the

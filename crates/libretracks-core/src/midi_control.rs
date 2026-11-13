@@ -1,6 +1,6 @@
 //! MIDI control surfaces: what a binding is and the pure decisions behind it.
 //!
-//! Plan `docs/plans/midi-controllers`, paso 01. The desktop crate owns the
+//! Plan `docs/plans/completed/midi-controllers`, paso 01. The desktop crate owns the
 //! ports and the side effects; everything that can be decided from numbers
 //! alone lives here so it can be tested (the desktop crate does not link its
 //! tests):

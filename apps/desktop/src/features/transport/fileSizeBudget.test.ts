@@ -39,32 +39,32 @@ const BUDGETS: Record<string, number> = {
   // El monolito. Objetivo: que baje, nunca que suba. Bajado de 8500 tras
   // sacar los handlers de canción a songs/songViewHandlers.ts y agrupar las
   // props de las vistas en songs/songViewBindings.ts (paso 01 de
-  // docs/plans/setlist-view), y a 8066 tras llevar los commits de recorte y
+  // docs/plans/completed/setlist-view), y a 8066 tras llevar los commits de recorte y
   // movimiento de canción a la misma factory (paso 07), y a 8000 tras sacar
   // las filas de MIDI Learn a hooks/useMidiLearnRows.ts (release 1.16.0).
   "TransportPanelContent.tsx": 8000,
   "library/libraryDragDrop.ts": 2300,
   // Bajado de 2000 tras extraer timeline/useRegionDrag.ts (paso 02 de
-  // docs/plans/ui-performance), y de 1700 tras sacar
-  // timeline/describeAutomationCue.ts (paso 1 de docs/plans/mobile-daw).
+  // docs/plans/completed/ui-performance), y de 1700 tras sacar
+  // timeline/describeAutomationCue.ts (paso 1 de docs/plans/completed/mobile-daw).
   "timeline/TimelineCanvasPane.tsx": 1650,
   // Bajado de 1650 tras extraer menus/markerKindMenus.ts (paso 3 de
-  // docs/plans/mobile-daw): todo el vocabulario de tipos de marca -22
+  // docs/plans/completed/mobile-daw): todo el vocabulario de tipos de marca -22
   // secciones, 13 avisos y variantes- vive ahora aparte.
   "menus/timelineMenus.ts": 1450,
   // Bajado de 1500 tras extraer panels/MidiLearnSettingsTab.tsx (paso 05 de
-  // docs/plans/mobile-midi), y de 1300 tras partir la antigua pestaña General
+  // docs/plans/completed/mobile-midi), y de 1300 tras partir la antigua pestaña General
   // en General/Timeline/Playback/Editing/Storage/System, cada una en su
   // fichero.
   "panels/SettingsPanel.tsx": 800,
   "timeline/TimelineToolbar.tsx": 1250,
   "compact/CompactView.tsx": 1150,
   // La raíz de la vista Setlist sólo reparte zonas por clase de tamaño; la
-  // lógica va en sus piezas (docs/plans/setlist-view, regla 4). El plan le
+  // lógica va en sus piezas (docs/plans/completed/setlist-view, regla 4). El plan le
   // pone techo en 900; arranca más bajo porque la holgura de abajo exige
   // menos de 600 líneas de margen.
   "setlist/SetlistView.tsx": 700,
-  // El editor de carriles de UNA canción (paso 11 de docs/plans/setlist-view).
+  // El editor de carriles de UNA canción (paso 11 de docs/plans/completed/setlist-view).
   "setlist/lanes/SongLanes.tsx": 700,
 };
 

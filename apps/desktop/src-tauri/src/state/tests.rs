@@ -5580,7 +5580,7 @@ fn place_bundled_audio_reuses_existing_original_and_copies_missing_one() {
 ///     update_song_region   19 ms   (mismo trabajo, TransportOnly)
 ///     move_clip           6,5 ms   (TimelineWindow)
 ///
-/// Ver docs/plans/ui-performance/00-DIAGNOSTICO.md, causa C8.
+/// Ver docs/plans/completed/ui-performance/00-DIAGNOSTICO.md, causa C8.
 #[test]
 fn moving_a_song_region_does_not_rebuild_the_engine_session() {
     let mut session = session_with_song_dir("region-move-impact", demo_song());

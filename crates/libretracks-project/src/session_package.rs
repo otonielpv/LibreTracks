@@ -1159,7 +1159,7 @@ pub fn extract_session_package(
 /// was to produce something `File::open` would accept. For the set that
 /// prompted this work that copy was 2.02 GiB written before extraction had
 /// even started — half the I/O of the entire import, spent purely to satisfy an
-/// argument type. See docs/plans/android-low-end/04-import-sin-staging.md.
+/// argument type. See docs/plans/completed/android-low-end/04-import-sin-staging.md.
 pub fn extract_session_package_from_reader<R: Read + io::Seek>(
     target_song_dir: &Path,
     reader: R,

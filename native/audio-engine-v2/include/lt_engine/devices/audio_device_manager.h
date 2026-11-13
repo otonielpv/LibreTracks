@@ -96,7 +96,7 @@ public:
     virtual void set_active_output_channels(const std::vector<int>& /*channels*/) noexcept {}
     // The driver's hardware instant for the block about to render (CoreAudio's
     // hostTimeNs), called on the audio thread right before render(). Backends
-    // without one never call it. Redundancy (docs/plans/redundancy step 02).
+    // without one never call it. Redundancy (docs/plans/completed/redundancy step 02).
     virtual void set_block_host_time_ns(std::uint64_t /*host_time_ns*/) noexcept {}
     virtual void render(float** output_channels,
                         int     num_channels,

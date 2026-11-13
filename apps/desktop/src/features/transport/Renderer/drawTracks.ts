@@ -1164,7 +1164,7 @@ export function drainWaveformTileWork(
   // Se mide la llamada ENTERA, no la suma de sus tiles: la diferencia entre
   // las dos es lo que cuesta asignar superficies y expulsar de la caché, que
   // es la hipótesis viva para los frames de 27-42 ms que sobrevivieron al
-  // paso 04 (docs/plans/ui-performance/state/04.md).
+  // paso 04 (docs/plans/completed/ui-performance/state/04.md).
   const startedAt = performance.now();
   const rendered = waveformTileCache.drainPendingTiles(budgetMs);
   recordTileDrain(performance.now() - startedAt);

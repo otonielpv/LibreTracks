@@ -15,7 +15,7 @@ import {
 } from "./useTrackRowWindow";
 
 /**
- * Paso 07 de `docs/plans/track-virtualization`: la ventana de filas con el
+ * Paso 07 de `docs/plans/completed/track-virtualization`: la ventana de filas con el
  * scroller tactil del movil. Con el dedo no hay rueda: el scroller escribe
  * `scrollTop` (sin leerlo) y el navegador emite `scroll`.
  */

@@ -89,7 +89,7 @@ const TUNING_NOTICE_CENTS = 15;
 /**
  * "Analizar canción": read the song's click track (tempo and meter markers)
  * and its harmonic tracks (key), let the user review and edit the proposal,
- * apply as one undoable edit. See docs/plans/song-analysis/.
+ * apply as one undoable edit. See docs/plans/completed/song-analysis/.
  */
 export function SongAnalysisModal({ onApplied }: Props) {
   const target = useSongAnalysisStore((state) => state.target);

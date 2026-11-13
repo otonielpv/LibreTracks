@@ -13,7 +13,7 @@ import {
 } from "./useVisibleTrackRows";
 
 /**
- * The window of track rows the DAW mounts (`docs/plans/track-virtualization`,
+ * The window of track rows the DAW mounts (`docs/plans/completed/track-virtualization`,
  * step 05), shared by the headers and the lanes.
  *
  * ONE controller (`useTrackRowWindowController`, in the transport panel)

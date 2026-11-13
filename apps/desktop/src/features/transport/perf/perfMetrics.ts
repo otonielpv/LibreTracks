@@ -61,7 +61,7 @@ let canvasRenderWorstLastSecond = 0;
 let canvasRenderWindowStart = 0;
 let canvasPaintCount = 0; // monotonic; lets the HUD distinguish "0 because idle" from "0 because instrumentation is broken"
 
-// ── Métricas del plan docs/plans/track-virtualization ───────────────────
+// ── Métricas del plan docs/plans/completed/track-virtualization ───────────────────
 //
 // Callbacks de animación de los medidores de pista ejecutados en el frame en
 // curso. `TrackMeter` lo incrementa; `tick()` lo vuelca en la ventana y lo
@@ -70,7 +70,7 @@ let canvasPaintCount = 0; // monotonic; lets the HUD distinguish "0 because idle
 let meterTicksThisFrame = 0;
 const meterTicksWindow: number[] = []; // mismas ~120 frames que frameTimeWindow
 
-// ── Métricas del plan docs/plans/ui-performance ─────────────────────────
+// ── Métricas del plan docs/plans/completed/ui-performance ─────────────────────────
 //
 // Cinco grupos añadidos para poder demostrar (o desmentir) las causas del
 // diagnóstico. Todos siguen el patrón de arriba: variables de módulo, función
@@ -584,7 +584,7 @@ export type PerfSnapshot = {
   canvasRenderEma: number;
   canvasRenderWorstMs: number;
   canvasPaintCount: number;
-  // ── Plan docs/plans/ui-performance ──
+  // ── Plan docs/plans/completed/ui-performance ──
   waveformTileRenders: number;
   waveformTileRenderEma: number;
   waveformTileRenderWorstMs: number;
@@ -598,7 +598,7 @@ export type PerfSnapshot = {
   waveformTileCachePeakBytes: number;
   gridBuilds: number;
   gridEntries: number;
-  // ── Plan docs/plans/track-virtualization ──
+  // ── Plan docs/plans/completed/track-virtualization ──
   /** Callbacks de animación de medidores por frame, media y máximo de la ventana. */
   meterTicksPerFrameAvg: number;
   meterTicksPerFrameMax: number;
@@ -873,7 +873,7 @@ export function dumpRecordingSummary() {
 
 /**
  * Resumen orientado a los criterios de aceptación de
- * `docs/plans/ui-performance`. Agrupa los gestos por tipo, porque el
+ * `docs/plans/completed/ui-performance`. Agrupa los gestos por tipo, porque el
  * protocolo pide 5 repeticiones de cada uno y lo que importa es la mediana,
  * no un gesto suelto.
  */

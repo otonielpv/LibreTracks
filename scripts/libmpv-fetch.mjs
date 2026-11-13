@@ -23,7 +23,7 @@
 // arranca igual y el vídeo aparece desactivado con el motivo.
 //
 // El nombre no empieza por "build": el `build*` del .gitignore raíz se lo
-// tragaría (ver docs/plans/video-output/00-DISENO.md, sección 7).
+// tragaría (ver docs/plans/completed/video-output/00-DISENO.md, sección 7).
 
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";

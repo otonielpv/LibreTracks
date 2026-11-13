@@ -611,7 +611,7 @@ jobs:
             bash -c 'mkdir -p vendor/bin/macos-frameworks && mv vendor/bin/native/*.dylib vendor/bin/native/bungee.framework vendor/bin/macos-frameworks/'
           }
 
-      # Video output (docs/plans/video-output, step 02). libmpv is loaded at
+      # Video output (docs/plans/completed/video-output, step 02). libmpv is loaded at
       # run time, so it only has to sit next to the exe: copying it into
       # vendor/bin/native lets the existing resources glob bundle it.
       - name: Cache libmpv (Windows)

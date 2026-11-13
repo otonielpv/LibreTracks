@@ -1,4 +1,4 @@
-//! What a device remembers about redundancy (docs/plans/redundancy), in its
+//! What a device remembers about redundancy (docs/plans/completed/redundancy), in its
 //! own `redundancy.json` next to `network-session.json`. NOT inside
 //! `AppSettings`: the settings are published to the remote's browser clients,
 //! and the backup PIN or trusted-backup hashes must not be.

@@ -148,7 +148,7 @@ export function useMarkerMoveDrag({
    * Posición en vuelo del arrastre. Vive en un ref, no en estado, porque se
    * escribe en cada `pointermove`: medido antes del cambio, eso costaba un
    * render completo de `TimelineCanvasPane` por frame — 144/s en una pantalla
-   * de 144 Hz (docs/plans/ui-performance/state/01.md).
+   * de 144 Hz (docs/plans/completed/ui-performance/state/01.md).
    *
    * Lo leen, fuera de React: el bucle rAF que coloca los hotspots, el que
    * dibuja el ruler (a través del snapshot, igual que ya hacía el arrastre del

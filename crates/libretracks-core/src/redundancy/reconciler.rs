@@ -1,4 +1,4 @@
-//! The heart of redundancy (docs/plans/redundancy/05-reconciliador.md):
+//! The heart of redundancy (docs/plans/completed/redundancy/05-reconciliador.md):
 //! given what the backup knows about the main and what its own engine is
 //! doing, decide the ONE action the backup takes now.
 //!

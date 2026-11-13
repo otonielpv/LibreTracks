@@ -436,7 +436,7 @@ export function useProjectActions({
           // was available — but the backend grew a native picker for both, and
           // the detour cost a full extra copy of the package at roughly 7 MB/s:
           // ~4.7 minutes of a frozen 0% for a 2 GB package on a low-end phone.
-          // See docs/plans/android-low-end/.
+          // See docs/plans/completed/android-low-end/.
           nextSnapshot = await pickAndImportSong();
         }
         if (!nextSnapshot) {

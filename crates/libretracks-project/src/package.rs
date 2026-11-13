@@ -952,7 +952,7 @@ pub fn extract_song_package(
 /// first was to produce something `File::open` would accept — a 2 GiB write at
 /// the ~7 MB/s the WebView base64 bridge sustains, spent purely to satisfy an
 /// argument type. `.ltset` stopped doing this in
-/// docs/plans/android-low-end/04-import-sin-staging.md; this is the same fix
+/// docs/plans/completed/android-low-end/04-import-sin-staging.md; this is the same fix
 /// for the song package.
 pub fn extract_song_package_from_reader<R: Read + Seek>(
     song_dir: &Path,

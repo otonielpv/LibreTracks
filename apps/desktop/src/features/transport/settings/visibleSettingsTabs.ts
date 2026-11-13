@@ -31,7 +31,7 @@ export function allSettingsTabs(
 
 /**
  * Tabs a phone or tablet never shows: no physical keyboard by default for
- * shortcuts; redundancy is desktop-first (docs/plans/redundancy, R7). (Video
+ * shortcuts; redundancy is desktop-first (docs/plans/completed/redundancy, R7). (Video
  * is shown since plan video-mobile: a phone drives a projector by cable or
  * AirPlay.)
  */

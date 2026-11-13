@@ -9,7 +9,7 @@ import type {
 } from "@libretracks/shared/networkApi";
 
 /**
- * Network sessions, host and guest side (docs/plans/network-sessions).
+ * Network sessions, host and guest side (docs/plans/completed/network-sessions).
  *
  * A store and not component state: the side-nav button, the topbar badge
  * and the modal never share a parent, and a session keeps running with the

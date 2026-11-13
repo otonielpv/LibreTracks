@@ -18,7 +18,7 @@
 //!   del árbol de la plantilla. Todo queda marcado con la canción.
 //! - `KeepSeparate`: la copia del árbol, en la raíz, marcada con la canción.
 //!
-//! Ver docs/plans/song-templates/00-DISENO.md.
+//! Ver docs/plans/completed/song-templates/00-DISENO.md.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;

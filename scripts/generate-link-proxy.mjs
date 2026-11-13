@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Generates the two halves of the network-session guest mirror from
-// scripts/link-commands.json (docs/plans/network-sessions):
+// scripts/link-commands.json (docs/plans/completed/network-sessions):
 //
 // - packages/shared/src/guestCommandTable.ts: which commands the guest UI
 //   keeps on its own device, sends to the host, or refuses.

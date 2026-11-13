@@ -14,7 +14,7 @@ import {
  * sin re-render) y se actualiza en cada movimiento. Cuando esa posición vivía
  * en `useState`, cada `pointermove` costaba un render completo del panel del
  * timeline — 144 por segundo en una pantalla de 144 Hz, medido
- * (docs/plans/ui-performance/state/01.md).
+ * (docs/plans/completed/ui-performance/state/01.md).
  *
  * Dos decisiones que no son casuales:
  *

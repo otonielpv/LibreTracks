@@ -16,7 +16,7 @@
 //!
 //! The trade is honest and worth stating: a prepared package is BIGGER than the
 //! original (compressed sources become PCM), so it moves cost from the phone's
-//! CPU to the transfer. See docs/plans/android-low-end/06-export-optimizado.md.
+//! CPU to the transfer. See docs/plans/completed/android-low-end/06-export-optimizado.md.
 
 use std::fs;
 use std::io;

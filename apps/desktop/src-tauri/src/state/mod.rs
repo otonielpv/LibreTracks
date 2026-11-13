@@ -429,7 +429,7 @@ pub struct DesktopSession {
     /// Marker jumps never had this problem because they are scheduled once.
     pub(super) scheduled_native_vamp_loop: Option<(f64, f64)>,
     pub(super) automation: AutomationDocument,
-    /// Redundancy (docs/plans/redundancy step 04): every transport change
+    /// Redundancy (docs/plans/completed/redundancy step 04): every transport change
     /// leaves here as one intent, see `state/redundancy.rs`.
     pub(super) intents: redundancy::IntentBus,
     pub(super) pending_automation_jump: Option<PendingAutomationJump>,

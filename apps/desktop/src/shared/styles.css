@@ -13969,7 +13969,7 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
     0 0 18px rgba(87, 241, 219, 0.16);
 }
 
-/* ---- Video (docs/plans/video-output). The canvas paints the clips; these
+/* ---- Video (docs/plans/completed/video-output). The canvas paints the clips; these
    are the header of a video track and the invisible hit targets over each
    clip. Teal (#3fb8af) is the video accent, apart from audio, MIDI (violet)
    and automation (pink). */

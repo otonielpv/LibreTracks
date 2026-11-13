@@ -1,4 +1,4 @@
-//! Redundancy backup peer over loopback (docs/plans/redundancy step 01):
+//! Redundancy backup peer over loopback (docs/plans/completed/redundancy step 01):
 //! a real host and real backup / guest clients on 127.0.0.1. Timeouts only
 //! bound how long a test waits for something that must happen.
 

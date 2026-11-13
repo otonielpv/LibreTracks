@@ -1,6 +1,6 @@
 //! Redundancy channel: a second LibreTracks follows this one as a BACKUP so
 //! a hardware switcher (or the desk) can move to it if the main dies.
-//! Plan: `docs/plans/redundancy/` (step 01 defines and carries the messages;
+//! Plan: `docs/plans/completed/redundancy/` (step 01 defines and carries the messages;
 //! later steps fill and use them).
 //!
 //! A backup is not a guest: it plays audio with its own engine, it does not

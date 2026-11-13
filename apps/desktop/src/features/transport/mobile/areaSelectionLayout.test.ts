@@ -12,7 +12,7 @@ import {
 } from "./areaSelection";
 
 /**
- * Paso 04 de `docs/plans/track-virtualization`: la seleccion por area sale del
+ * Paso 04 de `docs/plans/completed/track-virtualization`: la seleccion por area sale del
  * layout y no de medir cada fila en el DOM. Con todas las filas montadas tiene
  * que coger exactamente lo mismo que antes; sin ellas, lo que el DOM ya no ve.
  */

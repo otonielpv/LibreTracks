@@ -61,7 +61,7 @@ PitchRenderDecision resolve_pitch_render_decision(
 // del callback POR PISTA. Medido: a nivel de motor entero, 24 pistas pasan de
 // 0,9 % a 37,6 % con warp, y el ratio no cambia ese coste (ratio 1.0 y 1.2
 // miden igual). Ver el hecho 2 de
-// docs/plans/audio-thread-parallelism/00-DIAGNOSTICO.md.
+// docs/plans/completed/audio-thread-parallelism/00-DIAGNOSTICO.md.
 //
 // La decisión puede tomarse una vez, no por bloque: resolve_warp_time_ratio()
 // toma el BPM objetivo en el frame de INICIO de la región, así que el ratio de

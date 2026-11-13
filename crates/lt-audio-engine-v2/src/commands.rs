@@ -315,7 +315,7 @@ pub enum EngineCommand {
     /// expone la pestaña Diagnóstico como control de resolución de problemas,
     /// para no obligar a nadie a lanzar la app desde una terminal con una
     /// variable de entorno. Ver
-    /// docs/plans/audio-thread-parallelism/09-politica-de-hilos.md
+    /// docs/plans/completed/audio-thread-parallelism/09-politica-de-hilos.md
     SetRenderThreads {
         threads: i32,
     },

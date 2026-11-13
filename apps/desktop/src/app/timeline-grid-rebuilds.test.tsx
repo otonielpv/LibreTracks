@@ -9,7 +9,7 @@ import {
 } from "../features/transport/perf/perfMetrics";
 
 /**
- * Regresión del paso 06 de `docs/plans/ui-performance`.
+ * Regresión del paso 06 de `docs/plans/completed/ui-performance`.
  *
  * La rejilla del timeline se reconstruía en CADA render de
  * `TransportPanelContent`, porque `buildSongTempoRegions(song)` se evaluaba en

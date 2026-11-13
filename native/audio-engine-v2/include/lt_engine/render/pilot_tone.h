@@ -2,7 +2,7 @@
 
 // ---------------------------------------------------------------------------
 // PilotTone — the main's "I am alive" tone for a hardware switcher
-// (docs/plans/redundancy/08-tono-piloto.md), like the "drone track" a Radial
+// (docs/plans/completed/redundancy/08-tono-piloto.md), like the "drone track" a Radial
 // SW8 listens to.
 //
 // - A sine on ONE physical output channel (1-based, the number the user sees

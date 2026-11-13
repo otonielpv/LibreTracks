@@ -2,7 +2,7 @@
 
 // ---------------------------------------------------------------------------
 // AudioClockStamp — WHEN the transport was at a given frame
-// (docs/plans/redundancy/02-reloj-de-audio.md).
+// (docs/plans/completed/redundancy/02-reloj-de-audio.md).
 //
 // The audio thread publishes, at the top of every rendered block, the trio
 // (steady_clock instant, transport frame at the start of the block, moving).

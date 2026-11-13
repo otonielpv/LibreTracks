@@ -5,7 +5,7 @@ import { buildTrackRowLayout } from "../tracks/trackLayout";
 import { createReorderPreview, type ReorderPreviewItem } from "./reorderPreview";
 
 /**
- * Paso 04 de `docs/plans/track-virtualization`: la vista previa del reordenado
+ * Paso 04 de `docs/plans/completed/track-virtualization`: la vista previa del reordenado
  * acepta items con su posicion del layout y sin elemento (fila no montada), y
  * adjunta el elemento cuando aparece.
  */

@@ -61,7 +61,7 @@ pub struct LtSourcePeaksWindowView {
     pub ok: i32,
 }
 
-/// Mirrors `LtAudioClock` in lt_engine.h (docs/plans/redundancy step 02).
+/// Mirrors `LtAudioClock` in lt_engine.h (docs/plans/completed/redundancy step 02).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LtAudioClock {

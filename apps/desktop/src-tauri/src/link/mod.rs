@@ -1,4 +1,4 @@
-//! Network sessions between LibreTracks apps (docs/plans/network-sessions).
+//! Network sessions between LibreTracks apps (docs/plans/completed/network-sessions).
 //!
 //! Not the remote: `crate::remote` serves the browser SPA and stays as it is.
 //! This module adapts `libretracks-link` to the app on every platform: it

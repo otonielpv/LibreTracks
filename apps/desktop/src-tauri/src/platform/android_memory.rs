@@ -4,7 +4,7 @@
 //! used to ignore that: during the import of a 2 GB `.ltset` on an Oppo
 //! CPH1931, the system killed ~40 other processes to keep us alive and then
 //! restarted `system_server`. We were never asked politely — we were, and we
-//! didn't answer. See docs/plans/android-low-end/00-DIAGNOSTICO.md.
+//! didn't answer. See docs/plans/completed/android-low-end/00-DIAGNOSTICO.md.
 //!
 //! The Kotlin side (`MainActivity.onTrimMemory`) calls straight into
 //! [`Java_com_libretracks_desktop_MainActivity_nativeOnTrimMemory`] via JNI.

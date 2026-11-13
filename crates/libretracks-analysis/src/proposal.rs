@@ -13,7 +13,7 @@
 //! only shows up again where it really changes. The engine's metronome
 //! restarts the bar at any marker, but the timeline grid only at a time
 //! signature marker: a tempo marker keeps the beat phase, as in Ableton. See
-//! `docs/plans/song-analysis/00-DISENO.md` §3.
+//! `docs/plans/completed/song-analysis/00-DISENO.md` §3.
 
 use serde::{Deserialize, Serialize};
 

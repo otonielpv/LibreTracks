@@ -272,7 +272,7 @@ const ensureEngineV2 = (normalizedEnv) => {
     run("bash", ["scripts/macos-bundle-ffmpeg.sh", nativeVendorDir]);
   }
 
-  // macOS video output (docs/plans/video-output, step 15): our own libmpv
+  // macOS video output (docs/plans/completed/video-output, step 15): our own libmpv
   // next to the engine, like Windows does in desktop-native.ps1. Built once
   // (scripts/libmpv-macos.sh, slow the first time) and verified every time.
   if (process.platform === "darwin") {
@@ -344,7 +344,7 @@ switch (mode) {
       { env: runEnv },
     );
     break;
-  // Build de MEDICIÓN (docs/plans/ui-performance/PROTOCOLO.md).
+  // Build de MEDICIÓN (docs/plans/completed/ui-performance/PROTOCOLO.md).
   //
   // `tauri build --debug` empaqueta el bundle de frontend de PRODUCCIÓN (sin
   // React en modo dev, sin Vite/HMR — los artefactos que ya invalidaron una

@@ -184,7 +184,7 @@ export function PerfHud() {
         canvas paints total: {snapshot.canvasPaintCount}
       </div>
 
-      {/* Bloque del plan docs/plans/ui-performance. Compacto a propósito: el
+      {/* Bloque del plan docs/plans/completed/ui-performance. Compacto a propósito: el
           detalle (medianas por gesto, IPC por comando) sale por
           window.__lt_perf.plan(), que no compite por espacio en pantalla. */}
       <div

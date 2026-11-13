@@ -84,7 +84,7 @@ class MainActivity : TauriActivity() {
 
   // Android warns before it kills. Ignoring that warning is how importing a
   // 2 GB .ltset ended with the system killing ~40 other processes and
-  // restarting system_server; see docs/plans/android-low-end/.
+  // restarting system_server; see docs/plans/completed/android-low-end/.
   //
   // Straight to native rather than through the WebView: under real pressure the
   // WebView process is itself a kill candidate, so a warning that has to travel

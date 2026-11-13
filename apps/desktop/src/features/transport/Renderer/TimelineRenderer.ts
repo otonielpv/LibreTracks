@@ -383,7 +383,7 @@ export class TimelineRenderer {
         // presupuesto. Antes ocurría dentro del pintado, y al cruzar un paso
         // de zoom de 1,5x se rasterizaban decenas de tiles en un solo frame:
         // picos medidos de 27,7 a 76,5 ms contra un presupuesto de 6,9 ms
-        // (docs/plans/ui-performance/state/01.md).
+        // (docs/plans/completed/ui-performance/state/01.md).
         //
         // Si rasterizó algo, el frame siguiente tiene que repintar para
         // mostrarlo; mientras haya cola, seguimos pidiendo repintado. El

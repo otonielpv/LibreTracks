@@ -343,7 +343,7 @@ private:
     //           recorre las ranuras EN ORDEN ASCENDENTE.
     //
     // El orden de la fase B no es un detalle de implementación, es el contrato
-    // de bit-exactitud del plan (docs/plans/audio-thread-parallelism/
+    // de bit-exactitud del plan (docs/plans/completed/audio-thread-parallelism/
     // 07-buses-de-mezcla-por-pista.md): la suma de flotantes no es asociativa,
     // así que sumar en orden de ranura hace que la salida NO dependa de cuántos
     // hilos la calculen. Sin eso, el test de equivalencia serie-vs-paralelo del

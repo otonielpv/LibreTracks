@@ -8,7 +8,7 @@
 //!
 //! [`step`] is called by the desktop runtime every tick with where the
 //! transport is and what the player reports, and answers what to tell the
-//! player. Control law (docs/plans/video-output/00-DISENO.md §4.6):
+//! player. Control law (docs/plans/completed/video-output/00-DISENO.md §4.6):
 //!
 //! | Situation | Action |
 //! | --- | --- |

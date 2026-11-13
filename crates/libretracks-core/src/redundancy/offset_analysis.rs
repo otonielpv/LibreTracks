@@ -1,5 +1,5 @@
 //! How many milliseconds separate what the main and the backup put on the
-//! wire (docs/plans/redundancy/11-medir-y-calibrar.md): a stereo recording,
+//! wire (docs/plans/completed/redundancy/11-medir-y-calibrar.md): a stereo recording,
 //! main on the left, backup on the right, cut in 1 s windows; each window's
 //! lag by cross-correlation with parabolic interpolation (sub-sample).
 //! Windows without signal (silence, or a weak correlation) are skipped.

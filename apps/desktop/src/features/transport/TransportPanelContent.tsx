@@ -3635,7 +3635,7 @@ export function TransportPanelContent() {
 
   // El modelo ya refleja la edición -> cierra el cronómetro que el HUD abrió al
   // soltar el arrastre. Es `editCommitMs`, la métrica del paso 03 de
-  // docs/plans/ui-performance: mide lo que el usuario percibe como "y después
+  // docs/plans/completed/ui-performance: mide lo que el usuario percibe como "y después
   // de un tiempo se realiza el movimiento". No-op con el HUD apagado.
   useEffect(() => {
     settlePerfCommits();
@@ -4803,7 +4803,7 @@ export function TransportPanelContent() {
   // y, por la cadena `timelineGrid` -> `TimelineRenderer.updateState` ->
   // `markAllDirty`, repintaba las TRES capas de canvas en cada render.
   //
-  // Medido antes del cambio (docs/plans/ui-performance/state/01.md): el
+  // Medido antes del cambio (docs/plans/completed/ui-performance/state/01.md): el
   // contador `gridBuilds` era IDÉNTICO al de renders de este componente en las
   // 25 muestras comprobadas — 1:1, sin una excepción. Un notch de rueda
   // costaba 9-11 reconstrucciones.
@@ -6212,7 +6212,7 @@ export function TransportPanelContent() {
     getLaneViewportWidth: () => laneViewportWidthRef.current, selectRegion: setSelectedRegionId,
   };
 
-  // Barra tactil de la seleccion (docs/plans/mobile-daw, paso 2). Se instancia
+  // Barra tactil de la seleccion (docs/plans/completed/mobile-daw, paso 2). Se instancia
   // aqui y no junto a `timelineMenus` porque necesita
   // `handleImportLibraryFromDialog`, que nace de la factoria de arrastre de la
   // biblioteca, declarada mas arriba pero DESPUES de los menus.

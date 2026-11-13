@@ -1,5 +1,5 @@
 /**
- * Genera la sesión de referencia GRANDE del plan `docs/plans/ui-performance`.
+ * Genera la sesión de referencia GRANDE del plan `docs/plans/completed/ui-performance`.
  *
  * Por qué hace falta: la sesión de capturas (3 canciones) es pequeña, y las
  * causas C4 (caché de tiles de onda) y C6 (dibujo O(proyecto)) escalan con el
@@ -371,7 +371,7 @@ async function main() {
       `  entradas de rejilla:  ~${gridMarkers} (lo que hoy se recorre por capa y por frame)`,
       "",
       "Ábrela una vez para que se generen los .ltpeaks, ciérrala y vuelve a",
-      "abrirla antes de medir. Ver docs/plans/ui-performance/PROTOCOLO.md.",
+      "abrirla antes de medir. Ver docs/plans/completed/ui-performance/PROTOCOLO.md.",
       "",
     ].join("\n"),
   );

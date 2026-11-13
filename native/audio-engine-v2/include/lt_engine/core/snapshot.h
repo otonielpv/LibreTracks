@@ -44,7 +44,7 @@ struct DeviceInfo {
     // Stream paused on purpose while idle (CmdSetOutputSuspended).
     bool        output_suspended = false;
     // How long a rendered sample takes to be heard, as the backend reports it
-    // (docs/plans/redundancy step 02). 0 and latency_reported=false when the
+    // (docs/plans/completed/redundancy step 02). 0 and latency_reported=false when the
     // backend reports nothing or the fallback clock is driving.
     int         output_latency_samples = 0;
     double      output_latency_seconds = 0.0;
@@ -61,7 +61,7 @@ struct CpuDiagnostics {
     double callback_load_percent = 0.0;
     // Hilos del pool de render que estan realmente activos (1 = sin pool).
     // Es de SOLO LECTURA: no hay ajuste de usuario para esto a proposito -- ver
-    // docs/plans/audio-thread-parallelism/09-politica-de-hilos.md. Se expone
+    // docs/plans/completed/audio-thread-parallelism/09-politica-de-hilos.md. Se expone
     // para que un reporte de usuario diga a cuantos hilos corria de verdad en
     // vez de dejarnos adivinando, que es justo lo que paso con el log del 96 %.
     int render_threads_active = 1;

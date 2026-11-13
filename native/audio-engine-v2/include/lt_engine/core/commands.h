@@ -93,7 +93,7 @@ struct CmdSetMetronomeVolume      { float volume; };
 // Hilos del pool de render. 0 = "Automatico" (decide la politica del
 // dispositivo). No es un mando de rendimiento para el musico: es el control de
 // resolucion de problemas de la pestana Diagnostico. Ver
-// docs/plans/audio-thread-parallelism/09-politica-de-hilos.md
+// docs/plans/completed/audio-thread-parallelism/09-politica-de-hilos.md
 struct CmdSetRenderThreads        { int threads; };
 struct CmdSetMetronomeOutputRoute { std::string route; };
 struct CmdSetMetronomeConfig      {

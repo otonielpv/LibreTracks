@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-// Network sessions on iOS (docs/plans/network-sessions, pasos 03 y 04).
+// Network sessions on iOS (docs/plans/completed/network-sessions, pasos 03 y 04).
 //
 // - Keep-awake registry: the screen must not auto-lock while this device
 //   hosts or follows a host. Several features want that (video output too),

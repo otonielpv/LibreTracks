@@ -1,4 +1,4 @@
-//! Redundancy lifecycle (docs/plans/redundancy/07-caida-y-promocion.md):
+//! Redundancy lifecycle (docs/plans/completed/redundancy/07-caida-y-promocion.md):
 //! the backup's and the main's state machines, the 4 Hz limit on status
 //! events and what to do at startup after an unclean exit. Pure: every
 //! instant is injected (ns of one local monotonic base).

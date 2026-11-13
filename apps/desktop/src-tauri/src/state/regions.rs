@@ -746,7 +746,7 @@ impl DesktopSession {
         // se conforman con TimelineWindow desde siempre.
         //
         // La etiqueta no era gratis. Medido en el build de medicion
-        // (docs/plans/ui-performance/state/01.md y state/03.md):
+        // (docs/plans/completed/ui-performance/state/01.md y state/03.md):
         //
         //     move_song_region    629 ms   <- StructureRebuild
         //     update_song_region   19 ms   <- TransportOnly, mismo trabajo por

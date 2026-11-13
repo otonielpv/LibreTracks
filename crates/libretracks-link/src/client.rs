@@ -45,7 +45,7 @@ pub struct GuestConfig {
     pub silence_timeout: Duration,
     pub connect_timeout: Duration,
     pub command_timeout: Duration,
-    /// `Backup` = redundancy backup (docs/plans/redundancy): gets redundancy
+    /// `Backup` = redundancy backup (docs/plans/completed/redundancy): gets redundancy
     /// messages instead of the guest feeds and sends heartbeats.
     pub peer_kind: PeerKind,
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Genera los vídeos de prueba del plan de salida de vídeo
-// (docs/plans/video-output, pasos 01, 04, 07 y 08). No se suben al repo: se
+// (docs/plans/completed/video-output, pasos 01, 04, 07 y 08). No se suben al repo: se
 // regeneran con el ffmpeg del sistema cuando hacen falta.
 //
 //   node scripts/video-fixtures.mjs [carpeta]      (por defecto target/video-fixtures)

@@ -110,7 +110,7 @@ TEST_CASE("desktop never gets a spending budget") {
 }
 
 TEST_CASE("the Oppo CPH1931 classifies as Constrained") {
-    // The exact device from docs/plans/android-low-end/00-DIAGNOSTICO.md:
+    // The exact device from docs/plans/completed/android-low-end/00-DIAGNOSTICO.md:
     // 2 706 168 kB installed, ~1.0 GB available while idle, 8 cores.
     const auto profile =
         lt_device_profile_for(handheld_probe(2706168ull * 1024, 1122700ull * 1024, 8));

@@ -46,7 +46,7 @@ vi.mock("./WaveformTileCache", () => {
       }
 
       // El pintado publica el estado de la caché en el HUD una vez por frame
-      // (docs/plans/ui-performance, paso 01). El doble tiene que ofrecerlo o
+      // (docs/plans/completed/ui-performance, paso 01). El doble tiene que ofrecerlo o
       // drawTrackClipsLayer revienta.
       stats() {
         return { entries: 1, bytes: 64 * 32 * 4 };

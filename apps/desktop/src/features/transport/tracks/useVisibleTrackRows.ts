@@ -9,7 +9,7 @@ import { visibleTrackWindow, type TrackRowLayout, type TrackRowWindow } from "./
  *
  * Same question the canvas answers with `visibleTrackWindow`, asked of the same
  * `TrackRowLayout`, with a wider margin (a viewport above and below) so a fast
- * scroll never uncovers a gap. See `docs/plans/track-virtualization` for the
+ * scroll never uncovers a gap. See `docs/plans/completed/track-virtualization` for the
  * rules this keeps:
  *
  * - At or below `TRACK_VIRTUALIZATION_MIN_ROWS`, or `enabled: false`, every row.

@@ -35,7 +35,7 @@ void Mixer::force_control_count_zero_for_test() noexcept {
 namespace {
 
 // Release measurements and acceptance criteria:
-// docs/plans/audio-engine-performance/README.md. Keep the existing threshold
+// docs/plans/completed/audio-engine-performance/README.md. Keep the existing threshold
 // until modest hardware is measured.
 constexpr int kMinCostlyTracksForParallelRender = 8;
 
@@ -1053,7 +1053,7 @@ void Mixer::render(float** output_channels,
     auto t0 = std::chrono::steady_clock::now();
     callback_count_.fetch_add(1, std::memory_order_relaxed);
 
-    // Redundancy (docs/plans/redundancy step 02): WHEN the transport was at
+    // Redundancy (docs/plans/completed/redundancy step 02): WHEN the transport was at
     // the first frame of this block, taken before anything advances it. Atomic
     // stores only.
     if (audio_clock_stamp_) {

@@ -24,7 +24,7 @@ import "./reorderPreview.css";
  * Esa disposición puede venir del DOM (se mide cada elemento) o de un layout
  * (`offset`/`size` por elemento más un ancla montada que lo clava en
  * pantalla). Con el layout, un elemento puede no existir todavía: las pistas
- * fuera de pantalla no se montan (`docs/plans/track-virtualization`). Se
+ * fuera de pantalla no se montan (`docs/plans/completed/track-virtualization`). Se
  * desplaza en cuanto aparece, con `attach`.
  */
 

@@ -9,7 +9,7 @@ import {
 } from "../timeline/timelineMath";
 
 /**
- * Equivalencia del paso 06 de `docs/plans/ui-performance`.
+ * Equivalencia del paso 06 de `docs/plans/completed/ui-performance`.
  *
  * `drawRulerGridLabels` dejó de recorrer TODAS las marcas del proyecto en cada
  * pintado: ahora acota el tramo visible con búsqueda binaria y cachea por
