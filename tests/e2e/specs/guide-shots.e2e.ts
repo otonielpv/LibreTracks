@@ -744,14 +744,42 @@ describe("user guide screenshots", function () {
       });
       // Long tabs: one capture per screenful of the panel, scrolling the
       // panel itself; a tab that fits is captured once.
-      const pages = await runInPage(() => {
+      const { pages, overflow, innerHeight } = await runInPage(() => {
         const scroller = document.querySelector(".lt-settings-tab-panels");
-        if (!scroller) return 1;
+        if (!scroller) return { pages: 1, overflow: 0, innerHeight: window.innerHeight };
         scroller.scrollTop = 0;
         const overflow = scroller.scrollHeight - scroller.clientHeight;
-        if (overflow <= 8) return 1;
-        return Math.min(5, 1 + Math.ceil(overflow / (scroller.clientHeight - 80)));
+        const pages = overflow <= 8 ? 1 : Math.min(5, 1 + Math.ceil(overflow / (scroller.clientHeight - 80)));
+        return { pages, overflow, innerHeight: window.innerHeight };
       });
+      // A tab only a little taller than the panel would come out as two
+      // near-identical pages: lengthen the emulated viewport, let the panel
+      // and the modal grow to fit it, and shoot it once.
+      if (pages > 1 && overflow <= 200) {
+        await withTallViewport(innerHeight + overflow + 60, async () => {
+          await runInPage((extra: number) => {
+            const scroller = document.querySelector<HTMLElement>(".lt-settings-tab-panels");
+            const modal = document.querySelector<HTMLElement>(".lt-settings-modal");
+            if (!scroller || !modal) return;
+            const grow = (el: HTMLElement) => {
+              const h = el.getBoundingClientRect().height;
+              el.dataset.ltShotStyle = el.getAttribute("style") ?? "";
+              el.style.maxHeight = "none";
+              el.style.height = `${h + extra}px`;
+            };
+            grow(modal);
+            grow(scroller);
+          }, overflow + 4);
+          await shot(`settings-${id}`, { selector: ".lt-settings-tab-panels", margin: 4 });
+          await runInPage(() => {
+            document.querySelectorAll<HTMLElement>("[data-lt-shot-style]").forEach((el) => {
+              el.setAttribute("style", el.dataset.ltShotStyle ?? "");
+              delete el.dataset.ltShotStyle;
+            });
+          });
+        });
+        continue;
+      }
       // Lists (shortcuts, MIDI Learn) only need their first screen: the page
       // explains how they work, not every row. The filename keeps its "-1".
       const pagesToShoot = ["shortcuts", "midiLearn"].includes(id) ? 1 : pages;
