@@ -347,6 +347,12 @@ jobs:
 
       - name: Restore Rust cache
         uses: Swatinem/rust-cache@v2
+        with:
+          # whisper-rs-sys does not rebuild when GGML_* changes (no
+          # rerun-if-env-changed), so a cached build from before
+          # GGML_NATIVE=OFF (.cargo/config.toml) would ship AVX-512 again.
+          # Bump this key whenever whisper's build flags change.
+          key: ggml-native-off
 
       - name: Install Linux system dependencies
         if: matrix.platform == 'linux'
@@ -829,6 +835,36 @@ jobs:
             exit 1
           }
           .\scripts\verify-windows-no-vc-redist.ps1 $installer.FullName
+
+      # 1.17.0 shipped AVX-512 (whisper.cpp built with GGML_NATIVE on a runner
+      # that had it): "Analizar canción" died with 0xc000001d on most PCs.
+      # Any zmm register in the exe means it only runs on AVX-512 CPUs.
+      - name: Validate no AVX-512 in the app (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" | Select-Object -First 1
+          if (-not $dumpbin) { Write-Error "dumpbin.exe not found"; exit 1 }
+          $zmm = (& $dumpbin.FullName /nologo /disasm:nobytes target-desktop-native\release\libretracks-desktop.exe | Select-String -SimpleMatch 'zmm' | Measure-Object).Count
+          if ($zmm -gt 0) {
+            Write-Error "libretracks-desktop.exe has $zmm AVX-512 (zmm) instructions; check GGML_NATIVE in .cargo/config.toml and the Rust cache key."
+            exit 1
+          }
+          Write-Host "No AVX-512 instructions in libretracks-desktop.exe."
+
+      - name: Validate no AVX-512 in the app (Linux)
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          zmm=$(objdump -d --no-show-raw-insn target-desktop-native/release/libretracks-desktop | grep -c zmm || true)
+          if [ "$zmm" -gt 0 ]; then
+            echo "::error::libretracks-desktop has $zmm AVX-512 (zmm) instructions; check GGML_NATIVE in .cargo/config.toml and the Rust cache key."
+            exit 1
+          fi
+          echo "No AVX-512 instructions in libretracks-desktop."
 
       - name: Validate bundled libmpv (Windows)
         if: matrix.platform == 'windows'

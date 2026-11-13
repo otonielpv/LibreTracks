@@ -13,6 +13,14 @@ CMAKE_POLICY_DEFAULT_CMP0091 = "NEW"
 # The same crate also drops the optimisation flags on MSVC; this puts them
 # back (see the file).
 CMAKE_PROJECT_INCLUDE = { value = ".cargo/whisper-msvc-release.cmake", relative = true }
+# ggml defaults to GGML_NATIVE=ON: it compiles for the CPU of the machine that
+# builds it. 1.17.0 landed on a CI runner with AVX-512 and shipped zmm
+# instructions, so "Analizar canción" crashed (illegal instruction) as soon as
+# Whisper ran on any PC without AVX-512. OFF = fixed baseline (SSE4.2, AVX,
+# AVX2, FMA, F16C on x86), the same level 1.16.0 happened to ship.
+# whisper-rs-sys has no rerun-if-env-changed for this: after changing it,
+# `cargo clean -p whisper-rs-sys` on every local target.
+GGML_NATIVE = "OFF"
 
 [target.'cfg(all(target_os = "windows", target_env = "msvc"))']
 rustflags = ["-C", "target-feature=+crt-static"]
