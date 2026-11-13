@@ -362,6 +362,7 @@ Para mandar a cada músico su pista de ensayo (al batería todo menos la baterí
    - `Pistas por separado (.zip)`: un WAV por pista, todos alineados desde el inicio de la canción, dentro de un `.zip`.
 5. Ajusta formato (WAV 16/24/32 bits), frecuencia de muestreo, estéreo o mono, y si quieres:
    - `Aplicar la mezcla`: volumen y paneo de cada pista y carpeta y el volumen de la canción, como suenan al reproducir. Desmarcado, todas salen a 0 dB y centradas.
+   - `Aplicar las automatizaciones`: el render suena como la canción al reproducirla con sus automatizaciones: sigue los saltos, aplica cambios de volumen, paneo, mute, solo y escenas, y cambia el clic, la voz guía y el pad cuando lo dicen las cues. Solo cuentan las cues de la canción: un salto a otra canción se ignora y un salto atrás sin límite de vueltas suena una vez. El pad sale en la mezcla, o como archivo propio en pistas por separado. No está disponible al renderizar la sesión entera.
    - `Normalizar`: deja el pico de cada archivo en -0,3 dB.
    - `Incluir el metrónomo` / `Incluir la voz guía`: con tu configuración actual. En pistas por separado salen como archivos propios.
 6. Pulsa `Renderizar` y elige dónde guardarlo.

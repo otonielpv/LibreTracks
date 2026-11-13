@@ -360,6 +360,7 @@ To send each musician their rehearsal track (the drummer gets everything but the
    - `Separate tracks (.zip)`: one WAV per track, all aligned from the start of the song, inside a `.zip`.
 5. Set the format (16/24/32-bit WAV), sample rate, stereo or mono, and optionally:
    - `Apply the mix`: each track and folder's volume and pan and the song volume, as heard in playback. Unchecked, every track comes out at 0 dB, centred.
+   - `Apply the automations`: the render sounds like the song played with its automations: it follows the jumps, applies volume, pan, mute, solo and scene changes, and switches the click, voice guide and pad when the cues say so. Only the song's own cues count: a jump to another song is ignored and a jump back with no run limit plays once. The pad goes into the mix, or into its own file with separate tracks. Not available when rendering the whole session.
    - `Normalize`: puts each file's peak at -0.3 dB.
    - `Include the metronome` / `Include the voice guide`: with your current settings. With separate tracks they come out as their own files.
 6. Press `Render` and choose where to save it.

@@ -157,14 +157,23 @@ song bar and choose **Render audio…**.
 6. **Apply the mix**: the volume and pan of each track and folder, and the
    song's master, as they sound. Unticked, everything comes out at 0 dB and
    centred.
-7. **Normalize**: adjusts each file so its peak sits at −0.3 dB.
-8. **Include the metronome**.
-9. **Include the voice guide**. With separate tracks, the metronome and the
-   guide each come out as their own file.
-10. **File name**. It is suggested from what you pick, for example
+7. **Apply the automations**: the render sounds like the song played with its
+   automations (see below).
+8. **Normalize**: adjusts each file so its peak sits at −0.3 dB.
+9. **Include the metronome**.
+10. **Include the voice guide**. With separate tracks, the metronome and the
+    guide each come out as their own file.
+11. **File name**. It is suggested from what you pick, for example
     "Dios es Real (no Vocals)" if you leave out a track.
 
 </Legend>
+
+With **Apply the automations**, the render follows the jumps, applies the
+volume, pan, mute, solo and scene changes, and turns the click, voice guide
+and pad on, off or changes them when the cues say so. Only that song's cues
+count: a jump to another song is ignored and a jump back with no run limit
+plays once. The pad goes into the mix, or into its own file when you render
+separate tracks. Not available when rendering the whole session.
 
 The render happens on the side, without interrupting whatever is playing, and
 **Stop** cancels it. If an audio file could not be read, it comes out silent

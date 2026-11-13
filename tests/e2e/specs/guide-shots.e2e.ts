@@ -74,6 +74,33 @@ async function viewport() {
   }));
 }
 
+/**
+ * Runs `fn` with the emulated viewport `height` px tall, then puts the real
+ * one back. For a dialog taller than the screen (it would scroll and cut its
+ * last options). Only for captures: pointer actions land off while the
+ * emulated viewport is larger than the window.
+ */
+async function withTallViewport(height: number, fn: () => Promise<void>) {
+  const real = await viewport();
+  const dpr = Number(process.env.LT_GUIDESHOTS_DPR || real.dpr || 1);
+  await cdp("Emulation.setDeviceMetricsOverride", {
+    width: real.w, height: Math.max(real.h, height), deviceScaleFactor: dpr, mobile: false,
+  });
+  await browser.pause(800);
+  try {
+    await fn();
+  } finally {
+    if (process.env.LT_GUIDESHOTS_DPR) {
+      await cdp("Emulation.setDeviceMetricsOverride", {
+        width: real.w, height: real.h, deviceScaleFactor: dpr, mobile: false,
+      });
+    } else {
+      await cdp("Emulation.clearDeviceMetricsOverride");
+    }
+    await browser.pause(500);
+  }
+}
+
 /** Where shot() writes; the phone-layout step points it at the mobile set. */
 let shotDir = outDir;
 
@@ -1521,7 +1548,10 @@ describe("user guide screenshots", function () {
     await rightClick(".lt-region-hotspot", { fx: 0.3 });
     await clickItem(".lt-context-menu button", L("Renderizar audio"));
     const renderModal = '[aria-labelledby="lt-render-modal-title"]';
-    await annotatedShot(
+    // The option checkboxes only: the scope radios share the class.
+    const renderCheck = `${renderModal} .lt-render-check:has(input[type="checkbox"])`;
+    // The dialog is taller than the screen: let it grow so every option shows.
+    await withTallViewport(1500, () => annotatedShot(
       "render-modal",
       [
         { selector: `${renderModal} .lt-render-track-tools`, n: 1 },
@@ -1529,14 +1559,15 @@ describe("user guide screenshots", function () {
         { selector: `${renderModal} .lt-export-option`, nth: 0, n: 3 },
         { selector: `${renderModal} .lt-export-option`, nth: 1, n: 4 },
         { selector: `${renderModal} .lt-render-grid`, n: 5 },
-        { selector: `${renderModal} .lt-render-check`, nth: 0, n: 6 },
-        { selector: `${renderModal} .lt-render-check`, nth: 1, n: 7 },
-        { selector: `${renderModal} .lt-render-check`, nth: 2, n: 8 },
-        { selector: `${renderModal} .lt-render-check`, nth: 3, n: 9 },
-        { selector: `${renderModal} .lt-render-file-name`, n: 10 },
+        { selector: renderCheck, nth: 0, n: 6 },
+        { selector: renderCheck, nth: 1, n: 7 },
+        { selector: renderCheck, nth: 2, n: 8 },
+        { selector: renderCheck, nth: 3, n: 9 },
+        { selector: renderCheck, nth: 4, n: 10 },
+        { selector: `${renderModal} .lt-render-file-name`, n: 11 },
       ],
       { crop: { selector: renderModal, margin: 16 } },
-    );
+    ));
     await closeModal(renderModal);
 
     // Session: export and the cloud live in the File menu.

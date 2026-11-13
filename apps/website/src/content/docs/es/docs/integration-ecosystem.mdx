@@ -160,14 +160,24 @@ derecho en la barra de la canción y elige **Renderizar audio…**.
 6. **Aplicar la mezcla**: el volumen y el panorama de cada pista y carpeta, y
    el master de la canción, tal como suenan. Desmarcado, todo sale a 0 dB y
    centrado.
-7. **Normalizar**: ajusta cada archivo para que su pico quede en −0,3 dB.
-8. **Incluir el metrónomo**.
-9. **Incluir la voz guía**. En pistas por separado, el metrónomo y la guía
-   salen cada uno en su propio archivo.
-10. **Nombre del archivo**. Se propone solo según lo que elijas, por ejemplo
+7. **Aplicar las automatizaciones**: el render suena como la canción al
+   reproducirla con sus automatizaciones (ver abajo).
+8. **Normalizar**: ajusta cada archivo para que su pico quede en −0,3 dB.
+9. **Incluir el metrónomo**.
+10. **Incluir la voz guía**. En pistas por separado, el metrónomo y la guía
+    salen cada uno en su propio archivo.
+11. **Nombre del archivo**. Se propone solo según lo que elijas, por ejemplo
     «Dios es Real (sin Vocals)» si quitas una pista.
 
 </Legend>
+
+Con **Aplicar las automatizaciones**, el render sigue los saltos, aplica los
+cambios de volumen, panorama, mute, solo y escenas, y enciende, apaga o cambia
+el clic, la voz guía y el pad cuando lo dicen las cues. Solo cuentan las cues
+de esa canción: un salto a otra canción se ignora y un salto atrás sin límite
+de vueltas suena una vez. El pad va en la mezcla, o en su propio archivo si
+renderizas pistas por separado. No está disponible al renderizar la sesión
+entera.
 
 El render se hace aparte, sin interrumpir lo que esté sonando, y **Detener**
 lo cancela. Si algún audio no se pudo leer, sale en
