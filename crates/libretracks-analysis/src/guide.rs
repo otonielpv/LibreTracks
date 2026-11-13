@@ -162,8 +162,25 @@ pub fn analyze_guide(
     samples: &[f32],
     sample_rate: u32,
     templates: &[GuideTemplate],
+    transcriber: Option<&mut dyn Transcriber>,
+) -> GuideAnalysis {
+    analyze_guide_heard_from(samples, samples, sample_rate, templates, transcriber)
+}
+
+/// [`analyze_guide`] with the audio speech recognition hears given apart:
+/// `samples` is where the announcements are found and timed, `heard` (same
+/// length and rate) what each one sounds like to the recogniser. For a guide
+/// split from its click (`split_click_and_speech`): the announcements are
+/// found and timed on the speech alone, and the recogniser hears the render
+/// as it is, without the cuts the split leaves where the click was.
+pub fn analyze_guide_heard_from(
+    samples: &[f32],
+    heard: &[f32],
+    sample_rate: u32,
+    templates: &[GuideTemplate],
     mut transcriber: Option<&mut dyn Transcriber>,
 ) -> GuideAnalysis {
+    let heard = if heard.len() == samples.len() { heard } else { samples };
     let (signal, rate) = decimate_to(samples, f64::from(sample_rate.max(1)), SPEECH_RATE);
     let fragments = speech_fragments(&signal, rate);
     let features: Vec<Vec<[f64; COEFFICIENTS]>> = fragments
@@ -195,8 +212,8 @@ pub fn analyze_guide(
     let speech_of = |index: usize| -> Vec<f32> {
         let (start, end) = fragments[index];
         let from = ((start - RECOGNITION_PAD_SECONDS).max(0.0) * original_rate) as usize;
-        let to = (((end + RECOGNITION_PAD_SECONDS) * original_rate) as usize).min(samples.len());
-        resample_to(&samples[from.min(to)..to], original_rate, RECOGNITION_RATE)
+        let to = (((end + RECOGNITION_PAD_SECONDS) * original_rate) as usize).min(heard.len());
+        resample_to(&heard[from.min(to)..to], original_rate, RECOGNITION_RATE)
     };
     if let Some(recogniser) = transcriber.as_deref_mut() {
         if !fragments.is_empty() {
@@ -903,6 +920,37 @@ mod tests {
                 .iter()
                 .min_by(|a, b| (a.0 - seconds).abs().total_cmp(&(b.0 - seconds).abs()))
                 .map(|(_, text)| text.to_string())
+        }
+    }
+
+    /// Records how loud what it is given is.
+    struct LoudnessTranscriber {
+        peaks: Vec<f32>,
+    }
+
+    impl Transcriber for LoudnessTranscriber {
+        fn detect_language(&mut self, _speech: &[f32]) {}
+
+        fn transcribe(&mut self, speech: &[f32]) -> Option<String> {
+            self.peaks.push(speech.iter().fold(0.0_f32, |max, x| max.max(x.abs())));
+            None
+        }
+    }
+
+    /// Plan channel-split: the announcements come from one signal, and the
+    /// recogniser hears the other (the guide as rendered, click included).
+    #[test]
+    fn the_recogniser_hears_the_audio_it_is_given_apart() {
+        let audio = track(&[(2.0, 0, 0.5), (12.0, 1, 0.6)], 20.0);
+        let heard: Vec<f32> = audio.iter().map(|x| x * 0.25).collect();
+        let mut plain = LoudnessTranscriber { peaks: Vec::new() };
+        let found = analyze_guide(&audio, RATE, &[], Some(&mut plain)).announcements.len();
+        let mut apart = LoudnessTranscriber { peaks: Vec::new() };
+        let analysis = analyze_guide_heard_from(&audio, &heard, RATE, &[], Some(&mut apart));
+        assert_eq!(analysis.announcements.len(), found, "the announcements do not change");
+        assert_eq!(apart.peaks.len(), plain.peaks.len());
+        for (heard_peak, plain_peak) in apart.peaks.iter().zip(&plain.peaks) {
+            assert!((heard_peak - 0.25 * plain_peak).abs() < 0.05 * plain_peak, "{heard_peak} vs {plain_peak}");
         }
     }
 

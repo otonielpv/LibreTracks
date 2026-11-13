@@ -20,7 +20,7 @@ use libretracks_analysis::{
     analyze_music_tempo, initial_tempo_only, propose_tempo_markers, simplify_segments,
     ClickAnalysis, ExistingTiming, GuideAnalysis, GuideTemplate, KeyAnalysis,
     ProposedSignatureMarker, ProposedTempoMarker, SongSpan, TempoProposal, TempoSegment,
-    split_click_and_speech,
+    split_click_and_speech, analyze_guide_heard_from,
 };
 use lt_audio_engine_v2::{RenderError, RenderOutput, RenderRequest, RenderSampleFormat};
 use serde::{Deserialize, Serialize};
@@ -655,9 +655,10 @@ fn run_job(
         // A click without accent: read again once the guide says where its
         // bars start.
         let mut unaccented_click: Option<(Vec<f32>, u32)> = None;
-        // The speech half of the click render, when the guide is the same
-        // track(s) as the click and was not bounced on its own.
-        let mut shared_speech: Option<(Vec<f32>, u32)> = None;
+        // The speech half of the click render and the render itself (what
+        // speech recognition hears), when the guide is the same track(s) as
+        // the click and was not bounced on its own.
+        let mut shared_speech: Option<(Vec<f32>, Vec<f32>, u32)> = None;
         if let Some(tempo) = &job.tempo {
             if !on_progress(AnalysisProgress::at(RENDER_END, "tempo")) {
                 return Err(JobError::Cancelled);
@@ -665,9 +666,9 @@ fn run_job(
             let (mut samples, rate) = read(&click_path)?;
             if sharing != ClickGuideSharing::Apart {
                 let split = split_click_and_speech(&samples, rate);
-                samples = split.click;
+                let original = std::mem::replace(&mut samples, split.click);
                 if sharing == ClickGuideSharing::Same {
-                    shared_speech = Some((split.speech, rate));
+                    shared_speech = Some((split.speech, original, rate));
                 }
             }
             let analysis = if tempo.from_music {
@@ -703,17 +704,21 @@ fn run_job(
             if !on_progress(AnalysisProgress::at(KEY_END, "guide")) {
                 return Err(JobError::Cancelled);
             }
-            let (samples, rate) = match shared_speech.take() {
+            // `heard`: what speech recognition hears. With the click split
+            // off, the announcements are found and timed on the speech alone,
+            // and the recogniser hears the render as it is, without the cuts.
+            let (samples, heard, rate) = match shared_speech.take() {
                 Some(speech) => speech,
                 None => {
                     let (samples, rate) = read(&guide_path)?;
                     if sharing == ClickGuideSharing::Overlap {
-                        (split_click_and_speech(&samples, rate).speech, rate)
+                        (split_click_and_speech(&samples, rate).speech, samples, rate)
                     } else {
-                        (samples, rate)
+                        (samples, Vec::new(), rate)
                     }
                 }
             };
+            let heard: &[f32] = if heard.is_empty() { &samples } else { &heard };
             let templates = voices_dir.map(load_guide_templates).unwrap_or_default();
             let mut recogniser = speech_model.and_then(|model| {
                 crate::commands::speech::WhisperTranscriber::load(
@@ -728,9 +733,9 @@ fn run_job(
                         inner,
                         on_progress: &mut *on_progress,
                     };
-                    analyze_guide(&samples, rate, &templates, Some(&mut reporting))
+                    analyze_guide_heard_from(&samples, heard, rate, &templates, Some(&mut reporting))
                 }
-                None => analyze_guide(&samples, rate, &templates, None),
+                None => analyze_guide_heard_from(&samples, heard, rate, &templates, None),
             };
             if ANALYSIS_CANCEL.load(Ordering::Acquire) {
                 return Err(JobError::Cancelled);

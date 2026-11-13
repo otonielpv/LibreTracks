@@ -255,3 +255,40 @@ fn a_short_syllable_off_the_beat_stays_in_the_speech() {
     assert!(peak_near(&split.speech, 3.645, 0.02) > 0.1, "la sílaba no está en la voz");
 }
 
+/// A count-in over the click with a syllable right before its first hit
+/// (TestUnSoloArchivo at 48 kHz): the beat must stay the click's, the first
+/// hit must stay a hit and nothing may be made up between them. A median, or
+/// a syllable 0.096 s from a hit "explaining" the 0.288 s intervals as three
+/// of it, put the downbeat half a beat late or filled the count with hits
+/// every 0.096 s (a segment at 315 BPM).
+#[test]
+fn a_syllable_by_the_first_hit_does_not_move_the_beat() {
+    let eighth = 30.0 / 105.0;
+    let mut signal = vec![0.0_f32; RATE as usize * 12];
+    let hits: Vec<f64> = (0..35).map(|n| 0.57 + n as f64 * eighth).collect();
+    for &t in &hits {
+        add_click(&mut signal, t, 0.7);
+    }
+    let mut noise = Noise(11);
+    // The syllable a third of an eighth before the first hit, as in the real
+    // file, then a spoken count over the click.
+    add_voice(&mut signal, 0.57 - eighth / 3.0, 0.03, 0.3, &mut noise);
+    for &(from, length) in &[(1.12, 0.35), (2.27, 0.25), (2.84, 0.25), (3.41, 0.25), (3.98, 0.4)] {
+        add_voice(&mut signal, from, length, 0.3, &mut noise);
+    }
+    let split = split_click_and_speech(&signal, RATE);
+
+    assert!(peak_near(&split.click, 0.573, 0.004) > 0.4, "el primer golpe se perdió");
+    // Nothing off the eighth grid in the click.
+    let off_grid = (0..(11.0 / 0.005) as usize)
+        .map(|n| n as f64 * 0.005)
+        .filter(|&t| hits.iter().all(|&hit| (t - hit).abs() > 0.035))
+        .filter(|&t| peak_near(&split.click, t, 0.002) > 0.05)
+        .count();
+    assert_eq!(off_grid, 0, "golpes inventados fuera de la rejilla");
+    let analysis = analyze_click(&split.click, RATE, 4);
+    assert_eq!(analysis.segments.len(), 1, "{:?}", analysis.segments);
+    assert!((analysis.segments[0].bpm - 105.0).abs() < 0.5, "{:?}", analysis.segments);
+    assert!((analysis.segments[0].start_seconds - 0.57).abs() < 0.01, "{:?}", analysis.segments);
+}
+

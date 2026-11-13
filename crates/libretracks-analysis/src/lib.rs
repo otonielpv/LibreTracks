@@ -24,7 +24,7 @@ pub use click::{
     ClickWarningKind, TempoSegment,
 };
 pub use guide::{
-    analyze_guide, CountWord, GuideAnalysis, GuideAnnouncement, GuideGroup, GuideTemplate,
+    analyze_guide, analyze_guide_heard_from, CountWord, GuideAnalysis, GuideAnnouncement, GuideGroup, GuideTemplate,
     Transcriber,
 };
 pub use guide_text::{is_count, parse_announcement, AnnouncedMarker};

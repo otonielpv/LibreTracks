@@ -109,18 +109,7 @@ pub fn split_click_and_speech(samples: &[f32], sample_rate: u32) -> SplitSignals
         let from = (first * block).saturating_sub(margin);
         let to = ((last + 1) * block + margin).min(samples.len());
         click[from..to].copy_from_slice(&samples[from..to]);
-        for gain in &mut speech_gain[from..to] {
-            *gain = 0.0;
-        }
-        for step in 0..fade {
-            let ramp = step as f32 / fade as f32;
-            if let Some(index) = from.checked_sub(fade - step) {
-                speech_gain[index] = speech_gain[index].min(1.0 - ramp);
-            }
-            if let Some(gain) = speech_gain.get_mut(to + step) {
-                *gain = gain.min(ramp);
-            }
-        }
+        mute(&mut speech_gain, from, to, fade);
     }
     // The hits under a word: the click is periodic, so where a word hides
     // some, the hits on either side say where they fall. Without them the
@@ -139,8 +128,8 @@ pub fn split_click_and_speech(samples: &[f32], sample_rate: u32) -> SplitSignals
         samples[hit.min(end)..end].iter().fold(0.0_f32, |max, x| max.max(x.abs()))
     };
     let beats = beat_numbers(&hits);
-    let levels: Vec<f32> = hits.iter().map(|&hit| peak_at(hit)).collect();
-    let period = accent_period(&beats, &levels);
+    let hit_levels: Vec<f32> = hits.iter().map(|&hit| peak_at(hit)).collect();
+    let period = accent_period(&beats, &hit_levels);
     let by_beat: std::collections::HashMap<i64, usize> =
         beats.iter().enumerate().map(|(index, &beat)| (beat, index)).collect();
     for (hit, left, offset) in hidden_grid_hits(&hits) {
@@ -158,6 +147,16 @@ pub fn split_click_and_speech(samples: &[f32], sample_rate: u32) -> SplitSignals
             .min(samples.len().saturating_sub(hit.saturating_sub(lead)));
         let to = hit.saturating_sub(lead);
         click[to..to + length].copy_from_slice(&samples[from..from + length]);
+        // Out of the speech too when it sounds between two words (silence
+        // just before it): a spoken count's words are found by their onsets,
+        // and a hit left there read as a number ("1" on a hit at 1.71 s
+        // instead of the word at 2.29 s put the bar a beat early). A hit
+        // under a word stays: cutting it would make an onset of its own.
+        let before = (to / block).saturating_sub(2);
+        if levels.get(before).is_some_and(|&level| level < threshold) {
+            let end = (to + length + margin).min(samples.len());
+            mute(&mut speech_gain, to.saturating_sub(margin), end, fade);
+        }
     }
 
     let speech = samples
@@ -166,6 +165,22 @@ pub fn split_click_and_speech(samples: &[f32], sample_rate: u32) -> SplitSignals
         .map(|(sample, gain)| sample * gain)
         .collect();
     SplitSignals { click, speech }
+}
+
+/// Silence `[from, to)` of the speech, with short fades on both sides.
+fn mute(speech_gain: &mut [f32], from: usize, to: usize, fade: usize) {
+    for gain in &mut speech_gain[from..to] {
+        *gain = 0.0;
+    }
+    for step in 0..fade {
+        let ramp = step as f32 / fade as f32;
+        if let Some(index) = from.checked_sub(fade - step) {
+            speech_gain[index] = speech_gain[index].min(1.0 - ramp);
+        }
+        if let Some(gain) = speech_gain.get_mut(to + step) {
+            *gain = gain.min(ramp);
+        }
+    }
 }
 
 /// How long a clean hit copied under a word lasts.
@@ -186,6 +201,9 @@ const GRID_ACCENT_SPREAD: f32 = 0.15;
 const GRID_ACCENT_MAX_BEATS: usize = 12;
 /// Bars away a clean hit in the same place of the bar is looked for.
 const GRID_ACCENT_SEARCH_BARS: usize = 4;
+/// How far from a whole number of candidate beats an interval may be to count
+/// as explained by it.
+const GRID_BEAT_FIT: f64 = 0.1;
 /// Longest gap filled, in beats: a cue lasts a few; longer is the click
 /// really stopping.
 const GRID_MAX_FILL_BEATS: f64 = 16.0;
@@ -252,14 +270,42 @@ fn accent_period(beats: &[i64], levels: &[f32]) -> Option<i64> {
         .map(|(bar, _)| bar)
 }
 
-/// The beat around interval `index`: the median of its neighbours, so the
-/// odd long gap (a word) or short one (a syllable) does not move it.
+/// The beat around interval `index`: of its neighbours, the interval that
+/// explains most of them as a whole number of beats. A median is not enough:
+/// where the guide talks over the click (a count-in) most intervals are gaps
+/// of several beats, and their median (0.74 s in a song with hits every
+/// 0.286 s) threw out the first hit and put the downbeat half a beat late.
 fn local_beat(intervals: &[f64], index: usize) -> f64 {
-    let from = index.saturating_sub(GRID_CONTEXT_HITS);
-    let to = (index + GRID_CONTEXT_HITS).min(intervals.len());
-    let mut near: Vec<f64> = intervals[from..to].to_vec();
-    near.sort_by(f64::total_cmp);
-    near.get(near.len() / 2).copied().unwrap_or(0.0)
+    let from = index.saturating_sub(2 * GRID_CONTEXT_HITS);
+    let to = (index + 2 * GRID_CONTEXT_HITS).min(intervals.len());
+    let near = &intervals[from..to];
+    let explains = |candidate: f64, interval: f64| {
+        let beats = interval / candidate;
+        let whole = beats.round();
+        (1.0..=GRID_MAX_FILL_BEATS).contains(&whole) && (beats - whole).abs() <= GRID_BEAT_FIT
+    };
+    near.iter()
+        .copied()
+        .filter(|&candidate| candidate > 0.0)
+        .map(|candidate| {
+            let support = near.iter().filter(|&&i| explains(candidate, i)).count();
+            let single = near
+                .iter()
+                .filter(|&&i| (i - candidate).abs() <= GRID_STEADY_TOLERANCE * candidate)
+                .count();
+            (candidate, support, single)
+        })
+        // The beat is the interval that repeats between consecutive hits: a
+        // syllable 0.096 s from a hit also "explains" every 0.288 s interval
+        // as three of it, but it happens once. Then the most intervals
+        // explained, then the longer candidate, so a fraction of the beat
+        // never wins a tie.
+        .max_by(|a, b| {
+            a.2.cmp(&b.2)
+                .then(a.1.cmp(&b.1))
+                .then(a.0.total_cmp(&b.0))
+        })
+        .map_or(0.0, |(candidate, _, _)| candidate)
 }
 
 /// The hits missing between two gridded hits a whole number of beats apart
