@@ -310,6 +310,34 @@ TEST_CASE("offline render: stereo keeps a silent side, mono plays on both") {
     }
 }
 
+TEST_CASE("offline render: el modo de canal suena igual que en directo") {
+    // L = 0.2 y R = 0.6 constantes: la misma tabla que "modo de canal: la
+    // mezcla en directo da la tabla del diseno" en test_mixer_realtime_controls.
+    TempDir dir;
+    const std::string file = dir.file("lr.wav");
+    std::vector<float> lr(static_cast<std::size_t>(48000) * 2);
+    for (std::size_t f = 0; f < 48000; ++f) {
+        lr[f * 2] = 0.2f;
+        lr[f * 2 + 1] = 0.6f;
+    }
+    write_float_wav(file, lr, 2, 48000);
+    struct Row { const char* mode; float l, r; };
+    for (const Row row : {Row{"stereo", 0.2f, 0.6f}, Row{"mono", 0.4f, 0.4f},
+                          Row{"left", 0.2f, 0.2f}, Row{"right", 0.6f, 0.6f}}) {
+        CAPTURE(row.mode);
+        json track = track_json("t");
+        track["channelMode"] = row.mode;
+        const json song = song_json(json::array({track}),
+                                    json::array({clip_json("c", "t", file, 0.0, 1.0)}));
+        auto req = base_request(song, 0.0, 1.0);
+        req.outputs.push_back({dir.file("mix.wav"), {"t"}});
+        REQUIRE(render_offline(req).is_ok());
+        const auto out = read_wav(dir.file("mix.wav"));
+        CHECK(out.at(24000, 0) == doctest::Approx(row.l));
+        CHECK(out.at(24000, 1) == doctest::Approx(row.r));
+    }
+}
+
 TEST_CASE("offline render: a folder expands to its tracks and carries its gain") {
     TempDir dir;
     const std::string a = dir.file("a.wav");

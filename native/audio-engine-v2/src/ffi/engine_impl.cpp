@@ -3510,7 +3510,8 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     track.gain = tu.gain;
                     track.pan  = std::clamp(tu.pan, -1.0f, 1.0f);
                     track.audio_to = tu.audio_to.empty() ? "master" : tu.audio_to;
-                    track.mono_downmix = tu.mono_downmix;
+                    track.channel_mode =
+                        parse_track_channel_mode(tu.channel_mode, TrackChannelMode::Stereo);
                     track.mute = tu.mute;
                     track.solo = tu.solo;
                     track.transpose_behavior =

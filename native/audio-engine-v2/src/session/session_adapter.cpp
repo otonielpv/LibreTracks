@@ -142,8 +142,15 @@ Result<Session> session_from_project_json(const std::string& project_json,
                     track.gain = static_cast<Gain>(jtrack.value("gain", jtrack.value("volume", 1.0)));
                     track.pan = static_cast<float>(jtrack.value("pan", 0.0));
                     track.audio_to = jtrack.value("audioTo", jtrack.value("audio_to", std::string("master")));
-                    track.mono_downmix =
-                        jtrack.value("monoDownmix", jtrack.value("mono_downmix", false));
+                    // Espejo de commands.cpp: channelMode manda; si falta, el
+                    // viejo monoDownmix=true es Mono (sesiones anteriores).
+                    {
+                        const bool legacy_mono =
+                            jtrack.value("monoDownmix", jtrack.value("mono_downmix", false));
+                        track.channel_mode = parse_track_channel_mode(
+                            jtrack.value("channelMode", jtrack.value("channel_mode", std::string{})),
+                            legacy_mono ? TrackChannelMode::Mono : TrackChannelMode::Stereo);
+                    }
                     track.mute = jtrack.value("mute", jtrack.value("muted", false));
                     track.solo = jtrack.value("solo", false);
                     track.role = parse_track_role(jtrack.value("role", "Normal"));

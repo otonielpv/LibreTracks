@@ -1255,7 +1255,7 @@ impl AudioController {
                     gain: track.volume as f32,
                     pan: track.pan as f32,
                     audio_to: track.audio_to.clone(),
-                    mono_downmix: track.channel_mode == libretracks_core::ChannelMode::Mono,
+                    channel_mode: track.channel_mode.as_str().to_string(),
                     mute: track.muted,
                     solo: track.solo,
                     // transpose_enabled=false maps to NeverTranspose; default

@@ -73,21 +73,6 @@ void atomic_max_relaxed(std::atomic<float>& target, float value) noexcept {
                current, value, std::memory_order_relaxed, std::memory_order_relaxed)) {}
 }
 
-// Como coloca la pista sus dos canales ANTES del paneo. Solo la suma a mono
-// (boton de mono de la pista) los toca: una fuente MONO ya llega duplicada a
-// los dos lados desde el renderer de clips (TrackRenderer, por clip y segun el
-// numero de canales de la fuente), y una ESTEREO se respeta tal cual aunque un
-// lado venga en silencio, como en Ableton. Lo comparten la mezcla y el
-// medidor de pista, para que el medidor muestre exactamente lo que se mezcla.
-inline void place_track_source(bool mono_downmix,
-                               float& source_l, float& source_r) noexcept {
-    if (mono_downmix) {
-        const float summed = 0.5f * (source_l + source_r);
-        source_l = summed;
-        source_r = summed;
-    }
-}
-
 struct TrackMeterReading {
     float peak_l = 0.f, peak_r = 0.f;
     float rms_l = 0.f, rms_r = 0.f;
@@ -109,7 +94,7 @@ struct TrackMeterReading {
 // necesita esa precision y asi una pista muteada marca 0 en el acto.
 TrackMeterReading measure_track(const float* mix_l, const float* mix_r,
                                 int num_frames, float start_pan, float end_pan,
-                                bool mono_downmix, TrackMeterMode mode,
+                                TrackChannelMode channel_mode, TrackMeterMode mode,
                                 float fader_gain) noexcept {
     TrackMeterReading out;
     if (mode == TrackMeterMode::PostFader && fader_gain <= 0.0f) {
@@ -127,7 +112,7 @@ TrackMeterReading measure_track(const float* mix_l, const float* mix_r,
         if (!raw) {
             const float t = static_cast<float>(f + 1) / static_cast<float>(std::max(1, num_frames));
             const float pan = clamp_pan(start_pan + (end_pan - start_pan) * t);
-            place_track_source(mono_downmix, l, r);
+            place_track_source(channel_mode, l, r);
             l *= pan_left_gain(pan);
             r *= pan_right_gain(pan);
         }
@@ -898,7 +883,7 @@ void Mixer::render_timeline_span(float** output_channels,
             ++rendered_this_block;
 
             TrackMeterReading meter = measure_track(
-                mix_l, mix_r, num_frames, start_pan, end_pan, track.mono_downmix,
+                mix_l, mix_r, num_frames, start_pan, end_pan, track.channel_mode,
                 meter_mode,
                 track_meter_fader_gain(control->gain.load(std::memory_order_relaxed),
                                        control->mute.load(std::memory_order_relaxed),
@@ -983,7 +968,7 @@ void Mixer::render_timeline_span(float** output_channels,
             // que alguien quiere en mono) exactamente al mismo nivel. Es lo
             // que hace el Utility de Ableton, que es la referencia del
             // proyecto.
-            const bool mono_downmix = track.mono_downmix;
+            const TrackChannelMode channel_mode = track.channel_mode;
 
             for (int f = 0; f < num_frames; ++f) {
                 const float t = static_cast<float>(f + 1) / static_cast<float>(std::max(1, num_frames));
@@ -996,7 +981,7 @@ void Mixer::render_timeline_span(float** output_channels,
                 const float right_gain = pan_right_gain(pan);
                 float source_l = mix_l[f];
                 float source_r = mix_r[f];
-                place_track_source(mono_downmix, source_l, source_r);
+                place_track_source(channel_mode, source_l, source_r);
 
                 float out_l = source_l * effective_gain * left_gain;
                 float out_r = source_r * effective_gain * right_gain;
@@ -1393,7 +1378,7 @@ void Mixer::render(float** output_channels,
                 rendered_atomic.fetch_add(1, std::memory_order_relaxed);
 
                 TrackMeterReading meter = measure_track(
-                    mix_l, mix_r, num_frames, start_pan, end_pan, track.mono_downmix,
+                    mix_l, mix_r, num_frames, start_pan, end_pan, track.channel_mode,
                     meter_mode,
                     track_meter_fader_gain(control->gain.load(std::memory_order_relaxed),
                                            control->mute.load(std::memory_order_relaxed),
@@ -1482,7 +1467,7 @@ void Mixer::render(float** output_channels,
                 // El MISMO downmix que el camino de arriba. Son dos caminos de
                 // mezcla (uno por ruta de salida, otro no) y una pista no puede
                 // sonar distinto segun por cual entre.
-                const bool mono_downmix = track.mono_downmix;
+                const TrackChannelMode channel_mode = track.channel_mode;
 
                 // Accumulate into selected output route.
                 for (int f = 0; f < num_frames; ++f) {
@@ -1496,7 +1481,7 @@ void Mixer::render(float** output_channels,
                     const float right_gain = pan_right_gain(pan);
                     float source_l = mix_l[f];
                     float source_r = mix_r[f];
-                    place_track_source(mono_downmix, source_l, source_r);
+                    place_track_source(channel_mode, source_l, source_r);
 
                     float out_l = source_l * effective_gain * left_gain;
                     float out_r = source_r * effective_gain * right_gain;

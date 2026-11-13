@@ -842,7 +842,7 @@ TEST_CASE("pre_fader_meter_is_the_raw_track_input") {
     // ignora todo eso y muestra lo que entregan los clips (solo L).
     mixer.set_track_pan("child-0", 1.0f);
     mixer.set_track_gain("child-0", 0.1f);
-    session->songs[0].tracks[1].mono_downmix = true;
+    session->songs[0].tracks[1].channel_mode = TrackChannelMode::Mono;
     std::vector<float> left, right;
     render_blocks(mixer, clock, 30, left, right);
     auto meters = mixer.track_meters();
@@ -856,4 +856,36 @@ TEST_CASE("pre_fader_meter_is_the_raw_track_input") {
     meters = mixer.track_meters();
     CHECK(meters[1].left_peak < 0.005f);
     CHECK(meters[1].right_peak == doctest::Approx(peak(right)).epsilon(0.02));
+}
+
+// Plan channel-split, paso 02: una sesion vieja con monoDownmix y sin
+// channelMode se carga como Mono; channelMode manda si vienen los dos.
+TEST_CASE("session_adapter_channel_mode_and_legacy_mono_downmix") {
+    auto result = session_from_project_json(R"({
+      "id": "project",
+      "songs": [{
+        "id": "song",
+        "duration_seconds": 10.0,
+        "tracks": [
+          {"id": "old", "kind": "audio", "monoDownmix": true},
+          {"id": "plain", "kind": "audio"},
+          {"id": "l", "kind": "audio", "channelMode": "left"},
+          {"id": "r", "kind": "audio", "channelMode": "right", "monoDownmix": true}
+        ],
+        "regions": []
+      }]
+    })", 48000);
+    REQUIRE(result.is_ok());
+    const auto session = result.take();
+    const auto& tracks = session.songs.at(0).tracks;
+    const auto mode_of = [&](const std::string& id) {
+        for (const auto& t : tracks)
+            if (t.id == id) return t.channel_mode;
+        FAIL("pista no encontrada: " << id);
+        return TrackChannelMode::Stereo;
+    };
+    CHECK(mode_of("old") == TrackChannelMode::Mono);
+    CHECK(mode_of("plain") == TrackChannelMode::Stereo);
+    CHECK(mode_of("l") == TrackChannelMode::Left);
+    CHECK(mode_of("r") == TrackChannelMode::Right);
 }

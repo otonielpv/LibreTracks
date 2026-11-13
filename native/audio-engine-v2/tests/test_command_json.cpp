@@ -513,3 +513,20 @@ TEST_CASE("snapshot serializes pending jumps array") {
     CHECK(json.find("\"j1\"")      != std::string::npos);
     CHECK(json.find("\"pending\"") != std::string::npos);
 }
+
+// Plan channel-split, paso 02. El parser de comandos y el adaptador de sesion
+// van en espejo: channel_mode manda; si falta, el viejo mono_downmix=true es
+// Mono (invitados y sesiones de versiones anteriores).
+TEST_CASE("UpsertSongTracks: channel_mode, con caida al viejo mono_downmix") {
+    const auto parse_one = [](const std::string& track_fields) {
+        auto cmd = command_from_json(
+            R"({"type":"UpsertSongTracks","song_id":"s","tracks":[{"id":"t")" + track_fields +
+            R"(}],"regions":[],"markers":[],"bpm":120,"beats_per_bar":4,"beat_unit":4})");
+        return std::get<CmdUpsertSongTracks>(cmd).tracks.at(0).channel_mode;
+    };
+    CHECK(parse_one("") == "");
+    CHECK(parse_one(R"(,"mono_downmix":true)") == "mono");
+    CHECK(parse_one(R"(,"mono_downmix":false)") == "");
+    CHECK(parse_one(R"(,"channel_mode":"right")") == "right");
+    CHECK(parse_one(R"(,"channel_mode":"left","mono_downmix":true)") == "left");
+}

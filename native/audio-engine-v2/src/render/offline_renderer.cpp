@@ -745,7 +745,10 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
             // controls do not move during a render). A mono source is already
             // on both sides (decode_window duplicates it); a stereo one is kept
             // as it is even when one side is silent, as playback does.
-            const bool mono_downmix = apply_mixer && track.mono_downmix;
+            // Modo de canal (channel_mode.h), una vez por bloque sobre el bus
+            // de la pista, que es scratch. Por ahora solo con apply_mixer.
+            if (apply_mixer)
+                place_track_source_block(track.channel_mode, s.bus_l.data(), s.bus_r.data(), n);
             float left_gain = pan_left_gain(track_pan);
             float right_gain = pan_right_gain(track_pan);
             float* out_l = acc_l + out_frame;
@@ -795,13 +798,8 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
                     left_gain = chunk_l0 + (chunk_l1 - chunk_l0) * k;
                     right_gain = chunk_r0 + (chunk_r1 - chunk_r0) * k;
                 }
-                float src_l = s.bus_l[static_cast<std::size_t>(f)];
-                float src_r = s.bus_r[static_cast<std::size_t>(f)];
-                if (mono_downmix) {
-                    const float summed = 0.5f * (src_l + src_r);
-                    src_l = summed;
-                    src_r = summed;
-                }
+                const float src_l = s.bus_l[static_cast<std::size_t>(f)];
+                const float src_r = s.bus_r[static_cast<std::size_t>(f)];
                 const float mixed_l = src_l * gain * left_gain;
                 const float mixed_r = src_r * gain * right_gain;
                 const auto [left, right] = pan_render_bus(mixed_l, mixed_r, ctx.request.tracks_pan);

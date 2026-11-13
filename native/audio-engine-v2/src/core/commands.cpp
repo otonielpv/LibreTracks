@@ -372,7 +372,11 @@ EngineCommand command_from_json(const std::string& raw) {
             track.gain = t.value("gain", 1.0f);
             track.pan  = t.value("pan", 0.0f);
             track.audio_to = t.value("audio_to", std::string{"master"});
-            track.mono_downmix = t.value("mono_downmix", false);
+            // Espejo de session_adapter.cpp: channel_mode manda; si falta, el
+            // viejo mono_downmix=true es Mono.
+            track.channel_mode = t.value("channel_mode", std::string{});
+            if (track.channel_mode.empty() && t.value("mono_downmix", false))
+                track.channel_mode = "mono";
             track.mute = t.value("mute", false);
             track.solo = t.value("solo", false);
             track.transpose_behavior = t.value("transpose_behavior", std::string{});

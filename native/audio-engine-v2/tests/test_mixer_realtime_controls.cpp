@@ -331,7 +331,7 @@ TEST_CASE("una pista sumada a mono funde los dos canales en uno") {
     // Con mono y ley (L+R)/2, un material en contrafase se cancela.
     {
         auto mono_session = std::make_shared<Session>(one_track_session());
-        mono_session->songs[0].tracks[0].mono_downmix = true;
+        mono_session->songs[0].tracks[0].channel_mode = TrackChannelMode::Mono;
         TransportClock mono_clock(test::kFixtureSampleRate);
         Mixer mixer(mono_session, &sources, &mono_clock, &scheduler);
         mono_clock.play();
@@ -361,7 +361,7 @@ TEST_CASE("sumar a mono no sube el nivel: la ley es (L+R)/2") {
     REQUIRE(stereo_peak > 0.01f);
 
     auto mono = std::make_shared<Session>(one_track_session());
-    mono->songs[0].tracks[0].mono_downmix = true;
+    mono->songs[0].tracks[0].channel_mode = TrackChannelMode::Mono;
     TransportClock mono_clock(test::kFixtureSampleRate);
     Mixer mono_mixer(mono, &sources, &mono_clock, &scheduler);
     mono_clock.play();
@@ -376,7 +376,7 @@ TEST_CASE("quitar el mono devuelve la pista a estereo, sin perdida") {
     SourceManager sources;
     add_opposed_source(sources, "source");
     auto session = std::make_shared<Session>(one_track_session());
-    session->songs[0].tracks[0].mono_downmix = false;
+    session->songs[0].tracks[0].channel_mode = TrackChannelMode::Stereo;
     TransportClock clock(test::kFixtureSampleRate);
     JumpScheduler scheduler;
     Mixer mixer(session, &sources, &clock, &scheduler);
@@ -386,6 +386,147 @@ TEST_CASE("quitar el mono devuelve la pista a estereo, sin perdida") {
     render_blocks(mixer, clock, 8, left, right);
     CHECK(peak(left) > 0.01f);
     CHECK(peak(right) > 0.01f);
+}
+
+// ── Plan channel-split, paso 02: modo de canal por pista ─────────────────
+//
+// Fuente con dos senales DISTINTAS por lado (L = seno A a 440 Hz, R = seno B a
+// 660 Hz y otra amplitud). Se compara muestra a muestra con la salida en
+// Stereo: Left tiene que sacar exactamente la L del estereo por los dos lados,
+// Right la R, y Mono (L+R)/2.
+namespace {
+std::vector<float> make_two_sines(Frame frames) {
+    std::vector<float> samples(static_cast<std::size_t>(frames) * 2, 0.0f);
+    for (Frame f = 0; f < frames; ++f) {
+        const float t = static_cast<float>(f) / static_cast<float>(test::kFixtureSampleRate);
+        samples[static_cast<std::size_t>(f) * 2] = 0.5f * std::sin(2.0f * 3.14159265f * 440.0f * t);
+        samples[static_cast<std::size_t>(f) * 2 + 1] = 0.25f * std::sin(2.0f * 3.14159265f * 660.0f * t);
+    }
+    return samples;
+}
+
+struct ModeRender {
+    std::vector<float> left, right;
+    TrackMeterValues meter{};
+};
+
+ModeRender render_mode(SourceManager& sources, TrackChannelMode mode,
+                       TrackMeterMode meter_mode = TrackMeterMode::PostFader) {
+    auto session = std::make_shared<Session>(one_track_session());
+    session->songs[0].tracks[0].channel_mode = mode;
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+    mixer.set_track_meter_mode(meter_mode);
+    clock.play();
+    ModeRender out;
+    render_blocks(mixer, clock, 8, out.left, out.right);
+    out.meter = mixer.track_meters()[0];
+    return out;
+}
+
+void check_same(const std::vector<float>& actual, const std::vector<float>& expected,
+                const char* what) {
+    REQUIRE(actual.size() == expected.size());
+    float worst = 0.0f;
+    for (std::size_t i = 0; i < actual.size(); ++i)
+        worst = std::max(worst, std::abs(actual[i] - expected[i]));
+    CHECK_MESSAGE(worst < 1.0e-5f, what << ": diferencia maxima " << worst);
+}
+} // namespace
+
+TEST_CASE("modo de canal: Left/Right sacan un lado por los dos, Mono la media") {
+    SourceManager sources;
+    sources.register_source("source", "");
+    REQUIRE(sources.store_decoded_source("source", make_two_sines(48000 * 4), 2,
+                                         test::kFixtureSampleRate, 48000 * 4).is_ok());
+
+    const auto stereo = render_mode(sources, TrackChannelMode::Stereo);
+    REQUIRE(peak(stereo.left) > 0.1f);
+    REQUIRE(peak(stereo.right) > 0.05f);
+    // Las dos senales son distinguibles: si no, el test no demostraria nada.
+    REQUIRE(std::abs(peak(stereo.left) - peak(stereo.right)) > 0.1f);
+
+    const auto left = render_mode(sources, TrackChannelMode::Left);
+    check_same(left.left, stereo.left, "Left, lado izquierdo");
+    check_same(left.right, stereo.left, "Left, lado derecho");
+
+    const auto right = render_mode(sources, TrackChannelMode::Right);
+    check_same(right.left, stereo.right, "Right, lado izquierdo");
+    check_same(right.right, stereo.right, "Right, lado derecho");
+
+    std::vector<float> average(stereo.left.size());
+    for (std::size_t i = 0; i < average.size(); ++i)
+        average[i] = 0.5f * (stereo.left[i] + stereo.right[i]);
+    const auto mono = render_mode(sources, TrackChannelMode::Mono);
+    check_same(mono.left, average, "Mono, lado izquierdo");
+    check_same(mono.right, average, "Mono, lado derecho");
+}
+
+TEST_CASE("modo de canal: una fuente mono suena igual en Left/Right que en Stereo") {
+    SourceManager sources;
+    sources.register_source("source", "");
+    std::vector<float> mono_samples(48000 * 4);
+    for (std::size_t f = 0; f < mono_samples.size(); ++f)
+        mono_samples[f] = 0.4f * std::sin(2.0f * 3.14159265f * 440.0f * static_cast<float>(f)
+                                          / static_cast<float>(test::kFixtureSampleRate));
+    REQUIRE(sources.store_decoded_source("source", std::move(mono_samples), 1,
+                                         test::kFixtureSampleRate, 48000 * 4).is_ok());
+
+    const auto stereo = render_mode(sources, TrackChannelMode::Stereo);
+    REQUIRE(peak(stereo.left) > 0.1f);
+    for (auto mode : {TrackChannelMode::Left, TrackChannelMode::Right}) {
+        const auto out = render_mode(sources, mode);
+        check_same(out.left, stereo.left, "fuente mono, izquierdo");
+        check_same(out.right, stereo.right, "fuente mono, derecho");
+    }
+}
+
+TEST_CASE("modo de canal: el medidor de pista lee lo que se mezcla") {
+    SourceManager sources;
+    sources.register_source("source", "");
+    REQUIRE(sources.store_decoded_source("source", make_two_sines(48000 * 4), 2,
+                                         test::kFixtureSampleRate, 48000 * 4).is_ok());
+
+    for (auto meter_mode : {TrackMeterMode::PostPan, TrackMeterMode::PostFader}) {
+        const auto stereo = render_mode(sources, TrackChannelMode::Stereo, meter_mode);
+        REQUIRE(stereo.meter.left_peak > stereo.meter.right_peak + 0.1f);
+
+        const auto left = render_mode(sources, TrackChannelMode::Left, meter_mode);
+        CHECK(left.meter.left_peak == doctest::Approx(left.meter.right_peak).epsilon(1e-4));
+        CHECK(left.meter.left_peak == doctest::Approx(stereo.meter.left_peak).epsilon(1e-3));
+
+        const auto right = render_mode(sources, TrackChannelMode::Right, meter_mode);
+        CHECK(right.meter.left_peak == doctest::Approx(right.meter.right_peak).epsilon(1e-4));
+        CHECK(right.meter.right_peak == doctest::Approx(stereo.meter.right_peak).epsilon(1e-3));
+
+        const auto mono = render_mode(sources, TrackChannelMode::Mono, meter_mode);
+        CHECK(mono.meter.left_peak == doctest::Approx(mono.meter.right_peak).epsilon(1e-4));
+        CHECK(mono.meter.left_peak == doctest::Approx(peak(mono.left)).epsilon(0.02));
+    }
+}
+
+// Misma tabla que el test del offline ("offline render: el modo de canal suena
+// igual que en directo"): L = 0.2 y R = 0.6 constantes, paneo centrado.
+TEST_CASE("modo de canal: la mezcla en directo da la tabla del diseno") {
+    SourceManager sources;
+    sources.register_source("source", "");
+    std::vector<float> samples(static_cast<std::size_t>(48000) * 4 * 2);
+    for (std::size_t f = 0; f < samples.size() / 2; ++f) {
+        samples[f * 2] = 0.2f;
+        samples[f * 2 + 1] = 0.6f;
+    }
+    REQUIRE(sources.store_decoded_source("source", std::move(samples), 2,
+                                         test::kFixtureSampleRate, 48000 * 4).is_ok());
+    struct Row { TrackChannelMode mode; float l, r; };
+    for (const Row row : {Row{TrackChannelMode::Stereo, 0.2f, 0.6f},
+                          Row{TrackChannelMode::Mono, 0.4f, 0.4f},
+                          Row{TrackChannelMode::Left, 0.2f, 0.2f},
+                          Row{TrackChannelMode::Right, 0.6f, 0.6f}}) {
+        const auto out = render_mode(sources, row.mode);
+        CHECK(out.left[kBlock / 2] == doctest::Approx(row.l).epsilon(1e-4));
+        CHECK(out.right[kBlock / 2] == doctest::Approx(row.r).epsilon(1e-4));
+    }
 }
 
 TEST_CASE("mixer_mute_override_mutes_track") {

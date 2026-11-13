@@ -10,6 +10,7 @@
 
 #include <lt_engine/core/types.h>
 #include <lt_engine/core/result.h>
+#include <lt_engine/render/channel_mode.h>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -82,10 +83,10 @@ struct Track {
     Gain                gain               = 1.0f;
     float               pan                = 0.0f;
     std::string         audio_to           = "master";
-    // Sumar los dos canales de la pista a uno y colocarlo por el paneo, como
-    // el boton de mono de un canal de mezcla. No toca el fichero. Por defecto
-    // false, asi que una sesion guardada antes de que existiera suena igual.
-    bool                mono_downmix       = false;
+    // Que canales de la fuente suenan, antes del paneo (channel_mode.h). No
+    // toca el fichero. Por defecto Stereo, asi que una sesion guardada antes
+    // de que existiera suena igual.
+    TrackChannelMode    channel_mode       = TrackChannelMode::Stereo;
     bool                mute               = false;
     bool                solo               = false;
     TransposeBehavior   transpose_behavior = TransposeBehavior::FollowsSongOrRegion;

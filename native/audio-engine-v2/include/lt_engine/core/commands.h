@@ -319,7 +319,9 @@ struct CmdUpsertSongTracks {
         bool        mute = false;
         bool        solo = false;
         // Serialized tokens; converted to the engine enums when applied.
-        bool mono_downmix = false;
+        // Token de channel_mode.h; vacio = Stereo salvo que venga el viejo
+        // mono_downmix (comandos de versiones anteriores).
+        std::string channel_mode;
         std::string transpose_behavior;  // e.g. "follows_song_or_region" | "never"
         std::string role;                // e.g. "normal" | "click" | "guide"
         std::string kind;                // e.g. "audio" | "folder"
