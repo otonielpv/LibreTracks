@@ -201,3 +201,57 @@ fn after_the_split_each_spoken_cue_is_its_own_announcement() {
         assert!((announcement.start_seconds - from).abs() < 0.05, "{announcement:?} vs {from}");
     }
 }
+
+/// The guide speaks over the click: the hits under each word come back from
+/// the grid around it, so the click map no longer breaks at every cue.
+#[test]
+fn the_hits_under_the_words_come_back_from_the_grid() {
+    let material = click_and_voice(105.0, 30.0);
+    let split = split_click_and_speech(&material.mix, RATE);
+    let under: Vec<f64> = material
+        .beats
+        .iter()
+        .copied()
+        .filter(|&t| material.bursts.iter().any(|&(from, to)| t > from + 0.01 && t < to - 0.03))
+        .collect();
+    assert!(!under.is_empty(), "el material tiene golpes bajo la voz");
+    let missed: Vec<f64> = under
+        .iter()
+        .copied()
+        // ±2 ms: the grid comes from the envelope's 2 ms blocks.
+        .filter(|&t| peak_near(&split.click, t + 0.003, 0.006) <= 0.4)
+        .collect();
+    let recovered = under.len() - missed.len();
+    assert!(
+        recovered as f64 >= 0.9 * under.len() as f64,
+        "{recovered} de {} golpes bajo la voz",
+        under.len()
+    );
+
+    let analysis = analyze_click(&split.click, RATE, 4);
+    assert_eq!(analysis.segments.len(), 1, "{:?}", analysis.segments);
+    assert!(
+        !analysis
+            .warnings
+            .iter()
+            .any(|warning| warning.kind == crate::ClickWarningKind::ClickGap),
+        "{:?}",
+        analysis.warnings
+    );
+}
+
+/// A syllable short enough to pass for a click, off the beat, is speech.
+#[test]
+fn a_short_syllable_off_the_beat_stays_in_the_speech() {
+    let mut signal = vec![0.0_f32; RATE as usize * 8];
+    for n in 0..24 {
+        add_click(&mut signal, 0.5 + n as f64 * 0.3, 0.7);
+    }
+    let mut noise = Noise(3);
+    // 50 ms of "speech" halfway between two hits.
+    add_voice(&mut signal, 0.5 + 10.0 * 0.3 + 0.12, 0.05, 0.3, &mut noise);
+    let split = split_click_and_speech(&signal, RATE);
+    assert!(peak_near(&split.click, 3.645, 0.02) < 1.0e-3, "la sílaba se fue al click");
+    assert!(peak_near(&split.speech, 3.645, 0.02) > 0.1, "la sílaba no está en la voz");
+}
+
