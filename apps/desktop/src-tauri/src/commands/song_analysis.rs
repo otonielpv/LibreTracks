@@ -20,6 +20,7 @@ use libretracks_analysis::{
     analyze_music_tempo, initial_tempo_only, propose_tempo_markers, simplify_segments,
     ClickAnalysis, ExistingTiming, GuideAnalysis, GuideTemplate, KeyAnalysis,
     ProposedSignatureMarker, ProposedTempoMarker, SongSpan, TempoProposal, TempoSegment,
+    split_click_and_speech,
 };
 use lt_audio_engine_v2::{RenderError, RenderOutput, RenderRequest, RenderSampleFormat};
 use serde::{Deserialize, Serialize};
@@ -341,6 +342,73 @@ struct AnalysisJob {
     guide_track_ids: Vec<String>,
 }
 
+/// Whether the click and the guide come from the same track(s): a single file
+/// with the click and the spoken guide on one side (plan channel-split). Then
+/// each spoils the other's analysis and the signal is split first
+/// (`split_click_and_speech`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClickGuideSharing {
+    /// Nothing shared: each is analysed as rendered, as always.
+    Apart,
+    /// Some track in both: the click is split, and so is the guide render.
+    Overlap,
+    /// The same tracks: rendered once, the speech half is the guide.
+    Same,
+}
+
+fn click_guide_sharing(job: &AnalysisJob) -> ClickGuideSharing {
+    let Some(tempo) = job.tempo.as_ref().filter(|tempo| !tempo.from_music) else {
+        return ClickGuideSharing::Apart;
+    };
+    if !tempo
+        .track_ids
+        .iter()
+        .any(|id| job.guide_track_ids.contains(id))
+    {
+        return ClickGuideSharing::Apart;
+    }
+    let mut click: Vec<&String> = tempo.track_ids.iter().collect();
+    let mut guide: Vec<&String> = job.guide_track_ids.iter().collect();
+    click.sort();
+    click.dedup();
+    guide.sort();
+    guide.dedup();
+    if click == guide {
+        ClickGuideSharing::Same
+    } else {
+        ClickGuideSharing::Overlap
+    }
+}
+
+/// What the engine bounces for `job`: the click (or music), the key tracks
+/// and the guide, each to its own file. A guide on the click's own tracks is
+/// not bounced twice.
+fn analysis_outputs(
+    job: &AnalysisJob,
+    click_path: &std::path::Path,
+    key_path: &std::path::Path,
+    guide_path: &std::path::Path,
+) -> Vec<RenderOutput> {
+    let output = |path: &std::path::Path, track_ids: &[String]| RenderOutput {
+        path: path.to_string_lossy().into_owned(),
+        track_ids: track_ids.to_vec(),
+        include_metronome: false,
+        include_voice_guide: false,
+        include_pad: false,
+    };
+    let mut outputs = Vec::new();
+    if let Some(tempo) = &job.tempo {
+        outputs.push(output(click_path, &tempo.track_ids));
+    }
+    if let Some(key) = &job.key {
+        outputs.push(output(key_path, &key.track_ids));
+    }
+    if !job.guide_track_ids.is_empty() && click_guide_sharing(job) != ClickGuideSharing::Same {
+        outputs.push(output(guide_path, &job.guide_track_ids));
+    }
+    outputs
+}
+
 fn prepare_job(
     song_dir: &std::path::Path,
     song: &libretracks_core::Song,
@@ -541,34 +609,8 @@ fn run_job(
     let click_path = path_for("click");
     let key_path = path_for("key");
     let guide_path = path_for("guide");
-    let mut outputs = Vec::new();
-    if let Some(tempo) = &job.tempo {
-        outputs.push(RenderOutput {
-            path: click_path.to_string_lossy().into_owned(),
-            track_ids: tempo.track_ids.clone(),
-            include_metronome: false,
-            include_voice_guide: false,
-            include_pad: false,
-        });
-    }
-    if let Some(key) = &job.key {
-        outputs.push(RenderOutput {
-            path: key_path.to_string_lossy().into_owned(),
-            track_ids: key.track_ids.clone(),
-            include_metronome: false,
-            include_voice_guide: false,
-            include_pad: false,
-        });
-    }
-    if !job.guide_track_ids.is_empty() {
-        outputs.push(RenderOutput {
-            path: guide_path.to_string_lossy().into_owned(),
-            track_ids: job.guide_track_ids.clone(),
-            include_metronome: false,
-            include_voice_guide: false,
-            include_pad: false,
-        });
-    }
+    let sharing = click_guide_sharing(job);
+    let outputs = analysis_outputs(job, &click_path, &key_path, &guide_path);
     let cleanup = || {
         let _ = std::fs::remove_file(&click_path);
         let _ = std::fs::remove_file(&key_path);
@@ -613,11 +655,21 @@ fn run_job(
         // A click without accent: read again once the guide says where its
         // bars start.
         let mut unaccented_click: Option<(Vec<f32>, u32)> = None;
+        // The speech half of the click render, when the guide is the same
+        // track(s) as the click and was not bounced on its own.
+        let mut shared_speech: Option<(Vec<f32>, u32)> = None;
         if let Some(tempo) = &job.tempo {
             if !on_progress(AnalysisProgress::at(RENDER_END, "tempo")) {
                 return Err(JobError::Cancelled);
             }
-            let (samples, rate) = read(&click_path)?;
+            let (mut samples, rate) = read(&click_path)?;
+            if sharing != ClickGuideSharing::Apart {
+                let split = split_click_and_speech(&samples, rate);
+                samples = split.click;
+                if sharing == ClickGuideSharing::Same {
+                    shared_speech = Some((split.speech, rate));
+                }
+            }
             let analysis = if tempo.from_music {
                 analyze_music_tempo(&samples, rate, tempo.fallback_beats_per_bar)
             } else {
@@ -651,7 +703,17 @@ fn run_job(
             if !on_progress(AnalysisProgress::at(KEY_END, "guide")) {
                 return Err(JobError::Cancelled);
             }
-            let (samples, rate) = read(&guide_path)?;
+            let (samples, rate) = match shared_speech.take() {
+                Some(speech) => speech,
+                None => {
+                    let (samples, rate) = read(&guide_path)?;
+                    if sharing == ClickGuideSharing::Overlap {
+                        (split_click_and_speech(&samples, rate).speech, rate)
+                    } else {
+                        (samples, rate)
+                    }
+                }
+            };
             let templates = voices_dir.map(load_guide_templates).unwrap_or_default();
             let mut recogniser = speech_model.and_then(|model| {
                 crate::commands::speech::WhisperTranscriber::load(
@@ -1326,6 +1388,189 @@ mod tests {
         assert!(!segments.is_empty());
         for segment in segments {
             assert!((segment.bpm - 120.0).abs() < 0.5, "{segments:?}");
+        }
+    }
+
+    // ── Plan channel-split, paso 06: click y guía en la misma pista ──────
+
+    fn request_with(click: &[&str], guide: &[&str]) -> AnalyzeSongRequest {
+        AnalyzeSongRequest {
+            region_id: "b".into(),
+            click_track_ids: click.iter().map(|id| id.to_string()).collect(),
+            music_tempo_track_ids: vec![],
+            key_track_ids: vec!["keys".into()],
+            guide_track_ids: guide.iter().map(|id| id.to_string()).collect(),
+        }
+    }
+
+    fn outputs_for(request: &AnalyzeSongRequest) -> (ClickGuideSharing, Vec<(String, Vec<String>)>) {
+        let dir = tempfile::tempdir().expect("dir");
+        let job = prepare_job(dir.path(), &song(), request).expect("job");
+        let outputs = analysis_outputs(
+            &job,
+            std::path::Path::new("click.wav"),
+            std::path::Path::new("key.wav"),
+            std::path::Path::new("guide.wav"),
+        )
+        .into_iter()
+        .map(|output| (output.path, output.track_ids))
+        .collect();
+        (click_guide_sharing(&job), outputs)
+    }
+
+    #[test]
+    fn the_same_track_as_click_and_guide_is_bounced_once_and_split() {
+        let (sharing, outputs) = outputs_for(&request_with(&["cg"], &["cg"]));
+        assert_eq!(sharing, ClickGuideSharing::Same);
+        assert_eq!(
+            outputs,
+            vec![
+                ("click.wav".to_string(), vec!["cg".to_string()]),
+                ("key.wav".to_string(), vec!["keys".to_string()]),
+            ]
+        );
+    }
+
+    #[test]
+    fn different_click_and_guide_tracks_bounce_as_before() {
+        let (sharing, outputs) = outputs_for(&request_with(&["click"], &["guide"]));
+        assert_eq!(sharing, ClickGuideSharing::Apart);
+        assert_eq!(
+            outputs,
+            vec![
+                ("click.wav".to_string(), vec!["click".to_string()]),
+                ("key.wav".to_string(), vec!["keys".to_string()]),
+                ("guide.wav".to_string(), vec!["guide".to_string()]),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_partly_shared_guide_is_bounced_on_its_own_and_split() {
+        let (sharing, outputs) = outputs_for(&request_with(&["cg"], &["cg", "voz"]));
+        assert_eq!(sharing, ClickGuideSharing::Overlap);
+        assert_eq!(outputs.len(), 3);
+        // Tempo from the music: there is no click to split.
+        let music = AnalyzeSongRequest {
+            music_tempo_track_ids: vec!["cg".into()],
+            ..request_with(&[], &["cg"])
+        };
+        assert_eq!(outputs_for(&music).0, ClickGuideSharing::Apart);
+    }
+
+    /// End to end with the real engine: one Right-only track with the click
+    /// (eighths at 105) and spoken cues on its right channel, the left full of
+    /// noise, chosen as both click and guide.
+    #[test]
+    #[cfg_attr(feature = "no-link", ignore = "requires the real engine")]
+    fn click_and_guide_on_one_track_give_the_tempo_and_every_cue() {
+        const RATE: u32 = 48_000;
+        let dir = tempfile::tempdir().expect("dir");
+        std::fs::create_dir_all(dir.path().join("audio")).expect("audio dir");
+        let path = dir.path().join("audio").join("cg.wav");
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate: RATE,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        // A cue every 6 s, as a real guide does (one every few bars).
+        const SECONDS: u32 = 26;
+        let cues: Vec<(f64, f64)> = (0..4)
+            .map(|n| (3.13 + n as f64 * 6.0, 0.4 + 0.1 * n as f64))
+            .collect();
+        let mut seed = 12_345_u32;
+        let mut noise = move || {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (seed >> 8) as f32 / (1 << 23) as f32 * 2.0 - 1.0
+        };
+        let eighth = 30.0 / 105.0;
+        let mut writer = hound::WavWriter::create(&path, spec).expect("wav");
+        for frame in 0..(RATE * SECONDS) {
+            let t = f64::from(frame) / f64::from(RATE);
+            let phase = (t - 0.5).rem_euclid(eighth);
+            let mut right = if t >= 0.5 && phase < 0.008 {
+                0.7 * ((-phase / 0.002).exp() * (2.0 * std::f64::consts::PI * 1000.0 * phase).sin())
+                    as f32
+            } else {
+                0.0
+            };
+            for &(start, length) in &cues {
+                if t >= start && t < start + length {
+                    let local = t - start;
+                    let syllable = 0.6 + 0.4 * (std::f64::consts::PI * local / 0.12).sin().abs();
+                    let edges = (local / 0.01).min((length - local) / 0.01).min(1.0);
+                    right += 0.3 * (syllable * edges) as f32 * noise();
+                }
+            }
+            writer.write_sample(0.5 * noise()).unwrap();
+            writer.write_sample(right).unwrap();
+        }
+        writer.finalize().expect("finalize");
+
+        let mut song = song();
+        song.regions = vec![region("a", 0.0, f64::from(SECONDS))];
+        song.time_signature_markers.clear();
+        song.duration_seconds = f64::from(SECONDS);
+        let mut track_cg = track("cg", false);
+        track_cg.channel_mode = libretracks_core::ChannelMode::Right;
+        song.tracks = vec![track_cg];
+        song.clips = vec![libretracks_core::Clip {
+            id: "c".into(),
+            track_id: "cg".into(),
+            file_path: "audio/cg.wav".into(),
+            timeline_start_seconds: 0.0,
+            source_start_seconds: 0.0,
+            duration_seconds: f64::from(SECONDS),
+            gain: 1.0,
+            fade_in_seconds: None,
+            fade_out_seconds: None,
+            color: None,
+        }];
+        let request = AnalyzeSongRequest {
+            region_id: "a".into(),
+            click_track_ids: vec!["cg".into()],
+            music_tempo_track_ids: vec![],
+            key_track_ids: vec![],
+            guide_track_ids: vec!["cg".into()],
+        };
+        let job = prepare_job(dir.path(), &song, &request).expect("job");
+        let scratch = tempfile::tempdir().expect("scratch");
+        let result = run_job(&job, RATE, scratch.path(), None, None, &mut |_| true).expect("run");
+
+        let tempo = result.tempo.expect("tempo");
+        let bpms: Vec<(f64, f64, u32)> = tempo
+            .reading
+            .analysis
+            .segments
+            .iter()
+            .map(|s| (s.start_seconds, s.bpm, s.bars))
+            .collect();
+        let readings = [Some(&tempo.reading), tempo.as_eighths.as_ref()];
+        // The clicks under a word go with the word (ClickGap), so the map
+        // breaks there; what matters is that the bars read 105 (or its
+        // eighths), as with the real song (27 of 29 segments, the rest in the
+        // count-in).
+        assert!(
+            readings.iter().flatten().any(|reading| {
+                let segments = &reading.analysis.segments;
+                let total: u32 = segments.iter().map(|s| s.bars).sum();
+                let right: u32 = segments
+                    .iter()
+                    .filter(|s| (s.bpm - 105.0).abs() < 0.5 || (s.bpm - 210.0).abs() < 1.0)
+                    .map(|s| s.bars)
+                    .sum();
+                total > 0 && f64::from(right) >= 0.75 * f64::from(total)
+            }),
+            "{bpms:?}"
+        );
+        let announcements = result.guide.expect("guide").analysis.announcements;
+        assert_eq!(announcements.len(), cues.len(), "{announcements:?}");
+        for (announcement, &(start, _)) in announcements.iter().zip(&cues) {
+            assert!(
+                (announcement.start_seconds - start).abs() < 0.05,
+                "{announcement:?} vs {start}"
+            );
         }
     }
 }

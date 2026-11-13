@@ -14,6 +14,7 @@ pub mod key;
 pub mod music;
 pub mod proposal;
 pub mod simplify;
+pub mod split;
 
 #[cfg(test)]
 mod regression_tests;
@@ -34,3 +35,4 @@ pub use proposal::{
     TempoProposal,
 };
 pub use simplify::{initial_tempo_only, simplify_segments};
+pub use split::{split_click_and_speech, SplitSignals};

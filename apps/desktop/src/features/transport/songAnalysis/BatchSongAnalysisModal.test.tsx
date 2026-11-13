@@ -234,6 +234,25 @@ describe("BatchSongAnalysisModal", () => {
     expect(within(row("Dos")).getByText(/batch\.key .*"key":"G"/)).toBeTruthy();
   });
 
+  // Plan channel-split: tras separar L/R, una sola pista «Click + Guía» va
+  // como click y como guía de cada canción; el backend (run_job) la parte.
+  it("sends one Click + Guide track as both the click and the guide", async () => {
+    const shared = song();
+    shared.tracks = [audioTrack("keys", "Keys"), audioTrack("cg", "Click + Guía")];
+    shared.clips = [clip("k1", "keys", 0), clip("k2", "keys", 100), clip("c1", "cg", 0), clip("c2", "cg", 100)];
+    useSongStore.setState({ song: shared });
+    render(<BatchSongAnalysisModal onApplied={() => {}} />);
+
+    await analyzeAll();
+
+    const requests = analyzeSong.mock.calls.map(([request]) => request);
+    expect(requests).toHaveLength(2);
+    for (const request of requests) {
+      expect(request.clickTrackIds).toEqual(["cg"]);
+      expect(request.guideTrackIds).toEqual(["cg"]);
+    }
+  });
+
   it("applies every song as proposed, one apply (one undo) per song", async () => {
     const onApplied = vi.fn();
     render(<BatchSongAnalysisModal onApplied={onApplied} />);

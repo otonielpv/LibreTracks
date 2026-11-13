@@ -174,6 +174,22 @@ describe("guide", () => {
     expect(guideTrackOptions(song(), "b").preselected).toBe("guide");
   });
 
+  // Plan channel-split: tras «Separar canales L/R» el click y la guía quedan
+  // en una sola pista, que debe salir elegida en los dos selectores.
+  it.each(["Click + Guía", "Click/Guide", "Clic y guía"])(
+    "preselects one track named %s as both click and guide",
+    (name) => {
+      const shared = song();
+      shared.tracks = [audioTrack("keys", "Keys"), audioTrack("cg", name)];
+      shared.clips = [
+        { id: "k", trackId: "keys", timelineStartSeconds: 100, durationSeconds: 100 } as never,
+        { id: "c", trackId: "cg", timelineStartSeconds: 100, durationSeconds: 100 } as never,
+      ];
+      expect(clickTrackOptions(shared, "b").preselected).toBe("cg");
+      expect(guideTrackOptions(shared, "b").preselected).toBe("cg");
+    },
+  );
+
   it("reads the labels as a section and a cue", () => {
     expect(markersForLabels(["verse_3", "drums_in"])).toEqual({
       section: "verse:3",
