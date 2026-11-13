@@ -30,16 +30,18 @@ describe("Settings modal", () => {
   it("renders the desktop settings tabs with Audio selected by default", async () => {
     await expect(await AppPage.settingsTabList).toBeDisplayed();
 
-    for (const id of ["audio", "general", "shortcuts", "diagnostics", "midi", "midiLearn"]) {
-      await expect(await AppPage.settingsTab(id)).toBeDisplayed();
-    }
-
     // The modal always opens on the Audio tab (reset in an effect on open).
+    // Checked before the loop: settingsTab() opens a collapsed group (General,
+    // MIDI) to reach its tabs, and opening a group selects its first tab.
     await expect(await AppPage.settingsTab("audio")).toHaveAttribute(
       "aria-selected",
       "true",
     );
     await expect(await AppPage.settingsPanel("audio")).toBeDisplayed();
+
+    for (const id of ["audio", "general", "shortcuts", "diagnostics", "midi", "midiLearn"]) {
+      await expect(await AppPage.settingsTab(id)).toBeDisplayed();
+    }
   });
 
   it("switches to the General tab and updates aria-selected + panel", async () => {

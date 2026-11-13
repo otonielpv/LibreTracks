@@ -29,10 +29,21 @@ describe("Session templates (isolated session)", () => {
   let audioFilePath = "";
   const TRACK_ONE = "E2E Template Track One";
   const TRACK_TWO = "E2E Template Track Two";
+  // The E2E runs against the real settings: a default song template there
+  // would organise the source tracks into its own lanes and rename them.
+  let savedSongTemplate: string | null = null;
+  let savedSongLayout: "shared" | "songFolder" | "separate" = "shared";
 
   before(async () => {
     await AppPage.waitUntilBooted();
     await AppPage.resetShell();
+    const settings = (await AppPage.settings()) as unknown as {
+      defaultSongTemplate?: string | null;
+      songTrackLayout?: typeof savedSongLayout;
+    };
+    savedSongTemplate = settings.defaultSongTemplate ?? null;
+    savedSongLayout = settings.songTrackLayout ?? "shared";
+    await AppPage.setSongTemplateSettings(null, "shared");
 
     workDir = mkdtempSync(path.join(tmpdir(), "lt-e2e-template-"));
     templatePath = path
@@ -58,6 +69,7 @@ describe("Session templates (isolated session)", () => {
         { timeoutMsg: "Engine did not stop before template teardown" },
       );
     }
+    await AppPage.setSongTemplateSettings(savedSongTemplate, savedSongLayout);
     removeWorkDir(workDir);
   });
 
