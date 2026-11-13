@@ -683,6 +683,13 @@ const es = {
       interfaceZoom: "Tamaño de la interfaz",
       interfaceZoomHelp:
         "Escala toda la interfaz. Bájalo si la app es más ancha que tu pantalla. Atajo: Cmd/Ctrl +, − y 0 para restablecer.",
+      mixerSize: "Tamaño del mezclador",
+      mixerSize_auto: "Automático (grande en tablet)",
+      mixerSize_normal: "Normal",
+      mixerSize_large: "Grande",
+      mixerSize_xlarge: "Muy grande",
+      mixerSizeHelp:
+        "Ancho de las tiras y tamaño de los faders, sin cambiar el resto de la interfaz. Para alargar los faders, arrastra el borde superior del mezclador.",
       defaultView: "Vista al abrir",
       defaultViewHelp: "La vista en la que se abren las sesiones.",
       metronomeTitle: "Metronomo",

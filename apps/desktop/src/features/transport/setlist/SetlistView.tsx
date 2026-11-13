@@ -402,7 +402,8 @@ function SetlistViewComponent({
   );
   const mixerZoneRef = useRef<HTMLElement | null>(null);
   const mixerHeightPx = useSetlistStore((state) => state.mixerHeightPx);
-  const beginMixerResize = useMixerResize(rootRef, mixerZoneRef);
+  const { begin: beginMixerResize, resizable: mixerResizable } =
+    useMixerResize(rootRef, mixerZoneRef, layout, mixerCollapsed);
   const songsZoneRef = useRef<HTMLElement | null>(null);
   const songsHeightPx = useSetlistStore((state) => state.songsHeightPx);
   const songsResize = useSongsRowResize(rootRef, songsZoneRef);
@@ -418,7 +419,7 @@ function SetlistViewComponent({
   const railButtons = layout === "short" && shortPane === "mixer";
   const mixer = (
     <Zone name="mixer" zoneRef={mixerZoneRef} drop={songDrop}>
-      {layout === "wide" ? (
+      {mixerResizable ? (
         <div
           className="lt-setlist-mixer-resize"
           role="separator"
@@ -638,7 +639,9 @@ function SetlistViewComponent({
               ...(mixerHeightPx !== null ? { [MIXER_HEIGHT_VAR]: `${mixerHeightPx}px` } : null),
               ...(songsHeightPx !== null ? { [SONGS_HEIGHT_VAR]: `${songsHeightPx}px` } : null),
             } as CSSProperties)
-          : undefined
+          : layout === "medium" && mixerHeightPx !== null
+            ? ({ [MIXER_HEIGHT_VAR]: `${mixerHeightPx}px` } as CSSProperties)
+            : undefined
       }
     >
       {/* The section menu's «Position…» opens this; in the DAW it lives in

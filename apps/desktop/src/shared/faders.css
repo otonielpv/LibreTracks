@@ -453,3 +453,21 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
     --lt-mixer-strip-width: 7.75rem;
   }
 }
+
+/* Tamaño del mezclador elegido en Ajustes › General (shared/mixerSize.ts).
+   `:root.clase` pesa más que la regla de tablet de arriba, así que la
+   elección manda; sin clase («Automático») se queda esa regla. */
+:root.lt-mixer-size-normal {
+  --lt-mixer-fader-scale: 1;
+  --lt-mixer-strip-width: 6.5rem;
+}
+
+:root.lt-mixer-size-large {
+  --lt-mixer-fader-scale: 1.35;
+  --lt-mixer-strip-width: 7.75rem;
+}
+
+:root.lt-mixer-size-xlarge {
+  --lt-mixer-fader-scale: 1.7;
+  --lt-mixer-strip-width: 9.5rem;
+}

@@ -257,6 +257,24 @@ describe("Setlist mixer hint and sizes", () => {
     expect(useSetlistStore.getState().mixerHeightPx).toBe(600);
   });
 
+  // The iPad report: narrow strips and a short fader throw.
+  it("medium: the console grows by its top edge too, taking the waveform down to its minimum", () => {
+    const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="medium" />);
+    const root = container.querySelector<HTMLElement>(".lt-setlist-view")!;
+    const zone = container.querySelector<HTMLElement>("[data-setlist-zone='mixer']")!;
+    const wave = container.querySelector<HTMLElement>("[data-setlist-zone='overview']")!;
+    root.getBoundingClientRect = () => ({ height: 1000, top: 0, left: 0, width: 900 }) as DOMRect;
+    zone.getBoundingClientRect = () => ({ height: 300, top: 700, left: 0, width: 900 }) as DOMRect;
+    // 480 px of waveform: it can give 400 and keep 80; the song row is untouched.
+    wave.getBoundingClientRect = () => ({ height: 480, top: 200, left: 0, width: 900 }) as DOMRect;
+    const handle = screen.getByRole("separator", { name: "setlistView.mixer.resize" });
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientY: 700 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 0 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientY: 0 });
+    expect(useSetlistStore.getState().mixerHeightPx).toBe(700);
+    expect(root.style.getPropertyValue("--lt-setlist-mixer-height")).toBe("700px");
+  });
+
   // The desktop report: the mixer resized, the song row did not.
   it("wide: the song row's bottom edge resizes it (cards wrap); a double click goes back to automatic", () => {
     const { container } = render(<SetlistView {...props({ selectedRegionId: "a" })} layoutClass="wide" />);

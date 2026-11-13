@@ -1001,6 +1001,9 @@ type CompactVerticalFaderProps = {
   formatValue?: (position: number) => string;
 };
 
+/** Touch target around the fader cap: a finger's width, whatever the cap's size. */
+const GRAB_REACH_PX = 44;
+
 function CompactVerticalFaderComponent({
   value,
   onChange,
@@ -1019,6 +1022,11 @@ function CompactVerticalFaderComponent({
   // the fader crawls for precise dB tweaks (Reaper-style). Re-anchored whenever
   // Shift toggles so the thumb never jumps.
   const fineAnchorRef = useRef<{ clientY: number; value: number } | null>(null);
+  // Where the pointer took the cap, in px from its centre: a drag that
+  // starts on the cap, or within a finger's reach of it (GRAB_REACH_PX), moves
+  // it from there without the value jumping to the pointer. 0 = the track was
+  // touched away from the cap, which jumps there as before.
+  const grabOffsetRef = useRef(0);
   const latestValueRef = useRef(value);
   latestValueRef.current = value;
 
@@ -1050,7 +1058,16 @@ function CompactVerticalFaderComponent({
         fineAnchorRef.current = { clientY: event.clientY, value };
       } else {
         fineAnchorRef.current = null;
-        onChange(valueFromClientY(event.clientY));
+        const rect = target.getBoundingClientRect();
+        const cap = target.querySelector<HTMLElement>(".lt-compact-mixer-fader-thumb");
+        const capHalf = Math.max(
+          (cap?.getBoundingClientRect().height ?? 0) / 2,
+          GRAB_REACH_PX / 2,
+        );
+        const capCentre = rect.bottom - value * rect.height;
+        const onCap = capHalf > 0 && Math.abs(event.clientY - capCentre) <= capHalf;
+        grabOffsetRef.current = onCap ? event.clientY - capCentre : 0;
+        if (!onCap) onChange(valueFromClientY(event.clientY));
       }
     },
     [onChange, value, valueFromClientY],
@@ -1080,8 +1097,9 @@ function CompactVerticalFaderComponent({
       }
 
       // Shift released mid-drag → resume absolute tracking from the pointer.
+      if (fineAnchorRef.current) grabOffsetRef.current = 0;
       fineAnchorRef.current = null;
-      onChange(valueFromClientY(event.clientY));
+      onChange(valueFromClientY(event.clientY - grabOffsetRef.current));
     },
     [onChange, valueFromClientY],
   );

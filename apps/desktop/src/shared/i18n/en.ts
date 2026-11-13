@@ -692,6 +692,13 @@ const en = {
       interfaceZoom: "Interface size",
       interfaceZoomHelp:
         "Scale the whole interface. Lower it if the app is wider than your screen. Shortcut: Cmd/Ctrl +, − and 0 to reset.",
+      mixerSize: "Mixer size",
+      mixerSize_auto: "Automatic (large on tablets)",
+      mixerSize_normal: "Normal",
+      mixerSize_large: "Large",
+      mixerSize_xlarge: "Extra large",
+      mixerSizeHelp:
+        "Channel strip width and fader size, without changing the rest of the interface. To make the faders longer, drag the mixer's top edge.",
       defaultView: "Startup view",
       defaultViewHelp: "The view sessions open in.",
       metronomeTitle: "Metronome",

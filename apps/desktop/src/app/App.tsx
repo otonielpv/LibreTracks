@@ -12,6 +12,7 @@ import { TelemetryController } from "../features/telemetry/TelemetryController";
 import { TourOverlay } from "../features/tutorial/TourOverlay";
 import { DialogHost } from "../shared/dialog/DialogHost";
 import { installPageZoomGuard } from "../shared/pageZoomGuard";
+import { initMixerSize } from "../shared/mixerSize";
 import { dismissBootSplash } from "./bootSplash";
 import {
   dispatchUiZoomStatus,
@@ -94,6 +95,7 @@ export function App() {
   // the whole UI to fit. Lives here so it works regardless of focus/panel.
   useEffect(() => {
     initUiZoom();
+    initMixerSize();
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return;

@@ -4,8 +4,15 @@ import { useSetlistStore } from "./setlistStore";
 
 /** The mixer never gets shorter than 12 rem… */
 export const MIXER_MIN_HEIGHT_PX = 192;
-/** …nor taller than 60 % of the view. */
+/** …nor taller than 60 % of the view (`wide`). */
 export const MIXER_MAX_HEIGHT_FRACTION = 0.6;
+/**
+ * On a tablet (`medium`) the console is what gets touched, and a long fader
+ * throw, like an analogue desk's, is easier to ride on stage: it may take
+ * everything the waveform has above this (the song row is left alone; a
+ * fraction of the view cut it on an iPad).
+ */
+export const MEDIUM_WAVE_MIN_PX = 80;
 const STORAGE_KEY = "lt.setlistView.mixerHeightPx";
 export const MIXER_HEIGHT_VAR = "--lt-setlist-mixer-height";
 
@@ -32,7 +39,7 @@ function storeHeight(heightPx: number) {
 }
 
 /**
- * Dragging the top edge of the `wide` mixer. During the drag the height is
+ * Dragging the top edge of the `wide` or `medium` mixer. During the drag the height is
  * written straight to a CSS variable on the view root (no React state per
  * pointermove); on release it is committed once to setlistStore and
  * remembered in localStorage.
@@ -40,7 +47,13 @@ function storeHeight(heightPx: number) {
 export function useMixerResize(
   rootRef: RefObject<HTMLElement | null>,
   mixerRef: RefObject<HTMLElement | null>,
+  layout: string,
+  collapsed: boolean,
 ) {
+  // The tablet layout too: there the fader's length is what the musician
+  // rides, so the console can grow like an analogue desk's long throw.
+  const resizable = layout === "wide" || (layout === "medium" && !collapsed);
+  const medium = layout === "medium";
   const setMixerHeightPx = useSetlistStore((state) => state.setMixerHeightPx);
 
   useEffect(() => {
@@ -49,7 +62,7 @@ export function useMixerResize(
     if (stored !== null) setMixerHeightPx(stored);
   }, [setMixerHeightPx]);
 
-  return useCallback(
+  const begin = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       const root = rootRef.current;
       const mixer = mixerRef.current;
@@ -59,10 +72,18 @@ export function useMixerResize(
       const startY = event.clientY;
       const startHeight = mixer.getBoundingClientRect().height;
       const viewHeight = root.getBoundingClientRect().height;
-      let current = clampMixerHeight(startHeight, viewHeight);
+      // Measured once: the waveform shrinks while the console grows.
+      const wave = root.querySelector<HTMLElement>("[data-setlist-zone='overview']");
+      const spare = Math.max(0, (wave?.getBoundingClientRect().height ?? 0) - MEDIUM_WAVE_MIN_PX);
+      const mediumMax = Math.max(MIXER_MIN_HEIGHT_PX, startHeight + spare);
+      const clamp = (height: number) =>
+        medium
+          ? Math.round(Math.max(MIXER_MIN_HEIGHT_PX, Math.min(mediumMax, height)))
+          : clampMixerHeight(height, viewHeight);
+      let current = clamp(startHeight);
       const onMove = (moveEvent: PointerEvent) => {
         if (moveEvent.pointerId !== pointerId) return;
-        current = clampMixerHeight(startHeight - (moveEvent.clientY - startY), viewHeight);
+        current = clamp(startHeight - (moveEvent.clientY - startY));
         root.style.setProperty(MIXER_HEIGHT_VAR, `${current}px`);
       };
       const onUp = (upEvent: PointerEvent) => {
@@ -77,6 +98,7 @@ export function useMixerResize(
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onUp);
     },
-    [mixerRef, rootRef, setMixerHeightPx],
+    [medium, mixerRef, rootRef, setMixerHeightPx],
   );
+  return { begin, resizable };
 }

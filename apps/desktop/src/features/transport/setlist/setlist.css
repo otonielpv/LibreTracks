@@ -51,7 +51,8 @@
 /* medium: igual pero más apretada; el cajón es una hoja que sube desde abajo
    y tapa el mezclador. */
 .lt-setlist-view.is-medium {
-  grid-template-rows: auto minmax(5rem, 0.6fr) minmax(10rem, 1.8fr);
+  /* La consola se puede alargar arrastrando su borde (useMixerResize). */
+  grid-template-rows: auto minmax(5rem, 0.6fr) var(--lt-setlist-mixer-height, minmax(10rem, 1.8fr));
   --lt-setlist-gap: 0.35rem;
 }
 
@@ -814,6 +815,27 @@ html.lt-mobile .lt-setlist-add-song-button {
 
 .lt-setlist-mixer-resize:hover {
   background: rgb(87 241 219 / 0.25);
+}
+
+/* Con el dedo, 6 px no se aciertan: un asa más alta con una marca visible,
+   y la consola deja ese hueco libre para que el asa no tape su cabecera. */
+html.lt-mobile .lt-setlist-mixer-resize {
+  height: 16px;
+}
+
+html.lt-mobile .lt-setlist-mixer-resize::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 40px;
+  height: 3px;
+  transform: translateX(-50%);
+  background: rgb(186 202 197 / 0.35);
+}
+
+html.lt-mobile .lt-setlist-mixer-resize ~ .lt-setlist-mixer {
+  padding-top: 16px;
 }
 
 .lt-setlist-mixer {
