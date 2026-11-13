@@ -268,6 +268,8 @@ function RenderSongDialog({ regionId, regionName, tracks: songTracks, sessionTra
         fileName,
         metronomeLabel: t("transport.renderModal.metronomeStem"),
         voiceGuideLabel: t("transport.renderModal.voiceGuideStem"),
+        applyAutomation: scope !== "session" && preferences.applyAutomation,
+        padLabel: t("transport.renderModal.padStem"),
       });
       if (result.saved) {
         recordProductEvent("feature_audio_render");
@@ -518,6 +520,22 @@ function RenderSongDialog({ regionId, regionName, tracks: songTracks, sessionTra
                 <span className="lt-export-option-copy">
                   <strong>{t("transport.renderModal.applyMixer")}</strong>
                   <small>{t("transport.renderModal.applyMixerHint")}</small>
+                </span>
+              </label>
+              <label className="lt-render-check">
+                <input
+                  type="checkbox"
+                  checked={scope !== "session" && preferences.applyAutomation}
+                  disabled={scope === "session"}
+                  onChange={(event) => update({ applyAutomation: event.target.checked })}
+                />
+                <span className="lt-export-option-copy">
+                  <strong>{t("transport.renderModal.applyAutomation")}</strong>
+                  <small>
+                    {scope === "session"
+                      ? t("transport.renderModal.applyAutomationSessionHint")
+                      : t("transport.renderModal.applyAutomationHint")}
+                  </small>
                 </span>
               </label>
               <label className="lt-render-check">

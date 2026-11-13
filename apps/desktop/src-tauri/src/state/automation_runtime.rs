@@ -963,6 +963,11 @@ impl DesktopSession {
     }
 
     /// The session's scene ids in the editor's order (the MIDI scene slots).
+    /// The session's cues and scenes, for an offline render that plays them.
+    pub(crate) fn automation_document(&self) -> &crate::audio::automation::AutomationDocument {
+        &self.automation
+    }
+
     pub(crate) fn mix_scene_ids(&self) -> Vec<String> {
         self.automation.mix_scenes.iter().map(|scene| scene.id.clone()).collect()
     }

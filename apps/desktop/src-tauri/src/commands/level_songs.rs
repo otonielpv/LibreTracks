@@ -399,6 +399,7 @@ fn measure_songs(
                     track_ids: job.tracks.clone(),
                     include_metronome: false,
                     include_voice_guide: false,
+                    include_pad: false,
                 }],
                 format: RenderSampleFormat::Float32,
                 channels: 2,
@@ -410,6 +411,7 @@ fn measure_songs(
                 pans: None,
                 metronome: None,
                 voice_guide: None,
+                automation: None,
             };
             let report = match lt_audio_engine_v2::render_offline(&engine_request, on_progress) {
                 Ok(report) => report,
@@ -742,6 +744,7 @@ mod tests {
                         track_ids: tracks.clone(),
                         include_metronome: false,
                         include_voice_guide: false,
+                        include_pad: false,
                     }],
                     format: RenderSampleFormat::Float32,
                     channels: 2,
@@ -753,6 +756,7 @@ mod tests {
                     pans: None,
                     metronome: None,
                     voice_guide: None,
+                    automation: None,
                 };
                 std::fs::write(
                     out_dir.join(format!("song{index:02}-{kind}.json")),

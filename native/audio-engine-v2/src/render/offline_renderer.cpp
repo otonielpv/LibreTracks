@@ -511,16 +511,120 @@ const Source* find_source(const Session& session, const Id& id) {
     return nullptr;
 }
 
+// ── Automation ─────────────────────────────────────────────────────────────
+
+// Piecewise-linear envelope value at `t` (Rust's render_automation writes the
+// keys with the same reading: the last key at or before `t`, interpolated
+// toward the next; two keys at one instant are a step).
+float linear_at(const std::vector<OfflineKey>& keys, double t, float fallback) noexcept {
+    if (keys.empty()) return fallback;
+    if (t < keys.front().seconds) return keys.front().value;
+    std::size_t lo = 0;
+    std::size_t hi = keys.size();
+    while (hi - lo > 1) {               // last index with seconds <= t
+        const std::size_t mid = (lo + hi) / 2;
+        if (keys[mid].seconds <= t) lo = mid;
+        else hi = mid;
+    }
+    const OfflineKey& key = keys[lo];
+    if (lo + 1 >= keys.size()) return key.value;
+    const OfflineKey& next = keys[lo + 1];
+    if (!(next.seconds > key.seconds)) return key.value;
+    const double f = std::clamp((t - key.seconds) / (next.seconds - key.seconds), 0.0, 1.0);
+    return key.value + (next.value - key.value) * static_cast<float>(f);
+}
+
+bool step_at(const std::vector<OfflineKey>& keys, double t) noexcept {
+    bool value = false;
+    for (const auto& key : keys) {
+        if (key.seconds > t) break;
+        value = key.value > 0.5f;
+    }
+    return value;
+}
+
+struct AutomationIndex {
+    const OfflineAutomation* automation = nullptr;
+    std::unordered_map<Id, const OfflineTrackAutomation*> by_track;
+    bool solo_automated = false;
+
+    const OfflineTrackAutomation* find(const Id& id) const noexcept {
+        const auto it = by_track.find(id);
+        return it == by_track.end() ? nullptr : it->second;
+    }
+};
+
+// A track's gain and pan at output second `t` under the automation: the
+// folder chain as effective_gain_pan walks it, with each track's own keys in
+// place of its session values, then mute and solo (only for keyed tracks, see
+// the header) and the master fade.
+std::pair<float, float> automated_gain_pan(const Song& song, const Track& track, double t,
+                                           const AutomationIndex& ai,
+                                           bool apply_mixer) noexcept {
+    constexpr int kMaxFolderDepth = 8;   // Mixer::kMaxFolderDepth
+    float gain = 1.0f;
+    float pan = 0.0f;
+    bool muted = false;
+    bool eligible = false;
+    const Track* current = &track;
+    int depth = 0;
+    while (current && depth < kMaxFolderDepth) {
+        const OfflineTrackAutomation* keys = ai.find(current->id);
+        if (apply_mixer) {
+            gain *= keys ? linear_at(keys->gain, t, current->gain) : current->gain;
+            pan = clamp_pan(pan + (keys ? linear_at(keys->pan, t, current->pan) : current->pan));
+        }
+        if (keys && step_at(keys->mute, t)) muted = true;
+        if (keys && step_at(keys->solo, t)) eligible = true;
+        if (current->parent_track_id.empty()) break;
+        const Track* parent = nullptr;
+        for (const auto& candidate : song.tracks) {
+            if (candidate.id == current->parent_track_id) {
+                parent = &candidate;
+                break;
+            }
+        }
+        current = parent;
+        ++depth;
+    }
+    if (ai.solo_automated && !eligible) {
+        for (const auto& other : song.tracks) {
+            const OfflineTrackAutomation* keys = ai.find(other.id);
+            if (keys && step_at(keys->solo, t)) {
+                gain = 0.0f;
+                break;
+            }
+        }
+    }
+    if (muted) gain = 0.0f;
+    gain *= linear_at(ai.automation->master_gain, t, 1.0f);
+    return {gain, pan};
+}
+
+// A stretch of timeline frames and where it lands in the output.
+struct FrameSegment {
+    Frame start = 0;
+    Frame end = 0;
+    Frame out = 0;
+};
+
 struct RenderContext {
     const OfflineRenderRequest& request;
     const Session& session;
-    Frame range_start = 0;
+    Frame range_start = 0;   // union of the segments: what the clips decode
     Frame range_end = 0;
     // Progress bookkeeping: one unit per track (or cue layer) per output.
     double units_done = 0.0;
     double units_total = 1.0;
     const OfflineRenderProgress& progress;
     OfflineRenderReport& report;
+    std::vector<FrameSegment> segments;
+    Frame total_out = 0;
+    const AutomationIndex* automation = nullptr;   // null = constant controls
+
+    double out_seconds(Frame out_frame) const noexcept {
+        return static_cast<double>(out_frame) / static_cast<double>(request.sample_rate);
+    }
 
     bool report_progress(double unit_fraction) const {
         if (!progress) return true;
@@ -588,11 +692,20 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
     const auto [track_gain, track_pan] = controls;
 
     Scratch s;
-    const Frame total = ctx.range_end - ctx.range_start;
+    const Frame total = ctx.total_out;
     int block_index = 0;
-    for (Frame timeline_frame = ctx.range_start; timeline_frame < ctx.range_end;
+    Frame previous_end = -1;
+    for (const FrameSegment& segment : ctx.segments) {
+    if (previous_end >= 0 && segment.start != previous_end) {
+        // A jump: Bungee voices are primed for where they were; rebuild them
+        // at the landing, as the realtime voice manager does after a seek.
+        for (auto& cr : clips) cr.voice.reset();
+    }
+    previous_end = segment.end;
+    for (Frame timeline_frame = segment.start; timeline_frame < segment.end;
          timeline_frame += kBlockFrames, ++block_index) {
-        const int n = static_cast<int>(std::min<Frame>(kBlockFrames, ctx.range_end - timeline_frame));
+        const int n = static_cast<int>(std::min<Frame>(kBlockFrames, segment.end - timeline_frame));
+        const Frame out_frame = segment.out + (timeline_frame - segment.start);
         std::fill_n(s.bus_l.begin(), n, 0.0f);
         std::fill_n(s.bus_r.begin(), n, 0.0f);
 
@@ -633,10 +746,22 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
             // on both sides (decode_window duplicates it); a stereo one is kept
             // as it is even when one side is silent, as playback does.
             const bool mono_downmix = apply_mixer && track.mono_downmix;
-            const float left_gain = pan_left_gain(track_pan);
-            const float right_gain = pan_right_gain(track_pan);
-            float* out_l = acc_l + (timeline_frame - ctx.range_start);
-            float* out_r = acc_r + (timeline_frame - ctx.range_start);
+            float left_gain = pan_left_gain(track_pan);
+            float right_gain = pan_right_gain(track_pan);
+            float* out_l = acc_l + out_frame;
+            float* out_r = acc_r + out_frame;
+            // Automated controls are read every kAutomationChunk frames and
+            // interpolated in between (gain and the two pan gains), so a step
+            // becomes a short declick ramp, like the live mixer's control ramps.
+            constexpr int kAutomationChunk = 64;
+            float chunk_gain0 = 1.0f, chunk_gain1 = 1.0f;
+            float chunk_l0 = left_gain, chunk_l1 = left_gain;
+            float chunk_r0 = right_gain, chunk_r1 = right_gain;
+            int chunk_len = kAutomationChunk;
+            const auto controls_at = [&](Frame out) {
+                return automated_gain_pan(song, track, ctx.out_seconds(out), *ctx.automation,
+                                          apply_mixer);
+            };
             // Song master gain and fades, per sample: the same envelope the
             // mixer applies (region_envelope.h), so a render sounds like playback.
             std::array<float, kRegionEnvelopeChunk> envelope{};
@@ -646,9 +771,30 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
                                          std::min(kRegionEnvelopeChunk, n - f),
                                          envelope.data());
                 }
-                const float gain = apply_mixer
+                float gain = apply_mixer
                     ? track_gain * envelope[static_cast<std::size_t>(f % kRegionEnvelopeChunk)]
                     : 1.0f;
+                if (ctx.automation) {
+                    if (f % kAutomationChunk == 0) {
+                        chunk_len = std::min(kAutomationChunk, n - f);
+                        const auto [g0, p0] = controls_at(out_frame + f);
+                        const auto [g1, p1] = controls_at(out_frame + f + chunk_len);
+                        chunk_gain0 = g0;
+                        chunk_gain1 = g1;
+                        chunk_l0 = pan_left_gain(p0);
+                        chunk_l1 = pan_left_gain(p1);
+                        chunk_r0 = pan_right_gain(p0);
+                        chunk_r1 = pan_right_gain(p1);
+                    }
+                    const float k = static_cast<float>(f % kAutomationChunk)
+                        / static_cast<float>(chunk_len);
+                    const float region = apply_mixer
+                        ? envelope[static_cast<std::size_t>(f % kRegionEnvelopeChunk)]
+                        : 1.0f;
+                    gain = (chunk_gain0 + (chunk_gain1 - chunk_gain0) * k) * region;
+                    left_gain = chunk_l0 + (chunk_l1 - chunk_l0) * k;
+                    right_gain = chunk_r0 + (chunk_r1 - chunk_r0) * k;
+                }
                 float src_l = s.bus_l[static_cast<std::size_t>(f)];
                 float src_r = s.bus_r[static_cast<std::size_t>(f)];
                 if (mono_downmix) {
@@ -665,11 +811,12 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
         }
 
         if ((block_index & 15) == 0) {
-            const double done = static_cast<double>(timeline_frame - ctx.range_start + n)
+            const double done = static_cast<double>(out_frame + n)
                 / static_cast<double>(std::max<Frame>(1, total));
             if (!ctx.report_progress(0.5 + 0.5 * done))
                 return Result<void>::err(kCancelled);
         }
+    }
     }
     render_log("track '%s': %zu clip(s), decode %.0f ms, dsp %.0f ms "
                "(blocks direct=%d varispeed=%d stretched=%d) for %.1f s\n",
@@ -681,35 +828,77 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
 
 // Metronome / voice guide: the same renderers the mixer runs after the tracks,
 // forced to the master route (a render has no monitor bus).
-template <typename RenderBlock>
-Result<void> render_cue_layer(RenderContext& ctx, RenderBlock&& render_block,
+//
+// `before_block(out_frame)` applies the automation changes due at that output
+// frame and returns how many frames may run before the next one, so a change
+// lands on its exact frame (a click switched off on a beat keeps that beat).
+template <typename BeforeBlock, typename RenderBlock>
+Result<void> render_cue_layer(RenderContext& ctx, BeforeBlock&& before_block,
+                              RenderBlock&& render_block,
                               float* acc_l, float* acc_r, float pan) {
-    const Frame total = ctx.range_end - ctx.range_start;
+    const Frame total = ctx.total_out;
     int block_index = 0;
     std::array<float, kBlockFrames> left{};
     std::array<float, kBlockFrames> right{};
     pan = clamp_pan(pan);
-    for (Frame timeline_frame = ctx.range_start; timeline_frame < ctx.range_end;
-         timeline_frame += kBlockFrames, ++block_index) {
-        const int n = static_cast<int>(std::min<Frame>(kBlockFrames, ctx.range_end - timeline_frame));
-        std::fill_n(left.begin(), n, 0.0f);
-        std::fill_n(right.begin(), n, 0.0f);
-        float* planes[2] = {left.data(), right.data()};
-        render_block(planes, n, timeline_frame);
-        const auto offset = timeline_frame - ctx.range_start;
-        for (int frame = 0; frame < n; ++frame) {
-            const auto [out_left, out_right] = pan_render_bus(left[frame], right[frame], pan);
-            acc_l[offset + frame] += out_left;
-            acc_r[offset + frame] += out_right;
-        }
-        if ((block_index & 63) == 0) {
-            const double done = static_cast<double>(timeline_frame - ctx.range_start + n)
-                / static_cast<double>(std::max<Frame>(1, total));
-            if (!ctx.report_progress(done))
-                return Result<void>::err(kCancelled);
+    for (const FrameSegment& segment : ctx.segments) {
+        for (Frame timeline_frame = segment.start; timeline_frame < segment.end; ++block_index) {
+            const Frame offset = segment.out + (timeline_frame - segment.start);
+            const Frame allowed = std::max<Frame>(1, before_block(offset));
+            const int n = static_cast<int>(std::min<Frame>(
+                std::min<Frame>(kBlockFrames, allowed), segment.end - timeline_frame));
+            std::fill_n(left.begin(), n, 0.0f);
+            std::fill_n(right.begin(), n, 0.0f);
+            float* planes[2] = {left.data(), right.data()};
+            render_block(planes, n, timeline_frame);
+            for (int frame = 0; frame < n; ++frame) {
+                const auto [out_left, out_right] = pan_render_bus(left[frame], right[frame], pan);
+                acc_l[offset + frame] += out_left;
+                acc_r[offset + frame] += out_right;
+            }
+            timeline_frame += n;
+            if ((block_index & 63) == 0) {
+                const double done = static_cast<double>(offset + n)
+                    / static_cast<double>(std::max<Frame>(1, total));
+                if (!ctx.report_progress(done))
+                    return Result<void>::err(kCancelled);
+            }
         }
     }
     return Result<void>::ok();
+}
+
+// Applies a list of timed changes as the output reaches them: `apply(change)`
+// runs for every change at or before the frame, and the return value is the
+// number of frames until the next one.
+template <typename Change, typename Apply>
+struct ChangeCursor {
+    const std::vector<Change>& changes;
+    int sample_rate;
+    Apply apply;
+    std::size_t next = 0;
+
+    Frame operator()(Frame out_frame) {
+        while (next < changes.size() && frame_of(changes[next]) <= out_frame)
+            apply(changes[next++]);
+        return next < changes.size() ? frame_of(changes[next]) - out_frame
+                                     : static_cast<Frame>(kBlockFrames);
+    }
+
+    Frame frame_of(const Change& change) const noexcept {
+        return static_cast<Frame>(std::llround(change.seconds * sample_rate));
+    }
+};
+
+template <typename Change, typename Apply>
+ChangeCursor<Change, Apply> make_change_cursor(const std::vector<Change>& changes,
+                                               int sample_rate, Apply apply) {
+    return ChangeCursor<Change, Apply>{changes, sample_rate, std::move(apply), 0};
+}
+
+// No changes: the layer runs in whole blocks.
+inline Frame no_changes(Frame) noexcept {
+    return static_cast<Frame>(kBlockFrames);
 }
 
 // ── WAV writing ────────────────────────────────────────────────────────────
@@ -888,11 +1077,47 @@ Result<OfflineRenderReport> render_offline(const OfflineRenderRequest& request,
     const Session session = parsed.take();
 
     OfflineRenderReport report;
-    const Frame range_start = static_cast<Frame>(std::llround(request.start_seconds * request.sample_rate));
-    const Frame range_end = static_cast<Frame>(std::llround(request.end_seconds * request.sample_rate));
-    const Frame total = range_end - range_start;
+    const auto to_frame = [&](double seconds) {
+        return static_cast<Frame>(std::llround(seconds * request.sample_rate));
+    };
+    // What the render plays: the range, or the automation's segments in order.
+    std::vector<FrameSegment> segments;
+    const OfflineAutomation& automation = request.automation;
+    if (automation.active) {
+        Frame out = 0;
+        for (const auto& segment : automation.segments) {
+            const Frame start = std::max<Frame>(0, to_frame(segment.start_seconds));
+            const Frame end = to_frame(segment.end_seconds);
+            if (end <= start) continue;
+            segments.push_back({start, end, out});
+            out += end - start;
+        }
+        if (segments.empty())
+            return R::err("empty render range");
+    } else {
+        segments.push_back({to_frame(request.start_seconds), to_frame(request.end_seconds), 0});
+    }
+    Frame range_start = segments.front().start;
+    Frame range_end = segments.front().end;
+    Frame total = 0;
+    for (const auto& segment : segments) {
+        range_start = std::min(range_start, segment.start);
+        range_end = std::max(range_end, segment.end);
+        total += segment.end - segment.start;
+    }
     if (total <= 0)
         return R::err("empty render range");
+    if (static_cast<double>(total) / request.sample_rate > kMaxRenderSeconds)
+        return R::err("render range is too long");
+
+    AutomationIndex automation_index;
+    if (automation.active) {
+        automation_index.automation = &automation;
+        for (const auto& track : automation.tracks) {
+            automation_index.by_track[track.track_id] = &track;
+            if (!track.solo.empty()) automation_index.solo_automated = true;
+        }
+    }
 
     // Resolve every output's tracks up front so a bad id fails before any work.
     std::vector<std::vector<TrackRef>> output_tracks;
@@ -905,23 +1130,36 @@ Result<OfflineRenderReport> render_offline(const OfflineRenderRequest& request,
         std::unordered_set<Id> seen;
         for (const auto& id : output.track_ids)
             collect_audio_tracks(session, id, refs, seen);
-        if (refs.empty() && !output.include_metronome && !output.include_voice_guide)
+        const bool pad = output.include_pad && automation.active && !automation.pad.empty();
+        if (refs.empty() && !output.include_metronome && !output.include_voice_guide && !pad)
             return R::err("an output has no tracks to render");
         units_total += static_cast<double>(refs.size())
             + (output.include_metronome ? 1.0 : 0.0)
             + (output.include_voice_guide ? 1.0 : 0.0)
+            + (pad ? 1.0 : 0.0)
             + 0.25;   // finalise + write
         wants_guide = wants_guide || output.include_voice_guide;
         output_tracks.push_back(std::move(refs));
     }
 
-    std::shared_ptr<VoiceGuideClipBank> guide_bank;
-    if (wants_guide && !request.voice_guide_dir.empty())
-        guide_bank = load_voice_guide_bank(request.voice_guide_dir, request.voice_guide_lang,
-                                           request.sample_rate);
+    // Voice banks by language: a cue may switch the guide's language.
+    std::unordered_map<std::string, std::shared_ptr<VoiceGuideClipBank>> guide_banks;
+    const auto guide_bank_for = [&](const std::string& lang) {
+        auto it = guide_banks.find(lang);
+        if (it == guide_banks.end()) {
+            std::shared_ptr<VoiceGuideClipBank> bank;
+            if (!request.voice_guide_dir.empty())
+                bank = load_voice_guide_bank(request.voice_guide_dir, lang, request.sample_rate);
+            it = guide_banks.emplace(lang, std::move(bank)).first;
+        }
+        return it->second;
+    };
+    if (wants_guide)
+        guide_bank_for(request.voice_guide_lang);
 
     RenderContext run{request, session, range_start, range_end, 0.0,
-                      units_total, progress, report};
+                      units_total, progress, report, segments, total,
+                      automation.active ? &automation_index : nullptr};
 
     std::vector<std::string> written;
     auto fail = [&](const std::string& error) {
@@ -941,14 +1179,23 @@ Result<OfflineRenderReport> render_offline(const OfflineRenderRequest& request,
             run.units_done += 1.0;
         }
 
+        const double sr = static_cast<double>(request.sample_rate);
+
         if (output.include_metronome) {
             MetronomeRenderer metronome;
             MetronomeConfig config = request.metronome;
             config.enabled = true;
             config.output_route = "master";
             metronome.set_config(config);
-            const double sr = static_cast<double>(request.sample_rate);
+            // The cues' changes, keeping the dialog's volume and the master route.
+            auto changes = make_change_cursor(automation.metronome, request.sample_rate,
+                [&](const OfflineMetronomeChange& change) {
+                    MetronomeConfig next = change.config;
+                    next.output_route = "master";
+                    metronome.set_config(next);
+                });
             auto done = render_cue_layer(run,
+                [&](Frame out) { return automation.active ? changes(out) : no_changes(out); },
                 [&](float** planes, int n, Frame frame) {
                     metronome.render(planes, 2, n, sr, frame, &session);
                 }, acc_l.data(), acc_r.data(), request.metronome_pan);
@@ -963,12 +1210,61 @@ Result<OfflineRenderReport> render_offline(const OfflineRenderRequest& request,
             config.enabled = true;
             config.output_route = "master";
             guide.set_config(config);
-            guide.set_clip_bank(guide_bank);
-            const double sr = static_cast<double>(request.sample_rate);
+            guide.set_clip_bank(guide_bank_for(request.voice_guide_lang));
+            std::string lang = request.voice_guide_lang;
+            auto changes = make_change_cursor(automation.voice_guide, request.sample_rate,
+                [&](const OfflineVoiceGuideChange& change) {
+                    VoiceGuideConfig next = change.config;
+                    next.volume = request.voice_guide.volume;
+                    next.output_route = "master";
+                    guide.set_config(next);
+                    if (!change.lang.empty() && change.lang != lang) {
+                        lang = change.lang;
+                        guide.set_clip_bank(guide_bank_for(lang));
+                    }
+                });
             auto done = render_cue_layer(run,
+                [&](Frame out) { return automation.active ? changes(out) : no_changes(out); },
                 [&](float** planes, int n, Frame frame) {
                     guide.render(planes, 2, n, sr, frame, &session);
                 }, acc_l.data(), acc_r.data(), request.voice_guide_pan);
+            if (done.is_err())
+                return fail(done.error());
+            run.units_done += 1.0;
+        }
+
+        if (output.include_pad && automation.active && !automation.pad.empty()) {
+            // The pad runs on its own clock (it ignores the transport), so it
+            // just follows the output and its changes; jumps do not touch it.
+            PadRenderer pad;
+            std::string loaded_id;
+            int loaded_key = -1;
+            auto changes = make_change_cursor(automation.pad, request.sample_rate,
+                [&](const OfflinePadChange& change) {
+                    PadConfig next = change.config;
+                    next.output_route = "master";
+                    next.stop_with_transport = false;
+                    pad.set_config(next);
+                    if (next.enabled && !next.pad_id.empty()
+                        && (next.pad_id != loaded_id || next.key != loaded_key)) {
+                        loaded_id = next.pad_id;
+                        loaded_key = next.key;
+                        auto clip = load_pad_clip(automation.pads_dir, next.pad_id, next.key,
+                                                  request.sample_rate);
+                        if (clip && !clip->empty()) {
+                            pad.set_clip(std::move(clip));
+                        } else {
+                            const std::string missing = automation.pads_dir + "/" + next.pad_id;
+                            if (std::find(report.missing_files.begin(), report.missing_files.end(),
+                                          missing) == report.missing_files.end())
+                                report.missing_files.push_back(missing);
+                        }
+                    }
+                });
+            auto done = render_cue_layer(run,
+                [&](Frame out) { return changes(out); },
+                [&](float** planes, int n, Frame) { pad.render(planes, 2, n, sr); },
+                acc_l.data(), acc_r.data(), request.tracks_pan);
             if (done.is_err())
                 return fail(done.error());
             run.units_done += 1.0;
@@ -1065,21 +1361,25 @@ Result<OfflineRenderRequest> offline_render_request_from_json(const std::string&
             out.track_ids = jo.value("track_ids", std::vector<std::string>{});
             out.include_metronome = jo.value("include_metronome", false);
             out.include_voice_guide = jo.value("include_voice_guide", false);
+            out.include_pad = jo.value("include_pad", false);
             req.outputs.push_back(std::move(out));
         }
-        if (j.contains("metronome") && j["metronome"].is_object()) {
-            const auto& m = j["metronome"];
-            req.metronome.volume = m.value("volume", 0.75f);
-            req.metronome.accent_enabled = m.value("accent_enabled", true);
-            req.metronome.accent_preset = m.value("accent_preset", 0);
-            req.metronome.beat_preset = m.value("beat_preset", 0);
-            req.metronome.accent_pitch = m.value("accent_pitch", 0.0f);
-            req.metronome.beat_pitch = m.value("beat_pitch", 0.0f);
-            req.metronome.subdivision = m.value("subdivision", 1);
-            req.metronome.subdivision_preset = m.value("subdivision_preset", 0);
-            req.metronome.subdivision_pitch = m.value("subdivision_pitch", 0.0f);
-            req.metronome.subdivision_gain = m.value("subdivision_gain", 0.5f);
-        }
+        const auto metronome_from = [](const json& m) {
+            MetronomeConfig config;
+            config.volume = m.value("volume", 0.75f);
+            config.accent_enabled = m.value("accent_enabled", true);
+            config.accent_preset = m.value("accent_preset", 0);
+            config.beat_preset = m.value("beat_preset", 0);
+            config.accent_pitch = m.value("accent_pitch", 0.0f);
+            config.beat_pitch = m.value("beat_pitch", 0.0f);
+            config.subdivision = m.value("subdivision", 1);
+            config.subdivision_preset = m.value("subdivision_preset", 0);
+            config.subdivision_pitch = m.value("subdivision_pitch", 0.0f);
+            config.subdivision_gain = m.value("subdivision_gain", 0.5f);
+            return config;
+        };
+        if (j.contains("metronome") && j["metronome"].is_object())
+            req.metronome = metronome_from(j["metronome"]);
         if (j.contains("voice_guide") && j["voice_guide"].is_object()) {
             const auto& v = j["voice_guide"];
             req.voice_guide.volume = v.value("volume", 1.0f);
@@ -1088,6 +1388,65 @@ Result<OfflineRenderRequest> offline_render_request_from_json(const std::string&
             req.voice_guide.count_style = voice_guide_count_style_from_int(v.value("count_style", 0));
             req.voice_guide_dir = v.value("voices_dir", std::string());
             req.voice_guide_lang = v.value("lang", std::string());
+        }
+        if (j.contains("automation") && j["automation"].is_object()) {
+            const auto& a = j["automation"];
+            OfflineAutomation& automation = req.automation;
+            automation.active = true;
+            const auto keys_from = [](const json& parent, const char* name) {
+                std::vector<OfflineKey> keys;
+                if (parent.contains(name) && parent[name].is_array())
+                    for (const auto& k : parent[name])
+                        keys.push_back({k.at("seconds").get<double>(), k.at("value").get<float>()});
+                return keys;
+            };
+            for (const auto& js : a.at("segments"))
+                automation.segments.push_back({js.at("start_seconds").get<double>(),
+                                               js.at("end_seconds").get<double>()});
+            if (a.contains("tracks"))
+                for (const auto& jt : a["tracks"]) {
+                    OfflineTrackAutomation track;
+                    track.track_id = jt.at("track_id").get<std::string>();
+                    track.gain = keys_from(jt, "gain");
+                    track.pan = keys_from(jt, "pan");
+                    track.mute = keys_from(jt, "mute");
+                    track.solo = keys_from(jt, "solo");
+                    automation.tracks.push_back(std::move(track));
+                }
+            automation.master_gain = keys_from(a, "master_gain");
+            if (a.contains("metronome"))
+                for (const auto& jm : a["metronome"]) {
+                    OfflineMetronomeChange change;
+                    change.seconds = jm.at("seconds").get<double>();
+                    change.config = metronome_from(jm.at("config"));
+                    change.config.enabled = jm.value("enabled", true);
+                    automation.metronome.push_back(std::move(change));
+                }
+            if (a.contains("voice_guide"))
+                for (const auto& jv : a["voice_guide"]) {
+                    OfflineVoiceGuideChange change;
+                    change.seconds = jv.at("seconds").get<double>();
+                    change.config.enabled = jv.value("enabled", true);
+                    change.config.lead_bars = jv.value("lead_bars", 1);
+                    change.config.count_in_enabled = jv.value("count_in_enabled", true);
+                    change.config.count_style =
+                        voice_guide_count_style_from_int(jv.value("count_style", 0));
+                    change.lang = jv.value("lang", std::string());
+                    automation.voice_guide.push_back(std::move(change));
+                }
+            if (a.contains("pad"))
+                for (const auto& jp : a["pad"]) {
+                    OfflinePadChange change;
+                    change.seconds = jp.at("seconds").get<double>();
+                    change.config.enabled = jp.value("enabled", false);
+                    change.config.pad_id = jp.value("pad_id", std::string());
+                    change.config.key = jp.value("key", 0);
+                    change.config.volume = jp.value("volume", 1.0f);
+                    change.config.fade_in_seconds = jp.value("fade_in_seconds", 0.0f);
+                    change.config.fade_out_seconds = jp.value("fade_out_seconds", 0.0f);
+                    automation.pad.push_back(std::move(change));
+                }
+            automation.pads_dir = a.value("pads_dir", std::string());
         }
         return R::ok(std::move(req));
     } catch (const std::exception& e) {

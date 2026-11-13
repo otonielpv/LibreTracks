@@ -12,6 +12,7 @@ pub mod open_with;
 pub mod pads;
 pub mod project;
 pub mod render;
+pub mod render_automation;
 pub mod settings;
 pub mod song_analysis;
 pub mod speech;

@@ -135,6 +135,7 @@ export type RenderPreferences = {
   applyMixer: boolean;
   includeMetronome: boolean;
   includeVoiceGuide: boolean;
+  applyAutomation: boolean;
   tracksPan: number;
   metronomePan: number;
   voiceGuidePan: number;
@@ -150,6 +151,7 @@ export const DEFAULT_RENDER_PREFERENCES: RenderPreferences = {
   applyMixer: true,
   includeMetronome: false,
   includeVoiceGuide: false,
+  applyAutomation: false,
   tracksPan: 0,
   metronomePan: 0,
   voiceGuidePan: 0,
@@ -186,6 +188,7 @@ export function loadRenderPreferences(): RenderPreferences {
       applyMixer: merged.applyMixer !== false,
       includeMetronome: Boolean(merged.includeMetronome),
       includeVoiceGuide: Boolean(merged.includeVoiceGuide),
+      applyAutomation: Boolean(merged.applyAutomation),
       tracksPan: validPan(merged.tracksPan),
       metronomePan: validPan(merged.metronomePan),
       voiceGuidePan: validPan(merged.voiceGuidePan),

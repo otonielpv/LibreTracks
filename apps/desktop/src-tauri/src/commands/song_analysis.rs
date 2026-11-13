@@ -548,6 +548,7 @@ fn run_job(
             track_ids: tempo.track_ids.clone(),
             include_metronome: false,
             include_voice_guide: false,
+            include_pad: false,
         });
     }
     if let Some(key) = &job.key {
@@ -556,6 +557,7 @@ fn run_job(
             track_ids: key.track_ids.clone(),
             include_metronome: false,
             include_voice_guide: false,
+            include_pad: false,
         });
     }
     if !job.guide_track_ids.is_empty() {
@@ -564,6 +566,7 @@ fn run_job(
             track_ids: job.guide_track_ids.clone(),
             include_metronome: false,
             include_voice_guide: false,
+            include_pad: false,
         });
     }
     let cleanup = || {
@@ -587,6 +590,7 @@ fn run_job(
         pans: None,
         metronome: None,
         voice_guide: None,
+        automation: None,
     };
     // Rendering is most of the work; the analyses take a moment.
     let mut render_progress =

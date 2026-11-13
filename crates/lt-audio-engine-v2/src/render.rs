@@ -28,6 +28,10 @@ pub struct RenderOutput {
     pub include_metronome: bool,
     #[serde(default)]
     pub include_voice_guide: bool,
+    /// Mix in the ambient pad the automation turns on (only sounds when
+    /// [`RenderRequest::automation`] carries pad changes).
+    #[serde(default)]
+    pub include_pad: bool,
 }
 
 /// Mirrors `lt::MetronomeConfig` (sound only: the render forces the click on
@@ -66,6 +70,86 @@ pub struct RenderPans {
     pub voice_guide: f32,
 }
 
+/// A point of an automation envelope. `seconds` is OUTPUT time (0 = the first
+/// rendered frame), so envelopes keep running across a jump.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct RenderKey {
+    pub seconds: f64,
+    pub value: f32,
+}
+
+/// One stretch of timeline (view seconds) the render plays. Several of them
+/// are the song as its jumps play it.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct RenderSegment {
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+}
+
+/// A track's automated controls. Gain and pan are piecewise linear; mute and
+/// solo (0/1) are steps. An empty list leaves that control as it is in the
+/// project JSON (and mute/solo ignored, the render's default).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct RenderTrackAutomation {
+    pub track_id: String,
+    #[serde(default)]
+    pub gain: Vec<RenderKey>,
+    #[serde(default)]
+    pub pan: Vec<RenderKey>,
+    #[serde(default)]
+    pub mute: Vec<RenderKey>,
+    #[serde(default)]
+    pub solo: Vec<RenderKey>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenderMetronomeChange {
+    pub seconds: f64,
+    pub enabled: bool,
+    pub config: RenderMetronome,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RenderVoiceGuideChange {
+    pub seconds: f64,
+    pub enabled: bool,
+    pub lead_bars: i32,
+    pub count_in_enabled: bool,
+    pub count_style: i32,
+    pub lang: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RenderPadChange {
+    pub seconds: f64,
+    pub enabled: bool,
+    pub pad_id: String,
+    pub key: i32,
+    pub volume: f32,
+    pub fade_in_seconds: f32,
+    pub fade_out_seconds: f32,
+}
+
+/// The song's automation flattened for an offline render: the segments its
+/// jumps play, and every control change on the output timeline.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RenderAutomation {
+    pub segments: Vec<RenderSegment>,
+    #[serde(default)]
+    pub tracks: Vec<RenderTrackAutomation>,
+    /// Gain over every track (jump fades). Not over click, guide or pad.
+    #[serde(default)]
+    pub master_gain: Vec<RenderKey>,
+    #[serde(default)]
+    pub metronome: Vec<RenderMetronomeChange>,
+    #[serde(default)]
+    pub voice_guide: Vec<RenderVoiceGuideChange>,
+    #[serde(default)]
+    pub pad: Vec<RenderPadChange>,
+    #[serde(default)]
+    pub pads_dir: String,
+}
+
 /// Mirrors `lt::OfflineRenderRequest` (see offline_renderer.h).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderRequest {
@@ -91,6 +175,10 @@ pub struct RenderRequest {
     pub metronome: Option<RenderMetronome>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub voice_guide: Option<RenderVoiceGuide>,
+    /// Play the song as its automation does: follow the segments and apply
+    /// the envelopes. `None` = the plain range at constant controls.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automation: Option<RenderAutomation>,
 }
 
 /// Mirrors `lt::LoudnessStats` (see loudness_meter.h). LUFS values are -70
@@ -228,6 +316,7 @@ mod tests {
                 track_ids: vec!["t".into()],
                 include_metronome: true,
                 include_voice_guide: false,
+                include_pad: false,
             }],
             format: RenderSampleFormat::Float32,
             channels: 2,
@@ -239,6 +328,7 @@ mod tests {
             pans: None,
             metronome: None,
             voice_guide: None,
+            automation: None,
         };
         let value = serde_json::to_value(&request).unwrap();
         assert_eq!(value["format"], "float32");

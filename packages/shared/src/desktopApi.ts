@@ -1517,6 +1517,13 @@ export type RenderSongAudioRequest = {
   fileName: string;
   metronomeLabel: string;
   voiceGuideLabel: string;
+  /**
+   * Play the song's own automation into the render (jumps, mix changes,
+   * scenes, click/guide changes, the pad). Song and per-song scopes only.
+   */
+  applyAutomation?: boolean;
+  /** Stem name for the pad the automation turns on. */
+  padLabel?: string;
 };
 
 export type RenderSongAudioResult = {

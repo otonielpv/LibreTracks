@@ -694,3 +694,205 @@ TEST_CASE("offline render never contains the redundancy pilot tone") {
         CHECK(out.at(frame, 1) == doctest::Approx(0.1f));
     }
 }
+
+// ── Automation ─────────────────────────────────────────────────────────────
+
+namespace {
+
+// A clip whose sample value tells where in the source it was read:
+// 0.1 per second.
+std::vector<float> position_ramp(Frame frames, int sample_rate) {
+    std::vector<float> out(static_cast<std::size_t>(frames) * 2);
+    for (Frame f = 0; f < frames; ++f) {
+        const float v = 0.1f * static_cast<float>(f) / static_cast<float>(sample_rate);
+        out[static_cast<std::size_t>(f) * 2] = v;
+        out[static_cast<std::size_t>(f) * 2 + 1] = v;
+    }
+    return out;
+}
+
+float peak_in(const Decoded& out, double from_seconds, double to_seconds) {
+    float peak = 0.0f;
+    const Frame a = static_cast<Frame>(from_seconds * out.sample_rate);
+    const Frame b = std::min(out.frames(), static_cast<Frame>(to_seconds * out.sample_rate));
+    for (Frame f = a; f < b; ++f)
+        peak = std::max(peak, std::max(std::abs(out.at(f, 0)), std::abs(out.at(f, 1))));
+    return peak;
+}
+
+} // namespace
+
+TEST_CASE("offline render with automation plays the jump segments in order") {
+    TempDir dir;
+    const std::string source = dir.file("ramp.wav");
+    write_float_wav(source, position_ramp(4 * 48000, 48000), 2, 48000);
+    const json song = song_json(json::array({track_json("t")}),
+        json::array({clip_json("c", "t", source, 0.0, 4.0)}));
+    auto req = base_request(song, 0.0, 4.0);
+    req.automation.active = true;
+    req.automation.segments = {{0.0, 2.0}, {1.0, 3.0}};
+    req.outputs.push_back({dir.file("mix.wav"), {"t"}});
+    auto result = render_offline(req);
+    REQUIRE_MESSAGE(result.is_ok(), (result.is_err() ? result.error() : ""));
+    CHECK(result.unwrap().files[0].frames == 4 * 48000);
+    const auto out = read_wav(dir.file("mix.wav"));
+    CHECK(out.frames() == 4 * 48000);
+    CHECK(out.at(24000, 0) == doctest::Approx(0.05f).epsilon(1e-3));    // source 0.5 s
+    CHECK(out.at(95999, 0) == doctest::Approx(0.2f).epsilon(1e-2));     // just before the cut
+    CHECK(out.at(96000, 0) == doctest::Approx(0.1f).epsilon(1e-3));     // landed on 1 s
+    CHECK(out.at(120000, 0) == doctest::Approx(0.15f).epsilon(1e-3));   // source 1.5 s
+}
+
+TEST_CASE("offline render applies the track envelopes and mute on the output timeline") {
+    TempDir dir;
+    const std::string source = dir.file("c.wav");
+    write_float_wav(source, constant_stereo(4 * 48000, 0.2f), 2, 48000);
+    const json song = song_json(json::array({track_json("t", 0.5)}),
+        json::array({clip_json("c", "t", source, 0.0, 4.0)}));
+    auto req = base_request(song, 0.0, 4.0);
+    req.automation.active = true;
+    req.automation.segments = {{0.0, 4.0}};
+    OfflineTrackAutomation track;
+    track.track_id = "t";
+    track.gain = {{0.0, 1.0f}, {1.0, 1.0f}, {2.0, 0.5f}};
+    track.mute = {{0.0, 0.0f}, {3.0, 1.0f}};
+    req.automation.tracks.push_back(track);
+    req.outputs.push_back({dir.file("mix.wav"), {"t"}});
+    REQUIRE(render_offline(req).is_ok());
+    const auto out = read_wav(dir.file("mix.wav"));
+    // The key replaces the session gain (0.5).
+    CHECK(out.at(24000, 0) == doctest::Approx(0.2f).epsilon(1e-3));
+    CHECK(out.at(72000, 0) == doctest::Approx(0.15f).epsilon(1e-3));    // halfway down the ramp
+    CHECK(out.at(120000, 0) == doctest::Approx(0.1f).epsilon(1e-3));
+    CHECK(peak_in(out, 3.01, 4.0) < 1e-6f);                             // muted
+}
+
+TEST_CASE("offline render: an automated solo silences the rest, the master fade every track") {
+    TempDir dir;
+    const std::string a = dir.file("a.wav");
+    const std::string b = dir.file("b.wav");
+    write_float_wav(a, constant_stereo(3 * 48000, 0.1f), 2, 48000);
+    write_float_wav(b, constant_stereo(3 * 48000, 0.2f), 2, 48000);
+    const json song = song_json(json::array({track_json("ta"), track_json("tb")}),
+        json::array({clip_json("ca", "ta", a, 0.0, 3.0), clip_json("cb", "tb", b, 0.0, 3.0)}));
+    auto req = base_request(song, 0.0, 3.0);
+    req.automation.active = true;
+    req.automation.segments = {{0.0, 3.0}};
+    OfflineTrackAutomation ta;
+    ta.track_id = "ta";
+    ta.solo = {{0.0, 0.0f}, {1.0, 1.0f}};
+    OfflineTrackAutomation tb;
+    tb.track_id = "tb";
+    tb.solo = {{0.0, 0.0f}};
+    req.automation.tracks = {ta, tb};
+    req.automation.master_gain = {{0.0, 1.0f}, {2.0, 1.0f}, {2.0, 0.5f}};
+    req.outputs.push_back({dir.file("mix.wav"), {"ta", "tb"}});
+    REQUIRE(render_offline(req).is_ok());
+    const auto out = read_wav(dir.file("mix.wav"));
+    CHECK(out.at(24000, 0) == doctest::Approx(0.3f).epsilon(1e-3));     // both
+    CHECK(out.at(72000, 0) == doctest::Approx(0.1f).epsilon(1e-3));     // ta soloed
+    CHECK(out.at(120000, 0) == doctest::Approx(0.05f).epsilon(1e-3));   // master at half
+}
+
+TEST_CASE("offline render: a metronome change switches the click off on its frame") {
+    TempDir dir;
+    const std::string source = dir.file("silence.wav");
+    write_float_wav(source, constant_stereo(2 * 48000, 0.0f), 2, 48000);
+    const json song = song_json(json::array({track_json("t")}),
+        json::array({clip_json("c", "t", source, 0.0, 2.0)}));
+    auto req = base_request(song, 0.0, 2.0);
+    req.automation.active = true;
+    req.automation.segments = {{0.0, 2.0}};
+    OfflineMetronomeChange off;
+    off.seconds = 1.2;
+    off.config.enabled = false;
+    req.automation.metronome.push_back(off);
+    req.outputs.push_back({dir.file("mix.wav"), {"t"}, true, false});
+    REQUIRE(render_offline(req).is_ok());
+    const auto out = read_wav(dir.file("mix.wav"));
+    CHECK(peak_in(out, 0.0, 1.0) > 0.01f);     // clicks at 120 bpm
+    CHECK(peak_in(out, 1.3, 2.0) < 1e-6f);     // off from 1.2 s
+}
+
+TEST_CASE("offline render automation crosses the JSON boundary") {
+    const json j = {
+        {"project_json", "{}"}, {"start_seconds", 0.0}, {"end_seconds", 10.0},
+        {"outputs", json::array({{{"path", "x.wav"}, {"track_ids", {"a"}},
+                                  {"include_pad", true}}})},
+        {"automation", {
+            {"segments", json::array({{{"start_seconds", 0.0}, {"end_seconds", 4.0}},
+                                      {{"start_seconds", 2.0}, {"end_seconds", 10.0}}})},
+            {"tracks", json::array({{{"track_id", "a"},
+                                     {"gain", json::array({{{"seconds", 1.0}, {"value", 0.5}}})},
+                                     {"solo", json::array({{{"seconds", 0.0}, {"value", 1.0}}})}}})},
+            {"master_gain", json::array({{{"seconds", 3.0}, {"value", 0.0}}})},
+            {"metronome", json::array({{{"seconds", 2.0}, {"enabled", false},
+                                        {"config", {{"volume", 0.5}, {"subdivision", 2}}}}})},
+            {"voice_guide", json::array({{{"seconds", 1.0}, {"enabled", true},
+                                          {"lead_bars", 2}, {"count_in_enabled", false},
+                                          {"count_style", 1}, {"lang", "en"}}})},
+            {"pad", json::array({{{"seconds", 0.5}, {"enabled", true}, {"pad_id", "warm"},
+                                  {"key", 4}, {"volume", 0.7}, {"fade_in_seconds", 2.0},
+                                  {"fade_out_seconds", 1.0}}})},
+            {"pads_dir", "/pads"},
+        }},
+    };
+    auto parsed = offline_render_request_from_json(j.dump());
+    REQUIRE_MESSAGE(parsed.is_ok(), (parsed.is_err() ? parsed.error() : ""));
+    const auto& a = parsed.unwrap().automation;
+    CHECK(parsed.unwrap().outputs[0].include_pad);
+    CHECK(a.active);
+    REQUIRE(a.segments.size() == 2);
+    CHECK(a.segments[1].start_seconds == doctest::Approx(2.0));
+    REQUIRE(a.tracks.size() == 1);
+    CHECK(a.tracks[0].gain[0].value == doctest::Approx(0.5f));
+    CHECK(a.tracks[0].solo.size() == 1);
+    CHECK(a.master_gain.size() == 1);
+    REQUIRE(a.metronome.size() == 1);
+    CHECK_FALSE(a.metronome[0].config.enabled);
+    CHECK(a.metronome[0].config.subdivision == 2);
+    REQUIRE(a.voice_guide.size() == 1);
+    CHECK(a.voice_guide[0].config.lead_bars == 2);
+    CHECK(a.voice_guide[0].lang == "en");
+    REQUIRE(a.pad.size() == 1);
+    CHECK(a.pad[0].config.key == 4);
+    CHECK(a.pad[0].config.fade_in_seconds == doctest::Approx(2.0f));
+    CHECK(a.pads_dir == "/pads");
+    // Without the key, the render runs as before.
+    json plain = j;
+    plain.erase("automation");
+    CHECK_FALSE(offline_render_request_from_json(plain.dump()).unwrap().automation.active);
+}
+
+TEST_CASE("offline render: the automation's pad sounds from its cue, in its own file") {
+    TempDir dir;
+    const std::string source = dir.file("silence.wav");
+    write_float_wav(source, constant_stereo(3 * 48000, 0.0f), 2, 48000);
+    fs::create_directories(dir.path / "pads" / "warm");
+    write_float_wav(dir.file("pads/warm/E.wav"), constant_stereo(10 * 48000, 0.25f), 2, 48000);
+    const json song = song_json(json::array({track_json("t")}),
+        json::array({clip_json("c", "t", source, 0.0, 3.0)}));
+    auto req = base_request(song, 0.0, 3.0);
+    req.automation.active = true;
+    req.automation.segments = {{0.0, 2.0}, {0.0, 1.0}};   // a jump does not restart it
+    req.automation.pads_dir = dir.file("pads");
+    OfflinePadChange on;
+    on.seconds = 1.0;
+    on.config.enabled = true;
+    on.config.pad_id = "warm";
+    on.config.key = 4;   // E
+    on.config.volume = 0.5f;
+    req.automation.pad.push_back(on);
+    OfflineRenderOutput pad_only;
+    pad_only.path = dir.file("pad.wav");
+    pad_only.include_pad = true;
+    req.outputs.push_back(pad_only);
+    req.outputs.push_back({dir.file("tracks.wav"), {"t"}});
+    auto result = render_offline(req);
+    REQUIRE_MESSAGE(result.is_ok(), (result.is_err() ? result.error() : ""));
+    CHECK(result.unwrap().missing_files.empty());
+    const auto pad = read_wav(dir.file("pad.wav"));
+    CHECK(peak_in(pad, 0.0, 0.99) < 1e-6f);
+    CHECK(pad.at(static_cast<Frame>(2.5 * 48000), 0) == doctest::Approx(0.125f).epsilon(1e-3));
+    CHECK(peak_in(read_wav(dir.file("tracks.wav")), 0.0, 3.0) < 1e-6f);
+}

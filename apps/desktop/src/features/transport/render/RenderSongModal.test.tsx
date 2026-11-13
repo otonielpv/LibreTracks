@@ -249,6 +249,34 @@ describe("RenderSongModal", () => {
     expect(stemsRadio?.checked).toBe(true);
   });
 
+  it("asks for the song's automation, and never for the whole session", async () => {
+    renderSongAudio.mockResolvedValue(saved);
+    render(<RenderSongModal />);
+    const automation = () =>
+      screen.getByText("transport.renderModal.applyAutomation").closest("label")!
+        .querySelector("input") as HTMLInputElement;
+    expect(automation().checked).toBe(false);
+    fireEvent.click(automation());
+    fireEvent.click(screen.getByText("transport.renderModal.confirm"));
+    await waitFor(() => expect(renderSongAudio).toHaveBeenCalledTimes(1));
+    expect(renderSongAudio.mock.calls[0][0]).toMatchObject({
+      scope: "song",
+      applyAutomation: true,
+      padLabel: "transport.renderModal.padStem",
+    });
+
+    cleanup();
+    renderSongAudio.mockClear();
+    render(<RenderSongModal />);
+    fireEvent.click(screen.getByText("transport.renderModal.scope_session"));
+    expect(automation().disabled).toBe(true);
+    expect(automation().checked).toBe(false);
+    expect(screen.getByText("transport.renderModal.applyAutomationSessionHint")).toBeTruthy();
+    fireEvent.click(screen.getByText("transport.renderModal.confirm"));
+    await waitFor(() => expect(renderSongAudio).toHaveBeenCalledTimes(1));
+    expect(renderSongAudio.mock.calls[0][0].applyAutomation).toBe(false);
+  });
+
   it("reports a failure instead of closing", async () => {
     renderSongAudio.mockRejectedValue(new Error("disk full"));
     render(<RenderSongModal />);

@@ -88,6 +88,17 @@ pub struct RenderSongAudioRequest {
     pub metronome_label: String,
     #[serde(default = "default_voice_guide_label")]
     pub voice_guide_label: String,
+    /// Play the song's own automation into the render: jumps, mix changes,
+    /// scenes, click/guide changes and the pad (see `render_automation`).
+    /// Song and per-song scopes only.
+    #[serde(default)]
+    pub apply_automation: bool,
+    #[serde(default = "default_pad_label")]
+    pub pad_label: String,
+}
+
+fn default_pad_label() -> String {
+    "Pad".to_string()
 }
 
 fn default_metronome_label() -> String {
@@ -212,7 +223,7 @@ pub async fn render_song_audio(
     };
 
     // Copy the song out under a brief lock; everything after runs unlocked.
-    let (song_dir, song) = {
+    let (song_dir, song, automation) = {
         let session = state
             .session
             .lock()
@@ -226,7 +237,9 @@ pub async fn render_song_audio(
             .song()
             .cloned()
             .ok_or_else(|| "No song loaded".to_string())?;
-        (song_dir, song)
+        let automation = (request.apply_automation && request.scope != RenderScope::Session)
+            .then(|| session.automation_document().clone());
+        (song_dir, song, automation)
     };
     if request.scope == RenderScope::Song && !song
         .regions
@@ -263,6 +276,12 @@ pub async fn render_song_audio(
     } else {
         None
     };
+    let pads_dir = app
+        .path()
+        .app_local_data_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .map(|base| base.join("pads").to_string_lossy().into_owned())
+        .unwrap_or_default();
     let staging_root = app
         .path()
         .app_cache_dir()
@@ -291,6 +310,8 @@ pub async fn render_song_audio(
             engine_rate,
             voices_dir,
             staging_root: &staging_root,
+            automation: automation.as_ref(),
+            pads_dir,
         };
         let outcome = job.run(target.write_path());
         match outcome {
@@ -341,6 +362,9 @@ struct RenderJob<'a> {
     engine_rate: u32,
     voices_dir: Option<String>,
     staging_root: &'a Path,
+    /// Set when the user asked to apply the song's automation.
+    automation: Option<&'a crate::audio::automation::AutomationDocument>,
+    pads_dir: String,
 }
 
 impl RenderJob<'_> {
@@ -456,6 +480,25 @@ impl RenderJob<'_> {
         };
 
         let request = self.request;
+        // Automation belongs to one song: the per-song scope plans each
+        // region, the song scope the chosen one.
+        let automation_region = match (region_id, request.scope) {
+            (Some(region_id), _) => Some(region_id),
+            (None, RenderScope::Song) => Some(request.region_id.as_str()),
+            _ => None,
+        };
+        let automation = self.automation.zip(automation_region).and_then(|(document, region_id)| {
+            crate::commands::render_automation::plan_render_automation(
+                &crate::commands::render_automation::AutomationPlanInputs {
+                    song: self.song,
+                    automation: document,
+                    region_id,
+                    settings: self.settings,
+                    pads_dir: self.pads_dir.clone(),
+                },
+            )
+        });
+        let with_pad = automation.as_ref().is_some_and(|plan| !plan.pad.is_empty());
         let sample_rate =
             request
                 .sample_rate
@@ -484,6 +527,9 @@ impl RenderJob<'_> {
             if request.include_voice_guide {
                 names.push(request.voice_guide_label.clone());
             }
+            if with_pad {
+                names.push(request.pad_label.clone());
+            }
             let file_names = stem_file_names(&names);
             for (index, track) in chosen.iter().enumerate() {
                 outputs.push(RenderOutput {
@@ -491,6 +537,7 @@ impl RenderJob<'_> {
                     track_ids: vec![track.id.clone()],
                     include_metronome: false,
                     include_voice_guide: false,
+                    include_pad: false,
                 });
             }
             let mut next = chosen.len();
@@ -500,6 +547,7 @@ impl RenderJob<'_> {
                     track_ids: Vec::new(),
                     include_metronome: true,
                     include_voice_guide: false,
+                    include_pad: false,
                 });
                 next += 1;
             }
@@ -509,6 +557,17 @@ impl RenderJob<'_> {
                     track_ids: Vec::new(),
                     include_metronome: false,
                     include_voice_guide: true,
+                    include_pad: false,
+                });
+                next += 1;
+            }
+            if with_pad {
+                outputs.push(RenderOutput {
+                    path: path_string(&stem_dir.join(&file_names[next])),
+                    track_ids: Vec::new(),
+                    include_metronome: false,
+                    include_voice_guide: false,
+                    include_pad: true,
                 });
             }
         } else {
@@ -517,6 +576,7 @@ impl RenderJob<'_> {
                 track_ids: chosen.iter().map(|track| track.id.clone()).collect(),
                 include_metronome: request.include_metronome,
                 include_voice_guide: request.include_voice_guide,
+                include_pad: with_pad,
             });
         }
 
@@ -553,6 +613,7 @@ impl RenderJob<'_> {
                 .include_metronome
                 .then(|| crate::audio::engine::metronome_render_config(self.settings)),
             voice_guide,
+            automation,
         };
         Ok(engine_request)
     }
@@ -701,7 +762,7 @@ mod tests {
             let job = RenderJob {
                 emit: &emit, request, song_dir: Path::new("."), song: &song,
                 settings: &settings, engine_rate: 48000, voices_dir: None,
-                staging_root: Path::new("."),
+                staging_root: Path::new("."), automation: None, pads_dir: String::new(),
             };
             job.engine_request_for_region(Path::new("mix.wav"), Path::new("stems"), region).unwrap()
         };
@@ -739,7 +800,7 @@ mod tests {
         let job = RenderJob {
             emit: &emit, request: &request, song_dir: dir.path(), song: &song,
             settings: &settings, engine_rate: 48000, voices_dir: None,
-            staging_root: dir.path(),
+            staging_root: dir.path(), automation: None, pads_dir: String::new(),
         };
         let mut ranges = Vec::new();
         let zip_path = dir.path().join("songs.zip");
@@ -822,6 +883,8 @@ mod tests {
                     file_name: label.clone(),
                     metronome_label: "Metrónomo".into(),
                     voice_guide_label: "Voz guía".into(),
+                    apply_automation: false,
+                    pad_label: "Pad".into(),
                 };
                 let job = RenderJob {
                     emit: &emit,
@@ -832,6 +895,8 @@ mod tests {
                     engine_rate: 48_000,
                     voices_dir: None,
                     staging_root: &out_dir,
+                    automation: None,
+                    pads_dir: String::new(),
                 };
                 let stem_dir = out_dir.join(&label);
                 std::fs::create_dir_all(&stem_dir).unwrap();

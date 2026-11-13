@@ -21,12 +21,19 @@
 // Mute and solo are deliberately ignored: the caller names the tracks it wants
 // in each output file, which is the whole point of the feature ("everything
 // but the drums"), so a track muted for tonight's show is still exportable.
+//
+// With `automation` the render plays the song as its cues do (the caller —
+// Rust's render_automation — has already played the cues ahead of time): it
+// follows the jump segments in order and applies the per-track envelopes, the
+// master fade around jumps, and the click / guide / pad changes. Mute and
+// solo then count only for the tracks the automation gives keys to.
 // ---------------------------------------------------------------------------
 
 #include <lt_engine/core/result.h>
 #include <lt_engine/core/types.h>
 #include <lt_engine/render/loudness_meter.h>
 #include <lt_engine/render/metronome_renderer.h>
+#include <lt_engine/render/pad_renderer.h>
 #include <lt_engine/render/voice_guide_renderer.h>
 
 #include <functional>
@@ -49,6 +56,52 @@ struct OfflineRenderOutput {
     std::vector<Id>  track_ids;
     bool             include_metronome = false;
     bool             include_voice_guide = false;
+    bool             include_pad = false;   // the pad the automation turns on
+};
+
+// A point of an automation envelope, in OUTPUT seconds (0 = first frame).
+struct OfflineKey {
+    double seconds = 0.0;
+    float  value = 0.0f;
+};
+
+// A stretch of timeline, in seconds, the render plays.
+struct OfflineSegment {
+    double start_seconds = 0.0;
+    double end_seconds = 0.0;
+};
+
+// Gain/pan: piecewise linear. Mute/solo (0/1): steps. Empty = not automated.
+struct OfflineTrackAutomation {
+    Id track_id;
+    std::vector<OfflineKey> gain, pan, mute, solo;
+};
+
+struct OfflineMetronomeChange {
+    double seconds = 0.0;
+    MetronomeConfig config;     // `enabled` says whether the click sounds
+};
+
+struct OfflineVoiceGuideChange {
+    double seconds = 0.0;
+    VoiceGuideConfig config;    // `enabled` says whether the guide speaks
+    std::string lang;
+};
+
+struct OfflinePadChange {
+    double seconds = 0.0;
+    PadConfig config;
+};
+
+struct OfflineAutomation {
+    bool active = false;
+    std::vector<OfflineSegment> segments;   // replaces [start, end) when active
+    std::vector<OfflineTrackAutomation> tracks;
+    std::vector<OfflineKey> master_gain;    // over every track, not click/guide/pad
+    std::vector<OfflineMetronomeChange> metronome;
+    std::vector<OfflineVoiceGuideChange> voice_guide;
+    std::vector<OfflinePadChange> pad;
+    std::string pads_dir;
 };
 
 struct OfflineRenderRequest {
@@ -79,6 +132,8 @@ struct OfflineRenderRequest {
     VoiceGuideConfig voice_guide;           // used by outputs with include_voice_guide
     std::string      voice_guide_dir;
     std::string      voice_guide_lang;
+
+    OfflineAutomation automation;
 };
 
 struct OfflineRenderedFile {
