@@ -1265,9 +1265,13 @@ WhatsApp is read on a phone screen, in a chat, between other messages. So it is
 <one sentence: the headline change, the same one the poster/video leads with>
 
 <emoji> <change 1, one line>
+👉 <where it is: gesture and path>
+
 <emoji> <change 2>
-<emoji> <change 3>
-<emoji> <change 4, optional, max 4>
+👉 <where it is>
+
+<emoji> <change 3 … max ~6>
+👉 <where it is>
 
 🔧 Además: <the 2-3 most noticeable fixes, one line, comma-separated>
 
@@ -1278,10 +1282,14 @@ Rules:
 - **WhatsApp formatting, not markdown.** Bold is `*single asterisks*`, italic
   `_underscores_`; `**double**`, `#` headings and `[text](url)` links show up
   literally. Use bold only for the title line.
-- **Max 4 change lines**, each one line on a phone (~60-70 characters), same
-  emoji as the item in `docs/releases/v<NEW>.md`. No "how" clauses: the poster
-  or video and the Facebook post carry them; here a line that wraps three
-  times is not read.
+- **Up to ~6 changes**, each one short line on a phone (~60-70 characters),
+  same emoji as the item in `docs/releases/v<NEW>.md`, followed by its own
+  `👉` line saying **where it is** (gesture and path, same as the Facebook
+  post and the release notes: `Clic derecho en la pista → "Canales"`, with the
+  mobile gesture when it differs; settings as `Configuración → <grupo> →
+  <pestaña> → "<ajuste>"`). Labels exactly as the app shows them. Fixes and
+  changes the user does not have to go and find need no `👉` line. A blank
+  line between items keeps the chat readable.
 - **One "🔧 Además" line** for the fixes, not a list. Omit it if there are no
   user-visible fixes. Never call them "Arreglos" (feature name since 1.14.0).
 - **The URL alone on the last line, with `https://`**, so WhatsApp builds the
