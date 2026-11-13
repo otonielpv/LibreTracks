@@ -715,6 +715,9 @@ export type ClipSummary = {
   durationSeconds: number;
   gain: number;
   color?: string | null;
+  /** Modo de canal de su pista (ausente = estéreo): la onda pinta solo el
+   * canal que suena. */
+  channelMode?: TrackChannelMode;
 };
 
 /** Mirrors Rust `MidiEventKind` (serde camelCase, internally tagged on `type`). */

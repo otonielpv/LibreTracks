@@ -254,6 +254,60 @@ function getTileContext(surface: TileSurface) {
  * clips distintos NUNCA compartan clave— es de corrección, no de rendimiento:
  * si colisionaran, un clip mostraría la onda de otro. Tiene tests propios.
  */
+type ChannelPeaks = { min: Float32Array; max: Float32Array };
+type StereoPeaks = {
+  minPeaks: Float32Array;
+  maxPeaks: Float32Array;
+  minPeaksRight: Float32Array;
+  maxPeaksRight: Float32Array;
+};
+
+/** Media de los dos canales por cubeta, una vez por LOD. */
+const monoPeaksCache = new WeakMap<Float32Array, ChannelPeaks>();
+
+function averagedPeaks(peaks: StereoPeaks): ChannelPeaks {
+  const cached = monoPeaksCache.get(peaks.maxPeaks);
+  if (cached) return cached;
+  const min = new Float32Array(peaks.minPeaks.length);
+  const max = new Float32Array(peaks.maxPeaks.length);
+  for (let i = 0; i < min.length; i += 1) {
+    min[i] = 0.5 * (peaks.minPeaks[i] + peaks.minPeaksRight[i]);
+    max[i] = 0.5 * (peaks.maxPeaks[i] + peaks.maxPeaksRight[i]);
+  }
+  const result = { min, max };
+  monoPeaksCache.set(peaks.maxPeaks, result);
+  return result;
+}
+
+/**
+ * Los canales que pinta un clip, según el modo de canal de su pista: los dos
+ * (arriba L, abajo R) en estéreo; uno solo, a todo el alto, en Solo
+ * izquierdo, Solo derecho o Mono (la media, aproximada por cubeta). Una
+ * fuente mono siempre es un solo canal.
+ */
+export function channelsToDraw(
+  peaks: StereoPeaks,
+  channelMode: ClipSummary["channelMode"],
+): ChannelPeaks[] {
+  const left = { min: peaks.minPeaks, max: peaks.maxPeaks };
+  const hasRight =
+    peaks.minPeaksRight.length === peaks.minPeaks.length &&
+    peaks.maxPeaksRight.length === peaks.maxPeaks.length &&
+    peaks.maxPeaks.length > 0;
+  if (!hasRight) return [left];
+  const right = { min: peaks.minPeaksRight, max: peaks.maxPeaksRight };
+  switch (channelMode ?? "stereo") {
+    case "left":
+      return [left];
+    case "right":
+      return [right];
+    case "mono":
+      return [averagedPeaks(peaks)];
+    default:
+      return [left, right];
+  }
+}
+
 export function tileNamespace(request: TileRequest) {
   const renderPixelsPerSecond = getWaveformRenderPixelsPerSecond(
     request.pixelsPerSecond,
@@ -281,6 +335,9 @@ export function tileNamespace(request: TileRequest) {
     // de 128, y rasterizar siempre a 256 era el desperdicio que este paso quita.
     String(tileHeightForLane(request.laneHeightPx)),
     tilePixelRatio(request).toFixed(3),
+    // El modo de canal cambia qué se pinta: sin él, cambiar a Solo derecho
+    // seguiría mostrando el tile estéreo cacheado.
+    request.clip.channelMode ?? "stereo",
   ].join(":");
 }
 
@@ -367,18 +424,19 @@ function renderWaveformTile(
   context.lineJoin = "round";
   context.lineCap = "round";
 
-  const hasRightChannel =
-    minPeaksRight.length === minPeaks.length &&
-    maxPeaksRight.length === maxPeaks.length;
+  const channels = channelsToDraw(
+    { minPeaks, maxPeaks, minPeaksRight, maxPeaksRight },
+    request.clip.channelMode,
+  );
 
-  if (hasRightChannel) {
+  if (channels.length === 2) {
     context.fillStyle = "rgba(20, 20, 20, 0.18)";
     context.fillRect(0, Math.round(tileHeight * 0.5), tileWidth, 1);
     context.fillStyle = "rgba(20, 20, 20, 0.72)";
     drawChannelPeaks(
       context,
-      minPeaks,
-      maxPeaks,
+      channels[0].min,
+      channels[0].max,
       startIndex,
       endIndex,
       clipStartIndex,
@@ -390,8 +448,8 @@ function renderWaveformTile(
     );
     drawChannelPeaks(
       context,
-      minPeaksRight,
-      maxPeaksRight,
+      channels[1].min,
+      channels[1].max,
       startIndex,
       endIndex,
       clipStartIndex,
@@ -406,8 +464,8 @@ function renderWaveformTile(
 
   drawChannelPeaks(
     context,
-    minPeaks,
-    maxPeaks,
+    channels[0].min,
+    channels[0].max,
     startIndex,
     endIndex,
     clipStartIndex,
@@ -653,10 +711,8 @@ export function drawWaveformSketch(
 
   context.save();
   context.fillStyle = "rgba(20, 20, 20, 0.55)";
-  const hasRightChannel =
-    lod.minPeaksRight.length === lod.minPeaks.length &&
-    lod.maxPeaksRight.length === lod.maxPeaks.length;
-  if (hasRightChannel) {
+  const channels = channelsToDraw(lod, clip.channelMode);
+  if (channels.length === 2) {
     context.fillStyle = "rgba(20, 20, 20, 0.18)";
     context.fillRect(
       rect.left,
@@ -667,8 +723,8 @@ export function drawWaveformSketch(
     context.fillStyle = "rgba(20, 20, 20, 0.55)";
     drawSketchChannel(
       context,
-      lod.minPeaks,
-      lod.maxPeaks,
+      channels[0].min,
+      channels[0].max,
       from,
       to,
       rect,
@@ -678,8 +734,8 @@ export function drawWaveformSketch(
     );
     drawSketchChannel(
       context,
-      lod.minPeaksRight,
-      lod.maxPeaksRight,
+      channels[1].min,
+      channels[1].max,
       from,
       to,
       rect,
@@ -690,8 +746,8 @@ export function drawWaveformSketch(
   } else {
     drawSketchChannel(
       context,
-      lod.minPeaks,
-      lod.maxPeaks,
+      channels[0].min,
+      channels[0].max,
       from,
       to,
       rect,

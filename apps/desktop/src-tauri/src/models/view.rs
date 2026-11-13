@@ -608,6 +608,9 @@ pub struct ClipSummary {
     pub duration_seconds: f64,
     pub gain: f64,
     pub color: Option<String>,
+    /// Modo de canal de su pista: la onda pinta solo el canal que suena.
+    #[serde(skip_serializing_if = "libretracks_core::ChannelMode::is_stereo")]
+    pub channel_mode: libretracks_core::ChannelMode,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1112,6 +1115,7 @@ pub(crate) fn clip_to_summary(
         ),
         gain: clip.gain,
         color: clip.color.clone(),
+        channel_mode: track.map(|t| t.channel_mode).unwrap_or_default(),
     }
 }
 

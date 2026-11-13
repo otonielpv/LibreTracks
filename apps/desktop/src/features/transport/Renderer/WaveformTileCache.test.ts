@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { ClipSummary, WaveformSummaryDto } from "../desktopApi";
 import {
+  channelsToDraw,
   getWaveformRenderPixelsPerSecond,
   WaveformTileCache,
   decodeFloat32Peaks,
@@ -225,7 +226,7 @@ describe("WaveformTileCache", () => {
 });
 
 /**
- * Paso 04 de docs/plans/ui-performance: la rasterización sale del frame.
+ * Paso 04 de docs/plans/completed/ui-performance: la rasterización sale del frame.
  *
  * Medido antes del cambio: al cruzar un paso de zoom de 1,5x cambian de golpe
  * TODOS los namespaces visibles, y los tiles se rasterizaban dentro del
@@ -687,3 +688,46 @@ describe("altura del tile", () => {
     expect(twoX.stats().bytes).toBe(oneX.stats().bytes * 2);
   });
 });
+
+// Plan channel-split: la onda de una pista pinta solo el canal que suena.
+describe("modo de canal en la onda", () => {
+  const stereo = {
+    minPeaks: Float32Array.from([-0.8, -0.6]),
+    maxPeaks: Float32Array.from([0.8, 0.6]),
+    minPeaksRight: Float32Array.from([-0.2, -0.4]),
+    maxPeaksRight: Float32Array.from([0.2, 0.4]),
+  };
+
+  it("estéreo pinta los dos canales y Solo L / Solo R uno, a todo el alto", () => {
+    expect(channelsToDraw(stereo, undefined).map((c) => c.max)).toEqual([
+      stereo.maxPeaks,
+      stereo.maxPeaksRight,
+    ]);
+    expect(channelsToDraw(stereo, "left").map((c) => c.max)).toEqual([stereo.maxPeaks]);
+    expect(channelsToDraw(stereo, "right").map((c) => c.max)).toEqual([stereo.maxPeaksRight]);
+  });
+
+  it("mono pinta la media de los dos", () => {
+    const [mono] = channelsToDraw(stereo, "mono");
+    expect(Array.from(mono.max)).toEqual([
+      expect.closeTo(0.5, 5),
+      expect.closeTo(0.5, 5),
+    ]);
+    expect(Array.from(mono.min)).toEqual([expect.closeTo(-0.5, 5), expect.closeTo(-0.5, 5)]);
+  });
+
+  it("una fuente mono es siempre un solo canal", () => {
+    const mono = { ...stereo, minPeaksRight: new Float32Array(0), maxPeaksRight: new Float32Array(0) };
+    for (const mode of [undefined, "left", "right", "mono"] as const) {
+      expect(channelsToDraw(mono, mode).map((c) => c.max)).toEqual([stereo.maxPeaks]);
+    }
+  });
+
+  it("cambiar el modo cambia la clave del tile", () => {
+    const waveform = buildWaveform();
+    expect(namespaceOf(buildClip({ channelMode: "right" }), waveform)).not.toBe(
+      namespaceOf(buildClip(), waveform),
+    );
+  });
+});
+
