@@ -1247,6 +1247,7 @@ const es = {
         right: "Solo derecho",
         split: "Separar canales L/R",
         splitNoStereo: "Separar canales L/R (la pista no tiene audio estéreo)",
+        splitSection: "Separar",
         leftName: "{{name}} Izq",
         rightName: "{{name}} Der",
       },

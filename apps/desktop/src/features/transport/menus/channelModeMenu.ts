@@ -63,7 +63,7 @@ export function createChannelModeMenu(
         : d.t("transport.menu.channelMode.splitNoStereo", {
             defaultValue: "Separar canales L/R (la pista no tiene audio estéreo)",
           }),
-      section: "split",
+      section: d.t("transport.menu.channelMode.splitSection", { defaultValue: "Separar" }),
       disabled: !hasStereo,
       onSelect: async () => {
         if (!hasStereo) {

@@ -1230,6 +1230,7 @@ const en = {
         right: "Right only",
         split: "Split L/R channels",
         splitNoStereo: "Split L/R channels (the track has no stereo audio)",
+        splitSection: "Split",
         leftName: "{{name}} L",
         rightName: "{{name}} R",
       },
