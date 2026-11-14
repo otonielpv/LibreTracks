@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { TrackSummary } from "../desktopApi";
 
-import { computeActiveSongTrackIds, type CompactClipEntry } from "./CompactView";
+import {
+  computeActiveSongTrackIds,
+  resolveCompactFilterRegionId,
+  type CompactClipEntry,
+} from "./CompactView";
 import { resolveMixerRows, resolveVisibleTracks } from "./CompactMixer";
 
 const clip = (id: string, trackId: string): CompactClipEntry => ({
@@ -259,5 +263,22 @@ describe("resolveMixerRows hidden counts", () => {
     );
 
     expect(hiddenCountByFolderId.size).toBe(0);
+  });
+});
+
+describe("resolveCompactFilterRegionId", () => {
+  const regions = [{ id: "song-a" }, { id: "song-b" }];
+
+  it("prefers the clicked song over the one under the playhead", () => {
+    expect(resolveCompactFilterRegionId(regions, "song-b", "song-a")).toBe("song-b");
+  });
+
+  it("falls back to the playhead song with no selection", () => {
+    expect(resolveCompactFilterRegionId(regions, null, "song-a")).toBe("song-a");
+  });
+
+  it("ignores a selection whose song no longer exists", () => {
+    expect(resolveCompactFilterRegionId(regions, "gone", "song-a")).toBe("song-a");
+    expect(resolveCompactFilterRegionId(regions, "gone", null)).toBeNull();
   });
 });

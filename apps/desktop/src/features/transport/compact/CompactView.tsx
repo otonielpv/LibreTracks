@@ -92,6 +92,22 @@ export function computeActiveSongTrackIds(
   return ids;
 }
 
+/**
+ * The song the CompactMixer's filter is about: the one the user clicked
+ * (selected) wins, like in the Setlist view; otherwise the song under the
+ * playhead. A stale selection (song deleted) falls through to the playhead.
+ */
+export function resolveCompactFilterRegionId(
+  regions: readonly { id: string }[],
+  selectedRegionId: string | null,
+  activeRegionId: string | null,
+): string | null {
+  if (selectedRegionId && regions.some((region) => region.id === selectedRegionId)) {
+    return selectedRegionId;
+  }
+  return activeRegionId;
+}
+
 // Compacta keeps its own song menu, shows no sections and has no "cue".
 type CompactViewProps = Omit<
   SongViewBindings,
@@ -285,9 +301,15 @@ function CompactViewComponent({
   // rather than the raw position: the parent only re-renders us when
   // the playhead crosses into another song, which is precisely when
   // this set can change.
+  // A clicked (selected) song takes precedence, as in the Setlist view.
+  const filterRegionId = resolveCompactFilterRegionId(
+    regions,
+    selectedRegionId,
+    activeRegionId,
+  );
   const activeSongTrackIds = useMemo<Set<string> | null>(
-    () => computeActiveSongTrackIds(activeRegionId, clipsByRegion),
-    [activeRegionId, clipsByRegion],
+    () => computeActiveSongTrackIds(filterRegionId, clipsByRegion),
+    [filterRegionId, clipsByRegion],
   );
 
   // Android: mixer collapsed by default on narrow (phone) screens, visible on

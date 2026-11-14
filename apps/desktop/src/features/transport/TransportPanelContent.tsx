@@ -1005,8 +1005,10 @@ export function TransportPanelContent() {
   // is exactly when the filter has something to hide. Reads the reactive
   // `activeSongRegionId` (published by syncLivePosition only on a song
   // boundary crossing, not per frame), so the disabled state and its
-  // tooltip now match what the mixer really does.
-  const compactMixerFilterAvailable = activeSongRegionId !== "";
+  // tooltip now match what the mixer really does. A clicked (selected)
+  // song is also a target, as in the Setlist view.
+  const compactMixerFilterAvailable =
+    activeSongRegionId !== "" || selectedRegion !== null;
   const [selectedTimelineRange, setSelectedTimelineRange] =
     useState<TimelineRangeSelection | null>(null);
   const [optimisticClipOperations, setOptimisticClipOperations] = useState<
