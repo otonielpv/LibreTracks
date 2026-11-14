@@ -698,7 +698,7 @@ const en = {
       mixerSize_large: "Large",
       mixerSize_xlarge: "Extra large",
       mixerSizeHelp:
-        "Channel strip width and fader size, without changing the rest of the interface. To make the faders longer, drag the mixer's top edge.",
+        "Channel strip width, fader size and track name size, without changing the rest of the interface. To make the faders longer, drag the mixer's top edge.",
       defaultView: "Startup view",
       defaultViewHelp: "The view sessions open in.",
       metronomeTitle: "Metronome",

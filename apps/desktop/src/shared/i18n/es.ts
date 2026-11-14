@@ -689,7 +689,7 @@ const es = {
       mixerSize_large: "Grande",
       mixerSize_xlarge: "Muy grande",
       mixerSizeHelp:
-        "Ancho de las tiras y tamaño de los faders, sin cambiar el resto de la interfaz. Para alargar los faders, arrastra el borde superior del mezclador.",
+        "Ancho de las tiras, tamaño de los faders y de los nombres de pista, sin cambiar el resto de la interfaz. Para alargar los faders, arrastra el borde superior del mezclador.",
       defaultView: "Vista al abrir",
       defaultViewHelp: "La vista en la que se abren las sesiones.",
       metronomeTitle: "Metronomo",

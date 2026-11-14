@@ -3488,7 +3488,9 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
 /* Teléfono muy bajo (iPhone 13: ~255 px para la vista): M/S/T caben en la
    columna junto al fader. */
 .lt-setlist-mixer.is-short .lt-compact-mixer-strip-toggles .lt-compact-mixer-toggle {
-  min-height: 1.6rem;
+  /* Si aun así no caben (interfaz al 125 %), encogen hasta 1 rem en vez de
+     montarse sobre el paneo y la salida. */
+  min-height: 1rem;
   height: 1.6rem;
 }
 
@@ -5175,7 +5177,7 @@ html.lt-mobile .lt-setlist-view .lt-setlist-song-tile .lt-setlist-song-button {
    sin la fila de etiquetas L/C/R (el centro lo marca el carril) y el
    selector bajo, para que el fader se lleve el resto del alto. */
 .lt-setlist-mixer.is-short .lt-compact-mixer-strip.is-fader-strip > .lt-compact-mixer-pan-wrap {
-  margin: 0.15rem 0 0.1rem;
+  margin: 0.15rem 0 calc(0.3rem * var(--lt-mixer-fader-scale, 1));
 }
 
 .lt-setlist-mixer.is-short .lt-compact-mixer-strip.is-fader-strip .lt-compact-mixer-pan-guides {

@@ -445,29 +445,36 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
 :root {
   --lt-mixer-fader-scale: 1;
   --lt-mixer-strip-width: 6.5rem;
+  --lt-mixer-name-scale: 1;
 }
 
 @media (min-height: 600px) and (min-width: 900px) {
   html.lt-mobile {
     --lt-mixer-fader-scale: 1.35;
     --lt-mixer-strip-width: 7.75rem;
+    --lt-mixer-name-scale: 1.5;
   }
 }
 
 /* Tamaño del mezclador elegido en Ajustes › General (shared/mixerSize.ts).
+   También agranda el nombre de la pista: pedido desde un iPad a 1 m, donde
+   los 10 px no se leían.
    `:root.clase` pesa más que la regla de tablet de arriba, así que la
    elección manda; sin clase («Automático») se queda esa regla. */
 :root.lt-mixer-size-normal {
   --lt-mixer-fader-scale: 1;
   --lt-mixer-strip-width: 6.5rem;
+  --lt-mixer-name-scale: 1;
 }
 
 :root.lt-mixer-size-large {
   --lt-mixer-fader-scale: 1.35;
   --lt-mixer-strip-width: 7.75rem;
+  --lt-mixer-name-scale: 1.5;
 }
 
 :root.lt-mixer-size-xlarge {
   --lt-mixer-fader-scale: 1.7;
   --lt-mixer-strip-width: 9.5rem;
+  --lt-mixer-name-scale: 1.9;
 }
