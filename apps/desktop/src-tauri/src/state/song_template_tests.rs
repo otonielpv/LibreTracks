@@ -980,6 +980,41 @@ fn an_imported_song_in_song_folder_mode_gets_the_template_inside_its_folder() {
     assert_tree_in_order(&song);
 }
 
+/// Marca «Click Track» como silenciada y solo por el canal izquierdo, como la
+/// habría exportado el usuario.
+fn mute_imported_click(song: &mut Song) {
+    let click = song.tracks.iter_mut().find(|t| t.id == "pkg_click").unwrap();
+    click.muted = true;
+    click.channel_mode = libretracks_core::ChannelMode::Left;
+}
+
+#[test]
+fn a_per_song_template_track_takes_the_imported_mute_and_channels() {
+    let mut song = imported_way_maker(SongImportTrackMode::SongFolder);
+    mute_imported_click(&mut song);
+    organise(&mut song, &builtin_band(), SongImportTrackMode::SongFolder).expect("organised");
+
+    let click = track_of_clip(&song, "clip_pkg_click");
+    assert_eq!(click.name, "Click");
+    assert_eq!(click.volume, 0.5);
+    assert!(click.muted, "el mute de la canción exportada se pierde");
+    assert_eq!(click.channel_mode, libretracks_core::ChannelMode::Left);
+}
+
+#[test]
+fn a_shared_template_track_keeps_the_session_mute() {
+    let mut song = imported_way_maker(SongImportTrackMode::MergeIntoExisting);
+    mute_imported_click(&mut song);
+    organise(&mut song, &builtin_band(), SongImportTrackMode::MergeIntoExisting)
+        .expect("organised");
+
+    // Compartida por todas las canciones: silenciarla las callaría a todas.
+    let click = track_of_clip(&song, "clip_pkg_click");
+    assert_eq!(click.name, "Click");
+    assert!(!click.muted);
+    assert_eq!(click.channel_mode, libretracks_core::ChannelMode::Stereo);
+}
+
 #[test]
 fn an_imported_song_without_a_template_is_left_as_imported() {
     let mut song = imported_way_maker(SongImportTrackMode::SongFolder);

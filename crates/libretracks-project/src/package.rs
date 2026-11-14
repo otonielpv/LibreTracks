@@ -404,10 +404,30 @@ pub fn export_region_as_package_with_progress(
                 .chain(s.stored_video_clips().map(|clip| clip.track_id.as_str()))
         }))
         .collect::<HashSet<_>>();
+    // The folders the used tracks sit in travel too (they have no clips of
+    // their own), so the import can rebuild the hierarchy and the folders' mix.
+    let mut exported_track_ids = used_track_ids.clone();
+    for track_id in &used_track_ids {
+        let mut cursor = song
+            .tracks
+            .iter()
+            .find(|track| track.id == *track_id)
+            .and_then(|track| track.parent_track_id.as_deref());
+        while let Some(parent_id) = cursor {
+            if !exported_track_ids.insert(parent_id) {
+                break;
+            }
+            cursor = song
+                .tracks
+                .iter()
+                .find(|track| track.id == parent_id)
+                .and_then(|track| track.parent_track_id.as_deref());
+        }
+    }
     let tracks = song
         .tracks
         .iter()
-        .filter(|track| used_track_ids.contains(track.id.as_str()))
+        .filter(|track| exported_track_ids.contains(track.id.as_str()))
         .cloned()
         .collect::<Vec<_>>();
     let section_markers = song
@@ -1144,11 +1164,14 @@ pub fn merge_extracted_song_package(
         });
         folder_id
     });
+    // First pass: where every package track lands. Merging happens only into
+    // tracks that already existed in the destination session — not tracks we
+    // create in THIS import, so two package tracks sharing a name stay
+    // separate. Under `KeepSeparate` we skip the lookup entirely and always
+    // create a new track. A merged track keeps the destination's mix: that mix
+    // belongs to the session, not to the song.
+    let mut new_track_ids: HashSet<String> = HashSet::new();
     for track in &manifest.tracks {
-        // Merge into a track that already existed in the destination session,
-        // but only those — not tracks we created earlier in THIS loop, so two
-        // package tracks sharing a name stay separate. Under `KeepSeparate` we
-        // skip the lookup entirely and always fall through to a new track.
         if track_mode == SongImportTrackMode::MergeIntoExisting {
             if let Some(existing) = existing_tracks
                 .iter()
@@ -1159,24 +1182,50 @@ pub fn merge_extracted_song_package(
             }
         }
         let track_id = unique_id("track", &track.id, &mut used_track_ids);
+        new_track_ids.insert(track_id.clone());
+        target_track_id_by_manifest_id.insert(track.id.clone(), track_id);
+    }
+    // Second pass: build the new tracks with the mix they were exported with.
+    // Solo is the one thing left behind: a soloed track would silence the
+    // rest of the destination session.
+    for track in &manifest.tracks {
+        let track_id = target_track_id_by_manifest_id[&track.id].clone();
+        if !new_track_ids.contains(&track_id) {
+            continue;
+        }
+        // The package's folder when it travelled; otherwise the song's folder
+        // (or the top level).
+        let parent_track_id = track
+            .parent_track_id
+            .as_ref()
+            .and_then(|parent| target_track_id_by_manifest_id.get(parent))
+            .cloned()
+            .or_else(|| song_folder_id.clone());
+        // The exported route travels verbatim (an output the destination
+        // device lacks plays through the main pair, see
+        // `parse_audio_output_route`). Only "master" inside the song's folder
+        // becomes "inherit", so it sums through the folder the way a track the
+        // user drags into a folder does.
+        let audio_to = if parent_track_id.is_some()
+            && parent_track_id == song_folder_id
+            && track.audio_to.trim().eq_ignore_ascii_case("master")
+        {
+            "inherit".to_string()
+        } else {
+            track.audio_to.clone()
+        };
         next_song.tracks.push(Track {
             id: track_id.clone(),
             name: track.name.clone(),
             kind: track.kind,
-            parent_track_id: song_folder_id.clone(),
+            parent_track_id,
             volume: track.volume,
             pan: track.pan,
-            muted: false,
+            muted: track.muted,
             solo: false,
             transpose_enabled: track.transpose_enabled,
-            // Inside the song's folder the track sums through it, the way a
-            // track the user drags into a folder does.
-            audio_to: if song_folder_id.is_some() {
-                "inherit".to_string()
-            } else {
-                "master".to_string()
-            },
-            channel_mode: Default::default(),
+            audio_to,
+            channel_mode: track.channel_mode.clone(),
             color: track.color.clone(),
             auto_created: false,
             midi_port: track.midi_port.clone(),
@@ -1189,7 +1238,6 @@ pub fn merge_extracted_song_package(
             // imported tracks belong to the new song is the track mode's call.
             song_region_id: owning_region_id.clone(),
         });
-        target_track_id_by_manifest_id.insert(track.id.clone(), track_id);
     }
 
     // Ids the imported content ended up with (they change on a collision), so
@@ -2671,5 +2719,162 @@ mod tests {
         assert_eq!(content.clips[0].track_id, "nueva");
         assert_eq!(content.clips[0].id, "c1~2-importado");
         assert_eq!(remapped.original.clips[0].track_id, "nueva");
+    }
+
+    /// La mezcla con que se exportó una canción (carpetas, mute, salida,
+    /// canales, volumen y paneo) vuelve al importarla en pistas nuevas. Solo el
+    /// solo se queda atrás: silenciaría el resto de la sesión de destino.
+    fn mixed_source() -> Song {
+        let mut source = song();
+        let mut folder = track("f_drums", "Batería");
+        folder.kind = TrackKind::Folder;
+        folder.volume = 0.5;
+        folder.muted = true;
+        folder.audio_to = "out 3-4".into();
+        let mut kick = track("t_kick", "Bombo");
+        kick.parent_track_id = Some("f_drums".into());
+        kick.audio_to = "inherit".into();
+        kick.volume = 0.7;
+        kick.pan = -0.3;
+        kick.muted = true;
+        kick.solo = true;
+        kick.channel_mode = libretracks_core::ChannelMode::Left;
+        let mut click = track("t_click", "Click");
+        click.audio_to = "out 5".into();
+        // Una pista sin clips fuera de las carpetas usadas no viaja.
+        let unused = track("t_unused", "Sin uso");
+        source.tracks = vec![folder, kick, click, unused];
+        source.clips = vec![
+            clip("c_kick", "t_kick", 4.0, 8.0),
+            clip("c_click", "t_click", 4.0, 8.0),
+        ];
+        source
+    }
+
+    fn import_mixed(song_dir: &Path, mode: SongImportTrackMode) -> Song {
+        let package_path = song_dir.join("mix.ltpkg");
+        export_region_as_package(song_dir, song_dir, &mixed_source(), "r1", &package_path, false)
+            .expect("export");
+        let empty = Song {
+            tracks: vec![],
+            clips: vec![],
+            regions: vec![],
+            section_markers: vec![],
+            ..song()
+        };
+        import_song_package(song_dir, &empty, &package_path, 0.0, mode)
+            .expect("import package")
+            .song
+    }
+
+    fn named<'a>(song: &'a Song, name: &str) -> &'a Track {
+        song.tracks
+            .iter()
+            .find(|track| track.name == name)
+            .unwrap_or_else(|| panic!("falta la pista {name}"))
+    }
+
+    #[test]
+    fn the_exported_mix_and_folders_come_back_on_import() {
+        let dir = tempdir().expect("tempdir");
+        let imported = import_mixed(dir.path(), SongImportTrackMode::KeepSeparate);
+
+        assert_eq!(imported.tracks.len(), 3, "carpeta + 2 pistas, sin la que no se usa");
+        let folder = named(&imported, "Batería");
+        assert_eq!(folder.kind, TrackKind::Folder);
+        assert_eq!(folder.parent_track_id, None);
+        assert_eq!(folder.volume, 0.5);
+        assert!(folder.muted);
+        assert_eq!(folder.audio_to, "out 3-4");
+
+        let kick = named(&imported, "Bombo");
+        assert_eq!(kick.parent_track_id.as_deref(), Some(folder.id.as_str()));
+        assert_eq!(kick.audio_to, "inherit");
+        assert_eq!(kick.volume, 0.7);
+        assert_eq!(kick.pan, -0.3);
+        assert!(kick.muted);
+        assert!(!kick.solo, "el solo no viaja");
+        assert_eq!(kick.channel_mode, libretracks_core::ChannelMode::Left);
+
+        let click = named(&imported, "Click");
+        assert_eq!(click.parent_track_id, None);
+        assert_eq!(click.audio_to, "out 5");
+        assert!(validate_song(&imported).is_ok());
+    }
+
+    #[test]
+    fn the_exported_folders_nest_inside_the_song_folder() {
+        let dir = tempdir().expect("tempdir");
+        let imported = import_mixed(dir.path(), SongImportTrackMode::SongFolder);
+
+        let song_folder = imported
+            .tracks
+            .iter()
+            .find(|track| track.kind == TrackKind::Folder && track.name != "Batería")
+            .expect("carpeta de la canción");
+        let folder = named(&imported, "Batería");
+        assert_eq!(folder.parent_track_id.as_deref(), Some(song_folder.id.as_str()));
+        // Su salida explícita se respeta dentro de la carpeta de la canción.
+        assert_eq!(folder.audio_to, "out 3-4");
+        let kick = named(&imported, "Bombo");
+        assert_eq!(kick.parent_track_id.as_deref(), Some(folder.id.as_str()));
+        let click = named(&imported, "Click");
+        assert_eq!(click.parent_track_id.as_deref(), Some(song_folder.id.as_str()));
+        assert!(validate_song(&imported).is_ok());
+    }
+
+    #[test]
+    fn a_master_route_sums_through_the_song_folder() {
+        let dir = tempdir().expect("tempdir");
+        let package_path = dir.path().join("verse.ltpkg");
+        export_region_as_package(dir.path(), dir.path(), &song(), "r1", &package_path, false)
+            .expect("export");
+        let empty = Song {
+            tracks: vec![],
+            clips: vec![],
+            regions: vec![],
+            section_markers: vec![],
+            ..song()
+        };
+        let imported = import_song_package(
+            dir.path(),
+            &empty,
+            &package_path,
+            0.0,
+            SongImportTrackMode::SongFolder,
+        )
+        .expect("import")
+        .song;
+        assert_eq!(named(&imported, "Drums").audio_to, "inherit");
+    }
+
+    #[test]
+    fn a_merged_track_keeps_the_destination_mix() {
+        let dir = tempdir().expect("tempdir");
+        let package_path = dir.path().join("mix.ltpkg");
+        export_region_as_package(dir.path(), dir.path(), &mixed_source(), "r1", &package_path, false)
+            .expect("export");
+        let mut existing_kick = track("dest_kick", "Bombo");
+        existing_kick.volume = 0.9;
+        let existing = Song {
+            tracks: vec![existing_kick],
+            clips: vec![],
+            regions: vec![],
+            section_markers: vec![],
+            ..song()
+        };
+        let imported = import_song_package(
+            dir.path(),
+            &existing,
+            &package_path,
+            0.0,
+            SongImportTrackMode::MergeIntoExisting,
+        )
+        .expect("import")
+        .song;
+        let kick = named(&imported, "Bombo");
+        assert_eq!(kick.id, "dest_kick");
+        assert_eq!(kick.volume, 0.9);
+        assert!(!kick.muted);
     }
 }

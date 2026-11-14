@@ -1164,6 +1164,14 @@ fn adopt_imported_track(
                     receiver.volume = track.volume;
                     receiver.pan = track.pan;
                 }
+                if receiver.song_region_id.is_some() {
+                    // Una pista de esta canción sola (modos por canción): el
+                    // mute y los canales de la importada son de la mezcla de
+                    // la canción y no pisan a ninguna otra. En una compartida
+                    // sí lo harían, así que ahí se queda la de la sesión.
+                    receiver.muted = track.muted;
+                    receiver.channel_mode = track.channel_mode.clone();
+                }
             }
             used.insert(receiver_id);
         }
