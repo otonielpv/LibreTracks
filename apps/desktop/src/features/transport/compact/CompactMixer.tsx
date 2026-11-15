@@ -39,7 +39,7 @@ import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
 import { useIsInMidiBank } from "../midi/midiBankStore";
 import { trackTarget } from "../midi/controllerTargets";
 import { MidiMappable, useMidiMappable } from "../midi/MidiMappable";
-import { grabHalfReach, isOnRangeThumb } from "./faderGrab";
+import { grabHalfReach, useCapOnlyRange } from "./faderGrab";
 
 /**
  * Reusable horizontal-scroll mixer that lays out one vertical channel strip
@@ -608,23 +608,26 @@ function CompactMixerStripComponent({
     };
   }, []);
 
-  // The pan moves only when its thumb is taken: a press elsewhere on the
-  // slider is ignored (React puts the controlled value back).
-  const panGrabRef = useRef<{ pressed: boolean; onThumb: boolean }>({ pressed: false, onThumb: false });
-  const handlePanInput = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      if (panGrabRef.current.pressed && !panGrabRef.current.onThumb) return;
-      const next = Number(event.target.value);
+  const applyPan = useCallback(
+    (next: number) => {
       if (!Number.isFinite(next)) return;
-      const snapped = applySnap(
-        next,
-        PAN_SNAP_TARGET,
-        PAN_SNAP_THRESHOLD,
-        shiftPressedRef.current,
-      );
-      handlers.onPanChange(track.id, snapped);
+      handlers.onPanChange(track.id, applySnap(next, PAN_SNAP_TARGET, PAN_SNAP_THRESHOLD, shiftPressedRef.current));
     },
     [handlers, track.id],
+  );
+  // Only the thumb moves the pan; the rest of it scrolls the mixer (faderGrab).
+  const panRange = useCapOnlyRange({
+    min: -1,
+    max: 1,
+    step: 0.01,
+    onChange: applyPan,
+    onCommit: () => handlers.onCommitPan(track.id),
+    onGrab: (grabbing) => setIsPanDragging(grabbing),
+  });
+  // The keyboard (the pointer goes to the layer over the slider).
+  const handlePanInput = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => applyPan(Number(event.target.value)),
+    [applyPan],
   );
 
   // Double-click resets to the snap target — Ableton-style "reset to unity"
@@ -917,31 +920,17 @@ function CompactMixerStripComponent({
             aria-label={`Pan ${track.name}`}
             onChange={handlePanInput}
             onDoubleClick={handlePanDoubleClick}
-            onPointerDown={(event) => {
-              const onThumb = isOnRangeThumb(event.currentTarget, event.clientX, event.pointerType);
-              panGrabRef.current = { pressed: true, onThumb };
-              if (!onThumb) {
-                // Nothing to drag: on touch, let the strip row scroll.
-                if (event.pointerType !== "touch") event.preventDefault();
-                return;
-              }
-              setIsPanDragging(true);
-            }}
-            onPointerUp={() => {
-              const { onThumb } = panGrabRef.current;
-              panGrabRef.current = { pressed: false, onThumb: false };
-              setIsPanDragging(false);
-              if (onThumb) handlers.onCommitPan(track.id);
-            }}
-            onPointerCancel={() => {
-              const { onThumb } = panGrabRef.current;
-              panGrabRef.current = { pressed: false, onThumb: false };
-              setIsPanDragging(false);
-              if (onThumb) handlers.onCommitPan(track.id);
-            }}
+            ref={panRange.inputRef}
             onKeyUp={(event) => {
               if (isStepperKey(event.key)) handlers.onCommitPan(track.id);
             }}
+          />
+          <span
+            className="lt-cap-only-layer"
+            ref={panRange.layerRef}
+            onPointerDown={panRange.onPointerDown}
+            onDoubleClick={handlePanDoubleClick}
+            aria-hidden="true"
           />
           {isPanDragging ? (
             <div
@@ -1044,6 +1033,26 @@ function CompactVerticalFaderComponent({
   const grabOffsetRef = useRef(0);
   const latestValueRef = useRef(value);
   latestValueRef.current = value;
+
+  // A finger on the cap keeps the gesture (the scroll is cancelled); anywhere
+  // else on the fader it scrolls the mixer sideways (the track carries
+  // `touch-action: pan-x pan-y`, faders.css). Native and non-passive: React's
+  // touch handlers cannot cancel.
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const onTouchStart = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch || !event.cancelable) return;
+      const rect = track.getBoundingClientRect();
+      const cap = track.querySelector<HTMLElement>(".lt-compact-mixer-fader-thumb");
+      const capCentre = rect.bottom - latestValueRef.current * rect.height;
+      const reach = grabHalfReach(cap?.getBoundingClientRect().height ?? 0, "touch");
+      if (Math.abs(touch.clientY - capCentre) <= reach) event.preventDefault();
+    };
+    track.addEventListener("touchstart", onTouchStart, { passive: false });
+    return () => track.removeEventListener("touchstart", onTouchStart);
+  }, []);
 
   // Map a clientY inside the track to a value in [0, 1] with the
   // bottom of the track being 0 and the top being 1 — i.e. the way

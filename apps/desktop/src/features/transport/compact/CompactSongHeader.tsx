@@ -33,6 +33,7 @@ import {
 import { SONG_REORDER_IGNORE_ATTRIBUTE } from "../songs/useSongReorder";
 import { SongMasterMeter } from "../tracks/TrackMeter";
 import { SongCover } from "../songs/SongCoverImage";
+import { useCapOnlyRange } from "./faderGrab";
 
 /** Spread onto the fader: dragging it must never start a song reorder from
  * the header surface. (The context menu already stops pointerdown.) */
@@ -150,6 +151,14 @@ export function CompactSongHeaderComponent({
   // Track Shift state via window listeners so the slider's onChange can
   // read it; same pattern as the CompactMixerStrip volume / pan.
   const shiftPressedRef = useRef(false);
+  // Only the thumb moves the master; the rest scrolls the columns (faderGrab).
+  const masterRange = useCapOnlyRange({
+    min: 0,
+    max: 2,
+    step: 0.01,
+    onChange: (next) => onMasterGainChange(applyMasterSnap(next, shiftPressedRef.current)),
+    onCommit: onMasterGainCommit,
+  });
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Shift") shiftPressedRef.current = true;
@@ -395,6 +404,7 @@ export function CompactSongHeaderComponent({
       >
         <SongMasterMeter regionId={region.id} className="lt-compact-song-meter" />
         <input
+          ref={masterRange.inputRef}
           className="lt-compact-song-fader lt-fader is-master"
           type="range"
           min={0}
@@ -410,8 +420,7 @@ export function CompactSongHeaderComponent({
             onMasterGainChange(MASTER_SNAP_TARGET);
             onMasterGainCommit();
           }}
-          onPointerUp={onMasterGainCommit}
-          onPointerCancel={onMasterGainCommit}
+
           onKeyUp={(event) => {
             if (
               event.key === "ArrowUp" ||
@@ -426,6 +435,16 @@ export function CompactSongHeaderComponent({
               onMasterGainCommit();
             }
           }}
+        />
+        <span
+          className="lt-cap-only-layer"
+          ref={masterRange.layerRef}
+          onPointerDown={masterRange.onPointerDown}
+          onDoubleClick={() => {
+            onMasterGainChange(MASTER_SNAP_TARGET);
+            onMasterGainCommit();
+          }}
+          aria-hidden="true"
         />
       </div></NetworkControls>
     </div>

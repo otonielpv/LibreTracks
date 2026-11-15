@@ -109,6 +109,27 @@ input[type="range"].lt-fader {
   touch-action: none;
 }
 
+/* Mezcladores de Compacta y Setlist: una capa transparente sobre el control
+   recibe el puntero (useCapOnlyRange). Solo el pulgar mueve el control; el
+   resto deja al dedo desplazar el mezclador. El input de debajo pinta el
+   control y atiende al teclado. */
+.lt-cap-only-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.lt-cap-only-wrap > input {
+  width: 100%;
+}
+
+.lt-cap-only-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  touch-action: pan-x pan-y;
+}
+
 input[type="range"].lt-fader:focus {
   outline: none;
 }
@@ -363,7 +384,9 @@ input[type="range"].lt-fader:active:not(:disabled)::-webkit-slider-thumb {
   background-size: calc(7px * var(--lt-mixer-fader-scale, 1)) 100%;
   background-repeat: no-repeat;
   cursor: ns-resize;
-  touch-action: none;
+  /* El dedo fuera del cap desplaza el mezclador; sobre el cap, el fader
+     cancela el touchstart y se queda el gesto (CompactVerticalFader). */
+  touch-action: pan-x pan-y;
   outline: none;
 }
 

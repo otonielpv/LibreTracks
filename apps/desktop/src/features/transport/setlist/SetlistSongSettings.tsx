@@ -17,6 +17,7 @@ import { songCountStyleMenuActions } from "../songs/songCountStyle";
 import { songFadeMenuActions } from "../songs/songFades";
 import type { SongViewBindings } from "../songs/songViewBindings";
 import { useTransportStore } from "../store";
+import { useCapOnlyRange } from "../compact/faderGrab";
 import { requestStructureEdit } from "../structure/structureGuard";
 import { RegionTempoControl } from "../timeline/RegionTempoControl";
 import { clampRegionResizeEdge, regionResizeBounds } from "../timeline/regionResize";
@@ -212,6 +213,14 @@ function SetlistSongSettingsComponent({
   });
   const currentBpm = bpmByRegion[region.id] ?? song.bpm;
   const masterGain = optimisticMaster ?? region.master?.gain ?? 1;
+  // Only the thumb moves the master; the rest scrolls the drawer (faderGrab).
+  const masterRange = useCapOnlyRange({
+    min: 0,
+    max: 2,
+    step: 0.01,
+    onChange: (next) => onMasterGainChange(region.id, next),
+    onCommit: () => onMasterGainCommit(region.id),
+  });
 
   const sorted = [...regions].sort((left, right) => left.startSeconds - right.startSeconds);
   const index = sorted.findIndex((candidate) => candidate.id === region.id);
@@ -344,9 +353,11 @@ function SetlistSongSettingsComponent({
 
       <SettingsSection icon="volume_up" title={t("setlistView.edit.levelSection")}>
         <Field label={t("setlistView.mixer.master")}>
+          <span className="lt-cap-only-wrap lt-setlist-master-fader">
           <input
+            ref={masterRange.inputRef}
             type="range"
-            className="lt-fader is-volume lt-setlist-master-fader"
+            className="lt-fader is-volume"
             min={0}
             max={2}
             step={0.01}
@@ -354,9 +365,15 @@ function SetlistSongSettingsComponent({
             title={t("setlistView.mixer.masterTitle")}
             aria-label={t("setlistView.mixer.masterAria", { name: region.name })}
             onChange={(event) => onMasterGainChange(region.id, Number(event.target.value) || 0)}
-            onPointerUp={() => onMasterGainCommit(region.id)}
             onKeyUp={() => onMasterGainCommit(region.id)}
           />
+          <span
+            className="lt-cap-only-layer"
+            ref={masterRange.layerRef}
+            onPointerDown={masterRange.onPointerDown}
+            aria-hidden="true"
+          />
+          </span>
         </Field>
         <div className="lt-setlist-settings-row">
           {fadeActions.map((action) => (

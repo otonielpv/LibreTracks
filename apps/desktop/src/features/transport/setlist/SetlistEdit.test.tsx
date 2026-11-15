@@ -177,8 +177,9 @@ describe("Edit → Song", () => {
 
     const drawer = document.querySelector(".lt-setlist-drawer") as HTMLElement;
     const master = within(drawer).getByRole("slider", { name: "setlistView.mixer.masterAria:Beta" });
+    // The keyboard path (the pointer goes to the layer over it, faderGrab).
     fireEvent.change(master, { target: { value: "0.5" } });
-    fireEvent.pointerUp(master);
+    fireEvent.keyUp(master, { key: "ArrowRight" });
     expect(spies.onMasterGainChange).toHaveBeenCalledWith("b", 0.5);
     expect(spies.onMasterGainCommit).toHaveBeenCalledWith("b");
   });
