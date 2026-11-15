@@ -47,8 +47,8 @@ export const SetlistLyrics = memo(SetlistLyricsComponent);
 
 /**
  * Phone, lyrics pane: the lyrics with the view rail on their right, like the
- * console's, and optionally the waveform or the console beside them, as in
- * Live (`lyricsSide`, the rail's Wave/Mix buttons).
+ * console's, or the waveform or the console beside them, as in Live
+ * (`lyricsSide`, the Wave/Mix buttons), which then carry the buttons.
  */
 export function SetlistLyricsPane({
   overview,
@@ -67,9 +67,13 @@ export function SetlistLyricsPane({
     <div className={`lt-setlist-lyrics-pane${side !== "none" ? ` has-side is-side-${side}` : ""}`}>
       {side === "song" ? overview : side === "mixer" ? <div className="lt-setlist-bottom">{mixer}</div> : null}
       {lyrics}
-      <div className="lt-setlist-view-rail" role="toolbar" aria-label={t("setlistView.pane.rail")}>
-        {buttons}
-      </div>
+      {/* With the waveform or the console beside the lyrics, the buttons ride
+          in its dock or its rail: a rail of their own here cost width. */}
+      {side === "none" ? (
+        <div className="lt-setlist-view-rail" role="toolbar" aria-label={t("setlistView.pane.rail")}>
+          {buttons}
+        </div>
+      ) : null}
     </div>
   );
 }

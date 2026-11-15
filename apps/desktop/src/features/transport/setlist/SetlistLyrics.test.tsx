@@ -126,10 +126,16 @@ describe("Setlist lyrics on the phone, with a side pane", () => {
     fireEvent.click(sideButton("sideSong"));
     expect(zones(container)).toEqual(["songs", "overview", "lyrics"]);
     expect(container.querySelector(".lt-setlist-lyrics-pane.has-side [data-setlist-zone='overview']")).not.toBeNull();
+    // No rail of its own beside the waveform: the buttons ride in its dock.
+    expect(container.querySelector(".lt-setlist-view-rail")).toBeNull();
+    expect(container.querySelector(".lt-setlist-zone.is-overview .lt-setlist-pane-toggle")).not.toBeNull();
     fireEvent.click(sideButton("sideMixer"));
     expect(zones(container)).toEqual(["songs", "mixer", "lyrics"]);
     expect(sideButton("sideMixer").getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector(".lt-setlist-view-rail")).toBeNull();
+    expect(container.querySelector(".lt-setlist-zone.is-mixer .lt-setlist-pane-toggle")).not.toBeNull();
     fireEvent.click(sideButton("sideMixer"));
     expect(zones(container)).toEqual(["songs", "lyrics"]);
+    expect(container.querySelector(".lt-setlist-view-rail")).not.toBeNull();
   });
 });

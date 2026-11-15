@@ -183,6 +183,7 @@ function SetlistViewComponent({
   // Lyrics ship behind the same flag as Live's.
   const lyricsOpen = !waveEditing && FEATURE_FLAGS.lyrics && lyricsOpenSetting && layout !== "short";
   const lyricsPane = !waveEditing && FEATURE_FLAGS.lyrics && layout === "short" && shortPane === "lyrics";
+  const lyricsSide = useSetlistStore((state) => (lyricsPane ? state.lyricsSide : "none"));
   const setShortPane = useSetlistStore((state) => state.setShortPane);
   // The song the map, overview and mixer are about (00 §5 "Selección").
   const lastShownRegionIdRef = useRef<string | null>(null);
@@ -413,10 +414,11 @@ function SetlistViewComponent({
   );
   // Phone, waveform pane: Playback keeps the view buttons in a dock over the
   // bottom right of the waveform, folded away with an arrow.
-  const waveDock = layout === "short" && shortPane === "song";
+  // Beside the lyrics too: a rail there would take the waveform's width.
+  const waveDock = layout === "short" && (shortPane === "song" || lyricsSide === "song");
   // Phone, console pane: the same buttons head the console's rail. The song
   // row keeps them only off the phone, or beside the lyrics (no rail there).
-  const railButtons = layout === "short" && shortPane === "mixer";
+  const railButtons = layout === "short" && (shortPane === "mixer" || lyricsSide === "mixer");
   const mixer = (
     <Zone name="mixer" zoneRef={mixerZoneRef} drop={songDrop}>
       {mixerResizable ? (
