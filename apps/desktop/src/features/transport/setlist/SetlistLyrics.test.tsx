@@ -100,11 +100,21 @@ describe("Setlist lyrics", () => {
     expect(zones(container)).toEqual(["songs", "overview", "mixer"]);
   });
 
-  it("short: one more pane under the songs, and closing goes back to the mixer", () => {
+  it("short: the lyrics open beside the waveform, and closing goes back to it", () => {
+    const { container } = render(<SetlistView {...props()} layoutClass="short" />);
+    expect(zones(container)).toEqual(["songs", "overview"]);
+    fireEvent.click(lyricsButton()!);
+    expect(zones(container)).toEqual(["songs", "overview", "lyrics"]);
+    act(() => (panel.props.at(-1)!.onClose as () => void)());
+    expect(zones(container)).toEqual(["songs", "overview"]);
+  });
+
+  it("short: from the console the lyrics open beside it, and closing goes back to it", () => {
+    act(() => useSetlistStore.getState().setShortPane("mixer"));
     const { container } = render(<SetlistView {...props()} layoutClass="short" />);
     fireEvent.click(lyricsButton()!);
-    expect(zones(container)).toEqual(["songs", "lyrics"]);
-    act(() => (panel.props.at(-1)!.onClose as () => void)());
+    expect(zones(container)).toEqual(["songs", "mixer", "lyrics"]);
+    fireEvent.click(lyricsButton()!);
     expect(zones(container)).toEqual(["songs", "mixer"]);
   });
 
@@ -122,9 +132,9 @@ describe("Setlist lyrics on the phone, with a side pane", () => {
   it("puts the waveform or the mixer beside the lyrics, and back to the lyrics alone", () => {
     const { container } = render(<SetlistView {...props()} layoutClass="short" />);
     fireEvent.click(lyricsButton()!);
-    expect(zones(container)).toEqual(["songs", "lyrics"]);
-    fireEvent.click(sideButton("sideSong"));
+    // From the waveform pane: beside the waveform; its button lit.
     expect(zones(container)).toEqual(["songs", "overview", "lyrics"]);
+    expect(sideButton("sideSong").getAttribute("aria-pressed")).toBe("true");
     expect(container.querySelector(".lt-setlist-lyrics-pane.has-side [data-setlist-zone='overview']")).not.toBeNull();
     // No rail of its own beside the waveform: the buttons ride in its dock.
     expect(container.querySelector(".lt-setlist-view-rail")).toBeNull();

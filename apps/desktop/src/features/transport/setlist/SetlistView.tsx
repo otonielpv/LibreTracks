@@ -184,7 +184,6 @@ function SetlistViewComponent({
   const lyricsOpen = !waveEditing && FEATURE_FLAGS.lyrics && lyricsOpenSetting && layout !== "short";
   const lyricsPane = !waveEditing && FEATURE_FLAGS.lyrics && layout === "short" && shortPane === "lyrics";
   const lyricsSide = useSetlistStore((state) => (lyricsPane ? state.lyricsSide : "none"));
-  const setShortPane = useSetlistStore((state) => state.setShortPane);
   // The song the map, overview and mixer are about (00 §5 "Selección").
   const lastShownRegionIdRef = useRef<string | null>(null);
   const shownRegionId = resolveSetlistSongId(
@@ -616,7 +615,7 @@ function SetlistViewComponent({
       {layout !== "short" || waveDock || railButtons || lyricsPane ? null : paneButtons}
     </Zone>
   );
-  const closeLyrics = () => (layout === "short" ? setShortPane("mixer") : setLyricsOpen(false));
+  const closeLyrics = () => (layout === "short" ? useSetlistStore.getState().closeShortLyrics() : setLyricsOpen(false));
   const lyrics = (
     <Zone name="lyrics">
       <SetlistLyrics performance={performance} region={shownRegion} onClose={closeLyrics} />

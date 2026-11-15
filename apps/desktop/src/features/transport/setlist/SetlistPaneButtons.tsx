@@ -67,7 +67,11 @@ export function SetlistPaneButtons({
           aria-pressed={lyricsActive}
           title={t("setlistView.lyrics.toggleTitle")}
           onClick={() => {
-            if (layout === "short") setShortPane(lyricsPane ? "mixer" : "lyrics");
+            if (layout === "short") {
+              const store = useSetlistStore.getState();
+              if (lyricsPane) store.closeShortLyrics();
+              else store.openShortLyrics();
+            }
             else setLyricsOpen(!lyricsOpenSetting);
           }}
         >

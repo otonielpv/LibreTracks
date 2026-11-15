@@ -85,6 +85,10 @@ type SetlistActions = {
   setMixerExpanded: (expanded: boolean) => void;
   setLyricsOpen: (open: boolean) => void;
   setLyricsSide: (side: SetlistLyricsSide) => void;
+  /** Phone: the lyrics open beside what was showing (waveform or console). */
+  openShortLyrics: () => void;
+  /** Phone: closing the lyrics goes back to what was beside them. */
+  closeShortLyrics: () => void;
   setOverviewZoom: (zoom: number) => void;
   setWaveDockHidden: (hidden: boolean) => void;
   setLanesZoom: (zoom: number) => void;
@@ -127,6 +131,9 @@ export const useSetlistStore = create<SetlistState & SetlistActions>()(
     setMixerExpanded: (mixerExpanded) => set({ mixerExpanded }),
     setLyricsOpen: (lyricsOpen) => set({ lyricsOpen }),
     setLyricsSide: (lyricsSide) => set({ lyricsSide }),
+    openShortLyrics: () =>
+      set((state) => ({ shortPane: "lyrics", lyricsSide: state.shortPane === "mixer" ? "mixer" : "song" })),
+    closeShortLyrics: () => set((state) => ({ shortPane: state.lyricsSide === "song" ? "song" : "mixer" })),
     setWaveDockHidden: (waveDockHidden) => set({ waveDockHidden }),
     setOverviewZoom: (overviewZoom) => set({ overviewZoom: Math.max(1, Math.min(32, overviewZoom)) }),
     setLanesZoom: (lanesZoom) =>
