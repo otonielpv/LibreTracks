@@ -586,6 +586,36 @@ pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
         }
     }
 
+    // Resolve the project tempo BEFORE converting any timing. Ableton stores the
+    // arrangement positions (clip start/end, locator times, tempo/time-signature
+    // event times) in BEATS, not seconds — so until now every value above is a
+    // beat count (except an unwarped clip's audio markers, see `AbletonItem`).
+    // We need the BPM to turn them into seconds.
+    if bpm.is_none() {
+        bpm = tempo_markers
+            .iter()
+            .find(|marker| marker.start_seconds <= 0.0001)
+            .map(|marker| marker.bpm)
+            .or_else(|| tempo_markers.first().map(|marker| marker.bpm));
+    }
+
+    // Convert the whole project from beats to seconds. We use the base tempo for
+    // the linear mapping `seconds = beats * 60 / bpm`. Tempo automation (a
+    // changing BPM across the arrangement) would need piecewise integration of
+    // the tempo map; that is a TODO — single-tempo projects (the common case)
+    // are exact, variable-tempo projects are approximate but no longer wildly
+    // wrong (they used to be off by a factor of `bpm/60`).
+    let beats_to_seconds = 60.0 / bpm.unwrap_or(120.0).max(20.0);
+    for track in &mut track_builders {
+        for entry in &mut track.items {
+            entry.item.position_seconds *= beats_to_seconds;
+            if !entry.audio_in_seconds {
+                entry.item.length_seconds *= beats_to_seconds;
+                entry.item.source_start_seconds *= beats_to_seconds;
+            }
+        }
+    }
+
     let mut tracks = track_builders
         .into_iter()
         .enumerate()
@@ -604,32 +634,6 @@ pub fn parse_ableton_project(path: &Path) -> Result<ReaperProject, String> {
         });
     }
 
-    // Resolve the project tempo BEFORE converting any timing. Ableton stores ALL
-    // arrangement positions (clip start/end, locator times, tempo/time-signature
-    // event times) in BEATS, not seconds — so until now every value above is a
-    // beat count. We need the BPM to turn them into seconds.
-    if bpm.is_none() {
-        bpm = tempo_markers
-            .iter()
-            .find(|marker| marker.start_seconds <= 0.0001)
-            .map(|marker| marker.bpm)
-            .or_else(|| tempo_markers.first().map(|marker| marker.bpm));
-    }
-
-    // Convert the whole project from beats to seconds. We use the base tempo for
-    // the linear mapping `seconds = beats * 60 / bpm`. Tempo automation (a
-    // changing BPM across the arrangement) would need piecewise integration of
-    // the tempo map; that is a TODO — single-tempo projects (the common case)
-    // are exact, variable-tempo projects are approximate but no longer wildly
-    // wrong (they used to be off by a factor of `bpm/60`).
-    let beats_to_seconds = 60.0 / bpm.unwrap_or(120.0).max(20.0);
-    for track in &mut tracks {
-        for item in &mut track.items {
-            item.position_seconds *= beats_to_seconds;
-            item.length_seconds *= beats_to_seconds;
-            item.source_start_seconds *= beats_to_seconds;
-        }
-    }
     for marker in &mut section_markers {
         marker.start_seconds *= beats_to_seconds;
     }
@@ -730,7 +734,17 @@ struct AbletonTrackBuilder {
     pan: f64,
     muted: bool,
     solo: bool,
-    items: Vec<ReaperItem>,
+    items: Vec<AbletonItem>,
+}
+
+/// A clip as read, before the beats -> seconds pass (the tempo comes after
+/// the tracks in the file). The arrangement position is always in beats; the
+/// length and the source offset are beats too, except for an unwarped clip,
+/// whose markers Live keeps in seconds of the audio file.
+#[derive(Debug, Clone)]
+struct AbletonItem {
+    item: ReaperItem,
+    audio_in_seconds: bool,
 }
 
 impl Default for AbletonTrackBuilder {
@@ -753,6 +767,11 @@ struct AbletonClipBuilder {
     source_start_seconds: Option<f64>,
     gain: f64,
     file_refs: Vec<AbletonFileRef>,
+    is_warped: Option<bool>,
+    loop_on: bool,
+    loop_start: Option<f64>,
+    loop_end: Option<f64>,
+    start_relative: f64,
 }
 
 impl Default for AbletonClipBuilder {
@@ -763,6 +782,11 @@ impl Default for AbletonClipBuilder {
             source_start_seconds: None,
             gain: 1.0,
             file_refs: Vec::new(),
+            is_warped: None,
+            loop_on: false,
+            loop_start: None,
+            loop_end: None,
+            start_relative: 0.0,
         }
     }
 }
@@ -946,6 +970,21 @@ fn handle_ableton_node(
             }
         }
         if let Some(node_value) = value {
+            if parent_is(stack, "Loop") {
+                let number = node_value.parse::<f64>().ok();
+                if tag.eq_ignore_ascii_case("LoopStart") {
+                    clip.loop_start = number;
+                } else if tag.eq_ignore_ascii_case("LoopEnd") {
+                    clip.loop_end = number;
+                } else if tag.eq_ignore_ascii_case("StartRelative") {
+                    clip.start_relative = number.unwrap_or(0.0);
+                } else if tag.eq_ignore_ascii_case("LoopOn") {
+                    clip.loop_on = node_value.eq_ignore_ascii_case("true");
+                }
+            }
+            if tag.eq_ignore_ascii_case("IsWarped") && parent_is(stack, "AudioClip") {
+                clip.is_warped = Some(node_value.eq_ignore_ascii_case("true"));
+            }
             if tag.eq_ignore_ascii_case("CurrentStart") {
                 clip.current_start = node_value.parse::<f64>().ok().map(|value| value.max(0.0));
             } else if tag.eq_ignore_ascii_case("CurrentEnd") {
@@ -1027,22 +1066,51 @@ fn handle_ableton_node(
     }
 }
 
-fn build_ableton_item(root: &Path, builder: AbletonClipBuilder) -> Option<ReaperItem> {
+fn build_ableton_item(root: &Path, builder: AbletonClipBuilder) -> Option<AbletonItem> {
     let file_path = resolve_ableton_clip_path(root, &builder.file_refs)?;
-    let position_seconds = builder.current_start.unwrap_or(0.0).max(0.0);
-    let end_seconds = builder.current_end.unwrap_or(position_seconds);
-    let length_seconds = (end_seconds - position_seconds).max(0.0);
-    if length_seconds <= 0.0 {
+    let position = builder.current_start.unwrap_or(0.0).max(0.0);
+
+    // An unwarped clip plays its file at its own speed, whatever the tempo:
+    // its start and end markers are seconds of the audio, and with the loop
+    // off they are exactly what plays. Live 8 sets (the MultiTracks packs)
+    // even write `CurrentEnd` in those seconds; read as beats, every stem was
+    // cut at `seconds * 60 / bpm` (a 70 bpm song lost its last 46 s).
+    if builder.is_warped == Some(false) && !builder.loop_on {
+        if let (Some(loop_start), Some(loop_end)) = (builder.loop_start, builder.loop_end) {
+            let source_start = (loop_start + builder.start_relative).max(0.0);
+            let length = loop_end - source_start;
+            if length > 0.0 {
+                return Some(AbletonItem {
+                    item: ReaperItem {
+                        position_seconds: position,
+                        length_seconds: length,
+                        source_start_seconds: source_start,
+                        source_path: file_path,
+                        gain: builder.gain.max(0.0),
+                        muted: false,
+                    },
+                    audio_in_seconds: true,
+                });
+            }
+        }
+    }
+
+    let end = builder.current_end.unwrap_or(position);
+    let length = (end - position).max(0.0);
+    if length <= 0.0 {
         return None;
     }
 
-    Some(ReaperItem {
-        position_seconds,
-        length_seconds,
-        source_start_seconds: builder.source_start_seconds.unwrap_or(0.0).max(0.0),
-        source_path: file_path,
-        gain: builder.gain.max(0.0),
-        muted: false,
+    Some(AbletonItem {
+        item: ReaperItem {
+            position_seconds: position,
+            length_seconds: length,
+            source_start_seconds: builder.source_start_seconds.unwrap_or(0.0).max(0.0),
+            source_path: file_path,
+            gain: builder.gain.max(0.0),
+            muted: false,
+        },
+        audio_in_seconds: false,
     })
 }
 
@@ -1574,7 +1642,7 @@ fn build_ableton_track(builder: AbletonTrackBuilder, index: usize) -> ReaperTrac
     let stem_name = builder
         .items
         .first()
-        .and_then(|item| item.source_path.file_stem())
+        .and_then(|entry| entry.item.source_path.file_stem())
         .and_then(|stem| stem.to_str())
         .map(|stem| stem.trim().to_string())
         .filter(|stem| !stem.is_empty());
@@ -1595,7 +1663,7 @@ fn build_ableton_track(builder: AbletonTrackBuilder, index: usize) -> ReaperTrac
         muted: builder.muted,
         solo: builder.solo,
         folder_depth_delta: 0,
-        items: builder.items,
+        items: builder.items.into_iter().map(|entry| entry.item).collect(),
     }
 }
 
@@ -2373,5 +2441,83 @@ mod tests {
 
                 let parsed = parse_ableton_project(&project_path).expect("parse ableton");
                 assert_eq!(parsed.tracks[0].items[0].source_path, source_path);
+        }
+        #[test]
+        fn ableton_unwarped_clip_keeps_its_whole_audio_length() {
+                // A MultiTracks pack saved by Live 8: the clips are unwarped and
+                // their end (CurrentEnd, LoopEnd) is in SECONDS of the file. Read
+                // as beats at 70 bpm, every stem stopped at 276.6 s of 322.7 s.
+                let temp = tempfile::tempdir().expect("tempdir");
+                let source_path = temp.path().join("MultiTracks").join("Bass.wav");
+                fs::create_dir_all(source_path.parent().expect("dir")).expect("mkdir");
+                fs::write(&source_path, b"wav").expect("write wav");
+                let project_path = temp.path().join("MultiTrack.als");
+                let als = r#"<?xml version="1.0" encoding="utf-8"?>
+<Ableton MajorVersion="4" MinorVersion="8.1_226" Creator="Ableton Live 8.4.2">
+  <LiveSet>
+    <Tracks>
+      <AudioTrack>
+        <Name><EffectiveName Value="Bass" /></Name>
+        <DeviceChain><MainSequencer><Sample><ArrangerAutomation><Events>
+          <AudioClip Time="0">
+            <CurrentStart Value="0" />
+            <CurrentEnd Value="322.67859400" />
+            <Loop>
+              <LoopStart Value="0" />
+              <LoopEnd Value="322.67859400" />
+              <StartRelative Value="0" />
+              <LoopOn Value="false" />
+              <OutMarker Value="322.67859400" />
+            </Loop>
+            <SampleRef><FileRef>
+              <HasRelativePath Value="true" />
+              <RelativePath><RelativePathElement Dir="MultiTracks" /></RelativePath>
+              <Name Value="Bass.wav" />
+            </FileRef></SampleRef>
+            <IsWarped Value="false" />
+          </AudioClip>
+        </Events></ArrangerAutomation></Sample></MainSequencer></DeviceChain>
+      </AudioTrack>
+    </Tracks>
+    <MasterTrack><DeviceChain><Mixer>
+      <Tempo><ArrangerAutomation><Events>
+        <FloatEvent Time="-63072000" Value="70" />
+      </Events></ArrangerAutomation></Tempo>
+    </Mixer></DeviceChain></MasterTrack>
+  </LiveSet>
+</Ableton>"#;
+                fs::write(&project_path, als).expect("write als");
+
+                let parsed = parse_ableton_project(&project_path).expect("parse ableton");
+                let clip = &parsed.tracks[0].items[0];
+                assert!((clip.length_seconds - 322.678594).abs() < 0.001, "got {}", clip.length_seconds);
+                assert!(clip.source_start_seconds.abs() < 0.0001);
+                assert!(parsed.regions[0].end_seconds >= clip.length_seconds - 0.0001);
+        }
+
+        #[test]
+        fn ableton_warped_clip_markers_stay_in_beats() {
+                // Same clip, warped: its markers are beats and follow the tempo.
+                let temp = tempfile::tempdir().expect("tempdir");
+                let source_path = temp.path().join("Bass.wav");
+                fs::write(&source_path, b"wav").expect("write wav");
+                let project_path = temp.path().join("song.als");
+                let als = r#"<?xml version="1.0" encoding="utf-8"?>
+<Ableton><LiveSet>
+  <MasterTrack><DeviceChain><Mixer><Tempo><Manual Value="120"/></Tempo></Mixer></DeviceChain></MasterTrack>
+  <Tracks><AudioTrack><DeviceChain><MainSequencer><Sample><ArrangerAutomation><Events>
+    <AudioClip Time="0">
+      <CurrentStart Value="0" /><CurrentEnd Value="8" />
+      <Loop><LoopStart Value="0" /><LoopEnd Value="8" /><StartRelative Value="0" /><LoopOn Value="false" /></Loop>
+      <SampleRef><FileRef><Name Value="Bass.wav" /></FileRef></SampleRef>
+      <IsWarped Value="true" />
+    </AudioClip>
+  </Events></ArrangerAutomation></Sample></MainSequencer></DeviceChain></AudioTrack></Tracks>
+</LiveSet></Ableton>"#;
+                fs::write(&project_path, als).expect("write als");
+
+                let parsed = parse_ableton_project(&project_path).expect("parse ableton");
+                // 8 beats at 120 bpm.
+                assert!((parsed.tracks[0].items[0].length_seconds - 4.0).abs() < 0.001);
         }
 }
