@@ -4,8 +4,10 @@ import { advancePlayHistory, type PlayHistory } from "@libretracks/shared/charts
 
 /** How long a jump that vanished from the snapshot without the playhead
  * reaching its target is still waited for (the engine already jumped and the
- * position is on its way), before it counts as cancelled. */
-export const JUMP_LANDING_GRACE_MS = 1000;
+ * position is on its way, one snapshot behind at most), before it counts as
+ * cancelled. Short: a cancelled jump must leave the lyrics at once (the user
+ * found 1 s slow). */
+export const JUMP_LANDING_GRACE_MS = 250;
 
 type JumpState = {
   target: string;
