@@ -389,6 +389,7 @@ import { createBrowserDrop } from "./library/folders/browserDrop";
 import { useWindowTitle } from "./hooks/useWindowTitle";
 import { useFollowSongTracks } from "./hooks/useFollowSongTracks";
 import { useSongStore } from "./songStore";
+import { useMixerFilterStore } from "./mixerFilterStore";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
 import { createTapTempoHandler } from "./tempo/tapTempoHandler";
 import { createRegionTempoHandler } from "./tempo/regionTempoHandler";
@@ -972,35 +973,14 @@ export function TransportPanelContent() {
     [selectedRegionId, song?.regions],
   );
 
-  // Compact view: "Solo cancion activa" filter. Owned here so the
-  // toggle button lives in the TimelineToolbar (saves strip space),
-  // and the CompactMixer just reads the boolean as a controlled prop.
-  // Persists across sessions via localStorage; the read happens once
-  // at mount, the write on every change.
-  const COMPACT_MIXER_FILTER_KEY = "libretracks.compactMixer.filterActiveSong";
-  const [compactMixerFilterActiveSong, setCompactMixerFilterActiveSong] =
-    useState<boolean>(() => {
-      if (typeof window === "undefined") return false;
-      try {
-        return window.localStorage.getItem(COMPACT_MIXER_FILTER_KEY) === "1";
-      } catch {
-        return false;
-      }
-    });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(
-        COMPACT_MIXER_FILTER_KEY,
-        compactMixerFilterActiveSong ? "1" : "0",
-      );
-    } catch {
-      // Storage quota / private mode — toggle still works in memory.
-    }
-  }, [compactMixerFilterActiveSong]);
-  const toggleCompactMixerFilterActiveSong = useCallback(() => {
-    setCompactMixerFilterActiveSong((current) => !current);
-  }, []);
+  // "Solo cancion activa" filter, shared with the Setlist mixer (one
+  // switch for both views). The toggle lives in the TimelineToolbar.
+  const compactMixerFilterActiveSong = useMixerFilterStore(
+    (state) => state.filterActiveSong,
+  );
+  const toggleCompactMixerFilterActiveSong = useMixerFilterStore(
+    (state) => state.toggleFilterActiveSong,
+  );
   // "Available" — true when the playhead is actually inside a song, which
   // is exactly when the filter has something to hide. Reads the reactive
   // `activeSongRegionId` (published by syncLivePosition only on a song

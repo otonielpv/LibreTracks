@@ -8,6 +8,7 @@ import { SetlistView } from "./SetlistView";
 import { songCardHeight } from "./useSongsRowResize";
 import { INITIAL_SETLIST_STATE, useSetlistStore } from "./setlistStore";
 import { testRegion, testSetlistProps } from "./testBindings";
+import { useMixerFilterStore } from "../mixerFilterStore";
 
 const platform = vi.hoisted(() => ({ mobile: false }));
 
@@ -116,6 +117,7 @@ afterAll(() => {
 
 beforeEach(() => {
   useSetlistStore.setState(INITIAL_SETLIST_STATE);
+  useMixerFilterStore.setState({ filterActiveSong: true });
   platform.mobile = false;
   window.localStorage.clear();
 });

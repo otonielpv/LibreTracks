@@ -52,6 +52,7 @@ import {
 } from "../features/transport/setlist/setlistStore";
 import { useMidiBankStore } from "../features/transport/midi/midiBankStore";
 import { INITIAL_METER_STATE, useMeterStore } from "../features/transport/meterStore";
+import { useMixerFilterStore } from "../features/transport/mixerFilterStore";
 import {
   INITIAL_PREPARATION_STATUS,
   usePreparationStatusStore,
@@ -350,6 +351,7 @@ beforeEach(async () => {
   });
   resetTestDesktopApiMock();
   useMeterStore.setState(INITIAL_METER_STATE);
+  useMixerFilterStore.setState({ filterActiveSong: true });
   useTransportStore.setState({
     playback: null,
     optimisticMix: {},

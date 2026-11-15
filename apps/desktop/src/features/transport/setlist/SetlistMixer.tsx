@@ -27,6 +27,7 @@ import { useSetlistStore, type SetlistBottomTab } from "./setlistStore";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { computeSongTrackContent } from "./songTrackContent";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
+import { useMixerFilterStore } from "../mixerFilterStore";
 
 export type SetlistMixerProps = Pick<
   SongViewBindings,
@@ -152,7 +153,9 @@ function SetlistMixerComponent({
   const expanded = useSetlistStore((state) => state.mixerExpanded);
   const setExpanded = useSetlistStore((state) => state.setMixerExpanded);
   const setCollapsed = useSetlistStore((state) => state.setMixerCollapsed);
-  const [showAllTracks, setShowAllTracks] = useState(false);
+  // Shared with the compact view's filter: one switch for both mixers.
+  const showAllTracks = !useMixerFilterStore((state) => state.filterActiveSong);
+  const toggleFilterActiveSong = useMixerFilterStore((state) => state.toggleFilterActiveSong);
   const [hintDismissed, setHintDismissed] = useState(readHintDismissed);
   const optimisticMaster = useTransportStore((state) =>
     region ? state.optimisticRegionMaster[region.id] : undefined,
@@ -294,7 +297,7 @@ function SetlistMixerComponent({
             aria-pressed={!showAllTracks}
             aria-label={t("setlistView.mixer.filter")}
             title={t(showAllTracks ? "timelineToolbar.mixerFilterOff" : "timelineToolbar.mixerFilterOn")}
-            onClick={tracksAction(() => setShowAllTracks((value) => !value))}
+            onClick={tracksAction(toggleFilterActiveSong)}
           >
             <span className="material-symbols-outlined" aria-hidden="true">
               {showAllTracks ? "filter_alt_off" : "filter_alt"}
