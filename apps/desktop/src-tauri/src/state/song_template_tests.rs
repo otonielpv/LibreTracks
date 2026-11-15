@@ -131,7 +131,7 @@ fn a_saved_session_with_songs_past_its_duration_is_healed_on_open() {
 #[test]
 fn new_song_is_laid_out_from_the_default_template() {
     let mut session = empty_session("tpl-new-song-default");
-    let audio = audio_with(Some(BUILTIN_BAND_TEMPLATE), None);
+    let audio = audio_with(Some(BUILTIN_BAND_TEMPLATE), Some("shared"));
     session
         .create_empty_song(None, None, &audio)
         .expect("first song");
@@ -139,7 +139,7 @@ fn new_song_is_laid_out_from_the_default_template() {
     assert_eq!(after_first, 9, "the band template's nine targets");
     assert!(loaded(&session).tracks.iter().any(|t| t.name == "Batería"));
 
-    // Shared (the default layout): the second song adds nothing.
+    // Shared: the second song adds nothing.
     session
         .create_empty_song(None, None, &audio)
         .expect("second song");
@@ -526,7 +526,7 @@ fn deleting_a_song_takes_its_empty_tracks_in_one_undo_step() {
 #[test]
 fn deleting_a_song_keeps_shared_tracks() {
     let mut session = empty_session("tpl-delete-song-shared");
-    let audio = audio_with(Some(BUILTIN_BAND_TEMPLATE), None);
+    let audio = audio_with(Some(BUILTIN_BAND_TEMPLATE), Some("shared"));
     session
         .create_empty_song(None, None, &audio)
         .expect("create song");
@@ -1136,7 +1136,7 @@ fn splitting_a_song_gives_the_right_half_its_own_tracks() {
 #[test]
 fn splitting_a_song_with_shared_tracks_creates_none() {
     let mut session = empty_session("tpl-split-shared");
-    let audio = audio_with(Some(BUILTIN_BAND_TEMPLATE), None);
+    let audio = audio_with(Some(BUILTIN_BAND_TEMPLATE), Some("shared"));
     session
         .create_empty_song(Some("Way Maker"), None, &audio)
         .expect("song");

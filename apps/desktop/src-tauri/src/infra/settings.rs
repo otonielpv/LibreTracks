@@ -537,8 +537,11 @@ impl Default for AppSettings {
             track_meter_mode: lt_audio_engine_v2::TrackMeterMode::PostFader,
             timeline_navigation_scheme: default_timeline_navigation_scheme(),
             timeline_playhead_follow_mode: default_timeline_playhead_follow_mode(),
-            import_merge_matching_tracks: default_import_merge_matching_tracks(),
-            song_track_layout: None,
+            // A fresh install starts with each song's tracks on their own. The
+            // serde default stays `true` so a settings file from before the
+            // layout keeps merging: only users with no file at all get this.
+            import_merge_matching_tracks: false,
+            song_track_layout: Some("separate".to_string()),
             default_song_template: None,
             auto_color_new_tracks: default_auto_color_new_tracks(),
             auto_warp: default_auto_warp(),
@@ -964,7 +967,9 @@ mod tests {
         assert_eq!(settings.global_jump_bars, 4);
         assert_eq!(settings.vamp_mode, "section");
         assert_eq!(settings.timeline_navigation_scheme, "ableton");
-        assert!(settings.import_merge_matching_tracks);
+        assert!(!settings.import_merge_matching_tracks);
+        assert_eq!(settings.song_track_layout.as_deref(), Some("separate"));
+        assert_eq!(settings.track_layout(), SongImportTrackMode::KeepSeparate);
         assert!(settings.auto_color_new_tracks);
         assert!(settings.reference_imported_audio);
         assert!(settings.midi_mappings.is_empty());
@@ -1020,6 +1025,7 @@ mod tests {
 
         // Without a layout the switch is the user's own and is left alone.
         let mut settings = AppSettings::default();
+        settings.song_track_layout = None;
         settings.import_merge_matching_tracks = false;
         settings.sync_legacy_track_layout();
         assert!(!settings.import_merge_matching_tracks);
@@ -1083,9 +1089,18 @@ mod tests {
     #[test]
     fn deserializing_an_empty_object_fills_every_default() {
         // The settings file may predate any given field; serde defaults keep
-        // older files loadable. An empty object must yield the full defaults.
+        // older files loadable. An empty object must yield the full defaults,
+        // except the track layout: an old file keeps merging, while a fresh
+        // install (no file) starts with separate tracks.
         let settings: AppSettings = serde_json::from_str("{}").expect("defaults");
-        assert_eq!(settings, AppSettings::default());
+        assert_eq!(
+            settings,
+            AppSettings {
+                import_merge_matching_tracks: true,
+                song_track_layout: None,
+                ..AppSettings::default()
+            }
+        );
     }
 
     #[test]
