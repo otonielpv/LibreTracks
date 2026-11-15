@@ -22,9 +22,30 @@ export function SetlistPaneButtons({
   const setShortPane = useSetlistStore((state) => state.setShortPane);
   const lyricsOpenSetting = useSetlistStore((state) => state.lyricsOpen);
   const setLyricsOpen = useSetlistStore((state) => state.setLyricsOpen);
+  const lyricsSide = useSetlistStore((state) => state.lyricsSide);
+  const setLyricsSide = useSetlistStore((state) => state.setLyricsSide);
   return (
     <>
-      {layout === "short" ? (
+      {layout === "short" && lyricsPane ? (
+        // Beside the lyrics, as in Live: the waveform or the mixer (tap the
+        // lit one again for the lyrics alone).
+        ([
+          ["song", "graphic_eq", "setlistView.lyrics.sideSong", "setlistView.lyrics.sideSongTitle"],
+          ["mixer", "tune", "setlistView.lyrics.sideMixer", "setlistView.lyrics.sideMixerTitle"],
+        ] as const).map(([side, icon, label, title]) => (
+          <button
+            key={side}
+            type="button"
+            className={`lt-setlist-pane-toggle${lyricsSide === side ? " is-active" : ""}`}
+            aria-pressed={lyricsSide === side}
+            title={t(title)}
+            onClick={() => setLyricsSide(lyricsSide === side ? "none" : side)}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">{icon}</span>
+            {t(label)}
+          </button>
+        ))
+      ) : layout === "short" ? (
         <button
           type="button"
           // A way to the other view, not a state: it is never lit (lit, «Mix»

@@ -246,15 +246,18 @@ describe("Setlist mixer hint and sizes", () => {
     const zone = container.querySelector<HTMLElement>("[data-setlist-zone='mixer']")!;
     root.getBoundingClientRect = () => ({ height: 1000, top: 0, left: 0, width: 1400 }) as DOMRect;
     zone.getBoundingClientRect = () => ({ height: 300, top: 700, left: 0, width: 1400 }) as DOMRect;
+    const band = container.querySelector<HTMLElement>("[data-setlist-zone='overview']")!;
+    band.getBoundingClientRect = () => ({ height: 400, top: 300, left: 0, width: 1400 }) as DOMRect;
     const handle = screen.getByRole("separator", { name: "setlistView.mixer.resize" });
     fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientY: 700 });
     fireEvent.pointerMove(window, { pointerId: 1, clientY: 600 });
-    expect(root.style.getPropertyValue("--lt-setlist-mixer-height")).toBe("400px");
+    expect(root.style.getPropertyValue("--lt-setlist-mixer-height")).toBe("minmax(192px, 400px)");
     expect(useSetlistStore.getState().mixerHeightPx).toBeNull();
     fireEvent.pointerMove(window, { pointerId: 1, clientY: 100 });
     fireEvent.pointerUp(window, { pointerId: 1, clientY: 100 });
-    // Clamped to 60 % of the view.
-    expect(useSetlistStore.getState().mixerHeightPx).toBe(600);
+    // Only what the band gives down to its 8 rem minimum (300 + 400 - 128),
+    // under the 60 % cap: the song row above is never taken.
+    expect(useSetlistStore.getState().mixerHeightPx).toBe(572);
   });
 
   // The iPad report: narrow strips and a short fader throw.
@@ -272,7 +275,7 @@ describe("Setlist mixer hint and sizes", () => {
     fireEvent.pointerMove(window, { pointerId: 1, clientY: 0 });
     fireEvent.pointerUp(window, { pointerId: 1, clientY: 0 });
     expect(useSetlistStore.getState().mixerHeightPx).toBe(700);
-    expect(root.style.getPropertyValue("--lt-setlist-mixer-height")).toBe("700px");
+    expect(root.style.getPropertyValue("--lt-setlist-mixer-height")).toBe("minmax(192px, 700px)");
   });
 
   // The desktop report: the mixer resized, the song row did not.

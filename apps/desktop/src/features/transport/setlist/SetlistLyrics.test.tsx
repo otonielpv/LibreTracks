@@ -115,3 +115,21 @@ describe("Setlist lyrics", () => {
     expect(screen.getByTestId("chart-panel").textContent).toBe("Beta");
   });
 });
+
+describe("Setlist lyrics on the phone, with a side pane", () => {
+  const sideButton = (name: string) => screen.getByRole("button", { name: new RegExp(`setlistView.lyrics.${name}$`) });
+
+  it("puts the waveform or the mixer beside the lyrics, and back to the lyrics alone", () => {
+    const { container } = render(<SetlistView {...props()} layoutClass="short" />);
+    fireEvent.click(lyricsButton()!);
+    expect(zones(container)).toEqual(["songs", "lyrics"]);
+    fireEvent.click(sideButton("sideSong"));
+    expect(zones(container)).toEqual(["songs", "overview", "lyrics"]);
+    expect(container.querySelector(".lt-setlist-lyrics-pane.has-side [data-setlist-zone='overview']")).not.toBeNull();
+    fireEvent.click(sideButton("sideMixer"));
+    expect(zones(container)).toEqual(["songs", "mixer", "lyrics"]);
+    expect(sideButton("sideMixer").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(sideButton("sideMixer"));
+    expect(zones(container)).toEqual(["songs", "lyrics"]);
+  });
+});

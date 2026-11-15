@@ -5,6 +5,8 @@ export type SetlistBottomTab = "tracks" | "pads";
 /** `short` (phone), like Playback on an iPhone: under the songs, either the
  * console or the song's waveform, never both. */
 export type SetlistShortPane = "mixer" | "song" | "lyrics";
+/** Phone, lyrics pane: what sits beside the lyrics, as in Live. */
+export type SetlistLyricsSide = "none" | "song" | "mixer";
 /** Which edit drawer is open; `null` = performance (not editing). */
 export type SetlistEditMode =
   | null
@@ -38,6 +40,8 @@ export type SetlistState = {
   /** wide/medium: the lyrics panel is shown (beside the band, or instead of
    * it). The phone uses `shortPane: "lyrics"`. */
   lyricsOpen: boolean;
+  /** Phone, lyrics pane: the waveform or the mixer beside the lyrics. */
+  lyricsSide: SetlistLyricsSide;
   /** The band's zoom (1 = the whole song; more follows the playhead). */
   overviewZoom: number;
   /** Phone, waveform pane: the Mix/Lyrics/Edit buttons over the waveform
@@ -63,6 +67,7 @@ export const INITIAL_SETLIST_STATE: SetlistState = {
   shortPane: "song",
   mixerExpanded: false,
   lyricsOpen: false,
+  lyricsSide: "none",
   overviewZoom: 1,
   waveDockHidden: false,
   lanesZoom: 1,
@@ -79,6 +84,7 @@ type SetlistActions = {
   setShortPane: (pane: SetlistShortPane) => void;
   setMixerExpanded: (expanded: boolean) => void;
   setLyricsOpen: (open: boolean) => void;
+  setLyricsSide: (side: SetlistLyricsSide) => void;
   setOverviewZoom: (zoom: number) => void;
   setWaveDockHidden: (hidden: boolean) => void;
   setLanesZoom: (zoom: number) => void;
@@ -120,6 +126,7 @@ export const useSetlistStore = create<SetlistState & SetlistActions>()(
     setShortPane: (shortPane) => set({ shortPane }),
     setMixerExpanded: (mixerExpanded) => set({ mixerExpanded }),
     setLyricsOpen: (lyricsOpen) => set({ lyricsOpen }),
+    setLyricsSide: (lyricsSide) => set({ lyricsSide }),
     setWaveDockHidden: (waveDockHidden) => set({ waveDockHidden }),
     setOverviewZoom: (overviewZoom) => set({ overviewZoom: Math.max(1, Math.min(32, overviewZoom)) }),
     setLanesZoom: (lanesZoom) =>

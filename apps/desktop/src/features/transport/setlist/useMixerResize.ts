@@ -13,8 +13,22 @@ export const MIXER_MAX_HEIGHT_FRACTION = 0.6;
  * fraction of the view cut it on an iPad).
  */
 export const MEDIUM_WAVE_MIN_PX = 80;
+/** `wide`: the band row's grid minimum, without and with the lyrics beside it
+ * (`.is-wide` / `.is-wide.has-lyrics` in setlist.css). Keep them in step. */
+export const WIDE_BAND_MIN_REM = 8;
+export const WIDE_LYRICS_BAND_MIN_REM = 11;
 const STORAGE_KEY = "lt.setlistView.mixerHeightPx";
 export const MIXER_HEIGHT_VAR = "--lt-setlist-mixer-height";
+
+/**
+ * The console's grid track for a dragged or remembered height: up to that
+ * height, never below the minimum, and only what the song row (kept at its
+ * content, setlist.css) and the band's minimum leave. A height remembered on
+ * a taller window therefore shrinks the console, not the songs.
+ */
+export function mixerTrack(heightPx: number) {
+  return `minmax(${MIXER_MIN_HEIGHT_PX}px, ${Math.round(heightPx)}px)`;
+}
 
 export function clampMixerHeight(heightPx: number, viewHeightPx: number) {
   const max = Math.max(MIXER_MIN_HEIGHT_PX, viewHeightPx * MIXER_MAX_HEIGHT_FRACTION);
@@ -72,19 +86,25 @@ export function useMixerResize(
       const startY = event.clientY;
       const startHeight = mixer.getBoundingClientRect().height;
       const viewHeight = root.getBoundingClientRect().height;
-      // Measured once: the waveform shrinks while the console grows.
-      const wave = root.querySelector<HTMLElement>("[data-setlist-zone='overview']");
-      const spare = Math.max(0, (wave?.getBoundingClientRect().height ?? 0) - MEDIUM_WAVE_MIN_PX);
-      const mediumMax = Math.max(MIXER_MIN_HEIGHT_PX, startHeight + spare);
+      // Measured once: the waveform shrinks while the console grows, never
+      // the song row above (the user's call: only those two trade height).
+      // The floor is the band's own grid minimum (setlist.css).
+      const wave = root.querySelector<HTMLElement>("[data-setlist-zone='overview'], [data-setlist-zone='lyrics']");
+      const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      const waveMin = medium
+        ? MEDIUM_WAVE_MIN_PX
+        : (root.classList.contains("has-lyrics") ? WIDE_LYRICS_BAND_MIN_REM : WIDE_BAND_MIN_REM) * rem;
+      const spare = Math.max(0, (wave?.getBoundingClientRect().height ?? 0) - waveMin);
+      const bandMax = Math.max(MIXER_MIN_HEIGHT_PX, startHeight + spare);
       const clamp = (height: number) =>
         medium
-          ? Math.round(Math.max(MIXER_MIN_HEIGHT_PX, Math.min(mediumMax, height)))
-          : clampMixerHeight(height, viewHeight);
+          ? Math.round(Math.max(MIXER_MIN_HEIGHT_PX, Math.min(bandMax, height)))
+          : Math.min(clampMixerHeight(height, viewHeight), Math.round(bandMax));
       let current = clamp(startHeight);
       const onMove = (moveEvent: PointerEvent) => {
         if (moveEvent.pointerId !== pointerId) return;
         current = clamp(startHeight - (moveEvent.clientY - startY));
-        root.style.setProperty(MIXER_HEIGHT_VAR, `${current}px`);
+        root.style.setProperty(MIXER_HEIGHT_VAR, mixerTrack(current));
       };
       const onUp = (upEvent: PointerEvent) => {
         if (upEvent.pointerId !== pointerId) return;

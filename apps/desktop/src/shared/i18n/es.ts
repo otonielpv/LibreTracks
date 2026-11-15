@@ -3114,6 +3114,10 @@ const es = {
       toggleTitle: "Mostrar u ocultar la letra y los acordes de la canción",
       resize: "Ancho de la letra",
       resizeTitle: "Arrastra para cambiar el ancho de la letra; doble clic para volver al automático",
+      sideSong: "Onda",
+      sideSongTitle: "Ver la onda al lado de la letra",
+      sideMixer: "Mezcla",
+      sideMixerTitle: "Ver el mezclador al lado de la letra",
     },
     daw: {
       open: "Abrir en la DAW",

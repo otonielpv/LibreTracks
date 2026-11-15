@@ -52,7 +52,10 @@
    y tapa el mezclador. */
 .lt-setlist-view.is-medium {
   /* La consola se puede alargar arrastrando su borde (useMixerResize). */
-  grid-template-rows: auto minmax(5rem, 0.6fr) var(--lt-setlist-mixer-height, minmax(10rem, 1.8fr));
+  /* La onda se lleva lo que dejan las otras dos: su fr debe ser 1 (con fr que
+     suman menos de 1 el sobrante iba a la fila «auto» de canciones, y al
+     encoger la consola crecían las canciones en vez de la onda). */
+  grid-template-rows: auto minmax(5rem, 1fr) var(--lt-setlist-mixer-height, minmax(10rem, 3fr));
   --lt-setlist-gap: 0.35rem;
 }
 
@@ -121,6 +124,9 @@
    hueco final de la fila (::after, del ancho de los botones) deja sacar de
    debajo la última tarjeta, con su ▶ y su ⋯, desplazando hasta el final. */
 .lt-setlist-view:not(.is-short) > .lt-setlist-zone.is-songs {
+  /* La fila de canciones no cede alto: entre la onda y la consola se lo
+     reparten ellas dos (la pista de la consola es minmax, ver mixerTrack). */
+  min-height: min-content;
   --lt-setlist-song-toolbar-width: 11.5rem;
   position: relative;
 }
@@ -3870,7 +3876,8 @@ html.lt-mobile .lt-setlist-meter-marker {
 /* wide: la letra a la derecha de la banda, a su altura; la banda gana un
    poco de alto mientras está abierta. */
 .lt-setlist-view.is-wide.has-lyrics {
-  grid-template-rows: auto minmax(11rem, 0.9fr) var(--lt-setlist-mixer-height, minmax(14rem, 1.6fr));
+  /* fr 1 para la banda, por lo mismo que en .is-wide. */
+  grid-template-rows: auto minmax(11rem, 1fr) var(--lt-setlist-mixer-height, minmax(14rem, 1.78fr));
 }
 
 .lt-setlist-band-row {
@@ -4462,6 +4469,13 @@ button.lt-setlist-track-chip-name {
 
 .lt-setlist-lyrics-pane > .lt-setlist-zone {
   flex: 1 1 auto;
+}
+
+/* Con la onda o la consola al lado (como en Live): mitad y mitad. */
+.lt-setlist-lyrics-pane.has-side > .lt-setlist-zone,
+.lt-setlist-lyrics-pane.has-side > .lt-setlist-bottom {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .lt-setlist-view-rail {

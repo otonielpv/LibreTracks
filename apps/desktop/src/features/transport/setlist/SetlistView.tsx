@@ -12,13 +12,13 @@ import { SetlistSongRow, type SetlistDragPreview } from "./SetlistSongRow";
 import { SongMap } from "./SongMap";
 import { SongOverviewStrip } from "./SongOverviewStrip";
 import { SetlistMixer } from "./SetlistMixer";
-import { MIXER_HEIGHT_VAR, useMixerResize } from "./useMixerResize";
+import { MIXER_HEIGHT_VAR, mixerTrack, useMixerResize } from "./useMixerResize";
 import { SONGS_HEIGHT_VAR, useSongsRowResize } from "./useSongsRowResize";
 import { useLyricsWidthResize } from "./useLyricsWidthResize";
 import type { VideoLaneBindings } from "../video/VideoClipHotspots";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { OverviewZoom } from "./OverviewZoom";
-import { SetlistLyrics } from "./SetlistLyrics";
+import { SetlistLyrics, SetlistLyricsPane } from "./SetlistLyrics";
 import { textEditModes, waveformEditModes } from "./waveformEditModes";
 import { WaveDock } from "./WaveDock";
 import { SetlistEditDrawer } from "./SetlistEditDrawer";
@@ -636,11 +636,11 @@ function SetlistViewComponent({
       style={
         layout === "wide"
           ? ({
-              ...(mixerHeightPx !== null ? { [MIXER_HEIGHT_VAR]: `${mixerHeightPx}px` } : null),
+              ...(mixerHeightPx !== null ? { [MIXER_HEIGHT_VAR]: mixerTrack(mixerHeightPx) } : null),
               ...(songsHeightPx !== null ? { [SONGS_HEIGHT_VAR]: `${songsHeightPx}px` } : null),
             } as CSSProperties)
           : layout === "medium" && mixerHeightPx !== null
-            ? ({ [MIXER_HEIGHT_VAR]: `${mixerHeightPx}px` } as CSSProperties)
+            ? ({ [MIXER_HEIGHT_VAR]: mixerTrack(mixerHeightPx) } as CSSProperties)
             : undefined
       }
     >
@@ -658,14 +658,7 @@ function SetlistViewComponent({
           {/* Phone, console enlarged: the song row steps aside. */}
           {layout === "short" && shortPane === "mixer" && mixerExpanded && editMode === null ? null : songs}
           {/* Phone, lyrics pane: a rail of its own on the right, like the console's. */}
-          {lyricsPane ? (
-            <div className="lt-setlist-lyrics-pane">
-              {lyrics}
-              <div className="lt-setlist-view-rail" role="toolbar" aria-label={t("setlistView.pane.rail")}>
-                {paneButtons}
-              </div>
-            </div>
-          ) : null}
+          {lyricsPane ? <SetlistLyricsPane overview={overview} mixer={mixer} lyrics={lyrics} buttons={paneButtons} /> : null}
           {layout === "wide" && lyricsOpen ? (
             // wide: the lyrics beside the band, at its height (the user's
             // call for Live); the console stays below.

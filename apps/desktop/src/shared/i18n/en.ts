@@ -3082,6 +3082,10 @@ const en = {
       toggleTitle: "Show or hide the song's lyrics and chords",
       resize: "Lyrics width",
       resizeTitle: "Drag to change the lyrics width; double click for the automatic one",
+      sideSong: "Wave",
+      sideSongTitle: "Show the waveform beside the lyrics",
+      sideMixer: "Mix",
+      sideMixerTitle: "Show the mixer beside the lyrics",
     },
     daw: {
       open: "Open in the DAW",

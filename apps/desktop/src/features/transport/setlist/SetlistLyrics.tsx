@@ -1,9 +1,11 @@
-import { memo, useState } from "react";
+import { memo, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import type { SongRegionSummary } from "@libretracks/shared/models";
 
 import { LiveChartPanel } from "../charts/LiveChartPanel";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import type { PerformanceBindings } from "../songs/songViewBindings";
+import { useSetlistStore } from "./setlistStore";
 
 type SetlistLyricsProps = {
   performance: Pick<PerformanceBindings, "song" | "positionSecondsRef" | "pendingMarkerId" | "onChartChange">;
@@ -42,3 +44,32 @@ function SetlistLyricsComponent({ performance, region, onClose, startEditing = f
 }
 
 export const SetlistLyrics = memo(SetlistLyricsComponent);
+
+/**
+ * Phone, lyrics pane: the lyrics with the view rail on their right, like the
+ * console's, and optionally the waveform or the console beside them, as in
+ * Live (`lyricsSide`, the rail's Wave/Mix buttons).
+ */
+export function SetlistLyricsPane({
+  overview,
+  mixer,
+  lyrics,
+  buttons,
+}: {
+  overview: ReactNode;
+  mixer: ReactNode;
+  lyrics: ReactNode;
+  buttons: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const side = useSetlistStore((state) => state.lyricsSide);
+  return (
+    <div className={`lt-setlist-lyrics-pane${side !== "none" ? ` has-side is-side-${side}` : ""}`}>
+      {side === "song" ? overview : side === "mixer" ? <div className="lt-setlist-bottom">{mixer}</div> : null}
+      {lyrics}
+      <div className="lt-setlist-view-rail" role="toolbar" aria-label={t("setlistView.pane.rail")}>
+        {buttons}
+      </div>
+    </div>
+  );
+}
