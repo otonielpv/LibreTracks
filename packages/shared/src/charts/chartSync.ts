@@ -260,6 +260,8 @@ export type PerformanceBlock = {
   section: number | null;
   /** Shown because a jump to it is scheduled, not because it comes next. */
   queued: boolean;
+  /** The part a vamp is looping, shown again because it comes next again. */
+  looped?: boolean;
 };
 
 /** What has played, in the order it played: one entry per section marker
@@ -334,7 +336,9 @@ export function buildPerformanceBlocks(
   const queued = target !== undefined;
   const from = queued ? target : byId.get(last.markerId)! + (repeatCurrent ? 0 : 1);
   markers.slice(from).forEach((marker, index) => {
-    blocks.push(block(marker, `s${last.seq + 1 + index}`, queued));
+    const next = block(marker, `s${last.seq + 1 + index}`, queued);
+    if (!queued && repeatCurrent && index === 0) next.looped = true;
+    blocks.push(next);
   });
   return { blocks, current: played.length - 1 };
 }

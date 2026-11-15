@@ -3144,6 +3144,7 @@ const es = {
   },
   liveChart: {
     jump: "Salto",
+    vamp: "En bucle",
     toggleLabel: "Letra",
     hide: "Ocultar letra y acordes",
     title: "Letra y acordes",

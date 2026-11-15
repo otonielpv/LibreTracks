@@ -262,6 +262,31 @@ describe("LiveChartPanel", () => {
     }
   });
 
+  it("with a vamp on the part playing, it comes next again, badged as looping", () => {
+    render(
+      <LiveChartPanel
+        song={songView(region(linked))}
+        region={region(linked)}
+        positionSecondsRef={{ current: 5 }}
+        pendingMarkerId={null}
+        activeVamp={{ startSeconds: 0, endSeconds: 20 }}
+        expanded={false}
+        onToggleExpanded={vi.fn()}
+        onClose={vi.fn()}
+        onChartChange={vi.fn(async () => {})}
+      />,
+    );
+    const sections = [...document.querySelectorAll(".lt-chart-section")].map((node) => ({
+      label: node.querySelector(".lt-chart-section-label")?.textContent?.replace("repeat", ""),
+      looped: node.classList.contains("is-looped"),
+    }));
+    expect(sections).toEqual([
+      { label: "EstrofaVerso 1", looped: false },
+      { label: "liveChart.vampEstrofaVerso 1", looped: true },
+      { label: "EstribilloCoro 1", looped: false },
+    ]);
+  });
+
   it("shows the chords in the key the song is played in", () => {
     const { container } = renderPanel(region(linked, 2), { current: 0 });
     const chords = [...container.querySelectorAll(".lt-chart-chord")].map((node) => node.textContent);

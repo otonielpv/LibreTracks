@@ -639,11 +639,16 @@ export const LiveChartPanel = memo(function LiveChartPanel({
               <div
                 key={block.key}
                 data-block-key={block.key}
-                className={`lt-chart-section${isCurrent ? " is-current" : ""}${blockIndex < currentBlock ? " is-past" : ""}${block.queued ? " is-queued" : ""}${section ? "" : " is-unlinked"}`}
+                className={`lt-chart-section${isCurrent ? " is-current" : ""}${blockIndex < currentBlock ? " is-past" : ""}${block.queued ? " is-queued" : ""}${block.looped ? " is-looped" : ""}${section ? "" : " is-unlinked"}`}
               >
                 <h3 className="lt-chart-section-label" data-line-key={`${blockIndex}-head`}>
                   {block.queued && blockIndex > 0 && !blocks[blockIndex - 1].queued ? (
                     <em className="lt-chart-jump-badge">{t("liveChart.jump")}</em>
+                  ) : block.looped ? (
+                    <em className="lt-chart-jump-badge is-vamp">
+                      <span className="material-symbols-outlined" aria-hidden="true">repeat</span>
+                      {t("liveChart.vamp")}
+                    </em>
                   ) : null}
                   {block.label}
                   {sheetLabel ? <small>{sheetLabel}</small> : null}

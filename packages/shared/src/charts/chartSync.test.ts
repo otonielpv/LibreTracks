@@ -230,6 +230,8 @@ describe("lyrics in playing order", () => {
     const looping = buildPerformanceBlocks(doc, links, markers, play("intro", "verse"), null, true);
     // Plain continuation, not a scheduled jump: nothing is marked queued.
     expect(labels(looping)).toEqual(["Intro", "Estrofa", "Estrofa", "Coro", "Intro", "Final"]);
+    // The repeat is marked as the loop's (the lyrics badge it), only that one.
+    expect(looping.blocks.map((b) => Boolean(b.looped))).toEqual([false, false, true, false, false, false]);
     const history = play("intro", "verse");
     const wrapped = buildPerformanceBlocks(doc, links, markers, advancePlayHistory(history, "verse", true), null, true);
     expect(wrapped.current).toBe(2);

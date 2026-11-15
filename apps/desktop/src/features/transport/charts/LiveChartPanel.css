@@ -245,6 +245,19 @@
   font-style: normal;
 }
 
+/* La parte que repite un vamp: el turquesa de la pastilla «En bucle». */
+.lt-chart-jump-badge.is-vamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  border-color: rgb(87 241 219 / 0.55);
+  color: #57f1db;
+}
+
+.lt-chart-jump-badge.is-vamp .material-symbols-outlined {
+  font-size: 1.1em;
+}
+
 .lt-chart-line {
   display: flex;
   flex-wrap: wrap;

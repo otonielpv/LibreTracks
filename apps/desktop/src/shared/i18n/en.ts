@@ -3112,6 +3112,7 @@ const en = {
   },
   liveChart: {
     jump: "Jump",
+    vamp: "Looping",
     toggleLabel: "Lyrics",
     hide: "Hide lyrics and chords",
     title: "Lyrics & chords",
