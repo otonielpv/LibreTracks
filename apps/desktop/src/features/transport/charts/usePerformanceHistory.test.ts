@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { JUMP_LANDING_GRACE_MS, usePerformanceHistory } from "./usePerformanceHistory";
 
-type Props = { marker: string | null; line: number | null; pending: string | null; region?: string };
+type Props = { marker: string | null; line: number | null; pending: string | null; region?: string; vamp?: string | null };
 
 function setup(initial: Props) {
-  const hook = renderHook((props: Props) => usePerformanceHistory(props.region ?? "song", props.marker, props.line, props.pending), {
+  const hook = renderHook((props: Props) => usePerformanceHistory(props.region ?? "song", props.marker, props.line, props.pending, props.vamp ?? null), {
     initialProps: initial,
   });
   const played = () => hook.result.current.history.map((entry) => entry.markerId);
@@ -55,6 +55,19 @@ describe("usePerformanceHistory", () => {
     expect(played()).toEqual(["bridge", "bridge"]);
     rerender({ marker: "bridge", line: 2, pending: null });
     expect(played()).toEqual(["bridge", "bridge"]);
+  });
+
+  it("vamping the whole part: the overshoot into the next part is ignored, the loop plays again below", () => {
+    const { rerender, played } = setup({ marker: "verse2", line: 2, pending: null, vamp: "verse2" });
+    rerender({ marker: "verse2", line: 3, pending: null, vamp: "verse2" });
+    // End of the loop: the UI clock plays on into the chorus for a moment.
+    rerender({ marker: "chorus", line: 0, pending: null, vamp: "verse2" });
+    expect(played()).toEqual(["verse2"]);
+    rerender({ marker: "verse2", line: 0, pending: null, vamp: "verse2" });
+    expect(played()).toEqual(["verse2", "verse2"]);
+    // The vamp released: the chorus that plays now is real.
+    rerender({ marker: "chorus", line: 0, pending: null, vamp: null });
+    expect(played()).toEqual(["verse2", "verse2", "chorus"]);
   });
 
   it("a jump that vanishes without landing is given up after the grace", () => {

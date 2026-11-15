@@ -226,6 +226,16 @@ describe("lyrics in playing order", () => {
     expect(after.blocks.map((b) => b.key)).toEqual(before.blocks.map((b) => b.key));
   });
 
+  it("while a vamp loops the part playing, it comes next again (not the next part), and becomes current in place", () => {
+    const looping = buildPerformanceBlocks(doc, links, markers, play("intro", "verse"), null, true);
+    // Plain continuation, not a scheduled jump: nothing is marked queued.
+    expect(labels(looping)).toEqual(["Intro", "Estrofa", "Estrofa", "Coro", "Intro", "Final"]);
+    const history = play("intro", "verse");
+    const wrapped = buildPerformanceBlocks(doc, links, markers, advancePlayHistory(history, "verse", true), null, true);
+    expect(wrapped.current).toBe(2);
+    expect(wrapped.blocks[2].key).toBe(looping.blocks[2].key);
+  });
+
   it("keeps only the last parts played above the current one", () => {
     let history: PlayHistory = [];
     for (let round = 0; round < 5; round += 1) {

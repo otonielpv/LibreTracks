@@ -49,6 +49,8 @@ export function usePerformanceHistory(
   /** The line playing by time (not the recording taps). */
   line: number | null,
   pendingMarkerId: string | null,
+  /** The part a vamp is looping, if any. */
+  vampMarkerId: string | null = null,
 ): { history: PlayHistory; pendingMarkerId: string | null } {
   const stateRef = useRef<State>({ regionId, history: [], jump: null, last: { markerId: null, line: null } });
   // Re-renders once when a vanished jump's grace runs out.
@@ -93,6 +95,14 @@ export function usePerformanceHistory(
       // A cancelled jump: whatever plays now is real again.
       if (!jump.landed) state.history = advancePlayHistory(state.history, markerId);
     }
+  } else if (
+    vampMarkerId !== null &&
+    markerId !== vampMarkerId &&
+    state.history.at(-1)?.markerId === vampMarkerId
+  ) {
+    // Vamping: at the end of each loop the clock overshoots into the next
+    // part, which does not play. Ignored, and not remembered as "last" either,
+    // so the loop coming back still reads as going back inside the part.
   } else {
     const back =
       markerId !== null &&
@@ -102,7 +112,9 @@ export function usePerformanceHistory(
       line < state.last.line;
     state.history = advancePlayHistory(state.history, markerId, back);
   }
-  state.last = { markerId, line };
+  const overshoot =
+    !state.jump && vampMarkerId !== null && markerId !== vampMarkerId && state.history.at(-1)?.markerId === vampMarkerId;
+  if (!overshoot) state.last = { markerId, line };
 
   const waiting = state.jump !== null && !state.jump.landed && state.jump.clearedAt !== null;
   useEffect(() => {

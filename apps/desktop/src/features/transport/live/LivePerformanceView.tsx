@@ -662,6 +662,7 @@ function LivePerformanceViewComponent({
           region={selectedRegion}
           positionSecondsRef={positionSecondsRef}
           pendingMarkerId={pendingMarkerId}
+          activeVamp={activeVamp}
           expanded={chartExpanded}
           onToggleExpanded={toggleChartExpanded}
           onClose={toggleChartOpen}

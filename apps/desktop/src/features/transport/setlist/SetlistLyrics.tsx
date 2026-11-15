@@ -8,7 +8,7 @@ import type { PerformanceBindings } from "../songs/songViewBindings";
 import { useSetlistStore } from "./setlistStore";
 
 type SetlistLyricsProps = {
-  performance: Pick<PerformanceBindings, "song" | "positionSecondsRef" | "pendingMarkerId" | "onChartChange">;
+  performance: Pick<PerformanceBindings, "song" | "positionSecondsRef" | "pendingMarkerId" | "activeVamp" | "onChartChange">;
   /** The song the view shows (the selected one). */
   region: SongRegionSummary | null;
   onClose: () => void;
@@ -32,6 +32,7 @@ function SetlistLyricsComponent({ performance, region, onClose, startEditing = f
         region={region}
         positionSecondsRef={performance.positionSecondsRef}
         pendingMarkerId={performance.pendingMarkerId}
+        activeVamp={performance.activeVamp}
         expanded={expanded}
         onToggleExpanded={() => setExpanded((value) => !value)}
         onClose={onClose}

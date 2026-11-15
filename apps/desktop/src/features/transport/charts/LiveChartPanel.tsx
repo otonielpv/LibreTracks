@@ -77,6 +77,8 @@ type LiveChartPanelProps = {
   positionSecondsRef: { readonly current: number };
   /** A scheduled jump (marker or song id): its target shows next. */
   pendingMarkerId: string | null;
+  /** The vamp looping, if any: the part it loops shows next again. */
+  activeVamp?: { startSeconds: number; endSeconds: number } | null;
   expanded: boolean;
   onToggleExpanded: () => void;
   /** Hide the lyrics panel (the header button shows it again). */
@@ -152,6 +154,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   region,
   positionSecondsRef,
   pendingMarkerId,
+  activeVamp = null,
   expanded,
   onToggleExpanded,
   onClose,
@@ -250,7 +253,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
 
   // While recording, the line moves only with the taps: the time-based spread
   // would advance on its own and fight the person tapping.
-  const currentLine = useMemo(() => {
+  const rawLine = useMemo(() => {
     if (!recording || playback.line === null || playback.markerId === null || playback.section === null || !doc) {
       return playback.line;
     }
@@ -260,13 +263,39 @@ export const LiveChartPanel = memo(function LiveChartPanel({
 
   // What has played in this song, in the order it played: after a jump or a
   // vamp the lyrics go on below instead of scrolling back up the timeline.
-  const performed = usePerformanceHistory(region?.id ?? null, playback.markerId, playback.line, pendingMarkerId);
+  // The part a vamp loops: the one its start falls in.
+  const vampMarkerId = useMemo(() => {
+    if (!activeVamp) return null;
+    let found: string | null = null;
+    for (const marker of markers) {
+      if (marker.startSeconds <= activeVamp.startSeconds + 0.001) found = marker.id;
+      else break;
+    }
+    return found;
+  }, [activeVamp, markers]);
+  const performed = usePerformanceHistory(
+    region?.id ?? null,
+    playback.markerId,
+    playback.line,
+    pendingMarkerId,
+    vampMarkerId,
+  );
+  // Looping the part playing: it comes next again.
+  const vamping = vampMarkerId !== null && performed.history.at(-1)?.markerId === vampMarkerId;
+  // While the playhead is in a part the history ignores (the clock running
+  // past a jump or a vamp's loop end), the line stays where it was: the next
+  // part's first line would pull the lyrics up for a moment.
+  const shownLineRef = useRef<number | null>(rawLine);
+  if (playback.markerId === null || playback.markerId === performed.history.at(-1)?.markerId) {
+    shownLineRef.current = rawLine;
+  }
+  const currentLine = shownLineRef.current;
   const { blocks, current: currentBlock } = useMemo(
     () =>
       doc
-        ? buildPerformanceBlocks(doc, links, markers, performed.history, performed.pendingMarkerId)
+        ? buildPerformanceBlocks(doc, links, markers, performed.history, performed.pendingMarkerId, vamping)
         : { blocks: [], current: -1 },
-    [doc, links, markers, performed.history, performed.pendingMarkerId],
+    [doc, links, markers, performed.history, performed.pendingMarkerId, vamping],
   );
 
   // A new song: whatever was being recorded belonged to the previous one.

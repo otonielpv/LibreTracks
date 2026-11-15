@@ -310,6 +310,8 @@ export function buildPerformanceBlocks(
   markers: readonly SectionMarkerSummary[],
   history: PlayHistory,
   pendingMarkerId: string | null,
+  /** A vamp loops the part playing: it comes next again, then the rest. */
+  repeatCurrent = false,
 ): { blocks: PerformanceBlock[]; current: number } {
   const block = (marker: SectionMarkerSummary, key: string, queued: boolean): PerformanceBlock => {
     const link = chartLinkFor(links, marker.id);
@@ -330,7 +332,7 @@ export function buildPerformanceBlocks(
   const blocks = played.map((entry) => block(markers[byId.get(entry.markerId)!], `s${entry.seq}`, false));
   const target = pendingMarkerId !== null ? byId.get(pendingMarkerId) : undefined;
   const queued = target !== undefined;
-  const from = queued ? target : byId.get(last.markerId)! + 1;
+  const from = queued ? target : byId.get(last.markerId)! + (repeatCurrent ? 0 : 1);
   markers.slice(from).forEach((marker, index) => {
     blocks.push(block(marker, `s${last.seq + 1 + index}`, queued));
   });
