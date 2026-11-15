@@ -77,6 +77,8 @@ type LiveChartPanelProps = {
   positionSecondsRef: { readonly current: number };
   /** A scheduled jump (marker or song id): its target shows next. */
   pendingMarkerId: string | null;
+  /** When that jump fires: tells a cancelled jump from one landing. */
+  pendingJumpAtSeconds?: number | null;
   /** The vamp looping, if any: the part it loops shows next again. */
   activeVamp?: { startSeconds: number; endSeconds: number } | null;
   expanded: boolean;
@@ -155,6 +157,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   positionSecondsRef,
   pendingMarkerId,
   activeVamp = null,
+  pendingJumpAtSeconds = null,
   expanded,
   onToggleExpanded,
   onClose,
@@ -279,6 +282,8 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     playback.line,
     pendingMarkerId,
     vampMarkerId,
+    pendingJumpAtSeconds,
+    positionSecondsRef,
   );
   // Looping the part playing: it comes next again.
   const vamping = vampMarkerId !== null && performed.history.at(-1)?.markerId === vampMarkerId;

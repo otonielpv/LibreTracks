@@ -70,6 +70,35 @@ describe("usePerformanceHistory", () => {
     expect(played()).toEqual(["verse2", "verse2", "chorus"]);
   });
 
+  it("a jump that disappears before it fires was cancelled: the preview goes at once", () => {
+    const position = { current: 10 };
+    const hook = renderHook(
+      (props: { marker: string; pending: string | null }) =>
+        usePerformanceHistory("song", props.marker, 0, props.pending, null, 16, position),
+      { initialProps: { marker: "intro", pending: "chorus2" as string | null } },
+    );
+    expect(hook.result.current.pendingMarkerId).toBe("chorus2");
+    hook.rerender({ marker: "intro", pending: null });
+    expect(hook.result.current.pendingMarkerId).toBeNull();
+    // What plays from now on is real again.
+    position.current = 16.2;
+    hook.rerender({ marker: "verse1", pending: null });
+    expect(hook.result.current.history.map((entry) => entry.markerId)).toEqual(["intro", "verse1"]);
+  });
+
+  it("a jump that disappears after it fired is landing: the preview waits for the playhead", () => {
+    const position = { current: 16.3 };
+    const hook = renderHook(
+      (props: { marker: string; pending: string | null }) =>
+        usePerformanceHistory("song", props.marker, 0, props.pending, null, 16, position),
+      { initialProps: { marker: "intro", pending: "chorus2" as string | null } },
+    );
+    hook.rerender({ marker: "verse1", pending: null });
+    expect(hook.result.current.pendingMarkerId).toBe("chorus2");
+    hook.rerender({ marker: "chorus2", pending: null });
+    expect(hook.result.current.history.map((entry) => entry.markerId)).toEqual(["intro", "chorus2"]);
+  });
+
   it("a jump that vanishes without landing is given up after the grace", () => {
     const { rerender, played, result } = setup({ marker: "intro", line: 0, pending: "chorus2" });
     rerender({ marker: "intro", line: 1, pending: null });

@@ -6472,6 +6472,7 @@ export function TransportPanelContent() {
     song, positionSecondsRef: displayPositionSecondsRef, settings: appSettings,
     pendingMarkerId: pendingMarkerJump?.targetMarkerId ?? null,
     pendingMarkerName: pendingMarkerJump?.targetMarkerName ?? null,
+    pendingJumpAtSeconds: pendingMarkerJump?.executeAtSeconds ?? null,
     activeVamp,
     onMarkerAction: songViewHandlers.markerAction,
     onSongAction: songViewHandlers.songAction,

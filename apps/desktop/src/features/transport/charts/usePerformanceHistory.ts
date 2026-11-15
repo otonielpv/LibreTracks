@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 
 import { advancePlayHistory, type PlayHistory } from "@libretracks/shared/charts/chartSync";
 
-/** How long a jump that vanished from the snapshot without the playhead
- * reaching its target is still waited for (the engine already jumped and the
- * position is on its way, one snapshot behind at most), before it counts as
- * cancelled. Short: a cancelled jump must leave the lyrics at once (the user
- * found 1 s slow). */
+/** A jump that vanished from the snapshot AFTER its firing time has fired:
+ * the playhead is on its way to the target (a snapshot behind at most) and is
+ * waited for this long. One that vanished before its firing time was
+ * cancelled and leaves the lyrics at once. Without a firing time (older
+ * callers) this wait is all there is to tell them apart. */
 export const JUMP_LANDING_GRACE_MS = 250;
+/** Tolerance on the firing time: the visual clock is a frame or two off. */
+const FIRE_TOLERANCE_SECONDS = 0.05;
 
 type JumpState = {
   target: string;
@@ -16,6 +18,8 @@ type JumpState = {
   landed: boolean;
   /** When the snapshot stopped reporting it (null while it does). */
   clearedAt: number | null;
+  /** When the engine fires it (view seconds), if known. */
+  firesAt: number | null;
 };
 
 type State = {
@@ -53,6 +57,9 @@ export function usePerformanceHistory(
   pendingMarkerId: string | null,
   /** The part a vamp is looping, if any. */
   vampMarkerId: string | null = null,
+  /** When the scheduled jump fires (view seconds). */
+  jumpAtSeconds: number | null = null,
+  positionSecondsRef: { readonly current: number } | null = null,
 ): { history: PlayHistory; pendingMarkerId: string | null } {
   const stateRef = useRef<State>({ regionId, history: [], jump: null, last: { markerId: null, line: null } });
   // Re-renders once when a vanished jump's grace runs out.
@@ -68,9 +75,10 @@ export function usePerformanceHistory(
 
   if (pendingMarkerId !== null) {
     if (!state.jump || state.jump.target !== pendingMarkerId) {
-      state.jump = { target: pendingMarkerId, from: markerId, landed: false, clearedAt: null };
+      state.jump = { target: pendingMarkerId, from: markerId, landed: false, clearedAt: null, firesAt: jumpAtSeconds };
     } else {
       state.jump.clearedAt = null;
+      state.jump.firesAt = jumpAtSeconds;
     }
   } else if (state.jump && state.jump.clearedAt === null) {
     state.jump.clearedAt = Date.now();
@@ -90,8 +98,15 @@ export function usePerformanceHistory(
       // already scheduled); only the ones the clock overshoots into do not.
       state.history = advancePlayHistory(state.history, markerId);
     }
+    // Gone before it fired: cancelled, at once. Otherwise wait a snapshot.
+    const cancelled =
+      pendingMarkerId === null &&
+      !jump.landed &&
+      jump.firesAt !== null &&
+      positionSecondsRef !== null &&
+      positionSecondsRef.current < jump.firesAt - FIRE_TOLERANCE_SECONDS;
     const expired =
-      jump.clearedAt !== null && Date.now() - jump.clearedAt >= JUMP_LANDING_GRACE_MS;
+      cancelled || (jump.clearedAt !== null && Date.now() - jump.clearedAt >= JUMP_LANDING_GRACE_MS);
     if (pendingMarkerId === null && (jump.landed || expired)) {
       state.jump = null;
       // A cancelled jump: whatever plays now is real again.

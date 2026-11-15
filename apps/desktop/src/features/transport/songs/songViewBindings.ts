@@ -184,6 +184,9 @@ export type PerformanceBindings = {
   settings: LiveViewSettings;
   pendingMarkerId: string | null;
   pendingMarkerName: string | null;
+  /** When the scheduled jump fires (view seconds): before it, a jump that
+   * disappears was cancelled; after it, it landed. */
+  pendingJumpAtSeconds?: number | null;
   activeVamp: ActiveVampSummary | null;
   onMarkerAction: (marker: SectionMarkerSummary) => void;
   onSongAction: (region: SongRegionSummary) => void;

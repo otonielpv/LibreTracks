@@ -159,6 +159,7 @@ function LivePerformanceViewComponent({
   settings,
   pendingMarkerId,
   pendingMarkerName,
+  pendingJumpAtSeconds = null,
   activeVamp,
   onViewModeChange,
   headerStart,
@@ -662,6 +663,7 @@ function LivePerformanceViewComponent({
           region={selectedRegion}
           positionSecondsRef={positionSecondsRef}
           pendingMarkerId={pendingMarkerId}
+          pendingJumpAtSeconds={pendingJumpAtSeconds}
           activeVamp={activeVamp}
           expanded={chartExpanded}
           onToggleExpanded={toggleChartExpanded}
