@@ -186,7 +186,10 @@
   overflow-x: hidden;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding: 0.6rem 0.8rem 45vh;
+  /* Bottom room: .lt-live-chart-tail, sized to the panel (LiveChartPanel). */
+  padding: 0.6rem 0.8rem 0.6rem;
+  /* The panel anchors the playing block itself (WebKit has no anchoring). */
+  overflow-anchor: none;
   font-size: calc(1rem * var(--lt-chart-font-scale));
 }
 
@@ -514,7 +517,7 @@
   }
 
   .lt-live-chart-scroller {
-    padding: 0.35rem 0.5rem 45vh;
+    padding: 0.35rem 0.5rem 0.35rem;
   }
 
   .lt-chart-editor-body {

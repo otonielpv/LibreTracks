@@ -217,6 +217,51 @@ describe("LiveChartPanel", () => {
     }
   });
 
+  it("keeps the playing block in place when the oldest played block is trimmed off the top", () => {
+    vi.useFakeTimers();
+    const scrollTops = new WeakMap<Element, number>();
+    const scrollTop = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop");
+    const original = Element.prototype.getBoundingClientRect;
+    Object.defineProperty(Element.prototype, "scrollTop", {
+      configurable: true,
+      get(this: Element) { return scrollTops.get(this) ?? 0; },
+      set(this: Element, value: number) { scrollTops.set(this, value); },
+    });
+    // Every block 100 px tall, stacked in DOM order inside the scroller.
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const scroller = this.closest("[data-testid='live-chart-scroller']");
+      const sections = scroller ? [...scroller.querySelectorAll(".lt-chart-section")] : [];
+      const index = sections.indexOf(this as HTMLElement);
+      const top = this === scroller || index < 0 ? 0 : index * 100 - (scrollTops.get(scroller!) ?? 0);
+      return { top, bottom: top + 100, left: 0, right: 0, width: 0, height: 100, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+    };
+    try {
+      const position = { current: 1 };
+      const { getByTestId } = renderPanel(region(linked), position);
+      const tick = (seconds: number) => {
+        position.current = seconds;
+        act(() => {
+          vi.advanceTimersByTime(150);
+        });
+      };
+      // Verse and chorus back and forth until the history is full.
+      for (let step = 0; step < 6; step += 1) tick(step % 2 === 0 ? 25 : 1);
+      const scroller = getByTestId("live-chart-scroller");
+      scroller.scrollTop = 500;
+      const before = scroller.querySelectorAll(".lt-chart-section").length;
+      // One more part played: the oldest block leaves the top.
+      tick(25);
+      tick(1);
+      expect(scroller.querySelectorAll(".lt-chart-section").length).toBe(before);
+      // Nothing moved under the reader: the playing block was compensated.
+      expect(scroller.scrollTop).toBeLessThan(500);
+    } finally {
+      Element.prototype.getBoundingClientRect = original;
+      if (scrollTop) Object.defineProperty(Element.prototype, "scrollTop", scrollTop);
+      vi.useRealTimers();
+    }
+  });
+
   it("shows the chords in the key the song is played in", () => {
     const { container } = renderPanel(region(linked, 2), { current: 0 });
     const chords = [...container.querySelectorAll(".lt-chart-chord")].map((node) => node.textContent);

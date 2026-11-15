@@ -2,6 +2,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -166,6 +167,12 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [scrollerElement, setScrollerElement] = useState<HTMLDivElement | null>(null);
+  const attachScroller = useCallback((element: HTMLDivElement | null) => {
+    scrollerRef.current = element;
+    setScrollerElement(element);
+  }, []);
+  const tailRef = useRef<HTMLDivElement | null>(null);
   const manualScrollAtRef = useRef(Number.NEGATIVE_INFINITY);
   const [fontScale, setFontScale] = useState(() =>
     readStored(FONT_SCALE_KEY, 1, (value) => {
@@ -274,6 +281,51 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     setRecording(null);
     setError(null);
   }, [region?.id]);
+
+  // Room under the last block, almost a panel tall: the current line can sit
+  // near the top even at the end of the song, and when the upcoming blocks
+  // vanish for a moment (a jump landing: the pending target clears a tick
+  // before the playhead reaches it) the scroller does not get shorter than
+  // where it is scrolled, which used to pull the lyrics up.
+  useLayoutEffect(() => {
+    const scroller = scrollerElement;
+    if (!scroller) return;
+    const fit = () => {
+      if (tailRef.current) tailRef.current.style.height = `${Math.round(scroller.clientHeight * 0.9)}px`;
+    };
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(fit);
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [scrollerElement]);
+
+  // Reading only goes down: when blocks come and go (the oldest played one
+  // trimmed off the top, the upcoming ones replaced after a jump or a vamp)
+  // the block that was playing stays where it was on screen, and the follow
+  // below moves on from there. Done by hand because WebKit (iOS) has no
+  // scroll anchoring; the scroller opts out of the browser's (CSS) so
+  // Chromium does not correct twice.
+  const anchorRef = useRef<{ key: string; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const scroller = scrollerElement;
+    if (!scroller) {
+      anchorRef.current = null;
+      return;
+    }
+    const topOf = (element: Element) =>
+      element.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    const find = (key: string) => scroller.querySelector(`[data-block-key="${key}"]`);
+    const previous = anchorRef.current;
+    const previousElement = previous ? find(previous.key) : null;
+    if (previous && previousElement) {
+      const delta = topOf(previousElement) - previous.top;
+      if (Math.abs(delta) >= 1) scroller.scrollTop += delta;
+    }
+    const key = blocks[currentBlock]?.key ?? null;
+    const element = key ? find(key) : null;
+    anchorRef.current = key && element ? { key, top: topOf(element) } : null;
+  }, [scrollerElement, blocks, currentBlock]);
 
   // Follow the current line, unless the user is reading elsewhere.
   useEffect(() => {
@@ -540,7 +592,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
         </div>
       ) : (
         <div
-          ref={scrollerRef}
+          ref={attachScroller}
           className="lt-live-chart-scroller"
           onWheel={markManualScroll}
           onTouchStart={markManualScroll}
@@ -555,6 +607,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
             return (
               <div
                 key={block.key}
+                data-block-key={block.key}
                 className={`lt-chart-section${isCurrent ? " is-current" : ""}${blockIndex < currentBlock ? " is-past" : ""}${block.queued ? " is-queued" : ""}${section ? "" : " is-unlinked"}`}
               >
                 <h3 className="lt-chart-section-label" data-line-key={`${blockIndex}-head`}>
@@ -584,6 +637,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
               </div>
             );
           })}
+          <div ref={tailRef} className="lt-live-chart-tail" aria-hidden="true" />
         </div>
       )}
 
