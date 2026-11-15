@@ -132,8 +132,9 @@ describe("Setlist lyrics on the phone, with a side pane", () => {
     fireEvent.click(sideButton("sideMixer"));
     expect(zones(container)).toEqual(["songs", "mixer", "lyrics"]);
     expect(sideButton("sideMixer").getAttribute("aria-pressed")).toBe("true");
-    expect(container.querySelector(".lt-setlist-view-rail")).toBeNull();
-    expect(container.querySelector(".lt-setlist-zone.is-mixer .lt-setlist-pane-toggle")).not.toBeNull();
+    // Beside the console the rail stays at the far right (the user's call).
+    expect(container.querySelector(".lt-setlist-lyrics-pane > .lt-setlist-view-rail")).not.toBeNull();
+    expect(container.querySelector(".lt-setlist-zone.is-mixer .lt-setlist-pane-toggle")).toBeNull();
     fireEvent.click(sideButton("sideMixer"));
     expect(zones(container)).toEqual(["songs", "lyrics"]);
     expect(container.querySelector(".lt-setlist-view-rail")).not.toBeNull();

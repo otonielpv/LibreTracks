@@ -418,7 +418,7 @@ function SetlistViewComponent({
   const waveDock = layout === "short" && (shortPane === "song" || lyricsSide === "song");
   // Phone, console pane: the same buttons head the console's rail. The song
   // row keeps them only off the phone, or beside the lyrics (no rail there).
-  const railButtons = layout === "short" && (shortPane === "mixer" || lyricsSide === "mixer");
+  const railButtons = layout === "short" && shortPane === "mixer";
   const mixer = (
     <Zone name="mixer" zoneRef={mixerZoneRef} drop={songDrop}>
       {mixerResizable ? (
