@@ -20,6 +20,7 @@ import {
 } from "@libretracks/shared/models";
 
 import { ChartEditorModal } from "./ChartEditorModal";
+import { usePerformanceHistory } from "./usePerformanceHistory";
 import { parseChordPro, spellChart, type ChartLine } from "@libretracks/shared/charts/chordChart";
 import { keyPrefersFlats, parseNoteRun } from "@libretracks/shared/charts/chordNotation";
 import {
@@ -27,12 +28,10 @@ import {
   type AccidentalPreference,
 } from "@libretracks/shared/charts/personalChords";
 import {
-  advancePlayHistory,
   applyLineRecording,
   autoLinkChart,
   buildPerformanceBlocks,
   chartLinkMarkerId,
-  type PlayHistory,
   chartMarkersForRegion,
   recordLineTap,
   type LineRecording,
@@ -259,21 +258,15 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     return Math.min(taps - 1, doc.sections[playback.section].lines.length - 1);
   }, [recording, playback.line, playback.markerId, playback.section, doc]);
 
-  // What has played in this song, in the order it played: after a jump the
-  // lyrics go on below it instead of scrolling back up the timeline.
-  const historyRef = useRef<{ regionId: string | null; history: PlayHistory }>({ regionId: null, history: [] });
-  const history = useMemo(() => {
-    const kept = historyRef.current.regionId === (region?.id ?? null) ? historyRef.current.history : [];
-    const next = advancePlayHistory(kept, playback.markerId);
-    historyRef.current = { regionId: region?.id ?? null, history: next };
-    return next;
-  }, [region?.id, playback.markerId]);
+  // What has played in this song, in the order it played: after a jump or a
+  // vamp the lyrics go on below instead of scrolling back up the timeline.
+  const performed = usePerformanceHistory(region?.id ?? null, playback.markerId, playback.line, pendingMarkerId);
   const { blocks, current: currentBlock } = useMemo(
     () =>
       doc
-        ? buildPerformanceBlocks(doc, links, markers, history, pendingMarkerId)
+        ? buildPerformanceBlocks(doc, links, markers, performed.history, performed.pendingMarkerId)
         : { blocks: [], current: -1 },
-    [doc, links, markers, history, pendingMarkerId],
+    [doc, links, markers, performed.history, performed.pendingMarkerId],
   );
 
   // A new song: whatever was being recorded belonged to the previous one.
@@ -340,6 +333,10 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     // iOS that put the current line out of view.
     const offset = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
     const top = Math.max(0, scroller.scrollTop + offset - scroller.clientHeight * 0.18);
+    // Reading only goes down: never back up to a line that is already on
+    // screen. Up only to bring back a line above the panel (the reader had
+    // scrolled away by hand).
+    if (top < scroller.scrollTop && offset >= 0) return;
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (typeof scroller.scrollTo === "function") {
       scroller.scrollTo({ top, behavior: reduceMotion ? "auto" : "smooth" });

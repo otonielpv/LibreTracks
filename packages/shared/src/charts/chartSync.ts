@@ -275,10 +275,16 @@ export const PLAY_HISTORY_LIMIT = 6;
  * in the same part, one more entry if it moved on — by playing, by a jump, by
  * a seek. `null` (before the first marker) leaves it as it is.
  */
-export function advancePlayHistory(history: PlayHistory, markerId: string | null): PlayHistory {
+export function advancePlayHistory(
+  history: PlayHistory,
+  markerId: string | null,
+  /** A jump landed: the part plays again, below, even if it is the same one
+   * (a vamp or a repeated chorus goes on down, never back up). */
+  repeat = false,
+): PlayHistory {
   if (markerId === null) return history;
   const last = history[history.length - 1];
-  if (last?.markerId === markerId) return history;
+  if (last?.markerId === markerId && !repeat) return history;
   const next = [...history, { seq: last ? last.seq + 1 : 0, markerId }];
   return next.length > PLAY_HISTORY_LIMIT + 1 ? next.slice(next.length - PLAY_HISTORY_LIMIT - 1) : next;
 }
