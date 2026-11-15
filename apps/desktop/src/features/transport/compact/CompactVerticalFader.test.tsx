@@ -4,9 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import { CompactVerticalFader } from "./CompactMixer";
 
 // jsdom has no PointerEvent: a MouseEvent with a pointerId carries clientY.
-function pointer(target: Element, type: string, clientY: number) {
+function pointer(target: Element, type: string, clientY: number, pointerType = "mouse") {
   const event = new MouseEvent(type, { clientY, bubbles: true, button: 0 });
   Object.defineProperty(event, "pointerId", { value: 1 });
+  Object.defineProperty(event, "pointerType", { value: pointerType });
   fireEvent(target, event);
 }
 
@@ -28,18 +29,31 @@ function setup(value: number) {
 }
 
 describe("CompactVerticalFader", () => {
-  it("taking the cap by its edge does not jump the value; dragging moves it from there", () => {
-    // Value 0.5: the cap's centre is at y=200; its grab zone spans 178-222.
+  it("a finger takes the cap within a finger's reach; dragging moves it from there, no jump", () => {
+    // Value 0.5: the cap's centre is at y=200; a finger's grab zone spans 178-222.
     const { track, onChange } = setup(0.5);
-    pointer(track, "pointerdown", 180);
+    pointer(track, "pointerdown", 180, "touch");
     expect(onChange).not.toHaveBeenCalled();
-    pointer(track, "pointermove", 160); // 20 px up = +0.1
+    pointer(track, "pointermove", 160, "touch"); // 20 px up = +0.1
     expect(onChange).toHaveBeenLastCalledWith(expect.closeTo(0.6, 5));
   });
 
-  it("clicking the track outside the cap still jumps there", () => {
+  it("a mouse must be on the cap itself", () => {
     const { track, onChange } = setup(0.5);
-    pointer(track, "pointerdown", 120);
-    expect(onChange).toHaveBeenLastCalledWith(expect.closeTo(0.9, 5));
+    pointer(track, "pointerdown", 180); // 20 px off: beside the 22 px cap
+    pointer(track, "pointermove", 160);
+    expect(onChange).not.toHaveBeenCalled();
+    pointer(track, "pointerup", 160);
+    pointer(track, "pointerdown", 195); // on the cap
+    pointer(track, "pointermove", 175);
+    expect(onChange).toHaveBeenLastCalledWith(expect.closeTo(0.6, 5));
+  });
+
+  it("pressing the track away from the cap never changes the level", () => {
+    const { track, onChange } = setup(0.5);
+    pointer(track, "pointerdown", 120, "touch");
+    pointer(track, "pointermove", 110, "touch");
+    pointer(track, "pointerup", 110, "touch");
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

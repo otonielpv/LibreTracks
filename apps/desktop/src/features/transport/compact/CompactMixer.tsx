@@ -39,6 +39,7 @@ import { useTouchContextMenu } from "../timeline/useTouchContextMenu";
 import { useIsInMidiBank } from "../midi/midiBankStore";
 import { trackTarget } from "../midi/controllerTargets";
 import { MidiMappable, useMidiMappable } from "../midi/MidiMappable";
+import { grabHalfReach, isOnRangeThumb } from "./faderGrab";
 
 /**
  * Reusable horizontal-scroll mixer that lays out one vertical channel strip
@@ -607,8 +608,12 @@ function CompactMixerStripComponent({
     };
   }, []);
 
+  // The pan moves only when its thumb is taken: a press elsewhere on the
+  // slider is ignored (React puts the controlled value back).
+  const panGrabRef = useRef<{ pressed: boolean; onThumb: boolean }>({ pressed: false, onThumb: false });
   const handlePanInput = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
+      if (panGrabRef.current.pressed && !panGrabRef.current.onThumb) return;
       const next = Number(event.target.value);
       if (!Number.isFinite(next)) return;
       const snapped = applySnap(
@@ -912,14 +917,27 @@ function CompactMixerStripComponent({
             aria-label={`Pan ${track.name}`}
             onChange={handlePanInput}
             onDoubleClick={handlePanDoubleClick}
-            onPointerDown={() => setIsPanDragging(true)}
+            onPointerDown={(event) => {
+              const onThumb = isOnRangeThumb(event.currentTarget, event.clientX, event.pointerType);
+              panGrabRef.current = { pressed: true, onThumb };
+              if (!onThumb) {
+                // Nothing to drag: on touch, let the strip row scroll.
+                if (event.pointerType !== "touch") event.preventDefault();
+                return;
+              }
+              setIsPanDragging(true);
+            }}
             onPointerUp={() => {
+              const { onThumb } = panGrabRef.current;
+              panGrabRef.current = { pressed: false, onThumb: false };
               setIsPanDragging(false);
-              handlers.onCommitPan(track.id);
+              if (onThumb) handlers.onCommitPan(track.id);
             }}
             onPointerCancel={() => {
+              const { onThumb } = panGrabRef.current;
+              panGrabRef.current = { pressed: false, onThumb: false };
               setIsPanDragging(false);
-              handlers.onCommitPan(track.id);
+              if (onThumb) handlers.onCommitPan(track.id);
             }}
             onKeyUp={(event) => {
               if (isStepperKey(event.key)) handlers.onCommitPan(track.id);
@@ -1001,8 +1019,6 @@ type CompactVerticalFaderProps = {
   formatValue?: (position: number) => string;
 };
 
-/** Touch target around the fader cap: a finger's width, whatever the cap's size. */
-const GRAB_REACH_PX = 44;
 
 function CompactVerticalFaderComponent({
   value,
@@ -1022,10 +1038,9 @@ function CompactVerticalFaderComponent({
   // the fader crawls for precise dB tweaks (Reaper-style). Re-anchored whenever
   // Shift toggles so the thumb never jumps.
   const fineAnchorRef = useRef<{ clientY: number; value: number } | null>(null);
-  // Where the pointer took the cap, in px from its centre: a drag that
-  // starts on the cap, or within a finger's reach of it (GRAB_REACH_PX), moves
-  // it from there without the value jumping to the pointer. 0 = the track was
-  // touched away from the cap, which jumps there as before.
+  // Where the pointer took the cap, in px from its centre: the drag moves it
+  // from there without the value jumping to the pointer. Only the cap (or a
+  // finger's reach of it, faderGrab.ts) starts a drag at all.
   const grabOffsetRef = useRef(0);
   const latestValueRef = useRef(value);
   latestValueRef.current = value;
@@ -1047,9 +1062,18 @@ function CompactVerticalFaderComponent({
       // Only react to primary button drags. Right-click / middle-click
       // should fall through to the strip-level context menu.
       if (event.button !== 0) return;
-      event.preventDefault();
       const target = trackRef.current;
       if (!target) return;
+      // Only the cap moves the fader (a finger's reach around it on touch):
+      // a tap on the track never jumps the level. Shift is a fine drag from
+      // where it is, which never jumps either.
+      const rect = target.getBoundingClientRect();
+      const cap = target.querySelector<HTMLElement>(".lt-compact-mixer-fader-thumb");
+      const capHalf = grabHalfReach(cap?.getBoundingClientRect().height ?? 0, event.pointerType);
+      const capCentre = rect.bottom - value * rect.height;
+      const onCap = rect.height <= 0 || Math.abs(event.clientY - capCentre) <= capHalf;
+      if (!onCap && !event.shiftKey) return;
+      event.preventDefault();
       target.setPointerCapture(event.pointerId);
       draggingRef.current = true;
       setIsDragging(true);
@@ -1058,16 +1082,7 @@ function CompactVerticalFaderComponent({
         fineAnchorRef.current = { clientY: event.clientY, value };
       } else {
         fineAnchorRef.current = null;
-        const rect = target.getBoundingClientRect();
-        const cap = target.querySelector<HTMLElement>(".lt-compact-mixer-fader-thumb");
-        const capHalf = Math.max(
-          (cap?.getBoundingClientRect().height ?? 0) / 2,
-          GRAB_REACH_PX / 2,
-        );
-        const capCentre = rect.bottom - value * rect.height;
-        const onCap = capHalf > 0 && Math.abs(event.clientY - capCentre) <= capHalf;
-        grabOffsetRef.current = onCap ? event.clientY - capCentre : 0;
-        if (!onCap) onChange(valueFromClientY(event.clientY));
+        grabOffsetRef.current = rect.height > 0 ? event.clientY - capCentre : 0;
       }
     },
     [onChange, value, valueFromClientY],
