@@ -41,6 +41,7 @@ build*
 # without its `rerun-if-env-changed` the build-time client secret stops being
 # picked up when it changes. Same trap as the gradle files below.
 !crates/*/build.rs
+!vendor/*/build.rs
 # ...and the Android gradle project files are source too. Without these
 # negations a fresh clone can't build the Android app at all (the gradle
 # build scripts were silently swallowed by `build*`). gen/android/.gitignore

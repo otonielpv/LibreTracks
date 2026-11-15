@@ -28,6 +28,8 @@ thiserror = "2"
 # the upload. See vendor/midir/LIBRETRACKS_PATCH.md.
 [patch.crates-io]
 midir = { path = "vendor/midir" }
+# iOS: Rust->WebView events kept flowing while a finger scrolls (vendor/tao/LIBRETRACKS_PATCH.md).
+tao = { path = "vendor/tao" }
 
 # Full debug info made target-desktop-native/debug grow past 30 GB (the
 # desktop lib alone is built as staticlib + cdylib + rlib). Line tables keep
