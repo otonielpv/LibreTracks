@@ -1274,6 +1274,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       clip,
       deps: getDeps(),
       openColorMenu,
+      openSubMenu,
     });
   }
 

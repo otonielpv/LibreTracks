@@ -2216,6 +2216,32 @@ export async function updateClipColor(
   return invokeCommand<TransportSnapshot>("update_clip_color", { clipId, color });
 }
 
+/** Curvas que cambia `updateClipFades`; ausente o `null` = no tocar. */
+export type ClipFadeCurves = {
+  fadeInCurve?: { x: number; y: number } | null;
+  fadeOutCurve?: { x: number; y: number } | null;
+};
+
+/**
+ * Fades de varios clips en un solo paso de deshacer. `null` deja ese valor como
+ * está; una duración de 0 quita el fade. El backend recorta cada fade a su
+ * clip y cada curva a -1..1.
+ */
+export async function updateClipFades(
+  clipIds: string[],
+  fadeInSeconds: number | null,
+  fadeOutSeconds: number | null,
+  curves: ClipFadeCurves = {},
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("update_clip_fades", {
+    clipIds,
+    fadeInSeconds,
+    fadeOutSeconds,
+    fadeInCurve: curves.fadeInCurve ?? null,
+    fadeOutCurve: curves.fadeOutCurve ?? null,
+  });
+}
+
 export async function duplicateClip(
   clipId: string,
   timelineStartSeconds: number,

@@ -341,6 +341,7 @@ import {
   type LibraryDragDropDeps,
 } from "./library/libraryDragDrop";
 import { createColorHandlers } from "./colors/colorHandlers";
+import { useClipFadeDrag } from "./clipFades/useClipFadeDrag";
 import {
   TIMELINE_COLOR_PRESETS,
   loadRecentColors,
@@ -2139,6 +2140,16 @@ export function TransportPanelContent() {
       }),
     [runAction, setSong, applyPlaybackSnapshot, setStatus],
   );
+
+  // Asas de fade de los clips de audio: ver ./clipFades.
+  const clipFadeDrag = useClipFadeDrag({
+    getCameraX: () => getCameraX(),
+    getPixelsPerSecond: () => livePixelsPerSecondRef.current,
+    runAction,
+    applyPlaybackSnapshot,
+    selectClip,
+    getSelectedClips: () => selectedClipSummaries,
+  });
 
   const midiHandlers = useMemo(
     () =>
@@ -5769,6 +5780,9 @@ export function TransportPanelContent() {
     trackClips: ClipSummary[],
   ) {
     if (event.button !== 0 || isInteractiveTimelineTarget(event.target)) {
+      return;
+    }
+    if (clipFadeDrag.tryBegin(event, event.currentTarget, trackClips)) {
       return;
     }
 

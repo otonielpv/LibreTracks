@@ -296,3 +296,42 @@ TEST_CASE("loading a session keeps each song's voice-guide count style") {
     CHECK(session.songs[0].regions[1].voice_guide_count_style == 2);
     CHECK(session.songs[0].regions[2].voice_guide_count_style == -1);
 }
+
+// The clip fade curve rides the song JSON as a control point object. A reader
+// that expects another shape throws inside the JSON library and the whole
+// session refuses to open, which is how this was found. The older single-bend
+// number must keep loading too.
+TEST_CASE("loading a session reads the clip fade curves in either format") {
+    const auto load = [](const std::string& curves) {
+        const std::string project = R"({
+            "id":"s1","title":"Song","durationSeconds":10.0,
+            "tracks":[{"id":"t1","name":"T","kind":"audio"}],
+            "clips":[{"id":"c1","trackId":"t1","filePath":"a.wav",
+                      "timelineStartSeconds":0.0,"sourceStartSeconds":0.0,
+                      "durationSeconds":4.0,"gain":1.0,
+                      "fadeInSeconds":1.0,"fadeOutSeconds":1.0)" + curves + "}]}";
+        auto result = session_from_project_json(project, 48000);
+        REQUIRE(result.is_ok());
+        auto session = result.take();
+        REQUIRE(session.songs.size() == 1);
+        REQUIRE(session.songs[0].tracks.size() == 1);
+        REQUIRE(session.songs[0].tracks[0].clips.size() == 1);
+        return session.songs[0].tracks[0].clips[0];
+    };
+
+    const Clip point = load(R"(,"fadeInCurve":{"x":0.2,"y":0.9},"fadeOutCurve":{"x":0.7,"y":0.1})");
+    CHECK(point.fade_in_curve_x == doctest::Approx(0.2f));
+    CHECK(point.fade_in_curve_y == doctest::Approx(0.9f));
+    CHECK(point.fade_out_curve_x == doctest::Approx(0.7f));
+    CHECK(point.fade_out_curve_y == doctest::Approx(0.1f));
+
+    const Clip legacy = load(R"(,"fadeInCurve":-0.1)");
+    CHECK(legacy.fade_in_curve_x == doctest::Approx(0.55f));
+    CHECK(legacy.fade_in_curve_y == doctest::Approx(0.45f));
+    CHECK(legacy.fade_out_curve_x == doctest::Approx(0.5f));
+
+    const Clip straight = load("");
+    CHECK(straight.fade_in_curve_x == doctest::Approx(0.5f));
+    CHECK(straight.fade_in_curve_y == doctest::Approx(0.5f));
+}
+

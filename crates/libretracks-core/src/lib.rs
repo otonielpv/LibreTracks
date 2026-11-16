@@ -23,7 +23,7 @@ pub use automation::{
 };
 pub use model::{
     default_audio_to, implicit_start_section_id, Arrangement, ArrangementBlock, BlockContent, ChannelMode, OriginalSection,
-    OriginalSnapshot, SongStructure, SongChart, ChartLink, chart_link_marker_id, parse_audio_output_route, Clip, Marker, MarkerCategory, MarkerKind, MidiClip,
+    OriginalSnapshot, SongStructure, SongChart, ChartLink, chart_link_marker_id, parse_audio_output_route, Clip, FadeCurve, Marker, MarkerCategory, MarkerKind, MidiClip,
     KeyChange, KeyMap, MidiEvent, MidiEventKind, Project, Song, SongMaster, SongRegion, TempoMarker, TempoMetadata,
     is_video_file_path, TempoSource, TimeSignatureMarker, Track, TrackKind, VideoAssetInfo, VideoClip,
     VideoFit, VoiceGuideCountStyle, MAX_MIDI_CHANNEL, MAX_MIDI_DATA_VALUE, MIN_MIDI_CHANNEL,
@@ -131,6 +131,8 @@ mod tests {
                 gain: 1.0,
                 fade_in_seconds: None,
                 fade_out_seconds: None,
+                fade_in_curve: None,
+                fade_out_curve: None,
                 color: None,
             }],
             midi_clips: vec![],

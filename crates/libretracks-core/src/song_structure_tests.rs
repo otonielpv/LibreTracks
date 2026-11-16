@@ -44,6 +44,8 @@ fn clip(id: &str, track: &str, file: &str, rel: f64, duration: f64) -> Clip {
         gain: 1.0,
         fade_in_seconds: None,
         fade_out_seconds: None,
+        fade_in_curve: None,
+        fade_out_curve: None,
         color: None,
     }
 }

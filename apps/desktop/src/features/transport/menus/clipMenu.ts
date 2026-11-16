@@ -6,6 +6,7 @@ import {
   splitClip,
   splitClips,
 } from "../desktopApi";
+import { clipFadeMenuActions } from "../clipFades/clipFadeMenu";
 import { clipDisplayName, formatClock } from "../helpers";
 import type { ContextMenuAction } from "../types";
 import { menuSection } from "./menuSections";
@@ -20,6 +21,8 @@ export type ClipContextMenuArgs = {
     currentColor: string | null | undefined,
     onColor: (color: string | null) => Promise<void>,
   ) => void;
+  /** Abre un submenu desplazado del actual (el de «Fades ▸»). */
+  openSubMenu: (title: string, actions: ContextMenuAction[]) => void;
 };
 
 /**
@@ -34,6 +37,7 @@ export function clipContextMenuActions({
   clip,
   deps: d,
   openColorMenu,
+  openSubMenu,
 }: ClipContextMenuArgs): ContextMenuAction[] {
   const { t } = d;
   const currentCursorSeconds = d.displayPositionSecondsRef.current;
@@ -120,6 +124,14 @@ export function clipContextMenuActions({
               : t("transport.menu.colorOf", { name: clipName }),
             clip.color,
             (color) => d.handleSetClipColors(targetClips, color).then(() => undefined),
+          ),
+      },
+      {
+        label: `${t("transport.menu.clipFades")} ▸`,
+        onSelect: () =>
+          openSubMenu(
+            t("transport.menu.clipFades"),
+            clipFadeMenuActions(targetClips, { ...d, openSubMenu }),
           ),
       },
     ]),

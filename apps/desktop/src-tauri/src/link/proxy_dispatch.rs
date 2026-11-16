@@ -118,6 +118,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "trim_video_clip"
         | "undo_action"
         | "update_clip_color"
+        | "update_clip_fades"
         | "update_clip_window"
         | "update_live_region_master_gain"
         | "update_section_marker"
@@ -267,6 +268,7 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "trim_video_clip",
     "undo_action",
     "update_clip_color",
+    "update_clip_fades",
     "update_clip_window",
     "update_live_region_master_gain",
     "update_section_marker",
@@ -1055,6 +1057,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::timeline::update_clip_color(arg(&args, "clipId")?, arg(&args, "color")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "update_clip_fades" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::update_clip_fades(arg(&args, "clipIds")?, arg(&args, "fadeInSeconds")?, arg(&args, "fadeOutSeconds")?, arg(&args, "fadeInCurve")?, arg(&args, "fadeOutCurve")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?

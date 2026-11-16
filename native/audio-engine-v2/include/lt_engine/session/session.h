@@ -48,6 +48,12 @@ struct Clip {
     Gain  gain          = 1.0f;
     Frame fade_in_frames  = 0;
     Frame fade_out_frames = 0;
+    // Control point of each fade's curve, in the fade's own unit square
+    // ((0.5, 0.5) = straight). See render/fade_curve.h.
+    float fade_in_curve_x  = 0.5f;
+    float fade_in_curve_y  = 0.5f;
+    float fade_out_curve_x = 0.5f;
+    float fade_out_curve_y = 0.5f;
     Semitones semitones = 0;
 };
 

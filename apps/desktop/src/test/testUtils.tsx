@@ -210,6 +210,7 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     moveClipsLiveBatch: vi.fn(testDesktopApiMock.moveClipsLiveBatch),
     deleteClip: vi.fn(testDesktopApiMock.deleteClip),
     updateClipWindow: vi.fn(testDesktopApiMock.updateClipWindow),
+    updateClipFades: vi.fn(testDesktopApiMock.updateClipFades),
     duplicateClip: vi.fn(testDesktopApiMock.duplicateClip),
     splitClip: vi.fn(testDesktopApiMock.splitClip),
     createSongRegion: vi.fn(testDesktopApiMock.createSongRegion),

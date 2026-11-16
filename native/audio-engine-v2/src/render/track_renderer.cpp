@@ -1,4 +1,5 @@
 #include <lt_engine/render/track_renderer.h>
+#include <lt_engine/render/fade_curve.h>
 #include <lt_engine/render/pitch_resolution.h>
 #include <lt_engine/pitch/bungee_voice_manager.h>
 #include <lt_engine/debug/logging.h>
@@ -581,7 +582,9 @@ void TrackRenderer::finalise_clip_block(const ClipBlock& cb,
         for (int f = 0; f < read; ++f) {
             Frame pos = played + f;
             if (pos < clip.fade_in_frames) {
-                const float g = static_cast<float>(pos) / clip.fade_in_frames;
+                const float g = render::fade_curve_gain(
+                    static_cast<float>(pos) / clip.fade_in_frames,
+                    clip.fade_in_curve_x, clip.fade_in_curve_y);
                 scratch_l_[static_cast<std::size_t>(f)] *= g;
                 scratch_r_[static_cast<std::size_t>(f)] *= g;
             }
@@ -593,7 +596,9 @@ void TrackRenderer::finalise_clip_block(const ClipBlock& cb,
             Frame pos = played + f;
             Frame from_end = clip.length_frames - pos;
             if (from_end < clip.fade_out_frames && from_end >= 0) {
-                const float g = static_cast<float>(from_end) / clip.fade_out_frames;
+                const float g = render::fade_curve_gain(
+                    static_cast<float>(from_end) / clip.fade_out_frames,
+                    clip.fade_out_curve_x, clip.fade_out_curve_y);
                 scratch_l_[static_cast<std::size_t>(f)] *= g;
                 scratch_r_[static_cast<std::size_t>(f)] *= g;
             }

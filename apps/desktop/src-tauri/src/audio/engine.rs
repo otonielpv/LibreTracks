@@ -10,7 +10,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use libretracks_core::{
+use libretracks_core::{FadeCurve, 
     audible_clip_duration_seconds, effective_bpm_at, warp_timeline_seconds_at, MarkerCategory, Song,
     TempoMarker, TrackKind,
 };
@@ -1106,6 +1106,10 @@ impl AudioController {
                     gain: clip.gain as f32,
                     fade_in_frames: seconds_to_frames(frame_rate, clip.fade_in_seconds.unwrap_or(0.0)),
                     fade_out_frames: seconds_to_frames(frame_rate, clip.fade_out_seconds.unwrap_or(0.0)),
+                    fade_in_curve_x: FadeCurve::x_or_linear(clip.fade_in_curve) as f32,
+                    fade_in_curve_y: FadeCurve::y_or_linear(clip.fade_in_curve) as f32,
+                    fade_out_curve_x: FadeCurve::x_or_linear(clip.fade_out_curve) as f32,
+                    fade_out_curve_y: FadeCurve::y_or_linear(clip.fade_out_curve) as f32,
                     semitones: 0,
                 })
                 .collect();
@@ -1244,6 +1248,10 @@ impl AudioController {
                         gain: clip.gain as f32,
                         fade_in_frames: seconds_to_frames(frame_rate, clip.fade_in_seconds.unwrap_or(0.0)),
                         fade_out_frames: seconds_to_frames(frame_rate, clip.fade_out_seconds.unwrap_or(0.0)),
+                        fade_in_curve_x: FadeCurve::x_or_linear(clip.fade_in_curve) as f32,
+                        fade_in_curve_y: FadeCurve::y_or_linear(clip.fade_in_curve) as f32,
+                        fade_out_curve_x: FadeCurve::x_or_linear(clip.fade_out_curve) as f32,
+                        fade_out_curve_y: FadeCurve::y_or_linear(clip.fade_out_curve) as f32,
                         semitones: 0,
                     });
             }
@@ -3638,6 +3646,10 @@ fn session_signature(song: &Song) -> String {
         clip.gain.to_bits().hash(&mut hasher);
         clip.fade_in_seconds.map(f64::to_bits).hash(&mut hasher);
         clip.fade_out_seconds.map(f64::to_bits).hash(&mut hasher);
+        for curve in [clip.fade_in_curve, clip.fade_out_curve] {
+            FadeCurve::x_or_linear(curve).to_bits().hash(&mut hasher);
+            FadeCurve::y_or_linear(curve).to_bits().hash(&mut hasher);
+        }
     }
     for marker in &song.tempo_markers {
         marker.id.hash(&mut hasher);
@@ -3791,6 +3803,8 @@ mod tests {
                 gain: 1.0,
                 fade_in_seconds: None,
                 fade_out_seconds: None,
+                fade_in_curve: None,
+                fade_out_curve: None,
                 color: None,
             }],
             midi_clips: vec![],

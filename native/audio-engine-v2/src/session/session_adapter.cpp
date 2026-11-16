@@ -47,6 +47,30 @@ static T value_any(const json& j, const char* snake, const char* camel, T fallba
     return fallback;
 }
 
+// A fade curve control point, {"x":..,"y":..}; absent or null = straight.
+// A plain number is the older single bend (-1..1): read it as the point on
+// the matching diagonal, like the Rust model does, so that format can never
+// stop a session from loading. Anything else is ignored (straight fade).
+static void read_fade_curve(const json& j, const char* snake, const char* camel,
+                            float& x, float& y) {
+    const json* curve = nullptr;
+    if (j.contains(snake) && !j[snake].is_null()) curve = &j[snake];
+    else if (j.contains(camel) && !j[camel].is_null()) curve = &j[camel];
+    if (!curve) return;
+    if (curve->is_object()) {
+        const auto coord = [&](const char* key) {
+            const auto it = curve->find(key);
+            return it != curve->end() && it->is_number() ? it->get<float>() : 0.5f;
+        };
+        x = coord("x");
+        y = coord("y");
+    } else if (curve->is_number()) {
+        const float bend = std::clamp(curve->get<float>(), -1.0f, 1.0f);
+        x = 0.5f - bend / 2.0f;
+        y = 0.5f + bend / 2.0f;
+    }
+}
+
 static const json* array_any(const json& j, const char* snake, const char* camel) {
     if (j.contains(snake) && j[snake].is_array()) return &j[snake];
     if (j.contains(camel) && j[camel].is_array()) return &j[camel];
@@ -211,6 +235,8 @@ Result<Session> session_from_project_json(const std::string& project_json,
                                 value_any<double>(jclip, "fade_out_seconds", "fadeOutSeconds", 0.0),
                                 engine_sample_rate);
                         }
+                        read_fade_curve(jclip, "fade_in_curve", "fadeInCurve", clip.fade_in_curve_x, clip.fade_in_curve_y);
+                        read_fade_curve(jclip, "fade_out_curve", "fadeOutCurve", clip.fade_out_curve_x, clip.fade_out_curve_y);
                         clip.semitones = value_any<Semitones>(jclip, "semitones", "transposeSemitones", 0);
 
                         if (!clip.id.empty() && !clip.source_id.empty()) {

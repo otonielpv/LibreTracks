@@ -66,6 +66,7 @@ import type { AreaSelectGesture } from "../mobile/MobileTimelineNavigation";
 import { createTimelineVerticalScroller } from "./timelineVerticalScroll";
 import { isMobileApp } from "../desktopApi";
 import { consumeVideoRepaint } from "../video/videoCanvasState";
+import { consumeClipFadeRepaint } from "../clipFades/clipFadeCanvasState";
 import { useTimelineUIStore } from "../uiStore";
 import {
   cancelGatedFrame,
@@ -1103,7 +1104,8 @@ export function TimelineTrackCanvas({
           // behind a busy waveform tile queue.
           const drainedTiles = drainWaveformTileWork();
           const videoChanged = consumeVideoRepaint();
-          return drainedTiles || videoChanged;
+          const fadesChanged = consumeClipFadeRepaint();
+          return drainedTiles || videoChanged || fadesChanged;
         },
       },
     );

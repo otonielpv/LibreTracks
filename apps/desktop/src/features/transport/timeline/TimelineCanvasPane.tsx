@@ -1,3 +1,4 @@
+import { clipFadeCursorAt } from "../clipFades/clipFadeDrag";
 import {
   useEffect,
   useMemo,
@@ -1422,6 +1423,24 @@ export function TimelineCanvasPane({
                         onTrackLaneMouseDown(event, track, trackClips);
                       }
                     }}
+                    onMouseMove={
+                      trackClips.length > 0 && track.kind !== "midi" && track.kind !== "video"
+                        ? (event) => {
+                            if (event.buttons !== 0) return;
+                            const cursor = clipFadeCursorAt(
+                              event,
+                              event.currentTarget,
+                              trackClips,
+                              cameraXRef.current,
+                              livePixelsPerSecondRef.current || pixelsPerSecond,
+                              useTimelineUIStore.getState().selectedClipIds,
+                            );
+                            if (event.currentTarget.style.cursor !== cursor) {
+                              event.currentTarget.style.cursor = cursor;
+                            }
+                          }
+                        : undefined
+                    }
                     onContextMenu={(event) => {
                       if (!isPendingTrack) {
                         onTrackLaneContextMenu(event, track, trackClips);

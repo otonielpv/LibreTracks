@@ -530,3 +530,38 @@ TEST_CASE("UpsertSongTracks: channel_mode, con caida al viejo mono_downmix") {
     CHECK(parse_one(R"(,"channel_mode":"right")") == "right");
     CHECK(parse_one(R"(,"channel_mode":"left","mono_downmix":true)") == "left");
 }
+
+// Clip fade curves ride the same three clip parsers as the fade lengths. One
+// that drops them plays a curved fade as a straight ramp on that path.
+TEST_CASE("every clip parser keeps the fade curves") {
+    const char* clip = R"({"id":"c1","track_id":"t1","source_id":"s1",
+                           "timeline_start_frame":0,"source_start_frame":0,"length_frames":48000,
+                           "fade_in_frames":4800,"fade_out_frames":4800,
+                           "fade_in_curve_x":0.2,"fade_in_curve_y":0.9,
+                           "fade_out_curve_x":0.7,"fade_out_curve_y":0.1})";
+    auto check = [](const auto& clips) {
+        REQUIRE(clips.size() == 1);
+        CHECK(clips[0].fade_in_curve_x == doctest::Approx(0.2f));
+        CHECK(clips[0].fade_in_curve_y == doctest::Approx(0.9f));
+        CHECK(clips[0].fade_out_curve_x == doctest::Approx(0.7f));
+        CHECK(clips[0].fade_out_curve_y == doctest::Approx(0.1f));
+    };
+    const std::string tail = R"(,"markers":[],"bpm":128.0,"beats_per_bar":4,"beat_unit":4,
+                                "tempo_markers":[],"time_signature_markers":[]})";
+
+    auto clips_cmd = command_from_json(
+        std::string(R"({"type":"SetSongClips","song_id":"s","clips":[)") + clip + "]}");
+    check(std::get<CmdSetSongClips>(clips_cmd).clips);
+
+    auto window_cmd = command_from_json(
+        std::string(R"({"type":"SetSongTimelineWindow","song_id":"s","regions":[],"clips":[)")
+        + clip + "]" + tail);
+    check(std::get<CmdSetSongTimelineWindow>(window_cmd).clips);
+
+    auto upsert_cmd = command_from_json(
+        std::string(R"({"type":"UpsertSongTracks","song_id":"s","sources":[],"regions":[],)")
+        + R"("tracks":[{"id":"t1","name":"T","clips":[)" + clip + "]}]" + tail);
+    REQUIRE(std::get<CmdUpsertSongTracks>(upsert_cmd).tracks.size() == 1);
+    check(std::get<CmdUpsertSongTracks>(upsert_cmd).tracks[0].clips);
+}
+

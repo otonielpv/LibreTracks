@@ -249,6 +249,10 @@ EngineCommand command_from_json(const std::string& raw) {
             clip.gain = item.value("gain", 1.0f);
             clip.fade_in_frames = item.value("fade_in_frames", static_cast<Frame>(0));
             clip.fade_out_frames = item.value("fade_out_frames", static_cast<Frame>(0));
+            clip.fade_in_curve_x = item.value("fade_in_curve_x", 0.5f);
+            clip.fade_in_curve_y = item.value("fade_in_curve_y", 0.5f);
+            clip.fade_out_curve_x = item.value("fade_out_curve_x", 0.5f);
+            clip.fade_out_curve_y = item.value("fade_out_curve_y", 0.5f);
             clip.semitones = item.value("semitones", static_cast<Semitones>(0));
             cmd.clips.push_back(std::move(clip));
         }
@@ -314,6 +318,10 @@ EngineCommand command_from_json(const std::string& raw) {
             clip.gain = item.value("gain", 1.0f);
             clip.fade_in_frames = item.value("fade_in_frames", static_cast<Frame>(0));
             clip.fade_out_frames = item.value("fade_out_frames", static_cast<Frame>(0));
+            clip.fade_in_curve_x = item.value("fade_in_curve_x", 0.5f);
+            clip.fade_in_curve_y = item.value("fade_in_curve_y", 0.5f);
+            clip.fade_out_curve_x = item.value("fade_out_curve_x", 0.5f);
+            clip.fade_out_curve_y = item.value("fade_out_curve_y", 0.5f);
             clip.semitones = item.value("semitones", static_cast<Semitones>(0));
             cmd.clips.push_back(std::move(clip));
         }
@@ -394,6 +402,10 @@ EngineCommand command_from_json(const std::string& raw) {
                     clip.gain = item.value("gain", 1.0f);
                     clip.fade_in_frames = item.value("fade_in_frames", static_cast<Frame>(0));
                     clip.fade_out_frames = item.value("fade_out_frames", static_cast<Frame>(0));
+                    clip.fade_in_curve_x = item.value("fade_in_curve_x", 0.5f);
+                    clip.fade_in_curve_y = item.value("fade_in_curve_y", 0.5f);
+                    clip.fade_out_curve_x = item.value("fade_out_curve_x", 0.5f);
+                    clip.fade_out_curve_y = item.value("fade_out_curve_y", 0.5f);
                     clip.semitones = item.value("semitones", static_cast<Semitones>(0));
                     track.clips.push_back(std::move(clip));
                 }

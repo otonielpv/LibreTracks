@@ -185,6 +185,29 @@ pub fn update_clip_color(
 }
 
 #[tauri::command(async)]
+pub fn update_clip_fades(
+    clip_ids: Vec<String>,
+    fade_in_seconds: Option<f64>,
+    fade_out_seconds: Option<f64>,
+    fade_in_curve: Option<libretracks_core::FadeCurve>,
+    fade_out_curve: Option<libretracks_core::FadeCurve>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+
+    let curves = crate::state::arrangement::ClipFadeCurveUpdate {
+        fade_in_curve,
+        fade_out_curve,
+    };
+    session
+        .update_clip_fades(&clip_ids, fade_in_seconds, fade_out_seconds, curves, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command(async)]
 pub fn duplicate_clip(
     clip_id: String,
     timeline_start_seconds: f64,

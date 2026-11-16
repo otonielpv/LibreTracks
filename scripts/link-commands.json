@@ -188,6 +188,7 @@
     "trim_video_clip",
     "undo_action",
     "update_clip_color",
+    "update_clip_fades",
     "update_clip_window",
     "update_live_region_master_gain",
     "update_section_marker",

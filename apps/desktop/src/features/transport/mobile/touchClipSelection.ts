@@ -1,6 +1,7 @@
 import { useMemo, useRef, type MutableRefObject } from "react";
 import type { ClipSummary } from "../desktopApi";
 import { lanePointerToClip } from "../helpers";
+import { touchHitsSelectedClipFadeHandle } from "../clipFades/clipFadeDrag";
 import { useTimelineUIStore } from "../uiStore";
 import { useVideoStore } from "../video/videoStore";
 
@@ -95,14 +96,34 @@ export function createTouchClipSelection(deps: TouchClipSelectionDeps) {
      * encima de un clip ya cogido no puede convertirse en moverlo. Para mover
      * el grupo se sale del modo, que conserva la seleccion.
      */
-    shouldEdit(clientX: number, _clientY: number, target: EventTarget | null) {
+    shouldEdit(clientX: number, clientY: number, target: EventTarget | null) {
       if (deps.isMultiSelect()) return false;
       const videoClipId = deps.video ? videoClipIdAt(target) : null;
       if (videoClipId) {
         return deps.video!.getSelectedVideoClipIds().includes(videoClipId);
       }
+      const selectedIds = deps.getSelectedClipIds();
       const clip = clipAt(clientX, target);
-      return Boolean(clip && deps.getSelectedClipIds().includes(clip.id));
+      if (clip && selectedIds.includes(clip.id)) return true;
+      // Las asas de fade de un clip seleccionado: su zona de toque se sale
+      // del borde del clip, donde el hit-test de arriba dice que no.
+      const row =
+        target instanceof Element
+          ? (target.closest("[data-track-id]") as HTMLElement | null)
+          : null;
+      const trackId = row?.dataset.trackId;
+      return Boolean(
+        row &&
+          trackId &&
+          touchHitsSelectedClipFadeHandle(
+            { clientX, clientY },
+            row,
+            deps.getClipsByTrack()[trackId] ?? [],
+            selectedIds,
+            deps.getCameraX(),
+            deps.getPixelsPerSecond(),
+          ),
+      );
     },
     /** Toque limpio: selecciona lo que haya debajo, o limpia la seleccion. */
     onTap(clientX: number, _clientY: number, target: EventTarget | null) {

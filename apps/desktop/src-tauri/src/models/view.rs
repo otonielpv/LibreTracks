@@ -608,6 +608,15 @@ pub struct ClipSummary {
     pub duration_seconds: f64,
     pub gain: f64,
     pub color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fade_in_seconds: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fade_out_seconds: Option<f64>,
+    /// Punto de control de la curva de cada fade (ausente = recta).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fade_in_curve: Option<libretracks_core::FadeCurve>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fade_out_curve: Option<libretracks_core::FadeCurve>,
     /// Modo de canal de su pista: la onda pinta solo el canal que suena.
     #[serde(skip_serializing_if = "libretracks_core::ChannelMode::is_stereo")]
     pub channel_mode: libretracks_core::ChannelMode,
@@ -1115,6 +1124,10 @@ pub(crate) fn clip_to_summary(
         ),
         gain: clip.gain,
         color: clip.color.clone(),
+        fade_in_seconds: clip.fade_in_seconds.filter(|fade| *fade > 0.0),
+        fade_out_seconds: clip.fade_out_seconds.filter(|fade| *fade > 0.0),
+        fade_in_curve: clip.fade_in_curve,
+        fade_out_curve: clip.fade_out_curve,
         channel_mode: track.map(|t| t.channel_mode).unwrap_or_default(),
     }
 }
@@ -1715,6 +1728,8 @@ mod tests {
             gain: 1.0,
             fade_in_seconds: None,
             fade_out_seconds: None,
+            fade_in_curve: None,
+            fade_out_curve: None,
             color: None,
         }
     }

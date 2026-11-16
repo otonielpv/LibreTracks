@@ -51,6 +51,7 @@ add_executable(lt_engine_tests
     test_offline_renderer.cpp
     test_loudness_meter.cpp
     test_region_envelope.cpp
+    test_fade_curve.cpp
     test_audio_clock_stamp.cpp
     test_pilot_tone.cpp
     test_engine_hardening.cpp

@@ -606,6 +606,23 @@ describe("buildMemoizedClipsByTrack", () => {
     const second = buildMemoizedClipsByTrack(stereo, first);
     expect(second.t1[0].channelMode ?? "stereo").toBe("stereo");
   });
+
+  // Un fade nuevo tiene que llegar al timeline: si no, no se pinta y el asa
+  // arrastra desde el valor viejo y borra el otro fade.
+  it("does not reuse a clip whose fades changed", () => {
+    const song = (fadeIn?: number, fadeOut?: number) =>
+      makeSong({
+        tracks: [makeTrack({ id: "t1" })],
+        clips: [
+          makeClip({ id: "c1", trackId: "t1", fadeInSeconds: fadeIn, fadeOutSeconds: fadeOut }),
+        ],
+      });
+    const plain = buildMemoizedClipsByTrack(song(), {});
+    const fadedIn = buildMemoizedClipsByTrack(song(2), plain);
+    expect(fadedIn.t1[0].fadeInSeconds).toBe(2);
+    const both = buildMemoizedClipsByTrack(song(2, 3), fadedIn);
+    expect(both.t1[0]).toMatchObject({ fadeInSeconds: 2, fadeOutSeconds: 3 });
+  });
 });
 
 describe("mergeOptimisticClipsByTrack", () => {

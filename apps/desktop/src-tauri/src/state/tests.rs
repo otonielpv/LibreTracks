@@ -119,6 +119,8 @@ fn demo_song() -> Song {
             gain: 1.0,
             fade_in_seconds: None,
             fade_out_seconds: None,
+            fade_in_curve: None,
+            fade_out_curve: None,
             color: None,
         }],
         midi_clips: vec![],
@@ -4137,6 +4139,8 @@ fn reconcile_regions_and_clips_keeps_a_clip_from_crossing_into_the_next_song() {
         gain: 1.0,
         fade_in_seconds: None,
         fade_out_seconds: None,
+        fade_in_curve: None,
+        fade_out_curve: None,
         color: None,
     }];
 
@@ -4374,6 +4378,8 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
             gain: 1.0,
             fade_in_seconds: None,
             fade_out_seconds: None,
+            fade_in_curve: None,
+            fade_out_curve: None,
             color: None,
         },
         Clip {
@@ -4386,6 +4392,8 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
             gain: 1.0,
             fade_in_seconds: None,
             fade_out_seconds: None,
+            fade_in_curve: None,
+            fade_out_curve: None,
             color: None,
         },
     ];
@@ -5524,6 +5532,8 @@ fn place_bundled_audio_reuses_existing_original_and_copies_missing_one() {
         gain: 1.0,
         fade_in_seconds: None,
         fade_out_seconds: None,
+        fade_in_curve: None,
+        fade_out_curve: None,
         color: None,
     });
     // A clip whose original is GONE: it must be copied into audio/ and
@@ -5538,6 +5548,8 @@ fn place_bundled_audio_reuses_existing_original_and_copies_missing_one() {
         gain: 1.0,
         fade_in_seconds: None,
         fade_out_seconds: None,
+        fade_in_curve: None,
+        fade_out_curve: None,
         color: None,
     });
 
@@ -6688,4 +6700,119 @@ fn automation_click_and_guide_cues_are_validated() {
         count_style: None,
     })
     .is_err());
+}
+
+#[test]
+fn clip_fades_are_clamped_to_the_clip_and_undo_in_one_step() {
+    let root = tempdir().expect("temp dir should exist");
+    let song_dir =
+        create_song_folder(root.path(), "clip-fades-demo").expect("song dir should exist");
+    fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+    save_song(&song_dir, &demo_song()).expect("song should save");
+
+    let mut session = DesktopSession::default();
+    session.song_dir = Some(song_dir.clone());
+    session
+        .engine
+        .load_song(demo_song())
+        .expect("song should load into engine");
+    let audio = crate::audio::engine::AudioController::default();
+    let fades_of = |session: &mut DesktopSession| {
+        let clip = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist")
+            .clips
+            .into_iter()
+            .find(|clip| clip.id == "clip_1")
+            .expect("clip should exist");
+        (clip.fade_in_seconds, clip.fade_out_seconds)
+    };
+
+    // clip_1 lasts 4 s: a 3 s fade out after a 1.5 s fade in only gets 2.5 s.
+    session
+        .update_clip_fades(&["clip_1".to_string()], Some(1.5), Some(3.0), Default::default(), &audio)
+        .expect("fades should update");
+    assert_eq!(fades_of(&mut session), (Some(1.5), Some(2.5)));
+
+    // `None` leaves the other fade alone; a longer fade in pushes it back.
+    session
+        .update_clip_fades(&["clip_1".to_string()], Some(3.0), None, Default::default(), &audio)
+        .expect("fade in should update");
+    assert_eq!(fades_of(&mut session), (Some(3.0), Some(1.0)));
+
+    // 0 removes it.
+    session
+        .update_clip_fades(&["clip_1".to_string()], Some(0.0), Some(0.0), Default::default(), &audio)
+        .expect("fades should clear");
+    assert_eq!(fades_of(&mut session), (None, None));
+
+    session.undo_action(&audio).expect("undo should work");
+    assert_eq!(fades_of(&mut session), (Some(3.0), Some(1.0)));
+
+    assert!(session
+        .update_clip_fades(&["missing".to_string()], Some(1.0), None, Default::default(), &audio)
+        .is_err());
+}
+
+#[test]
+fn clip_fade_curves_are_clamped_and_kept_when_not_given() {
+    let root = tempdir().expect("temp dir should exist");
+    let song_dir =
+        create_song_folder(root.path(), "clip-curves-demo").expect("song dir should exist");
+    fs::create_dir_all(song_dir.join("audio")).expect("audio dir should exist");
+    save_song(&song_dir, &demo_song()).expect("song should save");
+    let mut session = DesktopSession::default();
+    session.song_dir = Some(song_dir.clone());
+    session.engine.load_song(demo_song()).expect("song should load into engine");
+    let audio = crate::audio::engine::AudioController::default();
+    let curves_of = |session: &mut DesktopSession| {
+        let clip = session
+            .song_view()
+            .expect("song view should build")
+            .expect("song summary should exist")
+            .clips
+            .into_iter()
+            .find(|clip| clip.id == "clip_1")
+            .expect("clip should exist");
+        (clip.fade_in_curve, clip.fade_out_curve)
+    };
+    let ids = ["clip_1".to_string()];
+    let curves = |fade_in_curve, fade_out_curve| crate::state::arrangement::ClipFadeCurveUpdate {
+        fade_in_curve,
+        fade_out_curve,
+    };
+
+    use libretracks_core::FadeCurve;
+    let point = |x, y| FadeCurve { x, y };
+
+    // Out of the unit square is pulled back into it.
+    session
+        .update_clip_fades(
+            &ids,
+            Some(1.0),
+            Some(1.0),
+            curves(Some(point(0.2, 0.9)), Some(point(-1.0, 3.0))),
+            &audio,
+        )
+        .expect("curves should update");
+    assert_eq!(
+        curves_of(&mut session),
+        (Some(point(0.2, 0.9)), Some(point(0.0, 1.0)))
+    );
+
+    // Changing only a length keeps both curves.
+    session
+        .update_clip_fades(&ids, Some(2.0), None, Default::default(), &audio)
+        .expect("fade should update");
+    assert_eq!(
+        curves_of(&mut session),
+        (Some(point(0.2, 0.9)), Some(point(0.0, 1.0)))
+    );
+
+    // A straight control point is stored as no curve.
+    session
+        .update_clip_fades(&ids, None, None, curves(Some(FadeCurve::LINEAR), None), &audio)
+        .expect("curve should reset");
+    assert_eq!(curves_of(&mut session).0, None);
 }

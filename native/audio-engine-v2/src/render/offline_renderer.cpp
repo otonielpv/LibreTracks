@@ -1,4 +1,5 @@
 #include <lt_engine/render/offline_renderer.h>
+#include <lt_engine/render/fade_curve.h>
 #include <lt_engine/core/denormals.h>
 
 #include <lt_engine/core/fs_path.h>
@@ -455,7 +456,9 @@ void finalise_clip_block(const Clip& clip, const ClipBlock& cb, Scratch& s) noex
         for (int f = 0; f < read; ++f) {
             const Frame pos = played + f;
             if (pos < clip.fade_in_frames) {
-                const float g = static_cast<float>(pos) / clip.fade_in_frames;
+                const float g = render::fade_curve_gain(
+                    static_cast<float>(pos) / clip.fade_in_frames,
+                    clip.fade_in_curve_x, clip.fade_in_curve_y);
                 s.clip_l[static_cast<std::size_t>(f)] *= g;
                 s.clip_r[static_cast<std::size_t>(f)] *= g;
             }
@@ -466,7 +469,9 @@ void finalise_clip_block(const Clip& clip, const ClipBlock& cb, Scratch& s) noex
             const Frame pos = played + f;
             const Frame from_end = clip.length_frames - pos;
             if (from_end < clip.fade_out_frames && from_end >= 0) {
-                const float g = static_cast<float>(from_end) / clip.fade_out_frames;
+                const float g = render::fade_curve_gain(
+                    static_cast<float>(from_end) / clip.fade_out_frames,
+                    clip.fade_out_curve_x, clip.fade_out_curve_y);
                 s.clip_l[static_cast<std::size_t>(f)] *= g;
                 s.clip_r[static_cast<std::size_t>(f)] *= g;
             }

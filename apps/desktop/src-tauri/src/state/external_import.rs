@@ -340,6 +340,8 @@ impl DesktopSession {
                     gain: item.gain.max(0.0),
                     fade_in_seconds: None,
                     fade_out_seconds: None,
+                    fade_in_curve: None,
+                    fade_out_curve: None,
                     color: None,
                 });
                 created_clip_count += 1;

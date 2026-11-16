@@ -330,6 +330,7 @@ impl DesktopSession {
         clip.timeline_start_seconds = normalize_timeline_start_seconds(timeline_start_seconds);
         clip.source_start_seconds = source_start_seconds.max(0.0);
         clip.duration_seconds = duration_seconds;
+        super::timeline_math::clamp_clip_fades(clip);
         refresh_song_duration(&mut song);
 
         self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
@@ -1003,6 +1004,60 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    /// Set the fade in and/or fade out of several clips as one undo step.
+    /// `None` leaves that value as it is; a length of `Some(0.0)` removes the
+    /// fade. Each fade is clamped to its clip, so a long fade on a short clip
+    /// just fills it. A curve is kept inside its unit square, and a straight
+    /// one is stored as none.
+    pub fn update_clip_fades(
+        &mut self,
+        clip_ids: &[String],
+        fade_in_seconds: Option<f64>,
+        fade_out_seconds: Option<f64>,
+        curves: ClipFadeCurveUpdate,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        for clip_id in clip_ids {
+            let clip = song
+                .clips
+                .iter_mut()
+                .find(|clip| &clip.id == clip_id)
+                .ok_or_else(|| DesktopError::ClipNotFound(clip_id.clone()))?;
+            // A fade in set alone must not be squeezed by the old fade out:
+            // the value just asked for wins and the other one gives way.
+            if let Some(fade_in) = fade_in_seconds {
+                clip.fade_in_seconds = Some(fade_in);
+                if fade_out_seconds.is_none() {
+                    let room = (clip.duration_seconds - fade_in.max(0.0)).max(0.0);
+                    clip.fade_out_seconds = clip.fade_out_seconds.map(|fade| fade.min(room));
+                }
+            }
+            if let Some(fade_out) = fade_out_seconds {
+                clip.fade_out_seconds = Some(fade_out);
+                if fade_in_seconds.is_none() {
+                    let room = (clip.duration_seconds - fade_out.max(0.0)).max(0.0);
+                    clip.fade_in_seconds = clip.fade_in_seconds.map(|fade| fade.min(room));
+                }
+            }
+            if let Some(curve) = curves.fade_in_curve {
+                clip.fade_in_curve = curve.normalized();
+            }
+            if let Some(curve) = curves.fade_out_curve {
+                clip.fade_out_curve = curve.normalized();
+            }
+            super::timeline_math::clamp_clip_fades(clip);
+        }
+
+        self.persist_song_update(song, audio, AudioChangeImpact::TimelineWindow, true)?;
+
+        Ok(self.snapshot())
+    }
+
     #[allow(dead_code)]
     pub fn update_track_name_only(
         &mut self,
@@ -1299,4 +1354,14 @@ pub(super) fn new_track(
         match_aliases: Vec::new(),
         song_region_id: None,
     }
+}
+
+/// The fade curves `update_clip_fades` sets; `None` leaves that one as it is.
+#[derive(Debug, Clone, Copy, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipFadeCurveUpdate {
+    #[serde(default)]
+    pub fade_in_curve: Option<libretracks_core::FadeCurve>,
+    #[serde(default)]
+    pub fade_out_curve: Option<libretracks_core::FadeCurve>,
 }

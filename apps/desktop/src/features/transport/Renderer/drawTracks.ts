@@ -1,6 +1,7 @@
 import type { SongView, VideoAssetSummary, WaveformSummaryDto } from "../desktopApi";
 import { getPendingClipLabel, type TimelineClipSummary, type TimelineTrackSummary } from "../library/pendingAudioImports";
 import { clipDisplayName } from "../helpers";
+import { drawClipFades } from "../clipFades/drawClipFades";
 // The canvas renderer is not a React component, so it reads from the i18n
 // singleton directly (whose .t always reflects the current language) rather
 // than threading `t` through every snapshot construction site.
@@ -1110,6 +1111,17 @@ export function drawTrackClipsLayer(
         context.textBaseline = "middle";
         context.fillText(clipDisplayName(clip), clippedLeft + 12, clipTop + 13);
         context.restore();
+      }
+
+      // Lo último: el asa del fade de entrada cae en la esquina del nombre.
+      if (!clip.isPending) {
+        drawClipFades(
+          context,
+          clip,
+          { left, width, top: clipTop, height: clipHeight },
+          snapshot.zoomLevel,
+          isSelected,
+        );
       }
     }
   }

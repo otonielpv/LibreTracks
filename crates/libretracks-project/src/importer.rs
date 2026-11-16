@@ -303,6 +303,8 @@ pub fn import_wav_song(
                 gain: 1.0,
                 fade_in_seconds: None,
                 fade_out_seconds: None,
+                fade_in_curve: None,
+                fade_out_curve: None,
                 color: None,
             })
             .collect(),
@@ -396,6 +398,8 @@ pub fn append_wav_files_to_song(
             gain: 1.0,
             fade_in_seconds: None,
             fade_out_seconds: None,
+            fade_in_curve: None,
+            fade_out_curve: None,
             color: None,
         });
 

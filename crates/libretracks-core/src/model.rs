@@ -783,8 +783,82 @@ pub struct Clip {
     pub gain: f64,
     pub fade_in_seconds: Option<f64>,
     pub fade_out_seconds: Option<f64>,
+    /// Shape of each fade: the control point of its curve, dragged freely
+    /// like Live's fade curve handle. `None` = a straight ramp; left out of
+    /// the file then, so sessions without curves are written as before. The
+    /// engine applies it in `render/fade_curve.h`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fade_in_curve: Option<FadeCurve>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fade_out_curve: Option<FadeCurve>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+}
+
+/// Control point of a fade's curve in the fade's own unit square: x runs from
+/// the silent edge (0) to where the fade reaches full level (1), y is the gain.
+/// The curve is a quadratic Bézier from (0, 0) to (1, 1) through this control
+/// point; (0.5, 0.5) is the straight ramp. Kept inside the unit square, which
+/// keeps the gain monotonic.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(from = "FadeCurveOnDisk")]
+pub struct FadeCurve {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// What a fade curve can look like in a session file. Sessions saved while the
+/// curve was a single bend (-1..1, before the free control point) hold a plain
+/// number; they must keep opening, so that number is read as the control
+/// point on the matching diagonal: up-left for a positive bend (fast), down-
+/// right for a negative one (slow), centre for 0.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum FadeCurveOnDisk {
+    Point { x: f64, y: f64 },
+    LegacyBend(f64),
+}
+
+impl From<FadeCurveOnDisk> for FadeCurve {
+    fn from(value: FadeCurveOnDisk) -> Self {
+        match value {
+            FadeCurveOnDisk::Point { x, y } => FadeCurve { x, y },
+            FadeCurveOnDisk::LegacyBend(bend) => {
+                let bend = if bend.is_finite() { bend.clamp(-1.0, 1.0) } else { 0.0 };
+                FadeCurve {
+                    x: 0.5 - bend / 2.0,
+                    y: 0.5 + bend / 2.0,
+                }
+            }
+        }
+    }
+}
+
+impl FadeCurve {
+    pub const LINEAR: FadeCurve = FadeCurve { x: 0.5, y: 0.5 };
+
+    /// Inside the unit square, or `None` when it is (nearly) straight or not a
+    /// number, so a straight fade is always stored as "no curve".
+    pub fn normalized(self) -> Option<FadeCurve> {
+        if !self.x.is_finite() || !self.y.is_finite() {
+            return None;
+        }
+        let curve = FadeCurve {
+            x: self.x.clamp(0.0, 1.0),
+            y: self.y.clamp(0.0, 1.0),
+        };
+        let straight =
+            (curve.x - Self::LINEAR.x).abs() < 1e-4 && (curve.y - Self::LINEAR.y).abs() < 1e-4;
+        (!straight).then_some(curve)
+    }
+
+    pub fn x_or_linear(curve: Option<FadeCurve>) -> f64 {
+        curve.map_or(Self::LINEAR.x, |curve| curve.x)
+    }
+
+    pub fn y_or_linear(curve: Option<FadeCurve>) -> f64 {
+        curve.map_or(Self::LINEAR.y, |curve| curve.y)
+    }
 }
 
 /// How a video frame is fitted into the output display when their aspect
@@ -1486,6 +1560,37 @@ mod tests {
         assert_eq!(VoiceGuideCountStyle::Full.as_engine_value(), 0);
         assert_eq!(VoiceGuideCountStyle::HalfThenFull.as_engine_value(), 1);
         assert_eq!(VoiceGuideCountStyle::HalfTime.as_engine_value(), 2);
+    }
+
+    // A session saved while the fade curve was one number (-1..1) must still
+    // open: the number becomes the control point on the matching diagonal.
+    #[test]
+    fn clip_fade_curves_read_both_the_point_and_the_old_single_bend() {
+        let clip = |curve: serde_json::Value| -> Clip {
+            serde_json::from_value(serde_json::json!({
+                "id": "c", "trackId": "t", "filePath": "a.wav",
+                "timelineStartSeconds": 0.0, "sourceStartSeconds": 0.0,
+                "durationSeconds": 4.0, "gain": 1.0,
+                "fadeInSeconds": 1.0, "fadeOutSeconds": null,
+                "fadeInCurve": curve
+            }))
+            .expect("the clip should load")
+        };
+        assert_eq!(
+            clip(serde_json::json!({"x": 0.2, "y": 0.9})).fade_in_curve,
+            Some(FadeCurve { x: 0.2, y: 0.9 })
+        );
+        assert_eq!(
+            clip(serde_json::json!(-0.1)).fade_in_curve,
+            Some(FadeCurve { x: 0.55, y: 0.45 })
+        );
+        assert_eq!(
+            clip(serde_json::json!(1.0)).fade_in_curve,
+            Some(FadeCurve { x: 0.0, y: 1.0 })
+        );
+        // Written back, it is always the point.
+        let json = serde_json::to_value(clip(serde_json::json!(-0.1))).unwrap();
+        assert_eq!(json["fadeInCurve"], serde_json::json!({"x": 0.55, "y": 0.45}));
     }
 
     #[test]

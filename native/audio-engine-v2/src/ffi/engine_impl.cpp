@@ -3183,6 +3183,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             std::max<Frame>(0, update.fade_in_frames);
                         clip.fade_out_frames =
                             std::max<Frame>(0, update.fade_out_frames);
+                        clip.fade_in_curve_x = update.fade_in_curve_x;
+                        clip.fade_in_curve_y = update.fade_in_curve_y;
+                        clip.fade_out_curve_x = update.fade_out_curve_x;
+                        clip.fade_out_curve_y = update.fade_out_curve_y;
                         clip.semitones = update.semitones;
                         by_track[update.track_id].push_back(std::move(clip));
                     }
@@ -3363,6 +3367,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                             std::max<Frame>(0, update.fade_in_frames);
                         clip.fade_out_frames =
                             std::max<Frame>(0, update.fade_out_frames);
+                        clip.fade_in_curve_x = update.fade_in_curve_x;
+                        clip.fade_in_curve_y = update.fade_in_curve_y;
+                        clip.fade_out_curve_x = update.fade_out_curve_x;
+                        clip.fade_out_curve_y = update.fade_out_curve_y;
                         clip.semitones = update.semitones;
                         by_track[update.track_id].push_back(std::move(clip));
                     }
@@ -3535,6 +3543,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         clip.gain = cu.gain;
                         clip.fade_in_frames = std::max<Frame>(0, cu.fade_in_frames);
                         clip.fade_out_frames = std::max<Frame>(0, cu.fade_out_frames);
+                        clip.fade_in_curve_x = cu.fade_in_curve_x;
+                        clip.fade_in_curve_y = cu.fade_in_curve_y;
+                        clip.fade_out_curve_x = cu.fade_out_curve_x;
+                        clip.fade_out_curve_y = cu.fade_out_curve_y;
                         clip.semitones = cu.semitones;
                         track.clips.push_back(std::move(clip));
                     }

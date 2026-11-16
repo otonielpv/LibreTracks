@@ -513,6 +513,7 @@ pub fn run() {
             commands::timeline::delete_clips,
             commands::timeline::update_clip_window,
             commands::timeline::update_clip_color,
+            commands::timeline::update_clip_fades,
             commands::timeline::duplicate_clip,
             commands::timeline::duplicate_clips,
             commands::timeline::split_clip,

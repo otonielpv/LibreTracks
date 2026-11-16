@@ -801,19 +801,42 @@ pub(super) fn split_clip_at_source(
         return None;
     }
     let left_duration = split_seconds_source - clip.timeline_start_seconds;
-    let left_clip = Clip {
+    // Each half keeps only its outer fade: the new inner edges start hard,
+    // like cutting a clip in any DAW.
+    let mut left_clip = Clip {
         id: left_id,
         duration_seconds: left_duration,
+        fade_out_seconds: None,
         ..clip.clone()
     };
-    let right_clip = Clip {
+    let mut right_clip = Clip {
         id: right_id,
         timeline_start_seconds: split_seconds_source,
         source_start_seconds: clip.source_start_seconds + left_duration,
         duration_seconds: clip_end - split_seconds_source,
+        fade_in_seconds: None,
         ..clip.clone()
     };
+    clamp_clip_fades(&mut left_clip);
+    clamp_clip_fades(&mut right_clip);
     Some((left_clip, right_clip))
+}
+
+/// Keep a clip's fades inside it: the fade in fits the clip, the fade out fits
+/// what the fade in leaves. A fade that ends up at 0 is stored as `None`.
+pub(crate) fn clamp_clip_fades(clip: &mut Clip) {
+    let duration = clip.duration_seconds.max(0.0);
+    let fade_in = clip
+        .fade_in_seconds
+        .filter(|fade| fade.is_finite())
+        .map(|fade| fade.clamp(0.0, duration));
+    let room_left = duration - fade_in.unwrap_or(0.0);
+    let fade_out = clip
+        .fade_out_seconds
+        .filter(|fade| fade.is_finite())
+        .map(|fade| fade.clamp(0.0, room_left));
+    clip.fade_in_seconds = fade_in.filter(|fade| *fade > 0.0);
+    clip.fade_out_seconds = fade_out.filter(|fade| *fade > 0.0);
 }
 
 /// Split every clip whose span strictly contains `split_seconds_source` into
@@ -1037,5 +1060,60 @@ mod snap_regions_after_to_downbeats_tests {
 
         let a = song.regions.iter().find(|r| r.id == "a").unwrap();
         assert_eq!(a.start_seconds, 0.0);
+    }
+}
+
+#[cfg(test)]
+mod clip_fade_tests {
+    use super::*;
+
+    fn clip(fade_in: Option<f64>, fade_out: Option<f64>) -> Clip {
+        Clip {
+            id: "c".into(),
+            track_id: "t".into(),
+            file_path: "audio/a.wav".into(),
+            timeline_start_seconds: 10.0,
+            source_start_seconds: 0.0,
+            duration_seconds: 8.0,
+            gain: 1.0,
+            fade_in_seconds: fade_in,
+            fade_out_seconds: fade_out,
+            fade_in_curve: None,
+            fade_out_curve: None,
+            color: None,
+        }
+    }
+
+    #[test]
+    fn splitting_keeps_only_the_outer_fade_on_each_half() {
+        let (left, right) =
+            split_clip_at_source(&clip(Some(1.0), Some(2.0)), 14.0, "l".into(), "r".into())
+                .expect("the cut is inside the clip");
+        assert_eq!(left.fade_in_seconds, Some(1.0));
+        assert_eq!(left.fade_out_seconds, None);
+        assert_eq!(right.fade_in_seconds, None);
+        assert_eq!(right.fade_out_seconds, Some(2.0));
+    }
+
+    #[test]
+    fn splitting_shrinks_an_outer_fade_longer_than_its_half() {
+        let (left, _) =
+            split_clip_at_source(&clip(Some(6.0), None), 13.0, "l".into(), "r".into())
+                .expect("the cut is inside the clip");
+        assert_eq!(left.duration_seconds, 3.0);
+        assert_eq!(left.fade_in_seconds, Some(3.0));
+    }
+
+    #[test]
+    fn clamping_fits_the_fade_out_in_what_the_fade_in_leaves() {
+        let mut faded = clip(Some(5.0), Some(5.0));
+        clamp_clip_fades(&mut faded);
+        assert_eq!(faded.fade_in_seconds, Some(5.0));
+        assert_eq!(faded.fade_out_seconds, Some(3.0));
+
+        let mut zeroed = clip(Some(0.0), Some(f64::NAN));
+        clamp_clip_fades(&mut zeroed);
+        assert_eq!(zeroed.fade_in_seconds, None);
+        assert_eq!(zeroed.fade_out_seconds, None);
     }
 }

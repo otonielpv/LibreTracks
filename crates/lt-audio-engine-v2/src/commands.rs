@@ -387,6 +387,15 @@ pub struct ClipUpdate {
     pub gain: f32,
     pub fade_in_frames: i64,
     pub fade_out_frames: i64,
+    /// Control points of the fade curves; 0.5 / 0.5 = straight.
+    #[serde(default = "default_half")]
+    pub fade_in_curve_x: f32,
+    #[serde(default = "default_half")]
+    pub fade_in_curve_y: f32,
+    #[serde(default = "default_half")]
+    pub fade_out_curve_x: f32,
+    #[serde(default = "default_half")]
+    pub fade_out_curve_y: f32,
     #[serde(default)]
     pub semitones: i32,
 }
@@ -440,6 +449,15 @@ pub struct TrackClipUpdate {
     pub fade_in_frames: i64,
     #[serde(default)]
     pub fade_out_frames: i64,
+    /// Control points of the fade curves; 0.5 / 0.5 = straight.
+    #[serde(default = "default_half")]
+    pub fade_in_curve_x: f32,
+    #[serde(default = "default_half")]
+    pub fade_in_curve_y: f32,
+    #[serde(default = "default_half")]
+    pub fade_out_curve_x: f32,
+    #[serde(default = "default_half")]
+    pub fade_out_curve_y: f32,
     #[serde(default)]
     pub semitones: i32,
 }
@@ -548,4 +566,8 @@ pub enum JumpTrigger {
     AtRegionEnd,
     AtSongEnd,
     AtFrame,
+}
+
+fn default_half() -> f32 {
+    0.5
 }

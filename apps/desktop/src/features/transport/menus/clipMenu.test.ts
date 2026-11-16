@@ -51,7 +51,7 @@ function setup(selection: ClipSummary[]) {
     handleSetClipColors,
   } as unknown as Deps;
 
-  const actions = clipContextMenuActions({ clip: C1, deps, openColorMenu });
+  const actions = clipContextMenuActions({ clip: C1, deps, openColorMenu, openSubMenu: vi.fn() });
   const byLabel = (fragment: string) =>
     actions.find((action) => action.label.includes(fragment))!;
   return { byLabel, duplicateClipGroup, handleSetClipColors, openColorMenu };

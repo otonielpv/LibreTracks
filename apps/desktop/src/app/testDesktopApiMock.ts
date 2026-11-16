@@ -1800,6 +1800,30 @@ export const testDesktopApiMock = {
     });
     return clone(buildSnapshot());
   },
+  updateClipFades: async (
+    clipIds: string[],
+    fadeInSeconds: number | null,
+    fadeOutSeconds: number | null,
+    curves: {
+      fadeInCurve?: { x: number; y: number } | null;
+      fadeOutCurve?: { x: number; y: number } | null;
+    } = {},
+  ) => {
+    const ids = new Set(clipIds);
+    replaceSong({
+      ...state.song,
+      clips: state.song.clips.map((clip) => {
+        if (!ids.has(clip.id)) return clip;
+        const next = { ...clip };
+        if (fadeInSeconds !== null) next.fadeInSeconds = fadeInSeconds > 0 ? fadeInSeconds : null;
+        if (fadeOutSeconds !== null) next.fadeOutSeconds = fadeOutSeconds > 0 ? fadeOutSeconds : null;
+        if (curves.fadeInCurve != null) next.fadeInCurve = curves.fadeInCurve;
+        if (curves.fadeOutCurve != null) next.fadeOutCurve = curves.fadeOutCurve;
+        return next;
+      }),
+    });
+    return clone(buildSnapshot());
+  },
   duplicateClip: async (clipId: string, timelineStartSeconds: number) => {
     const clip = state.song.clips.find((entry) => entry.id === clipId) ?? null;
     if (!clip) {

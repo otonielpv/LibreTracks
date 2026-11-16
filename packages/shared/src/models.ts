@@ -701,6 +701,9 @@ export function formatBpm(bpm: number): string {
   return bpm.toFixed(2).replace(/\.?0+$/, "");
 }
 
+/** Punto de control de la curva de un fade; (0.5, 0.5) es la recta. */
+export type FadeCurve = { x: number; y: number };
+
 export type ClipSummary = {
   id: string;
   trackId: string;
@@ -715,6 +718,15 @@ export type ClipSummary = {
   durationSeconds: number;
   gain: number;
   color?: string | null;
+  /** Fade in desde el inicio del clip / fade out hasta su final, en segundos
+   * de fuente. Ausente = sin fade. */
+  fadeInSeconds?: number | null;
+  fadeOutSeconds?: number | null;
+  /** Punto de control de la curva de cada fade, en el cuadrado del propio
+   * fade (x desde el borde en silencio hasta el nivel pleno, y = ganancia).
+   * Ausente = recta. Se arrastra libre, como el asa de curva de Live. */
+  fadeInCurve?: FadeCurve | null;
+  fadeOutCurve?: FadeCurve | null;
   /** Modo de canal de su pista (ausente = estéreo): la onda pinta solo el
    * canal que suena. */
   channelMode?: TrackChannelMode;

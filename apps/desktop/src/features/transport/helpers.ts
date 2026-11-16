@@ -589,6 +589,13 @@ export function trackChildrenCount(song: SongView, trackId: string) {
   return song.tracks.filter((track) => track.parentTrackId === trackId).length;
 }
 
+function sameFadeCurve(
+  left: { x: number; y: number } | null | undefined,
+  right: { x: number; y: number } | null | undefined,
+) {
+  return (left?.x ?? 0.5) === (right?.x ?? 0.5) && (left?.y ?? 0.5) === (right?.y ?? 0.5);
+}
+
 function isClipStructurallyEqual(left: ClipSummary, right: ClipSummary) {
   return (
     left.id === right.id &&
@@ -601,6 +608,12 @@ function isClipStructurallyEqual(left: ClipSummary, right: ClipSummary) {
     left.sourceDurationSeconds === right.sourceDurationSeconds &&
     left.durationSeconds === right.durationSeconds &&
     left.color === right.color &&
+    // Sin esto el timeline se quedaba con el clip sin fades: no se pintaban y
+    // el asa arrastraba desde el valor viejo, borrando el otro fade.
+    (left.fadeInSeconds ?? 0) === (right.fadeInSeconds ?? 0) &&
+    (left.fadeOutSeconds ?? 0) === (right.fadeOutSeconds ?? 0) &&
+    sameFadeCurve(left.fadeInCurve, right.fadeInCurve) &&
+    sameFadeCurve(left.fadeOutCurve, right.fadeOutCurve) &&
     // La onda pinta según el modo de canal: sin esto, volver a Estéreo
     // reutilizaba el clip viejo y seguía pintando un solo canal.
     (left.channelMode ?? "stereo") === (right.channelMode ?? "stereo")

@@ -149,6 +149,8 @@ pub(super) fn append_clip_to_song(
         gain: 1.0,
         fade_in_seconds: None,
         fade_out_seconds: None,
+        fade_in_curve: None,
+        fade_out_curve: None,
         color: None,
     });
 
@@ -638,6 +640,8 @@ mod region_message_tests {
             gain: 1.0,
             fade_in_seconds: None,
             fade_out_seconds: None,
+            fade_in_curve: None,
+            fade_out_curve: None,
             color: None,
         }
     }

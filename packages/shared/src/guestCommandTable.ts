@@ -186,6 +186,7 @@ export const GUEST_COMMAND_ROUTES: Readonly<Record<string, GuestCommandRoute>> =
   trim_video_clip: "edit",
   undo_action: "edit",
   update_clip_color: "edit",
+  update_clip_fades: "edit",
   update_clip_window: "edit",
   update_live_region_master_gain: "edit",
   update_section_marker: "edit",

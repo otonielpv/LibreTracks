@@ -58,7 +58,7 @@ use crate::infra::settings::AppSettings;
 /// Theme-split `impl DesktopSession` blocks. Each submodule owns one coherent
 /// slice of the session's behavior and reaches the `pub(super)` fields defined
 /// here. See docs/REDESIGN_state_rs_module_split.md.
-mod arrangement;
+pub(crate) mod arrangement;
 mod audio_prep;
 mod charts;
 mod covers;

@@ -1335,6 +1335,8 @@ pub fn merge_extracted_song_package(
             gain: clip.gain,
             fade_in_seconds: clip.fade_in_seconds,
             fade_out_seconds: clip.fade_out_seconds,
+            fade_in_curve: None,
+            fade_out_curve: None,
             color: clip.color.clone(),
         });
     }
@@ -1584,6 +1586,8 @@ mod tests {
             gain: 1.0,
             fade_in_seconds: None,
             fade_out_seconds: None,
+            fade_in_curve: None,
+            fade_out_curve: None,
             color: None,
         }
     }

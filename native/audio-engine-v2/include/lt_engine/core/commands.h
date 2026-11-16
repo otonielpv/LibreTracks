@@ -223,6 +223,10 @@ struct CmdSetSongClips {
         Gain  gain = 1.0f;
         Frame fade_in_frames = 0;
         Frame fade_out_frames = 0;
+        float fade_in_curve_x = 0.5f;
+        float fade_in_curve_y = 0.5f;
+        float fade_out_curve_x = 0.5f;
+        float fade_out_curve_y = 0.5f;
         Semitones semitones = 0;
     };
     Id song_id;
@@ -308,6 +312,10 @@ struct CmdUpsertSongTracks {
         Gain  gain = 1.0f;
         Frame fade_in_frames = 0;
         Frame fade_out_frames = 0;
+        float fade_in_curve_x = 0.5f;
+        float fade_in_curve_y = 0.5f;
+        float fade_out_curve_x = 0.5f;
+        float fade_out_curve_y = 0.5f;
         Semitones semitones = 0;
     };
     struct TrackUpdate {
