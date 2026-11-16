@@ -102,12 +102,14 @@ impl ExportTarget {
             ExportTarget::Path(_) => Ok(()),
             #[cfg(target_os = "android")]
             ExportTarget::Saf { temp, target } => {
+                ensure_space_for_mobile_copy(temp)?;
                 let result = crate::platform::mobile_files::copy_path_to_picked_target(app, temp, target);
                 let _ = std::fs::remove_file(temp);
                 result
             }
             #[cfg(target_os = "ios")]
             ExportTarget::IosExport { temp } => {
+                ensure_space_for_mobile_copy(temp)?;
                 let result = libretracks_ios_folder_picker::export_file_blocking(
                     app,
                     &temp.to_string_lossy(),
@@ -120,6 +122,19 @@ impl ExportTarget {
             }
         }
     }
+}
+
+/// On a phone the export is written to a temp file and then COPIED to where
+/// the user picked, on the same storage: the peak is twice the file. Check the
+/// copy fits before starting it, now that the exact size is known; on refusal
+/// the temp goes too, so a retry starts from the space it had.
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn ensure_space_for_mobile_copy(temp: &std::path::Path) -> Result<(), String> {
+    let size = std::fs::metadata(temp).map(|metadata| metadata.len()).unwrap_or(0);
+    libretracks_project::ensure_free_space(temp, size, 64 * 1024 * 1024).map_err(|error| {
+        let _ = std::fs::remove_file(temp);
+        error.to_string()
+    })
 }
 
 /// Platform "save as" dialog for exports. Returns None if the user cancels.

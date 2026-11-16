@@ -94,6 +94,52 @@ describe("formatTransportError", () => {
     expect(formatTransportError(raw, translator(es))).toBe(expected);
   });
 
+  it("shows a space check with both figures, not as an audio decode failure", () => {
+    const GB = 1024 ** 3;
+    expect(
+      formatTransportError(
+        `audio decode error: insufficient disk space: needs ${3 * GB} bytes, ${2.5 * GB} available`,
+        translator(es),
+      ),
+    ).toBe(
+      "No hay espacio suficiente: hacen falta 3.0 GB y solo quedan 2.5 GB libres. Libera espacio y vuelve a intentarlo.",
+    );
+  });
+
+  it("translates the OS's disk-full error instead of leaking it in English", () => {
+    for (const raw of [
+      "io error: No space left on device (os error 28)",
+      "io error: There is not enough space on the disk. (os error 112)",
+      // Windows words it in the system language: only the code is reliable.
+      "io error: No hay suficiente espacio en el disco. (os error 112)",
+      "copy failed (os error 28)",
+    ]) {
+      expect(formatTransportError(raw, translator(es))).toBe(
+        "El dispositivo se quedó sin espacio mientras se escribía. Libera espacio y vuelve a intentarlo.",
+      );
+    }
+  });
+
+  it("names the FAT32 cap instead of calling it a full disk", () => {
+    const GB = 1024 ** 3;
+    expect(
+      formatTransportError(
+        `io error: file too large for this volume: ${5 * GB} bytes, limit ${4 * GB - 1}`,
+        translator(es),
+      ),
+    ).toBe(
+      "Este archivo ocupa unos 5.0 GB y el destino solo admite archivos de hasta 4.0 GB (un pendrive o tarjeta SD en FAT32). Guárdalo en otro disco o formatea la unidad en exFAT.",
+    );
+  });
+
+  it("calls a corrupt package damaged, not undecodable audio", () => {
+    expect(
+      formatTransportError("invalid package: invalid Zip archive: Could not find EOCD", translator(en)),
+    ).toBe(
+      "The file is damaged or incomplete. If it came from the cloud or a transfer, download it again and try again.",
+    );
+  });
+
   it("translates backend messages that were hard-coded in Spanish for English users", () => {
     expect(
       formatTransportError(

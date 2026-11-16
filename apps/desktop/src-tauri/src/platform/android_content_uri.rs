@@ -131,8 +131,20 @@ pub fn copy_content_to(uri: &str, destination: &std::path::Path) -> std::io::Res
         fds.get(uri).ok_or_else(not_found)?.try_clone()?
     };
     source.seek(SeekFrom::Start(0))?;
+    // Antes de copiar, con el tamaño del descriptor: el mensaje lleva las
+    // cifras ("insufficient disk space: …") y la interfaz lo traduce.
+    if let Ok(metadata) = source.metadata() {
+        libretracks_project::ensure_free_space(destination, metadata.len(), 64 * 1024 * 1024)
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::StorageFull, error.to_string()))?;
+    }
     let mut target = File::create(destination)?;
-    std::io::copy(&mut source, &mut target)
+    let copied = std::io::copy(&mut source, &mut target);
+    if copied.is_err() {
+        // Media copia no sirve a nadie y ocupa sitio.
+        drop(target);
+        let _ = std::fs::remove_file(destination);
+    }
+    copied
 }
 
 /// Suelta todos. Al cerrar la sesión.

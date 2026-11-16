@@ -10,6 +10,7 @@ import {
   type CloudProviderId,
 } from "../desktopApi";
 import { formatBytes } from "../video/VideoExportOption";
+import { formatStorageError } from "../errors/formatTransportError";
 import { connectionType, shouldConfirmCloudDownload } from "../video/videoImportQuestion";
 import {
   isCloudTarget,
@@ -88,6 +89,16 @@ export function pickCloudFile(folder: CloudFolder): Promise<ProviderFile | null>
 }
 
 /**
+ * The message the cloud panel shows. Its own errors arrive already worded;
+ * a full disk or a damaged package comes from the OS or Rust in English, so
+ * those are translated.
+ */
+function cloudErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  return formatStorageError(raw, i18n.t) ?? raw;
+}
+
+/**
  * Bring a package down from the cloud and hand back the local path it landed on.
  *
  * Staged in a temp directory rather than somewhere the user chose: this file is
@@ -103,7 +114,13 @@ async function stageFromCloud(file: ProviderFile): Promise<string> {
   });
   try {
     // From the account the file came from, whatever the panel is showing.
-    const path = await downloadFromCloud(file.provider, file.id, file.name, stagingDir);
+    const path = await downloadFromCloud(
+      file.provider,
+      file.id,
+      file.name,
+      stagingDir,
+      file.sizeBytes,
+    );
     recordProductEvent("feature_cloud");
     return path;
   } finally {
@@ -150,7 +167,7 @@ export async function importFromCloud(
   } catch (error) {
     if (!isCloudTransferCancellation(error)) {
       useCloudStore.setState({
-        error: error instanceof Error ? error.message : String(error),
+        error: cloudErrorMessage(error),
       });
     }
     return false;
@@ -295,7 +312,7 @@ export async function finishExportWithChoice(
   } catch (error) {
     if (!isCloudTransferCancellation(error)) {
       useCloudStore.setState({
-        error: error instanceof Error ? error.message : String(error),
+        error: cloudErrorMessage(error),
       });
     }
   }

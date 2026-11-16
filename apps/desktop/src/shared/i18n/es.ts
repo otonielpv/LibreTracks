@@ -1462,6 +1462,14 @@ const es = {
         "El proyecto se creó con una versión de LibreTracks no compatible. Actualiza la aplicación y vuelve a intentarlo.",
       unsupportedAudioFormat:
         "Este formato de audio no es compatible. Convierte el archivo a WAV, FLAC, MP3, OGG, M4A o AAC.",
+      insufficientSpace:
+        "No hay espacio suficiente: hacen falta {{needed}} GB y solo quedan {{free}} GB libres. Libera espacio y vuelve a intentarlo.",
+      fileTooLargeForVolume:
+        "Este archivo ocupa unos {{size}} GB y el destino solo admite archivos de hasta {{limit}} GB (un pendrive o tarjeta SD en FAT32). Guárdalo en otro disco o formatea la unidad en exFAT.",
+      diskFull:
+        "El dispositivo se quedó sin espacio mientras se escribía. Libera espacio y vuelve a intentarlo.",
+      invalidPackage:
+        "El archivo está dañado o incompleto. Si viene de la nube o de una transferencia, descárgalo de nuevo y vuelve a intentarlo.",
       audioDecodeFailed:
         "LibreTracks no pudo decodificar este audio. Puede estar dañado o usar un códec no compatible.",
       importSkippedFiles_one:

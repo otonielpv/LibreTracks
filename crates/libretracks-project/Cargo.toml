@@ -20,5 +20,12 @@ zip = "2"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# macOS/iOS: the free space the system reports to users (Finder, Settings)
+# counts purgeable space (local Time Machine snapshots, iCloud caches) that
+# statvfs does not. Foundation's "important usage" capacity is that figure.
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSURL", "NSError", "NSValue"] }
+
 [dev-dependencies]
 tempfile = "3"

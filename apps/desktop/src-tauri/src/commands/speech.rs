@@ -83,14 +83,26 @@ pub async fn download_speech_model(app: AppHandle) -> Result<SpeechModelStatus, 
         .content_length()
         .filter(|&l| l > 0)
         .unwrap_or(MODEL_BYTES);
+    libretracks_project::ensure_free_space(&partial, total, 64 * 1024 * 1024)
+        .map_err(|error| error.to_string())?;
     let mut file = std::fs::File::create(&partial).map_err(|e| e.to_string())?;
     let mut hasher = Sha256::new();
     let mut downloaded: u64 = 0;
     let mut last_percent = u64::MAX;
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("download stream error: {e}"))?;
-        file.write_all(&chunk).map_err(|e| e.to_string())?;
+        // A dropped connection or a full disk leaves no `.part` behind.
+        let written = chunk
+            .map_err(|e| format!("download stream error: {e}"))
+            .and_then(|chunk| file.write_all(&chunk).map(|()| chunk).map_err(|e| e.to_string()));
+        let chunk = match written {
+            Ok(chunk) => chunk,
+            Err(error) => {
+                drop(file);
+                let _ = std::fs::remove_file(&partial);
+                return Err(error);
+            }
+        };
         hasher.update(&chunk);
         downloaded += chunk.len() as u64;
         let percent = downloaded.min(total) * 100 / total;

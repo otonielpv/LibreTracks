@@ -203,6 +203,20 @@ fn copy_demo_tree(src: &Path, dst: &Path, session_name: &str) -> std::io::Result
     Ok(session_file.unwrap_or_else(|| dst.join(format!("{session_name}.ltsession"))))
 }
 
+/// Total size of the files under `dir` (0 for what cannot be read).
+fn tree_bytes(dir: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .map(|entry| match entry.file_type() {
+            Ok(kind) if kind.is_dir() => tree_bytes(&entry.path()),
+            _ => entry.metadata().map(|metadata| metadata.len()).unwrap_or(0),
+        })
+        .fold(0, u64::saturating_add)
+}
+
 /// The demo song's `.ltsession` path, copying it into the device's songs folder
 /// the first time.
 ///
@@ -224,6 +238,11 @@ pub fn open_demo_session(app: AppHandle) -> Result<String, String> {
         ensure_demo_marker(&existing);
         return Ok(existing.to_string_lossy().into_owned());
     }
+
+    // Measured first so a full phone gets the translated "needs X GB, Y free"
+    // instead of a raw OS error halfway through the copy.
+    libretracks_project::ensure_free_space(&parent, tree_bytes(&demo_dir), 64 * 1024 * 1024)
+        .map_err(|error| error.to_string())?;
 
     let session_name = available_session_name(&parent);
     let target = parent.join(&session_name);

@@ -4850,6 +4850,7 @@ pub(super) fn copy_project_audio_files(
     fs::create_dir_all(target_song_dir.join("audio"))?;
     fs::create_dir_all(target_song_dir.join("cache").join("waveforms"))?;
 
+    let mut copies: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
     let mut copied_relative_paths = std::collections::HashSet::new();
     // Los vídeos van casi siempre por ruta absoluta (se referencian en su
     // sitio); sólo los que vinieron dentro de un paquete son relativos y
@@ -4884,7 +4885,7 @@ pub(super) fn copy_project_audio_files(
             fs::create_dir_all(parent)?;
         }
 
-        fs::copy(source_path, target_path)?;
+        copies.push((source_path, target_path));
     }
 
     for file_path in library_file_paths {
@@ -4910,6 +4911,23 @@ pub(super) fn copy_project_audio_files(
             fs::create_dir_all(parent)?;
         }
 
+        copies.push((source_path, target_path));
+    }
+
+    // Medido ANTES de copiar nada: un «Guardar como» de una sesión de varios
+    // GB se quedaba a medias con el «No space left on device» del sistema.
+    let total_bytes: u64 = copies
+        .iter()
+        .map(|(source, _)| fs::metadata(source).map(|metadata| metadata.len()).unwrap_or(0))
+        .fold(0, u64::saturating_add);
+    let largest_bytes = copies
+        .iter()
+        .map(|(source, _)| fs::metadata(source).map(|metadata| metadata.len()).unwrap_or(0))
+        .max()
+        .unwrap_or(0);
+    libretracks_project::ensure_file_fits_volume(target_song_dir, largest_bytes)?;
+    libretracks_project::ensure_free_space(target_song_dir, total_bytes, 128 * 1024 * 1024)?;
+    for (source_path, target_path) in copies {
         fs::copy(source_path, target_path)?;
     }
 

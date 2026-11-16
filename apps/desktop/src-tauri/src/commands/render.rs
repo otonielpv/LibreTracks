@@ -335,6 +335,59 @@ pub async fn render_song_audio(
     result
 }
 
+/// Bytes the engine will write for these requests: every output is a WAV of
+/// the range at the request's rate, channels and sample size.
+pub(crate) fn estimated_render_bytes(requests: &[RenderRequest]) -> u64 {
+    requests
+        .iter()
+        .map(|request| {
+            let seconds = (request.end_seconds - request.start_seconds).max(0.0);
+            let bytes_per_sample: u64 = match request.format {
+                lt_audio_engine_v2::RenderSampleFormat::Pcm16 => 2,
+                lt_audio_engine_v2::RenderSampleFormat::Pcm24 => 3,
+                lt_audio_engine_v2::RenderSampleFormat::Float32 => 4,
+            };
+            let frames = (seconds * f64::from(request.sample_rate)).ceil() as u64;
+            frames
+                .saturating_mul(u64::from(request.channels))
+                .saturating_mul(bytes_per_sample)
+                .saturating_mul(request.outputs.len() as u64)
+        })
+        .fold(0u64, u64::saturating_add)
+}
+
+/// Refuse a render that clearly will not fit, before the engine opens a file
+/// (it only reported "disk full?" after the write failed).
+///
+/// A mix is written once, at `write_path`. Stems are rendered into
+/// `stem_dir` and then zipped (stored, same size) at `write_path`: both
+/// copies exist at once, so when the two share a volume it needs twice.
+/// Same free figure from both paths is taken as "same volume".
+fn ensure_space_for_render(
+    requests: &[RenderRequest],
+    stems: bool,
+    write_path: &Path,
+    stem_dir: &Path,
+) -> Result<(), libretracks_project::ProjectError> {
+    const HEADROOM: u64 = 128 * 1024 * 1024;
+    let bytes = estimated_render_bytes(requests);
+    // One file lands at `write_path` either way (the WAV, or the zip with
+    // every stem): a FAT pendrive caps it at 4 GiB whatever the free space.
+    libretracks_project::ensure_file_fits_volume(write_path, bytes)?;
+    if !stems {
+        return libretracks_project::ensure_free_space(write_path, bytes, HEADROOM);
+    }
+    let same_volume = libretracks_project::free_space_bytes(write_path)
+        .zip(libretracks_project::free_space_bytes(stem_dir))
+        .is_some_and(|(target, staging)| target == staging);
+    if same_volume {
+        libretracks_project::ensure_free_space(write_path, bytes.saturating_mul(2), HEADROOM)
+    } else {
+        libretracks_project::ensure_free_space(stem_dir, bytes, HEADROOM)?;
+        libretracks_project::ensure_free_space(write_path, bytes, HEADROOM)
+    }
+}
+
 /// Remove whatever a failed or cancelled render left at the write path.
 fn discard_target(target: &ExportTarget) {
     let _ = std::fs::remove_file(target.write_path());
@@ -399,11 +452,11 @@ impl RenderJob<'_> {
         } else {
             vec![None]
         };
-        let mut last_emit = Instant::now() - Duration::from_secs(1);
-        let mut files = Vec::new();
-        let mut missing_files = Vec::new();
+        // Every request first, so the space check knows the whole job before
+        // the first byte is written.
+        let mut engine_requests = Vec::with_capacity(jobs.len());
         for (index, region) in jobs.iter().enumerate() {
-            let result = (|| {
+            let built = (|| {
                 let mut engine_request = self.engine_request_for_region(write_path, &stem_dir, region.map(|item| item.id.as_str()))?;
                 if let Some(region) = region {
                     let prefix = format!("{:02} {}", index + 1, sanitize_file_name(&region.name));
@@ -417,14 +470,35 @@ impl RenderJob<'_> {
                         output.path = path_string(&stem_dir.join(name));
                     }
                 }
+                Ok::<_, JobError>(engine_request)
+            })();
+            match built {
+                Ok(engine_request) => engine_requests.push(engine_request),
+                Err(error) => {
+                    let _ = std::fs::remove_dir_all(&stem_dir);
+                    return Err(error);
+                }
+            }
+        }
+        if let Err(error) = ensure_space_for_render(&engine_requests, stems, write_path, &stem_dir) {
+            let _ = std::fs::remove_dir_all(&stem_dir);
+            return Err(JobError::Failed(error.to_string()));
+        }
+
+        let mut last_emit = Instant::now() - Duration::from_secs(1);
+        let mut files = Vec::new();
+        let mut missing_files = Vec::new();
+        let job_count = engine_requests.len();
+        for (index, engine_request) in engine_requests.iter().enumerate() {
+            let result = (|| {
                 let mut on_progress = |fraction: f64| {
                     if last_emit.elapsed() >= Duration::from_millis(100) {
                         last_emit = Instant::now();
-                        self.emit_progress((index as f64 + fraction) / jobs.len() as f64 * render_share, "rendering");
+                        self.emit_progress((index as f64 + fraction) / job_count as f64 * render_share, "rendering");
                     }
                     !RENDER_CANCEL.load(Ordering::Acquire)
                 };
-                render(&engine_request, &mut on_progress).map_err(|error| match error {
+                render(engine_request, &mut on_progress).map_err(|error| match error {
                     RenderError::Cancelled => JobError::Cancelled,
                     RenderError::Failed(error) => JobError::Failed(error.to_string()),
                 })

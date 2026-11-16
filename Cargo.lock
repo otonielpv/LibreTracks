@@ -2689,6 +2689,8 @@ dependencies = [
  "hound",
  "libc",
  "libretracks-core",
+ "objc2",
+ "objc2-foundation",
  "rayon",
  "serde",
  "serde_json",

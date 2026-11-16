@@ -527,8 +527,17 @@ pub async fn cloud_download(
     file_id: String,
     file_name: String,
     dest_dir: String,
+    size_bytes: Option<u64>,
 ) -> Result<String, String> {
     let dest = PathBuf::from(dest_dir).join(&file_name);
+    // A set is often gigabytes: refuse up front rather than at 90% with the
+    // OS's raw "No space left on device". The import that follows checks its
+    // own extraction against what is left after this.
+    if let Some(size) = size_bytes.filter(|size| *size > 0) {
+        libretracks_project::ensure_file_fits_volume(&dest, size)
+            .and_then(|()| libretracks_project::ensure_free_space(&dest, size, 64 * 1024 * 1024))
+            .map_err(|error| error.to_string())?;
+    }
     let transfer = TransferGuard::begin()?;
     let handle = app.clone();
     storage(&app, &provider)?

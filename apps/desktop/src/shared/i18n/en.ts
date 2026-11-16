@@ -1444,6 +1444,14 @@ const en = {
         "This project was created with an unsupported LibreTracks version. Update the app and try again.",
       unsupportedAudioFormat:
         "This audio format is not supported. Convert the file to WAV, FLAC, MP3, OGG, M4A or AAC.",
+      insufficientSpace:
+        "Not enough storage: this needs {{needed}} GB and only {{free}} GB are free. Free up space and try again.",
+      fileTooLargeForVolume:
+        "This file is about {{size}} GB and the destination only accepts files up to {{limit}} GB (a pendrive or SD card formatted as FAT32). Save it to another disk, or reformat the drive as exFAT.",
+      diskFull:
+        "The device ran out of storage while writing. Free up space and try again.",
+      invalidPackage:
+        "The file is damaged or incomplete. If it came from the cloud or a transfer, download it again and try again.",
       audioDecodeFailed:
         "LibreTracks could not decode this audio file. The file may be damaged or use an unsupported codec.",
       importSkippedFiles_one:

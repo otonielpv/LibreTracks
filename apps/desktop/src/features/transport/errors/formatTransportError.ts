@@ -26,6 +26,54 @@ function namedRegion(
  * Turns stable backend/domain errors into localized, actionable UI messages.
  * Unknown errors deliberately keep their original detail for diagnostics.
  */
+/** `ProjectError::InsufficientSpace` (Rust), figures in bytes. */
+const INSUFFICIENT_SPACE_PATTERN =
+  /insufficient disk space: needs (\d+) bytes, (\d+) available/i;
+/** `ProjectError::FileTooLargeForVolume` (Rust): a FAT pendrive's 4 GiB cap. */
+const FILE_TOO_LARGE_PATTERN =
+  /file too large for this volume: (\d+) bytes, limit (\d+)/i;
+/**
+ * The OS's own "disk full", untranslated: ENOSPC (os error 28) on Unix,
+ * ERROR_DISK_FULL (112) / ERROR_HANDLE_DISK_FULL (39) on Windows, or the
+ * messages when the code is not attached.
+ */
+const DISK_FULL_PATTERN =
+  /os error (28|112|39)\b|no space left on device|not enough space on the disk|storage ?full/i;
+
+function formatGigabytes(bytes: number): string {
+  return (bytes / 1024 ** 3).toFixed(1);
+}
+
+/**
+ * Storage and package failures, translated; `null` for anything else.
+ *
+ * Separate so flows that show their own messages raw (the cloud panel) can
+ * still translate these, which come from the OS or a Rust error in English.
+ */
+export function formatStorageError(raw: string, t: TFunction): string | null {
+  const insufficientSpace = raw.match(INSUFFICIENT_SPACE_PATTERN);
+  if (insufficientSpace) {
+    return t("transport.errors.insufficientSpace", {
+      needed: formatGigabytes(Number(insufficientSpace[1])),
+      free: formatGigabytes(Number(insufficientSpace[2])),
+    });
+  }
+  const tooLarge = raw.match(FILE_TOO_LARGE_PATTERN);
+  if (tooLarge) {
+    return t("transport.errors.fileTooLargeForVolume", {
+      size: formatGigabytes(Number(tooLarge[1])),
+      limit: formatGigabytes(Number(tooLarge[2])),
+    });
+  }
+  if (DISK_FULL_PATTERN.test(raw)) {
+    return t("transport.errors.diskFull");
+  }
+  if (raw.toLocaleLowerCase().includes("invalid package:")) {
+    return t("transport.errors.invalidPackage");
+  }
+  return null;
+}
+
 export function formatTransportError(
   error: unknown,
   t: TFunction,
@@ -41,6 +89,14 @@ export function formatTransportError(
     return t(`networkSession.guestErrors.${code}`, {
       defaultValue: t("networkSession.guestErrors.generic"),
     });
+  }
+
+  // Storage first: these travel inside other wrappers ("io error:",
+  // "audio decode error:"…) and would otherwise land on a generic or, worse,
+  // wrong message ("could not decode this audio" for a full disk).
+  const storage = formatStorageError(raw, t);
+  if (storage) {
+    return storage;
   }
 
   const durationOverlap = raw.match(DURATION_OVERLAP_PATTERN);

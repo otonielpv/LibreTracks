@@ -245,7 +245,10 @@ fn an_interrupted_copy_never_leaves_a_session_to_open() {
     drop(job);
     assert!(!target.join(libretracks_project::SONG_FILE_NAME).exists(), "no session document");
     assert!(!target.join(&path).exists(), "no half file under its real name");
-    assert!(target.join(format!("{path}.part")).exists());
+    // Nor the half file at all: the next copy starts it from zero (the `.part`
+    // is opened with truncate), so keeping it only took space, gigabytes on
+    // a long stem, on a machine that may have run out of it.
+    assert!(!target.join(format!("{path}.part")).exists(), "no orphan .part");
 }
 
 /// Diagnóstico manual: LT_SESSION_DIR=<carpeta de sesión real>.

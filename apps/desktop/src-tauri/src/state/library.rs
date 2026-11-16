@@ -788,6 +788,9 @@ pub fn import_audio_files_from_bytes_to_library(
 
     let audio_dir = song_dir.join("audio");
     fs::create_dir_all(&audio_dir)?;
+    // The bytes are already in memory, so the exact size is known up front.
+    let total_bytes: u64 = files.iter().map(|file| file.bytes.len() as u64).sum();
+    libretracks_project::ensure_free_space(&audio_dir, total_bytes, 64 * 1024 * 1024)?;
 
     let mut written_paths = Vec::with_capacity(files.len());
     let import_result = (|| {

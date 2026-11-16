@@ -109,8 +109,7 @@ pub fn prepare_audio_to_wav(
         bits_per_sample: 16,
         sample_format: hound::SampleFormat::Int,
     };
-    let mut writer = hound::WavWriter::create(destination, spec)
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+    let mut writer = hound::WavWriter::create(destination, spec).map_err(writer_error)?;
 
     let mut frames: u64 = 0;
     loop {
@@ -147,23 +146,29 @@ pub fn prepare_audio_to_wav(
                 // Symmetric scaling: i16::MAX rather than 32768, so +1.0 maps to
                 // full scale without wrapping to a large negative value.
                 let quantised = (sample * f32::from(i16::MAX)).round() as i16;
-                writer
-                    .write_sample(quantised)
-                    .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+                writer.write_sample(quantised).map_err(writer_error)?;
             }
             frames += 1;
         }
     }
 
-    writer
-        .finalize()
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+    writer.finalize().map_err(writer_error)?;
 
     Ok(PreparedAudioInfo {
         sample_rate,
         channels,
         frames,
     })
+}
+
+/// A failure WRITING the prepared WAV. An I/O error stays `Io` so a full disk
+/// can be told apart from an undecodable source: the exporter skips the second
+/// but must stop on the first, or the package silently ships without audio.
+fn writer_error(error: hound::Error) -> ProjectError {
+    match error {
+        hound::Error::IoError(io_error) => ProjectError::Io(io_error),
+        other => ProjectError::AudioDecode(other.to_string()),
+    }
 }
 
 /// The name a prepared source takes inside the package: the original stem with

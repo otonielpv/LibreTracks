@@ -49,6 +49,21 @@ pub enum ProjectError {
     Wav(#[from] hound::Error),
     #[error("audio decode error: {0}")]
     AudioDecode(String),
+    /// The volume cannot hold what is about to be written. Its message is
+    /// parsed by the frontend (`insufficient disk space`) to show the figures
+    /// translated, so keep the wording and the order of the two numbers.
+    #[error("insufficient disk space: needs {needed_bytes} bytes, {free_bytes} available")]
+    InsufficientSpace { needed_bytes: u64, free_bytes: u64 },
+    /// The destination's filesystem caps file size below what is about to be
+    /// written (FAT on pendrives: 4 GiB). Parsed by the frontend too.
+    #[error("file too large for this volume: {size_bytes} bytes, limit {limit_bytes}")]
+    FileTooLargeForVolume { size_bytes: u64, limit_bytes: u64 },
+    /// A `.ltset`/`.ltpkg` that is not a readable package: truncated download,
+    /// corrupt zip, unsafe entry, no session inside. Used to travel as
+    /// `AudioDecode`, which the UI showed as "could not decode this audio" and
+    /// hid the real cause.
+    #[error("invalid package: {0}")]
+    InvalidPackage(String),
     #[error("waveform summary is invalid or stale: {0}")]
     InvalidWaveformSummary(PathBuf),
 }
@@ -1306,5 +1321,15 @@ mod tests {
         // The current reader, of course, accepts it.
         let song = parse_song_document(&json, SONG_FORMAT_VERSION).expect("v8 reader");
         assert_eq!(song.video_clips.len(), 3);
+    }
+}
+
+/// A zip failure as a project error. An I/O failure (disk full while writing a
+/// package, a read error) stays `Io` so it can be told apart; everything else
+/// means the archive itself is unusable.
+pub(crate) fn zip_error(error: zip::result::ZipError) -> ProjectError {
+    match error {
+        zip::result::ZipError::Io(io_error) => ProjectError::Io(io_error),
+        other => ProjectError::InvalidPackage(other.to_string()),
     }
 }

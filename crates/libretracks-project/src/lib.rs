@@ -4,7 +4,9 @@ pub mod cover;
 mod asset_path;
 mod atomic_write;
 mod disk_space;
-pub use disk_space::free_space_bytes;
+pub use disk_space::{
+    ensure_file_fits_volume, ensure_free_space, free_space_bytes, is_disk_full, max_file_size_bytes,
+};
 mod importer;
 mod package;
 mod prepared_audio;

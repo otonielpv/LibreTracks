@@ -3289,8 +3289,16 @@ export async function downloadFromCloud(
   fileId: string,
   fileName: string,
   destDir: string,
+  /** From the listing; lets the backend refuse a download that cannot fit. 0 = unknown. */
+  sizeBytes?: number,
 ): Promise<string> {
-  return invokeCommand<string>("cloud_download", { provider, fileId, fileName, destDir });
+  return invokeCommand<string>("cloud_download", {
+    provider,
+    fileId,
+    fileName,
+    destDir,
+    sizeBytes: sizeBytes && sizeBytes > 0 ? sizeBytes : null,
+  });
 }
 
 /** Abort the active upload/download. Safe when it has just completed. */

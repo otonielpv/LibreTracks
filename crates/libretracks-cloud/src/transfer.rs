@@ -242,6 +242,22 @@ pub(crate) async fn stream_to_file(
     progress: &ProgressFn,
     cancelled: &CancelFn,
 ) -> Result<(), CloudError> {
+    let result = write_download(response, dest_path, progress, cancelled).await;
+    if result.is_err() {
+        // A dropped connection or a full disk used to leave the `.part`
+        // behind (only a cancel cleaned up): gigabytes nobody could see,
+        // making the next attempt fail for lack of space too.
+        let _ = tokio::fs::remove_file(dest_path.with_extension("part")).await;
+    }
+    result
+}
+
+async fn write_download(
+    response: reqwest::Response,
+    dest_path: &Path,
+    progress: &ProgressFn,
+    cancelled: &CancelFn,
+) -> Result<(), CloudError> {
     let total = response.content_length().unwrap_or(0);
     let staging = dest_path.with_extension("part");
     // Buffered, and generously. Every write on a `tokio::fs::File` is

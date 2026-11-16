@@ -195,7 +195,15 @@ describe("varias cuentas", () => {
     } as never);
     await flow;
 
-    expect(downloadFromCloud).toHaveBeenCalledWith("dropbox", "id:a", "x.ltpkg", "/cache/cloud-staging");
+    // The size from the listing travels too: the backend refuses a download
+    // that cannot fit before writing a byte.
+    expect(downloadFromCloud).toHaveBeenCalledWith(
+      "dropbox",
+      "id:a",
+      "x.ltpkg",
+      "/cache/cloud-staging",
+      1,
+    );
   });
 
   it("una exportacion va a la cuenta elegida aunque se cambie de cuenta en medio", async () => {

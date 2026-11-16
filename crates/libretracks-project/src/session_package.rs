@@ -152,7 +152,7 @@ pub struct PackageVideoPayload {
 /// formats keep them under `video/`.
 pub fn package_video_payload<R: Read + io::Seek>(reader: R) -> Result<PackageVideoPayload, ProjectError> {
     let mut archive =
-        ZipArchive::new(reader).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        ZipArchive::new(reader).map_err(crate::song_store::zip_error)?;
     let mut payload = PackageVideoPayload::default();
     for index in 0..archive.len() {
         let Ok(entry) = archive.by_index_raw(index) else {
@@ -198,17 +198,7 @@ const EXTRACTION_HEADROOM_BYTES: u64 = 1024 * 1024 * 1024;
 ///
 /// Pure function of its inputs so the policy is testable without a filesystem.
 fn check_space_for_extraction(needed_bytes: u64, free_bytes: u64) -> Result<(), ProjectError> {
-    let required = needed_bytes.saturating_add(EXTRACTION_HEADROOM_BYTES);
-    if free_bytes >= required {
-        return Ok(());
-    }
-    let gb = |bytes: u64| (bytes as f64) / (1024.0 * 1024.0 * 1024.0);
-    Err(ProjectError::AudioDecode(format!(
-        "esta sesion necesita {:.1} GB y solo quedan {:.1} GB libres. \
-         Libera espacio o importa la sesion en formato Ligero.",
-        gb(needed_bytes),
-        gb(free_bytes)
-    )))
+    crate::disk_space::check_free_space(needed_bytes, EXTRACTION_HEADROOM_BYTES, free_bytes)
 }
 
 
@@ -633,7 +623,7 @@ pub(crate) fn write_file_entry<W: Write + io::Seek>(
         .compression_method(zip::CompressionMethod::Stored)
         .large_file(size >= u64::from(u32::MAX));
     zip.start_file(entry_name, options)
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        .map_err(crate::song_store::zip_error)?;
     io::copy(&mut file, zip)?;
     Ok(true)
 }
@@ -865,6 +855,90 @@ pub fn export_session_as_package_with_options(
     output_path: &Path,
     audio_mode: SessionPackageAudio,
     include_video: bool,
+    on_progress: impl FnMut(usize, usize),
+) -> Result<SessionPackageExport, ProjectError> {
+    let result = write_session_package(
+        cache_root,
+        song_dir,
+        song,
+        sidecars,
+        output_path,
+        audio_mode,
+        include_video,
+        on_progress,
+    );
+    remove_partial_output_on_error(&result, output_path);
+    result
+}
+
+/// A failed export leaves no half-written package behind. On a phone the
+/// output is a temp file the user never sees, and a 2 GB leftover from a
+/// disk-full failure made every retry fail too.
+pub(crate) fn remove_partial_output_on_error<T>(result: &Result<T, ProjectError>, output_path: &Path) {
+    if result.is_err() {
+        let _ = fs::remove_file(output_path);
+    }
+}
+
+/// Headroom an export leaves on top of what it writes, so it does not fill the
+/// volume to the last byte (the app keeps writing caches and autosaves).
+const EXPORT_HEADROOM_BYTES: u64 = 256 * 1024 * 1024;
+
+/// Roughly what bundling `source` costs in the package, BEFORE writing it.
+///
+/// Original ships the bytes as they are. Prepared ships 16-bit PCM: never more
+/// than a 16/24/32-bit WAV or AIFF source, about twice a FLAC, and around five
+/// times a lossy file at the bitrates people use for stems (256-320 kbps; lower
+/// bitrates expand more, so this stays on the low side and only refuses what
+/// clearly cannot fit). Deflate is ignored: PCM barely shrinks.
+pub(crate) fn estimated_bundle_bytes(source: &Path, audio_mode: SessionPackageAudio) -> u64 {
+    let size = fs::metadata(source).map(|metadata| metadata.len()).unwrap_or(0);
+    match audio_mode {
+        SessionPackageAudio::Referenced => 0,
+        SessionPackageAudio::Original => size,
+        SessionPackageAudio::Prepared => {
+            let extension = source
+                .extension()
+                .and_then(|value| value.to_str())
+                .map(str::to_ascii_lowercase);
+            match extension.as_deref() {
+                Some("wav" | "wave" | "aif" | "aiff" | "aifc") => size,
+                Some("flac") => size.saturating_mul(2),
+                _ => size.saturating_mul(5),
+            }
+        }
+    }
+}
+
+/// Refuse an export that clearly will not fit where it is written.
+///
+/// `payload_bytes` is what goes into the package. A Prepared export also
+/// stages each decoded source in the temp folder while it zips it, so the
+/// largest one counts on top.
+pub(crate) fn ensure_space_for_export(
+    output_path: &Path,
+    payload_bytes: u64,
+    largest_staged_bytes: u64,
+) -> Result<(), ProjectError> {
+    // A pendrive in FAT cannot hold a package over 4 GiB however much room it
+    // has; Windows reports that as "disk full", which sent users hunting for
+    // space they already had.
+    crate::disk_space::ensure_file_fits_volume(output_path, payload_bytes)?;
+    crate::disk_space::ensure_free_space(
+        output_path,
+        payload_bytes.saturating_add(largest_staged_bytes),
+        EXPORT_HEADROOM_BYTES,
+    )
+}
+
+fn write_session_package(
+    cache_root: &Path,
+    song_dir: &Path,
+    song: &Song,
+    sidecars: &[SidecarFile],
+    output_path: &Path,
+    audio_mode: SessionPackageAudio,
+    include_video: bool,
     mut on_progress: impl FnMut(usize, usize),
 ) -> Result<SessionPackageExport, ProjectError> {
     let include_audio = audio_mode.bundles_audio();
@@ -872,12 +946,6 @@ pub fn export_session_as_package_with_options(
     // rate in practice, and the first one decides what the manifest declares.
     let mut prepared_sample_rate: Option<u32> = None;
 
-    let file = File::create(output_path)?;
-    let mut zip = ZipWriter::new(file);
-    let deflated =
-        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-    // Audio and waveforms pick their own method by extension — see
-    // `payload_entry_options`.
 
     // The manifest is written LAST: an Optimized export only learns the rate it
     // is carrying once it has decoded a source, and the importer needs that
@@ -922,6 +990,30 @@ pub fn export_session_as_package_with_options(
         })
         .collect();
 
+    // Check the space BEFORE creating the file: a 3 GB song on a phone with
+    // "8 GB free" used to run into the OS's raw "No space left on device"
+    // halfway through.
+    let mut payload_bytes: u64 = planned_videos
+        .iter()
+        .map(|video| fs::metadata(&video.source_abs).map(|m| m.len()).unwrap_or(0))
+        .sum();
+    let mut largest_staged_bytes: u64 = 0;
+    for source in &planned {
+        let bytes = estimated_bundle_bytes(&source.source_abs, audio_mode);
+        payload_bytes = payload_bytes.saturating_add(bytes);
+        if matches!(audio_mode, SessionPackageAudio::Prepared) {
+            largest_staged_bytes = largest_staged_bytes.max(bytes);
+        }
+    }
+    ensure_space_for_export(output_path, payload_bytes, largest_staged_bytes)?;
+
+    let file = File::create(output_path)?;
+    let mut zip = ZipWriter::new(file);
+    let deflated =
+        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    // Audio and waveforms pick their own method by extension — see
+    // `payload_entry_options`.
+
     let session_json = if include_audio || !planned_videos.is_empty() {
         let mut portable = song.clone();
         if include_audio {
@@ -959,7 +1051,7 @@ pub fn export_session_as_package_with_options(
         crate::song_store::serialize_song_document(song)?
     };
     zip.start_file(SONG_FILE_NAME, deflated)
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        .map_err(crate::song_store::zip_error)?;
     zip.write_all(session_json.as_bytes())?;
 
     // In a full package the library.json's asset paths must be rewritten to the
@@ -1003,7 +1095,7 @@ pub fn export_session_as_package_with_options(
             bytes
         };
         zip.start_file(format!("sidecars/{}", sidecar.file_name), deflated)
-            .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+            .map_err(crate::song_store::zip_error)?;
         zip.write_all(&bytes)?;
     }
 
@@ -1036,7 +1128,7 @@ pub fn export_session_as_package_with_options(
             SessionPackageAudio::Original => {
                 if let Ok(audio_bytes) = fs::read(source_abs) {
                     zip.start_file(relative_path.clone(), payload_entry_options(relative_path))
-                        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+                        .map_err(crate::song_store::zip_error)?;
                     zip.write_all(&audio_bytes)?;
                 }
             }
@@ -1059,11 +1151,20 @@ pub fn export_session_as_package_with_options(
                     STAGING_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                     index
                 ));
-                if let Ok(info) = crate::prepared_audio::prepare_audio_to_wav(source_abs, &staging) {
+                let prepared = crate::prepared_audio::prepare_audio_to_wav(source_abs, &staging);
+                // A full disk is not "this source is unreadable": skipping it
+                // would ship a package with the audio silently missing.
+                if let Err(ProjectError::Io(error)) = &prepared {
+                    if crate::disk_space::is_disk_full(error) {
+                        let _ = fs::remove_file(&staging);
+                        return Err(prepared.unwrap_err());
+                    }
+                }
+                if let Ok(info) = prepared {
                     prepared_sample_rate.get_or_insert(info.sample_rate);
                     if let Ok(prepared_bytes) = fs::read(&staging) {
                         zip.start_file(relative_path.clone(), payload_entry_options(relative_path))
-                            .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+                            .map_err(crate::song_store::zip_error)?;
                         zip.write_all(&prepared_bytes)?;
                     }
                 }
@@ -1101,7 +1202,7 @@ pub fn export_session_as_package_with_options(
         };
         let waveform_options = payload_entry_options(&waveform_entry);
         zip.start_file(waveform_entry, waveform_options)
-            .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+            .map_err(crate::song_store::zip_error)?;
         zip.write_all(&waveform_bytes)?;
     }
 
@@ -1124,11 +1225,11 @@ pub fn export_session_as_package_with_options(
         bundled_video: !planned_videos.is_empty(),
     };
     zip.start_file("manifest.json", deflated)
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        .map_err(crate::song_store::zip_error)?;
     zip.write_all(serde_json::to_vec_pretty(&manifest)?.as_slice())?;
 
     zip.finish()
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        .map_err(crate::song_store::zip_error)?;
     Ok(SessionPackageExport {
         output_path: output_path.to_path_buf(),
     })
@@ -1199,19 +1300,17 @@ fn extract_session_package_inner<R: Read + io::Seek>(
     mut on_progress: impl FnMut(usize, usize),
 ) -> Result<ExtractedSessionPackage, ProjectError> {
     let mut archive =
-        ZipArchive::new(reader).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        ZipArchive::new(reader).map_err(crate::song_store::zip_error)?;
 
     let mut manifest_json = String::new();
     archive
         .by_name("manifest.json")
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?
+        .map_err(crate::song_store::zip_error)?
         .read_to_string(&mut manifest_json)?;
     let manifest: SessionPackageManifest = serde_json::from_str(&manifest_json)?;
     if manifest.format_version > SESSION_PACKAGE_FORMAT_VERSION {
-        return Err(ProjectError::AudioDecode(format!(
-            "este archivo .ltset usa un formato mas nuevo ({}) que esta version admite ({})",
-            manifest.format_version, SESSION_PACKAGE_FORMAT_VERSION
-        )));
+        // A newer app wrote it: "update the app" is the actionable message.
+        return Err(ProjectError::UnsupportedVersion(manifest.format_version));
     }
 
     fs::create_dir_all(target_song_dir.join("audio"))?;
@@ -1260,7 +1359,7 @@ fn extract_session_package_inner<R: Read + io::Seek>(
     for index in 0..entry_total {
         let mut zip_file = archive
             .by_index(index)
-            .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+            .map_err(crate::song_store::zip_error)?;
         let entry_name = normalize_zip_path(zip_file.name());
 
         let entry_size = zip_file.size();
@@ -1278,7 +1377,7 @@ fn extract_session_package_inner<R: Read + io::Seek>(
         }
 
         if !is_safe_relative_entry(&entry_name) {
-            return Err(ProjectError::AudioDecode(format!(
+            return Err(ProjectError::InvalidPackage(format!(
                 "entrada de paquete no segura: {entry_name}"
             )));
         }
@@ -1316,7 +1415,7 @@ fn extract_session_package_inner<R: Read + io::Seek>(
     }
 
     if !found_session {
-        return Err(ProjectError::AudioDecode(
+        return Err(ProjectError::InvalidPackage(
             "el archivo .ltset no contiene una sesion (session.ltsession)".into(),
         ));
     }
@@ -1762,14 +1861,17 @@ mod tests {
         // The package alone fits, but leaves no headroom for the audio cache
         // that follows — the real 2 GB set consumed 4.91 GB in total.
         let error = check_space_for_extraction(2 * GB, 2 * GB + 1).expect_err("should refuse");
-        let message = error.to_string();
-        // The message must name both figures, or the user cannot act on it.
-        assert!(message.contains("2.0 GB"), "missing required size: {message}");
-        assert!(message.contains("libres"), "missing free space: {message}");
-        assert!(
-            message.contains("Ligero"),
-            "an actionable error should point at a way out: {message}"
-        );
+        // Its own variant, not `AudioDecode`: the UI used to show this as
+        // "could not decode this audio". Both figures travel so the user can
+        // act on them, and the needed one includes the headroom, or the
+        // message would read "needs 2.0 GB, 2.0 GB available".
+        match error {
+            ProjectError::InsufficientSpace { needed_bytes, free_bytes } => {
+                assert_eq!(needed_bytes, 3 * GB);
+                assert_eq!(free_bytes, 2 * GB + 1);
+            }
+            other => panic!("expected InsufficientSpace, got {other:?}"),
+        }
     }
 
     #[test]
@@ -2843,5 +2945,54 @@ mod tests {
         // A reader that only knows v7 refuses it instead of dropping the videos.
         assert!(crate::song_store::parse_song_document(&document, 7).is_err());
         assert!(crate::song_store::parse_song_document(&document, 8).is_ok());
+    }
+
+    #[test]
+    fn a_truncated_package_is_reported_as_damaged_not_as_undecodable_audio() {
+        // A .ltset whose cloud download did not finish: the old code sent this
+        // through `AudioDecode` and the UI said "could not decode this audio".
+        let target = tempfile::tempdir().expect("target");
+        let truncated = io::Cursor::new(b"PK not really a zip".to_vec());
+        let error = extract_session_package_from_reader(&target.path().join("set"), truncated, |_, _| {})
+            .expect_err("a truncated archive cannot import");
+        assert!(
+            matches!(error, ProjectError::InvalidPackage(_)),
+            "expected InvalidPackage, got {error:?}"
+        );
+    }
+
+    #[test]
+    fn export_estimate_follows_what_each_mode_writes() {
+        let dir = tempfile::tempdir().expect("dir");
+        let wav = dir.path().join("a.wav");
+        let mp3 = dir.path().join("a.mp3");
+        let flac = dir.path().join("a.FLAC");
+        for path in [&wav, &mp3, &flac] {
+            fs::write(path, vec![0u8; 1000]).expect("write");
+        }
+        use SessionPackageAudio::*;
+        assert_eq!(estimated_bundle_bytes(&wav, Referenced), 0);
+        assert_eq!(estimated_bundle_bytes(&mp3, Original), 1000);
+        // Prepared writes 16-bit PCM: never more than a PCM source, more than
+        // a compressed one.
+        assert_eq!(estimated_bundle_bytes(&wav, Prepared), 1000);
+        assert_eq!(estimated_bundle_bytes(&flac, Prepared), 2000);
+        assert_eq!(estimated_bundle_bytes(&mp3, Prepared), 5000);
+        // A missing source costs nothing rather than blocking the export.
+        assert_eq!(estimated_bundle_bytes(&dir.path().join("gone.wav"), Original), 0);
+    }
+
+    #[test]
+    fn a_failed_export_leaves_no_partial_file() {
+        let dir = tempfile::tempdir().expect("dir");
+        let output = dir.path().join("half.ltset");
+        fs::write(&output, b"half written").expect("write");
+        let ok: Result<(), ProjectError> = Ok(());
+        remove_partial_output_on_error(&ok, &output);
+        assert!(output.exists(), "a successful export keeps its file");
+        let failed: Result<(), ProjectError> =
+            Err(ProjectError::Io(io::Error::from(io::ErrorKind::StorageFull)));
+        remove_partial_output_on_error(&failed, &output);
+        assert!(!output.exists(), "a failed export must not leave its half behind");
     }
 }

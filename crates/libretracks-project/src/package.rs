@@ -357,6 +357,30 @@ pub fn export_region_as_package_with_progress(
     output_path: &Path,
     audio_mode: crate::SessionPackageAudio,
     include_video: bool,
+    on_progress: impl FnMut(usize, usize),
+) -> Result<SongPackageExport, ProjectError> {
+    let result = write_region_package(
+        cache_root,
+        song_dir,
+        song,
+        region_id,
+        output_path,
+        audio_mode,
+        include_video,
+        on_progress,
+    );
+    crate::session_package::remove_partial_output_on_error(&result, output_path);
+    result
+}
+
+fn write_region_package(
+    cache_root: &Path,
+    song_dir: &Path,
+    song: &Song,
+    region_id: &str,
+    output_path: &Path,
+    audio_mode: crate::SessionPackageAudio,
+    include_video: bool,
     mut on_progress: impl FnMut(usize, usize),
 ) -> Result<SongPackageExport, ProjectError> {
     let include_audio = !matches!(audio_mode, crate::SessionPackageAudio::Referenced);
@@ -563,11 +587,43 @@ pub fn export_region_as_package_with_progress(
         region_cover_image: region.cover_image.clone(),
     };
 
+    // Check the space BEFORE creating the file, with the same estimate as a
+    // session export: a 3 GB song used to hit the OS's raw "No space left on
+    // device" halfway through.
+    {
+        let mut payload_bytes: u64 = video_library_meta
+            .iter()
+            .filter(|entry| entry.bundled_entry.is_some())
+            .map(|entry| {
+                let (source_abs, _) = crate::asset_path::resolve_asset(song_dir, &entry.file_path);
+                fs::metadata(source_abs).map(|m| m.len()).unwrap_or(0)
+            })
+            .sum();
+        let mut largest_staged_bytes: u64 = 0;
+        let mut counted = HashSet::new();
+        for clip in clips.iter().chain(&snapshot_clips) {
+            if !counted.insert(clip.file_path.as_str()) {
+                continue;
+            }
+            let (source_abs, _) = crate::asset_path::resolve_asset(song_dir, &clip.file_path);
+            let bytes = crate::session_package::estimated_bundle_bytes(&source_abs, audio_mode);
+            payload_bytes = payload_bytes.saturating_add(bytes);
+            if matches!(audio_mode, crate::SessionPackageAudio::Prepared) {
+                largest_staged_bytes = largest_staged_bytes.max(bytes);
+            }
+        }
+        crate::session_package::ensure_space_for_export(
+            output_path,
+            payload_bytes,
+            largest_staged_bytes,
+        )?;
+    }
+
     let file = File::create(output_path)?;
     let mut zip = ZipWriter::new(file);
     let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
     zip.start_file("manifest.json", options)
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        .map_err(crate::song_store::zip_error)?;
     zip.write_all(serde_json::to_vec_pretty(&manifest)?.as_slice())?;
 
     for entry in &video_library_meta {
@@ -611,7 +667,7 @@ pub fn export_region_as_package_with_progress(
                             let entry_options =
                                 crate::session_package::payload_entry_options(&entry);
                             zip.start_file(entry, entry_options)
-                                .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+                                .map_err(crate::song_store::zip_error)?;
                             zip.write_all(&audio_bytes)?;
                         }
                     }
@@ -623,9 +679,16 @@ pub fn export_region_as_package_with_progress(
                             "libretracks-prepare-song-{}-{file_name}.wav",
                             std::process::id()
                         ));
-                        if let Ok(info) =
-                            crate::prepare_audio_to_wav(&source_abs, &staging)
-                        {
+                        let prepared = crate::prepare_audio_to_wav(&source_abs, &staging);
+                        // A full disk is not "this source is unreadable":
+                        // skipping it would ship the song without its audio.
+                        if let Err(ProjectError::Io(error)) = &prepared {
+                            if crate::disk_space::is_disk_full(error) {
+                                let _ = fs::remove_file(&staging);
+                                return Err(prepared.unwrap_err());
+                            }
+                        }
+                        if let Ok(info) = prepared {
                             prepared_sample_rate.get_or_insert(info.sample_rate);
                             if let Ok(prepared_bytes) = fs::read(&staging) {
                                 let entry = crate::prepared_relative_path(file_name);
@@ -633,9 +696,7 @@ pub fn export_region_as_package_with_progress(
                                 let entry_options =
                                     crate::session_package::payload_entry_options(&entry);
                                 zip.start_file(entry, entry_options)
-                                    .map_err(|error| {
-                                        ProjectError::AudioDecode(error.to_string())
-                                    })?;
+                                    .map_err(crate::song_store::zip_error)?;
                                 zip.write_all(&prepared_bytes)?;
                             }
                         }
@@ -665,13 +726,13 @@ pub fn export_region_as_package_with_progress(
         let waveform_entry = format!("waveforms/{stem}.waveform.ltpeaks");
         let waveform_options = crate::session_package::payload_entry_options(&waveform_entry);
         zip.start_file(waveform_entry, waveform_options)
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        .map_err(crate::song_store::zip_error)?;
         zip.write_all(&waveform_bytes)?;
     }
     on_progress(total_files, total_files);
 
     zip.finish()
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        .map_err(crate::song_store::zip_error)?;
     Ok(SongPackageExport {
         output_path: output_path.to_path_buf(),
     })
@@ -801,7 +862,7 @@ fn extract_package_payload<R: Read + Seek>(
     for index in 0..entry_total {
         let mut zip_file = archive
             .by_index(index)
-            .map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+            .map_err(crate::song_store::zip_error)?;
         let entry_name = zip_file.name().to_string();
 
         // Bundled videos (paso 12): staged like the audio; mobile leaves them.
@@ -995,18 +1056,18 @@ pub fn extract_song_package_from_reader_with_options<R: Read + Seek>(
     on_extract_progress: impl FnMut(usize, usize),
 ) -> Result<ExtractedSongPackage, ProjectError> {
     let mut archive =
-        ZipArchive::new(reader).map_err(|error| ProjectError::AudioDecode(error.to_string()))?;
+        ZipArchive::new(reader).map_err(crate::song_store::zip_error)?;
 
     let mut manifest_json = String::new();
     archive
         .by_name("manifest.json")
-        .map_err(|error| ProjectError::AudioDecode(error.to_string()))?
+        .map_err(crate::song_store::zip_error)?
         .read_to_string(&mut manifest_json)?;
     let manifest: SongPackageManifest = serde_json::from_str(&manifest_json)?;
     if !(libretracks_core::MIN_TRANSPOSE_SEMITONES..=libretracks_core::MAX_TRANSPOSE_SEMITONES)
         .contains(&manifest.region_transpose_semitones)
     {
-        return Err(ProjectError::AudioDecode(format!(
+        return Err(ProjectError::InvalidPackage(format!(
             "invalid region transpose semitones: {}",
             manifest.region_transpose_semitones
         )));
@@ -1019,6 +1080,20 @@ pub fn extract_song_package_from_reader_with_options<R: Read + Seek>(
                 name.starts_with("video/") && !name.ends_with('/')
             })
         });
+    // Refuse a package that cannot fit BEFORE staging the first entry, from
+    // the central directory (no decompression), as the `.ltset` import does.
+    // The headroom is smaller than a whole session's: this is one song added
+    // to a session that already has its cache.
+    let mut uncompressed_total: u64 = 0;
+    for index in 0..archive.len() {
+        if let Ok(entry) = archive.by_index_raw(index) {
+            if !(options.skip_video && entry.name().starts_with("video/")) {
+                uncompressed_total = uncompressed_total.saturating_add(entry.size());
+            }
+        }
+    }
+    crate::disk_space::ensure_free_space(song_dir, uncompressed_total, 256 * 1024 * 1024)?;
+
     let bundled_audio =
         extract_package_payload(song_dir, &mut archive, options, on_extract_progress)?;
     Ok(ExtractedSongPackage {
@@ -1045,7 +1120,7 @@ fn remap_structure_ids(
         track_ids
             .get(id)
             .cloned()
-            .ok_or_else(|| ProjectError::AudioDecode(format!("package track not found: {id}")))
+            .ok_or_else(|| ProjectError::InvalidPackage(format!("package track not found: {id}")))
     };
     // The original and every edited block (`stored_*`) keep their own clips.
     for clip in structure.stored_clips_mut() {
@@ -1247,7 +1322,7 @@ pub fn merge_extracted_song_package(
         let target_track_id = target_track_id_by_manifest_id
             .get(&clip.track_id)
             .cloned()
-            .ok_or_else(|| ProjectError::AudioDecode("package track not found".into()))?;
+            .ok_or_else(|| ProjectError::InvalidPackage("package track not found".into()))?;
         let clip_id = unique_id("clip", &clip.id, &mut used_clip_ids);
         clip_id_by_manifest_id.insert(clip.id.clone(), clip_id.clone());
         next_song.clips.push(Clip {
@@ -1268,7 +1343,7 @@ pub fn merge_extracted_song_package(
         let target_track_id = target_track_id_by_manifest_id
             .get(&clip.track_id)
             .cloned()
-            .ok_or_else(|| ProjectError::AudioDecode("package MIDI track not found".into()))?;
+            .ok_or_else(|| ProjectError::InvalidPackage("package MIDI track not found".into()))?;
         let mut imported = clip.clone();
         imported.id = unique_id("midi_clip", &clip.id, &mut used_midi_clip_ids);
         imported.track_id = target_track_id;
@@ -1287,7 +1362,7 @@ pub fn merge_extracted_song_package(
         let target_track_id = target_track_id_by_manifest_id
             .get(&clip.track_id)
             .cloned()
-            .ok_or_else(|| ProjectError::AudioDecode("package video track not found".into()))?;
+            .ok_or_else(|| ProjectError::InvalidPackage("package video track not found".into()))?;
         let mut imported = clip.clone();
         imported.id = unique_id("video_clip", &clip.id, &mut used_video_clip_ids);
         imported.track_id = target_track_id;

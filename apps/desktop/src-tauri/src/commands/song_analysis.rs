@@ -634,6 +634,15 @@ fn run_job(
         voice_guide: None,
         automation: None,
     };
+    // Up to three float WAVs the length of the song: refuse before the
+    // engine starts writing them rather than failing on a full disk.
+    if let Err(error) = libretracks_project::ensure_free_space(
+        scratch_dir,
+        crate::commands::render::estimated_render_bytes(std::slice::from_ref(&engine_request)),
+        64 * 1024 * 1024,
+    ) {
+        return Err(JobError::Failed(error.to_string()));
+    }
     // Rendering is most of the work; the analyses take a moment.
     let mut render_progress =
         |fraction: f64| on_progress(AnalysisProgress::at(RENDER_END * fraction, "render"));

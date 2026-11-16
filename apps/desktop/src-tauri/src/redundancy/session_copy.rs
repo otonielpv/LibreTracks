@@ -314,6 +314,12 @@ impl CopyJob {
         fs::create_dir_all(&target).map_err(|error| error.to_string())?;
         let plan = plan_copy(manifest_files, &target, candidates);
         let reuse_bytes: u64 = plan.reuse.iter().map(|(file, _)| file.size).sum();
+        // What comes over the network must fit before the first chunk: a
+        // session is gigabytes, and the backup only learned otherwise from the
+        // OS halfway through. Reused files are hard links in the usual case,
+        // so they do not count.
+        libretracks_project::ensure_free_space(&target, plan.fetch_bytes(), 256 * 1024 * 1024)
+            .map_err(|error| error.to_string())?;
         let mut progress = CopyProgress {
             done_bytes: 0,
             total_bytes: plan.fetch_bytes() + reuse_bytes,
@@ -416,6 +422,18 @@ impl CopyJob {
         *expected += bytes.len() as u64;
         self.progress.done_bytes += bytes.len() as u64;
         self.next()
+    }
+}
+
+/// A job dropped mid-file (failed, cancelled, the main went away) removes the
+/// `.part` it was writing: it can be gigabytes, and the next copy starts that
+/// file from zero anyway. Finished files stay, so the next plan keeps them.
+impl Drop for CopyJob {
+    fn drop(&mut self) {
+        if let Some((file, handle, _)) = self.current.take() {
+            drop(handle);
+            let _ = fs::remove_file(part_path(&self.target, &file.path));
+        }
     }
 }
 

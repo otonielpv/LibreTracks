@@ -345,6 +345,13 @@ pub async fn get_pads_catalog(app: AppHandle) -> Result<PadsCatalog, String> {
 #[tauri::command]
 pub async fn download_pad(app: AppHandle, pad_id: String) -> Result<(), String> {
     let result = download_pad_inner(&app, &pad_id).await;
+    if result.is_err() {
+        // The zip and its extraction live here; a failed run (full disk, a
+        // dropped connection) used to keep them until the next attempt.
+        if let Ok(base) = pads_install_dir(&app) {
+            let _ = fs::remove_dir_all(base.join(format!(".{pad_id}.tmp")));
+        }
+    }
     match &result {
         Ok(()) => emit_pad_progress(&app, &pad_id, 100, "Listo", true, None),
         Err(error) => emit_pad_progress(&app, &pad_id, 100, "Error", true, Some(error.clone())),
@@ -398,6 +405,10 @@ async fn download_pad_inner(app: &AppHandle, pad_id: &str) -> Result<(), String>
         .content_length()
         .filter(|&l| l > 0)
         .unwrap_or(entry.size_bytes.max(1));
+    // The zip alone first; its contents are checked once it is here and the
+    // central directory can say how much they unpack to.
+    libretracks_project::ensure_free_space(&zip_path, total, PAD_SPACE_HEADROOM)
+        .map_err(|error| error.to_string())?;
 
     {
         let mut file =
@@ -446,6 +457,7 @@ async fn download_pad_inner(app: &AppHandle, pad_id: &str) -> Result<(), String>
             let file = fs::File::open(&zip_path).map_err(|e| format!("open zip failed: {e}"))?;
             let mut archive =
                 zip::ZipArchive::new(file).map_err(|e| format!("read zip failed: {e}"))?;
+            ensure_space_for_pad_install(&mut archive, &extract_root)?;
             let count = archive.len();
             for i in 0..count {
                 let mut zf = archive
@@ -500,6 +512,7 @@ async fn download_pad_inner(app: &AppHandle, pad_id: &str) -> Result<(), String>
     let _ = fs::remove_dir_all(&final_dir);
     fs::create_dir_all(&final_dir).map_err(|e| format!("create pad dir failed: {e}"))?;
 
+    let half_installed = final_dir.clone();
     let copied = {
         let source_dir = source_dir.clone();
         let final_dir = final_dir.clone();
@@ -532,7 +545,11 @@ async fn download_pad_inner(app: &AppHandle, pad_id: &str) -> Result<(), String>
             Ok(done)
         })
         .await
-        .map_err(|e| format!("prepare task panicked: {e}"))??
+        .map_err(|e| format!("prepare task panicked: {e}"))?
+        .inspect_err(|_| {
+            // Half the keys of a pack is not an installed pack.
+            let _ = fs::remove_dir_all(&half_installed);
+        })?
     };
 
     // Best-effort cleanup of the temp working dir (removes the source MP3s too).
@@ -543,6 +560,36 @@ async fn download_pad_inner(app: &AppHandle, pad_id: &str) -> Result<(), String>
         return Err("archive contained no recognised pad keys".to_string());
     }
     Ok(())
+}
+
+/// Headroom a pad download leaves on top of what it writes.
+const PAD_SPACE_HEADROOM: u64 = 128 * 1024 * 1024;
+
+/// Refuse to unpack a pad that cannot fit, from the zip's central directory.
+///
+/// At the peak the extracted sources and the installed WAVs coexist (the zip
+/// too, but it is already on disk and counted out of the free space). A WAV
+/// source is copied as is; a compressed one is decoded to 16-bit PCM, about
+/// five times an MP3 at the bitrates packs ship.
+fn ensure_space_for_pad_install<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    extract_root: &Path,
+) -> Result<(), String> {
+    let mut needed: u64 = 0;
+    for index in 0..archive.len() {
+        let Ok(entry) = archive.by_index_raw(index) else {
+            continue;
+        };
+        let size = entry.size();
+        let installed = if entry.name().to_ascii_lowercase().ends_with(".wav") {
+            size
+        } else {
+            size.saturating_mul(5)
+        };
+        needed = needed.saturating_add(size).saturating_add(installed);
+    }
+    libretracks_project::ensure_free_space(extract_root, needed, PAD_SPACE_HEADROOM)
+        .map_err(|error| error.to_string())
 }
 
 /// Decode a compressed audio file (MP3/…) to a 16-bit PCM WAV at its native
@@ -942,12 +989,25 @@ pub async fn assign_pad_key(
 
     // Decode/copy off the async runtime; it's CPU-heavy for compressed sources.
     let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
-        if src.extension().and_then(|e| e.to_str()) == Some("wav") {
-            fs::copy(&src, &dst).map_err(|e| format!("copy {stem}.wav: {e}"))?;
-            Ok(())
+        let is_wav = src.extension().and_then(|e| e.to_str()) == Some("wav");
+        // A WAV is copied as is; anything else becomes 16-bit PCM, about five
+        // times an MP3 (the same estimate as a pad pack download).
+        let source_bytes = fs::metadata(&src).map(|m| m.len()).unwrap_or(0);
+        let needed = if is_wav { source_bytes } else { source_bytes.saturating_mul(5) };
+        libretracks_project::ensure_free_space(&dst, needed, PAD_SPACE_HEADROOM)
+            .map_err(|error| error.to_string())?;
+        let written = if is_wav {
+            fs::copy(&src, &dst)
+                .map(|_| ())
+                .map_err(|e| format!("copy {stem}.wav: {e}"))
         } else {
             decode_to_wav16(&src, &dst)
+        };
+        if written.is_err() {
+            // A half-written key would play as a cut-off pad.
+            let _ = fs::remove_file(&dst);
         }
+        written
     })
     .await
     .map_err(|e| format!("assign task panicked: {e}"))?;

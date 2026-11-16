@@ -257,15 +257,37 @@ pub fn stage_picked_audio_documents(
     let mut payloads = Vec::with_capacity(total);
     for (index, document) in documents.iter().enumerate() {
         let staged_dir = staging_root.join(index.to_string());
+        let mut out_of_space: Option<String> = None;
         let copied = (|| -> Result<PathBuf, String> {
             std::fs::create_dir_all(&staged_dir).map_err(|error| error.to_string())?;
             let staged_path = staged_dir.join(&document.file_name);
             let mut source = open_picked_file_for_read(app, &document.picked)?;
+            // Before copying: a long multitrack picked on a nearly full phone
+            // used to fail file by file and read as "could not be read".
+            if let Ok(metadata) = source.metadata() {
+                libretracks_project::ensure_free_space(staging_root, metadata.len(), 64 * 1024 * 1024)
+                    .map_err(|error| {
+                        out_of_space = Some(error.to_string());
+                        error.to_string()
+                    })?;
+            }
             let mut destination =
                 std::fs::File::create(&staged_path).map_err(|error| error.to_string())?;
-            std::io::copy(&mut source, &mut destination).map_err(|error| error.to_string())?;
+            std::io::copy(&mut source, &mut destination).map_err(|error| {
+                if libretracks_project::is_disk_full(&error) {
+                    out_of_space = Some(error.to_string());
+                }
+                error.to_string()
+            })?;
             Ok(staged_path)
         })();
+
+        // A full disk is not "this one file is unreadable": skipping would
+        // fail every remaining file the same way and blame the files.
+        if let Some(error) = out_of_space {
+            let _ = std::fs::remove_dir_all(staging_root);
+            return Err(error);
+        }
 
         match copied {
             Ok(staged_path) => payloads.push(crate::state::AudioFilePathImportPayload {

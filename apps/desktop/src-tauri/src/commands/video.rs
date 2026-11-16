@@ -601,6 +601,15 @@ pub fn extract_video_audio(
 ) -> Result<TransportSnapshot, String> {
     let libmpv = state.video.libmpv()?;
     let plan = with_session(&state, |session, _| session.plan_video_audio_extraction(&clip_id))?;
+    // libmpv writes stereo s16 at the source's rate (48 kHz in practice for
+    // video): refuse a long video's audio before it fills the disk.
+    let estimated_bytes = (plan.duration_seconds.max(0.0) * 48_000.0 * 2.0 * 2.0).ceil() as u64;
+    if let Err(error) =
+        libretracks_project::ensure_free_space(&plan.destination, estimated_bytes, 64 * 1024 * 1024)
+    {
+        plan.abandon();
+        return Err(error.to_string());
+    }
     let cancel = std::sync::atomic::AtomicBool::new(false);
     let decoded = libretracks_video::audio::extract_audio_to_wav(
         &libmpv,
