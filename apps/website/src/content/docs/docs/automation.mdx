@@ -53,17 +53,36 @@ it. Turn this on so it only does so a few times (for example, jumping back to
 the chorus only the first time). When it runs out of repeats, the diamond
 shows dimmed. The counts go back to zero when you press **Stop**.
 
+**Lead time**: so the actions go out before the section starts (a scene, a mix
+change that has to be ready on the downbeat). Place the automation on the
+section marker and choose 1 beat, 1 bar and so on, or a custom amount in
+beats, bars or seconds. It works like it does for
+[MIDI clips](/docs/tasks/midi/#4-sending-it-ahead-of-the-section-lead-time):
+with a live jump, the target's actions go out before the jump, not the ones of
+the section you skip. If the automation has a **jump**, the jump is not moved:
+it stays on the bar.
+
+**Collapse all** and **Expand all** fold or open every action. The editor
+remembers which ones you left folded.
+
 ## Editing, moving and disabling
 
 - **Click** the diamond: opens the editor. Hovering over it shows a summary of
   what it does.
-- **Drag it** to move it.
+- **Drag it** to move it. Hold <kbd>Alt</kbd> (<kbd>Option</kbd> on Mac)
+  **when you drop** and a copy lands there; the original stays put.
+- **Ctrl+click** (**Cmd+click** on Mac) selects it without opening the
+  editor; **Shift+click** adds the ones between the last picked and this one.
+  With a selection, <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates right after it and
+  <kbd>Del</kbd> deletes.
 - **Right-click**:
 
 ![An automation's menu](/guide/desktop-en/menu-automation-cue.png)
 
-**Edit automation...**, **Rename automation**, **Disable automation** (it
-stays in place without firing) and **Delete automation**.
+**Edit automation...**, **Duplicate**, **Rename automation**, **Disable
+automation** (it stays in place without firing) and **Delete automation**.
+With several selected, right-clicking one of them offers **Duplicate** and
+**Delete** for all of them.
 
 Automations travel with their song: if you move or reorder the song, they move
 with it.

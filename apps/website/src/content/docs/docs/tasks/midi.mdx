@@ -148,13 +148,76 @@ where the playhead is. The editor opens:
   up** and **Move down** to change it.
 - **Test MIDI** sends the messages right now, without saving, to check that
   the device responds.
+- **Lead time**: so the clip goes out before its section starts. See the next
+  step.
+- **Collapse all** and **Expand all** fold or open every message at once. The
+  editor remembers which ones you left folded.
 
 The clip shows on the track as a marker with its name. Right-click it:
 
 ![A MIDI clip's menu](/guide/desktop-en/menu-midi-clip.png)
 
-**Edit MIDI** or **Delete MIDI**. MIDI clips can be dragged to move them, they
-travel with their song when you move it and they go inside exported songs.
+**Edit MIDI**, **Duplicate** or **Delete MIDI**. MIDI clips can be dragged to
+move them, they travel with their song when you move it and they go inside
+exported songs.
+
+### 4. Sending it ahead of the section (lead time)
+
+The typical case is lyrics software (ProPresenter, for example): the command
+that changes the lyrics has to arrive **a little before** the section starts,
+so the audience already has the words on screen when the singing begins.
+
+Place the clip **right on the section marker** and, in the editor, choose the
+**Lead time**:
+
+- The shortcuts: **Half a beat**, **1 beat**, **2 beats**, **1 bar** or
+  **2 bars**.
+- **Custom...**: any amount, with decimals, in **beats**, **bars** or
+  **seconds**.
+
+A beat is one metronome click: it follows the tempo, its changes and ramps,
+the time signature (in 6/8 a beat is an eighth note) and warp. If you change
+the song's tempo, "1 beat" is still one beat. Use **seconds** if you want it
+fixed.
+
+The track shows a dashed line from the point where it really goes out to the
+marker.
+
+What matters is that the lead is measured against **what is really going to
+play**, not against what comes next on the timeline:
+
+- **Normal playback and arrangements**: it goes out the lead before its
+  marker.
+- **A live jump**: if you are in the verse and arm a jump at the end of the
+  section to verse 2 (instead of going on to the chorus), the **verse 2** clip
+  goes out, the lead before the jump. The chorus clip does not, because the
+  chorus is not going to play.
+- **If you arm the jump late**, once the lead point has passed, the target's
+  clip goes out right then.
+- **If you cancel the jump** after the chorus clip should have gone out, the
+  chorus clip goes out at that moment.
+- **Vamp**: the clip at the start of the loop goes out again before every
+  lap.
+- **If you jump or press Play inside the lead** (half a beat before verse 2,
+  for example), it goes out at once: it is what should be on screen.
+
+To see what is sent and when, use a MIDI monitor (Pocket MIDI, or MIDI-OX on
+Windows) listening to the same port.
+
+### Selecting, duplicating and copying
+
+- **Ctrl+click** (**Cmd+click** on Mac) selects a clip without opening the
+  editor. **Shift+click** adds every clip on that track between the last one
+  picked and this one.
+- <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates the selection right after it: the
+  group's length, rounded up to whole bars. The copy keeps its messages, colour
+  and lead time, and ends up selected, so you can chain copies.
+- <kbd>Del</kbd> deletes the selection.
+- With several selected, right-clicking one of them offers **Duplicate** and
+  **Delete** for all of them.
+- Hold <kbd>Alt</kbd> (<kbd>Option</kbd> on Mac) **when you drop** a drag and
+  a copy lands where you drop it; the original stays put. Onto another MIDI
+  track too.
 
 ## LibreTracks as a MIDI device (mobile)
 

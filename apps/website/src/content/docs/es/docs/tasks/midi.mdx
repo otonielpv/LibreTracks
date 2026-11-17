@@ -155,14 +155,74 @@ se coloca donde está el cursor de reproducción. Se abre el editor:
   **Subir** y **Bajar** para cambiarlo.
 - **Probar MIDI** envía los mensajes ahora mismo, sin guardar, para comprobar
   que el aparato responde.
+- **Adelanto**: para que el clip salga antes de que empiece su sección. Lo
+  explicamos en el paso siguiente.
+- **Plegar todo** y **Desplegar todo** recogen o abren todos los mensajes de
+  una vez. El editor recuerda cuáles dejaste plegados.
 
 El clip aparece en la pista como una marca con su nombre. Clic derecho en él:
 
 ![Menú de un clip MIDI](/guide/desktop/menu-midi-clip.png)
 
-**Editar MIDI** o **Eliminar MIDI**. Los clips MIDI se arrastran para moverlos,
-viajan con su canción cuando la mueves y van dentro de las canciones
-exportadas.
+**Editar MIDI**, **Duplicar** o **Eliminar MIDI**. Los clips MIDI se
+arrastran para moverlos, viajan con su canción cuando la mueves y van dentro de
+las canciones exportadas.
+
+### 4. Enviarlo antes de la sección (adelanto)
+
+El caso típico es el software de letras (ProPresenter, por ejemplo): el
+comando que cambia la letra tiene que llegar **un poco antes** de que empiece
+la sección, para que el público ya la tenga en pantalla cuando se empieza a
+cantar.
+
+Coloca el clip **justo en la marca de la sección** y, en el editor, elige el
+**Adelanto**:
+
+- Los atajos: **Medio pulso**, **1 pulso**, **2 pulsos**, **1 compás** o
+  **2 compases**.
+- **Personalizado...**: cualquier cantidad, con decimales, en **pulsos**,
+  **compases** o **segundos**.
+
+Un pulso es un clic del metrónomo: sigue al tempo, a sus cambios y rampas, al
+compás (en 6/8 un pulso es una corchea) y al warp. Si cambias el tempo de la
+canción, "1 pulso" sigue siendo un pulso. Usa **segundos** si lo quieres fijo.
+
+En la pista se ve una línea discontinua desde el punto en que sale de verdad
+hasta la marca.
+
+Lo importante es que el adelanto se mide contra **lo que va a sonar de
+verdad**, no contra lo que hay escrito después en la línea de tiempo:
+
+- **Reproducción normal y arreglos**: sale el adelanto antes de su marca.
+- **Un salto en directo**: si estás en el verso y programas un salto al final
+  de la sección hacia el verso 2 (en lugar de seguir al coro), sale el clip del
+  **verso 2**, el adelanto antes del salto. El del coro no sale, porque el coro
+  no va a sonar.
+- **Si programas el salto tarde**, cuando ya ha pasado el momento del
+  adelanto, el clip del destino sale en ese mismo instante.
+- **Si cancelas el salto** después de que el del coro debiera haber salido, el
+  del coro sale en ese momento.
+- **Vamp**: el clip del inicio del bucle vuelve a salir antes de cada vuelta.
+- **Si saltas o pulsas Play dentro del adelanto** (medio pulso antes del verso
+  2, por ejemplo), sale en el acto: es lo que debería estar en pantalla.
+
+Para ver qué se envía y cuándo, usa un monitor MIDI (Pocket MIDI, o MIDI-OX en
+Windows) escuchando el mismo puerto.
+
+### Seleccionar, duplicar y copiar
+
+- **Ctrl+clic** (**Cmd+clic** en Mac) selecciona un clip sin abrir el editor.
+  **Mayús+clic** añade todos los de esa pista entre el último elegido y el
+  pulsado.
+- <kbd>Ctrl</kbd>+<kbd>D</kbd> duplica la selección justo detrás: lo que mide
+  el grupo, redondeado a compases enteros. La copia conserva sus mensajes, su
+  color y su adelanto, y queda seleccionada, así que puedes encadenar copias.
+- <kbd>Supr</kbd> borra la selección.
+- Con varios seleccionados, el clic derecho sobre uno de ellos ofrece
+  **Duplicar** y **Borrar** para todos.
+- Mantén <kbd>Alt</kbd> (<kbd>Option</kbd> en Mac) **al soltar** un arrastre y
+  queda una copia donde lo sueltas; el original no se mueve. También a otra
+  pista MIDI.
 
 ## LibreTracks como dispositivo MIDI (móvil)
 

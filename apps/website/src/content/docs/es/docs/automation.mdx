@@ -56,17 +56,37 @@ ejemplo, saltar atrás al coro solo la primera vez). Cuando agota sus
 repeticiones, el diamante se ve apagado. Las cuentas vuelven a cero al pulsar
 **Detener**.
 
+**Adelanto**: para que las acciones salgan antes de que empiece la sección
+(una escena, un cambio de mezcla que tiene que estar listo al entrar). Coloca
+el automatismo en la marca de la sección y elige 1 pulso, 1 compás, etc., o una
+cantidad personalizada en pulsos, compases o segundos. Funciona igual que en
+los [clips MIDI](/es/docs/tasks/midi/#4-enviarlo-antes-de-la-sección-adelanto):
+con un salto en directo salen las del destino, antes del salto, y no las de la
+sección que te saltas. Si el automatismo tiene un **salto**, el salto no se
+adelanta: sigue en su sitio, cuadrado con el compás.
+
+**Plegar todo** y **Desplegar todo** recogen o abren todas las acciones. El
+editor recuerda cuáles dejaste plegadas.
+
 ## Editar, mover y desactivar
 
 - **Clic** en el diamante: abre el editor. Al pasar el ratón por encima ves un
   resumen de lo que hace.
-- **Arrástralo** para cambiarlo de sitio.
+- **Arrástralo** para cambiarlo de sitio. Si mantienes <kbd>Alt</kbd>
+  (<kbd>Option</kbd> en Mac) **al soltar**, queda una copia ahí y el original
+  no se mueve.
+- **Ctrl+clic** (**Cmd+clic** en Mac) lo selecciona sin abrir el editor;
+  **Mayús+clic** añade los que hay entre el último elegido y el pulsado. Con
+  la selección, <kbd>Ctrl</kbd>+<kbd>D</kbd> duplica justo detrás y
+  <kbd>Supr</kbd> borra.
 - **Clic derecho**:
 
 ![Menú de un automatismo](/guide/desktop/menu-automation-cue.png)
 
-**Editar automatismo…**, **Renombrar automatismo**, **Desactivar automatismo**
-(se queda en su sitio sin dispararse) y **Eliminar automatismo**.
+**Editar automatismo…**, **Duplicar**, **Renombrar automatismo**,
+**Desactivar automatismo** (se queda en su sitio sin dispararse) y **Eliminar
+automatismo**. Con varios seleccionados, el clic derecho sobre uno de ellos
+ofrece **Duplicar** y **Borrar** para todos.
 
 Los automatismos viajan con su canción: si mueves o reordenas la canción, se
 mueven con ella.
