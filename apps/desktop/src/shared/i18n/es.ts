@@ -2634,6 +2634,7 @@ const es = {
       open: "Descargar sonidos",
       title: "Packs de sonidos gratuitos",
       offline: "Sin conexión: el catálogo aparecerá cuando haya red.",
+      missing: "Falta el pack {{name}}: esas filas callan.",
       download: "Descargar",
       remove: "Quitar",
       downloading: "Descargando {{name}}",

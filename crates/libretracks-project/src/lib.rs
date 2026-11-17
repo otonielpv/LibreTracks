@@ -2,6 +2,7 @@
 
 pub mod cover;
 pub mod rhythm_library;
+pub mod rhythm_package;
 mod asset_path;
 mod atomic_write;
 mod disk_space;

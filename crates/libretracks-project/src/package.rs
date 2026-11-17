@@ -184,6 +184,10 @@ struct SongPackageManifest {
     region_chart: Option<libretracks_core::SongChart>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     region_cover_image: Option<String>,
+    /// Loop de batería de la canción (plan drum-loops). Aditivo: una versión
+    /// vieja lo ignora.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    region_loop: Option<libretracks_core::drum_loops::RegionLoop>,
 }
 
 #[derive(Debug, Clone)]
@@ -585,6 +589,7 @@ fn write_region_package(
         structure,
         region_chart: region.chart.clone(),
         region_cover_image: region.cover_image.clone(),
+        region_loop: region.drum_loop.clone(),
     };
 
     // Check the space BEFORE creating the file, with the same estimate as a
@@ -1409,7 +1414,7 @@ pub fn merge_extracted_song_package(
         .max(furthest_clip_end_offset)
         .max(furthest_video_end_offset);
     next_song.regions.push(SongRegion {
-        drum_loop: None,
+        drum_loop: manifest.region_loop.clone(),
         id: region_id,
         name: manifest.song_title.clone(),
         start_seconds: insert_at_seconds,
@@ -1764,6 +1769,38 @@ mod tests {
         assert_eq!(result.song.regions.len(), 1);
         // The imported region must span the clip so the song stays valid.
         assert!(validate_song(&result.song).is_ok());
+    }
+
+    /// Plan drum-loops, paso 12: el loop de la canción viaja en el `.ltpkg`
+    /// (también las plantillas de canción, que usan este formato).
+    #[test]
+    fn a_song_package_round_trip_keeps_the_drum_loop() {
+        use libretracks_core::drum_loops::{DrumKit, KitRef, LoopPattern, PatternSignature, RegionLoop};
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let mut source = song();
+        let region_loop = RegionLoop {
+            pattern: LoopPattern {
+                id: "p".into(),
+                name: "Shaker".into(),
+                kit: KitRef::Embedded { kit: DrumKit { id: "k".into(), name: "K".into(), sounds: vec![] } },
+                bpm: 100.0,
+                signature: PatternSignature::default(),
+                steps_per_beat: 4,
+                bars: 1,
+                swing: 0.0,
+                rows: vec![],
+            },
+            autostart: true,
+            initial_rows: vec![],
+        };
+        source.regions[0].drum_loop = Some(region_loop.clone());
+        let package_path = song_dir.join("verse.ltpkg");
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false).expect("export region");
+        let empty = Song { tracks: vec![], clips: vec![], regions: vec![], section_markers: vec![], ..song() };
+        let result =
+            import_song_package(song_dir, &empty, &package_path, 0.0, SongImportTrackMode::default()).expect("import");
+        assert_eq!(result.song.regions[0].drum_loop, Some(region_loop));
     }
 
     /// Un bloque editado que usa una pista que solo está en él: exportar la

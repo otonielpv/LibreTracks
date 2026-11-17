@@ -393,6 +393,7 @@ fn import_package_from_reader_off_lock<R: std::io::Read + std::io::Seek>(
     // A phone asks before writing the package's videos (plan video-mobile,
     // paso 08); the desktop always brings them.
     let options = crate::state::package_extract_options(app, &mut reader, &song_dir);
+    crate::rhythm::install_package_samples_from(app, &mut reader);
     let extracted = extract_song_package_from_reader_with_options(&song_dir, reader, options, |done, total| {
         let percent = if total == 0 {
             7
@@ -2791,18 +2792,19 @@ pub async fn export_region_as_package(
     };
 
     let cache_root = crate::state::decoding_cache_root();
+    let rhythm_user_dir = crate::rhythm::user_dir(&app);
     let write_path = target.write_path().to_path_buf();
     tauri::async_runtime::spawn_blocking(move || {
-        libretracks_project::export_region_as_package_with_progress(
+        crate::rhythm::export_with_rhythm_samples(rhythm_user_dir.clone(), &song, &write_path, |song| libretracks_project::export_region_as_package_with_progress(
             &cache_root,
             &song_dir,
-            &song,
+            song,
             &region_id,
             &write_path,
             session_audio_mode(include_audio, None),
             include_video.unwrap_or(false),
             |done, total| emit_song_export_progress(&app, done, total, include_audio),
-        )
+        ))
         .map_err(|error| error.to_string())?;
         // On iOS this is where the "Save to…" sheet opens.
         crate::state::emit_session_export_progress(
@@ -2853,18 +2855,19 @@ pub async fn export_region_as_package_at(
     };
 
     let cache_root = crate::state::decoding_cache_root();
+    let rhythm_user_dir = crate::rhythm::user_dir(&app);
     let write_path = std::path::PathBuf::from(write_path);
     tauri::async_runtime::spawn_blocking(move || {
-        libretracks_project::export_region_as_package_with_progress(
+        crate::rhythm::export_with_rhythm_samples(rhythm_user_dir.clone(), &song, &write_path, |song| libretracks_project::export_region_as_package_with_progress(
             &cache_root,
             &song_dir,
-            &song,
+            song,
             &region_id,
             &write_path,
             session_audio_mode(include_audio, None),
             include_video.unwrap_or(false),
             |done, total| emit_song_export_progress(&app, done, total, include_audio),
-        )
+        ))
         .map_err(|error| error.to_string())
     })
     .await
@@ -3014,10 +3017,10 @@ fn spawn_session_export(
             false,
             None,
         );
-        let result = libretracks_project::export_session_as_package_with_options(
+        let result = crate::rhythm::export_with_rhythm_samples(crate::rhythm::user_dir(&worker_app), &song, &path, |song| libretracks_project::export_session_as_package_with_options(
             &cache_root,
             &song_dir,
-            &song,
+            song,
             &sidecars,
             &path,
             audio_mode,
@@ -3044,7 +3047,7 @@ fn spawn_session_export(
                     );
                 }
             },
-        );
+        ));
 
         // Android: the export landed in a private temp; hand it to the SAF
         // destination the user picked (desktop finish() is a no-op).
@@ -3154,10 +3157,10 @@ pub async fn export_session_package_at(
     );
 
     let result = tauri::async_runtime::spawn_blocking(move || {
-        libretracks_project::export_session_as_package_with_options(
+        crate::rhythm::export_with_rhythm_samples(crate::rhythm::user_dir(&worker_app), &song, &path, |song| libretracks_project::export_session_as_package_with_options(
             &cache_root,
             &song_dir,
-            &song,
+            song,
             &sidecars,
             &path,
             audio_mode,
@@ -3179,7 +3182,7 @@ pub async fn export_session_package_at(
                     );
                 }
             },
-        )
+        ))
         .map_err(|error| error.to_string())
     })
     .await

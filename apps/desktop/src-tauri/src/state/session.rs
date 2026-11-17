@@ -577,6 +577,7 @@ impl DesktopSession {
         let progress = Self::extraction_progress_reporter(app);
         let mut file = std::fs::File::open(package_path)?;
         let options = super::video_library::package_extract_options(app, &mut file, target_song_dir);
+        crate::rhythm::install_package_samples_from(app, &mut file);
         let extracted = libretracks_project::extract_session_package_from_reader_with_options(
             target_song_dir,
             file,
@@ -619,6 +620,7 @@ impl DesktopSession {
         let mut reader = reader;
         let options =
             super::video_library::package_extract_options(app, &mut reader, target_song_dir);
+        crate::rhythm::install_package_samples_from(app, &mut reader);
         let extracted = libretracks_project::extract_session_package_from_reader_with_options(
             target_song_dir,
             reader,

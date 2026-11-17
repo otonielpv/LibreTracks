@@ -25,6 +25,7 @@ import {
   setOneShotConfig,
 } from "../desktopApi";
 import { LoopRows } from "./LoopRows";
+import { MissingPacksNotice } from "./MissingPacksNotice";
 import { OneShotGrid } from "./OneShotGrid";
 import { swapPads } from "./oneShotOps";
 import { createRhythmHandlers, type RhythmHandlers } from "./rhythmHandlers";
@@ -156,6 +157,7 @@ export function RhythmPanel({
 
   const loopsZone = (
     <section className="lt-rhythm-zone lt-rhythm-zone--loops" aria-label={t("rhythm.loops")}>
+      <MissingPacksNotice songLoop={songLoop} />
       {pattern && kit ? (
         <LoopRows pattern={pattern} kit={kit} rows={loopRows} layout={layout} handlers={handlers} />
       ) : (

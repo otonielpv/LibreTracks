@@ -830,3 +830,21 @@
   width: 96px;
   accent-color: #57f1db;
 }
+
+.lt-missing-packs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: rgb(242 201 76 / 0.08);
+  border-bottom: 1px solid rgb(242 201 76 / 0.3);
+  color: #f2c94c;
+  font-size: 12px;
+}
+
+.lt-missing-packs__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}

@@ -2605,6 +2605,7 @@ const en = {
       open: "Download sounds",
       title: "Free sound packs",
       offline: "No connection: the catalog will show when you are online.",
+      missing: "Missing the {{name}} pack: those rows stay silent.",
       download: "Download",
       remove: "Remove",
       downloading: "Downloading {{name}}",

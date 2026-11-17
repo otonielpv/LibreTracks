@@ -265,6 +265,41 @@ impl RhythmRuntime {
     }
 }
 
+/// `loops/user/` de esta instalación, si la biblioteca está configurada.
+pub fn user_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+    use tauri::Manager;
+    app.state::<crate::state::DesktopState>()
+        .audio
+        .rhythm_library()
+        .map(|library| library.user_dir())
+}
+
+/// Exporta un paquete con las muestras propias de los loops de canción
+/// dentro (paso 12): la canción empaquetada las nombra por hash y el zip
+/// lleva `loops/<hash>.wav`.
+pub fn export_with_rhythm_samples<T>(
+    user_dir: Option<PathBuf>,
+    song: &Song,
+    package: &std::path::Path,
+    export: impl FnOnce(&Song) -> Result<T, libretracks_project::ProjectError>,
+) -> Result<T, libretracks_project::ProjectError> {
+    let Some(user_dir) = user_dir else { return export(song) };
+    let (packaged, samples) = libretracks_project::rhythm_package::hash_user_samples(song, &user_dir);
+    let result = export(&packaged)?;
+    libretracks_project::rhythm_package::append_rhythm_samples(package, &samples)?;
+    Ok(result)
+}
+
+/// Instala las muestras propias que trae un paquete importado, desde su
+/// lector (lo deja rebobinado para la extracción). Un fallo no tumba la
+/// importación: el loop llega y la fila sin muestra calla.
+pub fn install_package_samples_from<R: std::io::Read + std::io::Seek>(app: &tauri::AppHandle, reader: &mut R) {
+    let Some(user_dir) = user_dir(app) else { return };
+    if let Err(error) = libretracks_project::rhythm_package::install_rhythm_samples_from_reader(reader, &user_dir) {
+        eprintln!("[libretracks-rhythm] package samples not installed: {error}");
+    }
+}
+
 /// El kit de un patrón: el incrustado o el de la biblioteca.
 pub fn kit_for(pattern: &LoopPattern, kits: &[DrumKit]) -> Option<DrumKit> {
     match &pattern.kit {
