@@ -132,7 +132,7 @@ TEST_CASE("voice pointer survives a transpose change (no rebuild)") {
 TEST_CASE("region transpose retimes the warm voice in place, preserving phase") {
     // Regression: changing a region's key while warp was ON used to route
     // through build_seek_voice_map (destroy + rebuild at the current playhead),
-    // which restarts the Bungee pipeline from its ~108ms structural latency.
+    // which restarts the Bungee pipeline from its ~210ms structural latency.
     // The metronome / voice-guide render directly at the timeline frame with no
     // such reset, so the tracks slid out of phase with the click the instant
     // the user transposed. The fix routes a pure pitch change through

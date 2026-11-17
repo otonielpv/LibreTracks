@@ -60,10 +60,19 @@ Exactly a factor of two. That latency is the floor on how quickly a jump can
 speak, how much material a seek must prefeed, and how long the engine stays in
 an inconsistent state after a warp toggle.
 
-`BungeePitchVoice` shipped with `hop=0` for a period after the warp and pitch
-voices were merged into it — the argument was lost in the merge and the
-doubled latency went unnoticed because nothing tested it. `Warp[0]: the voice
-runs at the low-latency hop setting` now pins it.
+**Since 2026-11-17 the engine ships `hop=0`.** Voices are warmed and prefed
+on the control thread (`voice_priming::align_on_source`), so the structural
+latency no longer reaches the user: a jump or seek starts aligned at either
+hop. What hop 0 costs, measured at 48 kHz with 12 voices at -2 semitones:
+
+| | hop -1 | hop 0 | hop +1 |
+|---|---:|---:|---:|
+| audio-thread CPU (avg, % of a 512-frame block) | 11.6% | 11.9% | 12.9% (p95 x2) |
+| priming 12 voices (warm + prefeed) | 26 ms | 39 ms | - |
+| latency | 103 ms | 207 ms | ~410 ms |
+
+Hop 0 won a listening A/B on real stems over -1; +1 is out for its CPU spikes.
+`Warp[0]: the voice runs at the full-quality hop setting` pins the value.
 
 Related: `is_warm()` used to compare latency against `max_input_frames`
 (one block x 4). Since latency rests far above that at either hop, the

@@ -421,13 +421,12 @@ TEST_CASE("Warp[0]: is_warm() reports convergence and the warm loop can stop") {
 // ---------------------------------------------------------------------------
 // The hop setting is a shipped configuration, so pin it.
 //
-// log2SynthesisHopAdjust = -1 halves the grain hop and with it the structural
-// latency. That number is the floor on how fast a jump can speak and how long
-// the engine stays inconsistent after a warp toggle, so a silent regression to
-// hop=0 doubles the cost of every discontinuity in the app. It has already
-// happened once, when the warp and pitch voices were merged into one class.
+// log2SynthesisHopAdjust = 0 is Bungee's full-quality granularity, chosen in
+// an A/B on 2026-11-17 over -1 (half the latency, worse sound). Priming hides
+// the latency from the user, but the value still decides how much material
+// every prefeed pushes, so a silent change either way must fail here.
 // ---------------------------------------------------------------------------
-TEST_CASE("Warp[0]: the voice runs at the low-latency hop setting") {
+TEST_CASE("Warp[0]: the voice runs at the full-quality hop setting") {
     BungeePitchVoice voice;
     REQUIRE(voice.configure(kSampleRate, kChannels, kBlockFrames));
 
@@ -445,10 +444,10 @@ TEST_CASE("Warp[0]: the voice runs at the low-latency hop setting") {
 
     const double latency_ms = voice.latency_frames() * 1000.0 / kSampleRate;
     INFO("latency = " << voice.latency_frames() << " frames (" << latency_ms << " ms)");
-    // hop=-1 measures ~110 ms; hop=0 measures ~221 ms. The band below accepts
-    // the former and rejects the latter with room for sample-rate differences.
-    CHECK(latency_ms > 60.0);
-    CHECK(latency_ms < 150.0);
+    // hop=0 measures ~207-221 ms; hop=-1 ~103-110 ms; hop=+1 ~410 ms. The band
+    // accepts only hop=0, with room for sample-rate differences.
+    CHECK(latency_ms > 160.0);
+    CHECK(latency_ms < 300.0);
 }
 
 #endif // LT_ENGINE_HAVE_BUNGEE

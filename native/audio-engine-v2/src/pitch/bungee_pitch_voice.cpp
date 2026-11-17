@@ -200,21 +200,22 @@ bool BungeePitchVoice::configure(int sample_rate,
 
     try {
         Bungee::SampleRates rates{sample_rate, sample_rate};
-        // log2SynthesisHopAdjust = -1 halves the grain hop, which halves the
-        // structural latency. Measured against Bungee 2.4.24 Basic at 44.1 kHz:
+        // log2SynthesisHopAdjust = 0: Bungee's default granularity, its best
+        // quality. Structural latency, Bungee 2.4.24 Basic at 44.1 kHz:
         //
-        //   hop =  0   9728 frames   220.6 ms
+        //   hop =  0   9728 frames   220.6 ms   <- shipped
         //   hop = -1   4864 frames   110.3 ms
         //
-        // That latency is the floor on everything the user feels: how long a
-        // jump takes to speak, how much material a seek has to prefeed, how
-        // long the engine spends in an inconsistent state after a warp toggle.
-        // -1 is what WARP_BACKEND_NOTES.md documents and what shipped until the
-        // warp and pitch voices were merged into this class, where the argument
-        // was lost. -2 was tried and rejected: it is stable, but the quality
-        // cost on real transposed material was audible in an A/B.
+        // -1 shipped until 2026-11-17. It was dropped because the latency is no
+        // longer what the user hears: voices are warmed and prefed on the
+        // control thread (voice_priming::align_on_source), so a jump or seek
+        // starts aligned either way. Measured at 48 kHz with 12 voices at -2 st
+        // (bench_bungee_voice_cost and an A/B render): audio-thread CPU 11.9%
+        // vs 11.6% of the block, priming 39 ms vs 26 ms, and hop 0 won the
+        // listening test. +1 has p95 spikes at twice the cost, so it is out.
+        // -2 was rejected earlier on quality.
         impl_->stretcher = std::make_unique<Impl::Stretcher>(
-            rates, channel_count, -1);
+            rates, channel_count, 0);
         impl_->stream = std::make_unique<Impl::Stream>(
             *impl_->stretcher, max_input_frames_per_block, channel_count);
 

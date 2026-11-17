@@ -3116,7 +3116,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 // session (resolve_effective_semitones), so the swap below is
                 // all the audible path needs. We deliberately do NOT rebuild
                 // the voices via build_seek_voice_map here — that destroys the
-                // warm Bungee pipeline and restarts it from ~108ms of
+                // warm Bungee pipeline and restarts it from ~210ms of
                 // structural latency at the current playhead, which the
                 // metronome / voice-guide (rendered directly at timeline_frame,
                 // no such reset) do NOT share. The result was the tracks

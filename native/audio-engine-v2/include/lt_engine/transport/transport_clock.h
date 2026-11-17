@@ -30,7 +30,7 @@ public:
 
     // Called by audio thread to advance the clock by one block.
     // No-op while pending_start_ is set so the playhead doesn't run ahead
-    // during voice priming (Bungee needs ~600ms warm-up + ~110ms latency).
+    // during voice priming (Bungee needs ~600ms warm-up + ~210ms latency).
     void advance(int block_frames);
 
     // Called by audio thread on command execution.

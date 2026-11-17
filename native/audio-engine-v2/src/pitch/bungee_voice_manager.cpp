@@ -660,7 +660,7 @@ void BungeeVoiceManager::retime_existing_for_session(
     // NOT touch voices whose clip is unchanged: their Bungee pipeline is warm
     // and the source_cursor already advances itself with the playhead, so
     // resetting the cursor + clearing the output FIFO would force a refill from
-    // scratch (~108 ms structural latency at hop=-1) — heard as playback that
+    // scratch (~210 ms structural latency at hop=0) — heard as playback that
     // "jumps back then recovers" on EVERY edit, even edits to other clips.
     //
     // Compare each voice's CLIP MAPPING (timeline start, source start, warp
@@ -711,7 +711,7 @@ void BungeeVoiceManager::retime_existing_for_session(
         }
         if (live) {
             // Drag in progress: the clip's mapping is changing every tick. A
-            // hard retime per tick (FIFO clear + ~108ms refill + fade-in) is the
+            // hard retime per tick (FIFO clear + ~210ms refill + fade-in) is the
             // "trrrr" the user hears on big/multi-clip drags. Defer it entirely —
             // do NOT touch the voice and do NOT update its recorded mapping, so
             // the final commit (live=false) still sees the full pre-drag→drop
