@@ -3180,6 +3180,11 @@ export async function assignLoopToSong(
   });
 }
 
+/** Escucha un borrador del editor sin guardarlo; `null` vuelve al activo. */
+export async function previewLoopPattern(pattern: RhythmLoopPattern | null): Promise<void> {
+  return invokeCommand<void>("preview_loop_pattern", { pattern });
+}
+
 export async function clearSongLoop(regionId: string): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("clear_song_loop", { regionId });
 }

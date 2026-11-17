@@ -187,3 +187,21 @@ pub(super) fn song_with_regions() -> Song {
     song.regions.iter_mut().for_each(|r| r.drum_loop = None);
     song
 }
+
+#[test]
+fn a_preview_pattern_sounds_instead_of_the_active_one() {
+    let (mut rt, _dir) = runtime();
+    let data = library();
+    let mut draft = data.patterns[0].clone();
+    draft.bpm = 140.0;
+    draft.rows.truncate(1);
+    rt.set_preview(Some(draft));
+    let plan = rt.plan_with(&data, "pop", 0);
+    let EngineCommand::SetLoopPattern { pattern } = &plan.commands[0] else { panic!("patrón") };
+    assert_eq!(pattern.free_bpm, 140.0);
+    assert_eq!(pattern.rows.len(), 1);
+    rt.set_preview(None);
+    let plan = rt.plan_with(&data, "pop", 0);
+    let EngineCommand::SetLoopPattern { pattern } = &plan.commands[0] else { panic!("patrón") };
+    assert_eq!(pattern.free_bpm, 100.0);
+}

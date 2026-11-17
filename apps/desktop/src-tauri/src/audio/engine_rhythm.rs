@@ -44,6 +44,18 @@ impl AudioController {
         self.apply_rhythm_plan(plan)
     }
 
+    /// Borrador del editor que suena en lugar del patrón activo (`None` lo
+    /// quita) y sincroniza.
+    pub fn preview_rhythm_pattern(
+        &self,
+        pattern: Option<libretracks_core::drum_loops::LoopPattern>,
+    ) -> Result<(), DesktopError> {
+        if let Ok(mut runtime) = self.rhythm.lock() {
+            runtime.set_preview(pattern);
+        }
+        self.sync_rhythm()
+    }
+
     /// Lo mismo tras cargar la sesión o cambiar sus canciones (D5, D8).
     pub fn sync_rhythm_for_song(&self, song: &libretracks_core::Song) -> Result<(), DesktopError> {
         if let Ok(mut runtime) = self.rhythm.lock() {

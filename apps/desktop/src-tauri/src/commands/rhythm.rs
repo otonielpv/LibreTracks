@@ -92,6 +92,12 @@ pub fn save_one_shot_set(set: OneShotSet, state: State<'_, DesktopState>) -> Res
     with_library(&state, |lib| lib.save_one_shot_set(&set))
 }
 
+/// Escucha un borrador del editor sin guardarlo (`None` vuelve al activo).
+#[tauri::command(async)]
+pub fn preview_loop_pattern(pattern: Option<LoopPattern>, state: State<'_, DesktopState>) -> Result<(), String> {
+    state.audio.preview_rhythm_pattern(pattern).map_err(|e| e.to_string())
+}
+
 /// Asigna a la canción una copia del patrón con su kit incrustado (D5):
 /// editarla después no toca la biblioteca y viaja con la sesión.
 #[tauri::command(async)]

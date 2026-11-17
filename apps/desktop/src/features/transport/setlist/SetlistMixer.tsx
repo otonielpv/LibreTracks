@@ -418,7 +418,7 @@ function SetlistMixerComponent({
         />
       ) : null}
       {layout === "short" ? (
-        <RhythmDock view="setlist" layoutClass="short" songLoop={region?.loop ?? null} />
+        <RhythmDock view="setlist" layoutClass="short" songLoop={region?.loop ?? null} songRegionId={region?.id ?? null} />
       ) : null}
       {tab === "rhythm" || tab === "loops" || tab === "oneShots" ? (
         <div className="lt-setlist-mixer-panel is-rhythm" data-testid="setlist-rhythm-tab">
@@ -428,6 +428,7 @@ function SetlistMixerComponent({
             layoutClass={layout}
             surfaces={tab === "rhythm" ? "both" : tab}
             songLoop={region?.loop ?? null}
+            songRegionId={region?.id ?? null}
           />
         </div>
       ) : null}

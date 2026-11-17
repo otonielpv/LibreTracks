@@ -51,6 +51,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "one_shots_stop_all"
         | "pause_transport"
         | "play_transport"
+        | "preview_loop_pattern"
         | "reorder_song_region"
         | "schedule_marker_jump"
         | "schedule_region_jump"
@@ -217,6 +218,7 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "one_shots_stop_all",
     "pause_transport",
     "play_transport",
+    "preview_loop_pattern",
     "reorder_song_region",
     "schedule_marker_jump",
     "schedule_region_jump",
@@ -559,6 +561,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::transport::play_transport(app.clone(), app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "preview_loop_pattern" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::preview_loop_pattern(arg(&args, "pattern")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?

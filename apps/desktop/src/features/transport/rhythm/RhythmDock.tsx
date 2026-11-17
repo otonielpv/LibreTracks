@@ -13,6 +13,7 @@ import { getSettings, listenToSettingsUpdated } from "../desktopApi";
 import { DismissOnBack } from "../mobile/DismissOnBack";
 import { classifySetlistLayout } from "../setlist/useSetlistLayout";
 import { RhythmButton } from "./RhythmButton";
+import { RhythmEditors } from "./RhythmEditors";
 import { RhythmPanel, type RhythmEditTarget, type RhythmPanelSurfaces, type RhythmPanelVariant } from "./RhythmPanel";
 import { useRhythmStore, type RhythmView } from "./rhythmStore";
 import type { RhythmLayoutClass } from "./useRhythmLayout";
@@ -62,10 +63,12 @@ type RhythmDockProps = {
   /** Siempre visible (pestaña del Setlist) en vez de seguir el botón. */
   alwaysOpen?: boolean;
   songLoop?: RegionLoop | null;
-  onEdit?: (target: RhythmEditTarget) => void;
+  /** Región de la canción para «Asignar a esta canción». */
+  songRegionId?: string | null;
 };
 
-export function RhythmDock({ view, layoutClass, surfaces, alwaysOpen, songLoop, onEdit }: RhythmDockProps) {
+export function RhythmDock({ view, layoutClass, surfaces, alwaysOpen, songLoop, songRegionId }: RhythmDockProps) {
+  const [editing, setEditing] = useState<RhythmEditTarget | null>(null);
   const open = useRhythmStore((s) => s.openByView[view]);
   const setOpen = useRhythmStore((s) => s.setOpen);
   const [settings, setSettings] = useRhythmSettings();
@@ -84,8 +87,17 @@ export function RhythmDock({ view, layoutClass, surfaces, alwaysOpen, songLoop, 
         layoutClass={layoutClass}
         surfaces={surfaces}
         songLoop={songLoop}
-        onEdit={onEdit}
+        onEdit={setEditing}
         onClose={alwaysOpen ? undefined : close}
+      />
+      <RhythmEditors
+        target={editing}
+        settings={settings}
+        onSettings={setSettings}
+        songLoop={songLoop}
+        songRegionId={songRegionId}
+        layoutClass={layout}
+        onClose={() => setEditing(null)}
       />
     </>
   );

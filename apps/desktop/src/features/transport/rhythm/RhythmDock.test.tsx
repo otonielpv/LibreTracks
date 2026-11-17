@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { RhythmLibrary } from "@libretracks/shared/models";
 
 import { setRhythmLibraryForTest } from "../../../app/testDesktopApiMock";
-import { act, fireEvent, render, screen } from "../../../test/testUtils";
+import { act, fireEvent, render, screen, waitFor } from "../../../test/testUtils";
+import { assignLoopToSong, saveLoopPattern } from "../desktopApi";
 import { useBackDismissStore } from "../mobile/backNavigation";
 import { RhythmDock, RhythmViewButton } from "./RhythmDock";
 import { useRhythmStore } from "./rhythmStore";
@@ -63,5 +64,37 @@ describe("RhythmDock in the four views", () => {
     expect(otherClosed).toBe(false);
     expect(useBackDismissStore.getState().stack.map((e) => e.id)).toEqual(["other-overlay"]);
     useBackDismissStore.getState().unregister("other-overlay");
+  });
+});
+
+describe("RhythmDock editors", () => {
+  it("✎ opens the pattern editor on the active pattern and saving calls the commands", async () => {
+    setRhythmLibraryForTest({
+      kits: [
+        {
+          id: "kit",
+          name: "Kit",
+          sounds: [{ id: "hat", name: "Hat", color: "", sample: { source: { kind: "builtin" }, file: "hat.wav" }, gainDb: 0 }],
+        },
+      ],
+      patterns: [],
+      oneShots: { banks: [] },
+    });
+    render(<RhythmDock view="daw" layoutClass="wide" songRegionId="r1" />);
+    act(() => useRhythmStore.getState().setOpen("daw", true));
+    await screen.findByTestId("rhythm-panel");
+    await waitFor(() => expect(useRhythmStore.getState().library?.kits).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(await screen.findByTestId("loop-editor")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save ▾" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Save to library" }));
+    });
+    expect(saveLoopPattern).toHaveBeenCalledWith(expect.objectContaining({ kit: { kind: "library", kitId: "kit" } }));
+    fireEvent.click(screen.getByRole("button", { name: "Save ▾" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Assign to this song" }));
+    });
+    expect(assignLoopToSong).toHaveBeenCalledWith("r1", expect.objectContaining({ name: "Kit" }));
   });
 });

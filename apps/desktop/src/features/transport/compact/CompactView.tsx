@@ -484,6 +484,7 @@ function CompactViewComponent({
       <RhythmDock
         view="compact"
         songLoop={regions.find((region) => region.id === activeRegionId)?.loop ?? null}
+        songRegionId={activeRegionId}
       />
 
       {/* Bottom zone: global mixer over all tracks. Reusable so the DAW

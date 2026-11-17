@@ -1114,6 +1114,9 @@ export const testDesktopApiMock = {
     }
     return clone(buildSnapshot());
   },
+  previewLoopPattern: async (pattern: LoopPattern | null) => {
+    recordRhythmTrigger("preview_loop_pattern", { patternId: pattern?.id ?? null });
+  },
   clearSongLoop: async (regionId: string) => {
     const region = state.song.regions.find((r) => r.id === regionId);
     if (region) {

@@ -7561,6 +7561,7 @@ export function TransportPanelContent() {
                     <RhythmDock
                       view="daw"
                       songLoop={song?.regions.find((r) => r.id === activeSongRegionId)?.loop ?? null}
+                      songRegionId={activeSongRegionId || null}
                     />
                   ) : null}
 

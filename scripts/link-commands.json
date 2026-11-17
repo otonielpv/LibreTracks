@@ -125,6 +125,7 @@
     "one_shots_stop_all",
     "pause_transport",
     "play_transport",
+    "preview_loop_pattern",
     "reorder_song_region",
     "schedule_marker_jump",
     "schedule_region_jump",

@@ -44,6 +44,9 @@ pub struct RhythmRuntime {
     roots: Option<SampleRoots>,
     slots: SlotTable,
     region_loops: Vec<(String, RegionLoop)>,
+    /// Borrador del editor (paso 08): suena en lugar del patrón activo
+    /// mientras se escucha, sin guardarse.
+    preview: Option<LoopPattern>,
 }
 
 impl RhythmRuntime {
@@ -57,6 +60,10 @@ impl RhythmRuntime {
             user: library.user_dir(),
         });
         self.library = Some(library);
+    }
+
+    pub fn set_preview(&mut self, pattern: Option<LoopPattern>) {
+        self.preview = pattern;
     }
 
     pub fn library(&self) -> Option<&RhythmLibrary> {
@@ -91,10 +98,10 @@ impl RhythmRuntime {
         };
         let path_of = |sample: &SampleRef| resolve_sample_path(sample, &roots);
 
-        let active = data
-            .patterns
-            .iter()
-            .find(|p| p.id == active_pattern_id)
+        let active = self
+            .preview
+            .as_ref()
+            .or_else(|| data.patterns.iter().find(|p| p.id == active_pattern_id))
             .and_then(|p| kit_for(p, &data.kits).map(|k| (p.clone(), k)));
         let bank = data.one_shots.normalized().banks.get(active_bank).cloned();
 

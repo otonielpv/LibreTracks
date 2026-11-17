@@ -125,6 +125,7 @@ export const GUEST_COMMAND_ROUTES: Readonly<Record<string, GuestCommandRoute>> =
   one_shots_stop_all: "control",
   pause_transport: "control",
   play_transport: "control",
+  preview_loop_pattern: "control",
   reorder_song_region: "control",
   schedule_marker_jump: "control",
   schedule_region_jump: "control",

@@ -678,7 +678,7 @@ function LivePerformanceViewComponent({
 
       {/* Ritmo (plan drum-loops): se abre con el botón de la barra superior;
           acoplado al final, encoge la fila de cues o del chart. */}
-      <RhythmDock view="live" songLoop={currentRegion?.loop ?? null} />
+      <RhythmDock view="live" songLoop={currentRegion?.loop ?? null} songRegionId={currentRegion?.id ?? null} />
     </main>
   );
 }
