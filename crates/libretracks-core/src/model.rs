@@ -1004,6 +1004,11 @@ pub struct MidiClip {
     pub events: Vec<MidiEvent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// Fire this long BEFORE the section at `timeline_start_seconds` really
+    /// starts (a lyric change that has to be on screen when the singing begins).
+    /// See [`crate::lead_time`]. `None` = fire on the anchor, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead: Option<crate::lead_time::LeadTime>,
 }
 
 /// One message (or sweep) inside a [`MidiClip`].

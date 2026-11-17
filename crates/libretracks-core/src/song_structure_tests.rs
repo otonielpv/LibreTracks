@@ -97,6 +97,7 @@ fn region(id: &str, start: f64, end: f64) -> SongRegion {
 
 fn jump_to_marker(id: &str, rel: f64, target: &str) -> AutomationCue {
     AutomationCue {
+        lead: None,
         id: id.into(),
         name: id.into(),
         at_seconds: ORIGIN + rel,
@@ -158,6 +159,7 @@ fn base_song() -> Song {
             },
         ],
         midi_clips: vec![MidiClip {
+            lead: None,
             id: "m1".into(),
             track_id: "midi".into(),
             timeline_start_seconds: ORIGIN + 20.0,
@@ -1254,6 +1256,7 @@ fn extract(fixture: &Fixture, list: &[ArrangementBlock], index: usize, built: &B
 /// y una cue con acción MIDI, en relativo al bloque.
 fn second_chorus_edits(mut content: BlockContent) -> BlockContent {
     content.midi_clips.push(MidiClip {
+        lead: None,
         id: "midi_propio".into(),
         track_id: "midi".into(),
         timeline_start_seconds: 2.0,
@@ -1289,6 +1292,7 @@ fn second_chorus_edits(mut content: BlockContent) -> BlockContent {
         category_override: None,
     });
     content.automation_cues.push(AutomationCue {
+        lead: None,
         id: "cue_propia".into(),
         name: "MIDI coro 2".into(),
         at_seconds: 8.0,
@@ -1304,6 +1308,7 @@ fn second_chorus_edits(mut content: BlockContent) -> BlockContent {
     });
     // Salto al inicio de su propio bloque (relativo al bloque).
     content.automation_cues.push(AutomationCue {
+        lead: None,
         id: "vuelta_propia".into(),
         name: "Otra vez".into(),
         at_seconds: 12.0,

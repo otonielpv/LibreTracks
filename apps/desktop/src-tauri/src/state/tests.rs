@@ -6058,6 +6058,7 @@ fn song_with_intro_chorus_bridge() -> Song {
 
 fn mute_cue_at(at_seconds: f64) -> crate::audio::automation::AutomationCue {
     crate::audio::automation::AutomationCue {
+        lead: None,
         id: "mute_before_chorus".into(),
         name: "Mute".into(),
         at_seconds,
@@ -6197,6 +6198,7 @@ fn a_jump_puts_the_midi_cursor_just_before_the_landing_point() {
 
 fn jump_cue(id: &str, at_seconds: f64, marker_id: &str) -> crate::audio::automation::AutomationCue {
     crate::audio::automation::AutomationCue {
+        lead: None,
         id: id.into(),
         name: id.into(),
         at_seconds,
@@ -6550,6 +6552,7 @@ fn click_guide_cue(
     action: crate::audio::automation::AutomationAction,
 ) -> crate::audio::automation::AutomationCue {
     crate::audio::automation::AutomationCue {
+        lead: None,
         id: "cue_click".into(),
         name: "Click".into(),
         at_seconds: 1.0,
@@ -6815,4 +6818,130 @@ fn clip_fade_curves_are_clamped_and_kept_when_not_given() {
         .update_clip_fades(&ids, None, None, curves(Some(FadeCurve::LINEAR), None), &audio)
         .expect("curve should reset");
     assert_eq!(curves_of(&mut session).0, None);
+}
+
+// ---- Lead time on automation cues (plan lead-time) -------------------------
+
+fn lead_cue(
+    id: &str,
+    at_seconds: f64,
+    lead_seconds: f64,
+    action: crate::audio::automation::AutomationAction,
+) -> crate::audio::automation::AutomationCue {
+    crate::audio::automation::AutomationCue {
+        lead: Some(libretracks_core::lead_time::LeadTime::Seconds {
+            seconds: lead_seconds,
+        }),
+        id: id.into(),
+        name: id.into(),
+        at_seconds,
+        enabled: true,
+        max_runs: None,
+        actions: vec![action],
+    }
+}
+
+fn mute_track_1() -> crate::audio::automation::AutomationAction {
+    crate::audio::automation::AutomationAction::SetTrackMute {
+        track_id: "track_1".into(),
+        muted: true,
+    }
+}
+
+fn solo_track_1() -> crate::audio::automation::AutomationAction {
+    crate::audio::automation::AutomationAction::SetTrackSolo {
+        track_id: "track_1".into(),
+        solo: true,
+    }
+}
+
+fn track_1_state(session: &DesktopSession) -> (bool, bool) {
+    let track = session
+        .engine
+        .song()
+        .and_then(|song| song.tracks.iter().find(|track| track.id == "track_1"))
+        .expect("track_1");
+    (track.muted, track.solo)
+}
+
+/// Move the playhead as playback would (no landing), then run the lead walk.
+fn play_lead_walk_to(session: &mut DesktopSession, seconds: f64, audio: &crate::audio::engine::AudioController) {
+    session
+        .engine
+        .sync_position_preserving_transport_state(seconds)
+        .expect("position");
+    session
+        .advance_automation_lead_cues(audio)
+        .expect("lead walk");
+}
+
+#[test]
+fn a_cue_with_lead_fires_its_actions_ahead_and_is_not_armed_in_the_slot() {
+    let mut session = session_with_song_dir("lead-linear", song_with_intro_chorus_bridge());
+    session.automation.cues = vec![lead_cue("chorus_lyric", 4.0, 1.0, mute_track_1())];
+    let audio = crate::audio::engine::AudioController::default();
+
+    session.play(&audio).expect("play");
+    session.seek(2.0, &audio).expect("seek");
+    // The lead walk owns it: the single armed-cue slot leaves it alone.
+    assert!(session.active_automation_job.is_none());
+    assert!(session.pending_automation_jump.is_none());
+
+    play_lead_walk_to(&mut session, 2.9, &audio);
+    assert_eq!(track_1_state(&session), (false, false));
+    play_lead_walk_to(&mut session, 3.1, &audio);
+    assert_eq!(track_1_state(&session), (true, false), "fires at 3.0, a second early");
+}
+
+#[test]
+fn a_jump_landing_inside_a_lead_window_fires_the_cue_on_landing() {
+    let mut session = session_with_song_dir("lead-landing", song_with_intro_chorus_bridge());
+    session.automation.cues = vec![lead_cue("chorus_lyric", 4.0, 1.0, mute_track_1())];
+    let audio = crate::audio::engine::AudioController::default();
+
+    session.play(&audio).expect("play");
+    session.seek(6.0, &audio).expect("seek");
+    session
+        .schedule_marker_jump("chorus", JumpTrigger::Immediate, TransitionType::Instant, &audio)
+        .expect("jump");
+    session
+        .advance_automation_lead_cues(&audio)
+        .expect("lead walk");
+    assert_eq!(track_1_state(&session), (true, false));
+}
+
+/// The issue's case: in the intro, a jump armed for the next marker (the
+/// chorus, at 4 s) goes to the bridge instead. The bridge's cue goes out a
+/// second before the jump; the chorus' cue, which would also go out at 3 s, is
+/// held back.
+#[test]
+fn a_pending_jump_fires_the_target_cue_ahead_and_holds_back_the_skipped_one() {
+    let mut session = session_with_song_dir("lead-jump", song_with_intro_chorus_bridge());
+    session.automation.cues = vec![
+        lead_cue("chorus_lyric", 4.0, 1.0, solo_track_1()),
+        lead_cue("bridge_lyric", 8.0, 1.0, mute_track_1()),
+    ];
+    let audio = crate::audio::engine::AudioController::default();
+
+    session.play(&audio).expect("play");
+    session.seek(1.0, &audio).expect("seek");
+    session
+        .schedule_marker_jump("bridge", JumpTrigger::NextMarker, TransitionType::Instant, &audio)
+        .expect("jump");
+    assert!(
+        session.engine.pending_marker_jump().is_some(),
+        "the jump waits for the chorus marker"
+    );
+
+    // Steps under a second, like real ticks (a longer one is a stall).
+    for step in [1.5, 2.0, 2.5, 2.9] {
+        play_lead_walk_to(&mut session, step, &audio);
+    }
+    assert_eq!(track_1_state(&session), (false, false));
+    play_lead_walk_to(&mut session, 3.5, &audio);
+    assert_eq!(
+        track_1_state(&session),
+        (true, false),
+        "bridge cue (mute) fired, chorus cue (solo) held back"
+    );
 }

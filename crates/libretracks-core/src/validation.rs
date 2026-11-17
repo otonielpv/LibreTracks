@@ -1081,6 +1081,7 @@ mod tests {
         let mut song = valid_song();
         song.tracks.push(track("midi1", TrackKind::Midi, None));
         song.midi_clips.push(MidiClip {
+            lead: None,
             id: "mc1".into(),
             track_id: "midi1".into(),
             timeline_start_seconds: 10.0,
@@ -1360,6 +1361,7 @@ mod tests {
         song.regions.clear();
         song.tracks = vec![track("midi1", TrackKind::Midi, None)];
         song.midi_clips = vec![MidiClip {
+            lead: None,
             id: "mc1".into(),
             track_id: "midi1".into(),
             timeline_start_seconds: 0.0,
@@ -1373,6 +1375,7 @@ mod tests {
     #[test]
     fn midi_clip_duration_spans_its_longest_event() {
         let clip = MidiClip {
+            lead: None,
             id: "mc".into(),
             track_id: "midi1".into(),
             timeline_start_seconds: 10.0,
@@ -1407,6 +1410,7 @@ mod tests {
     #[test]
     fn a_clip_of_instantaneous_messages_has_zero_duration() {
         let clip = MidiClip {
+            lead: None,
             id: "mc".into(),
             track_id: "midi1".into(),
             timeline_start_seconds: 3.0,

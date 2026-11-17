@@ -12,7 +12,7 @@
 //! The desktop side owns everything stateful: opening the port, holding the
 //! cursor, and pushing the resulting messages.
 
-use crate::model::{MidiEventKind, Song, TrackKind};
+use crate::model::{MidiClip, MidiEventKind, Song, TrackKind};
 
 /// A MIDI message to emit, in terms the caller turns into wire bytes.
 ///
@@ -109,6 +109,22 @@ pub fn collect_events_in_window(
     previous_seconds: f64,
     now_seconds: f64,
 ) -> MidiTickOutput {
+    collect_events_in_window_from(song, previous_seconds, now_seconds, |clip| {
+        vec![clip.timeline_start_seconds]
+    })
+}
+
+/// [`collect_events_in_window`] with each clip starting wherever `starts`
+/// says instead of on its anchor: the clip's events keep their offsets from
+/// that start. This is how a lead time plays (see [`crate::lead_plan`]): the
+/// planner gives a clip with a lead its earlier start, none while a pending
+/// jump holds it back, or two when a loop replays it.
+pub fn collect_events_in_window_from(
+    song: &Song,
+    previous_seconds: f64,
+    now_seconds: f64,
+    starts: impl Fn(&MidiClip) -> Vec<f64>,
+) -> MidiTickOutput {
     let mut output = MidiTickOutput::default();
 
     for clip in &song.midi_clips {
@@ -131,81 +147,83 @@ pub fn collect_events_in_window(
         let track_channel = track.midi_channel;
         let port = track.midi_port.clone();
 
-        for event in &clip.events {
-            let event_seconds = clip.timeline_start_seconds + event.at_seconds.max(0.0);
-            if event_seconds <= previous_seconds || event_seconds > now_seconds {
-                continue;
-            }
+        for clip_start in starts(clip) {
+            for event in &clip.events {
+                let event_seconds = clip_start + event.at_seconds.max(0.0);
+                if event_seconds <= previous_seconds || event_seconds > now_seconds {
+                    continue;
+                }
 
-            let channel = event.effective_channel(track_channel);
+                let channel = event.effective_channel(track_channel);
 
-            match event.kind {
-                MidiEventKind::Note {
-                    note,
-                    velocity,
-                    duration_seconds,
-                } => {
-                    output.messages.push(ScheduledMidiMessage::NoteOn {
-                        port: port.clone(),
-                        channel,
+                match event.kind {
+                    MidiEventKind::Note {
                         note,
                         velocity,
-                    });
-                    output.started_notes.push(PendingNoteOff {
-                        port: port.clone(),
-                        channel,
-                        note,
-                        off_at_seconds: event_seconds + duration_seconds.max(0.0),
-                    });
-                }
-                MidiEventKind::ControlChange { controller, value } => {
-                    output.messages.push(ScheduledMidiMessage::ControlChange {
-                        port: port.clone(),
-                        channel,
-                        controller,
-                        value,
-                    });
-                }
-                MidiEventKind::ProgramChange { program } => {
-                    output.messages.push(ScheduledMidiMessage::ProgramChange {
-                        port: port.clone(),
-                        channel,
-                        program,
-                    });
-                }
-                MidiEventKind::ControlCurve {
-                    controller,
-                    from_value,
-                    to_value,
-                    duration_seconds,
-                } => {
-                    // A zero-length sweep is just a value change; emitting the
-                    // start and end would send two messages for one intent.
-                    if duration_seconds <= 0.0 {
+                        duration_seconds,
+                    } => {
+                        output.messages.push(ScheduledMidiMessage::NoteOn {
+                            port: port.clone(),
+                            channel,
+                            note,
+                            velocity,
+                        });
+                        output.started_notes.push(PendingNoteOff {
+                            port: port.clone(),
+                            channel,
+                            note,
+                            off_at_seconds: event_seconds + duration_seconds.max(0.0),
+                        });
+                    }
+                    MidiEventKind::ControlChange { controller, value } => {
                         output.messages.push(ScheduledMidiMessage::ControlChange {
                             port: port.clone(),
                             channel,
                             controller,
-                            value: to_value,
+                            value,
                         });
-                        continue;
                     }
-                    output.messages.push(ScheduledMidiMessage::ControlChange {
-                        port: port.clone(),
-                        channel,
-                        controller,
-                        value: from_value,
-                    });
-                    output.started_curves.push(PendingControlCurve {
-                        port: port.clone(),
-                        channel,
+                    MidiEventKind::ProgramChange { program } => {
+                        output.messages.push(ScheduledMidiMessage::ProgramChange {
+                            port: port.clone(),
+                            channel,
+                            program,
+                        });
+                    }
+                    MidiEventKind::ControlCurve {
                         controller,
                         from_value,
                         to_value,
-                        start_seconds: event_seconds,
                         duration_seconds,
-                        last_sent_value: from_value,
-                    });
+                    } => {
+                        // A zero-length sweep is just a value change; emitting the
+                        // start and end would send two messages for one intent.
+                        if duration_seconds <= 0.0 {
+                            output.messages.push(ScheduledMidiMessage::ControlChange {
+                                port: port.clone(),
+                                channel,
+                                controller,
+                                value: to_value,
+                            });
+                            continue;
+                        }
+                        output.messages.push(ScheduledMidiMessage::ControlChange {
+                            port: port.clone(),
+                            channel,
+                            controller,
+                            value: from_value,
+                        });
+                        output.started_curves.push(PendingControlCurve {
+                            port: port.clone(),
+                            channel,
+                            controller,
+                            from_value,
+                            to_value,
+                            start_seconds: event_seconds,
+                            duration_seconds,
+                            last_sent_value: from_value,
+                        });
+                    }
                 }
             }
         }
@@ -352,6 +370,7 @@ mod tests {
 
     fn clip(id: &str, start: f64, events: Vec<MidiEvent>) -> MidiClip {
         MidiClip {
+            lead: None,
             id: id.into(),
             track_id: "midi1".into(),
             timeline_start_seconds: start,
@@ -359,6 +378,38 @@ mod tests {
             events,
             color: None,
         }
+    }
+
+    #[test]
+    fn a_clip_with_lead_fires_at_the_start_the_planner_gives_it() {
+        use crate::lead_plan::{LeadItem, LeadPlanner};
+        use crate::lead_time::{LeadGrid, LeadTime};
+
+        let mut lyric = clip("c", 10.0, vec![note_event("e", 0.0, 60, 100, 0.25)]);
+        lyric.lead = Some(LeadTime::Beats { count: 1.0 });
+        let song = song_with(vec![lyric], false);
+        let grid = LeadGrid::new(&song);
+        let planner = LeadPlanner::new();
+        let starts = |clip: &MidiClip| {
+            planner.starts(
+                &grid,
+                LeadItem {
+                    id: &clip.id,
+                    anchor: clip.timeline_start_seconds,
+                    lead: clip.lead.as_ref(),
+                },
+            )
+        };
+
+        // 120 bpm: one beat early is 9.5.
+        let early = collect_events_in_window_from(&song, 9.0, 9.6, starts);
+        assert_eq!(early.messages.len(), 1);
+        assert!((early.started_notes[0].off_at_seconds - 9.75).abs() < 1.0e-9);
+        assert!(collect_events_in_window_from(&song, 9.6, 10.5, starts)
+            .messages
+            .is_empty());
+        // The plain walk (preview) still plays it on its anchor.
+        assert_eq!(collect_events_in_window(&song, 9.6, 10.5).messages.len(), 1);
     }
 
     #[test]
@@ -735,6 +786,7 @@ mod tests {
             vec![
                 clip("lights", 1.0, vec![note_event("e1", 0.0, 60, 100, 1.0)]),
                 MidiClip {
+                    lead: None,
                     id: "lyrics".into(),
                     track_id: "midi2".into(),
                     timeline_start_seconds: 1.0,

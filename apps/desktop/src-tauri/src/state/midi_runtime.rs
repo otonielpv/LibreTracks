@@ -18,15 +18,19 @@
 use std::sync::Arc;
 
 use libretracks_audio::PlaybackState;
+use libretracks_core::lead_plan::LeadItem;
+use libretracks_core::lead_time::LeadGrid;
 use libretracks_core::midi_schedule::{
-    collect_events_in_window, has_enabled_midi_events, step_control_curves, take_due_note_offs,
-    PendingControlCurve, PendingNoteOff, ScheduledMidiMessage,
+    collect_events_in_window, collect_events_in_window_from, has_enabled_midi_events,
+    step_control_curves, take_due_note_offs, PendingControlCurve, PendingNoteOff,
+    ScheduledMidiMessage,
 };
 use libretracks_core::MidiClip;
 
 use crate::infra::error::DesktopError;
 use crate::midi::output::{MidiOutputManager, OutboundMidiMessage};
 
+use super::lead_runtime::{midi_lead_items, song_has_midi_leads};
 use super::DesktopSession;
 
 /// A tick longer than this is treated as a discontinuity rather than playback:
@@ -111,6 +115,14 @@ impl DesktopSession {
     /// silence whatever is currently sounding. Called on seek, jump, stop and
     /// pause — any time the playhead moves discontinuously.
     pub(super) fn reset_midi_cursor(&mut self, position_seconds: f64) {
+        self.reset_midi_cursor_keeping_leads(position_seconds);
+        self.midi_lead_planner.reset();
+    }
+
+    /// [`Self::reset_midi_cursor`] without forgetting what the lead planner
+    /// pre-fired for a pending jump, for paths where a landing may still
+    /// follow (a stalled tick).
+    fn reset_midi_cursor_keeping_leads(&mut self, position_seconds: f64) {
         self.midi_cursor_seconds = position_seconds.max(0.0);
         self.release_all_midi_notes();
         self.active_midi_curves.clear();
@@ -120,9 +132,28 @@ impl DesktopSession {
     /// seek, Play) so the events sitting exactly on that point still go out:
     /// the tick window is `(cursor, now]`, and a cursor left ON the landing
     /// point would skip the lyrics change placed on the chorus marker.
+    ///
+    /// Clips with a lead (plan lead-time): one pre-fired before the jump is
+    /// not sent again, and one whose lead window contains the landing goes out
+    /// now. Notes a pre-fired clip started are released here like any other
+    /// (the landing cuts them); its events still ahead play from the landing.
     pub(super) fn land_midi_cursor(&mut self, landing_seconds: f64) {
-        self.reset_midi_cursor(landing_seconds);
+        let fired_until = self.midi_cursor_seconds;
+        self.reset_midi_cursor_keeping_leads(landing_seconds);
         self.midi_cursor_seconds = landing_seconds.max(0.0) - MIDI_LANDING_EPSILON_SECONDS;
+        match self.engine.song().filter(|song| song_has_midi_leads(song)) {
+            Some(song) => {
+                let grid = LeadGrid::new(song);
+                self.midi_lead_planner.on_landing(
+                    &grid,
+                    midi_lead_items(song),
+                    landing_seconds.max(0.0),
+                    self.midi_cursor_seconds,
+                    fired_until,
+                );
+            }
+            None => self.midi_lead_planner.reset(),
+        }
     }
 
     /// Send note-offs for every sounding note and forget them.
@@ -238,7 +269,9 @@ impl DesktopSession {
         // A wildly-forward movement is a discontinuity: re-anchor without
         // firing, so a stalled tick can't machine-gun the receiving device.
         if now_seconds - previous_seconds > MAX_CONTINUOUS_TICK_SECONDS {
-            self.reset_midi_cursor(now_seconds);
+            // Keep the lead planner: a jump's landing usually follows, and it
+            // needs to know what went out before it.
+            self.reset_midi_cursor_keeping_leads(now_seconds);
             return Ok(());
         }
 
@@ -252,7 +285,34 @@ impl DesktopSession {
         self.active_midi_notes = still_held;
         scheduled.extend(note_offs);
 
-        let tick = collect_events_in_window(&song, previous_seconds, now_seconds);
+        let tick = if song_has_midi_leads(&song) {
+            // Clips with a lead start where the planner says, given the jump
+            // that is pending right now (plan lead-time).
+            let grid = LeadGrid::new(&song);
+            let pending = self.pending_lead_discontinuity(&song);
+            self.midi_lead_planner.sync_pending(
+                &grid,
+                midi_lead_items(&song),
+                pending,
+                previous_seconds,
+            );
+            let planner = &self.midi_lead_planner;
+            collect_events_in_window_from(&song, previous_seconds, now_seconds, |clip| {
+                planner.starts(
+                    &grid,
+                    LeadItem {
+                        id: &clip.id,
+                        anchor: clip.timeline_start_seconds,
+                        lead: clip.lead.as_ref(),
+                    },
+                )
+            })
+        } else {
+            if !self.midi_lead_planner.is_idle() {
+                self.midi_lead_planner.reset();
+            }
+            collect_events_in_window(&song, previous_seconds, now_seconds)
+        };
         scheduled.extend(tick.messages);
         self.active_midi_notes.extend(tick.started_notes);
         self.active_midi_curves.extend(tick.started_curves);

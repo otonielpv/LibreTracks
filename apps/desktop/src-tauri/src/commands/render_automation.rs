@@ -24,8 +24,9 @@
 //! - the pad starts off and the click/guide start on (the user asked for them
 //!   in the dialog); cues switch them from there.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
+use libretracks_core::lead_time::{has_lead, LeadGrid};
 use libretracks_core::mix_scene::{active_song_track_ids, resolve_scene, SceneLatches, TrackMix};
 use libretracks_core::{warp_timeline_seconds_at, Song, SongRegion};
 use lt_audio_engine_v2::{
@@ -87,9 +88,16 @@ pub(crate) fn plan_render_automation(inputs: &AutomationPlanInputs<'_>) -> Optio
     let mut position = region.start_seconds;
     let mut skip_cue: Option<String> = None;
     let mut jumps = 0usize;
+    // Lead times (plan lead-time), same rules as playback: a cue with a lead
+    // starts its actions `lead` before its anchor; a cue jump pre-fires the
+    // cues of the section it lands on, and those are not fired again there.
+    let grid = LeadGrid::new(song);
+    let mut carried: Vec<(f64, AutomationAction)> = Vec::new();
+    let mut prefired: HashSet<String> = HashSet::new();
 
     'segments: loop {
-        let mut pending: Vec<(f64, AutomationAction)> = Vec::new();
+        let mut pending: Vec<(f64, AutomationAction)> = std::mem::take(&mut carried);
+        let landed_prefired = std::mem::take(&mut prefired);
         for cue in &cues {
             let on_landing = cue.at_seconds <= position + EPSILON;
             if cue.at_seconds < position - EPSILON {
@@ -98,6 +106,7 @@ pub(crate) fn plan_render_automation(inputs: &AutomationPlanInputs<'_>) -> Optio
             if on_landing && skip_cue.as_deref() == Some(cue.id.as_str()) {
                 continue;
             }
+            let already_fired = landed_prefired.contains(&cue.id);
             let jump = cue.jump_action().and_then(|action| match action {
                 AutomationAction::Jump { target, transition, mix_scene_id } => {
                     let target_seconds = target_source_seconds(song, target)?;
@@ -113,15 +122,23 @@ pub(crate) fn plan_render_automation(inputs: &AutomationPlanInputs<'_>) -> Optio
                 Some((target_seconds, _, _)) if *target_seconds <= cue.at_seconds => 1,
                 _ => u32::MAX,
             });
-            if runs >= limit {
-                continue;
+            if !already_fired {
+                if runs >= limit {
+                    continue;
+                }
+                *sim.runs.entry(cue.id.as_str()).or_insert(0) += 1;
+                // Landing inside a lead window starts the actions now.
+                let start = if has_lead(cue.lead.as_ref()) {
+                    grid.fire_seconds(cue.at_seconds, cue.lead.as_ref()).max(position)
+                } else {
+                    cue.at_seconds
+                };
+                pending.extend(
+                    cue.timed_pre_jump_actions()
+                        .into_iter()
+                        .map(|(offset, action)| (start + offset, action)),
+                );
             }
-            *sim.runs.entry(cue.id.as_str()).or_insert(0) += 1;
-            pending.extend(
-                cue.timed_pre_jump_actions()
-                    .into_iter()
-                    .map(|(offset, action)| (cue.at_seconds + offset, action)),
-            );
 
             let Some((target_seconds, transition, mix_scene_id)) = jump else {
                 continue;
@@ -131,6 +148,34 @@ pub(crate) fn plan_render_automation(inputs: &AutomationPlanInputs<'_>) -> Optio
                 continue;
             }
             jumps += 1;
+            for other in &cues {
+                if other.id == cue.id {
+                    continue;
+                }
+                let Some(rest) = grid.remainder_before_landing(
+                    target_seconds,
+                    other.at_seconds,
+                    other.lead.as_ref(),
+                ) else {
+                    continue;
+                };
+                let runs = sim.runs.get(other.id.as_str()).copied().unwrap_or(0);
+                if runs >= other.max_runs.unwrap_or(u32::MAX) {
+                    continue;
+                }
+                *sim.runs.entry(other.id.as_str()).or_insert(0) += 1;
+                let start = grid.fire_seconds(jump_at, Some(&rest)).max(position);
+                for (offset, action) in other.timed_pre_jump_actions() {
+                    let at = start + offset;
+                    if at < jump_at {
+                        pending.push((at, action));
+                    } else {
+                        // Past the cut: same distance after the landing.
+                        carried.push((target_seconds + (at - jump_at), action));
+                    }
+                }
+                prefired.insert(other.id.clone());
+            }
             sim.fire_pending(&mut pending, position, jump_at);
             let fade = match transition.mode {
                 AutomationTransitionMode::FadeOut => transition

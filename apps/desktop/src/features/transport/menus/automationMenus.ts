@@ -95,6 +95,7 @@ export function createAutomationMenus(getDeps: () => TimelineMenuDeps) {
       name: cue.name,
       maxRuns: cue.maxRuns ?? null,
       actions: cue.actions,
+      lead: cue.lead ?? null,
     });
   }
 

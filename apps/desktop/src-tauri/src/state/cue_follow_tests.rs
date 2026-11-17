@@ -102,6 +102,7 @@ fn three_songs() -> Song {
 
 fn mute_cue(id: &str, at: f64) -> AutomationCue {
     AutomationCue {
+        lead: None,
         id: id.into(),
         name: id.into(),
         at_seconds: at,
@@ -116,6 +117,7 @@ fn mute_cue(id: &str, at: f64) -> AutomationCue {
 
 fn frame_jump_cue(id: &str, at: f64, target: f64) -> AutomationCue {
     AutomationCue {
+        lead: None,
         id: id.into(),
         name: id.into(),
         at_seconds: at,

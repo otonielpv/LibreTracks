@@ -65,6 +65,11 @@ pub struct AutomationCue {
     /// so existing automation.ltautomation files migrate transparently.
     #[serde(default, alias = "action", deserialize_with = "deserialize_actions")]
     pub actions: Vec<AutomationAction>,
+    /// Fire this long BEFORE the section at `at_seconds` really starts. Moves
+    /// the cue's actions, never its jump (which stays on the bar). See
+    /// [`crate::lead_time`]. `None` = fire on the anchor, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead: Option<crate::lead_time::LeadTime>,
 }
 
 /// Deserialize `actions: [...]` (new) or legacy `action: {...}` (single).

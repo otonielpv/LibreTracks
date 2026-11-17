@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type {
+  LeadTime,
   MidiClipSummary,
   MidiEventKindSummary,
   MidiEventSummary,
@@ -10,6 +11,8 @@ import type {
 import { formatClock } from "../helpers";
 import { MidiEventFields, describeEvent } from "./MidiEventFields";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { LeadTimeField } from "./LeadTimeField";
+import { normalizeLead } from "./leadTime";
 
 /**
  * What the modal is editing. `clipId` is present when editing an existing clip.
@@ -20,6 +23,8 @@ export type MidiClipDraft = {
   timelineStartSeconds: number;
   name: string;
   events: MidiEventSummary[];
+  /** Fire this long before the section starts (plan lead-time). */
+  lead?: LeadTime | null;
 };
 
 export type MidiClipModalResult = {
@@ -28,6 +33,7 @@ export type MidiClipModalResult = {
   timelineStartSeconds: number;
   name: string;
   events: MidiEventSummary[];
+  lead: LeadTime | null;
 };
 
 type MidiClipModalProps = {
@@ -114,6 +120,7 @@ export function MidiClipModal({
     () => draft?.events ?? [],
   );
   const [name, setName] = useState(() => draft?.name ?? "");
+  const [lead, setLead] = useState<LeadTime | null>(() => normalizeLead(draft?.lead));
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [pendingType, setPendingType] =
     useState<MidiEventKindSummary["type"]>("note");
@@ -178,6 +185,7 @@ export function MidiClipModal({
     timelineStartSeconds: draft.timelineStartSeconds,
     name,
     events,
+    lead: normalizeLead(lead),
   });
 
   return (
@@ -222,6 +230,8 @@ export function MidiClipModal({
               onChange={(event) => setName(event.target.value)}
             />
           </label>
+
+          <LeadTimeField value={lead} onChange={setLead} />
 
           {events.length === 0 ? (
             <p className="lt-automation-empty">{t("transport.midi.modalEmpty")}</p>

@@ -41,6 +41,7 @@ fn full_structure() -> SongStructure {
                 color: None,
             }],
             midi_clips: vec![MidiClip {
+                lead: None,
                 id: "m1".into(),
                 track_id: "midi".into(),
                 timeline_start_seconds: 2.0,
@@ -82,6 +83,7 @@ fn full_structure() -> SongStructure {
                 marker("build", 12.0, MarkerKind::Build),
             ],
             automation_cues: vec![AutomationCue {
+                lead: None,
                 id: "k1".into(),
                 name: "Al coro".into(),
                 at_seconds: 6.0,

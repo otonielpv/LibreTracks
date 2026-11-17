@@ -41,6 +41,7 @@ function editMidiClip(clip: MidiClipSummary) {
     timelineStartSeconds: clip.timelineStartSeconds,
     name: clip.name,
     events: clip.events,
+    lead: clip.lead ?? null,
   });
 }
 

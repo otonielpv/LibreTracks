@@ -3617,6 +3617,37 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   touch-action: none;
 }
 
+/* Lead time tail (plan lead-time): from the item's anchor back to where it
+   really fires. Inside the item, so it follows a drag. */
+.lt-setlist-lead-tail {
+  position: absolute;
+  right: 100%;
+  bottom: 3px;
+  height: 0;
+  border-top: 1px dashed var(--lt-midi-clip-color, #ffd27a);
+  pointer-events: none;
+}
+
+.lt-setlist-lead-tail::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -5px;
+  height: 7px;
+  border-left: 1px solid var(--lt-midi-clip-color, #ffd27a);
+}
+
+/* A cue's anchor is its diamond's centre, not the button's edge. */
+.lt-setlist-cue .lt-setlist-lead-tail {
+  right: calc(100% - 0.45rem);
+  bottom: 50%;
+  border-top-color: #ffd27a;
+}
+
+.lt-setlist-cue .lt-setlist-lead-tail::before {
+  border-left-color: #ffd27a;
+}
+
 .lt-setlist-midi-clip:focus-visible {
   outline: 2px solid var(--lt-setlist-accent);
   outline-offset: 1px;

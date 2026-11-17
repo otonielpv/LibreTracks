@@ -71,6 +71,7 @@ mod history;
 mod library;
 mod midi_edit;
 mod midi_runtime;
+mod lead_runtime;
 mod video_edit;
 mod video_library;
 mod video_audio;
@@ -459,6 +460,14 @@ pub struct DesktopSession {
     pub(super) active_midi_notes: Vec<ActiveMidiNote>,
     /// In-progress controller sweeps from `ControlCurve` events.
     pub(super) active_midi_curves: Vec<ActiveMidiCurve>,
+    /// Where MIDI clips with a lead time start, given the pending jump (plan
+    /// lead-time). Idle while no clip has a lead.
+    pub(super) midi_lead_planner: libretracks_core::lead_plan::LeadPlanner,
+    /// Same for automation cues with a lead, which fire their actions from a
+    /// walk of their own instead of the single armed-cue slot.
+    pub(super) automation_lead_planner: libretracks_core::lead_plan::LeadPlanner,
+    /// Position that walk has fired up to; actions fire in `(cursor, now]`.
+    pub(super) automation_lead_cursor: f64,
     pub(super) project_revision: u64,
     /// Bumped when automation changes a track's mute/solo/volume/pan in the
     /// model. Separate from `project_revision` on purpose: automation is
@@ -614,6 +623,9 @@ impl Default for DesktopSession {
             midi_cursor_seconds: 0.0,
             active_midi_notes: Vec::new(),
             active_midi_curves: Vec::new(),
+            midi_lead_planner: Default::default(),
+            automation_lead_planner: Default::default(),
+            automation_lead_cursor: 0.0,
             project_revision: 0,
             mix_revision: 0,
             fade_stop: None,
@@ -2099,6 +2111,9 @@ impl DesktopSession {
         // be left silent even if something was started before a reload.
         self.panic_midi();
         self.midi_cursor_seconds = self.engine.position_seconds().max(0.0);
+        self.midi_lead_planner.reset();
+        self.automation_lead_planner.reset();
+        self.automation_lead_cursor = self.engine.position_seconds().max(0.0);
         self.cancel_native_scheduled_jumps(audio)?;
 
         Ok(self.snapshot())

@@ -1,5 +1,6 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use libretracks_audio::{ActiveVamp, JumpTrigger, PendingMarkerJump, TransitionType};
+use libretracks_core::lead_time::{has_lead, lead_fire_seconds, LeadTime};
 use libretracks_core::song_structure::bars_for_view_duration;
 use libretracks_core::{
     audible_clip_duration_seconds, warp_timeline_seconds_at, Clip, Marker, MarkerCategory,
@@ -166,6 +167,13 @@ pub struct MidiClipSummary {
     pub name: String,
     pub events: Vec<MidiEvent>,
     pub color: Option<String>,
+    /// Lead time as stored (see `libretracks_core::lead_time`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lead: Option<LeadTime>,
+    /// View-space instant the lead makes it fire in linear playback, for the
+    /// timeline's lead tail. `None` without a lead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lead_start_seconds: Option<f64>,
 }
 
 /// A video clip in view space. `timeline_start_seconds` and
@@ -214,6 +222,13 @@ pub struct AutomationCueSummary {
     pub exhausted: bool,
     /// Ordered actions of the job.
     pub actions: Vec<AutomationActionSummary>,
+    /// Lead time as stored (see `libretracks_core::lead_time`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lead: Option<LeadTime>,
+    /// View-space instant the lead makes it fire in linear playback, for the
+    /// timeline's lead tail. `None` without a lead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lead_start_seconds: Option<f64>,
 }
 
 // Internally-tagged enum: rename_all renames the tags but not struct-variant
@@ -945,6 +960,8 @@ pub(crate) fn automation_cue_to_summary(
             .iter()
             .map(|action| automation_action_to_summary(song, action))
             .collect(),
+        lead: cue.lead,
+        lead_start_seconds: lead_start_view_seconds(song, cue.at_seconds, cue.lead.as_ref()),
     }
 }
 
@@ -1173,7 +1190,19 @@ pub(crate) fn midi_clip_to_summary(song: &Song, clip: &MidiClip) -> MidiClipSumm
         name: clip.name.clone(),
         events: clip.events.clone(),
         color: clip.color.clone(),
+        lead: clip.lead,
+        lead_start_seconds: lead_start_view_seconds(
+            song,
+            clip.timeline_start_seconds,
+            clip.lead.as_ref(),
+        ),
     }
+}
+
+/// Where an item anchored at `anchor` (source seconds) fires in linear
+/// playback, in view seconds; `None` when it has no lead.
+fn lead_start_view_seconds(song: &Song, anchor: f64, lead: Option<&LeadTime>) -> Option<f64> {
+    has_lead(lead).then(|| warp_timeline_seconds_at(song, lead_fire_seconds(song, anchor, lead)))
 }
 
 pub(crate) fn waveform_key_for_file_path(file_path: &str) -> String {

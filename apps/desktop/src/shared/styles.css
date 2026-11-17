@@ -3153,6 +3153,46 @@ html.lt-ios body {
   font: 600 0.85rem/1.2 "Space Grotesk", sans-serif;
 }
 
+/* Lead time ("fire ahead") field, shared by the MIDI clip and automation cue
+   editors (plan lead-time). */
+.lt-lead-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.lt-lead-field-select select,
+.lt-lead-field-custom select,
+.lt-lead-field-custom input[type="number"] {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.55rem 0.7rem;
+  font: 600 0.88rem/1.2 "Space Grotesk", sans-serif;
+}
+
+.lt-lead-field-select {
+  max-width: 16rem;
+}
+
+.lt-lead-field-custom {
+  display: grid;
+  grid-template-columns: minmax(0, 8rem) minmax(0, 10rem);
+  gap: 0.8rem;
+}
+
+.lt-lead-field-hint {
+  margin: 0;
+  color: rgb(186 202 197 / 0.7);
+  font: 500 0.8rem/1.35 "Space Grotesk", sans-serif;
+}
+
 /* Mix scene editor (plan live-scenes, paso 03). One scroller: the body.
    The header and the Close button stay put, and on a phone the list and the
    rules scroll together instead of nesting two scroll areas

@@ -24,6 +24,7 @@ import {
   type AppSettings,
   type AudioDeviceDescriptor,
   type AutomationActionSummary,
+  type LeadTime,
   type ClipSummary,
   type JumpTriggerLabel,
   type PendingJumpSummary,
@@ -5440,7 +5441,11 @@ export function TransportPanelContent() {
 
   // Commit the modal's result: create or update the cue, then refresh.
   const handleConfirmAutomationCue = useCallback(
-    (result: { actions: AutomationActionSummary[]; maxRuns: number | null }) => {
+    (result: {
+      actions: AutomationActionSummary[];
+      maxRuns: number | null;
+      lead: LeadTime | null;
+    }) => {
       const draft = automationCueDraft;
       const currentSong = songRef.current;
       if (!draft || !currentSong) {
@@ -5465,6 +5470,7 @@ export function TransportPanelContent() {
           enabled: true,
           maxRuns: result.maxRuns,
           actions: result.actions,
+          lead: result.lead,
         });
         recordProductEvent("feature_automation");
         applyPlaybackSnapshot(nextSnapshot);

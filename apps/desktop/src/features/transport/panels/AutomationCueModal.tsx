@@ -13,6 +13,7 @@ import {
   type AppSettings,
   type AutomationActionSummary,
   type AutomationJumpTargetSummary,
+  type LeadTime,
   type MixSceneMode,
   type PadCatalogEntry,
   type SongView,
@@ -25,6 +26,8 @@ import {
   type TrackSongGroup,
 } from "./trackSongGroups";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { LeadTimeField } from "./LeadTimeField";
+import { normalizeLead } from "./leadTime";
 import {
   MetronomeActionEditor,
   VoiceGuideActionEditor,
@@ -43,6 +46,8 @@ export type AutomationCueDraft = {
   /** Max times the cue fires per session; null = unlimited. */
   maxRuns: number | null;
   actions: AutomationActionSummary[];
+  /** Fire the actions this long before the section starts (plan lead-time). */
+  lead?: LeadTime | null;
 };
 
 type AutomationCueModalProps = {
@@ -54,6 +59,7 @@ type AutomationCueModalProps = {
   onConfirm: (result: {
     actions: AutomationActionSummary[];
     maxRuns: number | null;
+    lead: LeadTime | null;
   }) => void;
 };
 
@@ -166,6 +172,7 @@ export function AutomationCueModal({
     () => draft?.actions ?? [],
   );
   // null = unlimited (∞). When limited, the numeric value (≥1).
+  const [lead, setLead] = useState<LeadTime | null>(() => normalizeLead(draft?.lead));
   const [maxRuns, setMaxRuns] = useState<number | null>(
     () => draft?.maxRuns ?? null,
   );
@@ -406,6 +413,12 @@ export function AutomationCueModal({
               </span>
             )}
           </div>
+
+          <LeadTimeField
+            value={lead}
+            onChange={setLead}
+            hasJump={actions.some((action) => action.type === "jump")}
+          />
         </div>
 
         <div className="lt-inline-actions lt-automation-modal-actions">
@@ -421,7 +434,11 @@ export function AutomationCueModal({
             className="is-primary"
             disabled={!canConfirm}
             onClick={() =>
-              onConfirm({ actions: normalize(actions), maxRuns })
+              onConfirm({
+                actions: normalize(actions),
+                maxRuns,
+                lead: normalizeLead(lead),
+              })
             }
           >
             {t(isEditing ? "common.save" : "common.create")}

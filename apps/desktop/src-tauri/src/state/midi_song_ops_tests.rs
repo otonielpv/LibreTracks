@@ -80,6 +80,7 @@ fn audio_clip(id: &str, start: f64) -> Clip {
 
 fn midi_clip(id: &str, start: f64) -> MidiClip {
     MidiClip {
+        lead: None,
         id: id.into(),
         track_id: "m1".into(),
         timeline_start_seconds: start,

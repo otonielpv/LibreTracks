@@ -6,6 +6,7 @@ import {
   previewMidiClip,
   setMidiTrackRouting,
   upsertMidiClip,
+  type LeadTime,
   type MidiEventSummary,
   type TrackSummary,
   type TransportSnapshot,
@@ -64,6 +65,8 @@ export function createMidiClipHandlers(deps: MidiClipHandlerDeps) {
     name: string;
     events: MidiEventSummary[];
     color?: string | null;
+    /** Rebuilt field by field below: a field missing here is lost on save. */
+    lead?: LeadTime | null;
   }) => {
     await runAction(async () => {
       const isNew = input.clipId === null;
@@ -74,6 +77,7 @@ export function createMidiClipHandlers(deps: MidiClipHandlerDeps) {
         name: input.name,
         events: input.events,
         color: input.color ?? null,
+        lead: input.lead ?? null,
       });
       recordProductEvent("feature_midi");
       applyPlaybackSnapshot(snapshot);

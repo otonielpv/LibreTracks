@@ -1,6 +1,8 @@
 pub mod audio_clock;
 pub mod automation;
 pub mod key_changes;
+pub mod lead_plan;
+pub mod lead_time;
 pub mod midi_control;
 pub mod midi_port_names;
 pub mod midi_schedule;

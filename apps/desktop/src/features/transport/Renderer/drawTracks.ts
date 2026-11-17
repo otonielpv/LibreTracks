@@ -442,6 +442,46 @@ function fitLabel(
   return lo > 0 ? text.slice(0, lo) + ellipsis : null;
 }
 
+/**
+ * Lead tail (plan lead-time): a dashed line from where an item with a lead
+ * really fires to its anchor, with a tick at the firing point, so the timeline
+ * shows that the lyric goes out a beat before the marker it sits on.
+ */
+function drawLeadTail(
+  context: CanvasRenderingContext2D,
+  snapshot: TrackSceneSnapshot,
+  anchorX: number,
+  leadStartSeconds: number | null | undefined,
+  trackTop: number,
+  laneHeight: number,
+  color: string,
+) {
+  if (leadStartSeconds == null || !Number.isFinite(leadStartSeconds)) {
+    return;
+  }
+  const leadX =
+    Math.round(secondsToScreenX(leadStartSeconds, snapshot.cameraX, snapshot.zoomLevel)) + 0.5;
+  if (anchorX - leadX < 2 || anchorX < 0 || leadX > snapshot.width) {
+    return;
+  }
+  const y = Math.round(trackTop + laneHeight - 6) + 0.5;
+  context.save();
+  context.strokeStyle = color;
+  context.globalAlpha = 0.85;
+  context.lineWidth = 1;
+  context.setLineDash([3, 3]);
+  context.beginPath();
+  context.moveTo(leadX, y);
+  context.lineTo(anchorX, y);
+  context.stroke();
+  context.setLineDash([]);
+  context.beginPath();
+  context.moveTo(leadX, y - 4);
+  context.lineTo(leadX, y + 2);
+  context.stroke();
+  context.restore();
+}
+
 export function drawAutomationLane(
   context: CanvasRenderingContext2D,
   snapshot: TrackSceneSnapshot,
@@ -483,6 +523,16 @@ export function drawAutomationLane(
       ? blendOnTrackBackdrop("#ff7ab6", 0.22)
       : blendOnTrackBackdrop("#bacac5", 0.12);
     const textStyle = cue.enabled ? "#ffb3d8" : "rgba(186, 202, 197, 0.75)";
+
+    drawLeadTail(
+      context,
+      snapshot,
+      snappedX,
+      cue.leadStartSeconds,
+      trackTop,
+      laneHeight,
+      strokeStyle,
+    );
 
     context.save();
     context.strokeStyle = strokeStyle;
@@ -618,6 +668,16 @@ export function drawMidiLane(
 
     const strokeStyle = clip.color ?? ACCENT;
     const fillStyle = blendOnTrackBackdrop(clip.color ?? ACCENT, 0.22);
+
+    drawLeadTail(
+      context,
+      snapshot,
+      snappedX,
+      clip.leadStartSeconds,
+      trackTop,
+      laneHeight,
+      strokeStyle,
+    );
 
     context.save();
     context.strokeStyle = strokeStyle;

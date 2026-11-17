@@ -151,6 +151,7 @@ fn moving_the_last_song_first_carries_everything_inside_it() {
     }];
     song.section_markers = vec![section("s2", 10.0), section("s3", 20.0)];
     song.midi_clips = vec![MidiClip {
+        lead: None,
         id: "m3".into(),
         track_id: "a1".into(),
         timeline_start_seconds: 18.0,

@@ -1126,6 +1126,7 @@ mod tests {
             song_region_id: None,
         });
         song.midi_clips.push(libretracks_core::MidiClip {
+            lead: None,
             id: "mc1".into(),
             track_id: "midi1".into(),
             timeline_start_seconds: 12.5,

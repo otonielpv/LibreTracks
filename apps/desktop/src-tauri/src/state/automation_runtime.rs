@@ -10,6 +10,7 @@
 use libretracks_audio::{
     ActiveVamp, JumpTrigger, PendingMarkerJump, PlaybackState, TransitionType,
 };
+use libretracks_core::lead_time::has_lead;
 use libretracks_core::mix_scene::{active_song_track_ids, resolve_scene, TrackMix};
 use libretracks_core::{source_seconds_at_view, warp_timeline_seconds_at, Song};
 use lt_audio_engine_v2::{JumpTarget as NativeJumpTarget, JumpTargetKind as NativeJumpTargetKind};
@@ -415,7 +416,7 @@ impl DesktopSession {
     }
 
     /// Whether the cue can still fire this session (under its `max_runs` limit).
-    fn cue_has_runs_left(&self, cue: &AutomationCue) -> bool {
+    pub(super) fn cue_has_runs_left(&self, cue: &AutomationCue) -> bool {
         match cue.max_runs {
             None => true,
             Some(max) => {
@@ -486,6 +487,7 @@ impl DesktopSession {
         landing_seconds: f64,
         skip_cue_id: Option<&str>,
     ) -> Result<(), DesktopError> {
+        self.land_automation_leads(landing_seconds);
         self.arm_next_automation_cue(audio, Some((landing_seconds, skip_cue_id)))
     }
 
@@ -564,6 +566,12 @@ impl DesktopSession {
                     // times and then the playhead passes through.
                     && self.cue_has_runs_left(cue)
                     && horizon_seconds.map_or(true, |horizon| cue.at_seconds < horizon)
+                    // Cues with a lead fire their actions from their own walk
+                    // (`advance_automation_lead_cues`); the slot only keeps the
+                    // jump of the ones that have one, and only when that jump
+                    // is not going to be stripped anyway.
+                    && !(has_lead(cue.lead.as_ref())
+                        && (cue.jump_action().is_none() || horizon_seconds.is_some()))
             })
             .min_by(|left, right| {
                 left.at_seconds
@@ -577,7 +585,13 @@ impl DesktopSession {
             return Ok(());
         };
 
-        let timed_actions = cue.timed_pre_jump_actions();
+        // A cue with a lead keeps only its jump here: its actions go out from
+        // the lead walk, `lead` ahead of the section.
+        let timed_actions = if has_lead(cue.lead.as_ref()) {
+            Vec::new()
+        } else {
+            cue.timed_pre_jump_actions()
+        };
 
         let jump_action = if horizon_seconds.is_some() {
             None
@@ -918,6 +932,7 @@ impl DesktopSession {
         if self.engine.playback_state() != PlaybackState::Playing {
             return Ok(());
         }
+        self.advance_automation_lead_cues(audio)?;
         let position_seconds = self.engine.position_seconds();
 
         // Collect the actions that became due, then apply them (split borrow).

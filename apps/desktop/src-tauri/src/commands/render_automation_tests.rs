@@ -285,3 +285,64 @@ fn a_jump_scene_applies_on_landing() {
     .unwrap();
     assert_eq!(keys(&track(&plan, "drums").gain), vec![(0.0, 0.8), (14.0, 0.8), (14.0, 0.2)]);
 }
+
+#[test]
+fn a_cue_with_lead_fires_its_actions_ahead_of_its_anchor() {
+    let plan = plan(
+        serde_json::json!([
+            {"id": "c", "name": "Mute", "atSeconds": 8.0,
+             "lead": {"unit": "seconds", "seconds": 1.5},
+             "actions": [{"type": "setTrackMute", "trackId": "drums", "muted": true}]}
+        ]),
+        "a",
+    )
+    .unwrap();
+    assert_eq!(keys(&track(&plan, "drums").mute), vec![(0.0, 0.0), (6.5, 1.0)]);
+}
+
+#[test]
+fn a_cue_jump_pre_fires_the_landing_cue_and_holds_back_the_skipped_one() {
+    // Jump at 6 s to 14 s. The cue on 8 s (skipped) must not fire; the one on
+    // 14 s (landing) fires 1 s before the jump and not again after it.
+    let plan = plan(
+        serde_json::json!([
+            {"id": "skip", "name": "Skipped", "atSeconds": 8.0,
+             "lead": {"unit": "seconds", "seconds": 1.0},
+             "actions": [{"type": "setTrackMute", "trackId": "keys", "muted": false}]},
+            {"id": "land", "name": "Landing", "atSeconds": 14.0,
+             "lead": {"unit": "seconds", "seconds": 1.0},
+             "actions": [{"type": "setTrackMute", "trackId": "drums", "muted": true}]},
+            {"id": "go", "name": "Go", "atSeconds": 6.0, "maxRuns": 1,
+             "actions": [{"type": "jump", "target": {"kind": "frame", "seconds": 14.0}}]}
+        ]),
+        "a",
+    )
+    .unwrap();
+    assert_eq!(segments(&plan), vec![(0.0, 6.0), (14.0, 20.0)]);
+    assert_eq!(keys(&track(&plan, "drums").mute), vec![(0.0, 0.0), (5.0, 1.0)]);
+    assert!(plan.tracks.iter().all(|track| track.track_id != "keys"));
+}
+
+#[test]
+fn pre_fired_actions_past_the_cut_continue_after_the_landing() {
+    // Lead 1 s, but the action waits 2 s: half of it goes before the jump at
+    // 6 s, the unmute lands 1 s after the landing (output 6 + 1 = 7).
+    let plan = plan(
+        serde_json::json!([
+            {"id": "land", "name": "Landing", "atSeconds": 14.0,
+             "lead": {"unit": "seconds", "seconds": 1.0}, "actions": [
+                {"type": "setTrackMute", "trackId": "drums", "muted": true},
+                {"type": "wait", "durationSeconds": 2.0},
+                {"type": "setTrackMute", "trackId": "drums", "muted": false}
+             ]},
+            {"id": "go", "name": "Go", "atSeconds": 6.0, "maxRuns": 1,
+             "actions": [{"type": "jump", "target": {"kind": "frame", "seconds": 14.0}}]}
+        ]),
+        "a",
+    )
+    .unwrap();
+    assert_eq!(
+        keys(&track(&plan, "drums").mute),
+        vec![(0.0, 0.0), (5.0, 1.0), (7.0, 0.0)]
+    );
+}

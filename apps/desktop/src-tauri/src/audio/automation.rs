@@ -105,6 +105,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("temp dir");
         let document = AutomationDocument {
             cues: vec![AutomationCue {
+                lead: None,
                 id: "cue_1".into(),
                 name: "Jump early".into(),
                 at_seconds: 42.0,

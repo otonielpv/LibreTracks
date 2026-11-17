@@ -1866,6 +1866,7 @@ mod tests {
         source.clips.clear();
         source.midi_clips = vec![
             MidiClip {
+                lead: None,
                 id: "crossing".into(),
                 track_id: "midi".into(),
                 timeline_start_seconds: 8.0,
@@ -1879,6 +1880,7 @@ mod tests {
                 color: None,
             },
             MidiClip {
+                lead: None,
                 id: "inside_clip".into(),
                 track_id: "midi".into(),
                 timeline_start_seconds: 15.0,
@@ -1887,6 +1889,7 @@ mod tests {
                 color: None,
             },
             MidiClip {
+                lead: None,
                 id: "outside".into(),
                 track_id: "midi".into(),
                 timeline_start_seconds: 25.0,

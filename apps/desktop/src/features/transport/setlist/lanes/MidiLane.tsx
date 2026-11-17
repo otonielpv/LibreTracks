@@ -13,6 +13,7 @@ import { DRAG_THRESHOLD_PX } from "../../constants";
 import { useTimelineUIStore } from "../../uiStore";
 import { resolvePointDrag } from "./automationLaneModel";
 import type { SongLaneRenderProps, SongLaneType } from "./laneTypes";
+import { LeadTail } from "./LeadTail";
 import { LANE_PREVIEW_FALLBACK_MS } from "./useClipGestures";
 
 export const MIDI_LANE_HEIGHT = 56;
@@ -204,6 +205,11 @@ function MidiLaneComponent({ track, song, region, scale, menus }: SongLaneRender
             }}
             onDoubleClick={(event) => event.stopPropagation()}
           >
+            <LeadTail
+              anchorSeconds={clip.timelineStartSeconds}
+              leadStartSeconds={clip.leadStartSeconds}
+              pxPerSecond={scale.pxPerSecond}
+            />
             <span className="lt-setlist-midi-clip-name">{clip.name || "MIDI"}</span>
             <span className="lt-setlist-midi-clip-events">{summary}</span>
           </button>

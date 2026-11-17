@@ -74,6 +74,7 @@ pub(crate) fn marker(id: &str, start: f64, kind: MarkerKind) -> Marker {
 
 pub(crate) fn mute_cue(id: &str, at: f64) -> AutomationCue {
     AutomationCue {
+        lead: None,
         id: id.into(),
         name: id.into(),
         at_seconds: at,

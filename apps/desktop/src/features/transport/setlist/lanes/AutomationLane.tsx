@@ -15,6 +15,7 @@ import { describeAutomationCue } from "../../timeline/describeAutomationCue";
 import { useTimelineUIStore } from "../../uiStore";
 import type { SongTimeScale } from "../songTimeScale";
 import { resolvePointDrag, songAutomationCues } from "./automationLaneModel";
+import { LeadTail } from "./LeadTail";
 import { LANE_PREVIEW_FALLBACK_MS } from "./useClipGestures";
 
 /** Row height of the automation lane, in px. */
@@ -211,6 +212,11 @@ function AutomationLaneComponent({ song, region, scale, menus, positionSecondsRe
               onContextMenu={(event) => openCueMenu(event, cue)}
               onDoubleClick={(event) => event.stopPropagation()}
             >
+              <LeadTail
+                anchorSeconds={cue.atSeconds}
+                leadStartSeconds={cue.leadStartSeconds}
+                pxPerSecond={scale.pxPerSecond}
+              />
               <span className="lt-setlist-cue-diamond" aria-hidden="true" />
               <span className="lt-setlist-cue-label">{cue.name}</span>
             </button>

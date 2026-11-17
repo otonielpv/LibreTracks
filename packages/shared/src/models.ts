@@ -560,7 +560,26 @@ export type AutomationCueSummary = {
   exhausted?: boolean;
   /** Ordered actions executed in sequence when the playhead reaches atSeconds. */
   actions: AutomationActionSummary[];
+  /**
+   * Fire this long BEFORE the section at the anchor really starts (e.g. a
+   * lyric change that has to be on screen when the singing begins). Absent =
+   * fire on the anchor. In a live jump into the section it fires that long
+   * before the jump. Clips/cues with a jump keep the jump on the bar.
+   */
+  lead?: LeadTime | null;
+  /** View-space instant the lead fires at in linear playback (read-only). */
+  leadStartSeconds?: number | null;
 };
+
+/**
+ * How far ahead of its anchor a MIDI clip or automation cue fires. A beat is
+ * the time signature's denominator note (like the metronome); bars use the
+ * governing signature; seconds are fixed time.
+ */
+export type LeadTime =
+  | { unit: "beats"; count: number }
+  | { unit: "bars"; count: number }
+  | { unit: "seconds"; seconds: number };
 
 export type MixSceneMode = "apply" | "toggle" | "restore";
 
@@ -770,6 +789,15 @@ export type MidiClipSummary = {
   name: string;
   events: MidiEventSummary[];
   color?: string | null;
+  /**
+   * Fire this long BEFORE the section at the anchor really starts (e.g. a
+   * lyric change that has to be on screen when the singing begins). Absent =
+   * fire on the anchor. In a live jump into the section it fires that long
+   * before the jump. Clips/cues with a jump keep the jump on the bar.
+   */
+  lead?: LeadTime | null;
+  /** View-space instant the lead fires at in linear playback (read-only). */
+  leadStartSeconds?: number | null;
 };
 
 /** How a video frame fits the output display. */
