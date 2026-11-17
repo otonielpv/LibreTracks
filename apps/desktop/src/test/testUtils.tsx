@@ -46,6 +46,7 @@ import {
 } from "../features/transport/structure/structureStore";
 import { resetVideoCanvasState } from "../features/transport/video/videoCanvasState";
 import { useTrackRowWindowStore } from "../features/transport/tracks/useTrackRowWindow";
+import { useRhythmStore } from "../features/transport/rhythm/rhythmStore";
 import {
   INITIAL_SETLIST_STATE,
   useSetlistStore,
@@ -120,6 +121,29 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     listenToAudioIdleWake: vi.fn(testDesktopApiMock.listenToAudioIdleWake),
     takeAudioIdleWake: vi.fn(testDesktopApiMock.takeAudioIdleWake),
     listenToMidiRawMessage: vi.fn(testDesktopApiMock.listenToMidiRawMessage),
+    // Loops de batería y one shots (plan drum-loops).
+    listenToRhythmMeters: vi.fn(testDesktopApiMock.listenToRhythmMeters),
+    getRhythmLibrary: vi.fn(testDesktopApiMock.getRhythmLibrary),
+    getRhythmState: vi.fn(testDesktopApiMock.getRhythmState),
+    saveLoopPattern: vi.fn(testDesktopApiMock.saveLoopPattern),
+    deleteLoopPattern: vi.fn(testDesktopApiMock.deleteLoopPattern),
+    saveDrumKit: vi.fn(testDesktopApiMock.saveDrumKit),
+    deleteDrumKit: vi.fn(testDesktopApiMock.deleteDrumKit),
+    saveOneShotSet: vi.fn(testDesktopApiMock.saveOneShotSet),
+    assignLoopToSong: vi.fn(testDesktopApiMock.assignLoopToSong),
+    clearSongLoop: vi.fn(testDesktopApiMock.clearSongLoop),
+    loopToggle: vi.fn(testDesktopApiMock.loopToggle),
+    loopToggleRow: vi.fn(testDesktopApiMock.loopToggleRow),
+    loopSetRow: vi.fn(testDesktopApiMock.loopSetRow),
+    loopSetAllRows: vi.fn(testDesktopApiMock.loopSetAllRows),
+    oneShotDown: vi.fn(testDesktopApiMock.oneShotDown),
+    oneShotUp: vi.fn(testDesktopApiMock.oneShotUp),
+    oneShotsStopAll: vi.fn(testDesktopApiMock.oneShotsStopAll),
+    setLoopConfig: vi.fn(testDesktopApiMock.setLoopConfig),
+    setOneShotConfig: vi.fn(testDesktopApiMock.setOneShotConfig),
+    setActivePattern: vi.fn(testDesktopApiMock.setActivePattern),
+    setOneShotBank: vi.fn(testDesktopApiMock.setOneShotBank),
+    importUserSample: vi.fn(testDesktopApiMock.importUserSample),
     // Cerrar la app: la X no existe en los tests y salir no debe matar vitest.
     listenToAppCloseRequested: vi.fn(async () => () => {}),
     exitApp: vi.fn(async () => {}),
@@ -432,6 +456,8 @@ beforeEach(async () => {
   });
   // Vista Setlist: pestañas, cajón de edición y alto del mezclador.
   useSetlistStore.setState(INITIAL_SETLIST_STATE);
+  // Panel Ritmo (plan drum-loops): biblioteca, estado vivo y paso.
+  useRhythmStore.getState().reset();
   useMidiBankStore.setState({ active: false, offset: 0, trackIds: [] });
   // Indicadores de preparación: sin esto un «Preparando audio…» quedaría
   // encendido para la prueba siguiente.
