@@ -6,8 +6,10 @@
 //! mandar al motor. El `AudioController` lo ejecuta fuera de sus locks
 //! (`audio/engine_rhythm.rs`).
 
+pub mod builtin;
 pub mod import;
 pub mod meters;
+pub mod packs;
 
 use std::path::PathBuf;
 
@@ -54,6 +56,9 @@ impl RhythmRuntime {
     pub fn configure(&mut self, loops_root: PathBuf, builtin_root: PathBuf) {
         let library = RhythmLibrary::new(loops_root);
         let _ = library.ensure_dirs();
+        if let Err(error) = builtin::install_builtin(&builtin_root) {
+            eprintln!("[libretracks-rhythm] builtin kit not installed: {error}");
+        }
         self.roots = Some(SampleRoots {
             builtin: builtin_root,
             packs: library.packs_dir(),
@@ -82,7 +87,10 @@ impl RhythmRuntime {
     /// Lee la biblioteca y calcula el plan.
     pub fn plan(&mut self, active_pattern_id: &str, active_bank: usize) -> Result<RhythmSyncPlan, String> {
         let library = self.library.as_ref().ok_or("rhythm library not configured")?;
-        let data = library.load().map_err(|e| e.to_string())?;
+        let data = packs::with_packs(
+            builtin::with_builtin(library.load().map_err(|e| e.to_string())?),
+            &library.packs_dir(),
+        );
         Ok(self.plan_with(&data, active_pattern_id, active_bank))
     }
 

@@ -9,6 +9,7 @@ import type { DrumSampleRef, RhythmSampleEntry, UserSampleKind } from "@libretra
 
 import { importUserSample, isMobileApp, listRhythmSamples } from "../desktopApi";
 import { pickFilesViaWebView, stageFileForImport } from "../library/mobileFilePicker";
+import { PackCatalog } from "./PackCatalog";
 import { formatRhythmError } from "./rhythmErrors";
 
 const AUDIO_EXTENSIONS = ["wav", "flac", "mp3", "ogg", "m4a", "aac"];
@@ -46,6 +47,7 @@ export function SamplePicker({ kind, value, onPick, pickPath }: SamplePickerProp
   const [samples, setSamples] = useState<RhythmSampleEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [packsOpen, setPacksOpen] = useState(false);
 
   const refresh = () =>
     listRhythmSamples()
@@ -106,6 +108,10 @@ export function SamplePicker({ kind, value, onPick, pickPath }: SamplePickerProp
       <button type="button" disabled={busy} onClick={() => void importFile()}>
         {t("rhythm.picker.import")}
       </button>
+      <button type="button" aria-expanded={packsOpen} onClick={() => setPacksOpen((open) => !open)}>
+        {t("rhythm.packs.open")}
+      </button>
+      {packsOpen ? <PackCatalog onInstalled={() => void refresh()} /> : null}
       {error ? (
         <p className="lt-sample-picker__error" role="alert">
           {error}

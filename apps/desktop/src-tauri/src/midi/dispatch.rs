@@ -1200,8 +1200,7 @@ fn dispatch_rhythm(
     }
     match target {
         MidiTarget::Loop(LoopMidiTarget::Pattern(step)) => {
-            let Some(library) = audio.rhythm_library() else { return Ok(()) };
-            let patterns = library.list_patterns().map_err(|error| error.to_string())?;
+            let patterns = audio.rhythm_library_data().map_err(|error| error.to_string())?.patterns;
             if patterns.is_empty() {
                 return Ok(());
             }

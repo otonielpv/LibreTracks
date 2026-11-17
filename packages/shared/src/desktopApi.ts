@@ -11,6 +11,8 @@ import type {
   RhythmLibrary,
   RhythmMeterPayload,
   RhythmSampleEntry,
+  RhythmPacksCatalog,
+  RhythmPackProgress,
   UserSampleKind,
   LoopClockMode,
   LoopQuantize,
@@ -3243,6 +3245,25 @@ export async function setActivePattern(patternId: string): Promise<AppSettings> 
 export async function setOneShotBank(bank: number): Promise<AppSettings> {
   const saved = await invokeCommand<AppSettings>("set_one_shot_bank", { bank });
   return guestMirrorMode ? guestSettings.overlay(saved) : saved;
+}
+
+export async function getRhythmPacksCatalog(): Promise<RhythmPacksCatalog> {
+  return invokeCommand<RhythmPacksCatalog>("get_rhythm_packs_catalog");
+}
+
+export async function downloadRhythmPack(packId: string): Promise<RhythmLibrary> {
+  return invokeCommand<RhythmLibrary>("download_rhythm_pack", { packId });
+}
+
+export async function deleteRhythmPack(packId: string): Promise<RhythmLibrary> {
+  return invokeCommand<RhythmLibrary>("delete_rhythm_pack", { packId });
+}
+
+export async function listenToRhythmPackProgress(
+  handler: (progress: RhythmPackProgress) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<RhythmPackProgress>("rhythm:pack-progress", (event) => handler(event.payload));
 }
 
 export async function listRhythmSamples(): Promise<RhythmSampleEntry[]> {

@@ -1,0 +1,208 @@
+[
+  {
+    "id": "basic",
+    "name": "Básico",
+    "sounds": [
+      {
+        "id": "kick",
+        "name": "Bombo",
+        "color": "#ff6b6b",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "kick.wav"
+        },
+        "gainDb": 0.0
+      },
+      {
+        "id": "snare",
+        "name": "Caja",
+        "color": "#ffa94d",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "snare.wav"
+        },
+        "gainDb": 0.0
+      },
+      {
+        "id": "rim",
+        "name": "Aro",
+        "color": "#ffd43b",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "rim.wav"
+        },
+        "gainDb": 0.0
+      },
+      {
+        "id": "hat_closed",
+        "name": "Hi-hat cerrado",
+        "color": "#69db7c",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "hat_closed.wav"
+        },
+        "gainDb": 0.0,
+        "chokeGroup": 1
+      },
+      {
+        "id": "hat_open",
+        "name": "Hi-hat abierto",
+        "color": "#38d9a9",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "hat_open.wav"
+        },
+        "gainDb": 0.0,
+        "chokeGroup": 1
+      },
+      {
+        "id": "shaker_a",
+        "name": "Shaker",
+        "color": "#4dabf7",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "shaker_a.wav"
+        },
+        "gainDb": 0.0
+      },
+      {
+        "id": "tambourine",
+        "name": "Pandereta",
+        "color": "#9775fa",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "tambourine.wav"
+        },
+        "gainDb": 0.0
+      },
+      {
+        "id": "clap",
+        "name": "Palmas",
+        "color": "#f783ac",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "clap.wav"
+        },
+        "gainDb": 0.0
+      }
+    ]
+  },
+  {
+    "id": "percussion",
+    "name": "Percusión",
+    "sounds": [
+      {
+        "id": "kick",
+        "name": "Bombo",
+        "color": "#ff6b6b",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "kick.wav"
+        },
+        "gainDb": 0.0
+      },
+      {
+        "id": "rim",
+        "name": "Aro",
+        "color": "#ffd43b",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "rim.wav"
+        },
+        "gainDb": 0.0
+      },
+      {
+        "id": "shaker_a",
+        "name": "Shaker",
+        "color": "#4dabf7",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "shaker_a.wav"
+        },
+        "gainDb": 0.0
+      },
+      {
+        "id": "shaker_b",
+        "name": "Shaker suave",
+        "color": "#74c0fc",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "shaker_b.wav"
+        },
+        "gainDb": 0.0
+      },
+      {
+        "id": "tambourine",
+        "name": "Pandereta",
+        "color": "#9775fa",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "tambourine.wav"
+        },
+        "gainDb": 0.0
+      },
+      {
+        "id": "clap",
+        "name": "Palmas",
+        "color": "#f783ac",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "clap.wav"
+        },
+        "gainDb": 0.0
+      },
+      {
+        "id": "cajon",
+        "name": "Cajón",
+        "color": "#e599f7",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "cajon.wav"
+        },
+        "gainDb": 0.0
+      },
+      {
+        "id": "ride_bell",
+        "name": "Campana ride",
+        "color": "#ced4da",
+        "sample": {
+          "source": {
+            "kind": "builtin"
+          },
+          "file": "ride_bell.wav"
+        },
+        "gainDb": 0.0
+      }
+    ]
+  }
+]

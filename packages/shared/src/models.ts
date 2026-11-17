@@ -3061,3 +3061,25 @@ export type RhythmSampleEntry = {
   name: string;
   bytes: number;
 };
+
+/** Pack de sonidos descargable (plan drum-loops, paso 11). */
+export type RhythmPackEntry = {
+  id: string;
+  name: string;
+  kind: "kit" | "oneshots" | "patterns";
+  description: string;
+  sizeBytes: number;
+  downloadUrl: string;
+  sha256: string;
+  installed: boolean;
+};
+
+export type RhythmPacksCatalog = { packs: RhythmPackEntry[]; offline: boolean };
+
+export type RhythmPackProgress = {
+  packId: string;
+  received: number;
+  total: number;
+  done: boolean;
+  error?: string;
+};

@@ -794,3 +794,39 @@
   padding-top: 10px;
   border-top: 1px solid rgb(186 202 197 / 0.12);
 }
+
+/* ── Catálogo de packs ───────────────────────────────────────────────── */
+.lt-pack-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-basis: 100%;
+  padding-top: 8px;
+  border-top: 1px solid rgb(186 202 197 / 0.12);
+}
+
+.lt-pack-catalog__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lt-pack-catalog__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.lt-pack-catalog__text span,
+.lt-pack-catalog__note {
+  color: #8d9a96;
+  font-size: 11px;
+  margin: 0;
+}
+
+.lt-pack-catalog progress {
+  width: 96px;
+  accent-color: #57f1db;
+}

@@ -16,6 +16,8 @@ import type {
   RhythmLibrary,
   RhythmMeterPayload,
   RhythmSampleEntry,
+  RhythmPacksCatalog,
+  RhythmPackProgress,
   UserSampleKind,
   AutomationCueSummary,
   MixSceneMode,
@@ -885,6 +887,17 @@ let rhythmLibrary: RhythmLibrary = { kits: [], patterns: [], oneShots: { banks: 
 let rhythmSamples: RhythmSampleEntry[] = [];
 let importUserSampleError: string | null = null;
 
+let rhythmPacks: RhythmPacksCatalog = { packs: [], offline: false };
+const rhythmPackListeners = new Set<(progress: RhythmPackProgress) => void>();
+
+export function setRhythmPacksForTest(catalog: RhythmPacksCatalog) {
+  rhythmPacks = clone(catalog);
+}
+
+export function emitRhythmPackProgressForTest(progress: RhythmPackProgress) {
+  for (const listener of rhythmPackListeners) listener(progress);
+}
+
 export function setRhythmSamplesForTest(samples: RhythmSampleEntry[]) {
   rhythmSamples = clone(samples);
 }
@@ -922,6 +935,8 @@ export function resetTestDesktopApiMock() {
   rhythmLibrary = { kits: [], patterns: [], oneShots: { banks: [] } };
   rhythmSamples = [];
   importUserSampleError = null;
+  rhythmPacks = { packs: [], offline: false };
+  rhythmPackListeners.clear();
   rhythmMeterListeners.clear();
   rhythmTriggerCallsForTest.length = 0;
   idCounter = 0;
@@ -1176,6 +1191,27 @@ export const testDesktopApiMock = {
     return clone(state.appSettings);
   },
   listRhythmSamples: async () => clone(rhythmSamples),
+  getRhythmPacksCatalog: async () => clone(rhythmPacks),
+  downloadRhythmPack: async (packId: string) => {
+    rhythmPacks = {
+      ...rhythmPacks,
+      packs: rhythmPacks.packs.map((p) => (p.id === packId ? { ...p, installed: true } : p)),
+    };
+    return clone(rhythmLibrary);
+  },
+  deleteRhythmPack: async (packId: string) => {
+    rhythmPacks = {
+      ...rhythmPacks,
+      packs: rhythmPacks.packs.map((p) => (p.id === packId ? { ...p, installed: false } : p)),
+    };
+    return clone(rhythmLibrary);
+  },
+  listenToRhythmPackProgress: async (handler: (progress: RhythmPackProgress) => void) => {
+    rhythmPackListeners.add(handler);
+    return () => {
+      rhythmPackListeners.delete(handler);
+    };
+  },
   importUserSample: async (path: string, _kind: UserSampleKind): Promise<DrumSampleRef> => {
     if (importUserSampleError) throw new Error(importUserSampleError);
     const file = path.split(/[\\/]/).pop() ?? "sample.wav";

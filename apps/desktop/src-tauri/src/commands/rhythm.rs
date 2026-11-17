@@ -26,8 +26,7 @@ pub struct RhythmLibraryView {
 }
 
 fn library_view(state: &DesktopState) -> Result<RhythmLibraryView, String> {
-    let library = state.audio.rhythm_library().ok_or("rhythm library not configured")?;
-    let data = library.load().map_err(|e| e.to_string())?;
+    let data = state.audio.rhythm_library_data().map_err(|e| e.to_string())?;
     Ok(RhythmLibraryView {
         kits: data.kits,
         patterns: data.patterns,
@@ -108,8 +107,7 @@ pub fn assign_loop_to_song(
     initial_rows: Option<Vec<LoopRowLiveState>>,
     state: State<'_, DesktopState>,
 ) -> Result<TransportSnapshot, String> {
-    let library = state.audio.rhythm_library().ok_or("rhythm library not configured")?;
-    let kits = library.list_kits().map_err(|e| e.to_string())?;
+    let kits = state.audio.rhythm_library_data().map_err(|e| e.to_string())?.kits;
     let embedded = crate::rhythm::embed_kit(&pattern, &kits).ok_or("pattern kit not found")?;
     let region_loop = RegionLoop {
         pattern: embedded,
@@ -286,4 +284,132 @@ pub fn list_rhythm_samples(state: State<'_, DesktopState>) -> Vec<crate::rhythm:
 pub fn import_user_sample(path: String, kind: UserSampleKind, state: State<'_, DesktopState>) -> Result<SampleRef, String> {
     let library = state.audio.rhythm_library().ok_or("rhythm library not configured")?;
     import_sample(std::path::Path::new(&path), &library.user_dir(), kind)
+}
+
+// ── Packs descargables (paso 11) ─────────────────────────────────────────────
+
+async fn fetch_packs_manifest() -> Option<crate::rhythm::packs::PacksManifest> {
+    let client = reqwest::Client::builder()
+        .user_agent(format!("LibreTracks/{}", env!("CARGO_PKG_VERSION")))
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .ok()?;
+    let response = client.get(crate::rhythm::packs::PACKS_MANIFEST_URL).send().await.ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    response.json().await.ok()
+}
+
+#[tauri::command]
+pub async fn get_rhythm_packs_catalog(
+    state: State<'_, DesktopState>,
+) -> Result<crate::rhythm::packs::PacksCatalog, String> {
+    let installed = state
+        .audio
+        .rhythm_library()
+        .map(|lib| crate::rhythm::packs::installed_pack_ids(&lib.packs_dir()))
+        .unwrap_or_default();
+    let manifest = fetch_packs_manifest().await;
+    let offline = manifest.is_none();
+    let packs = manifest
+        .unwrap_or_default()
+        .packs
+        .into_iter()
+        .map(|entry| crate::rhythm::packs::PackCatalogEntry {
+            installed: installed.contains(&entry.id),
+            entry,
+        })
+        .collect();
+    Ok(crate::rhythm::packs::PacksCatalog { packs, offline })
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RhythmPackProgress {
+    pub pack_id: String,
+    pub received: u64,
+    pub total: u64,
+    pub done: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Descarga, verifica el sha256 e instala un pack; progreso en
+/// `rhythm:pack-progress`.
+#[tauri::command]
+pub async fn download_rhythm_pack(
+    pack_id: String,
+    app: AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<RhythmLibraryView, String> {
+    use futures_util::StreamExt;
+    let emit = |received: u64, total: u64, done: bool, error: Option<String>| {
+        let _ = app.emit(
+            "rhythm:pack-progress",
+            RhythmPackProgress { pack_id: pack_id.clone(), received, total, done, error },
+        );
+    };
+    let result: Result<(), String> = async {
+        let manifest = fetch_packs_manifest().await.ok_or("packs catalog unavailable")?;
+        let entry = manifest
+            .packs
+            .into_iter()
+            .find(|p| p.id == pack_id)
+            .ok_or_else(|| format!("unknown pack: {pack_id}"))?;
+        let library = state.audio.rhythm_library().ok_or("rhythm library not configured")?;
+        let response = reqwest::get(&entry.download_url).await.map_err(|e| e.to_string())?;
+        if !response.status().is_success() {
+            return Err(format!("download failed: {}", response.status()));
+        }
+        let total = response.content_length().unwrap_or(entry.size_bytes);
+        let mut bytes = Vec::with_capacity(total as usize);
+        let mut stream = response.bytes_stream();
+        let mut last_emit = 0u64;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| e.to_string())?;
+            bytes.extend_from_slice(&chunk);
+            let received = bytes.len() as u64;
+            if received - last_emit > 64 * 1024 {
+                last_emit = received;
+                emit(received, total, false, None);
+            }
+        }
+        let packs_dir = library.packs_dir();
+        let sha = entry.sha256.clone();
+        let id = pack_id.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            crate::rhythm::packs::install_pack_zip(&bytes, &sha, &packs_dir, &id)
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        Ok(())
+    }
+    .await;
+    match result {
+        Ok(()) => {
+            emit(1, 1, true, None);
+            resync(&state);
+            library_view(&state)
+        }
+        Err(error) => {
+            emit(0, 0, true, Some(error.clone()));
+            Err(error)
+        }
+    }
+}
+
+/// Desinstala un pack. La UI avisa antes si hay patrones que lo usan.
+#[tauri::command(async)]
+pub fn delete_rhythm_pack(pack_id: String, state: State<'_, DesktopState>) -> Result<RhythmLibraryView, String> {
+    if !libretracks_project::rhythm_library::is_safe_entry_id(&pack_id) {
+        return Err(format!("invalid pack id: {pack_id}"));
+    }
+    let library = state.audio.rhythm_library().ok_or("rhythm library not configured")?;
+    let dir = library.packs_dir().join(&pack_id);
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+    }
+    resync(&state);
+    library_view(&state)
 }

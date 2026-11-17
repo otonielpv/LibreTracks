@@ -2601,6 +2601,16 @@ const en = {
     stopAll: "Stop all",
     emptyPad: "Add a sound",
     padLabel: "Pad {{number}}",
+    packs: {
+      open: "Download sounds",
+      title: "Free sound packs",
+      offline: "No connection: the catalog will show when you are online.",
+      download: "Download",
+      remove: "Remove",
+      downloading: "Downloading {{name}}",
+      removeUsed: "{{count}} patterns use this pack. Remove it anyway?",
+      kind: { kit: "Kit", oneshots: "One shots", patterns: "Patterns" },
+    },
     midi: {
       loopToggle: "Loop: start/stop",
       loopTap: "Loop: tap tempo (free)",

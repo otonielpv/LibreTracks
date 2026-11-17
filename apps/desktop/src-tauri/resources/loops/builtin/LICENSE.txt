@@ -1,0 +1,4 @@
+Kit «Básico» provisional de LibreTracks (plan drum-loops, paso 11).
+Todos los sonidos se sintetizan con scripts/loopgen/generate.py: no contienen
+muestras de terceros. Se publican bajo CC0 1.0 (dominio público).
+https://creativecommons.org/publicdomain/zero/1.0/

@@ -582,12 +582,9 @@ impl AudioController {
             .app_local_data_dir()
             .or_else(|_| app_handle.path().app_data_dir())
         {
-            let builtin = app_handle
-                .path()
-                .resource_dir()
-                .map(|dir| dir.join("loops").join("kit"))
-                .unwrap_or_else(|_| base.join("loops").join("builtin"));
-            self.configure_rhythm(base.join("loops"), builtin);
+            // El kit incluido va en el binario y se escribe aquí al arrancar
+            // (rhythm/builtin.rs): Android no empaqueta recursos de Tauri.
+            self.configure_rhythm(base.join("loops"), base.join("loops").join("builtin"));
         }
         if let Ok(mut slot) = self.app_handle.lock() {
             *slot = Some(app_handle.clone());

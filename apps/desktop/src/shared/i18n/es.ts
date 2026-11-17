@@ -2630,6 +2630,16 @@ const es = {
     stopAll: "Parar todo",
     emptyPad: "Añadir un sonido",
     padLabel: "Pad {{number}}",
+    packs: {
+      open: "Descargar sonidos",
+      title: "Packs de sonidos gratuitos",
+      offline: "Sin conexión: el catálogo aparecerá cuando haya red.",
+      download: "Descargar",
+      remove: "Quitar",
+      downloading: "Descargando {{name}}",
+      removeUsed: "{{count}} patrones usan este pack. ¿Quitarlo igualmente?",
+      kind: { kit: "Kit", oneshots: "One shots", patterns: "Patrones" },
+    },
     midi: {
       loopToggle: "Loop: arrancar/parar",
       loopTap: "Loop: tap tempo (libre)",

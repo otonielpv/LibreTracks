@@ -26,6 +26,17 @@ impl AudioController {
         roots.map(|roots| crate::rhythm::list_samples(&roots)).unwrap_or_default()
     }
 
+    /// Biblioteca del usuario con los kits y patrones de serie.
+    pub fn rhythm_library_data(
+        &self,
+    ) -> Result<libretracks_project::rhythm_library::RhythmLibraryData, DesktopError> {
+        let library = self
+            .rhythm_library()
+            .ok_or_else(|| DesktopError::AudioCommand("rhythm library not configured".into()))?;
+        let data = library.load().map_err(|e| DesktopError::AudioCommand(e.to_string()))?;
+        Ok(crate::rhythm::packs::with_packs(crate::rhythm::builtin::with_builtin(data), &library.packs_dir()))
+    }
+
     pub fn rhythm_library(&self) -> Option<libretracks_project::rhythm_library::RhythmLibrary> {
         self.rhythm.lock().ok().and_then(|r| r.library().cloned())
     }
