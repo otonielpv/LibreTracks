@@ -17,7 +17,7 @@ import { useMixSceneTriggerStore } from "../../scenes/SceneButtons";
 export type MixSceneHandlerDeps = {
   runAction: (action: () => Promise<void>) => Promise<void>;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
-  refreshSongView: (options?: { sync?: boolean; includeWaveforms?: boolean }) => Promise<unknown>;
+  refreshSongView: (options?: { sync?: boolean }) => Promise<unknown>;
 };
 
 /**
@@ -33,7 +33,7 @@ export function createMixSceneHandlers({
   const edit = (call: () => Promise<TransportSnapshot>) =>
     runAction(async () => {
       applyPlaybackSnapshot(await call());
-      await refreshSongView({ includeWaveforms: false, sync: true });
+      await refreshSongView({ sync: true });
     });
 
   return {

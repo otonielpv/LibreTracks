@@ -30,7 +30,6 @@ export type TapTempoHandlerDeps = {
   runAction: (action: () => Promise<void>) => Promise<void>;
   refreshSongView: (options?: {
     sync?: boolean;
-    includeWaveforms?: boolean;
   }) => Promise<SongView | null>;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
   optimisticallyAppliedRevisionsRef: { current: Set<number> };
@@ -113,7 +112,7 @@ export function createTapTempoHandler(deps: TapTempoHandlerDeps) {
       optimisticallyAppliedRevisionsRef.current.add(
         nextSnapshot.projectRevision,
       );
-      await refreshSongView({ includeWaveforms: false, sync: true });
+      await refreshSongView({ sync: true });
       applyPlaybackSnapshot(nextSnapshot);
       setStatus(
         t("transport.status.tapTempoUpdated", { bpm: nextBpm.toFixed(1) }),

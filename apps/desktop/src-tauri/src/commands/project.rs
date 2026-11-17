@@ -211,8 +211,11 @@ pub fn get_song_view(
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
+    // Peaks only when asked for: a whole session's worth in one message (base64,
+    // ~1.2 MB per 5-minute stem) killed the Android WebView with 120 stems.
+    // The UI never asks; it uses get_waveform_summaries in batches.
     session
-        .song_view_with_options(include_waveforms.unwrap_or(true))
+        .song_view_with_options(include_waveforms.unwrap_or(false))
         .map_err(|error| error.to_string())
 }
 

@@ -1271,23 +1271,11 @@ export const testDesktopApiMock = {
     ) =>
     () => {},
   getTransportSnapshot: async () => clone(buildSnapshot()),
-  getSongView: async (options?: { includeWaveforms?: boolean }) => {
-    const includeWaveforms = options?.includeWaveforms ?? true;
-    if (!includeWaveforms) {
-      // Mirror the real backend contract (get_song_view include_waveforms):
-      // omit the array entirely rather than leaving whatever the caller's
-      // song object happened to carry, so tests can tell "not requested"
-      // apart from "requested but empty".
-      const { waveforms: _omitted, ...rest } = state.song;
-      return clone(rest as SongView);
-    }
-    const clipKeys = state.song.clips
-      .map((clip) => clip.waveformKey)
-      .filter((key, index, keys) => keys.indexOf(key) === index);
-    const waveforms = clipKeys
-      .map((key) => state.waveforms[key])
-      .filter((summary): summary is WaveformSummaryDto => Boolean(summary));
-    return clone({ ...state.song, waveforms });
+  // Mirrors the real contract: the UI never takes peaks inline, they come
+  // through getWaveformSummaries (useSongWaveforms).
+  getSongView: async () => {
+    const { waveforms: _omitted, ...rest } = state.song;
+    return clone(rest as SongView);
   },
   getWaveformSummaries: async (waveformKeys: string[]) =>
     waveformKeys

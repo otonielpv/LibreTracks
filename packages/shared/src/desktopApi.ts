@@ -608,17 +608,16 @@ export async function getOwnershipDiagnostics(): Promise<
   );
 }
 
-export async function getSongView(
-  options?: { includeWaveforms?: boolean },
-): Promise<SongView | null> {
-  const args = {
-    // A network-session guest never asks for the peaks inline: with a real
-    // session that is tens of MB in one message over the Wi-Fi (36 MB on the
-    // first test, which a phone could not take). The timeline then fetches
-    // them in small batches (useSongWaveforms), as it already does for any
-    // clip whose peaks are missing.
-    includeWaveforms: guestMirrorMode ? false : (options?.includeWaveforms ?? true),
-  };
+export async function getSongView(): Promise<SongView | null> {
+  // The UI never takes the peaks inline. They are every waveform of the whole
+  // session in one message (base64, ~1.2 MB per 5-minute stem): a network
+  // guest could not take it over Wi-Fi (36 MB on the first test), and on
+  // Android a 120-stem setlist killed the WebView renderer, and the app with
+  // it, the moment a song was added (2026-11-17). Worse, the copy that rode on
+  // `song.waveforms` was a second, separately parsed copy of what
+  // `waveformCache` already held. The timeline fetches peaks in small batches
+  // (useSongWaveforms) for any clip that lacks them.
+  const args = { includeWaveforms: false };
   const maxAttempts = 6;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {

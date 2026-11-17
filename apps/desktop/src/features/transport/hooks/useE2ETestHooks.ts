@@ -411,7 +411,7 @@ export function useE2ETestHooks(
       createSessionNamed,
       openSessionFromPath,
       importLibraryAudioFromPaths,
-      getSongView: () => getSongView({ includeWaveforms: false }),
+      getSongView: () => getSongView(),
       getTransportSnapshot,
       getSettings,
       getEngineDiagnostics: async () =>
@@ -490,13 +490,13 @@ export function useE2ETestHooks(
       // song. Returns the created clip ids so the flow can address them.
       createAudioTracksWithClips: async (requests) => {
         const before = new Set(
-          ((await getSongView({ includeWaveforms: false }))?.clips ?? []).map(
+          ((await getSongView())?.clips ?? []).map(
             (clip) => clip.id,
           ),
         );
         await createAudioTracksWithClips(requests);
         const after =
-          (await getSongView({ includeWaveforms: false }))?.clips ?? [];
+          (await getSongView())?.clips ?? [];
         return after
           .filter((clip) => !before.has(clip.id))
           .map((clip) => clip.id);
@@ -507,13 +507,13 @@ export function useE2ETestHooks(
       createSectionMarker: async (startSeconds) => {
         const before = new Set(
           (
-            (await getSongView({ includeWaveforms: false }))?.sectionMarkers ??
+            (await getSongView())?.sectionMarkers ??
             []
           ).map((marker) => marker.id),
         );
         await createSectionMarker(startSeconds);
         const after =
-          (await getSongView({ includeWaveforms: false }))?.sectionMarkers ??
+          (await getSongView())?.sectionMarkers ??
           [];
         return after.find((marker) => !before.has(marker.id))?.id ?? "";
       },

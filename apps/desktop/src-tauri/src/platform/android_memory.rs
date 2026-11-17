@@ -170,6 +170,28 @@ fn log_pressure(level: i32, freed: u64, paused: bool) {
     );
 }
 
+/// The WebView's renderer process died (`RendererGoneGuard.kt`), and the
+/// Activity is about to restart the app. Written to the error log because it
+/// is the only trace a user can send us: the system's own crash dialog says
+/// "out of memory" and nothing else, and without the guard the error log ended
+/// silently at the last unrelated line (field report 2026-11-17).
+///
+/// # Safety
+/// Called by the JVM with valid `JNIEnv`/`jobject` pointers, which we ignore.
+#[no_mangle]
+pub extern "C" fn Java_com_libretracks_desktop_RendererGoneGuard_nativeOnRendererGone(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+    did_crash: u8,
+    restarting: u8,
+) {
+    crate::infra::error_log::write_error(&format!(
+        "webview renderer gone: crashed={} (false = killed by the system for memory); restarting={}",
+        did_crash != 0,
+        restarting != 0,
+    ));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

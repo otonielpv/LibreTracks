@@ -172,7 +172,6 @@ export type TimelineMenuDeps = {
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
   refreshSongView: (options?: {
     sync?: boolean;
-    includeWaveforms?: boolean;
   }) => Promise<unknown>;
   setStatus: (message: string) => void;
   setContextMenu: (next: ContextMenuState) => void;
@@ -410,7 +409,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       d.optimisticallyAppliedRevisionsRef.current.add(
         nextSnapshot.projectRevision,
       );
-      await d.refreshSongView({ includeWaveforms: false, sync: true });
+      await d.refreshSongView({ sync: true });
       d.applyPlaybackSnapshot(nextSnapshot);
       d.tempoDraftDirtyRef.current = false;
       d.setTempoDraft(formatBpmDraft(nextBpm));
@@ -502,7 +501,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
               try { image = await normalizeCoverImage(file); }
               catch { await alertDialog(t("songCover.error")); return; }
               d.applyPlaybackSnapshot(await setSongRegionCover(region.id, image));
-              await d.refreshSongView({ includeWaveforms: false, sync: true });
+              await d.refreshSongView({ sync: true });
             });
           }),
         },
@@ -511,7 +510,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
           disabled: isGuestMirrorMode(),
           onSelect: () => d.runAction(async () => {
             d.applyPlaybackSnapshot(await setSongRegionCover(region.id, null));
-            await d.refreshSongView({ includeWaveforms: false, sync: true });
+            await d.refreshSongView({ sync: true });
           }),
         }] : []),
         ...([-1, 1] as const).map((step) => {
@@ -560,7 +559,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
                 region.warpEnabled,
                 nextSourceBpm,
               );
-              await d.refreshSongView({ includeWaveforms: false, sync: true });
+              await d.refreshSongView({ sync: true });
               d.applyPlaybackSnapshot(nextSnapshot);
               d.setStatus(
                 t("transport.status.regionWarpSourceBpmUpdated", {
@@ -730,7 +729,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
             d.optimisticallyAppliedRevisionsRef.current.add(
               nextSnapshot.projectRevision,
             );
-            await d.refreshSongView({ includeWaveforms: false, sync: true });
+            await d.refreshSongView({ sync: true });
             d.applyPlaybackSnapshot(nextSnapshot);
             d.tempoDraftDirtyRef.current = false;
             d.setTempoDraft(formatBpmDraft(nextBpm));
@@ -1119,7 +1118,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
             // still reference the same waveformKeys, and orphaned cache
             // entries are harmless until the next full reload. Skip the
             // ~27 MB waveform payload to keep the UI responsive.
-            await d.refreshSongView({ includeWaveforms: false });
+            await d.refreshSongView();
             d.setStatus(
               t("transport.status.trackDeleted", { name: track.name }),
             );

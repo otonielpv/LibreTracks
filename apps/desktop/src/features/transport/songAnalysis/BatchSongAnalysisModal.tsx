@@ -253,7 +253,7 @@ function BatchDialog({
           await applySongAnalysis(item.regionId, args.tempo, args.key, args.sections, args.keyChanges),
         );
         patchItem(item.regionId, { status: "applied" });
-        fresh = await getSongView({ includeWaveforms: false }).catch(() => null);
+        fresh = await getSongView().catch(() => null);
       } catch (error) {
         const raw = error instanceof Error ? error.message : String(error);
         const message = applyErrorMessage(raw, error, t, current);

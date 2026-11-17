@@ -23,7 +23,6 @@ export type RulerMarkerHandlerDeps = {
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
   refreshSongView: (options?: {
     sync?: boolean;
-    includeWaveforms?: boolean;
   }) => Promise<SongView | null>;
   setStatus: (status: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
@@ -73,7 +72,7 @@ export function createRulerMarkerHandlers(deps: RulerMarkerHandlerDeps) {
     );
     void runAction(async () => {
       applyPlaybackSnapshot(await duplicateRulerMarkers(copies));
-      const next = await refreshSongView({ includeWaveforms: false, sync: true });
+      const next = await refreshSongView({ sync: true });
       const created = findCopies(next, before, copies);
       if (created.length > 0) {
         useTimelineUIStore.getState().setSelectedMarkers(created, created[0]);

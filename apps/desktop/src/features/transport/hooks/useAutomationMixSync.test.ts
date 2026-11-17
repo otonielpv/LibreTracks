@@ -7,13 +7,13 @@ import { useSongStore } from "../songStore";
 import { useTransportStore } from "../store";
 import { mergeTrackMix, useAutomationMixSync } from "./useAutomationMixSync";
 
-const getSongViewMock = vi.fn<(options?: { includeWaveforms?: boolean }) => Promise<SongView | null>>();
+const getSongViewMock = vi.fn<() => Promise<SongView | null>>();
 
 vi.mock("../desktopApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../desktopApi")>();
   return {
     ...actual,
-    getSongView: (options?: { includeWaveforms?: boolean }) => getSongViewMock(options),
+    getSongView: () => getSongViewMock(),
   };
 });
 
@@ -73,7 +73,7 @@ describe("useAutomationMixSync", () => {
     await waitFor(() =>
       expect(useSongStore.getState().song?.tracks[0].muted).toBe(false),
     );
-    expect(getSongViewMock).toHaveBeenCalledWith({ includeWaveforms: false });
+    expect(getSongViewMock).toHaveBeenCalled();
   });
 
   it("does not refetch when the mix revision is unchanged", () => {

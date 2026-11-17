@@ -30,7 +30,7 @@ const ID_COLLECTIONS = [
  *
  * Nunca cambia el contenido: el resultado es estructuralmente igual a `next`.
  * Si las dos vistas son de canciones distintas no reutiliza nada.
- * `waveforms` no se toca: de eso se ocupa `useSongViewLoader`.
+ * `waveforms` no se toca: la vista nunca trae picos (los pide `useSongWaveforms`).
  */
 export function mergeSongView(
   previous: SongView | null,

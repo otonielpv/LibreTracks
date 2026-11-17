@@ -199,7 +199,6 @@ export type LibraryDragDropDeps = {
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
   refreshSongView: (options?: {
     sync?: boolean;
-    includeWaveforms?: boolean;
   }) => Promise<unknown>;
   formatErrorStatus: (error: unknown) => string;
   selectTrack: (trackIds: string[]) => void;

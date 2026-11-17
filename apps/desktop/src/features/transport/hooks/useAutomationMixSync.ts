@@ -60,7 +60,7 @@ export function useAutomationMixSync() {
       (mixRevision, previousMixRevision) => {
         if (mixRevision === previousMixRevision || mixRevision === 0) return;
         const ownRequest = ++requestId;
-        void getSongView({ includeWaveforms: false })
+        void getSongView()
           .then((fresh) => {
             // A newer bump already asked for a fresher view; let that one win.
             if (!active || ownRequest !== requestId) return;

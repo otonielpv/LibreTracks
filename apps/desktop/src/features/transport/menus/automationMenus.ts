@@ -148,7 +148,7 @@ export function createAutomationMenus(getDeps: () => TimelineMenuDeps) {
               name: nextName,
             });
             d.applyPlaybackSnapshot(nextSnapshot);
-            await d.refreshSongView({ includeWaveforms: false, sync: true });
+            await d.refreshSongView({ sync: true });
             d.setStatus(
               t("transport.automation.statusCueRenamed", {
                 name: nextName,
@@ -170,7 +170,7 @@ export function createAutomationMenus(getDeps: () => TimelineMenuDeps) {
               enabled: !cue.enabled,
             });
             d.applyPlaybackSnapshot(nextSnapshot);
-            await d.refreshSongView({ includeWaveforms: false, sync: true });
+            await d.refreshSongView({ sync: true });
             d.setStatus(
               t(
                 cue.enabled
@@ -187,7 +187,7 @@ export function createAutomationMenus(getDeps: () => TimelineMenuDeps) {
           await d.runAction(async () => {
             const nextSnapshot = await deleteAutomationCue(cue.id);
             d.applyPlaybackSnapshot(nextSnapshot);
-            await d.refreshSongView({ includeWaveforms: false, sync: true });
+            await d.refreshSongView({ sync: true });
             d.setStatus(
               t("transport.automation.statusCueDeleted", {
                 name: cue.name,
@@ -227,7 +227,7 @@ export function createAutomationMenus(getDeps: () => TimelineMenuDeps) {
           await d.runAction(async () => {
             const nextSnapshot = await removeAutomationTrack();
             d.applyPlaybackSnapshot(nextSnapshot);
-            await d.refreshSongView({ includeWaveforms: false, sync: true });
+            await d.refreshSongView({ sync: true });
             d.setStatus(t("transport.automation.statusTrackRemoved"));
           });
         },
@@ -241,7 +241,7 @@ export function createAutomationMenus(getDeps: () => TimelineMenuDeps) {
     await d.runAction(async () => {
       const nextSnapshot = await addAutomationTrack(afterTrackId);
       d.applyPlaybackSnapshot(nextSnapshot);
-      await d.refreshSongView({ includeWaveforms: false, sync: true });
+      await d.refreshSongView({ sync: true });
       d.setStatus(d.t("transport.automation.statusTrackAdded"));
     });
   }
@@ -261,7 +261,7 @@ export function createAutomationMenus(getDeps: () => TimelineMenuDeps) {
     await d.runAction(async () => {
       const nextSnapshot = await upsertAutomationCue({ ...cue, atSeconds });
       d.applyPlaybackSnapshot(nextSnapshot);
-      await d.refreshSongView({ includeWaveforms: false, sync: true });
+      await d.refreshSongView({ sync: true });
     });
   }
 
@@ -271,7 +271,7 @@ export function createAutomationMenus(getDeps: () => TimelineMenuDeps) {
     await d.runAction(async () => {
       const nextSnapshot = await setAutomationTrackEnabled(enabled);
       d.applyPlaybackSnapshot(nextSnapshot);
-      await d.refreshSongView({ includeWaveforms: false, sync: true });
+      await d.refreshSongView({ sync: true });
       d.setStatus(
         d.t(enabled ? "transport.automation.statusTrackEnabled" : "transport.automation.statusTrackDisabled"),
       );

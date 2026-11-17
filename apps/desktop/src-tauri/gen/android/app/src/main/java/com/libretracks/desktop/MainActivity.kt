@@ -82,6 +82,13 @@ class MainActivity : TauriActivity() {
 
   private external fun nativeOnStorageVolumesChanged()
 
+  // A dead WebView renderer would otherwise abort the whole app; see
+  // RendererGoneGuard.
+  override fun onWebViewCreate(webView: android.webkit.WebView) {
+    super.onWebViewCreate(webView)
+    RendererGoneGuard.install(this, webView)
+  }
+
   // Android warns before it kills. Ignoring that warning is how importing a
   // 2 GB .ltset ended with the system killing ~40 other processes and
   // restarting system_server; see docs/plans/completed/android-low-end/.

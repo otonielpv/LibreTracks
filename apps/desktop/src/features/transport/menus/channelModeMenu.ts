@@ -44,7 +44,7 @@ export function createChannelModeMenu(
             channelMode: mode,
           });
           d.applyPlaybackSnapshot(nextSnapshot);
-          await d.refreshSongView({ includeWaveforms: false });
+          await d.refreshSongView();
         });
       },
     }));
@@ -82,7 +82,7 @@ export function createChannelModeMenu(
             }),
           });
           d.applyPlaybackSnapshot(nextSnapshot);
-          await d.refreshSongView({ includeWaveforms: false });
+          await d.refreshSongView();
         });
       },
     };

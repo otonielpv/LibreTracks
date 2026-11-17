@@ -49,7 +49,7 @@ describe("automation menus", () => {
     expect(api.upsertAutomationCue).toHaveBeenCalledTimes(1);
     expect(api.upsertAutomationCue).toHaveBeenCalledWith({ ...cue, atSeconds: 14 });
     expect(d.applyPlaybackSnapshot).toHaveBeenCalledWith({ projectRevision: 2 });
-    expect(d.refreshSongView).toHaveBeenCalledWith({ includeWaveforms: false, sync: true });
+    expect(d.refreshSongView).toHaveBeenCalledWith({ sync: true });
   });
 
   it("a move to the same place, or of an unknown cue, sends nothing", async () => {

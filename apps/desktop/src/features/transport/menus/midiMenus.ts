@@ -161,7 +161,7 @@ function midiTrackContextMenu(track: TrackSummary): ContextMenuAction[] {
             nextSnapshot.projectRevision,
           );
           d.applyPlaybackSnapshot(nextSnapshot);
-          await d.refreshSongView({ includeWaveforms: false });
+          await d.refreshSongView();
           d.setStatus(
             t("transport.status.trackDeleted", { name: track.name }),
           );

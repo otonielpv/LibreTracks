@@ -136,7 +136,7 @@ export function createVideoClipHandlers(deps: VideoClipHandlerDeps) {
   const offerAudioExtraction = async (clipIdsBefore: Set<string>, withSound: Set<string>) => {
     let song: SongView | null = null;
     try {
-      song = await getSongView({ includeWaveforms: false });
+      song = await getSongView();
     } catch {
       return;
     }

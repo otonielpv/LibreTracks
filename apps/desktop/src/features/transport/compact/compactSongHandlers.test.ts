@@ -212,7 +212,7 @@ describe("createCompactSongHandlers", () => {
     it("changes the song speed and refreshes geometry in automatic mode", async () => {
       const { handlers, deps } = setup({ getAutoWarp: () => true, prompt: vi.fn(async () => "128") });
       await handlers.handleCompactSetSongBpm("r1");
-      await vi.waitFor(() => expect(deps.refreshSongView).toHaveBeenCalledWith({ includeWaveforms: false, sync: true }));
+      await vi.waitFor(() => expect(deps.refreshSongView).toHaveBeenCalledWith({ sync: true }));
       expect(deps.setSongRegionTempo).toHaveBeenCalledWith("r1", 128);
       expect(deps.upsertSongTempoMarker).not.toHaveBeenCalled();
     });

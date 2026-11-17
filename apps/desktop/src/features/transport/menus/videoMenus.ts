@@ -161,7 +161,7 @@ export function createVideoMenus(
             const nextSnapshot = await deleteTrack(track.id);
             d.optimisticallyAppliedRevisionsRef.current.add(nextSnapshot.projectRevision);
             d.applyPlaybackSnapshot(nextSnapshot);
-            await d.refreshSongView({ includeWaveforms: false });
+            await d.refreshSongView();
             d.setStatus(t("transport.status.trackDeleted", { name: track.name }));
           });
         },

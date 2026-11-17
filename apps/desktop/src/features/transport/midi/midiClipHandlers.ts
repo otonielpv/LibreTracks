@@ -30,7 +30,6 @@ export type MidiClipHandlerDeps = {
   translate: (key: string) => string;
   refreshSongView: (options?: {
     sync?: boolean;
-    includeWaveforms?: boolean;
   }) => Promise<unknown>;
   /** Reads the live song, so the factory never closes over a stale track. */
   getTrack: (trackId: string) => TrackSummary | null;
@@ -130,7 +129,7 @@ export function createMidiClipHandlers(deps: MidiClipHandlerDeps) {
     await runAction(async () => {
       const snapshot = await setMidiTrackRouting(trackId, port, channel);
       applyPlaybackSnapshot(snapshot);
-      await refreshSongView({ includeWaveforms: false, sync: true });
+      await refreshSongView({ sync: true });
       setStatus(translate("transport.midi.statusRouteUpdated"));
     });
   };
@@ -155,7 +154,7 @@ export function createMidiClipHandlers(deps: MidiClipHandlerDeps) {
     await runAction(async () => {
       const snapshot = await setMidiTrackEnabled(trackId, next);
       applyPlaybackSnapshot(snapshot);
-      await refreshSongView({ includeWaveforms: false, sync: true });
+      await refreshSongView({ sync: true });
       setStatus(
         translate(
           next
@@ -171,7 +170,7 @@ export function createMidiClipHandlers(deps: MidiClipHandlerDeps) {
     await runAction(async () => {
       const snapshot = await setAutomationTrackEnabled(enabled);
       applyPlaybackSnapshot(snapshot);
-      await refreshSongView({ includeWaveforms: false, sync: true });
+      await refreshSongView({ sync: true });
       setStatus(
         translate(
           enabled

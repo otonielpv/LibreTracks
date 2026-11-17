@@ -29,7 +29,6 @@ export type TrackHandlerDeps = {
   runAction: (action: () => Promise<void>) => Promise<void>;
   refreshSongView: (options?: {
     sync?: boolean;
-    includeWaveforms?: boolean;
   }) => Promise<SongView | null>;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
   /** `settle` after a drop that will change the order: the preview stays
@@ -106,7 +105,7 @@ export function createTrackHandlers(deps: TrackHandlerDeps) {
           try {
             const snapshot = await setAutomationTrackPosition(plan.afterTrackId);
             applyPlaybackSnapshot(snapshot);
-            await refreshSongView({ includeWaveforms: false });
+            await refreshSongView();
             setStatus(t("transport.automation.statusTrackReordered"));
           } catch (error) {
             clearTrackDragVisuals({ revert: true });
@@ -148,7 +147,7 @@ export function createTrackHandlers(deps: TrackHandlerDeps) {
           // valid. Fetching it again was a multi-MB payload, and replacing
           // the song wholesale re-rendered every row — with 138 tracks the
           // drop took seconds to land.
-          await refreshSongView({ includeWaveforms: false });
+          await refreshSongView();
           setStatus(
             t("transport.status.tracksReordered", {
               count: plan.moves.length,
@@ -196,7 +195,7 @@ export function createTrackHandlers(deps: TrackHandlerDeps) {
         applyPlaybackSnapshot(nextSnapshot);
         // Creating an empty track does not add, move, or remove clips, so the
         // waveform peaks cache is still valid. Skip the ~27 MB waveform payload.
-        await refreshSongView({ includeWaveforms: false });
+        await refreshSongView();
         setStatus(t("transport.status.trackCreated", { name }));
       });
     },

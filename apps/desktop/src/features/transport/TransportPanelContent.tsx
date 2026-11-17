@@ -1658,57 +1658,25 @@ export function TransportPanelContent() {
     });
   }, []);
 
-  const hydrateWaveformCacheFromSong = useCallback(
+  // The song view never carries peaks (useSongWaveforms fetches them), so the
+  // only thing a loaded song does to the cache is empty it when there is none.
+  const resetWaveformCacheWithoutSong = useCallback(
     (nextSong: SongView | null) => {
-      const nextWaveforms = Object.fromEntries(
-        (nextSong?.waveforms ?? []).map((summary) => [
-          summary.waveformKey,
-          summary,
-        ]),
-      );
       if (!nextSong) {
         setWaveformCache({});
-      } else if (Object.keys(nextWaveforms).length > 0) {
-        setWaveformCache((current) => ({
-          ...current,
-          ...nextWaveforms,
-        }));
       }
     },
     [],
   );
 
   const refreshSongView = useCallback(
-    async (options?: { sync?: boolean; includeWaveforms?: boolean }) => {
-      // includeWaveforms defaults to true to preserve the contract for the
-      // initial load and for structural mutations (clip add/remove/move). For
-      // mutations that never touch peaks — transpose, gain, mute, solo, region
-      // rename — pass `includeWaveforms: false` to collapse the IPC payload
-      // from ~27 MB to ~50 KB. The frontend keeps its previously hydrated
-      // waveform cache; ClipSummary.waveformKey still points at it. When
-      // waveforms are skipped we must NOT re-hydrate from an empty array
-      // (it would wipe the cache); skip hydration in that case and preserve
-      // the existing entries on the next setSong.
-      const includeWaveforms = options?.includeWaveforms ?? true;
-      if (includeWaveforms) {
-        waveformsHydratedRef.current = true;
-      }
-      const nextSong = await getSongView({ includeWaveforms });
+    async (options?: { sync?: boolean }) => {
+      waveformsHydratedRef.current = true;
+      const nextSong = await getSongView();
       const apply = () => {
-        if (includeWaveforms) {
-          hydrateWaveformCacheFromSong(nextSong);
-          setSong(nextSong);
-        } else {
-          // Merge: keep waveforms from the previous song; overlay everything
-          // else from nextSong. If there was no previous song we still take
-          // nextSong as-is (no waveforms to preserve).
-          setSong((previous) => {
-            if (!nextSong) return null;
-            if (!previous) return nextSong;
-            // Untouched tracks/clips keep their identity, as in the revision loader.
-            return mergeSongView(previous, { ...nextSong, waveforms: previous.waveforms });
-          });
-        }
+        resetWaveformCacheWithoutSong(nextSong);
+        // Untouched tracks/clips keep their identity, as in the revision loader.
+        setSong((previous) => (nextSong ? mergeSongView(previous, nextSong) : null));
       };
       if (options?.sync) {
         flushSync(apply);
@@ -1717,7 +1685,7 @@ export function TransportPanelContent() {
       }
       return nextSong;
     },
-    [hydrateWaveformCacheFromSong],
+    [resetWaveformCacheWithoutSong],
   );
 
   // Settings changed elsewhere (remote, second window) -> adopt them here.
@@ -3186,7 +3154,7 @@ export function TransportPanelContent() {
           // left clip durations stale, so the UI showed the wrong clip width
           // until the next structural mutation. Skipping waveforms keeps this
           // cheap (~50ms IPC).
-          await refreshSongView({ includeWaveforms: false, sync: true });
+          await refreshSongView({ sync: true });
           applyPlaybackSnapshot(nextSnapshot);
           setStatus(
             t("transport.status.regionTransposeUpdated", {
@@ -3236,7 +3204,7 @@ export function TransportPanelContent() {
         // both paths produce different audible durations than Direct. The
         // old optimistic patch left clip widths stale until the next
         // structural mutation.
-        await refreshSongView({ includeWaveforms: false, sync: true });
+        await refreshSongView({ sync: true });
         applyPlaybackSnapshot(nextSnapshot);
       });
     },
@@ -3627,7 +3595,7 @@ export function TransportPanelContent() {
     waveformsHydratedRef,
     inFlightWaveformKeysRef,
     setIsProjectViewHydrating,
-    hydrateWaveformCacheFromSong,
+    resetWaveformCacheWithoutSong,
   });
 
   // El modelo ya refleja la edición -> cierra el cronómetro que el HUD abrió al
@@ -3655,16 +3623,9 @@ export function TransportPanelContent() {
     if (shouldResetProjectScopedState) {
       inFlightWaveformKeysRef.current.clear();
       // Also covers the song-closes-without-closing-the-session case (song
-      // goes to null but songDir doesn't change): waveforms is [] then, so
-      // this clears the cache exactly like a dedicated `!song` effect would.
-      setWaveformCache(
-        Object.fromEntries(
-          (song?.waveforms ?? []).map((summary) => [
-            summary.waveformKey,
-            summary,
-          ]),
-        ),
-      );
+      // goes to null but songDir doesn't change). useSongWaveforms refills the
+      // cache for the new identity.
+      setWaveformCache({});
       setLibraryAssets([]);
       setLibraryClipPreview([]);
       setOptimisticClipOperations([]);
@@ -3672,7 +3633,7 @@ export function TransportPanelContent() {
     }
 
     projectIdentityRef.current = nextProjectIdentity;
-  }, [playbackSongDir, song?.id, song?.waveforms]);
+  }, [playbackSongDir, song?.id]);
 
   // Session library: asset/folder loading + waveform pre-warm.
   // See ./hooks/useLibraryState.
@@ -5483,7 +5444,7 @@ export function TransportPanelContent() {
         });
         recordProductEvent("feature_automation");
         applyPlaybackSnapshot(nextSnapshot);
-        await refreshSongView({ includeWaveforms: false, sync: true });
+        await refreshSongView({ sync: true });
         setStatus(
           draft.cueId
             ? t("transport.automation.statusCueUpdated", { label })
@@ -6631,7 +6592,7 @@ export function TransportPanelContent() {
               optimisticallyAppliedRevisionsRef.current.add(
                 nextSnapshot.projectRevision,
               );
-              await refreshSongView({ includeWaveforms: false, sync: true });
+              await refreshSongView({ sync: true });
               applyPlaybackSnapshot(nextSnapshot);
               setStatus(
                 t("transport.status.tempoUpdated", {

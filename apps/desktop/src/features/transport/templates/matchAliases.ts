@@ -25,7 +25,7 @@ type MatchAliasesDeps = {
   t: Translate;
   runAction: (action: () => Promise<void>) => Promise<void>;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
-  refreshSongView: (options?: { includeWaveforms?: boolean }) => Promise<unknown>;
+  refreshSongView: () => Promise<unknown>;
   setStatus: (message: string) => void;
 };
 
@@ -56,7 +56,7 @@ export function matchAliasesAction(
         });
         deps.applyPlaybackSnapshot(snapshot);
         // The aliases live on the track summary the next prompt reads from.
-        await deps.refreshSongView({ includeWaveforms: false });
+        await deps.refreshSongView();
         deps.setStatus(t("songTemplates.matchAliasesUpdated", { name: track.name }));
       });
     },

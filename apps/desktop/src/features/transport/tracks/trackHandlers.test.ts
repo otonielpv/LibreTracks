@@ -131,9 +131,7 @@ describe("createTrackHandlers", () => {
       targetTrackId: "target",
       mode: "before",
     });
-    expect(deps.refreshSongView).toHaveBeenCalledWith({
-      includeWaveforms: false,
-    });
+    expect(deps.refreshSongView).toHaveBeenCalledWith();
     expect(deps.optimisticallyAppliedRevisionsRef.current.has(3)).toBe(true);
   });
 
@@ -248,9 +246,7 @@ describe("createTrackHandlers", () => {
       insertAfterTrackId: "anchor",
       parentTrackId: null,
     });
-    expect(deps.refreshSongView).toHaveBeenCalledWith({
-      includeWaveforms: false,
-    });
+    expect(deps.refreshSongView).toHaveBeenCalledWith();
     expect(deps.optimisticallyAppliedRevisionsRef.current.has(4)).toBe(true);
   });
 });

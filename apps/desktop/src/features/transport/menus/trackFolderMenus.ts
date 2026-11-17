@@ -96,7 +96,7 @@ export function createTrackFolderMenus(
       });
       d.optimisticallyAppliedRevisionsRef.current.add(created.projectRevision);
       d.applyPlaybackSnapshot(created);
-      await d.refreshSongView({ includeWaveforms: false, sync: true });
+      await d.refreshSongView({ sync: true });
     });
 
     const folderId = (d.songRef.current?.tracks ?? []).find(

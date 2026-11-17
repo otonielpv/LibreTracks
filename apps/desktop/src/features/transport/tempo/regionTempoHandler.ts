@@ -16,7 +16,6 @@ export type RegionTempoHandlerDeps = {
   runAction: (action: () => Promise<void>) => Promise<void>;
   refreshSongView: (options?: {
     sync?: boolean;
-    includeWaveforms?: boolean;
   }) => Promise<SongView | null>;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
   setSongRegionTempo: (
@@ -40,7 +39,7 @@ export function createRegionTempoHandler(deps: RegionTempoHandlerDeps) {
       if (!wasWarped) deps.onWarpEnabled();
       // Same as the warp toggle: the new ratio changes every clip's audible
       // length, so the SongView is refetched before applying the snapshot.
-      await deps.refreshSongView({ includeWaveforms: false, sync: true });
+      await deps.refreshSongView({ sync: true });
       deps.applyPlaybackSnapshot(nextSnapshot);
       deps.setStatus(
         deps.t("transport.status.regionTempoUpdated", {

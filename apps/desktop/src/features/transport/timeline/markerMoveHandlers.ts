@@ -28,7 +28,6 @@ export type MarkerMoveHandlerDeps = {
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
   refreshSongView: (options?: {
     sync?: boolean;
-    includeWaveforms?: boolean;
   }) => Promise<SongView | null>;
   updateSectionMarker: (
     markerId: string,
@@ -79,7 +78,7 @@ export function createMarkerMoveHandlers(deps: MarkerMoveHandlerDeps) {
         applyPlaybackSnapshot(
           await duplicateRulerMarkers([{ kind: "section", id: section.id, startSeconds }]),
         );
-        await refreshSongView({ includeWaveforms: false, sync: true });
+        await refreshSongView({ sync: true });
       });
       return;
     }
@@ -94,7 +93,7 @@ export function createMarkerMoveHandlers(deps: MarkerMoveHandlerDeps) {
       // A lane change alters what the voice guide does with this marker, so the
       // view has to be re-read for the flag to settle in its new row.
       if (category) {
-        await refreshSongView({ includeWaveforms: false, sync: true });
+        await refreshSongView({ sync: true });
       }
     });
   };
@@ -115,7 +114,7 @@ export function createMarkerMoveHandlers(deps: MarkerMoveHandlerDeps) {
         copy ? { ...cue, id: nextCueId(), atSeconds } : { ...cue, atSeconds },
       );
       applyPlaybackSnapshot(nextSnapshot);
-      await refreshSongView({ includeWaveforms: false, sync: true });
+      await refreshSongView({ sync: true });
     });
   };
 

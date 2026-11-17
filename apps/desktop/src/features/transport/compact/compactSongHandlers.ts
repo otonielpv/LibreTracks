@@ -21,7 +21,7 @@ import type {
 export type CompactSongHandlerDeps = {
   getSong: () => SongView | null;
   getAutoWarp: () => boolean;
-  refreshSongView: (options?: { sync?: boolean; includeWaveforms?: boolean }) => Promise<SongView | null>;
+  refreshSongView: (options?: { sync?: boolean }) => Promise<SongView | null>;
   runAction: (
     action: () => Promise<void>,
     options?: { busy?: boolean },
@@ -289,7 +289,7 @@ export function createCompactSongHandlers(deps: CompactSongHandlerDeps) {
       const snapshot = autoWarp
         ? await setSongRegionTempo(regionId, nextBpm)
         : await upsertSongTempoMarker(currentRegion.startSeconds, nextBpm);
-      if (autoWarp) await refreshSongView({ includeWaveforms: false, sync: true });
+      if (autoWarp) await refreshSongView({ sync: true });
       applyPlaybackSnapshot(snapshot);
       setStatus(
         t("compactView.bpmSet", { name: currentRegion.name, bpm: nextBpm.toFixed(2) }),

@@ -65,3 +65,6 @@
 # VideoProbe: análisis y miniaturas de vídeo en Android (paso 07 de
 # video-mobile); Rust llama a probe/frames por nombre y firma.
 -keep class com.libretracks.desktop.VideoProbe { *; }
+# RendererGoneGuard.nativeOnRendererGone is resolved by JNI symbol name
+# (Java_com_libretracks_desktop_RendererGoneGuard_...): the class name must survive.
+-keep class com.libretracks.desktop.RendererGoneGuard { *; }

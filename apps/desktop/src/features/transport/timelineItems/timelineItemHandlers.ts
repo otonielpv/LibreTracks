@@ -32,7 +32,7 @@ export type TimelineItemHandlerDeps = {
   getSong: () => SongView | null;
   runAction: (action: () => Promise<void>) => Promise<void> | void;
   applyPlaybackSnapshot: (snapshot: TransportSnapshot | null) => void;
-  refreshSongView: (options: { includeWaveforms: boolean; sync: boolean }) => Promise<unknown>;
+  refreshSongView: (options: { sync: boolean }) => Promise<unknown>;
   setStatus: (status: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 };
@@ -158,7 +158,7 @@ export function createTimelineItemHandlers(deps: TimelineItemHandlerDeps) {
         }
       }
       applyPlaybackSnapshot(snapshot);
-      await refreshSongView({ includeWaveforms: false, sync: true });
+      await refreshSongView({ sync: true });
       useTimelineUIStore.getState().setSelectedTimelineItems(created);
       setStatus(t("transport.timelineItems.statusDuplicated", { count: created.length }));
     });
@@ -212,7 +212,7 @@ export function createTimelineItemHandlers(deps: TimelineItemHandlerDeps) {
             : await deleteAutomationCue(item.cue.id);
       }
       if (snapshot) applyPlaybackSnapshot(snapshot);
-      await refreshSongView({ includeWaveforms: false, sync: true });
+      await refreshSongView({ sync: true });
       useTimelineUIStore.getState().clearSelection();
       setStatus(t("transport.timelineItems.statusDeleted", { count: resolved.length }));
     });
