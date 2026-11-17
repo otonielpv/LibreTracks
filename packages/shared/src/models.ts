@@ -308,6 +308,9 @@ export type SongRegionSummary = {
    * view seconds, like every other position here) until the next. Absent from
    * hosts that predate the feature. See `regionKeyAt`. */
   keyChanges?: KeyChangeSummary[];
+  /** Loop de batería propio de la canción (plan drum-loops). Ausente si no
+   * tiene o si el host es anterior. */
+  loop?: RegionLoop | null;
   /** When true, the region's audio is time-stretched so its `warpSourceBpm`
    * aligns with the effective timeline tempo. Applies to ALL tracks in the
    * region, independent of `transposeSemitones`. */
@@ -1578,6 +1581,19 @@ export type AppSettings = {
    * keeps sounding between songs, which is the point of an ambient pad.
    */
   padStopWithTransport: boolean;
+  /** Loops de batería: `follow` sigue el click de la canción, `free` su BPM. */
+  loopClockMode: LoopClockMode;
+  /** BPM del modo libre fijada por tap; 0 = la del patrón. */
+  loopFreeBpm: number;
+  loopQuantize: LoopQuantize;
+  loopOutput: string;
+  loopVolume: number;
+  oneShotOutput: string;
+  oneShotVolume: number;
+  /** Patrón de la biblioteca elegido en el panel Ritmo ("" = ninguno). */
+  activeLoopPatternId: string;
+  /** Banco de one shots visible, 0..3 (A-D). */
+  activeOneShotBank: number;
   globalJumpMode: "immediate" | "after_bars" | "next_marker" | "next_section" | "next_cue";
   globalJumpBars: number;
   songJumpTrigger: "immediate" | "region_end" | "after_bars" | "next_marker" | "next_section" | "next_cue";
@@ -1745,6 +1761,15 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   padFadeOutSeconds: 0,
   padFollowSongKey: false,
   padStopWithTransport: false,
+  loopClockMode: "follow",
+  loopFreeBpm: 0,
+  loopQuantize: "bar",
+  loopOutput: "master",
+  loopVolume: 1,
+  oneShotOutput: "master",
+  oneShotVolume: 1,
+  activeLoopPatternId: "",
+  activeOneShotBank: 0,
   globalJumpMode: "immediate",
   globalJumpBars: 4,
   songJumpTrigger: "immediate",
@@ -2047,6 +2072,27 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
       : DEFAULT_APP_SETTINGS.padFadeOutSeconds,
     padFollowSongKey: Boolean(settings.padFollowSongKey),
     padStopWithTransport: Boolean(settings.padStopWithTransport),
+    loopClockMode: settings.loopClockMode === "free" ? "free" : "follow",
+    loopFreeBpm: Number.isFinite(settings.loopFreeBpm) && settings.loopFreeBpm > 0
+      ? Math.min(300, Math.max(30, settings.loopFreeBpm))
+      : 0,
+    loopQuantize:
+      settings.loopQuantize === "beat" || settings.loopQuantize === "immediate"
+        ? settings.loopQuantize
+        : "bar",
+    loopOutput: typeof settings.loopOutput === "string" && settings.loopOutput ? settings.loopOutput : "master",
+    loopVolume: Number.isFinite(settings.loopVolume)
+      ? Math.min(AUX_MAX_GAIN, Math.max(0, settings.loopVolume))
+      : DEFAULT_APP_SETTINGS.loopVolume,
+    oneShotOutput:
+      typeof settings.oneShotOutput === "string" && settings.oneShotOutput ? settings.oneShotOutput : "master",
+    oneShotVolume: Number.isFinite(settings.oneShotVolume)
+      ? Math.min(AUX_MAX_GAIN, Math.max(0, settings.oneShotVolume))
+      : DEFAULT_APP_SETTINGS.oneShotVolume,
+    activeLoopPatternId: typeof settings.activeLoopPatternId === "string" ? settings.activeLoopPatternId : "",
+    activeOneShotBank: Number.isFinite(settings.activeOneShotBank)
+      ? Math.min(3, Math.max(0, Math.round(settings.activeOneShotBank)))
+      : 0,
     globalJumpMode,
     globalJumpBars: normalizeJumpBars(
       settings.globalJumpBars,
@@ -2969,3 +3015,42 @@ export type LoopPatternError =
   | { code: "unknownSound"; soundId: string }
   | { code: "invalidStepsPerBeat" }
   | { code: "invalidBars" };
+
+export type LoopClockMode = "follow" | "free";
+export type LoopQuantize = "bar" | "beat" | "immediate";
+
+export type RhythmLibrary = {
+  kits: DrumKit[];
+  patterns: LoopPattern[];
+  oneShots: OneShotSet;
+};
+
+/** Fila del loop en directo (`audio:rhythm`). */
+export type LoopRowMeter = {
+  enabled: boolean;
+  variation: number;
+  /** Variación pedida que entra en el próximo límite (cuantizada). */
+  pendingVariation?: number;
+  pendingEnabled?: boolean;
+};
+
+/** Estado en directo de loops y one shots (`audio:rhythm`, solo si cambia). */
+export type RhythmMeterPayload = {
+  /** Paso del patrón que suena, -1 parado. Se pinta por ref + rAF (D13). */
+  loopStep: number;
+  loopBar: number;
+  loopPlaying: boolean;
+  loopRows: LoopRowMeter[];
+  /** Pads de one shot sonando (bits 0..11). */
+  oneShotsActive: number;
+};
+
+export type UserSampleKind = "loop" | "oneShot";
+
+export const EMPTY_RHYTHM_METERS: RhythmMeterPayload = {
+  loopStep: -1,
+  loopBar: 0,
+  loopPlaying: false,
+  loopRows: [],
+  oneShotsActive: 0,
+};

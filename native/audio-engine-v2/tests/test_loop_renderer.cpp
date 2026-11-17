@@ -564,3 +564,28 @@ TEST_CASE("loop commands: JSON round trip") {
     CHECK(data.rows[0].steps[0][2] == 3);
     CHECK(data.rows[0].steps[1][0] == 1);
 }
+
+TEST_CASE("loop renderer: publishes row state with pending changes") {
+    Bank b;
+    const Session session = make_session();
+    LoopRenderer loop;
+    LoopPatternData p = every_beat();
+    p.row_count = 2;
+    loop.set_pattern(p);
+    loop.set_transport(true);
+    std::vector<float> l(256), r(256);
+    float* channels[] = {l.data(), r.data()};
+    LoopSpan s = playing_from(0, 0, 256);
+    loop.render(channels, 2, 256, kSr, &session, &s, 1, b.bank);
+    CHECK(loop.row_count() == 2);
+    CHECK((loop.rows_state() & 0xFFFFu) == 0x0101u);  // las dos encendidas en A
+    loop.set_row(1, 0, 2);  // apagar y pasar a C, pendiente hasta el compás
+    s = playing_from(0, 256, 256);
+    loop.render(channels, 2, 256, kSr, &session, &s, 1, b.bank);
+    const uint64_t row1 = (loop.rows_state() >> 8) & 0xFFu;
+    CHECK((row1 & 1u) == 1u);          // aún encendida
+    CHECK((row1 & 0x8u) != 0u);        // variación pendiente
+    CHECK(((row1 >> 4) & 3u) == 2u);   // la C
+    CHECK((row1 & 0x40u) != 0u);       // encendido pendiente
+    CHECK((row1 & 0x80u) == 0u);       // a apagado
+}

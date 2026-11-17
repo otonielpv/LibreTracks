@@ -625,6 +625,18 @@ void LoopRenderer::render(float** output_channels,
     if (done < num_frames) process_free(done, num_frames - done, nullptr, 0, sample_rate);
 
     // Lo que ve el resto del motor.
+    uint64_t packed = 0;
+    for (int r = 0; r < kLoopMaxRows; ++r) {
+        const auto& row = rows_[static_cast<std::size_t>(r)];
+        uint64_t bits = (row.enabled ? 1u : 0u) | (static_cast<uint64_t>(row.variation & 3) << 1);
+        const int pv = pending_variation_[static_cast<std::size_t>(r)];
+        const int pe = pending_enabled_[static_cast<std::size_t>(r)];
+        if (pv >= 0) bits |= (1u << 3) | (static_cast<uint64_t>(pv & 3) << 4);
+        if (pe >= 0) bits |= (1u << 6) | (pe ? (1u << 7) : 0u);
+        packed |= bits << (8 * r);
+    }
+    rows_state_.store(packed, std::memory_order_release);
+    row_count_.store(has_pattern_ ? pattern_.row_count : 0, std::memory_order_release);
     playing_.store(playing_now_, std::memory_order_release);
     if (pending_playing_ < 0) start_requested_.store(playing_now_, std::memory_order_release);
     if (!playing_now_) current_step_.store(-1, std::memory_order_relaxed);

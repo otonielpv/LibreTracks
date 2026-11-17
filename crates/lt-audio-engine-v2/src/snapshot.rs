@@ -331,6 +331,13 @@ pub struct LoopSnapshot {
     pub current_bar: i32,
     #[serde(default)]
     pub active_voices: i32,
+    /// 8 bits por fila: bit 0 encendida, 1-2 variación, 3 hay variación
+    /// pendiente, 4-5 variación pendiente, 6 hay encendido pendiente, 7
+    /// encendido pendiente.
+    #[serde(default)]
+    pub rows_state: u64,
+    #[serde(default)]
+    pub row_count: i32,
     /// One shots sonando (bits 0..11).
     #[serde(default)]
     pub one_shot_mask: u32,

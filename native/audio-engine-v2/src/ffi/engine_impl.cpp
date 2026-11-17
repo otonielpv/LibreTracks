@@ -1212,6 +1212,8 @@ std::string EngineImpl::build_snapshot(bool include_sources) const {
         snap.loops.current_step = loop_diag.current_step;
         snap.loops.current_bar = loop_diag.current_bar;
         snap.loops.active_voices = loop_diag.active_voices;
+        snap.loops.rows_state = loop.rows_state();
+        snap.loops.row_count = loop.row_count();
         const OneShotRenderer& one_shots = mixer_->one_shot_renderer();
         snap.loops.one_shot_mask = one_shots.playing_mask();
         snap.loops.one_shot_wants_audio = one_shots.wants_audio();

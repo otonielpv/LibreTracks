@@ -24,6 +24,8 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         "get_missing_media"
         | "get_pads_catalog"
         | "get_project_load_progress_snapshot"
+        | "get_rhythm_library"
+        | "get_rhythm_state"
         | "get_settings"
         | "get_song_view"
         | "get_transport_snapshot"
@@ -40,20 +42,33 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "video_sync_stats" => Some(ProxyAccess::View),
         "cancel_marker_jump"
         | "fade_out_and_stop"
+        | "loop_set_all_rows"
+        | "loop_set_row"
+        | "loop_toggle"
+        | "loop_toggle_row"
+        | "one_shot_down"
+        | "one_shot_up"
+        | "one_shots_stop_all"
         | "pause_transport"
         | "play_transport"
         | "reorder_song_region"
         | "schedule_marker_jump"
         | "schedule_region_jump"
         | "seek_transport"
+        | "set_active_pattern"
+        | "set_loop_config"
+        | "set_one_shot_bank"
+        | "set_one_shot_config"
         | "stop_transport"
         | "toggle_vamp"
         | "video_live_action"
         | "video_scrub" => Some(ProxyAccess::Control),
         "add_automation_track"
         | "apply_song_arrangement"
+        | "assign_loop_to_song"
         | "assign_section_marker_digit"
         | "capture_song_structure"
+        | "clear_song_loop"
         | "commit_track_mix_change"
         | "create_section_marker"
         | "create_song_region"
@@ -66,7 +81,6 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "delete_ruler_markers"
         | "delete_section_marker"
         | "delete_song_arrangement"
-        | "reset_arrangement_block"
         | "delete_song_region"
         | "delete_song_tempo_marker"
         | "delete_song_time_signature_marker"
@@ -91,6 +105,8 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "move_video_clip"
         | "redo_action"
         | "remove_automation_track"
+        | "reorder_mix_scenes"
+        | "reset_arrangement_block"
         | "save_song_arrangement"
         | "set_automation_track_enabled"
         | "set_automation_track_position"
@@ -105,6 +121,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "set_section_marker_kind"
         | "set_song_region_chart"
         | "set_song_region_compact_width"
+        | "set_song_region_cover"
         | "set_song_region_key_changes"
         | "set_song_region_tempo"
         | "set_song_tempo_marker_ramp"
@@ -112,9 +129,10 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "set_voice_guide_volume_realtime"
         | "split_clip"
         | "split_clips"
-        | "split_track_channels"
         | "split_song_region"
+        | "split_track_channels"
         | "split_video_clips"
+        | "trigger_mix_scene"
         | "trim_video_clip"
         | "undo_action"
         | "update_clip_color"
@@ -133,12 +151,12 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "update_song_tempo"
         | "update_song_time_signature"
         | "update_track"
+        | "update_track_channel_mode"
         | "update_track_collapsed"
         | "update_track_color"
         | "update_track_height_offset"
-        | "update_track_mix_realtime"
         | "update_track_match_aliases"
-        | "update_track_channel_mode"
+        | "update_track_mix_realtime"
         | "update_track_mono_downmix"
         | "update_track_transpose_enabled"
         | "update_video_clip"
@@ -146,10 +164,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "upsert_midi_clip"
         | "upsert_mix_scene"
         | "upsert_song_tempo_marker"
-        | "upsert_song_time_signature_marker"
-        | "set_song_region_cover"
-        | "reorder_mix_scenes"
-        | "trigger_mix_scene" => Some(ProxyAccess::Edit),
+        | "upsert_song_time_signature_marker" => Some(ProxyAccess::Edit),
         "save_settings" => Some(ProxyAccess::Custom),
         _ => None,
     }
@@ -168,12 +183,15 @@ pub const EVENTS_TO_RELAY: &[&str] = &[
     "video:thumbnails-ready",
     "video:live-state",
     "video:output-status",
+    "audio:rhythm",
 ];
 
 pub const PROXIED_COMMANDS: &[&str] = &[
     "get_missing_media",
     "get_pads_catalog",
     "get_project_load_progress_snapshot",
+    "get_rhythm_library",
+    "get_rhythm_state",
     "get_settings",
     "get_song_view",
     "get_transport_snapshot",
@@ -190,20 +208,33 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "video_sync_stats",
     "cancel_marker_jump",
     "fade_out_and_stop",
+    "loop_set_all_rows",
+    "loop_set_row",
+    "loop_toggle",
+    "loop_toggle_row",
+    "one_shot_down",
+    "one_shot_up",
+    "one_shots_stop_all",
     "pause_transport",
     "play_transport",
     "reorder_song_region",
     "schedule_marker_jump",
     "schedule_region_jump",
     "seek_transport",
+    "set_active_pattern",
+    "set_loop_config",
+    "set_one_shot_bank",
+    "set_one_shot_config",
     "stop_transport",
     "toggle_vamp",
     "video_live_action",
     "video_scrub",
     "add_automation_track",
     "apply_song_arrangement",
+    "assign_loop_to_song",
     "assign_section_marker_digit",
     "capture_song_structure",
+    "clear_song_loop",
     "commit_track_mix_change",
     "create_section_marker",
     "create_song_region",
@@ -216,7 +247,6 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "delete_ruler_markers",
     "delete_section_marker",
     "delete_song_arrangement",
-    "reset_arrangement_block",
     "delete_song_region",
     "delete_song_tempo_marker",
     "delete_song_time_signature_marker",
@@ -241,6 +271,8 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "move_video_clip",
     "redo_action",
     "remove_automation_track",
+    "reorder_mix_scenes",
+    "reset_arrangement_block",
     "save_song_arrangement",
     "set_automation_track_enabled",
     "set_automation_track_position",
@@ -255,6 +287,7 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "set_section_marker_kind",
     "set_song_region_chart",
     "set_song_region_compact_width",
+    "set_song_region_cover",
     "set_song_region_key_changes",
     "set_song_region_tempo",
     "set_song_tempo_marker_ramp",
@@ -262,9 +295,10 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "set_voice_guide_volume_realtime",
     "split_clip",
     "split_clips",
-    "split_track_channels",
     "split_song_region",
+    "split_track_channels",
     "split_video_clips",
+    "trigger_mix_scene",
     "trim_video_clip",
     "undo_action",
     "update_clip_color",
@@ -283,12 +317,12 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "update_song_tempo",
     "update_song_time_signature",
     "update_track",
+    "update_track_channel_mode",
     "update_track_collapsed",
     "update_track_color",
     "update_track_height_offset",
-    "update_track_mix_realtime",
     "update_track_match_aliases",
-    "update_track_channel_mode",
+    "update_track_mix_realtime",
     "update_track_mono_downmix",
     "update_track_transpose_enabled",
     "update_video_clip",
@@ -297,9 +331,6 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "upsert_mix_scene",
     "upsert_song_tempo_marker",
     "upsert_song_time_signature_marker",
-    "set_song_region_cover",
-    "reorder_mix_scenes",
-    "trigger_mix_scene",
 ];
 
 /// Run a proxied command with the guest's arguments, exactly as the host's
@@ -319,6 +350,22 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::project::get_project_load_progress_snapshot(app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "get_rhythm_library" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::get_rhythm_library(app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "get_rhythm_state" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::get_rhythm_state(app.state()))
             })
             .await
             .map_err(|error| error.to_string())?
@@ -444,6 +491,62 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             .await
             .map_err(|error| error.to_string())?
         }
+        "loop_set_all_rows" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::loop_set_all_rows(arg(&args, "variation")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "loop_set_row" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::loop_set_row(arg(&args, "row")?, arg(&args, "variation")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "loop_toggle" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::loop_toggle(app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "loop_toggle_row" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::loop_toggle_row(arg(&args, "row")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "one_shot_down" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::one_shot_down(arg(&args, "pad")?, arg(&args, "velocity")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "one_shot_up" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::one_shot_up(arg(&args, "pad")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "one_shots_stop_all" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::one_shots_stop_all(app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
         "pause_transport" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
@@ -488,6 +591,38 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::transport::seek_transport(app.clone(), arg(&args, "positionSeconds")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "set_active_pattern" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::set_active_pattern(arg(&args, "patternId")?, app.clone(), app.state(), app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "set_loop_config" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::set_loop_config(arg(&args, "clockMode")?, arg(&args, "freeBpm")?, arg(&args, "quantize")?, arg(&args, "output")?, arg(&args, "volume")?, app.clone(), app.state(), app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "set_one_shot_bank" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::set_one_shot_bank(arg(&args, "bank")?, app.clone(), app.state(), app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "set_one_shot_config" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::set_one_shot_config(arg(&args, "output")?, arg(&args, "volume")?, app.clone(), app.state(), app.state()))
             })
             .await
             .map_err(|error| error.to_string())?
@@ -540,6 +675,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             .await
             .map_err(|error| error.to_string())?
         }
+        "assign_loop_to_song" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::assign_loop_to_song(arg(&args, "regionId")?, arg(&args, "pattern")?, arg(&args, "autostart")?, arg(&args, "initialRows")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
         "assign_section_marker_digit" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
@@ -552,6 +695,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::timeline::capture_song_structure(arg(&args, "regionId")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "clear_song_loop" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::clear_song_loop(arg(&args, "regionId")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?
@@ -648,14 +799,6 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::timeline::delete_song_arrangement(arg(&args, "regionId")?, arg(&args, "arrangementId")?, app.state()))
-            })
-            .await
-            .map_err(|error| error.to_string())?
-        }
-        "reset_arrangement_block" => {
-            let app = app.clone();
-            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
-                into_value_result(crate::commands::timeline::reset_arrangement_block(arg(&args, "regionId")?, arg(&args, "arrangementId")?, arg(&args, "blockId")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?
@@ -845,6 +988,22 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             .await
             .map_err(|error| error.to_string())?
         }
+        "reorder_mix_scenes" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::reorder_mix_scenes(arg(&args, "sceneIds")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "reset_arrangement_block" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::reset_arrangement_block(arg(&args, "regionId")?, arg(&args, "arrangementId")?, arg(&args, "blockId")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
         "save_song_arrangement" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
@@ -957,6 +1116,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             .await
             .map_err(|error| error.to_string())?
         }
+        "set_song_region_cover" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::covers::set_song_region_cover(arg(&args, "regionId")?, arg(&args, "coverImage")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
         "set_song_region_key_changes" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
@@ -1013,14 +1180,6 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             .await
             .map_err(|error| error.to_string())?
         }
-        "split_track_channels" => {
-            let app = app.clone();
-            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
-                into_value_result(crate::commands::timeline::split_track_channels(arg(&args, "trackId")?, arg(&args, "leftName")?, arg(&args, "rightName")?, app.state()))
-            })
-            .await
-            .map_err(|error| error.to_string())?
-        }
         "split_song_region" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
@@ -1029,10 +1188,26 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             .await
             .map_err(|error| error.to_string())?
         }
+        "split_track_channels" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::split_track_channels(arg(&args, "trackId")?, arg(&args, "leftName")?, arg(&args, "rightName")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
         "split_video_clips" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::video::split_video_clips(arg(&args, "clipIds")?, arg(&args, "splitSeconds")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "trigger_mix_scene" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::trigger_mix_scene(arg(&args, "sceneId")?, arg(&args, "mode")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?
@@ -1183,6 +1358,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             .await
             .map_err(|error| error.to_string())?
         }
+        "update_track_channel_mode" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::update_track_channel_mode(arg(&args, "trackId")?, arg(&args, "channelMode")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
         "update_track_collapsed" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
@@ -1207,14 +1390,6 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             .await
             .map_err(|error| error.to_string())?
         }
-        "update_track_mix_realtime" => {
-            let app = app.clone();
-            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
-                into_value_result(crate::commands::timeline::update_track_mix_realtime(arg(&args, "trackId")?, arg(&args, "volume")?, arg(&args, "pan")?, arg(&args, "muted")?, arg(&args, "solo")?, app.state()))
-            })
-            .await
-            .map_err(|error| error.to_string())?
-        }
         "update_track_match_aliases" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
@@ -1223,10 +1398,10 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             .await
             .map_err(|error| error.to_string())?
         }
-        "update_track_channel_mode" => {
+        "update_track_mix_realtime" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
-                into_value_result(crate::commands::timeline::update_track_channel_mode(arg(&args, "trackId")?, arg(&args, "channelMode")?, app.state()))
+                into_value_result(crate::commands::timeline::update_track_mix_realtime(arg(&args, "trackId")?, arg(&args, "volume")?, arg(&args, "pan")?, arg(&args, "muted")?, arg(&args, "solo")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?
@@ -1291,30 +1466,6 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::timeline::upsert_song_time_signature_marker(arg(&args, "startSeconds")?, arg(&args, "signature")?, app.state()))
-            })
-            .await
-            .map_err(|error| error.to_string())?
-        }
-        "set_song_region_cover" => {
-            let app = app.clone();
-            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
-                into_value_result(crate::commands::covers::set_song_region_cover(arg(&args, "regionId")?, arg(&args, "coverImage")?, app.state()))
-            })
-            .await
-            .map_err(|error| error.to_string())?
-        }
-        "reorder_mix_scenes" => {
-            let app = app.clone();
-            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
-                into_value_result(crate::commands::timeline::reorder_mix_scenes(arg(&args, "sceneIds")?, app.state()))
-            })
-            .await
-            .map_err(|error| error.to_string())?
-        }
-        "trigger_mix_scene" => {
-            let app = app.clone();
-            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
-                into_value_result(crate::commands::timeline::trigger_mix_scene(arg(&args, "sceneId")?, arg(&args, "mode")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?

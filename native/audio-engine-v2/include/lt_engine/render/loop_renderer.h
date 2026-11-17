@@ -144,6 +144,12 @@ public:
     bool playing() const noexcept { return playing_.load(std::memory_order_acquire); }
     int current_step() const noexcept { return current_step_.load(std::memory_order_acquire); }
     int current_bar() const noexcept { return current_bar_.load(std::memory_order_acquire); }
+    /// Estado de las filas, 8 bits por fila (fila 0 en los bits bajos):
+    /// bit 0 encendida, bits 1-2 variación, bit 3 hay variación pendiente,
+    /// bits 4-5 variación pendiente, bit 6 hay encendido pendiente, bit 7
+    /// encendido pendiente.
+    uint64_t rows_state() const noexcept { return rows_state_.load(std::memory_order_acquire); }
+    int row_count() const noexcept { return row_count_.load(std::memory_order_acquire); }
     /// Suena o va a sonar: no se puede suspender el stream.
     bool wants_audio() const noexcept;
     LoopDiagnostics diagnostics() const;
@@ -230,6 +236,8 @@ private:
     std::atomic<bool> start_requested_{false};
     std::atomic<int> current_step_{-1};
     std::atomic<int> current_bar_{0};
+    std::atomic<uint64_t> rows_state_{0};
+    std::atomic<int> row_count_{0};
     std::atomic<int> active_voice_count_{0};
     std::atomic<uint64_t> fired_steps_{0};
     std::atomic<uint64_t> triggered_voices_{0};

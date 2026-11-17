@@ -379,6 +379,10 @@ pub struct SongRegionSummary {
     pub voice_guide_count_style: Option<libretracks_core::VoiceGuideCountStyle>,
     /// Cambios de nota dentro de la canción, ordenados; `key` es la inicial.
     pub key_changes: Vec<KeyChangeSummary>,
+    /// Loop de batería propio de la canción (plan drum-loops); se omite si no
+    /// tiene.
+    #[serde(rename = "loop", skip_serializing_if = "Option::is_none")]
+    pub drum_loop: Option<libretracks_core::drum_loops::RegionLoop>,
     /// Lo que pinta el editor de arreglos. No lleva la instantánea del
     /// original, que puede ser grande: sólo secciones y arreglos.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1356,6 +1360,7 @@ pub(crate) fn region_to_summary(song: &Song, region: &SongRegion) -> SongRegionS
         },
         compact_column_width_rem: region.compact_column_width_rem,
         chart: region.chart.clone(),
+        drum_loop: region.drum_loop.clone(),
         voice_guide_count_style: region.voice_guide_count_style,
         key_changes: region
             .key_changes

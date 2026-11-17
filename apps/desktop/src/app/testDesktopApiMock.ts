@@ -9,6 +9,13 @@ import {
 import { getEffectiveBpmAt, markerCategory } from "@libretracks/shared/models";
 import type {
   AppSettings,
+  DrumKit,
+  DrumSampleRef,
+  LoopPattern,
+  OneShotSet,
+  RhythmLibrary,
+  RhythmMeterPayload,
+  UserSampleKind,
   AutomationCueSummary,
   MixSceneMode,
   MixSceneSummary,
@@ -455,6 +462,15 @@ function buildInitialState(): DesktopApiMockState {
       padFadeOutSeconds: 0,
       padFollowSongKey: false,
       padStopWithTransport: false,
+      loopClockMode: "follow",
+      loopFreeBpm: 0,
+      loopQuantize: "bar",
+      loopOutput: "master",
+      loopVolume: 1,
+      oneShotOutput: "master",
+      oneShotVolume: 1,
+      activeLoopPatternId: "",
+      activeOneShotBank: 0,
       globalJumpMode: "immediate",
       globalJumpBars: 4,
       songJumpTrigger: "immediate",
@@ -863,7 +879,38 @@ function mockSectionsFor(regionId: string): SongStructureSummary["sections"] {
   });
 }
 
+// ── Loops de batería y one shots (plan drum-loops) ──────────────────────────
+let rhythmLibrary: RhythmLibrary = { kits: [], patterns: [], oneShots: { banks: [] } };
+const rhythmMeterListeners = new Set<(payload: RhythmMeterPayload) => void>();
+/** Llamadas del camino rápido, para que los tests de la UI comprueben qué se
+ * mandó sin espiar cada función. */
+export const rhythmTriggerCallsForTest: Array<{ command: string; args: Record<string, unknown> }> = [];
+
+export function setRhythmLibraryForTest(library: RhythmLibrary) {
+  rhythmLibrary = clone(library);
+}
+
+export function emitRhythmMetersForTest(payload: RhythmMeterPayload) {
+  for (const listener of rhythmMeterListeners) listener(payload);
+}
+
+function recordRhythmTrigger(command: string, args: Record<string, unknown> = {}) {
+  rhythmTriggerCallsForTest.push({ command, args });
+  return true;
+}
+
+function upsertById<T extends { id: string }>(list: T[], item: T): T[] {
+  const index = list.findIndex((entry) => entry.id === item.id);
+  if (index < 0) return [...list, clone(item)];
+  const next = list.slice();
+  next[index] = clone(item);
+  return next;
+}
+
 export function resetTestDesktopApiMock() {
+  rhythmLibrary = { kits: [], patterns: [], oneShots: { banks: [] } };
+  rhythmMeterListeners.clear();
+  rhythmTriggerCallsForTest.length = 0;
   idCounter = 0;
   state = buildInitialState();
   waveformReadyListeners = [];
@@ -1025,6 +1072,97 @@ export function switchToDifferentSongForTest(
 }
 
 export const testDesktopApiMock = {
+  listenToRhythmMeters: async (handler: (payload: RhythmMeterPayload) => void) => {
+    rhythmMeterListeners.add(handler);
+    return () => {
+      rhythmMeterListeners.delete(handler);
+    };
+  },
+  getRhythmLibrary: async () => clone(rhythmLibrary),
+  getRhythmState: async (): Promise<RhythmMeterPayload> => ({
+    loopStep: -1,
+    loopBar: 0,
+    loopPlaying: false,
+    loopRows: [],
+    oneShotsActive: 0,
+  }),
+  saveLoopPattern: async (pattern: LoopPattern) => {
+    rhythmLibrary = { ...rhythmLibrary, patterns: upsertById(rhythmLibrary.patterns, pattern) };
+    return clone(rhythmLibrary);
+  },
+  deleteLoopPattern: async (patternId: string) => {
+    rhythmLibrary = { ...rhythmLibrary, patterns: rhythmLibrary.patterns.filter((p) => p.id !== patternId) };
+    return clone(rhythmLibrary);
+  },
+  saveDrumKit: async (kit: DrumKit) => {
+    rhythmLibrary = { ...rhythmLibrary, kits: upsertById(rhythmLibrary.kits, kit) };
+    return clone(rhythmLibrary);
+  },
+  deleteDrumKit: async (kitId: string) => {
+    rhythmLibrary = { ...rhythmLibrary, kits: rhythmLibrary.kits.filter((k) => k.id !== kitId) };
+    return clone(rhythmLibrary);
+  },
+  saveOneShotSet: async (set: OneShotSet) => {
+    rhythmLibrary = { ...rhythmLibrary, oneShots: clone(set) };
+    return clone(rhythmLibrary);
+  },
+  assignLoopToSong: async (regionId: string, pattern: LoopPattern) => {
+    const region = state.song.regions.find((r) => r.id === regionId);
+    if (region) {
+      region.loop = { pattern: clone(pattern), autostart: true, initialRows: [] };
+      state.projectRevision += 1;
+    }
+    return clone(buildSnapshot());
+  },
+  clearSongLoop: async (regionId: string) => {
+    const region = state.song.regions.find((r) => r.id === regionId);
+    if (region) {
+      region.loop = null;
+      state.projectRevision += 1;
+    }
+    return clone(buildSnapshot());
+  },
+  loopToggle: async () => recordRhythmTrigger("loop_toggle"),
+  loopToggleRow: async (row: number) => recordRhythmTrigger("loop_toggle_row", { row }),
+  loopSetRow: async (row: number, variation: number) => recordRhythmTrigger("loop_set_row", { row, variation }),
+  loopSetAllRows: async (variation: number) => recordRhythmTrigger("loop_set_all_rows", { variation }),
+  oneShotDown: async (pad: number, velocity?: number) =>
+    recordRhythmTrigger("one_shot_down", { pad, velocity: velocity ?? null }),
+  oneShotUp: async (pad: number) => recordRhythmTrigger("one_shot_up", { pad }),
+  oneShotsStopAll: async () => recordRhythmTrigger("one_shots_stop_all"),
+  setLoopConfig: async (config: {
+    clockMode: AppSettings["loopClockMode"];
+    freeBpm: number;
+    quantize: AppSettings["loopQuantize"];
+    output: string;
+    volume: number;
+  }) => {
+    state.appSettings = {
+      ...state.appSettings,
+      loopClockMode: config.clockMode,
+      loopFreeBpm: config.freeBpm,
+      loopQuantize: config.quantize,
+      loopOutput: config.output,
+      loopVolume: config.volume,
+    };
+    return clone(state.appSettings);
+  },
+  setOneShotConfig: async (output: string, volume: number) => {
+    state.appSettings = { ...state.appSettings, oneShotOutput: output, oneShotVolume: volume };
+    return clone(state.appSettings);
+  },
+  setActivePattern: async (patternId: string) => {
+    state.appSettings = { ...state.appSettings, activeLoopPatternId: patternId };
+    return clone(state.appSettings);
+  },
+  setOneShotBank: async (bank: number) => {
+    state.appSettings = { ...state.appSettings, activeOneShotBank: bank };
+    return clone(state.appSettings);
+  },
+  importUserSample: async (path: string, _kind: UserSampleKind): Promise<DrumSampleRef> => ({
+    source: { kind: "user" },
+    file: path.split(/[\\/]/).pop() ?? "sample.wav",
+  }),
   listenToTransportLifecycle:
     async (_handler: (event: TransportLifecycleEvent) => void) => () => {},
   listenToAudioMeters:

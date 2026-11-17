@@ -13,6 +13,7 @@ mod link;
 mod models;
 mod platform;
 mod redundancy;
+mod rhythm;
 mod session_feed;
 mod state;
 mod video;
@@ -367,6 +368,27 @@ pub fn run() {
             commands::cloud::cloud_download,
             commands::cloud::cloud_cancel_transfer,
             commands::cloud::cloud_delete,
+            commands::rhythm::get_rhythm_library,
+            commands::rhythm::get_rhythm_state,
+            commands::rhythm::save_loop_pattern,
+            commands::rhythm::delete_loop_pattern,
+            commands::rhythm::save_drum_kit,
+            commands::rhythm::delete_drum_kit,
+            commands::rhythm::save_one_shot_set,
+            commands::rhythm::assign_loop_to_song,
+            commands::rhythm::clear_song_loop,
+            commands::rhythm::loop_toggle,
+            commands::rhythm::loop_toggle_row,
+            commands::rhythm::loop_set_row,
+            commands::rhythm::loop_set_all_rows,
+            commands::rhythm::one_shot_down,
+            commands::rhythm::one_shot_up,
+            commands::rhythm::one_shots_stop_all,
+            commands::rhythm::set_loop_config,
+            commands::rhythm::set_one_shot_config,
+            commands::rhythm::set_active_pattern,
+            commands::rhythm::set_one_shot_bank,
+            commands::rhythm::import_user_sample,
             commands::pads::get_pads_catalog,
             commands::pads::download_pad,
             commands::pads::delete_pad,
@@ -715,6 +737,11 @@ fn start_audio_and_midi(
     }
     // Virtual ports and the iOS network session first, so a saved
     // selection of "LibreTracks In"/"Out" finds its port below.
+    // Loops de batería y one shots: patrones, loops de canción y muestras
+    // de la biblioteca (la configuración ya la mandó apply_settings).
+    if let Err(error) = state.audio.sync_rhythm() {
+        eprintln!("[libretracks-rhythm] initial sync failed: {error}");
+    }
     if let Ok(settings) = state.audio.current_settings() {
         midi::apply_platform_settings(&settings);
     }

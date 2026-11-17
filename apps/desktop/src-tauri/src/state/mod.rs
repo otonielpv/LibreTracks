@@ -88,6 +88,7 @@ pub use ruler_markers::{RulerMarkerKind, RulerMarkerPlacement, RulerMarkerRef};
 mod song_analysis;
 pub use song_analysis::AnalysedSection;
 mod song_edit;
+mod song_loops;
 mod song_templates;
 mod template_catalog;
 pub(crate) use template_catalog::import_template_into_catalog;

@@ -184,6 +184,9 @@ pub struct RegionMeterLevel {
 struct MeterFrame {
     tracks: Vec<AudioMeterLevel>,
     regions: Vec<RegionMeterLevel>,
+    /// Loops y one shots (`audio:rhythm`).
+    rhythm: crate::rhythm::meters::RhythmMeterPayload,
+    rhythm_active: bool,
     /// The transport is running: poll at the fast rate.
     playing: bool,
     /// The output stream is suspended while idle: poll at the slowest rate.
@@ -416,8 +419,18 @@ impl ControllerState {
     }
 }
 
+#[path = "engine_rhythm.rs"]
+mod rhythm_bridge;
+pub use rhythm_bridge::rhythm_loop_config;
+
 pub struct AudioController {
     state: Mutex<ControllerState>,
+    /// Loops de batería y one shots (plan drum-loops): biblioteca, slots del
+    /// banco y loops de las canciones. Ver `engine_rhythm.rs` (orden de locks).
+    rhythm: Mutex<crate::rhythm::RhythmRuntime>,
+    rhythm_sync: Mutex<()>,
+    rhythm_trigger: Mutex<Option<lt_audio_engine_v2::EngineTrigger>>,
+    rhythm_dropped_triggers: AtomicU64,
     sender: mpsc::Sender<AudioCommand>,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     remote_handle: Mutex<Option<RemoteServerHandle>>,
@@ -528,6 +541,10 @@ impl AudioController {
         let (sender, _receiver) = mpsc::channel();
         Self {
             state: Mutex::new(ControllerState::new()),
+            rhythm: Mutex::new(crate::rhythm::RhythmRuntime::default()),
+            rhythm_sync: Mutex::new(()),
+            rhythm_trigger: Mutex::new(None),
+            rhythm_dropped_triggers: AtomicU64::new(0),
             sender,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             remote_handle: Mutex::new(None),
@@ -559,6 +576,18 @@ impl AudioController {
             .map(|base| base.join("pads").to_string_lossy().to_string());
         if let Ok(mut state) = self.state.lock() {
             state.pads_dir = pads_dir;
+        }
+        if let Ok(base) = app_handle
+            .path()
+            .app_local_data_dir()
+            .or_else(|_| app_handle.path().app_data_dir())
+        {
+            let builtin = app_handle
+                .path()
+                .resource_dir()
+                .map(|dir| dir.join("loops").join("kit"))
+                .unwrap_or_else(|_| base.join("loops").join("builtin"));
+            self.configure_rhythm(base.join("loops"), builtin);
         }
         if let Ok(mut slot) = self.app_handle.lock() {
             *slot = Some(app_handle.clone());
@@ -600,6 +629,7 @@ impl AudioController {
             let mut last_watchdog_at = Instant::now();
             let mut last_track_levels: Option<Vec<AudioMeterLevel>> = None;
             let mut last_region_levels: Option<Vec<RegionMeterLevel>> = None;
+            let mut last_rhythm: Option<crate::rhythm::meters::RhythmMeterPayload> = None;
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             let mut last_remote_publish_at: Option<Instant> = None;
             while !stop.load(Ordering::Relaxed) {
@@ -636,8 +666,12 @@ impl AudioController {
                     // kept this loop at 30 Hz forever.
                     if frame.suspended {
                         interval = SUSPENDED_INTERVAL;
-                    } else if frame.playing || tracks_changed || regions_changed {
+                    } else if frame.playing || tracks_changed || regions_changed || frame.rhythm_active {
                         interval = ACTIVE_INTERVAL;
+                    }
+                    if crate::rhythm::meters::should_emit(last_rhythm.as_ref(), &frame.rhythm) {
+                        let _ = app_handle.emit(crate::rhythm::meters::RHYTHM_EVENT, &frame.rhythm);
+                        last_rhythm = Some(frame.rhythm.clone());
                     }
                     if tracks_changed && !frame.tracks.is_empty() {
                         let _ = app_handle.emit("audio:meters", &frame.tracks);
@@ -948,7 +982,17 @@ impl AudioController {
                 opened_files: 0,
             });
             Ok(())
-        })
+        })?;
+        self.sync_song_loops(&song);
+        Ok(())
+    }
+
+    /// Los loops de las canciones (SetRegionLoops) tras cargar o cambiar la
+    /// sesión. Un fallo aquí no tumba la operación de la sesión.
+    fn sync_song_loops(&self, song: &Song) {
+        if let Err(error) = self.sync_rhythm_for_song(song) {
+            eprintln!("[libretracks-rhythm] song loops not synced: {error}");
+        }
     }
 
     pub fn update_live_region_transpose(
@@ -1047,7 +1091,9 @@ impl AudioController {
                 opened_files: 0,
             });
             Ok(())
-        })
+        })?;
+        self.sync_song_loops(song);
+        Ok(())
     }
 
     pub fn update_live_section_markers(&self, song: &Song) -> Result<(), DesktopError> {
@@ -2203,6 +2249,13 @@ impl AudioController {
                 fade_out_seconds: settings.pad_fade_out_seconds as f32,
                 stop_with_transport: settings.pad_stop_with_transport,
             })?;
+            // Loops de batería y one shots: configuración (los patrones y las
+            // muestras los manda sync_rhythm, que conoce la biblioteca).
+            engine.send_command(&rhythm_loop_config(&settings))?;
+            engine.send_command(&EngineCommand::SetOneShotConfig {
+                route: settings.one_shot_output.clone(),
+                gain: settings.one_shot_volume as f32,
+            })?;
             // Pure mixer flag, like the metronome config: a failure here is an
             // engine bug, so it propagates.
             engine.send_command(&EngineCommand::SetPauseAtSongEnd {
@@ -2745,7 +2798,9 @@ impl AudioController {
                 opened_files: 0,
             });
             Ok(())
-        })
+        })?;
+        self.sync_song_loops(&song);
+        Ok(())
     }
 
     /// One pass of the meter thread: a single engine snapshot read under the
@@ -2793,6 +2848,7 @@ impl AudioController {
                 && !snapshot.transport_pending_start
                 && !snapshot.pad.enabled
                 && !snapshot.loops.wants_audio
+                && !snapshot.loops.one_shot_wants_audio
                 && !snapshot.pitch.mixer_song_gap_vamp_active;
             tick.idle_wake = wake_policy.step(SystemTime::now(), away, idle);
             let request = match idle_policy.step(Instant::now(), backgrounded, idle, suspended) {
@@ -2834,6 +2890,8 @@ impl AudioController {
             tick.frame = Some(MeterFrame {
                 tracks,
                 regions,
+                rhythm: crate::rhythm::meters::rhythm_meter_payload(&snapshot.loops),
+                rhythm_active: crate::rhythm::meters::wants_fast_poll(&snapshot.loops),
                 playing,
                 suspended,
             });
@@ -3199,6 +3257,9 @@ impl Drop for AudioController {
             if let Some(handle) = handle.take() {
                 let _ = handle.join();
             }
+        }
+        if let Ok(mut trigger) = self.rhythm_trigger.lock() {
+            *trigger = None;
         }
         if let Ok(mut state) = self.state.lock() {
             if let Some(engine) = state.engine.as_ref() {

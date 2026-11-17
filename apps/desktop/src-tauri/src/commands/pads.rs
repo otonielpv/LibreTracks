@@ -598,7 +598,7 @@ fn ensure_space_for_pad_install<R: std::io::Read + std::io::Seek>(
 /// means switching pad key later reads ready PCM instead of decoding a ~15-min
 /// MP3 live. Uses `symphonia` (the Rust side's decoder — FFmpeg lives only in
 /// the native engine), consistent with how the app decodes waveforms/imports.
-fn decode_to_wav16(src: &Path, dst: &Path) -> Result<(), String> {
+pub(crate) fn decode_to_wav16(src: &Path, dst: &Path) -> Result<(), String> {
     use symphonia::core::audio::{AudioBufferRef, Signal};
     use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
     use symphonia::core::formats::FormatOptions;

@@ -1,6 +1,7 @@
 //! Persistencia y operaciones de proyecto.
 
 pub mod cover;
+pub mod rhythm_library;
 mod asset_path;
 mod atomic_write;
 mod disk_space;

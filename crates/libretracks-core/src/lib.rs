@@ -1,5 +1,6 @@
 pub mod audio_clock;
 pub mod automation;
+pub mod drum_loop_resolve;
 pub mod drum_loops;
 pub mod key_changes;
 pub mod lead_plan;

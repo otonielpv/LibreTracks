@@ -57,6 +57,18 @@ fn default_voice_guide_language() -> String {
     "es".to_string()
 }
 
+fn default_loop_clock_mode() -> String {
+    "follow".into()
+}
+
+fn default_loop_quantize() -> String {
+    "bar".into()
+}
+
+fn default_rhythm_volume() -> f64 {
+    1.0
+}
+
 fn default_pad_volume() -> f64 {
     1.0
 }
@@ -286,6 +298,30 @@ pub struct AppSettings {
     pub voice_guide_count_style: libretracks_core::VoiceGuideCountStyle,
     #[serde(default = "default_voice_guide_language")]
     pub voice_guide_language: String,
+    /// Loops de batería (plan drum-loops): `follow` sigue el click de la
+    /// canción, `free` usa su propia BPM.
+    #[serde(default = "default_loop_clock_mode")]
+    pub loop_clock_mode: String,
+    /// BPM del modo libre fijada por tap; 0 = la del patrón.
+    #[serde(default)]
+    pub loop_free_bpm: f64,
+    /// `bar` | `beat` | `immediate`.
+    #[serde(default = "default_loop_quantize")]
+    pub loop_quantize: String,
+    #[serde(default = "default_pad_route")]
+    pub loop_output: String,
+    #[serde(default = "default_rhythm_volume")]
+    pub loop_volume: f64,
+    #[serde(default = "default_pad_route")]
+    pub one_shot_output: String,
+    #[serde(default = "default_rhythm_volume")]
+    pub one_shot_volume: f64,
+    /// Patrón de la biblioteca elegido en el panel (vacío = ninguno).
+    #[serde(default)]
+    pub active_loop_pattern_id: String,
+    /// Banco de one shots visible (0..3 = A-D).
+    #[serde(default)]
+    pub active_one_shot_bank: u8,
     #[serde(default)]
     pub pad_enabled: bool,
     /// Installed pad folder name currently selected (empty = none).
@@ -513,6 +549,15 @@ impl Default for AppSettings {
             voice_guide_count_in_enabled: default_voice_guide_count_in_enabled(),
             voice_guide_count_style: libretracks_core::VoiceGuideCountStyle::default(),
             voice_guide_language: default_voice_guide_language(),
+            loop_clock_mode: default_loop_clock_mode(),
+            loop_free_bpm: 0.0,
+            loop_quantize: default_loop_quantize(),
+            loop_output: default_pad_route(),
+            loop_volume: default_rhythm_volume(),
+            one_shot_output: default_pad_route(),
+            one_shot_volume: default_rhythm_volume(),
+            active_loop_pattern_id: String::new(),
+            active_one_shot_bank: 0,
             pad_enabled: false,
             pad_id: String::new(),
             pad_key: 0,

@@ -3,6 +3,16 @@ import { guestCanInvoke, guestRouteFor } from "./guestRouting";
 import { createGuestSettingsBridge } from "./guestSettings";
 import type { NetworkRole } from "./networkRoles";
 import type {
+  DrumKit as RhythmDrumKit,
+  LoopPattern as RhythmLoopPattern,
+  LoopRowLiveState as RhythmLoopRowLiveState,
+  OneShotSet as RhythmOneShotSet,
+  DrumSampleRef as RhythmSampleRef,
+  RhythmLibrary,
+  RhythmMeterPayload,
+  UserSampleKind,
+  LoopClockMode,
+  LoopQuantize,
   AppSettings,
   TrackChannelMode,
   AudioDeviceStatusEvent,
@@ -284,6 +294,17 @@ export async function listenToAudioMeters(
 ): Promise<() => void> {
   const { listen } = await import("@tauri-apps/api/event");
   return listen<AudioMeterLevel[]>(sessionEventName("audio:meters"), (event) => {
+    handler(event.payload);
+  });
+}
+
+/** Estado en directo de loops y one shots (plan drum-loops). Solo llega
+ * cuando cambia; el paso se pinta por ref + rAF, nunca con setState (D13). */
+export async function listenToRhythmMeters(
+  handler: (payload: RhythmMeterPayload) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<RhythmMeterPayload>(sessionEventName("audio:rhythm"), (event) => {
     handler(event.payload);
   });
 }
@@ -3113,6 +3134,113 @@ export async function setVoiceGuideConfigRealtime(
     settings,
   });
   return guestMirrorMode ? guestSettings.overlay(saved) : saved;
+}
+
+// ── Loops de batería y one shots (plan drum-loops) ───────────────────────────
+
+export async function getRhythmLibrary(): Promise<RhythmLibrary> {
+  return invokeCommand<RhythmLibrary>("get_rhythm_library");
+}
+
+export async function getRhythmState(): Promise<RhythmMeterPayload> {
+  return invokeCommand<RhythmMeterPayload>("get_rhythm_state");
+}
+
+export async function saveLoopPattern(pattern: RhythmLoopPattern): Promise<RhythmLibrary> {
+  return invokeCommand<RhythmLibrary>("save_loop_pattern", { pattern });
+}
+
+export async function deleteLoopPattern(patternId: string): Promise<RhythmLibrary> {
+  return invokeCommand<RhythmLibrary>("delete_loop_pattern", { patternId });
+}
+
+export async function saveDrumKit(kit: RhythmDrumKit): Promise<RhythmLibrary> {
+  return invokeCommand<RhythmLibrary>("save_drum_kit", { kit });
+}
+
+export async function deleteDrumKit(kitId: string): Promise<RhythmLibrary> {
+  return invokeCommand<RhythmLibrary>("delete_drum_kit", { kitId });
+}
+
+export async function saveOneShotSet(set: RhythmOneShotSet): Promise<RhythmLibrary> {
+  return invokeCommand<RhythmLibrary>("save_one_shot_set", { set });
+}
+
+/** Copia el patrón (con su kit) en la canción: viaja con la sesión (D5). */
+export async function assignLoopToSong(
+  regionId: string,
+  pattern: RhythmLoopPattern,
+  options: { autostart?: boolean; initialRows?: RhythmLoopRowLiveState[] } = {},
+): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("assign_loop_to_song", {
+    regionId,
+    pattern,
+    autostart: options.autostart ?? null,
+    initialRows: options.initialRows ?? null,
+  });
+}
+
+export async function clearSongLoop(regionId: string): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("clear_song_loop", { regionId });
+}
+
+// Directo: camino rápido del motor (sin snapshot). `false` = disparo descartado.
+export async function loopToggle(): Promise<boolean> {
+  return invokeCommand<boolean>("loop_toggle");
+}
+
+export async function loopToggleRow(row: number): Promise<boolean> {
+  return invokeCommand<boolean>("loop_toggle_row", { row });
+}
+
+export async function loopSetRow(row: number, variation: number): Promise<boolean> {
+  return invokeCommand<boolean>("loop_set_row", { row, variation });
+}
+
+export async function loopSetAllRows(variation: number): Promise<boolean> {
+  return invokeCommand<boolean>("loop_set_all_rows", { variation });
+}
+
+export async function oneShotDown(pad: number, velocity?: number): Promise<boolean> {
+  return invokeCommand<boolean>("one_shot_down", { pad, velocity: velocity ?? null });
+}
+
+export async function oneShotUp(pad: number): Promise<boolean> {
+  return invokeCommand<boolean>("one_shot_up", { pad });
+}
+
+export async function oneShotsStopAll(): Promise<boolean> {
+  return invokeCommand<boolean>("one_shots_stop_all");
+}
+
+export async function setLoopConfig(config: {
+  clockMode: LoopClockMode;
+  freeBpm: number;
+  quantize: LoopQuantize;
+  output: string;
+  volume: number;
+}): Promise<AppSettings> {
+  const saved = await invokeCommand<AppSettings>("set_loop_config", config);
+  return guestMirrorMode ? guestSettings.overlay(saved) : saved;
+}
+
+export async function setOneShotConfig(output: string, volume: number): Promise<AppSettings> {
+  const saved = await invokeCommand<AppSettings>("set_one_shot_config", { output, volume });
+  return guestMirrorMode ? guestSettings.overlay(saved) : saved;
+}
+
+export async function setActivePattern(patternId: string): Promise<AppSettings> {
+  const saved = await invokeCommand<AppSettings>("set_active_pattern", { patternId });
+  return guestMirrorMode ? guestSettings.overlay(saved) : saved;
+}
+
+export async function setOneShotBank(bank: number): Promise<AppSettings> {
+  const saved = await invokeCommand<AppSettings>("set_one_shot_bank", { bank });
+  return guestMirrorMode ? guestSettings.overlay(saved) : saved;
+}
+
+export async function importUserSample(path: string, kind: UserSampleKind): Promise<RhythmSampleRef> {
+  return invokeCommand<RhythmSampleRef>("import_user_sample", { path, kind });
 }
 
 // ── Ambient pads ─────────────────────────────────────────────────────────────

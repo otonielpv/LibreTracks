@@ -10,6 +10,7 @@ pub mod library;
 pub mod library_places;
 pub mod open_with;
 pub mod pads;
+pub mod rhythm;
 pub mod project;
 pub mod render;
 pub mod render_automation;
