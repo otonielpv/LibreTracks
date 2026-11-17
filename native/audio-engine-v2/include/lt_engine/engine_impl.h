@@ -76,6 +76,11 @@ public:
                            int key,
                            int sample_rate);
 
+    // Plan drum-loops: decodifica las muestras de loops y one shots y publica
+    // un banco nuevo. Como load_pad_clip_now, corre en el hilo que llama, sin
+    // el lock del motor de Rust. Devuelve el JSON de SampleLoadResult.
+    std::string load_samples_now(const std::string& request_json);
+
 private:
 #ifdef LT_ENGINE_BENCHMARK_HOOKS
     friend class StreamingBenchmarkEngine;

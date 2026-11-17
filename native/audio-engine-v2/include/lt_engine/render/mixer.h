@@ -9,6 +9,7 @@
 #include <lt_engine/render/metronome_renderer.h>
 #include <lt_engine/render/voice_guide_renderer.h>
 #include <lt_engine/render/pad_renderer.h>
+#include <lt_engine/render/sample_bank.h>
 #include <lt_engine/render/render_thread_pool.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
@@ -140,6 +141,11 @@ public:
     void set_pad_volume(float volume);
     void set_pad_clip(std::shared_ptr<const PadClip> clip) noexcept;
     PadDiagnostics pad_diagnostics() const;
+
+    // Banco de muestras de loops y one shots (plan drum-loops). Se carga y
+    // recolecta desde el hilo de comandos; los renderers lo leen por bloque.
+    SampleBank& sample_bank() noexcept { return sample_bank_; }
+    const SampleBank& sample_bank() const noexcept { return sample_bank_; }
     // Build the voice-guide announce target from the next pending scheduled jump
     // (so the destination section is spoken before the jump fires). Empty target
     // when no announceable jump is pending.
@@ -503,6 +509,7 @@ private:
     MetronomeRenderer metronome_;
     VoiceGuideRenderer voice_guide_;
     PadRenderer pad_;
+    SampleBank sample_bank_;
 
     // Check whether any track is soloed (scans control slots).
     bool any_solo_active_in_slots() const noexcept;

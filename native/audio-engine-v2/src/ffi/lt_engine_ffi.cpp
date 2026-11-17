@@ -344,6 +344,23 @@ LT_API void lt_audio_engine_load_pad_clip(LtEngine* engine,
     }
 }
 
+LT_API const char* lt_audio_engine_load_samples(LtEngine* engine, const char* request_json) {
+    thread_local std::string buf;
+    if (!engine || !request_json) {
+        buf = "{\"ok\":false,\"error\":\"invalid handle\",\"entries\":[]}";
+        return buf.c_str();
+    }
+    try {
+        buf = as_impl(engine)->load_samples_now(request_json);
+    } catch (const std::exception& e) {
+        buf = std::string("{\"ok\":false,\"error\":") + json(std::string(e.what())).dump()
+            + ",\"entries\":[]}";
+    } catch (...) {
+        buf = "{\"ok\":false,\"error\":\"load failed\",\"entries\":[]}";
+    }
+    return buf.c_str();
+}
+
 // ---------------------------------------------------------------------------
 // Cache maintenance — no engine handle required. These operate on the
 // env-resolved PCM cache directory ($LIBRETRACKS_CACHE_DIR), so the UI can

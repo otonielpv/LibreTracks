@@ -235,6 +235,14 @@ LT_API void lt_audio_engine_load_pad_clip(LtEngine* engine,
                                           int32_t key,
                                           int32_t sample_rate);
 
+/** Plan drum-loops: decode the drum-loop / one-shot samples and publish a new
+ *  sample bank. Request: {"samples":[{"slot","path"}],"maxBytes"?,"sampleRate"?}.
+ *  Runs on the calling thread, intended WITHOUT the host's engine lock. Returns
+ *  {ok,error?,totalBytes,sampleRate,entries:[{slot,ok,error?,channels,frames}]},
+ *  valid until the next call on this thread. Over the memory cap nothing is
+ *  published. */
+LT_API const char* lt_audio_engine_load_samples(LtEngine* engine, const char* request_json);
+
 // ---------------------------------------------------------------------------
 // Decoding cache maintenance (no engine handle required)
 //

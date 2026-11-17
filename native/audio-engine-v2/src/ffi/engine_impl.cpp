@@ -958,6 +958,9 @@ Result<void> EngineImpl::send_command(const std::string& cmd_json) {
 
 void EngineImpl::service_control_thread_tasks() {
     if (mixer_) {
+        // Las versiones retiradas del banco de muestras se liberan aquí, en el
+        // hilo de control, nunca en el render.
+        mixer_->sample_bank().collect_retired();
         const Frame target = mixer_->take_pending_scheduled_jump();
         if (target != Mixer::kNoJumpPending
             && bungee_voices_ && bungee_voices_->is_available()
@@ -1584,6 +1587,8 @@ void EngineImpl::resample_sources_for_new_sample_rate() {
     // 48k). Done before the early-returns below so it always runs on an SR change.
     reload_voice_guide_bank_for_new_sample_rate();
     reload_pad_clip_for_new_sample_rate();
+    // Muestras de loops y one shots: se re-decodifican desde sus rutas.
+    if (mixer_ && new_sr > 0) (void)mixer_->sample_bank().reload_for_sample_rate(new_sr);
 
     if (!source_manager_) return;
 
@@ -1669,6 +1674,27 @@ void EngineImpl::load_pad_clip_now(const std::string& pads_dir,
     // playback or snapshots. The swap below is realtime-safe.
     auto clip = load_pad_clip(pads_dir, pad_id, clamped_key, rate);
     mixer_->set_pad_clip(std::move(clip));
+}
+
+std::string EngineImpl::load_samples_now(const std::string& request_json) {
+    SampleLoadRequest request;
+    std::string error;
+    if (!sample_load_request_from_json(request_json, request, &error)) {
+        SampleLoadResult bad;
+        bad.error = "invalid request: " + error;
+        return sample_load_result_to_json(bad);
+    }
+    if (!mixer_) {
+        SampleLoadResult bad;
+        bad.error = "engine not initialized";
+        return sample_load_result_to_json(bad);
+    }
+    const int rate = request.sample_rate > 0
+        ? request.sample_rate
+        : (clock_ && clock_->sample_rate() > 0 ? clock_->sample_rate() : 48000);
+    SampleBank& bank = mixer_->sample_bank();
+    if (request.max_bytes > 0) bank.set_max_bytes(request.max_bytes);
+    return sample_load_result_to_json(bank.load(request.entries, rate));
 }
 
 void EngineImpl::rescale_session_for_new_sample_rate(int old_sr) {

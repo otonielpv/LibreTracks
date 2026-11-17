@@ -8,6 +8,7 @@ mod error;
 mod events;
 mod ffi;
 mod render;
+mod samples;
 mod snapshot;
 
 #[cfg(test)]
@@ -17,6 +18,7 @@ pub use commands::*;
 pub use error::EngineError;
 pub use events::*;
 pub use render::*;
+pub use samples::*;
 pub use snapshot::*;
 
 use ffi::*;
@@ -271,6 +273,14 @@ impl Engine {
     /// `.load(...)` so the slow MP3 decode never blocks playback/snapshots.
     pub fn pad_loader(&self) -> PadClipLoader {
         PadClipLoader {
+            handle: self.handle,
+        }
+    }
+
+    /// [`SampleLoader`] para las muestras de loops y one shots: se obtiene
+    /// bajo un lock breve y se usa sin él, como `pad_loader`.
+    pub fn sample_loader(&self) -> SampleLoader {
+        SampleLoader {
             handle: self.handle,
         }
     }

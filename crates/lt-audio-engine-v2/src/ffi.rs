@@ -138,6 +138,10 @@ extern "C" {
         on_progress: Option<LtRenderProgressCallback>,
         progress_ctx: *mut c_void,
     ) -> *const c_char;
+    pub fn lt_audio_engine_load_samples(
+        engine: *mut LtEngine,
+        request_json: *const c_char,
+    ) -> *const c_char;
     pub fn lt_audio_engine_source_cache_dir() -> *const c_char;
     pub fn lt_audio_engine_source_cache_size_bytes() -> u64;
     pub fn lt_audio_engine_purge_source_cache() -> u64;
@@ -386,6 +390,13 @@ pub unsafe fn lt_audio_engine_load_pad_clip(
     _: i32,
     _: i32,
 ) {
+}
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
+pub unsafe fn lt_audio_engine_load_samples(_: *mut LtEngine, _: *const c_char) -> *const c_char {
+    c"{\"ok\":false,\"error\":\"engine not linked\",\"entries\":[]}".as_ptr()
 }
 #[cfg(any(
     feature = "no-link",
