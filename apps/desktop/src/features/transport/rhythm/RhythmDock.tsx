@@ -54,6 +54,18 @@ function currentWindowLayout(): RhythmLayoutClass {
   return classifySetlistLayout(window.innerWidth, window.innerHeight);
 }
 
+/** Clase de tamaño de la VENTANA. El panel acoplado mide 300 px de alto: si
+ * se midiera a sí mismo caería siempre en `short` (teléfono). */
+function useWindowLayout(): RhythmLayoutClass {
+  const [layout, setLayout] = useState(currentWindowLayout);
+  useEffect(() => {
+    const onResize = () => setLayout(currentWindowLayout());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return layout;
+}
+
 type RhythmDockProps = {
   view: RhythmView;
   /** Fuerza la clase de tamaño (tests y arnés). */
@@ -73,7 +85,8 @@ export function RhythmDock({ view, layoutClass, surfaces, alwaysOpen, songLoop, 
   const setOpen = useRhythmStore((s) => s.setOpen);
   const [settings, setSettings] = useRhythmSettings();
   const close = useCallback(() => setOpen(view, false), [setOpen, view]);
-  const layout = layoutClass ?? currentWindowLayout();
+  const windowLayout = useWindowLayout();
+  const layout = layoutClass ?? windowLayout;
   const variant = rhythmVariantFor(view, layout);
 
   if (!(alwaysOpen || open) || !settings) return null;
@@ -84,7 +97,7 @@ export function RhythmDock({ view, layoutClass, surfaces, alwaysOpen, songLoop, 
         variant={variant}
         settings={settings}
         onSettings={setSettings}
-        layoutClass={layoutClass}
+        layoutClass={layout}
         surfaces={surfaces}
         songLoop={songLoop}
         onEdit={setEditing}

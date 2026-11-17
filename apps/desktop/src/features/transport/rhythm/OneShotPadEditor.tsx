@@ -47,14 +47,20 @@ export function OneShotPadEditor({
 
   return (
     <div
-      className={sheet ? "lt-pad-editor is-sheet" : "lt-pad-editor is-popover"}
+      className={sheet ? "lt-rhythm-card lt-pad-editor is-sheet" : "lt-rhythm-card lt-pad-editor is-popover"}
       role="dialog"
       aria-label={t("rhythm.pads.editTitle", { number: padIndex + 1 })}
       data-testid="pad-editor"
       data-variant={sheet ? "sheet" : "popover"}
     >
+      <div className="lt-rhythm-card__title">
+        <span>{t("rhythm.pads.editTitle", { number: padIndex + 1 })}</span>
+        <button type="button" className="lt-rhythm-icon" aria-label={t("rhythm.close")} onClick={onClose}>
+          <span className="material-symbols-outlined" aria-hidden="true">close</span>
+        </button>
+      </div>
       <label className="lt-rhythm-field">
-        <span>{t("rhythm.pads.bankName")}</span>
+        <span className="lt-rhythm-field__label">{t("rhythm.pads.bankName")}</span>
         <input value={bankName} onChange={(event) => setBankName(event.target.value)} />
       </label>
       <SamplePicker
@@ -80,15 +86,15 @@ export function OneShotPadEditor({
       {pad ? (
         <>
           <label className="lt-rhythm-field">
-            <span>{t("rhythm.pads.name")}</span>
+            <span className="lt-rhythm-field__label">{t("rhythm.pads.name")}</span>
             <input value={pad.name} onChange={(event) => update({ name: event.target.value })} />
           </label>
           <label className="lt-rhythm-field">
-            <span>{t("rhythm.pads.color")}</span>
+            <span className="lt-rhythm-field__label">{t("rhythm.pads.color")}</span>
             <input type="color" value={pad.color || "#57f1db"} onChange={(event) => update({ color: event.target.value })} />
           </label>
           <label className="lt-rhythm-field">
-            <span>{t("rhythm.volume")}</span>
+            <span className="lt-rhythm-field__label">{t("rhythm.volume")}</span>
             <input
               type="range"
               min={-24}
@@ -99,14 +105,14 @@ export function OneShotPadEditor({
             />
           </label>
           <label className="lt-rhythm-field">
-            <span>{t("rhythm.pads.mode")}</span>
+            <span className="lt-rhythm-field__label">{t("rhythm.pads.mode")}</span>
             <select value={pad.mode} onChange={(event) => update({ mode: event.target.value as OneShotPad["mode"] })}>
               <option value="oneShot">{t("rhythm.pads.oneShot")}</option>
               <option value="gate">{t("rhythm.pads.gate")}</option>
             </select>
           </label>
           <label className="lt-rhythm-field">
-            <span>{t("rhythm.quantize")}</span>
+            <span className="lt-rhythm-field__label">{t("rhythm.quantize")}</span>
             <select
               value={pad.quantize}
               onChange={(event) => update({ quantize: event.target.value as OneShotPad["quantize"] })}
@@ -117,7 +123,7 @@ export function OneShotPadEditor({
             </select>
           </label>
           <label className="lt-rhythm-field">
-            <span>{t("rhythm.pads.choke")}</span>
+            <span className="lt-rhythm-field__label">{t("rhythm.pads.choke")}</span>
             <select
               value={pad.chokeGroup ?? 0}
               onChange={(event) => {

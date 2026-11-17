@@ -430,22 +430,13 @@
   grid-template-rows: repeat(3, minmax(0, 1fr));
 }
 
-/* ── Botón «Ritmo» de las vistas ─────────────────────────────────────── */
-.lt-rhythm-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.lt-rhythm-button.is-active .lt-rhythm-button__icon {
+/* ── Botón «Ritmo» de la barra superior ─────────────────────────────────
+   Hereda el aspecto de los botones de la barra (como Pads); sonando, el
+   icono se enciende aunque el panel esté cerrado. */
+.lt-rhythm-button.is-sounding .material-symbols-outlined {
   color: #57f1db;
-  text-shadow: 0 0 6px rgb(87 241 219 / 0.8);
+  text-shadow: 0 0 6px rgb(87 241 219 / 0.7);
 }
-
-.lt-rhythm-button.is-open {
-  outline: 1px solid rgb(87 241 219 / 0.6);
-}
-
 
 /* ── Editor de patrones ──────────────────────────────────────────────── */
 .lt-loop-editor {
@@ -627,4 +618,179 @@
   color: #ff8a80;
   margin: 0;
   flex-basis: 100%;
+}
+
+
+/* ── Controles con el aspecto de la app (no los nativos) ─────────────── */
+.lt-rhythm-panel,
+.lt-loop-editor,
+.lt-rhythm-card {
+  font-family: inherit;
+}
+
+.lt-rhythm-panel select,
+.lt-loop-editor select,
+.lt-rhythm-card select,
+.lt-rhythm-panel input:not([type="range"]):not([type="color"]),
+.lt-loop-editor input:not([type="range"]):not([type="color"]),
+.lt-rhythm-card input:not([type="range"]):not([type="color"]) {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: calc(var(--lt-rhythm-target, 32px) - 4px);
+  padding: 0 28px 0 10px;
+  background-color: #1d2120;
+  color: #e9f1ee;
+  border: 1px solid rgb(186 202 197 / 0.18);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.lt-rhythm-panel select,
+.lt-loop-editor select,
+.lt-rhythm-card select {
+  background-image: linear-gradient(45deg, transparent 50%, #8d9a96 50%),
+    linear-gradient(135deg, #8d9a96 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+.lt-rhythm-panel input:not([type="range"]):not([type="color"]),
+.lt-loop-editor input:not([type="range"]):not([type="color"]),
+.lt-rhythm-card input:not([type="range"]):not([type="color"]) {
+  padding-right: 10px;
+}
+
+.lt-rhythm-panel select:focus-visible,
+.lt-loop-editor select:focus-visible,
+.lt-rhythm-card select:focus-visible,
+.lt-rhythm-card input:focus-visible {
+  outline: 1px solid #57f1db;
+  outline-offset: 0;
+}
+
+.lt-rhythm-panel input[type="range"],
+.lt-loop-editor input[type="range"],
+.lt-rhythm-card input[type="range"] {
+  accent-color: #57f1db;
+}
+
+.lt-rhythm-card button,
+.lt-loop-editor__header button,
+.lt-loop-settings button,
+.lt-sample-picker button {
+  min-height: calc(var(--lt-rhythm-target, 32px) - 4px);
+  padding: 0 12px;
+  background: #1d2120;
+  color: #e9f1ee;
+  border: 1px solid rgb(186 202 197 / 0.18);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.lt-rhythm-card button:hover,
+.lt-loop-editor__header button:hover,
+.lt-sample-picker button:hover {
+  border-color: rgb(87 241 219 / 0.6);
+}
+
+.lt-rhythm-card button.is-primary,
+.lt-loop-editor__header button.is-primary {
+  background: #57f1db;
+  border-color: #57f1db;
+  color: #04110e;
+  font-weight: 600;
+}
+
+/* Etiquetas como las de la barra superior: pequeñas, en mayúsculas. */
+.lt-rhythm-field__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8d9a96;
+}
+
+.lt-rhythm-free {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lt-rhythm-follow-hint {
+  font-size: 11px;
+  color: #8d9a96;
+}
+
+.lt-rhythm-icon .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Menú «⋯» y tarjetas: superficie elevada con filas ordenadas. */
+.lt-rhythm-more__menu {
+  min-width: 240px;
+  padding: 10px;
+  gap: 10px;
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.45);
+}
+
+.lt-rhythm-more__menu .lt-rhythm-field {
+  justify-content: space-between;
+}
+
+.lt-rhythm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: #151817;
+  color: #e9f1ee;
+  border: 1px solid rgb(186 202 197 / 0.16);
+  border-radius: 6px;
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.5);
+}
+
+.lt-rhythm-card.is-sheet,
+.lt-rhythm-card.lt-kit-editor {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.lt-rhythm-card__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.lt-rhythm-card__title button {
+  min-width: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.lt-pad-editor .lt-rhythm-field {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.lt-pad-editor .lt-sample-picker select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lt-pad-editor__actions {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid rgb(186 202 197 / 0.12);
 }

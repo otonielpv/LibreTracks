@@ -33,7 +33,7 @@ export function LoopPatternSettings({ pattern, variation, onChange }: LoopPatter
   return (
     <div className="lt-loop-settings" data-testid="loop-pattern-settings">
       <label className="lt-rhythm-field">
-        <span>{t("rhythm.editor.bars")}</span>
+        <span className="lt-rhythm-field__label">{t("rhythm.editor.bars")}</span>
         <select
           value={pattern.bars}
           onChange={(event) => onChange(resizeBars(pattern, Number(event.target.value)))}
@@ -46,7 +46,7 @@ export function LoopPatternSettings({ pattern, variation, onChange }: LoopPatter
         </select>
       </label>
       <label className="lt-rhythm-field">
-        <span>{t("rhythm.editor.signature")}</span>
+        <span className="lt-rhythm-field__label">{t("rhythm.editor.signature")}</span>
         <select
           value={`${pattern.signature.numerator}/${pattern.signature.denominator}`}
           onChange={(event) => {
@@ -60,7 +60,7 @@ export function LoopPatternSettings({ pattern, variation, onChange }: LoopPatter
         </select>
       </label>
       <label className="lt-rhythm-field">
-        <span>{t("rhythm.editor.stepsPerBeat")}</span>
+        <span className="lt-rhythm-field__label">{t("rhythm.editor.stepsPerBeat")}</span>
         <select
           value={pattern.stepsPerBeat}
           onChange={(event) => {
@@ -74,7 +74,7 @@ export function LoopPatternSettings({ pattern, variation, onChange }: LoopPatter
         </select>
       </label>
       <label className="lt-rhythm-field">
-        <span>{t("rhythm.editor.swing")}</span>
+        <span className="lt-rhythm-field__label">{t("rhythm.editor.swing")}</span>
         <input
           type="range"
           min={0}
@@ -85,7 +85,7 @@ export function LoopPatternSettings({ pattern, variation, onChange }: LoopPatter
         />
       </label>
       <label className="lt-rhythm-field">
-        <span>{t("rhythm.editor.freeBpm")}</span>
+        <span className="lt-rhythm-field__label">{t("rhythm.editor.freeBpm")}</span>
         <input
           type="number"
           min={30}

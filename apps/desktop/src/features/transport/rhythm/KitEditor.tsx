@@ -61,7 +61,7 @@ export function KitEditor({ kit: initial, patterns, onSave, onClose, confirm, pi
     );
 
   return (
-    <div className="lt-kit-editor" role="dialog" aria-label={t("rhythm.kit.title")} data-testid="kit-editor">
+    <div className="lt-rhythm-card lt-kit-editor" role="dialog" aria-label={t("rhythm.kit.title")} data-testid="kit-editor">
       <div className="lt-loop-editor__header">
         <input
           className="lt-loop-editor__name"

@@ -2588,6 +2588,8 @@ const en = {
     quantizeBeat: "Beat",
     quantizeImmediate: "Immediate",
     tap: "Tap",
+    followHint: "Follows the song's tempo",
+    freeHint: "Own tempo: tap to set it",
     bpm: "{{bpm}} BPM",
     volume: "Volume",
     more: "More options",

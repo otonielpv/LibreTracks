@@ -57,7 +57,7 @@ export function RhythmHeader({
         ))}
       </div>
       <label className="lt-rhythm-field">
-        <span>{t("rhythm.quantize")}</span>
+        <span className="lt-rhythm-field__label">{t("rhythm.quantize")}</span>
         <select
           value={settings.loopQuantize}
           onChange={(event) => void handlers.setQuantize(event.target.value as LoopQuantize)}
@@ -68,7 +68,7 @@ export function RhythmHeader({
         </select>
       </label>
       <label className="lt-rhythm-field">
-        <span>{t("rhythm.volume")}</span>
+        <span className="lt-rhythm-field__label">{t("rhythm.volume")}</span>
         <input
           type="range"
           min={0}
@@ -113,14 +113,18 @@ export function RhythmHeader({
           ))}
         </select>
       )}
-      {free && freeBpm !== null ? (
-        <span className="lt-rhythm-bpm">{t("rhythm.bpm", { bpm: Math.round(freeBpm * 10) / 10 })}</span>
-      ) : null}
       {free ? (
-        <button type="button" className="lt-rhythm-tap" onClick={() => handlers.tap()}>
-          {t("rhythm.tap")}
-        </button>
-      ) : null}
+        <span className="lt-rhythm-free" title={t("rhythm.freeHint")}>
+          {freeBpm !== null ? (
+            <span className="lt-rhythm-bpm">{t("rhythm.bpm", { bpm: Math.round(freeBpm * 10) / 10 })}</span>
+          ) : null}
+          <button type="button" className="lt-rhythm-tap" onClick={() => handlers.tap()}>
+            {t("rhythm.tap")}
+          </button>
+        </span>
+      ) : (
+        <span className="lt-rhythm-follow-hint">{t("rhythm.followHint")}</span>
+      )}
       {layout === "short" ? (
         <div className="lt-rhythm-more">
           <button

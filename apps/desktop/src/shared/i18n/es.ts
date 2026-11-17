@@ -2617,6 +2617,8 @@ const es = {
     quantizeBeat: "Tiempo",
     quantizeImmediate: "Inmediato",
     tap: "Tap",
+    followHint: "Sigue el tempo de la canción",
+    freeHint: "Tempo propio: pulsa Tap para fijarlo",
     bpm: "{{bpm}} BPM",
     volume: "Volumen",
     more: "Más opciones",

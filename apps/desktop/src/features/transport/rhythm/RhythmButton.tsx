@@ -41,8 +41,9 @@ export function RhythmButton({ open, onToggle, className, compact }: RhythmButto
   return (
     <button
       type="button"
-      className={["lt-rhythm-button", active ? "is-active" : "", open ? "is-open" : "", className ?? ""]
+      className={["is-toggle lt-rhythm-button", open ? "is-active" : "", active ? "is-sounding" : "", className ?? ""]
         .join(" ")
+        .replace(/\s+/g, " ")
         .trim()}
       aria-pressed={open}
       aria-label={t("rhythm.button")}
@@ -51,10 +52,10 @@ export function RhythmButton({ open, onToggle, className, compact }: RhythmButto
       data-active={active ? "true" : "false"}
       onClick={onToggle}
     >
-      <span className="lt-rhythm-button__icon" aria-hidden="true">
-        ◉
+      <span className="material-symbols-outlined" aria-hidden="true">
+        grid_view
       </span>
-      {compact ? null : <span className="lt-rhythm-button__label">{t("rhythm.button")}</span>}
+      {compact ? null : <span className="lt-button-label">{t("rhythm.button")}</span>}
     </button>
   );
 }
