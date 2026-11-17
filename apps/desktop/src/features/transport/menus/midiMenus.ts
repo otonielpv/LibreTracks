@@ -6,6 +6,7 @@ import type { ContextMenuAction } from "../types";
 import { menuSection } from "./menuSections";
 import type { TimelineMenuDeps, ColorPickerPopoverState } from "./timelineMenus";
 import { timelineItemHandlersFrom } from "../timelineItems/fromMenuDeps";
+import { itemsForMenu } from "../timelineItems/timelineItemSelection";
 
 /**
  * Context menus and dialog openers for the MIDI feature.
@@ -49,6 +50,21 @@ function editMidiClip(clip: MidiClipSummary) {
 function midiClipContextMenu(clip: MidiClipSummary): ContextMenuAction[] {
   const d = getDeps();
   const { t } = d;
+  // Right-click on one of several selected: duplicate/delete act on them all.
+  const targets = itemsForMenu({ kind: "midi", id: clip.id });
+  if (targets.length > 1) {
+    return [
+      {
+        label: t("transport.timelineItems.duplicateCount", { count: targets.length }),
+        shortcut: d.shortcutHint("edit.duplicate"),
+        onSelect: () => timelineItemHandlersFrom(getDeps).duplicate(targets),
+      },
+      {
+        label: t("transport.timelineItems.deleteCount", { count: targets.length }),
+        onSelect: () => timelineItemHandlersFrom(getDeps).deleteItems(targets),
+      },
+    ];
+  }
   return [
     {
       label: t("transport.midi.editClip"),

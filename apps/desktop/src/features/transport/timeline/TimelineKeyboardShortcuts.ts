@@ -107,6 +107,7 @@ type TimelineKeyboardShortcutsProps = {
   /** Ctrl+D on MIDI clips / cues selected with Ctrl/Cmd+click (timelineItems/). */
   timelineItems?: {
     duplicateSelected: () => boolean;
+    deleteSelected: () => boolean;
   };
   videoEdits?: {
     splitSelected: () => Promise<boolean>;
@@ -371,6 +372,14 @@ export function useTimelineKeyboardShortcuts({
           selectedClipIds.length === 0 &&
           selectedTrackIds.length === 0 &&
           rulerMarkersRef.current?.deleteSelected()
+        ) {
+          return;
+        }
+        // MIDI clips / cues picked with Ctrl/Cmd or Shift+click.
+        if (
+          selectedClipIds.length === 0 &&
+          selectedTrackIds.length === 0 &&
+          timelineItemsRef.current?.deleteSelected()
         ) {
           return;
         }

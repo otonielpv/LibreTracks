@@ -14,6 +14,7 @@ import { useTimelineUIStore } from "../../uiStore";
 import { resolvePointDrag } from "./automationLaneModel";
 import type { SongLaneRenderProps, SongLaneType } from "./laneTypes";
 import { LeadTail } from "./LeadTail";
+import { handleTimelineItemClick } from "../../timelineItems/timelineItemSelection";
 import { LANE_PREVIEW_FALLBACK_MS } from "./useClipGestures";
 
 export const MIDI_LANE_HEIGHT = 56;
@@ -130,8 +131,12 @@ function MidiLaneComponent({ track, song, region, scale, menus }: SongLaneRender
       detach();
       if (!moved) {
         // Ctrl/Cmd+click selects (for Ctrl+D) instead of opening the editor.
-        if (upEvent.ctrlKey || upEvent.metaKey) {
-          useTimelineUIStore.getState().toggleTimelineItemSelection({ kind: "midi", id: clip.id });
+        if (
+          handleTimelineItemClick(song, { kind: "midi", id: clip.id }, {
+            additive: upEvent.ctrlKey || upEvent.metaKey,
+            range: upEvent.shiftKey,
+          })
+        ) {
           return;
         }
         menus.editMidiClip(clip);

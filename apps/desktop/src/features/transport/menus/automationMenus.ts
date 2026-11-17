@@ -16,6 +16,7 @@ import { markerCategory } from "../markerKinds";
 import type { ContextMenuAction } from "../types";
 import type { TimelineMenuDeps } from "./timelineMenus";
 import { timelineItemHandlersFrom } from "../timelineItems/fromMenuDeps";
+import { itemsForMenu } from "../timelineItems/timelineItemSelection";
 
 /**
  * Automation cues and the automation lane: create/edit/move a cue, its menu,
@@ -105,6 +106,21 @@ export function createAutomationMenus(getDeps: () => TimelineMenuDeps) {
   ): ContextMenuAction[] {
     const d = getDeps();
     const { t } = d;
+    // Right-click on one of several selected: duplicate/delete act on them all.
+    const targets = itemsForMenu({ kind: "cue", id: cue.id });
+    if (targets.length > 1) {
+      return [
+        {
+          label: t("transport.timelineItems.duplicateCount", { count: targets.length }),
+          shortcut: d.shortcutHint("edit.duplicate"),
+          onSelect: () => timelineItemHandlersFrom(getDeps).duplicate(targets),
+        },
+        {
+          label: t("transport.timelineItems.deleteCount", { count: targets.length }),
+          onSelect: () => timelineItemHandlersFrom(getDeps).deleteItems(targets),
+        },
+      ];
+    }
     return [
       {
         label: t("transport.automation.editCue"),

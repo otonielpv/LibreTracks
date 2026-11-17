@@ -2055,6 +2055,10 @@ const en = {
       duplicate: "Duplicate",
       statusDuplicated_one: "Duplicated",
       statusDuplicated_other: "{{count}} duplicated",
+      duplicateCount: "Duplicate {{count}}",
+      deleteCount: "Delete {{count}}",
+      statusDeleted_one: "Deleted",
+      statusDeleted_other: "{{count}} deleted",
     },
     lead: {
       label: "Lead time",

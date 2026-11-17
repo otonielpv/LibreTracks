@@ -16,6 +16,7 @@ import { useTimelineUIStore } from "../../uiStore";
 import type { SongTimeScale } from "../songTimeScale";
 import { resolvePointDrag, songAutomationCues } from "./automationLaneModel";
 import { LeadTail } from "./LeadTail";
+import { handleTimelineItemClick } from "../../timelineItems/timelineItemSelection";
 import { LANE_PREVIEW_FALLBACK_MS } from "./useClipGestures";
 
 /** Row height of the automation lane, in px. */
@@ -126,8 +127,12 @@ function AutomationLaneComponent({ song, region, scale, menus, positionSecondsRe
       detach();
       if (!moved) {
         // Ctrl/Cmd+click selects (for Ctrl+D) instead of opening the editor.
-        if (upEvent.ctrlKey || upEvent.metaKey) {
-          useTimelineUIStore.getState().toggleTimelineItemSelection({ kind: "cue", id: cue.id });
+        if (
+          handleTimelineItemClick(song, { kind: "cue", id: cue.id }, {
+            additive: upEvent.ctrlKey || upEvent.metaKey,
+            range: upEvent.shiftKey,
+          })
+        ) {
           return;
         }
         menus.editAutomationCue(cue);

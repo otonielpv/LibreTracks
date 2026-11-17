@@ -163,6 +163,8 @@ type TimelineUIState = {
   markerSelectionAnchor: RulerMarkerRef | null;
   /** MIDI clips and automation cues selected with Ctrl/Cmd+click. */
   selectedTimelineItems: TimelineItemRef[];
+  /** Where Shift+click counts from: the last item picked. */
+  timelineItemAnchor: TimelineItemRef | null;
   snapEnabled: boolean;
   followPlayheadEnabled: boolean;
   /** DAW: keep the tracks of the song under the playhead scrolled to the top
@@ -215,6 +217,9 @@ type TimelineUIState = {
   /** Ctrl/Cmd+click on a MIDI clip or cue: adds or removes it. */
   toggleTimelineItemSelection: (item: TimelineItemRef) => void;
   setSelectedTimelineItems: (items: TimelineItemRef[]) => void;
+  /** Shift+click: `range` (anchor..clicked, worked out by the caller) joins
+   * the selection; the anchor stays. */
+  extendTimelineItemSelection: (range: TimelineItemRef[]) => void;
   clearSelection: () => void;
   clearSelectionIfAny: () => void;
   selectTrack: (trackIds: string[]) => void;
@@ -271,6 +276,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     selectedMarkers: [],
     markerSelectionAnchor: null,
     selectedTimelineItems: [],
+    timelineItemAnchor: null,
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
     followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     followSongTracksEnabled: false,
@@ -405,11 +411,27 @@ export const useTimelineUIStore = create<TimelineUIState>()(
                 (entry) => !(entry.kind === item.kind && entry.id === item.id),
               )
             : [...state.selectedTimelineItems, item],
+          timelineItemAnchor: item,
         };
       });
     },
     setSelectedTimelineItems: (items) => {
-      set({ ...EMPTY_SELECTION, selectedTimelineItems: items });
+      set({ ...EMPTY_SELECTION, selectedTimelineItems: items, timelineItemAnchor: items[0] ?? null });
+    },
+    extendTimelineItemSelection: (range) => {
+      set((state) => {
+        const next = [...state.selectedTimelineItems];
+        for (const item of range) {
+          if (!next.some((entry) => entry.kind === item.kind && entry.id === item.id)) {
+            next.push(item);
+          }
+        }
+        return {
+          ...EMPTY_SELECTION,
+          selectedTimelineItems: next,
+          timelineItemAnchor: state.timelineItemAnchor,
+        };
+      });
     },
     clearSelection: () => {
       // Soltar la seleccion sale tambien de los modos de sumar: si no, el

@@ -61,6 +61,7 @@ import { useLaneAreaSelection } from "../mobile/useAreaSelection";
 import { armLaneTouchDrag, laneMouseDragAllowed } from "./laneDragStart";
 import { MobileEmptyLanes } from "../mobile/MobileEmptyLanes";
 import { selectedRulerMarkers, useTimelineUIStore } from "../uiStore";
+import { handleTimelineItemClick } from "../timelineItems/timelineItemSelection";
 import { useBoundedTimelineScroll } from "./useBoundedTimelineScroll";
 import {
   LibraryPreviewLanes,
@@ -1378,11 +1379,13 @@ export function TimelineCanvasPane({
                                 markerDidDragRef.current = false;
                                 return;
                               }
-                              // Ctrl/Cmd+click selects (for Ctrl+D), like markers.
-                              if (event.ctrlKey || event.metaKey) {
-                                useTimelineUIStore
-                                  .getState()
-                                  .toggleTimelineItemSelection({ kind: "cue", id: cue.id });
+                              // Ctrl/Cmd+click picks, Shift+click a range.
+                              if (
+                                handleTimelineItemClick(song, { kind: "cue", id: cue.id }, {
+                                  additive: event.ctrlKey || event.metaKey,
+                                  range: event.shiftKey,
+                                })
+                              ) {
                                 return;
                               }
                               // Left-click the diamond opens the editor directly

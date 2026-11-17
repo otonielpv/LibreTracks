@@ -4,6 +4,7 @@ import { secondsToScreenX } from "../timeline/timelineMath";
 import type { MidiClipSummary, SongView } from "../desktopApi";
 import type { useMidiClipHotspots } from "./useMidiClipHotspots";
 import { useTimelineUIStore } from "../uiStore";
+import { handleTimelineItemClick } from "../timelineItems/timelineItemSelection";
 
 /**
  * The invisible hit targets for a MIDI track's clips.
@@ -130,11 +131,13 @@ export function MidiClipHotspots({
               event.preventDefault();
               event.stopPropagation();
               if (consumeDragClick()) return;
-              // Ctrl/Cmd+click selects (for Ctrl+D), like markers.
-              if (event.ctrlKey || event.metaKey) {
-                useTimelineUIStore
-                  .getState()
-                  .toggleTimelineItemSelection({ kind: "midi", id: clip.id });
+              // Ctrl/Cmd+click picks, Shift+click a range (like markers).
+              if (
+                handleTimelineItemClick(song, { kind: "midi", id: clip.id }, {
+                  additive: event.ctrlKey || event.metaKey,
+                  range: event.shiftKey,
+                })
+              ) {
                 return;
               }
               onEdit?.(clip);

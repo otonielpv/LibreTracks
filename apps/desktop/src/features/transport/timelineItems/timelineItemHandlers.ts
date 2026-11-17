@@ -6,6 +6,8 @@ import type {
 } from "@libretracks/shared/models";
 
 import {
+  deleteAutomationCue,
+  deleteMidiClip,
   getSongTempoRegionAtPosition,
   upsertAutomationCue,
   upsertMidiClip,
@@ -189,7 +191,34 @@ export function createTimelineItemHandlers(deps: TimelineItemHandlerDeps) {
     copyItems([item], atSeconds - itemStart(resolved), targetTrackId);
   };
 
-  return { duplicate, duplicateSelected, copyTo };
+  /** Supr: delete the Ctrl/Cmd+click selection. False when empty. */
+  const deleteSelected = (): boolean => {
+    const items = useTimelineUIStore.getState().selectedTimelineItems;
+    if (items.length === 0) return false;
+    deleteItems(items);
+    return true;
+  };
+
+  /** Delete these items (the menu's "Delete" on a selection, or Supr). */
+  const deleteItems = (items: TimelineItemRef[]) => {
+    const resolved = resolve(getSong(), items);
+    if (resolved.length === 0) return;
+    void runAction(async () => {
+      let snapshot: TransportSnapshot | null = null;
+      for (const item of resolved) {
+        snapshot =
+          item.kind === "midi"
+            ? await deleteMidiClip(item.clip.id)
+            : await deleteAutomationCue(item.cue.id);
+      }
+      if (snapshot) applyPlaybackSnapshot(snapshot);
+      await refreshSongView({ includeWaveforms: false, sync: true });
+      useTimelineUIStore.getState().clearSelection();
+      setStatus(t("transport.timelineItems.statusDeleted", { count: resolved.length }));
+    });
+  };
+
+  return { duplicate, duplicateSelected, deleteSelected, deleteItems, copyTo };
 }
 
 export type TimelineItemHandlers = ReturnType<typeof createTimelineItemHandlers>;

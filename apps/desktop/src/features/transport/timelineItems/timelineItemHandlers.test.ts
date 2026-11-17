@@ -4,6 +4,8 @@ import type { SongView } from "@libretracks/shared/models";
 
 const upsertMidiClip = vi.fn(async (clip: unknown) => ({ snapshotFor: clip }));
 const upsertAutomationCue = vi.fn(async (cue: unknown) => ({ snapshotFor: cue }));
+const deleteMidiClip = vi.fn(async (id: string) => ({ deleted: id }));
+const deleteAutomationCue = vi.fn(async (id: string) => ({ deleted: id }));
 
 vi.mock("../desktopApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../desktopApi")>();
@@ -11,11 +13,14 @@ vi.mock("../desktopApi", async (importOriginal) => {
     ...actual,
     upsertMidiClip: (clip: unknown) => upsertMidiClip(clip),
     upsertAutomationCue: (cue: unknown) => upsertAutomationCue(cue),
+    deleteMidiClip: (id: string) => deleteMidiClip(id),
+    deleteAutomationCue: (id: string) => deleteAutomationCue(id),
   };
 });
 
 import { useTimelineUIStore } from "../uiStore";
 import { createTimelineItemHandlers, timelineItemsDuplicateOffset } from "./timelineItemHandlers";
+import { handleTimelineItemClick, itemsForMenu } from "./timelineItemSelection";
 
 // 120 bpm 4/4: a bar is 2 s.
 const song = {
@@ -80,6 +85,8 @@ describe("timeline item duplicate", () => {
   beforeEach(() => {
     upsertMidiClip.mockClear();
     upsertAutomationCue.mockClear();
+    deleteMidiClip.mockClear();
+    deleteAutomationCue.mockClear();
     useTimelineUIStore.getState().clearSelection();
   });
 
@@ -157,5 +164,44 @@ describe("timeline item duplicate", () => {
     store.toggleTimelineItemSelection({ kind: "midi", id: "lyric" });
     store.setSelectedClipIds(["audio"]);
     expect(useTimelineUIStore.getState().selectedTimelineItems).toEqual([]);
+  });
+
+  it("Supr deletes every selected item and clears the selection", async () => {
+    const { items } = handlers();
+    expect(items.deleteSelected()).toBe(false);
+    const store = useTimelineUIStore.getState();
+    store.toggleTimelineItemSelection({ kind: "midi", id: "lyric" });
+    store.toggleTimelineItemSelection({ kind: "cue", id: "cue" });
+    expect(items.deleteSelected()).toBe(true);
+    await flush();
+    expect(deleteMidiClip).toHaveBeenCalledWith("lyric");
+    expect(deleteAutomationCue).toHaveBeenCalledWith("cue");
+    expect(useTimelineUIStore.getState().selectedTimelineItems).toEqual([]);
+  });
+
+  it("Shift+click adds the range from the last pick (same track for MIDI)", () => {
+    const withMore = {
+      ...song,
+      midiClips: [
+        ...(song.midiClips ?? []),
+        { ...song.midiClips![0], id: "mid", timelineStartSeconds: 12 },
+        { ...song.midiClips![0], id: "late", timelineStartSeconds: 16 },
+        { ...song.midiClips![0], id: "other-track", trackId: "x", timelineStartSeconds: 14 },
+      ],
+    } as SongView;
+    expect(handleTimelineItemClick(withMore, { kind: "midi", id: "lyric" }, { additive: false, range: false })).toBe(false);
+    handleTimelineItemClick(withMore, { kind: "midi", id: "lyric" }, { additive: true, range: false });
+    handleTimelineItemClick(withMore, { kind: "midi", id: "late" }, { additive: false, range: true });
+    expect(useTimelineUIStore.getState().selectedTimelineItems.map((item) => item.id).sort()).toEqual(
+      ["late", "lyric", "mid"],
+    );
+  });
+
+  it("a menu on a selected item acts on the whole selection, else on the item", () => {
+    const store = useTimelineUIStore.getState();
+    store.toggleTimelineItemSelection({ kind: "midi", id: "lyric" });
+    store.toggleTimelineItemSelection({ kind: "cue", id: "cue" });
+    expect(itemsForMenu({ kind: "cue", id: "cue" })).toHaveLength(2);
+    expect(itemsForMenu({ kind: "midi", id: "long" })).toEqual([{ kind: "midi", id: "long" }]);
   });
 });

@@ -2084,6 +2084,10 @@ const es = {
       duplicate: "Duplicar",
       statusDuplicated_one: "Duplicado",
       statusDuplicated_other: "{{count}} duplicados",
+      duplicateCount: "Duplicar {{count}}",
+      deleteCount: "Borrar {{count}}",
+      statusDeleted_one: "Borrado",
+      statusDeleted_other: "{{count}} borrados",
     },
     lead: {
       label: "Adelanto",
