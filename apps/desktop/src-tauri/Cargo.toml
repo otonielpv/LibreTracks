@@ -104,6 +104,11 @@ objc2 = "0.6"
 # by a native open panel, so reopening a saved session (and reading all the
 # audio inside its folder) never triggers per-file TCC prompts and survives
 # app updates. objc2 gives us the NSURL bookmark APIs without a C shim.
+# iOS + macOS: the vendored runtime's hook for a dead WebKit content process
+# (vendor/tauri-runtime-wry/LIBRETRACKS_PATCH.md, platform/web_content_guard.rs).
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+tauri-runtime-wry = "2.10.1"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSURL", "NSData", "NSError", "NSString", "NSArray"] }

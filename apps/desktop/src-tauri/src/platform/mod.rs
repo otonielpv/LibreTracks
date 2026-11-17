@@ -41,6 +41,10 @@ pub mod content_uri;
 // Igual: decide qué carpeta borra «Borrar sesión» en iOS.
 pub mod ios_container;
 
+// Cuándo recargar la UI de iOS/macOS si muere el proceso de WebKit; el
+// presupuesto se prueba en todos los sistemas.
+pub mod web_content_guard;
+
 // Compilado en todos los sistemas a proposito: solo el lanzamiento del proceso
 // es de Windows, y dejar el modulo entero tras un `cfg` significaria que ningun
 // `cargo check` de macOS/Linux mira su logica. Ver la cabecera del modulo.

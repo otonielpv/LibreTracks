@@ -30,6 +30,8 @@ thiserror = "2"
 midir = { path = "vendor/midir" }
 # iOS: Rust->WebView events kept flowing while a finger scrolls (vendor/tao/LIBRETRACKS_PATCH.md).
 tao = { path = "vendor/tao" }
+# iOS/macOS: reload the UI when WebKit's content process dies (vendor/tauri-runtime-wry/LIBRETRACKS_PATCH.md).
+tauri-runtime-wry = { path = "vendor/tauri-runtime-wry" }
 
 # Full debug info made target-desktop-native/debug grow past 30 GB (the
 # desktop lib alone is built as staticlib + cdylib + rlib). Line tables keep

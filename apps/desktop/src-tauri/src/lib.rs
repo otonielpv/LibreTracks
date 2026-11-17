@@ -203,6 +203,9 @@ pub fn run() {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 infra::crash_report::install(&app_data_dir);
             }
+            // A dead WebKit content process leaves a blank window; reload it.
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            platform::web_content_guard::install();
             libretracks_video::diagnostics::set_trace_sink(infra::crash_report::breadcrumb_sink);
 
             // Point the C++ engine's debug/diagnostic log at a KNOWN, writable
