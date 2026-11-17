@@ -145,6 +145,7 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     setOneShotBank: vi.fn(testDesktopApiMock.setOneShotBank),
     importUserSample: vi.fn(testDesktopApiMock.importUserSample),
     previewLoopPattern: vi.fn(testDesktopApiMock.previewLoopPattern),
+    listRhythmSamples: vi.fn(testDesktopApiMock.listRhythmSamples),
     // Cerrar la app: la X no existe en los tests y salir no debe matar vitest.
     listenToAppCloseRequested: vi.fn(async () => () => {}),
     exitApp: vi.fn(async () => {}),

@@ -205,3 +205,35 @@ fn a_preview_pattern_sounds_instead_of_the_active_one() {
     let EngineCommand::SetLoopPattern { pattern } = &plan.commands[0] else { panic!("patrón") };
     assert_eq!(pattern.free_bpm, 100.0);
 }
+
+#[test]
+fn lists_builtin_pack_and_user_samples() {
+    let dir = tempfile::tempdir().unwrap();
+    let roots = SampleRoots {
+        builtin: dir.path().join("builtin"),
+        packs: dir.path().join("packs"),
+        user: dir.path().join("user"),
+    };
+    for (path, bytes) in [
+        ("builtin/kick.wav", 10),
+        ("builtin/notes.txt", 3),
+        ("packs/latin/shaker/a.WAV", 20),
+        ("user/mía.flac", 30),
+    ] {
+        let full = dir.path().join(path);
+        std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+        std::fs::write(full, vec![0u8; bytes]).unwrap();
+    }
+    let list = list_samples(&roots);
+    let files: Vec<(String, String)> = list
+        .iter()
+        .map(|e| (format!("{:?}", e.sample.source), e.sample.file.clone()))
+        .collect();
+    assert_eq!(list.len(), 3, "{files:?}");
+    assert_eq!(list[0].sample.file, "kick.wav");
+    assert_eq!(list[0].name, "kick");
+    assert_eq!(list[1].sample.source, SampleSource::Pack { pack_id: "latin".into() });
+    assert_eq!(list[1].sample.file, "shaker/a.WAV");
+    assert_eq!(list[2].sample.source, SampleSource::User);
+    assert_eq!(list[2].bytes, 30);
+}

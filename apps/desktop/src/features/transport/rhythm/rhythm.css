@@ -577,3 +577,54 @@
   outline: 2px solid #fff;
   outline-offset: -2px;
 }
+
+/* ── Editores de pads y kits ─────────────────────────────────────────── */
+.lt-pad-editor,
+.lt-kit-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: #151817;
+  color: #e9f1ee;
+  border: 1px solid rgb(186 202 197 / 0.13);
+  z-index: 80;
+}
+
+.lt-pad-editor.is-popover {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.lt-pad-editor.is-sheet,
+.lt-kit-editor {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  padding: calc(12px + var(--lt-safe-area-top, 0px)) calc(12px + var(--lt-safe-area-right, 0px))
+    calc(12px + var(--lt-safe-area-bottom, 0px)) calc(12px + var(--lt-safe-area-left, 0px));
+}
+
+.lt-pad-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.lt-kit-editor__sound,
+.lt-sample-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.lt-sample-picker__error {
+  color: #ff8a80;
+  margin: 0;
+  flex-basis: 100%;
+}

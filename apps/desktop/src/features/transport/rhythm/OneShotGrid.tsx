@@ -18,6 +18,10 @@ type OneShotGridProps = {
   editMode: boolean;
   handlers: Pick<RhythmHandlers, "padDown" | "padUp" | "stopAllPads" | "selectBank">;
   onEditPad?: (pad: number) => void;
+  /** ✎: entra o sale del modo edición de los pads. */
+  onToggleEdit?: () => void;
+  /** Modo edición: arrastrar un pad sobre otro los intercambia. */
+  onSwap?: (from: number, to: number) => void;
 };
 
 function OneShotGridImpl({
@@ -28,9 +32,13 @@ function OneShotGridImpl({
   editMode,
   handlers,
   onEditPad,
+  onToggleEdit,
+  onSwap,
 }: OneShotGridProps) {
   const { t } = useTranslation();
   const pressed = useRef(new Map<number, number>());
+  const dragFrom = useRef<number | null>(null);
+  const swapped = useRef(false);
 
   const release = (pointerId: number) => {
     const pad = pressed.current.get(pointerId);
@@ -57,6 +65,17 @@ function OneShotGridImpl({
             </button>
           ))}
         </div>
+        {onToggleEdit ? (
+          <button
+            type="button"
+            className={editMode ? "lt-rhythm-chip is-active" : "lt-rhythm-chip"}
+            aria-pressed={editMode}
+            aria-label={t("rhythm.pads.editMode")}
+            onClick={onToggleEdit}
+          >
+            ✎
+          </button>
+        ) : null}
         <button type="button" className="lt-rhythm-stop-all" onClick={() => void handlers.stopAllPads()}>
           {t("rhythm.stopAll")}
         </button>
@@ -87,7 +106,26 @@ function OneShotGridImpl({
                 className="lt-rhythm-pad is-editing"
                 style={{ ["--lt-rhythm-pad-color" as string]: pad.color || undefined }}
                 data-testid={`rhythm-pad-${index}`}
-                onClick={() => onEditPad?.(index)}
+                onPointerDown={(event) => {
+                  event.currentTarget.releasePointerCapture?.(event.pointerId);
+                  dragFrom.current = index;
+                  swapped.current = false;
+                }}
+                onPointerUp={() => {
+                  const from = dragFrom.current;
+                  dragFrom.current = null;
+                  if (from !== null && from !== index) {
+                    swapped.current = true;
+                    onSwap?.(from, index);
+                  }
+                }}
+                onClick={() => {
+                  if (swapped.current) {
+                    swapped.current = false;
+                    return;
+                  }
+                  onEditPad?.(index);
+                }}
               >
                 {pad.name}
               </button>

@@ -8,6 +8,7 @@ import {
   setRhythmLibraryForTest,
 } from "../../../app/testDesktopApiMock";
 import { act, fireEvent, render, screen, waitFor } from "../../../test/testUtils";
+import { saveOneShotSet } from "../desktopApi";
 import { resetFrameGateForTests } from "../frameGate";
 import { loopRowsRenderCount } from "./LoopRows";
 import { RhythmPanel, type RhythmPanelProps } from "./RhythmPanel";
@@ -249,5 +250,18 @@ describe("RhythmPanel", () => {
   it("without a pattern shows the empty card", async () => {
     renderPanel({ settings: { ...DEFAULT_APP_SETTINGS, activeLoopPatternId: "" } });
     expect(await screen.findByTestId("rhythm-empty")).toBeTruthy();
+  });
+
+  it("edit mode: dragging a pad onto another swaps them", async () => {
+    renderPanel({ onEdit: () => {} });
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Edit pads" }));
+    fireEvent.pointerDown(screen.getByTestId("rhythm-pad-0"), { pointerId: 1 });
+    fireEvent.pointerUp(screen.getByTestId("rhythm-pad-1"), { pointerId: 1 });
+    await waitFor(() => expect(saveOneShotSet).toHaveBeenCalled());
+    const saved = vi.mocked(saveOneShotSet).mock.calls[0][0];
+    expect(saved.banks[0].pads[0]?.id).toBe("riser");
+    expect(saved.banks[0].pads[1]?.id).toBe("boom");
+    expect(rhythmTriggerCallsForTest).toHaveLength(0);
   });
 });

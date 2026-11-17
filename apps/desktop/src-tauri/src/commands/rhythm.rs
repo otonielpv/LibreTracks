@@ -275,6 +275,12 @@ pub fn set_one_shot_bank(
     Ok(settings)
 }
 
+/// Muestras que se pueden elegir: incluidas, de packs y propias.
+#[tauri::command(async)]
+pub fn list_rhythm_samples(state: State<'_, DesktopState>) -> Vec<crate::rhythm::RhythmSampleEntry> {
+    state.audio.rhythm_samples()
+}
+
 /// Importa una muestra propia a `loops/user/` (WAV 16 bit, límites de D11).
 #[tauri::command(async)]
 pub fn import_user_sample(path: String, kind: UserSampleKind, state: State<'_, DesktopState>) -> Result<SampleRef, String> {

@@ -2,8 +2,12 @@
 // Una sola definición de guardar para todas las vistas (D14).
 import type { AppSettings, DrumKit, LoopPattern, RegionLoop } from "@libretracks/shared/models";
 
-import { assignLoopToSong, saveLoopPattern, setActivePattern } from "../desktopApi";
+import { useState } from "react";
+
+import { assignLoopToSong, saveDrumKit, saveLoopPattern, saveOneShotSet, setActivePattern } from "../desktopApi";
+import { KitEditor } from "./KitEditor";
 import { LoopEditor, type LoopEditorSaveTarget } from "./LoopEditor";
+import { OneShotPadEditor } from "./OneShotPadEditor";
 import { emptyPattern } from "./patternOps";
 import type { RhythmEditTarget } from "./RhythmPanel";
 import { useRhythmStore } from "./rhythmStore";
@@ -54,7 +58,21 @@ export function RhythmEditors({
 }: RhythmEditorsProps) {
   const library = useRhythmStore((s) => s.library);
   const setLibrary = useRhythmStore((s) => s.setLibrary);
+  const [kitOpen, setKitOpen] = useState(false);
   if (!target || !library) return null;
+
+  if (target.kind === "pad") {
+    return (
+      <OneShotPadEditor
+        set={library.oneShots}
+        bankIndex={Math.min(settings.activeOneShotBank, 3)}
+        padIndex={target.pad}
+        layoutClass={layoutClass}
+        onSave={async (set) => setLibrary(await saveOneShotSet(set))}
+        onClose={onClose}
+      />
+    );
+  }
 
   if (target.kind === "pattern") {
     const editable = patternToEdit(settings, songLoop, library.patterns, library.kits);
@@ -67,15 +85,27 @@ export function RhythmEditors({
       setLibrary(await saveLoopPattern(pattern));
       if (where === "new" || !settings.activeLoopPatternId) onSettings(await setActivePattern(pattern.id));
     };
+    const libraryKit = library.kits.find((k) => k.id === editable.kit.id) ?? null;
     return (
-      <LoopEditor
-        pattern={editable.pattern}
-        kit={editable.kit}
-        layoutClass={layoutClass}
-        songRegionId={songRegionId}
-        onSave={save}
-        onClose={onClose}
-      />
+      <>
+        <LoopEditor
+          pattern={editable.pattern}
+          kit={editable.kit}
+          layoutClass={layoutClass}
+          songRegionId={songRegionId}
+          onSave={save}
+          onClose={onClose}
+          onEditKit={libraryKit ? () => setKitOpen(true) : undefined}
+        />
+        {kitOpen && libraryKit ? (
+          <KitEditor
+            kit={libraryKit}
+            patterns={library.patterns}
+            onSave={async (kit) => setLibrary(await saveDrumKit(kit))}
+            onClose={() => setKitOpen(false)}
+          />
+        ) : null}
+      </>
     );
   }
   return null;

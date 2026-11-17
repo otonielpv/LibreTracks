@@ -390,6 +390,7 @@ pub fn run() {
             commands::rhythm::set_one_shot_bank,
             commands::rhythm::import_user_sample,
             commands::rhythm::preview_loop_pattern,
+            commands::rhythm::list_rhythm_samples,
             commands::pads::get_pads_catalog,
             commands::pads::download_pad,
             commands::pads::delete_pad,

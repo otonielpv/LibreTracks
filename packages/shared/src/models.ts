@@ -3054,3 +3054,10 @@ export const EMPTY_RHYTHM_METERS: RhythmMeterPayload = {
   loopRows: [],
   oneShotsActive: 0,
 };
+
+/** Una muestra elegible en el selector (plan drum-loops, paso 09). */
+export type RhythmSampleEntry = {
+  sample: DrumSampleRef;
+  name: string;
+  bytes: number;
+};

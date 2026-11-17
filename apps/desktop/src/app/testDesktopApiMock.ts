@@ -15,6 +15,7 @@ import type {
   OneShotSet,
   RhythmLibrary,
   RhythmMeterPayload,
+  RhythmSampleEntry,
   UserSampleKind,
   AutomationCueSummary,
   MixSceneMode,
@@ -881,6 +882,16 @@ function mockSectionsFor(regionId: string): SongStructureSummary["sections"] {
 
 // ── Loops de batería y one shots (plan drum-loops) ──────────────────────────
 let rhythmLibrary: RhythmLibrary = { kits: [], patterns: [], oneShots: { banks: [] } };
+let rhythmSamples: RhythmSampleEntry[] = [];
+let importUserSampleError: string | null = null;
+
+export function setRhythmSamplesForTest(samples: RhythmSampleEntry[]) {
+  rhythmSamples = clone(samples);
+}
+
+export function failNextImportForTest(message: string | null) {
+  importUserSampleError = message;
+}
 const rhythmMeterListeners = new Set<(payload: RhythmMeterPayload) => void>();
 /** Llamadas del camino rápido, para que los tests de la UI comprueben qué se
  * mandó sin espiar cada función. */
@@ -909,6 +920,8 @@ function upsertById<T extends { id: string }>(list: T[], item: T): T[] {
 
 export function resetTestDesktopApiMock() {
   rhythmLibrary = { kits: [], patterns: [], oneShots: { banks: [] } };
+  rhythmSamples = [];
+  importUserSampleError = null;
   rhythmMeterListeners.clear();
   rhythmTriggerCallsForTest.length = 0;
   idCounter = 0;
@@ -1162,10 +1175,13 @@ export const testDesktopApiMock = {
     state.appSettings = { ...state.appSettings, activeOneShotBank: bank };
     return clone(state.appSettings);
   },
-  importUserSample: async (path: string, _kind: UserSampleKind): Promise<DrumSampleRef> => ({
-    source: { kind: "user" },
-    file: path.split(/[\\/]/).pop() ?? "sample.wav",
-  }),
+  listRhythmSamples: async () => clone(rhythmSamples),
+  importUserSample: async (path: string, _kind: UserSampleKind): Promise<DrumSampleRef> => {
+    if (importUserSampleError) throw new Error(importUserSampleError);
+    const file = path.split(/[\\/]/).pop() ?? "sample.wav";
+    rhythmSamples = [...rhythmSamples, { sample: { source: { kind: "user" }, file }, name: file.replace(/\.[^.]+$/, ""), bytes: 1 }];
+    return { source: { kind: "user" }, file };
+  },
   listenToTransportLifecycle:
     async (_handler: (event: TransportLifecycleEvent) => void) => () => {},
   listenToAudioMeters:

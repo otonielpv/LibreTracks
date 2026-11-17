@@ -181,6 +181,82 @@ impl RhythmRuntime {
     }
 }
 
+const SAMPLE_EXTENSIONS: &[&str] = &["wav", "flac", "mp3", "ogg", "m4a", "aac"];
+
+/// Una muestra que se puede elegir en el selector.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RhythmSampleEntry {
+    pub sample: SampleRef,
+    /// Nombre legible (el fichero sin extensión).
+    pub name: String,
+    pub bytes: u64,
+}
+
+fn audio_files(dir: &std::path::Path, base: &std::path::Path, out: &mut Vec<(String, u64)>, depth: u8) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let path = entry.path();
+        if path.is_dir() {
+            if depth > 0 {
+                audio_files(&path, base, out, depth - 1);
+            }
+            continue;
+        }
+        let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
+        if !ext.is_some_and(|e| SAMPLE_EXTENSIONS.contains(&e.as_str())) {
+            continue;
+        }
+        if let Ok(rel) = path.strip_prefix(base) {
+            let rel = rel.to_string_lossy().replace('\\', "/");
+            out.push((rel, entry.metadata().map(|m| m.len()).unwrap_or(0)));
+        }
+    }
+}
+
+/// Muestras disponibles: incluidas, de cada pack y propias (paso 09).
+pub fn list_samples(roots: &SampleRoots) -> Vec<RhythmSampleEntry> {
+    let mut list = Vec::new();
+    let mut push = |source: libretracks_core::drum_loops::SampleSource, files: Vec<(String, u64)>| {
+        for (file, bytes) in files {
+            let name = std::path::Path::new(&file)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| file.clone());
+            list.push(RhythmSampleEntry { sample: SampleRef { source: source.clone(), file }, name, bytes });
+        }
+    };
+    let mut builtin = Vec::new();
+    audio_files(&roots.builtin, &roots.builtin, &mut builtin, 2);
+    push(libretracks_core::drum_loops::SampleSource::Builtin, builtin);
+    if let Ok(packs) = std::fs::read_dir(&roots.packs) {
+        let mut packs: Vec<_> = packs.flatten().filter(|e| e.path().is_dir()).collect();
+        packs.sort_by_key(|e| e.file_name());
+        for pack in packs {
+            let mut files = Vec::new();
+            audio_files(&pack.path(), &pack.path(), &mut files, 2);
+            push(
+                libretracks_core::drum_loops::SampleSource::Pack {
+                    pack_id: pack.file_name().to_string_lossy().into_owned(),
+                },
+                files,
+            );
+        }
+    }
+    let mut user = Vec::new();
+    audio_files(&roots.user, &roots.user, &mut user, 0);
+    push(libretracks_core::drum_loops::SampleSource::User, user);
+    list
+}
+
+impl RhythmRuntime {
+    pub fn sample_roots(&self) -> Option<&SampleRoots> {
+        self.roots.as_ref()
+    }
+}
+
 /// El kit de un patrón: el incrustado o el de la biblioteca.
 pub fn kit_for(pattern: &LoopPattern, kits: &[DrumKit]) -> Option<DrumKit> {
     match &pattern.kit {

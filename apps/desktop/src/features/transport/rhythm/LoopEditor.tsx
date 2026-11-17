@@ -27,6 +27,8 @@ type LoopEditorProps = {
   /** Confirmación al cerrar con cambios (inyectable en tests). */
   confirmDiscard?: () => boolean;
   newId?: () => string;
+  /** Abre el editor del kit (solo kits de la biblioteca). */
+  onEditKit?: () => void;
 };
 
 function visibleStepsFor(layout: RhythmLayoutClass, pattern: LoopPattern): number {
@@ -44,6 +46,7 @@ export function LoopEditor({
   onClose,
   confirmDiscard,
   newId = () => `pattern-${Date.now().toString(36)}`,
+  onEditKit,
 }: LoopEditorProps) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(() => normalizePattern(initial, kit));
@@ -166,6 +169,11 @@ export function LoopEditor({
         >
           ↷
         </button>
+        {onEditKit ? (
+          <button type="button" onClick={onEditKit}>
+            {t("rhythm.kit.edit")}
+          </button>
+        ) : null}
         <span className="lt-rhythm-header__spacer" />
         <div className="lt-rhythm-more">
           <button type="button" aria-expanded={saveOpen} onClick={() => setSaveOpen((open) => !open)}>

@@ -10,6 +10,7 @@ import type { AppSettings, DrumKit, LoopPattern, RegionLoop } from "@libretracks
 import {
   getRhythmLibrary,
   isMobileApp,
+  saveOneShotSet,
   listenToRhythmMeters,
   loopSetAllRows,
   loopSetRow,
@@ -25,6 +26,7 @@ import {
 } from "../desktopApi";
 import { LoopRows } from "./LoopRows";
 import { OneShotGrid } from "./OneShotGrid";
+import { swapPads } from "./oneShotOps";
 import { createRhythmHandlers, type RhythmHandlers } from "./rhythmHandlers";
 import { RhythmHeader } from "./RhythmHeader";
 import { useRhythmStore } from "./rhythmStore";
@@ -137,6 +139,8 @@ export function RhythmPanel({
   const surface = useRhythmStore((s) => s.surface);
   const setSurface = useRhythmStore((s) => s.setSurface);
   const padEditMode = useRhythmStore((s) => s.padEditMode);
+  const setPadEditMode = useRhythmStore((s) => s.setPadEditMode);
+  const setLibrary = useRhythmStore((s) => s.setLibrary);
 
   const patterns = library?.patterns ?? [];
   const kits = library?.kits ?? [];
@@ -172,6 +176,13 @@ export function RhythmPanel({
         editMode={padEditMode}
         handlers={handlers}
         onEditPad={(pad) => onEdit?.({ kind: "pad", pad })}
+        onToggleEdit={onEdit ? () => setPadEditMode(!padEditMode) : undefined}
+        onSwap={(from, to) => {
+          if (!library) return;
+          void saveOneShotSet(swapPads(library.oneShots, bankIndex, from, to))
+            .then(setLibrary)
+            .catch(() => {});
+        }}
       />
     </section>
   );

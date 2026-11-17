@@ -10,6 +10,7 @@ import type {
   DrumSampleRef as RhythmSampleRef,
   RhythmLibrary,
   RhythmMeterPayload,
+  RhythmSampleEntry,
   UserSampleKind,
   LoopClockMode,
   LoopQuantize,
@@ -3242,6 +3243,10 @@ export async function setActivePattern(patternId: string): Promise<AppSettings> 
 export async function setOneShotBank(bank: number): Promise<AppSettings> {
   const saved = await invokeCommand<AppSettings>("set_one_shot_bank", { bank });
   return guestMirrorMode ? guestSettings.overlay(saved) : saved;
+}
+
+export async function listRhythmSamples(): Promise<RhythmSampleEntry[]> {
+  return invokeCommand<RhythmSampleEntry[]>("list_rhythm_samples");
 }
 
 export async function importUserSample(path: string, kind: UserSampleKind): Promise<RhythmSampleRef> {

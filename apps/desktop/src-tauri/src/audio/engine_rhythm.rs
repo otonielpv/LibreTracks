@@ -21,6 +21,11 @@ impl AudioController {
         }
     }
 
+    pub fn rhythm_samples(&self) -> Vec<crate::rhythm::RhythmSampleEntry> {
+        let roots = self.rhythm.lock().ok().and_then(|r| r.sample_roots().cloned());
+        roots.map(|roots| crate::rhythm::list_samples(&roots)).unwrap_or_default()
+    }
+
     pub fn rhythm_library(&self) -> Option<libretracks_project::rhythm_library::RhythmLibrary> {
         self.rhythm.lock().ok().and_then(|r| r.library().cloned())
     }
