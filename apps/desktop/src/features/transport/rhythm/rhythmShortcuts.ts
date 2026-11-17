@@ -5,6 +5,7 @@ import {
   loopSetAllRows,
   loopSetRow,
   loopToggle,
+  setLoopPlaying,
   loopToggleRow,
   oneShotDown,
   oneShotsStopAll,
@@ -20,6 +21,7 @@ import { createRhythmHandlers } from "./rhythmHandlers";
 const handlers = createRhythmHandlers({
   api: {
     loopToggle,
+    setLoopPlaying,
     loopToggleRow,
     loopSetRow,
     loopSetAllRows,

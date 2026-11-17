@@ -73,6 +73,7 @@ export function LoopPatternSettings({ pattern, variation, onChange }: LoopPatter
           <option value={3}>{t("rhythm.editor.triplets")}</option>
         </select>
       </label>
+      <span className="lt-loop-settings__divider" aria-hidden="true" />
       <label className="lt-rhythm-field">
         <span className="lt-rhythm-field__label">{t("rhythm.editor.swing")}</span>
         <input
@@ -83,6 +84,7 @@ export function LoopPatternSettings({ pattern, variation, onChange }: LoopPatter
           value={pattern.swing}
           onChange={(event) => onChange({ ...pattern, swing: Number(event.target.value) })}
         />
+        <span className="lt-loop-settings__value">{Math.round(pattern.swing * 100)}%</span>
       </label>
       <label className="lt-rhythm-field">
         <span className="lt-rhythm-field__label">{t("rhythm.editor.freeBpm")}</span>

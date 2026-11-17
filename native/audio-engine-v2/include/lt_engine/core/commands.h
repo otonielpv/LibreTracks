@@ -201,6 +201,7 @@ struct CmdSetLoopConfig {
     std::string quantize = "bar";        // "bar" | "beat" | "immediate"
     std::string route = "master";
     float gain = 1.0f;
+    bool follow_transport = true;          // arranca/para con la canción
 };
 // Loops por canción: un patrón por región, cargado en el frame en que empieza.
 struct CmdSetRegionLoops { std::vector<RegionLoopSpec> regions; };

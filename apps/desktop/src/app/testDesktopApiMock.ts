@@ -468,6 +468,7 @@ function buildInitialState(): DesktopApiMockState {
       loopClockMode: "follow",
       loopFreeBpm: 0,
       loopQuantize: "bar",
+      loopFollowTransport: true,
       loopOutput: "master",
       loopVolume: 1,
       oneShotOutput: "master",
@@ -1155,6 +1156,9 @@ export const testDesktopApiMock = {
   },
   loopToggle: async () => recordRhythmTrigger("loop_toggle"),
   loopToggleRow: async (row: number) => recordRhythmTrigger("loop_toggle_row", { row }),
+  setLoopPlaying: async (playing: boolean) => {
+    recordRhythmTrigger("set_loop_playing", { playing });
+  },
   loopSetRow: async (row: number, variation: number) => recordRhythmTrigger("loop_set_row", { row, variation }),
   loopSetAllRows: async (variation: number) => recordRhythmTrigger("loop_set_all_rows", { variation }),
   oneShotDown: async (pad: number, velocity?: number) =>
@@ -1167,9 +1171,11 @@ export const testDesktopApiMock = {
     quantize: AppSettings["loopQuantize"];
     output: string;
     volume: number;
+    followTransport?: boolean;
   }) => {
     state.appSettings = {
       ...state.appSettings,
+      loopFollowTransport: config.followTransport ?? state.appSettings.loopFollowTransport,
       loopClockMode: config.clockMode,
       loopFreeBpm: config.freeBpm,
       loopQuantize: config.quantize,

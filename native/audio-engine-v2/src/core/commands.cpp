@@ -612,6 +612,7 @@ EngineCommand command_from_json(const std::string& raw) {
         c.quantize = j.value("quantize", std::string{"bar"});
         c.route = j.value("route", std::string{"master"});
         c.gain = j.value("gain", 1.0f);
+        c.follow_transport = j.value("follow_transport", true);
         return c;
     }
 
@@ -783,6 +784,7 @@ std::string command_to_json(const EngineCommand& cmd) {
             j["quantize"] = c.quantize;
             j["route"] = c.route;
             j["gain"] = c.gain;
+            j["follow_transport"] = c.follow_transport;
         }
         else if constexpr (std::is_same_v<T, CmdSetOneShotBank>) {
             j["type"] = "SetOneShotBank";

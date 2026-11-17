@@ -219,6 +219,9 @@ pub enum EngineCommand {
         quantize: String,
         route: String,
         gain: f32,
+        /// Arranca con el play de la canción y para con su stop.
+        #[serde(default = "default_true")]
+        follow_transport: bool,
     },
     /// Loops por canción: el motor carga el de cada región en el frame en que
     /// empieza.
@@ -673,4 +676,8 @@ pub struct OneShotEnginePad {
     /// 0 = sin grupo de corte.
     #[serde(default)]
     pub choke_group: i32,
+}
+
+fn default_true() -> bool {
+    true
 }

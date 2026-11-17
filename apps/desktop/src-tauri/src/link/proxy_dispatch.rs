@@ -58,6 +58,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "seek_transport"
         | "set_active_pattern"
         | "set_loop_config"
+        | "set_loop_playing"
         | "set_one_shot_bank"
         | "set_one_shot_config"
         | "stop_transport"
@@ -225,6 +226,7 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "seek_transport",
     "set_active_pattern",
     "set_loop_config",
+    "set_loop_playing",
     "set_one_shot_bank",
     "set_one_shot_config",
     "stop_transport",
@@ -616,7 +618,15 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
         "set_loop_config" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
-                into_value_result(crate::commands::rhythm::set_loop_config(arg(&args, "clockMode")?, arg(&args, "freeBpm")?, arg(&args, "quantize")?, arg(&args, "output")?, arg(&args, "volume")?, app.clone(), app.state(), app.state()))
+                into_value_result(crate::commands::rhythm::set_loop_config(arg(&args, "clockMode")?, arg(&args, "freeBpm")?, arg(&args, "quantize")?, arg(&args, "output")?, arg(&args, "volume")?, arg(&args, "followTransport")?, app.clone(), app.state(), app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "set_loop_playing" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::rhythm::set_loop_playing(arg(&args, "playing")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?

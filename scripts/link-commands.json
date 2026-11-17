@@ -136,6 +136,7 @@
     "seek_transport",
     "set_active_pattern",
     "set_loop_config",
+    "set_loop_playing",
     "set_one_shot_bank",
     "set_one_shot_config",
     "stop_transport",

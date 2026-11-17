@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import type { DrumKit, LoopPattern } from "@libretracks/shared/models";
 
-import { isMobileApp, loopToggle, previewLoopPattern } from "../desktopApi";
+import { isMobileApp, previewLoopPattern, setLoopPlaying } from "../desktopApi";
 import { LoopPatternSettings } from "./LoopPatternSettings";
 import { VARIATION_LETTERS } from "./LoopRows";
 import { LoopStepGrid } from "./LoopStepGrid";
@@ -85,7 +85,7 @@ export function LoopEditor({
     const next = !listening;
     setListening(next);
     await previewLoopPattern(next ? draft : null).catch(() => {});
-    await loopToggle().catch(() => {});
+    await setLoopPlaying(next).catch(() => {});
   };
 
   const save = async (target: LoopEditorSaveTarget) => {
@@ -113,70 +113,85 @@ export function LoopEditor({
       data-layout={layoutClass}
     >
       <div className="lt-loop-editor__header">
-        <input
-          className="lt-loop-editor__name"
-          aria-label={t("rhythm.editor.name")}
-          value={draft.name}
-          onChange={(event) => apply({ ...draft, name: event.target.value })}
-        />
-        <div className="lt-rhythm-row__variations" role="group" aria-label={t("rhythm.editor.variation")}>
-          {VARIATION_LETTERS.map((letter, index) => (
-            <button
-              key={letter}
-              type="button"
-              className={index === variation ? "lt-rhythm-chip is-active" : "lt-rhythm-chip"}
-              aria-pressed={index === variation}
-              onClick={() => setVariation(index)}
-            >
-              {letter}
-            </button>
-          ))}
+        <div className="lt-loop-editor__group lt-loop-editor__identity">
+          <input
+            className="lt-loop-editor__name"
+            aria-label={t("rhythm.editor.name")}
+            value={draft.name}
+            onChange={(event) => apply({ ...draft, name: event.target.value })}
+          />
+          <span className="lt-loop-editor__kit">
+            <span className="lt-rhythm-field__label">{t("rhythm.editor.kit")}</span>
+            <span className="lt-loop-editor__kit-name">{kit.name}</span>
+            {onEditKit ? (
+              <button type="button" className="lt-loop-editor__link" onClick={onEditKit}>
+                {t("rhythm.kit.edit")}
+              </button>
+            ) : null}
+          </span>
+        </div>
+        <div className="lt-loop-editor__group">
+          <span className="lt-rhythm-field__label">{t("rhythm.editor.variation")}</span>
+          <div className="lt-loop-editor__segmented" role="group" aria-label={t("rhythm.editor.variation")}>
+            {VARIATION_LETTERS.map((letter, index) => (
+              <button
+                key={letter}
+                type="button"
+                className={index === variation ? "is-active" : ""}
+                aria-pressed={index === variation}
+                onClick={() => setVariation(index)}
+              >
+                {letter}
+              </button>
+            ))}
+          </div>
         </div>
         <button
           type="button"
-          className={listening ? "lt-rhythm-play is-playing" : "lt-rhythm-play"}
+          className={listening ? "lt-loop-editor__play is-playing" : "lt-loop-editor__play"}
           aria-pressed={listening}
           aria-label={t("rhythm.editor.listen")}
           onClick={() => void toggleListen()}
         >
-          {listening ? "■" : "▶"}
+          <span className="material-symbols-outlined" aria-hidden="true">
+            {listening ? "stop" : "play_arrow"}
+          </span>
         </button>
-        <button
-          type="button"
-          aria-label={t("rhythm.editor.undo")}
-          disabled={past.length === 0}
-          onClick={() => {
-            const previous = past[past.length - 1];
-            if (!previous) return;
-            setPast(past.slice(0, -1));
-            setFuture([draft, ...future]);
-            setDraft(previous);
-          }}
-        >
-          ↶
-        </button>
-        <button
-          type="button"
-          aria-label={t("rhythm.editor.redo")}
-          disabled={future.length === 0}
-          onClick={() => {
-            const [next, ...rest] = future;
-            if (!next) return;
-            setFuture(rest);
-            setPast([...past, draft]);
-            setDraft(next);
-          }}
-        >
-          ↷
-        </button>
-        {onEditKit ? (
-          <button type="button" onClick={onEditKit}>
-            {t("rhythm.kit.edit")}
-          </button>
-        ) : null}
         <span className="lt-rhythm-header__spacer" />
+        <div className="lt-loop-editor__group">
+          <button
+            type="button"
+            className="lt-loop-editor__icon"
+            aria-label={t("rhythm.editor.undo")}
+            disabled={past.length === 0}
+            onClick={() => {
+              const previous = past[past.length - 1];
+              if (!previous) return;
+              setPast(past.slice(0, -1));
+              setFuture([draft, ...future]);
+              setDraft(previous);
+            }}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">undo</span>
+          </button>
+          <button
+            type="button"
+            className="lt-loop-editor__icon"
+            aria-label={t("rhythm.editor.redo")}
+            disabled={future.length === 0}
+            onClick={() => {
+              const [next, ...rest] = future;
+              if (!next) return;
+              setFuture(rest);
+              setPast([...past, draft]);
+              setDraft(next);
+            }}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">redo</span>
+          </button>
+        </div>
         <div className="lt-rhythm-more">
-          <button type="button" aria-expanded={saveOpen} onClick={() => setSaveOpen((open) => !open)}>
+          <button type="button" className="is-primary" aria-expanded={saveOpen} onClick={() => setSaveOpen((open) => !open)}>
             {t("rhythm.editor.save")} ▾
           </button>
           {saveOpen ? (
@@ -195,8 +210,8 @@ export function LoopEditor({
             </div>
           ) : null}
         </div>
-        <button type="button" className="lt-rhythm-icon" aria-label={t("rhythm.close")} onClick={close}>
-          ×
+        <button type="button" className="lt-loop-editor__icon" aria-label={t("rhythm.close")} onClick={close}>
+          <span className="material-symbols-outlined" aria-hidden="true">close</span>
         </button>
       </div>
       <LoopPatternSettings pattern={draft} variation={variation} onChange={apply} />
@@ -217,6 +232,7 @@ export function LoopEditor({
         </div>
       ) : null}
       <div className="lt-loop-editor__grid">
+        <div className="lt-loop-editor__canvas">
         <LoopStepGrid
           pattern={draft}
           kit={kit}
@@ -226,6 +242,7 @@ export function LoopEditor({
           shortLabels={layoutClass === "short"}
           onChange={apply}
         />
+        </div>
       </div>
     </div>
   );

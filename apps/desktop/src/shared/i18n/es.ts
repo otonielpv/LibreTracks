@@ -2617,6 +2617,7 @@ const es = {
     quantizeBeat: "Tiempo",
     quantizeImmediate: "Inmediato",
     tap: "Tap",
+    followTransport: "Con la canción",
     followHint: "Sigue el tempo de la canción",
     freeHint: "Tempo propio: pulsa Tap para fijarlo",
     bpm: "{{bpm}} BPM",
@@ -2713,6 +2714,8 @@ const es = {
       memory: "Los sonidos ocupan {{used}} MB y el límite es {{limit}} MB. Usa muestras más cortas o menos sonidos.",
     },
     editor: {
+      kit: "Kit",
+      subdivision: "Subdivisión",
       title: "Editor de patrones",
       name: "Nombre del patrón",
       variation: "Variación",

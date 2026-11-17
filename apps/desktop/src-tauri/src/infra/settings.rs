@@ -65,6 +65,10 @@ fn default_loop_quantize() -> String {
     "bar".into()
 }
 
+fn default_loop_follow_transport() -> bool {
+    true
+}
+
 fn default_rhythm_volume() -> f64 {
     1.0
 }
@@ -308,6 +312,9 @@ pub struct AppSettings {
     /// `bar` | `beat` | `immediate`.
     #[serde(default = "default_loop_quantize")]
     pub loop_quantize: String,
+    /// El loop arranca con el play de la canción y para con su stop.
+    #[serde(default = "default_loop_follow_transport")]
+    pub loop_follow_transport: bool,
     #[serde(default = "default_pad_route")]
     pub loop_output: String,
     #[serde(default = "default_rhythm_volume")]
@@ -552,6 +559,7 @@ impl Default for AppSettings {
             loop_clock_mode: default_loop_clock_mode(),
             loop_free_bpm: 0.0,
             loop_quantize: default_loop_quantize(),
+            loop_follow_transport: default_loop_follow_transport(),
             loop_output: default_pad_route(),
             loop_volume: default_rhythm_volume(),
             one_shot_output: default_pad_route(),

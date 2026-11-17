@@ -15,6 +15,7 @@ import {
   loopSetAllRows,
   loopSetRow,
   loopToggle,
+  setLoopPlaying,
   loopToggleRow,
   oneShotDown,
   oneShotsStopAll,
@@ -72,6 +73,7 @@ export function useRhythmHandlers(settings: AppSettings, onSettings: (s: AppSett
       createRhythmHandlers({
         api: {
           loopToggle,
+          setLoopPlaying,
           loopToggleRow,
           loopSetRow,
           loopSetAllRows,

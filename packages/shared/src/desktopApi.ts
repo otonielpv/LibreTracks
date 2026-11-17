@@ -3196,6 +3196,11 @@ export async function loopToggle(): Promise<boolean> {
   return invokeCommand<boolean>("loop_toggle");
 }
 
+/** Arranca o para el loop sin alternar (el ▶ del editor). */
+export async function setLoopPlaying(playing: boolean): Promise<void> {
+  return invokeCommand<void>("set_loop_playing", { playing });
+}
+
 export async function loopToggleRow(row: number): Promise<boolean> {
   return invokeCommand<boolean>("loop_toggle_row", { row });
 }
@@ -3226,8 +3231,12 @@ export async function setLoopConfig(config: {
   quantize: LoopQuantize;
   output: string;
   volume: number;
+  followTransport?: boolean;
 }): Promise<AppSettings> {
-  const saved = await invokeCommand<AppSettings>("set_loop_config", config);
+  const saved = await invokeCommand<AppSettings>("set_loop_config", {
+    ...config,
+    followTransport: config.followTransport ?? null,
+  });
   return guestMirrorMode ? guestSettings.overlay(saved) : saved;
 }
 

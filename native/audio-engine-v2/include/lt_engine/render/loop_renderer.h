@@ -97,6 +97,9 @@ struct LoopConfig {
     LoopQuantize quantize = LoopQuantize::Bar;
     std::string route = "master";
     float gain = 1.0f;
+    // Arranca con el play de la canción y para con su stop (el ▶ del panel
+    // sigue mandando a mano).
+    bool follow_transport = true;
 };
 
 // Tramo del bloque y qué reloj rige en él. El Mixer los rellena en orden,
@@ -229,6 +232,7 @@ private:
     std::atomic<int> route_start_{0};
     std::atomic<int> route_end_{1};
     std::atomic<float> gain_{1.0f};
+    std::atomic<bool> follow_transport_{true};
     std::array<char, 64> route_text_{};
 
     // Publicado para otros hilos
@@ -252,6 +256,7 @@ private:
     std::array<int, kLoopMaxRows> pending_variation_{};
     int pending_playing_ = -1;     // -1 nada, 0 parar, 1 arrancar
     bool playing_now_ = false;
+    bool last_transport_playing_ = false;
     bool realign_start_bar_ = false;
     int64_t start_bar_ = 0;
     std::array<char, 128> current_region_id_{};

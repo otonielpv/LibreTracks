@@ -130,51 +130,85 @@ export function LoopStepGrid({
     setPreview({ row, value: current.value, cells: new Set(current.cells) });
   };
 
+  const beatsVisible = Math.ceil(Math.max(0, steps) / Math.max(1, pattern.stepsPerBeat));
+  const beatGroups = Array.from({ length: beatsVisible }, (_, beat) => {
+    const first = firstStep + beat * pattern.stepsPerBeat;
+    return Array.from({ length: pattern.stepsPerBeat }, (_, i) => first + i).filter((step) => step < firstStep + steps);
+  });
+  const beatsPerBar = Math.max(1, pattern.signature.numerator);
+
   return (
-    <div
-      ref={gridRef}
-      className="lt-step-grid"
-      style={{ ["--lt-step-count" as string]: String(Math.max(1, steps)) }}
-      data-testid="loop-step-grid"
-    >
+    <div ref={gridRef} className="lt-step-grid" data-testid="loop-step-grid">
+      <div className="lt-step-row lt-step-row--ruler" aria-hidden="true">
+        <span className="lt-step-row__label" />
+        <div className="lt-step-row__cells">
+          {beatGroups.map((group, beat) => {
+            const absoluteBeat = Math.floor(group[0] / Math.max(1, pattern.stepsPerBeat));
+            const barStart = absoluteBeat % beatsPerBar === 0;
+            return (
+              <span key={beat} className={barStart ? "lt-step-beat is-bar-start" : "lt-step-beat"}>
+                <span className="lt-step-ruler__number">
+                  {barStart ? `${Math.floor(absoluteBeat / beatsPerBar) + 1}` : `·${(absoluteBeat % beatsPerBar) + 1}`}
+                </span>
+              </span>
+            );
+          })}
+        </div>
+      </div>
       {pattern.rows.map((row, rowIndex) => {
         const sound = kit.sounds.find((s) => s.id === row.soundId);
         const name = sound?.name ?? row.soundId;
         return (
-          <div key={row.soundId} className="lt-step-row" data-testid={`step-row-${rowIndex}`}>
+          <div
+            key={row.soundId}
+            className="lt-step-row"
+            data-testid={`step-row-${rowIndex}`}
+            style={{ ["--lt-step-color" as string]: sound?.color || "#57f1db" }}
+          >
             <span className="lt-step-row__label" title={name}>
-              <span className="lt-step-row__color" style={{ background: sound?.color || undefined }} />
-              {shortLabels ? name.slice(0, 3) : name}
+              <span className="lt-step-row__color" />
+              <span className="lt-step-row__name">{shortLabels ? name.slice(0, 3) : name}</span>
             </span>
-            {Array.from({ length: Math.max(0, steps) }, (_, i) => {
-              const step = firstStep + i;
-              const value = valueAt(rowIndex, step);
-              return (
-                <button
-                  key={step}
-                  type="button"
-                  className={step % pattern.stepsPerBeat === 0 ? "lt-step-cell is-beat" : "lt-step-cell"}
-                  data-step={step}
-                  data-velocity={value}
-                  data-bar-start={step % spb === 0 ? "true" : undefined}
-                  aria-label={`${name} ${step + 1}`}
-                  aria-pressed={value > 0}
-                  onPointerDown={(event) => {
-                    if (event.button === 2) return;
-                    event.preventDefault();
-                    startDrag(rowIndex, step, event.pointerId, event.currentTarget);
-                  }}
-                  onPointerEnter={() => enter(rowIndex, step)}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    clearLongPress();
-                    drag.current = null;
-                    setPreview(null);
-                    onChange(cycleVelocity(pattern, rowIndex, variation, step));
-                  }}
-                />
-              );
-            })}
+            <div className="lt-step-row__cells">
+              {beatGroups.map((group, beat) => {
+                const absoluteBeat = Math.floor(group[0] / Math.max(1, pattern.stepsPerBeat));
+                return (
+                  <span
+                    key={beat}
+                    className={absoluteBeat % beatsPerBar === 0 ? "lt-step-beat is-bar-start" : "lt-step-beat"}
+                  >
+                    {group.map((step) => {
+                      const value = valueAt(rowIndex, step);
+                      return (
+                        <button
+                          key={step}
+                          type="button"
+                          className={step % pattern.stepsPerBeat === 0 ? "lt-step-cell is-beat" : "lt-step-cell"}
+                          data-step={step}
+                          data-velocity={value}
+                          data-bar-start={step % spb === 0 ? "true" : undefined}
+                          aria-label={`${name} ${step + 1}`}
+                          aria-pressed={value > 0}
+                          onPointerDown={(event) => {
+                            if (event.button === 2) return;
+                            event.preventDefault();
+                            startDrag(rowIndex, step, event.pointerId, event.currentTarget);
+                          }}
+                          onPointerEnter={() => enter(rowIndex, step)}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            clearLongPress();
+                            drag.current = null;
+                            setPreview(null);
+                            onChange(cycleVelocity(pattern, rowIndex, variation, step));
+                          }}
+                        />
+                      );
+                    })}
+                  </span>
+                );
+              })}
+            </div>
           </div>
         );
       })}

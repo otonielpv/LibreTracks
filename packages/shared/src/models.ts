@@ -1586,6 +1586,8 @@ export type AppSettings = {
   /** BPM del modo libre fijada por tap; 0 = la del patrón. */
   loopFreeBpm: number;
   loopQuantize: LoopQuantize;
+  /** El loop arranca con el play de la canción y para con su stop. */
+  loopFollowTransport: boolean;
   loopOutput: string;
   loopVolume: number;
   oneShotOutput: string;
@@ -1764,6 +1766,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   loopClockMode: "follow",
   loopFreeBpm: 0,
   loopQuantize: "bar",
+  loopFollowTransport: true,
   loopOutput: "master",
   loopVolume: 1,
   oneShotOutput: "master",
@@ -2080,6 +2083,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
       settings.loopQuantize === "beat" || settings.loopQuantize === "immediate"
         ? settings.loopQuantize
         : "bar",
+    loopFollowTransport: settings.loopFollowTransport !== false,
     loopOutput: typeof settings.loopOutput === "string" && settings.loopOutput ? settings.loopOutput : "master",
     loopVolume: Number.isFinite(settings.loopVolume)
       ? Math.min(AUX_MAX_GAIN, Math.max(0, settings.loopVolume))

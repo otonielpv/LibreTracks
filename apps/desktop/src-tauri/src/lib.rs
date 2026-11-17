@@ -381,6 +381,7 @@ pub fn run() {
             commands::rhythm::assign_loop_to_song,
             commands::rhythm::clear_song_loop,
             commands::rhythm::loop_toggle,
+            commands::rhythm::set_loop_playing,
             commands::rhythm::loop_toggle_row,
             commands::rhythm::loop_set_row,
             commands::rhythm::loop_set_all_rows,

@@ -142,6 +142,16 @@ fn trigger(state: &DesktopState, kind: TriggerKind, index: i32, value: i32) -> R
         .map_err(|e| e.to_string())
 }
 
+/// Arranca (`true`) o para el loop explícitamente, sin alternar (el ▶ del
+/// editor: si el motor ya sonaba no lo para).
+#[tauri::command(async)]
+pub fn set_loop_playing(playing: bool, state: State<'_, DesktopState>) -> Result<(), String> {
+    state
+        .audio
+        .send_rhythm_command("set_loop_playing", EngineCommand::SetLoopTransport { playing })
+        .map_err(|e| e.to_string())
+}
+
 /// Arranca o para el loop (cuantizado). `false` = disparo descartado.
 #[tauri::command(async)]
 pub fn loop_toggle(state: State<'_, DesktopState>) -> Result<bool, String> {
@@ -203,11 +213,15 @@ pub fn set_loop_config(
     quantize: String,
     output: String,
     volume: f64,
+    follow_transport: Option<bool>,
     app: AppHandle,
     settings_store: State<'_, AppSettingsStore>,
     state: State<'_, DesktopState>,
 ) -> Result<AppSettings, String> {
     let settings = update_settings(&app, &settings_store, &state, |s| {
+        if let Some(follow) = follow_transport {
+            s.loop_follow_transport = follow;
+        }
         s.loop_clock_mode = if clock_mode == "free" { "free".into() } else { "follow".into() };
         s.loop_free_bpm = if free_bpm > 0.0 { free_bpm.clamp(30.0, 300.0) } else { 0.0 };
         s.loop_quantize = match quantize.as_str() {

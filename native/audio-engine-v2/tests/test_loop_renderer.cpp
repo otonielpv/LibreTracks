@@ -285,6 +285,11 @@ TEST_CASE("loop renderer: start, variation change and stop are quantized to the 
     const Session session = make_session();
     SUBCASE("start requested mid-bar sounds on the next bar") {
         LoopRenderer loop;
+        // Arranque a mano con la canción ya sonando: sin «Con la canción»,
+        // que lo habría arrancado en el play (eso lo prueba test_loop_mixer).
+        LoopConfig manual;
+        manual.follow_transport = false;
+        loop.set_config(manual);
         loop.set_pattern(every_beat());
         const auto out = run(loop, b, &session, 4 * kBar120, 512,
                              [](Frame f, int n) { return playing_from(0, f, n); },

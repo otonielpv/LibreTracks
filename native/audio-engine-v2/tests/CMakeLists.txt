@@ -58,6 +58,7 @@ add_executable(lt_engine_tests
     test_sample_bank.cpp
     test_loop_renderer.cpp
     test_one_shot_renderer.cpp
+    test_loop_mixer.cpp
 )
 
 target_link_libraries(lt_engine_tests

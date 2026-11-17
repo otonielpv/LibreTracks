@@ -89,7 +89,39 @@ describe("rhythm handlers", () => {
     expect(free.handlers.tap()).toBeNull();  // hace falta un segundo toque
     free.advance(500);
     expect(free.handlers.tap()).toBe(120);
-    await Promise.resolve();
-    expect(free.api.setLoopConfig).toHaveBeenCalledWith(expect.objectContaining({ freeBpm: 120 }));
+    await vi.waitFor(() =>
+      expect(free.api.setLoopConfig).toHaveBeenCalledWith(expect.objectContaining({ freeBpm: 120 })),
+    );
+  });
+
+  it("a burst of volume changes applies only the last answer, in order", async () => {
+    const { handlers, api, applied } = setup();
+    const resolvers: Array<() => void> = [];
+    api.setLoopConfig.mockImplementation(
+      (config) =>
+        new Promise((resolve) => {
+          resolvers.push(() => resolve({ ...DEFAULT_APP_SETTINGS, loopVolume: config.volume }));
+        }),
+    );
+    const done = [0.2, 0.4, 0.6].map((v) => handlers.setLoopVolume(v));
+    // En serie: la segunda no sale hasta que vuelve la primera.
+    await vi.waitFor(() => expect(resolvers).toHaveLength(1));
+    resolvers[0]();
+    await vi.waitFor(() => expect(resolvers).toHaveLength(2));
+    resolvers[1]();
+    await vi.waitFor(() => expect(resolvers).toHaveLength(3));
+    resolvers[2]();
+    await Promise.all(done);
+    expect(applied.map((s) => s.loopVolume)).toEqual([0.6]);
+  });
+
+  it("screen buttons ask for an explicit start or stop", async () => {
+    const { handlers } = setup();
+    await handlers.setLoopPlaying(true);
+    await handlers.setLoopPlaying(false);
+    expect(rhythmTriggerCallsForTest).toEqual([
+      { command: "set_loop_playing", args: { playing: true } },
+      { command: "set_loop_playing", args: { playing: false } },
+    ]);
   });
 });

@@ -146,6 +146,7 @@ void LoopRenderer::set_config(const LoopConfig& config) {
                     std::memory_order_release);
     quantize_.store(static_cast<int>(config.quantize), std::memory_order_release);
     gain_.store(std::clamp(config.gain, 0.0f, kMaxLoopGain), std::memory_order_release);
+    follow_transport_.store(config.follow_transport, std::memory_order_release);
     const std::string route = normalize_aux_route(config.route);
     const AuxRoute parsed = parse_aux_route(route);
     route_mode_.store(static_cast<int>(parsed.mode), std::memory_order_release);
@@ -162,6 +163,7 @@ LoopConfig LoopRenderer::config() const {
     c.free_bpm = free_bpm_.load(std::memory_order_acquire);
     c.quantize = static_cast<LoopQuantize>(quantize_.load(std::memory_order_acquire));
     c.gain = gain_.load(std::memory_order_acquire);
+    c.follow_transport = follow_transport_.load(std::memory_order_acquire);
     c.route = std::string(route_text_.data());
     return c;
 }
@@ -596,6 +598,24 @@ void LoopRenderer::render(float** output_channels,
     program_in_block_ = program_.acquire();
     sync_program(program_in_block_);
     drain_controls();
+
+    // Con la canción: el play del transporte arranca el loop (alineado a la
+    // canción) y el stop lo para, sin esperar al compás. El vamp cuenta como
+    // reproducción: el click sigue y el loop con él.
+    bool transport_playing = false;
+    for (int i = 0; i < span_count; ++i)
+        transport_playing |= spans[i].kind == LoopSpanKind::Playing || spans[i].kind == LoopSpanKind::Vamp;
+    if (transport_playing != last_transport_playing_
+        && follow_transport_.load(std::memory_order_relaxed)) {
+        if (transport_playing && has_pattern_) {
+            playing_now_ = true;
+            realign_start_bar_ = true;
+        } else if (!transport_playing) {
+            playing_now_ = false;
+        }
+        pending_playing_ = -1;
+    }
+    last_transport_playing_ = transport_playing;
 
     const bool free_mode =
         clock_mode_.load(std::memory_order_relaxed) == static_cast<int>(LoopClockMode::Free);

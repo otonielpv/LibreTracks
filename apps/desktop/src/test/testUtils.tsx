@@ -133,6 +133,7 @@ vi.mock("../features/transport/desktopApi", async (importOriginal) => {
     assignLoopToSong: vi.fn(testDesktopApiMock.assignLoopToSong),
     clearSongLoop: vi.fn(testDesktopApiMock.clearSongLoop),
     loopToggle: vi.fn(testDesktopApiMock.loopToggle),
+    setLoopPlaying: vi.fn(testDesktopApiMock.setLoopPlaying),
     loopToggleRow: vi.fn(testDesktopApiMock.loopToggleRow),
     loopSetRow: vi.fn(testDesktopApiMock.loopSetRow),
     loopSetAllRows: vi.fn(testDesktopApiMock.loopSetAllRows),

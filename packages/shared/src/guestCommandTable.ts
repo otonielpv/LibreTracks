@@ -136,6 +136,7 @@ export const GUEST_COMMAND_ROUTES: Readonly<Record<string, GuestCommandRoute>> =
   seek_transport: "control",
   set_active_pattern: "control",
   set_loop_config: "control",
+  set_loop_playing: "control",
   set_one_shot_bank: "control",
   set_one_shot_config: "control",
   stop_transport: "control",

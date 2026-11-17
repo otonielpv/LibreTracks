@@ -197,5 +197,6 @@ pub fn rhythm_loop_config(settings: &crate::infra::settings::AppSettings) -> Eng
         quantize: settings.loop_quantize.clone(),
         route: settings.loop_output.clone(),
         gain: settings.loop_volume as f32,
+        follow_transport: settings.loop_follow_transport,
     }
 }

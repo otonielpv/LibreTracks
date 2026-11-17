@@ -905,6 +905,7 @@ fn loop_commands_serialize_as_the_engine_expects() {
         quantize: "beat".into(),
         route: "ext:3-4".into(),
         gain: 0.8,
+        follow_transport: true,
     })
     .unwrap();
     assert_eq!(config["clock_mode"], "free");

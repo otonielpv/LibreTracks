@@ -1,7 +1,7 @@
 // Cabecera del panel: ▶/■, patrón, BPM (y Tap en Libre), reloj,
 // cuantización, volumen y ✎. En `short` lo secundario va a un menú «⋯» para
 // que la cabecera no haga nunca dos líneas.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { AppSettings, LoopClockMode, LoopPattern, LoopQuantize } from "@libretracks/shared/models";
@@ -20,7 +20,7 @@ type RhythmHeaderProps = {
   freeBpm: number | null;
   handlers: Pick<
     RhythmHandlers,
-    "toggleLoop" | "selectPattern" | "setClockMode" | "setQuantize" | "setLoopVolume" | "tap"
+    "setLoopPlaying" | "selectPattern" | "setClockMode" | "setQuantize" | "setLoopVolume" | "tap" | "setFollowTransport"
   >;
   onEdit?: () => void;
   onClose?: () => void;
@@ -40,6 +40,12 @@ export function RhythmHeader({
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const free = settings.loopClockMode === "free";
+  // Mientras se arrastra el fader manda lo local; los ajustes que vuelven del
+  // backend solo lo sustituyen cuando ya coinciden (sin saltos).
+  const [volumeDraft, setVolumeDraft] = useState<number | null>(null);
+  useEffect(() => {
+    if (volumeDraft !== null && Math.abs(settings.loopVolume - volumeDraft) < 1e-6) setVolumeDraft(null);
+  }, [settings.loopVolume, volumeDraft]);
 
   const secondary = (
     <>
@@ -56,6 +62,14 @@ export function RhythmHeader({
           </button>
         ))}
       </div>
+      <label className="lt-rhythm-field lt-rhythm-switch-field">
+        <input
+          type="checkbox"
+          checked={settings.loopFollowTransport}
+          onChange={(event) => void handlers.setFollowTransport(event.target.checked)}
+        />
+        <span className="lt-rhythm-field__label">{t("rhythm.followTransport")}</span>
+      </label>
       <label className="lt-rhythm-field">
         <span className="lt-rhythm-field__label">{t("rhythm.quantize")}</span>
         <select
@@ -74,8 +88,12 @@ export function RhythmHeader({
           min={0}
           max={2}
           step={0.01}
-          value={settings.loopVolume}
-          onChange={(event) => void handlers.setLoopVolume(Number(event.target.value))}
+          value={volumeDraft ?? settings.loopVolume}
+          onChange={(event) => {
+            const volume = Number(event.target.value);
+            setVolumeDraft(volume);
+            void handlers.setLoopVolume(volume);
+          }}
         />
       </label>
     </>
@@ -89,7 +107,7 @@ export function RhythmHeader({
         className={playing ? "lt-rhythm-play is-playing" : "lt-rhythm-play"}
         aria-pressed={playing}
         aria-label={playing ? t("rhythm.stop") : t("rhythm.play")}
-        onClick={() => void handlers.toggleLoop()}
+        onClick={() => void handlers.setLoopPlaying(!playing)}
       >
         {playing ? "■" : "▶"}
       </button>

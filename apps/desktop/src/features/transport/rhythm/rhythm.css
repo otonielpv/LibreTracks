@@ -438,7 +438,11 @@
   text-shadow: 0 0 6px rgb(87 241 219 / 0.7);
 }
 
-/* ── Editor de patrones ──────────────────────────────────────────────── */
+/* ── Editor de patrones ──────────────────────────────────────────────
+   Barra agrupada arriba, ajustes en una fila de controles y la rejilla
+   como un lienzo: celdas cuadradas de tamaño fijo, agrupadas por tiempos
+   (más aire entre tiempos y aún más entre compases), con el color de cada
+   sonido y la intensidad en la opacidad. */
 .lt-loop-editor {
   --lt-rhythm-bg: #0d100f;
   --lt-rhythm-surface: #151817;
@@ -446,7 +450,11 @@
   --lt-rhythm-border: rgb(186 202 197 / 0.13);
   --lt-rhythm-accent: #57f1db;
   --lt-rhythm-target: 32px;
-  --lt-step-cell: 28px;
+  --lt-step-cell: 34px;
+  --lt-step-gap: 4px;
+  --lt-step-beat-gap: 12px;
+  --lt-step-bar-gap: 22px;
+  --lt-step-label: 168px;
   position: fixed;
   inset: 0;
   z-index: 70;
@@ -460,113 +468,304 @@
 
 .lt-loop-editor.is-touch {
   --lt-rhythm-target: 44px;
+  --lt-step-cell: 40px;
+}
+
+.lt-loop-editor--medium {
+  --lt-step-cell: 38px;
 }
 
 .lt-loop-editor--short {
   --lt-step-cell: 40px;
+  --lt-step-gap: 3px;
+  --lt-step-beat-gap: 8px;
+  --lt-step-bar-gap: 12px;
+  --lt-step-label: 56px;
 }
 
-.lt-loop-editor__header,
-.lt-loop-settings,
-.lt-loop-editor__pages {
+.lt-loop-editor__header {
   display: flex;
-  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
-  min-height: var(--lt-rhythm-target);
-  padding: 0 8px;
+  gap: 16px;
+  min-height: 56px;
+  padding: 0 16px;
   background: var(--lt-rhythm-surface);
   border-bottom: 1px solid var(--lt-rhythm-border);
-  overflow-x: auto;
   white-space: nowrap;
 }
 
+.lt-loop-editor__group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lt-loop-editor__identity {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
 .lt-loop-editor__name {
-  min-width: 0;
-  width: 180px;
+  width: 220px;
+  min-height: 28px !important;
+  padding: 0 6px !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  font-size: 15px !important;
+  font-weight: 700;
+}
+
+.lt-loop-editor__name:hover,
+.lt-loop-editor__name:focus-visible {
+  border-color: rgb(186 202 197 / 0.25) !important;
+}
+
+.lt-loop-editor__kit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 6px;
+  font-size: 12px;
+  color: #b6c2be;
+}
+
+.lt-loop-editor .lt-loop-editor__link {
+  min-height: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--lt-rhythm-accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.lt-loop-editor__segmented {
+  display: inline-flex;
+  padding: 2px;
   background: var(--lt-rhythm-raised);
-  color: inherit;
   border: 1px solid var(--lt-rhythm-border);
-  min-height: calc(var(--lt-rhythm-target) - 8px);
+  border-radius: 6px;
+}
+
+.lt-loop-editor .lt-loop-editor__segmented button {
+  min-width: 34px;
+  min-height: 28px;
   padding: 0 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #b6c2be;
+  font-weight: 700;
+}
+
+.lt-loop-editor .lt-loop-editor__segmented button.is-active {
+  background: var(--lt-rhythm-accent);
+  color: #04110e;
+}
+
+.lt-loop-editor .lt-loop-editor__play {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--lt-rhythm-raised);
+  border: 1px solid rgb(87 241 219 / 0.5);
+  color: var(--lt-rhythm-accent);
+}
+
+.lt-loop-editor .lt-loop-editor__play.is-playing {
+  background: var(--lt-rhythm-accent);
+  color: #04110e;
+}
+
+.lt-loop-editor .lt-loop-editor__icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: #b6c2be;
+}
+
+.lt-loop-editor .lt-loop-editor__icon:disabled {
+  opacity: 0.35;
+}
+
+.lt-loop-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  padding: 10px 16px;
+  background: var(--lt-rhythm-bg);
+  border-bottom: 1px solid var(--lt-rhythm-border);
+}
+
+.lt-loop-settings .lt-rhythm-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lt-loop-settings__divider {
+  width: 1px;
+  height: 22px;
+  background: var(--lt-rhythm-border);
+}
+
+.lt-loop-settings__value {
+  min-width: 34px;
+  font-size: 12px;
+  color: #b6c2be;
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-loop-settings input[type="number"] {
+  width: 72px;
 }
 
 .lt-loop-settings__warning {
+  flex-basis: 100%;
   color: #f2c94c;
+  font-size: 12px;
   margin: 0;
+}
+
+.lt-loop-editor__pages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px 0;
 }
 
 .lt-loop-editor__grid {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
   overscroll-behavior: contain;
+  padding: 16px;
+}
+
+.lt-loop-editor__canvas {
+  display: inline-block;
+  padding: 12px 16px 16px;
+  background: var(--lt-rhythm-surface);
+  border: 1px solid var(--lt-rhythm-border);
+  border-radius: 8px;
 }
 
 .lt-step-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
 }
 
 .lt-step-row {
-  display: grid;
-  grid-template-columns: 120px repeat(var(--lt-step-count), minmax(var(--lt-step-cell), 1fr));
-  gap: 1px;
-  background: var(--lt-rhythm-border);
-  border-bottom: 1px solid var(--lt-rhythm-border);
-}
-
-.lt-loop-editor--short .lt-step-row {
-  grid-template-columns: 52px repeat(var(--lt-step-count), minmax(var(--lt-step-cell), 1fr));
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .lt-step-row__label {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 6px;
-  background: var(--lt-rhythm-surface);
+  gap: 8px;
+  flex: 0 0 var(--lt-step-label);
+  min-width: 0;
+  font-size: 13px;
+}
+
+.lt-step-row__name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .lt-step-row__color {
-  flex: 0 0 4px;
-  align-self: stretch;
-  background: var(--lt-rhythm-accent);
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lt-step-color, var(--lt-rhythm-accent));
 }
 
-.lt-step-cell {
-  min-height: max(var(--lt-step-cell), var(--lt-rhythm-target));
+.lt-step-row__cells {
+  display: flex;
+  gap: var(--lt-step-beat-gap);
+}
+
+.lt-step-beat {
+  display: flex;
+  gap: var(--lt-step-gap);
+}
+
+.lt-step-beat.is-bar-start:not(:first-child) {
+  margin-left: calc(var(--lt-step-bar-gap) - var(--lt-step-beat-gap));
+  padding-left: calc(var(--lt-step-bar-gap) - var(--lt-step-beat-gap));
+  border-left: 1px solid var(--lt-rhythm-border);
+}
+
+.lt-step-row--ruler .lt-step-beat {
+  width: calc(var(--lt-step-cell) * 4 + var(--lt-step-gap) * 3);
+}
+
+.lt-step-ruler__number {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6f7c78;
+}
+
+.lt-step-beat.is-bar-start .lt-step-ruler__number {
+  color: #e9f1ee;
+}
+
+.lt-loop-editor .lt-step-cell {
+  width: var(--lt-step-cell);
+  height: var(--lt-step-cell);
+  min-height: 0;
+  padding: 0;
+  border-radius: 6px;
   background: var(--lt-rhythm-raised);
-  border: none;
+  border: 1px solid rgb(186 202 197 / 0.08);
+  cursor: pointer;
+  transition: background-color 60ms linear;
 }
 
-.lt-step-cell.is-beat {
-  box-shadow: inset 2px 0 0 rgb(255 255 255 / 0.14);
+.lt-loop-editor .lt-step-cell.is-beat {
+  background: #252a29;
 }
 
-.lt-step-cell[data-bar-start="true"] {
-  box-shadow: inset 3px 0 0 rgb(255 255 255 / 0.3);
+.lt-loop-editor .lt-step-cell:hover {
+  border-color: rgb(186 202 197 / 0.35);
 }
 
-.lt-step-cell[data-velocity="1"] {
-  background: rgb(87 241 219 / 0.35);
+.lt-loop-editor .lt-step-cell[data-velocity="1"] {
+  background: var(--lt-step-color);
+  opacity: 0.4;
 }
 
-.lt-step-cell[data-velocity="2"] {
-  background: rgb(87 241 219 / 0.65);
+.lt-loop-editor .lt-step-cell[data-velocity="2"] {
+  background: var(--lt-step-color);
+  opacity: 0.75;
 }
 
-.lt-step-cell[data-velocity="3"] {
-  background: var(--lt-rhythm-accent);
+.lt-loop-editor .lt-step-cell[data-velocity="3"] {
+  background: var(--lt-step-color);
+  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 0.65);
 }
 
-.lt-step-cell.is-playing {
-  outline: 2px solid #fff;
-  outline-offset: -2px;
+.lt-loop-editor .lt-step-cell.is-playing {
+  outline: 2px solid rgb(255 255 255 / 0.55);
+  outline-offset: 1px;
 }
 
 /* ── Editores de pads y kits ─────────────────────────────────────────── */

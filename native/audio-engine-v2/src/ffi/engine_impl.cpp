@@ -2372,6 +2372,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                                 : LoopQuantize::Bar;
                 config.route = c.route;
                 config.gain = c.gain;
+                config.follow_transport = c.follow_transport;
                 mixer_->loop_renderer().set_config(config);
             }
             return Result<void>::ok();

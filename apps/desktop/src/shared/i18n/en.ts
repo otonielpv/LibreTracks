@@ -2588,6 +2588,7 @@ const en = {
     quantizeBeat: "Beat",
     quantizeImmediate: "Immediate",
     tap: "Tap",
+    followTransport: "With the song",
     followHint: "Follows the song's tempo",
     freeHint: "Own tempo: tap to set it",
     bpm: "{{bpm}} BPM",
@@ -2684,6 +2685,8 @@ const en = {
       memory: "The sounds take {{used}} MB and the limit is {{limit}} MB. Use shorter samples or fewer sounds.",
     },
     editor: {
+      kit: "Kit",
+      subdivision: "Subdivision",
       title: "Pattern editor",
       name: "Pattern name",
       variation: "Variation",
