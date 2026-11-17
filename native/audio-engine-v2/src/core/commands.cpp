@@ -615,6 +615,33 @@ EngineCommand command_from_json(const std::string& raw) {
         return c;
     }
 
+    if (type == "SetOneShotBank") {
+        CmdSetOneShotBank c;
+        if (j.contains("pads") && j["pads"].is_array()) {
+            for (const auto& jp : j["pads"]) {
+                OneShotPadSpec p;
+                if (!jp.is_object()) {
+                    c.pads.push_back(p);  // hueco vacío
+                    continue;
+                }
+                p.slot = jp.value("slot", -1);
+                p.gain = jp.value("gain", 1.0f);
+                p.mode = jp.value("mode", std::string{"oneShot"});
+                p.quantize = jp.value("quantize", std::string{"off"});
+                p.choke_group = jp.value("choke_group", 0);
+                c.pads.push_back(std::move(p));
+            }
+        }
+        return c;
+    }
+
+    if (type == "SetOneShotConfig") {
+        CmdSetOneShotConfig c;
+        c.route = j.value("route", std::string{"master"});
+        c.gain = j.value("gain", 1.0f);
+        return c;
+    }
+
     if (type == "SetRegionLoops") {
         CmdSetRegionLoops c;
         if (j.contains("regions") && j["regions"].is_array()) {
@@ -754,6 +781,20 @@ std::string command_to_json(const EngineCommand& cmd) {
             j["clock_mode"] = c.clock_mode;
             j["free_bpm"] = c.free_bpm;
             j["quantize"] = c.quantize;
+            j["route"] = c.route;
+            j["gain"] = c.gain;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetOneShotBank>) {
+            j["type"] = "SetOneShotBank";
+            auto pads = nlohmann::json::array();
+            for (const auto& p : c.pads) {
+                pads.push_back({{"slot", p.slot}, {"gain", p.gain}, {"mode", p.mode},
+                                {"quantize", p.quantize}, {"choke_group", p.choke_group}});
+            }
+            j["pads"] = std::move(pads);
+        }
+        else if constexpr (std::is_same_v<T, CmdSetOneShotConfig>) {
+            j["type"] = "SetOneShotConfig";
             j["route"] = c.route;
             j["gain"] = c.gain;
         }

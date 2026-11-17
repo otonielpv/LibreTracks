@@ -331,6 +331,13 @@ pub struct LoopSnapshot {
     pub current_bar: i32,
     #[serde(default)]
     pub active_voices: i32,
+    /// One shots sonando (bits 0..11).
+    #[serde(default)]
+    pub one_shot_mask: u32,
+    #[serde(default)]
+    pub one_shot_wants_audio: bool,
+    #[serde(default)]
+    pub one_shot_dropped: u64,
 }
 
 fn no_step() -> i32 {

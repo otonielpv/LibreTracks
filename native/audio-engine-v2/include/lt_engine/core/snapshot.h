@@ -194,6 +194,10 @@ struct LoopSnapshot {
     int  current_step = -1;
     int  current_bar = 0;
     int  active_voices = 0;
+    // One shots: pads sonando (bits 0..11) y disparos descartados.
+    uint32_t one_shot_mask = 0;
+    bool one_shot_wants_audio = false;
+    uint64_t one_shot_dropped = 0;
 };
 
 struct EngineSnapshot {

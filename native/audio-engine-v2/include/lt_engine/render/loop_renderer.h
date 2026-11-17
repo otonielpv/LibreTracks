@@ -132,6 +132,10 @@ public:
     /// `enabled`/`variation` < 0 = no cambiar.
     void set_row(int row, int enabled, int variation);
     void set_all_rows(int variation);
+    // Camino rápido (lt_audio_engine_trigger, MIDI): alternan sin conocer el
+    // estado; el hilo de audio resuelve el valor efectivo.
+    void toggle_transport();
+    void toggle_row(int row);
     void set_config(const LoopConfig& config);
     LoopConfig config() const;
     void collect_retired();
@@ -143,6 +147,16 @@ public:
     /// Suena o va a sonar: no se puede suspender el stream.
     bool wants_audio() const noexcept;
     LoopDiagnostics diagnostics() const;
+    bool free_clock() const noexcept {
+        return clock_mode_.load(std::memory_order_acquire) == static_cast<int>(LoopClockMode::Free);
+    }
+
+    // ── Hilo de audio, tras render() del mismo bloque ──────────────────────
+    // Tiempos y compases del reloj del loop que cayeron en el bloque (offsets
+    // dentro del bloque). Los one shots cuantizados los usan cuando no hay
+    // rejilla de canción.
+    bool clock_running() const noexcept { return playing_now_ || beat_mark_count_ > 0; }
+    int block_mark_at_or_after(int offset, bool bar) const noexcept;
 
     // ── Hilo de audio ───────────────────────────────────────────────────
     void render(float** output_channels,
@@ -158,7 +172,7 @@ public:
 
 private:
     struct Control {
-        enum Type : int { Transport = 0, Row = 1, AllRows = 2 };
+        enum Type : int { Transport = 0, Row = 1, AllRows = 2, TransportToggle = 3, RowToggle = 4 };
         int type = Transport;
         int row = 0;
         int enabled = -1;
@@ -186,7 +200,8 @@ private:
                         const Session* session, double sample_rate) noexcept;
     void process_free(int offset, int frames, const Song* song_at_playhead, Frame playhead,
                       double sample_rate) noexcept;
-    void on_step(int64_t bar, int step_in_bar, bool beat_boundary) noexcept;
+    void on_step(int64_t bar, int step_in_bar, bool beat_boundary, int block_offset) noexcept;
+    void push_control(const Control& c) noexcept;
     void apply_pending(int64_t bar) noexcept;
     void maybe_enter_region(const Song* song, Frame frame) noexcept;
     double swing_beats(int64_t step) const noexcept;
@@ -199,6 +214,7 @@ private:
     std::mutex writer_mutex_;      // serializa a los que publican (nunca audio)
     uint64_t next_pattern_serial_ = 1;
     SpscRing<Control, 256> controls_;
+    std::mutex controls_mutex_;    // productores (comandos, disparo rápido)
 
     std::atomic<int> clock_mode_{0};
     std::atomic<double> free_bpm_{0.0};
@@ -259,6 +275,12 @@ private:
 
     std::array<Voice, kLoopVoiceCount> voices_{};
     uint64_t voice_serial_ = 0;
+
+    static constexpr int kMaxBlockMarks = 64;
+    std::array<int, kMaxBlockMarks> beat_marks_{};
+    std::array<int, kMaxBlockMarks> bar_marks_{};
+    int beat_mark_count_ = 0;
+    int bar_mark_count_ = 0;
 };
 
 } // namespace lt

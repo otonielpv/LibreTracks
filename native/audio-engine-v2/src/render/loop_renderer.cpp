@@ -91,7 +91,36 @@ void LoopRenderer::set_transport(bool playing) {
     c.type = Control::Transport;
     c.playing = playing;
     start_requested_.store(playing, std::memory_order_release);
+    push_control(c);
+}
+
+void LoopRenderer::push_control(const Control& c) noexcept {
+    std::lock_guard<std::mutex> lock(controls_mutex_);
     controls_.push(c);
+}
+
+void LoopRenderer::toggle_transport() {
+    Control c;
+    c.type = Control::TransportToggle;
+    // Lo que se pidió por última vez: el render lo corrige al aplicar.
+    start_requested_.store(!start_requested_.load(std::memory_order_acquire), std::memory_order_release);
+    push_control(c);
+}
+
+void LoopRenderer::toggle_row(int row) {
+    if (row < 0 || row >= kLoopMaxRows) return;
+    Control c;
+    c.type = Control::RowToggle;
+    c.row = row;
+    push_control(c);
+}
+
+int LoopRenderer::block_mark_at_or_after(int offset, bool bar) const noexcept {
+    const auto& marks = bar ? bar_marks_ : beat_marks_;
+    const int count = bar ? bar_mark_count_ : beat_mark_count_;
+    for (int i = 0; i < count; ++i)
+        if (marks[static_cast<std::size_t>(i)] >= offset) return marks[static_cast<std::size_t>(i)];
+    return -1;
 }
 
 void LoopRenderer::set_row(int row, int enabled, int variation) {
@@ -101,14 +130,14 @@ void LoopRenderer::set_row(int row, int enabled, int variation) {
     c.row = row;
     c.enabled = enabled < 0 ? -1 : (enabled ? 1 : 0);
     c.variation = variation < 0 ? -1 : std::clamp(variation, 0, kLoopVariations - 1);
-    controls_.push(c);
+    push_control(c);
 }
 
 void LoopRenderer::set_all_rows(int variation) {
     Control c;
     c.type = Control::AllRows;
     c.variation = std::clamp(variation, 0, kLoopVariations - 1);
-    controls_.push(c);
+    push_control(c);
 }
 
 void LoopRenderer::set_config(const LoopConfig& config) {
@@ -175,6 +204,17 @@ void LoopRenderer::drain_controls() noexcept {
             case Control::AllRows:
                 pending_variation_.fill(c.variation);
                 break;
+            case Control::TransportToggle: {
+                const bool will_play = pending_playing_ >= 0 ? pending_playing_ == 1 : playing_now_;
+                pending_playing_ = will_play ? 0 : 1;
+                break;
+            }
+            case Control::RowToggle: {
+                const std::size_t r = static_cast<std::size_t>(c.row);
+                const bool enabled = pending_enabled_[r] >= 0 ? pending_enabled_[r] == 1 : rows_[r].enabled;
+                pending_enabled_[r] = enabled ? 0 : 1;
+                break;
+            }
             default:
                 break;
         }
@@ -217,7 +257,11 @@ void LoopRenderer::apply_pending(int64_t bar) noexcept {
     }
 }
 
-void LoopRenderer::on_step(int64_t bar, int step_in_bar, bool beat_boundary) noexcept {
+void LoopRenderer::on_step(int64_t bar, int step_in_bar, bool beat_boundary, int block_offset) noexcept {
+    if (beat_boundary && beat_mark_count_ < kMaxBlockMarks)
+        beat_marks_[static_cast<std::size_t>(beat_mark_count_++)] = block_offset;
+    if (step_in_bar == 0 && bar_mark_count_ < kMaxBlockMarks)
+        bar_marks_[static_cast<std::size_t>(bar_mark_count_++)] = block_offset;
     const int q = quantize_.load(std::memory_order_relaxed);
     const bool boundary = q == static_cast<int>(LoopQuantize::Immediate)
         || (q == static_cast<int>(LoopQuantize::Beat) && beat_boundary)
@@ -352,7 +396,8 @@ void LoopRenderer::process_follow(int offset, int frames, Frame t0, const Song* 
             render_voices(offset + static_cast<int>(t - t0), static_cast<int>(f - t));
             t = f;
             const int step_in_bar = static_cast<int>(positive_mod(k, song_steps_per_bar));
-            on_step(floor_div(k, song_steps_per_bar), step_in_bar, step_in_bar % spb == 0);
+            on_step(floor_div(k, song_steps_per_bar), step_in_bar, step_in_bar % spb == 0,
+                    offset + static_cast<int>(f - t0));
             last_fired_frame_ = f;
             ++k;
         }
@@ -433,7 +478,8 @@ void LoopRenderer::process_free(int offset, int frames, const Song* song_at_play
             render_voices(offset + static_cast<int>(now - clock_), static_cast<int>(f - now));
             now = f;
             const int step_in_bar = static_cast<int>(positive_mod(free_next_step_, steps_per_bar));
-            on_step(floor_div(free_next_step_, steps_per_bar), step_in_bar, step_in_bar % spb == 0);
+            on_step(floor_div(free_next_step_, steps_per_bar), step_in_bar, step_in_bar % spb == 0,
+                    offset + static_cast<int>(now - clock_));
             ++free_next_step_;
             if (!playing_now_ && pending_playing_ < 0) break;
         }
@@ -544,6 +590,8 @@ void LoopRenderer::render(float** output_channels,
     right_ = std::clamp(route.right, 0, num_channels - 1);
     block_gain_ = gain_.load(std::memory_order_relaxed);
 
+    beat_mark_count_ = 0;
+    bar_mark_count_ = 0;
     bank_version_ = bank.acquire();
     program_in_block_ = program_.acquire();
     sync_program(program_in_block_);

@@ -962,6 +962,7 @@ void EngineImpl::service_control_thread_tasks() {
         // hilo de control, nunca en el render.
         mixer_->sample_bank().collect_retired();
         mixer_->loop_renderer().collect_retired();
+        mixer_->one_shot_renderer().collect_retired();
         const Frame target = mixer_->take_pending_scheduled_jump();
         if (target != Mixer::kNoJumpPending
             && bungee_voices_ && bungee_voices_->is_available()
@@ -1211,6 +1212,10 @@ std::string EngineImpl::build_snapshot(bool include_sources) const {
         snap.loops.current_step = loop_diag.current_step;
         snap.loops.current_bar = loop_diag.current_bar;
         snap.loops.active_voices = loop_diag.active_voices;
+        const OneShotRenderer& one_shots = mixer_->one_shot_renderer();
+        snap.loops.one_shot_mask = one_shots.playing_mask();
+        snap.loops.one_shot_wants_audio = one_shots.wants_audio();
+        snap.loops.one_shot_dropped = one_shots.dropped_triggers();
         snap.mixer_scheduled_jump_executed_count =
             mixer_->scheduled_jump_executed_count();
         snap.mixer_song_end_pause_count = mixer_->song_end_pause_count();
@@ -1682,6 +1687,38 @@ void EngineImpl::load_pad_clip_now(const std::string& pads_dir,
     // playback or snapshots. The swap below is realtime-safe.
     auto clip = load_pad_clip(pads_dir, pad_id, clamped_key, rate);
     mixer_->set_pad_clip(std::move(clip));
+}
+
+int EngineImpl::trigger(int kind, int index, int value) noexcept {
+    if (!mixer_) return -1;
+    bool queued = true;
+    bool makes_sound = false;
+    switch (static_cast<TriggerKind>(kind)) {
+        case TriggerKind::OneShotDown:
+            makes_sound = true;
+            [[fallthrough]];
+        case TriggerKind::OneShotUp:
+        case TriggerKind::OneShotStopAll:
+            queued = mixer_->one_shot_renderer().push_trigger(static_cast<TriggerKind>(kind), index, value);
+            break;
+        case TriggerKind::LoopToggle:
+            mixer_->loop_renderer().toggle_transport();
+            makes_sound = true;
+            break;
+        case TriggerKind::LoopRow:
+            mixer_->loop_renderer().toggle_row(index);
+            break;
+        case TriggerKind::LoopVariation:
+            if (index < 0) mixer_->loop_renderer().set_all_rows(value);
+            else mixer_->loop_renderer().set_row(index, -1, value);
+            break;
+        default:
+            return -1;
+    }
+    if (!queued) return -1;
+    // El disparo no despierta el stream por sí mismo (no compite con el hilo
+    // de comandos): avisa y el host manda SetOutputSuspended{false}.
+    return makes_sound && output_suspended_.load(std::memory_order_relaxed) ? 1 : 0;
 }
 
 std::string EngineImpl::load_samples_now(const std::string& request_json) {
@@ -2335,6 +2372,29 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 config.gain = c.gain;
                 mixer_->loop_renderer().set_config(config);
             }
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetOneShotBank>) {
+            if (mixer_) {
+                OneShotBankData bank;
+                const int count = std::min<int>(kOneShotPads, static_cast<int>(c.pads.size()));
+                for (int i = 0; i < count; ++i) {
+                    const auto& in = c.pads[static_cast<std::size_t>(i)];
+                    auto& out = bank.pads[static_cast<std::size_t>(i)];
+                    out.slot = in.slot;
+                    out.gain = in.gain;
+                    out.mode = in.mode == "gate" ? OneShotMode::Gate : OneShotMode::OneShot;
+                    out.quantize = in.quantize == "bar" ? OneShotQuantize::Bar
+                                 : in.quantize == "beat" ? OneShotQuantize::Beat
+                                 : OneShotQuantize::Off;
+                    out.choke_group = in.choke_group;
+                }
+                mixer_->one_shot_renderer().set_bank(bank);
+            }
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetOneShotConfig>) {
+            if (mixer_) mixer_->one_shot_renderer().set_config(c.route, c.gain);
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetRegionLoops>) {
@@ -4006,7 +4066,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             // decides when it is idle, but a Play may have landed since.
             if (c.suspended
                 && (clock_->position().state == TransportState::Playing
-                    || pad_config_.enabled)) {
+                    || pad_config_.enabled
+                    || (mixer_ && (mixer_->loop_renderer().wants_audio()
+                                   || mixer_->one_shot_renderer().wants_audio())))) {
                 return Result<void>::ok();
             }
             auto r = c.suspended ? device_manager_->stop() : device_manager_->start();

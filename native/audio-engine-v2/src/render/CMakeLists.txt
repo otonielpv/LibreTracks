@@ -7,6 +7,7 @@ target_sources(lt_audio_engine_v2 PRIVATE
     pad_renderer.cpp
     sample_bank.cpp
     loop_renderer.cpp
+    one_shot_renderer.cpp
     mixer.cpp
     render_thread_pool.cpp
     offline_renderer.cpp

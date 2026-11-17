@@ -243,6 +243,14 @@ LT_API void lt_audio_engine_load_pad_clip(LtEngine* engine,
  *  published. */
 LT_API const char* lt_audio_engine_load_samples(LtEngine* engine, const char* request_json);
 
+/** Plan drum-loops: fast trigger for one shots and live loop controls. No JSON,
+ *  no snapshot, no lock; safe from any thread (UI, MIDI). kind: 0 OneShotDown
+ *  (index=pad, value=velocity 0-127), 1 OneShotUp, 2 OneShotStopAll,
+ *  3 LoopToggle, 4 LoopRow (index=row, toggles it), 5 LoopVariation (index=row
+ *  or -1 for all, value=variation). Returns 0 queued, 1 queued but the output
+ *  stream is suspended (send SetOutputSuspended{false}), -1 dropped. */
+LT_API int32_t lt_audio_engine_trigger(LtEngine* engine, int32_t kind, int32_t index, int32_t value);
+
 // ---------------------------------------------------------------------------
 // Decoding cache maintenance (no engine handle required)
 //

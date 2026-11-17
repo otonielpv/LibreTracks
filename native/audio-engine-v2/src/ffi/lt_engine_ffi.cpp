@@ -344,6 +344,11 @@ LT_API void lt_audio_engine_load_pad_clip(LtEngine* engine,
     }
 }
 
+LT_API int32_t lt_audio_engine_trigger(LtEngine* engine, int32_t kind, int32_t index, int32_t value) {
+    if (!engine) return -1;
+    return as_impl(engine)->trigger(static_cast<int>(kind), static_cast<int>(index), static_cast<int>(value));
+}
+
 LT_API const char* lt_audio_engine_load_samples(LtEngine* engine, const char* request_json) {
     thread_local std::string buf;
     if (!engine || !request_json) {

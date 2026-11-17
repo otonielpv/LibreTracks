@@ -205,6 +205,21 @@ struct CmdSetLoopConfig {
 // Loops por canción: un patrón por región, cargado en el frame en que empieza.
 struct CmdSetRegionLoops { std::vector<RegionLoopSpec> regions; };
 
+// One shots (paso 04): los 12 pads del banco activo. El disparo NO es un
+// comando: va por lt_audio_engine_trigger.
+struct OneShotPadSpec {
+    int slot = -1;
+    float gain = 1.0f;
+    std::string mode = "oneShot";        // "oneShot" | "gate"
+    std::string quantize = "off";        // "off" | "beat" | "bar"
+    int choke_group = 0;
+};
+struct CmdSetOneShotBank { std::vector<OneShotPadSpec> pads; };
+struct CmdSetOneShotConfig {
+    std::string route = "master";
+    float gain = 1.0f;
+};
+
 // Punto de medida de los vumetros de pista y carpeta (ajuste global de la
 // app). JSON: {"type":"SetTrackMeterMode","mode":"postFader"|"postPan"|
 // "preFader"}; un valor desconocido cae en postFader. Ver lt::TrackMeterMode
@@ -475,7 +490,7 @@ using EngineCommand = std::variant<
     CmdSetPadConfig, CmdLoadPadClip,
     CmdSetPauseAtSongEnd, CmdSetSongGapVamp, CmdEndSongGapVamp,
     CmdSetLoopPattern, CmdSetLoopTransport, CmdSetLoopRow, CmdSetLoopAllRows,
-    CmdSetLoopConfig, CmdSetRegionLoops,
+    CmdSetLoopConfig, CmdSetRegionLoops, CmdSetOneShotBank, CmdSetOneShotConfig,
     CmdSetTrackMeterMode,
     CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetRegionMasterGain, CmdSetSongRegions,
     CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,

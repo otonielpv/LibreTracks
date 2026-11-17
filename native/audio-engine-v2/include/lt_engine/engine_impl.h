@@ -81,6 +81,11 @@ public:
     // el lock del motor de Rust. Devuelve el JSON de SampleLoadResult.
     std::string load_samples_now(const std::string& request_json);
 
+    // Disparo rápido (paso 04, D9): sin JSON, sin snapshot, sin lock. Devuelve
+    // 0 encolado, 1 encolado con el stream suspendido (el host debe
+    // reanudarlo) y -1 descartado (cola llena o tipo desconocido).
+    int trigger(int kind, int index, int value) noexcept;
+
 private:
 #ifdef LT_ENGINE_BENCHMARK_HOOKS
     friend class StreamingBenchmarkEngine;

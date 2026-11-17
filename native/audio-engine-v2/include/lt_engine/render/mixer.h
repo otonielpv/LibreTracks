@@ -11,6 +11,7 @@
 #include <lt_engine/render/pad_renderer.h>
 #include <lt_engine/render/sample_bank.h>
 #include <lt_engine/render/loop_renderer.h>
+#include <lt_engine/render/one_shot_renderer.h>
 #include <lt_engine/render/render_thread_pool.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
@@ -151,6 +152,9 @@ public:
     // transporte, renderizados una vez por callback como los pads.
     LoopRenderer& loop_renderer() noexcept { return loop_; }
     const LoopRenderer& loop_renderer() const noexcept { return loop_; }
+    // One shots (paso 04): disparo rápido por cola SPSC.
+    OneShotRenderer& one_shot_renderer() noexcept { return one_shots_; }
+    const OneShotRenderer& one_shot_renderer() const noexcept { return one_shots_; }
     // Build the voice-guide announce target from the next pending scheduled jump
     // (so the destination section is spoken before the jump fires). Empty target
     // when no announceable jump is pending.
@@ -516,6 +520,7 @@ private:
     PadRenderer pad_;
     SampleBank sample_bank_;
     LoopRenderer loop_;
+    OneShotRenderer one_shots_;
     // Tramos del bloque en curso y su reloj, para el renderer de loops (que
     // corre una sola vez por callback aunque un salto parta el bloque).
     std::array<LoopSpan, 4> loop_spans_{};

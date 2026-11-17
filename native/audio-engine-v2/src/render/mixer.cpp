@@ -1570,6 +1570,11 @@ void Mixer::render(float** output_channels,
         loop_.render(output_channels, num_channels, num_frames, clock_->sample_rate(),
                      session.get(), loop_spans_.data(), loop_span_count_, sample_bank_,
                      render_output_channels_.data(), render_output_channel_count_);
+        // Después del loop: los one shots cuantizados sin rejilla de canción
+        // caen en los tiempos que el loop marcó en este bloque.
+        one_shots_.render(output_channels, num_channels, num_frames, clock_->sample_rate(),
+                          session.get(), loop_spans_.data(), loop_span_count_, sample_bank_,
+                          &loop_, render_output_channels_.data(), render_output_channel_count_);
     }
 
     phase_mark(phase_t, phase_tracks_us_);  // track render loop (+ jump split)

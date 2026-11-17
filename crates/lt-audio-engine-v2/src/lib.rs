@@ -9,6 +9,7 @@ mod events;
 mod ffi;
 mod render;
 mod samples;
+mod trigger;
 mod snapshot;
 
 #[cfg(test)]
@@ -19,6 +20,7 @@ pub use error::EngineError;
 pub use events::*;
 pub use render::*;
 pub use samples::*;
+pub use trigger::*;
 pub use snapshot::*;
 
 use ffi::*;
@@ -281,6 +283,18 @@ impl Engine {
     /// bajo un lock breve y se usa sin él, como `pad_loader`.
     pub fn sample_loader(&self) -> SampleLoader {
         SampleLoader {
+            handle: self.handle,
+        }
+    }
+
+    /// Disparo rápido (one shots y controles de loop): sin JSON ni snapshot.
+    pub fn trigger(&self, kind: TriggerKind, index: i32, value: i32) -> TriggerOutcome {
+        self.trigger_handle().trigger(kind, index, value)
+    }
+
+    /// [`EngineTrigger`] para disparar sin el lock del motor (UI, MIDI).
+    pub fn trigger_handle(&self) -> EngineTrigger {
+        EngineTrigger {
             handle: self.handle,
         }
     }

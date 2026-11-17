@@ -142,6 +142,7 @@ extern "C" {
         engine: *mut LtEngine,
         request_json: *const c_char,
     ) -> *const c_char;
+    pub fn lt_audio_engine_trigger(engine: *mut LtEngine, kind: i32, index: i32, value: i32) -> i32;
     pub fn lt_audio_engine_source_cache_dir() -> *const c_char;
     pub fn lt_audio_engine_source_cache_size_bytes() -> u64;
     pub fn lt_audio_engine_purge_source_cache() -> u64;
@@ -236,6 +237,7 @@ pub unsafe fn lt_audio_engine_poll_event(_: *mut LtEngine) -> *const c_char {
     all(target_os = "android", not(lt_engine_android_link))
 ))]
 pub unsafe fn lt_audio_engine_get_snapshot(_: *mut LtEngine) -> *const c_char {
+    STUB_SNAPSHOT_CALLS.with(|calls| calls.set(calls.get() + 1));
     // The safe wrapper deserializes this into EngineSnapshot, which has a few
     // non-defaulted fields (current_frame, device, cpu, meters…). Returning a
     // bare "{}" fails to deserialize, so emit a fully-defaulted snapshot. The
@@ -390,6 +392,24 @@ pub unsafe fn lt_audio_engine_load_pad_clip(
     _: i32,
     _: i32,
 ) {
+}
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
+pub unsafe fn lt_audio_engine_trigger(_: *mut LtEngine, _: i32, _: i32, _: i32) -> i32 {
+    STUB_TRIGGER_CALLS.with(|calls| calls.set(calls.get() + 1));
+    0
+}
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
+thread_local! {
+    /// Llamadas a los stubs en este hilo (test de que disparar no pide
+    /// snapshot, plan drum-loops paso 04).
+    pub static STUB_TRIGGER_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    pub static STUB_SNAPSHOT_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 #[cfg(any(
     feature = "no-link",

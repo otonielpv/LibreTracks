@@ -225,6 +225,15 @@ pub enum EngineCommand {
     SetRegionLoops {
         regions: Vec<RegionLoopEngine>,
     },
+    /// One shots: los 12 pads del banco activo. Disparar NO es un comando:
+    /// va por `Engine::trigger`.
+    SetOneShotBank {
+        pads: Vec<Option<OneShotEnginePad>>,
+    },
+    SetOneShotConfig {
+        route: String,
+        gain: f32,
+    },
 
     /// Decode a single ambient-pad key from disk and swap it into the renderer.
     /// The engine reads `<pads_dir>/<pad_id>/<key>.<ext>`. Decoding happens off
@@ -651,4 +660,17 @@ pub struct RegionLoopEngine {
     pub autostart: bool,
     #[serde(default)]
     pub initial_rows: Vec<LoopEngineRowState>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OneShotEnginePad {
+    pub slot: i32,
+    pub gain: f32,
+    /// `oneShot` | `gate`
+    pub mode: String,
+    /// `off` | `beat` | `bar`
+    pub quantize: String,
+    /// 0 = sin grupo de corte.
+    #[serde(default)]
+    pub choke_group: i32,
 }
