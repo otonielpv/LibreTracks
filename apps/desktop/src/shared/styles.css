@@ -11706,6 +11706,24 @@ body.lt-song-reordering .lt-compact-column-resize-slot {
   padding: 0.5rem 0.6rem;
 }
 
+/* The "+ Create" next to it: it sat outside `.lt-inline-actions`, so it fell
+   back to the browser's grey button. Same look as the modal's primary action. */
+.lt-midi-add-control button {
+  flex: 0 0 auto;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.24);
+  background: rgb(87 241 219 / 0.14);
+  color: #f3f0ef;
+  padding: 0.5rem 0.9rem;
+  font: 700 0.82rem/1 "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.lt-midi-add-control button:hover {
+  border-color: rgb(87 241 219 / 0.5);
+  color: #57f1db;
+}
+
 /* The row header is a button so the whole strip toggles the row; it must not
    look like one, hence the reset. */
 .lt-midi-event-toggle {
