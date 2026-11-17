@@ -116,4 +116,42 @@ describe("MidiClipModal", () => {
       expect.objectContaining({ lead: { unit: "seconds", seconds: 0.75 } }),
     );
   });
+
+  it("remembers which messages were folded when the clip is opened again", () => {
+    const draft = {
+      clipId: "fold-clip",
+      trackId: "midi-track-1",
+      timelineStartSeconds: 8,
+      name: "Folds",
+      events: [
+        { id: "e1", atSeconds: 0, channel: null, kind: { type: "programChange" as const, program: 1 } },
+        { id: "e2", atSeconds: 0, channel: null, kind: { type: "programChange" as const, program: 2 } },
+      ],
+    };
+    const first = render(
+      <MidiClipModal draft={draft} song={null} onCancel={vi.fn()} onConfirm={vi.fn()} />,
+    );
+    const toggles = () => first.container.querySelectorAll<HTMLButtonElement>(".lt-midi-event-toggle");
+    fireEvent.click(toggles()[0]);
+    expect(toggles()[0].getAttribute("aria-expanded")).toBe("false");
+    first.unmount();
+
+    const again = render(
+      <MidiClipModal draft={draft} song={null} onCancel={vi.fn()} onConfirm={vi.fn()} />,
+    );
+    const reopened = again.container.querySelectorAll<HTMLButtonElement>(".lt-midi-event-toggle");
+    expect(reopened[0].getAttribute("aria-expanded")).toBe("false");
+    expect(reopened[1].getAttribute("aria-expanded")).toBe("true");
+    again.unmount();
+
+    // A brand-new clip starts with everything open.
+    const fresh = render(
+      <MidiClipModal draft={{ ...draft, clipId: null }} song={null} onCancel={vi.fn()} onConfirm={vi.fn()} />,
+    );
+    expect(
+      Array.from(fresh.container.querySelectorAll(".lt-midi-event-toggle")).every(
+        (toggle) => toggle.getAttribute("aria-expanded") === "true",
+      ),
+    ).toBe(true);
+  });
 });

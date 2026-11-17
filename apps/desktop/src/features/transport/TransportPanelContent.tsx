@@ -374,6 +374,7 @@ import type {
 import { createMarkerMoveHandlers } from "./timeline/markerMoveHandlers";
 import { createRulerMarkerHandlers } from "./rulerMarkers/rulerMarkerHandlers";
 import { createTimelineItemHandlers } from "./timelineItems/timelineItemHandlers";
+import { cueFoldKey, moveFolds, NEW_CUE_FOLD_KEY } from "./panels/editorFolds";
 import { useLibraryState } from "./hooks/useLibraryState";
 import { useSongWaveforms } from "./hooks/useSongWaveforms";
 import { useWaveformProgress } from "./hooks/useWaveformProgress";
@@ -5468,8 +5469,10 @@ export function TransportPanelContent() {
             : t("transport.automation.labelActionsCount", {
                 count: result.actions.length,
               });
+        const cueId = draft.cueId ?? createAutomationCueId();
+        if (!draft.cueId) moveFolds(NEW_CUE_FOLD_KEY, cueFoldKey(cueId));
         const nextSnapshot = await upsertAutomationCue({
-          id: draft.cueId ?? createAutomationCueId(),
+          id: cueId,
           name: draft.name ?? label,
           atSeconds: draft.atSeconds,
           enabled: true,

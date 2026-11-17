@@ -28,6 +28,7 @@ import {
 import { useDismissOnBack } from "../mobile/backNavigation";
 import { LeadTimeField } from "./LeadTimeField";
 import { normalizeLead } from "./leadTime";
+import { cueFoldKey, foldsFor, rememberFolds } from "./editorFolds";
 import {
   MetronomeActionEditor,
   VoiceGuideActionEditor,
@@ -180,7 +181,13 @@ export function AutomationCueModal({
   // Collapsed rows are tracked by index, not id: an action has no stable id.
   // Reordering therefore keeps the *position* folded rather than the action,
   // which is the lesser evil versus minting ids just for this.
-  const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
+  // Folded rows survive closing the editor (editorFolds.ts).
+  const [collapsed, setCollapsed] = useState<Set<number>>(
+    () => new Set(Array.from(foldsFor(cueFoldKey(draft?.cueId ?? null)), Number)),
+  );
+  useEffect(() => {
+    if (draft) rememberFolds(cueFoldKey(draft.cueId), collapsed);
+  }, [collapsed, draft]);
 
   useEffect(() => {
     let cancelled = false;

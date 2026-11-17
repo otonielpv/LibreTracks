@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -13,6 +13,7 @@ import { MidiEventFields, describeEvent } from "./MidiEventFields";
 import { useDismissOnBack } from "../mobile/backNavigation";
 import { LeadTimeField } from "./LeadTimeField";
 import { normalizeLead } from "./leadTime";
+import { foldsFor, midiClipFoldKey, rememberFolds } from "./editorFolds";
 
 /**
  * What the modal is editing. `clipId` is present when editing an existing clip.
@@ -121,7 +122,13 @@ export function MidiClipModal({
   );
   const [name, setName] = useState(() => draft?.name ?? "");
   const [lead, setLead] = useState<LeadTime | null>(() => normalizeLead(draft?.lead));
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  // Folded rows survive closing the editor (editorFolds.ts).
+  const [collapsed, setCollapsed] = useState<Set<string>>(() =>
+    foldsFor(midiClipFoldKey(draft?.clipId ?? null)),
+  );
+  useEffect(() => {
+    if (draft) rememberFolds(midiClipFoldKey(draft.clipId), collapsed);
+  }, [collapsed, draft]);
   const [pendingType, setPendingType] =
     useState<MidiEventKindSummary["type"]>("note");
 

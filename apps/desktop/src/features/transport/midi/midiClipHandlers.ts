@@ -13,6 +13,7 @@ import {
 } from "../desktopApi";
 import type { MidiRouteDraft } from "../panels/MidiRouteModal";
 import { recordProductEvent } from "../../telemetry/telemetry";
+import { midiClipFoldKey, moveFolds, NEW_MIDI_CLIP_FOLD_KEY } from "../panels/editorFolds";
 
 /**
  * Handlers for creating, editing, moving and deleting MIDI clips.
@@ -71,8 +72,10 @@ export function createMidiClipHandlers(deps: MidiClipHandlerDeps) {
   }) => {
     await runAction(async () => {
       const isNew = input.clipId === null;
+      const id = input.clipId ?? nextClipId();
+      if (isNew) moveFolds(NEW_MIDI_CLIP_FOLD_KEY, midiClipFoldKey(id));
       const snapshot = await upsertMidiClip({
-        id: input.clipId ?? nextClipId(),
+        id,
         trackId: input.trackId,
         timelineStartSeconds: input.timelineStartSeconds,
         name: input.name,
