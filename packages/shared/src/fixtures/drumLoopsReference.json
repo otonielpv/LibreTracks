@@ -1,0 +1,127 @@
+{
+  "regionLoop": {
+    "pattern": {
+      "id": "p1",
+      "name": "Pop",
+      "kit": {
+        "kind": "embedded",
+        "kit": {
+          "id": "kit",
+          "name": "Kit",
+          "sounds": [
+            {
+              "id": "shaker",
+              "name": "Shaker",
+              "color": "#ffaa00",
+              "sample": {
+                "source": {
+                  "kind": "pack",
+                  "packId": "latin"
+                },
+                "file": "shaker.wav"
+              },
+              "gainDb": -3.0,
+              "chokeGroup": 1
+            }
+          ]
+        }
+      },
+      "bpm": 92.0,
+      "signature": {
+        "numerator": 3,
+        "denominator": 4
+      },
+      "stepsPerBeat": 4,
+      "bars": 1,
+      "swing": 0.25,
+      "rows": [
+        {
+          "soundId": "shaker",
+          "gainDb": 0.0,
+          "variations": [
+            [
+              2,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              3,
+              0,
+              0,
+              0
+            ],
+            [],
+            [],
+            []
+          ]
+        }
+      ]
+    },
+    "autostart": true,
+    "initialRows": [
+      {
+        "enabled": true,
+        "variation": 1
+      }
+    ]
+  },
+  "libraryKitRef": {
+    "kind": "library",
+    "kitId": "basic"
+  },
+  "userSample": {
+    "source": {
+      "kind": "user"
+    },
+    "file": "mine.wav"
+  },
+  "builtinSample": {
+    "source": {
+      "kind": "builtin"
+    },
+    "file": "kick.wav"
+  },
+  "liveState": {
+    "patternId": "p1",
+    "playing": true,
+    "rows": [
+      {
+        "enabled": false,
+        "variation": 3
+      }
+    ]
+  },
+  "oneShotSet": {
+    "banks": [
+      {
+        "id": "a",
+        "name": "A",
+        "pads": [
+          {
+            "id": "boom",
+            "name": "Boom",
+            "color": "#00ff00",
+            "sample": {
+              "source": {
+                "kind": "builtin"
+              },
+              "file": "boom.wav"
+            },
+            "gainDb": 1.5,
+            "mode": "gate",
+            "quantize": "bar",
+            "chokeGroup": 2
+          },
+          null
+        ]
+      }
+    ]
+  },
+  "patternError": {
+    "code": "unknownSound",
+    "soundId": "x"
+  }
+}

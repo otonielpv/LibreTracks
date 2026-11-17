@@ -289,6 +289,7 @@ pub(super) fn ensure_region_covers_clip_for_file(
     }
     let region_index = song.regions.len();
     song.regions.push(SongRegion {
+        drum_loop: None,
         key_changes: Vec::new(),
         id: format!("region_{}_{}", timestamp_suffix(), region_index),
         name: default_region_name(locale, region_index),
@@ -433,6 +434,7 @@ mod region_message_tests {
 
     fn region(name: &str, start: f64, end: f64) -> SongRegion {
         SongRegion {
+            drum_loop: None,
             key_changes: Vec::new(),
             id: format!("region_{name}"),
             name: name.to_string(),

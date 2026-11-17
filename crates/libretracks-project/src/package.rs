@@ -1409,6 +1409,7 @@ pub fn merge_extracted_song_package(
         .max(furthest_clip_end_offset)
         .max(furthest_video_end_offset);
     next_song.regions.push(SongRegion {
+        drum_loop: None,
         id: region_id,
         name: manifest.song_title.clone(),
         start_seconds: insert_at_seconds,
@@ -1628,6 +1629,7 @@ mod tests {
 
     fn region(id: &str, name: &str, start: f64, end: f64) -> SongRegion {
         SongRegion {
+            drum_loop: None,
             key_changes: Vec::new(),
             id: id.into(),
             name: name.into(),

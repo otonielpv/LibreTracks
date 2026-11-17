@@ -716,6 +716,7 @@ pub(super) fn replace_song_region_range(song: &mut Song, replacement: SongRegion
             fragment_index += 1;
             let keys = region.key_map_between(region.start_seconds, replacement.start_seconds);
             next_regions.push(SongRegion {
+                drum_loop: region.drum_loop.clone(),
                 id: format!(
                     "{}_fragment_{}_{}",
                     region.id,
@@ -743,6 +744,7 @@ pub(super) fn replace_song_region_range(song: &mut Song, replacement: SongRegion
             fragment_index += 1;
             let keys = region.key_map_between(replacement.end_seconds, region.end_seconds);
             next_regions.push(SongRegion {
+                drum_loop: region.drum_loop.clone(),
                 id: format!(
                     "{}_fragment_{}_{}",
                     region.id,
@@ -931,6 +933,7 @@ mod snap_regions_after_to_downbeats_tests {
 
     fn region(id: &str, start: f64, end: f64) -> SongRegion {
         SongRegion {
+            drum_loop: None,
             key_changes: Vec::new(),
             id: id.into(),
             name: id.into(),

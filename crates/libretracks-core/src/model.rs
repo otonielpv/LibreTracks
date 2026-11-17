@@ -135,6 +135,13 @@ pub struct SongRegion {
     /// Se omite si está vacío: una versión vieja ve la nota inicial.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub key_changes: Vec<KeyChange>,
+    /// Loop de batería asignado a esta canción (copia incrustada del patrón,
+    /// plan `drum-loops`). `None` —y lo que deserializan las sesiones de
+    /// antes— es una canción sin loop propio. Se omite al guardar, así que una
+    /// canción sin loop se escribe igual que antes y una versión vieja, que no
+    /// rechaza campos desconocidos, lo ignora.
+    #[serde(rename = "loop", default, skip_serializing_if = "Option::is_none")]
+    pub drum_loop: Option<crate::drum_loops::RegionLoop>,
 }
 
 /// Un cambio de nota dentro de una canción. Igual que `SongRegion.key`, es la

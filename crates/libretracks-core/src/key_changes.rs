@@ -209,6 +209,7 @@ mod tests {
     #[test]
     fn resizing_keeps_each_change_where_it_sounds() {
         let mut region = SongRegion {
+            drum_loop: None,
             id: "r".into(),
             name: "r".into(),
             start_seconds: 10.0,

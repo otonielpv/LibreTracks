@@ -242,6 +242,7 @@ impl DesktopSession {
         let region_index = song.regions.len();
         let region_name = default_region_name(ui_locale(audio).as_deref(), region_index);
         let region = SongRegion {
+            drum_loop: None,
             key_changes: Vec::new(),
             id: format!("region_{}_{}", timestamp_suffix(), region_index),
             name: region_name,
@@ -342,6 +343,7 @@ impl DesktopSession {
             .unwrap_or_else(|| default_region_name(ui_locale(audio).as_deref(), region_index));
 
         let region = SongRegion {
+            drum_loop: None,
             key_changes: Vec::new(),
             id: format!("region_{}_{}", timestamp_suffix(), region_index),
             name: region_name,
@@ -438,6 +440,7 @@ impl DesktopSession {
         let (start_seconds, end_seconds) =
             sanitize_region_bounds(&song, start_seconds, end_seconds)?;
         let mut updated_region = SongRegion {
+            drum_loop: existing_region.drum_loop.clone(),
             id: existing_region.id.clone(),
             name: trimmed_name.to_string(),
             start_seconds,
@@ -699,6 +702,7 @@ impl DesktopSession {
         }
 
         let updated_region = SongRegion {
+            drum_loop: existing_region.drum_loop.clone(),
             id: existing_region.id.clone(),
             name: existing_region.name.clone(),
             start_seconds: new_start,
@@ -1469,6 +1473,7 @@ impl DesktopSession {
 
         let right_keys = region.key_map_between(split_seconds, region.end_seconds);
         let right = SongRegion {
+            drum_loop: region.drum_loop.clone(),
             id: format!("region_{}_{}", timestamp_suffix(), song.regions.len()),
             name: format!("{} (2)", region.name),
             start_seconds: split_seconds,

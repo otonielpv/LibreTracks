@@ -137,6 +137,7 @@ fn full_structure() -> SongStructure {
 
 fn region_with(structure: Option<SongStructure>) -> SongRegion {
     SongRegion {
+        drum_loop: None,
         key_changes: Vec::new(),
         id: "r1".into(),
         name: "Canción".into(),

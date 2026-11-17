@@ -1,5 +1,6 @@
 pub mod audio_clock;
 pub mod automation;
+pub mod drum_loops;
 pub mod key_changes;
 pub mod lead_plan;
 pub mod lead_time;
@@ -61,6 +62,7 @@ mod tests {
             tempo_markers: vec![],
             time_signature_markers: vec![],
             regions: vec![SongRegion {
+                drum_loop: None,
                 key_changes: Vec::new(),
                 id: "region_intro".into(),
                 name: "Cancion".into(),
@@ -162,6 +164,7 @@ mod tests {
     fn allows_regions_beyond_song_duration() {
         let mut song = valid_song();
         song.regions.push(SongRegion {
+            drum_loop: None,
             key_changes: Vec::new(),
             id: "region_outro".into(),
             name: "Outro".into(),
@@ -221,6 +224,7 @@ mod tests {
         // so the boundary is real, then make the clip extend across it.
         let mut song = valid_song();
         song.regions.push(SongRegion {
+            drum_loop: None,
             key_changes: Vec::new(),
             id: "region_outro".into(),
             name: "Outro".into(),
@@ -253,6 +257,7 @@ mod tests {
         let mut song = valid_song();
         song.regions[0].end_seconds = 10.0;
         song.regions.push(SongRegion {
+            drum_loop: None,
             key_changes: Vec::new(),
             id: "region_outro".into(),
             name: "Outro".into(),

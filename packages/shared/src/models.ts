@@ -2848,3 +2848,124 @@ export function getMusicalPositionForSong(
     getSongBaseTimeSignature(song),
   );
 }
+
+// ---------------------------------------------------------------------------
+// Loops de batería y one shots (plan drum-loops). Espejo de
+// `crates/libretracks-core/src/drum_loops.rs`; el JSON de referencia compartido
+// está en `fixtures/drumLoopsReference.json`.
+// ---------------------------------------------------------------------------
+
+export const DRUM_KIT_MAX_SOUNDS = 8;
+export const DRUM_LOOP_VARIATIONS = 4;
+export const DRUM_LOOP_MAX_STEPS = 64;
+export const ONE_SHOT_MAX_BANKS = 4;
+export const ONE_SHOT_PADS_PER_BANK = 12;
+
+export type DrumSampleSource =
+  | { kind: "builtin" }
+  | { kind: "pack"; packId: string }
+  | { kind: "user" };
+
+export type DrumSampleRef = {
+  source: DrumSampleSource;
+  file: string;
+};
+
+export type DrumSound = {
+  id: string;
+  name: string;
+  color: string;
+  sample: DrumSampleRef;
+  gainDb: number;
+  chokeGroup?: number | null;
+};
+
+export type DrumKit = {
+  id: string;
+  name: string;
+  sounds: DrumSound[];
+};
+
+export type DrumKitRef =
+  | { kind: "library"; kitId: string }
+  | { kind: "embedded"; kit: DrumKit };
+
+export type LoopPatternSignature = {
+  numerator: number;
+  denominator: number;
+};
+
+/** Un byte por paso: 0 silencio, 1 suave, 2 normal, 3 acento. */
+export type LoopStepVelocity = 0 | 1 | 2 | 3;
+
+export type LoopRow = {
+  soundId: string;
+  gainDb: number;
+  /** Variaciones A-D. */
+  variations: number[][];
+};
+
+export type LoopPattern = {
+  id: string;
+  name: string;
+  kit: DrumKitRef;
+  bpm: number;
+  signature: LoopPatternSignature;
+  /** 4 = semicorcheas, 3 = tresillos. */
+  stepsPerBeat: 3 | 4;
+  bars: 1 | 2 | 4;
+  swing: number;
+  rows: LoopRow[];
+};
+
+export type LoopRowLiveState = {
+  enabled: boolean;
+  /** 0..3 (A-D). */
+  variation: number;
+};
+
+export type LoopLiveState = {
+  patternId?: string | null;
+  playing: boolean;
+  rows: LoopRowLiveState[];
+};
+
+export type OneShotMode = "oneShot" | "gate";
+export type TriggerQuantize = "off" | "beat" | "bar";
+
+export type OneShotPad = {
+  id: string;
+  name: string;
+  color: string;
+  sample: DrumSampleRef;
+  gainDb: number;
+  mode: OneShotMode;
+  quantize: TriggerQuantize;
+  chokeGroup?: number | null;
+};
+
+export type OneShotBank = {
+  id: string;
+  name: string;
+  /** Rejilla 4×3; `null` es un hueco vacío. */
+  pads: (OneShotPad | null)[];
+};
+
+export type OneShotSet = {
+  banks: OneShotBank[];
+};
+
+/** Loop asignado a una canción (`SongRegion.loop`): copia incrustada. */
+export type RegionLoop = {
+  pattern: LoopPattern;
+  autostart: boolean;
+  initialRows: LoopRowLiveState[];
+};
+
+export type LoopPatternError =
+  | { code: "emptyName" }
+  | { code: "kitWithoutSounds" }
+  | { code: "noRows" }
+  | { code: "unknownSound"; soundId: string }
+  | { code: "invalidStepsPerBeat" }
+  | { code: "invalidBars" };

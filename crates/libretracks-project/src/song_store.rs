@@ -314,6 +314,7 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
         tempo_markers: vec![],
         time_signature_markers: vec![],
         regions: vec![SongRegion {
+            drum_loop: None,
             key_changes: Vec::new(),
             id: "region_1".into(),
             name: "Song 1".into(),
@@ -354,6 +355,7 @@ fn migrate_v3_song(document: LegacySongDocumentV3) -> Result<Song, ProjectError>
         tempo_markers: vec![],
         time_signature_markers: vec![],
         regions: vec![SongRegion {
+            drum_loop: None,
             key_changes: Vec::new(),
             id: "region_1".into(),
             name: region_name,
@@ -519,6 +521,7 @@ fn fit_regions_to_clips(song: &mut Song) {
             }
             (None, None) => {
                 song.regions.push(SongRegion {
+                    drum_loop: None,
                     key_changes: Vec::new(),
                     id: format!("region_v5_migrated_{}", song.regions.len()),
                     name: "Cancion".into(),
@@ -567,6 +570,7 @@ fn fit_regions_to_clips(song: &mut Song) {
         }
         if max_end > min_start {
             song.regions.push(SongRegion {
+                drum_loop: None,
                 key_changes: Vec::new(),
                 id: "region_v5_migrated_default".into(),
                 name: "Cancion".into(),
@@ -632,6 +636,62 @@ mod tests {
         assert_eq!(saved, golden);
     }
 
+    /// Plan drum-loops, paso 01 (C4): una sesión sin loop por canción carga
+    /// y se vuelve a guardar sin el campo `loop`.
+    #[test]
+    fn a_session_without_drum_loop_saves_without_the_field() {
+        let fixture = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../apps/desktop/src-tauri/resources/demo/song.ltsession"
+        );
+        let song = load_song_from_file(fixture).expect("load demo");
+        assert!(song.regions.iter().all(|region| region.drum_loop.is_none()));
+        let saved = serialize_song_document(&song).expect("serialize");
+        let raw: Value = serde_json::from_str(&saved).expect("saved is json");
+        for region in raw["regions"].as_array().expect("regions") {
+            assert!(region.get("loop").is_none(), "una canción sin loop no escribe el campo");
+        }
+    }
+
+    /// Una canción con loop lo conserva al guardar y cargar, y el lector no
+    /// rechaza campos desconocidos: una versión anterior al campo lo ignora.
+    #[test]
+    fn a_region_drum_loop_round_trips_and_unknown_fields_are_ignored() {
+        use libretracks_core::drum_loops::{
+            DrumKit, KitRef, LoopPattern, LoopRow, PatternSignature, RegionLoop,
+        };
+        let mut song = base_song();
+        song.regions.push(region("r1", 0.0, song.duration_seconds.max(1.0)));
+        song.regions[0].drum_loop = Some(RegionLoop {
+            pattern: LoopPattern {
+                id: "p".into(),
+                name: "Pop".into(),
+                kit: KitRef::Embedded {
+                    kit: DrumKit { id: "k".into(), name: "K".into(), sounds: vec![] },
+                },
+                bpm: 92.0,
+                signature: PatternSignature::default(),
+                steps_per_beat: 4,
+                bars: 1,
+                swing: 0.0,
+                rows: vec![LoopRow { sound_id: "s".into(), gain_db: 0.0, variations: vec![vec![2; 16]] }],
+            },
+            autostart: true,
+            initial_rows: vec![],
+        });
+        let saved = serialize_song_document(&song).expect("serialize");
+        let raw: Value = serde_json::from_str(&saved).expect("saved is json");
+        assert_eq!(raw["regions"][0]["loop"]["pattern"]["name"], "Pop");
+        let loaded = parse_song_document(&saved, SONG_FORMAT_VERSION).expect("load");
+        assert_eq!(loaded, song);
+
+        let mut future = raw.clone();
+        future["regions"][0]["someFutureField"] = Value::Bool(true);
+        let tolerant = parse_song_document(&future.to_string(), SONG_FORMAT_VERSION)
+            .expect("un campo desconocido en la región no impide cargar");
+        assert_eq!(tolerant, song);
+    }
+
     fn base_song() -> Song {
         Song {
             id: "song_test".into(),
@@ -692,6 +752,7 @@ mod tests {
 
     fn region(id: &str, start: f64, end: f64) -> SongRegion {
         SongRegion {
+            drum_loop: None,
             key_changes: Vec::new(),
             id: id.into(),
             name: id.into(),
