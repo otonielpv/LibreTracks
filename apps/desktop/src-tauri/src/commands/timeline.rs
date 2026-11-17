@@ -32,6 +32,9 @@ use serde::Deserialize;
 pub struct DuplicateClipPlacement {
     clip_id: String,
     timeline_start_seconds: f64,
+    /// Put the copy on another track (Alt/Option+drag onto another lane).
+    #[serde(default)]
+    target_track_id: Option<String>,
 }
 #[tauri::command(async)]
 pub fn move_clip(
@@ -234,11 +237,17 @@ pub fn duplicate_clips(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
     let placements = placements
         .into_iter()
-        .map(|placement| (placement.clip_id, placement.timeline_start_seconds))
+        .map(|placement| {
+            (
+                placement.clip_id,
+                placement.timeline_start_seconds,
+                placement.target_track_id,
+            )
+        })
         .collect::<Vec<_>>();
 
     session
-        .duplicate_clips(&placements, &state.audio)
+        .duplicate_clips_to_tracks(&placements, &state.audio)
         .map_err(|error| error.to_string())
 }
 

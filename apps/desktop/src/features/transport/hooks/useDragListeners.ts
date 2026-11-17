@@ -8,6 +8,7 @@ import {
 } from "@libretracks/shared/models";
 
 import {
+  duplicateClips,
   moveClip,
   moveClipsBatch,
   type ClipMoveRequest,
@@ -437,12 +438,32 @@ export function useDragListeners({
           changedTrack ||
           Math.abs(deltaLocalX) > DRAG_THRESHOLD_PX ||
           Math.abs(deltaLocalY) > DRAG_THRESHOLD_PX;
+        // Alt/Option at the drop: copies land where the clips were dragged
+        // (onto other lanes too) and the originals stay. One command, one undo.
+        const copyDrop = movedEnough && event.altKey;
+        if (copyDrop) {
+          const placements = activeClipDrag.members.map((member) => ({
+            clipId: member.clipId,
+            timelineStartSeconds: member.previewSeconds,
+            ...(previewTrackIds[member.clipId]
+              ? { targetTrackId: previewTrackIds[member.clipId] }
+              : {}),
+          }));
+          clipPreviewSecondsRef.current = {};
+          clipPreviewTrackIdRef.current = {};
+          void runAction(async () => {
+            applyPlaybackSnapshot(await duplicateClips(placements));
+            setStatus(t("transport.status.clipsDuplicated"));
+          });
+        }
         // Any track reassignment routes through the batch path so position +
         // track commit in a single operation (one undo, one revision), even
         // for a single clip.
         const useBatch =
           movedEnough && (activeClipDrag.members.length > 1 || changedTrack);
-        if (useBatch) {
+        if (copyDrop) {
+          // Handled above.
+        } else if (useBatch) {
           // Multi-clip drag: commit all positions in one batch so the engine
           // rebuilds the timeline window once, the history records a single
           // entry, and only one project_revision bumps.

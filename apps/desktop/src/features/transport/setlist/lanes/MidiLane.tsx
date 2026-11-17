@@ -141,6 +141,12 @@ function MidiLaneComponent({ track, song, region, scale, menus }: SongLaneRender
         clearMidiPreviews(root);
         return;
       }
+      if (upEvent.altKey) {
+        // Alt/Option at the drop: a copy lands there, the original stays put.
+        clearMidiPreviews(root);
+        menus.moveMidiClip(clip.id, target, targetTrackId, true);
+        return;
+      }
       menus.moveMidiClip(clip.id, target, targetTrackId);
       if (fallbackRef.current !== null) window.clearTimeout(fallbackRef.current);
       fallbackRef.current = window.setTimeout(() => clearMidiPreviews(root), LANE_PREVIEW_FALLBACK_MS);

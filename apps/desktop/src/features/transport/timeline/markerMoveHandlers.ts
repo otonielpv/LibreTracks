@@ -4,6 +4,13 @@ import type {
   SongView,
   TransportSnapshot,
 } from "@libretracks/shared/models";
+import { duplicateRulerMarkers } from "../desktopApi";
+
+/** Same shape as `createAutomationCueId` (timelineMenus imports this module's
+ * users, so it is not imported from there). */
+function nextCueId() {
+  return `automation_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
 
 /**
  * Dependencies for the ruler drag-commit handlers extracted from
@@ -58,11 +65,22 @@ export function createMarkerMoveHandlers(deps: MarkerMoveHandlerDeps) {
     markerId: string,
     startSeconds: number,
     category?: MarkerCategory,
+    copy = false,
   ) => {
     const section = getSong()?.sectionMarkers.find(
       (candidate) => candidate.id === markerId,
     );
     if (!section) {
+      return;
+    }
+    if (copy) {
+      // Alt/Option at the drop: a copy lands there, the original stays.
+      void runAction(async () => {
+        applyPlaybackSnapshot(
+          await duplicateRulerMarkers([{ kind: "section", id: section.id, startSeconds }]),
+        );
+        await refreshSongView({ includeWaveforms: false, sync: true });
+      });
       return;
     }
     void runAction(async () => {
@@ -82,7 +100,7 @@ export function createMarkerMoveHandlers(deps: MarkerMoveHandlerDeps) {
   };
 
   /** Persist an automation-cue diamond dragged along its lane. */
-  const handleAutomationCueMoveCommit = (cueId: string, atSeconds: number) => {
+  const handleAutomationCueMoveCommit = (cueId: string, atSeconds: number, copy = false) => {
     const cue = getSong()?.automationCues?.find(
       (candidate) => candidate.id === cueId,
     );
@@ -90,9 +108,12 @@ export function createMarkerMoveHandlers(deps: MarkerMoveHandlerDeps) {
       return;
     }
     // Re-upsert the whole cue with only its position changed, so
-    // name/enabled/maxRuns/actions survive the move.
+    // name/enabled/maxRuns/actions survive the move. Alt/Option at the drop
+    // writes a copy there under a new id instead.
     void runAction(async () => {
-      const nextSnapshot = await upsertAutomationCue({ ...cue, atSeconds });
+      const nextSnapshot = await upsertAutomationCue(
+        copy ? { ...cue, id: nextCueId(), atSeconds } : { ...cue, atSeconds },
+      );
       applyPlaybackSnapshot(nextSnapshot);
       await refreshSongView({ includeWaveforms: false, sync: true });
     });

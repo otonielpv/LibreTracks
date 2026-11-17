@@ -1,4 +1,5 @@
 import {
+  duplicateClips,
   moveClipsBatch,
   updateClipWindow,
   type ClipMoveRequest,
@@ -43,7 +44,16 @@ export function createLaneClipHandlers(getDeps: () => LaneClipHandlerDeps) {
     return true;
   }
 
-  return { commitMove, commitTrim };
+  /** Alt/Option at the drop: copies land there (onto another lane too), the
+   * originals stay. One command, one undo. */
+  function commitCopy(moves: ClipMoveRequest[]): boolean {
+    if (moves.length === 0) return false;
+    const deps = getDeps();
+    void deps.runAction(async () => deps.applySnapshot(await duplicateClips(moves)));
+    return true;
+  }
+
+  return { commitMove, commitTrim, commitCopy };
 }
 
 export type LaneClipHandlers = ReturnType<typeof createLaneClipHandlers>;

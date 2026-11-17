@@ -188,6 +188,21 @@ describe("MIDI lane", () => {
     expect(menuMock.moveMidiClip).toHaveBeenCalledTimes(1);
   });
 
+  it("Ctrl/Cmd+click selects instead of editing; Alt at the drop copies", () => {
+    const menuMock = menus();
+    const { container } = render(<SongLanes {...props(menuMock)} />);
+    const element = block(container, "m1");
+    fireEvent.pointerDown(element, { button: 0, pointerId: 1, clientX: 200 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 200, metaKey: true });
+    expect(menuMock.editMidiClip).not.toHaveBeenCalled();
+    expect(useTimelineUIStore.getState().selectedTimelineItems).toEqual([{ kind: "midi", id: "m1" }]);
+
+    fireEvent.pointerDown(element, { button: 0, pointerId: 2, clientX: 200 });
+    fireEvent.pointerMove(window, { pointerId: 2, clientX: 300 });
+    fireEvent.pointerUp(window, { pointerId: 2, clientX: 300, altKey: true });
+    expect(menuMock.moveMidiClip).toHaveBeenCalledWith("m1", 30, null, true);
+  });
+
   it("dropped on another MIDI track, the same one call carries the new track", () => {
     const menuMock = menus();
     const { container } = render(<SongLanes {...props(menuMock)} />);

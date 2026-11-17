@@ -352,6 +352,21 @@ impl DesktopSession {
         placements: &[(String, f64)],
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
+        let placements = placements
+            .iter()
+            .map(|(clip_id, seconds)| (clip_id.clone(), *seconds, None))
+            .collect::<Vec<_>>();
+        self.duplicate_clips_to_tracks(&placements, audio)
+    }
+
+    /// [`Self::duplicate_clips`] where each copy may go to another track
+    /// (Alt/Option+drag onto another lane). The destination must exist and not
+    /// be a folder, the same rule as moving a clip there.
+    pub fn duplicate_clips_to_tracks(
+        &mut self,
+        placements: &[(String, f64, Option<String>)],
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
         if placements.is_empty() {
             return Ok(self.snapshot());
         }
@@ -364,21 +379,39 @@ impl DesktopSession {
 
         let source_clips = placements
             .iter()
-            .map(|(clip_id, timeline_start_seconds)| {
+            .map(|(clip_id, timeline_start_seconds, target_track_id)| {
                 let source_clip = song
                     .clips
                     .iter()
                     .find(|clip| clip.id == *clip_id)
                     .cloned()
                     .ok_or_else(|| DesktopError::ClipNotFound(clip_id.clone()))?;
-                Ok((source_clip, *timeline_start_seconds))
+                if let Some(target_track_id) = target_track_id {
+                    let target_kind = song
+                        .tracks
+                        .iter()
+                        .find(|track| &track.id == target_track_id)
+                        .map(|track| track.kind)
+                        .ok_or_else(|| DesktopError::TrackNotFound(target_track_id.clone()))?;
+                    if target_kind == TrackKind::Folder {
+                        return Err(DesktopError::AudioCommand(
+                            "no se puede copiar un clip a un folder".into(),
+                        ));
+                    }
+                }
+                Ok((source_clip, *timeline_start_seconds, target_track_id.clone()))
             })
             .collect::<Result<Vec<_>, DesktopError>>()?;
 
         let timestamp = timestamp_suffix();
-        for (index, (source_clip, timeline_start_seconds)) in source_clips.into_iter().enumerate() {
+        for (index, (source_clip, timeline_start_seconds, target_track_id)) in
+            source_clips.into_iter().enumerate()
+        {
             let mut duplicated_clip = source_clip;
             duplicated_clip.id = format!("clip_{timestamp}_{index}");
+            if let Some(target_track_id) = target_track_id {
+                duplicated_clip.track_id = target_track_id;
+            }
             // View → source first (warp-aware mapping), then normalize so the
             // duplicated clip never lands at a negative timeline position.
             // Mirrors the pattern used by paste_clips and create_section_marker.

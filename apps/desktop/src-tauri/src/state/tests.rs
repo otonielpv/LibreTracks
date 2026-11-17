@@ -6945,3 +6945,36 @@ fn a_pending_jump_fires_the_target_cue_ahead_and_holds_back_the_skipped_one() {
         "bridge cue (mute) fired, chorus cue (solo) held back"
     );
 }
+
+/// Alt/Option+drag onto another lane: the copy lands on that track; a folder
+/// is refused like it is for a move.
+#[test]
+fn duplicating_clips_onto_another_track() {
+    let mut song = demo_song();
+    let mut second = song.tracks[0].clone();
+    second.id = "track_2".into();
+    second.name = "Second".into();
+    let mut folder = song.tracks[0].clone();
+    folder.id = "folder_1".into();
+    folder.kind = libretracks_core::TrackKind::Folder;
+    song.tracks.push(second);
+    song.tracks.push(folder);
+    let mut session = session_with_song_dir("duplicate-to-track", song);
+    let audio = crate::audio::engine::AudioController::default();
+
+    session
+        .duplicate_clips_to_tracks(&[("clip_1".into(), 6.0, Some("track_2".into()))], &audio)
+        .expect("copy onto another track");
+    let song = session.engine.song().expect("song");
+    let copy = song.clips.iter().find(|clip| clip.id != "clip_1").expect("copy");
+    assert_eq!(copy.track_id, "track_2");
+    assert_eq!(
+        song.clips.iter().find(|clip| clip.id == "clip_1").map(|clip| clip.track_id.as_str()),
+        Some("track_1"),
+        "the original stays where it was"
+    );
+
+    assert!(session
+        .duplicate_clips_to_tracks(&[("clip_1".into(), 8.0, Some("folder_1".into()))], &audio)
+        .is_err());
+}

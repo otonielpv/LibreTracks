@@ -102,6 +102,16 @@ describe("installAltMenuGuard", () => {
     expect(key("keyup", { key: "Alt" })).toBe(false);
   });
 
+  it("cancels the Alt release after a drag dropped with Alt (copy), even if Alt came mid-drag", () => {
+    install();
+
+    // Pressed without Alt; Alt only shows on the release that drops the copy.
+    window.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    window.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, altKey: true }));
+
+    expect(key("keyup", { key: "Alt" })).toBe(true);
+  });
+
   it("stops listening once uninstalled", () => {
     install();
 

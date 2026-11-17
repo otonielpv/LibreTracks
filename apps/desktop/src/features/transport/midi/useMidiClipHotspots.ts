@@ -38,8 +38,9 @@ export type MidiClipHotspotDeps = {
   song: SongView | null;
   /** Whether grid snapping is on; Shift bypasses it either way. */
   snapEnabled?: boolean;
-  /** Commit a finished drag. */
-  onMoveClip: (clipId: string, timelineStartSeconds: number) => void;
+  /** Commit a finished drag. `copy`: Alt/Option held at the drop, so a copy
+   * lands there and the original stays. */
+  onMoveClip: (clipId: string, timelineStartSeconds: number, copy?: boolean) => void;
 };
 
 /** Pixels the pointer must travel before a press counts as a drag, so a plain
@@ -206,7 +207,7 @@ export function useMidiClipHotspots({
       justDraggedRef.current = drag.moved;
 
       if (drag.moved && dropped) {
-        onMoveClip(drag.clipId, dropped.startSeconds);
+        onMoveClip(drag.clipId, dropped.startSeconds, event.altKey);
       }
     },
     [onMoveClip],

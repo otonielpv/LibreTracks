@@ -137,6 +137,12 @@ function AutomationLaneComponent({ song, region, scale, menus, positionSecondsRe
         element.style.removeProperty("transform");
         return;
       }
+      if (upEvent.altKey) {
+        // Alt/Option at the drop: a copy lands there, the original stays put.
+        element.style.removeProperty("transform");
+        void menus.moveAutomationCue(cue.id, target, true);
+        return;
+      }
       void menus.moveAutomationCue(cue.id, target);
       if (fallbackRef.current !== null) window.clearTimeout(fallbackRef.current);
       fallbackRef.current = window.setTimeout(

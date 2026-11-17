@@ -1356,12 +1356,8 @@ export function TimelineCanvasPane({
                             }}
                             onPointerDown={(event) => {
                               event.stopPropagation();
-                              if (
-                                event.altKey ||
-                                event.ctrlKey ||
-                                event.metaKey
-                              )
-                                return;
+                              // Alt/Option drags (it copies at the drop).
+                              if (event.ctrlKey || event.metaKey) return;
                               beginMarkerMove(
                                 event,
                                 cue.id,

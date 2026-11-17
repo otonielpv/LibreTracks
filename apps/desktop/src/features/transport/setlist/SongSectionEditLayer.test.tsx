@@ -118,6 +118,16 @@ function drag(element: HTMLElement, fromX: number, toX: number, extra: Record<st
 }
 
 describe("Section handles: drag", () => {
+  it("Alt/Option at the drop copies the sections there and puts the originals back", () => {
+    const { deps, handlers } = setup();
+    renderLayer(handlers);
+    const coro = handle("Coro");
+    drag(coro, 400, 433);
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 433, altKey: true });
+    expect(deps.rulerMarkers.moveGroup).toHaveBeenCalledWith([{ kind: "section", id: "Coro" }], 4, true);
+    expect(coro.style.transform).toBe("");
+  });
+
   it("previews locally and commits ONE moveRulerMarkers on release, snapped to a bar", () => {
     const { deps, handlers } = setup();
     renderLayer(handlers);
@@ -128,7 +138,7 @@ describe("Section handles: drag", () => {
     expect(coro.style.transform).toBe("translate3d(40px, 0, 0)");
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 433 });
     expect(deps.rulerMarkers.moveGroup).toHaveBeenCalledTimes(1);
-    expect(deps.rulerMarkers.moveGroup).toHaveBeenCalledWith([{ kind: "section", id: "Coro" }], 4);
+    expect(deps.rulerMarkers.moveGroup).toHaveBeenCalledWith([{ kind: "section", id: "Coro" }], 4, false);
   });
 
   it("stays inside the song at both edges", () => {
@@ -137,7 +147,7 @@ describe("Section handles: drag", () => {
     renderLayer(handlers);
     drag(handle("Verso"), 100, -500);
     fireEvent.pointerUp(window, { pointerId: 1, clientX: -500 });
-    expect(deps.rulerMarkers.moveGroup).toHaveBeenLastCalledWith([{ kind: "section", id: "Verso" }], -10);
+    expect(deps.rulerMarkers.moveGroup).toHaveBeenLastCalledWith([{ kind: "section", id: "Verso" }], -10, false);
 
     drag(handle("Puente"), 800, 5000);
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 5000 });
@@ -258,7 +268,7 @@ describe("Section handles: select, menu, create", () => {
     expect(cue.classList.contains("is-cue")).toBe(true);
     drag(cue, 600, 640);
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 640 });
-    expect(deps.rulerMarkers.moveGroup).toHaveBeenCalledWith([{ kind: "section", id: "Aviso" }], 4);
+    expect(deps.rulerMarkers.moveGroup).toHaveBeenCalledWith([{ kind: "section", id: "Aviso" }], 4, false);
   });
 
   it("the song-end handle changes the song's end (the last section's length) once", () => {

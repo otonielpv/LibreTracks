@@ -144,8 +144,8 @@ export function RulerMarkerHotspots({
     },
     onPointerDown: (event: ButtonPointer) => {
       markerTouchContextMenu.begin(event);
+      // Alt/Option is NOT excluded: holding it at the drop copies instead.
       if (
-        event.altKey ||
         event.ctrlKey ||
         event.metaKey ||
         !includesRulerMarker(selected, marker)
@@ -247,7 +247,8 @@ export function RulerMarkerHotspots({
             }}
             onPointerDown={(event) => {
               event.stopPropagation();
-              if (event.altKey || event.ctrlKey || event.metaKey) return;
+              // Alt/Option drags too: held at the drop, it copies.
+              if (event.ctrlKey || event.metaKey) return;
               markerTouchContextMenu.begin(event);
               beginMarkerMove(
                 event,

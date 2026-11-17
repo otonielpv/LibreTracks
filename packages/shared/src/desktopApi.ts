@@ -2250,7 +2250,8 @@ export async function duplicateClip(
 }
 
 export async function duplicateClips(
-  placements: Array<{ clipId: string; timelineStartSeconds: number }>,
+  /** `targetTrackId`: put the copy on another track (Alt/Option+drag). */
+  placements: Array<{ clipId: string; timelineStartSeconds: number; targetTrackId?: string }>,
 ): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("duplicate_clips", { placements });
 }

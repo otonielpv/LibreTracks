@@ -173,12 +173,26 @@ function midiTrackContextMenu(track: TrackSummary): ContextMenuAction[] {
   const clipCallbacks = {
     onEdit: editMidiClip,
     onContextMenu: openMidiClipMenu,
-    onMoveClip: (clipId: string, timelineStartSeconds: number) =>
-      getDeps().moveMidiClip(clipId, timelineStartSeconds),
+    onMoveClip: (clipId: string, timelineStartSeconds: number, copy = false) =>
+      moveMidiClip(clipId, timelineStartSeconds, null, copy),
   };
 
-  /** Move a clip, optionally onto another MIDI track (one command). */
-  function moveMidiClip(clipId: string, timelineStartSeconds: number, targetTrackId: string | null = null) {
+  /** Move a clip, optionally onto another MIDI track (one command). With
+   * `copy` (Alt/Option at the drop) a copy lands there instead. */
+  function moveMidiClip(
+    clipId: string,
+    timelineStartSeconds: number,
+    targetTrackId: string | null = null,
+    copy = false,
+  ) {
+    if (copy) {
+      timelineItemHandlersFrom(getDeps).copyTo(
+        { kind: "midi", id: clipId },
+        timelineStartSeconds,
+        targetTrackId,
+      );
+      return;
+    }
     getDeps().moveMidiClip(clipId, timelineStartSeconds, targetTrackId);
   }
 

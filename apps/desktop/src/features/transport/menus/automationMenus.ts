@@ -233,7 +233,12 @@ export function createAutomationMenus(getDeps: () => TimelineMenuDeps) {
   // A cue dragged along its lane: re-upsert the whole cue with only its
   // position changed, so name/enabled/maxRuns/actions survive the move (the
   // DAW's ruler does the same in markerMoveHandlers).
-  async function moveAutomationCue(cueId: string, atSeconds: number) {
+  async function moveAutomationCue(cueId: string, atSeconds: number, copy = false) {
+    if (copy) {
+      // Alt/Option at the drop: a copy lands there, the original stays.
+      timelineItemHandlersFrom(getDeps).copyTo({ kind: "cue", id: cueId }, atSeconds);
+      return;
+    }
     const d = getDeps();
     const cue = d.songRef.current?.automationCues?.find((candidate) => candidate.id === cueId);
     if (!cue || Math.abs(cue.atSeconds - atSeconds) < 1e-6) return;

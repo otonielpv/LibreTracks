@@ -177,6 +177,23 @@ describe("automation lane", () => {
     expect(menuMock.editAutomationCue).toHaveBeenCalledTimes(1);
   });
 
+  it("Ctrl/Cmd+click selects instead of editing; Alt at the drop copies and puts the cue back", () => {
+    const menuMock = menus();
+    const { container } = render(<SongLanes {...props(baseSong, menuMock)} />);
+    const element = diamond(container, "a");
+
+    fireEvent.pointerDown(element, { button: 0, pointerId: 1, clientX: 200 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 200, ctrlKey: true });
+    expect(menuMock.editAutomationCue).not.toHaveBeenCalled();
+    expect(useTimelineUIStore.getState().selectedTimelineItems).toEqual([{ kind: "cue", id: "a" }]);
+
+    fireEvent.pointerDown(element, { button: 0, pointerId: 2, clientX: 200 });
+    fireEvent.pointerMove(window, { pointerId: 2, clientX: 250 });
+    fireEvent.pointerUp(window, { pointerId: 2, clientX: 250, altKey: true });
+    expect(menuMock.moveAutomationCue).toHaveBeenCalledWith("a", 25, true);
+    expect(element.style.transform).toBe("");
+  });
+
   it("with snap on, the cue lands on the grid", () => {
     useTimelineUIStore.setState({ snapEnabled: true });
     const menuMock = menus();

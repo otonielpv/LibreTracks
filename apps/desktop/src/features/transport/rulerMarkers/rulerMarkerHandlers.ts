@@ -40,10 +40,16 @@ export function createRulerMarkerHandlers(deps: RulerMarkerHandlerDeps) {
   const { getSong, runAction, applyPlaybackSnapshot, refreshSongView, setStatus, t } =
     deps;
 
-  /** Persistir un arrastre de grupo: todas las marcas desplazadas lo mismo. */
-  const moveGroup = (markers: RulerMarkerRef[], deltaSeconds: number) => {
+  /** Persistir un arrastre de grupo: todas las marcas desplazadas lo mismo.
+   * Con `copy` (Alt/Option al soltar) se escriben copias ahi y el original se
+   * queda donde estaba. */
+  const moveGroup = (markers: RulerMarkerRef[], deltaSeconds: number, copy = false) => {
     const moves = groupMovePlacements(getSong(), markers, deltaSeconds);
     if (moves.length === 0) return;
+    if (copy) {
+      writeCopies(moves);
+      return;
+    }
     void runAction(async () => {
       applyPlaybackSnapshot(await moveRulerMarkers(moves));
     });
@@ -55,8 +61,12 @@ export function createRulerMarkerHandlers(deps: RulerMarkerHandlerDeps) {
    * todas encima de la primera.
    */
   const duplicate = (markers: RulerMarkerRef[]) => {
+    writeCopies(duplicatePlacements(getSong(), markers));
+  };
+
+  /** Escribe las copias y deja seleccionado lo copiado. */
+  const writeCopies = (copies: RulerMarkerPlacement[]) => {
     const song = getSong();
-    const copies = duplicatePlacements(song, markers);
     if (copies.length === 0) return;
     const before = new Set(
       listRulerMarkers(song).map((entry) => `${entry.kind}:${entry.id}`),

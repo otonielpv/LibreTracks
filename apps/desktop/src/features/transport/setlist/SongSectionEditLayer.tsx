@@ -180,9 +180,10 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
         return;
       }
       const committed = upEvent.type === "pointerup" && groupIds
-        ? handlers.commitMove(groupIds, delta)
+        ? handlers.commitMove(groupIds, delta, upEvent.altKey)
         : false;
-      if (!committed) {
+      // A copy leaves the originals where they were: put them back now.
+      if (!committed || upEvent.altKey) {
         clearPreview();
         return;
       }

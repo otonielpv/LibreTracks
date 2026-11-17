@@ -147,11 +147,12 @@ export function createSectionEditHandlers(getDeps: () => SectionEditDeps) {
     else menus.openCreateCueKindMenu(target);
   }
 
-  /** One commit when the drag ends: `moveRulerMarkers` for the group. */
-  function commitMove(markerIds: readonly string[], deltaSeconds: number) {
+  /** One commit when the drag ends: `moveRulerMarkers` for the group, or
+   * copies there when Alt/Option was held at the drop (`copy`). */
+  function commitMove(markerIds: readonly string[], deltaSeconds: number, copy = false) {
     if (markerIds.length === 0 || Math.abs(deltaSeconds) < 1e-6) return false;
     if (!requestMarkerEdit(markerIds)) return false;
-    getDeps().rulerMarkers.moveGroup(markerIds.map(sectionRef), deltaSeconds);
+    getDeps().rulerMarkers.moveGroup(markerIds.map(sectionRef), deltaSeconds, copy);
     return true;
   }
 

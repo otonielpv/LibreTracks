@@ -9,7 +9,7 @@ export type MidiLaneCallbacks = {
     event: ReactMouseEvent<HTMLElement>,
     clip: MidiClipSummary,
   ) => void;
-  onMoveClip?: (clipId: string, timelineStartSeconds: number) => void;
+  onMoveClip?: (clipId: string, timelineStartSeconds: number, copy?: boolean) => void;
 };
 
 /**
@@ -40,7 +40,7 @@ export function useMidiLane({
     ...camera,
     song,
     snapEnabled,
-    onMoveClip: (id, seconds) => callbacks?.onMoveClip?.(id, seconds),
+    onMoveClip: (id, seconds, copy) => callbacks?.onMoveClip?.(id, seconds, copy),
   });
 
   return {

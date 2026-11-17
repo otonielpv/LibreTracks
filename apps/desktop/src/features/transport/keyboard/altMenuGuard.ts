@@ -12,7 +12,9 @@
  * Alt release itself: a cancelled key event is not forwarded to the window
  * procedure, so the menu never activates. It only arms after a wheel or pointer
  * gesture that actually carried Alt (Alt + wheel, Alt-dragging a track's bottom
- * edge), so a plain Alt press anywhere else behaves normally.
+ * edge, dropping a drag with Alt to copy), so a plain Alt press anywhere else
+ * behaves normally. The release counts too: Alt pressed mid-drag only shows on
+ * the pointerup that drops the copy.
  */
 export function installAltMenuGuard(): () => void {
   let armed = false;
@@ -58,6 +60,10 @@ export function installAltMenuGuard(): () => void {
     capture: true,
     passive: true,
   });
+  window.addEventListener("pointerup", onAltGesture, {
+    capture: true,
+    passive: true,
+  });
   window.addEventListener("keydown", onKeyDown, true);
   window.addEventListener("keyup", onKeyUp, true);
   window.addEventListener("blur", onBlur);
@@ -65,6 +71,7 @@ export function installAltMenuGuard(): () => void {
   return () => {
     window.removeEventListener("wheel", onAltGesture, { capture: true });
     window.removeEventListener("pointerdown", onAltGesture, { capture: true });
+    window.removeEventListener("pointerup", onAltGesture, { capture: true });
     window.removeEventListener("keydown", onKeyDown, true);
     window.removeEventListener("keyup", onKeyUp, true);
     window.removeEventListener("blur", onBlur);

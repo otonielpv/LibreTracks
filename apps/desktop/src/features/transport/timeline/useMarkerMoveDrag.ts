@@ -102,14 +102,17 @@ export type MarkerMoveDragDeps = {
   pixelsPerSecond: number;
   /** `category` is passed only when the drag actually changed lanes, so a plain
    * horizontal nudge never writes a category override the user didn't ask for. */
+  /** `copy`: Alt/Option was held at the drop, so the original stays and a copy
+   * lands at the new position (all three commits). */
   onMarkerMoveCommit?: (
     markerId: string,
     startSeconds: number,
     category?: MarkerCategory,
+    copy?: boolean,
   ) => void;
-  onAutomationCueMoveCommit?: (cueId: string, atSeconds: number) => void;
+  onAutomationCueMoveCommit?: (cueId: string, atSeconds: number, copy?: boolean) => void;
   /** Suelta un arrastre de grupo (ver `MarkerMoveDrag.group`). */
-  onGroupMoveCommit?: (markers: RulerMarkerRef[], deltaSeconds: number) => void;
+  onGroupMoveCommit?: (markers: RulerMarkerRef[], deltaSeconds: number, copy?: boolean) => void;
 };
 
 /**
@@ -356,15 +359,17 @@ export function useMarkerMoveDrag({
     if (!moved) {
       return;
     }
+    const copy = event.altKey;
     if (drag.group) {
-      onGroupMoveCommit?.(drag.group.markers, finalStart - drag.initialStartSeconds);
+      onGroupMoveCommit?.(drag.group.markers, finalStart - drag.initialStartSeconds, copy);
     } else if (drag.kind === "cue") {
-      onAutomationCueMoveCommit?.(drag.markerId, finalStart);
+      onAutomationCueMoveCommit?.(drag.markerId, finalStart, copy);
     } else {
       onMarkerMoveCommit?.(
         drag.markerId,
         finalStart,
         laneChanged ? drag.previewCategory : undefined,
+        copy,
       );
     }
   }

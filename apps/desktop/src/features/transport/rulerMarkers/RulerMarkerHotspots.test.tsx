@@ -189,6 +189,6 @@ describe("seleccion multiple de marcas en la regla", () => {
     fireEvent.click(tempoHotspot());
     expect(selected()).toEqual([{ kind: "tempo", id: "t1" }]);
     dragBy(tempoHotspot(), -100);
-    expect(props.onGroupMoveCommit).toHaveBeenCalledWith([{ kind: "tempo", id: "t1" }], expect.closeTo(-1));
+    expect(props.onGroupMoveCommit).toHaveBeenCalledWith([{ kind: "tempo", id: "t1" }], expect.closeTo(-1), false);
   });
 });

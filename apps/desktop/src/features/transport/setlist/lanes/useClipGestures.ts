@@ -196,6 +196,12 @@ export function useClipGestures(rootRef: RefObject<HTMLElement | null>, sources:
             timelineStartSeconds: member.originSeconds + delta,
             ...(targetTrackId ? { targetTrackId } : {}),
           }));
+          if (upEvent.altKey) {
+            // A copy leaves the originals where they were: put them back now.
+            sourcesRef.current.clipHandlers.commitCopy(moves);
+            clearLanePreviews(root);
+            return;
+          }
           committed = sourcesRef.current.clipHandlers.commitMove(moves);
         } else if (mode !== "move" && trimWindow) {
           committed = sourcesRef.current.clipHandlers.commitTrim(clip.id, trimWindow);
