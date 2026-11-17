@@ -6552,6 +6552,12 @@ html.lt-ios body {
   cursor: default;
 }
 
+/* Picked with Ctrl/Cmd+click (MIDI clip or cue), ready for Ctrl+D. */
+.lt-automation-hotspot.is-selected {
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgb(87 241 219 / 0.95);
+}
+
 /* Con el dedo, 24 px no se aciertan: objetivo de 44 px centrado igual en el
    diamante. Los hotspots llevan data-lt-native-touch para que la navegacion
    tactil les ceda el gesto (tocar abre el editor, arrastrar mueve). */

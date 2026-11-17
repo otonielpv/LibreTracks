@@ -15,6 +15,7 @@ import {
 import { markerCategory } from "../markerKinds";
 import type { ContextMenuAction } from "../types";
 import type { TimelineMenuDeps } from "./timelineMenus";
+import { timelineItemHandlersFrom } from "../timelineItems/fromMenuDeps";
 
 /**
  * Automation cues and the automation lane: create/edit/move a cue, its menu,
@@ -108,6 +109,12 @@ export function createAutomationMenus(getDeps: () => TimelineMenuDeps) {
       {
         label: t("transport.automation.editCue"),
         onSelect: () => editAutomationCue(cue),
+      },
+      {
+        label: t("transport.timelineItems.duplicate"),
+        shortcut: d.shortcutHint("edit.duplicate"),
+        onSelect: () =>
+          timelineItemHandlersFrom(getDeps).duplicate([{ kind: "cue", id: cue.id }]),
       },
       {
         label: t("transport.automation.renameCue"),

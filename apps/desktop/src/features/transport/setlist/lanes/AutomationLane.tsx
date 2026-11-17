@@ -55,6 +55,10 @@ const clearCuePreviews = (root: ParentNode | null) =>
  */
 function AutomationLaneComponent({ song, region, scale, menus, positionSecondsRef }: AutomationLaneProps) {
   const { t } = useTranslation();
+  const selectedItems = useTimelineUIStore((state) => state.selectedTimelineItems);
+  const selectedCueIds = new Set(
+    selectedItems.filter((item) => item.kind === "cue").map((item) => item.id),
+  );
   const rowRef = useRef<HTMLDivElement | null>(null);
   const fallbackRef = useRef<number | null>(null);
   const cues = songAutomationCues(song, region);
@@ -121,6 +125,11 @@ function AutomationLaneComponent({ song, region, scale, menus, positionSecondsRe
       if (upEvent.pointerId !== pointerId) return;
       detach();
       if (!moved) {
+        // Ctrl/Cmd+click selects (for Ctrl+D) instead of opening the editor.
+        if (upEvent.ctrlKey || upEvent.metaKey) {
+          useTimelineUIStore.getState().toggleTimelineItemSelection({ kind: "cue", id: cue.id });
+          return;
+        }
         menus.editAutomationCue(cue);
         return;
       }
@@ -197,7 +206,7 @@ function AutomationLaneComponent({ song, region, scale, menus, positionSecondsRe
             <button
               key={cue.id}
               type="button"
-              className={`lt-setlist-cue${cue.enabled && !cue.exhausted ? "" : " is-off"}`}
+              className={`lt-setlist-cue${cue.enabled && !cue.exhausted ? "" : " is-off"}${selectedCueIds.has(cue.id) ? " is-selected" : ""}`}
               data-lane-cue-id={cue.id}
               style={{ left: `${x}px` }}
               aria-label={`${cue.name}: ${description}`}

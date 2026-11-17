@@ -38,6 +38,10 @@ export const DEFAULT_VIEW_MODE: ViewMode = "daw";
  * ensena las acciones de algo que el usuario dejo de tener seleccionado hace
  * rato.
  */
+/** A MIDI clip or an automation cue picked with Ctrl/Cmd+click (a plain click
+ * opens its editor). */
+export type TimelineItemRef = { kind: "midi" | "cue"; id: string };
+
 const EMPTY_SELECTION = {
   selectedTrackIds: [] as string[],
   selectedClipId: null as string | null,
@@ -46,12 +50,14 @@ const EMPTY_SELECTION = {
   selectedTempoMarkerId: null as string | null,
   selectedTimeSignatureMarkerId: null as string | null,
   selectedMarkers: [] as RulerMarkerRef[],
+  selectedTimelineItems: [] as TimelineItemRef[],
 };
 
 const CLEAR_RULER_MARKERS = {
   selectedTempoMarkerId: null as string | null,
   selectedTimeSignatureMarkerId: null as string | null,
   selectedMarkers: [] as RulerMarkerRef[],
+  selectedTimelineItems: [] as TimelineItemRef[],
 };
 
 /**
@@ -155,6 +161,8 @@ type TimelineUIState = {
   selectedMarkers: RulerMarkerRef[];
   /** Desde donde cuenta Shift+clic: la ultima marca elegida sola o con Ctrl. */
   markerSelectionAnchor: RulerMarkerRef | null;
+  /** MIDI clips and automation cues selected with Ctrl/Cmd+click. */
+  selectedTimelineItems: TimelineItemRef[];
   snapEnabled: boolean;
   followPlayheadEnabled: boolean;
   /** DAW: keep the tracks of the song under the playhead scrolled to the top
@@ -204,6 +212,9 @@ type TimelineUIState = {
   setSelectedMarkers: (markers: RulerMarkerRef[], anchor?: RulerMarkerRef) => void;
   /** Ctrl+clic: pone o quita una marca, y pasa a ser el ancla. */
   toggleMarkerSelection: (marker: RulerMarkerRef) => void;
+  /** Ctrl/Cmd+click on a MIDI clip or cue: adds or removes it. */
+  toggleTimelineItemSelection: (item: TimelineItemRef) => void;
+  setSelectedTimelineItems: (items: TimelineItemRef[]) => void;
   clearSelection: () => void;
   clearSelectionIfAny: () => void;
   selectTrack: (trackIds: string[]) => void;
@@ -259,6 +270,7 @@ export const useTimelineUIStore = create<TimelineUIState>()(
     selectedTimeSignatureMarkerId: null,
     selectedMarkers: [],
     markerSelectionAnchor: null,
+    selectedTimelineItems: [],
     snapEnabled: TIMELINE_DEFAULT_SNAP_ENABLED,
     followPlayheadEnabled: TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
     followSongTracksEnabled: false,
@@ -381,6 +393,24 @@ export const useTimelineUIStore = create<TimelineUIState>()(
         return { ...markerSelectionFields(next), markerSelectionAnchor: marker };
       });
     },
+    toggleTimelineItemSelection: (item) => {
+      set((state) => {
+        const has = state.selectedTimelineItems.some(
+          (entry) => entry.kind === item.kind && entry.id === item.id,
+        );
+        return {
+          ...EMPTY_SELECTION,
+          selectedTimelineItems: has
+            ? state.selectedTimelineItems.filter(
+                (entry) => !(entry.kind === item.kind && entry.id === item.id),
+              )
+            : [...state.selectedTimelineItems, item],
+        };
+      });
+    },
+    setSelectedTimelineItems: (items) => {
+      set({ ...EMPTY_SELECTION, selectedTimelineItems: items });
+    },
     clearSelection: () => {
       // Soltar la seleccion sale tambien de los modos de sumar: si no, el
       // siguiente toque volveria a sumar sin que nadie lo haya pedido.
@@ -399,7 +429,8 @@ export const useTimelineUIStore = create<TimelineUIState>()(
         state.selectedSectionId === null &&
         state.selectedTempoMarkerId === null &&
         state.selectedTimeSignatureMarkerId === null &&
-        state.selectedMarkers.length === 0
+        state.selectedMarkers.length === 0 &&
+        state.selectedTimelineItems.length === 0
       ) {
         return;
       }

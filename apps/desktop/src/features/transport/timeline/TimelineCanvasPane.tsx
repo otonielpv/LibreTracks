@@ -511,6 +511,7 @@ export function TimelineCanvasPane({
   const markerTouchContextMenu = useTouchContextMenu();
   // Lo que el canvas de la regla resalta: la seleccion de marcas entera.
   const selectedMarkers = useTimelineUIStore((state) => state.selectedMarkers);
+  const selectedTimelineItems = useTimelineUIStore((state) => state.selectedTimelineItems);
   // En el modo area el tramo de la regla coge marcas: no es el rango del que
   // sale una cancion, y no debe parecerlo.
   const areaSelectMode = useTimelineUIStore((state) => isMobileApp && state.areaSelectMode);
@@ -1318,7 +1319,7 @@ export function TimelineCanvasPane({
                             }
                             type="button"
                             data-lt-native-touch="" /* tocar/arrastrar en movil */
-                            className={`lt-automation-hotspot ${isPending ? "is-pending" : ""} ${isOff ? "is-disabled" : ""}${isDraggingCue ? " is-dragging" : ""}`}
+                            className={`lt-automation-hotspot ${isPending ? "is-pending" : ""} ${isOff ? "is-disabled" : ""}${isDraggingCue ? " is-dragging" : ""}${selectedTimelineItems.some((item) => item.kind === "cue" && item.id === cue.id) ? " is-selected" : ""}`}
                             aria-label={cueDescription}
                             title={cueDescription}
                             style={{
@@ -1379,6 +1380,13 @@ export function TimelineCanvasPane({
                               // open the editor.
                               if (markerDidDragRef.current) {
                                 markerDidDragRef.current = false;
+                                return;
+                              }
+                              // Ctrl/Cmd+click selects (for Ctrl+D), like markers.
+                              if (event.ctrlKey || event.metaKey) {
+                                useTimelineUIStore
+                                  .getState()
+                                  .toggleTimelineItemSelection({ kind: "cue", id: cue.id });
                                 return;
                               }
                               // Left-click the diamond opens the editor directly

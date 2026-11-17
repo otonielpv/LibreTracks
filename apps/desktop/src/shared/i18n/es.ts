@@ -2080,6 +2080,11 @@ const es = {
         showInLibrary: "Mostrar en la biblioteca",
       },
     },
+    timelineItems: {
+      duplicate: "Duplicar",
+      statusDuplicated_one: "Duplicado",
+      statusDuplicated_other: "{{count}} duplicados",
+    },
     lead: {
       label: "Adelanto",
       none: "Sin adelanto",

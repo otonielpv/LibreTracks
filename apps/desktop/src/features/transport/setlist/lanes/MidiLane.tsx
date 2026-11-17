@@ -60,6 +60,10 @@ const clearMidiPreviews = (root: ParentNode | null) => {
  */
 function MidiLaneComponent({ track, song, region, scale, menus }: SongLaneRenderProps) {
   const { t } = useTranslation();
+  const selectedItems = useTimelineUIStore((state) => state.selectedTimelineItems);
+  const selectedMidiIds = new Set(
+    selectedItems.filter((item) => item.kind === "midi").map((item) => item.id),
+  );
   const laneRef = useRef<HTMLDivElement | null>(null);
   const fallbackRef = useRef<number | null>(null);
   const clips = (song.midiClips ?? [])
@@ -125,6 +129,11 @@ function MidiLaneComponent({ track, song, region, scale, menus }: SongLaneRender
       if (upEvent.pointerId !== pointerId) return;
       detach();
       if (!moved) {
+        // Ctrl/Cmd+click selects (for Ctrl+D) instead of opening the editor.
+        if (upEvent.ctrlKey || upEvent.metaKey) {
+          useTimelineUIStore.getState().toggleTimelineItemSelection({ kind: "midi", id: clip.id });
+          return;
+        }
         menus.editMidiClip(clip);
         return;
       }
@@ -186,7 +195,7 @@ function MidiLaneComponent({ track, song, region, scale, menus }: SongLaneRender
           <button
             key={clip.id}
             type="button"
-            className="lt-setlist-midi-clip"
+            className={`lt-setlist-midi-clip${selectedMidiIds.has(clip.id) ? " is-selected" : ""}`}
             data-lane-midi-clip-id={clip.id}
             style={{ left: `${x}px`, ...(clip.color ? { "--lt-midi-clip-color": clip.color } : {}) } as CSSProperties}
             aria-label={`${clip.name || "MIDI"}: ${summary}`}

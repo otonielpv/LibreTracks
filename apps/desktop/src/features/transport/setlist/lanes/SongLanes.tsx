@@ -124,6 +124,7 @@ function SongLanesComponent({
   const setZoom = useSetlistStore((state) => state.setLanesZoom);
   const setScrollPx = useSetlistStore((state) => state.setLanesScrollPx);
   const selectedClipIds = useTimelineUIStore((state) => state.selectedClipIds);
+  const hasTimelineItems = useTimelineUIStore((state) => state.selectedTimelineItems.length > 0);
   const selectedVideoClipIds = useVideoStore((state) => state.selectedVideoClipIds);
   const touchMenu = useTouchContextMenu();
 
@@ -449,7 +450,7 @@ function SongLanesComponent({
       <button type="button" className="lt-setlist-settings-button" disabled={!hasSelection} aria-label={t("setlistView.lanes.split")} title={t("setlistView.lanes.split")} onClick={() => runShortcutAction("edit.splitClip")}>
         <span className="material-symbols-outlined" aria-hidden="true">content_cut</span>
       </button>
-      <button type="button" className="lt-setlist-settings-button" disabled={!hasSelection} aria-label={t("setlistView.lanes.duplicate")} title={t("setlistView.lanes.duplicate")} onClick={() => runShortcutAction("edit.duplicate")}>
+      <button type="button" className="lt-setlist-settings-button" disabled={!hasSelection && !hasTimelineItems} aria-label={t("setlistView.lanes.duplicate")} title={t("setlistView.lanes.duplicate")} onClick={() => runShortcutAction("edit.duplicate")}>
         <span className="material-symbols-outlined" aria-hidden="true">content_copy</span>
       </button>
       <button type="button" className="lt-setlist-settings-button" disabled={!hasSelection} aria-label={t("setlistView.lanes.delete")} title={t("setlistView.lanes.delete")} onClick={() => runShortcutAction("edit.delete")}>

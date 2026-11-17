@@ -2051,6 +2051,11 @@ const en = {
         showInLibrary: "Show in library",
       },
     },
+    timelineItems: {
+      duplicate: "Duplicate",
+      statusDuplicated_one: "Duplicated",
+      statusDuplicated_other: "{{count}} duplicated",
+    },
     lead: {
       label: "Lead time",
       none: "No lead",

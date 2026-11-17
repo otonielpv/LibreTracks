@@ -3617,6 +3617,16 @@ html.lt-mobile .lt-setlist-add-song.is-short .lt-setlist-add-song-button {
   touch-action: none;
 }
 
+/* Picked with Ctrl/Cmd+click, ready for Ctrl+D. */
+.lt-setlist-midi-clip.is-selected {
+  outline: 2px solid var(--lt-setlist-accent);
+  outline-offset: 1px;
+}
+
+.lt-setlist-cue.is-selected .lt-setlist-cue-diamond {
+  box-shadow: 0 0 0 2px var(--lt-setlist-accent);
+}
+
 /* Lead time tail (plan lead-time): from the item's anchor back to where it
    really fires. Inside the item, so it follows a drag. */
 .lt-setlist-lead-tail {

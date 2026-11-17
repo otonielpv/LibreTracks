@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent, MutableRefObject } from "react";
 import { secondsToScreenX } from "../timeline/timelineMath";
 import type { MidiClipSummary, SongView } from "../desktopApi";
 import type { useMidiClipHotspots } from "./useMidiClipHotspots";
+import { useTimelineUIStore } from "../uiStore";
 
 /**
  * The invisible hit targets for a MIDI track's clips.
@@ -72,6 +73,10 @@ export function MidiClipHotspots({
     consumeDragClick,
     preview,
   } = hotspots;
+  const selectedItems = useTimelineUIStore((state) => state.selectedTimelineItems);
+  const selectedIds = new Set(
+    selectedItems.filter((item) => item.kind === "midi").map((item) => item.id),
+  );
   const cameraX = cameraXRef.current;
   const livePixelsPerSecond = livePixelsPerSecondRef.current ?? pixelsPerSecond;
 
@@ -93,7 +98,7 @@ export function MidiClipHotspots({
             // en los carriles salvo en controles marcados asi; sin esto el
             // punto no se podia ni abrir ni mover con el dedo.
             data-lt-native-touch=""
-            className={`lt-automation-hotspot${isDragging ? " is-dragging" : ""}`}
+            className={`lt-automation-hotspot${isDragging ? " is-dragging" : ""}${selectedIds.has(clip.id) ? " is-selected" : ""}`}
             aria-label={label}
             title={label}
             style={{
@@ -114,6 +119,8 @@ export function MidiClipHotspots({
             }}
             onPointerDown={(event) => {
               event.stopPropagation();
+              // Ctrl/Cmd+click selects instead (see onClick).
+              if (event.ctrlKey || event.metaKey) return;
               onBeginMove(event, clip);
             }}
             onPointerMove={onUpdateMove}
@@ -123,6 +130,13 @@ export function MidiClipHotspots({
               event.preventDefault();
               event.stopPropagation();
               if (consumeDragClick()) return;
+              // Ctrl/Cmd+click selects (for Ctrl+D), like markers.
+              if (event.ctrlKey || event.metaKey) {
+                useTimelineUIStore
+                  .getState()
+                  .toggleTimelineItemSelection({ kind: "midi", id: clip.id });
+                return;
+              }
               onEdit?.(clip);
             }}
             onContextMenu={(event) => {

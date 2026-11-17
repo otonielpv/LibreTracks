@@ -104,6 +104,10 @@ type TimelineKeyboardShortcutsProps = {
     deleteSelected: () => boolean;
     duplicateSelected: () => boolean;
   };
+  /** Ctrl+D on MIDI clips / cues selected with Ctrl/Cmd+click (timelineItems/). */
+  timelineItems?: {
+    duplicateSelected: () => boolean;
+  };
   videoEdits?: {
     splitSelected: () => Promise<boolean>;
     deleteSelected: () => boolean;
@@ -151,12 +155,15 @@ export function useTimelineKeyboardShortcuts({
   toggleViewMode,
   toggleViewModeBackward,
   rulerMarkers,
+  timelineItems,
   videoEdits,
 }: TimelineKeyboardShortcutsProps) {
   const videoEditsRef = useRef(videoEdits);
   videoEditsRef.current = videoEdits;
   const rulerMarkersRef = useRef(rulerMarkers);
   rulerMarkersRef.current = rulerMarkers;
+  const timelineItemsRef = useRef(timelineItems);
+  timelineItemsRef.current = timelineItems;
   // Kept in a ref, not the effect's dep array: it closes over per-render
   // values in the panel, so listing it would re-register the key listener on
   // every render.
@@ -296,6 +303,10 @@ export function useTimelineKeyboardShortcuts({
         // Marcas de la regla: seleccionarlas suelta clips y pistas, asi que si
         // hay marcas elegidas son lo que se duplica.
         if (selectedClipIds.length === 0 && rulerMarkersRef.current?.duplicateSelected()) {
+          return;
+        }
+        // Same for MIDI clips and cues: selecting them drops the other picks.
+        if (selectedClipIds.length === 0 && timelineItemsRef.current?.duplicateSelected()) {
           return;
         }
         void runAction(async () => {

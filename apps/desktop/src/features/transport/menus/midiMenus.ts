@@ -5,6 +5,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import type { ContextMenuAction } from "../types";
 import { menuSection } from "./menuSections";
 import type { TimelineMenuDeps, ColorPickerPopoverState } from "./timelineMenus";
+import { timelineItemHandlersFrom } from "../timelineItems/fromMenuDeps";
 
 /**
  * Context menus and dialog openers for the MIDI feature.
@@ -52,6 +53,11 @@ function midiClipContextMenu(clip: MidiClipSummary): ContextMenuAction[] {
     {
       label: t("transport.midi.editClip"),
       onSelect: () => editMidiClip(clip),
+    },
+    {
+      label: t("transport.timelineItems.duplicate"),
+      shortcut: d.shortcutHint("edit.duplicate"),
+      onSelect: () => timelineItemHandlersFrom(getDeps).duplicate([{ kind: "midi", id: clip.id }]),
     },
     {
       label: t("transport.midi.deleteClip"),

@@ -37,7 +37,8 @@ export type MidiClipHandlerDeps = {
 };
 
 let clipCounter = 0;
-function nextClipId() {
+/** Fresh MIDI clip id (also used by duplicate/copy). */
+export function nextClipId() {
   clipCounter += 1;
   return `midi_clip_${Date.now()}_${clipCounter}`;
 }

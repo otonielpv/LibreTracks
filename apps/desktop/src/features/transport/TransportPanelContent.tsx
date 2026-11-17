@@ -373,6 +373,7 @@ import type {
 } from "./songs/songViewBindings";
 import { createMarkerMoveHandlers } from "./timeline/markerMoveHandlers";
 import { createRulerMarkerHandlers } from "./rulerMarkers/rulerMarkerHandlers";
+import { createTimelineItemHandlers } from "./timelineItems/timelineItemHandlers";
 import { useLibraryState } from "./hooks/useLibraryState";
 import { useSongWaveforms } from "./hooks/useSongWaveforms";
 import { useWaveformProgress } from "./hooks/useWaveformProgress";
@@ -4237,8 +4238,12 @@ export function TransportPanelContent() {
   const rulerMarkers = useMemo(() => createRulerMarkerHandlers({
     getSong: () => songRef.current, runAction, applyPlaybackSnapshot, refreshSongView, setStatus, t,
   }), [applyPlaybackSnapshot, refreshSongView, runAction, setStatus, t]);
+  const timelineItems = useMemo(() => createTimelineItemHandlers({
+    getSong: () => songRef.current, runAction, applyPlaybackSnapshot, refreshSongView, setStatus, t,
+  }), [applyPlaybackSnapshot, refreshSongView, runAction, setStatus, t]);
   const { runShortcutAction } = useTimelineKeyboardShortcuts({
     rulerMarkers,
+    timelineItems,
     videoEdits: video.keyboardEdits,
     runAction,
     applyPlaybackSnapshot,
