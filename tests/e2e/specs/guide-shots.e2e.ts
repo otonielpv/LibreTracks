@@ -192,6 +192,93 @@ async function tagByText(selector: string, text: string, name: string) {
 }
 
 /** Opens the working session unless it is already on screen. */
+/** Raw Tauri command from the page (the app's own `invokeCommand`). */
+function invokeCommand(cmd: string, args: Record<string, unknown> = {}) {
+  return browser.executeAsync(
+    (c: string, a: Record<string, unknown>, done: (v: unknown) => void) => {
+      const w = window as unknown as {
+        __TAURI_INTERNALS__: { invoke: (c: string, a: unknown) => Promise<unknown> };
+      };
+      w.__TAURI_INTERNALS__.invoke(c, a).then(done, (e) => done({ __error: String(e) }));
+    },
+    cmd,
+    args,
+  );
+}
+
+type ShotsSong = {
+  tracks: Array<{ id: string; name: string; kind: string }>;
+  sectionMarkers?: Array<{ startSeconds: number }>;
+  midiClips?: Array<{ trackId: string }>;
+  automationCues?: unknown[];
+};
+
+/**
+ * The MIDI and automation captures need a MIDI track with a clip and an
+ * automation cue. The shots session has neither (the older one it replaced
+ * did), so they are written into the session COPY here, on a section marker
+ * near the start and with a lead time, which is what the guide explains.
+ * Then the session is saved and reopened so the UI shows them. Idempotent.
+ */
+async function ensureMidiAndCue() {
+  let song = (await AppPage.songView()) as unknown as ShotsSong | null;
+  if (!song) throw new Error("no song loaded");
+  const hasMidi = (song.midiClips ?? []).length > 0;
+  const hasCue = (song.automationCues ?? []).length > 0;
+  if (hasMidi && hasCue) return;
+  const markers = [...(song.sectionMarkers ?? [])].sort((a, b) => a.startSeconds - b.startSeconds);
+  const at = markers.find((m) => m.startSeconds > 2 && m.startSeconds < 60)?.startSeconds ?? 16;
+  const english = UI_LANG === "en";
+  if (!hasMidi) {
+    if (!song.tracks.some((t) => t.kind === "midi")) {
+      await invokeCommand("create_track", { name: "MIDI Luces", kind: "midi", insertAfterTrackId: null, parentTrackId: null });
+      song = (await AppPage.songView()) as unknown as ShotsSong;
+    }
+    const midiTrack = song.tracks.find((t) => t.kind === "midi");
+    await invokeCommand("upsert_midi_clip", {
+      clip: {
+        id: "guide_midi_lyrics",
+        trackId: midiTrack?.id,
+        timelineStartSeconds: at,
+        name: english ? "Verse 2 lyrics" : "Letra verso 2",
+        events: [
+          { id: "e1", atSeconds: 0, channel: null, kind: { type: "programChange", program: 4 } },
+          { id: "e2", atSeconds: 0, channel: null, kind: { type: "note", note: 60, velocity: 100, durationSeconds: 0.5 } },
+        ],
+        color: null,
+        lead: { unit: "bars", count: 1 },
+      },
+    });
+  }
+  if (!hasCue) {
+    await invokeCommand("add_automation_track", { afterTrackId: null });
+    const audioTrack = song.tracks.find((t) => t.kind === "audio");
+    await invokeCommand("upsert_automation_cue", {
+      cue: {
+        id: "guide_cue_scene",
+        name: english ? "Chorus mix" : "Mezcla del coro",
+        atSeconds: at,
+        enabled: true,
+        maxRuns: null,
+        actions: audioTrack ? [{ type: "setTrackMute", trackId: audioTrack.id, muted: true }] : [],
+        lead: { unit: "beats", count: 1 },
+      },
+    });
+  }
+  await invokeCommand("save_project");
+  await AppPage.reopenSessionUntil(
+    session,
+    (s) => {
+      const view = s as unknown as ShotsSong;
+      return (view.midiClips ?? []).length > 0 && (view.automationCues ?? []).length > 0;
+    },
+    180_000,
+  );
+  await AppPage.resetShell();
+  await browser.pause(3000);
+  await dismissVideoNotice();
+}
+
 async function ensureSession() {
   if (await rectOf(".lt-timeline-shell")) return;
   await AppPage.reopenSessionUntil(session, (s) => s.tracks.length >= 5, 180_000);
@@ -1282,6 +1369,7 @@ describe("user guide screenshots", function () {
 
   it("midi", async () => {
     await ensureSession();
+    await ensureMidiAndCue();
     await AppPage.resetShell();
     await setTimelineView({ zoomLevel: 0.25 });
     await browser.pause(800);
@@ -1299,7 +1387,12 @@ describe("user guide screenshots", function () {
 
     // The MIDI track's own menu and its routing window.
     // The MIDI track row, not the automation lane (which shares the header class).
-    const header = await tagByText(".lt-midi-track-header:not(.is-automation)", "MIDI Luces", "midi-header");
+    // Whatever MIDI track the session has ("MIDI Luces" when ensureMidiAndCue
+    // created it).
+    const midiName =
+      ((await AppPage.songView()) as unknown as ShotsSong | null)?.tracks.find((t) => t.kind === "midi")?.name ??
+      "MIDI Luces";
+    const header = await tagByText(".lt-midi-track-header:not(.is-automation)", midiName, "midi-header");
     // Aim at the name text: the header's centre is the power button.
     const name = `${header} .lt-midi-header-text`;
     await rightClick(name, { fx: 0.3 });
@@ -1313,6 +1406,7 @@ describe("user guide screenshots", function () {
 
   it("automation", async () => {
     await ensureSession();
+    await ensureMidiAndCue();
     await AppPage.resetShell();
     await setTimelineView({ zoomLevel: 0.25 });
     await browser.pause(800);
