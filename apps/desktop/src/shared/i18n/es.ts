@@ -2080,6 +2080,10 @@ const es = {
         showInLibrary: "Mostrar en la biblioteca",
       },
     },
+    editorFolds: {
+      collapseAll: "Plegar todo",
+      expandAll: "Desplegar todo",
+    },
     timelineItems: {
       duplicate: "Duplicar",
       statusDuplicated_one: "Duplicado",

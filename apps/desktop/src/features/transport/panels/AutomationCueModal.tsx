@@ -27,6 +27,7 @@ import {
 } from "./trackSongGroups";
 import { useDismissOnBack } from "../mobile/backNavigation";
 import { LeadTimeField } from "./LeadTimeField";
+import { FoldAllButtons } from "./FoldAllButtons";
 import { normalizeLead } from "./leadTime";
 import { cueFoldKey, foldsFor, rememberFolds } from "./editorFolds";
 import {
@@ -282,6 +283,12 @@ export function AutomationCueModal({
         </header>
 
         <div className="lt-settings-modal-body lt-automation-actions-body">
+          <FoldAllButtons
+            total={actions.length}
+            folded={actions.filter((_, index) => collapsed.has(index)).length}
+            onCollapseAll={() => setCollapsed(new Set(actions.map((_, index) => index)))}
+            onExpandAll={() => setCollapsed(new Set())}
+          />
           {actions.length === 0 ? (
             <p className="lt-automation-empty">
               {t("transport.automation.modalEmpty")}

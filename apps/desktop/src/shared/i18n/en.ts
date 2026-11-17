@@ -2051,6 +2051,10 @@ const en = {
         showInLibrary: "Show in library",
       },
     },
+    editorFolds: {
+      collapseAll: "Collapse all",
+      expandAll: "Expand all",
+    },
     timelineItems: {
       duplicate: "Duplicate",
       statusDuplicated_one: "Duplicated",

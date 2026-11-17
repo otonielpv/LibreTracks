@@ -12,6 +12,7 @@ import { formatClock } from "../helpers";
 import { MidiEventFields, describeEvent } from "./MidiEventFields";
 import { useDismissOnBack } from "../mobile/backNavigation";
 import { LeadTimeField } from "./LeadTimeField";
+import { FoldAllButtons } from "./FoldAllButtons";
 import { normalizeLead } from "./leadTime";
 import { foldsFor, midiClipFoldKey, rememberFolds } from "./editorFolds";
 
@@ -239,6 +240,13 @@ export function MidiClipModal({
           </label>
 
           <LeadTimeField value={lead} onChange={setLead} />
+
+          <FoldAllButtons
+            total={events.length}
+            folded={events.filter((event) => collapsed.has(event.id)).length}
+            onCollapseAll={() => setCollapsed(new Set(events.map((event) => event.id)))}
+            onExpandAll={() => setCollapsed(new Set())}
+          />
 
           {events.length === 0 ? (
             <p className="lt-automation-empty">{t("transport.midi.modalEmpty")}</p>

@@ -3153,6 +3153,30 @@ html.lt-ios body {
   font: 600 0.85rem/1.2 "Space Grotesk", sans-serif;
 }
 
+/* "Collapse all" / "Expand all" over the rows of the MIDI clip and cue
+   editors. */
+.lt-fold-all-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.lt-fold-all-buttons button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+}
+
+.lt-fold-all-buttons button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.lt-fold-all-buttons .material-symbols-outlined {
+  font-size: 1rem;
+}
+
 /* Lead time ("fire ahead") field, shared by the MIDI clip and automation cue
    editors (plan lead-time). */
 .lt-lead-field {
