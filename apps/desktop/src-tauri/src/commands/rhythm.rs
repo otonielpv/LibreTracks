@@ -7,7 +7,7 @@
 use libretracks_core::drum_loops::{DrumKit, LoopPattern, LoopRowLiveState, OneShotSet, RegionLoop, SampleRef};
 use lt_audio_engine_v2::{EngineCommand, TriggerKind, TriggerOutcome};
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::audio::engine::rhythm_loop_config;
 use crate::infra::error::DesktopError;
@@ -187,6 +187,8 @@ fn update_settings(
     state.audio.replace_settings(settings.clone()).map_err(|e| e.to_string())?;
     store.set(settings.clone()).map_err(|e| e.to_string())?;
     save_app_settings(app, &settings).map_err(|e| e.to_string())?;
+    // Toda la UI (no solo el panel que lo pidió) ve los ajustes nuevos.
+    let _ = app.emit("settings:updated", &settings);
     Ok(settings)
 }
 

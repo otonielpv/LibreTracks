@@ -980,3 +980,9 @@
   border: 0;
   border-radius: 0;
 }
+
+/* Panel Ritmo acoplado (plan drum-loops): ocupa una fila propia al final y
+   la fila flexible (cues o chart) encoge. */
+.lt-live-view > .lt-rhythm-panel {
+  grid-column: 1 / -1;
+}

@@ -1,7 +1,9 @@
 import { create } from "zustand";
 
 /** Tabs of the bottom console in `wide`/`medium`. */
-export type SetlistBottomTab = "tracks" | "pads";
+/** "rhythm" en wide; "loops" y "oneShots" por separado en medium y short
+ * (plan drum-loops). */
+export type SetlistBottomTab = "tracks" | "pads" | "rhythm" | "loops" | "oneShots";
 /** `short` (phone), like Playback on an iPhone: under the songs, either the
  * console or the song's waveform, never both. */
 export type SetlistShortPane = "mixer" | "song" | "lyrics";

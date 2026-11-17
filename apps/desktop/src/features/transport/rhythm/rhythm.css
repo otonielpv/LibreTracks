@@ -429,3 +429,20 @@
 .lt-rhythm-panel--short .lt-rhythm-shots__grid {
   grid-template-rows: repeat(3, minmax(0, 1fr));
 }
+
+/* ── Botón «Ritmo» de las vistas ─────────────────────────────────────── */
+.lt-rhythm-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lt-rhythm-button.is-active .lt-rhythm-button__icon {
+  color: #57f1db;
+  text-shadow: 0 0 6px rgb(87 241 219 / 0.8);
+}
+
+.lt-rhythm-button.is-open {
+  outline: 1px solid rgb(87 241 219 / 0.6);
+}
+

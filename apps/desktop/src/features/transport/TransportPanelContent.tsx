@@ -146,6 +146,7 @@ import { createStructureHandlers } from "./structure/structureHandlers";
 import { TimelineToolbar } from "./timeline/TimelineToolbar";
 import { TimelineTopbar } from "./timeline/TimelineTopbar";
 import { PadsPopover } from "./panels/PadsPopover";
+import { RhythmDock, RhythmViewButton } from "./rhythm/RhythmDock";
 import { MetronomePopover } from "./panels/MetronomePopover";
 import { VoiceGuidePopover } from "./panels/VoiceGuidePopover";
 import { TrackHeadersPane } from "./tracks/TrackHeadersPane";
@@ -6594,6 +6595,7 @@ export function TransportPanelContent() {
           }
           onOpenPads={() => setIsPadsPopoverOpen((open) => !open)}
           isPadsPopoverOpen={isPadsPopoverOpen}
+          rhythmButton={<RhythmViewButton view={viewMode} />}
           onTempoDraftChange={(next) => {
             tempoDraftDirtyRef.current = true;
             setTempoDraft(next);
@@ -7554,6 +7556,12 @@ export function TransportPanelContent() {
                     )}
                   </div>
 
+                  ) : null}
+                  {viewMode === "daw" ? (
+                    <RhythmDock
+                      view="daw"
+                      songLoop={song?.regions.find((r) => r.id === activeSongRegionId)?.loop ?? null}
+                    />
                   ) : null}
 
                   {/* Compact view replaces the DAW timeline when the user

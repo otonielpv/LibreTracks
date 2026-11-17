@@ -28,6 +28,7 @@ import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { computeSongTrackContent } from "./songTrackContent";
 import type { SetlistLayoutClass } from "./useSetlistLayout";
 import { useMixerFilterStore } from "../mixerFilterStore";
+import { RhythmDock } from "../rhythm/RhythmDock";
 
 export type SetlistMixerProps = Pick<
   SongViewBindings,
@@ -199,8 +200,28 @@ function SetlistMixerComponent({
   const tabs: Array<{ tab: SetlistBottomTab; label: string; icon: string }> = [
     { tab: "tracks", label: t("setlistView.mixer.tabs.tracks"), icon: "equalizer" },
     { tab: "pads", label: t("setlistView.mixer.tabs.pads"), icon: "piano" },
+    // Ritmo (plan drum-loops): una pestaña con las dos columnas en wide; en
+    // medium y short, Loops y One shots por separado.
+    // En el teléfono no hay pestañas: la hoja se abre con el botón Ritmo.
+    ...(layout === "wide"
+      ? [{ tab: "rhythm" as const, label: t("rhythm.title"), icon: "graphic_eq" }]
+      : layout === "medium"
+        ? [
+            { tab: "loops" as const, label: t("rhythm.loops"), icon: "graphic_eq" },
+            { tab: "oneShots" as const, label: t("rhythm.oneShots"), icon: "grid_view" },
+          ]
+        : []),
   ];
-  const tab: SetlistBottomTab = bottomTab;
+  // Una pestaña de ritmo que no existe en esta clase de tamaño cae en la suya.
+  const rhythmTab = bottomTab === "rhythm" || bottomTab === "loops" || bottomTab === "oneShots";
+  const tab: SetlistBottomTab =
+    layout === "short" && rhythmTab
+      ? "tracks"
+      : layout === "wide" && (bottomTab === "loops" || bottomTab === "oneShots")
+        ? "rhythm"
+        : layout === "medium" && bottomTab === "rhythm"
+          ? "loops"
+          : bottomTab;
   // Medium folds the console to its Master bar to give the waveform the
   // height; wide resizes it, and the phone swaps it with the waveform.
   const foldable = layout === "medium";
@@ -395,6 +416,20 @@ function SetlistMixerComponent({
           audioRoutingOptions={audioRoutingOptions}
           auxHandlers={auxHandlers}
         />
+      ) : null}
+      {layout === "short" ? (
+        <RhythmDock view="setlist" layoutClass="short" songLoop={region?.loop ?? null} />
+      ) : null}
+      {tab === "rhythm" || tab === "loops" || tab === "oneShots" ? (
+        <div className="lt-setlist-mixer-panel is-rhythm" data-testid="setlist-rhythm-tab">
+          <RhythmDock
+            view="setlist"
+            alwaysOpen
+            layoutClass={layout}
+            surfaces={tab === "rhythm" ? "both" : tab}
+            songLoop={region?.loop ?? null}
+          />
+        </div>
       ) : null}
       </div>
     </div>

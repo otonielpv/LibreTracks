@@ -9,6 +9,35 @@ import { create } from "zustand";
 import type { LoopRowMeter, RhythmLibrary, RhythmMeterPayload } from "@libretracks/shared/models";
 
 export type RhythmSurface = "loops" | "oneShots";
+export type RhythmView = "daw" | "setlist" | "compact" | "live";
+type OpenByView = Record<RhythmView, boolean>;
+
+const OPEN_KEY = "lt.rhythm.panelOpen";
+const CLOSED: OpenByView = { daw: false, setlist: false, compact: false, live: false };
+
+function readOpenByView(): OpenByView {
+  try {
+    const raw = window.localStorage.getItem(OPEN_KEY);
+    if (!raw) return { ...CLOSED };
+    const parsed = JSON.parse(raw) as Partial<OpenByView>;
+    return {
+      daw: parsed.daw === true,
+      setlist: parsed.setlist === true,
+      compact: parsed.compact === true,
+      live: parsed.live === true,
+    };
+  } catch {
+    return { ...CLOSED };
+  }
+}
+
+function writeOpenByView(value: OpenByView) {
+  try {
+    window.localStorage.setItem(OPEN_KEY, JSON.stringify(value));
+  } catch {
+    // Sin almacenamiento: se queda en memoria.
+  }
+}
 
 type RhythmStore = {
   library: RhythmLibrary | null;
@@ -20,6 +49,10 @@ type RhythmStore = {
   surface: RhythmSurface;
   /** Modo edición de los pads (✎). */
   padEditMode: boolean;
+  /** Panel abierto en cada vista (persistido, como las demás preferencias de vista). */
+  openByView: OpenByView;
+  setOpen: (view: RhythmView, open: boolean) => void;
+  toggleOpen: (view: RhythmView) => void;
   setLibrary: (library: RhythmLibrary) => void;
   applyMeters: (payload: RhythmMeterPayload) => void;
   setSurface: (surface: RhythmSurface) => void;
@@ -62,6 +95,13 @@ function sameRows(a: LoopRowMeter[], b: LoopRowMeter[]): boolean {
 
 export const useRhythmStore = create<RhythmStore>((set, get) => ({
   ...INITIAL,
+  openByView: readOpenByView(),
+  setOpen: (view, open) => {
+    const openByView = { ...get().openByView, [view]: open };
+    set({ openByView });
+    writeOpenByView(openByView);
+  },
+  toggleOpen: (view) => get().setOpen(view, !get().openByView[view]),
   setLibrary: (library) => set({ library }),
   applyMeters: (payload) => {
     rhythmStepRef.step = payload.loopStep;
@@ -81,7 +121,8 @@ export const useRhythmStore = create<RhythmStore>((set, get) => ({
     rhythmStepRef.step = -1;
     rhythmStepRef.bar = 0;
     rhythmStepRef.playing = false;
-    set({ ...INITIAL });
+    set({ ...INITIAL, openByView: { ...CLOSED } });
+    writeOpenByView(CLOSED);
   },
 }));
 

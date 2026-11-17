@@ -1,3 +1,4 @@
+import { RhythmDock } from "../rhythm/RhythmDock";
 import { useTranslation } from "react-i18next";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
@@ -479,6 +480,11 @@ function CompactViewComponent({
       ) : (
         <SceneBar className="lt-compact-scenes" menuClassName="lt-compact-mixer-toggle" />
       )}
+      {/* Ritmo (plan drum-loops): se abre con el botón de la barra superior. */}
+      <RhythmDock
+        view="compact"
+        songLoop={regions.find((region) => region.id === activeRegionId)?.loop ?? null}
+      />
 
       {/* Bottom zone: global mixer over all tracks. Reusable so the DAW
           view can mount it later without forking the component. */}

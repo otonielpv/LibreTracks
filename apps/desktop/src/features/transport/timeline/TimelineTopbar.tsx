@@ -95,6 +95,8 @@ type TimelineTopbarProps = {
   onTogglePads: () => void;
   onOpenPads: () => void;
   isPadsPopoverOpen: boolean;
+  /** Botón «Ritmo» (plan drum-loops), junto a Pads. */
+  rhythmButton?: ReactNode;
   onTempoDraftChange: (nextTempoDraft: string) => void;
   onTempoDraftFocus?: () => void;
   onTapTempo: () => void;
@@ -157,6 +159,7 @@ export function TimelineTopbar({
   onTogglePads,
   onOpenPads,
   isPadsPopoverOpen,
+  rhythmButton,
   onTempoDraftChange,
   onTempoDraftFocus,
   onTapTempo,
@@ -876,6 +879,7 @@ export function TimelineTopbar({
                 </span>
               </button>
             </div>
+            {rhythmButton}
             </NetworkControls>
             <MidiMappable target="action:next_song">
             <button
