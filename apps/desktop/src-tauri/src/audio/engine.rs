@@ -671,6 +671,7 @@ impl AudioController {
                     }
                     if crate::rhythm::meters::should_emit(last_rhythm.as_ref(), &frame.rhythm) {
                         let _ = app_handle.emit(crate::rhythm::meters::RHYTHM_EVENT, &frame.rhythm);
+                        crate::midi::feedback::update_rhythm(&app_handle, frame.rhythm.clone());
                         last_rhythm = Some(frame.rhythm.clone());
                     }
                     if tracks_changed && !frame.tracks.is_empty() {

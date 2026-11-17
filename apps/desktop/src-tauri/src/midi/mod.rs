@@ -13,6 +13,7 @@ pub(crate) mod bluetooth;
 pub(crate) mod control;
 mod dispatch;
 pub(crate) mod feedback;
+pub(crate) mod rhythm_midi;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) mod lifecycle;
 pub mod message;

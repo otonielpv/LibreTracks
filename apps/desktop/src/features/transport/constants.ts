@@ -141,6 +141,30 @@ export const MIDI_LEARN_COMMANDS: MidiLearnCommand[] = [
   },
   { key: "action:toggle_metronome", labelKey: "timelineTopbar.metronome" },
   { key: "action:toggle_voice_guide", labelKey: "timelineTopbar.voiceGuide" },
+  // Ritmo (plan drum-loops, paso 10)
+  { key: "action:loop_toggle", labelKey: "rhythm.midi.loopToggle" },
+  { key: "action:loop_tap", labelKey: "rhythm.midi.loopTap" },
+  { key: "action:oneshots_stop_all", labelKey: "rhythm.stopAll" },
+  { key: "loop:pattern:next", labelKey: "rhythm.midi.patternNext" },
+  { key: "loop:pattern:prev", labelKey: "rhythm.midi.patternPrev" },
+  ...["a", "b", "c", "d"].map((letter) => ({
+    key: `loop:var:${letter}`,
+    labelKey: `rhythm.midi.allVariation${letter.toUpperCase()}`,
+  })),
+  ...Array.from({ length: 8 }, (_, row) => ({
+    key: `loop:row:${row + 1}:toggle`,
+    labelKey: `rhythm.midi.row${row + 1}`,
+  })),
+  ...Array.from({ length: 12 }, (_, pad) => ({
+    key: `oneshot:${pad + 1}`,
+    labelKey: `rhythm.midi.pad${pad + 1}`,
+  })),
+  ...["a", "b", "c", "d"].map((letter) => ({
+    key: `oneshot:bank:${letter}`,
+    labelKey: `rhythm.midi.bank${letter.toUpperCase()}`,
+  })),
+  { key: "mixer:loops:volume", labelKey: "rhythm.midi.loopsVolume" },
+  { key: "mixer:oneshots:volume", labelKey: "rhythm.midi.oneShotsVolume" },
   { key: "action:toggle_vamp", labelKey: "timelineToolbar.vampButton" },
   { key: "action:cancel_jump", labelKey: "timelineToolbar.cancelJump" },
   {

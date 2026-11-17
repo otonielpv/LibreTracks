@@ -70,6 +70,18 @@ pub(crate) fn dispatch_midi_message(app: &AppHandle, message: MidiMessage) -> Re
     let mut first_error = None;
     for (target, binding) in bindings {
         let result = match target {
+            // Loops y one shots (plan drum-loops): disparo rápido, sin sesión.
+            MidiTarget::Action(name)
+                if matches!(name.as_str(), "loop_toggle" | "oneshots_stop_all" | "loop_tap") =>
+            {
+                if !action_fires(binding, target, normalized) {
+                    continue;
+                }
+                dispatch_rhythm(app, &settings_store, target, true, message.data2)
+            }
+            MidiTarget::Loop(_) | MidiTarget::OneShot(_) => {
+                dispatch_rhythm(app, &settings_store, target, ButtonState::is_press(normalized), message.data2)
+            }
             MidiTarget::Action(_) => {
                 if !action_fires(binding, target, normalized) {
                     continue;
@@ -722,6 +734,8 @@ fn dispatch_mixer(
     let read = |settings: &AppSettings| match mixer {
         MixerTarget::Metronome => settings.metronome_volume,
         MixerTarget::VoiceGuide => settings.voice_guide_volume,
+        MixerTarget::Loops => settings.loop_volume,
+        MixerTarget::OneShots => settings.one_shot_volume,
         _ => settings.pad_volume,
     };
     let (current, _) = settings_store
@@ -736,6 +750,8 @@ fn dispatch_mixer(
         .update(|settings| match mixer {
             MixerTarget::Metronome => settings.metronome_volume = gain,
             MixerTarget::VoiceGuide => settings.voice_guide_volume = gain,
+            MixerTarget::Loops => settings.loop_volume = gain,
+            MixerTarget::OneShots => settings.one_shot_volume = gain,
             _ => settings.pad_volume = gain,
         })
         .map_err(|error| error.to_string())?;
@@ -745,6 +761,18 @@ fn dispatch_mixer(
     match mixer {
         MixerTarget::Metronome => audio.set_metronome_volume_realtime(gain),
         MixerTarget::VoiceGuide => audio.set_voice_guide_volume_realtime(gain),
+        MixerTarget::Loops | MixerTarget::OneShots => {
+            let settings = settings_store.current().map_err(|error| error.to_string())?;
+            let command = if mixer == MixerTarget::Loops {
+                crate::audio::engine::rhythm_loop_config(&settings)
+            } else {
+                lt_audio_engine_v2::EngineCommand::SetOneShotConfig {
+                    route: settings.one_shot_output.clone(),
+                    gain: settings.one_shot_volume as f32,
+                }
+            };
+            audio.send_rhythm_command("midi_rhythm_volume", command)
+        }
         _ => audio.set_pad_volume_realtime(gain),
     }
     .map_err(|error| error.to_string())?;
@@ -1150,4 +1178,78 @@ mod tests {
         assert_eq!(next_region_index(&starts, 260.0), Some(0));
         assert_eq!(next_region_index(&[], 10.0), None);
     }
+}
+
+/// Loops y one shots (plan drum-loops, paso 10). Los disparos van por
+/// `Engine::trigger`; patrón, banco y tap tocan ajustes y sincronizan.
+fn dispatch_rhythm(
+    app: &AppHandle,
+    settings_store: &AppSettingsStore,
+    target: &MidiTarget,
+    pressed: bool,
+    velocity: u8,
+) -> Result<(), String> {
+    use libretracks_core::midi_control::{LoopMidiTarget, OneShotMidiTarget};
+    let audio = &app.state::<DesktopState>().audio;
+    if let Some((kind, index, value)) = super::rhythm_midi::rhythm_trigger_for(target, pressed, velocity) {
+        audio.rhythm_trigger(kind, index, value).map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+    if !pressed {
+        return Ok(());
+    }
+    match target {
+        MidiTarget::Loop(LoopMidiTarget::Pattern(step)) => {
+            let Some(library) = audio.rhythm_library() else { return Ok(()) };
+            let patterns = library.list_patterns().map_err(|error| error.to_string())?;
+            if patterns.is_empty() {
+                return Ok(());
+            }
+            let current = settings_store.current().map_err(|error| error.to_string())?;
+            let at = patterns.iter().position(|p| p.id == current.active_loop_pattern_id);
+            let len = patterns.len() as i64;
+            let next = match at {
+                Some(at) => (at as i64 + i64::from(*step)).rem_euclid(len),
+                None if *step < 0 => len - 1,
+                None => 0,
+            };
+            let id = patterns[next as usize].id.clone();
+            settings_store
+                .update(|settings| settings.active_loop_pattern_id = id)
+                .map_err(|error| error.to_string())?;
+        }
+        MidiTarget::OneShot(OneShotMidiTarget::Bank(bank)) => {
+            settings_store
+                .update(|settings| settings.active_one_shot_bank = *bank)
+                .map_err(|error| error.to_string())?;
+        }
+        MidiTarget::Action(name) if name == "loop_tap" => {
+            static TAPS: std::sync::Mutex<Vec<std::time::Instant>> = std::sync::Mutex::new(Vec::new());
+            let current = settings_store.current().map_err(|error| error.to_string())?;
+            if current.loop_clock_mode != "free" {
+                return Ok(());
+            }
+            let mut taps = TAPS.lock().unwrap_or_else(|e| e.into_inner());
+            let Some(bpm) = super::rhythm_midi::next_tap_bpm(&mut taps, std::time::Instant::now()) else {
+                return Ok(());
+            };
+            drop(taps);
+            settings_store
+                .update(|settings| settings.loop_free_bpm = (bpm * 10.0).round() / 10.0)
+                .map_err(|error| error.to_string())?;
+            let settings = settings_store.current().map_err(|error| error.to_string())?;
+            audio
+                .send_rhythm_command("midi_loop_tap", crate::audio::engine::rhythm_loop_config(&settings))
+                .map_err(|error| error.to_string())?;
+            control().settings_dirty(app);
+            return Ok(());
+        }
+        _ => return Ok(()),
+    }
+    // Patrón o banco: el AudioController lee los ajustes del controlador.
+    let settings = settings_store.current().map_err(|error| error.to_string())?;
+    audio.replace_settings(settings).map_err(|error| error.to_string())?;
+    audio.sync_rhythm().map_err(|error| error.to_string())?;
+    control().settings_dirty(app);
+    Ok(())
 }

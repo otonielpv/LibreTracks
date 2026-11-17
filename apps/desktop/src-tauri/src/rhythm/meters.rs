@@ -22,7 +22,7 @@ pub struct LoopRowMeter {
     pub pending_enabled: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RhythmMeterPayload {
     /// Paso del patrón que suena (-1 parado). La UI lo pinta por ref + rAF.

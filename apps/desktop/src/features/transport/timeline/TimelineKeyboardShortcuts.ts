@@ -22,6 +22,7 @@ import {
 import type { ShortcutActionId } from "../keyboard/actions";
 import { eventToBinding } from "../keyboard/keybinding";
 import { VIDEO_SHORTCUT_HANDLERS } from "../video/videoLive";
+import { RHYTHM_SHORTCUT_HANDLERS } from "../rhythm/rhythmShortcuts";
 import {
   SETLIST_SHORTCUT_HANDLERS,
   clearSetlistSectionCursor,
@@ -494,6 +495,7 @@ export function useTimelineKeyboardShortcuts({
         useTimelineUIStore.getState().setViewMode("setlist");
       },
       ...VIDEO_SHORTCUT_HANDLERS,
+      ...RHYTHM_SHORTCUT_HANDLERS,
       ...SETLIST_SHORTCUT_HANDLERS,
     };
 

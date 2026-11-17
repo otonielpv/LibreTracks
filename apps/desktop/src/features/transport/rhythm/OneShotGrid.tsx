@@ -6,6 +6,8 @@ import { useTranslation } from "react-i18next";
 
 import { ONE_SHOT_PADS_PER_BANK, type OneShotBank } from "@libretracks/shared/models";
 
+import { MidiMappable } from "../midi/MidiMappable";
+import { useTimelineUIStore } from "../uiStore";
 import type { RhythmHandlers } from "./rhythmHandlers";
 
 const BANK_LETTERS = ["A", "B", "C", "D"] as const;
@@ -38,6 +40,8 @@ function OneShotGridImpl({
   const { t } = useTranslation();
   const pressed = useRef(new Map<number, number>());
   const dragFrom = useRef<number | null>(null);
+  // En modo Mapeo tocar un pad aprende su destino, no suena.
+  const learning = useTimelineUIStore((state) => state.midiLearnMode !== null);
   const swapped = useRef(false);
 
   const release = (pointerId: number) => {
@@ -52,8 +56,8 @@ function OneShotGridImpl({
       <div className="lt-rhythm-shots__bar">
         <div className="lt-rhythm-shots__banks" role="tablist">
           {BANK_LETTERS.slice(0, Math.max(1, bankCount)).map((letter, index) => (
+            <MidiMappable key={letter} target={`oneshot:bank:${letter.toLowerCase()}`}>
             <button
-              key={letter}
               type="button"
               role="tab"
               aria-selected={index === bankIndex}
@@ -63,6 +67,7 @@ function OneShotGridImpl({
             >
               {letter}
             </button>
+            </MidiMappable>
           ))}
         </div>
         {onToggleEdit ? (
@@ -76,9 +81,11 @@ function OneShotGridImpl({
             ✎
           </button>
         ) : null}
+        <MidiMappable target="action:oneshots_stop_all">
         <button type="button" className="lt-rhythm-stop-all" onClick={() => void handlers.stopAllPads()}>
           {t("rhythm.stopAll")}
         </button>
+        </MidiMappable>
       </div>
       <div className="lt-rhythm-shots__grid">
         {Array.from({ length: ONE_SHOT_PADS_PER_BANK }, (_, index) => {
@@ -132,14 +139,15 @@ function OneShotGridImpl({
             );
           }
           return (
+            <MidiMappable key={index} target={`oneshot:${index + 1}`} label={pad.name}>
             <button
-              key={index}
               type="button"
               className={sounding ? "lt-rhythm-pad is-sounding" : "lt-rhythm-pad"}
               style={{ ["--lt-rhythm-pad-color" as string]: pad.color || undefined }}
               aria-label={pad.name || t("rhythm.padLabel", { number: index + 1 })}
               data-testid={`rhythm-pad-${index}`}
               onPointerDown={(event) => {
+                if (learning) return;
                 event.preventDefault();
                 event.currentTarget.setPointerCapture?.(event.pointerId);
                 pressed.current.set(event.pointerId, index);
@@ -151,6 +159,7 @@ function OneShotGridImpl({
             >
               {pad.name}
             </button>
+            </MidiMappable>
           );
         })}
       </div>

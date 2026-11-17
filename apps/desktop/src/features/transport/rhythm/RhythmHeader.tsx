@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import type { AppSettings, LoopClockMode, LoopPattern, LoopQuantize } from "@libretracks/shared/models";
 
+import { MidiMappable } from "../midi/MidiMappable";
 import type { RhythmHandlers } from "./rhythmHandlers";
 import type { RhythmLayoutClass } from "./useRhythmLayout";
 
@@ -82,6 +83,7 @@ export function RhythmHeader({
 
   return (
     <div className="lt-rhythm-header" data-testid="rhythm-header">
+      <MidiMappable target="action:loop_toggle">
       <button
         type="button"
         className={playing ? "lt-rhythm-play is-playing" : "lt-rhythm-play"}
@@ -91,6 +93,7 @@ export function RhythmHeader({
       >
         {playing ? "■" : "▶"}
       </button>
+      </MidiMappable>
       {songPatternName ? (
         <span className="lt-rhythm-song-pattern" title={t("rhythm.songPattern")}>
           {songPatternName}

@@ -41,6 +41,9 @@ struct FeedbackState {
     scenes: SceneFeedback,
     /// Last message sent per binding key.
     sent: HashMap<String, [u8; 3]>,
+    /// Estado en directo de loops y one shots (plan drum-loops), del hilo de
+    /// medidores.
+    rhythm: crate::rhythm::meters::RhythmMeterPayload,
 }
 
 fn state() -> &'static Mutex<FeedbackState> {
@@ -102,6 +105,7 @@ pub(crate) fn refresh(app: &AppHandle) {
     }
     let transport = feedback.transport;
     let scenes = feedback.scenes.clone();
+    let rhythm = feedback.rhythm.clone();
     let desired = control().with_mix(|mix| {
         // Switches light LEDs; volume and pan move motor faders and LED
         // rings (paso 09, Mackie Control). Sent on refreshes only, never per
@@ -140,6 +144,7 @@ pub(crate) fn refresh(app: &AppHandle) {
                     "toggle_metronome" => toggles.0,
                     "toggle_voice_guide" => toggles.1,
                     "toggle_pads" => toggles.2,
+                    "loop_toggle" => rhythm.loop_playing,
                     _ => return None,
                 };
                 Some(FeedbackValue::Switch(on))
@@ -150,6 +155,7 @@ pub(crate) fn refresh(app: &AppHandle) {
             MidiTarget::Scene { .. } | MidiTarget::SceneSlot(_) => target
                 .scene_led(&scenes.scene_ids, &scenes.active_scene_ids)
                 .map(FeedbackValue::Switch),
+            MidiTarget::Loop(_) | MidiTarget::OneShot(_) => super::rhythm_midi::rhythm_led(target, &rhythm),
             _ => None,
         })
     });
@@ -287,4 +293,17 @@ mod tests {
             vec![("strip:1:volume".to_string(), [0xE3, (word & 0x7F) as u8, (word >> 7) as u8])]
         );
     }
+}
+
+/// El hilo de medidores avisa del estado de loops y one shots cuando cambia;
+/// los LEDs de filas, variaciones y pads lo siguen.
+pub fn update_rhythm(app: &AppHandle, rhythm: crate::rhythm::meters::RhythmMeterPayload) {
+    {
+        let mut feedback = state().lock().unwrap_or_else(|e| e.into_inner());
+        if feedback.rhythm == rhythm {
+            return;
+        }
+        feedback.rhythm = rhythm;
+    }
+    refresh(app);
 }

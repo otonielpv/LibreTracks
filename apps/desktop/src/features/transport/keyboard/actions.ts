@@ -22,7 +22,8 @@ export type ShortcutGroup =
   | "project"
   | "navigation"
   | "video"
-  | "setlist";
+  | "setlist"
+  | "rhythm";
 
 export type ShortcutActionId =
   // transport
@@ -68,7 +69,26 @@ export type ShortcutActionId =
   | "setlist.nextSection"
   | "setlist.previousSong"
   | "setlist.nextSong"
-  | "setlist.confirmJump";
+  | "setlist.confirmJump"
+  // Ritmo (plan drum-loops, paso 10)
+  | "rhythm.loopToggle"
+  | "rhythm.variationA"
+  | "rhythm.variationB"
+  | "rhythm.variationC"
+  | "rhythm.variationD"
+  | "rhythm.stopAllPads"
+  | "rhythm.pad1"
+  | "rhythm.pad2"
+  | "rhythm.pad3"
+  | "rhythm.pad4"
+  | "rhythm.pad5"
+  | "rhythm.pad6"
+  | "rhythm.pad7"
+  | "rhythm.pad8"
+  | "rhythm.pad9"
+  | "rhythm.pad10"
+  | "rhythm.pad11"
+  | "rhythm.pad12";
 
 /**
  * Where an action listens. Global actions (no scope) work in every view; a
@@ -316,6 +336,118 @@ export const SHORTCUT_ACTIONS: ShortcutActionDef[] = [
     id: "video.toggleOutput",
     group: "video",
     labelKey: "shortcuts.action.videoToggleOutput",
+    defaultBinding: null,
+  },
+
+  // --- Ritmo (plan drum-loops, paso 10) ----------------------------------
+  // Solo arrancar/parar el loop y las variaciones de todas las filas traen
+  // tecla; los pads se asignan a mano.
+  {
+    id: "rhythm.loopToggle",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmLoopToggle",
+    defaultBinding: "Alt+L",
+  },
+  {
+    id: "rhythm.variationA",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmVariationA",
+    defaultBinding: "Alt+1",
+  },
+  {
+    id: "rhythm.variationB",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmVariationB",
+    defaultBinding: "Alt+2",
+  },
+  {
+    id: "rhythm.variationC",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmVariationC",
+    defaultBinding: "Alt+3",
+  },
+  {
+    id: "rhythm.variationD",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmVariationD",
+    defaultBinding: "Alt+4",
+  },
+  {
+    id: "rhythm.stopAllPads",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmStopAllPads",
+    defaultBinding: null,
+  },
+  {
+    id: "rhythm.pad1",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmPad1",
+    defaultBinding: null,
+  },
+  {
+    id: "rhythm.pad2",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmPad2",
+    defaultBinding: null,
+  },
+  {
+    id: "rhythm.pad3",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmPad3",
+    defaultBinding: null,
+  },
+  {
+    id: "rhythm.pad4",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmPad4",
+    defaultBinding: null,
+  },
+  {
+    id: "rhythm.pad5",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmPad5",
+    defaultBinding: null,
+  },
+  {
+    id: "rhythm.pad6",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmPad6",
+    defaultBinding: null,
+  },
+  {
+    id: "rhythm.pad7",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmPad7",
+    defaultBinding: null,
+  },
+  {
+    id: "rhythm.pad8",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmPad8",
+    defaultBinding: null,
+  },
+  {
+    id: "rhythm.pad9",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmPad9",
+    defaultBinding: null,
+  },
+  {
+    id: "rhythm.pad10",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmPad10",
+    defaultBinding: null,
+  },
+  {
+    id: "rhythm.pad11",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmPad11",
+    defaultBinding: null,
+  },
+  {
+    id: "rhythm.pad12",
+    group: "rhythm",
+    labelKey: "shortcuts.action.rhythmPad12",
     defaultBinding: null,
   },
 

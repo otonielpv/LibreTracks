@@ -505,3 +505,36 @@ fn scene_leds_follow_the_engaged_scenes() {
     assert_eq!(led("scene_slot:9"), Some(false));
     assert_eq!(led("scene:b:apply"), None);
 }
+
+
+// Plan drum-loops, paso 10: destinos de loops y one shots.
+#[test]
+fn drum_loop_and_one_shot_targets_parse_and_serialize() {
+    use crate::midi_control::{LoopMidiTarget, MidiTarget, MixerTarget, OneShotMidiTarget, TargetValueKind};
+    let cases = [
+        ("action:loop_toggle", MidiTarget::Action("loop_toggle".into())),
+        ("action:loop_tap", MidiTarget::Action("loop_tap".into())),
+        ("action:oneshots_stop_all", MidiTarget::Action("oneshots_stop_all".into())),
+        ("loop:row:1:toggle", MidiTarget::Loop(LoopMidiTarget::RowToggle(0))),
+        ("loop:row:8:var:c", MidiTarget::Loop(LoopMidiTarget::RowVariation { row: 7, variation: 2 })),
+        ("loop:var:d", MidiTarget::Loop(LoopMidiTarget::AllVariation(3))),
+        ("loop:pattern:next", MidiTarget::Loop(LoopMidiTarget::Pattern(1))),
+        ("loop:pattern:prev", MidiTarget::Loop(LoopMidiTarget::Pattern(-1))),
+        ("oneshot:1", MidiTarget::OneShot(OneShotMidiTarget::Pad(0))),
+        ("oneshot:12", MidiTarget::OneShot(OneShotMidiTarget::Pad(11))),
+        ("oneshot:bank:b", MidiTarget::OneShot(OneShotMidiTarget::Bank(1))),
+        ("mixer:loops:volume", MidiTarget::Mixer(MixerTarget::Loops)),
+        ("mixer:oneshots:volume", MidiTarget::Mixer(MixerTarget::OneShots)),
+    ];
+    for (key, target) in cases {
+        assert_eq!(MidiTarget::parse(key), Some(target.clone()), "{key}");
+        assert_eq!(target.key(), key);
+    }
+    for bad in ["loop:row:0:toggle", "loop:row:9:toggle", "loop:row:1:var:e", "loop:var:x", "oneshot:0", "oneshot:13", "oneshot:bank:e", "loop:pattern:up"] {
+        assert_eq!(MidiTarget::parse(bad), None, "{bad}");
+    }
+    assert_eq!(MidiTarget::parse("loop:row:2:toggle").unwrap().value_kind(), TargetValueKind::Switch);
+    assert_eq!(MidiTarget::parse("oneshot:3").unwrap().value_kind(), TargetValueKind::Trigger);
+    assert_eq!(MidiTarget::parse("loop:pattern:next").unwrap().value_kind(), TargetValueKind::Trigger);
+    assert_eq!(MidiTarget::parse("mixer:loops:volume").unwrap().value_kind(), TargetValueKind::Continuous);
+}

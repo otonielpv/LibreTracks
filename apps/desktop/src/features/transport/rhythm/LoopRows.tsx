@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import type { DrumKit, LoopPattern, LoopRowMeter } from "@libretracks/shared/models";
 
+import { MidiMappable } from "../midi/MidiMappable";
 import { stepsPerBar as patternStepsPerBar } from "./patternOps";
 import type { RhythmHandlers } from "./rhythmHandlers";
 import { LoopStepStrip } from "./LoopStepStrip";
@@ -46,6 +47,7 @@ function LoopRowsImpl({ pattern, kit, rows, layout, handlers }: LoopRowsProps) {
             data-testid={`rhythm-row-${index}`}
           >
             <span className="lt-rhythm-row__color" style={{ background: sound?.color || undefined }} />
+            <MidiMappable target={`loop:row:${index + 1}:toggle`} label={name}>
             <button
               type="button"
               className={[
@@ -59,10 +61,11 @@ function LoopRowsImpl({ pattern, kit, rows, layout, handlers }: LoopRowsProps) {
             >
               <span className="lt-rhythm-row__name">{name}</span>
             </button>
+            </MidiMappable>
             <div className="lt-rhythm-row__variations" role="group">
               {VARIATION_LETTERS.map((letter, v) => (
+                <MidiMappable key={letter} target={`loop:row:${index + 1}:var:${letter.toLowerCase()}`} label={`${name} ${letter}`}>
                 <button
-                  key={letter}
                   type="button"
                   className={[
                     "lt-rhythm-chip",
@@ -76,6 +79,7 @@ function LoopRowsImpl({ pattern, kit, rows, layout, handlers }: LoopRowsProps) {
                 >
                   {letter}
                 </button>
+                </MidiMappable>
               ))}
             </div>
             {layout === "wide" ? (

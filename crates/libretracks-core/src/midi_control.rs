@@ -598,6 +598,10 @@ pub enum MixerTarget {
     Metronome,
     VoiceGuide,
     Pads,
+    /// Loops de batería (plan drum-loops).
+    Loops,
+    /// One shots (plan drum-loops).
+    OneShots,
 }
 
 impl MixerTarget {
@@ -607,6 +611,8 @@ impl MixerTarget {
             "metronome" => Self::Metronome,
             "voice_guide" => Self::VoiceGuide,
             "pads" => Self::Pads,
+            "loops" => Self::Loops,
+            "oneshots" => Self::OneShots,
             _ => return None,
         })
     }
@@ -617,6 +623,96 @@ impl MixerTarget {
             Self::Metronome => "metronome",
             Self::VoiceGuide => "voice_guide",
             Self::Pads => "pads",
+            Self::Loops => "loops",
+            Self::OneShots => "oneshots",
+        }
+    }
+}
+
+/// Destinos del loop de batería (plan drum-loops, paso 10). Filas 0-based
+/// aquí; en la clave van 1-based (`loop:row:1:toggle`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LoopMidiTarget {
+    /// `loop:row:<n>:toggle`
+    RowToggle(u8),
+    /// `loop:row:<n>:var:<a-d>`
+    RowVariation { row: u8, variation: u8 },
+    /// `loop:var:<a-d>` — todas las filas.
+    AllVariation(u8),
+    /// `loop:pattern:next` / `loop:pattern:prev`
+    Pattern(i8),
+}
+
+/// Destinos de los one shots (plan drum-loops, paso 10). Pads y bancos
+/// 0-based aquí, 1-based / letra en la clave.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OneShotMidiTarget {
+    /// `oneshot:<n>` — pad n (1-12) del banco activo; nota con velocidad,
+    /// nota off = soltar.
+    Pad(u8),
+    /// `oneshot:bank:<a-d>`
+    Bank(u8),
+}
+
+fn variation_from_letter(letter: &str) -> Option<u8> {
+    match letter {
+        "a" | "A" => Some(0),
+        "b" | "B" => Some(1),
+        "c" | "C" => Some(2),
+        "d" | "D" => Some(3),
+        _ => None,
+    }
+}
+
+fn variation_letter(variation: u8) -> char {
+    (b'a' + variation.min(3)) as char
+}
+
+fn one_based(value: &str, max: u8) -> Option<u8> {
+    value.parse::<u8>().ok().filter(|n| (1..=max).contains(n)).map(|n| n - 1)
+}
+
+impl LoopMidiTarget {
+    fn parse(rest: &str) -> Option<Self> {
+        let parts: Vec<&str> = rest.split(':').collect();
+        match parts.as_slice() {
+            ["row", n, "toggle"] => Some(Self::RowToggle(one_based(n, 8)?)),
+            ["row", n, "var", letter] => Some(Self::RowVariation {
+                row: one_based(n, 8)?,
+                variation: variation_from_letter(letter)?,
+            }),
+            ["var", letter] => Some(Self::AllVariation(variation_from_letter(letter)?)),
+            ["pattern", "next"] => Some(Self::Pattern(1)),
+            ["pattern", "prev"] => Some(Self::Pattern(-1)),
+            _ => None,
+        }
+    }
+
+    fn key(&self) -> String {
+        match self {
+            Self::RowToggle(row) => format!("loop:row:{}:toggle", row + 1),
+            Self::RowVariation { row, variation } => {
+                format!("loop:row:{}:var:{}", row + 1, variation_letter(*variation))
+            }
+            Self::AllVariation(variation) => format!("loop:var:{}", variation_letter(*variation)),
+            Self::Pattern(step) if *step < 0 => "loop:pattern:prev".to_string(),
+            Self::Pattern(_) => "loop:pattern:next".to_string(),
+        }
+    }
+}
+
+impl OneShotMidiTarget {
+    fn parse(rest: &str) -> Option<Self> {
+        if let Some(letter) = rest.strip_prefix("bank:") {
+            return variation_from_letter(letter).map(Self::Bank);
+        }
+        one_based(rest, 12).map(Self::Pad)
+    }
+
+    fn key(&self) -> String {
+        match self {
+            Self::Pad(pad) => format!("oneshot:{}", pad + 1),
+            Self::Bank(bank) => format!("oneshot:bank:{}", variation_letter(*bank)),
         }
     }
 }
@@ -642,6 +738,10 @@ pub enum MidiTarget {
     /// `scene_slot:<n>` — the n-th (1-based) scene in the editor's order,
     /// toggled: a profile can map "buttons 1-8 = scenes 1-8" for any session.
     SceneSlot(u16),
+    /// `loop:*` — controles del loop de batería (plan drum-loops).
+    Loop(LoopMidiTarget),
+    /// `oneshot:*` — pads y bancos de one shots (plan drum-loops).
+    OneShot(OneShotMidiTarget),
 }
 
 /// What kind of value a target takes, which picks the default mode.
@@ -704,6 +804,12 @@ impl MidiTarget {
                 .filter(|slot| *slot > 0)
                 .map(Self::SceneSlot);
         }
+        if let Some(rest) = key.strip_prefix("loop:") {
+            return LoopMidiTarget::parse(rest).map(Self::Loop);
+        }
+        if let Some(rest) = key.strip_prefix("oneshot:") {
+            return OneShotMidiTarget::parse(rest).map(Self::OneShot);
+        }
         match key {
             "bank:next" => Some(Self::Bank(1)),
             "bank:prev" => Some(Self::Bank(-1)),
@@ -722,6 +828,8 @@ impl MidiTarget {
             Self::Bank(_) => "bank:next".to_string(),
             Self::Scene { scene_id, mode } => format!("scene:{scene_id}:{}", mode.as_str()),
             Self::SceneSlot(slot) => format!("scene_slot:{slot}"),
+            Self::Loop(target) => target.key(),
+            Self::OneShot(target) => target.key(),
         }
     }
 
@@ -735,6 +843,13 @@ impl MidiTarget {
                 SceneMode::Apply | SceneMode::Restore => TargetValueKind::Trigger,
             },
             Self::SceneSlot(_) => TargetValueKind::Switch,
+            // Filas y variaciones encienden su LED con el estado del loop;
+            // cambiar de patrón o de banco dispara una vez.
+            Self::Loop(LoopMidiTarget::Pattern(_)) => TargetValueKind::Trigger,
+            Self::Loop(_) => TargetValueKind::Switch,
+            Self::OneShot(OneShotMidiTarget::Bank(_)) => TargetValueKind::Trigger,
+            // Un pad suena mientras se pulsa: nota on = down, nota off = up.
+            Self::OneShot(OneShotMidiTarget::Pad(_)) => TargetValueKind::Trigger,
             Self::Param(_) | Self::Mixer(_) => TargetValueKind::Continuous,
             Self::Track { control, .. } | Self::Strip { control, .. } => {
                 if control.is_switch() {
