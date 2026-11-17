@@ -768,6 +768,7 @@ void Mixer::render_timeline_span(float** output_channels,
         return;
 
     const Frame timeline_frame = clock_->position().frame;
+    push_loop_span(output_offset, num_frames, timeline_frame, LoopSpanKind::Playing);
     std::uint64_t rendered_this_block = 0;
     std::uint64_t skipped_this_block = 0;
 
@@ -1104,6 +1105,7 @@ void Mixer::render(float** output_channels,
         std::fill(output_channels[ch], output_channels[ch] + num_frames, 0.f);
 
     Frame timeline_frame = clock_->position().frame;
+    loop_span_count_ = 0;
 
     reset_track_meters();
 
@@ -1245,6 +1247,7 @@ void Mixer::render(float** output_channels,
         fade_.process(fade_channels, num_channels, post_frames);
         fade_processed_in_split = true;
     } else if (clock_->position().state == TransportState::Playing && session) {
+        push_loop_span(0, num_frames, timeline_frame, LoopSpanKind::Playing);
         std::uint64_t rendered_this_block = 0;
         std::uint64_t skipped_this_block = 0;
         // Renderer slots available to the audio thread this block (see the note
@@ -1554,6 +1557,21 @@ void Mixer::render(float** output_channels,
     pad_.render(output_channels, num_channels, num_frames, clock_->sample_rate(),
                 render_output_channels_.data(), render_output_channel_count_);
 
+    // Loops de batería: lo que no cubrió el transporte ni el vamp corre como
+    // parado, a la BPM de la canción bajo el playhead.
+    {
+        int covered = 0;
+        for (int i = 0; i < loop_span_count_; ++i)
+            covered = std::max(covered, loop_spans_[static_cast<std::size_t>(i)].offset
+                                            + loop_spans_[static_cast<std::size_t>(i)].frames);
+        if (covered < num_frames)
+            push_loop_span(covered, num_frames - covered, clock_->position().frame,
+                           LoopSpanKind::Stopped);
+        loop_.render(output_channels, num_channels, num_frames, clock_->sample_rate(),
+                     session.get(), loop_spans_.data(), loop_span_count_, sample_bank_,
+                     render_output_channels_.data(), render_output_channel_count_);
+    }
+
     phase_mark(phase_t, phase_tracks_us_);  // track render loop (+ jump split)
 
     // Apply crossfade ramp (Phase 7).
@@ -1713,6 +1731,17 @@ bool Mixer::song_gap_vamp_active() const noexcept {
     return song_gap_vamp_active_.load(std::memory_order_acquire);
 }
 
+void Mixer::push_loop_span(int offset, int frames, Frame timeline_frame, LoopSpanKind kind,
+                           const Song* frozen_song) noexcept {
+    if (frames <= 0 || loop_span_count_ >= static_cast<int>(loop_spans_.size())) return;
+    LoopSpan& span = loop_spans_[static_cast<std::size_t>(loop_span_count_++)];
+    span.offset = offset;
+    span.frames = frames;
+    span.timeline_frame = timeline_frame;
+    span.kind = kind;
+    span.frozen_song = frozen_song;
+}
+
 void Mixer::render_song_gap_vamp(float** output_channels,
                                  int num_channels,
                                  int num_frames,
@@ -1728,6 +1757,8 @@ void Mixer::render_song_gap_vamp(float** output_channels,
             shifted_channels[static_cast<std::size_t>(ch)] = output_channels[ch] + output_offset;
         channels = shifted_channels.data();
     }
+    push_loop_span(output_offset, num_frames, song_gap_vamp_frame_, LoopSpanKind::Vamp,
+                   &song_gap_vamp_timing_);
     metronome_.render_song(channels, num_channels, num_frames, clock_->sample_rate(),
                            song_gap_vamp_frame_, &song_gap_vamp_timing_,
                            render_output_channels_.data(), render_output_channel_count_);

@@ -187,6 +187,45 @@ pub enum EngineCommand {
         stop_with_transport: bool,
     },
 
+    /// Loops de batería (plan drum-loops): patrón elegido a mano. Se aplica en
+    /// el siguiente bloque conservando la posición y el estado de las filas.
+    SetLoopPattern {
+        pattern: LoopEnginePattern,
+    },
+    /// Arranca o para el loop, cuantizado. `playing: true` despierta un stream
+    /// suspendido.
+    SetLoopTransport {
+        playing: bool,
+    },
+    /// Cambia una fila (cuantizado). `None` deja el valor como está.
+    SetLoopRow {
+        row: i32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        enabled: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        variation: Option<i32>,
+    },
+    /// Todas las filas a una variación (cuantizado).
+    SetLoopAllRows {
+        variation: i32,
+    },
+    SetLoopConfig {
+        /// `follow` | `free`
+        clock_mode: String,
+        /// >0 sustituye a la BPM del patrón en modo libre (tap).
+        #[serde(default)]
+        free_bpm: f64,
+        /// `bar` | `beat` | `immediate`
+        quantize: String,
+        route: String,
+        gain: f32,
+    },
+    /// Loops por canción: el motor carga el de cada región en el frame en que
+    /// empieza.
+    SetRegionLoops {
+        regions: Vec<RegionLoopEngine>,
+    },
+
     /// Decode a single ambient-pad key from disk and swap it into the renderer.
     /// The engine reads `<pads_dir>/<pad_id>/<key>.<ext>`. Decoding happens off
     /// the audio thread; the clip is swapped in atomically.
@@ -570,4 +609,46 @@ pub enum JumpTrigger {
 
 fn default_half() -> f32 {
     0.5
+}
+
+/// Patrón de loop resuelto para el motor: slots del banco de muestras,
+/// ganancias lineales y un byte por paso (0 silencio, 1 suave, 2 normal,
+/// 3 acento).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct LoopEnginePattern {
+    pub steps_per_beat: i32,
+    pub beats_per_bar: i32,
+    pub beat_unit: i32,
+    pub bars: i32,
+    pub free_bpm: f64,
+    #[serde(default)]
+    pub swing: f64,
+    #[serde(default)]
+    pub rows: Vec<LoopEngineRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct LoopEngineRow {
+    pub slot: i32,
+    pub gain: f32,
+    /// 0 = sin grupo de corte.
+    #[serde(default)]
+    pub choke_group: i32,
+    pub variations: Vec<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct LoopEngineRowState {
+    pub enabled: bool,
+    pub variation: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RegionLoopEngine {
+    pub region_id: String,
+    pub pattern: LoopEnginePattern,
+    #[serde(default)]
+    pub autostart: bool,
+    #[serde(default)]
+    pub initial_rows: Vec<LoopEngineRowState>,
 }

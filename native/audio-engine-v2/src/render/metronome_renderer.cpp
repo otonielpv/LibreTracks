@@ -1,5 +1,7 @@
 #include <lt_engine/render/metronome_renderer.h>
 #include <lt_engine/devices/device_channel_layout.h>
+#include <lt_engine/render/beat_grid.h>
+#include <lt_engine/render/output_route.h>
 #include <lt_engine/session/tempo_ramp.h>
 
 #include <algorithm>
@@ -25,108 +27,7 @@ std::string array_text(const std::array<char, 64>& src) {
     return std::string(src.data());
 }
 
-std::string normalize_route(std::string route) {
-    std::transform(route.begin(), route.end(), route.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    route.erase(route.begin(), std::find_if(route.begin(), route.end(), [](unsigned char c) {
-        return std::isspace(c) == 0;
-    }));
-    route.erase(std::find_if(route.rbegin(), route.rend(), [](unsigned char c) {
-        return std::isspace(c) == 0;
-    }).base(), route.end());
-    return route;
-}
 
-std::pair<int, int> signature_at(const Song* song, Frame frame) noexcept {
-    if (!song) return {4, 4};
-    int beats = std::max(1, song->beats_per_bar);
-    int unit = std::max(1, song->beat_unit);
-    for (const auto& marker : song->time_signature_markers) {
-        if (marker.frame > frame) break;
-        beats = std::max(1, marker.beats_per_bar);
-        unit = std::max(1, marker.beat_unit);
-    }
-    return {beats, unit};
-}
-
-double bpm_at(const Song* song, Frame frame) noexcept {
-    if (!song) return 120.0;
-    // Inside a ramp, the tempo it has reached at this frame.
-    return tempo_span_at(song, frame).bpm_at(static_cast<double>(frame));
-}
-
-Frame timing_segment_start(const Song* song, Frame frame) noexcept {
-    if (!song) return 0;
-    Frame start = song->start_frame;
-    for (const auto& marker : song->tempo_markers) {
-        if (marker.frame > frame) break;
-        start = std::max(song->start_frame, marker.frame);
-    }
-    for (const auto& marker : song->time_signature_markers) {
-        if (marker.frame > frame) break;
-        start = std::max(start, marker.frame);
-    }
-    return start;
-}
-
-// Where the next grid starts after `frame`: a tempo or time signature marker
-// of the song, or the next song (`next_song_start`, -1 for none). -1 when
-// nothing follows.
-Frame next_grid_start(const Song* song, Frame frame, Frame next_song_start) noexcept {
-    Frame next = next_song_start > frame ? next_song_start : -1;
-    const auto earlier = [&](Frame candidate) {
-        if (candidate > frame && (next < 0 || candidate < next)) next = candidate;
-    };
-    for (const auto& marker : song->tempo_markers) {
-        if (marker.frame > frame) {
-            earlier(marker.frame);
-            break;
-        }
-    }
-    for (const auto& marker : song->time_signature_markers) {
-        if (marker.frame > frame) {
-            earlier(marker.frame);
-            break;
-        }
-    }
-    return next;
-}
-
-// A click this close to where the next grid starts (as a share of the space
-// between its clicks) is not played: that grid's own downbeat follows at
-// once. A change of song or tempo a few ms off the old grid ("Digno de
-// adorar" at 71 after 65, 3.5 ms past a beat of the 65) sounded as a double
-// click.
-constexpr double kClickBeforeGridShare = 0.25;
-
-bool lands_on_next_grid(Frame click_frame, double spacing_frames, Frame next_grid) noexcept {
-    return next_grid > click_frame
-        && static_cast<double>(next_grid - click_frame) < kClickBeforeGridShare * spacing_frames;
-}
-
-// The song whose timing map drives the click. Like the ambient pad, the
-// metronome must sound whether or not there is audio under the playhead: an
-// empty song (no clips) collapses to end_frame == start_frame and would cover
-// no frame at all, and the playhead can also sit past the last song's end.
-// Timing (bpm / signature / tempo map) exists independently of audio content,
-// so when no song covers the frame we fall back to the nearest one — the last
-// song starting at or before the playhead, else the first song. Only a session
-// with no songs at all leaves the click without a timing map.
-const Song* active_song(const Session* session, Frame frame) noexcept {
-    if (!session || session->songs.empty()) return nullptr;
-    const Song* fallback = &session->songs.front();
-    for (const auto& song : session->songs) {
-        if (frame >= song.start_frame && frame < song.end_frame)
-            return &song;
-        if (song.start_frame <= frame && song.start_frame >= fallback->start_frame)
-            fallback = &song;
-    }
-    return fallback;
-}
-
-Frame rounded_beat_frame(Frame segment_start, double beat_frames, int64_t beat_index) noexcept {
-    return segment_start + static_cast<Frame>(std::llround(static_cast<double>(beat_index) * beat_frames));
-}
 
 double semitones_to_ratio(float semitones) noexcept {
     return std::pow(2.0, static_cast<double>(semitones) / 12.0);
@@ -186,37 +87,12 @@ void MetronomeRenderer::set_config(const MetronomeConfig& config) {
     subdivision_gain_.store(std::clamp(config.subdivision_gain, 0.0f, kMaxAuxGain),
                             std::memory_order_release);
 
-    std::string route = normalize_route(config.output_route.empty() ? "master" : config.output_route);
+    const std::string route = normalize_aux_route(config.output_route);
     copy_text(output_route_, route);
-
-    if (route == "monitor") {
-        route_mode_.store(static_cast<int>(RouteMode::Monitor), std::memory_order_release);
-        route_start_.store(2, std::memory_order_release);
-        route_end_.store(3, std::memory_order_release);
-    } else if (route.rfind("ext:", 0) == 0) {
-        route_mode_.store(static_cast<int>(RouteMode::Ext), std::memory_order_release);
-        std::string spec = route.substr(4);
-        auto dash = spec.find('-');
-        int start = 0;
-        int end = 0;
-        try {
-            if (dash == std::string::npos) {
-                start = end = std::max(0, std::stoi(spec));
-            } else {
-                start = std::max(0, std::stoi(spec.substr(0, dash)));
-                end = std::max(start, std::stoi(spec.substr(dash + 1)));
-            }
-        } catch (...) {
-            start = 0;
-            end = 1;
-        }
-        route_start_.store(start, std::memory_order_release);
-        route_end_.store(end, std::memory_order_release);
-    } else {
-        route_mode_.store(static_cast<int>(RouteMode::Master), std::memory_order_release);
-        route_start_.store(0, std::memory_order_release);
-        route_end_.store(1, std::memory_order_release);
-    }
+    const AuxRoute parsed = parse_aux_route(route);
+    route_mode_.store(static_cast<int>(parsed.mode), std::memory_order_release);
+    route_start_.store(parsed.start, std::memory_order_release);
+    route_end_.store(parsed.end, std::memory_order_release);
 }
 
 void MetronomeRenderer::set_enabled(bool enabled) {
@@ -495,34 +371,13 @@ void MetronomeRenderer::render_song(float** output_channels,
         copy_text(muted_reason_, "no_active_song");
         return;
     }
-    int left = 0;
-    int right = std::min(1, num_channels - 1);
-    const int mode = route_mode_.load(std::memory_order_acquire);
-    if (mode == static_cast<int>(RouteMode::Monitor)) {
-        if (num_channels >= 4) {
-            left = 2;
-            right = 3;
-            copy_text(route_resolved_, "monitor");
-        } else {
-            copy_text(route_resolved_, "monitor_fallback_master");
-        }
-    } else if (mode == static_cast<int>(RouteMode::Ext)) {
-        const int mapped_left = device_layout::callback_channel_for_physical(
-            route_start_.load(std::memory_order_acquire), active_output_channels,
-            active_output_channel_count, num_channels);
-        const int mapped_right = device_layout::callback_channel_for_physical(
-            route_end_.load(std::memory_order_acquire), active_output_channels,
-            active_output_channel_count, num_channels);
-        if (mapped_left >= 0 && mapped_right >= 0) {
-            left = mapped_left;
-            right = mapped_right;
-            copy_text(route_resolved_, "ext");
-        } else {
-            copy_text(route_resolved_, "ext_fallback_master");
-        }
-    } else {
-        copy_text(route_resolved_, "master");
-    }
+    const ResolvedAuxRoute route = resolve_aux_route(
+        static_cast<AuxRouteMode>(route_mode_.load(std::memory_order_acquire)),
+        route_start_.load(std::memory_order_acquire), route_end_.load(std::memory_order_acquire),
+        num_channels, active_output_channels, active_output_channel_count);
+    const int left = route.left;
+    const int right = route.right;
+    copy_text(route_resolved_, route.label);
 
     copy_text(muted_reason_, "");
 

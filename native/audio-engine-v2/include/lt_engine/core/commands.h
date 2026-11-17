@@ -156,6 +156,55 @@ struct CmdSetPauseAtSongEnd { bool enabled = false; };
 struct CmdSetSongGapVamp { bool enabled = false; };
 struct CmdEndSongGapVamp {};
 
+// ---------------------------------------------------------------------------
+// Loops de batería (plan drum-loops, paso 03)
+// ---------------------------------------------------------------------------
+// Patrón ya resuelto por Rust: slots del SampleBank, ganancias lineales y los
+// bytes de cada variación (0 silencio, 1 suave, 2 normal, 3 acento).
+struct LoopPatternRowSpec {
+    int slot = -1;
+    float gain = 1.0f;
+    int choke_group = 0;
+    std::vector<std::vector<int>> variations;
+};
+struct LoopPatternSpec {
+    int steps_per_beat = 4;
+    int beats_per_bar = 4;
+    int beat_unit = 4;
+    int bars = 1;
+    double free_bpm = 120.0;
+    double swing = 0.0;
+    std::vector<LoopPatternRowSpec> rows;
+};
+struct LoopRowStateSpec {
+    bool enabled = true;
+    int variation = 0;
+};
+struct RegionLoopSpec {
+    Id region_id;
+    LoopPatternSpec pattern;
+    bool autostart = false;
+    std::vector<LoopRowStateSpec> initial_rows;
+};
+struct CmdSetLoopPattern { LoopPatternSpec pattern; };
+// Arranca o para (cuantizado). playing=true despierta un stream suspendido.
+struct CmdSetLoopTransport { bool playing = false; };
+struct CmdSetLoopRow {
+    int row = 0;
+    std::optional<bool> enabled;
+    std::optional<int> variation;
+};
+struct CmdSetLoopAllRows { int variation = 0; };
+struct CmdSetLoopConfig {
+    std::string clock_mode = "follow";   // "follow" | "free"
+    double free_bpm = 0.0;               // >0 sustituye a la BPM del patrón
+    std::string quantize = "bar";        // "bar" | "beat" | "immediate"
+    std::string route = "master";
+    float gain = 1.0f;
+};
+// Loops por canción: un patrón por región, cargado en el frame en que empieza.
+struct CmdSetRegionLoops { std::vector<RegionLoopSpec> regions; };
+
 // Punto de medida de los vumetros de pista y carpeta (ajuste global de la
 // app). JSON: {"type":"SetTrackMeterMode","mode":"postFader"|"postPan"|
 // "preFader"}; un valor desconocido cae en postFader. Ver lt::TrackMeterMode
@@ -425,6 +474,8 @@ using EngineCommand = std::variant<
     CmdSetVoiceGuideConfig, CmdLoadVoiceGuideBank,
     CmdSetPadConfig, CmdLoadPadClip,
     CmdSetPauseAtSongEnd, CmdSetSongGapVamp, CmdEndSongGapVamp,
+    CmdSetLoopPattern, CmdSetLoopTransport, CmdSetLoopRow, CmdSetLoopAllRows,
+    CmdSetLoopConfig, CmdSetRegionLoops,
     CmdSetTrackMeterMode,
     CmdSetSongTranspose, CmdSetRegionTranspose, CmdSetRegionWarp, CmdSetRegionMasterGain, CmdSetSongRegions,
     CmdSetSongClips, CmdSetSongMarkers, CmdSetSongTiming, CmdSetSongTimelineWindow,

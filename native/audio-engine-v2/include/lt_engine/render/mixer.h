@@ -10,6 +10,7 @@
 #include <lt_engine/render/voice_guide_renderer.h>
 #include <lt_engine/render/pad_renderer.h>
 #include <lt_engine/render/sample_bank.h>
+#include <lt_engine/render/loop_renderer.h>
 #include <lt_engine/render/render_thread_pool.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
@@ -146,6 +147,10 @@ public:
     // recolecta desde el hilo de comandos; los renderers lo leen por bloque.
     SampleBank& sample_bank() noexcept { return sample_bank_; }
     const SampleBank& sample_bank() const noexcept { return sample_bank_; }
+    // Loops de batería (plan drum-loops, paso 03): suenan con o sin
+    // transporte, renderizados una vez por callback como los pads.
+    LoopRenderer& loop_renderer() noexcept { return loop_; }
+    const LoopRenderer& loop_renderer() const noexcept { return loop_; }
     // Build the voice-guide announce target from the next pending scheduled jump
     // (so the destination section is spoken before the jump fires). Empty target
     // when no announceable jump is pending.
@@ -510,6 +515,13 @@ private:
     VoiceGuideRenderer voice_guide_;
     PadRenderer pad_;
     SampleBank sample_bank_;
+    LoopRenderer loop_;
+    // Tramos del bloque en curso y su reloj, para el renderer de loops (que
+    // corre una sola vez por callback aunque un salto parta el bloque).
+    std::array<LoopSpan, 4> loop_spans_{};
+    int loop_span_count_ = 0;
+    void push_loop_span(int offset, int frames, Frame timeline_frame, LoopSpanKind kind,
+                        const Song* frozen_song = nullptr) noexcept;
 
     // Check whether any track is soloed (scans control slots).
     bool any_solo_active_in_slots() const noexcept;

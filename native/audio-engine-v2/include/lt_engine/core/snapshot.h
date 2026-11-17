@@ -186,6 +186,16 @@ struct PadSnapshot {
     float       current_gain = 0.f;
 };
 
+// Loops de batería (plan drum-loops). `wants_audio`: suena o va a sonar, el
+// stream no puede suspenderse.
+struct LoopSnapshot {
+    bool playing = false;
+    bool wants_audio = false;
+    int  current_step = -1;
+    int  current_bar = 0;
+    int  active_voices = 0;
+};
+
 struct EngineSnapshot {
     // Transport position
     Frame              current_frame   = 0;
@@ -220,6 +230,7 @@ struct EngineSnapshot {
     MetronomeSnapshot metronome;
     VoiceGuideSnapshot voice_guide;
     PadSnapshot pad;
+    LoopSnapshot loops;
 
     std::uint64_t mixer_scheduled_jump_executed_count = 0;
     // Times the mixer paused the transport on its own at a song's end

@@ -2792,6 +2792,7 @@ impl AudioController {
             let idle = !playing
                 && !snapshot.transport_pending_start
                 && !snapshot.pad.enabled
+                && !snapshot.loops.wants_audio
                 && !snapshot.pitch.mixer_song_gap_vamp_active;
             tick.idle_wake = wake_policy.step(SystemTime::now(), away, idle);
             let request = match idle_policy.step(Instant::now(), backgrounded, idle, suspended) {

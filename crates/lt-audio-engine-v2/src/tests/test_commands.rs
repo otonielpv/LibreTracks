@@ -864,3 +864,56 @@ fn region_update_master_gain_defaults_to_unity_when_absent() {
     assert!(!region.warp_enabled);
     assert_eq!(region.warp_source_bpm, 0.0);
 }
+
+// Plan drum-loops, paso 03: el JSON de los comandos de loops es el que lee
+// commands.cpp (snake_case, `type` como etiqueta).
+#[test]
+fn loop_commands_serialize_as_the_engine_expects() {
+    let pattern = LoopEnginePattern {
+        steps_per_beat: 4,
+        beats_per_bar: 4,
+        beat_unit: 4,
+        bars: 1,
+        free_bpm: 92.0,
+        swing: 0.25,
+        rows: vec![LoopEngineRow { slot: 3, gain: 0.5, choke_group: 1, variations: vec![vec![2, 0, 3]] }],
+    };
+    let json = serde_json::to_value(EngineCommand::SetRegionLoops {
+        regions: vec![RegionLoopEngine {
+            region_id: "r2".into(),
+            pattern: pattern.clone(),
+            autostart: true,
+            initial_rows: vec![LoopEngineRowState { enabled: false, variation: 2 }],
+        }],
+    })
+    .unwrap();
+    assert_eq!(json["type"], "SetRegionLoops");
+    assert_eq!(json["regions"][0]["region_id"], "r2");
+    assert_eq!(json["regions"][0]["pattern"]["steps_per_beat"], 4);
+    assert_eq!(json["regions"][0]["pattern"]["rows"][0]["choke_group"], 1);
+    assert_eq!(json["regions"][0]["pattern"]["rows"][0]["variations"][0][2], 3);
+    assert_eq!(json["regions"][0]["initial_rows"][0]["variation"], 2);
+
+    let row = serde_json::to_value(EngineCommand::SetLoopRow { row: 2, enabled: None, variation: Some(1) }).unwrap();
+    assert_eq!(row, serde_json::json!({ "type": "SetLoopRow", "row": 2, "variation": 1 }));
+    assert_eq!(round_trip_type(&EngineCommand::SetLoopTransport { playing: true }), "SetLoopTransport");
+    assert_eq!(round_trip_type(&EngineCommand::SetLoopAllRows { variation: 3 }), "SetLoopAllRows");
+    assert_eq!(round_trip_type(&EngineCommand::SetLoopPattern { pattern }), "SetLoopPattern");
+    let config = serde_json::to_value(EngineCommand::SetLoopConfig {
+        clock_mode: "free".into(),
+        free_bpm: 101.0,
+        quantize: "beat".into(),
+        route: "ext:3-4".into(),
+        gain: 0.8,
+    })
+    .unwrap();
+    assert_eq!(config["clock_mode"], "free");
+    assert_eq!(config["quantize"], "beat");
+}
+
+#[test]
+fn snapshot_without_loops_block_defaults_to_no_step() {
+    let snapshot: crate::LoopSnapshot = serde_json::from_str("{}").unwrap();
+    assert_eq!(snapshot.current_step, -1);
+    assert!(!snapshot.wants_audio);
+}

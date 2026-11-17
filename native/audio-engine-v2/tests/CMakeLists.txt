@@ -56,6 +56,7 @@ add_executable(lt_engine_tests
     test_pilot_tone.cpp
     test_engine_hardening.cpp
     test_sample_bank.cpp
+    test_loop_renderer.cpp
 )
 
 target_link_libraries(lt_engine_tests

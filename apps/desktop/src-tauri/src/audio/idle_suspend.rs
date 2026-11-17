@@ -32,7 +32,8 @@ pub struct IdleSuspendPolicy {
 }
 
 impl IdleSuspendPolicy {
-    /// `idle`: transport not playing (nor about to) and the pad off.
+    /// `idle`: transport not playing (nor about to), the pad off and no drum
+    /// loop sounding (`snapshot.loops.wants_audio`).
     /// `suspended`: what the engine's snapshot reports right now.
     pub fn step(
         &mut self,

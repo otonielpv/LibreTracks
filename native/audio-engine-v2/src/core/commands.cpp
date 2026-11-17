@@ -38,6 +38,72 @@ static JumpTrigger trigger_from_json(const json& j) {
 // ---------------------------------------------------------------------------
 // command_from_json
 // ---------------------------------------------------------------------------
+namespace {
+
+LoopPatternSpec loop_pattern_from_json(const nlohmann::json& j) {
+    LoopPatternSpec p;
+    if (!j.is_object()) return p;
+    p.steps_per_beat = j.value("steps_per_beat", 4);
+    p.beats_per_bar = j.value("beats_per_bar", 4);
+    p.beat_unit = j.value("beat_unit", 4);
+    p.bars = j.value("bars", 1);
+    p.free_bpm = j.value("free_bpm", 120.0);
+    p.swing = j.value("swing", 0.0);
+    if (j.contains("rows") && j["rows"].is_array()) {
+        for (const auto& jr : j["rows"]) {
+            LoopPatternRowSpec row;
+            row.slot = jr.value("slot", -1);
+            row.gain = jr.value("gain", 1.0f);
+            row.choke_group = jr.value("choke_group", 0);
+            if (jr.contains("variations") && jr["variations"].is_array()) {
+                for (const auto& jv : jr["variations"]) {
+                    std::vector<int> steps;
+                    if (jv.is_array())
+                        for (const auto& s : jv) steps.push_back(s.is_number() ? s.get<int>() : 0);
+                    row.variations.push_back(std::move(steps));
+                }
+            }
+            p.rows.push_back(std::move(row));
+        }
+    }
+    return p;
+}
+
+nlohmann::json loop_pattern_to_json(const LoopPatternSpec& p) {
+    nlohmann::json j;
+    j["steps_per_beat"] = p.steps_per_beat;
+    j["beats_per_bar"] = p.beats_per_bar;
+    j["beat_unit"] = p.beat_unit;
+    j["bars"] = p.bars;
+    j["free_bpm"] = p.free_bpm;
+    j["swing"] = p.swing;
+    auto rows = nlohmann::json::array();
+    for (const auto& row : p.rows) {
+        nlohmann::json jr;
+        jr["slot"] = row.slot;
+        jr["gain"] = row.gain;
+        jr["choke_group"] = row.choke_group;
+        jr["variations"] = row.variations;
+        rows.push_back(std::move(jr));
+    }
+    j["rows"] = std::move(rows);
+    return j;
+}
+
+std::vector<LoopRowStateSpec> loop_rows_from_json(const nlohmann::json& j, const char* key) {
+    std::vector<LoopRowStateSpec> rows;
+    if (!j.contains(key) || !j[key].is_array()) return rows;
+    for (const auto& jr : j[key]) {
+        LoopRowStateSpec r;
+        r.enabled = jr.value("enabled", true);
+        r.variation = jr.value("variation", 0);
+        rows.push_back(r);
+    }
+    return rows;
+}
+
+} // namespace
+
 EngineCommand command_from_json(const std::string& raw) {
     json j = json::parse(raw);
     std::string type = j.at("type").get<std::string>();
@@ -519,6 +585,51 @@ EngineCommand command_from_json(const std::string& raw) {
     if (type == "EndSongGapVamp")
         return CmdEndSongGapVamp{};
 
+    if (type == "SetLoopPattern") {
+        CmdSetLoopPattern c;
+        if (j.contains("pattern")) c.pattern = loop_pattern_from_json(j["pattern"]);
+        return c;
+    }
+
+    if (type == "SetLoopTransport")
+        return CmdSetLoopTransport{ j.value("playing", false) };
+
+    if (type == "SetLoopRow") {
+        CmdSetLoopRow c;
+        c.row = j.value("row", 0);
+        if (j.contains("enabled") && j["enabled"].is_boolean()) c.enabled = j["enabled"].get<bool>();
+        if (j.contains("variation") && j["variation"].is_number()) c.variation = j["variation"].get<int>();
+        return c;
+    }
+
+    if (type == "SetLoopAllRows")
+        return CmdSetLoopAllRows{ j.value("variation", 0) };
+
+    if (type == "SetLoopConfig") {
+        CmdSetLoopConfig c;
+        c.clock_mode = j.value("clock_mode", std::string{"follow"});
+        c.free_bpm = j.value("free_bpm", 0.0);
+        c.quantize = j.value("quantize", std::string{"bar"});
+        c.route = j.value("route", std::string{"master"});
+        c.gain = j.value("gain", 1.0f);
+        return c;
+    }
+
+    if (type == "SetRegionLoops") {
+        CmdSetRegionLoops c;
+        if (j.contains("regions") && j["regions"].is_array()) {
+            for (const auto& jr : j["regions"]) {
+                RegionLoopSpec r;
+                r.region_id = jr.value("region_id", std::string{});
+                if (jr.contains("pattern")) r.pattern = loop_pattern_from_json(jr["pattern"]);
+                r.autostart = jr.value("autostart", false);
+                r.initial_rows = loop_rows_from_json(jr, "initial_rows");
+                c.regions.push_back(std::move(r));
+            }
+        }
+        return c;
+    }
+
     if (type == "SetTrackMeterMode") {
         const std::string mode = j.value("mode", std::string{"postFader"});
         CmdSetTrackMeterMode c;
@@ -619,6 +730,48 @@ std::string command_to_json(const EngineCommand& cmd) {
         }
         else if constexpr (std::is_same_v<T, CmdEndSongGapVamp>) {
             j["type"] = "EndSongGapVamp";
+        }
+        else if constexpr (std::is_same_v<T, CmdSetLoopPattern>) {
+            j["type"] = "SetLoopPattern";
+            j["pattern"] = loop_pattern_to_json(c.pattern);
+        }
+        else if constexpr (std::is_same_v<T, CmdSetLoopTransport>) {
+            j["type"] = "SetLoopTransport";
+            j["playing"] = c.playing;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetLoopRow>) {
+            j["type"] = "SetLoopRow";
+            j["row"] = c.row;
+            if (c.enabled) j["enabled"] = *c.enabled;
+            if (c.variation) j["variation"] = *c.variation;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetLoopAllRows>) {
+            j["type"] = "SetLoopAllRows";
+            j["variation"] = c.variation;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetLoopConfig>) {
+            j["type"] = "SetLoopConfig";
+            j["clock_mode"] = c.clock_mode;
+            j["free_bpm"] = c.free_bpm;
+            j["quantize"] = c.quantize;
+            j["route"] = c.route;
+            j["gain"] = c.gain;
+        }
+        else if constexpr (std::is_same_v<T, CmdSetRegionLoops>) {
+            j["type"] = "SetRegionLoops";
+            auto regions = nlohmann::json::array();
+            for (const auto& r : c.regions) {
+                nlohmann::json jr;
+                jr["region_id"] = r.region_id;
+                jr["pattern"] = loop_pattern_to_json(r.pattern);
+                jr["autostart"] = r.autostart;
+                auto rows = nlohmann::json::array();
+                for (const auto& row : r.initial_rows)
+                    rows.push_back({{"enabled", row.enabled}, {"variation", row.variation}});
+                jr["initial_rows"] = std::move(rows);
+                regions.push_back(std::move(jr));
+            }
+            j["regions"] = std::move(regions);
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackMeterMode>) {
             j["type"] = "SetTrackMeterMode";

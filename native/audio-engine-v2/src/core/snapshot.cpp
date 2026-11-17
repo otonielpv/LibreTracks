@@ -187,6 +187,14 @@ std::string snapshot_to_json(const EngineSnapshot& snap) {
         {"current_gain", snap.pad.current_gain},
     };
 
+    j["loops"] = {
+        {"playing", snap.loops.playing},
+        {"wants_audio", snap.loops.wants_audio},
+        {"current_step", snap.loops.current_step},
+        {"current_bar", snap.loops.current_bar},
+        {"active_voices", snap.loops.active_voices},
+    };
+
     j["pitch"] = {
         {"mixer_scheduled_jump_executed_count",
          snap.mixer_scheduled_jump_executed_count},

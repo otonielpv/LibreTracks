@@ -48,6 +48,10 @@ pub struct EngineSnapshot {
     #[serde(default)]
     pub pad: PadSnapshot,
 
+    /// Loops de batería (plan drum-loops).
+    #[serde(default)]
+    pub loops: LoopSnapshot,
+
     #[serde(default)]
     pub pitch: PitchSnapshot,
 
@@ -312,6 +316,25 @@ pub struct MetronomeSnapshot {
     pub target_gain: f32,
     #[serde(default)]
     pub toggle_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LoopSnapshot {
+    #[serde(default)]
+    pub playing: bool,
+    /// Suena o va a sonar: el stream no puede suspenderse.
+    #[serde(default)]
+    pub wants_audio: bool,
+    #[serde(default = "no_step")]
+    pub current_step: i32,
+    #[serde(default)]
+    pub current_bar: i32,
+    #[serde(default)]
+    pub active_voices: i32,
+}
+
+fn no_step() -> i32 {
+    -1
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

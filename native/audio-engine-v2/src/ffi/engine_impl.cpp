@@ -961,6 +961,7 @@ void EngineImpl::service_control_thread_tasks() {
         // Las versiones retiradas del banco de muestras se liberan aquí, en el
         // hilo de control, nunca en el render.
         mixer_->sample_bank().collect_retired();
+        mixer_->loop_renderer().collect_retired();
         const Frame target = mixer_->take_pending_scheduled_jump();
         if (target != Mixer::kNoJumpPending
             && bungee_voices_ && bungee_voices_->is_available()
@@ -1203,6 +1204,13 @@ std::string EngineImpl::build_snapshot(bool include_sources) const {
         snap.pad.route_resolved = pad.route_resolved;
         snap.pad.muted_reason = pad.muted_reason;
         snap.pad.current_gain = pad.current_gain;
+        const LoopRenderer& loop = mixer_->loop_renderer();
+        const LoopDiagnostics loop_diag = loop.diagnostics();
+        snap.loops.playing = loop_diag.playing;
+        snap.loops.wants_audio = loop.wants_audio();
+        snap.loops.current_step = loop_diag.current_step;
+        snap.loops.current_bar = loop_diag.current_bar;
+        snap.loops.active_voices = loop_diag.active_voices;
         snap.mixer_scheduled_jump_executed_count =
             mixer_->scheduled_jump_executed_count();
         snap.mixer_song_end_pause_count = mixer_->song_end_pause_count();
@@ -1848,7 +1856,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         const bool needs_audio =
             std::holds_alternative<CmdPlay>(cmd)
             || (std::holds_alternative<CmdSetPadConfig>(cmd)
-                && std::get<CmdSetPadConfig>(cmd).enabled);
+                && std::get<CmdSetPadConfig>(cmd).enabled)
+            || (std::holds_alternative<CmdSetLoopTransport>(cmd)
+                && std::get<CmdSetLoopTransport>(cmd).playing);
         const bool reopens_device =
             std::holds_alternative<CmdSetOutputDevice>(cmd)
             || std::holds_alternative<CmdSetSampleRate>(cmd)
@@ -2291,6 +2301,61 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         }
         else if constexpr (std::is_same_v<T, CmdSetSongGapVamp>) {
             if (mixer_) mixer_->set_song_gap_vamp(c.enabled);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetLoopPattern>) {
+            if (mixer_) mixer_->loop_renderer().set_pattern(loop_pattern_data_from_spec(c.pattern));
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetLoopTransport>) {
+            if (mixer_) mixer_->loop_renderer().set_transport(c.playing);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetLoopRow>) {
+            if (mixer_) {
+                mixer_->loop_renderer().set_row(c.row,
+                                                c.enabled ? (*c.enabled ? 1 : 0) : -1,
+                                                c.variation ? *c.variation : -1);
+            }
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetLoopAllRows>) {
+            if (mixer_) mixer_->loop_renderer().set_all_rows(c.variation);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetLoopConfig>) {
+            if (mixer_) {
+                LoopConfig config;
+                config.clock_mode = c.clock_mode == "free" ? LoopClockMode::Free : LoopClockMode::FollowSong;
+                config.free_bpm = c.free_bpm;
+                config.quantize = c.quantize == "beat" ? LoopQuantize::Beat
+                                : c.quantize == "immediate" ? LoopQuantize::Immediate
+                                : LoopQuantize::Bar;
+                config.route = c.route;
+                config.gain = c.gain;
+                mixer_->loop_renderer().set_config(config);
+            }
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetRegionLoops>) {
+            if (mixer_) {
+                std::vector<RegionLoopData> regions;
+                regions.reserve(c.regions.size());
+                for (const auto& spec : c.regions) {
+                    RegionLoopData data;
+                    data.region_id = spec.region_id;
+                    data.pattern = loop_pattern_data_from_spec(spec.pattern);
+                    data.autostart = spec.autostart;
+                    data.initial_row_count = std::min<int>(kLoopMaxRows, static_cast<int>(spec.initial_rows.size()));
+                    for (int r = 0; r < data.initial_row_count; ++r) {
+                        data.initial_rows[static_cast<std::size_t>(r)].enabled = spec.initial_rows[static_cast<std::size_t>(r)].enabled;
+                        data.initial_rows[static_cast<std::size_t>(r)].variation =
+                            std::clamp(spec.initial_rows[static_cast<std::size_t>(r)].variation, 0, kLoopVariations - 1);
+                    }
+                    regions.push_back(std::move(data));
+                }
+                mixer_->loop_renderer().set_region_loops(std::move(regions));
+            }
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdEndSongGapVamp>) {
