@@ -186,6 +186,7 @@ export default defineConfig({
             { slug: "docs/live-control-flow" },
             { slug: "docs/voice-guide" },
             { slug: "docs/ambient-pads" },
+            { slug: "docs/drum-loops" },
             { slug: "docs/live-scenes" },
             { slug: "docs/remote-control" },
             { slug: "docs/automation" },

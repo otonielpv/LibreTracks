@@ -1,0 +1,94 @@
+---
+title: Drum loops and one shots
+description: "Step drum loops locked to the song's click and one shots to fire effects in LibreTracks: the Rhythm panel, per-row variations, the pattern editor, your own sounds, MIDI and keyboard."
+---
+
+The **Rhythm** panel adds two things for playing live over the song:
+
+- **Loops**: a step drum machine (shaker, tambourine, hi-hat…) locked to the
+  song's click. Every row has four variations (A-D), so you can change the
+  tambourine in the chorus without touching the shaker.
+- **One shots**: a grid of 12 pads in 4 banks to fire single effects (hits,
+  risers, impacts).
+
+They are not session tracks: they sound on their own, like the metronome, and
+the song master does not touch them.
+
+## Opening the panel
+
+Press **Rhythm** in the top bar. It opens the panel of the view you are in:
+docked at the bottom in DAW, Live and Compact, and as a tab in Setlist. On a
+phone it docks at the bottom and keeps the transport visible. The button
+lights up while a loop or a one shot is sounding, even with the panel closed.
+
+![Rhythm panel](/guide/desktop/rhythm-panel.png)
+
+## Loops
+
+1. Pick a **pattern** in the list. The app ships 12 (pop, ballad, rock,
+   worship 6/8, waltz, shuffle, dembow, cajón…).
+2. Press **▶** to start and **■** to stop. Starting waits for the next bar
+   (or beat, depending on quantize); stopping is immediate.
+3. On each row: the name turns it on or off, and **A B C D** change its
+   variation (on a phone, with a dropdown next to its steps). A requested change blinks until it comes in at the bar.
+
+Header options:
+
+- **Follow song / Free**: following the song, the steps land on the click's
+  grid, also through tempo ramps and time signature changes. In *Free* the
+  loop has its own tempo, which you set with **Tap**.
+- **With the song**: the loop starts when you press Play and stops when the
+  song stops. With it off, only its own button controls it.
+- **Quantize**: when starts and variation changes come in: on the bar, on
+  the beat or on the next step.
+- Loop **volume**.
+
+### A loop for each song
+
+In the editor, **Save ▾ → Assign to this song** copies the pattern into the
+song. When the song arrives, the loop switches on its first bar, and it
+travels with the session when you export it (`.ltset`, `.ltpkg`), your own
+sounds included.
+
+## The pattern editor
+
+Open it with **✎** in the panel header.
+
+![Pattern editor](/guide/desktop/rhythm-editor.png)
+
+- **Tap** a step to turn it on or off. **Hold** it (or right click) to change
+  its intensity: soft, normal, accent.
+- **Drag** to paint several steps in a row.
+- **Variation A-D**: you edit that variation on every row.
+- Bars (1, 2 or 4), time signature, subdivision (sixteenths or triplets),
+  swing and the free mode's BPM. On a phone they are folded behind the
+  settings button, so the whole grid fits.
+- **▶** plays the pattern as it is, without saving it.
+- **Save ▾**: to the library, to this song or as a new pattern.
+- **Edit kit**: change the kit's sounds (up to 8), their color, volume and
+  choke group.
+
+## One shots
+
+Tap a pad to fire it. With **✎** in the bank bar you enter edit mode: tapping
+a pad opens its settings and dragging one onto another swaps them.
+
+Each pad has a sample, name, color, volume, **mode** (*One shot* plays to the
+end; *Hold* plays while you press it), **quantize** (immediate, beat or bar)
+and **choke group**. **Stop all** silences them with a short fade.
+
+## Your own sounds and packs
+
+In the sample picker, **Import file…** adds a sound of yours (WAV, MP3,
+FLAC…). Limits: 10 s for a loop sound and 30 s for a one shot. **Download
+sounds** shows the free packs.
+
+## MIDI and keyboard
+
+Every control of the panel can be mapped in
+[MIDI Map](/docs/live-control-flow/) mode: start the loop, turn rows on,
+variations, pads (with their velocity; releasing the note releases a *Hold*
+pad), banks and volumes. The controller's LEDs follow the state.
+
+Default shortcuts: **Alt+L** starts or stops the loop and **Alt+1…4** put
+every row on variation A-D. Pads are assigned in Settings → Shortcuts.

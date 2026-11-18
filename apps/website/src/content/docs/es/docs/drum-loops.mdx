@@ -1,0 +1,99 @@
+---
+title: Loops de batería y one shots
+description: "Loops de batería por pasos clavados al click de la canción y one shots para disparar efectos en LibreTracks: panel Ritmo, variaciones por fila, editor de patrones, sonidos propios, MIDI y teclado."
+---
+
+El panel **Ritmo** añade dos cosas pensadas para tocar en directo encima de
+la canción:
+
+- **Loops**: una caja de ritmos por pasos (shaker, pandereta, hi-hat…) que va
+  clavada al click de la canción. Cada fila tiene cuatro variaciones (A-D)
+  para cambiar, por ejemplo, la pandereta en el estribillo sin tocar el
+  shaker.
+- **One shots**: una rejilla de 12 pads en 4 bancos para disparar efectos
+  sueltos (golpes, risers, impactos).
+
+No son pistas de la sesión: suenan aparte, como el metrónomo, y no los toca el
+master de la canción.
+
+## Abrir el panel
+
+Pulsa **Ritmo** en la barra superior. Abre el panel de la vista en la que
+estés: abajo en el DAW, en Live y en Compacta, y como pestaña en el Setlist.
+En el teléfono se acopla abajo y deja el transporte a la vista. El botón se
+ilumina mientras suena un loop o un one shot, aunque el panel esté cerrado.
+
+![Panel Ritmo](/guide/desktop/rhythm-panel.png)
+
+## Loops
+
+1. Elige un **patrón** en el desplegable. La app trae 12 de serie (pop,
+   balada, rock, worship 6/8, vals, shuffle, dembow, cajón…).
+2. Pulsa **▶** para arrancar y **■** para parar. Arrancar espera al
+   siguiente compás (o tiempo, según la cuantización); parar es inmediato.
+3. En cada fila: el nombre la enciende o la apaga, y **A B C D** cambian su
+   variación (en el teléfono, con un desplegable al lado de sus pasos). Un cambio pedido parpadea hasta que entra, al llegar al
+   compás.
+
+Opciones de la cabecera:
+
+- **Seguir canción / Libre**: siguiendo la canción, los pasos caen en la
+  rejilla del click, también con rampas de tempo y cambios de compás. En
+  *Libre* el loop tiene su propio tempo, que fijas con **Tap**.
+- **Con la canción**: el loop arranca al dar Play y se para al parar la
+  canción. Con la opción apagada solo lo manejas con su botón.
+- **Cuantización**: cuándo entran los arranques y los cambios de variación:
+  al compás, al tiempo o en el paso siguiente.
+- **Volumen** del loop.
+
+### Un loop para cada canción
+
+En el editor, **Guardar ▾ → Asignar a esta canción** copia el patrón dentro
+de la canción. Al llegar a ella, el loop cambia solo en su primer compás y
+viaja con la sesión al exportarla (`.ltset`, `.ltpkg`), incluidos tus
+sonidos propios.
+
+## El editor de patrones
+
+Se abre con **✎** en la cabecera del panel.
+
+![Editor de patrones](/guide/desktop/rhythm-editor.png)
+
+- **Toca** un paso para encenderlo o apagarlo. **Mantén pulsado** (o clic
+  derecho) para cambiar su intensidad: suave, normal, acento.
+- **Arrastra** para pintar varios pasos seguidos.
+- **Variación A-D**: editas esa variación de todas las filas.
+- Compases (1, 2 o 4), compás, subdivisión (semicorcheas o tresillos),
+  swing y BPM del modo libre. En el teléfono están plegados tras el botón de
+  ajustes, para que la rejilla quepa entera.
+- **▶** escucha el patrón tal como está, sin guardarlo.
+- **Guardar ▾**: en la biblioteca, en esta canción o como un patrón nuevo.
+- **Editar kit**: cambia los sonidos del kit (hasta 8), su color, su volumen
+  y su grupo de corte.
+
+## One shots
+
+Toca un pad para dispararlo. Con **✎** en la barra de bancos entras en modo
+edición: tocar un pad abre su configuración y arrastrar uno sobre otro los
+intercambia.
+
+Cada pad tiene muestra, nombre, color, volumen, **modo** (*One shot* suena
+entero; *Mantener* suena mientras lo pulsas), **cuantización** (inmediato,
+al tiempo o al compás) y **grupo de corte**. **Parar todo** los apaga con un
+fundido corto.
+
+## Sonidos propios y packs
+
+En el selector de muestras, **Importar archivo…** añade un sonido tuyo
+(WAV, MP3, FLAC…). Límites: 10 s para un sonido de loop y 30 s para un one
+shot. **Descargar sonidos** muestra los packs gratuitos.
+
+## MIDI y teclado
+
+Todos los controles del panel se pueden mapear en el modo
+[Mapeo MIDI](/es/docs/live-control-flow/): arrancar el loop, encender filas,
+variaciones, pads (con su velocidad; soltar la nota suelta un pad en modo
+*Mantener*), bancos y volúmenes. Los LEDs del controlador siguen el estado.
+
+Atajos por defecto: **Alt+L** arranca o para el loop y **Alt+1…4** ponen todas
+las filas en la variación A-D. Los pads se asignan en Ajustes → Atajos.
