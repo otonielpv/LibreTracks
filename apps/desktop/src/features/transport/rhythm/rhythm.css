@@ -43,18 +43,12 @@
 }
 
 /* Teléfono: acoplado y bajo, para que el transporte siga a la vista.
-   A la izquierda NO se aparta del notch: la barra lateral de la app ya
-   lleva ese inset y repetirlo aquí lo sumaba dos veces (iPhone apaisado:
-   el panel empezaba a ~95 px del borde). A la derecha el contenido llega
-   al borde de la pantalla, así que sí. */
+   Sin insets laterales propios: a la izquierda la barra lateral de la app
+   ya lleva el del notch, y a la derecha la línea de tiempo y la barra
+   superior llegan al borde; apartarse ahí dejaba ~47 px vacíos en un
+   iPhone apaisado. */
 .lt-rhythm-panel--docked.lt-rhythm-panel--short {
   height: min(62vh, 270px);
-  padding-right: var(--lt-safe-area-right, 0);
-}
-
-/* El cajón del Setlist ya se aparta del notch por los dos lados. */
-.lt-setlist-zone.is-drawer .lt-rhythm-panel--docked.lt-rhythm-panel--short {
-  padding-right: 0;
 }
 
 .lt-rhythm-panel--tab {
@@ -100,8 +94,14 @@
 }
 
 .lt-rhythm-play {
+  display: inline-grid;
+  place-items: center;
   min-width: var(--lt-rhythm-target);
   font-size: 15px;
+}
+
+.lt-rhythm-play .material-symbols-outlined {
+  font-size: 20px;
 }
 
 .lt-rhythm-play.is-playing {

@@ -14,10 +14,11 @@ function rule(selector: string): string {
 // iPhone apaisado: el inset del notch se sumaba dos veces y el panel Ritmo y
 // la hoja del pad quedaban estrechos y desplazados.
 describe("insets del notch en el panel Ritmo", () => {
-  it("el panel acoplado no repite el inset izquierdo que ya lleva la barra lateral", () => {
+  it("el panel acoplado no se aparta del notch: lo hace la vista que lo contiene", () => {
     const docked = rule(".lt-rhythm-panel--docked.lt-rhythm-panel--short");
     expect(docked).toBeTruthy();
     expect(docked).not.toContain("--lt-safe-area-left");
+    expect(docked).not.toContain("--lt-safe-area-right");
   });
 
   it("la hoja del pad no se aparta del notch con la caja Y con el relleno", () => {

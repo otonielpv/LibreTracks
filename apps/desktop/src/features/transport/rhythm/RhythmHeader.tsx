@@ -108,7 +108,10 @@ export function RhythmHeader({
         aria-label={playing ? t("rhythm.stop") : t("rhythm.play")}
         onClick={() => void handlers.setLoopPlaying(!playing)}
       >
-        {playing ? "■" : "▶"}
+        {/* Icono y no «▶»: iOS pinta ese carácter como emoji azul. */}
+        <span className="material-symbols-outlined" aria-hidden="true">
+          {playing ? "stop" : "play_arrow"}
+        </span>
       </button>
       </MidiMappable>
       {songPatternName ? (
