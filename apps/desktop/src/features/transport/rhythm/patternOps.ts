@@ -198,3 +198,19 @@ export function emptyPattern(id: string, name: string, kit: DrumKit, kitRef: Loo
     kit,
   );
 }
+
+/** Ajusta las filas tras editar el kit: quita las de sonidos borrados y añade
+ * una fila vacía por cada sonido nuevo (los que no estaban en `previous`).
+ * Devuelve el mismo patrón si no cambia nada. */
+export function syncRowsToKit(pattern: LoopPattern, previous: DrumKit, kit: DrumKit): LoopPattern {
+  const ids = new Set(kit.sounds.slice(0, DRUM_KIT_MAX_SOUNDS).map((s) => s.id));
+  const before = new Set(previous.sounds.map((s) => s.id));
+  const kept = pattern.rows.filter((row) => ids.has(row.soundId));
+  const present = new Set(kept.map((row) => row.soundId));
+  const added = kit.sounds
+    .slice(0, DRUM_KIT_MAX_SOUNDS)
+    .filter((s) => !before.has(s.id) && !present.has(s.id))
+    .map((s) => ({ soundId: s.id, gainDb: 0, variations: [] as number[][] }));
+  if (kept.length === pattern.rows.length && added.length === 0) return pattern;
+  return normalizePattern({ ...pattern, rows: [...kept, ...added] }, kit);
+}

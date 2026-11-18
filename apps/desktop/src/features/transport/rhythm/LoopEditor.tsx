@@ -10,7 +10,7 @@ import { isMobileApp, previewLoopPattern, setLoopPlaying } from "../desktopApi";
 import { LoopPatternSettings } from "./LoopPatternSettings";
 import { VARIATION_LETTERS } from "./LoopRows";
 import { LoopStepGrid } from "./LoopStepGrid";
-import { normalizePattern, stepCount, stepsPerBar } from "./patternOps";
+import { normalizePattern, stepCount, stepsPerBar, syncRowsToKit } from "./patternOps";
 import type { RhythmLayoutClass } from "./useRhythmLayout";
 
 export type LoopEditorSaveTarget = "library" | "song" | "new";
@@ -62,6 +62,19 @@ export function LoopEditor({
   const [settingsOpen, setSettingsOpen] = useState(!collapsibleSettings);
   const [saved, setSaved] = useState(draft);
   const dirty = draft !== saved;
+
+  // Editar el kit con el patrón abierto: los sonidos nuevos salen como filas
+  // vacías y los borrados desaparecen. No cuenta como cambio sin guardar.
+  const [kitSeen, setKitSeen] = useState(kit);
+  if (kitSeen !== kit) {
+    const sync = (p: LoopPattern) => syncRowsToKit(p, kitSeen, kit);
+    setKitSeen(kit);
+    const synced = sync(draft);
+    setDraft(synced);
+    setSaved(saved === draft ? synced : sync(saved));
+    setPast((list) => list.map(sync));
+    setFuture((list) => list.map(sync));
+  }
 
   const visible = visibleStepsFor(layoutClass, draft);
   const pages = Math.max(1, Math.ceil(stepCount(draft) / visible));

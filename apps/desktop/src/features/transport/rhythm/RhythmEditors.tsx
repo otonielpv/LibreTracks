@@ -58,7 +58,6 @@ export function RhythmEditors({
 }: RhythmEditorsProps) {
   const library = useRhythmStore((s) => s.library);
   const setLibrary = useRhythmStore((s) => s.setLibrary);
-  const [kitOpen, setKitOpen] = useState(false);
   if (!target || !library) return null;
 
   if (target.kind === "pad") {
@@ -75,38 +74,64 @@ export function RhythmEditors({
   }
 
   if (target.kind === "pattern") {
-    const editable = patternToEdit(settings, songLoop, library.patterns, library.kits);
-    if (!editable) return null;
-    const save = async (pattern: LoopPattern, where: LoopEditorSaveTarget) => {
-      if (where === "song" && songRegionId) {
-        await assignLoopToSong(songRegionId, pattern);
-        return;
-      }
-      setLibrary(await saveLoopPattern(pattern));
-      if (where === "new" || !settings.activeLoopPatternId) onSettings(await setActivePattern(pattern.id));
-    };
-    const libraryKit = library.kits.find((k) => k.id === editable.kit.id) ?? null;
     return (
-      <>
-        <LoopEditor
-          pattern={editable.pattern}
-          kit={editable.kit}
-          layoutClass={layoutClass}
-          songRegionId={songRegionId}
-          onSave={save}
-          onClose={onClose}
-          onEditKit={libraryKit ? () => setKitOpen(true) : undefined}
-        />
-        {kitOpen && libraryKit ? (
-          <KitEditor
-            kit={libraryKit}
-            patterns={library.patterns}
-            onSave={async (kit) => setLibrary(await saveDrumKit(kit))}
-            onClose={() => setKitOpen(false)}
-          />
-        ) : null}
-      </>
+      <PatternEditors
+        settings={settings}
+        onSettings={onSettings}
+        songLoop={songLoop}
+        songRegionId={songRegionId}
+        layoutClass={layoutClass}
+        onClose={onClose}
+      />
     );
   }
   return null;
+}
+
+type PatternEditorsProps = Omit<RhythmEditorsProps, "target">;
+
+/** Editor de patrón + editor de su kit. El patrón se elige UNA vez al abrir:
+ * si se recalculase en cada render, un patrón nuevo cogería `kits[0]`, y
+ * guardar un kit de serie lo manda al final de la lista (la copia del usuario
+ * va detrás de los de serie), así que el editor saltaba a otro kit. El kit se
+ * busca siempre por el id que referencia el patrón. */
+function PatternEditors({ settings, onSettings, songLoop, songRegionId, layoutClass, onClose }: PatternEditorsProps) {
+  const library = useRhythmStore((s) => s.library);
+  const setLibrary = useRhythmStore((s) => s.setLibrary);
+  const [kitOpen, setKitOpen] = useState(false);
+  const [initial] = useState(() =>
+    library ? patternToEdit(settings, songLoop, library.patterns, library.kits) : null,
+  );
+  if (!library || !initial) return null;
+  const kit = kitForPattern(initial.pattern, library.kits) ?? initial.kit;
+  const save = async (pattern: LoopPattern, where: LoopEditorSaveTarget) => {
+    if (where === "song" && songRegionId) {
+      await assignLoopToSong(songRegionId, pattern);
+      return;
+    }
+    setLibrary(await saveLoopPattern(pattern));
+    if (where === "new" || !settings.activeLoopPatternId) onSettings(await setActivePattern(pattern.id));
+  };
+  const libraryKit = library.kits.find((k) => k.id === kit.id) ?? null;
+  return (
+    <>
+      <LoopEditor
+        pattern={initial.pattern}
+        kit={kit}
+        layoutClass={layoutClass}
+        songRegionId={songRegionId}
+        onSave={save}
+        onClose={onClose}
+        onEditKit={libraryKit ? () => setKitOpen(true) : undefined}
+      />
+      {kitOpen && libraryKit ? (
+        <KitEditor
+          kit={libraryKit}
+          patterns={library.patterns}
+          onSave={async (saved) => setLibrary(await saveDrumKit(saved))}
+          onClose={() => setKitOpen(false)}
+        />
+      ) : null}
+    </>
+  );
 }

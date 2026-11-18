@@ -206,4 +206,23 @@ describe("LoopEditor on a phone", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pattern settings" }));
     expect(screen.getByText("Bars")).toBeTruthy();
   });
+
+  it("a sound added to the kit while editing shows up as a row, without counting as unsaved", () => {
+    const onClose = vi.fn();
+    const confirm = vi.fn(() => false);
+    const props = {
+      pattern: pattern(2),
+      layoutClass: "wide" as RhythmLayoutClass,
+      onSave: vi.fn(),
+      onClose,
+      confirmDiscard: confirm,
+    };
+    const { rerender } = render(<LoopEditor {...props} kit={kit(2)} />);
+    expect(screen.queryByText("Shaker 2")).toBeNull();
+    rerender(<LoopEditor {...props} kit={kit(3)} />);
+    expect(screen.getByText("Shaker 2")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /cerrar|close/i }));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+  });
 });

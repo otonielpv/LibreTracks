@@ -15,6 +15,7 @@ import {
   STEP_NORMAL,
   STEP_SOFT,
   stepCount,
+  syncRowsToKit,
   toggleStep,
 } from "./patternOps";
 
@@ -139,5 +140,21 @@ describe("patternOps editing", () => {
     const inexact = setStepsPerBeat(toggleStep(p, 0, 0, 2), 3);
     expect(inexact.movedSteps).toBe(1);
     expect(inexact.pattern.rows[0].variations[0][2]).toBeGreaterThan(0);
+  });
+});
+
+describe("syncRowsToKit", () => {
+  it("adds an empty row per new sound and drops removed ones, keeping the rest", () => {
+    const base = normalizePattern(toggleStep(normalizePattern(pattern(["kick", "snare"])), 0, 0, 0));
+    const next = syncRowsToKit(base, kit(["kick", "snare"]), kit(["kick", "cajon"]));
+    expect(next.rows.map((r) => r.soundId)).toEqual(["kick", "cajon"]);
+    expect(next.rows[0].variations[0][0]).toBe(STEP_NORMAL);
+    expect(next.rows[1].variations[0]).toHaveLength(stepCount(next));
+    expect(next.rows[1].variations[0].every((v) => v === 0)).toBe(true);
+  });
+
+  it("does not re-add a sound the pattern left out on purpose", () => {
+    const base = normalizePattern(pattern(["kick"]));
+    expect(syncRowsToKit(base, kit(["kick", "hat"]), kit(["kick", "hat"]))).toBe(base);
   });
 });

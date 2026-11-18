@@ -174,6 +174,24 @@
   border: 1px solid var(--lt-rhythm-border);
 }
 
+/* «Guardar ▾» está al borde derecho del editor y este recorta lo que
+   sobresale (overflow: hidden): el menú se abre hacia la izquierda. */
+.lt-rhythm-more__menu.lt-loop-editor__save-menu {
+  left: auto;
+  right: 0;
+  z-index: 20;
+  min-width: 220px;
+  margin-top: 4px;
+  border-radius: 4px;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.5);
+}
+
+.lt-loop-editor__save-menu button {
+  justify-content: flex-start;
+  text-align: left;
+  white-space: nowrap;
+}
+
 .lt-rhythm-icon {
   min-width: var(--lt-rhythm-target);
 }
@@ -504,10 +522,149 @@
 .lt-rhythm-backdrop > .lt-rhythm-card.lt-kit-editor {
   position: relative;
   inset: auto;
-  width: min(760px, 100%);
+  width: min(820px, 100%);
   max-height: 100%;
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
+  background: #0d100f;
+  border-radius: 4px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.55);
+}
+
+/* Editor de kit: una tarjeta por sonido. Arriba color, nombre, volumen,
+   grupo de corte y quitar; debajo la muestra a todo el ancho. Las columnas
+   son fijas para que las cabeceras queden alineadas con cada fila. */
+.lt-kit-editor {
+  --lt-kit-columns: 40px minmax(0, 1fr) 200px 120px 32px;
+}
+
+.lt-kit-editor__header {
+  flex: 0 0 auto;
+  background: #151817;
+  border-bottom: 1px solid rgb(186 202 197 / 0.13);
+}
+
+.lt-kit-editor__header .lt-rhythm-field__label {
+  padding-left: 6px;
+}
+
+.lt-kit-editor .lt-kit-editor__sounds {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 12px 16px 16px;
   overflow-y: auto;
-  border-radius: 10px;
+}
+
+.lt-kit-editor__columns,
+.lt-kit-editor__sound {
+  display: grid;
+  grid-template-columns: var(--lt-kit-columns);
+  align-items: center;
+  column-gap: 10px;
+}
+
+.lt-kit-editor__columns {
+  padding: 0 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8d9a96;
+}
+
+.lt-kit-editor__sound {
+  row-gap: 8px;
+  padding: 10px;
+  background: #151817;
+  border: 1px solid rgb(186 202 197 / 0.1);
+  border-radius: 4px;
+}
+
+.lt-kit-editor input.lt-kit-editor__color {
+  width: 40px;
+  height: 28px;
+  padding: 2px;
+  background: #1d2120;
+  border: 1px solid rgb(186 202 197 / 0.18);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.lt-kit-editor .lt-kit-editor__name,
+.lt-kit-editor .lt-kit-editor__choke {
+  width: 100%;
+  min-width: 0;
+}
+
+.lt-kit-editor__fader .lt-rhythm-fader {
+  display: flex;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.lt-kit-editor__fader .lt-rhythm-fader input.lt-fader {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.lt-kit-editor .lt-kit-editor__remove {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  color: #8d9a96;
+}
+
+.lt-kit-editor .lt-kit-editor__remove:hover {
+  color: #ff8a80;
+  border-color: rgb(255 138 128 / 0.45);
+}
+
+.lt-kit-editor__remove .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.lt-kit-editor__sample {
+  grid-column: 2 / -1;
+  min-width: 0;
+}
+
+.lt-kit-editor__sample .lt-sample-picker select {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.lt-kit-editor .lt-kit-editor__add {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+/* Pantallas estrechas: el volumen y el corte bajan a su propia fila. */
+@media (max-width: 640px) {
+  .lt-kit-editor {
+    --lt-kit-columns: 40px minmax(0, 1fr) 32px;
+  }
+
+  .lt-kit-editor__columns {
+    display: none;
+  }
+
+  .lt-kit-editor__fader,
+  .lt-kit-editor .lt-kit-editor__choke,
+  .lt-kit-editor__sample {
+    grid-column: 1 / -1;
+  }
+
+  .lt-kit-editor__remove {
+    grid-column: 3;
+    grid-row: 1;
+  }
 }
 
 .lt-switch-check,
