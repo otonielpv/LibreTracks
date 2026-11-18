@@ -981,10 +981,8 @@
   border-radius: 4px;
 }
 
-.lt-pad-editor.is-sheet input[type="range"] {
-  width: 120px;
-  height: calc(var(--lt-rhythm-target) - 4px);
-  margin: 0;
+.lt-pad-editor.is-sheet .lt-rhythm-fader {
+  min-height: calc(var(--lt-rhythm-target) - 4px);
 }
 
 /* ── Controles con el aspecto de la app (no los nativos) ─────────────── */
@@ -1217,4 +1215,24 @@
 
 .lt-loop-editor .lt-loop-editor__icon.is-active {
   color: #57f1db;
+}
+
+/* Fader de volumen con el estilo de consola (faders.css) y su valor en dB. */
+.lt-rhythm-fader {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lt-rhythm-fader input.lt-fader {
+  width: 120px;
+}
+
+.lt-rhythm-fader__value {
+  min-width: 38px;
+  font-size: 11px;
+  color: #8d9a96;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }

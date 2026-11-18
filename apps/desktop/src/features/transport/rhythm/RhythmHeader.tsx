@@ -4,10 +4,12 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { DB_FLOOR, dbToGain, gainToDb } from "@libretracks/shared/faderScale";
 import type { AppSettings, LoopClockMode, LoopPattern, LoopQuantize } from "@libretracks/shared/models";
 
 import { MidiMappable } from "../midi/MidiMappable";
 import type { RhythmHandlers } from "./rhythmHandlers";
+import { RhythmVolumeFader } from "./RhythmVolumeFader";
 import type { RhythmLayoutClass } from "./useRhythmLayout";
 
 type RhythmHeaderProps = {
@@ -83,14 +85,11 @@ export function RhythmHeader({
       </label>
       <label className="lt-rhythm-field">
         <span className="lt-rhythm-field__label">{t("rhythm.volume")}</span>
-        <input
-          type="range"
-          min={0}
-          max={2}
-          step={0.01}
-          value={volumeDraft ?? settings.loopVolume}
-          onChange={(event) => {
-            const volume = Number(event.target.value);
+        <RhythmVolumeFader
+          ariaLabel={t("rhythm.volume")}
+          db={gainToDb(volumeDraft ?? settings.loopVolume)}
+          onChange={(db) => {
+            const volume = db <= DB_FLOOR ? 0 : dbToGain(db);
             setVolumeDraft(volume);
             void handlers.setLoopVolume(volume);
           }}

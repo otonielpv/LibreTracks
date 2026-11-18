@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { DRUM_KIT_MAX_SOUNDS, type DrumKit, type DrumSound, type LoopPattern } from "@libretracks/shared/models";
 
 import { SamplePicker } from "./SamplePicker";
+import { RhythmVolumeFader } from "./RhythmVolumeFader";
 
 /** Patrones de la biblioteca que usan `soundId` de este kit. */
 export function patternsUsingSound(kit: DrumKit, soundId: string, patterns: LoopPattern[]): number {
@@ -105,14 +106,10 @@ export function KitEditor({ kit: initial, patterns, onSave, onClose, confirm, pi
               pickPath={pickPath}
               onPick={(sample) => updateSound(index, { sample })}
             />
-            <input
-              type="range"
-              aria-label={t("rhythm.volume")}
-              min={-24}
-              max={6}
-              step={0.5}
-              value={sound.gainDb}
-              onChange={(event) => updateSound(index, { gainDb: Number(event.target.value) })}
+            <RhythmVolumeFader
+              ariaLabel={t("rhythm.volume")}
+              db={sound.gainDb}
+              onChange={(gainDb) => updateSound(index, { gainDb })}
             />
             <select
               aria-label={t("rhythm.pads.choke")}

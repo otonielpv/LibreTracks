@@ -8,6 +8,7 @@ import type { OneShotPad, OneShotSet } from "@libretracks/shared/models";
 
 import { ensureBank, renameBank, setPad } from "./oneShotOps";
 import { SamplePicker } from "./SamplePicker";
+import { RhythmVolumeFader } from "./RhythmVolumeFader";
 import type { RhythmLayoutClass } from "./useRhythmLayout";
 
 type OneShotPadEditorProps = {
@@ -95,13 +96,10 @@ export function OneShotPadEditor({
           </label>
           <label className="lt-rhythm-field">
             <span className="lt-rhythm-field__label">{t("rhythm.volume")}</span>
-            <input
-              type="range"
-              min={-24}
-              max={6}
-              step={0.5}
-              value={pad.gainDb}
-              onChange={(event) => update({ gainDb: Number(event.target.value) })}
+            <RhythmVolumeFader
+              ariaLabel={t("rhythm.volume")}
+              db={pad.gainDb}
+              onChange={(gainDb) => update({ gainDb })}
             />
           </label>
           <label className="lt-rhythm-field">
