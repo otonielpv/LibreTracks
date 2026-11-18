@@ -921,28 +921,27 @@
   padding-top: 8px;
 }
 
-/* Teléfono en horizontal: la muestra arriba y el resto en cuatro columnas
-   con la etiqueta encima; a todo el ancho cada campo ocupaba una fila y
-   había que desplazar. */
+/* Teléfono en horizontal: cada control mide lo que pide su contenido
+   (un color no necesita 200 px) y se colocan en fila, con la etiqueta
+   encima; solo el título y los botones ocupan todo el ancho. */
 .lt-pad-editor.is-sheet {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  align-items: end;
-  column-gap: 12px;
+  display: flex;
+  flex-flow: row wrap;
+  align-items: flex-end;
+  gap: 8px 14px;
 }
 
 .lt-pad-editor.is-sheet > .lt-rhythm-card__title {
-  grid-row: 1;
-  grid-column: 1 / -1;
+  flex: 1 1 100%;
 }
 
-.lt-pad-editor.is-sheet > .lt-sample-picker {
-  grid-row: 2;
-  grid-column: 1 / -1;
-}
-
+/* Cancelar/Guardar al final de la última fila, sin una fila propia. */
 .lt-pad-editor.is-sheet > .lt-pad-editor__actions {
-  grid-column: 1 / -1;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0;
+  border: none;
 }
 
 .lt-pad-editor.is-sheet .lt-rhythm-field {
@@ -950,11 +949,31 @@
   flex-direction: column;
   align-items: stretch;
   gap: 3px;
+}
+
+.lt-pad-editor.is-sheet .lt-sample-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.lt-pad-editor.is-sheet .lt-sample-picker select {
+  flex: 0 0 auto;
+  width: 180px;
+}
+
+.lt-pad-editor.is-sheet input:not([type="range"]):not([type="color"]):not([type="checkbox"]) {
+  width: 120px;
+}
+
+.lt-pad-editor.is-sheet select {
+  width: auto;
   min-width: 0;
 }
 
 .lt-pad-editor.is-sheet input[type="color"] {
-  width: 100%;
+  width: 44px;
   height: calc(var(--lt-rhythm-target) - 4px);
   padding: 2px;
   background: #1d2120;
@@ -963,7 +982,7 @@
 }
 
 .lt-pad-editor.is-sheet input[type="range"] {
-  width: 100%;
+  width: 120px;
   height: calc(var(--lt-rhythm-target) - 4px);
   margin: 0;
 }
