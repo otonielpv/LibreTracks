@@ -1,7 +1,7 @@
 // Editor de patrones a pantalla completa (plan drum-loops, paso 08):
 // cabecera con nombre, variación A-D, ▶ escuchar (el motor, sin guardar),
 // deshacer/rehacer local, Guardar ▾ y cerrar (pregunta si hay cambios).
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { DrumKit, LoopPattern } from "@libretracks/shared/models";
@@ -10,14 +10,17 @@ import { isMobileApp, previewLoopPattern, setLoopPlaying } from "../desktopApi";
 import { LoopPatternSettings } from "./LoopPatternSettings";
 import { VARIATION_LETTERS } from "./LoopRows";
 import { LoopStepGrid } from "./LoopStepGrid";
-import { normalizePattern, stepCount, stepsPerBar, syncRowsToKit } from "./patternOps";
+import { normalizePattern, stepCount, stepsPerBar, syncRowsToKit, withKit } from "./patternOps";
 import type { RhythmLayoutClass } from "./useRhythmLayout";
 
 export type LoopEditorSaveTarget = "library" | "song" | "new";
 
 type LoopEditorProps = {
   pattern: LoopPattern;
+  /** Kit con el que se abre el patrón (y reserva si no está en `kits`). */
   kit: DrumKit;
+  /** Kits de la biblioteca para elegir; sin ellos no hay selector. */
+  kits?: DrumKit[];
   layoutClass: RhythmLayoutClass;
   touch?: boolean;
   /** Región para «Asignar a esta canción»; sin ella la opción no aparece. */
@@ -27,9 +30,12 @@ type LoopEditorProps = {
   /** Confirmación al cerrar con cambios (inyectable en tests). */
   confirmDiscard?: () => boolean;
   newId?: () => string;
-  /** Abre el editor del kit (solo kits de la biblioteca). */
-  onEditKit?: () => void;
+  /** Abre el editor de kits: `kit` para editar uno de la biblioteca, `null`
+   * para crear uno. `select` pone en el patrón el kit guardado si es otro. */
+  onEditKit?: (kit: DrumKit | null, select: (kit: DrumKit) => void) => void;
 };
+
+const NEW_KIT = "__new_kit__";
 
 function visibleStepsFor(layout: RhythmLayoutClass, pattern: LoopPattern): number {
   const bar = stepsPerBar(pattern);
@@ -38,7 +44,8 @@ function visibleStepsFor(layout: RhythmLayoutClass, pattern: LoopPattern): numbe
 
 export function LoopEditor({
   pattern: initial,
-  kit,
+  kit: openedKit,
+  kits = [],
   layoutClass,
   touch = isMobileApp,
   songRegionId,
@@ -49,7 +56,7 @@ export function LoopEditor({
   onEditKit,
 }: LoopEditorProps) {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState(() => normalizePattern(initial, kit));
+  const [draft, setDraft] = useState(() => normalizePattern(initial, openedKit));
   const [past, setPast] = useState<LoopPattern[]>([]);
   const [future, setFuture] = useState<LoopPattern[]>([]);
   const [variation, setVariation] = useState(0);
@@ -63,11 +70,25 @@ export function LoopEditor({
   const [saved, setSaved] = useState(draft);
   const dirty = draft !== saved;
 
+  // El kit sale del propio borrador, así deshacer también deshace un cambio
+  // de kit. `known` guarda los recién creados por si la biblioteca aún no
+  // los trae en este render.
+  const known = useRef(new Map<string, DrumKit>());
+  const kitRef = draft.kit;
+  const kit =
+    kitRef.kind === "embedded"
+      ? kitRef.kit
+      : (kits.find((k) => k.id === kitRef.kitId) ??
+        known.current.get(kitRef.kitId) ??
+        openedKit);
+
   // Editar el kit con el patrón abierto: los sonidos nuevos salen como filas
   // vacías y los borrados desaparecen. No cuenta como cambio sin guardar.
   const [kitSeen, setKitSeen] = useState(kit);
   if (kitSeen !== kit) {
-    const sync = (p: LoopPattern) => syncRowsToKit(p, kitSeen, kit);
+    const refId = (p: LoopPattern) => (p.kit.kind === "embedded" ? p.kit.kit.id : p.kit.kitId);
+    const sameKit = kitSeen.id === kit.id;
+    const sync = (p: LoopPattern) => (sameKit && refId(p) === kit.id ? syncRowsToKit(p, kitSeen, kit) : p);
     setKitSeen(kit);
     const synced = sync(draft);
     setDraft(synced);
@@ -86,6 +107,18 @@ export function LoopEditor({
     setFuture([]);
     setDraft(next);
   };
+
+  // `select` puede llegar más tarde (al guardar el editor de kits): usa
+  // siempre el borrador y el `apply` del último render.
+  const latest = useRef({ draft, apply });
+  latest.current = { draft, apply };
+  const selectKit = (next: DrumKit) => {
+    known.current.set(next.id, next);
+    const { draft: current, apply: applyLatest } = latest.current;
+    applyLatest(withKit(current, next, { kind: "library", kitId: next.id }));
+  };
+  const libraryKit = kits.some((k) => k.id === kit.id);
+  const kitOptions = libraryKit || kitRef.kind === "embedded" ? kits : [kit, ...kits];
 
   // Mientras se escucha, cada cambio suena ya (sin guardar).
   useEffect(() => {
@@ -145,9 +178,34 @@ export function LoopEditor({
           />
           <span className="lt-loop-editor__kit">
             <span className="lt-rhythm-field__label">{t("rhythm.editor.kit")}</span>
-            <span className="lt-loop-editor__kit-name">{kit.name}</span>
-            {onEditKit ? (
-              <button type="button" className="lt-loop-editor__link" onClick={onEditKit}>
+            {kits.length > 0 && onEditKit ? (
+              <select
+                className="lt-loop-editor__kit-select"
+                aria-label={t("rhythm.editor.kit")}
+                value={kitRef.kind === "library" ? kit.id : ""}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === NEW_KIT) {
+                    onEditKit(null, selectKit);
+                    return;
+                  }
+                  const next = kits.find((k) => k.id === value);
+                  if (next) selectKit(next);
+                }}
+              >
+                {kitRef.kind === "embedded" ? <option value="">{kit.name}</option> : null}
+                {kitOptions.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.name}
+                  </option>
+                ))}
+                <option value={NEW_KIT}>{t("rhythm.kit.create")}</option>
+              </select>
+            ) : (
+              <span className="lt-loop-editor__kit-name">{kit.name}</span>
+            )}
+            {onEditKit && libraryKit ? (
+              <button type="button" className="lt-loop-editor__link" onClick={() => onEditKit(kit, selectKit)}>
                 {t("rhythm.kit.edit")}
               </button>
             ) : null}

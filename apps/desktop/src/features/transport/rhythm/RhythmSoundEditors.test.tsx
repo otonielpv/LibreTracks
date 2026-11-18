@@ -6,7 +6,7 @@ import { failNextImportForTest, setRhythmSamplesForTest } from "../../../app/tes
 import i18n from "../../../shared/i18n";
 import { act, fireEvent, render, screen, waitFor, within } from "../../../test/testUtils";
 import { importUserSample } from "../desktopApi";
-import { KitEditor, patternsUsingSound } from "./KitEditor";
+import { blankKit, KitEditor, patternsUsingSound } from "./KitEditor";
 import { OneShotPadEditor } from "./OneShotPadEditor";
 import { ensureBank, renameBank, setPad, swapPads } from "./oneShotOps";
 import type { RhythmLayoutClass } from "./useRhythmLayout";
@@ -158,5 +158,21 @@ describe("KitEditor", () => {
     });
     expect(onSave.mock.calls[0][0].sounds.map((s: { id: string }) => s.id)[0]).toBe("tamb");
     expect(onSave.mock.calls[0][0].sounds).toHaveLength(2);
+  });
+
+  it("«Save as new» keeps the original and saves a copy with a new id", async () => {
+    const onSave = vi.fn();
+    render(<KitEditor kit={kit} patterns={patterns} onSave={onSave} onClose={() => {}} newKitId={() => "copy-1"} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save as new" }));
+    });
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ id: "copy-1", name: "Basic (copy)" }));
+    expect(onSave.mock.calls[0][0].sounds.map((s: { id: string }) => s.id)).toEqual(["hat", "tamb"]);
+  });
+
+  it("a new kit has no «Save as new» and cannot be saved empty", () => {
+    render(<KitEditor kit={blankKit("Mine", "k")} isNew patterns={[]} onSave={vi.fn()} onClose={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Save as new" })).toBeNull();
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

@@ -225,4 +225,50 @@ describe("LoopEditor on a phone", () => {
     expect(confirm).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("picking another kit rebuilds the rows (keeping shared sounds) and undo brings the old kit back", () => {
+    const other: DrumKit = { ...kit(4), id: "other", name: "Otro" };
+    other.sounds = other.sounds.slice(1); // s1, s2, s3
+    render(
+      <LoopEditor
+        pattern={pattern(2)}
+        kit={kit(2)}
+        kits={[kit(2), other]}
+        layoutClass="wide"
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+        onEditKit={vi.fn()}
+      />,
+    );
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Shaker 1 1" }));
+    fireEvent.pointerUp(window);
+    fireEvent.change(screen.getByRole("combobox", { name: /kit/i }), { target: { value: "other" } });
+    expect(screen.queryByText("Shaker 0")).toBeNull();
+    expect(screen.getByText("Shaker 3")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Shaker 1 1" }).getAttribute("data-velocity")).toBe("2");
+    fireEvent.click(screen.getByRole("button", { name: /deshacer|undo/i }));
+    expect(screen.getByText("Shaker 0")).toBeTruthy();
+    expect(screen.queryByText("Shaker 3")).toBeNull();
+  });
+
+  it("«New kit…» opens the kit editor and the created kit becomes the pattern's kit", () => {
+    const onEditKit = vi.fn();
+    render(
+      <LoopEditor
+        pattern={pattern(2)}
+        kit={kit(2)}
+        kits={[kit(2)]}
+        layoutClass="wide"
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+        onEditKit={onEditKit}
+      />,
+    );
+    fireEvent.change(screen.getByRole("combobox", { name: /kit/i }), { target: { value: "__new_kit__" } });
+    expect(onEditKit).toHaveBeenCalledWith(null, expect.any(Function));
+    const created: DrumKit = { ...kit(1), id: "mine", name: "Mío", sounds: [{ ...kit(1).sounds[0], id: "x", name: "Cajón" }] };
+    act(() => onEditKit.mock.calls[0][1](created));
+    expect(screen.getByText("Cajón")).toBeTruthy();
+    expect(screen.queryByText("Shaker 0")).toBeNull();
+  });
 });

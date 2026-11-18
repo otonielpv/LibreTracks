@@ -23,9 +23,28 @@ type KitEditorProps = {
   onClose: () => void;
   confirm?: (message: string) => boolean;
   pickPath?: () => Promise<string | null>;
+  /** Kit sin guardar todavía: no ofrece «Guardar como nuevo». */
+  isNew?: boolean;
+  newKitId?: () => string;
 };
 
-export function KitEditor({ kit: initial, patterns, onSave, onClose, confirm, pickPath }: KitEditorProps) {
+export const newKitId = () => `kit-${Date.now().toString(36)}`;
+
+/** Kit vacío para «Nuevo kit…». */
+export function blankKit(name: string, id: string = newKitId()): DrumKit {
+  return { id, name, sounds: [] };
+}
+
+export function KitEditor({
+  kit: initial,
+  patterns,
+  onSave,
+  onClose,
+  confirm,
+  pickPath,
+  isNew = false,
+  newKitId: makeKitId = newKitId,
+}: KitEditorProps) {
   const { t } = useTranslation();
   const [kit, setKit] = useState(initial);
 
@@ -78,9 +97,22 @@ export function KitEditor({ kit: initial, patterns, onSave, onClose, confirm, pi
           <button type="button" onClick={onClose}>
             {t("rhythm.pads.cancel")}
           </button>
+          {isNew ? null : (
+            <button
+              type="button"
+              onClick={async () => {
+                const name = kit.name === initial.name ? t("rhythm.kit.copyName", { name: kit.name }) : kit.name;
+                await onSave({ ...kit, id: makeKitId(), name });
+                onClose();
+              }}
+            >
+              {t("rhythm.kit.saveNew")}
+            </button>
+          )}
           <button
             type="button"
             className="is-primary"
+            disabled={isNew && kit.sounds.length === 0}
             onClick={async () => {
               await onSave(kit);
               onClose();

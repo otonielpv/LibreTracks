@@ -214,3 +214,14 @@ export function syncRowsToKit(pattern: LoopPattern, previous: DrumKit, kit: Drum
   if (kept.length === pattern.rows.length && added.length === 0) return pattern;
   return normalizePattern({ ...pattern, rows: [...kept, ...added] }, kit);
 }
+
+/** Cambia el kit del patrón: una fila por sonido del kit nuevo, en su orden.
+ * Las filas cuyo sonido existe en ambos (mismo id) conservan sus pasos; el
+ * resto empieza vacío. Una copia de un kit conserva los ids, y con ellos todo. */
+export function withKit(pattern: LoopPattern, kit: DrumKit, ref: LoopPattern["kit"]): LoopPattern {
+  const byId = new Map(pattern.rows.map((row) => [row.soundId, row]));
+  const rows = kit.sounds
+    .slice(0, DRUM_KIT_MAX_SOUNDS)
+    .map((s) => byId.get(s.id) ?? { soundId: s.id, gainDb: 0, variations: [] as number[][] });
+  return normalizePattern({ ...pattern, kit: ref, rows }, kit);
+}

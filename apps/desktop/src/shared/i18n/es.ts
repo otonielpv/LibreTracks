@@ -2695,6 +2695,10 @@ const es = {
     kit: {
       title: "Editor de kit",
       edit: "Editar kit",
+      create: "Nuevo kit…",
+      newName: "Mi kit",
+      saveNew: "Guardar como nuevo",
+      copyName: "{{name}} (copia)",
       name: "Nombre del kit",
       add: "Añadir sonido",
       remove: "Quitar {{name}}",

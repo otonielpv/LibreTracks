@@ -2664,6 +2664,10 @@ const en = {
       cancel: "Cancel",
     },
     kit: {
+      create: "New kit…",
+      newName: "My kit",
+      saveNew: "Save as new",
+      copyName: "{{name}} (copy)",
       title: "Kit editor",
       edit: "Edit kit",
       name: "Kit name",

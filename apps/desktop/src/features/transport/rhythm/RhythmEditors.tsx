@@ -3,9 +3,10 @@
 import type { AppSettings, DrumKit, LoopPattern, RegionLoop } from "@libretracks/shared/models";
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { assignLoopToSong, saveDrumKit, saveLoopPattern, saveOneShotSet, setActivePattern } from "../desktopApi";
-import { KitEditor } from "./KitEditor";
+import { blankKit, KitEditor } from "./KitEditor";
 import { LoopEditor, type LoopEditorSaveTarget } from "./LoopEditor";
 import { OneShotPadEditor } from "./OneShotPadEditor";
 import { emptyPattern } from "./patternOps";
@@ -98,7 +99,10 @@ type PatternEditorsProps = Omit<RhythmEditorsProps, "target">;
 function PatternEditors({ settings, onSettings, songLoop, songRegionId, layoutClass, onClose }: PatternEditorsProps) {
   const library = useRhythmStore((s) => s.library);
   const setLibrary = useRhythmStore((s) => s.setLibrary);
-  const [kitOpen, setKitOpen] = useState(false);
+  const { t } = useTranslation();
+  const [kitEdit, setKitEdit] = useState<{ kit: DrumKit; isNew: boolean; select: (kit: DrumKit) => void } | null>(
+    null,
+  );
   const [initial] = useState(() =>
     library ? patternToEdit(settings, songLoop, library.patterns, library.kits) : null,
   );
@@ -112,24 +116,35 @@ function PatternEditors({ settings, onSettings, songLoop, songRegionId, layoutCl
     setLibrary(await saveLoopPattern(pattern));
     if (where === "new" || !settings.activeLoopPatternId) onSettings(await setActivePattern(pattern.id));
   };
-  const libraryKit = library.kits.find((k) => k.id === kit.id) ?? null;
   return (
     <>
       <LoopEditor
         pattern={initial.pattern}
         kit={kit}
+        kits={library.kits}
         layoutClass={layoutClass}
         songRegionId={songRegionId}
         onSave={save}
         onClose={onClose}
-        onEditKit={libraryKit ? () => setKitOpen(true) : undefined}
+        onEditKit={(toEdit, select) =>
+          setKitEdit({
+            kit: toEdit ?? blankKit(t("rhythm.kit.newName")),
+            isNew: toEdit === null,
+            select,
+          })
+        }
       />
-      {kitOpen && libraryKit ? (
+      {kitEdit ? (
         <KitEditor
-          kit={libraryKit}
+          kit={kitEdit.kit}
+          isNew={kitEdit.isNew}
           patterns={library.patterns}
-          onSave={async (saved) => setLibrary(await saveDrumKit(saved))}
-          onClose={() => setKitOpen(false)}
+          onSave={async (saved) => {
+            setLibrary(await saveDrumKit(saved));
+            // Un kit nuevo (creado o «Guardar como nuevo») pasa al patrón.
+            if (saved.id !== kitEdit.kit.id || kitEdit.isNew) kitEdit.select(saved);
+          }}
+          onClose={() => setKitEdit(null)}
         />
       ) : null}
     </>

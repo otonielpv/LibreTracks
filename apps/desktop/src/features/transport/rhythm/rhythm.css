@@ -811,6 +811,12 @@
   color: #b6c2be;
 }
 
+.lt-loop-editor .lt-loop-editor__kit-select {
+  min-height: 24px;
+  max-width: 200px;
+  padding-left: 8px;
+}
+
 .lt-loop-editor .lt-loop-editor__link {
   min-height: 0;
   padding: 0;
