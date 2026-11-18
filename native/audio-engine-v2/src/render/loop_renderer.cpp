@@ -197,7 +197,14 @@ void LoopRenderer::drain_controls() noexcept {
     while (controls_.pop(c)) {
         switch (c.type) {
             case Control::Transport:
-                pending_playing_ = c.playing ? 1 : 0;
+                // Arrancar espera al límite (cuantizado); parar es inmediato:
+                // quien pulsa stop quiere silencio ya. Lo que suena acaba solo.
+                if (c.playing) {
+                    pending_playing_ = 1;
+                } else {
+                    playing_now_ = false;
+                    pending_playing_ = -1;
+                }
                 break;
             case Control::Row:
                 if (c.enabled >= 0) pending_enabled_[static_cast<std::size_t>(c.row)] = c.enabled;
@@ -208,7 +215,12 @@ void LoopRenderer::drain_controls() noexcept {
                 break;
             case Control::TransportToggle: {
                 const bool will_play = pending_playing_ >= 0 ? pending_playing_ == 1 : playing_now_;
-                pending_playing_ = will_play ? 0 : 1;
+                if (will_play) {
+                    playing_now_ = false;  // parar: inmediato
+                    pending_playing_ = -1;
+                } else {
+                    pending_playing_ = 1;
+                }
                 break;
             }
             case Control::RowToggle: {

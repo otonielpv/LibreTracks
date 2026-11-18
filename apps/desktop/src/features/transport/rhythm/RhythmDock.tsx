@@ -43,10 +43,12 @@ export function useRhythmSettings(): [AppSettings | null, (settings: AppSettings
   return [settings, setSettings];
 }
 
-/** Hoja en teléfono horizontal; si no, acoplado. */
+/** Acoplado abajo en todas las clases (en el teléfono, más bajo y dejando
+ * el transporte a la vista); en el Setlist de escritorio y tablet, pestaña.
+ * Nunca a pantalla completa: tapaba la app y no se podía seguir tocando. */
 export function rhythmVariantFor(view: RhythmView, layout: RhythmLayoutClass | undefined): RhythmPanelVariant {
-  if (view === "setlist") return layout === "short" ? "sheet" : "tab";
-  return layout === "short" ? "sheet" : "docked";
+  if (view === "setlist" && layout !== "short") return "tab";
+  return "docked";
 }
 
 function currentWindowLayout(): RhythmLayoutClass {
@@ -92,7 +94,7 @@ export function RhythmDock({ view, layoutClass, surfaces, alwaysOpen, songLoop, 
   if (!(alwaysOpen || open) || !settings) return null;
   return (
     <>
-      {variant === "sheet" && !alwaysOpen ? <DismissOnBack close={close} /> : null}
+      {layout === "short" && !alwaysOpen ? <DismissOnBack close={close} /> : null}
       <RhythmPanel
         variant={variant}
         settings={settings}

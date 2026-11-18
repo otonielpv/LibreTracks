@@ -185,3 +185,17 @@ describe("LoopEditor saving", () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("LoopEditor container", () => {
+  it("is a dialog over a backdrop, not the whole window; clicking outside asks before closing", () => {
+    const confirm = vi.fn(() => false);
+    const { onClose } = renderEditor({ confirm });
+    const editor = screen.getByTestId("loop-editor");
+    const backdrop = editor.parentElement!;
+    expect(backdrop.className).toContain("lt-rhythm-backdrop");
+    fireEvent.pointerDown(editor);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.pointerDown(backdrop);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});

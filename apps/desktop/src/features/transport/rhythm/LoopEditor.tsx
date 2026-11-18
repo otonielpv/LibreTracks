@@ -105,6 +105,12 @@ export function LoopEditor({
 
   return (
     <div
+      className={`lt-rhythm-backdrop lt-rhythm-backdrop--${layoutClass}`}
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+    >
+    <div
       className={["lt-loop-editor", `lt-loop-editor--${layoutClass}`, touch ? "is-touch" : ""].join(" ")}
       role="dialog"
       aria-modal="true"
@@ -244,6 +250,7 @@ export function LoopEditor({
         />
         </div>
       </div>
+    </div>
     </div>
   );
 }

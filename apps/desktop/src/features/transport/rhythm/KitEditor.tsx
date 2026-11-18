@@ -61,6 +61,7 @@ export function KitEditor({ kit: initial, patterns, onSave, onClose, confirm, pi
     );
 
   return (
+    <div className="lt-rhythm-backdrop">
     <div className="lt-rhythm-card lt-kit-editor" role="dialog" aria-label={t("rhythm.kit.title")} data-testid="kit-editor">
       <div className="lt-loop-editor__header">
         <input
@@ -136,6 +137,7 @@ export function KitEditor({ kit: initial, patterns, onSave, onClose, confirm, pi
           {t("rhythm.kit.add")}
         </button>
       </div>
+    </div>
     </div>
   );
 }

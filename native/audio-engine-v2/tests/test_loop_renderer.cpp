@@ -319,7 +319,8 @@ TEST_CASE("loop renderer: start, variation change and stop are quantized to the 
                                          2 * kBar120 + 2 * kStep120};
         expect_same(onsets(out), want);
     }
-    SUBCASE("stop mid-bar silences from the next bar") {
+    // Decisión del usuario (2026-11-18): parar NO se cuantiza, es inmediato.
+    SUBCASE("stop mid-bar silences at once, without waiting for the bar") {
         LoopRenderer loop;
         loop.set_pattern(every_beat());
         loop.set_transport(true);
@@ -330,8 +331,10 @@ TEST_CASE("loop renderer: start, variation change and stop are quantized to the 
                                      loop.set_transport(false);
                              });
         const auto got = onsets(out);
-        REQUIRE(got.size() == 8);
-        CHECK(got.back() == kBar120 + 72000);
+        // El stop llega en el bloque que empieza en 143872: el tiempo de
+        // 144000 (mitad del segundo compás) ya no suena.
+        REQUIRE(got.size() == 6);
+        CHECK(got.back() == kBar120 + 24000);
         CHECK_FALSE(loop.playing());
     }
 }

@@ -35,12 +35,11 @@
   max-height: 40vh;
 }
 
-.lt-rhythm-panel--sheet {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  padding: var(--lt-safe-area-top, 0) var(--lt-safe-area-right, 0) var(--lt-safe-area-bottom, 0)
-    var(--lt-safe-area-left, 0);
+/* Teléfono: acoplado y bajo, para que el transporte siga a la vista. */
+.lt-rhythm-panel--docked.lt-rhythm-panel--short {
+  height: min(62vh, 270px);
+  padding-left: var(--lt-safe-area-left, 0);
+  padding-right: var(--lt-safe-area-right, 0);
 }
 
 .lt-rhythm-panel--tab {
@@ -438,6 +437,44 @@
   text-shadow: 0 0 6px rgb(87 241 219 / 0.7);
 }
 
+/* ── Diálogos (editor de patrones, kit) ──────────────────────────────── */
+.lt-rhythm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: calc(24px + var(--lt-safe-area-top, 0px)) calc(24px + var(--lt-safe-area-right, 0px))
+    calc(24px + var(--lt-safe-area-bottom, 0px)) calc(24px + var(--lt-safe-area-left, 0px));
+  background: rgb(0 0 0 / 0.55);
+}
+
+.lt-rhythm-backdrop--short {
+  padding: calc(6px + var(--lt-safe-area-top, 0px)) calc(6px + var(--lt-safe-area-right, 0px))
+    calc(6px + var(--lt-safe-area-bottom, 0px)) calc(6px + var(--lt-safe-area-left, 0px));
+}
+
+.lt-rhythm-backdrop > .lt-rhythm-card.lt-kit-editor {
+  position: relative;
+  inset: auto;
+  width: min(760px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  border-radius: 10px;
+}
+
+.lt-switch-check,
+.lt-rhythm-switch-field input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #57f1db;
+  cursor: pointer;
+}
+
+.lt-rhythm-switch-field {
+  cursor: pointer;
+}
+
 /* ── Editor de patrones ──────────────────────────────────────────────
    Barra agrupada arriba, ajustes en una fila de controles y la rejilla
    como un lienzo: celdas cuadradas de tamaño fijo, agrupadas por tiempos
@@ -455,15 +492,23 @@
   --lt-step-beat-gap: 12px;
   --lt-step-bar-gap: 22px;
   --lt-step-label: 168px;
-  position: fixed;
-  inset: 0;
-  z-index: 70;
+  position: relative;
   display: flex;
   flex-direction: column;
+  width: min(1180px, 100%);
+  max-height: 100%;
+  overflow: hidden;
   background: var(--lt-rhythm-bg);
   color: #e9f1ee;
-  padding: var(--lt-safe-area-top, 0) var(--lt-safe-area-right, 0) var(--lt-safe-area-bottom, 0)
-    var(--lt-safe-area-left, 0);
+  border: 1px solid var(--lt-rhythm-border);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.55);
+}
+
+.lt-loop-editor--short {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
 }
 
 .lt-loop-editor.is-touch {
@@ -790,10 +835,13 @@
   overflow-y: auto;
 }
 
-.lt-pad-editor.is-sheet,
-.lt-kit-editor {
+.lt-pad-editor.is-sheet {
   position: fixed;
-  inset: 0;
+  left: var(--lt-safe-area-left, 0);
+  right: var(--lt-safe-area-right, 0);
+  bottom: 0;
+  max-height: 88vh;
+  border-radius: 10px 10px 0 0;
   overflow-y: auto;
   padding: calc(12px + var(--lt-safe-area-top, 0px)) calc(12px + var(--lt-safe-area-right, 0px))
     calc(12px + var(--lt-safe-area-bottom, 0px)) calc(12px + var(--lt-safe-area-left, 0px));
@@ -830,9 +878,9 @@
 .lt-rhythm-panel select,
 .lt-loop-editor select,
 .lt-rhythm-card select,
-.lt-rhythm-panel input:not([type="range"]):not([type="color"]),
-.lt-loop-editor input:not([type="range"]):not([type="color"]),
-.lt-rhythm-card input:not([type="range"]):not([type="color"]) {
+.lt-rhythm-panel input:not([type="range"]):not([type="color"]):not([type="checkbox"]),
+.lt-loop-editor input:not([type="range"]):not([type="color"]):not([type="checkbox"]),
+.lt-rhythm-card input:not([type="range"]):not([type="color"]):not([type="checkbox"]) {
   appearance: none;
   -webkit-appearance: none;
   min-height: calc(var(--lt-rhythm-target, 32px) - 4px);
@@ -856,9 +904,9 @@
   cursor: pointer;
 }
 
-.lt-rhythm-panel input:not([type="range"]):not([type="color"]),
-.lt-loop-editor input:not([type="range"]):not([type="color"]),
-.lt-rhythm-card input:not([type="range"]):not([type="color"]) {
+.lt-rhythm-panel input:not([type="range"]):not([type="color"]):not([type="checkbox"]),
+.lt-loop-editor input:not([type="range"]):not([type="color"]):not([type="checkbox"]),
+.lt-rhythm-card input:not([type="range"]):not([type="color"]):not([type="checkbox"]) {
   padding-right: 10px;
 }
 

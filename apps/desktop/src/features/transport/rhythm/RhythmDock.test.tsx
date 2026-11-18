@@ -13,15 +13,17 @@ const EMPTY: RhythmLibrary = { kits: [], patterns: [], oneShots: { banks: [] } }
 
 beforeEach(() => setRhythmLibraryForTest(EMPTY));
 
+// Decisión del usuario (2026-11-18): nunca a pantalla completa; en el
+// teléfono también acoplado abajo, con el transporte a la vista.
 describe("RhythmDock in the four views", () => {
   it.each([
     ["daw", "wide", "docked"],
     ["live", "wide", "docked"],
     ["compact", "medium", "docked"],
-    ["daw", "short", "sheet"],
-    ["live", "short", "sheet"],
-    ["compact", "short", "sheet"],
-    ["setlist", "short", "sheet"],
+    ["daw", "short", "docked"],
+    ["live", "short", "docked"],
+    ["compact", "short", "docked"],
+    ["setlist", "short", "docked"],
   ] as const)("%s at %s opens the %s variant from its button", async (view, layout, variant) => {
     render(
       <>
