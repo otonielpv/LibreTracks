@@ -26,7 +26,16 @@ type KitEditorProps = {
   /** Kit sin guardar todavía: no ofrece «Guardar como nuevo». */
   isNew?: boolean;
   newKitId?: () => string;
+  /** Borrar el kit del usuario: "delete" lo elimina; "restore" borra la copia
+   * editada de un kit de serie o de pack y vuelve al original. */
+  deleteMode?: "delete" | "restore";
+  onDelete?: () => Promise<void> | void;
 };
+
+/** Patrones de la biblioteca que usan este kit. */
+export function patternsUsingKit(kitId: string, patterns: LoopPattern[]): number {
+  return patterns.filter((p) => p.kit.kind === "library" && p.kit.kitId === kitId).length;
+}
 
 export const newKitId = () => `kit-${Date.now().toString(36)}`;
 
@@ -44,8 +53,15 @@ export function KitEditor({
   pickPath,
   isNew = false,
   newKitId: makeKitId = newKitId,
+  deleteMode,
+  onDelete,
 }: KitEditorProps) {
   const { t } = useTranslation();
+  const ask = (message: string) => (confirm ? confirm(message) : window.confirm(message));
+  // Un kit en uso no se elimina: sus patrones se quedarían sin sonidos.
+  // Restablecer sí, porque el original conserva el mismo id.
+  const usedBy = patternsUsingKit(initial.id, patterns);
+  const deleteBlocked = deleteMode === "delete" && usedBy > 0;
   const [kit, setKit] = useState(initial);
 
   const updateSound = (index: number, patch: Partial<DrumSound>) =>
@@ -56,7 +72,7 @@ export function KitEditor({
     const used = patternsUsingSound(initial, sound.id, patterns);
     if (used > 0) {
       const message = t("rhythm.kit.removeUsed", { name: sound.name, count: used });
-      if (!(confirm ? confirm(message) : window.confirm(message))) return;
+      if (!ask(message)) return;
     }
     setKit((k) => ({ ...k, sounds: k.sounds.filter((_, i) => i !== index) }));
   };
@@ -94,6 +110,22 @@ export function KitEditor({
             />
           </div>
           <span className="lt-rhythm-header__spacer" />
+          {deleteMode && onDelete ? (
+            <button
+              type="button"
+              className="lt-kit-editor__delete"
+              disabled={deleteBlocked}
+              title={deleteBlocked ? t("rhythm.kit.deleteUsed", { count: usedBy }) : undefined}
+              onClick={async () => {
+                const key = deleteMode === "delete" ? "rhythm.kit.deleteConfirm" : "rhythm.kit.restoreConfirm";
+                if (!ask(t(key, { name: initial.name }))) return;
+                await onDelete();
+                onClose();
+              }}
+            >
+              {deleteMode === "delete" ? t("rhythm.kit.delete") : t("rhythm.kit.restore")}
+            </button>
+          ) : null}
           <button type="button" onClick={onClose}>
             {t("rhythm.pads.cancel")}
           </button>

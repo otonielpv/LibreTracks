@@ -1437,3 +1437,18 @@
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
+
+.lt-kit-editor .lt-kit-editor__delete {
+  background: transparent;
+  color: #ff8a80;
+  border-color: rgb(255 138 128 / 0.35);
+}
+
+.lt-kit-editor .lt-kit-editor__delete:hover:not(:disabled) {
+  border-color: #ff8a80;
+}
+
+.lt-kit-editor .lt-kit-editor__delete:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

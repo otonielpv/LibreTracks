@@ -23,15 +23,38 @@ pub struct RhythmLibraryView {
     pub kits: Vec<DrumKit>,
     pub patterns: Vec<LoopPattern>,
     pub one_shots: OneShotSet,
+    /// Kits guardados por el usuario (se pueden borrar).
+    pub own_kit_ids: Vec<String>,
+    /// Kits de serie y de packs: borrar la copia del usuario los restablece.
+    pub shipped_kit_ids: Vec<String>,
 }
 
 fn library_view(state: &DesktopState) -> Result<RhythmLibraryView, String> {
     let data = state.audio.rhythm_library_data().map_err(|e| e.to_string())?;
+    let (own_kit_ids, shipped_kit_ids) = match state.audio.rhythm_library() {
+        Some(library) => kit_origins(&library),
+        None => (Vec::new(), Vec::new()),
+    };
     Ok(RhythmLibraryView {
         kits: data.kits,
         patterns: data.patterns,
         one_shots: data.one_shots,
+        own_kit_ids,
+        shipped_kit_ids,
     })
+}
+
+fn kit_origins(library: &libretracks_project::rhythm_library::RhythmLibrary) -> (Vec<String>, Vec<String>) {
+    let own = library.list_kits().unwrap_or_default().into_iter().map(|k| k.id).collect();
+    let shipped = crate::rhythm::packs::with_packs(
+        crate::rhythm::builtin::with_builtin(Default::default()),
+        &library.packs_dir(),
+    )
+    .kits
+    .into_iter()
+    .map(|k| k.id)
+    .collect();
+    (own, shipped)
 }
 
 /// Tras tocar la biblioteca: el motor recibe lo que cambió. Un fallo del

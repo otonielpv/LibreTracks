@@ -3027,6 +3027,10 @@ export type RhythmLibrary = {
   kits: DrumKit[];
   patterns: LoopPattern[];
   oneShots: OneShotSet;
+  /** Kits guardados por el usuario (se pueden borrar). */
+  ownKitIds?: string[];
+  /** Kits de serie y de packs: borrar la copia del usuario los restablece. */
+  shippedKitIds?: string[];
 };
 
 /** Fila del loop en directo (`audio:rhythm`). */

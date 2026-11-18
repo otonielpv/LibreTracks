@@ -5,7 +5,7 @@ import type { AppSettings, DrumKit, LoopPattern, RegionLoop } from "@libretracks
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { assignLoopToSong, saveDrumKit, saveLoopPattern, saveOneShotSet, setActivePattern } from "../desktopApi";
+import { assignLoopToSong, deleteDrumKit, saveDrumKit, saveLoopPattern, saveOneShotSet, setActivePattern } from "../desktopApi";
 import { blankKit, KitEditor } from "./KitEditor";
 import { LoopEditor, type LoopEditorSaveTarget } from "./LoopEditor";
 import { OneShotPadEditor } from "./OneShotPadEditor";
@@ -145,8 +145,26 @@ function PatternEditors({ settings, onSettings, songLoop, songRegionId, layoutCl
             if (saved.id !== kitEdit.kit.id || kitEdit.isNew) kitEdit.select(saved);
           }}
           onClose={() => setKitEdit(null)}
+          deleteMode={kitDeleteMode(kitEdit.kit.id, kitEdit.isNew, library)}
+          onDelete={async () => {
+            const mode = kitDeleteMode(kitEdit.kit.id, kitEdit.isNew, library);
+            const next = await deleteDrumKit(kitEdit.kit.id);
+            setLibrary(next);
+            // Eliminado del todo: el patrón abierto pasa al primer kit que queda.
+            if (mode === "delete" && next.kits[0]) kitEdit.select(next.kits[0]);
+          }}
         />
       ) : null}
     </>
   );
+}
+
+/** Qué hace «borrar» con este kit, o nada si no es del usuario. */
+export function kitDeleteMode(
+  kitId: string,
+  isNew: boolean,
+  library: { ownKitIds?: string[]; shippedKitIds?: string[] },
+): "delete" | "restore" | undefined {
+  if (isNew || !library.ownKitIds?.includes(kitId)) return undefined;
+  return library.shippedKitIds?.includes(kitId) ? "restore" : "delete";
 }

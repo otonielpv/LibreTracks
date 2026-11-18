@@ -7,6 +7,7 @@ import i18n from "../../../shared/i18n";
 import { act, fireEvent, render, screen, waitFor, within } from "../../../test/testUtils";
 import { importUserSample } from "../desktopApi";
 import { blankKit, KitEditor, patternsUsingSound } from "./KitEditor";
+import { kitDeleteMode } from "./RhythmEditors";
 import { OneShotPadEditor } from "./OneShotPadEditor";
 import { ensureBank, renameBank, setPad, swapPads } from "./oneShotOps";
 import type { RhythmLayoutClass } from "./useRhythmLayout";
@@ -174,5 +175,31 @@ describe("KitEditor", () => {
     render(<KitEditor kit={blankKit("Mine", "k")} isNew patterns={[]} onSave={vi.fn()} onClose={() => {}} />);
     expect(screen.queryByRole("button", { name: "Save as new" })).toBeNull();
     expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("deleting a kit asks first; a kit in use cannot be deleted, only restored", async () => {
+    const onDelete = vi.fn();
+    const confirm = vi.fn(() => true);
+    const free = { ...kit, id: "mine", name: "Mine" };
+    const { unmount } = render(
+      <KitEditor kit={free} patterns={patterns} onSave={vi.fn()} onClose={() => {}} confirm={confirm} deleteMode="delete" onDelete={onDelete} />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Delete kit" }));
+    });
+    expect(confirm).toHaveBeenCalledWith(`Delete the kit "Mine"? This can't be undone.`);
+    expect(onDelete).toHaveBeenCalled();
+    unmount();
+
+    render(<KitEditor kit={kit} patterns={patterns} onSave={vi.fn()} onClose={() => {}} deleteMode="delete" onDelete={onDelete} />);
+    expect((screen.getByRole("button", { name: "Delete kit" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("kitDeleteMode: only own kits; a shipped id means restore", () => {
+    const library = { ownKitIds: ["basic", "mine"], shippedKitIds: ["basic", "percussion"] };
+    expect(kitDeleteMode("mine", false, library)).toBe("delete");
+    expect(kitDeleteMode("basic", false, library)).toBe("restore");
+    expect(kitDeleteMode("percussion", false, library)).toBeUndefined();
+    expect(kitDeleteMode("mine", true, library)).toBeUndefined();
   });
 });
