@@ -42,11 +42,19 @@
   max-height: 40vh;
 }
 
-/* Teléfono: acoplado y bajo, para que el transporte siga a la vista. */
+/* Teléfono: acoplado y bajo, para que el transporte siga a la vista.
+   A la izquierda NO se aparta del notch: la barra lateral de la app ya
+   lleva ese inset y repetirlo aquí lo sumaba dos veces (iPhone apaisado:
+   el panel empezaba a ~95 px del borde). A la derecha el contenido llega
+   al borde de la pantalla, así que sí. */
 .lt-rhythm-panel--docked.lt-rhythm-panel--short {
   height: min(62vh, 270px);
-  padding-left: var(--lt-safe-area-left, 0);
   padding-right: var(--lt-safe-area-right, 0);
+}
+
+/* El cajón del Setlist ya se aparta del notch por los dos lados. */
+.lt-setlist-zone.is-drawer .lt-rhythm-panel--docked.lt-rhythm-panel--short {
+  padding-right: 0;
 }
 
 .lt-rhythm-panel--tab {
@@ -903,10 +911,13 @@
   overflow-y: auto;
 }
 
+/* La hoja va de borde a borde y es el relleno el que se aparta del notch.
+   Antes la caja ya se desplazaba con left/right Y el relleno repetía el
+   inset: el contenido quedaba a ~120 px de cada lado. */
 .lt-pad-editor.is-sheet {
   position: fixed;
-  left: var(--lt-safe-area-left, 0);
-  right: var(--lt-safe-area-right, 0);
+  left: 0;
+  right: 0;
   bottom: 0;
   max-height: 88vh;
   gap: 8px;
@@ -1141,16 +1152,43 @@
   background: transparent;
 }
 
+/* Escritorio (popover): etiqueta a la izquierda en una línea y control a la
+   derecha, con aire entre filas para que los desplegables no se toquen. */
+.lt-pad-editor.is-popover {
+  gap: 10px;
+}
+
 .lt-pad-editor .lt-rhythm-field {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
+  grid-template-columns: 128px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.lt-pad-editor.is-popover .lt-rhythm-field__label {
+  white-space: nowrap;
+}
+
+/* Selector de muestra: el desplegable a todo el ancho y los dos botones
+   repartidos debajo. Sin esto eran elementos en línea sin hueco y
+   «Descargar sonidos» saltaba de línea pegado al resto. */
+.lt-sample-picker {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
 .lt-pad-editor .lt-sample-picker select {
-  flex: 1 1 auto;
   min-width: 0;
+}
+
+.lt-pad-editor.is-popover .lt-sample-picker select {
+  flex: 1 1 100%;
+}
+
+.lt-pad-editor.is-popover .lt-sample-picker > button {
+  flex: 1 1 0;
 }
 
 .lt-pad-editor__actions {
