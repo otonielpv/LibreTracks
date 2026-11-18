@@ -512,11 +512,13 @@
 }
 
 /* Teléfono: hoja bajo la barra superior (54 px), que sigue visible y se
-   puede usar (play de la canción) con el editor abierto. */
+   puede usar (play de la canción) con el editor abierto. Solo se aparta del
+   notch a la izquierda, a la altura de la barra lateral; a la derecha llega
+   al borde como el resto de la app (el inset derecho dejaba ~47 px vacíos). */
 .lt-rhythm-backdrop--short {
   top: calc(54px + var(--lt-safe-area-top, 0px));
   place-items: stretch;
-  padding: 0 var(--lt-safe-area-right, 0px) var(--lt-safe-area-bottom, 0px) var(--lt-safe-area-left, 0px);
+  padding: 0 0 var(--lt-safe-area-bottom, 0px) var(--lt-safe-area-left, 0px);
 }
 
 .lt-rhythm-backdrop > .lt-rhythm-card.lt-kit-editor {
@@ -731,7 +733,7 @@
   --lt-step-gap: 3px;
   --lt-step-beat-gap: 8px;
   --lt-step-bar-gap: 12px;
-  --lt-step-label: 120px;
+  --lt-step-label: 96px;
 }
 
 /* Teléfono: cabecera y ajustes más bajos para dejar la rejilla a la vista. */
@@ -742,10 +744,21 @@
 .lt-loop-editor--short .lt-loop-editor__header {
   gap: 10px;
   min-height: 44px;
-  padding: 0 8px 0 12px;
+  padding: 2px 8px 2px 12px;
 }
 
-.lt-loop-editor--short .lt-loop-editor__identity .lt-loop-editor__kit {
+/* El kit se elige y se edita también en el teléfono: bajo el nombre, como
+   en escritorio, con el nombre más estrecho para que quepa la cabecera. */
+.lt-loop-editor--short .lt-loop-editor__name {
+  width: 170px;
+  min-height: 24px !important;
+}
+
+.lt-loop-editor--short .lt-loop-editor__kit-select {
+  max-width: 130px;
+}
+
+.lt-loop-editor--short .lt-loop-editor__kit > .lt-rhythm-field__label {
   display: none;
 }
 

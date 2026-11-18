@@ -21,6 +21,16 @@ describe("insets del notch en el panel Ritmo", () => {
     expect(docked).not.toContain("--lt-safe-area-right");
   });
 
+  it("el editor de patrones en el teléfono llega al borde derecho", () => {
+    const backdrop = rule(".lt-rhythm-backdrop--short");
+    expect(backdrop).toContain("--lt-safe-area-left");
+    expect(backdrop).not.toContain("--lt-safe-area-right");
+  });
+
+  it("el kit no se oculta en el teléfono", () => {
+    expect(rule(".lt-loop-editor--short .lt-loop-editor__identity .lt-loop-editor__kit")).not.toContain("display: none");
+  });
+
   it("la hoja del pad no se aparta del notch con la caja Y con el relleno", () => {
     const sheet = rule(".lt-pad-editor.is-sheet");
     const box = sheet.match(/(?:^|[\s;])(?:left|right):[^;]+;/g)?.join(" ") ?? "";
