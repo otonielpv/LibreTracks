@@ -133,27 +133,41 @@ jobs:
     name: Build signed App Store IPA
     needs: preflight
     if: needs.preflight.outputs.ready == 'true'
-    runs-on: macos-15
+    # macos-26 y no macos-15: las Xcode nuevas llegan primero a la imagen
+    # nueva (en nov. 2026 macos-15 se queda en 26.3 y macos-26 ya trae 26.6).
+    runs-on: macos-26
     timeout-minutes: 90
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # App Store Connect rechaza cualquier IPA compilado con un SDK anterior al
-      # de iOS 26 ("SDK version issue ... must be built with the iOS 26 SDK or
-      # later"), y la imagen macos-15 sigue arrancando con Xcode 16.4. Se elige
-      # aqui, antes del motor, para que toda la compilacion use el mismo
-      # toolchain; y se falla en seco si la imagen no lo trae, porque la
-      # alternativa es enterarse cuarenta minutos despues y por boca de Apple.
+      # App Store Connect exige un SDK minimo de iOS que Apple sube cada ano
+      # (ITMS-90725). Hoy acepta el de iOS 26; desde abril de 2027 exige el de
+      # iOS 27 (Xcode 27). Se elige la Xcode estable mas nueva de la imagen,
+      # nunca una beta/RC (Apple rechaza binarios compilados con ellas), aqui,
+      # antes del motor, para que toda la compilacion use el mismo toolchain.
+      # Por debajo de MIN_XCODE se falla en seco, porque la alternativa es
+      # enterarse cuarenta minutos despues y por boca de Apple; por debajo de
+      # NEXT_XCODE solo se avisa. Cuando Apple anuncie el siguiente minimo,
+      # subir los dos numeros.
       - name: Select the Xcode App Store Connect requires
+        env:
+          MIN_XCODE: "26"
+          NEXT_XCODE: "27"
         run: |
           set -euo pipefail
-          newest="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)"
-          if [ -z "$newest" ]; then
-            echo "::error::This runner image has no Xcode 26, and App Store Connect refuses IPAs built with an older SDK."
+          newest="$(ls -d /Applications/Xcode_[0-9]*.app 2>/dev/null \
+            | grep -viE 'beta|rc|release.candidate' \
+            | sort -V | tail -1 || true)"
+          major="$(basename "${newest:-Xcode_0.app}" .app | sed -E 's/^Xcode_([0-9]+).*/\1/')"
+          if [ -z "$newest" ] || [ "$major" -lt "$MIN_XCODE" ]; then
+            echo "::error::This runner image has no stable Xcode $MIN_XCODE or later, and App Store Connect refuses IPAs built with an older SDK."
             ls -d /Applications/Xcode*.app || true
             exit 1
+          fi
+          if [ "$major" -lt "$NEXT_XCODE" ]; then
+            echo "::warning::Building with Xcode $major. From April 2027 App Store Connect requires Xcode $NEXT_XCODE (iOS $NEXT_XCODE SDK); this image doesn't have it yet."
           fi
           sudo xcode-select -s "$newest"
           xcodebuild -version
