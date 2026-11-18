@@ -1,5 +1,7 @@
 // Filas del loop en directo: color + nombre, interruptor, variaciones A-D y
-// tira de pasos (wide) o pulso (medium). Una variación pendiente (cuantizada)
+// tira de pasos (wide) o pulso (medium). En el teléfono (short) la variación
+// es un desplegable para dejar sitio a la tira de pasos (decisión del usuario,
+// 2026-11-18). Una variación pendiente (cuantizada)
 // parpadea hasta que el motor la aplica.
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
@@ -29,9 +31,9 @@ function LoopRowsImpl({ pattern, kit, rows, layout, handlers }: LoopRowsProps) {
   loopRowsRenderCount.current += 1;
   const { t } = useTranslation();
   const spb = patternStepsPerBar(pattern);
-  const twoColumns = layout === "short" && pattern.rows.length > 5;
+  const compactVariation = layout === "short";
   return (
-    <div className={twoColumns ? "lt-rhythm-rows is-two-columns" : "lt-rhythm-rows"} data-testid="rhythm-rows">
+    <div className="lt-rhythm-rows" data-testid="rhythm-rows">
       {pattern.rows.map((row, index) => {
         const sound = kit.sounds.find((s) => s.id === row.soundId);
         const meter = rows[index];
@@ -62,27 +64,42 @@ function LoopRowsImpl({ pattern, kit, rows, layout, handlers }: LoopRowsProps) {
               <span className="lt-rhythm-row__name">{name}</span>
             </button>
             </MidiMappable>
-            <div className="lt-rhythm-row__variations" role="group">
-              {VARIATION_LETTERS.map((letter, v) => (
-                <MidiMappable key={letter} target={`loop:row:${index + 1}:var:${letter.toLowerCase()}`} label={`${name} ${letter}`}>
-                <button
-                  type="button"
-                  className={[
-                    "lt-rhythm-chip",
-                    v === active && pending === undefined ? "is-active" : "",
-                    v === active && pending !== undefined ? "is-leaving" : "",
-                    v === pending ? "is-pending" : "",
-                  ].join(" ")}
-                  aria-pressed={v === active}
-                  aria-label={t("rhythm.variation", { letter })}
-                  onClick={() => void handlers.setRowVariation(index, v)}
-                >
-                  {letter}
-                </button>
-                </MidiMappable>
-              ))}
-            </div>
-            {layout === "wide" ? (
+            {compactVariation ? (
+              <select
+                className={pending !== undefined ? "lt-rhythm-row__variation-select is-pending" : "lt-rhythm-row__variation-select"}
+                aria-label={`${name} ${t("rhythm.editor.variation")}`}
+                value={pending ?? active}
+                onChange={(event) => void handlers.setRowVariation(index, Number(event.target.value))}
+              >
+                {VARIATION_LETTERS.map((letter, v) => (
+                  <option key={letter} value={v}>
+                    {letter}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="lt-rhythm-row__variations" role="group">
+                {VARIATION_LETTERS.map((letter, v) => (
+                  <MidiMappable key={letter} target={`loop:row:${index + 1}:var:${letter.toLowerCase()}`} label={`${name} ${letter}`}>
+                  <button
+                    type="button"
+                    className={[
+                      "lt-rhythm-chip",
+                      v === active && pending === undefined ? "is-active" : "",
+                      v === active && pending !== undefined ? "is-leaving" : "",
+                      v === pending ? "is-pending" : "",
+                    ].join(" ")}
+                    aria-pressed={v === active}
+                    aria-label={t("rhythm.variation", { letter })}
+                    onClick={() => void handlers.setRowVariation(index, v)}
+                  >
+                    {letter}
+                  </button>
+                  </MidiMappable>
+                ))}
+              </div>
+            )}
+            {layout === "wide" || layout === "short" ? (
               <LoopStepStrip
                 steps={row.variations[active] ?? []}
                 stepsPerBar={spb}

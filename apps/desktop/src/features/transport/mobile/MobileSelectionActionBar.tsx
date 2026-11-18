@@ -5,6 +5,7 @@ import {
   MultiTrackMixControls,
   type MultiTrackMixActions,
 } from "../tracks/MultiTrackMixControls";
+import { useRhythmStore } from "../rhythm/rhythmStore";
 import { useTimelineUIStore } from "../uiStore";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import type { ContextMenuAction } from "../types";
@@ -90,8 +91,11 @@ export function MobileSelectionActionBar({
   const mixOpen = useTimelineUIStore((state) => state.selectionMixOpen);
   const areaSelectMode = useTimelineUIStore((state) => state.areaSelectMode);
   const selectedMarkers = useTimelineUIStore((state) => state.selectedMarkers);
+  // El panel Ritmo se acopla abajo, justo donde flota esta barra: con los dos
+  // a la vez la barra tapaba las filas del loop.
+  const rhythmOpen = useRhythmStore((state) => state.openByView.daw);
 
-  if (!isMobileApp || !menus) {
+  if (!isMobileApp || !menus || rhythmOpen) {
     return null;
   }
 

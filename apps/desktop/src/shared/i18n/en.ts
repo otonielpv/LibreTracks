@@ -2696,6 +2696,7 @@ const en = {
       save: "Save",
       saveLibrary: "Save to library",
       assignSong: "Assign to this song",
+      settings: "Pattern settings",
       saveNew: "Save as new",
       discard: "Discard the unsaved changes?",
       bars: "Bars",

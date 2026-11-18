@@ -139,10 +139,9 @@ describe("LoopEditor sizes", () => {
     expect(screen.getByTestId("loop-editor-pages").querySelectorAll("button")).toHaveLength(pages);
     fireEvent.click(screen.getByRole("tab", { name: "2" }));
     expect(cell(0, steps).dataset.step).toBe(String(steps));
-    if (layout === "short") {
-      expect(screen.getByTestId("step-row-0").textContent).toContain("Sha");
-      expect(screen.getByTestId("step-row-0").textContent).not.toContain("Shaker");
-    }
+    // Nombre entero siempre (el CSS lo recorta con puntos suspensivos): con
+    // tres letras «Shaker» y «Shaker suave» eran indistinguibles.
+    expect(screen.getByTestId("step-row-0").textContent).toContain("Shaker 0");
   });
 });
 
@@ -197,5 +196,14 @@ describe("LoopEditor container", () => {
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.pointerDown(backdrop);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("LoopEditor on a phone", () => {
+  it("keeps the pattern settings folded behind a button", () => {
+    renderEditor({ layout: "short" });
+    expect(screen.queryByText("Bars")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Pattern settings" }));
+    expect(screen.getByText("Bars")).toBeTruthy();
   });
 });

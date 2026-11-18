@@ -56,6 +56,10 @@ export function LoopEditor({
   const [page, setPage] = useState(0);
   const [listening, setListening] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
+  // En el teléfono los ajustes (compases, swing…) van plegados: abiertos se
+  // comían media pantalla y no dejaban ver la rejilla.
+  const collapsibleSettings = layoutClass === "short";
+  const [settingsOpen, setSettingsOpen] = useState(!collapsibleSettings);
   const [saved, setSaved] = useState(draft);
   const dirty = draft !== saved;
 
@@ -163,6 +167,17 @@ export function LoopEditor({
             {listening ? "stop" : "play_arrow"}
           </span>
         </button>
+        {collapsibleSettings ? (
+          <button
+            type="button"
+            className={settingsOpen ? "lt-loop-editor__icon is-active" : "lt-loop-editor__icon"}
+            aria-label={t("rhythm.editor.settings")}
+            aria-expanded={settingsOpen}
+            onClick={() => setSettingsOpen((open) => !open)}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">tune</span>
+          </button>
+        ) : null}
         <span className="lt-rhythm-header__spacer" />
         <div className="lt-loop-editor__group">
           <button
@@ -220,7 +235,7 @@ export function LoopEditor({
           <span className="material-symbols-outlined" aria-hidden="true">close</span>
         </button>
       </div>
-      <LoopPatternSettings pattern={draft} variation={variation} onChange={apply} />
+      {settingsOpen ? <LoopPatternSettings pattern={draft} variation={variation} onChange={apply} /> : null}
       {pages > 1 ? (
         <div className="lt-loop-editor__pages" role="tablist" data-testid="loop-editor-pages">
           {Array.from({ length: pages }, (_, index) => (
@@ -245,7 +260,6 @@ export function LoopEditor({
           variation={variation}
           firstStep={currentPage * visible}
           visibleSteps={visible}
-          shortLabels={layoutClass === "short"}
           onChange={apply}
         />
         </div>

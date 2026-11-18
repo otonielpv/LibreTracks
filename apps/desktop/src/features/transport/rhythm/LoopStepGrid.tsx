@@ -25,8 +25,6 @@ type LoopStepGridProps = {
   /** Primer paso visible (paginación por compases). */
   firstStep: number;
   visibleSteps: number;
-  /** Etiquetas de 3 letras (short). */
-  shortLabels: boolean;
   onChange: (pattern: LoopPattern) => void;
 };
 
@@ -36,7 +34,6 @@ export function LoopStepGrid({
   variation,
   firstStep,
   visibleSteps,
-  shortLabels,
   onChange,
 }: LoopStepGridProps) {
   const [preview, setPreview] = useState<{ row: number; value: number; cells: Set<number> } | null>(null);
@@ -167,7 +164,7 @@ export function LoopStepGrid({
           >
             <span className="lt-step-row__label" title={name}>
               <span className="lt-step-row__color" />
-              <span className="lt-step-row__name">{shortLabels ? name.slice(0, 3) : name}</span>
+              <span className="lt-step-row__name">{name}</span>
             </span>
             <div className="lt-step-row__cells">
               {beatGroups.map((group, beat) => {

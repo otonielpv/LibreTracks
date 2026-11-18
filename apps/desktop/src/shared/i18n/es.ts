@@ -2725,6 +2725,7 @@ const es = {
       save: "Guardar",
       saveLibrary: "Guardar en la biblioteca",
       assignSong: "Asignar a esta canción",
+      settings: "Ajustes del patrón",
       saveNew: "Guardar como nuevo",
       discard: "¿Descartar los cambios sin guardar?",
       bars: "Compases",

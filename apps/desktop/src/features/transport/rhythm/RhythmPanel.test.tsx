@@ -223,12 +223,18 @@ describe("RhythmPanel", () => {
     expect(document.querySelectorAll(".lt-rhythm-pulse")).toHaveLength(6);
   });
 
-  it("short: one surface with a switch, a ⋯ menu and two columns of rows past five", async () => {
+  // Decisión del usuario (2026-11-18): en el teléfono la variación es un
+  // desplegable y cada fila enseña sus pasos; una sola columna.
+  it("short: one surface with a switch, a ⋯ menu, variation dropdowns and step strips", async () => {
     renderPanel({ layoutClass: "short", variant: "sheet" });
     await ready();
     expect(screen.getByTestId("rhythm-surface-switch")).toBeTruthy();
     expect(screen.queryByTestId("rhythm-one-shots")).toBeNull();
-    expect(document.querySelector(".lt-rhythm-rows.is-two-columns")).toBeTruthy();
+    expect(document.querySelector(".lt-rhythm-rows.is-two-columns")).toBeNull();
+    const rows = screen.getByTestId("rhythm-rows").querySelectorAll(".lt-rhythm-row");
+    expect(document.querySelectorAll(".lt-rhythm-strip")).toHaveLength(rows.length);
+    expect(document.querySelectorAll(".lt-rhythm-row__variation-select")).toHaveLength(rows.length);
+    expect(document.querySelectorAll(".lt-rhythm-row__variations")).toHaveLength(0);
     expect(screen.queryByRole("combobox", { name: "Quantize" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "More options" }));
     expect(screen.getByTestId("rhythm-more-menu")).toBeTruthy();

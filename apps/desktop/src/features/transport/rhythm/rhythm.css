@@ -25,6 +25,13 @@
   --lt-rhythm-target: 44px;
 }
 
+/* En el teléfono en horizontal 44 px por control dejaba dos filas a la
+   vista; 34 px sigue siendo cómodo con el dedo. */
+.lt-rhythm-panel--short.is-touch,
+.lt-rhythm-card.is-sheet {
+  --lt-rhythm-target: 34px;
+}
+
 .lt-rhythm-panel--docked {
   height: 300px;
   border-top: 1px solid var(--lt-rhythm-border);
@@ -177,6 +184,13 @@
   font: inherit;
 }
 
+/* En el teléfono el panel acoplado mide ~260 px: unas pestañas de 44 px se
+   comían casi una fila entera. Aquí basta con una tira fina. */
+.lt-rhythm-panel--short .lt-rhythm-switch button {
+  min-height: 30px;
+  font-size: 0.85em;
+}
+
 /* ── Cuerpo: dos columnas 60/40 ───────────────────────────────────────── */
 .lt-rhythm-body {
   display: flex;
@@ -274,6 +288,28 @@
 .lt-rhythm-row__variations {
   display: inline-flex;
   gap: 2px;
+}
+
+.lt-rhythm-panel--short .lt-rhythm-row {
+  gap: 8px;
+  padding: 0 8px 0 0;
+}
+
+.lt-rhythm-panel--short .lt-rhythm-row__toggle {
+  flex: 0 0 104px;
+}
+
+.lt-rhythm-panel .lt-rhythm-row__variation-select {
+  flex: 0 0 54px;
+}
+
+.lt-rhythm-row__variation-select.is-pending {
+  animation: lt-rhythm-blink 0.6s steps(2, start) infinite;
+  border-color: var(--lt-rhythm-pending);
+}
+
+.lt-rhythm-panel--short .lt-rhythm-strip {
+  height: 18px;
 }
 
 .lt-rhythm-chip {
@@ -449,9 +485,12 @@
   background: rgb(0 0 0 / 0.55);
 }
 
+/* Teléfono: hoja bajo la barra superior (54 px), que sigue visible y se
+   puede usar (play de la canción) con el editor abierto. */
 .lt-rhythm-backdrop--short {
-  padding: calc(6px + var(--lt-safe-area-top, 0px)) calc(6px + var(--lt-safe-area-right, 0px))
-    calc(6px + var(--lt-safe-area-bottom, 0px)) calc(6px + var(--lt-safe-area-left, 0px));
+  top: calc(54px + var(--lt-safe-area-top, 0px));
+  place-items: stretch;
+  padding: 0 var(--lt-safe-area-right, 0px) var(--lt-safe-area-bottom, 0px) var(--lt-safe-area-left, 0px);
 }
 
 .lt-rhythm-backdrop > .lt-rhythm-card.lt-kit-editor {
@@ -501,14 +540,16 @@
   background: var(--lt-rhythm-bg);
   color: #e9f1ee;
   border: 1px solid var(--lt-rhythm-border);
-  border-radius: 10px;
+  border-radius: 4px;
   box-shadow: 0 24px 60px rgb(0 0 0 / 0.55);
 }
 
 .lt-loop-editor--short {
   width: 100%;
   height: 100%;
-  border-radius: 6px;
+  border-radius: 0;
+  border-width: 1px 0 0;
+  box-shadow: none;
 }
 
 .lt-loop-editor.is-touch {
@@ -525,7 +566,37 @@
   --lt-step-gap: 3px;
   --lt-step-beat-gap: 8px;
   --lt-step-bar-gap: 12px;
-  --lt-step-label: 56px;
+  --lt-step-label: 120px;
+}
+
+/* Teléfono: cabecera y ajustes más bajos para dejar la rejilla a la vista. */
+.lt-loop-editor--short.is-touch {
+  --lt-rhythm-target: 34px;
+}
+
+.lt-loop-editor--short .lt-loop-editor__header {
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 8px 0 12px;
+}
+
+.lt-loop-editor--short .lt-loop-editor__identity .lt-loop-editor__kit {
+  display: none;
+}
+
+.lt-loop-editor--short .lt-loop-settings {
+  gap: 6px 12px;
+  padding: 6px 12px;
+}
+
+.lt-loop-editor--short .lt-loop-editor__grid {
+  padding: 8px 12px;
+}
+
+.lt-loop-editor--short .lt-loop-editor__play {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
 }
 
 .lt-loop-editor__header {
@@ -694,15 +765,12 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 16px;
+  padding: 12px 16px;
 }
 
+/* Sin tarjeta alrededor de la rejilla: el marco redondeado se comía sitio. */
 .lt-loop-editor__canvas {
   display: inline-block;
-  padding: 12px 16px 16px;
-  background: var(--lt-rhythm-surface);
-  border: 1px solid var(--lt-rhythm-border);
-  border-radius: 8px;
 }
 
 .lt-step-grid {
@@ -778,7 +846,7 @@
   height: var(--lt-step-cell);
   min-height: 0;
   padding: 0;
-  border-radius: 6px;
+  border-radius: 3px;
   background: var(--lt-rhythm-raised);
   border: 1px solid rgb(186 202 197 / 0.08);
   cursor: pointer;
@@ -841,32 +909,64 @@
   right: var(--lt-safe-area-right, 0);
   bottom: 0;
   max-height: 88vh;
-  border-radius: 10px 10px 0 0;
-  overflow-y: auto;
-  padding: calc(12px + var(--lt-safe-area-top, 0px)) calc(12px + var(--lt-safe-area-right, 0px))
-    calc(12px + var(--lt-safe-area-bottom, 0px)) calc(12px + var(--lt-safe-area-left, 0px));
-}
-
-.lt-pad-editor__actions {
-  display: flex;
-  justify-content: flex-end;
   gap: 8px;
+  border-radius: 0;
+  overflow-y: auto;
+  padding: 8px calc(12px + var(--lt-safe-area-right, 0px)) calc(8px + var(--lt-safe-area-bottom, 0px))
+    calc(12px + var(--lt-safe-area-left, 0px));
 }
 
-.lt-kit-editor__sound,
-.lt-sample-picker {
+.lt-pad-editor.is-sheet .lt-pad-editor__actions {
+  margin-top: 0;
+  padding-top: 8px;
+}
+
+/* Teléfono en horizontal: la muestra arriba y el resto en cuatro columnas
+   con la etiqueta encima; a todo el ancho cada campo ocupaba una fila y
+   había que desplazar. */
+.lt-pad-editor.is-sheet {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  column-gap: 12px;
+}
+
+.lt-pad-editor.is-sheet > .lt-rhythm-card__title {
+  grid-row: 1;
+  grid-column: 1 / -1;
+}
+
+.lt-pad-editor.is-sheet > .lt-sample-picker {
+  grid-row: 2;
+  grid-column: 1 / -1;
+}
+
+.lt-pad-editor.is-sheet > .lt-pad-editor__actions {
+  grid-column: 1 / -1;
+}
+
+.lt-pad-editor.is-sheet .lt-rhythm-field {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  min-width: 0;
 }
 
-.lt-sample-picker__error {
-  color: #ff8a80;
+.lt-pad-editor.is-sheet input[type="color"] {
+  width: 100%;
+  height: calc(var(--lt-rhythm-target) - 4px);
+  padding: 2px;
+  background: #1d2120;
+  border: 1px solid rgb(186 202 197 / 0.18);
+  border-radius: 4px;
+}
+
+.lt-pad-editor.is-sheet input[type="range"] {
+  width: 100%;
+  height: calc(var(--lt-rhythm-target) - 4px);
   margin: 0;
-  flex-basis: 100%;
 }
-
 
 /* ── Controles con el aspecto de la app (no los nativos) ─────────────── */
 .lt-rhythm-panel,
@@ -1094,4 +1194,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.lt-loop-editor .lt-loop-editor__icon.is-active {
+  color: #57f1db;
 }
