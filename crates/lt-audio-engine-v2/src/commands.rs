@@ -62,6 +62,12 @@ pub enum EngineCommand {
     },
     /// EQ entero de la pista (plan track-eq, D8): el `TrackEq` del core tal
     /// cual (camelCase). `None` = quitar el EQ. El motor lo lee tolerante.
+    /// Pista que alimenta el RTA del editor de EQ; vacío = apagado (el
+    /// mezclador deja de copiar).
+    SetTrackAnalyzer {
+        #[serde(default)]
+        track_id: String,
+    },
     SetTrackEq {
         track_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]

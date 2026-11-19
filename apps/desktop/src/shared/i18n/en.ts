@@ -13,6 +13,8 @@ const en = {
     slopeOf: "Band {{number}} slope",
     off: "off",
     bypass: "Bypass",
+    rta: "RTA",
+    rtaHint: "Spectrum analyzer: what the track puts out after the equalizer",
     reset: "Reset",
     remove: "Remove EQ",
     close: "Close the equalizer",

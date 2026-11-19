@@ -13,6 +13,8 @@ const es = {
     slopeOf: "Pendiente de la banda {{number}}",
     off: "apagada",
     bypass: "Bypass",
+    rta: "RTA",
+    rtaHint: "Analizador de espectro: lo que sale de la pista después del ecualizador",
     reset: "Reiniciar",
     remove: "Quitar EQ",
     close: "Cerrar el ecualizador",

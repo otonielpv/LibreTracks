@@ -1516,6 +1516,26 @@ pub fn update_track_eq_realtime(
         .map_err(|error| error.to_string())
 }
 
+/// RTA del editor de EQ: elige la pista que analiza el motor (`None` apaga).
+#[tauri::command(async)]
+pub fn set_track_eq_analyzer(
+    track_id: Option<String>,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    state
+        .audio
+        .set_track_analyzer(track_id.as_deref())
+        .map_err(|error| error.to_string())
+}
+
+/// RTA: bandas en dB (log, 20 Hz - 20 kHz) de la pista analizada. Barato:
+/// el editor lo pide unas 30 veces por segundo mientras está abierto. Fuera
+/// del hilo principal como todos (la FFT no debe frenar la UI).
+#[tauri::command(async)]
+pub fn get_track_eq_spectrum(state: State<'_, DesktopState>) -> Vec<f32> {
+    state.audio.read_track_spectrum()
+}
+
 /// Confirmación del EQ al soltar: modelo + deshacer + motor, recortado.
 #[tauri::command(async)]
 pub fn commit_track_eq_change(

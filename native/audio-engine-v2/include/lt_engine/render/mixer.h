@@ -15,6 +15,7 @@
 #include <lt_engine/render/render_thread_pool.h>
 #include <lt_engine/render/rt_publisher.h>
 #include <lt_engine/render/track_eq.h>
+#include <lt_engine/render/spectrum_analyzer.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/transport/audio_clock_stamp.h>
@@ -98,6 +99,10 @@ public:
     void sync_track_eqs_from_song(const Id& song_id);
     // EQ publicado para una pista (diagnóstico y tests). Hilo de comandos.
     std::optional<TrackEqParams> track_eq_for_test(const Id& track_id) const;
+    // RTA del editor de EQ: qué pista se copia a la toma (vacío = ninguna, y
+    // entonces no se copia nada). La toma la lee cualquier hilo no de audio.
+    void set_analyzer_track(const Id& track_id) noexcept;
+    const AnalyzerTap& analyzer_tap() const noexcept { return analyzer_tap_; }
     void start_master_fade(float target_gain, double duration_seconds) noexcept;
     // Pause the transport by itself on the frame where a song (region) ends.
     // Command thread; read by the audio thread at the top of each block.
@@ -431,6 +436,9 @@ private:
         std::uint64_t version = 0;
     };
     RtPublisher<TrackEqTable> eq_table_;
+    // RTA: hash del id de la pista analizada (0 = apagado) y su toma.
+    std::atomic<std::size_t> analyzer_track_hash_{0};
+    AnalyzerTap analyzer_tap_;
     mutable std::mutex eq_writer_mutex_;   // solo hilo de comandos
     std::uint64_t eq_table_version_ = 0;   // bajo eq_writer_mutex_
     void publish_eq_table_locked(std::vector<TrackEqEntry> entries);

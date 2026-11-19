@@ -34,6 +34,8 @@ export type TrackEqHandlerDeps = {
     trackId: string;
     eq: TrackEq | null;
   }) => Promise<TransportSnapshot>;
+  setTrackEqAnalyzer: (trackId: string | null) => Promise<void>;
+  getTrackEqSpectrum: () => Promise<number[]>;
 };
 
 export type TrackEqHandlers = ReturnType<typeof createTrackEqHandlers>;
@@ -57,6 +59,8 @@ export function createTrackEqHandlers(deps: TrackEqHandlerDeps) {
     findTrack,
     updateTrackEqRealtime,
     commitTrackEqChange,
+    setTrackEqAnalyzer,
+    getTrackEqSpectrum,
   } = deps;
 
   const open = (trackId: string) => openTrackEq(findTrack(trackId));
@@ -101,5 +105,29 @@ export function createTrackEqHandlers(deps: TrackEqHandlerDeps) {
   /** Quita el EQ de la pista (vuelve a no tener, coste cero en el motor). */
   const remove = (trackId: string) => commit(trackId, null);
 
-  return { open, close, applyLive, commit, toggleBypass, reset, remove };
+  /** RTA: el motor empieza a analizar la pista (después de su EQ). */
+  const startAnalyzer = (trackId: string) => {
+    void setTrackEqAnalyzer(trackId).catch(() => undefined);
+  };
+
+  /** RTA apagado: el motor deja de copiar audio. */
+  const stopAnalyzer = () => {
+    void setTrackEqAnalyzer(null).catch(() => undefined);
+  };
+
+  /** Bandas en dB del RTA (vacío si no hay o si falla la lectura). */
+  const readSpectrum = () => getTrackEqSpectrum().catch(() => [] as number[]);
+
+  return {
+    open,
+    close,
+    applyLive,
+    commit,
+    toggleBypass,
+    reset,
+    remove,
+    startAnalyzer,
+    stopAnalyzer,
+    readSpectrum,
+  };
 }

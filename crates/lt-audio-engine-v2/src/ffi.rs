@@ -101,6 +101,11 @@ extern "C" {
     pub fn lt_audio_engine_get_meter_snapshot(engine: *mut LtEngine) -> *const c_char;
     pub fn lt_audio_engine_get_audio_clock(engine: *mut LtEngine, out: *mut LtAudioClock)
         -> LtResult;
+    pub fn lt_audio_engine_read_track_spectrum(
+        engine: *mut LtEngine,
+        out: *mut f32,
+        capacity: i32,
+    ) -> i32;
     pub fn lt_audio_engine_list_devices(engine: *mut LtEngine, force_rescan: i32) -> *const c_char;
     pub fn lt_audio_engine_get_source_peaks(
         engine: *mut LtEngine,
@@ -267,6 +272,19 @@ pub unsafe fn lt_audio_engine_get_snapshot(_: *mut LtEngine) -> *const c_char {
 pub unsafe fn lt_audio_engine_get_meter_snapshot(engine: *mut LtEngine) -> *const c_char {
     lt_audio_engine_get_snapshot(engine)
 }
+/// Stub: sin motor no hay espectro (el RTA del editor de EQ se queda vacío).
+#[cfg(any(
+    feature = "no-link",
+    all(target_os = "android", not(lt_engine_android_link))
+))]
+pub unsafe fn lt_audio_engine_read_track_spectrum(
+    _: *mut LtEngine,
+    _: *mut f32,
+    _: i32,
+) -> i32 {
+    0
+}
+
 /// Stub: a fixed, recognisable reading (frame 48 000 at 48 kHz, stamped
 /// 2 ms before "now", 480 samples of latency) so the Rust reading path is
 /// tested without the engine.

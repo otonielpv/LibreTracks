@@ -352,6 +352,19 @@ impl Engine {
         Some(AudioClockReading::from_raw(&raw))
     }
 
+    /// RTA del editor de EQ: bandas en dB (log, 20 Hz - 20 kHz) de la pista
+    /// elegida con `EngineCommand::SetTrackAnalyzer`. Vacío si no hay.
+    /// Hace la FFT en el hilo que llama: nunca desde el de audio.
+    pub fn read_track_spectrum(&self) -> Vec<f32> {
+        const CAPACITY: usize = 128;
+        let mut bands = vec![0.0f32; CAPACITY];
+        let written = unsafe {
+            ffi::lt_audio_engine_read_track_spectrum(self.handle, bands.as_mut_ptr(), CAPACITY as i32)
+        };
+        bands.truncate(written.clamp(0, CAPACITY as i32) as usize);
+        bands
+    }
+
     pub fn list_devices(&self) -> Result<Vec<DeviceInfo>, EngineError> {
         self.list_devices_ext(false)
     }

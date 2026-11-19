@@ -80,6 +80,8 @@ struct CmdSetTrackGain              { Id track_id; Gain gain; };
 struct CmdSetTrackPan               { Id track_id; float pan; };
 // EQ entero de la pista (plan track-eq, D8). Vacío = quitar el EQ.
 struct CmdSetTrackEq                { Id track_id; std::optional<TrackEqParams> eq; };
+// Pista que alimenta el RTA del editor de EQ (vacío = apagado).
+struct CmdSetTrackAnalyzer          { Id track_id; };
 struct CmdSetTrackMute              { Id track_id; bool mute; };
 struct CmdSetTrackSolo              { Id track_id; bool solo; };
 struct CmdSetTrackAudioRoute        { Id track_id; std::string audio_to; };
@@ -488,7 +490,7 @@ using EngineCommand = std::variant<
     CmdScheduleJump, CmdCancelScheduledJump,
     CmdCancelAllScheduledJumps, CmdReplaceScheduledJump,
     CmdSetTrackGain, CmdSetTrackPan, CmdSetTrackMute, CmdSetTrackSolo,
-    CmdSetTrackEq,
+    CmdSetTrackEq, CmdSetTrackAnalyzer,
     CmdSetTrackAudioRoute,
     CmdSetTrackTransposeEnabled, CmdStartMasterFade, CmdSetPilotTone,
     CmdSetMetronomeEnabled, CmdSetMetronomeVolume, CmdSetMetronomeOutputRoute,

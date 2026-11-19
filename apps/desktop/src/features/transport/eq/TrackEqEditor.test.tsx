@@ -34,6 +34,9 @@ function makeHandlers() {
     toggleBypass: vi.fn(async (_trackId: string) => undefined),
     reset: vi.fn(async (_trackId: string) => undefined),
     remove: vi.fn(async (_trackId: string) => undefined),
+    startAnalyzer: vi.fn((_trackId: string) => undefined),
+    stopAnalyzer: vi.fn(() => undefined),
+    readSpectrum: vi.fn(async () => [-90, -60, -30, -12, -40, -80] as number[]),
   } satisfies TrackEqHandlers;
 }
 
@@ -72,6 +75,7 @@ function flushFrames() {
 beforeEach(() => {
   platform.isMobileApp = false;
   frames = [];
+  window.localStorage.clear();
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
     frames.push(callback);
     return frames.length;
@@ -258,5 +262,47 @@ describe("TrackEqEditor pinch", () => {
     touch(graph, "touchend", []);
     expect(handlers.commit).not.toHaveBeenCalled();
     expect(handlers.applyLive).not.toHaveBeenCalled();
+  });
+});
+
+describe("TrackEqEditor RTA", () => {
+  it("analyzes the open track, paints the spectrum without re-rendering and stops on close", async () => {
+    const handlers = makeHandlers();
+    let renders = 0;
+    const { unmount } = render(
+      <Profiler id="eq" onRender={() => (renders += 1)}>
+        <TrackEqEditor track={makeTrack()} handlers={handlers} />
+      </Profiler>,
+    );
+    expect(handlers.startAnalyzer).toHaveBeenCalledWith("t1");
+    const before = renders;
+    for (let i = 0; i < 3; i += 1) {
+      flushFrames();
+      await act(async () => undefined);
+    }
+    expect(handlers.readSpectrum).toHaveBeenCalled();
+    expect(screen.getByTestId("lt-eq-spectrum").getAttribute("d")).toMatch(/^M0 .*Z$/);
+    expect(renders).toBe(before);
+    unmount();
+    expect(handlers.stopAnalyzer).toHaveBeenCalled();
+  });
+
+  it("the RTA button turns the analyzer off and remembers it", async () => {
+    const handlers = makeHandlers();
+    render(<TrackEqEditor track={makeTrack()} handlers={handlers} />);
+    const button = screen.getByText("eq.rta");
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(button);
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(handlers.stopAnalyzer).toHaveBeenCalledTimes(1);
+    handlers.readSpectrum.mockClear();
+    flushFrames();
+    await act(async () => undefined);
+    expect(handlers.readSpectrum).not.toHaveBeenCalled();
+    expect(screen.getByTestId("lt-eq-spectrum").getAttribute("d")).toBe("");
+    cleanup();
+    const again = makeHandlers();
+    render(<TrackEqEditor track={makeTrack()} handlers={again} />);
+    expect(again.startAnalyzer).not.toHaveBeenCalled();
   });
 });

@@ -79,7 +79,8 @@ These ship inside the desktop application (`.app` / `.exe` / `.deb` / `.rpm` /
 - **Copyright:** © 2021 Geraint Luff / Signalsmith Audio Ltd.
 - **Source:** https://github.com/Signalsmith-Audio/dsp
 - Vendored in `native/audio-engine-v2/vendor/signalsmith-dsp/` (`filters.h`,
-  `common.h`, `perf.h` and `LICENSE.txt`); biquads of the per-track EQ.
+  `fft.h`, `common.h`, `perf.h` and `LICENSE.txt`); biquads of the per-track EQ
+  and the FFT of its spectrum analyzer.
 
 ### mpv / libmpv (video output, Windows desktop build)
 - **License:** GNU GPL-2.0-or-later as built (the build enables mpv's GPL

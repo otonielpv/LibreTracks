@@ -49,6 +49,40 @@ const LOG_MIN = Math.log10(EQ_MIN_FREQUENCY_HZ);
 const LOG_MAX = Math.log10(EQ_MAX_FREQUENCY_HZ);
 const WHEEL_COMMIT_DELAY_MS = 350;
 const FINE_FACTOR = 0.2;
+/** El RTA se pinta de -90 dB (suelo de la gráfica) a 0 dB (techo). */
+export const RTA_MIN_DB = -90;
+const RTA_FRAME_MS = 33;
+const RTA_STORAGE_KEY = "lt.eq.rta";
+
+function readRtaPreference(): boolean {
+  try {
+    return window.localStorage.getItem(RTA_STORAGE_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+function writeRtaPreference(on: boolean) {
+  try {
+    window.localStorage.setItem(RTA_STORAGE_KEY, on ? "on" : "off");
+  } catch {
+    // Sin almacenamiento (privado, vista previa): solo dura esta sesión.
+  }
+}
+
+/** Área del RTA: bandas en dB espaciadas en log de 20 Hz a 20 kHz. */
+export function spectrumPath(bands: number[]): string {
+  if (bands.length < 2) return "";
+  // 0 dB arriba, RTA_MIN_DB abajo.
+  const yOf = (db: number) =>
+    (Math.min(0, Math.max(RTA_MIN_DB, db)) / RTA_MIN_DB) * EQ_VIEW_HEIGHT;
+  let d = `M0 ${EQ_VIEW_HEIGHT}`;
+  bands.forEach((db, index) => {
+    const hz = 20 * Math.pow(1000, index / (bands.length - 1));
+    d += `L${freqToX(hz).toFixed(1)} ${yOf(db).toFixed(1)}`;
+  });
+  return `${d}L${EQ_VIEW_WIDTH} ${EQ_VIEW_HEIGHT}Z`;
+}
 
 export function freqToX(hz: number): number {
   return ((Math.log10(hz) - LOG_MIN) / (LOG_MAX - LOG_MIN)) * EQ_VIEW_WIDTH;
@@ -138,6 +172,41 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
   const nodeRefs = useRef<(SVGGElement | null)[]>([]);
   const activeBandRef = useRef<number | null>(null);
   activeBandRef.current = activeBand;
+  const spectrumPathRef = useRef<SVGPathElement | null>(null);
+  const [rtaOn, setRtaOn] = useState(readRtaPreference);
+
+  // RTA: mientras el editor está abierto y encendido, el motor analiza esta
+  // pista y aquí se repinta el área a ~30 fps a mano (sin estado de React).
+  useEffect(() => {
+    if (!rtaOn) return;
+    const trackId = track.id;
+    handlersRef.current.startAnalyzer(trackId);
+    let cancelled = false;
+    let inFlight = false;
+    let last = 0;
+    let handle: number | null = null;
+    const tick = (now: number) => {
+      handle = null;
+      if (cancelled) return;
+      if (!inFlight && now - last >= RTA_FRAME_MS) {
+        last = now;
+        inFlight = true;
+        void handlersRef.current.readSpectrum().then((bands) => {
+          inFlight = false;
+          if (cancelled) return;
+          spectrumPathRef.current?.setAttribute("d", spectrumPath(bands));
+        });
+      }
+      handle = requestFrame(() => tick(performanceNow()));
+    };
+    handle = requestFrame(() => tick(performanceNow()));
+    return () => {
+      cancelled = true;
+      if (handle !== null) cancelFrame(handle);
+      spectrumPathRef.current?.setAttribute("d", "");
+      handlersRef.current.stopAnalyzer();
+    };
+  }, [rtaOn, track.id]);
 
   // El modelo manda cuando no hay gesto en curso (otra vista, deshacer...).
   useEffect(() => {
@@ -370,6 +439,18 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
             <button
               type="button"
               className="lt-eq-button"
+              aria-pressed={rtaOn}
+              title={t("eq.rtaHint")}
+              onClick={() => {
+                writeRtaPreference(!rtaOn);
+                setRtaOn(!rtaOn);
+              }}
+            >
+              {t("eq.rta")}
+            </button>
+            <button
+              type="button"
+              className="lt-eq-button"
               aria-pressed={!eq.enabled}
               onClick={() => {
                 const next = { ...eq, enabled: !eq.enabled };
@@ -463,6 +544,12 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
               ) : null}
             </g>
           ))}
+          <path
+            ref={spectrumPathRef}
+            className="lt-eq-spectrum"
+            data-testid="lt-eq-spectrum"
+            d=""
+          />
           {active ? (
             <path
               ref={bandPathRef}
@@ -655,6 +742,10 @@ function NumberField({
       <span className="lt-eq-field-suffix">{suffix}</span>
     </label>
   );
+}
+
+function performanceNow(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
 function requestFrame(callback: () => void): number {

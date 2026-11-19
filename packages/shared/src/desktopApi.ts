@@ -3118,6 +3118,23 @@ export async function commitTrackEqChange(args: {
   return invokeCommand<TransportSnapshot>("commit_track_eq_change", args);
 }
 
+/**
+ * RTA del editor de EQ: qué pista analiza el motor (después de su EQ, antes
+ * del fader). `null` lo apaga y el motor deja de copiar audio.
+ */
+export async function setTrackEqAnalyzer(trackId: string | null): Promise<void> {
+  await invokeCommand("set_track_eq_analyzer", { trackId });
+}
+
+/**
+ * RTA: bandas en dB (0 dB = seno a fondo de escala), espaciadas en log de
+ * 20 Hz a 20 kHz: la banda `i` de `n` está en `20 * 1000^(i / (n - 1))` Hz.
+ * Vacío si no hay análisis.
+ */
+export async function getTrackEqSpectrum(): Promise<number[]> {
+  return invokeCommand<number[]>("get_track_eq_spectrum");
+}
+
 export async function setMetronomeEnabledRealtime(enabled: boolean): Promise<void> {
   await invokeCommand("set_metronome_enabled_realtime", { enabled });
 }

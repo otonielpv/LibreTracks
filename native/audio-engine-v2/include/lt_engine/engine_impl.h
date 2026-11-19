@@ -24,6 +24,7 @@
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <atomic>
@@ -56,6 +57,9 @@ public:
     std::string  get_meter_snapshot()  const;
     /// Redundancy: last block's (instant, frame) + output latency. Lock-free.
     void         get_audio_clock(LtAudioClock& out) const;
+    /// RTA del editor de EQ: bandas en dB de la pista elegida con
+    /// SetTrackAnalyzer. Fuera del hilo de audio (hace la FFT aquí).
+    int          read_track_spectrum(float* out, int capacity);
     std::string  list_devices(bool force_rescan = false)  const;
     std::string  get_source_peaks(const std::string& source_id,
                                   int resolution_frames) const;
@@ -213,6 +217,10 @@ private:
     // start of every send_command so callers can distinguish a fresh
     // failure from a stale one.
     mutable std::mutex last_command_error_mtx_;
+    std::mutex spectrum_mtx_;
+    std::unique_ptr<SpectrumAnalyzer> spectrum_;
+    std::chrono::steady_clock::time_point spectrum_last_read_{};
+    bool spectrum_has_read_ = false;
     std::string last_command_error_;
 };
 

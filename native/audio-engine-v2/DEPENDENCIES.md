@@ -112,11 +112,13 @@ Not used in the audio callback hot path.
 | Decision    | Value |
 |-------------|-------|
 | Version     | 1.7.3 (commit ca390d28c41ea5108a528e2e81faa4088f2f8ac8; the header still says 1.7.0) |
-| Integration | Bundled headers in `vendor/signalsmith-dsp/include/signalsmith-dsp/` (`filters.h` and what it includes: `common.h`, `perf.h`) |
+| Integration | Bundled headers in `vendor/signalsmith-dsp/include/signalsmith-dsp/` (`filters.h`, `fft.h` and what they include: `common.h`, `perf.h`) |
 | License     | MIT (`vendor/signalsmith-dsp/LICENSE.txt`) |
 
 Header-only, no dependencies, no allocation or locking when coefficients
-change. Used only by `render/track_eq.h/.cpp`, the single EQ DSP shared by the
+change. `fft.h` is the FFT of the EQ editor's spectrum analyzer
+(`render/spectrum_analyzer.cpp`), which runs off the audio thread. The filters
+are used only by `render/track_eq.h/.cpp`, the single EQ DSP shared by the
 live mixer and the offline renderer. Peak and notch use the `vicanek` design
 (matched to the analogue prototype, no cramping near Nyquist), shelves
 `oneSided`, cuts `bilinear` Butterworth. Upgrading it changes the curve the UI

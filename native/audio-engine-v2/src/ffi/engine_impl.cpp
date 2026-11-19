@@ -994,6 +994,22 @@ std::string EngineImpl::get_snapshot() const {
 // diagnostics of EVERY source, file paths included) is what makes a full
 // snapshot cost more the bigger the session, and it took the same locks as the
 // preparation workers. See docs: project-engine-snapshot-cost.
+int EngineImpl::read_track_spectrum(float* out, int capacity) {
+    if (!out || capacity <= 0 || !mixer_)
+        return 0;
+    std::lock_guard<std::mutex> lock(spectrum_mtx_);
+    if (!spectrum_)
+        spectrum_ = std::make_unique<SpectrumAnalyzer>();
+    const auto now = std::chrono::steady_clock::now();
+    const double elapsed = spectrum_has_read_
+        ? std::chrono::duration<double>(now - spectrum_last_read_).count() : 0.0;
+    spectrum_last_read_ = now;
+    spectrum_has_read_ = true;
+    const double rate = clock_ ? static_cast<double>(clock_->sample_rate()) : 48000.0;
+    return static_cast<int>(spectrum_->analyze(mixer_->analyzer_tap(), rate, elapsed, out,
+                                               static_cast<std::size_t>(capacity)));
+}
+
 void EngineImpl::get_audio_clock(LtAudioClock& out) const {
     out = LtAudioClock{};
     AudioClockStampData stamp;
@@ -2220,6 +2236,12 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackEq>) {
             if (mixer_) mixer_->set_track_eq(c.track_id, c.eq);
+            return Result<void>::ok();
+        }
+        else if constexpr (std::is_same_v<T, CmdSetTrackAnalyzer>) {
+            if (mixer_) mixer_->set_analyzer_track(c.track_id);
+            std::lock_guard<std::mutex> lock(spectrum_mtx_);
+            if (spectrum_) spectrum_->reset();
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackMute>) {

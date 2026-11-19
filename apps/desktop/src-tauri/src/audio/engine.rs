@@ -1568,6 +1568,30 @@ impl AudioController {
         })
     }
 
+    /// RTA del editor de EQ: qué pista analiza el motor (`None` = apagado; el
+    /// mezclador deja de copiar audio).
+    pub fn set_track_analyzer(&self, track_id: Option<&str>) -> Result<(), DesktopError> {
+        let track_id = track_id.unwrap_or_default().to_string();
+        self.with_engine_state("set_track_analyzer", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetTrackAnalyzer { track_id })?;
+            Ok(())
+        })
+    }
+
+    /// RTA: bandas en dB de la pista analizada. Como los medidores, nunca
+    /// espera al candado del estado: vacío si un comando lo tiene (se salta
+    /// este fotograma) o si no hay motor.
+    pub fn read_track_spectrum(&self) -> Vec<f32> {
+        let Ok(state) = self.state.try_lock() else {
+            return Vec::new();
+        };
+        state
+            .engine
+            .as_ref()
+            .map(|engine| engine.read_track_spectrum())
+            .unwrap_or_default()
+    }
+
     /// Arrastre en vivo del EQ: cuenta como mando en tiempo real, como el pan.
     pub fn update_live_track_eq(
         &self,

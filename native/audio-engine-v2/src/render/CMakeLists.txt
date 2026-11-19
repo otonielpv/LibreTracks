@@ -13,4 +13,5 @@ target_sources(lt_audio_engine_v2 PRIVATE
     offline_renderer.cpp
     loudness_meter.cpp
     track_eq.cpp
+    spectrum_analyzer.cpp
 )

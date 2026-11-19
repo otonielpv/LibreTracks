@@ -2,7 +2,12 @@ import { useMemo } from "react";
 
 import type { TransportSnapshot } from "@libretracks/shared/models";
 
-import { commitTrackEqChange, updateTrackEqRealtime } from "../desktopApi";
+import {
+  commitTrackEqChange,
+  getTrackEqSpectrum,
+  setTrackEqAnalyzer,
+  updateTrackEqRealtime,
+} from "../desktopApi";
 import { getSong, setSong, useSongStore } from "../songStore";
 import { createTrackEqHandlers } from "../tracks/trackEqHandlers";
 import { TrackEqEditor } from "./TrackEqEditor";
@@ -33,6 +38,8 @@ export function TrackEqEditorHost({
         findTrack: (trackId) => getSong()?.tracks.find((track) => track.id === trackId) ?? null,
         updateTrackEqRealtime,
         commitTrackEqChange,
+        setTrackEqAnalyzer,
+        getTrackEqSpectrum,
       }),
     [runAction, applyPlaybackSnapshot, optimisticallyAppliedRevisionsRef],
   );

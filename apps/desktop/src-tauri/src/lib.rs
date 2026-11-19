@@ -649,6 +649,8 @@ pub fn run() {
             commands::timeline::commit_track_mix_change,
             commands::timeline::update_track_eq_realtime,
             commands::timeline::commit_track_eq_change,
+            commands::timeline::set_track_eq_analyzer,
+            commands::timeline::get_track_eq_spectrum,
             commands::timeline::update_track,
             commands::timeline::update_track_color,
             commands::timeline::update_track_transpose_enabled,

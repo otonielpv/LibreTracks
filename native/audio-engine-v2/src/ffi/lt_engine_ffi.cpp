@@ -133,6 +133,15 @@ LT_API LtResult lt_audio_engine_get_audio_clock(LtEngine* engine, LtAudioClock* 
     return LT_OK;
 }
 
+LT_API int32_t lt_audio_engine_read_track_spectrum(LtEngine* engine, float* out, int32_t capacity) {
+    if (!engine || !out || capacity <= 0) return 0;
+    try {
+        return as_impl(engine)->read_track_spectrum(out, capacity);
+    } catch (...) {
+        return 0;
+    }
+}
+
 LT_API const char* lt_audio_engine_list_devices(LtEngine* engine,
                                                 int32_t force_rescan) {
     if (!engine) return "[]";

@@ -113,6 +113,14 @@
   font: 500 10px "Inter", sans-serif;
 }
 
+.lt-eq-spectrum {
+  fill: rgb(186 202 197 / 0.16);
+  stroke: rgb(186 202 197 / 0.35);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
 .lt-eq-curve {
   fill: none;
   stroke: #57f1db;

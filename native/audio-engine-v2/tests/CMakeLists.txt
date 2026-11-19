@@ -62,6 +62,7 @@ add_executable(lt_engine_tests
     test_track_eq.cpp
     test_mixer_track_eq.cpp
     test_mixer_eq_baseline.cpp
+    test_spectrum_analyzer.cpp
 )
 
 target_link_libraries(lt_engine_tests

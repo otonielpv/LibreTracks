@@ -125,6 +125,11 @@ typedef struct LtAudioClock {
 
 LT_API LtResult lt_audio_engine_get_audio_clock(LtEngine* engine, LtAudioClock* out);
 
+/* RTA del editor de EQ (plan track-eq): escribe hasta `capacity` bandas en dB
+   (log, 20 Hz - 20 kHz) de la pista elegida con el comando SetTrackAnalyzer.
+   Devuelve las bandas escritas. Llamar fuera del hilo de audio. */
+LT_API int32_t lt_audio_engine_read_track_spectrum(LtEngine* engine, float* out, int32_t capacity);
+
 // ---------------------------------------------------------------------------
 // Device enumeration helpers (convenience wrappers)
 // ---------------------------------------------------------------------------

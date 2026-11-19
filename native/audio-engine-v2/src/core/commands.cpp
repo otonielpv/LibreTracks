@@ -166,6 +166,12 @@ EngineCommand command_from_json(const std::string& raw) {
 
     if (type == "SetTrackPan")
         return CmdSetTrackPan{ j.at("track_id").get<Id>(), j.at("pan").get<float>() };
+    if (type == "SetTrackAnalyzer") {
+        CmdSetTrackAnalyzer cmd;
+        if (auto it = j.find("track_id"); it != j.end() && it->is_string())
+            cmd.track_id = it->get<Id>();
+        return cmd;
+    }
     if (type == "SetTrackEq") {
         // Lectura tolerante: sin `eq`, `null` o algo que no es un objeto =
         // quitar el EQ; campos desconocidos se ignoran.

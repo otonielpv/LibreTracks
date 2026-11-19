@@ -20,6 +20,8 @@ function setup(track: TrackSummary = audio) {
     optimisticallyAppliedRevisionsRef: { current: new Set<number>() },
     findTrack: (id: string) => song.tracks.find((t) => t.id === id) ?? null,
     updateTrackEqRealtime: vi.fn(async (_args: { trackId: string; eq: TrackEq | null }) => undefined),
+    setTrackEqAnalyzer: vi.fn(async (_trackId: string | null) => undefined),
+    getTrackEqSpectrum: vi.fn(async () => [-20, -30] as number[]),
     commitTrackEqChange: vi.fn(
       async (_args: { trackId: string; eq: TrackEq | null }) => ({ projectRevision: 7 }) as TransportSnapshot,
     ),
@@ -68,5 +70,15 @@ describe("createTrackEqHandlers", () => {
     expect(deps.commitTrackEqChange.mock.calls[1][0].eq).toEqual(defaultTrackEq());
     await handlers.remove("a");
     expect(deps.commitTrackEqChange.mock.calls[2][0].eq).toBeNull();
+  });
+
+  it("the analyzer starts on a track, stops with null and reads the bands", async () => {
+    const { handlers, deps } = setup();
+    handlers.startAnalyzer("a");
+    handlers.stopAnalyzer();
+    expect(deps.setTrackEqAnalyzer.mock.calls).toEqual([["a"], [null]]);
+    expect(await handlers.readSpectrum()).toEqual([-20, -30]);
+    deps.getTrackEqSpectrum.mockRejectedValueOnce(new Error("no engine"));
+    expect(await handlers.readSpectrum()).toEqual([]);
   });
 });

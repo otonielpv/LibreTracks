@@ -1841,6 +1841,16 @@ void Mixer::process_track_eq(TrackBusSlot& bus, const Track& track, const TrackE
         bus.eq_was_silent = false;
     }
     bus.eq.process(left, right, static_cast<std::size_t>(std::max(0, frames)));
+    // RTA: después del EQ y antes del fader. Solo una pista coincide, así que
+    // hay un único productor por bloque.
+    const std::size_t analyzed = analyzer_track_hash_.load(std::memory_order_relaxed);
+    if (analyzed != 0 && analyzed == bus.eq_id_hash)
+        analyzer_tap_.write(left, right, static_cast<std::size_t>(std::max(0, frames)));
+}
+
+void Mixer::set_analyzer_track(const Id& track_id) noexcept {
+    analyzer_track_hash_.store(track_id.empty() ? 0 : std::hash<std::string>{}(track_id),
+                               std::memory_order_relaxed);
 }
 
 void Mixer::set_track_gain(const Id& track_id, Gain gain) {
