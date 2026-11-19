@@ -565,8 +565,10 @@ fn write_region_package(
 
     let manifest = SongPackageManifest {
         song_title: region.name.clone(),
-        base_bpm: song.bpm,
-        base_time_signature: song.time_signature.clone(),
+        // Tempo y compás vigentes al INICIO de la canción, no los de la
+        // sesión: si la canción no es la primera, el de la sesión es otro.
+        base_bpm: song_bpm_at(song, region.start_seconds),
+        base_time_signature: song_time_signature_at(song, region.start_seconds),
         duration_seconds: region_duration,
         region_transpose_semitones: region.transpose_semitones,
         region_key: region.key.clone(),
@@ -1443,9 +1445,14 @@ pub fn merge_extracted_song_package(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
+    // El tempo de arranque sólo sale del primer marcador si ese marcador está
+    // en el inicio de la canción. Si está a mitad (un cambio de tempo), usarlo
+    // como base hacía que el bucle de abajo lo descartara por redundante y el
+    // cambio se perdía al importar.
     let injected_bpm = manifest
         .tempo_markers
         .first()
+        .filter(|marker| marker.start_seconds <= 0.01)
         .map(|marker| marker.bpm)
         .unwrap_or(manifest.base_bpm);
     if is_empty_session {
@@ -1474,6 +1481,7 @@ pub fn merge_extracted_song_package(
     let injected_signature = manifest
         .time_signature_markers
         .first()
+        .filter(|marker| marker.start_seconds <= 0.01)
         .map(|marker| marker.signature.clone())
         .unwrap_or(manifest.base_time_signature.clone());
     if is_empty_session {
@@ -1769,6 +1777,56 @@ mod tests {
         assert_eq!(result.song.regions.len(), 1);
         // The imported region must span the clip so the song stays valid.
         assert!(validate_song(&result.song).is_ok());
+    }
+
+    /// Un cambio de tempo a mitad de canción sobrevive a exportar e importar
+    /// (antes el import tomaba su BPM como base y lo descartaba).
+    #[test]
+    fn a_mid_song_tempo_change_survives_the_round_trip() {
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let mut source = song();
+        source.tempo_markers = vec![TempoMarker {
+            id: "t".into(),
+            start_seconds: 2.0,
+            bpm: 90.0,
+            ramp: false,
+        }];
+        source.time_signature_markers = vec![TimeSignatureMarker {
+            id: "ts".into(),
+            start_seconds: 2.0,
+            signature: "3/4".into(),
+        }];
+        let package_path = song_dir.join("verse.ltpkg");
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false)
+            .expect("export region");
+
+        let empty = Song {
+            tracks: vec![],
+            clips: vec![],
+            regions: vec![],
+            section_markers: vec![],
+            tempo_markers: vec![],
+            time_signature_markers: vec![],
+            ..song()
+        };
+        let result = import_song_package(
+            song_dir,
+            &empty,
+            &package_path,
+            0.0,
+            SongImportTrackMode::default(),
+        )
+        .expect("import package");
+
+        let region_start = source.regions[0].start_seconds;
+        assert_eq!(result.song.bpm, source.bpm);
+        assert_eq!(result.song.tempo_markers.len(), 1);
+        assert!((result.song.tempo_markers[0].start_seconds - (2.0 - region_start)).abs() < 1e-9);
+        assert_eq!(result.song.tempo_markers[0].bpm, 90.0);
+        assert_eq!(result.song.time_signature, source.time_signature);
+        assert_eq!(result.song.time_signature_markers.len(), 1);
+        assert_eq!(result.song.time_signature_markers[0].signature, "3/4");
     }
 
     /// Plan drum-loops, paso 12: el loop de la canción viaja en el `.ltpkg`
