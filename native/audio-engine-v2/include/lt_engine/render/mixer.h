@@ -13,6 +13,8 @@
 #include <lt_engine/render/loop_renderer.h>
 #include <lt_engine/render/one_shot_renderer.h>
 #include <lt_engine/render/render_thread_pool.h>
+#include <lt_engine/render/rt_publisher.h>
+#include <lt_engine/render/track_eq.h>
 #include <lt_engine/devices/audio_device_manager.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/transport/audio_clock_stamp.h>
@@ -87,6 +89,15 @@ public:
     void set_track_pan(const Id& track_id, float pan);
     void set_track_mute(const Id& track_id, bool mute);
     void set_track_solo(const Id& track_id, bool solo);
+    // EQ de la pista (plan track-eq, D5/D8). Vacío = quitar el EQ. Hilo de
+    // comandos: publica una tabla nueva; el hilo de audio la recoge en el
+    // siguiente bloque y suaviza hacia ella.
+    void set_track_eq(const Id& track_id, const std::optional<TrackEqParams>& eq);
+    // Vuelve a tomar de la sesión el EQ de las pistas de `song_id`, por encima
+    // del valor en vivo. Lo usa UpsertSongTracks, que es la foto del modelo.
+    void sync_track_eqs_from_song(const Id& song_id);
+    // EQ publicado para una pista (diagnóstico y tests). Hilo de comandos.
+    std::optional<TrackEqParams> track_eq_for_test(const Id& track_id) const;
     void start_master_fade(float target_gain, double duration_seconds) noexcept;
     // Pause the transport by itself on the frame where a song (region) ends.
     // Command thread; read by the audio thread at the top of each block.
@@ -371,6 +382,16 @@ private:
     struct TrackBusSlot {
         std::vector<float> left;
         std::vector<float> right;
+        // EQ de la pista que ocupa esta ranura (plan track-eq, D4). Solo lo
+        // toca el hilo que renderiza la ranura en la fase A. La identidad de la
+        // pista se sigue por el hash de su id: si la ranura pasa a otra pista,
+        // el EQ salta a la suya sin fundido ni estado heredado.
+        TrackEq eq;
+        const Track*  eq_track = nullptr;
+        std::size_t   eq_id_hash = 0;
+        std::uint64_t eq_table_version = 0;
+        double        eq_sample_rate = 0.0;
+        bool          eq_was_silent = false;
     };
     std::vector<std::unique_ptr<TrackBusSlot>> track_buses_;
 
@@ -394,6 +415,29 @@ private:
         TrackMeterMode meter_mode = TrackMeterMode::PostFader;
     };
     std::vector<TrackBlockState> track_block_state_;
+
+    // ── EQ por pista (plan track-eq, D5) ────────────────────────────────────
+    // Tabla inmutable {pista -> parámetros} que publica el hilo de comandos con
+    // RtPublisher (swap atómico + puntero de peligro; lo retirado se libera en
+    // el hilo de comandos). El director la adquiere una vez por bloque antes de
+    // la fase A y la suelta al terminarla; las ranuras solo releen su entrada
+    // cuando cambia `version`.
+    struct TrackEqEntry {
+        Id track_id;
+        std::optional<TrackEqParams> params;
+    };
+    struct TrackEqTable {
+        std::vector<TrackEqEntry> entries;
+        std::uint64_t version = 0;
+    };
+    RtPublisher<TrackEqTable> eq_table_;
+    mutable std::mutex eq_writer_mutex_;   // solo hilo de comandos
+    std::uint64_t eq_table_version_ = 0;   // bajo eq_writer_mutex_
+    void publish_eq_table_locked(std::vector<TrackEqEntry> entries);
+    void rebuild_eq_table(const std::shared_ptr<const Session>& session, bool preserve_realtime_state);
+    // Fase A: aplica el EQ de la ranura sobre su bus, antes de medir y del fader.
+    void process_track_eq(TrackBusSlot& bus, const Track& track, const TrackEqTable* table,
+                          float* left, float* right, int frames, bool settled_silent) noexcept;
 
     // Reparte la FASE A entre el director y sus trabajadores. La fase B no pasa
     // por aqui nunca: es la reduccion, y su orden es el contrato de

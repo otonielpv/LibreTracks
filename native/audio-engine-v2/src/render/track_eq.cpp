@@ -302,50 +302,66 @@ void TrackEq::settle_after_chunk() noexcept {
 }
 
 void TrackEq::process_chunk(float* left, float* right, std::size_t frames) noexcept {
-    std::size_t active[kTrackEqMaxBands];
-    std::size_t active_count = 0;
-    for (std::size_t i = 0; i < kTrackEqMaxBands; ++i) {
-        const auto& band = bands_[i];
-        if (band.mix > 0.0 || band.mix_target > 0.0)
-            active[active_count++] = i;
+    // Banda por fuera y muestras por dentro, en doble sobre el sub-bloque:
+    // cada biquad recorre sus 32 muestras seguidas (L y R intercalados, dos
+    // cadenas independientes), que es lo que deja trabajar a la CPU. Mismo
+    // camino con y sin fundidos, así que el resultado numérico no cambia al
+    // terminar uno.
+    double xl[kSubBlockFrames];
+    double xr[kSubBlockFrames];
+    double dry_l[kSubBlockFrames];
+    double dry_r[kSubBlockFrames];
+    for (std::size_t i = 0; i < frames; ++i) {
+        xl[i] = dry_l[i] = left[i];
+        xr[i] = dry_r[i] = right[i];
     }
 
-    for (std::size_t frame = 0; frame < frames; ++frame) {
-        const double dry_l = left[frame];
-        const double dry_r = right[frame];
-        double xl = dry_l;
-        double xr = dry_r;
-        for (std::size_t a = 0; a < active_count; ++a) {
-            Band& band = bands_[active[a]];
-            double yl = xl;
-            double yr = xr;
-            for (int stage = 0; stage < band.stages; ++stage) {
-                yl = band.filters[stage][0](yl);
-                yr = band.filters[stage][1](yr);
+    for (auto& band : bands_) {
+        if (band.mix == 0.0 && band.mix_target == 0.0)
+            continue;
+        const bool steady = band.mix == 1.0 && band.mix_target == 1.0;
+        double in_l[kSubBlockFrames];
+        double in_r[kSubBlockFrames];
+        if (!steady) {
+            for (std::size_t i = 0; i < frames; ++i) {
+                in_l[i] = xl[i];
+                in_r[i] = xr[i];
             }
-            if (band.mix == 1.0 && band.mix_target == 1.0) {
-                xl = yl;
-                xr = yr;
-            } else {
+        }
+        for (int stage = 0; stage < band.stages; ++stage) {
+            auto& fl = band.filters[stage][0];
+            auto& fr = band.filters[stage][1];
+            for (std::size_t i = 0; i < frames; ++i) {
+                xl[i] = fl(xl[i]);
+                xr[i] = fr(xr[i]);
+            }
+        }
+        if (!steady) {
+            for (std::size_t i = 0; i < frames; ++i) {
                 if (band.mix < band.mix_target)
                     band.mix = std::min(band.mix_target, band.mix + mix_step_);
                 else if (band.mix > band.mix_target)
                     band.mix = std::max(band.mix_target, band.mix - mix_step_);
-                xl += band.mix * (yl - xl);
-                xr += band.mix * (yr - xr);
+                xl[i] = in_l[i] + band.mix * (xl[i] - in_l[i]);
+                xr[i] = in_r[i] + band.mix * (xr[i] - in_r[i]);
             }
         }
-        if (global_mix_ == 1.0 && global_mix_target_ == 1.0) {
-            left[frame] = static_cast<float>(xl);
-            right[frame] = static_cast<float>(xr);
-        } else {
-            if (global_mix_ < global_mix_target_)
-                global_mix_ = std::min(global_mix_target_, global_mix_ + mix_step_);
-            else if (global_mix_ > global_mix_target_)
-                global_mix_ = std::max(global_mix_target_, global_mix_ - mix_step_);
-            left[frame] = static_cast<float>(dry_l + global_mix_ * (xl - dry_l));
-            right[frame] = static_cast<float>(dry_r + global_mix_ * (xr - dry_r));
+    }
+
+    if (global_mix_ == 1.0 && global_mix_target_ == 1.0) {
+        for (std::size_t i = 0; i < frames; ++i) {
+            left[i] = static_cast<float>(xl[i]);
+            right[i] = static_cast<float>(xr[i]);
         }
+        return;
+    }
+    for (std::size_t i = 0; i < frames; ++i) {
+        if (global_mix_ < global_mix_target_)
+            global_mix_ = std::min(global_mix_target_, global_mix_ + mix_step_);
+        else if (global_mix_ > global_mix_target_)
+            global_mix_ = std::max(global_mix_target_, global_mix_ - mix_step_);
+        left[i] = static_cast<float>(dry_l[i] + global_mix_ * (xl[i] - dry_l[i]));
+        right[i] = static_cast<float>(dry_r[i] + global_mix_ * (xr[i] - dry_r[i]));
     }
 }
 

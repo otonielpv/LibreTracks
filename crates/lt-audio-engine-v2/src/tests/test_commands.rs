@@ -88,6 +88,7 @@ fn upsert_song_tracks_json_shape_matches_cpp_parser() {
             role: String::new(),
             kind: "audio".into(),
             parent_track_id: String::new(),
+            eq: None,
             clips: vec![TrackClipUpdate {
                 id: "clip-1".into(),
                 source_id: "bass.mp3".into(),
@@ -917,4 +918,64 @@ fn snapshot_without_loops_block_defaults_to_no_step() {
     let snapshot: crate::LoopSnapshot = serde_json::from_str("{}").unwrap();
     assert_eq!(snapshot.current_step, -1);
     assert!(!snapshot.wants_audio);
+}
+
+// ── EQ por pista (plan track-eq) ─────────────────────────────────────────────
+
+fn sample_eq() -> serde_json::Value {
+    serde_json::json!({
+        "enabled": true,
+        "bands": [
+            { "enabled": true, "kind": "peak", "frequencyHz": 1000.0, "gainDb": 6.0, "q": 1.0, "slope": 12 },
+            { "enabled": true, "kind": "lowCut", "frequencyHz": 40.0, "gainDb": 0.0, "q": 0.71, "slope": 24 }
+        ]
+    })
+}
+
+#[test]
+fn set_track_eq_json_shape_matches_cpp_parser() {
+    // C++ (core/commands.cpp "SetTrackEq") lee track_id y eq (objeto camelCase).
+    let cmd = EngineCommand::SetTrackEq {
+        track_id: "trk-1".into(),
+        eq: Some(sample_eq()),
+    };
+    let v = serde_json::to_value(&cmd).unwrap();
+    assert_eq!(v["type"], "SetTrackEq");
+    assert_eq!(v["track_id"], "trk-1");
+    assert_eq!(v["eq"], sample_eq());
+    assert!(matches!(round_trip(&cmd), EngineCommand::SetTrackEq { eq: Some(_), .. }));
+}
+
+#[test]
+fn set_track_eq_without_eq_omits_the_key_and_accepts_null() {
+    let cmd = EngineCommand::SetTrackEq { track_id: "t".into(), eq: None };
+    let v = serde_json::to_value(&cmd).unwrap();
+    assert!(v.get("eq").is_none(), "quitar el EQ = sin clave (el C++ lo lee igual que null)");
+    let from_null: EngineCommand =
+        serde_json::from_str(r#"{"type":"SetTrackEq","track_id":"t","eq":null}"#).unwrap();
+    assert!(matches!(from_null, EngineCommand::SetTrackEq { eq: None, .. }));
+}
+
+#[test]
+fn track_upsert_carries_eq_only_when_present() {
+    let base = TrackUpsert {
+        id: "a".into(),
+        name: String::new(),
+        gain: 1.0,
+        pan: 0.0,
+        audio_to: "master".into(),
+        channel_mode: String::new(),
+        mute: false,
+        solo: false,
+        transpose_behavior: String::new(),
+        role: String::new(),
+        kind: "audio".into(),
+        parent_track_id: String::new(),
+        eq: None,
+        clips: vec![],
+    };
+    let without = serde_json::to_value(&base).unwrap();
+    assert!(without.get("eq").is_none());
+    let with = serde_json::to_value(TrackUpsert { eq: Some(sample_eq()), ..base }).unwrap();
+    assert_eq!(with["eq"], sample_eq());
 }

@@ -60,6 +60,13 @@ pub enum EngineCommand {
         track_id: String,
         pan: f32,
     },
+    /// EQ entero de la pista (plan track-eq, D8): el `TrackEq` del core tal
+    /// cual (camelCase). `None` = quitar el EQ. El motor lo lee tolerante.
+    SetTrackEq {
+        track_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        eq: Option<serde_json::Value>,
+    },
     SetTrackMute {
         track_id: String,
         mute: bool,
@@ -482,6 +489,11 @@ pub struct TrackUpsert {
     pub kind: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub parent_track_id: String,
+    /// EQ de la pista (plan track-eq): el `TrackEq` del core en camelCase.
+    /// Ausente = sin EQ. El upsert es la foto del modelo y manda sobre el valor
+    /// en vivo (deshacer y rehacer viajan por aquí).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eq: Option<serde_json::Value>,
     #[serde(default)]
     pub clips: Vec<TrackClipUpdate>,
 }

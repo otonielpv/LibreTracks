@@ -332,6 +332,7 @@ Mixer::Mixer(const Session*       session,
     , scheduler_(scheduler)
 {
     rebuild_control_slots(load_session(), false);
+    rebuild_eq_table(load_session(), false);
     prepare_render_resources(kMaxBlockFrames);
 }
 
@@ -345,6 +346,7 @@ Mixer::Mixer(std::shared_ptr<const Session> session,
     , scheduler_(scheduler)
 {
     rebuild_control_slots(load_session(), false);
+    rebuild_eq_table(load_session(), false);
     prepare_render_resources(kMaxBlockFrames);
 }
 
@@ -794,6 +796,8 @@ void Mixer::render_timeline_span(float** output_channels,
             track_block_state_[ti].rendered = false;
 
         // -- FASE A: por pista e independiente entre pistas ------------------
+        // Tabla de EQ: adquirida aqui y soltada al acabar la fase A.
+        const TrackEqTable* eq_table = eq_table_.acquire();
         for (std::size_t ti = 0; ti < song.tracks.size() && ti < renderer_slots; ++ti) {
             const Track& track = song.tracks[ti];
 
@@ -882,6 +886,8 @@ void Mixer::render_timeline_span(float** output_channels,
                                    /*track_is_silent=*/settled_silent,
                                    /*track_gain_override=*/1.0f);
             ++rendered_this_block;
+            // EQ antes de medir y del fader: es un inserto de canal (D4).
+            process_track_eq(bus, track, eq_table, mix_l, mix_r, num_frames, settled_silent);
 
             TrackMeterReading meter = measure_track(
                 mix_l, mix_r, num_frames, start_pan, end_pan, track.channel_mode,
@@ -932,6 +938,7 @@ void Mixer::render_timeline_span(float** output_channels,
                 published_slots && map_index < ancestor_meter_indices_for_renderer_.size();
             st.meter_mode       = meter_mode;
         }
+        eq_table_.end_block();
 
         // -- FASE B: reduccion, siempre en el director y EN ORDEN ASCENDENTE --
         //
@@ -1276,6 +1283,9 @@ void Mixer::render(float** output_channels,
             //    el pool; con un hilo, run_block ejecuta el bucle tal cual. --
             const std::size_t phase_a_count =
                 std::min(song.tracks.size(), renderer_slots);
+            // Tabla de EQ: la adquiere el director (unico lector del
+            // publicador) y la suelta cuando el pool ha terminado la fase A.
+            const TrackEqTable* eq_table = eq_table_.acquire();
             auto phase_a = [&](int index) noexcept {
                 const std::size_t ti = static_cast<std::size_t>(index);
                 const Track& track = song.tracks[ti];
@@ -1379,6 +1389,10 @@ void Mixer::render(float** output_channels,
                                        /*track_is_silent=*/settled_silent,
                                        /*track_gain_override=*/1.0f);
                 rendered_atomic.fetch_add(1, std::memory_order_relaxed);
+                // EQ antes de medir y del fader: es un inserto de canal (D4).
+                // La ranura es de este hilo durante la fase A; la tabla es
+                // inmutable mientras el director la tenga adquirida.
+                process_track_eq(bus, track, eq_table, mix_l, mix_r, num_frames, settled_silent);
 
                 TrackMeterReading meter = measure_track(
                     mix_l, mix_r, num_frames, start_pan, end_pan, track.channel_mode,
@@ -1441,6 +1455,7 @@ void Mixer::render(float** output_channels,
 #endif
                     ));
             }
+            eq_table_.end_block();
             rendered_this_block += rendered_atomic.exchange(0, std::memory_order_relaxed);
             skipped_this_block  += skipped_atomic.exchange(0, std::memory_order_relaxed);
 
@@ -1677,6 +1692,157 @@ void Mixer::render(float** output_channels,
     }
 }
 
+// ── EQ por pista (plan track-eq) ────────────────────────────────────────────
+
+void Mixer::publish_eq_table_locked(std::vector<TrackEqEntry> entries) {
+    auto table = std::make_unique<TrackEqTable>();
+    table->entries = std::move(entries);
+    table->version = ++eq_table_version_;
+    eq_table_.publish(std::move(table));
+}
+
+void Mixer::set_track_eq(const Id& track_id, const std::optional<TrackEqParams>& eq) {
+    std::lock_guard<std::mutex> lock(eq_writer_mutex_);
+    std::vector<TrackEqEntry> entries;
+    if (const auto* current = eq_table_.current_for_writer())
+        entries = current->entries;
+    std::optional<TrackEqParams> clamped;
+    if (eq) clamped = clamp_params(*eq);
+    bool found = false;
+    for (auto& entry : entries) {
+        if (entry.track_id == track_id) {
+            entry.params = clamped;
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+        entries.push_back(TrackEqEntry{ track_id, clamped });
+    publish_eq_table_locked(std::move(entries));
+}
+
+void Mixer::rebuild_eq_table(const std::shared_ptr<const Session>& session, bool preserve_realtime_state) {
+    std::lock_guard<std::mutex> lock(eq_writer_mutex_);
+    const auto* previous = eq_table_.current_for_writer();
+    std::vector<TrackEqEntry> entries;
+    if (session) {
+        for (const auto& song : session->songs) {
+            for (const auto& track : song.tracks) {
+                if (track.kind != TrackKind::Audio)
+                    continue;
+                // Igual que la ganancia: con preserve, el valor en vivo de una
+                // pista que ya existia manda sobre el de la sesion.
+                const TrackEqEntry* kept = nullptr;
+                if (preserve_realtime_state && previous) {
+                    for (const auto& entry : previous->entries) {
+                        if (entry.track_id == track.id) {
+                            kept = &entry;
+                            break;
+                        }
+                    }
+                }
+                entries.push_back(kept ? *kept : TrackEqEntry{ track.id, track.eq });
+            }
+        }
+    }
+    publish_eq_table_locked(std::move(entries));
+}
+
+void Mixer::sync_track_eqs_from_song(const Id& song_id) {
+    const auto session = load_session();
+    if (!session)
+        return;
+    std::lock_guard<std::mutex> lock(eq_writer_mutex_);
+    std::vector<TrackEqEntry> entries;
+    if (const auto* current = eq_table_.current_for_writer())
+        entries = current->entries;
+    for (const auto& song : session->songs) {
+        if (song.id != song_id)
+            continue;
+        for (const auto& track : song.tracks) {
+            if (track.kind != TrackKind::Audio)
+                continue;
+            bool found = false;
+            for (auto& entry : entries) {
+                if (entry.track_id == track.id) {
+                    entry.params = track.eq;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+                entries.push_back(TrackEqEntry{ track.id, track.eq });
+        }
+    }
+    publish_eq_table_locked(std::move(entries));
+}
+
+std::optional<TrackEqParams> Mixer::track_eq_for_test(const Id& track_id) const {
+    std::lock_guard<std::mutex> lock(eq_writer_mutex_);
+    if (const auto* current = eq_table_.current_for_writer()) {
+        for (const auto& entry : current->entries) {
+            if (entry.track_id == track_id)
+                return entry.params;
+        }
+    }
+    return std::nullopt;
+}
+
+void Mixer::process_track_eq(TrackBusSlot& bus, const Track& track, const TrackEqTable* table,
+                             float* left, float* right, int frames, bool settled_silent) noexcept {
+    // Cambio de frecuencia de muestreo: prepare() no aloja ni bloquea, asi
+    // que es seguro aqui; deja el EQ apagado y fuerza releer la tabla.
+    const double sample_rate = static_cast<double>(clock_->sample_rate());
+    bool snap = false;
+    if (bus.eq_sample_rate != sample_rate) {
+        bus.eq.prepare(sample_rate);
+        bus.eq_sample_rate = sample_rate;
+        bus.eq_track = nullptr;
+        bus.eq_id_hash = 0;
+        snap = true;
+    }
+    // La sesion cambia de puntero en cada swap aunque la pista sea la misma:
+    // solo un id distinto es otra pista.
+    bool reread = false;
+    if (bus.eq_track != &track) {
+        const std::size_t id_hash = std::hash<std::string>{}(track.id);
+        if (bus.eq_track == nullptr || id_hash != bus.eq_id_hash)
+            snap = true;
+        bus.eq_track = &track;
+        bus.eq_id_hash = id_hash;
+        reread = true;
+    }
+    const std::uint64_t version = table ? table->version : 0;
+    if (reread || version != bus.eq_table_version) {
+        bus.eq_table_version = version;
+        const TrackEqParams* params = nullptr;
+        if (table) {
+            for (const auto& entry : table->entries) {
+                if (entry.track_id == track.id) {
+                    if (entry.params) params = &*entry.params;
+                    break;
+                }
+            }
+        }
+        bus.eq.set_target(params ? *params : TrackEqParams{});
+        if (snap) {
+            bus.eq.snap_to_target();
+            bus.eq_was_silent = false;
+        }
+    }
+    // Pista en silencio asentado: su salida se multiplica por cero, no se
+    // procesa. Al volver, los filtros arrancan sin el estado viejo (D6).
+    if (settled_silent) {
+        bus.eq_was_silent = true;
+        return;
+    }
+    if (bus.eq_was_silent) {
+        bus.eq.reset();
+        bus.eq_was_silent = false;
+    }
+    bus.eq.process(left, right, static_cast<std::size_t>(std::max(0, frames)));
+}
+
 void Mixer::set_track_gain(const Id& track_id, Gain gain) {
     if (auto* control = control_for_track(track_id))
         control->gain.store(std::max(0.0f, gain), std::memory_order_relaxed);
@@ -1804,6 +1970,7 @@ std::optional<Frame> Mixer::song_end_pause_frame(const Session* session,
 void Mixer::set_session(std::shared_ptr<const Session> session, bool preserve_realtime_state) {
     store_session(std::move(session));
     rebuild_control_slots(load_session(), preserve_realtime_state);
+    rebuild_eq_table(load_session(), preserve_realtime_state);
     prepare_render_resources(kMaxBlockFrames);
     reset_track_meters();
 }

@@ -9,6 +9,7 @@
 // ---------------------------------------------------------------------------
 
 #include <lt_engine/core/types.h>
+#include <lt_engine/render/track_eq_params.h>
 #include <optional>
 #include <string>
 #include <variant>
@@ -77,6 +78,8 @@ struct CmdReplaceScheduledJump {
 // ---------------------------------------------------------------------------
 struct CmdSetTrackGain              { Id track_id; Gain gain; };
 struct CmdSetTrackPan               { Id track_id; float pan; };
+// EQ entero de la pista (plan track-eq, D8). Vacío = quitar el EQ.
+struct CmdSetTrackEq                { Id track_id; std::optional<TrackEqParams> eq; };
 struct CmdSetTrackMute              { Id track_id; bool mute; };
 struct CmdSetTrackSolo              { Id track_id; bool solo; };
 struct CmdSetTrackAudioRoute        { Id track_id; std::string audio_to; };
@@ -399,6 +402,9 @@ struct CmdUpsertSongTracks {
         std::string role;                // e.g. "normal" | "click" | "guide"
         std::string kind;                // e.g. "audio" | "folder"
         Id          parent_track_id;     // empty = top level
+        // EQ de la pista (plan track-eq); vacío = sin EQ. El upsert es la foto
+        // completa del modelo, así que manda sobre el valor en vivo.
+        std::optional<TrackEqParams> eq;
         std::vector<ClipUpdate> clips;
     };
     // New source files to register+enqueue for background decode. Sources whose
@@ -482,6 +488,7 @@ using EngineCommand = std::variant<
     CmdScheduleJump, CmdCancelScheduledJump,
     CmdCancelAllScheduledJumps, CmdReplaceScheduledJump,
     CmdSetTrackGain, CmdSetTrackPan, CmdSetTrackMute, CmdSetTrackSolo,
+    CmdSetTrackEq,
     CmdSetTrackAudioRoute,
     CmdSetTrackTransposeEnabled, CmdStartMasterFade, CmdSetPilotTone,
     CmdSetMetronomeEnabled, CmdSetMetronomeVolume, CmdSetMetronomeOutputRoute,

@@ -60,6 +60,8 @@ add_executable(lt_engine_tests
     test_one_shot_renderer.cpp
     test_loop_mixer.cpp
     test_track_eq.cpp
+    test_mixer_track_eq.cpp
+    test_mixer_eq_baseline.cpp
 )
 
 target_link_libraries(lt_engine_tests

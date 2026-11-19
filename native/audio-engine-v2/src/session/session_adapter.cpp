@@ -1,6 +1,8 @@
 #include <lt_engine/session/session_adapter.h>
 #include <nlohmann/json.hpp>
 
+#include "session/track_eq_json.h"
+
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -193,6 +195,12 @@ Result<Session> session_from_project_json(const std::string& project_json,
                         std::transform(kind_str.begin(), kind_str.end(), kind_str.begin(),
                             [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
                         track.kind = (kind_str == "folder") ? TrackKind::Folder : TrackKind::Audio;
+                        // EQ solo en pistas de audio de verdad (D3): una MIDI o
+                        // de vídeo también llega aquí como Audio y no lo lleva.
+                        if (kind_str == "audio") {
+                            if (auto eq_it = jtrack.find("eq"); eq_it != jtrack.end())
+                                track.eq = parse_track_eq_json(*eq_it);
+                        }
                     }
                     track.parent_track_id = value_any<std::string>(jtrack, "parent_track_id", "parentTrackId", "");
 

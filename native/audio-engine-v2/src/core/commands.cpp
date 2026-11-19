@@ -1,5 +1,7 @@
 #include <lt_engine/core/commands.h>
 #include <nlohmann/json.hpp>
+
+#include "session/track_eq_json.h"
 #include <stdexcept>
 #include <type_traits>
 
@@ -164,6 +166,15 @@ EngineCommand command_from_json(const std::string& raw) {
 
     if (type == "SetTrackPan")
         return CmdSetTrackPan{ j.at("track_id").get<Id>(), j.at("pan").get<float>() };
+    if (type == "SetTrackEq") {
+        // Lectura tolerante: sin `eq`, `null` o algo que no es un objeto =
+        // quitar el EQ; campos desconocidos se ignoran.
+        CmdSetTrackEq cmd;
+        cmd.track_id = j.at("track_id").get<Id>();
+        if (auto it = j.find("eq"); it != j.end())
+            cmd.eq = parse_track_eq_json(*it);
+        return cmd;
+    }
 
     if (type == "SetTrackMute")
         return CmdSetTrackMute{ j.at("track_id").get<Id>(), j.at("mute").get<bool>() };
@@ -457,6 +468,11 @@ EngineCommand command_from_json(const std::string& raw) {
             track.role = t.value("role", std::string{});
             track.kind = t.value("kind", std::string{});
             track.parent_track_id = t.value("parent_track_id", std::string{});
+            // Espejo de session_adapter.cpp (mismo lector) y solo en audio.
+            if (track.kind.empty() || track.kind == "audio") {
+                if (auto it = t.find("eq"); it != t.end())
+                    track.eq = parse_track_eq_json(*it);
+            }
             if (auto it = t.find("clips"); it != t.end() && it->is_array()) {
                 for (const auto& item : *it) {
                     CmdUpsertSongTracks::ClipUpdate clip;

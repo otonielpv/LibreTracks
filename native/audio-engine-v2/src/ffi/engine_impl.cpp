@@ -2218,6 +2218,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (mixer_) mixer_->set_track_pan(c.track_id, c.pan);
             return Result<void>::ok();
         }
+        else if constexpr (std::is_same_v<T, CmdSetTrackEq>) {
+            if (mixer_) mixer_->set_track_eq(c.track_id, c.eq);
+            return Result<void>::ok();
+        }
         else if constexpr (std::is_same_v<T, CmdSetTrackMute>) {
             if (mixer_) mixer_->set_track_mute(c.track_id, c.mute);
             return Result<void>::ok();
@@ -3685,6 +3689,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     track.kind = (tu.kind == "folder")
                         ? TrackKind::Folder : TrackKind::Audio;
                     track.parent_track_id = tu.parent_track_id;
+                    track.eq = (track.kind == TrackKind::Audio) ? tu.eq : std::nullopt;
 
                     track.clips.reserve(tu.clips.size());
                     for (const auto& cu : tu.clips) {
@@ -3828,6 +3833,9 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                 // would silently no-op until a full LoadSession). preserve=true
                 // keeps live slider state for tracks that still exist.
                 mixer_->set_session(next_session, /*preserve_realtime_state=*/true);
+                // El EQ del upsert es la foto confirmada del modelo (deshacer y
+                // rehacer viajan por aqui): manda sobre el valor en vivo.
+                mixer_->sync_track_eqs_from_song(c.song_id);
             }
             if (prearmed_jumps_) {
                 const auto rev = prearm_revision_.fetch_add(1,

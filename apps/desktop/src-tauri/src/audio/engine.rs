@@ -1326,6 +1326,7 @@ impl AudioController {
                         }
                     },
                     parent_track_id: track.parent_track_id.clone().unwrap_or_default(),
+                    eq: None,
                     clips: clips_by_track.remove(&track.id).unwrap_or_default(),
                 })
                 .collect();

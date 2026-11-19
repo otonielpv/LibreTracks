@@ -13,6 +13,9 @@
 #include <lt_engine/render/channel_mode.h>
 #include <cstdint>
 #include <optional>
+
+#include <lt_engine/render/track_eq_params.h>
+
 #include <string>
 #include <vector>
 
@@ -100,6 +103,9 @@ struct Track {
     TrackKind           kind               = TrackKind::Audio;
     Id                  parent_track_id;      // empty if top-level
     std::vector<Clip>   clips;
+    // Ecualizador de la pista (plan track-eq). Vacío = nunca ha tenido EQ, que
+    // es lo que leen las sesiones anteriores: coste cero en el mezclador.
+    std::optional<TrackEqParams> eq;
 };
 
 // ---------------------------------------------------------------------------

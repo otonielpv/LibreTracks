@@ -32,6 +32,7 @@
 //                             [--ratio X] [--semitones S] [--threads T]
 //                             [--blocks B] [--warmup W] [--json <ruta>]
 //                             [--paced] [--matrix] [--label <texto>]
+//                             [--eq-bands N]   (EQ por pista, plan track-eq)
 //
 //   --paced   respeta la cadencia real del dispositivo entre bloques y mide
 //             CPU total del proceso. Es el modo que detecta workers girando
@@ -92,6 +93,8 @@ struct Config {
     int    semitones  = 0;
     int    threads    = 1;   // pool de render (paso 08)
     int    muted_tracks = 0;
+    // Plan track-eq (03-C9): bandas de EQ encendidas en cada pista (0 = sin EQ).
+    int    eq_bands   = 0;
     int    parallel_threshold = 8;
     int    blocks     = 600;
     int    warmup     = 150;
@@ -251,6 +254,17 @@ Session build_session(const Config& cfg, SourceManager& sources, Frame length) {
         track.kind = TrackKind::Audio;
         track.gain = 0.5f;
         track.mute = i < cfg.muted_tracks;
+        if (cfg.eq_bands > 0) {
+            // Todas las bandas haciendo algo: el peor caso del D14.
+            TrackEqParams eq = default_track_eq_params();
+            eq.band_count = static_cast<std::size_t>(std::min(cfg.eq_bands, 6));
+            for (std::size_t b = 0; b < eq.band_count; ++b) {
+                eq.bands[b].enabled = true;
+                eq.bands[b].gain_db = (b % 2 == 0) ? 3.0f : -3.0f;
+                eq.bands[b].slope_db_per_octave = 24;
+            }
+            track.eq = eq;
+        }
         track.transpose_behavior = TransposeBehavior::FollowsSongOrRegion;
         track.clips.push_back(Clip{"clip-" + std::to_string(i), src_id, 0, 0, length});
         song.tracks.push_back(std::move(track));
@@ -637,6 +651,7 @@ int main(int argc, char** argv) {
         else if (a == "--semitones") cfg.semitones   = std::atoi(next("--semitones"));
         else if (a == "--threads")   cfg.threads     = std::atoi(next("--threads"));
         else if (a == "--muted-tracks") cfg.muted_tracks = std::atoi(next("--muted-tracks"));
+        else if (a == "--eq-bands") cfg.eq_bands = std::atoi(next("--eq-bands"));
         else if (a == "--parallel-threshold") cfg.parallel_threshold = std::atoi(next("--parallel-threshold"));
         else if (a == "--blocks")    cfg.blocks      = std::atoi(next("--blocks"));
         else if (a == "--warmup")    cfg.warmup      = std::atoi(next("--warmup"));
