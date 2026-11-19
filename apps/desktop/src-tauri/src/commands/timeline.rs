@@ -1502,6 +1502,36 @@ pub fn commit_track_mix_change(
         .map_err(|error| error.to_string())
 }
 
+/// Arrastre del EQ (plan track-eq, D9): solo motor, sin modelo ni historial.
+/// La UI lo limita a un envío por frame de animación.
+#[tauri::command(async)]
+pub fn update_track_eq_realtime(
+    track_id: String,
+    eq: Option<libretracks_core::TrackEq>,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    state
+        .audio
+        .update_live_track_eq(&track_id, eq.as_ref())
+        .map_err(|error| error.to_string())
+}
+
+/// Confirmación del EQ al soltar: modelo + deshacer + motor, recortado.
+#[tauri::command(async)]
+pub fn commit_track_eq_change(
+    track_id: String,
+    eq: Option<libretracks_core::TrackEq>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .commit_track_eq_model_and_command(&track_id, eq, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command(async)]
 pub fn delete_track(
     track_id: String,

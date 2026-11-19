@@ -108,6 +108,7 @@ pub(crate) use video_library::{
 pub(crate) use video_library::free_space_near;
 pub(crate) use self::TransportClockMirror as VideoTransportClock;
 mod track_colors;
+mod track_eq;
 mod track_split;
 pub(crate) use track_split::track_has_stereo_audio;
 mod track_tree;
@@ -4968,3 +4969,5 @@ mod ruler_markers_tests;
 mod mix_scene_tests;
 #[cfg(test)]
 mod channel_mode_tests;
+#[cfg(test)]
+mod track_eq_tests;

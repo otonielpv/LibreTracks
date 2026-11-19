@@ -2386,6 +2386,39 @@ mod tests {
         assert!(dest_dir.join("library.json").exists());
     }
 
+    /// Plan track-eq 05-C4: el EQ de una pista hace ida y vuelta en el .ltset.
+    #[test]
+    fn the_track_eq_round_trips_through_a_session_package() {
+        for full in [false, true] {
+            let src = tempfile::tempdir().expect("src");
+            let song_dir = src.path();
+            write_session_dir(song_dir);
+            let mut song = session();
+            let mut eq = libretracks_core::TrackEq::default();
+            eq.bands[1].gain_db = -4.0;
+            eq.bands[5].enabled = true;
+            eq.enabled = false;
+            song.tracks[0].eq = Some(eq.clone());
+            let package_path = song_dir.join("set.ltset");
+            export_session_as_package(
+                song_dir,
+                song_dir,
+                &song,
+                &sidecars(),
+                &package_path,
+                full,
+                |_, _| {},
+            )
+            .expect("export");
+            let target = tempfile::tempdir().expect("target");
+            let dest_dir = target.path().join("Mi Set");
+            let extracted =
+                extract_session_package(&dest_dir, &package_path, |_, _| {}).expect("extract");
+            let loaded = crate::load_song_from_file(&extracted.song_file).expect("load");
+            assert_eq!(loaded.tracks[0].eq, Some(eq), "full={full}");
+        }
+    }
+
     #[test]
     fn full_export_rewrites_library_paths_to_bundled_audio() {
         // The library.json ships the exporter's original (often absolute) source

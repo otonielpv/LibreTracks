@@ -1326,7 +1326,7 @@ impl AudioController {
                         }
                     },
                     parent_track_id: track.parent_track_id.clone().unwrap_or_default(),
-                    eq: None,
+                    eq: track_eq_for_engine(track),
                     clips: clips_by_track.remove(&track.id).unwrap_or_default(),
                 })
                 .collect();
@@ -1542,6 +1542,35 @@ impl AudioController {
             }
             Ok(())
         })
+    }
+
+    /// EQ de la pista al motor (plan track-eq, D8/D9): el EQ entero, ya
+    /// recortado, o `None` para quitarlo. Lo usan el arrastre en vivo (sin
+    /// modelo ni historial) y la confirmación al soltar.
+    pub fn set_track_eq(
+        &self,
+        track_id: &str,
+        eq: Option<&libretracks_core::TrackEq>,
+    ) -> Result<(), DesktopError> {
+        let eq_json = eq.and_then(|eq| serde_json::to_value(eq.sanitized()).ok());
+        self.with_engine_state("set_track_eq", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetTrackEq {
+                track_id: track_id.into(),
+                eq: eq_json,
+            })?;
+            Ok(())
+        })
+    }
+
+    /// Arrastre en vivo del EQ: cuenta como mando en tiempo real, como el pan.
+    pub fn update_live_track_eq(
+        &self,
+        track_id: &str,
+        eq: Option<&libretracks_core::TrackEq>,
+    ) -> Result<(), DesktopError> {
+        self.live_mix_realtime_command_count
+            .fetch_add(1, Ordering::Relaxed);
+        self.set_track_eq(track_id, eq)
     }
 
     pub fn set_track_transpose_enabled_realtime(
@@ -3488,6 +3517,20 @@ fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song 
         }
     }
     resolved
+}
+
+/// EQ que lleva una pista en `TrackUpsert` (plan track-eq): solo pistas de
+/// audio, recortado con la misma función que los comandos. El motor lo lee
+/// tolerante y el upsert manda sobre el valor en vivo, así que deshacer y
+/// rehacer devuelven el EQ también al motor.
+pub(crate) fn track_eq_for_engine(track: &libretracks_core::Track) -> Option<serde_json::Value> {
+    if track.kind != TrackKind::Audio {
+        return None;
+    }
+    track
+        .eq
+        .as_ref()
+        .and_then(|eq| serde_json::to_value(eq.sanitized()).ok())
 }
 
 /// Tracks a `CmdUpsertSongTracks` carries. MIDI and video tracks produce no

@@ -76,6 +76,7 @@ import type {
   WaveformReadyEvent,
   WaveformSummaryDto,
   WaveformWindowDto,
+  TrackEq,
 } from "./models";
 
 export * from "./models";
@@ -3092,6 +3093,29 @@ export async function updateTrackMixRealtime(args: {
   solo?: boolean;
 }): Promise<void> {
   await invokeCommand("update_track_mix_realtime", args);
+}
+
+/**
+ * Arrastre del ecualizador de una pista (plan track-eq): solo motor, sin
+ * modelo ni deshacer. Quien arrastra lo limita a un envío por frame.
+ * `eq: null` quita el EQ.
+ */
+export async function updateTrackEqRealtime(args: {
+  trackId: string;
+  eq: TrackEq | null;
+}): Promise<void> {
+  await invokeCommand("update_track_eq_realtime", args);
+}
+
+/**
+ * Confirma el EQ de una pista al soltar: modelo + un paso de deshacer + motor.
+ * El backend recorta los rangos. `eq: null` quita el EQ. Solo pistas de audio.
+ */
+export async function commitTrackEqChange(args: {
+  trackId: string;
+  eq: TrackEq | null;
+}): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("commit_track_eq_change", args);
 }
 
 export async function setMetronomeEnabledRealtime(enabled: boolean): Promise<void> {

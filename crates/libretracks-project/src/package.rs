@@ -1298,7 +1298,11 @@ pub fn merge_extracted_song_package(
             track.audio_to.clone()
         };
         next_song.tracks.push(Track {
-            eq: None,
+            // El EQ viaja con la pista, recortado como cualquier entrada
+            // (plan track-eq). Solo cuenta en pistas de audio.
+            eq: (track.kind == libretracks_core::TrackKind::Audio)
+                .then(|| track.eq.as_ref().map(|eq| eq.sanitized()))
+                .flatten(),
             id: track_id.clone(),
             name: track.name.clone(),
             kind: track.kind,
@@ -2955,6 +2959,53 @@ mod tests {
             .iter()
             .find(|track| track.name == name)
             .unwrap_or_else(|| panic!("falta la pista {name}"))
+    }
+
+    /// Plan track-eq 05-C3: el EQ viaja en el .ltpkg, ligero y completo, y
+    /// llega recortado como cualquier entrada.
+    #[test]
+    fn the_track_eq_survives_light_and_full_packages_clamped() {
+        let mut eq = libretracks_core::TrackEq::default();
+        eq.bands[2].gain_db = 5.0;
+        eq.bands[0].enabled = true;
+        eq.bands[0].slope = 24;
+        let mut wild = eq.clone();
+        wild.bands[3].gain_db = 60.0;
+
+        for (full, source_eq, expected) in [
+            (false, eq.clone(), eq.clone()),
+            (true, eq.clone(), eq.clone()),
+            (false, wild.clone(), wild.sanitized()),
+        ] {
+            let dir = tempdir().expect("tempdir");
+            let song_dir = dir.path();
+            fs::create_dir_all(song_dir.join("audio")).expect("audio dir");
+            fs::write(song_dir.join("audio").join("loop.wav"), b"RIFF....fake").expect("audio");
+            let mut source = song();
+            source.tracks[0].eq = Some(source_eq);
+            let package_path = song_dir.join("eq.ltpkg");
+            export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, full)
+                .expect("export");
+            let empty = Song {
+                tracks: vec![],
+                clips: vec![],
+                regions: vec![],
+                section_markers: vec![],
+                ..song()
+            };
+            let target = tempdir().expect("target");
+            let imported = import_song_package(
+                target.path(),
+                &empty,
+                &package_path,
+                0.0,
+                SongImportTrackMode::KeepSeparate,
+            )
+            .expect("import")
+            .song;
+            let drums = named(&imported, "Drums");
+            assert_eq!(drums.eq.as_ref(), Some(&expected), "full={full}");
+        }
     }
 
     #[test]
