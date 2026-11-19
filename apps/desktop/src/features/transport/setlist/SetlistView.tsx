@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 
@@ -37,14 +37,15 @@ import { createSectionEditHandlers, type SectionEditDeps } from "./sectionEditHa
 import { useTimelineUIStore } from "../uiStore";
 import { resolveSetlistSongId } from "./songMapModel";
 import { resolveSongSeekSeconds } from "./sectionScrubModel";
-import { SONG_DROP_CLASS, songDropHandlers } from "./songDrop";
+import { songDropHandlers } from "./songDrop";
 import { useSetlistStore } from "./setlistStore";
 import { useSetlistKeyboardBridge } from "./setlistKeyboard";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
+import { SetlistShortRhythmDock, useSetlistRhythm } from "./SetlistRhythm";
+import { Zone } from "./SetlistZone";
 import "./setlist.css";
 
-/** "overview" is the song band: the waveform with the sections on it. */
-export type SetlistZone = "songs" | "overview" | "mixer" | "drawer" | "lyrics";
+export type { SetlistZone } from "./SetlistZone";
 
 export type SetlistViewProps = SongViewBindings & {
   performance: PerformanceBindings;
@@ -59,33 +60,6 @@ export type SetlistViewProps = SongViewBindings & {
   /** The video feature's lane bindings (useVideoFeature, once per panel). */
   videoLanes?: VideoLaneBindings;
 };
-
-/** A named, empty slot the later steps fill without stepping on each other. */
-function Zone({
-  name,
-  children,
-  zoneRef,
-  drop,
-}: {
-  name: SetlistZone;
-  children?: ReactNode;
-  zoneRef?: RefObject<HTMLElement | null>;
-  /** Makes the zone a "drop audio into this song" target. */
-  drop?: { regionId: string; active: boolean; handlers: ReturnType<typeof songDropHandlers> };
-}) {
-  return (
-    <section
-      ref={zoneRef}
-      className={`lt-setlist-zone is-${name}${drop ? ` ${SONG_DROP_CLASS}` : ""}${drop?.active ? " is-drop-target" : ""}`}
-      data-setlist-zone={name}
-      data-region-id={drop?.regionId}
-      onDragOver={drop?.handlers.onDragOver}
-      onDrop={drop?.handlers.onDrop}
-    >
-      {children}
-    </section>
-  );
-}
 
 /**
  * The Setlist view, Playback-style (docs/plans/completed/setlist-view): a row of song
@@ -155,6 +129,7 @@ function SetlistViewComponent({
   const { t } = useTranslation();
   const rootRef = useRef<HTMLElement | null>(null);
   const layout = useSetlistLayout(rootRef, layoutClass);
+  const shortRhythmOpen = useSetlistRhythm(layout);
   const editMode = useSetlistStore((state) => state.editMode);
   const { canEdit } = useNetworkPermissions();
   useEffect(() => {
@@ -623,10 +598,11 @@ function SetlistViewComponent({
   );
 
   return (
+    <>
     <main
       ref={rootRef}
       data-lt-view="setlist"
-      className={`lt-setlist-view is-${layout}${editMode ? " is-editing" : ""}${waveEditing ? " is-wave-editing" : ""}${
+      className={`lt-setlist-view is-${layout}${shortRhythmOpen ? " has-rhythm" : ""}${editMode ? " is-editing" : ""}${waveEditing ? " is-wave-editing" : ""}${
         mixerCollapsed && layout === "medium" ? " is-mixer-collapsed" : ""
       }${lyricsOpen ? " has-lyrics" : ""}${layout === "wide" && songsHeightPx !== null ? " has-songs-height" : ""
       }${
@@ -687,6 +663,8 @@ function SetlistViewComponent({
           {drawer}
       </>
     </main>
+    {shortRhythmOpen ? <SetlistShortRhythmDock region={shownRegion} /> : null}
+    </>
   );
 }
 

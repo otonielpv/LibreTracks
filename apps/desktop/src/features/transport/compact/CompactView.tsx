@@ -1,4 +1,5 @@
 import { RhythmDock } from "../rhythm/RhythmDock";
+import { useRhythmStore } from "../rhythm/rhythmStore";
 import { useTranslation } from "react-i18next";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
@@ -351,12 +352,13 @@ function CompactViewComponent({
   const viewRef = useRef<HTMLDivElement | null>(null);
   const mixerResize = useCompactMixerResize(viewRef);
   const canResizeMixer = !isMobileApp && isMixerVisible;
+  const rhythmOpen = useRhythmStore((state) => state.openByView.compact);
 
   return (
     <div
       ref={viewRef}
       data-lt-view="compact"
-      className={`lt-compact-view${mixerTakesFullHeight ? " is-mixer-full" : ""}${
+      className={`lt-compact-view${mixerTakesFullHeight ? " is-mixer-full" : ""}${rhythmOpen ? " has-rhythm" : ""}${
         resizingRegionId ? " is-resizing-column" : ""
       }${canResizeMixer && mixerResize.heightPx !== null ? " is-mixer-sized" : ""}`}
       style={canResizeMixer ? mixerResize.style : undefined}

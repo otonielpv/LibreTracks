@@ -981,8 +981,45 @@
   border-radius: 0;
 }
 
-/* Panel Ritmo acoplado (plan drum-loops): ocupa una fila propia al final y
-   la fila flexible (cues o chart) encoge. */
+/* Panel Ritmo acoplado (plan drum-loops): ocupa una fila propia al final
+   (implícita) y la fila flexible (cues o chart) encoge, pero los cues
+   guardan una fila a la vista: en un teléfono apaisado el panel se la
+   comía entera y no se podía saltar de sección con el ritmo abierto. El
+   panel cede la altura que falte (sus zonas tienen scroll propio). */
+.lt-live-view.has-rhythm {
+  grid-template-rows: auto auto minmax(4.5rem, 1fr);
+  grid-auto-rows: minmax(0, max-content);
+}
+
+.lt-live-view.has-rhythm.is-chart-expanded {
+  grid-template-rows: auto minmax(6rem, 1fr);
+}
+
 .lt-live-view > .lt-rhythm-panel {
   grid-column: 1 / -1;
+  min-height: 0;
+  max-height: 100%;
+}
+
+/* Teléfono apaisado: con el ritmo abierto la tira de modos de salto (ajustes,
+   no gestos de directo) cede su fila para que quepa una fila entera de cues. */
+@media (max-height: 500px) {
+  .lt-live-view.has-rhythm .lt-live-settings {
+    display: none;
+  }
+
+  .lt-live-view.has-rhythm:not(.is-chart-expanded) {
+    grid-template-rows: auto 0 minmax(7rem, 1fr);
+  }
+
+  /* Sin la tira, la colocación automática lo metería en su fila vacía. */
+  .lt-live-view.has-rhythm:not(.is-chart-expanded) > .lt-rhythm-panel {
+    grid-row: 4;
+  }
+}
+
+@media (orientation: portrait) and (max-width: 700px) {
+  .lt-live-view.has-rhythm:not(.is-chart-expanded) {
+    grid-template-rows: auto auto minmax(4.5rem, 1fr) minmax(8rem, 1.4fr);
+  }
 }

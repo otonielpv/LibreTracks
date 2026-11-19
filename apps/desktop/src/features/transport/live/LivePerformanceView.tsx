@@ -1,4 +1,5 @@
 import { RhythmDock } from "../rhythm/RhythmDock";
+import { useRhythmStore } from "../rhythm/rhythmStore";
 import { SongCover } from "../songs/SongCoverImage";
 import {
   memo,
@@ -188,6 +189,7 @@ function LivePerformanceViewComponent({
   const canControl = allowControl && permissions.canControl;
   const canEditChart = allowEditChart && permissions.canEdit;
   const { t } = useTranslation();
+  const rhythmOpen = useRhythmStore((state) => state.openByView.live);
   const phoneScreen = usePhoneScreen();
   const allGroups = useMemo(
     () => buildLiveMarkerGroups(song.sectionMarkers),
@@ -367,7 +369,7 @@ function LivePerformanceViewComponent({
   return (
     <main
       data-lt-view="live"
-      className={`lt-live-view${chartOpen ? " has-chart" : ""}${chartOpen && chartExpanded ? " is-chart-expanded" : ""}`}
+      className={`lt-live-view${rhythmOpen ? " has-rhythm" : ""}${chartOpen ? " has-chart" : ""}${chartOpen && chartExpanded ? " is-chart-expanded" : ""}`}
       aria-label={t("liveView.title")}
     >
       <header className="lt-live-header">

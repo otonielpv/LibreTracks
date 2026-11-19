@@ -202,7 +202,9 @@ function SetlistMixerComponent({
     { tab: "pads", label: t("setlistView.mixer.tabs.pads"), icon: "piano" },
     // Ritmo (plan drum-loops): una pestaña con las dos columnas en wide; en
     // medium y short, Loops y One shots por separado.
-    // En el teléfono no hay pestañas: la hoja se abre con el botón Ritmo.
+    // En el teléfono no hay pestañas: el botón Ritmo abre el panel acoplado
+    // bajo la vista (SetlistView), no dentro de la consola, que allí se
+    // turna con la onda y podía no estar a la vista.
     ...(layout === "wide"
       ? [{ tab: "rhythm" as const, label: t("rhythm.title"), icon: "graphic_eq" }]
       : layout === "medium"
@@ -416,9 +418,6 @@ function SetlistMixerComponent({
           audioRoutingOptions={audioRoutingOptions}
           auxHandlers={auxHandlers}
         />
-      ) : null}
-      {layout === "short" ? (
-        <RhythmDock view="setlist" layoutClass="short" songLoop={region?.loop ?? null} songRegionId={region?.id ?? null} />
       ) : null}
       {tab === "rhythm" || tab === "loops" || tab === "oneShots" ? (
         <div className="lt-setlist-mixer-panel is-rhythm" data-testid="setlist-rhythm-tab">

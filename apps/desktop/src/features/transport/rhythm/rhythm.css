@@ -55,6 +55,39 @@
   height: 100%;
 }
 
+/* ── El panel acoplado en Compacta y en el Setlist del teléfono ──────────
+   El panel cede altura antes de dejar la vista sin su contenido: las
+   columnas de canciones (Compacta), el mezclador a pantalla completa de
+   Android (Compacta) y la fila de canciones (Setlist en el teléfono)
+   guardan un mínimo. Las zonas del panel tienen scroll propio. */
+/* En el móvil el elemento flexible es el contenedor con scroll; en
+   escritorio ese contenedor es `display: contents` y lo es la fila. */
+.lt-compact-view.has-rhythm:not(.is-mixer-full) > .lt-compact-songs-scroll,
+.lt-compact-view.has-rhythm:not(.is-mixer-full) > .lt-compact-songs-scroll > .lt-compact-songs {
+  flex-basis: 0;
+  min-height: 5.5rem;
+}
+
+/* Mezclador a pantalla completa (Android): las canciones ya están ocultas;
+   su contenedor vacío no se queda con una franja de altura. */
+.lt-compact-view.has-rhythm.is-mixer-full > .lt-compact-songs-scroll {
+  flex: 0 0 0;
+  min-height: 0;
+}
+
+.lt-compact-view.has-rhythm.is-mixer-full .lt-compact-mixer {
+  min-height: 7rem;
+}
+
+.lt-compact-view > .lt-rhythm-panel--docked {
+  flex-shrink: 1;
+  min-height: 0;
+}
+
+.lt-setlist-view.is-short.has-rhythm {
+  min-height: 6.25rem;
+}
+
 /* ── Cabecera: nunca dos líneas ───────────────────────────────────────── */
 .lt-rhythm-header {
   display: flex;
