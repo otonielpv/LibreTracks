@@ -84,8 +84,37 @@
   min-height: 0;
 }
 
+/* Setlist en el teléfono: el ritmo se turna con la onda, la consola y la
+   letra (como ellas entre sí). Quedan las canciones arriba y el panel con
+   el resto de la altura; los paneles ocultos siguen montados y vuelven tal
+   cual al cerrar el ritmo. */
 .lt-setlist-view.is-short.has-rhythm {
-  min-height: 6.25rem;
+  flex: 0 0 auto;
+  height: auto;
+  grid-template-rows: auto;
+}
+
+.lt-setlist-view.is-short.has-rhythm > .lt-setlist-bottom,
+.lt-setlist-view.is-short.has-rhythm > .lt-setlist-zone:not(.is-songs),
+.lt-setlist-view.is-short.has-rhythm > .lt-setlist-lyrics-pane {
+  display: none;
+}
+
+.lt-setlist-view.is-short.has-rhythm + .lt-rhythm-panel--docked {
+  flex: 1 1 auto;
+  height: auto;
+}
+
+/* Setlist en escritorio y tablet: la pestaña ocupa todo el ancho de la
+   consola, sin el relleno de las otras pestañas (paneles pegados). */
+.lt-setlist-mixer-panel.is-rhythm {
+  padding: 0;
+  overflow: hidden;
+}
+
+.lt-setlist-mixer-panel.is-rhythm > .lt-rhythm-panel {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* ── Cabecera: nunca dos líneas ───────────────────────────────────────── */

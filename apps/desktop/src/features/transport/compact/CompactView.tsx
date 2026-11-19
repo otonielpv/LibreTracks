@@ -1,5 +1,6 @@
 import { RhythmDock } from "../rhythm/RhythmDock";
 import { useRhythmStore } from "../rhythm/rhythmStore";
+import { usePhoneScreen } from "../scenes/SceneMenuButton";
 import { useTranslation } from "react-i18next";
 import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
@@ -317,7 +318,7 @@ function CompactViewComponent({
 
   // Android: mixer collapsed by default on narrow (phone) screens, visible on
   // tablets; the user's explicit choice persists. Desktop: always visible.
-  const [isMixerVisible, setIsMixerVisible] = useState(() => {
+  const [mixerPreference, setIsMixerVisible] = useState(() => {
     if (!isMobileApp) return true;
     try {
       const saved = window.localStorage.getItem(
@@ -344,6 +345,17 @@ function CompactViewComponent({
       return next;
     });
   };
+  // Teléfono: el panel Ritmo y el mezclador se turnan (compartiendo la
+  // altura no se podía usar ninguno). Abrir el ritmo oculta el mezclador
+  // sin tocar la preferencia guardada; pedir el mezclador cierra el ritmo.
+  const phone = usePhoneScreen();
+  const rhythmOpen = useRhythmStore((state) => state.openByView.compact);
+  const rhythmTakesMixer = phone && rhythmOpen;
+  const isMixerVisible = mixerPreference && !rhythmTakesMixer;
+  const onMixerToggle = () => {
+    if (rhythmTakesMixer) useRhythmStore.getState().setOpen("compact", false);
+    if (!rhythmTakesMixer || !mixerPreference) toggleMixerVisible();
+  };
 
   // Android: with the mixer open it takes the WHOLE compact view (pan +
   // routing were unreadable sharing the height with the song columns on a
@@ -353,7 +365,6 @@ function CompactViewComponent({
   const viewRef = useRef<HTMLDivElement | null>(null);
   const mixerResize = useCompactMixerResize(viewRef);
   const canResizeMixer = !isMobileApp && isMixerVisible;
-  const rhythmOpen = useRhythmStore((state) => state.openByView.compact);
 
   return (
     <div
@@ -467,7 +478,7 @@ function CompactViewComponent({
             type="button"
             className="lt-compact-mixer-toggle"
             aria-expanded={isMixerVisible}
-            onClick={toggleMixerVisible}
+            onClick={onMixerToggle}
           >
             <span className="material-symbols-outlined" aria-hidden="true">
               {isMixerVisible ? "expand_more" : "expand_less"}
