@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
+const duplicateRulerMarkers = vi.fn(async (_copies: unknown) => ({}) as TransportSnapshot);
+vi.mock("../desktopApi", () => ({
+  duplicateRulerMarkers: (copies: unknown) => duplicateRulerMarkers(copies),
+}));
+
 import { createMarkerMoveHandlers } from "./markerMoveHandlers";
 import type {
   AutomationCueSummary,
@@ -106,6 +111,31 @@ describe("handleMarkerMoveCommit", () => {
     await vi.waitFor(() => expect(updateSectionMarker).toHaveBeenCalled());
 
     expect(updateSectionMarker).toHaveBeenCalledWith("m1", "Chorus", 9, "cue");
+  });
+
+  it("a copy dropped in the other lane lands in that lane", async () => {
+    const { handlers, updateSectionMarker } = setupMarkers();
+    duplicateRulerMarkers.mockClear();
+
+    handlers.handleMarkerMoveCommit("m1", 9, "cue", true);
+    await vi.waitFor(() => expect(duplicateRulerMarkers).toHaveBeenCalled());
+
+    expect(duplicateRulerMarkers).toHaveBeenCalledWith([
+      { kind: "section", id: "m1", startSeconds: 9, categoryOverride: "cue" },
+    ]);
+    expect(updateSectionMarker).not.toHaveBeenCalled();
+  });
+
+  it("a copy in the same lane does not pin a category", async () => {
+    const { handlers } = setupMarkers();
+    duplicateRulerMarkers.mockClear();
+
+    handlers.handleMarkerMoveCommit("m1", 9, undefined, true);
+    await vi.waitFor(() => expect(duplicateRulerMarkers).toHaveBeenCalled());
+
+    expect(duplicateRulerMarkers).toHaveBeenCalledWith([
+      { kind: "section", id: "m1", startSeconds: 9 },
+    ]);
   });
 });
 

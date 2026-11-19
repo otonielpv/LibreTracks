@@ -73,10 +73,18 @@ export function createMarkerMoveHandlers(deps: MarkerMoveHandlerDeps) {
       return;
     }
     if (copy) {
-      // Alt/Option at the drop: a copy lands there, the original stays.
+      // Alt/Option at the drop: a copy lands there (in the lane it was
+      // dropped in), the original stays.
       void runAction(async () => {
         applyPlaybackSnapshot(
-          await duplicateRulerMarkers([{ kind: "section", id: section.id, startSeconds }]),
+          await duplicateRulerMarkers([
+            {
+              kind: "section",
+              id: section.id,
+              startSeconds,
+              ...(category ? { categoryOverride: category } : {}),
+            },
+          ]),
         );
         await refreshSongView({ sync: true });
       });

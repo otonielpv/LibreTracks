@@ -3,7 +3,7 @@
 //! Fixture de `song_structure_tests`: 120 BPM 4/4, secciones a(8) b(16)
 //! c(32) m3(40) y la marca de tempo t2 en 8. Sin warp: vista = fuente.
 
-use libretracks_core::{MarkerKind, TempoMarker, TimeSignatureMarker};
+use libretracks_core::{MarkerCategory, MarkerKind, TempoMarker, TimeSignatureMarker};
 
 use super::song_structure::tests::{base_song, close, marker_start, session_with, song_of};
 use super::{RulerMarkerKind, RulerMarkerPlacement, RulerMarkerRef};
@@ -14,6 +14,7 @@ fn place(kind: RulerMarkerKind, id: &str, start_seconds: f64) -> RulerMarkerPlac
         kind,
         id: id.into(),
         start_seconds,
+        category_override: None,
     }
 }
 
@@ -194,4 +195,82 @@ fn a_missing_marker_in_a_move_fails_without_touching_the_song() {
 
     assert!(result.is_err());
     assert_eq!(song_of(&session), before);
+}
+
+/// Una sesión guarda en el cero las marcas de tempo y compás de su primera
+/// canción. Copiar o mover sólo secciones (Alt+arrastrar dos secciones) las
+/// borraba al absorberlas en el valor base.
+#[test]
+fn section_only_edits_keep_tempo_and_signature_markers_at_zero() {
+    let mut base = base_song();
+    base.tempo_markers.push(TempoMarker {
+        id: "t0".into(),
+        start_seconds: 0.0,
+        bpm: 148.0,
+        ramp: false,
+    });
+    base.time_signature_markers.push(TimeSignatureMarker {
+        id: "ts0".into(),
+        start_seconds: 0.0,
+        signature: "4/4".into(),
+    });
+    let mut session = session_with(base, vec![]);
+    let audio = AudioController::default();
+    let keeps_origin = |song: &libretracks_core::Song| {
+        assert!(song.tempo_markers.iter().any(|marker| marker.id == "t0"), "tempo en 0");
+        assert!(
+            song.time_signature_markers.iter().any(|marker| marker.id == "ts0"),
+            "compás en 0"
+        );
+    };
+
+    session
+        .duplicate_ruler_markers(
+            &[
+                place(RulerMarkerKind::Section, "a", 24.0),
+                place(RulerMarkerKind::Section, "b", 28.0),
+            ],
+            &audio,
+        )
+        .expect("duplicate");
+    keeps_origin(&song_of(&session));
+
+    session
+        .move_ruler_markers(
+            &[
+                place(RulerMarkerKind::Section, "a", 10.0),
+                place(RulerMarkerKind::Section, "b", 18.0),
+            ],
+            &audio,
+        )
+        .expect("move");
+    keeps_origin(&song_of(&session));
+}
+
+/// Alt+arrastrar una sección al carril de avisos: la copia cae como aviso y el
+/// original sigue siendo sección.
+#[test]
+fn a_copy_dropped_in_the_other_lane_takes_that_lane() {
+    let mut session = session_with(base_song(), vec![]);
+    let audio = AudioController::default();
+
+    session
+        .duplicate_ruler_markers(
+            &[RulerMarkerPlacement {
+                category_override: Some(MarkerCategory::Cue),
+                ..place(RulerMarkerKind::Section, "a", 24.0)
+            }],
+            &audio,
+        )
+        .expect("duplicate");
+
+    let song = song_of(&session);
+    let copy = song
+        .section_markers
+        .iter()
+        .find(|marker| (marker.start_seconds - 24.0).abs() < 1e-6)
+        .expect("copy");
+    assert_eq!(copy.category_override, Some(MarkerCategory::Cue));
+    let original = song.section_markers.iter().find(|marker| marker.id == "a").unwrap();
+    assert_eq!(original.category_override, None);
 }

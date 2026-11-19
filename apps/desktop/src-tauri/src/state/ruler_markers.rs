@@ -7,7 +7,7 @@
 //! mover una marca de tempo cambia el mapeo, y convertir unas marcas contra el
 //! mapeo nuevo y otras contra el viejo descolocaría el grupo.
 
-use libretracks_core::{source_seconds_at_view, Song};
+use libretracks_core::{source_seconds_at_view, MarkerCategory, Song};
 use serde::Deserialize;
 
 use crate::audio::engine::AudioController;
@@ -46,6 +46,10 @@ pub struct RulerMarkerPlacement {
     pub kind: RulerMarkerKind,
     pub id: String,
     pub start_seconds: f64,
+    /// Sólo secciones, al duplicar: el carril donde cae la copia (Alt+arrastrar
+    /// una marca al carril de avisos). Sin él, la copia hereda el del original.
+    #[serde(default)]
+    pub category_override: Option<MarkerCategory>,
 }
 
 fn sort_by_start<T>(items: &mut [T], start: impl Fn(&T) -> f64) {
@@ -164,6 +168,11 @@ impl DesktopSession {
                         marker.id = format!("section_{suffix}_{index}");
                         marker.start_seconds = source(copy.start_seconds);
                         marker.digit = None;
+                        // Mismo criterio que mover: su carril natural no se fija.
+                        if let Some(category) = copy.category_override {
+                            marker.category_override =
+                                (category != marker.kind.category()).then_some(category);
+                        }
                         song.section_markers.push(marker);
                         touched.sections = true;
                     }
@@ -284,7 +293,20 @@ impl DesktopSession {
 /// Tras colocar marcas de tempo y compás: una que cae en el cero pasa a ser
 /// el valor base de la canción, dos en el mismo sitio se funden (gana la
 /// recién colocada) y todo queda ordenado.
+///
+/// Sólo se asienta el tipo que se colocó: una sesión puede tener marcas de
+/// tempo y compás en el cero (las de su primera canción), y mover o copiar
+/// sólo secciones no debe absorberlas en el valor base, que las borraba.
 fn settle_tempo_and_signature(song: &mut Song, fresh_tempo: &[String], fresh_signature: &[String]) {
+    if !fresh_tempo.is_empty() {
+        settle_tempo(song, fresh_tempo);
+    }
+    if !fresh_signature.is_empty() {
+        settle_signature(song, fresh_signature);
+    }
+}
+
+fn settle_tempo(song: &mut Song, fresh_tempo: &[String]) {
     let mut tempo = std::mem::take(&mut song.tempo_markers);
     sort_by_start(&mut tempo, |marker| marker.start_seconds);
     if let Some(origin) = tempo
@@ -300,7 +322,9 @@ fn settle_tempo_and_signature(song: &mut Song, fresh_tempo: &[String], fresh_sig
         |marker| marker.start_seconds,
         |marker| fresh_tempo.contains(&marker.id),
     );
+}
 
+fn settle_signature(song: &mut Song, fresh_signature: &[String]) {
     let mut signatures = std::mem::take(&mut song.time_signature_markers);
     sort_by_start(&mut signatures, |marker| marker.start_seconds);
     if let Some(origin) = signatures

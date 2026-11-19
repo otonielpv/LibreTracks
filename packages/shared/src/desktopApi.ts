@@ -2843,7 +2843,11 @@ export type RulerMarkerKind = "section" | "tempo" | "timeSignature";
 export type RulerMarkerRef = { kind: RulerMarkerKind; id: string };
 /** A marker and where it should end up (move) or where its copy goes
  * (duplicate), in view seconds. */
-export type RulerMarkerPlacement = RulerMarkerRef & { startSeconds: number };
+export type RulerMarkerPlacement = RulerMarkerRef & {
+  startSeconds: number;
+  /** Duplicating a section only: the lane the copy lands in. */
+  categoryOverride?: MarkerCategory;
+};
 
 /** Moves a multi-selection of ruler markers. One undo step. */
 export async function moveRulerMarkers(
