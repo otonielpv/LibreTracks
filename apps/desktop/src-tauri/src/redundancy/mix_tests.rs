@@ -274,3 +274,129 @@ fn mix_messages_never_touch_the_transport() {
     assert_eq!(after.playback_state, "playing");
     assert!(intents.try_recv().is_err(), "no transport intent at all");
 }
+
+// ── EQ por pista (plan track-eq, paso 08) ───────────────────────────────────
+
+fn boosted_eq() -> TrackEq {
+    let mut eq = TrackEq::default();
+    eq.bands[2].gain_db = 5.5;
+    eq.bands[0].enabled = true;
+    eq
+}
+
+fn first_audio_track(session: &DesktopSession) -> String {
+    song(session)
+        .tracks
+        .iter()
+        .find(|track| track.kind == TrackKind::Audio)
+        .unwrap()
+        .id
+        .clone()
+}
+
+#[test]
+fn a_committed_eq_on_the_main_reaches_the_backup_model_and_engine() {
+    let audio = AudioController::default();
+    let mut main = session("redundancy-eq-main");
+    let track = first_audio_track(&main);
+    main.commit_track_eq_model_and_command(&track, Some(boosted_eq()), &audio)
+        .unwrap();
+    let mut backup = session("redundancy-eq-backup");
+    let mut settings = AppSettings::default();
+    let snapshot = MixSnapshot::from_song(&song(&main), &AppSettings::default());
+    assert!(snapshot
+        .controls()
+        .iter()
+        .any(|control| matches!(control, MixControl::TrackEq { eq: Some(_), .. })));
+    apply_full(&mut backup, &mut settings, &audio, &snapshot);
+
+    let ours = song(&backup).tracks.into_iter().find(|t| t.id == track).unwrap();
+    assert_eq!(ours.eq, Some(boosted_eq()));
+    // Al motor del respaldo va el mismo comando que en el principal.
+    assert_eq!(
+        audio.debug_snapshot().unwrap().last_command.map(|trace| trace.kind),
+        Some("set_track_eq".to_string())
+    );
+    assert!(MixSnapshot::from_song(&song(&backup), &settings)
+        .matches(&MixSnapshot::from_song(&song(&main), &settings)));
+
+    // Aplicarlo otra vez no crea pasos de deshacer.
+    let steps = backup.undo_stack.len();
+    apply_full(&mut backup, &mut settings, &audio, &snapshot);
+    assert_eq!(backup.undo_stack.len(), steps);
+}
+
+#[test]
+fn a_live_eq_drag_is_emitted_and_applied_live_on_the_backup() {
+    let audio = AudioController::default();
+    let mut receiver = subscribe();
+    audio.update_live_track_eq("t1", Some(&boosted_eq())).unwrap();
+    // El bus es global y otros tests en paralelo también emiten: se busca el nuestro.
+    let wanted = MixControl::TrackEq { track_id: "t1".into(), eq: Some(boosted_eq()) };
+    let mut found = false;
+    while let Ok(control) = receiver.try_recv() {
+        if control == wanted {
+            found = true;
+            break;
+        }
+    }
+    assert!(found, "the drag reaches the mirror bus");
+
+    // En el respaldo, un control en vivo va al motor sin tocar el modelo.
+    let mut backup = session("redundancy-eq-live");
+    let track = first_audio_track(&backup);
+    let before = song(&backup);
+    let live = MixControl::TrackEq { track_id: track, eq: Some(boosted_eq()) };
+    apply_to_session(&mut backup, &audio, &live, false).unwrap();
+    assert_eq!(song(&backup), before);
+    assert_eq!(
+        audio.debug_snapshot().unwrap().last_command.map(|trace| trace.kind),
+        Some("set_track_eq".to_string())
+    );
+}
+
+#[test]
+fn eq_drags_are_coalesced_per_track_and_the_last_value_arrives() {
+    let mut coalescer = MixCoalescer::default();
+    let eq_with = |gain: f64| {
+        let mut eq = TrackEq::default();
+        eq.bands[2].gain_db = gain;
+        MixControl::TrackEq { track_id: "t".into(), eq: Some(eq) }
+    };
+    assert!(coalescer.push(eq_with(1.0), 0).is_some());
+    assert!(coalescer.push(eq_with(2.0), 5_000_000).is_none());
+    // Un fader de la misma pista no pisa al EQ: claves distintas.
+    assert!(coalescer
+        .push(
+            MixControl::Track { track_id: "t".into(), volume: Some(0.5), pan: None, muted: None, solo: None },
+            6_000_000,
+        )
+        .is_some());
+    assert_eq!(coalescer.flush(40_000_000), vec![eq_with(2.0)]);
+}
+
+#[test]
+fn sessions_that_differ_only_in_eq_have_different_mix_fingerprints_and_same_timeline() {
+    let audio = AudioController::default();
+    let settings = AppSettings::default();
+    let mut main = session("redundancy-eq-fp-main");
+    let backup = session("redundancy-eq-fp-backup");
+    let digests = |session: &DesktopSession| {
+        let source = session.fingerprint_source().unwrap();
+        crate::redundancy::fingerprint::compute(&source, &settings)
+            .songs
+            .into_iter()
+            .map(|song| (song.mix, song.timeline))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(digests(&main), digests(&backup));
+    let track = first_audio_track(&main);
+    main.commit_track_eq_model_and_command(&track, Some(boosted_eq()), &audio)
+        .unwrap();
+    let (a, b) = (digests(&main), digests(&backup));
+    assert!(a.iter().zip(&b).any(|(x, y)| x.0 != y.0), "el EQ cambia la huella de mezcla");
+    assert!(
+        a.iter().zip(&b).all(|(x, y)| x.1 == y.1),
+        "y no la de la línea de tiempo: no impide armar el respaldo"
+    );
+}

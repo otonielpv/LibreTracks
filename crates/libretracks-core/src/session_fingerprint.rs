@@ -64,7 +64,7 @@ pub struct SongFingerprint {
     pub timeline: Digest,
     /// Per file used: case-folded name + size in bytes.
     pub audio: Digest,
-    /// Volume, pan, mute, solo, routes, mono, MIDI ports, the song master.
+    /// Volume, pan, mute, solo, EQ, routes, mono, MIDI ports, the song master.
     /// Does not block arming (step 09 mirrors the live mix).
     pub mix: Digest,
 }
@@ -185,6 +185,9 @@ const TRACK_MIX_KEYS: &[&str] = &[
     "midiPort",
     "midiChannel",
     "midiEnabled",
+    // El EQ por pista (plan track-eq) es mezcla: el respaldo lo recibe por el
+    // espejo de mezcla, así que una diferencia se nombra pero no impide armar.
+    "eq",
 ];
 
 pub fn fingerprint(

@@ -220,6 +220,12 @@ pub enum MixControl {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         solo: Option<bool>,
     },
+    /// EQ entero de una pista (plan track-eq). `None` = sin EQ.
+    TrackEq {
+        track_id: String,
+        #[serde(default)]
+        eq: Option<libretracks_core::TrackEq>,
+    },
     SongMaster {
         region_id: String,
         gain: f64,

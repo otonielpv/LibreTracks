@@ -2,6 +2,7 @@
 //! so switching to it sounds the same.
 //!
 //! What is mirrored: track and folder volume, pan, mute and solo; each
+//! audio track's EQ (plan track-eq); each
 //! song's master gain (`region.master.gain`); metronome on/off and volume;
 //! voice guide volume. Values in the model's own units (the dB faders store
 //! a linear gain: that is what travels).
@@ -21,7 +22,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::OnceLock;
 
-use libretracks_core::Song;
+use libretracks_core::{Song, TrackEq, TrackKind};
 use libretracks_link::redundancy::MixControl;
 use tokio::sync::broadcast;
 
@@ -61,6 +62,8 @@ pub struct TrackMix {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct MixSnapshot {
     pub tracks: BTreeMap<String, TrackMix>,
+    /// EQ de cada pista de audio (`None` = sin EQ).
+    pub eqs: BTreeMap<String, Option<TrackEq>>,
     pub song_masters: BTreeMap<String, f64>,
     pub metronome_enabled: bool,
     pub metronome_volume: f64,
@@ -94,6 +97,12 @@ impl MixSnapshot {
                     )
                 })
                 .collect(),
+            eqs: song
+                .tracks
+                .iter()
+                .filter(|track| track.kind == TrackKind::Audio)
+                .map(|track| (track.id.clone(), track.eq.clone()))
+                .collect(),
             song_masters: song
                 .regions
                 .iter()
@@ -120,6 +129,12 @@ impl MixSnapshot {
                         },
                     )
                 })
+                .collect(),
+            eqs: song
+                .tracks
+                .iter()
+                .filter(|track| track.kind == "audio")
+                .map(|track| (track.id.clone(), track.eq.clone()))
                 .collect(),
             song_masters: song
                 .regions
@@ -153,6 +168,9 @@ impl MixSnapshot {
                         },
                     );
                 }
+                MixControl::TrackEq { track_id, eq } => {
+                    mix.eqs.insert(track_id.clone(), eq.clone());
+                }
                 MixControl::SongMaster { region_id, gain } => {
                     mix.song_masters.insert(region_id.clone(), *gain);
                 }
@@ -182,6 +200,10 @@ impl MixSnapshot {
                 solo: Some(mix.solo),
             })
             .collect();
+        controls.extend(self.eqs.iter().map(|(id, eq)| MixControl::TrackEq {
+            track_id: id.clone(),
+            eq: eq.clone(),
+        }));
         controls.extend(self.song_masters.iter().map(|(id, gain)| MixControl::SongMaster {
             region_id: id.clone(),
             gain: *gain,
@@ -210,6 +232,7 @@ impl MixSnapshot {
                         && mix.solo == theirs.solo
                 })
             })
+            && self.eqs == other.eqs
             && self.song_masters.len() == other.song_masters.len()
             && self.song_masters.iter().all(|(id, gain)| {
                 other
@@ -227,6 +250,7 @@ impl MixSnapshot {
 fn control_key(control: &MixControl) -> String {
     match control {
         MixControl::Track { track_id, .. } => format!("track:{track_id}"),
+        MixControl::TrackEq { track_id, .. } => format!("eq:{track_id}"),
         MixControl::SongMaster { region_id, .. } => format!("master:{region_id}"),
         MixControl::Metronome { .. } => "metronome".into(),
         MixControl::VoiceGuide { .. } => "voiceGuide".into(),
@@ -360,7 +384,7 @@ pub fn apply_to_settings(settings: &mut AppSettings, control: &MixControl) -> bo
                 settings.voice_guide_volume = volume.clamp(0.0, 10.0);
             }
         }
-        MixControl::Track { .. } | MixControl::SongMaster { .. } => {}
+        MixControl::Track { .. } | MixControl::TrackEq { .. } | MixControl::SongMaster { .. } => {}
     }
     before
         != (
@@ -426,6 +450,27 @@ pub fn apply_to_session(
                         None,
                         audio,
                     )
+                    .map_err(error)?;
+            }
+            Ok(())
+        }
+        MixControl::TrackEq { track_id, eq } => {
+            if !full {
+                return audio.update_live_track_eq(track_id, eq.as_ref()).map_err(error);
+            }
+            let Some(current) = session
+                .engine
+                .song()
+                .and_then(|song| song.tracks.iter().find(|track| &track.id == track_id))
+                .filter(|track| track.kind == TrackKind::Audio)
+                .map(|track| track.eq.clone())
+            else {
+                return Ok(()); // pista que el respaldo no tiene, o no es de audio
+            };
+            let wanted = eq.as_ref().map(TrackEq::sanitized);
+            if wanted != current {
+                session
+                    .commit_track_eq_model_and_command(track_id, wanted, audio)
                     .map_err(error)?;
             }
             Ok(())

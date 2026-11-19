@@ -1553,6 +1553,12 @@ impl AudioController {
         eq: Option<&libretracks_core::TrackEq>,
     ) -> Result<(), DesktopError> {
         let eq_json = eq.and_then(|eq| serde_json::to_value(eq.sanitized()).ok());
+        // Espejo de mezcla del respaldo (plan track-eq, paso 08): como el pan,
+        // el arrastre y la confirmación pasan por aquí.
+        crate::redundancy::mix::emit(libretracks_link::redundancy::MixControl::TrackEq {
+            track_id: track_id.to_string(),
+            eq: eq.map(|eq| eq.sanitized()),
+        });
         self.with_engine_state("set_track_eq", None, |engine, _state| {
             engine.send_command(&EngineCommand::SetTrackEq {
                 track_id: track_id.into(),
