@@ -85,6 +85,17 @@ const cell = (row: number, step: number) =>
   screen.getByTestId(`step-row-${row}`).querySelector<HTMLElement>(`[data-step="${step}"]`)!;
 
 describe.each([false, true])("LoopEditor gestures (touch=%s)", (touch) => {
+  it("a scroll that starts on a cell (pointercancel) does not paint it", () => {
+    vi.useFakeTimers();
+    renderEditor({ touch });
+    fireEvent.pointerDown(cell(0, 1));
+    fireEvent.pointerCancel(window);
+    act(() => vi.advanceTimersByTime(LONG_PRESS_MS + 10));
+    fireEvent.pointerUp(window);
+    expect(cell(0, 1).dataset.velocity).toBe("0");
+    expect((screen.getByRole("button", { name: "Undo" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("tap toggles normal and silence", () => {
     renderEditor({ touch });
     fireEvent.pointerDown(cell(0, 2));

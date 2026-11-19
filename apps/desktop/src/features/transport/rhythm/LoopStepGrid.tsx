@@ -61,13 +61,21 @@ export function LoopStepGrid({
     if (next !== pattern) onChange(next);
   };
 
+  // Si el navegador cancela el gesto (p. ej. lo convierte en scroll), se
+  // descarta el toque en vez de pintar la celda.
+  const cancel = () => {
+    clearLongPress();
+    drag.current = null;
+    setPreview(null);
+  };
+
   useEffect(() => {
     const up = () => finish();
     window.addEventListener("pointerup", up);
-    window.addEventListener("pointercancel", up);
+    window.addEventListener("pointercancel", cancel);
     return () => {
       window.removeEventListener("pointerup", up);
-      window.removeEventListener("pointercancel", up);
+      window.removeEventListener("pointercancel", cancel);
       clearLongPress();
     };
   });

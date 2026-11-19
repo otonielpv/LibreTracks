@@ -27,6 +27,23 @@ describe("insets del notch en el panel Ritmo", () => {
     expect(backdrop).not.toContain("--lt-safe-area-right");
   });
 
+  it("el editor de patrones en el teléfono llega abajo: el inset lo absorbe la rejilla", () => {
+    expect(rule(".lt-rhythm-backdrop--short")).not.toContain("--lt-safe-area-bottom");
+    expect(rule(".lt-loop-editor--short .lt-loop-editor__grid")).toContain("--lt-safe-area-bottom");
+  });
+
+  it("la rejilla se desplaza en un solo eje por scroll (sin diagonal)", () => {
+    const outer = rule(".lt-loop-editor__grid");
+    const inner = rule(".lt-loop-editor__canvas");
+    expect(outer).toContain("overflow-x: hidden");
+    expect(outer).toContain("overflow-y: auto");
+    expect(inner).toContain("overflow-x: auto");
+    expect(inner).toContain("overflow-y: hidden");
+    // Fuera de las celdas se desplaza; en las celdas se pinta arrastrando.
+    expect(rule(".lt-step-grid")).toContain("touch-action: pan-x pan-y");
+    expect(rule(".lt-loop-editor .lt-step-grid .lt-step-cell")).toContain("touch-action: none");
+  });
+
   it("el kit no se oculta en el teléfono", () => {
     expect(rule(".lt-loop-editor--short .lt-loop-editor__identity .lt-loop-editor__kit")).not.toContain("display: none");
   });

@@ -514,11 +514,13 @@
 /* Teléfono: hoja bajo la barra superior (54 px), que sigue visible y se
    puede usar (play de la canción) con el editor abierto. Solo se aparta del
    notch a la izquierda, a la altura de la barra lateral; a la derecha llega
-   al borde como el resto de la app (el inset derecho dejaba ~47 px vacíos). */
+   al borde como el resto de la app (el inset derecho dejaba ~47 px vacíos).
+   Abajo también llega al borde: el inset inferior (barra de inicio del
+   iPhone) lo absorbe el relleno de la rejilla, no una franja negra. */
 .lt-rhythm-backdrop--short {
   top: calc(54px + var(--lt-safe-area-top, 0px));
   place-items: stretch;
-  padding: 0 0 var(--lt-safe-area-bottom, 0px) var(--lt-safe-area-left, 0px);
+  padding: 0 0 0 var(--lt-safe-area-left, 0px);
 }
 
 .lt-rhythm-backdrop > .lt-rhythm-card.lt-kit-editor {
@@ -768,7 +770,7 @@
 }
 
 .lt-loop-editor--short .lt-loop-editor__grid {
-  padding: 8px 12px;
+  padding: 8px 12px calc(8px + var(--lt-safe-area-bottom, 0px));
 }
 
 .lt-loop-editor--short .lt-loop-editor__play {
@@ -944,26 +946,39 @@
   padding: 8px 16px 0;
 }
 
+/* Dos scrolls perpendiculares: la rejilla solo en vertical y el lienzo solo
+   en horizontal. Con un único scroll en los dos ejes el dedo arrastraba en
+   diagonal y rebotaba en iOS; así cada gesto se queda en un eje. */
 .lt-loop-editor__grid {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
   padding: 12px 16px;
 }
 
 /* Sin tarjeta alrededor de la rejilla: el marco redondeado se comía sitio. */
 .lt-loop-editor__canvas {
-  display: inline-block;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
+/* Las celdas se comen el arrastre (pintar varias con el dedo); el resto de
+   la rejilla (nombres, regla, huecos) desplaza. Antes toda la rejilla tenía
+   touch-action none y solo se podía desplazar desde el relleno. */
 .lt-step-grid {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  touch-action: none;
+  width: max-content;
+  touch-action: pan-x pan-y;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.lt-loop-editor .lt-step-grid .lt-step-cell {
+  touch-action: none;
 }
 
 .lt-step-row {
@@ -979,6 +994,17 @@
   flex: 0 0 var(--lt-step-label);
   min-width: 0;
   font-size: 13px;
+}
+
+/* Los nombres se quedan a la vista al desplazar en horizontal; la sombra
+   tapa el hueco entre el nombre y las celdas. */
+.lt-loop-editor .lt-step-row__label {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  align-self: stretch;
+  background: var(--lt-rhythm-bg);
+  box-shadow: 10px 0 0 var(--lt-rhythm-bg);
 }
 
 .lt-step-row__name {
