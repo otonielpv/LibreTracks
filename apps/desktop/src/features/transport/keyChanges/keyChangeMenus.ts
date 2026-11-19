@@ -150,17 +150,30 @@ export function openKeyChangeMenu(
   );
 }
 
-/** Mueve un cambio de nota a `startSeconds` (arrastrar su muesca). */
+/** Mueve un cambio de nota a `startSeconds` (arrastrar su muesca). Con `copy`
+ * (Alt/Option al soltar) añade otro con la misma nota ahí y deja el original. */
 export function moveKeyChange(
   region: SongRegionSummary,
   changeId: string,
   startSeconds: number,
   deps: Pick<KeyChangeMenuDeps, "t" | "runAction" | "applyPlaybackSnapshot" | "setStatus">,
+  copy = false,
 ) {
   const clamped = Math.min(
     region.endSeconds - EDGE_SECONDS,
     Math.max(region.startSeconds + EDGE_SECONDS, startSeconds),
   );
+  const changes = region.keyChanges ?? [];
+  if (copy) {
+    const source = changes.find((candidate) => candidate.id === changeId);
+    if (!source) return Promise.resolve();
+    return commitKeyChanges(
+      region,
+      [...asInputs(changes), { startSeconds: clamped, key: source.key }],
+      deps.t("transport.keyChanges.added", { key: source.key, time: formatClock(clamped) }),
+      deps,
+    );
+  }
   return commitKeyChanges(
     region,
     asInputs(
@@ -176,8 +189,9 @@ export function moveKeyChange(
 export type KeyChangeCallbacks = {
   /** Toque, clic o clic derecho en una muesca (coordenadas de cliente). */
   openMenu: (clientX: number, clientY: number, regionId: string, changeId: string) => void;
-  /** Suelta un arrastre de muesca en `startSeconds` (segundos de vista). */
-  move: (regionId: string, changeId: string, startSeconds: number) => void;
+  /** Suelta un arrastre de muesca en `startSeconds` (segundos de vista);
+   * `copy` si Alt/Option estaba pulsado al soltar. */
+  move: (regionId: string, changeId: string, startSeconds: number, copy?: boolean) => void;
 };
 
 /** Lo que reciben las zonas táctiles de las muescas, instanciado una vez. */
@@ -193,9 +207,9 @@ export function createKeyChangeCallbacks(
         openKeyChangeMenu(region, changeId, clientToZoomedCoords(clientX, clientY), getDeps());
       }
     },
-    move: (regionId, changeId, startSeconds) => {
+    move: (regionId, changeId, startSeconds, copy) => {
       const region = regionById(regionId);
-      if (region) void moveKeyChange(region, changeId, startSeconds, getDeps());
+      if (region) void moveKeyChange(region, changeId, startSeconds, getDeps(), copy);
     },
   };
 }

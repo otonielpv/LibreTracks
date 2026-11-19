@@ -25,6 +25,7 @@ vi.mock("react-i18next", () => ({
 import { KeyChangeHotspots } from "./KeyChangeHotspots";
 import {
   keyChangeAtCursorAction,
+  moveKeyChange,
   openKeyChangeMenu,
   type KeyChangeMenuDeps,
 } from "./keyChangeMenus";
@@ -160,11 +161,26 @@ describe("key change menus", () => {
 });
 
 /** jsdom has no PointerEvent: fireEvent.pointer* would carry no clientX. */
-function pointer(target: Element, type: string, clientX: number) {
-  const event = new MouseEvent(type, { clientX, button: 0, bubbles: true });
+function pointer(target: Element, type: string, clientX: number, altKey = false) {
+  const event = new MouseEvent(type, { clientX, button: 0, bubbles: true, altKey });
   Object.defineProperty(event, "pointerId", { value: 1 });
   fireEvent(target, event);
 }
+
+describe("moveKeyChange", () => {
+  it("moves the change, or adds a copy with the same key and keeps it", async () => {
+    const { deps } = menuDeps();
+    await moveKeyChange(region(), "up", 300, deps);
+    expect(setSongRegionKeyChanges).toHaveBeenLastCalledWith("song", [
+      { id: "up", startSeconds: 300, key: "E" },
+    ]);
+    await moveKeyChange(region(), "up", 300, deps, true);
+    expect(setSongRegionKeyChanges).toHaveBeenLastCalledWith("song", [
+      { id: "up", startSeconds: 280, key: "E" },
+      { startSeconds: 300, key: "E" },
+    ]);
+  });
+});
 
 describe("KeyChangeHotspots", () => {
   const callbacks = () => ({ openMenu: vi.fn(), move: vi.fn() });
@@ -201,8 +217,18 @@ describe("KeyChangeHotspots", () => {
     pointer(button, "pointerup", 150);
     fireEvent.click(button);
     // 50 px at 10 px/s = 5 s later.
-    expect(cb.move).toHaveBeenCalledWith("song", "up", 285);
+    expect(cb.move).toHaveBeenCalledWith("song", "up", 285, false);
     expect(cb.openMenu).not.toHaveBeenCalled();
+  });
+
+  it("copies with Alt held at the drop and puts the original back", () => {
+    const { cb, button } = renderHotspots();
+    const leftBefore = (button as HTMLElement).style.left;
+    pointer(button, "pointerdown", 100);
+    pointer(button, "pointermove", 150);
+    pointer(button, "pointerup", 150, true);
+    expect(cb.move).toHaveBeenCalledWith("song", "up", 285, true);
+    expect((button as HTMLElement).style.left).toBe(leftBefore);
   });
 
   it("treats a press that barely moves as a tap", () => {

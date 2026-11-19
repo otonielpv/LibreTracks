@@ -22,6 +22,8 @@ type Drag = {
   initialSeconds: number;
   previewSeconds: number;
   initialLeftPx: number;
+  /** El `left` inline de antes del arrastre, para devolverlo tal cual. */
+  initialLeftStyle: string;
   moved: boolean;
 };
 
@@ -37,7 +39,8 @@ export type KeyChangeHotspotsProps = {
  * Las zonas táctiles de los cambios de nota, sobre la banda de la canción del
  * ruler. El canvas las PINTA (keyChanges/drawKeyChanges); esto sólo recibe el
  * puntero: un toque (o clic derecho) abre su menú y arrastrar la mueve, con el
- * mismo ajuste a la rejilla que las marcas (Shift lo salta).
+ * mismo ajuste a la rejilla que las marcas (Shift lo salta). Con Alt/Option al
+ * soltar deja una copia y el original no se mueve.
  *
  * Viven dentro del contenedor del ruler que ya lleva `translateX(-cameraX)`,
  * así que la posición es `segundos × px/s`, como las zonas de las regiones.
@@ -75,6 +78,7 @@ export function KeyChangeHotspots({
       initialSeconds: startSeconds,
       previewSeconds: startSeconds,
       initialLeftPx: event.currentTarget.offsetLeft,
+      initialLeftStyle: event.currentTarget.style.left,
       moved: false,
     };
     try {
@@ -117,10 +121,14 @@ export function KeyChangeHotspots({
     event.currentTarget.classList.remove("is-dragging");
     if (!drag.moved) return;
     swallowClickRef.current = true;
-    if (Math.abs(drag.previewSeconds - drag.initialSeconds) > 1e-6) {
-      callbacks.move(drag.regionId, drag.changeId, drag.previewSeconds);
-    } else {
-      event.currentTarget.style.left = `${drag.initialLeftPx}px`;
+    const changed = Math.abs(drag.previewSeconds - drag.initialSeconds) > 1e-6;
+    // Alt/Option al soltar copia: el original se queda donde estaba.
+    const copy = event.altKey;
+    if (changed) {
+      callbacks.move(drag.regionId, drag.changeId, drag.previewSeconds, copy);
+    }
+    if (!changed || copy) {
+      event.currentTarget.style.left = drag.initialLeftStyle;
     }
   }
 
