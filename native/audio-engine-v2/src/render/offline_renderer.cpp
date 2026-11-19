@@ -1,4 +1,5 @@
 #include <lt_engine/render/offline_renderer.h>
+#include <lt_engine/render/track_eq.h>
 #include <lt_engine/render/fade_curve.h>
 #include <lt_engine/core/denormals.h>
 
@@ -696,6 +697,21 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
         controls = effective_gain_pan(song, track);
     const auto [track_gain, track_pan] = controls;
 
+    // EQ de la pista (plan track-eq, D7): el MISMO render/track_eq.h que el
+    // mezclador en vivo, en el mismo punto (antes del modo de canal, la
+    // ganancia y el paneo). Arranca ya en sus parámetros: un render no empieza
+    // con un fundido. Es parte de la mezcla, así que sigue a apply_mixer: el
+    // análisis de una pista oye la fuente, no el EQ.
+    std::unique_ptr<TrackEq> eq;
+    if (apply_mixer && track.eq) {
+        eq = std::make_unique<TrackEq>();
+        eq->prepare(static_cast<double>(sample_rate));
+        eq->set_target(*track.eq);
+        eq->snap_to_target();
+        if (eq->is_transparent())
+            eq.reset();
+    }
+
     Scratch s;
     const Frame total = ctx.total_out;
     int block_index = 0;
@@ -741,7 +757,9 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
             any = true;
         }
 
-        if (any) {
+        // Con EQ, un bloque sin clips sigue pasando por el filtro (su cola),
+        // como en directo, donde la pista renderiza silencio y el EQ lo procesa.
+        if (any || eq) {
             // Same guard as the live mixer's phase A: a NaN/Inf block from the
             // DSP is silenced for this track instead of poisoning the render.
             sanitize_non_finite(s.bus_l.data(), n);
@@ -756,6 +774,8 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
             // una pista en Solo derecho tiene que oir solo el derecho, y la
             // bajada a channels=1 de write_wav llega despues (Left a mono = L,
             // no (L+R)/2). Ganancia, paneo y envolvente siguen tras apply_mixer.
+            if (eq)
+                eq->process(s.bus_l.data(), s.bus_r.data(), static_cast<std::size_t>(n));
             place_track_source_block(track.channel_mode, s.bus_l.data(), s.bus_r.data(), n);
             float left_gain = pan_left_gain(track_pan);
             float right_gain = pan_right_gain(track_pan);

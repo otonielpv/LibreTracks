@@ -4,6 +4,8 @@
 
 #include <lt_engine/render/mixer.h>
 #include <lt_engine/render/offline_renderer.h>
+#include <lt_engine/render/track_eq.h>
+#include <lt_engine/session/session_adapter.h>
 #include <lt_engine/scheduler/jump_scheduler.h>
 #include <lt_engine/transport/transport_clock.h>
 #include <lt_engine/sources/audio_decoder.h>
@@ -21,6 +23,9 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+// Plan track-eq 04-C3: hash del render offline anterior al paso.
+#define LT_OFFLINE_EQ_BASELINE_HASH 4235357221005358289ull  // render de 359536da
 
 using namespace lt;
 using json = nlohmann::json;
@@ -969,4 +974,156 @@ TEST_CASE("offline render: the automation's pad sounds from its cue, in its own 
     CHECK(peak_in(pad, 0.0, 0.99) < 1e-6f);
     CHECK(pad.at(static_cast<Frame>(2.5 * 48000), 0) == doctest::Approx(0.125f).epsilon(1e-3));
     CHECK(peak_in(read_wav(dir.file("tracks.wav")), 0.0, 3.0) < 1e-6f);
+}
+
+// ---------------------------------------------------------------------------
+// Plan track-eq, paso 04: el render offline aplica el EQ igual que el directo.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+json peak_eq_json(double hz, double gain_db, double q) {
+    return {{"enabled", true},
+            {"bands", json::array({{{"enabled", true}, {"kind", "peak"}, {"frequencyHz", hz},
+                                    {"gainDb", gain_db}, {"q", q}, {"slope", 12}}})}};
+}
+
+std::vector<float> left_of(const Decoded& d, Frame from, Frame to) {
+    std::vector<float> out;
+    for (Frame f = from; f < to; ++f) out.push_back(d.at(f, 0));
+    return out;
+}
+
+std::uint64_t fnv_hash(const std::vector<float>& samples) {
+    std::uint64_t hash = 1469598103934665603ull;
+    for (float sample : samples) {
+        std::uint32_t bits;
+        std::memcpy(&bits, &sample, sizeof bits);
+        for (int byte = 0; byte < 4; ++byte) {
+            hash ^= (bits >> (byte * 8)) & 0xffu;
+            hash *= 1099511628211ull;
+        }
+    }
+    return hash;
+}
+
+} // namespace
+
+TEST_CASE("offline render eq C1: the same session with eq matches the live mixer sample by sample") {
+    constexpr int kSR = 48000;
+    constexpr int kBlock = 512;
+    constexpr Frame kFrames = kSR;
+    TempDir dir;
+    const std::string file = dir.file("tone.wav");
+    const auto source = stereo_sine_at(kFrames, 700.0, kSR);
+    write_float_wav(file, source, 2, kSR);
+
+    auto compare = [&](bool with_eq) {
+        json track = track_json("t", 0.8, 0.0);
+        if (with_eq) track["eq"] = peak_eq_json(700.0, 6.0, 1.5);
+        const json song = song_json(json::array({track}),
+                                    json::array({clip_json("c", "t", file, 0.0, 1.0)}));
+        auto req = base_request(song, 0.0, 1.0);
+        req.outputs.push_back({dir.file("mix.wav"), {"t"}});
+        REQUIRE(render_offline(req).is_ok());
+        const auto offline = read_wav(dir.file("mix.wav"));
+
+        auto parsed = session_from_project_json(song.dump(), kSR);
+        REQUIRE(parsed.is_ok());
+        auto session = std::make_shared<const Session>(parsed.take());
+        REQUIRE(session->songs[0].tracks[0].eq.has_value() == with_eq);
+        SourceManager sm;
+        const Id source_id = session->songs[0].tracks[0].clips[0].source_id;
+        sm.register_source(source_id, "");
+        REQUIRE(sm.store_decoded_source(source_id, source, 2, kSR, kFrames).is_ok());
+        TransportClock clock(kSR);
+        JumpScheduler scheduler;
+        Mixer mixer(session, &sm, &clock, &scheduler);
+        mixer.prepare_render_resources(kBlock);
+        mixer.set_active_output_channels({0, 1});
+        clock.play();
+        clock.clear_pending_start();
+        std::vector<float> l(kBlock), r(kBlock), live;
+        float* out[2] = {l.data(), r.data()};
+        for (int b = 0; b < 80; ++b) {
+            std::fill(l.begin(), l.end(), 0.0f);
+            std::fill(r.begin(), r.end(), 0.0f);
+            mixer.render(out, 2, kBlock, clock.sample_rate());
+            live.insert(live.end(), l.begin(), l.end());
+        }
+        // Desde el bloque 8: los dos caminos ya están en régimen.
+        float worst = 0.0f;
+        for (std::size_t i = kBlock * 8; i < live.size(); ++i)
+            worst = std::max(worst, std::abs(live[i] - offline.at(static_cast<Frame>(i), 0)));
+        return worst;
+    };
+    const float without_eq = compare(false);
+    const float with_eq = compare(true);
+    CAPTURE(without_eq);
+    CAPTURE(with_eq);
+    // Sin EQ, los dos caminos coinciden hoy bit a bit; con EQ también.
+    CHECK(without_eq == 0.0f);
+    CHECK(with_eq <= 1e-6f);
+}
+
+TEST_CASE("offline render eq C2: the first block is already equalised, with no fade in") {
+    constexpr int kSR = 48000;
+    TempDir dir;
+    const std::string file = dir.file("tone.wav");
+    // 0,1 de pico: con +12 dB queda en 0,4, lejos del limitador de salida.
+    auto source = stereo_sine_at(kSR, 1000.0, kSR);
+    for (auto& v : source) v *= 0.2f;
+    write_float_wav(file, source, 2, kSR);
+    json track = track_json("t");
+    track["eq"] = peak_eq_json(1000.0, 12.0, 1.0);
+    const json song = song_json(json::array({track}),
+                                json::array({clip_json("c", "t", file, 0.0, 1.0)}));
+    auto req = base_request(song, 0.0, 1.0);
+    req.outputs.push_back({dir.file("mix.wav"), {"t"}});
+    REQUIRE(render_offline(req).is_ok());
+    const auto out = read_wav(dir.file("mix.wav"));
+
+    // Lo esperado: el mismo EQ ya asentado procesando la fuente desde cero.
+    TrackEqParams params;
+    params.enabled = true;
+    params.band_count = 1;
+    params.bands[0] = {true, EqBandKind::Peak, 1000.0f, 12.0f, 1.0f, 12};
+    TrackEq eq;
+    eq.prepare(kSR);
+    eq.set_target(params);
+    eq.snap_to_target();
+    std::vector<float> el(1024), er(1024);
+    for (std::size_t f = 0; f < el.size(); ++f) {
+        el[f] = source[f * 2];
+        er[f] = source[f * 2 + 1];
+    }
+    eq.process(el.data(), er.data(), el.size());
+    float worst = 0.0f;
+    for (std::size_t f = 0; f < el.size(); ++f)
+        worst = std::max(worst, std::abs(el[f] - out.at(static_cast<Frame>(f), 0)));
+    CAPTURE(worst);
+    CHECK(worst <= 1e-6f);
+}
+
+// Hash grabado con el render offline anterior al paso 04 (commit 359536da).
+TEST_CASE("offline render eq C3: a session without eq renders exactly as before the eq existed") {
+    constexpr int kSR = 48000;
+    TempDir dir;
+    const std::string a = dir.file("a.wav");
+    const std::string b = dir.file("b.wav");
+    write_float_wav(a, stereo_sine_at(kSR * 2, 330.0, kSR), 2, kSR);
+    write_float_wav(b, stereo_sine_at(kSR * 2, 95.0, kSR), 2, kSR);
+    json ta = track_json("ta", 0.7, -0.4);
+    json tb = track_json("tb", 0.5, 0.6);
+    tb["channelMode"] = "mono";
+    const json song = song_json(json::array({ta, tb}),
+                                json::array({clip_json("ca", "ta", a, 0.0, 2.0),
+                                             clip_json("cb", "tb", b, 0.5, 1.5)}));
+    auto req = base_request(song, 0.0, 2.0);
+    req.outputs.push_back({dir.file("mix.wav"), {"ta", "tb"}});
+    REQUIRE(render_offline(req).is_ok());
+    const auto out = read_wav(dir.file("mix.wav"));
+    const std::uint64_t hash = fnv_hash(out.interleaved);
+    MESSAGE("offline baseline hash = " << hash);
+    CHECK(hash == LT_OFFLINE_EQ_BASELINE_HASH);
 }
