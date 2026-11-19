@@ -5,6 +5,7 @@ import {
   MultiTrackMixControls,
   type MultiTrackMixActions,
 } from "../tracks/MultiTrackMixControls";
+import { TrackEqButton } from "../eq/TrackEqButton";
 import { useRhythmStore } from "../rhythm/rhythmStore";
 import { useTimelineUIStore } from "../uiStore";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
@@ -257,6 +258,14 @@ export function MobileSelectionActionBar({
             tune
           </span>
         </button>
+      ) : null}
+      {mixTracks.length > 0 ? (
+        // Con varias pistas, deshabilitado en v1: el EQ es por pista.
+        <TrackEqButton
+          trackId={mixTracks[0].id}
+          className="lt-mobile-selection-action"
+          disabled={mixTracks.length > 1}
+        />
       ) : null}
       <button
         type="button"

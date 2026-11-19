@@ -11,6 +11,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
+
+import { TrackEqButton } from "../eq/TrackEqButton";
 import { CompactMidiStrip, type CompactMidiStripHandlers } from "./CompactMidiStrip";
 import { NetworkControls } from "../../network/NetworkControls";
 
@@ -853,6 +855,7 @@ function CompactMixerStripComponent({
         >
           T
         </button>
+        <TrackEqButton trackId={track.id} className="lt-compact-mixer-toggle is-eq" />
       </div>
 
       {/* Vertical fader + post-fader meter side by side, the way Ableton

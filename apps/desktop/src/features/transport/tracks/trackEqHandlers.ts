@@ -38,6 +38,16 @@ export type TrackEqHandlerDeps = {
 
 export type TrackEqHandlers = ReturnType<typeof createTrackEqHandlers>;
 
+/**
+ * Abrir el editor de una pista. Es lo único que necesitan los botones de las
+ * vistas, y no depende de nada del monolito: vive aquí para que todas llamen
+ * a la misma acción. Solo pistas de audio.
+ */
+export function openTrackEq(track: Pick<TrackSummary, "id" | "kind"> | null) {
+  if (!track || track.kind !== "audio") return;
+  useTrackEqStore.getState().setOpenTrackId(track.id);
+}
+
 export function createTrackEqHandlers(deps: TrackEqHandlerDeps) {
   const {
     runAction,
@@ -49,11 +59,7 @@ export function createTrackEqHandlers(deps: TrackEqHandlerDeps) {
     commitTrackEqChange,
   } = deps;
 
-  const open = (trackId: string) => {
-    const track = findTrack(trackId);
-    if (!track || track.kind !== "audio") return;
-    useTrackEqStore.getState().setOpenTrackId(trackId);
-  };
+  const open = (trackId: string) => openTrackEq(findTrack(trackId));
 
   const close = () => useTrackEqStore.getState().setOpenTrackId(null);
 

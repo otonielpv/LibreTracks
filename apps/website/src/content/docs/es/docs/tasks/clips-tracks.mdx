@@ -176,3 +176,26 @@ El click y la guía se quedan en la misma pista: al
 como guía, y LibreTracks los separa para leer cada uno.
 
 La opción sale desactivada si la pista no tiene ningún audio estéreo.
+
+## Ecualizador de pista
+
+Cada pista de audio tiene un ecualizador paramétrico de hasta 6 bandas. Se
+abre con el botón **EQ** de la pista: en la cabecera de la vista de
+arreglos, en la tira del mezclador de la vista compacta y del Setlist, y en
+el móvil desde la barra de selección con una pista seleccionada. El botón se
+ilumina cuando el ecualizador está encendido y alguna banda cambia algo.
+
+- **Nodos**: arrastra un nodo en horizontal para cambiar la frecuencia y en
+  vertical para la ganancia. La rueda del ratón (o pellizcar con dos dedos en
+  el móvil) cambia la Q, es decir, lo ancha que es la banda. Con
+  <kbd>Mayús</kbd> el ajuste es más fino. Doble clic enciende o apaga la banda.
+- **Tipos de banda**: corte de graves y de agudos (12 o 24 dB/oct), shelf de
+  graves y de agudos, campana y notch. Se eligen en la tira de bandas, donde
+  también puedes escribir la frecuencia, la ganancia y la Q.
+- **Bypass** apaga el ecualizador entero para comparar; **Reiniciar** vuelve
+  a las bandas de partida y **Quitar EQ** lo elimina de la pista.
+
+Suena antes del volumen y del panorama, igual en directo, al
+renderizar audio y al nivelar canciones, y viaja con la pista en las sesiones
+y los paquetes de canción. Cada cambio se deshace con
+<kbd>Ctrl</kbd>+<kbd>Z</kbd>.

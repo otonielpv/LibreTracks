@@ -174,3 +174,25 @@ The click and the guide stay on the same track: when you
 as the guide, and LibreTracks separates them to read each one.
 
 The option is greyed out if the track has no stereo audio.
+
+## Track equalizer
+
+Every audio track has a parametric equalizer with up to 6 bands. Open it with
+the track's **EQ** button: in the arrangement view's track header, on the
+mixer strip of the compact and Setlist views, and on a phone from the
+selection bar with one track selected. The button lights up when the
+equalizer is on and some band changes something.
+
+- **Nodes**: drag a node sideways to change the frequency and up or down for
+  the gain. The mouse wheel (or a two finger pinch on a phone) changes the Q,
+  that is, how wide the band is. Hold <kbd>Shift</kbd> for finer moves.
+  Double click turns the band on or off.
+- **Band types**: low and high cut (12 or 24 dB/oct), low and high shelf,
+  bell and notch. Pick them in the band strip, where you can also type the
+  frequency, gain and Q.
+- **Bypass** switches the whole equalizer off to compare; **Reset** goes back
+  to the starting bands and **Remove EQ** takes it off the track.
+
+It works before volume and pan, the same live, when rendering audio and when
+levelling songs, and it travels with the track in sessions and song packages.
+Every change can be undone with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.

@@ -11,6 +11,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { TrackMixControls } from "./TrackMixControls";
+import { TrackEqButton } from "../eq/TrackEqButton";
 import { TrackMeter } from "./TrackMeter";
 import type { TrackChannelMode, TrackKind } from "../desktopApi";
 import { useTransportStore } from "../store";
@@ -328,6 +329,7 @@ function TrackHeaderItemComponent({
               >
                 T
               </button>
+              <TrackEqButton trackId={trackId} className="lt-track-toggle-eq" />
             </div>
             <TrackMixControls
               trackId={trackId}

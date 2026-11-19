@@ -343,6 +343,7 @@ import {
   type LibraryDragDropDeps,
 } from "./library/libraryDragDrop";
 import { createColorHandlers } from "./colors/colorHandlers";
+import { TrackEqEditorHost } from "./eq/TrackEqEditorHost";
 import { useClipFadeDrag } from "./clipFades/useClipFadeDrag";
 import {
   TIMELINE_COLOR_PRESETS,
@@ -7778,6 +7779,12 @@ export function TransportPanelContent() {
               onUpsert={mixSceneHandlers.upsert}
               onDelete={mixSceneHandlers.remove}
               onReorder={mixSceneHandlers.reorder}
+            />
+
+            <TrackEqEditorHost
+              runAction={runAction}
+              applyPlaybackSnapshot={applyPlaybackSnapshot}
+              optimisticallyAppliedRevisionsRef={optimisticallyAppliedRevisionsRef}
             />
 
             <TimelineContextMenus

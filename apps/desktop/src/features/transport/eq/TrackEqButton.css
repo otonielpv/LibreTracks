@@ -1,0 +1,18 @@
+/* Botón «EQ» de una pista (plan track-eq): hereda el aspecto del grupo de
+   botones de cada vista; aquí solo el sitio que ocupa y el encendido. */
+
+.lt-track-toggle-group button.lt-track-toggle-eq {
+  grid-column: 1 / span 2;
+  width: auto;
+}
+
+.lt-compact-mixer-toggle.is-eq.is-active {
+  background: rgb(87 241 219 / 0.85);
+  border-color: rgb(87 241 219 / 0.85);
+  color: #0e0e0e;
+}
+
+.lt-mobile-selection-action.lt-track-eq-button.is-active {
+  color: #57f1db;
+  border-color: rgb(87 241 219 / 0.6);
+}
