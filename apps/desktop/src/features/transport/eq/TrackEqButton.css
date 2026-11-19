@@ -1,9 +1,21 @@
 /* Botón «EQ» de una pista (plan track-eq): hereda el aspecto del grupo de
    botones de cada vista; aquí solo el sitio que ocupa y el encendido. */
 
+/* En la cabecera DAW comparte fila con la T (cada uno una columna): no
+   añade fila, así que el alto de la pista no cambia. */
+.lt-track-toggle-group:has(.lt-track-toggle-eq) button.lt-track-toggle-transpose {
+  grid-column: auto;
+}
+
 .lt-track-toggle-group button.lt-track-toggle-eq {
-  grid-column: 1 / span 2;
-  width: auto;
+  font-size: 9px;
+  letter-spacing: -0.02em;
+}
+
+/* En el panel de pista del móvil sería una fila más: allí el EQ se abre
+   desde la barra de selección. */
+.lt-mobile .lt-mobile-track-row-panel .lt-track-toggle-group button.lt-track-toggle-eq {
+  display: none;
 }
 
 .lt-compact-mixer-toggle.is-eq.is-active {

@@ -539,14 +539,16 @@ function BandStrip({
 }) {
   const { t } = useTranslation();
   return (
-    <fieldset
+    <div
+      role="group"
+      aria-label={t("eq.band", { number: index + 1 })}
       className={`lt-eq-band lt-eq-color-${index + 1} ${band.enabled ? "" : "is-off"} ${
         active ? "is-active" : ""
       }`}
       onFocus={onSelect}
       onClick={onSelect}
     >
-      <legend className="lt-eq-band-head">
+      <div className="lt-eq-band-head">
         <label className="lt-eq-band-toggle">
           <input
             type="checkbox"
@@ -559,18 +561,19 @@ function BandStrip({
         <svg className="lt-eq-kind-icon" viewBox="0 0 24 18" aria-hidden="true">
           <path d={KIND_ICONS[band.kind]} />
         </svg>
-        <select
-          aria-label={t("eq.kindOf", { number: index + 1 })}
-          value={band.kind}
-          onChange={(event) => onPatch({ kind: event.target.value as EqBandKind })}
-        >
-          {EQ_BAND_KINDS.map((kind) => (
-            <option key={kind} value={kind}>
-              {t(`eq.kind.${kind}`)}
-            </option>
-          ))}
-        </select>
-      </legend>
+      </div>
+      <select
+        className="lt-eq-select"
+        aria-label={t("eq.kindOf", { number: index + 1 })}
+        value={band.kind}
+        onChange={(event) => onPatch({ kind: event.target.value as EqBandKind })}
+      >
+        {EQ_BAND_KINDS.map((kind) => (
+          <option key={kind} value={kind}>
+            {t(`eq.kind.${kind}`)}
+          </option>
+        ))}
+      </select>
       <NumberField
         label={t("eq.frequencyOf", { number: index + 1 })}
         value={band.frequencyHz}
@@ -596,6 +599,7 @@ function BandStrip({
       />
       {isCut(band.kind) ? (
         <select
+          className="lt-eq-select"
           aria-label={t("eq.slopeOf", { number: index + 1 })}
           value={band.slope}
           onChange={(event) => onPatch({ slope: Number(event.target.value) === 24 ? 24 : 12 })}
@@ -604,7 +608,7 @@ function BandStrip({
           <option value={24}>24 dB/oct</option>
         </select>
       ) : null}
-    </fieldset>
+    </div>
   );
 }
 
