@@ -68,6 +68,7 @@ function setup(overrides: Partial<TrackHeaderHandlerDeps> = {}) {
   const deps: TrackHeaderHandlerDeps = {
     findTrack: (trackId) => tracks[trackId] ?? null,
     getVisibleTrackIds: () => ["t1", "t2", "t3"],
+    getAllTracks: () => Object.values(tracks),
     getSelectedTrackIds: () => selected,
     selectTrack: vi.fn((ids: string[]) => {
       selected = ids;
@@ -324,6 +325,34 @@ describe("createTrackHeaderHandlers", () => {
       expect(deps.patchTrackOptimisticMix).toHaveBeenCalledWith("t1", {
         solo: false,
       });
+    });
+
+    it("clear solo unsolos every soloed track, hidden ones included", async () => {
+      const all = [
+        track("t1", { solo: true }),
+        track("t2"),
+        track("hidden", { solo: true }),
+      ];
+      const { handlers, deps } = setup({
+        getAllTracks: () => all,
+        findTrack: (id) => all.find((t) => t.id === id) ?? null,
+      });
+      handlers.handleClearAllSolo();
+
+      expect(deps.patchTrackOptimisticMix).toHaveBeenCalledTimes(2);
+      expect(deps.patchTrackOptimisticMix).toHaveBeenCalledWith("t1", { solo: false });
+      expect(deps.patchTrackOptimisticMix).toHaveBeenCalledWith("hidden", { solo: false });
+      await vi.waitFor(() => {
+        expect(deps.persistTrackMix).toHaveBeenCalledWith("hidden", ["solo"]);
+      });
+    });
+
+    it("clear solo with nothing soloed does nothing", () => {
+      const { handlers, deps } = setup();
+      handlers.handleClearAllSolo();
+
+      expect(deps.patchTrackOptimisticMix).not.toHaveBeenCalled();
+      expect(deps.runAction).not.toHaveBeenCalled();
     });
 
     it("mute/solo on a missing track is a no-op", () => {

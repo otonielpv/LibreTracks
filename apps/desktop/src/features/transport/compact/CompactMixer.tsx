@@ -61,6 +61,8 @@ export type CompactMixerHandlers = {
   onPanChange: (trackId: string, nextPan: number) => void;
   onCommitPan: (trackId: string) => void;
   onAudioToChange: (trackId: string, nextAudioTo: string) => void;
+  /** Quita el solo de todas las pistas (botón "Quitar solos" de cada vista). */
+  onClearSolo?: () => void;
 };
 
 type CompactMixerProps = {

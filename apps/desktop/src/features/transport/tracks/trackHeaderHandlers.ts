@@ -33,6 +33,8 @@ export type TrackHeaderHandlerDeps = {
   findTrack: (trackId: string) => TrackSummary | null;
   /** Ordered visible track ids, used to resolve shift-click ranges. */
   getVisibleTrackIds: () => string[];
+  /** Every track of the session, folded folders included (clear solo). */
+  getAllTracks: () => TrackSummary[];
   getSelectedTrackIds: () => string[];
   selectTrack: (trackIds: string[]) => void;
   /** Resolve a track's effective mix, optimistic values taking precedence. */
@@ -99,6 +101,7 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
   const {
     findTrack,
     getVisibleTrackIds,
+    getAllTracks,
     getSelectedTrackIds,
     selectTrack,
     resolveTrackMix,
@@ -350,6 +353,18 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
     );
   };
 
+  /**
+   * Quita el solo de todas las pistas de la sesion, tambien las ocultas en una
+   * carpeta plegada o fuera del filtro de la cancion: el solo de una pista que
+   * no se ve sigue enmudeciendo al resto.
+   */
+  const handleClearAllSolo = () => {
+    const soloed = getAllTracks()
+      .filter((track) => resolveTrackMix(track, track.id).solo)
+      .map((track) => track.id);
+    applyAbsoluteMix(soloed, "solo", false);
+  };
+
   const handleTrackHeaderVolumeChange = (
     trackId: string,
     nextVolume: number,
@@ -564,6 +579,7 @@ export function createTrackHeaderHandlers(deps: TrackHeaderHandlerDeps) {
     handleTrackHeaderFolderToggle,
     handleTrackHeaderMuteToggle,
     handleTrackHeaderSoloToggle,
+    handleClearAllSolo,
     handleTrackHeaderVolumeChange,
     handleTrackHeaderVolumeCommit,
     handleTrackHeaderPanChange,

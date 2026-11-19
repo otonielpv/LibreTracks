@@ -22,6 +22,7 @@ import { useTransportStore } from "../store";
 import { SongMasterMeter } from "../tracks/TrackMeter";
 import { isMobileApp } from "../desktopApi";
 import { MobileTrackSelectionControls } from "../mobile/MobileTrackSelectionControls";
+import { ClearSoloButton } from "../tracks/ClearSoloButton";
 import { SetlistConsoleStrip } from "./SetlistConsoleStrip";
 import { useSetlistStore, type SetlistBottomTab } from "./setlistStore";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
@@ -260,6 +261,16 @@ function SetlistMixerComponent({
   return (
     <div className={`lt-setlist-mixer is-${layout}`} data-lt-tour={TOUR_TARGETS.setlistMixer}>
       <div className="lt-setlist-mixer-header">
+        {/* Móvil: el rail hace scroll y abajo quedaba fuera de la vista. Arriba
+            del todo, y sólo mientras haya un solo que quitar. */}
+        {short && mixerHandlers.onClearSolo ? (
+          <ClearSoloButton
+            placement="setlist-rail"
+            showRailLabel
+            hideWhenInactive
+            onClear={mixerHandlers.onClearSolo}
+          />
+        ) : null}
         {viewButtons ? (
           <>
             {viewButtons}
@@ -328,6 +339,12 @@ function SetlistMixerComponent({
             <span className="lt-setlist-mixer-action-label">{t("setlistView.mixer.filter")}</span>
             {railLabel("setlistView.mixer.rail.filter")}
           </button>
+        ) : null}
+        {tab === "tracks" && !short && mixerHandlers.onClearSolo ? (
+          <ClearSoloButton
+            placement="setlist-rail"
+            onClear={mixerHandlers.onClearSolo}
+          />
         ) : null}
         {tab === "tracks" || short ? (
           <button

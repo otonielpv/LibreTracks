@@ -31,6 +31,7 @@ import {
 } from "./CompactMixer";
 import { CompactSongHeader } from "./CompactSongHeader";
 import { MobileTrackSelectionControls } from "../mobile/MobileTrackSelectionControls";
+import { ClearSoloButton } from "../tracks/ClearSoloButton";
 import { columnDensityClass, useColumnResize } from "./useColumnResize";
 import { useNearbySongColumns } from "./useNearbySongColumns";
 import { useSongColumnHandlers } from "./useSongColumnHandlers";
@@ -476,11 +477,21 @@ function CompactViewComponent({
               : t("transport.shell.showMixer")}
           </button>
           {isMixerVisible ? <MobileTrackSelectionControls /> : null}
+          {/* Fuera del pliegue, como las escenas: un solo olvidado se quita
+              sin abrir el mixer. */}
+          {mixerHandlers.onClearSolo ? (
+            <ClearSoloButton onClear={mixerHandlers.onClearSolo} />
+          ) : null}
           {/* Outside the fold: a scene is one tap away with the mixer hidden. */}
           <SceneBar className="lt-compact-scenes" menuClassName="lt-compact-mixer-toggle" />
         </div>
       ) : (
-        <SceneBar className="lt-compact-scenes" menuClassName="lt-compact-mixer-toggle" />
+        <div className="lt-compact-mixer-desk-bar">
+          {mixerHandlers.onClearSolo ? (
+            <ClearSoloButton onClear={mixerHandlers.onClearSolo} />
+          ) : null}
+          <SceneBar className="lt-compact-scenes" menuClassName="lt-compact-mixer-toggle" />
+        </div>
       )}
       {/* Ritmo (plan drum-loops): se abre con el botón de la barra superior. */}
       <RhythmDock

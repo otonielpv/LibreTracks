@@ -25,6 +25,7 @@ import { useHeaderAreaSelection } from "../mobile/useAreaSelection";
 import { useRenderCounter } from "../perf/useRenderCounter";
 import { renderTrackRows } from "./trackRowWindowing";
 import { useTrackRowWindow } from "./useTrackRowWindow";
+import { ClearSoloButton } from "./ClearSoloButton";
 import { NetworkControls } from "../../network/NetworkControls";
 
 const TRACK_HEADER_CONTROL_SELECTOR =
@@ -72,6 +73,8 @@ type TrackHeadersPaneProps = {
   onResetRowHeight: (trackId: string) => void;
   onToggleMute: (trackId: string) => void;
   onToggleSolo: (trackId: string) => void;
+  /** Quita todos los solos; el botón vive junto a la etiqueta "Tracks". */
+  onClearSolo?: () => void;
   onToggleTranspose: (trackId: string) => void;
   onVolumeChange: (trackId: string, nextVolume: number) => void;
   onCommitVolume: (trackId: string) => void;
@@ -106,6 +109,7 @@ export function TrackHeadersPane({
   onResetRowHeight,
   onToggleMute,
   onToggleSolo,
+  onClearSolo,
   onToggleTranspose,
   onVolumeChange,
   onCommitVolume,
@@ -204,7 +208,12 @@ export function TrackHeadersPane({
         {headerActions ? (
           <div className="lt-ruler-header-actions">{headerActions}</div>
         ) : null}
-        <span>Tracks</span>
+        <div className="lt-ruler-header-label">
+          <span>Tracks</span>
+          {hasSong && onClearSolo ? (
+            <ClearSoloButton onClear={onClearSolo} />
+          ) : null}
+        </div>
       </div>
       <NetworkControls permission="edit"><div
         className="lt-track-headers-list"

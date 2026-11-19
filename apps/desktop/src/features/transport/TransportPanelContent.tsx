@@ -5637,6 +5637,7 @@ export function TransportPanelContent() {
     handleTrackHeaderFolderToggle,
     handleTrackHeaderMuteToggle,
     handleTrackHeaderSoloToggle,
+    handleClearAllSolo,
     handleTrackHeaderVolumeChange,
     handleTrackHeaderVolumeCommit,
     handleTrackHeaderPanChange,
@@ -5650,6 +5651,7 @@ export function TransportPanelContent() {
         findTrack: (trackId) => findTrack(songRef.current, trackId),
         getVisibleTrackIds: () =>
           visibleTracksRef.current.map((track) => track.id),
+        getAllTracks: () => songRef.current?.tracks ?? [],
         getSelectedTrackIds: () =>
           useTimelineUIStore.getState().selectedTrackIds,
         selectTrack,
@@ -5700,8 +5702,10 @@ export function TransportPanelContent() {
       onPanChange: handleTrackHeaderPanChange,
       onCommitPan: handleTrackHeaderPanCommit,
       onAudioToChange: handleTrackHeaderAudioToChange,
+      onClearSolo: handleClearAllSolo,
     }),
     [
+      handleClearAllSolo,
       handleTrackHeaderAudioToChange, handleTrackHeaderMuteToggle,
       handleTrackHeaderPanChange, handleTrackHeaderPanCommit,
       handleTrackHeaderSoloToggle, handleTrackHeaderTransposeToggle,
@@ -7182,6 +7186,7 @@ export function TransportPanelContent() {
                           onResetRowHeight={resetRowHeight}
                           onToggleMute={handleTrackHeaderMuteToggle}
                           onToggleSolo={handleTrackHeaderSoloToggle}
+                          onClearSolo={handleClearAllSolo}
                           onToggleTranspose={handleTrackHeaderTransposeToggle}
                           onVolumeChange={handleTrackHeaderVolumeChange}
                           onCommitVolume={handleTrackHeaderVolumeCommit}
