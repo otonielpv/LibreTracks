@@ -52,6 +52,7 @@ fn clip(id: &str, track: &str, file: &str, rel: f64, duration: f64) -> Clip {
 
 fn track(id: &str, kind: TrackKind) -> Track {
     Track {
+        eq: None,
         id: id.into(),
         name: id.into(),
         kind,

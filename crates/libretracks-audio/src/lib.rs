@@ -1136,6 +1136,7 @@ mod tests {
             }],
             tracks: vec![
                 Track {
+                    eq: None,
                     id: "folder_monitor".into(),
                     name: "Click + Guide".into(),
                     kind: TrackKind::Folder,
@@ -1158,6 +1159,7 @@ mod tests {
                     song_region_id: None,
                 },
                 Track {
+                    eq: None,
                     id: "track_click".into(),
                     name: "Click".into(),
                     kind: TrackKind::Audio,
@@ -1180,6 +1182,7 @@ mod tests {
                     song_region_id: None,
                 },
                 Track {
+                    eq: None,
                     id: "folder_main".into(),
                     name: "Drums + Bass".into(),
                     kind: TrackKind::Folder,
@@ -1202,6 +1205,7 @@ mod tests {
                     song_region_id: None,
                 },
                 Track {
+                    eq: None,
                     id: "track_drums".into(),
                     name: "Drums".into(),
                     kind: TrackKind::Audio,
@@ -1372,6 +1376,7 @@ mod tests {
                 },
             ],
             tracks: vec![Track {
+                eq: None,
                 id: "track_main".into(),
                 name: "Main".into(),
                 kind: TrackKind::Audio,

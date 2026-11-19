@@ -768,6 +768,7 @@ fn plain_track(
     region: Option<&str>,
 ) -> Track {
     Track {
+        eq: None,
         id: id.into(),
         name: name.into(),
         kind,

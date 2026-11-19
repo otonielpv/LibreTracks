@@ -1,0 +1,13 @@
+{
+  "trackEq": {
+    "enabled": true,
+    "bands": [
+      { "enabled": true, "kind": "lowCut", "frequencyHz": 35.0, "gainDb": 0.0, "q": 0.71, "slope": 24 },
+      { "enabled": true, "kind": "lowShelf", "frequencyHz": 100.0, "gainDb": 3.5, "q": 0.71, "slope": 12 },
+      { "enabled": false, "kind": "peak", "frequencyHz": 400.0, "gainDb": -4.0, "q": 2.2, "slope": 12 },
+      { "enabled": true, "kind": "notch", "frequencyHz": 2900.0, "gainDb": 0.0, "q": 6.0, "slope": 12 },
+      { "enabled": true, "kind": "highShelf", "frequencyHz": 8000.0, "gainDb": 2.0, "q": 0.5, "slope": 12 },
+      { "enabled": true, "kind": "highCut", "frequencyHz": 16000.0, "gainDb": 0.0, "q": 0.9, "slope": 12 }
+    ]
+  }
+}

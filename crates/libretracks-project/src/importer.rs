@@ -270,6 +270,7 @@ pub fn import_wav_song(
         tracks: imported_files
             .iter()
             .map(|file| Track {
+                eq: None,
                 id: file.track_id.clone(),
                 name: file.track_name.clone(),
                 kind: TrackKind::Audio,
@@ -364,6 +365,7 @@ pub fn append_wav_files_to_song(
         let clip_id = unique_entity_id("clip", &track_slug, &mut used_clip_ids);
 
         next_song.tracks.push(Track {
+            eq: None,
             id: track_id.clone(),
             name: humanize_track_name(stem),
             kind: TrackKind::Audio,

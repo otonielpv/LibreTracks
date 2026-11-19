@@ -83,6 +83,7 @@ mod tests {
 
     fn track(id: &str, kind: TrackKind) -> Track {
         Track {
+            eq: None,
             id: id.to_string(),
             name: id.to_string(),
             kind,

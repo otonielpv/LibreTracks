@@ -705,6 +705,7 @@ mod tests {
             time_signature_markers: vec![],
             regions: vec![],
             tracks: vec![Track {
+                eq: None,
                 id: "t1".into(),
                 name: "T1".into(),
                 kind: TrackKind::Audio,
@@ -1019,6 +1020,7 @@ mod tests {
     fn folder_collapsed_state_round_trips_through_save_and_load() {
         let mut song = base_song();
         song.tracks.push(libretracks_core::Track {
+            eq: None,
             id: "folder1".into(),
             name: "Rhythm".into(),
             kind: TrackKind::Folder,
@@ -1165,6 +1167,7 @@ mod tests {
     fn midi_clips_round_trip_through_save_and_load() {
         let mut song = base_song();
         song.tracks.push(libretracks_core::Track {
+            eq: None,
             id: "midi1".into(),
             name: "Lights".into(),
             kind: TrackKind::Midi,
@@ -1244,6 +1247,7 @@ mod tests {
 
     fn video_track(id: &str, name: &str) -> libretracks_core::Track {
         libretracks_core::Track {
+            eq: None,
             id: id.into(),
             name: name.into(),
             kind: TrackKind::Video,

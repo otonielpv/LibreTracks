@@ -109,6 +109,7 @@ mod tests {
                 structure: None,
             }],
             tracks: vec![Track {
+                eq: None,
                 id: "track_click".into(),
                 name: "Click".into(),
                 kind: TrackKind::Audio,

@@ -11,6 +11,25 @@ const AUX_MAX_GAIN = positionToGain(1, AUX_FADER_SCALE);
 
 export type TrackChannelMode = "stereo" | "mono" | "left" | "right";
 
+/** Mirrors Rust `EqBandKind` (serde camelCase). */
+export type EqBandKind = "lowCut" | "lowShelf" | "peak" | "highShelf" | "highCut" | "notch";
+
+/** Mirrors Rust `EqBand`. `slope` (12 o 24 dB/oct) solo cuenta en los cortes. */
+export type EqBand = {
+  enabled: boolean;
+  kind: EqBandKind;
+  frequencyHz: number;
+  gainDb: number;
+  q: number;
+  slope: 12 | 24;
+};
+
+/** Mirrors Rust `TrackEq`: bypass global y hasta 6 bandas. */
+export type TrackEq = {
+  enabled: boolean;
+  bands: EqBand[];
+};
+
 export type PlaybackState = "empty" | "stopped" | "playing" | "paused";
 export type TrackKind = "audio" | "folder" | "midi" | "video";
 export type JumpTriggerLabel =
@@ -699,6 +718,9 @@ export type TrackSummary = {
   /** The song (region id) this track was created for when a template lays
    * out per-song tracks. Absent/null = shared by every song. */
   songRegionId?: string | null;
+  /** Ecualizador paramétrico de la pista (plan track-eq). Ausente = la pista
+   * nunca ha tenido EQ. Solo suena en pistas de audio. */
+  eq?: TrackEq | null;
 };
 
 export function formatTransposeSemitones(value: number): string {

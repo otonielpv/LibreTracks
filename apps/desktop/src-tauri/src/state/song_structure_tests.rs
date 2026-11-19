@@ -112,6 +112,7 @@ pub(crate) fn song_with_sections(a: f64, b: f64, c: f64) -> Song {
             region("r3", r2_end, r2_end + 8.0),
         ],
         tracks: vec![Track {
+            eq: None,
             id: "a1".into(),
             name: "a1".into(),
             kind: TrackKind::Audio,

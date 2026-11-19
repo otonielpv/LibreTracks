@@ -279,6 +279,7 @@ mod tests {
             time_signature_markers: vec![],
             regions: vec![],
             tracks: vec![Track {
+                eq: None,
                 id: "t".into(),
                 name: "t".into(),
                 kind: TrackKind::Audio,

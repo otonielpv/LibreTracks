@@ -89,6 +89,7 @@ fn demo_song() -> Song {
             structure: None,
         }],
         tracks: vec![Track {
+            eq: None,
             id: "track_1".into(),
             name: "Track 1".into(),
             kind: TrackKind::Audio,
@@ -368,6 +369,7 @@ fn demo_song_with_folder_track() -> Song {
     song.tracks.insert(
         0,
         Track {
+            eq: None,
             id: "folder_1".into(),
             name: "Folder".into(),
             kind: TrackKind::Folder,
@@ -464,6 +466,7 @@ fn hierarchy_song() -> Song {
         }],
         tracks: vec![
             Track {
+                eq: None,
                 id: "track_folder_a".into(),
                 name: "Folder A".into(),
                 kind: TrackKind::Folder,
@@ -486,6 +489,7 @@ fn hierarchy_song() -> Song {
                 song_region_id: None,
             },
             Track {
+                eq: None,
                 id: "track_child_a".into(),
                 name: "Child A".into(),
                 kind: TrackKind::Audio,
@@ -508,6 +512,7 @@ fn hierarchy_song() -> Song {
                 song_region_id: None,
             },
             Track {
+                eq: None,
                 id: "track_folder_b".into(),
                 name: "Folder B".into(),
                 kind: TrackKind::Folder,
@@ -530,6 +535,7 @@ fn hierarchy_song() -> Song {
                 song_region_id: None,
             },
             Track {
+                eq: None,
                 id: "track_child_b".into(),
                 name: "Child B".into(),
                 kind: TrackKind::Audio,
@@ -1096,6 +1102,7 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
         }],
         tracks: vec![
             Track {
+                eq: None,
                 id: "folder_main".into(),
                 name: "Folder".into(),
                 kind: TrackKind::Folder,
@@ -1118,6 +1125,7 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
                 song_region_id: None,
             },
             Track {
+                eq: None,
                 id: "track-drums_01".into(),
                 name: "Drums".into(),
                 kind: TrackKind::Audio,
@@ -1303,6 +1311,7 @@ fn batch_move_can_reassign_clip_to_another_track() {
     let mut song = demo_song();
     song.tracks[0].auto_created = true;
     song.tracks.push(Track {
+        eq: None,
         id: "track_2".into(),
         name: "Track 2".into(),
         kind: TrackKind::Audio,
@@ -2550,6 +2559,7 @@ fn song_with_folder_hierarchy() -> Song {
     song.tracks.insert(
         0,
         Track {
+            eq: None,
             id: "folder_1".into(),
             name: "Drums".into(),
             kind: TrackKind::Folder,
@@ -2573,6 +2583,7 @@ fn song_with_folder_hierarchy() -> Song {
         },
     );
     song.tracks.push(Track {
+        eq: None,
         id: "track_child".into(),
         name: "Kick".into(),
         kind: TrackKind::Audio,

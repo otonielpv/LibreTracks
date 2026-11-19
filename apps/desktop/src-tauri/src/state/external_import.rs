@@ -287,6 +287,7 @@ impl DesktopSession {
                 );
             }
             next_song.tracks.push(Track {
+                eq: None,
                 id: track_id.clone(),
                 name: track.name.clone(),
                 kind: if is_folder_track {

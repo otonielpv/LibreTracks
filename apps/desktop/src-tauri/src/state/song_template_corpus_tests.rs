@@ -175,6 +175,7 @@ fn audio_with(template: Option<&str>, layout: SongImportTrackMode) -> AudioContr
 
 fn track(id: &str, name: &str, kind: TrackKind, parent: Option<&str>, color: &str, audio_to: &str, aliases: &[&str]) -> Track {
     Track {
+        eq: None,
         id: id.into(),
         name: name.into(),
         kind,

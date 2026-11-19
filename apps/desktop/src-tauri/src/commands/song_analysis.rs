@@ -986,6 +986,7 @@ mod tests {
 
     fn track(id: &str, transpose_enabled: bool) -> Track {
         Track {
+            eq: None,
             id: id.into(),
             name: id.into(),
             kind: TrackKind::Audio,

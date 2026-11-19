@@ -195,6 +195,7 @@ pub(crate) fn builtin_band_template(locale: Option<&str>) -> Vec<Track> {
     entries
         .into_iter()
         .map(|(id, name, kind, color, aliases)| Track {
+            eq: None,
             id: format!("builtin_{id}"),
             name,
             kind,
@@ -449,6 +450,7 @@ pub(crate) fn apply_template_to_region(
 /// canción». Lleva el nombre de la canción y queda marcada con ella.
 pub(crate) fn song_folder_track(id: String, name: String, region_id: &str) -> Track {
     Track {
+        eq: None,
         id,
         name,
         kind: TrackKind::Folder,
@@ -1388,6 +1390,7 @@ fn lane_track(
     let color =
         color.or_else(|| auto_color_for_new_track(&song.tracks, TrackKind::Audio, auto_color));
     Track {
+        eq: None,
         id,
         name: name.to_string(),
         kind: TrackKind::Audio,

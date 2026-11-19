@@ -212,6 +212,7 @@ mod tests {
 
     fn track(id: &str, name: &str) -> Track {
         Track {
+            eq: None,
             id: id.to_string(),
             name: name.to_string(),
             kind: TrackKind::Audio,

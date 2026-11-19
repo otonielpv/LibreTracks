@@ -671,6 +671,7 @@ mod tests {
     fn song_with_tracks(solo_second: bool, mute_first: bool) -> Song {
         use crate::model::{SongMaster, SongRegion, Track, VideoClip};
         let track = |id: &str, muted: bool, solo: bool| Track {
+            eq: None,
             id: id.into(),
             name: id.into(),
             kind: TrackKind::Video,

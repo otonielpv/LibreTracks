@@ -1453,6 +1453,7 @@ mod tests {
 
     fn track(id: &str, name: &str) -> Track {
         Track {
+            eq: None,
             id: id.into(),
             name: name.into(),
             kind: TrackKind::Audio,

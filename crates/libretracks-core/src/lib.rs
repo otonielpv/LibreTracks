@@ -16,6 +16,7 @@ pub mod redundancy;
 pub mod session_fingerprint;
 pub mod song_structure;
 pub mod tempo_ramp;
+pub mod track_eq;
 pub mod track_matching;
 pub mod validation;
 pub mod video_schedule;
@@ -33,6 +34,7 @@ pub use model::{
     VideoFit, VoiceGuideCountStyle, MAX_MIDI_CHANNEL, MAX_MIDI_DATA_VALUE, MIN_MIDI_CHANNEL,
     SLOW_SEEK_KEYFRAME_INTERVAL_SECONDS, VIDEO_FILE_EXTENSIONS,
 };
+pub use track_eq::{EqBand, EqBandKind, TrackEq, TRACK_EQ_MAX_BANDS};
 pub use validation::{
     validate_song, validate_song_structure, DomainError, MAX_COMPACT_COLUMN_WIDTH_REM, MAX_TRANSPOSE_SEMITONES,
     MAX_WARP_SOURCE_BPM, MIN_COMPACT_COLUMN_WIDTH_REM, MIN_TRANSPOSE_SEMITONES,
@@ -82,6 +84,7 @@ mod tests {
             }],
             tracks: vec![
                 Track {
+                    eq: None,
                     id: "track_folder".into(),
                     name: "Rhythm".into(),
                     kind: TrackKind::Folder,
@@ -104,6 +107,7 @@ mod tests {
                     song_region_id: None,
                 },
                 Track {
+                    eq: None,
                     id: "track_click".into(),
                     name: "Click".into(),
                     kind: TrackKind::Audio,
@@ -566,3 +570,6 @@ mod chart_tests;
 #[cfg(test)]
 #[path = "mix_scene_tests.rs"]
 mod mix_scene_tests;
+
+#[cfg(test)]
+mod track_eq_tests;

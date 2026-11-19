@@ -768,6 +768,12 @@ pub struct Track {
     /// deducing ownership from the clips could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub song_region_id: Option<String>,
+    /// Ecualizador paramétrico de la pista (plan `track-eq`). `None` — lo que
+    /// cargan las sesiones anteriores — es una pista que nunca ha tenido EQ:
+    /// se omite al guardar, así que esas sesiones se escriben byte a byte
+    /// igual. Solo lo procesa el motor en pistas [`TrackKind::Audio`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eq: Option<crate::track_eq::TrackEq>,
 }
 
 pub fn default_audio_to() -> String {

@@ -1223,6 +1223,7 @@ pub fn merge_extracted_song_package(
     let song_folder_id = (track_mode == SongImportTrackMode::SongFolder).then(|| {
         let folder_id = unique_id("track", "song_folder", &mut used_track_ids);
         next_song.tracks.push(Track {
+            eq: None,
             id: folder_id.clone(),
             name: manifest.song_title.clone(),
             kind: libretracks_core::TrackKind::Folder,
@@ -1297,6 +1298,7 @@ pub fn merge_extracted_song_package(
             track.audio_to.clone()
         };
         next_song.tracks.push(Track {
+            eq: None,
             id: track_id.clone(),
             name: track.name.clone(),
             kind: track.kind,
@@ -1566,6 +1568,7 @@ mod tests {
 
     fn track(id: &str, name: &str) -> Track {
         Track {
+            eq: None,
             id: id.into(),
             name: name.into(),
             kind: TrackKind::Audio,
@@ -1608,6 +1611,7 @@ mod tests {
 
     fn midi_track(id: &str, name: &str, channel: u8, port: Option<&str>) -> Track {
         Track {
+            eq: None,
             id: id.into(),
             name: name.into(),
             kind: TrackKind::Midi,

@@ -39,6 +39,7 @@ fn region(id: &str, start: f64, end: f64) -> SongRegion {
 
 fn track(id: &str, kind: TrackKind) -> Track {
     Track {
+        eq: None,
         id: id.into(),
         name: id.into(),
         kind,

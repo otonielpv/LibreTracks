@@ -678,6 +678,7 @@ mod tests {
 
     fn track(id: &str, kind: TrackKind, parent: Option<&str>) -> Track {
         Track {
+            eq: None,
             id: id.into(),
             name: id.into(),
             kind,

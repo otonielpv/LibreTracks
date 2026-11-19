@@ -620,6 +620,7 @@ impl DesktopSession {
             // diez sale con diez colores, no diez veces el mismo.
             let color = auto_color_for_new_track(&song.tracks, TrackKind::Audio, auto_color);
             song.tracks.push(libretracks_core::Track {
+                eq: None,
                 id: track_id.clone(),
                 name: track_name,
                 kind: libretracks_core::TrackKind::Audio,
@@ -720,6 +721,7 @@ impl DesktopSession {
             // en la línea de tiempo tiene que dar una pista de cada color.
             let color = auto_color_for_new_track(&song.tracks, TrackKind::Audio, auto_color);
             song.tracks.push(Track {
+                eq: None,
                 id: track_id.clone(),
                 name: trimmed_name.to_string(),
                 kind: TrackKind::Audio,
@@ -788,6 +790,7 @@ impl DesktopSession {
                     let color =
                         auto_color_for_new_track(&song.tracks, TrackKind::Audio, auto_color);
                     let track = Track {
+                        eq: None,
                         id: ids.allocate(),
                         name: names[index].clone(),
                         kind: TrackKind::Audio,
@@ -1364,6 +1367,7 @@ pub(super) fn new_track(
     let color = auto_color_for_new_track(&song.tracks, kind, auto_color_enabled(audio));
 
     Track {
+        eq: None,
         id: unique_track_id(&song.tracks),
         name: name.to_string(),
         kind,

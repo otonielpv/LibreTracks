@@ -312,6 +312,7 @@ mod tests {
 
     fn midi_track_on(id: &str, muted: bool, channel: u8, port: Option<&str>) -> Track {
         Track {
+            eq: None,
             id: id.into(),
             name: id.into(),
             kind: TrackKind::Midi,

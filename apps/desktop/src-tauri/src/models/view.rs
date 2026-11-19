@@ -561,6 +561,10 @@ pub struct TrackSummary {
     pub match_aliases: Vec<String>,
     /// The song this track was created for; `None` = shared by every song.
     pub song_region_id: Option<String>,
+    /// Ecualizador de la pista (plan `track-eq`); `None` = nunca ha tenido.
+    /// Se omite si no hay, como en el modelo.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eq: Option<libretracks_core::TrackEq>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -914,6 +918,7 @@ pub(crate) fn song_to_view(
                 height_offset: track.height_offset,
                 match_aliases: track.match_aliases.clone(),
                 song_region_id: track.song_region_id.clone(),
+                eq: track.eq.clone(),
             })
             .collect(),
         automation_cues: automation_cues_to_summary(song, &automation.cues, automation_run_counts),
@@ -1728,6 +1733,7 @@ mod tests {
 
     fn track(id: &str, kind: TrackKind, parent: Option<&str>) -> Track {
         Track {
+            eq: None,
             id: id.into(),
             name: format!("Track {id}"),
             kind,

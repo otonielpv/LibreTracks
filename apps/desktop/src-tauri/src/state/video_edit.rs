@@ -49,6 +49,7 @@ fn require_video_track(song: &Song, track_id: &str) -> Result<(), DesktopError> 
 
 fn new_video_track(song: &Song, name: &str, auto_color: bool) -> libretracks_core::Track {
     libretracks_core::Track {
+        eq: None,
         id: unique_track_id(&song.tracks),
         name: name.to_string(),
         kind: TrackKind::Video,

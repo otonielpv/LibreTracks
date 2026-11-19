@@ -77,6 +77,7 @@ fn song_with(regions: Vec<SongRegion>, clips: Vec<Clip>) -> Song {
         time_signature_markers: vec![],
         regions,
         tracks: vec![Track {
+            eq: None,
             id: "a1".into(),
             name: "a1".into(),
             kind: TrackKind::Audio,
