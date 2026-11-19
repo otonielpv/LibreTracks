@@ -74,6 +74,9 @@ endif()
 target_include_directories(lt_audio_engine_v2
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        # signalsmith-dsp (solo cabeceras, MIT): filtros del EQ por pista.
+        # Público porque `render/track_eq.h` guarda sus biquads por valor.
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/signalsmith-dsp/include>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -95,6 +98,11 @@ target_compile_definitions(lt_audio_engine_v2 PUBLIC
     LT_ENGINE_ENABLE_E2E_CAPTURE=$<BOOL:${LT_ENGINE_ENABLE_E2E_CAPTURE}>
     _SILENCE_CXX20_OLD_SHARED_PTR_ATOMIC_SUPPORT_DEPRECATION_WARNING
 )
+
+# signalsmith-dsp usa M_PI; MSVC solo lo define con _USE_MATH_DEFINES.
+if(MSVC)
+    target_compile_definitions(lt_audio_engine_v2 PRIVATE _USE_MATH_DEFINES)
+endif()
 
 # The realtime allocation guard is test instrumentation. The test build uses a
 # separate static engine, so this define can never reach the shipped library.

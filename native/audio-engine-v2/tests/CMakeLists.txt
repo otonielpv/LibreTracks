@@ -59,6 +59,7 @@ add_executable(lt_engine_tests
     test_loop_renderer.cpp
     test_one_shot_renderer.cpp
     test_loop_mixer.cpp
+    test_track_eq.cpp
 )
 
 target_link_libraries(lt_engine_tests
@@ -80,6 +81,9 @@ target_compile_definitions(lt_engine_tests PRIVATE
     LT_ENGINE_RT_GUARD=1
     LT_ENGINE_TEST_HOOKS=1
     LT_VOICES_DIR="${CMAKE_SOURCE_DIR}/../../apps/desktop/src-tauri/resources/voices"
+    # Tabla dorada de la respuesta del EQ por pista: la escribe/comprueba
+    # test_track_eq.cpp y la lee el test de la curva en la UI (plan track-eq, D11).
+    LT_EQ_GOLDEN_PATH="${CMAKE_SOURCE_DIR}/../../apps/desktop/src/features/transport/eq/__fixtures__/eqResponseGolden.json"
 )
 
 # Compile the disabled form in isolation: linking it into the instrumented test
