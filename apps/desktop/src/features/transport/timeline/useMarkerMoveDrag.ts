@@ -86,6 +86,9 @@ export type MarkerMovePreview = {
   category: MarkerCategory;
   /** Arrastre de grupo: lo que se desplaza cada miembro. */
   group?: { markers: RulerMarkerRef[]; deltaSeconds: number };
+  /** Alt/Option pulsado: soltar copiara, asi que se pinta la copia en la
+   * posicion previsualizada y el original se queda donde esta. */
+  copy?: boolean;
 } | null;
 
 export type MarkerMoveDragDeps = {
@@ -331,6 +334,7 @@ export function useMarkerMoveDrag({
             deltaSeconds: nextStart - drag.initialStartSeconds,
           }
         : undefined,
+      copy: event.altKey,
     });
   }
 

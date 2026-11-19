@@ -284,6 +284,7 @@ function buildWaveformCacheSignature(
 
 /**
  * Sustituye la marca arrastrada por su posición y carril de previsualización.
+ * Con `copy` (Alt/Option) deja el original y añade la copia en esa posición.
  *
  * Se aplica al dibujar y no en props a propósito: la posición cambia en cada
  * `pointermove` y pasarla por React costaba un render del panel por frame
@@ -301,6 +302,18 @@ export function applyMarkerMovePreview(
   if (preview.group) {
     return applyGroupMovePreview(markers, preview, "section");
   }
+  if (preview.copy) {
+    const source = markers.find((marker) => marker.id === preview.markerId);
+    if (!source) return markers;
+    return withCopies(markers, [
+      {
+        ...source,
+        id: copyPreviewId(source.id),
+        startSeconds: preview.startSeconds,
+        categoryOverride: preview.category,
+      },
+    ]);
+  }
   return markers.map((marker) =>
     marker.id === preview.markerId
       ? {
@@ -310,6 +323,16 @@ export function applyMarkerMovePreview(
         }
       : marker,
   );
+}
+
+/** Id de la copia previsualizada: no choca con el original ni con la seleccion. */
+function copyPreviewId(id: string) {
+  return `${id}::copy-preview`;
+}
+
+/** Originales intactos mas las copias, en orden de posicion como el modelo. */
+function withCopies<T extends { startSeconds: number }>(markers: T[], copies: T[]): T[] {
+  return [...markers, ...copies].sort((left, right) => left.startSeconds - right.startSeconds);
 }
 
 /**
@@ -330,6 +353,18 @@ export function applyGroupMovePreview<T extends { id: string; startSeconds: numb
   );
   if (ids.size === 0) {
     return markers;
+  }
+  if (preview.copy) {
+    return withCopies(
+      markers,
+      markers
+        .filter((marker) => ids.has(marker.id))
+        .map((marker) => ({
+          ...marker,
+          id: copyPreviewId(marker.id),
+          startSeconds: marker.startSeconds + group.deltaSeconds,
+        })),
+    );
   }
   return markers.map((marker) =>
     ids.has(marker.id)
@@ -710,7 +745,7 @@ export function TimelineRulerCanvas({
           // lista mientras hay un arrastre, y sólo cuando el preview cambia.
           const markerPreview = snapshot.markerMovePreviewRef?.current ?? null;
           const markerPreviewKey = markerPreview
-            ? `${markerPreview.markerId}:${markerPreview.startSeconds}:${markerPreview.category}:${markerPreview.group?.deltaSeconds ?? ""}`
+            ? `${markerPreview.markerId}:${markerPreview.startSeconds}:${markerPreview.category}:${markerPreview.group?.deltaSeconds ?? ""}:${markerPreview.copy ? 1 : 0}`
             : "";
           const shouldRedrawOverlay =
             lastOverlaySceneVersion !== sceneVersionRef.current ||

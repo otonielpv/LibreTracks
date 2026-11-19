@@ -45,6 +45,32 @@ const PREVIEW_FALLBACK_MS = 400;
  * the handles take the pointer. Touch: only a handle drags, a long-press on it
  * opens its menu.
  */
+const COPY_GHOST_ATTR = "data-section-copy-ghost";
+
+/** The ghost that previews an Alt/Option copy of a handle; made on first use.
+ * Plain DOM, like the transform preview: no render per pixel. */
+function copyGhostOf(handle: HTMLElement): HTMLElement {
+  const id = handle.dataset.sectionHandle ?? "";
+  const layer = handle.parentElement;
+  const existing = layer?.querySelector<HTMLElement>(`[${COPY_GHOST_ATTR}="${id}"]`);
+  if (existing) return existing;
+  const ghost = handle.cloneNode(true) as HTMLElement;
+  ghost.removeAttribute("data-section-handle");
+  ghost.removeAttribute("aria-label");
+  ghost.removeAttribute("title");
+  ghost.setAttribute(COPY_GHOST_ATTR, id);
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.tabIndex = -1;
+  ghost.classList.add("is-copy-ghost");
+  ghost.style.pointerEvents = "none";
+  layer?.appendChild(ghost);
+  return ghost;
+}
+
+function removeCopyGhosts(layer: HTMLElement | null) {
+  layer?.querySelectorAll(`[${COPY_GHOST_ATTR}]`).forEach((ghost) => ghost.remove());
+}
+
 function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEditLayerProps) {
   const { t } = useTranslation();
   const layerRef = useRef<HTMLDivElement | null>(null);
@@ -98,6 +124,7 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
     layerRef.current
       ?.querySelectorAll<HTMLElement>("[data-section-handle]")
       .forEach((element) => element.style.removeProperty("transform"));
+    removeCopyGhosts(layerRef.current);
   };
   useLayoutEffect(clearPreview, [song.sectionMarkers]);
 
@@ -159,8 +186,15 @@ function SongSectionEditLayerComponent({ song, region, handlers }: SongSectionEd
         widthPx,
       );
       const offsetPx = delta * scale.pxPerSecond;
+      // Alt/Option: the originals stay put and a ghost copy follows instead,
+      // so it reads as a copy and not as a move. Releasing Alt mid-drag
+      // switches back to moving.
+      const copying = moveEvent.altKey;
+      if (!copying) removeCopyGhosts(layer);
       for (const element of elementsFor(groupIds)) {
-        element.style.setProperty("transform", `translate3d(${offsetPx}px, 0, 0)`);
+        const target = copying ? copyGhostOf(element) : element;
+        if (copying) element.style.removeProperty("transform");
+        target.style.setProperty("transform", `translate3d(${offsetPx}px, 0, 0)`);
       }
     };
     const finish = (upEvent: PointerEvent) => {

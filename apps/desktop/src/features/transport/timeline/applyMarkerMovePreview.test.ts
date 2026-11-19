@@ -78,3 +78,44 @@ describe("arrastre de un GRUPO de marcas", () => {
     expect(applyGroupMovePreview(TEMPO, null, "tempo")).toBe(TEMPO);
   });
 });
+
+describe("arrastre con Alt/Option (copia)", () => {
+  it("deja la marca en su sitio y pinta la copia donde caería", () => {
+    const result = applyMarkerMovePreview(MARKERS, {
+      markerId: "a",
+      startSeconds: 8,
+      category: "cue",
+      copy: true,
+    });
+    expect(result.map((marker) => [marker.id, marker.startSeconds])).toEqual([
+      ["a", 1],
+      ["b", 5],
+      ["a::copy-preview", 8],
+    ]);
+    expect(result[2].categoryOverride).toBe("cue");
+    expect(result[0]).toBe(MARKERS[0]);
+  });
+
+  it("en un grupo, los originales se quedan y las copias se desplazan", () => {
+    const TEMPO = [
+      { id: "t1", startSeconds: 3, bpm: 100 },
+      { id: "t2", startSeconds: 9, bpm: 90 },
+    ];
+    const result = applyGroupMovePreview(
+      TEMPO,
+      {
+        markerId: "t1",
+        startSeconds: 5,
+        category: "section",
+        group: { markers: [{ kind: "tempo", id: "t1" }], deltaSeconds: 2 },
+        copy: true,
+      },
+      "tempo",
+    );
+    expect(result.map((marker) => [marker.id, marker.startSeconds])).toEqual([
+      ["t1", 3],
+      ["t1::copy-preview", 5],
+      ["t2", 9],
+    ]);
+  });
+});

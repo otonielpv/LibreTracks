@@ -249,6 +249,18 @@ describe("useMarkerMoveDrag lane changes", () => {
     expect(onMarkerMoveCommit.mock.calls[0][3]).toBe(true);
   });
 
+  it("the preview says it is a copy while Alt/Option is held", () => {
+    const { hotspot, previewRefs } = setup(vi.fn());
+    const y = clientYFor(LANE_SECTIONS);
+    fireEvent(hotspot, pointer("pointerdown", 0, y));
+    const withAlt = pointer("pointermove", 50, y);
+    Object.defineProperty(withAlt, "altKey", { value: true });
+    fireEvent(hotspot, withAlt);
+    expect(previewRefs[0].current).toMatchObject({ copy: true });
+    fireEvent(hotspot, pointer("pointermove", 60, y));
+    expect(previewRefs[0].current).toMatchObject({ copy: false });
+  });
+
   it("omits the category on a purely horizontal move", () => {
     // A plain nudge must not write an override the user never asked for.
     const onMarkerMoveCommit = vi.fn();

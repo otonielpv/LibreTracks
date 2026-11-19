@@ -113,8 +113,8 @@ beforeEach(() => {
 
 function drag(element: HTMLElement, fromX: number, toX: number, extra: Record<string, unknown> = {}) {
   fireEvent.pointerDown(element, { button: 0, pointerId: 1, clientX: fromX, ...extra });
-  fireEvent.pointerMove(window, { pointerId: 1, clientX: (fromX + toX) / 2 });
-  fireEvent.pointerMove(window, { pointerId: 1, clientX: toX });
+  fireEvent.pointerMove(window, { pointerId: 1, clientX: (fromX + toX) / 2, ...extra });
+  fireEvent.pointerMove(window, { pointerId: 1, clientX: toX, ...extra });
 }
 
 describe("Section handles: drag", () => {
@@ -126,6 +126,24 @@ describe("Section handles: drag", () => {
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 433, altKey: true });
     expect(deps.rulerMarkers.moveGroup).toHaveBeenCalledWith([{ kind: "section", id: "Coro" }], 4, true);
     expect(coro.style.transform).toBe("");
+  });
+
+  it("with Alt held mid-drag the original stays and a ghost copy follows", () => {
+    const { handlers } = setup();
+    renderLayer(handlers);
+    const coro = handle("Coro");
+    drag(coro, 400, 433, { altKey: true });
+    const ghost = document.querySelector<HTMLElement>('[data-section-copy-ghost="Coro"]');
+    expect(coro.style.transform).toBe("");
+    expect(ghost?.style.transform).toBe("translate3d(40px, 0, 0)");
+    expect(ghost?.getAttribute("aria-hidden")).toBe("true");
+    // Releasing Alt mid-drag goes back to moving the original.
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 433 });
+    expect(document.querySelector("[data-section-copy-ghost]")).toBeNull();
+    expect(coro.style.transform).toBe("translate3d(40px, 0, 0)");
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 433, altKey: true });
+    expect(coro.style.transform).toBe("");
+    expect(document.querySelector("[data-section-copy-ghost]")).toBeNull();
   });
 
   it("previews locally and commits ONE moveRulerMarkers on release, snapped to a bar", () => {
