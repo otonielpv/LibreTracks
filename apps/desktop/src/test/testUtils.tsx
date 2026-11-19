@@ -34,6 +34,7 @@ import {
 } from "../features/redundancy/redundancyStore";
 import { useLevelSongsStore } from "../features/transport/levelSongs/levelSongsStore";
 import { useMixSceneEditorStore } from "../features/transport/panels/mixScenes/mixSceneEditorStore";
+import { useTrackEqStore } from "../features/transport/eq/trackEqStore";
 import { useRenderStore } from "../features/transport/render/renderStore";
 import {
   useBatchSongAnalysisStore,
@@ -445,6 +446,7 @@ beforeEach(async () => {
   useRenderStore.setState({ target: null });
   useLevelSongsStore.setState({ open: false });
   useMixSceneEditorStore.setState({ open: false });
+  useTrackEqStore.setState({ openTrackId: null });
   useSongAnalysisStore.setState({ target: null });
   useBatchSongAnalysisStore.setState({ open: false });
   useNetworkSessionStore.setState(INITIAL_NETWORK_SESSION_STATE);

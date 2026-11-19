@@ -1,0 +1,262 @@
+/* Editor del EQ por pista (plan track-eq). Misma familia visual que los
+   modales del transporte: fondo oscuro, acento turquesa, esquinas de 2 px. */
+
+.lt-eq-editor {
+  --lt-eq-band-1: #ff6b6b;
+  --lt-eq-band-2: #ffb454;
+  --lt-eq-band-3: #f5e663;
+  --lt-eq-band-4: #57f1db;
+  --lt-eq-band-5: #6ea8ff;
+  --lt-eq-band-6: #c88bff;
+  box-sizing: border-box;
+  width: min(56rem, 100%);
+  max-height: calc(100vh - 3rem);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: linear-gradient(180deg, rgb(22 25 26 / 0.98), rgb(13 15 16 / 0.98));
+  box-shadow: 0 28px 80px rgb(0 0 0 / 0.45);
+  color: #e8e5e4;
+}
+
+.lt-eq-editor.is-mobile {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  padding: calc(0.5rem + var(--lt-safe-area-top, 0px)) calc(0.75rem + var(--lt-safe-area-right, 0px))
+    calc(0.5rem + var(--lt-safe-area-bottom, 0px)) calc(0.75rem + var(--lt-safe-area-left, 0px));
+}
+
+.lt-eq-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.lt-eq-header h2 {
+  margin: 0;
+  font: 800 1.2rem/1.1 "Space Grotesk", sans-serif;
+  letter-spacing: -0.03em;
+  color: #f3f0ef;
+}
+
+.lt-eq-track-name {
+  margin-left: 0.4rem;
+  font-weight: 500;
+  color: rgb(243 240 239 / 0.6);
+}
+
+.lt-eq-header-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.lt-eq-button {
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: rgb(255 255 255 / 0.04);
+  color: inherit;
+  font: 600 0.8rem/1 "Inter", sans-serif;
+  cursor: pointer;
+}
+
+.lt-eq-button:hover {
+  border-color: rgb(87 241 219 / 0.5);
+}
+
+.lt-eq-button[aria-pressed="true"] {
+  background: rgb(255 180 84 / 0.18);
+  border-color: rgb(255 180 84 / 0.6);
+  color: #ffb454;
+}
+
+.lt-eq-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.4rem;
+}
+
+.lt-eq-graph {
+  width: 100%;
+  height: clamp(10rem, 34vh, 16rem);
+  background: rgb(0 0 0 / 0.35);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 2px;
+  touch-action: none;
+  user-select: none;
+}
+
+.lt-eq-grid {
+  stroke: rgb(255 255 255 / 0.07);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.lt-eq-grid.is-zero {
+  stroke: rgb(255 255 255 / 0.22);
+}
+
+.lt-eq-grid-label {
+  fill: rgb(255 255 255 / 0.38);
+  font: 500 10px "Inter", sans-serif;
+}
+
+.lt-eq-curve {
+  fill: none;
+  stroke: #57f1db;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.lt-eq-editor.is-bypassed .lt-eq-curve {
+  stroke: rgb(255 255 255 / 0.3);
+  stroke-dasharray: 4 4;
+}
+
+.lt-eq-band-curve {
+  fill: none;
+  stroke-width: 1.2;
+  opacity: 0.7;
+  vector-effect: non-scaling-stroke;
+}
+
+.lt-eq-node {
+  cursor: grab;
+  outline: none;
+}
+
+.lt-eq-node circle {
+  stroke: #0d0f10;
+  stroke-width: 1.5;
+}
+
+.lt-eq-node text {
+  fill: #0d0f10;
+  font: 800 10px "Inter", sans-serif;
+  pointer-events: none;
+}
+
+.lt-eq-node.is-active circle,
+.lt-eq-node:focus-visible circle {
+  stroke: #f3f0ef;
+  stroke-width: 2;
+}
+
+.lt-eq-node.is-off circle {
+  fill: #5b5f61;
+}
+
+.lt-eq-color-1 { --lt-eq-color: var(--lt-eq-band-1); }
+.lt-eq-color-2 { --lt-eq-color: var(--lt-eq-band-2); }
+.lt-eq-color-3 { --lt-eq-color: var(--lt-eq-band-3); }
+.lt-eq-color-4 { --lt-eq-color: var(--lt-eq-band-4); }
+.lt-eq-color-5 { --lt-eq-color: var(--lt-eq-band-5); }
+.lt-eq-color-6 { --lt-eq-color: var(--lt-eq-band-6); }
+
+.lt-eq-node circle { fill: var(--lt-eq-color); }
+.lt-eq-band-curve { stroke: var(--lt-eq-color); }
+
+.lt-eq-bands {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+  background: rgb(255 255 255 / 0.08);
+}
+
+.lt-eq-editor.is-mobile .lt-eq-bands {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.lt-eq-band {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  border: 0;
+  border-top: 2px solid var(--lt-eq-color);
+  background: #121516;
+}
+
+.lt-eq-band.is-active {
+  background: #1a1e1f;
+}
+
+.lt-eq-band.is-off {
+  border-top-color: #5b5f61;
+}
+
+.lt-eq-band-head {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  padding: 0;
+}
+
+.lt-eq-band-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+}
+
+.lt-eq-band-number {
+  font: 800 0.8rem/1 "Inter", sans-serif;
+  color: var(--lt-eq-color);
+}
+
+.lt-eq-kind-icon {
+  width: 1.4rem;
+  height: 1rem;
+  flex: none;
+}
+
+.lt-eq-kind-icon path {
+  fill: none;
+  stroke: var(--lt-eq-color);
+  stroke-width: 1.8;
+}
+
+.lt-eq-band select,
+.lt-eq-field input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  height: 1.8rem;
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(0 0 0 / 0.3);
+  color: inherit;
+  font: 500 0.8rem/1 "Inter", sans-serif;
+}
+
+.lt-eq-field {
+  position: relative;
+  display: flex;
+}
+
+.lt-eq-field input {
+  padding: 0 2.2rem 0 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-eq-field-suffix {
+  position: absolute;
+  right: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.7rem;
+  color: rgb(255 255 255 / 0.45);
+  pointer-events: none;
+}
