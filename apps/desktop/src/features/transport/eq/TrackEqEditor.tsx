@@ -45,6 +45,8 @@ import "./TrackEqEditor.css";
 export const EQ_VIEW_WIDTH = 600;
 export const EQ_VIEW_HEIGHT = 220;
 const CURVE_POINTS = 160;
+/** Margen arriba y abajo para que un nodo a ±18 dB no salga cortado. */
+const VIEW_PAD = 12;
 const LOG_MIN = Math.log10(EQ_MIN_FREQUENCY_HZ);
 const LOG_MAX = Math.log10(EQ_MAX_FREQUENCY_HZ);
 const WHEEL_COMMIT_DELAY_MS = 350;
@@ -100,13 +102,38 @@ export function yToGain(y: number): number {
   return ((EQ_VIEW_HEIGHT / 2 - y) / (EQ_VIEW_HEIGHT / 2)) * EQ_MAX_GAIN_DB;
 }
 
-function curvePath(response: (hz: number) => number): string {
-  let d = "";
-  for (let i = 0; i <= CURVE_POINTS; i += 1) {
-    const x = (i / CURVE_POINTS) * EQ_VIEW_WIDTH;
-    const y = Math.min(EQ_VIEW_HEIGHT + 40, Math.max(-40, gainToY(response(xToFreq(x)))));
-    d += `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+/**
+ * Frecuencias extra que muestrear: el centro de cada banda y puntos a su
+ * alrededor según su Q. Con Q alta la campana es más estrecha que el paso de
+ * la rejilla y, sin esto, el pico se perdía o daba saltos al moverlo.
+ */
+export function bandSampleFrequencies(bands: EqBand[]): number[] {
+  const out: number[] = [];
+  for (const band of bands) {
+    if (!band.enabled) continue;
+    out.push(band.frequencyHz);
+    const width = 1 / Math.max(0.1, band.q);
+    for (const k of [0.125, 0.25, 0.5, 1, 2]) {
+      const ratio = Math.pow(2, k * width);
+      out.push(band.frequencyHz * ratio, band.frequencyHz / ratio);
+    }
   }
+  return out;
+}
+
+export function curvePath(response: (hz: number) => number, extraHz: number[] = []): string {
+  const xs: number[] = [];
+  for (let i = 0; i <= CURVE_POINTS; i += 1) xs.push((i / CURVE_POINTS) * EQ_VIEW_WIDTH);
+  for (const hz of extraHz) {
+    const x = freqToX(hz);
+    if (x > 0 && x < EQ_VIEW_WIDTH) xs.push(x);
+  }
+  xs.sort((a, b) => a - b);
+  let d = "";
+  xs.forEach((x, i) => {
+    const y = Math.min(EQ_VIEW_HEIGHT + 40, Math.max(-40, gainToY(response(xToFreq(x)))));
+    d += `${i === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(1)}`;
+  });
   return d;
 }
 
@@ -139,7 +166,9 @@ type Drag = {
   startClientY: number;
   startX: number;
   startY: number;
-  scale: number;
+  /** El SVG se estira sin mantener proporción: cada eje tiene su escala. */
+  scaleX: number;
+  scaleY: number;
   moved: boolean;
 };
 
@@ -166,6 +195,10 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
   const pinchRef = useRef<Pinch | null>(null);
   const frameRef = useRef<number | null>(null);
   const wheelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Commits enviados que aún no han vuelto (el modelo puede llegar atrasado). */
+  const pendingCommitsRef = useRef(0);
+  const modelEqRef = useRef<TrackEq | null | undefined>(track.eq);
+  modelEqRef.current = track.eq;
   const svgRef = useRef<SVGSVGElement | null>(null);
   const totalPathRef = useRef<SVGPathElement | null>(null);
   const bandPathRef = useRef<SVGPathElement | null>(null);
@@ -209,12 +242,17 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
   }, [rtaOn, track.id]);
 
   // El modelo manda cuando no hay gesto en curso (otra vista, deshacer...).
-  useEffect(() => {
+  // Mientras quedan commits nuestros por volver, el modelo puede traer uno
+  // anterior: aplicarlo devolvía la banda a donde estaba y la curva parpadeaba.
+  const adoptModel = useCallback(() => {
     if (dragRef.current || pinchRef.current || wheelTimerRef.current) return;
-    const next = sanitizeTrackEq(track.eq ?? defaultTrackEq());
+    if (pendingCommitsRef.current > 0) return;
+    const next = sanitizeTrackEq(modelEqRef.current ?? defaultTrackEq());
     draftRef.current = next;
     setEq(next);
-  }, [track.eq]);
+  }, []);
+
+  useEffect(adoptModel, [track.eq, adoptModel]);
 
   useEffect(
     () => () => {
@@ -230,13 +268,16 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
   // ── Repintado imperativo durante el gesto (sin React) ────────────────────
   const paint = () => {
     const draft = draftRef.current;
-    totalPathRef.current?.setAttribute("d", curvePath(totalResponse(draft)));
+    totalPathRef.current?.setAttribute(
+      "d",
+      curvePath(totalResponse(draft), bandSampleFrequencies(draft.bands)),
+    );
     const band = activeBandRef.current;
     if (band !== null && draft.bands[band]) {
       const target = draft.bands[band];
       bandPathRef.current?.setAttribute(
         "d",
-        curvePath((hz) => bandResponseDb(target, sampleRate, hz)),
+        curvePath((hz) => bandResponseDb(target, sampleRate, hz), bandSampleFrequencies([target])),
       );
     }
     draft.bands.forEach((b, index) => {
@@ -263,17 +304,38 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
     }
   };
 
+  const trackId = track.id;
+  const sendCommit = (send: () => Promise<unknown>) => {
+    pendingCommitsRef.current += 1;
+    void send()
+      .catch(() => undefined)
+      .finally(() => {
+        pendingCommitsRef.current -= 1;
+        // Si alguno falló, el modelo es la verdad: vuelve a él al acabar.
+        adoptModel();
+      });
+  };
+
   const commit = (next: TrackEq) => {
     const clean = sanitizeTrackEq(next);
     draftRef.current = clean;
     setEq(clean);
-    void handlersRef.current.commit(track.id, clean);
+    sendCommit(() => handlersRef.current.commit(trackId, clean));
+  };
+
+  /** Una rueda que aún no ha hecho commit entra en el gesto siguiente. */
+  const absorbPendingWheel = () => {
+    if (!wheelTimerRef.current) return;
+    clearTimeout(wheelTimerRef.current);
+    wheelTimerRef.current = null;
   };
 
   const patchBand = (index: number, patch: Partial<EqBand>) => {
+    absorbPendingWheel();
+    const draft = draftRef.current;
     commit({
-      ...eq,
-      bands: eq.bands.map((band, i) => (i === index ? { ...band, ...patch } : band)),
+      ...draft,
+      bands: draft.bands.map((band, i) => (i === index ? { ...band, ...patch } : band)),
     });
   };
 
@@ -290,10 +352,12 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
     if (event.button !== undefined && event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
+    absorbPendingWheel();
     const rect = svgRef.current?.getBoundingClientRect();
-    const scale = rect && rect.width > 0 ? EQ_VIEW_WIDTH / rect.width : 1;
-    const band = eq.bands[index];
-    draftRef.current = eq;
+    const scaleX = rect && rect.width > 0 ? EQ_VIEW_WIDTH / rect.width : 1;
+    const scaleY = rect && rect.height > 0 ? (EQ_VIEW_HEIGHT + 2 * VIEW_PAD) / rect.height : scaleX;
+    // El borrador, no `eq`: puede llevar una Q de la rueda aún sin commit.
+    const band = draftRef.current.bands[index];
     dragRef.current = {
       band: index,
       pointerId: event.pointerId,
@@ -301,7 +365,8 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
       startClientY: event.clientY ?? 0,
       startX: freqToX(band.frequencyHz),
       startY: nodeY(band),
-      scale,
+      scaleX,
+      scaleY,
       moved: false,
     };
     try {
@@ -316,8 +381,8 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
     const drag = dragRef.current;
     if (!drag) return;
     const fine = event.shiftKey ? FINE_FACTOR : 1;
-    const dx = ((event.clientX ?? drag.startClientX) - drag.startClientX) * drag.scale * fine;
-    const dy = ((event.clientY ?? drag.startClientY) - drag.startClientY) * drag.scale * fine;
+    const dx = ((event.clientX ?? drag.startClientX) - drag.startClientX) * drag.scaleX * fine;
+    const dy = ((event.clientY ?? drag.startClientY) - drag.startClientY) * drag.scaleY * fine;
     const band = draftRef.current.bands[drag.band];
     const patch: Partial<EqBand> = {
       frequencyHz: clampFrequency(xToFreq(drag.startX + dx)),
@@ -453,10 +518,10 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
               className="lt-eq-button"
               aria-pressed={!eq.enabled}
               onClick={() => {
-                const next = { ...eq, enabled: !eq.enabled };
-                draftRef.current = next;
-                setEq(next);
-                void handlersRef.current.toggleBypass(track.id);
+                // Desde el borrador: lleva la Q de la rueda aunque aún no
+                // haya hecho commit (el modelo podría no tenerla todavía).
+                absorbPendingWheel();
+                commit({ ...draftRef.current, enabled: !draftRef.current.enabled });
               }}
             >
               {t("eq.bypass")}
@@ -465,10 +530,11 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
               type="button"
               className="lt-eq-button"
               onClick={() => {
+                absorbPendingWheel();
                 const next = defaultTrackEq();
                 draftRef.current = next;
                 setEq(next);
-                void handlersRef.current.reset(track.id);
+                sendCommit(() => handlersRef.current.reset(trackId));
               }}
             >
               {t("eq.reset")}
@@ -499,7 +565,7 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
         <svg
           ref={svgRef}
           className="lt-eq-graph"
-          viewBox={`0 0 ${EQ_VIEW_WIDTH} ${EQ_VIEW_HEIGHT}`}
+          viewBox={`0 ${-VIEW_PAD} ${EQ_VIEW_WIDTH} ${EQ_VIEW_HEIGHT + 2 * VIEW_PAD}`}
           preserveAspectRatio="none"
           role="group"
           aria-label={t("eq.graph")}
@@ -554,14 +620,17 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
             <path
               ref={bandPathRef}
               className={`lt-eq-band-curve lt-eq-color-${(activeBand ?? 0) + 1}`}
-              d={curvePath((hz) => bandResponseDb(active, sampleRate, hz))}
+              d={curvePath(
+                (hz) => bandResponseDb(active, sampleRate, hz),
+                bandSampleFrequencies([active]),
+              )}
             />
           ) : null}
           <path
             ref={totalPathRef}
             className="lt-eq-curve"
             data-testid="lt-eq-curve"
-            d={curvePath(totalResponse(eq))}
+            d={curvePath(totalResponse(eq), bandSampleFrequencies(eq.bands))}
           />
           {eq.bands.map((band, index) => (
             <g

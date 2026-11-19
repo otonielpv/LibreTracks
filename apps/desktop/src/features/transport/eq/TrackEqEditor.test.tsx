@@ -21,7 +21,8 @@ vi.mock("@libretracks/shared/desktopApi", async (importOriginal) => ({
   },
 }));
 
-import { TrackEqEditor } from "./TrackEqEditor";
+import { TrackEqEditor, bandSampleFrequencies, curvePath, gainToY } from "./TrackEqEditor";
+import { trackEqResponseDb } from "./eqResponse";
 import { defaultTrackEq } from "./trackEqModel";
 import type { TrackEqHandlers } from "../tracks/trackEqHandlers";
 
@@ -164,6 +165,59 @@ describe("TrackEqEditor drag", () => {
   });
 });
 
+describe("TrackEqEditor Q with the wheel and the model", () => {
+  it("a node grabbed right after the wheel keeps the new Q", () => {
+    const handlers = makeHandlers();
+    render(<TrackEqEditor track={makeTrack()} handlers={handlers} />);
+    const node = screen.getByTestId("lt-eq-node-3");
+    fireEvent.focus(node);
+    const graph = screen.getByTestId("lt-eq-graph");
+    for (let i = 0; i < 10; i += 1) fireEvent.wheel(graph, { deltaY: -100 });
+    // Antes de que la rueda haga su commit, se agarra el nodo y se mueve.
+    pointer(node, "pointerdown", 300, 110);
+    pointer(node, "pointermove", 340, 110);
+    pointer(node, "pointerup", 340, 110);
+    expect(handlers.commit).toHaveBeenCalledTimes(1);
+    const eq = handlers.commit.mock.calls[0][1] as TrackEq;
+    expect(eq.bands[2].q).toBeGreaterThan(2);
+  });
+
+  it("a late model from an earlier commit does not move the band back", async () => {
+    let finish: () => void = () => undefined;
+    const handlers = makeHandlers();
+    handlers.commit.mockImplementation(
+      () => new Promise<undefined>((resolve) => (finish = () => resolve(undefined))),
+    );
+    const first = defaultTrackEq();
+    const { rerender } = render(<TrackEqEditor track={makeTrack(first)} handlers={handlers} />);
+    const node = screen.getByTestId("lt-eq-node-3");
+    pointer(node, "pointerdown", 300, 110);
+    pointer(node, "pointermove", 360, 60);
+    pointer(node, "pointerup", 360, 60);
+    const sent = handlers.commit.mock.calls[0][1] as TrackEq;
+    // Llega un modelo viejo (p. ej. el de un commit anterior) con el nuestro en vuelo.
+    const stale = defaultTrackEq();
+    stale.bands[2].q = 5;
+    rerender(<TrackEqEditor track={makeTrack(stale)} handlers={handlers} />);
+    expect(node.getAttribute("aria-valuenow")).toBe(String(Math.round(sent.bands[2].frequencyHz)));
+    // Con todo de vuelta, el modelo vuelve a mandar.
+    rerender(<TrackEqEditor track={makeTrack(sent)} handlers={handlers} />);
+    await act(async () => finish());
+    expect(node.getAttribute("aria-valuenow")).toBe(String(Math.round(sent.bands[2].frequencyHz)));
+  });
+
+  it("a narrow bell is drawn up to its gain", () => {
+    const eq = defaultTrackEq();
+    eq.bands[2] = { ...eq.bands[2], enabled: true, gainDb: 18, q: 18, frequencyHz: 295.2 };
+    const peak = Math.min(
+      ...[...curvePath((hz) => trackEqResponseDb(eq, 48000, hz), bandSampleFrequencies(eq.bands))
+        .matchAll(/[ML][\d.]+ (-?[\d.]+)/g)].map((m) => Number(m[1])),
+    );
+    // Sin las muestras de la banda, el pico se quedaba muy por debajo de +18 dB.
+    expect(peak).toBeLessThan(gainToY(17));
+  });
+});
+
 describe("TrackEqEditor keyboard fields", () => {
   it("each field edit commits once and clamps like the core", () => {
     const handlers = makeHandlers();
@@ -208,14 +262,15 @@ describe("TrackEqEditor buttons", () => {
     const handlers = makeHandlers();
     render(<TrackEqEditor track={makeTrack()} handlers={handlers} />);
     fireEvent.click(screen.getByText("eq.bypass"));
-    expect(handlers.toggleBypass).toHaveBeenCalledWith("t1");
+    // El bypass sale del borrador del editor, no del modelo.
+    expect(handlers.commit).toHaveBeenCalledTimes(1);
+    expect((handlers.commit.mock.calls[0][1] as TrackEq).enabled).toBe(false);
     fireEvent.click(screen.getByText("eq.reset"));
     expect(handlers.reset).toHaveBeenCalledWith("t1");
     fireEvent.click(screen.getByText("eq.remove"));
     expect(handlers.remove).toHaveBeenCalledWith("t1");
     fireEvent.click(screen.getByLabelText("eq.close"));
     expect(handlers.close).toHaveBeenCalled();
-    expect(handlers.commit).not.toHaveBeenCalled();
   });
 
   it("a track without eq opens on the default bands", () => {
