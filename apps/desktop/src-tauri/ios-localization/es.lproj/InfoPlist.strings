@@ -5,4 +5,4 @@
 
 "NSBluetoothAlwaysUsageDescription" = "LibreTracks usa el Bluetooth para conectar pedaleras y controladores MIDI inalámbricos, para que puedas arrancar canciones y saltar entre secciones con el pie.";
 
-"NSLocalNetworkUsageDescription" = "LibreTracks usa la red local para enviar y recibir MIDI por Wi-Fi con un ordenador u otro dispositivo (sesión MIDI de red), por ejemplo para controlar luces o letras desde tu show.";
+"NSLocalNetworkUsageDescription" = "LibreTracks usa la red local para enviar y recibir MIDI por Wi-Fi con un ordenador u otro dispositivo (sesión MIDI de red), por ejemplo para controlar luces, y para enviar la letra a ProPresenter, FreeShow u Holyrics en tu red.";

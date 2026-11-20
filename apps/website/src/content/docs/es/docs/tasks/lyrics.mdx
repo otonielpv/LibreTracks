@@ -1,0 +1,140 @@
+---
+title: Letra en proyección
+description: "Sincroniza la letra con ProPresenter, FreeShow u Holyrics por la red, sin MIDI: cada sección de la canción cambia la diapositiva con adelanto, siguiendo saltos, vamps y arreglos."
+sidebar:
+  order: 9
+---
+
+LibreTracks puede **cambiar la letra en el programa de proyección** al ritmo de
+la canción: cuando llega el Coro, el programa de letras muestra el Coro. Habla
+con **ProPresenter**, **FreeShow** y **Holyrics** directamente por la red: sin
+puertos MIDI virtuales, sin asignar notas a diapositivas y sin programar nada
+canción a canción.
+
+Funciona con las **marcas de sección** que ya tienes (Verso 1, Coro, Puente…):
+cada una se empareja por su nombre con el grupo del mismo nombre en la
+presentación, y LibreTracks lo envía **un poco antes** de que empiece la
+sección, para que la letra esté en pantalla cuando se empieza a cantar. Sigue
+los saltos en directo, el Vamp y los arreglos igual que el resto del show.
+
+## 1. Activarlo
+
+Abre **Ajustes › Letras**, activa **Enviar la letra al programa de
+proyección** y elige tu programa. La primera vez aparece un **tutorial paso a
+paso** de cómo activar la red en ese programa. Si ya sabes hacerlo, pulsa
+**Saltar tutorial**; puedes volver a verlo cuando quieras con **Ver el
+tutorial**.
+
+### ProPresenter
+
+1. En ProPresenter abre **Ajustes** (Preferencias en Mac) › **Red**.
+2. Marca **Habilitar red**. No hace falta ProPresenter Remote ni contraseña.
+3. Copia en LibreTracks el **puerto** que muestra (por ejemplo 50001).
+
+### FreeShow
+
+1. En FreeShow abre **Ajustes › Conexiones**.
+2. Activa la **API REST** (puerto 5506 por defecto).
+3. Si le pones una clave, cópiala en el campo **Clave** de LibreTracks.
+
+### Holyrics
+
+1. En Holyrics: **Archivo › Configuraciones › API Server**.
+2. Marca **API server - Local** (puerto 8091). Es gratis: el plan de pago solo
+   hace falta para la API por internet.
+3. Pulsa **Manage Permissions**, crea un **token** y marca en la columna
+   **Local**: GetSongs, GetLyrics, ShowLyrics, ActionGoToIndex, ActionNext,
+   SetF8, GetCurrentPresentation y GetSlideDescriptions.
+4. Pega el token en LibreTracks. Se guarda en el llavero del sistema, nunca en
+   un fichero.
+
+Si el programa está **en otro ordenador**, escribe su IP en **Equipo**. Si va
+en el mismo, deja `127.0.0.1`. Pulsa **Probar conexión**: verás la versión y
+cuántas canciones encontró, o qué falla en palabras llanas (y, en Holyrics, la
+lista exacta de permisos que faltan).
+
+## 2. Vincular las canciones
+
+Cada canción se vincula **sola** con la presentación que tiene **el mismo
+nombre** (sin contar tildes, mayúsculas, "(En vivo)", el número de pista ni la
+tonalidad al final). Para revisarlo, pulsa la píldora **Letra** de la barra
+superior › **Vincular canciones…**:
+
+- ✔ **vinculada**: ya está.
+- ? **sugerencia**: pulsa **Usar «…»** o elige otra de la lista. **Aceptar
+  todas las sugerencias** lo hace de golpe.
+- ✗ **sin encontrar**: búscala por su nombre.
+
+El vínculo se guarda **por nombre**: una canción exportada en `.ltpkg` sigue
+funcionando en otra iglesia con otro ordenador.
+
+## 3. Cómo se emparejan las secciones
+
+En el menú de la canción, **Letra en proyección…** muestra cada marca y el
+grupo que enviará:
+
+- **Verso 2** prefiere el grupo **Verse 2** y, si no existe, cae a **Verse**.
+- **Coro** empareja con **Chorus** y con **Chorus 1**; **Estribillo** también.
+- Si una marca no encaja con nada, sale en ámbar y **no se envía nada** (la
+  pantalla se queda como esté).
+
+Para corregirla, elige otro grupo en su desplegable, **Limpiar pantalla** o
+**No cambiar**. Si la sección se repite, LibreTracks pregunta si el cambio es
+**solo esta vez** o **todas las veces**. **Probar** envía esa sección al
+momento, sin reproducir.
+
+Las secciones que se repiten (los coros de un arreglo) llevan a la aparición
+que les toca: el tercer coro de la canción va al tercer coro de la
+presentación, si existe.
+
+## 4. Diapositivas dentro de la sección
+
+Si un grupo tiene varias diapositivas (un verso de dos pantallas), en el panel
+de la canción eliges cómo avanzan:
+
+- **Automático** (por defecto): se reparten en compases enteros. Un verso de
+  8 compases con 2 diapositivas cambia en el compás 5; el panel te lo dice.
+- **Grabados**: pulsa **Grabar cambios…**, reproduce la canción y toca la
+  barra espaciadora (o el botón grande en el móvil) en cada cambio. Cada toque
+  se envía en ese momento para que veas que funciona; al terminar,
+  **Guardar** o **Descartar**. Se guardan en pulsos, así que siguen al tempo,
+  y valen para todas las repeticiones de esa sección.
+- **Solo la primera**.
+
+## 5. En directo
+
+La píldora **Letra** de la barra superior dice cómo va:
+
+- **verde**: conectado;
+- **ámbar**: conectado, pero hay canciones sin presentación;
+- **rojo**: sin conexión o sin permisos;
+- **gris**: envío en pausa.
+
+Púlsala para ver el último envío ("Coro → Chorus, 18 ms"), **Pausar envío**
+(por ejemplo si el operador de proyección quiere llevarla a mano) y
+**Refrescar** si has cambiado presentaciones en el programa.
+
+Al terminar una canción se limpia la pantalla (desactívalo en Ajustes ›
+Letras si prefieres que se quede). Pausar nunca limpia.
+
+Con **redundancia**, solo envía el principal; el respaldo toma el relevo si el
+principal se pierde, sin enviar nada duplicado.
+
+## Consejos
+
+- Usa la transición **Corte** en el programa de letras: una transición larga
+  hace que la letra llegue tarde.
+- Si son dos ordenadores, mejor **por cable**; con wifi, que sea de 5 GHz.
+- El **adelanto** por defecto es de **1 pulso**. Cámbialo en Ajustes › Letras
+  o solo para una canción en su panel.
+
+## Problemas frecuentes
+
+- **No conecta**: comprueba que el programa está abierto con la red activada,
+  la IP y el puerto (en ProPresenter el puerto lo elige el programa) y que el
+  cortafuegos de Windows no lo bloquea.
+- **Faltan permisos** (Holyrics): marca los permisos que lista Probar conexión
+  en Manage Permissions, columna Local.
+- **Salta al primer coro**: el programa tiene un solo grupo "Coro"; está bien,
+  el texto es el mismo. Si no, nombra los grupos como en tus marcas.
+- **Llega tarde**: sube el adelanto y usa la transición Corte.

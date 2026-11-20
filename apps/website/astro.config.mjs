@@ -174,6 +174,7 @@ export default defineConfig({
             { slug: "docs/pitch-and-warp" },
             { slug: "docs/audio-routing-metronome" },
             { slug: "docs/tasks/video" },
+            { slug: "docs/tasks/lyrics" },
           ],
         },
         {

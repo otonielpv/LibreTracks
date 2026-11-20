@@ -1,0 +1,141 @@
+---
+title: Lyrics on screen
+description: "Sync the lyrics with ProPresenter, FreeShow or Holyrics over the network, without MIDI: every section of the song changes the slide ahead of time, following jumps, vamps and arrangements."
+sidebar:
+  order: 9
+---
+
+LibreTracks can **change the lyrics in your presentation program** in time
+with the song: when the Chorus comes, the lyrics program shows the Chorus. It
+talks to **ProPresenter**, **FreeShow** and **Holyrics** directly over the
+network: no virtual MIDI ports, no mapping notes to slides and nothing to
+program song by song.
+
+It works with the **section markers** you already have (Verse 1, Chorus,
+Bridge…): each one is matched by name with the group of the same name in the
+presentation, and LibreTracks sends it **a little before** the section starts,
+so the words are on screen when the singing begins. It follows live jumps,
+Vamp and arrangements like the rest of the show.
+
+## 1. Turning it on
+
+Open **Settings › Lyrics**, turn on **Send the lyrics to the presentation
+program** and pick your program. The first time, a **step-by-step tutorial**
+shows how to enable the network in that program. If you already know how,
+press **Skip tutorial**; you can see it again any time with **Show the
+tutorial**.
+
+### ProPresenter
+
+1. In ProPresenter open **Settings** (Preferences on Mac) › **Network**.
+2. Tick **Enable Network**. You do not need ProPresenter Remote or a password.
+3. Copy the **port** it shows (for example 50001) into LibreTracks.
+
+### FreeShow
+
+1. In FreeShow open **Settings › Connections**.
+2. Enable the **REST API** (port 5506 by default).
+3. If you set a key, copy it into LibreTracks' **Key** field.
+
+### Holyrics
+
+1. In Holyrics: **File › Settings › API Server**.
+2. Tick **API server - Local** (port 8091). It is free: the paid plan is only
+   for the API over the internet.
+3. Press **Manage Permissions**, create a **token** and tick in the **Local**
+   column: GetSongs, GetLyrics, ShowLyrics, ActionGoToIndex, ActionNext, SetF8,
+   GetCurrentPresentation and GetSlideDescriptions.
+4. Paste the token into LibreTracks. It is stored in the system keychain,
+   never in a file.
+
+If the program runs **on another computer**, type its IP in **Computer**. On
+the same one, leave `127.0.0.1`. Press **Test connection**: you see the
+version and how many songs it found, or what is wrong in plain words (and, in
+Holyrics, the exact permissions missing).
+
+## 2. Linking the songs
+
+Each song links **on its own** to the presentation with **the same name**
+(ignoring accents, case, "(Live)", the track number or a key at the end). To
+check, press the **Lyrics** pill in the top bar › **Link songs…**:
+
+- ✔ **linked**: done.
+- ? **suggestion**: press **Use «…»** or pick another from the list. **Accept
+  all suggestions** does them all at once.
+- ✗ **not found**: search for it by name.
+
+The link is stored **by name**: a song exported as `.ltpkg` keeps working at
+another church on another computer.
+
+## 3. How sections are matched
+
+In the song's menu, **Lyrics on screen…** shows each marker and the group it
+will send:
+
+- **Verse 2** prefers the group **Verse 2** and, if there is none, falls back
+  to **Verse**.
+- **Chorus** matches **Chorus** and **Chorus 1**; **Refrain** too.
+- A marker that matches nothing shows in amber and **nothing is sent** (the
+  screen stays as it is).
+
+To correct it, pick another group in its list, **Clear the screen** or **Do
+not change**. If the section repeats, LibreTracks asks whether the change is
+**only this time** or **every time**. **Test** sends that section right away,
+without playing.
+
+Repeated sections (the choruses of an arrangement) go to their own
+appearance: the song's third chorus goes to the presentation's third chorus,
+if there is one.
+
+## 4. Slides inside a section
+
+If a group has several slides (a verse spread over two screens), choose in
+the song panel how they advance:
+
+- **Automatic** (default): spread over whole bars. An 8-bar verse with 2
+  slides changes on bar 5; the panel tells you.
+- **Recorded**: press **Record changes…**, play the song and tap the space
+  bar (or the big button on a phone) on each change. Each tap is sent at once
+  so you see it work; when you finish, **Save** or **Discard**. They are
+  stored in beats, so they follow the tempo, and apply to every repeat of
+  that section.
+- **Only the first**.
+
+## 5. Live
+
+The **Lyrics** pill in the top bar tells you how it goes:
+
+- **green**: connected;
+- **amber**: connected, but some songs have no presentation;
+- **red**: not connected or no permissions;
+- **grey**: sending paused.
+
+Press it to see the last send ("Chorus → Chorus, 18 ms"), **Pause sending**
+(for example when the projection operator wants to drive it by hand) and
+**Refresh** after changing presentations in the program.
+
+When a song ends the screen is cleared (turn it off in Settings › Lyrics if
+you prefer it to stay). Pausing never clears.
+
+With **redundancy**, only the main sends; the backup takes over if the main
+is lost, without sending anything twice.
+
+## Tips
+
+- Use the **Cut** transition in the lyrics program: a long transition makes
+  the lyrics arrive late.
+- With two computers, a **cable** is better; on Wi-Fi, use 5 GHz.
+- The default **lead** is **1 beat**. Change it in Settings › Lyrics, or for
+  one song in its panel.
+
+## Common problems
+
+- **It does not connect**: check that the program is open with its network
+  enabled, the IP and port (ProPresenter picks its own port) and that the
+  Windows firewall is not blocking it.
+- **Missing permissions** (Holyrics): tick the permissions Test connection
+  lists in Manage Permissions, Local column.
+- **It jumps to the first chorus**: the program has a single "Chorus" group;
+  that is fine, the text is the same. Otherwise name the groups like your
+  markers.
+- **It arrives late**: raise the lead and use the Cut transition.
