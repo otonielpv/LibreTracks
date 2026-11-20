@@ -20,6 +20,11 @@ pub struct StructureEntry {
     #[serde(skip)]
     pub canonical: Option<SectionId>,
     pub slide_count: u32,
+    /// The program's own slide this appearance shows (FreeShow slide id,
+    /// Holyrics slide number): a layout that repeats a slide in a row points
+    /// at the same one.
+    #[serde(skip)]
+    pub source: Option<String>,
     /// Index of this appearance's first slide in the program's own numbering
     /// (FreeShow: 1-based layout position; Holyrics: 0-based position in the
     /// order; ProPresenter: 0-based slide of the flattened groups).
@@ -102,9 +107,10 @@ pub fn parse_propresenter(json: &Value) -> Result<LyricsStructure, LyricsError> 
             .and_then(Value::as_array)
             .map_or(0, |slides| slides.len() as u32);
         entries.push(StructureEntry {
-            canonical: canonical_section(&label),
+            canonical: canonical_section(base_label(&label)),
             group_label: label,
             aliases: Vec::new(),
+            source: None,
             slide_count: slides.max(1),
             first_index: index,
         });
@@ -113,7 +119,7 @@ pub fn parse_propresenter(json: &Value) -> Result<LyricsStructure, LyricsError> 
     Ok(LyricsStructure {
         presentation_id,
         title,
-        entries,
+        entries: merge_consecutive(entries),
     })
 }
 
@@ -162,11 +168,12 @@ pub fn parse_freeshow(
         let canonical = global
             .as_deref()
             .and_then(canonical_section)
-            .or_else(|| canonical_section(&label));
+            .or_else(|| canonical_section(base_label(&label)));
         entries.push(StructureEntry {
             group_label: label,
             aliases: global.into_iter().collect(),
             canonical,
+            source: Some(slide_id.clone()),
             slide_count: 1,
             first_index: index,
         });
@@ -174,7 +181,7 @@ pub fn parse_freeshow(
     Ok(LyricsStructure {
         presentation_id: show_id.to_string(),
         title,
-        entries,
+        entries: merge_consecutive(entries),
     })
 }
 
@@ -246,12 +253,13 @@ pub fn parse_holyrics(
             continue;
         }
         let aliases = aliases_of(&label);
-        let canonical = canonical_section(&label)
+        let canonical = canonical_section(base_label(&label))
             .or_else(|| aliases.iter().find_map(|alias| canonical_section(alias)));
         entries.push(StructureEntry {
             group_label: label,
             aliases,
             canonical,
+            source: Some(slide_index.to_string()),
             slide_count: 1,
             first_index: position as u32,
         });
@@ -259,6 +267,60 @@ pub fn parse_holyrics(
     Ok(LyricsStructure {
         presentation_id,
         title,
-        entries,
+        entries: merge_consecutive(entries),
     })
+}
+
+/// The group a label belongs to, without a part number some programs add
+/// when a group repeats: FreeShow shows "Coro 1 1", "Coro 1 2" for "Coro 1"
+/// twice in a row, others write "Chorus 1 (2)". A single number stays
+/// ("Coro 2" is the second chorus, not a part).
+pub fn base_label(label: &str) -> &str {
+    let trimmed = label.trim();
+    // "Chorus 1 (2)"
+    if let Some(open) = trimmed.rfind('(') {
+        let inside = trimmed[open + 1..].trim_end_matches(')').trim();
+        if trimmed.ends_with(')') && !inside.is_empty() && inside.chars().all(|c| c.is_ascii_digit()) {
+            return trimmed[..open].trim_end();
+        }
+    }
+    // "Coro 1 2": two trailing numbers, the last is the part.
+    let mut words = trimmed.rsplitn(3, char::is_whitespace);
+    let last = words.next().unwrap_or_default();
+    let middle = words.next().unwrap_or_default();
+    let rest = words.next();
+    let numeric = |word: &str| !word.is_empty() && word.chars().all(|c| c.is_ascii_digit());
+    if rest.is_some() && numeric(last) && numeric(middle) {
+        return trimmed[..trimmed.len() - last.len()].trim_end();
+    }
+    trimmed
+}
+
+/// The same group several times in a row ("Coro 1 1", "Coro 1 2"; or a
+/// slide repeated in a layout) is ONE section with that many slides: the
+/// section shows the first and its slide changes walk through the rest.
+/// Only appearances that sit next to each other in the program's numbering
+/// merge.
+fn merge_consecutive(entries: Vec<StructureEntry>) -> Vec<StructureEntry> {
+    let mut merged: Vec<StructureEntry> = Vec::with_capacity(entries.len());
+    for mut entry in entries {
+        let base = base_label(&entry.group_label).to_string();
+        if let Some(last) = merged.last_mut() {
+            let same_group = !base.is_empty() && base.to_lowercase() == last.group_label.to_lowercase();
+            let same_slide = entry.source.is_some() && entry.source == last.source;
+            let adjacent = last.first_index + last.slide_count == entry.first_index;
+            if (same_group || same_slide) && adjacent {
+                last.slide_count += entry.slide_count;
+                for alias in entry.aliases {
+                    if !last.aliases.contains(&alias) {
+                        last.aliases.push(alias);
+                    }
+                }
+                continue;
+            }
+        }
+        entry.group_label = base;
+        merged.push(entry);
+    }
+    merged
 }

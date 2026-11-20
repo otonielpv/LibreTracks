@@ -300,3 +300,93 @@ fn an_unknown_section_is_unmatched_and_sends_nothing() {
     assert_eq!(plan.markers["solo"].status, MarkerStatus::Unmatched);
     assert_eq!(section_of(&plan, "solo"), None);
 }
+
+/// The real FreeShow song of 2026-11-20 ("Digno"): Verso 1, Coro 1 twice in
+/// a row (FreeShow shows "CORO 1 1", "CORO 1 2"), Verso 2, Coro 2 four
+/// times, Puente four times. Consecutive appearances of a group are ONE
+/// section with that many slides, whether the label carries the part
+/// number or not.
+fn digno(labels_with_part: bool) -> LyricsStructure {
+    // (group, global group, times in a row, the same slide repeated?)
+    let groups: &[(&str, &str, usize, bool)] = &[
+        ("Verso 1", "verse", 1, false),
+        ("Coro 1", "chorus", 2, false),
+        ("Verso 2", "verse", 1, false),
+        ("Coro 2", "chorus", 4, true),
+        ("Puente", "bridge", 4, true),
+    ];
+    let mut slides = serde_json::Map::new();
+    let mut layout = Vec::new();
+    for (group, global, times, same_slide) in groups {
+        for part in 1..=*times {
+            // A repeated slide is the same id in the layout; two different
+            // slides of one group may carry "Coro 1 1", "Coro 1 2".
+            let id = if *same_slide { group.to_string() } else { format!("{group}-{part}") };
+            let label = if labels_with_part && *times > 1 && !*same_slide {
+                format!("{group} {part}")
+            } else {
+                group.to_string()
+            };
+            slides.insert(id.clone(), serde_json::json!({ "group": label, "globalGroup": global }));
+            layout.push(serde_json::json!({ "type": "parent", "id": id, "index": layout.len() }));
+        }
+    }
+    parse_freeshow(
+        "digno",
+        &serde_json::json!({ "data": { "name": "Digno (Worthy)", "slides": slides } }),
+        &serde_json::json!({ "data": layout }),
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_group_repeated_in_a_row_is_one_section_with_several_slides() {
+    for with_part in [false, true] {
+        let structure = digno(with_part);
+        assert_eq!(
+            shape(&structure),
+            rows(&[
+                ("Verso 1", 1, 1),
+                ("Coro 1", 2, 2),
+                ("Verso 2", 1, 4),
+                ("Coro 2", 4, 5),
+                ("Puente", 4, 9),
+            ]),
+            "labels with part number: {with_part}"
+        );
+        let markers = [
+            marker("v1", MarkerKind::Verse, Some(1), 0.0),
+            marker("c1", MarkerKind::Chorus, Some(1), 16.0),
+            marker("p", MarkerKind::Bridge, None, 48.0),
+        ];
+        let refs: Vec<&Marker> = markers.iter().collect();
+        let plan = build_plan(
+            LyricsSoftware::FreeShow,
+            &refs,
+            &structure,
+            &link(LyricsSoftware::FreeShow, vec![]),
+        );
+        assert_eq!(index_of(&plan, "c1"), 2);
+        let steps: Vec<Option<u32>> = plan.markers["c1"]
+            .steps
+            .iter()
+            .map(|step| match step {
+                LyricsCommand::Step { index, .. } => *index,
+                _ => None,
+            })
+            .collect();
+        assert_eq!(steps, vec![Some(3)], "Coro 1 → its second slide (CORO 1 2)");
+        assert_eq!(plan.markers["p"].steps.len(), 3, "Puente: slides 2, 3 and 4");
+        assert_eq!(plan.slide_counts()["c1"], 2);
+    }
+}
+
+#[test]
+fn part_numbers_come_off_labels_but_single_numbers_stay() {
+    use libretracks_lyrics::structure::base_label;
+    assert_eq!(base_label("Coro 1 2"), "Coro 1");
+    assert_eq!(base_label("Chorus 1 (2)"), "Chorus 1");
+    assert_eq!(base_label("Coro 2"), "Coro 2");
+    assert_eq!(base_label("Puente"), "Puente");
+    assert_eq!(base_label("2 3"), "2 3");
+}
