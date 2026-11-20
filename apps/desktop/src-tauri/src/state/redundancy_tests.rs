@@ -348,3 +348,158 @@ fn transport_command_coverage() {
     }
     assert_eq!(commands.len(), known.len(), "{commands:?}");
 }
+
+/// MIDI output whose only port, "Out", records every byte written to it.
+struct RecordingTransport(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+struct RecordingOutput(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl crate::midi::transport::OutputConnection for RecordingOutput {
+    fn send(&mut self, bytes: &[u8]) -> Result<(), String> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(())
+    }
+}
+
+impl crate::midi::transport::MidiTransport for RecordingTransport {
+    fn input_names(&self) -> Result<Vec<String>, String> {
+        Ok(Vec::new())
+    }
+
+    fn output_names(&self) -> Result<Vec<String>, String> {
+        Ok(vec!["Out".into()])
+    }
+
+    fn open_input(
+        &self,
+        name: &str,
+        _on_bytes: crate::midi::transport::OnBytes,
+    ) -> Result<Box<dyn crate::midi::transport::InputConnection>, String> {
+        Err(format!("no inputs: {name}"))
+    }
+
+    fn open_output(
+        &self,
+        _name: &str,
+    ) -> Result<Box<dyn crate::midi::transport::OutputConnection>, String> {
+        Ok(Box::new(RecordingOutput(std::sync::Arc::clone(&self.0))))
+    }
+
+    fn capabilities(&self) -> crate::midi::transport::MidiCapabilities {
+        crate::midi::transport::MidiCapabilities {
+            available: true,
+            ..Default::default()
+        }
+    }
+}
+
+/// A playing session with one MIDI clip (a program change) at 0 s, wired to
+/// a recording port. Returns the bytes the port received.
+fn playing_session_with_midi_clip() -> (
+    DesktopSession,
+    std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+) {
+    use libretracks_core::model::{MidiClip, MidiEvent, MidiEventKind, TrackKind};
+
+    let mut song = demo_song_with_two_sections();
+    let mut midi_track = song.tracks[0].clone();
+    midi_track.id = "m1".into();
+    midi_track.kind = TrackKind::Midi;
+    song.tracks.push(midi_track);
+    song.midi_clips.push(MidiClip {
+        lead: None,
+        id: "mc1".into(),
+        track_id: "m1".into(),
+        timeline_start_seconds: 0.0,
+        name: String::new(),
+        events: vec![MidiEvent {
+            id: "e1".into(),
+            at_seconds: 0.0,
+            channel: None,
+            kind: MidiEventKind::ProgramChange { program: 5 },
+        }],
+        color: None,
+    });
+    let mut session = session_with_song_dir("redundancy-midi", song);
+
+    let sent = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let output = crate::midi::output::MidiOutputManager::with_transport(std::sync::Arc::new(
+        RecordingTransport(std::sync::Arc::clone(&sent)),
+    ));
+    output.restart(Some("Out".into())).unwrap();
+    session.midi_output = Some(std::sync::Arc::new(output));
+    session.play(&audio()).unwrap();
+    // Whatever opening the port or starting playback wrote is not ours.
+    drain_midi(&session, &sent);
+    (session, sent)
+}
+
+/// MIDI goes out on its own thread. Send a sentinel note behind whatever the
+/// session queued, wait for it to arrive (the thread keeps order) and return
+/// the bytes that came before it, leaving the record empty.
+fn drain_midi(
+    session: &DesktopSession,
+    sent: &std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+) -> Vec<u8> {
+    use crate::midi::message::OutboundMidiMessage;
+
+    const SENTINEL: [u8; 3] = [0x9F, 127, 1];
+    session
+        .midi_output
+        .as_ref()
+        .expect("port wired")
+        .send(&[OutboundMidiMessage::note_on(16, 127, 1)]);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        {
+            let mut bytes = sent.lock().unwrap();
+            if bytes.ends_with(&SENTINEL) {
+                let before = bytes[..bytes.len() - SENTINEL.len()].to_vec();
+                bytes.clear();
+                return before;
+            }
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the sentinel never reached the port"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+}
+
+#[test]
+fn a_backup_following_its_main_sends_no_timeline_midi() {
+    let (mut session, sent) = playing_session_with_midi_clip();
+    session.set_transport_locked(true, None);
+
+    // The tick window (cursor, now] covers the clip at 0 s.
+    session.midi_cursor_seconds = -0.01;
+    session.advance_midi_playback().unwrap();
+
+    assert_eq!(
+        drain_midi(&session, &sent),
+        Vec::<u8>::new(),
+        "the main sends, not the backup"
+    );
+    assert!(
+        session.midi_cursor_seconds >= 0.0,
+        "the cursor still advances, so taking over does not burst held messages"
+    );
+}
+
+#[test]
+fn a_backup_that_carries_the_show_sends_timeline_midi() {
+    let (mut session, sent) = playing_session_with_midi_clip();
+    // Main lost or "Ahora mando yo": the follower lifts the lock.
+    session.set_transport_locked(true, None);
+    session.set_transport_locked(false, None);
+
+    session.midi_cursor_seconds = -0.01;
+    session.advance_midi_playback().unwrap();
+
+    // Program change on the track's channel: status 0xC?, program 5.
+    let bytes = drain_midi(&session, &sent);
+    assert_eq!(bytes.len(), 2, "one program change, got {bytes:?}");
+    assert_eq!(bytes[0] & 0xF0, 0xC0);
+    assert_eq!(bytes[1], 5);
+}

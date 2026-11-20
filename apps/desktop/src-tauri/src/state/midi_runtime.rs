@@ -313,14 +313,23 @@ impl DesktopSession {
             }
             collect_events_in_window(&song, previous_seconds, now_seconds)
         };
-        scheduled.extend(tick.messages);
-        self.active_midi_notes.extend(tick.started_notes);
-        self.active_midi_curves.extend(tick.started_curves);
+        if self.timeline_midi_suppressed() {
+            // Backup following its main: the main sends. The cursor and the
+            // lead planner still advance, so taking over later carries on
+            // from here instead of bursting everything held back. Only the
+            // note-offs above go out (they release notes this device sent
+            // before it started following).
+            self.active_midi_curves.clear();
+        } else {
+            scheduled.extend(tick.messages);
+            self.active_midi_notes.extend(tick.started_notes);
+            self.active_midi_curves.extend(tick.started_curves);
 
-        let curves = std::mem::take(&mut self.active_midi_curves);
-        let (curve_messages, still_running) = step_control_curves(curves, now_seconds);
-        self.active_midi_curves = still_running;
-        scheduled.extend(curve_messages);
+            let curves = std::mem::take(&mut self.active_midi_curves);
+            let (curve_messages, still_running) = step_control_curves(curves, now_seconds);
+            self.active_midi_curves = still_running;
+            scheduled.extend(curve_messages);
+        }
 
         dispatch(&output, scheduled);
 

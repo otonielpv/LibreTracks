@@ -195,6 +195,16 @@ impl DesktopSession {
         self.intents.locked
     }
 
+    /// Whether the timeline's MIDI clips stay silent on this device. True
+    /// while it is a backup following a live main (the same window in which
+    /// its transport is locked): both machines play the same song, and a
+    /// lyrics program or a lighting desk wired to both would otherwise get
+    /// every message twice. Once the main is lost or the operator takes
+    /// over, the lock lifts and the backup sends.
+    pub fn timeline_midi_suppressed(&self) -> bool {
+        self.intents.locked
+    }
+
     /// Redundancy drift correction (step 06): shift the engine by
     /// `delta_seconds` with `SeekRelative`. Only the follower calls it; no
     /// intent, no session reload.
