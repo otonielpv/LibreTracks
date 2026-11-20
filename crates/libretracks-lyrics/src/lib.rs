@@ -3,13 +3,18 @@
 //!
 //! - [`structure`]: each program's presentation read as one shape.
 //! - [`plan`]: a song's concrete orders, built once, never resolved live.
+//! - [`gate`]: who sends (main, backup, guest).
+//! - [`worker`]: events → orders, coalesced, off the MIDI thread.
 //! - [`clients`]: the three HTTP clients behind [`clients::LyricsClient`].
 //!
 //! No Tauri here: the tests run in CI. The desktop runtime owns the worker.
 
 pub mod clients;
+pub mod gate;
 pub mod plan;
+pub mod report;
 pub mod structure;
+pub mod worker;
 
 use serde::Serialize;
 

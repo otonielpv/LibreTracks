@@ -154,6 +154,8 @@ impl DesktopSession {
             }
             None => self.midi_lead_planner.reset(),
         }
+        // Lyrics land at the same points (plan lyrics-sync, D16).
+        self.land_lyrics(landing_seconds);
     }
 
     /// Send note-offs for every sounding note and forget them.

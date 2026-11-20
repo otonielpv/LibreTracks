@@ -9,6 +9,7 @@ pub mod events;
 pub mod level_songs;
 pub mod library;
 pub mod library_places;
+pub mod lyrics;
 pub mod open_with;
 pub mod pads;
 pub mod rhythm;

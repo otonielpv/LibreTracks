@@ -164,6 +164,7 @@ impl DesktopSession {
         self.redo_stack.clear();
         self.live_history_anchor = None;
         self.engine.load_song(song)?;
+        self.lyrics_song_changed();
         self.project_revision = self.project_revision.saturating_add(1);
         let loaded_song = self
             .engine

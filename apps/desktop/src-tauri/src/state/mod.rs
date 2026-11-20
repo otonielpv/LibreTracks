@@ -61,6 +61,7 @@ use crate::infra::settings::AppSettings;
 pub(crate) mod arrangement;
 mod audio_prep;
 mod charts;
+mod lyrics_edit;
 mod covers;
 mod disk_space_notice;
 mod automation_runtime;
@@ -72,6 +73,7 @@ mod library;
 mod midi_edit;
 mod midi_runtime;
 mod lead_runtime;
+pub(crate) mod lyrics_runtime;
 mod video_edit;
 mod video_library;
 mod video_audio;
@@ -335,11 +337,16 @@ impl DesktopState {
             while !stop.load(Ordering::Relaxed) {
                 let active = match session.try_lock() {
                     Ok(mut session) => {
-                        let active = session.midi_runtime_should_tick();
-                        if active {
+                        let midi = session.midi_runtime_should_tick();
+                        if midi {
                             let _ = session.advance_midi_playback();
                         }
-                        active
+                        // Lyrics: events to the worker's channel only (D17).
+                        let lyrics = session.lyrics_should_tick();
+                        if lyrics {
+                            session.advance_lyrics();
+                        }
+                        midi || lyrics
                     }
                     Err(std::sync::TryLockError::WouldBlock) => true,
                     Err(std::sync::TryLockError::Poisoned(_)) => false,
@@ -465,6 +472,8 @@ pub struct DesktopSession {
     /// Where MIDI clips with a lead time start, given the pending jump (plan
     /// lead-time). Idle while no clip has a lead.
     pub(super) midi_lead_planner: libretracks_core::lead_plan::LeadPlanner,
+    /// Lyrics sync (plan lyrics-sync): the MIDI thread's side of it.
+    pub(crate) lyrics: lyrics_runtime::LyricsRuntime,
     /// Same for automation cues with a lead, which fire their actions from a
     /// walk of their own instead of the single armed-cue slot.
     pub(super) automation_lead_planner: libretracks_core::lead_plan::LeadPlanner,
@@ -626,6 +635,7 @@ impl Default for DesktopSession {
             active_midi_notes: Vec::new(),
             active_midi_curves: Vec::new(),
             midi_lead_planner: Default::default(),
+            lyrics: Default::default(),
             automation_lead_planner: Default::default(),
             automation_lead_cursor: 0.0,
             project_revision: 0,
@@ -2145,6 +2155,7 @@ impl DesktopSession {
         self.midi_lead_planner.reset();
         self.automation_lead_planner.reset();
         self.automation_lead_cursor = self.engine.position_seconds().max(0.0);
+        self.lyrics_stopped();
         self.cancel_native_scheduled_jumps(audio)?;
 
         Ok(self.snapshot())
@@ -2737,6 +2748,7 @@ impl DesktopSession {
         // state and pending jumps compute execute_at_seconds relative to the seek position.
         if impact == AudioChangeImpact::MixerOnly {
             self.engine.load_song(song)?;
+            self.lyrics_song_changed();
             // load_song resets playback_state to Stopped — restore it so snapshot()
             // returns the correct state and the UI doesn't briefly show "detenido".
             match playback_state {
@@ -2837,6 +2849,7 @@ impl DesktopSession {
 
         self.perf_metrics.song_save_millis = 0;
         self.engine.load_song(song)?;
+        self.lyrics_song_changed();
         if bump_revision {
             self.project_revision = self.project_revision.saturating_add(1);
         }

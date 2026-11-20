@@ -269,6 +269,9 @@ pub fn run() {
 
             let state = app.state::<DesktopState>();
             state.audio.attach_app_handle(app.handle().clone());
+            // Letra en proyección (plan lyrics-sync): worker de envío y
+            // ajustes de lyrics.json.
+            lyrics::initialize(app.handle());
             {
                 // Cambio de tono preparado: cuando la cola termina, el motor
                 // recibe las pistas con el audio recién preparado. La canción
@@ -661,6 +664,18 @@ pub fn run() {
             commands::timeline::update_song_region_key,
             commands::timeline::set_song_region_compact_width,
             commands::charts::set_song_region_chart,
+            commands::lyrics::lyrics_get_config,
+            commands::lyrics::lyrics_save_config,
+            commands::lyrics::lyrics_probe,
+            commands::lyrics::lyrics_list_presentations,
+            commands::lyrics::lyrics_region_report,
+            commands::lyrics::lyrics_setlist_report,
+            commands::lyrics::lyrics_set_region_lyrics,
+            commands::lyrics::lyrics_test_send,
+            commands::lyrics::lyrics_set_paused,
+            commands::lyrics::lyrics_refresh,
+            commands::lyrics::lyrics_status,
+            commands::lyrics::lyrics_tutorial_done,
             commands::timeline::upsert_song_tempo_marker,
             commands::timeline::delete_song_tempo_marker,
             commands::timeline::set_song_tempo_marker_ramp,

@@ -187,7 +187,13 @@ impl DesktopSession {
     /// Backup following its main: refuse (or forward) every transport order
     /// that does not come from the follower.
     pub fn set_transport_locked(&mut self, locked: bool, forwarder: Option<Forwarder>) {
+        let taking_over = self.intents.locked && !locked;
         self.intents.locked = locked;
+        if taking_over {
+            // The backup hosts now: put on screen what should be there
+            // (plan lyrics-sync, D19).
+            self.lyrics_take_over();
+        }
         self.intents.forwarder = if locked { forwarder } else { None };
     }
 

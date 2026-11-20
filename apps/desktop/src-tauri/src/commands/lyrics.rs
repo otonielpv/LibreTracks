@@ -1,0 +1,268 @@
+//! Letra en proyección (plan lyrics-sync): ajustes, prueba de conexión,
+//! vínculo de cada canción y estado. Todo el HTTP sale de Rust: el WebView no
+//! habla nunca con el programa de letras (en Android release el cleartext del
+//! WebView está bloqueado).
+
+use libretracks_core::lyrics_config::{uses_token, LyricsConfig};
+use libretracks_core::{LyricsSoftware, RegionLyrics};
+use libretracks_lyrics::clients::{client_for, Connection, LyricsClient, Presentation, ProbeInfo};
+use libretracks_lyrics::report::{region_report, RegionReport};
+use libretracks_lyrics::worker::{LyricsStatus, WorkerInput};
+use libretracks_lyrics::LyricsError;
+use serde::Serialize;
+use tauri::{AppHandle, Manager, State};
+
+use crate::infra::error::DesktopError;
+use crate::lyrics::{config, connection_for, load_token, save_token, LyricsService};
+use crate::models::TransportSnapshot;
+use crate::state::DesktopState;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsConfigView {
+    pub config: LyricsConfig,
+    /// Whether a token is stored for the selected program (never the token).
+    pub has_token: bool,
+}
+
+fn current_config(service: &LyricsService) -> LyricsConfig {
+    service
+        .config
+        .lock()
+        .map(|config| config.clone())
+        .unwrap_or_default()
+}
+
+fn config_view(app: &AppHandle, service: &LyricsService) -> LyricsConfigView {
+    let config = current_config(service);
+    let has_token = config
+        .software
+        .filter(|software| uses_token(*software))
+        .and_then(|software| load_token(app, software))
+        .is_some();
+    LyricsConfigView { config, has_token }
+}
+
+#[tauri::command]
+pub fn lyrics_get_config(app: AppHandle, service: State<'_, LyricsService>) -> LyricsConfigView {
+    config_view(&app, &service)
+}
+
+/// Guarda los ajustes. `token`: `None` deja el guardado; `Some("")` lo borra.
+#[tauri::command(async)]
+pub fn lyrics_save_config(
+    app: AppHandle,
+    service: State<'_, LyricsService>,
+    config: LyricsConfig,
+    token: Option<String>,
+) -> Result<LyricsConfigView, String> {
+    if let (Some(software), Some(token)) = (config.software, token.as_deref()) {
+        if uses_token(software) {
+            save_token(&app, software, token)?;
+        }
+    }
+    let resumed = {
+        let mut slot = service
+            .config
+            .lock()
+            .map_err(|_| "lyrics config poisoned".to_string())?;
+        let resumed = slot.paused && !config.paused;
+        *slot = config;
+        config::save(&app, &slot);
+        resumed
+    };
+    service.apply(&app);
+    if resumed {
+        take_over(&app);
+    }
+    Ok(config_view(&app, &service))
+}
+
+fn take_over(app: &AppHandle) {
+    let state = app.state::<DesktopState>();
+    let locked = state.session.lock();
+    if let Ok(mut session) = locked {
+        session.lyrics_take_over();
+    }
+}
+
+/// «Probar conexión» con lo que hay en el formulario, sin guardarlo.
+/// `token: None` usa el guardado.
+#[tauri::command(async)]
+pub async fn lyrics_probe(
+    app: AppHandle,
+    software: LyricsSoftware,
+    host: String,
+    port: u16,
+    token: Option<String>,
+) -> Result<ProbeInfo, LyricsError> {
+    let token = match token {
+        Some(token) if !token.trim().is_empty() => Some(token.trim().to_string()),
+        _ if uses_token(software) => load_token(&app, software),
+        _ => None,
+    };
+    let client = client_for(
+        software,
+        Connection {
+            host: host.trim().to_string(),
+            port,
+            token,
+        },
+    )?;
+    client.probe().await
+}
+
+fn configured_client(
+    app: &AppHandle,
+    service: &LyricsService,
+) -> Result<(LyricsSoftware, Box<dyn LyricsClient>), LyricsError> {
+    let config = current_config(service);
+    let (software, connection) =
+        connection_for(app, &config).ok_or_else(|| LyricsError::Unexpected {
+            detail: "elige el programa de letras y su puerto".into(),
+        })?;
+    Ok((software, client_for(software, connection)?))
+}
+
+#[tauri::command(async)]
+pub async fn lyrics_list_presentations(
+    app: AppHandle,
+    service: State<'_, LyricsService>,
+) -> Result<Vec<Presentation>, LyricsError> {
+    let (_, client) = configured_client(&app, &service)?;
+    client.list_presentations().await
+}
+
+fn session_song(state: &DesktopState) -> Result<libretracks_core::Song, LyricsError> {
+    let session = state.session.lock().map_err(|_| LyricsError::Unexpected {
+        detail: "estado bloqueado".into(),
+    })?;
+    session
+        .engine
+        .song()
+        .cloned()
+        .ok_or_else(|| LyricsError::Unexpected {
+            detail: "no hay sesión abierta".into(),
+        })
+}
+
+/// Lo que muestra el panel de letra de una canción.
+#[tauri::command(async)]
+pub async fn lyrics_region_report(
+    app: AppHandle,
+    service: State<'_, LyricsService>,
+    state: State<'_, DesktopState>,
+    region_id: String,
+) -> Result<RegionReport, LyricsError> {
+    let (software, client) = configured_client(&app, &service)?;
+    let song = session_song(&state)?;
+    let catalog = client.list_presentations().await?;
+    region_report(client.as_ref(), software, &song, &region_id, &catalog).await
+}
+
+/// Lo que muestra «Vincular canciones»: un informe por canción.
+#[tauri::command(async)]
+pub async fn lyrics_setlist_report(
+    app: AppHandle,
+    service: State<'_, LyricsService>,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<RegionReport>, LyricsError> {
+    let (software, client) = configured_client(&app, &service)?;
+    let song = session_song(&state)?;
+    let catalog = client.list_presentations().await?;
+    let mut reports = Vec::with_capacity(song.regions.len());
+    for region in &song.regions {
+        reports.push(region_report(client.as_ref(), software, &song, &region.id, &catalog).await?);
+    }
+    Ok(reports)
+}
+
+/// Guarda la letra en proyección de una canción (con deshacer).
+#[tauri::command(async)]
+pub fn lyrics_set_region_lyrics(
+    state: State<'_, DesktopState>,
+    region_id: String,
+    lyrics: Option<RegionLyrics>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .set_region_lyrics(&region_id, lyrics, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
+/// «Probar»: manda ya esa sección (y su diapositiva `k`).
+#[tauri::command]
+pub fn lyrics_test_send(
+    service: State<'_, LyricsService>,
+    region_id: String,
+    marker_id: String,
+    k: u32,
+) {
+    service.send(WorkerInput::TestSend {
+        region_id,
+        marker_id,
+        k,
+    });
+}
+
+#[tauri::command(async)]
+pub fn lyrics_set_paused(
+    app: AppHandle,
+    service: State<'_, LyricsService>,
+    paused: bool,
+) -> Result<(), String> {
+    {
+        let mut slot = service
+            .config
+            .lock()
+            .map_err(|_| "lyrics config poisoned".to_string())?;
+        if slot.paused == paused {
+            return Ok(());
+        }
+        slot.paused = paused;
+        config::save(&app, &slot);
+    }
+    service.apply(&app);
+    if !paused {
+        take_over(&app);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn lyrics_refresh(app: AppHandle, service: State<'_, LyricsService>) {
+    service.send(WorkerInput::Refresh);
+    service.apply(&app);
+}
+
+#[tauri::command]
+pub fn lyrics_status(service: State<'_, LyricsService>) -> LyricsStatus {
+    service
+        .status
+        .lock()
+        .map(|status| status.clone())
+        .unwrap_or_default()
+}
+
+/// Marca el tutorial de configuración de un programa como visto (o saltado).
+#[tauri::command]
+pub fn lyrics_tutorial_done(
+    app: AppHandle,
+    service: State<'_, LyricsService>,
+    software: LyricsSoftware,
+) -> Result<LyricsConfigView, String> {
+    {
+        let mut slot = service
+            .config
+            .lock()
+            .map_err(|_| "lyrics config poisoned".to_string())?;
+        if !slot.tutorial_done.contains(&software) {
+            slot.tutorial_done.push(software);
+            config::save(&app, &slot);
+        }
+    }
+    Ok(config_view(&app, &service))
+}

@@ -85,3 +85,67 @@ fn splitting_a_song_copies_its_lyrics_link_to_both_halves() {
         assert_eq!(lyrics.links[0].presentation_name, "Song");
     }
 }
+
+fn link_named(name: &str) -> LyricsLink {
+    LyricsLink {
+        software: LyricsSoftware::Holyrics,
+        presentation_id: Some("812".into()),
+        presentation_name: name.into(),
+        overrides: vec![],
+    }
+}
+
+#[test]
+fn linking_a_song_is_one_undo_step() {
+    let mut session = session();
+    let audio = AudioController::default();
+    let lyrics = RegionLyrics {
+        links: vec![link_named("Way Maker")],
+        ..RegionLyrics::default()
+    };
+    session
+        .set_region_lyrics("r1", Some(lyrics.clone()), &audio)
+        .expect("set");
+    assert_eq!(session.engine.song().unwrap().regions[0].lyrics, Some(lyrics));
+    session.undo_action(&audio).expect("undo");
+    let restored = session.engine.song().unwrap().regions[0].lyrics.clone();
+    assert_eq!(restored.unwrap().links[0].software, LyricsSoftware::FreeShow);
+}
+
+#[test]
+fn a_link_found_by_name_is_stored_without_an_undo_step_and_keeps_the_rest() {
+    let mut session = session();
+    let audio = AudioController::default();
+    session
+        .store_lyrics_link_silently("r1", link_named("Way Maker"), &audio)
+        .expect("store");
+    let lyrics = session.engine.song().unwrap().regions[0]
+        .lyrics
+        .clone()
+        .expect("lyrics");
+    // The FreeShow link stays; the Holyrics one is added.
+    assert_eq!(lyrics.links.len(), 2);
+    assert!(session.undo_action(&audio).is_err() || {
+        let after = session.engine.song().unwrap().regions[0].lyrics.clone().unwrap();
+        after.links.len() == 2
+    });
+}
+
+#[test]
+fn edits_reach_the_lyrics_worker_only_while_lyrics_are_on() {
+    let mut session = session();
+    let audio = AudioController::default();
+    let (sender, mut inbox) = tokio::sync::mpsc::unbounded_channel();
+    session
+        .set_region_lyrics("r1", None, &audio)
+        .expect("edit while off");
+    assert!(inbox.try_recv().is_err(), "no worker yet");
+    session.lyrics.sender = Some(sender);
+    session
+        .set_region_lyrics("r1", Some(RegionLyrics::default()), &audio)
+        .expect("edit while on");
+    assert!(matches!(
+        inbox.try_recv(),
+        Ok(libretracks_lyrics::worker::WorkerInput::Song(_))
+    ));
+}

@@ -2628,6 +2628,7 @@ dependencies = [
  "libretracks-core",
  "libretracks-ios-folder-picker",
  "libretracks-link",
+ "libretracks-lyrics",
  "libretracks-project",
  "libretracks-remote",
  "libretracks-video",
