@@ -22,7 +22,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::OnceLock;
 
-use libretracks_core::{Song, TrackEq, TrackKind};
+use libretracks_core::{Song, TrackEq};
 use libretracks_link::redundancy::MixControl;
 use tokio::sync::broadcast;
 
@@ -100,7 +100,7 @@ impl MixSnapshot {
             eqs: song
                 .tracks
                 .iter()
-                .filter(|track| track.kind == TrackKind::Audio)
+                .filter(|track| libretracks_core::track_eq::track_kind_takes_eq(track.kind))
                 .map(|track| (track.id.clone(), track.eq.clone()))
                 .collect(),
             song_masters: song
@@ -133,7 +133,7 @@ impl MixSnapshot {
             eqs: song
                 .tracks
                 .iter()
-                .filter(|track| track.kind == "audio")
+                .filter(|track| track.kind == "audio" || track.kind == "folder")
                 .map(|track| (track.id.clone(), track.eq.clone()))
                 .collect(),
             song_masters: song
@@ -462,10 +462,10 @@ pub fn apply_to_session(
                 .engine
                 .song()
                 .and_then(|song| song.tracks.iter().find(|track| &track.id == track_id))
-                .filter(|track| track.kind == TrackKind::Audio)
+                .filter(|track| libretracks_core::track_eq::track_kind_takes_eq(track.kind))
                 .map(|track| track.eq.clone())
             else {
-                return Ok(()); // pista que el respaldo no tiene, o no es de audio
+                return Ok(()); // pista que el respaldo no tiene, o sin EQ posible
             };
             let wanted = eq.as_ref().map(TrackEq::sanitized);
             if wanted != current {

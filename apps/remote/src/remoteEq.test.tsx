@@ -75,7 +75,7 @@ describe("remote EQ", () => {
 
   it("the strip button opens the shared editor and releasing a node sends a commit", () => {
     const send = vi.fn();
-    const tracks = [track("voz", "audio", defaultTrackEq()), track("banda", "folder")];
+    const tracks = [track("voz", "audio", defaultTrackEq()), track("luces", "midi")];
     render(
       <>
         {tracks.map((item) => (
@@ -84,8 +84,8 @@ describe("remote EQ", () => {
         <RemoteTrackEqHost tracks={tracks} send={send} onLocalCommit={vi.fn()} language="es" />
       </>,
     );
-    // Solo en pistas de audio.
-    expect(screen.queryByRole("button", { name: "Ecualizador de BANDA" })).toBeNull();
+    // Audio y carpetas, no MIDI.
+    expect(screen.queryByRole("button", { name: "Ecualizador de LUCES" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Ecualizador de VOZ" }));
     expect(screen.getByRole("dialog")).toBeTruthy();
 

@@ -17,7 +17,7 @@ import {
   updateTrackEqRealtime,
 } from "../desktopApi";
 import { getSong, setSong, useSongStore } from "../songStore";
-import { createTrackEqHandlers } from "../tracks/trackEqHandlers";
+import { createTrackEqHandlers, trackTakesEq } from "../tracks/trackEqHandlers";
 import { TrackEqEditor } from "./TrackEqEditor";
 import { useTrackEqStore } from "./trackEqStore";
 
@@ -81,6 +81,6 @@ export function TrackEqEditorHost({
   const track = useSongStore((state) =>
     openTrackId ? (state.song?.tracks.find((candidate) => candidate.id === openTrackId) ?? null) : null,
   );
-  if (!track || track.kind !== "audio") return null;
+  if (!track || !trackTakesEq(track)) return null;
   return <TrackEqEditor key={track.id} track={track} handlers={handlers} />;
 }

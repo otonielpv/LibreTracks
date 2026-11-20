@@ -482,8 +482,8 @@ EngineCommand command_from_json(const std::string& raw) {
             track.role = t.value("role", std::string{});
             track.kind = t.value("kind", std::string{});
             track.parent_track_id = t.value("parent_track_id", std::string{});
-            // Espejo de session_adapter.cpp (mismo lector) y solo en audio.
-            if (track.kind.empty() || track.kind == "audio") {
+            // Espejo de session_adapter.cpp (mismo lector): audio y carpetas.
+            if (track.kind.empty() || track.kind == "audio" || track.kind == "folder") {
                 if (auto it = t.find("eq"); it != t.end())
                     track.eq = parse_track_eq_json(*it);
             }

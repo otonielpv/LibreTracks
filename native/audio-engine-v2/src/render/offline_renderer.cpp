@@ -1112,6 +1112,129 @@ void collect_audio_tracks(const Session& session, const Id& id,
     }
 }
 
+// ── EQ de carpetas (plan track-eq-2, E9) ───────────────────────────────────
+//
+// Como en directo: las hijas que heredan la salida suman (ya con su ganancia y
+// su paneo) en un búfer de la carpeta; el búfer se ecualiza con el MISMO
+// render/track_eq.h y se suma a su carpeta padre (si también tiene EQ) o a la
+// salida. Solo en una mezcla (varias pistas) o en el stem de la propia
+// carpeta (o de una de sus carpetas padre): el stem de una hija suelta no
+// lleva el EQ de su carpeta.
+
+const Track* find_in_song(const Song& song, const Id& id) {
+    for (const auto& track : song.tracks)
+        if (track.id == id) return &track;
+    return nullptr;
+}
+
+bool inherits_route(const Track& track) {
+    std::string route = track.audio_to;
+    std::transform(route.begin(), route.end(), route.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    route.erase(0, route.find_first_not_of(" \t"));
+    route.erase(route.find_last_not_of(" \t") + 1);
+    return route.empty() || route == "inherit";
+}
+
+struct FolderEqBus {
+    const Song* song = nullptr;
+    const Track* folder = nullptr;
+    int depth = 0;
+    std::vector<float> left, right;
+    bool used = false;
+};
+
+class FolderEqPlan {
+public:
+    FolderEqPlan(const OfflineRenderRequest& request, const OfflineRenderOutput& output, Frame total)
+        : request_(request), output_(output), total_(total) {}
+
+    // Dónde suma `track`: el búfer de la carpeta con EQ más cercana, o null
+    // (directo a la salida).
+    FolderEqBus* destination(const Song& song, const Track& track) {
+        const Track* current = &track;
+        for (int depth = 0; depth < 8; ++depth) {
+            if (!inherits_route(*current) || current->parent_track_id.empty())
+                return nullptr;
+            const Track* parent = find_in_song(song, current->parent_track_id);
+            if (!parent || parent->kind != TrackKind::Folder)
+                return nullptr;
+            if (applies(song, *parent))
+                return bus_for(song, *parent);
+            current = parent;
+        }
+        return nullptr;
+    }
+
+    // Ecualiza cada carpeta que recibió algo, de la más profunda a la más
+    // externa, y la suma donde toca.
+    void finish(float* acc_l, float* acc_r) {
+        std::vector<FolderEqBus*> order;
+        for (auto& bus : buses_) order.push_back(bus.get());
+        std::stable_sort(order.begin(), order.end(),
+                         [](const FolderEqBus* a, const FolderEqBus* b) { return a->depth > b->depth; });
+        for (FolderEqBus* bus : order) {
+            if (!bus->used) continue;
+            TrackEq eq;
+            eq.prepare(static_cast<double>(request_.sample_rate));
+            eq.set_target(*bus->folder->eq);
+            eq.snap_to_target();
+            for (Frame at = 0; at < total_; at += kBlockFrames) {
+                const std::size_t n = static_cast<std::size_t>(std::min<Frame>(kBlockFrames, total_ - at));
+                eq.process(bus->left.data() + at, bus->right.data() + at, n);
+            }
+            FolderEqBus* up = destination(*bus->song, *bus->folder);
+            float* out_l = up ? up->left.data() : acc_l;
+            float* out_r = up ? up->right.data() : acc_r;
+            if (up) up->used = true;
+            for (Frame f = 0; f < total_; ++f) {
+                out_l[f] += bus->left[static_cast<std::size_t>(f)];
+                out_r[f] += bus->right[static_cast<std::size_t>(f)];
+            }
+        }
+    }
+
+private:
+    bool applies(const Song& song, const Track& folder) const {
+        if (!request_.apply_mixer || !folder.eq) return false;
+        TrackEq probe;
+        probe.prepare(static_cast<double>(request_.sample_rate));
+        probe.set_target(*folder.eq);
+        probe.snap_to_target();
+        if (probe.is_transparent()) return false;
+        if (output_.track_ids.size() >= 2) return true;
+        // Stem de la carpeta o de una carpeta que la contiene.
+        const Track* current = &folder;
+        for (int depth = 0; current && depth < 8; ++depth) {
+            for (const auto& id : output_.track_ids)
+                if (id == current->id) return true;
+            current = current->parent_track_id.empty() ? nullptr
+                                                       : find_in_song(song, current->parent_track_id);
+        }
+        return false;
+    }
+
+    FolderEqBus* bus_for(const Song& song, const Track& folder) {
+        for (auto& bus : buses_)
+            if (bus->folder == &folder) return bus.get();
+        auto bus = std::make_unique<FolderEqBus>();
+        bus->song = &song;
+        bus->folder = &folder;
+        for (const Track* current = &folder; current && !current->parent_track_id.empty()
+             && bus->depth < 8; ++bus->depth)
+            current = find_in_song(song, current->parent_track_id);
+        bus->left.assign(static_cast<std::size_t>(total_), 0.0f);
+        bus->right.assign(static_cast<std::size_t>(total_), 0.0f);
+        buses_.push_back(std::move(bus));
+        return buses_.back().get();
+    }
+
+    const OfflineRenderRequest& request_;
+    const OfflineRenderOutput& output_;
+    Frame total_ = 0;
+    std::vector<std::unique_ptr<FolderEqBus>> buses_;
+};
+
 } // namespace
 
 Result<OfflineRenderReport> render_offline(const OfflineRenderRequest& request,
@@ -1232,12 +1355,18 @@ Result<OfflineRenderReport> render_offline(const OfflineRenderRequest& request,
         std::vector<float> acc_l(static_cast<std::size_t>(total), 0.0f);
         std::vector<float> acc_r(static_cast<std::size_t>(total), 0.0f);
 
+        FolderEqPlan folders(request, output, total);
         for (const auto& ref : output_tracks[oi]) {
-            auto rendered = render_track(run, *ref.song, *ref.track, acc_l.data(), acc_r.data());
+            FolderEqBus* folder = folders.destination(*ref.song, *ref.track);
+            if (folder) folder->used = true;
+            auto rendered = render_track(run, *ref.song, *ref.track,
+                                         folder ? folder->left.data() : acc_l.data(),
+                                         folder ? folder->right.data() : acc_r.data());
             if (rendered.is_err())
                 return fail(rendered.error());
             run.units_done += 1.0;
         }
+        folders.finish(acc_l.data(), acc_r.data());
 
         const double sr = static_cast<double>(request.sample_rate);
 

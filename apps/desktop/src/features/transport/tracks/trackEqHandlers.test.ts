@@ -8,6 +8,7 @@ import { createTrackEqHandlers, openTrackEq } from "./trackEqHandlers";
 
 const audio = { id: "a", kind: "audio", eq: null } as unknown as TrackSummary;
 const folder = { id: "f", kind: "folder", eq: null } as unknown as TrackSummary;
+const midi = { id: "m", kind: "midi", eq: null } as unknown as TrackSummary;
 
 function setup(track: TrackSummary | TrackSummary[] = audio) {
   const tracks = Array.isArray(track) ? track : [track];
@@ -40,7 +41,7 @@ function setup(track: TrackSummary | TrackSummary[] = audio) {
 beforeEach(() => useTrackEqStore.setState({ openTrackId: null, targetTrackIds: [] }));
 
 describe("createTrackEqHandlers", () => {
-  it("opens the editor only for audio tracks", () => {
+  it("opens the editor for audio tracks and folders, not for MIDI", () => {
     const { handlers } = setup();
     handlers.open("a");
     expect(useTrackEqStore.getState().openTrackId).toBe("a");
@@ -48,6 +49,10 @@ describe("createTrackEqHandlers", () => {
     expect(useTrackEqStore.getState().openTrackId).toBeNull();
     const withFolder = setup(folder);
     withFolder.handlers.open("f");
+    expect(useTrackEqStore.getState().openTrackId).toBe("f");
+    handlers.close();
+    const withMidi = setup(midi);
+    withMidi.handlers.open("m");
     expect(useTrackEqStore.getState().openTrackId).toBeNull();
   });
 
@@ -104,8 +109,8 @@ describe("createTrackEqHandlers", () => {
 
   it("with several tracks selected every change goes to all of them in one batch", async () => {
     const other = { id: "b", kind: "audio", eq: null } as unknown as TrackSummary;
-    const { handlers, deps, song } = setup([audio, other, folder]);
-    openTrackEq(audio, [audio, other, folder]);
+    const { handlers, deps, song } = setup([audio, other, midi]);
+    openTrackEq(audio, [audio, other, midi]);
     expect(useTrackEqStore.getState().targetTrackIds).toEqual(["a", "b"]);
 
     handlers.applyLive("a", defaultTrackEq());
@@ -128,8 +133,8 @@ describe("createTrackEqHandlers", () => {
     const source = { id: "a", kind: "audio", eq } as unknown as TrackSummary;
     const other = { id: "b", kind: "audio", eq: null } as unknown as TrackSummary;
     const third = { id: "c", kind: "audio", eq: null } as unknown as TrackSummary;
-    const { handlers, deps } = setup([source, other, third, folder]);
-    await handlers.copyTo("a", ["a", "b", "c", "f"]);
+    const { handlers, deps } = setup([source, other, third, midi]);
+    await handlers.copyTo("a", ["a", "b", "c", "m"]);
     expect(deps.commitTrackEqsChange).toHaveBeenCalledTimes(1);
     const { changes } = deps.commitTrackEqsChange.mock.calls[0][0];
     expect(changes.map((c) => c.trackId)).toEqual(["b", "c"]);

@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { useSongStore } from "../songStore";
-import { openTrackEq } from "../tracks/trackEqHandlers";
+import { openTrackEq, trackTakesEq } from "../tracks/trackEqHandlers";
 import { trackEqIsActive } from "@libretracks/shared/eq/trackEqModel";
 import "./TrackEqButton.css";
 
@@ -28,7 +28,7 @@ export function TrackEqButton({
   const track = useSongStore(
     (state) => state.song?.tracks.find((candidate) => candidate.id === trackId) ?? null,
   );
-  if (!track || track.kind !== "audio") return null;
+  if (!track || !trackTakesEq(track)) return null;
   const active = trackEqIsActive(track.eq);
   return (
     <button

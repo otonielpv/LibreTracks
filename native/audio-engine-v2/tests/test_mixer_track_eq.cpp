@@ -403,20 +403,23 @@ TEST_CASE("mixer eq C7: SetTrackEq and UpsertSongTracks parse eq tolerantly") {
         // Tipo de una versión futura: la banda se apaga, no suena a otra cosa.
         CHECK_FALSE(eq->bands[2].enabled);
     }
-    SUBCASE("UpsertSongTracks reads eq only on audio tracks") {
+    SUBCASE("UpsertSongTracks reads eq on audio tracks and folders, not on midi") {
+        // Plan track-eq-2, E9: las carpetas también llevan EQ.
         const auto cmd = command_from_json(R"({"type":"UpsertSongTracks","song_id":"s","tracks":[
             {"id":"a","kind":"audio","eq":{"enabled":true,"bands":[{"kind":"notch","frequencyHz":60}]}},
             {"id":"b","kind":"audio"},
             {"id":"c","kind":"audio","eq":null},
+            {"id":"m","kind":"midi","eq":{"enabled":true,"bands":[]}},
             {"id":"f","kind":"folder","eq":{"enabled":true,"bands":[]}}]})");
         const auto& up = std::get<CmdUpsertSongTracks>(cmd);
-        REQUIRE(up.tracks.size() == 4);
+        REQUIRE(up.tracks.size() == 5);
         REQUIRE(up.tracks[0].eq.has_value());
         CHECK(up.tracks[0].eq->bands[0].kind == EqBandKind::Notch);
         CHECK(up.tracks[0].eq->bands[0].frequency_hz == 60.0f);
         CHECK_FALSE(up.tracks[1].eq.has_value());
         CHECK_FALSE(up.tracks[2].eq.has_value());
         CHECK_FALSE(up.tracks[3].eq.has_value());
+        CHECK(up.tracks[4].eq.has_value());
     }
 }
 

@@ -54,17 +54,18 @@ describe("copy EQ to the selected tracks", () => {
     await copy!.onSelect?.();
     expect(api.commitTrackEqsChange).toHaveBeenCalledTimes(1);
     const { changes } = api.commitTrackEqsChange.mock.calls[0][0];
-    expect(changes.map((change) => change.trackId)).toEqual(["bajo", "gtr"]);
+    // Las carpetas también llevan EQ (plan track-eq-2, paso 08); MIDI no.
+    expect(changes.map((change) => change.trackId)).toEqual(["bajo", "gtr", "banda"]);
     expect(changes.every((change) => change.eq?.bands[2].gainDb === 6)).toBe(true);
     expect(deps.applyPlaybackSnapshot).toHaveBeenCalledTimes(1);
   });
 
-  it("is not offered from a folder or without other audio tracks", () => {
+  it("is not offered from a MIDI track or without other tracks that take an eq", () => {
     const { multiTrackContextMenu } = menus();
     const labels = (list: ReturnType<typeof multiTrackContextMenu>) => list.map((a) => a.label);
-    expect(labels(multiTrackContextMenu(tracks, tracks[3])).some((l) => l?.startsWith("eq.copy"))).toBe(false);
+    expect(labels(multiTrackContextMenu(tracks, tracks[4])).some((l) => l?.startsWith("eq.copy"))).toBe(false);
     expect(
-      labels(multiTrackContextMenu([tracks[0], tracks[3]], tracks[0])).some((l) => l?.startsWith("eq.copy")),
+      labels(multiTrackContextMenu([tracks[0], tracks[4]], tracks[0])).some((l) => l?.startsWith("eq.copy")),
     ).toBe(false);
   });
 });

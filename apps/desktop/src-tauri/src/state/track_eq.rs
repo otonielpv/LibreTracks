@@ -14,8 +14,15 @@ use crate::models::TransportSnapshot;
 
 use super::DesktopSession;
 
-/// Qué pistas llevan EQ. Hoy solo las de audio.
+/// Qué pistas llevan EQ: audio y carpetas (plan track-eq-2, E9).
 pub(crate) fn track_kind_takes_eq(kind: TrackKind) -> bool {
+    libretracks_core::track_eq::track_kind_takes_eq(kind)
+}
+
+/// Qué pistas cambian de EQ desde cues y escenas: solo las de audio. El
+/// render offline aplica el EQ de carpeta fijo, así que una carpeta no se
+/// automatiza (sonaría distinto en directo que renderizado).
+pub(crate) fn track_kind_takes_automated_eq(kind: TrackKind) -> bool {
     kind == TrackKind::Audio
 }
 
@@ -55,7 +62,7 @@ impl DesktopSession {
                     .ok_or_else(|| DesktopError::TrackNotFound(track_id.clone()))?;
                 if !track_kind_takes_eq(track.kind) {
                     return Err(DesktopError::AudioCommand(format!(
-                        "el ecualizador solo existe en pistas de audio ({track_id})"
+                        "el ecualizador solo existe en pistas de audio y carpetas ({track_id})"
                     )));
                 }
                 if &track.eq != eq {
@@ -113,7 +120,7 @@ impl DesktopSession {
         let Some(track) = song.tracks.iter_mut().find(|track| track.id == track_id) else {
             return Ok(());
         };
-        if !track_kind_takes_eq(track.kind) || track.eq == eq {
+        if !track_kind_takes_automated_eq(track.kind) || track.eq == eq {
             return Ok(());
         }
         track.eq = eq.clone();

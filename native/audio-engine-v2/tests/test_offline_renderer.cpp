@@ -1206,3 +1206,108 @@ TEST_CASE("offline render eq ramp C2: a ramped eq change matches the live mixer 
     CHECK(level(kChangeBlock * kBlock + 12000 - 2400) - level(10 * kBlock)
           == doctest::Approx(6.0).epsilon(0.15));
 }
+
+// ---------------------------------------------------------------------------
+// Plan track-eq-2, paso 08: el render offline aplica el EQ de carpeta igual
+// que el directo.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("offline render folder eq C5: a folder with eq matches the live mixer sample by sample") {
+    constexpr int kSR = 48000;
+    constexpr int kBlock = 512;
+    constexpr Frame kFrames = kSR;
+    TempDir dir;
+    const std::string f1 = dir.file("a.wav");
+    const std::string f2 = dir.file("b.wav");
+    const auto s1 = stereo_sine_at(kFrames, 523.25, kSR);
+    auto s2 = stereo_sine_at(kFrames, 880.0, kSR);
+    for (auto& v : s2) v *= 0.7f;
+    write_float_wav(f1, s1, 2, kSR);
+    write_float_wav(f2, s2, 2, kSR);
+
+    auto make_song = [&](bool folder_eq) {
+        json folder = {{"id", "f"}, {"name", "f"}, {"kind", "folder"}, {"gain", 0.9}, {"pan", 0.0}};
+        if (folder_eq) folder["eq"] = peak_eq_json(700.0, 9.0, 1.0);
+        json a = track_json("a", 0.5, -0.4);
+        a["parentTrackId"] = "f";
+        a["audioTo"] = "inherit";
+        json b = track_json("b", 0.6, 0.3);
+        b["parentTrackId"] = "f";
+        b["audioTo"] = "inherit";
+        return song_json(json::array({folder, a, b}),
+                         json::array({clip_json("ca", "a", f1, 0.0, 1.0),
+                                      clip_json("cb", "b", f2, 0.0, 1.0)}));
+    };
+
+    auto compare = [&](bool folder_eq) {
+        const json song = make_song(folder_eq);
+        auto req = base_request(song, 0.0, 1.0);
+        req.outputs.push_back({dir.file("mix.wav"), {"a", "b"}});
+        auto rendered = render_offline(req);
+        REQUIRE_MESSAGE(rendered.is_ok(), (rendered.is_err() ? rendered.error() : ""));
+        const auto offline = read_wav(dir.file("mix.wav"));
+
+        auto parsed = session_from_project_json(song.dump(), kSR);
+        REQUIRE(parsed.is_ok());
+        auto session = std::make_shared<const Session>(parsed.take());
+        REQUIRE(session->songs[0].tracks[0].eq.has_value() == folder_eq);
+        SourceManager sm;
+        for (std::size_t t = 1; t <= 2; ++t) {
+            const Id source_id = session->songs[0].tracks[t].clips[0].source_id;
+            sm.register_source(source_id, "");
+            REQUIRE(sm.store_decoded_source(source_id, t == 1 ? s1 : s2, 2, kSR, kFrames).is_ok());
+        }
+        TransportClock clock(kSR);
+        JumpScheduler scheduler;
+        Mixer mixer(session, &sm, &clock, &scheduler);
+        mixer.prepare_render_resources(kBlock);
+        mixer.set_active_output_channels({0, 1});
+        clock.play();
+        clock.clear_pending_start();
+        std::vector<float> l(kBlock), r(kBlock), live;
+        float* out[2] = {l.data(), r.data()};
+        for (int b = 0; b < 80; ++b) {
+            std::fill(l.begin(), l.end(), 0.0f);
+            std::fill(r.begin(), r.end(), 0.0f);
+            mixer.render(out, 2, kBlock, clock.sample_rate());
+            live.insert(live.end(), l.begin(), l.end());
+        }
+        float worst = 0.0f;
+        for (std::size_t i = kBlock * 8; i < live.size(); ++i)
+            worst = std::max(worst, std::abs(live[i] - offline.at(static_cast<Frame>(i), 0)));
+        return std::make_pair(worst, offline);
+    };
+    const auto [without_eq, plain] = compare(false);
+    const auto [with_eq, equalised] = compare(true);
+    CAPTURE(without_eq);
+    CAPTURE(with_eq);
+    CHECK(without_eq <= 1e-6f);
+    CHECK(with_eq <= 1e-5f);
+    // El EQ ha sonado en el render.
+    float differs = 0.0f;
+    for (Frame f = kBlock * 8; f < kFrames; ++f)
+        differs = std::max(differs, std::abs(plain.at(f, 0) - equalised.at(f, 0)));
+    CHECK(differs > 0.01f);
+
+    // El stem de una hija suelta no lleva el EQ de su carpeta; el de la
+    // carpeta sí.
+    const json song = make_song(true);
+    auto req = base_request(song, 0.0, 1.0);
+    req.outputs.push_back({dir.file("stem-a-eq.wav"), {"a"}});
+    req.outputs.push_back({dir.file("stem-f.wav"), {"f"}});
+    REQUIRE(render_offline(req).is_ok());
+    auto plain_req = base_request(make_song(false), 0.0, 1.0);
+    plain_req.outputs.push_back({dir.file("stem-a.wav"), {"a"}});
+    REQUIRE(render_offline(plain_req).is_ok());
+    const auto stem_a_eq = read_wav(dir.file("stem-a-eq.wav"));
+    const auto stem_a = read_wav(dir.file("stem-a.wav"));
+    const auto stem_f = read_wav(dir.file("stem-f.wav"));
+    float stem_diff = 0.0f;
+    float folder_diff = 0.0f;
+    for (Frame f = 0; f < kFrames; ++f) {
+        stem_diff = std::max(stem_diff, std::abs(stem_a_eq.at(f, 0) - stem_a.at(f, 0)));
+        folder_diff = std::max(folder_diff, std::abs(stem_f.at(f, 0) - equalised.at(f, 0)));
+    }
+    CHECK(stem_diff == 0.0f);
+    CHECK(folder_diff <= 1e-6f);
+}

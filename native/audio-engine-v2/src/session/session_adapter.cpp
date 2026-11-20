@@ -195,9 +195,10 @@ Result<Session> session_from_project_json(const std::string& project_json,
                         std::transform(kind_str.begin(), kind_str.end(), kind_str.begin(),
                             [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
                         track.kind = (kind_str == "folder") ? TrackKind::Folder : TrackKind::Audio;
-                        // EQ solo en pistas de audio de verdad (D3): una MIDI o
-                        // de vídeo también llega aquí como Audio y no lo lleva.
-                        if (kind_str == "audio") {
+                        // EQ en pistas de audio de verdad (D3) y en carpetas
+                        // (plan track-eq-2, E9): una MIDI o de vídeo también
+                        // llega aquí como Audio y no lo lleva.
+                        if (kind_str == "audio" || kind_str == "folder") {
                             if (auto eq_it = jtrack.find("eq"); eq_it != jtrack.end())
                                 track.eq = parse_track_eq_json(*eq_it);
                         }

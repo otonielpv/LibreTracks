@@ -7,7 +7,12 @@ import {
   TrackEqEditor,
   type TrackEqEditorHandlers,
 } from "@libretracks/shared/eq/TrackEqEditor";
-import { defaultTrackEq, sanitizeTrackEq, trackEqIsActive } from "@libretracks/shared/eq/trackEqModel";
+import {
+  defaultTrackEq,
+  sanitizeTrackEq,
+  trackEqIsActive,
+  trackKindTakesEq,
+} from "@libretracks/shared/eq/trackEqModel";
 import type { TrackEq, TrackSummary } from "@libretracks/shared/models";
 
 /**
@@ -121,7 +126,7 @@ export function RemoteTrackEqHost({
   const handlers = useMemo(() => createRemoteEqHandlers(send, onLocalCommit), [send, onLocalCommit]);
   const t = useMemo(() => eqTranslator(language), [language]);
   const track = openTrackId ? tracks.find((candidate) => candidate.id === openTrackId) : null;
-  if (!track || track.kind !== "audio") return null;
+  if (!track || !trackKindTakesEq(track.kind)) return null;
   return (
     <TrackEqEditor
       key={track.id}
@@ -135,7 +140,7 @@ export function RemoteTrackEqHost({
 
 /** Botón «EQ» de la tira: solo en pistas de audio, encendido si suena. */
 export function RemoteEqButton({ track, language }: { track: TrackSummary; language: EqLanguage }) {
-  if (track.kind !== "audio") return null;
+  if (!trackKindTakesEq(track.kind)) return null;
   const t = eqTranslator(language);
   const active = trackEqIsActive(track.eq);
   return (

@@ -1121,8 +1121,6 @@ fn remap_structure_ids(
     track_ids: &HashMap<String, String>,
     clip_ids: &HashMap<String, String>,
 ) -> Result<libretracks_core::SongStructure, ProjectError> {
-    use libretracks_core::AutomationAction;
-
     let track = |id: &str| {
         track_ids
             .get(id)
@@ -1294,8 +1292,8 @@ pub fn merge_extracted_song_package(
         };
         next_song.tracks.push(Track {
             // El EQ viaja con la pista, recortado como cualquier entrada
-            // (plan track-eq). Solo cuenta en pistas de audio.
-            eq: (track.kind == libretracks_core::TrackKind::Audio)
+            // (plan track-eq). Pistas de audio y carpetas (track-eq-2, E9).
+            eq: libretracks_core::track_eq::track_kind_takes_eq(track.kind)
                 .then(|| track.eq.as_ref().map(|eq| eq.sanitized()))
                 .flatten(),
             id: track_id.clone(),

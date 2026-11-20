@@ -3597,7 +3597,8 @@ fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song 
 /// tolerante y el upsert manda sobre el valor en vivo, así que deshacer y
 /// rehacer devuelven el EQ también al motor.
 pub(crate) fn track_eq_for_engine(track: &libretracks_core::Track) -> Option<serde_json::Value> {
-    if track.kind != TrackKind::Audio {
+    // Audio y carpetas (plan track-eq-2, E9).
+    if !libretracks_core::track_eq::track_kind_takes_eq(track.kind) {
         return None;
     }
     track

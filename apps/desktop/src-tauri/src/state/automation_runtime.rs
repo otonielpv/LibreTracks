@@ -1242,7 +1242,7 @@ impl DesktopSession {
             // EQ (plan track-eq-2, paso 03): sin rampa, con el suavizado del
             // motor; solo si cambia y la pista lleva EQ. Se manda tras la
             // mezcla.
-            let eq_change = (track.eq != target.eq && super::track_eq::track_kind_takes_eq(track.kind))
+            let eq_change = (track.eq != target.eq && super::track_eq::track_kind_takes_automated_eq(track.kind))
                 .then(|| target.eq.clone());
             if let Some(eq) = &eq_change {
                 track.eq = eq.clone();

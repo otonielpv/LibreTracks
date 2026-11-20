@@ -215,11 +215,11 @@ beforeEach(async () => {
 afterEach(cleanup);
 
 describe("EQ button in the DAW header", () => {
-  it("shows on audio tracks only and opens that track's editor", () => {
+  it("shows on audio tracks and folders and opens that track's editor", () => {
     for (const track of TRACKS) {
       renderHeader(track);
       const button = eqButton(track.name);
-      expect(Boolean(button)).toBe(track.kind === "audio");
+      expect(Boolean(button)).toBe(track.kind === "audio" || track.kind === "folder");
       if (button) {
         fireEvent.click(button);
         expect(useTrackEqStore.getState().openTrackId).toBe(track.id);
@@ -237,10 +237,10 @@ describe("EQ button in the DAW header", () => {
 });
 
 describe("EQ button in the Compact mixer", () => {
-  it("shows on audio strips only, opens the editor and lights from the model", () => {
+  it("shows on audio and folder strips, opens the editor and lights from the model", () => {
     renderCompact();
     expect(eqButton("Voz")).toBeTruthy();
-    expect(eqButton("Banda")).toBeNull();
+    expect(eqButton("Banda")).toBeTruthy();
     expect(eqButton("Luces")).toBeNull();
     expect(eqButton("Clip")).toBeNull();
     expect(eqButton("Bajo")!.className).toContain("is-active");
@@ -317,10 +317,13 @@ describe("EQ button in the mobile selection bar", () => {
     expect(changes.map((change) => change.trackId)).toEqual(["voz", "bajo"]);
   });
 
-  it("a folder: no button", () => {
+  it("a folder has the button too (plan track-eq-2, paso 08); a MIDI track does not", () => {
     platform.mobile = true;
     renderMobileBar(["banda"]);
-    expect(eqButton("Banda")).toBeNull();
+    expect(eqButton("Banda")).toBeTruthy();
+    cleanup();
+    renderMobileBar(["luces"]);
+    expect(eqButton("Luces")).toBeNull();
   });
 });
 

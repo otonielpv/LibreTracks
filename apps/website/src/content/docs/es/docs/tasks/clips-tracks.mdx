@@ -179,7 +179,11 @@ La opción sale desactivada si la pista no tiene ningún audio estéreo.
 
 ## Ecualizador de pista
 
-Cada pista de audio tiene un ecualizador paramétrico de hasta 6 bandas. Se
+Cada pista de audio y cada **carpeta** tiene un ecualizador paramétrico de
+hasta 6 bandas. El de una carpeta suena sobre la suma de sus pistas (ya con
+su volumen y su panorama), como el EQ de un grupo; una pista de la carpeta que
+sale por otra salida no pasa por él. En un render, la mezcla y el stem de la
+carpeta llevan su EQ; el stem de una pista suelta, no. Se
 abre con el botón **EQ** de la pista: en la cabecera de la vista de
 arreglos, en la tira del mezclador de la vista compacta y del Setlist, y en
 el móvil desde la barra de selección con una pista seleccionada. El botón se

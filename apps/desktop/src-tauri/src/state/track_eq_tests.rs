@@ -137,29 +137,34 @@ fn out_of_range_values_reach_the_model_and_the_engine_clamped() {
 }
 
 #[test]
-fn only_audio_tracks_take_an_eq() {
+fn audio_tracks_and_folders_take_an_eq_midi_does_not() {
+    // Plan track-eq-2, E9: las carpetas llevan EQ (sobre la suma de sus hijas).
     let mut session = two_song_session();
     let audio = AudioController::default();
     let mut song = session.engine.song().cloned().unwrap();
-    song.tracks
-        .iter_mut()
-        .find(|t| t.id == "voz2")
-        .unwrap()
-        .kind = TrackKind::Folder;
-    song.clips.retain(|clip| clip.track_id != "voz2");
+    song.tracks.iter_mut().find(|t| t.id == "voz2").unwrap().kind = TrackKind::Folder;
+    song.tracks.iter_mut().find(|t| t.id == "bass2").unwrap().kind = TrackKind::Midi;
+    song.clips.retain(|clip| clip.track_id != "voz2" && clip.track_id != "bass2");
     session.engine.load_song(song).unwrap();
 
-    let result = session.commit_track_eq_model_and_command("voz2", Some(boosted_eq()), &audio);
-    assert!(result.is_err(), "una carpeta no lleva EQ");
-    assert_eq!(track_of(&session, "voz2").eq, None);
+    session
+        .commit_track_eq_model_and_command("voz2", Some(boosted_eq()), &audio)
+        .expect("una carpeta lleva EQ");
+    assert_eq!(track_of(&session, "voz2").eq, Some(boosted_eq()));
+    assert_eq!(
+        track_eq_for_engine(&track_of(&session, "voz2")),
+        Some(serde_json::to_value(boosted_eq()).unwrap()),
+        "y el motor lo recibe"
+    );
+
+    let result = session.commit_track_eq_model_and_command("bass2", Some(boosted_eq()), &audio);
+    assert!(result.is_err(), "una pista MIDI no lleva EQ");
     assert!(session
         .commit_track_eq_model_and_command("nope", Some(boosted_eq()), &audio)
         .is_err());
-
-    // Y aunque una carpeta lo lleve en el modelo, el motor no lo recibe.
-    let mut folder = track_of(&session, "voz2");
-    folder.eq = Some(boosted_eq());
-    assert_eq!(track_eq_for_engine(&folder), None);
+    let mut midi = track_of(&session, "bass2");
+    midi.eq = Some(boosted_eq());
+    assert_eq!(track_eq_for_engine(&midi), None);
 }
 
 #[test]

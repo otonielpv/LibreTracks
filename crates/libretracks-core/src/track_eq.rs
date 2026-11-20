@@ -92,6 +92,12 @@ fn finite_or(value: f64, fallback: f64) -> f64 {
     }
 }
 
+/// Qué pistas llevan EQ: las de audio y, desde el plan track-eq-2 (E9), las
+/// carpetas (sobre la suma de sus hijas).
+pub fn track_kind_takes_eq(kind: crate::model::TrackKind) -> bool {
+    matches!(kind, crate::model::TrackKind::Audio | crate::model::TrackKind::Folder)
+}
+
 impl TrackEq {
     /// Las 6 bandas de D2: corte bajo a 40 Hz y corte alto a 18 kHz apagados;
     /// shelf bajo 100 Hz, campanas 400 Hz y 2,5 kHz, shelf alto 8 kHz; todo a

@@ -7,7 +7,11 @@ import type {
 } from "@libretracks/shared/models";
 
 import { useTrackEqStore } from "../eq/trackEqStore";
-import { defaultTrackEq, sanitizeTrackEq } from "@libretracks/shared/eq/trackEqModel";
+import {
+  defaultTrackEq,
+  sanitizeTrackEq,
+  trackKindTakesEq,
+} from "@libretracks/shared/eq/trackEqModel";
 
 /**
  * Acciones del ecualizador por pista (plan track-eq, D9/D12). Es la ÚNICA
@@ -52,7 +56,7 @@ export type TrackEqHandlers = ReturnType<typeof createTrackEqHandlers>;
 
 /** Qué pistas pueden llevar EQ. */
 export function trackTakesEq(track: Pick<TrackSummary, "kind"> | null | undefined): boolean {
-  return track?.kind === "audio";
+  return trackKindTakesEq(track?.kind);
 }
 
 /**

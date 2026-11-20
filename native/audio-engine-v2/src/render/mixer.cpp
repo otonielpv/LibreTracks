@@ -792,8 +792,10 @@ void Mixer::render_timeline_span(float** output_channels,
         // La fase B se salta las ranuras que la A no marco. Sin este reseteo
         // arrastraria el estado del bloque anterior y una pista saltada seguiria
         // sumando su bus viejo a la salida.
-        for (std::size_t ti = 0; ti < renderer_slots && ti < track_block_state_.size(); ++ti)
+        for (std::size_t ti = 0; ti < renderer_slots && ti < track_block_state_.size(); ++ti) {
             track_block_state_[ti].rendered = false;
+            track_block_state_[ti].folder_eq_active = false;
+        }
 
         // -- FASE A: por pista e independiente entre pistas ------------------
         // Tabla de EQ: adquirida aqui y soltada al acabar la fase A.
@@ -802,6 +804,7 @@ void Mixer::render_timeline_span(float** output_channels,
             const Track& track = song.tracks[ti];
 
             if (track.kind == TrackKind::Folder) {
+                prepare_folder_eq(ti, track, eq_table, num_frames);
                 ++skipped_this_block;
                 continue;
             }
@@ -946,6 +949,9 @@ void Mixer::render_timeline_span(float** output_channels,
         // flotantes no es asociativa, asi que recorrer las ranuras de menor a
         // mayor hace que la salida sea identica la calcule un hilo o los que
         // sean. No lo cambies "para optimizar".
+        bool any_folder_eq = false;
+        for (std::size_t ti = 0; ti < song.tracks.size() && ti < renderer_slots; ++ti)
+            any_folder_eq = any_folder_eq || track_block_state_[ti].folder_eq_active;
         for (std::size_t ti = 0; ti < song.tracks.size() && ti < renderer_slots; ++ti) {
             TrackBlockState& st = track_block_state_[ti];
             if (!st.rendered) continue;
@@ -953,6 +959,22 @@ void Mixer::render_timeline_span(float** output_channels,
             const Track& track = *st.track;
             const float* mix_l = track_buses_[ti]->left.data();
             const float* mix_r = track_buses_[ti]->right.data();
+            // Hija de una carpeta con EQ (E9): suma en el bus de la carpeta.
+            float* folder_l = nullptr;
+            float* folder_r = nullptr;
+            if (any_folder_eq) {
+                const int folder = folder_eq_destination(song, ti, renderer_slots);
+                if (folder >= 0) {
+                    TrackBlockState& fst = track_block_state_[static_cast<std::size_t>(folder)];
+                    if (!fst.folder_bus_used) {
+                        fst.folder_bus_used = true;
+                        fst.folder_left_channel = st.left_channel;
+                        fst.folder_right_channel = st.right_channel;
+                    }
+                    folder_l = track_buses_[static_cast<std::size_t>(folder)]->left.data();
+                    folder_r = track_buses_[static_cast<std::size_t>(folder)]->right.data();
+                }
+            }
 
             update_ancestor_folder_meters(
                 song, track, st.meter_peak_l, st.meter_peak_r, st.meter_rms_l, st.meter_rms_r,
@@ -993,7 +1015,10 @@ void Mixer::render_timeline_span(float** output_channels,
 
                 float out_l = source_l * effective_gain * left_gain;
                 float out_r = source_r * effective_gain * right_gain;
-                if (right_channel < 0) {
+                if (folder_l) {
+                    folder_l[f] += out_l;
+                    folder_r[f] += out_r;
+                } else if (right_channel < 0) {
                     if (left_channel >= 0 && left_channel < num_channels)
                         output_channels[left_channel][output_offset + f] += 0.5f * (out_l + out_r);
                 } else {
@@ -1004,6 +1029,9 @@ void Mixer::render_timeline_span(float** output_channels,
                 }
             }
         }
+        if (any_folder_eq)
+            mix_folder_eq_buses(song, output_channels, num_channels, num_frames, output_offset,
+                                renderer_slots);
         break;
     }
 
@@ -1271,8 +1299,10 @@ void Mixer::render(float** output_channels,
             const bool solo_active = any_solo_active_in_slots();
             const TrackMeterMode meter_mode = track_meter_mode();
 
-            for (std::size_t ti = 0; ti < renderer_slots && ti < track_block_state_.size(); ++ti)
+            for (std::size_t ti = 0; ti < renderer_slots && ti < track_block_state_.size(); ++ti) {
                 track_block_state_[ti].rendered = false;
+                track_block_state_[ti].folder_eq_active = false;
+            }
 
             // Los contadores de pistas los tocan varios hilos en la fase A, asi
             // que no pueden ser las variables locales de antes.
@@ -1292,6 +1322,7 @@ void Mixer::render(float** output_channels,
 
                 // Folder tracks are not audio sources — skip rendering them.
                 if (track.kind == TrackKind::Folder) {
+                    prepare_folder_eq(ti, track, eq_table, num_frames);
                     skipped_atomic.fetch_add(1, std::memory_order_relaxed);
                     return;
                 }
@@ -1463,6 +1494,9 @@ void Mixer::render(float** output_channels,
             //    ASCENDENTE. Es el contrato de bit-exactitud del plan: la suma
             //    de flotantes no es asociativa, asi que este orden hace que la
             //    salida no dependa de cuantos hilos la calculen. --
+            bool any_folder_eq = false;
+            for (std::size_t ti = 0; ti < song.tracks.size() && ti < renderer_slots; ++ti)
+                any_folder_eq = any_folder_eq || track_block_state_[ti].folder_eq_active;
             for (std::size_t ti = 0; ti < song.tracks.size() && ti < renderer_slots; ++ti) {
                 TrackBlockState& st = track_block_state_[ti];
                 if (!st.rendered) continue;
@@ -1470,6 +1504,22 @@ void Mixer::render(float** output_channels,
                 const Track& track = *st.track;
                 const float* mix_l = track_buses_[ti]->left.data();
                 const float* mix_r = track_buses_[ti]->right.data();
+                // Hija de una carpeta con EQ (E9): suma en el bus de la carpeta.
+                float* folder_l = nullptr;
+                float* folder_r = nullptr;
+                if (any_folder_eq) {
+                    const int folder = folder_eq_destination(song, ti, renderer_slots);
+                    if (folder >= 0) {
+                        TrackBlockState& fst = track_block_state_[static_cast<std::size_t>(folder)];
+                        if (!fst.folder_bus_used) {
+                            fst.folder_bus_used = true;
+                            fst.folder_left_channel = st.left_channel;
+                            fst.folder_right_channel = st.right_channel;
+                        }
+                        folder_l = track_buses_[static_cast<std::size_t>(folder)]->left.data();
+                        folder_r = track_buses_[static_cast<std::size_t>(folder)]->right.data();
+                    }
+                }
 
                 update_ancestor_folder_meters(
                     song, track, st.meter_peak_l, st.meter_peak_r, st.meter_rms_l, st.meter_rms_r,
@@ -1503,7 +1553,10 @@ void Mixer::render(float** output_channels,
 
                     float out_l = source_l * effective_gain * left_gain;
                     float out_r = source_r * effective_gain * right_gain;
-                    if (right_channel < 0) {
+                    if (folder_l) {
+                        folder_l[f] += out_l;
+                        folder_r[f] += out_r;
+                    } else if (right_channel < 0) {
                         if (left_channel >= 0 && left_channel < num_channels)
                             output_channels[left_channel][f] += 0.5f * (out_l + out_r);
                     } else {
@@ -1513,6 +1566,9 @@ void Mixer::render(float** output_channels,
                     }
                 }
             }
+            if (any_folder_eq)
+                mix_folder_eq_buses(song, output_channels, num_channels, num_frames, 0,
+                                    renderer_slots);
             break;
         }
         rendered_track_count_.fetch_add(rendered_this_block, std::memory_order_relaxed);
@@ -1730,7 +1786,8 @@ void Mixer::rebuild_eq_table(const std::shared_ptr<const Session>& session, bool
     if (session) {
         for (const auto& song : session->songs) {
             for (const auto& track : song.tracks) {
-                if (track.kind != TrackKind::Audio)
+                // Audio y carpetas (plan track-eq-2, E9).
+                if (track.kind != TrackKind::Audio && track.kind != TrackKind::Folder)
                     continue;
                 // Igual que la ganancia: con preserve, el valor en vivo de una
                 // pista que ya existia manda sobre el de la sesion.
@@ -1762,7 +1819,7 @@ void Mixer::sync_track_eqs_from_song(const Id& song_id) {
         if (song.id != song_id)
             continue;
         for (const auto& track : song.tracks) {
-            if (track.kind != TrackKind::Audio)
+            if (track.kind != TrackKind::Audio && track.kind != TrackKind::Folder)
                 continue;
             bool found = false;
             for (auto& entry : entries) {
@@ -1792,6 +1849,27 @@ std::optional<TrackEqParams> Mixer::track_eq_for_test(const Id& track_id) const 
 
 void Mixer::process_track_eq(TrackBusSlot& bus, const Track& track, const TrackEqTable* table,
                              float* left, float* right, int frames, bool settled_silent) noexcept {
+    sync_track_eq_target(bus, track, table);
+    // Pista en silencio asentado: su salida se multiplica por cero, no se
+    // procesa. Al volver, los filtros arrancan sin el estado viejo (D6).
+    if (settled_silent) {
+        bus.eq_was_silent = true;
+        return;
+    }
+    if (bus.eq_was_silent) {
+        bus.eq.reset();
+        bus.eq_was_silent = false;
+    }
+    bus.eq.process(left, right, static_cast<std::size_t>(std::max(0, frames)));
+    // RTA: después del EQ y antes del fader. Solo una pista coincide, así que
+    // hay un único productor por bloque.
+    const std::size_t analyzed = analyzer_track_hash_.load(std::memory_order_relaxed);
+    if (analyzed != 0 && analyzed == bus.eq_id_hash)
+        analyzer_tap_.write(left, right, static_cast<std::size_t>(std::max(0, frames)));
+}
+
+void Mixer::sync_track_eq_target(TrackBusSlot& bus, const Track& track,
+                                 const TrackEqTable* table) noexcept {
     // Cambio de frecuencia de muestreo: prepare() no aloja ni bloquea, asi
     // que es seguro aqui; deja el EQ apagado y fuerza releer la tabla.
     const double sample_rate = static_cast<double>(clock_->sample_rate());
@@ -1835,22 +1913,118 @@ void Mixer::process_track_eq(TrackBusSlot& bus, const Track& track, const TrackE
             bus.eq_was_silent = false;
         }
     }
-    // Pista en silencio asentado: su salida se multiplica por cero, no se
-    // procesa. Al volver, los filtros arrancan sin el estado viejo (D6).
-    if (settled_silent) {
-        bus.eq_was_silent = true;
+}
+
+// ── EQ en carpetas (plan track-eq-2, E9) ────────────────────────────────────
+
+namespace {
+
+bool inherits_audio_route(const Track& track) noexcept {
+    const std::string_view route = normalize_audio_route(track.audio_to);
+    return route.empty() || route_equals(route, "inherit");
+}
+
+} // namespace
+
+void Mixer::prepare_folder_eq(std::size_t slot, const Track& folder, const TrackEqTable* table,
+                              int frames) noexcept {
+    if (slot >= track_buses_.size() || slot >= track_block_state_.size())
         return;
+    TrackBusSlot& bus = *track_buses_[slot];
+    sync_track_eq_target(bus, folder, table);
+    TrackBlockState& st = track_block_state_[slot];
+    st.folder_eq_active = !bus.eq.is_transparent();
+    st.folder_bus_used = false;
+    if (st.folder_eq_active) {
+        const std::size_t n = static_cast<std::size_t>(std::max(0, frames));
+        std::fill(bus.left.begin(), bus.left.begin() + static_cast<std::ptrdiff_t>(n), 0.f);
+        std::fill(bus.right.begin(), bus.right.begin() + static_cast<std::ptrdiff_t>(n), 0.f);
     }
-    if (bus.eq_was_silent) {
-        bus.eq.reset();
-        bus.eq_was_silent = false;
+}
+
+int Mixer::folder_eq_destination(const Song& song, std::size_t slot,
+                                 std::size_t slots) const noexcept {
+    if (slot >= song.tracks.size())
+        return -1;
+    const Track* current = &song.tracks[slot];
+    for (int depth = 0; depth < kMaxFolderDepth; ++depth) {
+        // Una pista con salida propia no pasa por el EQ de sus carpetas.
+        if (!inherits_audio_route(*current) || current->parent_track_id.empty())
+            return -1;
+        std::size_t parent = song.tracks.size();
+        for (std::size_t i = 0; i < song.tracks.size(); ++i) {
+            if (song.tracks[i].id == current->parent_track_id) {
+                parent = i;
+                break;
+            }
+        }
+        if (parent >= song.tracks.size() || song.tracks[parent].kind != TrackKind::Folder)
+            return -1;
+        if (parent < slots && parent < track_block_state_.size()
+            && track_block_state_[parent].folder_eq_active)
+            return static_cast<int>(parent);
+        current = &song.tracks[parent];
     }
-    bus.eq.process(left, right, static_cast<std::size_t>(std::max(0, frames)));
-    // RTA: después del EQ y antes del fader. Solo una pista coincide, así que
-    // hay un único productor por bloque.
-    const std::size_t analyzed = analyzer_track_hash_.load(std::memory_order_relaxed);
-    if (analyzed != 0 && analyzed == bus.eq_id_hash)
-        analyzer_tap_.write(left, right, static_cast<std::size_t>(std::max(0, frames)));
+    return -1;
+}
+
+void Mixer::mix_folder_eq_buses(const Song& song, float** output_channels, int num_channels,
+                                int num_frames, int output_offset, std::size_t slots) noexcept {
+    const std::size_t count = std::min({slots, song.tracks.size(), track_block_state_.size()});
+    for (std::size_t index = count; index-- > 0;) {
+        TrackBlockState& st = track_block_state_[index];
+        if (!st.folder_eq_active)
+            continue;
+        TrackBusSlot& bus = *track_buses_[index];
+        if (!st.folder_bus_used) {
+            // Nada sonó dentro: no se procesa y los filtros arrancan limpios
+            // cuando vuelva (como una pista en silencio asentado).
+            bus.eq_was_silent = true;
+            continue;
+        }
+        if (bus.eq_was_silent) {
+            bus.eq.reset();
+            bus.eq_was_silent = false;
+        }
+        float* left = bus.left.data();
+        float* right = bus.right.data();
+        bus.eq.process(left, right, static_cast<std::size_t>(std::max(0, num_frames)));
+        // RTA de la carpeta: después de su EQ. Fase B, un solo hilo; ninguna
+        // pista comparte el hash de la carpeta, así que sigue habiendo un
+        // único productor por bloque.
+        const std::size_t analyzed = analyzer_track_hash_.load(std::memory_order_relaxed);
+        if (analyzed != 0 && analyzed == bus.eq_id_hash)
+            analyzer_tap_.write(left, right, static_cast<std::size_t>(std::max(0, num_frames)));
+        const int parent = folder_eq_destination(song, index, slots);
+        if (parent >= 0) {
+            TrackBlockState& up = track_block_state_[static_cast<std::size_t>(parent)];
+            float* up_l = track_buses_[static_cast<std::size_t>(parent)]->left.data();
+            float* up_r = track_buses_[static_cast<std::size_t>(parent)]->right.data();
+            if (!up.folder_bus_used) {
+                up.folder_bus_used = true;
+                up.folder_left_channel = st.folder_left_channel;
+                up.folder_right_channel = st.folder_right_channel;
+            }
+            for (int f = 0; f < num_frames; ++f) {
+                up_l[f] += left[f];
+                up_r[f] += right[f];
+            }
+            continue;
+        }
+        const int left_channel = st.folder_left_channel;
+        const int right_channel = st.folder_right_channel;
+        for (int f = 0; f < num_frames; ++f) {
+            if (right_channel < 0) {
+                if (left_channel >= 0 && left_channel < num_channels)
+                    output_channels[left_channel][output_offset + f] += 0.5f * (left[f] + right[f]);
+            } else {
+                if (left_channel >= 0 && left_channel < num_channels)
+                    output_channels[left_channel][output_offset + f] += left[f];
+                if (right_channel < num_channels)
+                    output_channels[right_channel][output_offset + f] += right[f];
+            }
+        }
+    }
 }
 
 void Mixer::set_analyzer_track(const Id& track_id) noexcept {

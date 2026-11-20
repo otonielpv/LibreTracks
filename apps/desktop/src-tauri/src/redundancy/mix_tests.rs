@@ -1,5 +1,6 @@
 //! Redundancy step 09: the mirror mix, on real sessions (no-link stubs).
 
+use libretracks_core::TrackKind;
 use libretracks_core::redundancy::reconciler::Policy;
 use libretracks_core::session_fingerprint::FingerprintDiff;
 use libretracks_link::redundancy::{MixControl, RedundancyMessage};

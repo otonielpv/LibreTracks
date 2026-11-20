@@ -99,6 +99,11 @@ export function bandIsAudible(band: EqBand): boolean {
 }
 
 /** Lo que ilumina el botón «EQ»: encendido y alguna banda que haga algo. */
+/** Qué pistas llevan EQ: audio y carpetas (plan track-eq-2, E9). */
+export function trackKindTakesEq(kind: string | null | undefined): boolean {
+  return kind === "audio" || kind === "folder";
+}
+
 export function trackEqIsActive(eq: TrackEq | null | undefined): boolean {
   return Boolean(eq?.enabled && eq.bands.some(bandIsAudible));
 }

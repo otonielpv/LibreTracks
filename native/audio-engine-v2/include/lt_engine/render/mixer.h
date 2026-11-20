@@ -420,6 +420,13 @@ private:
         // Modo de medida con el que se midio este bloque: las carpetas lo
         // siguen (en PostFader aplican su propio fader).
         TrackMeterMode meter_mode = TrackMeterMode::PostFader;
+        // Carpeta con EQ (plan track-eq-2, E9). Solo en ranuras de carpeta:
+        // `folder_eq_active` = su EQ suena este bloque (lo decide la fase A);
+        // `folder_bus_used` = alguna hija sumo en su bus; los canales son los
+        // de la salida que heredan sus hijas (los de la primera que suma).
+        bool folder_eq_active = false;
+        bool folder_bus_used = false;
+        int  folder_left_channel = 0, folder_right_channel = -1;
     };
     std::vector<TrackBlockState> track_block_state_;
 
@@ -449,6 +456,23 @@ private:
     void publish_eq_table_locked(std::vector<TrackEqEntry> entries);
     void rebuild_eq_table(const std::shared_ptr<const Session>& session, bool preserve_realtime_state);
     // Fase A: aplica el EQ de la ranura sobre su bus, antes de medir y del fader.
+    // Lleva el EQ de la ranura a los parámetros de la tabla (y lo prepara o
+    // salta si cambió la frecuencia de muestreo o la pista). Fase A.
+    void sync_track_eq_target(TrackBusSlot& bus, const Track& track,
+                              const TrackEqTable* table) noexcept;
+    // Fase A de una carpeta (plan track-eq-2, E9): sincroniza su EQ y, si
+    // suena, limpia su bus para que las hijas sumen en él en la fase B.
+    void prepare_folder_eq(std::size_t slot, const Track& folder, const TrackEqTable* table,
+                           int frames) noexcept;
+    // Fase B: la carpeta con EQ activo donde suma esta pista, o -1 (sale
+    // directa). Solo hijas que heredan la salida y en el MISMO bloque.
+    int folder_eq_destination(const Song& song, std::size_t slot, std::size_t slots) const noexcept;
+    // Tras la fase B: cada carpeta con EQ que recibió algo se ecualiza y se
+    // suma a su carpeta padre (si también tiene EQ) o a la salida. De la más
+    // profunda a la más externa (orden de ranura descendente). Sin carpetas
+    // con EQ no hace nada: la salida es bit-idéntica a sin EQ en carpetas.
+    void mix_folder_eq_buses(const Song& song, float** output_channels, int num_channels,
+                             int num_frames, int output_offset, std::size_t slots) noexcept;
     void process_track_eq(TrackBusSlot& bus, const Track& track, const TrackEqTable* table,
                           float* left, float* right, int frames, bool settled_silent) noexcept;
 

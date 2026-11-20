@@ -177,7 +177,11 @@ The option is greyed out if the track has no stereo audio.
 
 ## Track equalizer
 
-Every audio track has a parametric equalizer with up to 6 bands. Open it with
+Every audio track and every **folder** has a parametric equalizer with up
+to 6 bands. A folder's one works on the sum of its tracks (with their volume
+and pan already applied), like a group EQ; a track in the folder that goes to
+another output skips it. When rendering, the mix and the folder's stem carry
+its EQ; a single track's stem does not. Open it with
 the track's **EQ** button: in the arrangement view's track header, on the
 mixer strip of the compact and Setlist views, and on a phone from the
 selection bar with one track selected. The button lights up when the
