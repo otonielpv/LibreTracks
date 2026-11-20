@@ -2839,21 +2839,31 @@ impl AudioController {
         }
     }
 
+    /// Resumen del cambio de tono preparado si hay renders en curso. Tiene
+    /// prioridad sobre el estado del motor en los dos muestreadores: si solo
+    /// lo mirase uno, el sondeo periódico lo pisaría y el indicador no saldría.
+    fn prerender_pitch_summary() -> Option<PitchPrepareSummary> {
+        let prerender = pitch_prerender::worker().progress();
+        if !prerender.active {
+            return None;
+        }
+        Some(PitchPrepareSummary {
+            pitch_prepare_active: true,
+            pitch_prepare_pending: true,
+            pitch_prepare_progress: prerender.percent(),
+            pitch_jobs_pending: prerender.total.saturating_sub(prerender.done),
+            pitch_jobs_completed: prerender.done,
+            pitch_jobs_failed: prerender.failed,
+            pitch_prepare_status: "preparing".into(),
+            last_pitch_prepare_reason: "prerender".into(),
+            ..PitchPrepareSummary::default()
+        })
+    }
+
     pub fn pitch_prepare_summary(&self) -> PitchPrepareSummary {
         // Cambio de tono preparado en curso: es lo que el usuario espera ver.
-        let prerender = pitch_prerender::worker().progress();
-        if prerender.active {
-            return PitchPrepareSummary {
-                pitch_prepare_active: true,
-                pitch_prepare_pending: true,
-                pitch_prepare_progress: prerender.percent(),
-                pitch_jobs_pending: prerender.total.saturating_sub(prerender.done),
-                pitch_jobs_completed: prerender.done,
-                pitch_jobs_failed: prerender.failed,
-                pitch_prepare_status: "preparing".into(),
-                last_pitch_prepare_reason: "prerender".into(),
-                ..PitchPrepareSummary::default()
-            };
+        if let Some(summary) = Self::prerender_pitch_summary() {
+            return summary;
         }
         let mut state = match self.state.lock() {
             Ok(state) => state,
@@ -3009,6 +3019,7 @@ impl AudioController {
             last_missing_proxy_key: pitch.last_missing_proxy_key,
             last_missing_proxy_block_index: pitch.last_missing_proxy_block_index,
         };
+        let pitch_summary = Self::prerender_pitch_summary().unwrap_or(pitch_summary);
 
         let current_sources: Vec<_> = snapshot
             .source_states
