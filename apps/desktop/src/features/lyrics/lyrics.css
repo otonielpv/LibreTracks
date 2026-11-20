@@ -1,19 +1,146 @@
-/* Letra en proyección (plan lyrics-sync). */
+/* Letra en proyección (plan lyrics-sync).
+   Cada botón, desplegable y campo lleva su clase (.lt-lyrics-btn,
+   .lt-lyrics-select, .lt-lyrics-input): la app no tiene estilos base para
+   ellos (Tailwind sin preflight) y así su aspecto no depende de dónde estén. */
+
+.lt-lyrics-settings,
+.lt-lyrics-modal-body,
+.lt-lyrics-popover {
+  color: #e5e2e1;
+  font: 500 0.88rem/1.45 "Space Grotesk", sans-serif;
+}
+
+.lt-lyrics-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* ---------- Botones ---------- */
+
+button.lt-lyrics-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 34px;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.05);
+  color: #f3f0ef;
+  padding: 0.5rem 0.85rem;
+  font: 700 0.75rem/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+button.lt-lyrics-btn:hover:not(:disabled) {
+  border-color: rgb(87 241 219 / 0.28);
+  color: #57f1db;
+}
+button.lt-lyrics-btn:focus-visible {
+  outline: 2px solid #57f1db;
+  outline-offset: 1px;
+}
+button.lt-lyrics-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+button.lt-lyrics-btn.is-primary {
+  background: #57f1db;
+  border-color: #57f1db;
+  color: #0e0e0e;
+}
+button.lt-lyrics-btn.is-primary:hover:not(:disabled) {
+  color: #0e0e0e;
+  filter: brightness(1.08);
+}
+
+/* Enlaces con forma de texto: «Ver el tutorial», «Saltar tutorial», el
+   nombre de la canción en el vinculador. */
+button.lt-lyrics-link-button,
+button.lt-lyrics-tutorial-skip {
+  border: 0;
+  background: none;
+  padding: 0.25rem 0;
+  color: #57f1db;
+  font: 600 0.82rem/1.2 "Space Grotesk", sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-align: left;
+  cursor: pointer;
+}
+button.lt-lyrics-tutorial-skip {
+  color: #b9b4b2;
+}
+button.lt-lyrics-link-button:hover,
+button.lt-lyrics-tutorial-skip:hover {
+  color: #8ff7e8;
+}
+
+/* ---------- Campos ---------- */
+
+input.lt-lyrics-input,
+select.lt-lyrics-select {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: rgb(28 31 32 / 0.98);
+  color: #f3f0ef;
+  padding: 0.6rem 0.75rem;
+  font: 600 0.88rem/1.2 "Space Grotesk", sans-serif;
+}
+input.lt-lyrics-input:focus,
+select.lt-lyrics-select:focus {
+  outline: none;
+  border-color: #57f1db;
+}
+input.lt-lyrics-input::placeholder {
+  color: rgb(229 226 225 / 0.4);
+}
+select.lt-lyrics-select.lt-lyrics-unmatched {
+  border-color: rgb(246 173 85 / 0.6);
+  color: #f6ad55;
+}
+.lt-lyrics-table select.lt-lyrics-select {
+  width: auto;
+  min-width: 12rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.lt-lyrics-settings .lt-settings-field > span:first-child,
+.lt-lyrics-modal-body .lt-settings-field > span:first-child {
+  color: #f3f0ef;
+  font: 700 0.85rem/1.2 "Space Grotesk", sans-serif;
+}
+.lt-lyrics-settings small,
+.lt-lyrics-modal-body small {
+  color: rgb(229 226 225 / 0.6);
+  font-size: 0.78rem;
+}
+
+/* ---------- Ajustes ---------- */
 
 .lt-lyrics-programs {
   display: flex;
   flex-wrap: wrap;
   gap: 1px;
 }
-.lt-lyrics-programs button {
+.lt-lyrics-programs button.lt-lyrics-btn {
   flex: 1 1 0;
   min-width: 110px;
-  padding: 8px 12px;
-  font-weight: 600;
+  height: 38px;
+  background: #0e0e0e;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 11px;
 }
-.lt-lyrics-programs button.is-selected {
-  background: #57f1db;
-  color: #fff;
+.lt-lyrics-programs button.lt-lyrics-btn.is-selected {
+  background: rgb(87 241 219 / 0.14);
+  border-color: #57f1db;
+  color: #57f1db;
 }
 
 .lt-lyrics-row {
@@ -22,6 +149,10 @@
   gap: 1px;
   align-items: center;
 }
+.lt-lyrics-settings > .lt-lyrics-row {
+  padding: 0.6rem 0;
+}
+
 /* Equipo y Puerto: dos cajas iguales, pegadas, de la misma altura. */
 .lt-lyrics-fields {
   display: grid;
@@ -39,40 +170,64 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
-  font-size: 13px;
-  opacity: 0.9;
+  gap: 0.5rem 1rem;
+  padding: 0.6rem 0.95rem;
+  background: rgb(15 18 19 / 0.92);
+  border: 1px solid rgb(255 255 255 / 0.06);
+  font-size: 0.84rem;
 }
 .lt-lyrics-howto p {
   margin: 0;
   flex: 1 1 260px;
 }
-.lt-lyrics-link-button {
-  background: none;
-  border: none;
-  padding: 0;
-  color: #57f1db;
-  text-decoration: underline;
-  cursor: pointer;
+
+.lt-lyrics-probe {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid rgb(255 255 255 / 0.06);
+}
+.lt-lyrics-probe p {
+  margin: 0;
+}
+.lt-lyrics-probe.is-ok {
+  background: rgb(47 133 90 / 0.18);
+  border-color: rgb(104 211 145 / 0.3);
+}
+.lt-lyrics-probe.is-error {
+  background: rgb(197 48 48 / 0.18);
+  border-color: rgb(252 129 129 / 0.3);
+}
+.lt-lyrics-missing {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.lt-lyrics-missing code {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  color: #f3f0ef;
 }
 
-/* Tutorial de configuración */
+/* ---------- Tutorial de configuración ---------- */
+
 .lt-lyrics-tutorial {
-  border: 1px solid #57f1db;
+  border: 1px solid rgb(87 241 219 / 0.45);
   background: rgb(87 241 219 / 0.06);
-  padding: 12px 14px;
+  padding: 0.85rem 1rem;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5rem;
 }
 .lt-lyrics-tutorial-header {
   display: flex;
   justify-content: space-between;
   gap: 8px;
 }
+.lt-lyrics-tutorial-header strong {
+  color: #f3f0ef;
+  font: 700 0.92rem/1.2 "Space Grotesk", sans-serif;
+}
 .lt-lyrics-tutorial-count {
-  font-size: 12px;
-  opacity: 0.75;
+  font-size: 0.75rem;
+  color: rgb(229 226 225 / 0.6);
 }
 .lt-lyrics-tutorial-dots {
   display: flex;
@@ -84,7 +239,7 @@
 .lt-lyrics-tutorial-dots li {
   flex: 1 1 0;
   height: 3px;
-  background: rgba(127, 127, 127, 0.35);
+  background: rgb(127 127 127 / 0.35);
 }
 .lt-lyrics-tutorial-dots li.is-done,
 .lt-lyrics-tutorial-dots li.is-current {
@@ -92,17 +247,18 @@
 }
 .lt-lyrics-tutorial-title {
   margin: 4px 0 0;
-  font-size: 15px;
+  color: #f3f0ef;
+  font: 700 1rem/1.25 "Space Grotesk", sans-serif;
 }
 .lt-lyrics-tutorial-body {
   margin: 0;
-  line-height: 1.45;
+  line-height: 1.5;
   white-space: pre-line;
 }
 .lt-lyrics-tutorial-tip {
   margin: 0;
-  font-size: 12px;
-  opacity: 0.8;
+  font-size: 0.78rem;
+  color: rgb(229 226 225 / 0.7);
 }
 .lt-lyrics-tutorial-actions {
   display: flex;
@@ -112,44 +268,14 @@
 .lt-lyrics-tutorial-spacer {
   flex: 1;
 }
-.lt-lyrics-tutorial-skip {
-  background: none;
-  border: none;
-  text-decoration: underline;
-  cursor: pointer;
-  opacity: 0.8;
-}
-.lt-lyrics-tutorial-actions button.is-primary {
-  background: #57f1db;
-  color: #fff;
-  font-weight: 600;
-  padding: 6px 14px;
-}
 
-.lt-lyrics-probe {
-  margin: 0;
-  padding: 8px 10px;
-}
-.lt-lyrics-probe p {
-  margin: 0;
-}
-.lt-lyrics-probe.is-ok {
-  background: rgba(47, 133, 90, 0.18);
-}
-.lt-lyrics-probe.is-error {
-  background: rgba(197, 48, 48, 0.18);
-}
-.lt-lyrics-missing {
-  margin: 6px 0 0;
-  padding-left: 18px;
-}
+/* ---------- Píldora y su popover ---------- */
 
-/* Píldora */
 .lt-lyrics-pill-slot {
   position: relative;
   pointer-events: auto;
 }
-.lt-lyrics-pill {
+button.lt-lyrics-pill {
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
@@ -157,187 +283,234 @@
   height: 26px;
   padding: 0 10px;
   border: 1px solid transparent;
-  font-weight: 700;
-  font-size: 12px;
+  border-radius: 2px;
+  font: 700 12px/1 "Space Grotesk", sans-serif;
   cursor: pointer;
   color: #fff;
 }
 .lt-lyrics-pill .material-symbols-outlined {
   font-size: 16px;
 }
-.lt-lyrics-pill.is-ok { background: #2f855a; }
-.lt-lyrics-pill.is-warning { background: #b7791f; }
-.lt-lyrics-pill.is-error { background: #c53030; }
-.lt-lyrics-pill.is-paused { background: #5b5f66; }
+button.lt-lyrics-pill.is-ok { background: #2f855a; }
+button.lt-lyrics-pill.is-warning { background: #b7791f; }
+button.lt-lyrics-pill.is-error { background: #c53030; }
+button.lt-lyrics-pill.is-paused { background: #5b5f66; }
 
 .lt-lyrics-popover {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
   z-index: 70;
-  min-width: 260px;
+  min-width: 280px;
   max-width: min(360px, calc(100vw - 32px));
-  padding: 10px 12px;
-  background: var(--lt-surface, #1f2227);
-  border: 1px solid rgba(127, 127, 127, 0.35);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  box-sizing: border-box;
+  padding: 0.75rem 0.85rem;
+  border-radius: 2px;
+  border: 1px solid rgb(87 241 219 / 0.18);
+  background: linear-gradient(180deg, rgb(22 25 26 / 0.99), rgb(13 15 16 / 0.99));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  white-space: normal;
 }
 .lt-lyrics-popover p {
   margin: 0;
+}
+.lt-lyrics-popover-program strong {
+  color: #f3f0ef;
+}
+.lt-lyrics-popover-program span {
+  color: rgb(229 226 225 / 0.7);
 }
 .lt-lyrics-popover-error { color: #fc8181; }
 .lt-lyrics-popover-warning { color: #f6ad55; }
 .lt-lyrics-popover-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 1px;
+  margin-top: 0.25rem;
+}
+.lt-lyrics-popover-actions button.lt-lyrics-btn {
+  flex: 1 1 auto;
 }
 
-/* Paneles de vincular y de canción */
+/* ---------- Vinculador y panel de canción ---------- */
+
 .lt-lyrics-modal {
-  width: min(820px, calc(100vw - 32px));
-  max-height: calc(100vh - 48px);
-  display: flex;
-  flex-direction: column;
+  width: min(56rem, 100%);
+  max-height: calc(100vh - 3rem);
 }
 .lt-lyrics-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
   overflow: auto;
-  padding: 0 16px 16px;
 }
+/* Presentación + «Cambiar…»: una fila, el botón centrado en vertical. */
+.lt-lyrics-modal-body > .lt-lyrics-row {
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+.lt-lyrics-modal-body > .lt-lyrics-row > .lt-settings-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.lt-lyrics-modal-body > .lt-lyrics-row > button.lt-lyrics-btn {
+  align-self: center;
+  margin-left: 0.6rem;
+}
+.lt-lyrics-modal-body > button.lt-lyrics-btn {
+  align-self: flex-start;
+}
+.lt-lyrics-modal-body h3 {
+  margin: 0.5rem 0 0.2rem;
+  color: #f3f0ef;
+  font: 700 0.95rem/1.2 "Space Grotesk", sans-serif;
+}
+
 .lt-lyrics-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 0.84rem;
+  background: rgb(15 18 19 / 0.92);
+  border: 1px solid rgb(255 255 255 / 0.06);
 }
-.lt-lyrics-table th,
-.lt-lyrics-table td {
+.lt-lyrics-table th {
   text-align: left;
-  padding: 6px 8px;
-  border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+  padding: 0.55rem 0.7rem;
+  color: rgb(229 226 225 / 0.6);
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+.lt-lyrics-table td {
+  padding: 0.45rem 0.7rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.05);
   vertical-align: middle;
+}
+.lt-lyrics-table td:last-child {
+  text-align: right;
+}
+.lt-lyrics-table tr:last-child td {
+  border-bottom: 0;
+}
+.lt-lyrics-table td > span {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
 }
 .lt-lyrics-state-linked { color: #68d391; }
 .lt-lyrics-state-suggested { color: #f6ad55; }
 .lt-lyrics-state-notFound { color: #fc8181; }
-.lt-lyrics-unmatched { color: #f6ad55; }
+td.lt-lyrics-unmatched { color: #f6ad55; }
 
-.lt-lyrics-slides h3 {
-  margin: 12px 0 4px;
-  font-size: 14px;
+.lt-lyrics-search {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  max-height: 240px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid rgb(255 255 255 / 0.06);
+}
+.lt-lyrics-search button.lt-lyrics-btn {
+  width: 100%;
+  justify-content: flex-start;
+  border: 0;
+  background: rgb(15 18 19 / 0.92);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-align: left;
+  white-space: normal;
+}
+.lt-lyrics-search button.lt-lyrics-btn:hover {
+  background: rgb(87 241 219 / 0.1);
+}
+
+/* Diapositivas dentro de la sección */
+.lt-lyrics-slides {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.lt-lyrics-slides > button.lt-lyrics-btn {
+  align-self: flex-start;
 }
 .lt-lyrics-slides-list {
-  margin: 4px 0;
+  margin: 0;
   padding-left: 18px;
-  font-size: 13px;
+  font-size: 0.84rem;
 }
 .lt-lyrics-recorder {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid rgb(87 241 219 / 0.3);
   background: rgb(87 241 219 / 0.06);
 }
-.lt-lyrics-recorder p {
+.lt-lyrics-recorder p,
+.lt-lyrics-recorder ul {
   margin: 0;
 }
-.lt-lyrics-tap {
-  min-height: 72px;
-  font-size: 18px;
-  font-weight: 700;
+.lt-lyrics-recorder-transport {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
 }
-.lt-lyrics-search {
-  list-style: none;
-  margin: 4px 0;
-  padding: 0;
-  max-height: 220px;
-  overflow: auto;
-}
-.lt-lyrics-search button {
-  width: 100%;
-  text-align: left;
-}
-
-/* Botones con el aspecto de la app (sin preflight el navegador pone el suyo). */
-.lt-lyrics-settings button,
-.lt-lyrics-modal-body button,
-.lt-lyrics-popover button {
-  border-radius: 2px;
-  border: 1px solid rgb(255 255 255 / 0.1);
-  background: rgb(255 255 255 / 0.05);
-  color: #f3f0ef;
-  padding: 0.55rem 0.85rem;
-  font: 700 0.75rem/1 "Space Grotesk", sans-serif;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-}
-.lt-lyrics-settings button:hover:not(:disabled),
-.lt-lyrics-modal-body button:hover:not(:disabled),
-.lt-lyrics-popover button:hover:not(:disabled) {
-  border-color: rgb(87 241 219 / 0.28);
-  color: #57f1db;
-}
-.lt-lyrics-settings button:disabled,
-.lt-lyrics-modal-body button:disabled,
-.lt-lyrics-popover button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-/* Selector de programa: control segmentado. */
-.lt-lyrics-settings .lt-lyrics-programs button {
+.lt-lyrics-recorder-transport button.lt-lyrics-btn {
   flex: 1 1 0;
-  min-width: 110px;
-  height: 38px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 11px;
-  background: #0e0e0e;
+  min-height: 48px;
+  font-size: 0.85rem;
 }
-.lt-lyrics-settings .lt-lyrics-programs button.is-selected {
+.lt-lyrics-recorder-transport .material-symbols-outlined {
+  font-size: 22px;
+}
+.lt-lyrics-recorder > button.lt-lyrics-btn {
+  align-self: flex-start;
+}
+.lt-lyrics-recorder > button.lt-lyrics-tap {
+  align-self: stretch;
+  min-height: 88px;
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   background: rgb(87 241 219 / 0.14);
   border-color: #57f1db;
   color: #57f1db;
+  touch-action: manipulation;
+}
+.lt-lyrics-recorder > button.lt-lyrics-tap:active {
+  background: rgb(87 241 219 / 0.3);
 }
 
-.lt-lyrics-settings button.is-primary,
-.lt-lyrics-modal-body button.is-primary {
-  background: #57f1db;
-  border-color: #57f1db;
-  color: #0e0e0e;
+/* Pie de los paneles: estado del guardado y «Listo». */
+.lt-lyrics-modal-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.4rem;
+  padding: 0.7rem 0 0.1rem;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+  background: rgb(13 15 16 / 0.98);
 }
-.lt-lyrics-settings button.is-primary:hover:not(:disabled),
-.lt-lyrics-modal-body button.is-primary:hover:not(:disabled) {
-  color: #0e0e0e;
-  filter: brightness(1.08);
+.lt-lyrics-save-state {
+  font-size: 0.8rem;
+  color: rgb(229 226 225 / 0.6);
 }
-
-/* Enlaces con forma de texto: «Ver el tutorial», «Saltar tutorial». */
-.lt-lyrics-settings .lt-lyrics-link-button,
-.lt-lyrics-modal-body .lt-lyrics-link-button,
-.lt-lyrics-settings .lt-lyrics-tutorial-skip {
-  border: 0;
-  background: none;
-  padding: 0.25rem 0;
-  color: #57f1db;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  letter-spacing: 0;
-  font-weight: 600;
+.lt-lyrics-save-state.is-saving {
+  color: #f6ad55;
 }
-.lt-lyrics-settings .lt-lyrics-tutorial-skip {
-  color: #b9b4b2;
-}
-
-.lt-lyrics-howto {
-  padding: 0.6rem 0.95rem;
-  background: rgb(15 18 19 / 0.92);
-  border: 1px solid rgb(255 255 255 / 0.06);
-}
-.lt-lyrics-tutorial-title,
-.lt-lyrics-tutorial-header strong {
-  font-family: "Space Grotesk", sans-serif;
+.lt-lyrics-save-state.is-saved {
+  color: #68d391;
 }

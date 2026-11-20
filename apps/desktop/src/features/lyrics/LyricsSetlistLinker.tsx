@@ -63,7 +63,7 @@ export function LyricsSetlistLinker({
       ) : null}
       {reports === null && !error ? <p>{t("lyrics.linker.loading")}</p> : null}
       {pending.length > 0 ? (
-        <button type="button" onClick={() => after(handlers.acceptAllSuggestions(pending))}>
+        <button className="lt-lyrics-btn" type="button" onClick={() => after(handlers.acceptAllSuggestions(pending))}>
           {t("lyrics.linker.acceptAll", { count: pending.length })}
         </button>
       ) : null}
@@ -99,7 +99,7 @@ export function LyricsSetlistLinker({
                   />
                   {searching === report.regionId ? (
                     <div className="lt-settings-field">
-                      <input
+                      <input className="lt-lyrics-input"
                         aria-label={t("lyrics.song.search")}
                         placeholder={t("lyrics.song.search")}
                         value={search}
@@ -113,7 +113,7 @@ export function LyricsSetlistLinker({
                           .slice(0, 20)
                           .map((presentation) => (
                             <li key={presentation.id}>
-                              <button
+                              <button className="lt-lyrics-btn"
                                 type="button"
                                 onClick={() => {
                                   setSearching(null);
@@ -141,6 +141,12 @@ export function LyricsSetlistLinker({
           </tbody>
         </table>
       ) : null}
+      <footer className="lt-lyrics-modal-footer">
+        <span className="lt-lyrics-save-state is-idle">{t("lyrics.song.autoSave")}</span>
+        <button type="button" className="lt-lyrics-btn is-primary" onClick={close}>
+          {t("lyrics.song.done")}
+        </button>
+      </footer>
     </LyricsModal>
   );
 }
@@ -170,11 +176,11 @@ function LinkCell({
     return (
       <span className="lt-lyrics-state-suggested">
         <span aria-hidden="true">? </span>
-        <button type="button" onClick={() => onUse({ id: best.id, name: best.name })}>
+        <button className="lt-lyrics-btn" type="button" onClick={() => onUse({ id: best.id, name: best.name })}>
           {t("lyrics.linker.use", { name: best.name })}
         </button>
         {others.length > 0 ? (
-          <select
+          <select className="lt-lyrics-select"
             aria-label={t("lyrics.linker.others", { name: report.regionName })}
             value=""
             onChange={(event) => {
@@ -197,7 +203,7 @@ function LinkCell({
     <span className="lt-lyrics-state-notFound">
       <span aria-hidden="true">✗ </span>
       {t("lyrics.linker.notFound")}{" "}
-      <button type="button" onClick={onSearch}>
+      <button className="lt-lyrics-btn" type="button" onClick={onSearch}>
         {t("lyrics.linker.search")}
       </button>
     </span>

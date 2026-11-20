@@ -63,13 +63,13 @@ export function LyricsSetupTutorial({ software, onDone }: Props) {
         )}
         <span className="lt-lyrics-tutorial-spacer" />
         {step > 0 ? (
-          <button type="button" onClick={() => setStep(step - 1)}>
+          <button className="lt-lyrics-btn" type="button" onClick={() => setStep(step - 1)}>
             {t("lyrics.tutorial.back")}
           </button>
         ) : null}
         <button
           type="button"
-          className="is-primary"
+          className="lt-lyrics-btn is-primary"
           onClick={() => (last ? onDone() : setStep(step + 1))}
         >
           {last ? t("lyrics.tutorial.done") : t("lyrics.tutorial.next")}

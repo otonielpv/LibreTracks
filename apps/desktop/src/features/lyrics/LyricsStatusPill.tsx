@@ -80,10 +80,10 @@ function LyricsPillPopover({
         </p>
       ) : null}
       <div className="lt-lyrics-popover-actions">
-        <button type="button" onClick={() => void handlers.setPaused(!paused)}>
+        <button className="lt-lyrics-btn" type="button" onClick={() => void handlers.setPaused(!paused)}>
           {paused ? t("lyrics.pill.resume") : t("lyrics.pill.pause")}
         </button>
-        <button
+        <button className="lt-lyrics-btn"
           type="button"
           onClick={() => {
             handlers.openLinker();
@@ -92,7 +92,7 @@ function LyricsPillPopover({
         >
           {t("lyrics.pill.link")}
         </button>
-        <button type="button" onClick={() => void handlers.refresh()}>
+        <button className="lt-lyrics-btn" type="button" onClick={() => void handlers.refresh()}>
           {t("lyrics.pill.refresh")}
         </button>
       </div>

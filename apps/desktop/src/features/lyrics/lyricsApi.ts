@@ -3,7 +3,14 @@
  * lyrics program goes through Rust: the WebView never talks to it (Android
  * release blocks the WebView's cleartext).
  */
-import { invokeCommand } from "@libretracks/shared/desktopApi";
+import {
+  invokeCommand,
+  pauseTransport,
+  playTransport,
+  seekTransport,
+} from "@libretracks/shared/desktopApi";
+
+export { pauseTransport, playTransport, seekTransport };
 import type {
   LyricsConfig,
   LyricsLink,

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import type { LyricsOverrideTarget } from "@libretracks/shared/models";
 
-import { getSong } from "../transport/songStore";
+import { useSongStore } from "../transport/songStore";
 import { LeadTimeField } from "../transport/panels/LeadTimeField";
 import {
   asLyricsError,
@@ -70,8 +70,11 @@ export function LyricsSongPanel({
   const [catalog, setCatalog] = useState<Presentation[] | null>(null);
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState<PendingRepeat | null>(null);
+  const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
 
-  const region = getSong()?.regions.find((candidate) => candidate.id === regionId) ?? null;
+  const region = useSongStore(
+    (state) => state.song?.regions.find((candidate) => candidate.id === regionId) ?? null,
+  );
   const stored = software ? linkFor(region?.lyrics, software) : null;
 
   const load = useCallback(() => {
@@ -88,9 +91,25 @@ export function LyricsSongPanel({
     load();
   }, [load, linksVersion]);
 
+  // Every change is saved at once (one undo step each); the footer says so.
   const after = (work: Promise<unknown>) => {
-    void work.then(load).catch((reason) => setError(asLyricsError(reason)));
+    setSaving("saving");
+    void work
+      .then(() => {
+        setSaving("saved");
+        load();
+      })
+      .catch((reason) => {
+        setSaving("idle");
+        setError(asLyricsError(reason));
+      });
   };
+
+  useEffect(() => {
+    if (saving !== "saved") return () => {};
+    const timer = window.setTimeout(() => setSaving("idle"), 2500);
+    return () => window.clearTimeout(timer);
+  }, [saving]);
 
   const applyOverride = (markerId: string, target: LyricsOverrideTarget | null, onlyThisTime: boolean) => {
     setPending(null);
@@ -129,13 +148,13 @@ export function LyricsSongPanel({
             <small>{t("lyrics.song.foundByName")}</small>
           ) : null}
         </div>
-        <button type="button" disabled={Boolean(error)} onClick={openSearch}>
+        <button className="lt-lyrics-btn" type="button" disabled={Boolean(error)} onClick={openSearch}>
           {t("lyrics.song.change")}
         </button>
       </div>
 
       {report && report.linkState.state === "linked" && !report.stored && report.link?.presentationId ? (
-        <button
+        <button className="lt-lyrics-btn"
           type="button"
           onClick={() =>
             after(
@@ -152,7 +171,7 @@ export function LyricsSongPanel({
 
       {catalog !== null ? (
         <div className="lt-settings-field">
-          <input
+          <input className="lt-lyrics-input"
             aria-label={t("lyrics.song.search")}
             placeholder={t("lyrics.song.search")}
             value={search}
@@ -161,7 +180,7 @@ export function LyricsSongPanel({
           <ul className="lt-lyrics-search">
             {filtered.slice(0, 30).map((presentation) => (
               <li key={presentation.id}>
-                <button
+                <button className="lt-lyrics-btn"
                   type="button"
                   onClick={() => {
                     setCatalog(null);
@@ -192,10 +211,10 @@ export function LyricsSongPanel({
         <div className="lt-lyrics-probe" role="group" aria-label={t("lyrics.song.repeatQuestion")}>
           <p>{t("lyrics.song.repeatQuestion")}</p>
           <div className="lt-lyrics-row">
-            <button type="button" onClick={() => applyOverride(pending.markerId, pending.target, true)}>
+            <button className="lt-lyrics-btn" type="button" onClick={() => applyOverride(pending.markerId, pending.target, true)}>
               {t("lyrics.song.onlyThisTime")}
             </button>
-            <button type="button" onClick={() => applyOverride(pending.markerId, pending.target, false)}>
+            <button className="lt-lyrics-btn" type="button" onClick={() => applyOverride(pending.markerId, pending.target, false)}>
               {t("lyrics.song.everyTime")}
             </button>
           </div>
@@ -227,7 +246,7 @@ export function LyricsSongPanel({
                       name: marker.markerName,
                       n: marker.occurrence + 1,
                     })}
-                    className={marker.status === "unmatched" ? "lt-lyrics-unmatched" : ""}
+                    className={`lt-lyrics-select ${marker.status === "unmatched" ? "lt-lyrics-unmatched" : ""}`}
                     value={selectValue(marker)}
                     onChange={(event) => {
                       const target = targetOf(event.target.value);
@@ -256,7 +275,7 @@ export function LyricsSongPanel({
                 </td>
                 <td>{marker.slideCount > 0 ? marker.slideCount : ""}</td>
                 <td>
-                  <button
+                  <button className="lt-lyrics-btn"
                     type="button"
                     disabled={marker.status === "unmatched" || marker.status === "skip"}
                     onClick={() => void handlers.testSend(regionId, marker.markerId, 0)}
@@ -277,18 +296,53 @@ export function LyricsSongPanel({
         <LyricsSlidesBlock
           regionId={regionId}
           report={report}
+          regionStartSeconds={region?.startSeconds ?? 0}
           regionEndSeconds={region?.endSeconds ?? 0}
           stepMode={region?.lyrics?.stepMode ?? "auto"}
           handlers={handlers}
-          onSaved={load}
+          onSaved={() => after(Promise.resolve())}
         />
       ) : null}
 
-      <LeadTimeField
-        value={region?.lyrics?.lead ?? null}
-        onChange={(lead) => after(handlers.setRegionLead(regionId, lead))}
-      />
-      <small>{t("lyrics.song.leadHelp")}</small>
+      <label className="lt-settings-toggle">
+        <input
+          type="checkbox"
+          checked={Boolean(region?.lyrics?.lead)}
+          onChange={(event) =>
+            after(
+              handlers.setRegionLead(
+                regionId,
+                event.target.checked ? { unit: "beats", count: 1 } : null,
+              ),
+            )
+          }
+        />
+        <span className="lt-settings-toggle-copy">
+          <strong>{t("lyrics.song.ownLead")}</strong>
+          <small>{t("lyrics.song.leadHelp")}</small>
+        </span>
+      </label>
+      {region?.lyrics?.lead ? (
+        <LeadTimeField
+          value={region.lyrics.lead}
+          onChange={(lead) =>
+            after(handlers.setRegionLead(regionId, lead ?? { unit: "beats", count: 0 }))
+          }
+        />
+      ) : null}
+
+      <footer className="lt-lyrics-modal-footer">
+        <span className={`lt-lyrics-save-state is-${saving}`} role="status">
+          {saving === "saving"
+            ? t("lyrics.song.saving")
+            : saving === "saved"
+              ? t("lyrics.song.saved")
+              : t("lyrics.song.autoSave")}
+        </span>
+        <button type="button" className="lt-lyrics-btn is-primary" onClick={close}>
+          {t("lyrics.song.done")}
+        </button>
+      </footer>
     </LyricsModal>
   );
 }

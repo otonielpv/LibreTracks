@@ -40,10 +40,16 @@ function makeApi(positions: number[]) {
     listPresentations: vi.fn(),
     stepsFromTaps: vi.fn(async () => [{ markerId: "v1", offsetBeats: 16 }]),
     getTapPosition: vi.fn(async () => positions[index++] ?? 0),
+    playTransport: vi.fn(async () => ({ playbackState: "playing" })),
+    pauseTransport: vi.fn(async () => ({ playbackState: "paused" })),
+    seekTransport: vi.fn(async () => ({ playbackState: "paused" })),
   } as unknown as LyricsApi & {
     setRegionLyrics: ReturnType<typeof vi.fn>;
     testSendLyrics: ReturnType<typeof vi.fn>;
     stepsFromTaps: ReturnType<typeof vi.fn>;
+    playTransport: ReturnType<typeof vi.fn>;
+    pauseTransport: ReturnType<typeof vi.fn>;
+    seekTransport: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -110,6 +116,7 @@ function renderBlock(api: ReturnType<typeof makeApi>) {
     <LyricsSlidesBlock
       regionId="r1"
       report={REPORT}
+      regionStartSeconds={0}
       regionEndSeconds={24}
       stepMode="auto"
       handlers={handlers}
@@ -120,6 +127,39 @@ function renderBlock(api: ReturnType<typeof makeApi>) {
 }
 
 describe("LyricsSlidesBlock", () => {
+  it("plays, pauses and goes to the song start from the recorder (no keyboard on a phone)", async () => {
+    const api = makeApi([]);
+    renderBlock(api);
+    fireEvent.click(screen.getByRole("button", { name: "Grabar cambios…" }));
+    fireEvent.click(screen.getByRole("button", { name: /Reproducir/ }));
+    await waitFor(() => expect(api.playTransport).toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole("button", { name: /Pausa/ }));
+    await waitFor(() => expect(api.pauseTransport).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: /Al inicio de la canción/ }));
+    await waitFor(() => expect(api.seekTransport).toHaveBeenCalledWith(0));
+  });
+
+  it("hides the recorder when no section has several slides", () => {
+    const handlers = createLyricsHandlers({ api: makeApi([]), getRegionLyrics: () => null });
+    const single = {
+      ...REPORT,
+      markers: REPORT.markers.map((marker) => ({ ...marker, slideCount: 1, autoChangeBars: [] })),
+    };
+    render(
+      <LyricsSlidesBlock
+        regionId="r1"
+        report={single}
+        regionStartSeconds={0}
+        regionEndSeconds={24}
+        stepMode="auto"
+        handlers={handlers}
+        onSaved={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Grabar cambios…" })).toBeNull();
+    expect(screen.getByText("Ninguna sección tiene más de una diapositiva.")).toBeTruthy();
+  });
+
   it("shows where the automatic changes fall", () => {
     renderBlock(makeApi([]));
     expect(screen.getByText(/Verso 1: cambia en el compás 5/)).toBeTruthy();

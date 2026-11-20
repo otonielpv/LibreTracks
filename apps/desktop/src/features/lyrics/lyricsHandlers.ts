@@ -40,6 +40,9 @@ export type LyricsApi = Pick<
   | "listPresentations"
   | "stepsFromTaps"
   | "getTapPosition"
+  | "playTransport"
+  | "pauseTransport"
+  | "seekTransport"
 >;
 
 export type LyricsHandlerDeps = {
@@ -48,6 +51,9 @@ export type LyricsHandlerDeps = {
   onSnapshot?: (snapshot: unknown) => void;
   /** The song's current lyrics model, read when the action runs. */
   getRegionLyrics: (regionId: string) => RegionLyrics | null | undefined;
+  /** A save went through: keep the local song in step at once, so the next
+   * edit builds on this one instead of on a stale copy. */
+  onRegionSaved?: (regionId: string, lyrics: RegionLyrics | null) => void;
 };
 
 export type ProbeOutcome =
@@ -58,6 +64,7 @@ export function createLyricsHandlers({
   api: injected,
   getRegionLyrics,
   onSnapshot,
+  onRegionSaved,
 }: LyricsHandlerDeps) {
   const calls: LyricsApi = injected ?? api;
   const store = () => useLyricsStore.getState();
@@ -69,7 +76,10 @@ export function createLyricsHandlers({
     store().configView?.config.software ?? null;
   const saveRegion = async (regionId: string, lyrics: RegionLyrics | null) => {
     const snapshot = await calls.setRegionLyrics(regionId, lyrics);
+    onRegionSaved?.(regionId, lyrics);
     onSnapshot?.(snapshot);
+    // Open panels (the linker's counts) read the session again.
+    store().bumpLinks();
     return snapshot;
   };
 
@@ -164,6 +174,24 @@ export function createLyricsHandlers({
       saveRegion(regionId, withStepMode(getRegionLyrics(regionId), mode)),
 
     tapPosition: () => calls.getTapPosition(),
+
+    /** Transport for the recorder (no keyboard on a phone). Returns whether
+     * it is playing now. */
+    play: async () => {
+      const snapshot = await calls.playTransport();
+      onSnapshot?.(snapshot);
+      return snapshot.playbackState === "playing";
+    },
+    pause: async () => {
+      const snapshot = await calls.pauseTransport();
+      onSnapshot?.(snapshot);
+      return snapshot.playbackState === "playing";
+    },
+    seekTo: async (seconds: number) => {
+      const snapshot = await calls.seekTransport(seconds);
+      onSnapshot?.(snapshot);
+      return snapshot.playbackState === "playing";
+    },
 
     /** Save a recording: one commit, one undo step. */
     saveRecording: async (regionId: string, taps: number[]) => {

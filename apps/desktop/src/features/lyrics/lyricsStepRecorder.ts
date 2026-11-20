@@ -11,6 +11,7 @@ export type SectionSpan = {
   markerName: string;
   startSeconds: number;
   endSeconds: number;
+  slides?: number;
 };
 
 export type RecorderDeps = {

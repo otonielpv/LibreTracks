@@ -16,6 +16,7 @@ import {
 type Props = {
   regionId: string;
   report: RegionReport;
+  regionStartSeconds: number;
   regionEndSeconds: number;
   stepMode: LyricsStepMode;
   handlers: LyricsHandlers;
@@ -33,6 +34,7 @@ type Props = {
 export function LyricsSlidesBlock({
   regionId,
   report,
+  regionStartSeconds,
   regionEndSeconds,
   stepMode,
   handlers,
@@ -43,16 +45,22 @@ export function LyricsSlidesBlock({
   const [recording, setRecording] = useState(false);
   const [summary, setSummary] = useState<RecorderSummary | null>(null);
   const [lastTap, setLastTap] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
   const recorder = useRef<StepRecorder | null>(null);
 
   const sections: SectionSpan[] = useMemo(() => {
     const sorted = [...report.markers].sort((a, b) => a.startSeconds - b.startSeconds);
-    return sorted.map((marker, index) => ({
-      markerId: marker.markerId,
-      markerName: marker.markerName,
-      startSeconds: marker.startSeconds,
-      endSeconds: sorted[index + 1]?.startSeconds ?? regionEndSeconds,
-    }));
+    // Only sections with several slides take taps: a tap elsewhere has no
+    // slide to move to.
+    return sorted
+      .map((marker, index) => ({
+        markerId: marker.markerId,
+        markerName: marker.markerName,
+        startSeconds: marker.startSeconds,
+        endSeconds: sorted[index + 1]?.startSeconds ?? regionEndSeconds,
+        slides: marker.slideCount,
+      }))
+      .filter((section) => section.slides > 1);
   }, [report.markers, regionEndSeconds]);
 
   const tap = () => {
@@ -81,8 +89,13 @@ export function LyricsSlidesBlock({
     setRecording(true);
   };
 
+  const transport = (work: Promise<boolean>) => {
+    void work.then(setPlaying).catch(() => {});
+  };
+
   const stop = () => {
     setRecording(false);
+    if (playing) transport(handlers.pause());
     setSummary(recorder.current?.summary() ?? []);
   };
 
@@ -101,9 +114,11 @@ export function LyricsSlidesBlock({
   return (
     <section className="lt-lyrics-slides" aria-label={t("lyrics.slides.title")}>
       <h3>{t("lyrics.slides.title")}</h3>
+      {multi.length === 0 ? <small>{t("lyrics.slides.noneMulti")}</small> : null}
+      {multi.length === 0 ? null : (
       <label className="lt-settings-field">
         <span>{t("lyrics.slides.mode")}</span>
-        <select
+        <select className="lt-lyrics-select"
           aria-label={t("lyrics.slides.mode")}
           value={stepMode}
           onChange={(event) =>
@@ -115,6 +130,7 @@ export function LyricsSlidesBlock({
           <option value="off">{t("lyrics.slides.off")}</option>
         </select>
       </label>
+      )}
       {stepMode === "auto" && multi.length > 0 ? (
         <ul className="lt-lyrics-slides-list">
           {multi.map((marker) => (
@@ -127,16 +143,36 @@ export function LyricsSlidesBlock({
           ))}
         </ul>
       ) : null}
-      {stepMode === "auto" && multi.length === 0 ? <small>{t("lyrics.slides.noneMulti")}</small> : null}
-
-      {recording ? (
+      {multi.length === 0 ? null : recording ? (
         <div className="lt-lyrics-recorder" role="group" aria-label={t("lyrics.slides.recording")}>
           <p>{t("lyrics.slides.recordingHelp")}</p>
-          <button type="button" className="lt-lyrics-tap" onClick={tap}>
+          <div className="lt-lyrics-recorder-transport">
+            <button
+              type="button"
+              className="lt-lyrics-btn"
+              onClick={() => transport(handlers.seekTo(regionStartSeconds))}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">
+                skip_previous
+              </span>
+              {t("lyrics.slides.toSongStart")}
+            </button>
+            <button
+              type="button"
+              className="lt-lyrics-btn"
+              onClick={() => transport(playing ? handlers.pause() : handlers.play())}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">
+                {playing ? "pause" : "play_arrow"}
+              </span>
+              {playing ? t("lyrics.slides.pause") : t("lyrics.slides.play")}
+            </button>
+          </div>
+          <button type="button" className="lt-lyrics-btn lt-lyrics-tap" onClick={tap}>
             {t("lyrics.slides.tap")}
           </button>
           {lastTap ? <small>{t("lyrics.slides.lastTap", { name: lastTap })}</small> : null}
-          <button type="button" onClick={stop}>
+          <button className="lt-lyrics-btn" type="button" onClick={stop}>
             {t("lyrics.slides.stop")}
           </button>
         </div>
@@ -154,16 +190,16 @@ export function LyricsSlidesBlock({
             </ul>
           )}
           <div className="lt-lyrics-row">
-            <button type="button" className="is-primary" disabled={summary.length === 0} onClick={save}>
+            <button type="button" className="lt-lyrics-btn is-primary" disabled={summary.length === 0} onClick={save}>
               {t("lyrics.slides.save")}
             </button>
-            <button type="button" onClick={discard}>
+            <button className="lt-lyrics-btn" type="button" onClick={discard}>
               {t("lyrics.slides.discard")}
             </button>
           </div>
         </div>
       ) : (
-        <button type="button" onClick={start}>
+        <button className="lt-lyrics-btn" type="button" onClick={start}>
           {t("lyrics.slides.record")}
         </button>
       )}

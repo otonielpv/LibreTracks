@@ -77,6 +77,9 @@ function makeApi(overrides: Partial<LyricsApi> = {}) {
     getSetlistReport: vi.fn(async () => [] as RegionReport[]),
     stepsFromTaps: vi.fn(async () => []),
     getTapPosition: vi.fn(async () => 0),
+    playTransport: vi.fn(async () => ({ playbackState: "playing" }) as never),
+    pauseTransport: vi.fn(async () => ({ playbackState: "paused" }) as never),
+    seekTransport: vi.fn(async () => ({ playbackState: "paused" }) as never),
     listPresentations: vi.fn(async () => [{ id: "812", name: "Way Maker" }]),
   } satisfies LyricsApi;
   return { ...base, ...overrides } as typeof base;
@@ -152,8 +155,13 @@ describe("LyricsSongPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Todas las veces" }));
     await waitFor(() => expect(api.setRegionLyrics).toHaveBeenCalledTimes(2));
+    // The second edit builds on the first (it used to overwrite it: only
+    // the last correction survived and the linker kept counting the rest).
     const every = api.setRegionLyrics.mock.calls[1][1] as RegionLyrics;
-    expect(every.links[0].overrides).toEqual([{ markerId: "c", target: { type: "group", label: "Coro 2" } }]);
+    expect(every.links[0].overrides).toEqual([
+      { markerId: "c~1", target: { type: "group", label: "Coro 2" } },
+      { markerId: "c", target: { type: "group", label: "Coro 2" } },
+    ]);
   });
 
   it("test sends that section with k = 0", async () => {

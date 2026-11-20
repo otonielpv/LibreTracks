@@ -40,6 +40,9 @@ function makeApi(initial: Partial<LyricsConfig> = {}) {
     getSetlistReport: vi.fn(async () => []),
     stepsFromTaps: vi.fn(async () => []),
     getTapPosition: vi.fn(async () => 0),
+    playTransport: vi.fn(async () => ({ playbackState: "playing" }) as never),
+    pauseTransport: vi.fn(async () => ({ playbackState: "paused" }) as never),
+    seekTransport: vi.fn(async () => ({ playbackState: "paused" }) as never),
     listPresentations: vi.fn(async () => []),
   } satisfies LyricsApi;
   return api;

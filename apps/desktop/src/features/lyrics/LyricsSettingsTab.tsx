@@ -102,7 +102,7 @@ export function LyricsSettingsTab({ api }: { api?: LyricsApi } = {}) {
                   type="button"
                   role="radio"
                   aria-checked={software === program}
-                  className={software === program ? "is-selected" : ""}
+                  className={`lt-lyrics-btn ${software === program ? "is-selected" : ""}`}
                   onClick={() => {
                     setShowTutorial(false);
                     save(withSoftware(config, program, portTouched));
@@ -139,7 +139,7 @@ export function LyricsSettingsTab({ api }: { api?: LyricsApi } = {}) {
               <div className="lt-lyrics-fields">
                 <label className="lt-settings-field">
                   <span>{t("lyrics.settings.host")}</span>
-                  <input
+                  <input className="lt-lyrics-input"
                     aria-label={t("lyrics.settings.host")}
                     defaultValue={config.host}
                     key={`host-${config.host}`}
@@ -153,7 +153,7 @@ export function LyricsSettingsTab({ api }: { api?: LyricsApi } = {}) {
                 </label>
                 <label className="lt-settings-field">
                   <span>{t("lyrics.settings.port")}</span>
-                  <input
+                  <input className="lt-lyrics-input"
                     aria-label={t("lyrics.settings.port")}
                     inputMode="numeric"
                     defaultValue={config.port ?? ""}
@@ -176,7 +176,7 @@ export function LyricsSettingsTab({ api }: { api?: LyricsApi } = {}) {
               {usesToken(software) ? (
                 <label className="lt-settings-field">
                   <span>{t(software === "holyrics" ? "lyrics.settings.token" : "lyrics.settings.key")}</span>
-                  <input
+                  <input className="lt-lyrics-input"
                     type="password"
                     autoComplete="off"
                     aria-label={t(software === "holyrics" ? "lyrics.settings.token" : "lyrics.settings.key")}
@@ -197,7 +197,7 @@ export function LyricsSettingsTab({ api }: { api?: LyricsApi } = {}) {
               ) : null}
 
               <div className="lt-lyrics-row">
-                <button type="button" disabled={probing} onClick={() => void runProbe()}>
+                <button className="lt-lyrics-btn" type="button" disabled={probing} onClick={() => void runProbe()}>
                   {probing ? t("lyrics.settings.probing") : t("lyrics.settings.probe")}
                 </button>
               </div>
@@ -250,7 +250,7 @@ export function LyricsSettingsTab({ api }: { api?: LyricsApi } = {}) {
                 </span>
               </label>
               <div className="lt-lyrics-row">
-                <button type="button" onClick={handlers.openLinker}>
+                <button className="lt-lyrics-btn" type="button" onClick={handlers.openLinker}>
                   {t("lyrics.pill.link")}
                 </button>
               </div>
