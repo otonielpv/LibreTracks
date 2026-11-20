@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type {
+  EqPreset,
+  MixSceneEqChange,
   MixScenePanChange,
   MixSceneRule,
   MixSceneTrackChange,
@@ -10,6 +12,7 @@ import type {
 } from "@libretracks/shared/models";
 
 import type { TrackSongGroup } from "../trackSongGroups";
+import { eqPresetLabel, useEqPresets } from "../../eq/useEqPresets";
 import { parseWords } from "./sceneRules";
 
 type T = (key: string, options?: Record<string, unknown>) => string;
@@ -225,6 +228,7 @@ function ChangeEditor({
 }) {
   const volumeMode = change.volume?.type ?? "none";
   const panMode = change.pan?.type ?? "none";
+  const presets = useEqPresets();
   return (
     <div className="lt-scene-rule-changes">
       <span className="lt-scene-change">
@@ -331,7 +335,70 @@ function ChangeEditor({
         t={t}
         onChange={(solo) => onChange({ ...change, solo })}
       />
+      <EqChangeEditor
+        value={change.eq ?? null}
+        presets={presets}
+        t={t}
+        onChange={(eq) => onChange({ ...change, eq })}
+      />
     </div>
+  );
+}
+
+/** «EQ: sin cambio / encender / apagar / preset…» (plan track-eq-2, paso 03). */
+function EqChangeEditor({
+  value,
+  presets,
+  t,
+  onChange,
+}: {
+  value: MixSceneEqChange | null;
+  presets: EqPreset[];
+  t: T;
+  onChange: (value: MixSceneEqChange | null) => void;
+}) {
+  const label = t("transport.mixScene.eq");
+  const mode = value?.eq
+    ? `preset:${value.presetId ?? ""}`
+    : value?.enabled === true
+      ? "on"
+      : value?.enabled === false
+        ? "off"
+        : "none";
+  // Un preset guardado en la regla que ya no existe sigue funcionando: su
+  // curva va en la regla.
+  const missingPreset =
+    value?.eq && !presets.some((preset) => preset.id === value.presetId);
+  return (
+    <span className="lt-scene-change">
+      <span className="lt-scene-change-label">{label}</span>
+      <select
+        aria-label={label}
+        value={mode}
+        onChange={(event) => {
+          const next = event.target.value;
+          if (next === "none") onChange(null);
+          else if (next === "on") onChange({ enabled: true });
+          else if (next === "off") onChange({ enabled: false });
+          else {
+            const preset = presets.find((candidate) => `preset:${candidate.id}` === next);
+            if (preset) onChange({ presetId: preset.id, eq: preset.eq, enabled: true });
+          }
+        }}
+      >
+        <option value="none">{t("transport.mixScene.noChange")}</option>
+        <option value="on">{t("transport.mixScene.eqOn")}</option>
+        <option value="off">{t("transport.mixScene.eqOff")}</option>
+        {missingPreset ? (
+          <option value={mode}>{t("transport.mixScene.eqSavedCurve")}</option>
+        ) : null}
+        {presets.map((preset) => (
+          <option key={preset.id} value={`preset:${preset.id}`}>
+            {t("transport.mixScene.eqPreset", { name: eqPresetLabel(preset, t) })}
+          </option>
+        ))}
+      </select>
+    </span>
   );
 }
 

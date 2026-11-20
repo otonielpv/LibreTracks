@@ -636,6 +636,18 @@ export type MixSceneTrackChange = {
   pan?: MixScenePanChange | null;
   muted?: boolean | null;
   solo?: boolean | null;
+  eq?: MixSceneEqChange | null;
+};
+
+/**
+ * Lo que una regla hace con el EQ (plan track-eq-2, paso 03): encender o
+ * apagar, o poner la curva de un preset (copiada en `eq` al elegirlo, así
+ * borrar el preset no rompe la escena).
+ */
+export type MixSceneEqChange = {
+  enabled?: boolean | null;
+  presetId?: string | null;
+  eq?: TrackEq | null;
 };
 
 export type MixSceneRule = {

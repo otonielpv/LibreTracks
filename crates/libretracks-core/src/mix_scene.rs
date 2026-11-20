@@ -13,6 +13,7 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::model::{Song, TrackKind};
+use crate::track_eq::TrackEq;
 use crate::track_matching::fold_text;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -62,6 +63,51 @@ pub struct TrackChange {
     pub muted: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub solo: Option<bool>,
+    /// Plan track-eq-2, paso 03: encender/apagar el EQ o poner una curva.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eq: Option<SceneEq>,
+}
+
+/// Lo que una regla de escena hace con el EQ de sus pistas (E3). Sin rampa:
+/// el cambio usa el suavizado de ~10 ms del motor.
+///
+/// - `eq`: la curva que se pone (la de un preset se copia aquí al guardar la
+///   escena, así borrar el preset no rompe la escena). `preset_id` es solo
+///   para que la UI muestre de qué preset vino.
+/// - `enabled`: enciende o apaga el EQ (sobre la curva puesta, o sobre la que
+///   la pista ya tuviera).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneEq {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eq: Option<TrackEq>,
+}
+
+impl SceneEq {
+    pub fn is_empty(&self) -> bool {
+        self.enabled.is_none() && self.eq.is_none()
+    }
+
+    /// El EQ que resulta de aplicar esto a `current`.
+    pub fn apply(&self, current: Option<&TrackEq>) -> Option<TrackEq> {
+        let mut result = match &self.eq {
+            Some(curve) => Some(curve.sanitized()),
+            None => current.cloned(),
+        };
+        if let Some(enabled) = self.enabled {
+            match result.as_mut() {
+                Some(eq) => eq.enabled = enabled,
+                // Encender una pista sin EQ: las bandas por defecto (planas).
+                None if enabled => result = Some(TrackEq::default()),
+                None => {}
+            }
+        }
+        result
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -84,7 +130,11 @@ pub enum PanChange {
 
 impl TrackChange {
     pub fn is_empty(&self) -> bool {
-        self.volume.is_none() && self.pan.is_none() && self.muted.is_none() && self.solo.is_none()
+        self.volume.is_none()
+            && self.pan.is_none()
+            && self.muted.is_none()
+            && self.solo.is_none()
+            && self.eq.as_ref().is_none_or(SceneEq::is_empty)
     }
 
     /// `other` on top of `self`, field by field: the later rule wins.
@@ -100,6 +150,9 @@ impl TrackChange {
         }
         if other.solo.is_some() {
             self.solo = other.solo;
+        }
+        if other.eq.as_ref().is_some_and(|eq| !eq.is_empty()) {
+            self.eq = other.eq.clone();
         }
     }
 }
@@ -161,6 +214,7 @@ impl<'de> Deserialize<'de> for MixScene {
                         pan: legacy.pan.map(PanChange::Absolute),
                         muted: legacy.muted,
                         solo: legacy.solo,
+                        eq: None,
                     },
                 })
                 .collect(),
@@ -377,13 +431,15 @@ pub fn resolve_scene(
 
 // --- Arithmetic (D6) ------------------------------------------------------
 
-/// A track's mix values.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// A track's mix values. Plan track-eq-2: lleva el EQ (por eso ya no es
+/// `Copy`).
+#[derive(Debug, Clone, PartialEq)]
 pub struct TrackMix {
     pub volume: f64,
     pub pan: f64,
     pub muted: bool,
     pub solo: bool,
+    pub eq: Option<TrackEq>,
 }
 
 pub fn apply_change(current: TrackMix, change: &TrackChange) -> TrackMix {
@@ -402,6 +458,10 @@ pub fn apply_change(current: TrackMix, change: &TrackChange) -> TrackMix {
         pan: if pan.is_finite() { pan.clamp(-1.0, 1.0) } else { current.pan },
         muted: change.muted.unwrap_or(current.muted),
         solo: change.solo.unwrap_or(current.solo),
+        eq: match &change.eq {
+            Some(scene_eq) if !scene_eq.is_empty() => scene_eq.apply(current.eq.as_ref()),
+            _ => current.eq,
+        },
     }
 }
 
@@ -540,7 +600,7 @@ impl SceneLatches {
     /// The track's value before any scene, which is what a save must write
     /// (D9). `None` when no scene holds it.
     pub fn values_for_save(&self, track_id: &str) -> Option<TrackMix> {
-        self.base.get(track_id).copied()
+        self.base.get(track_id).cloned()
     }
 
     /// Release everything without computing anything (session closed).
@@ -554,7 +614,7 @@ impl SceneLatches {
     fn settle(&mut self, track_ids: Vec<String>) -> Vec<(String, TrackMix)> {
         let mut out = Vec::with_capacity(track_ids.len());
         for track_id in track_ids {
-            let Some(base) = self.base.get(&track_id).copied() else {
+            let Some(base) = self.base.get(&track_id).cloned() else {
                 continue;
             };
             let mut held = false;

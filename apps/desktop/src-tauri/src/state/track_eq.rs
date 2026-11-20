@@ -72,6 +72,10 @@ impl DesktopSession {
         self.push_history_entry();
         self.redo_stack.clear();
         self.transpose_history_group = None;
+        // Tocar el EQ a mano saca la pista de las escenas puestas (E3).
+        for (track_id, _) in &pending {
+            self.mix_touched_by_user(track_id);
+        }
         {
             let song = self.engine.song_mut()?;
             for (track_id, eq) in &pending {

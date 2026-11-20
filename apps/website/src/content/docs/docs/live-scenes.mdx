@@ -32,8 +32,10 @@ automation track is needed.
      "voz" finds "Vóz guía") or a specific `Track`.
    - **except:** zero or more selectors that are taken away.
    - **What changes:** volume (`± dB` over each track's own level, or a fixed
-     value), pan, mute and solo. Anything left on **No change** is not
-     touched.
+     value), pan, mute, solo and **EQ** (turn on, turn off or load a preset;
+     the preset's curve is stored in the scene, so deleting the preset later
+     doesn't break it). The EQ changes at once, without a ramp. Anything left
+     on **No change** is not touched.
 5. **Which tracks it affects in the current song**, to check the rule before
    using it live.
 
@@ -66,7 +68,7 @@ You can also:
 
 ## While it is engaged
 
-- If you move a track's fader, mute or solo by hand (on screen or on the
+- If you move a track's fader, mute, solo or EQ by hand (on screen or on the
   controller), that track leaves the scene: when you release it, the track
   stays where you left it.
 - If playback moves on to the **next song**, the scene stays engaged and

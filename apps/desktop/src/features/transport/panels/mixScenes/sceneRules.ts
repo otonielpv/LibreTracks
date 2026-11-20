@@ -82,8 +82,14 @@ function selectorPicks(
 }
 
 function changeIsEmpty(rule: MixSceneRule) {
-  const { volume, pan, muted, solo } = rule.change;
-  return volume == null && pan == null && muted == null && solo == null;
+  const { volume, pan, muted, solo, eq } = rule.change;
+  return (
+    volume == null &&
+    pan == null &&
+    muted == null &&
+    solo == null &&
+    (eq == null || (eq.enabled == null && eq.eq == null))
+  );
 }
 
 /** The ids of the tracks the scene touches, in track order. */

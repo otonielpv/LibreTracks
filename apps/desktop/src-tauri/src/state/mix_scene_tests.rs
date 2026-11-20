@@ -219,6 +219,7 @@ fn music_down(ramp_seconds: f64) -> MixScene {
                 pan: Some(PanChange::Absolute(0.5)),
                 muted: Some(true),
                 solo: Some(true),
+                eq: None,
             },
         }],
     }
@@ -710,4 +711,107 @@ fn a_template_from_before_the_plan_opens_without_scenes() {
 
 fn track_of_song(session: &DesktopSession) -> Song {
     session.engine.song().cloned().expect("song loaded")
+}
+
+// --- Plan track-eq-2, paso 03: EQ en escenas ---------------------------------
+
+fn boosted_eq() -> libretracks_core::TrackEq {
+    let mut eq = libretracks_core::TrackEq::default();
+    eq.bands[2].gain_db = 5.0;
+    eq
+}
+
+/// «EQ fuera» para el bajo de la primera canción y una curva para la voz.
+fn eq_scene() -> MixScene {
+    use libretracks_core::mix_scene::SceneEq;
+    MixScene {
+        id: "eq".into(),
+        name: "EQ".into(),
+        ramp_seconds: 0.0,
+        rules: vec![
+            SceneRule {
+                select: TrackSelector::Track { track_id: "bass1".into() },
+                except: vec![],
+                change: TrackChange {
+                    eq: Some(SceneEq { enabled: Some(false), ..SceneEq::default() }),
+                    ..TrackChange::default()
+                },
+            },
+            SceneRule {
+                select: TrackSelector::Track { track_id: "voz1".into() },
+                except: vec![],
+                change: TrackChange {
+                    eq: Some(SceneEq { preset_id: Some("p".into()), eq: Some(boosted_eq()), ..SceneEq::default() }),
+                    ..TrackChange::default()
+                },
+            },
+        ],
+    }
+}
+
+fn last_audio_command(audio: &AudioController) -> String {
+    audio
+        .debug_snapshot()
+        .expect("debug snapshot")
+        .last_command
+        .map(|trace| trace.kind)
+        .unwrap_or_default()
+}
+
+#[test]
+fn an_eq_scene_changes_model_and_engine_and_releasing_restores_it() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    session
+        .commit_track_eq_model_and_command("bass1", Some(boosted_eq()), &audio)
+        .expect("bass eq");
+    session.automation.mix_scenes.push(eq_scene());
+    let undo = session.undo_stack.len();
+
+    session.trigger_mix_scene("eq", SceneMode::Apply, &audio).expect("engage");
+    assert_eq!(track_of(&session, "bass1").eq.map(|eq| eq.enabled), Some(false));
+    assert_eq!(track_of(&session, "voz1").eq, Some(boosted_eq()));
+    assert_eq!(last_audio_command(&audio), "set_track_eq");
+    assert_eq!(session.undo_stack.len(), undo, "una escena no deshace");
+
+    session.trigger_mix_scene("eq", SceneMode::Restore, &audio).expect("release");
+    assert_eq!(track_of(&session, "bass1").eq, Some(boosted_eq()));
+    assert_eq!(track_of(&session, "voz1").eq, None);
+}
+
+#[test]
+fn touching_the_eq_by_hand_takes_the_track_out_of_the_scene() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    session.automation.mix_scenes.push(eq_scene());
+    session.trigger_mix_scene("eq", SceneMode::Apply, &audio).expect("engage");
+
+    let mut mine = boosted_eq();
+    mine.bands[3].gain_db = -3.0;
+    session
+        .commit_track_eq_model_and_command("voz1", Some(mine.clone()), &audio)
+        .expect("by hand");
+    session.trigger_mix_scene("eq", SceneMode::Restore, &audio).expect("release");
+    assert_eq!(track_of(&session, "voz1").eq, Some(mine), "se queda lo que puso el usuario");
+}
+
+#[test]
+fn saving_with_an_eq_scene_engaged_writes_the_eq_from_before() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    session
+        .commit_track_eq_model_and_command("bass1", Some(boosted_eq()), &audio)
+        .expect("bass eq");
+    session.automation.mix_scenes.push(eq_scene());
+    session.trigger_mix_scene("eq", SceneMode::Apply, &audio).expect("engage");
+
+    session.save_project().expect("save");
+    let song_file = session.song_file_path.clone().expect("song file");
+    let reloaded = load_song_from_file(&song_file).expect("reload");
+    let bass = reloaded.tracks.iter().find(|t| t.id == "bass1").unwrap();
+    assert_eq!(bass.eq, Some(boosted_eq()));
+    let voz = reloaded.tracks.iter().find(|t| t.id == "voz1").unwrap();
+    assert_eq!(voz.eq, None);
+    // Sigue sonando la escena.
+    assert_eq!(track_of(&session, "voz1").eq, Some(boosted_eq()));
 }

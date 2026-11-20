@@ -329,6 +329,7 @@ impl<'a> Simulation<'a> {
             pan: track.pan,
             muted: track.muted,
             solo: track.solo,
+            eq: track.eq.clone(),
         })
     }
 
@@ -340,7 +341,7 @@ impl<'a> Simulation<'a> {
             return;
         };
         // The values the track starts the render with: what the model says.
-        let initial = self.initial_mix(track_id).unwrap_or(current);
+        let initial = self.initial_mix(track_id).unwrap_or_else(|| current.clone());
         let keys = self.track_keys(track_id);
         if fields.volume {
             set_linear(&mut keys.gain, initial.volume as f32, at, target.volume as f32, ramp);
@@ -383,6 +384,7 @@ impl<'a> Simulation<'a> {
             pan: keys.pan.first().map_or(current.pan, |key| key.value as f64),
             muted: keys.mute.first().map_or(current.muted, |key| key.value > 0.5),
             solo: keys.solo.first().map_or(current.solo, |key| key.value > 0.5),
+            eq: current.eq.clone(),
         })
     }
 
@@ -537,6 +539,7 @@ impl<'a> Simulation<'a> {
                     pan: track.pan,
                     muted: track.muted,
                     solo: track.solo,
+                    eq: track.eq.clone(),
                 })
             };
             self.latches.engage(scene_id, resolved, current)

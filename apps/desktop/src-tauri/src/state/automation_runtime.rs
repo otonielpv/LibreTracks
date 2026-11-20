@@ -55,6 +55,7 @@ pub(super) fn track_mix_of(song: &Song, track_id: &str) -> Option<TrackMix> {
             pan: track.pan,
             muted: track.muted,
             solo: track.solo,
+            eq: track.eq.clone(),
         })
 }
 
@@ -1071,6 +1072,7 @@ impl DesktopSession {
                     track.pan = mix.pan;
                     track.muted = mix.muted;
                     track.solo = mix.solo;
+                    track.eq = mix.eq;
                 }
             }
         }
@@ -1145,7 +1147,7 @@ impl DesktopSession {
                 .into_iter()
                 // Only what moves: replaying an unchanged track would cut
                 // a ramp that is still taking it there.
-                .filter(|(track_id, target)| track_mix_of(song, track_id) != Some(*target))
+                .filter(|(track_id, target)| track_mix_of(song, track_id).as_ref() != Some(target))
                 .collect();
             let ramp = if playing { scene.ramp_seconds } else { 0.0 };
             self.play_mix_targets(targets, ramp, audio)?;
@@ -1207,6 +1209,14 @@ impl DesktopSession {
             track.pan = target.pan;
             track.muted = target.muted;
             track.solo = target.solo;
+            // EQ (plan track-eq-2, paso 03): sin rampa, con el suavizado del
+            // motor; solo si cambia y la pista lleva EQ. Se manda tras la
+            // mezcla.
+            let eq_change = (track.eq != target.eq && super::track_eq::track_kind_takes_eq(track.kind))
+                .then(|| target.eq.clone());
+            if let Some(eq) = &eq_change {
+                track.eq = eq.clone();
+            }
             self.active_mix_ramps.retain(|existing| existing.track_id != track_id);
 
             let volume_moves = from_volume != target.volume;
@@ -1221,7 +1231,7 @@ impl DesktopSession {
                     None,
                 )?;
                 new_ramps.push(ActiveMixRamp {
-                    track_id,
+                    track_id: track_id.clone(),
                     start_position_seconds: position_seconds,
                     duration_seconds: ramp_seconds,
                     volume: volume_moves.then_some((from_volume, target.volume)),
@@ -1236,6 +1246,9 @@ impl DesktopSession {
                     Some(target.solo),
                     None,
                 )?;
+            }
+            if let Some(eq) = eq_change {
+                audio.update_live_track_eq(&track_id, eq.as_ref())?;
             }
         }
         self.active_mix_ramps.extend(new_ramps);

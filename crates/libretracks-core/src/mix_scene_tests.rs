@@ -64,6 +64,7 @@ fn mix(volume: f64) -> TrackMix {
         pan: 0.0,
         muted: false,
         solo: false,
+        eq: None,
     }
 }
 
@@ -115,6 +116,7 @@ fn pre_plan_scenes_load_as_absolute_track_rules() {
                     pan: None,
                     muted: Some(false),
                     solo: None,
+                    eq: None,
                 },
             },
             SceneRule {
@@ -176,6 +178,7 @@ fn every_selector_and_change_round_trips_in_camel_case() {
                     pan: Some(PanChange::Relative(0.25)),
                     muted: None,
                     solo: None,
+                    eq: None,
                 },
             },
             SceneRule {
@@ -188,6 +191,7 @@ fn every_selector_and_change_round_trips_in_camel_case() {
                     pan: Some(PanChange::Absolute(-1.0)),
                     muted: Some(true),
                     solo: Some(false),
+                    eq: None,
                 },
             },
         ],
@@ -421,13 +425,13 @@ fn relative_changes_scale_and_clamp() {
 // --- C6: latches ----------------------------------------------------------
 
 fn current_of<'a>(values: &'a [(&'a str, TrackMix)]) -> impl Fn(&str) -> Option<TrackMix> + 'a {
-    move |id| values.iter().find(|(track, _)| *track == id).map(|(_, mix)| *mix)
+    move |id| values.iter().find(|(track, _)| *track == id).map(|(_, mix)| mix.clone())
 }
 
 fn target(out: &[(String, TrackMix)], track_id: &str) -> TrackMix {
     out.iter()
         .find(|(id, _)| id == track_id)
-        .map(|(_, mix)| *mix)
+        .map(|(_, mix)| mix.clone())
         .unwrap_or_else(|| panic!("{track_id} not in {out:?}"))
 }
 
@@ -576,4 +580,101 @@ fn a_template_keeps_rule_scenes_and_drops_track_ids() {
         vec![TrackSelector::NameContains { words: vec!["voz".into()] }]
     );
     assert_eq!(kept[1].rules.len(), 1);
+}
+
+// --- Plan track-eq-2, paso 03: EQ en escenas ---------------------------------
+
+fn boosted() -> crate::track_eq::TrackEq {
+    let mut eq = crate::track_eq::TrackEq::default();
+    eq.bands[2].gain_db = 6.0;
+    eq
+}
+
+fn eq_change(track_id: &str, scene_eq: crate::mix_scene::SceneEq) -> ResolvedChange {
+    ResolvedChange {
+        track_id: track_id.into(),
+        change: TrackChange { eq: Some(scene_eq), ..TrackChange::default() },
+    }
+}
+
+#[test]
+fn scene_eq_turns_on_off_and_sets_a_curve() {
+    use crate::mix_scene::SceneEq;
+    let with_eq = TrackMix { eq: Some(boosted()), ..mix(1.0) };
+    let off = apply_change(
+        with_eq.clone(),
+        &TrackChange { eq: Some(SceneEq { enabled: Some(false), ..SceneEq::default() }), ..TrackChange::default() },
+    );
+    assert_eq!(off.eq.as_ref().map(|eq| eq.enabled), Some(false));
+    assert_eq!(off.eq.as_ref().unwrap().bands, boosted().bands, "apagar no toca las bandas");
+
+    // Apagar una pista sin EQ no crea nada; encenderla pone las bandas planas.
+    let none_off = apply_change(
+        mix(1.0),
+        &TrackChange { eq: Some(SceneEq { enabled: Some(false), ..SceneEq::default() }), ..TrackChange::default() },
+    );
+    assert_eq!(none_off.eq, None);
+    let none_on = apply_change(
+        mix(1.0),
+        &TrackChange { eq: Some(SceneEq { enabled: Some(true), ..SceneEq::default() }), ..TrackChange::default() },
+    );
+    assert_eq!(none_on.eq, Some(crate::track_eq::TrackEq::default()));
+
+    // Una curva (recortada) y apagada a la vez.
+    let mut wild = boosted();
+    wild.bands[2].gain_db = 99.0;
+    let curve = apply_change(
+        mix(1.0),
+        &TrackChange {
+            eq: Some(SceneEq { enabled: Some(false), preset_id: Some("factory-kick".into()), eq: Some(wild.clone()) }),
+            ..TrackChange::default()
+        },
+    );
+    let mut expected = wild.sanitized();
+    expected.enabled = false;
+    assert_eq!(curve.eq, Some(expected));
+    // Un SceneEq vacío no es un cambio.
+    assert!(TrackChange { eq: Some(SceneEq::default()), ..TrackChange::default() }.is_empty());
+}
+
+#[test]
+fn engaging_an_eq_scene_keeps_the_previous_eq_as_base() {
+    use crate::mix_scene::SceneEq;
+    let mut latches = SceneLatches::default();
+    let before = [("bass", TrackMix { eq: Some(boosted()), ..mix(0.8) })];
+    let applied = latches.engage(
+        "eq-off",
+        vec![eq_change("bass", SceneEq { enabled: Some(false), ..SceneEq::default() })],
+        current_of(&before),
+    );
+    assert_eq!(target(&applied, "bass").eq.map(|eq| eq.enabled), Some(false));
+    assert_eq!(latches.values_for_save("bass"), Some(before[0].1.clone()));
+    let restored = latches.release("eq-off");
+    assert_eq!(target(&restored, "bass"), before[0].1);
+}
+
+#[test]
+fn the_later_rule_wins_on_eq() {
+    use crate::mix_scene::SceneEq;
+    let scene: MixScene = serde_json::from_value(serde_json::json!({
+        "id": "s", "name": "S",
+        "rules": [
+            { "select": { "type": "track", "trackId": "t1" }, "change": { "eq": { "enabled": false } } },
+            { "select": { "type": "track", "trackId": "t1" }, "change": { "eq": { "enabled": true } } },
+            { "select": { "type": "track", "trackId": "t1" }, "change": { "volume": { "type": "absolute", "value": 0.5 } } }
+        ]
+    }))
+    .unwrap();
+    let song = song(&[], vec![track("t1", "T1", "audio", None)], vec![], vec![]);
+    let resolved = resolve_scene(&scene, &song, None);
+    assert_eq!(resolved.len(), 1);
+    assert_eq!(resolved[0].change.eq, Some(SceneEq { enabled: Some(true), ..SceneEq::default() }));
+    assert_eq!(resolved[0].change.volume, Some(VolumeChange::Absolute(0.5)));
+    // Ida y vuelta en camelCase.
+    let json = serde_json::to_value(&scene).unwrap();
+    assert_eq!(json["rules"][0]["change"]["eq"], serde_json::json!({ "enabled": false }));
+    let with_preset = SceneEq { enabled: None, preset_id: Some("p".into()), eq: Some(boosted()) };
+    let json = serde_json::to_value(&with_preset).unwrap();
+    assert_eq!(json["presetId"], "p");
+    assert_eq!(serde_json::from_value::<SceneEq>(json).unwrap(), with_preset);
 }
