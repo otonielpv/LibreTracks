@@ -1,30 +1,30 @@
 // @vitest-environment jsdom
-import { Profiler } from "react";
+import { Profiler, type ComponentProps } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { EqPreset, TrackEq, TrackSummary } from "@libretracks/shared/models";
+import type { EqPreset, TrackEq } from "../models";
+
+import {
+  TrackEqEditor as SharedTrackEqEditor,
+  bandSampleFrequencies,
+  curvePath,
+  gainToY,
+  type TrackEqEditorHandlers,
+  type TrackEqEditorTrack,
+} from "./TrackEqEditor";
+import { trackEqResponseDb } from "./eqResponse";
+import { defaultTrackEq } from "./trackEqModel";
 
 const platform = { isMobileApp: false };
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string, options?: Record<string, unknown>) =>
-      options && "number" in options ? `${key}:${String(options.number)}` : key,
-  }),
-}));
+const t = (key: string, options?: Record<string, unknown>) =>
+  options && "number" in options ? `${key}:${String(options.number)}` : key;
 
-vi.mock("@libretracks/shared/desktopApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@libretracks/shared/desktopApi")>()),
-  get isMobileApp() {
-    return platform.isMobileApp;
-  },
-}));
-
-import { TrackEqEditor, bandSampleFrequencies, curvePath, gainToY } from "./TrackEqEditor";
-import { trackEqResponseDb } from "./eqResponse";
-import { defaultTrackEq } from "./trackEqModel";
-import type { TrackEqHandlers } from "../tracks/trackEqHandlers";
+/** El editor como lo monta una app: con sus textos y su plataforma. */
+function TrackEqEditor(props: Omit<ComponentProps<typeof SharedTrackEqEditor>, "t">) {
+  return <SharedTrackEqEditor t={t} isMobile={platform.isMobileApp} {...props} />;
+}
 
 const PRESET_EQ: TrackEq = (() => {
   const eq = defaultTrackEq();
@@ -39,13 +39,9 @@ const PRESETS: EqPreset[] = [
 
 function makeHandlers() {
   return {
-    open: vi.fn((_trackId: string) => undefined),
     close: vi.fn(() => undefined),
     applyLive: vi.fn((_trackId: string, _eq: TrackEq | null) => undefined),
     commit: vi.fn(async (_trackId: string, _eq: TrackEq | null) => undefined),
-    copyTo: vi.fn(async (_source: string, _targets: string[]) => undefined),
-    targetsFor: vi.fn((trackId: string) => [trackId]),
-    toggleBypass: vi.fn(async (_trackId: string) => undefined),
     reset: vi.fn(async (_trackId: string) => undefined),
     remove: vi.fn(async (_trackId: string) => undefined),
     startAnalyzer: vi.fn((_trackId: string) => undefined),
@@ -54,24 +50,11 @@ function makeHandlers() {
     listPresets: vi.fn(async () => PRESETS),
     savePreset: vi.fn(async (_name: string, _eq: TrackEq) => PRESETS),
     deletePreset: vi.fn(async (_presetId: string) => PRESETS.filter((p) => p.factory)),
-  } satisfies TrackEqHandlers;
+  } satisfies TrackEqEditorHandlers;
 }
 
-function makeTrack(eq: TrackEq | null = defaultTrackEq()): TrackSummary {
-  return {
-    id: "t1",
-    name: "Bajo",
-    kind: "audio",
-    depth: 0,
-    hasChildren: false,
-    volume: 1,
-    pan: 0,
-    muted: false,
-    solo: false,
-    audioTo: "master",
-    transposeEnabled: true,
-    eq,
-  };
+function makeTrack(eq: TrackEq | null = defaultTrackEq()): TrackEqEditorTrack {
+  return { id: "t1", name: "Bajo", eq };
 }
 
 // jsdom no tiene PointerEvent: un MouseEvent con pointerId hace de puntero
@@ -423,5 +406,37 @@ describe("TrackEqEditor presets", () => {
     fireEvent.click(screen.getByRole("button", { name: "eq.presets.delete" }));
     expect(handlers.deletePreset).toHaveBeenCalledWith("user-1");
     expect(await screen.findByText("eq.presets.empty")).toBeTruthy();
+  });
+});
+
+describe("TrackEqEditor shared props", () => {
+  it("without preset handlers there is no presets menu", () => {
+    const { listPresets: _l, savePreset: _s, deletePreset: _d, ...handlers } = makeHandlers();
+    render(<TrackEqEditor track={makeTrack()} handlers={handlers} />);
+    expect(screen.queryByRole("button", { name: "eq.presets.title" })).toBeNull();
+  });
+
+  it("the mappable wrapper receives every control with its key", () => {
+    const controls: string[] = [];
+    render(
+      <TrackEqEditor
+        track={makeTrack()}
+        handlers={makeHandlers()}
+        mappable={(control, _label, element) => {
+          controls.push(control);
+          return element;
+        }}
+      />,
+    );
+    expect(controls).toContain("eqon");
+    expect(controls).toContain("eq3gain");
+    expect(controls).toContain("eq1freq");
+    expect(controls).toContain("eq6q");
+    expect(controls).toContain("eq2on");
+  });
+
+  it("shows how many tracks a change goes to", () => {
+    render(<TrackEqEditor track={makeTrack()} handlers={makeHandlers()} targetCount={3} />);
+    expect(screen.getByRole("status").textContent).toBe("eq.appliesTo");
   });
 });

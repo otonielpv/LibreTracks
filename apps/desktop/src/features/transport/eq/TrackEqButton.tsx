@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { useSongStore } from "../songStore";
 import { openTrackEq } from "../tracks/trackEqHandlers";
-import { trackEqIsActive } from "./trackEqModel";
+import { trackEqIsActive } from "@libretracks/shared/eq/trackEqModel";
 import "./TrackEqButton.css";
 
 /**

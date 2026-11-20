@@ -1,4 +1,4 @@
-import type { EqBand, EqBandKind, TrackEq } from "@libretracks/shared/models";
+import type { EqBand, EqBandKind, TrackEq } from "../models";
 
 /**
  * Rangos y valores por defecto del EQ por pista (plan track-eq, D2). Son los

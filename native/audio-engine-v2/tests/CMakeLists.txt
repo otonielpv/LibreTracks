@@ -86,7 +86,7 @@ target_compile_definitions(lt_engine_tests PRIVATE
     LT_VOICES_DIR="${CMAKE_SOURCE_DIR}/../../apps/desktop/src-tauri/resources/voices"
     # Tabla dorada de la respuesta del EQ por pista: la escribe/comprueba
     # test_track_eq.cpp y la lee el test de la curva en la UI (plan track-eq, D11).
-    LT_EQ_GOLDEN_PATH="${CMAKE_SOURCE_DIR}/../../apps/desktop/src/features/transport/eq/__fixtures__/eqResponseGolden.json"
+    LT_EQ_GOLDEN_PATH="${CMAKE_SOURCE_DIR}/../../packages/shared/src/eq/__fixtures__/eqResponseGolden.json"
 )
 
 # Compile the disabled form in isolation: linking it into the instrumented test

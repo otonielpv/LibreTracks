@@ -15,7 +15,7 @@ vi.mock("../desktopApi", async (original) => ({
   commitTrackEqsChange: api.commitTrackEqsChange,
 }));
 
-import { defaultTrackEq } from "../eq/trackEqModel";
+import { defaultTrackEq } from "@libretracks/shared/eq/trackEqModel";
 import { createTimelineMenus, type TimelineMenuDeps } from "./timelineMenus";
 
 const sourceEq = (() => {

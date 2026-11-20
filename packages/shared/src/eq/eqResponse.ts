@@ -1,4 +1,4 @@
-import type { EqBand, TrackEq } from "@libretracks/shared/models";
+import type { EqBand, TrackEq } from "../models";
 
 import { isCut, sanitizeTrackEq } from "./trackEqModel";
 

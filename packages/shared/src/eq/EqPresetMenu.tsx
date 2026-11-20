@@ -1,10 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { useTranslation } from "react-i18next";
-
-import type { EqPreset, TrackEq } from "@libretracks/shared/models";
-
-import type { TrackEqHandlers } from "../tracks/trackEqHandlers";
+import type { EqPreset, TrackEq } from "../models";
 
 /**
  * Desplegable «Presets» de la cabecera del editor (plan track-eq-2, paso 01).
@@ -17,14 +13,19 @@ import type { TrackEqHandlers } from "../tracks/trackEqHandlers";
  */
 export function EqPresetMenu({
   handlers,
+  t,
   getCurrent,
   onLoad,
 }: {
-  handlers: Pick<TrackEqHandlers, "listPresets" | "savePreset" | "deletePreset">;
+  handlers: {
+    listPresets: () => Promise<EqPreset[]>;
+    savePreset: (name: string, eq: TrackEq) => Promise<EqPreset[]>;
+    deletePreset: (presetId: string) => Promise<EqPreset[]>;
+  };
+  t: (key: string, options?: Record<string, unknown>) => string;
   getCurrent: () => TrackEq;
   onLoad: (eq: TrackEq) => void;
 }) {
-  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [presets, setPresets] = useState<EqPreset[] | null>(null);
   const [failed, setFailed] = useState(false);

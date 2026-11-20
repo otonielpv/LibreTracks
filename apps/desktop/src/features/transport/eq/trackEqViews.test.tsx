@@ -43,7 +43,7 @@ import { setSong } from "../songStore";
 import { TrackHeaderItem } from "../tracks/TrackHeaderItem";
 import { useTimelineUIStore } from "../uiStore";
 import { TrackEqEditorHost } from "./TrackEqEditorHost";
-import { defaultTrackEq } from "./trackEqModel";
+import { defaultTrackEq } from "@libretracks/shared/eq/trackEqModel";
 import { useTrackEqStore } from "./trackEqStore";
 
 const activeEq = (): TrackEq => {

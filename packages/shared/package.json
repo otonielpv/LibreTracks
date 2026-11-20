@@ -18,7 +18,10 @@
     "./featureFlags": "./src/featureFlags.ts",
     "./networkApi": "./src/networkApi.ts",
     "./networkRoles": "./src/networkRoles.ts",
-    "./charts/chartTimes": "./src/charts/chartTimes.ts"
+    "./charts/chartTimes": "./src/charts/chartTimes.ts",
+    "./eq/TrackEqEditor": "./src/eq/TrackEqEditor.tsx",
+    "./eq/eqResponse": "./src/eq/eqResponse.ts",
+    "./eq/trackEqModel": "./src/eq/trackEqModel.ts"
   },
   "scripts": {
     "lint": "tsc -p tsconfig.json --noEmit",
@@ -29,5 +32,8 @@
   },
   "devDependencies": {
     "vitest": "^2.1.9"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
   }
 }

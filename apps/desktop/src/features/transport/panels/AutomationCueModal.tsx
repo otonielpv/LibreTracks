@@ -19,7 +19,7 @@ import {
   type SongView,
   type TrackEq,
 } from "../desktopApi";
-import { defaultTrackEq } from "../eq/trackEqModel";
+import { defaultTrackEq } from "@libretracks/shared/eq/trackEqModel";
 import { TrackEqActionEditor } from "./TrackEqActionEditor";
 import { formatClock, formatCompactTime } from "../helpers";
 import { duplicateMarkerNames, groupMarkersBySong } from "./jumpTargetGroups";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { TrackEq } from "@libretracks/shared/models";
+import type { TrackEq } from "../models";
 
 import golden from "./__fixtures__/eqResponseGolden.json";
 import { trackEqResponseDb } from "./eqResponse";

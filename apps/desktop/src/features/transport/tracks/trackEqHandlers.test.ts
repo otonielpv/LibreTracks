@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EqPreset, SongView, TrackEq, TrackSummary, TransportSnapshot } from "@libretracks/shared/models";
 
 import { useTrackEqStore } from "../eq/trackEqStore";
-import { defaultTrackEq } from "../eq/trackEqModel";
+import { defaultTrackEq } from "@libretracks/shared/eq/trackEqModel";
 import { createTrackEqHandlers, openTrackEq } from "./trackEqHandlers";
 
 const audio = { id: "a", kind: "audio", eq: null } as unknown as TrackSummary;

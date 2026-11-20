@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { AutomationActionSummary, TrackEq } from "../desktopApi";
-import { defaultTrackEq } from "../eq/trackEqModel";
+import { defaultTrackEq } from "@libretracks/shared/eq/trackEqModel";
 import { eqPresetLabel, useEqPresets } from "../eq/useEqPresets";
 
 type T = (key: string, options?: Record<string, unknown>) => string;
