@@ -449,6 +449,8 @@ pub struct AudioController {
     /// on Android, where the activity tells Rust directly.
     #[cfg_attr(target_os = "android", allow(dead_code))]
     app_hidden: AtomicBool,
+    /// Pista del RTA (plan track-eq-2, paso 07): la última que se pidió.
+    analyzer_track: Mutex<Option<String>>,
     /// Total Category A realtime bridge commands (SetTrackGain/Pan/Mute/Solo/Route/Transpose).
     live_mix_realtime_command_count: AtomicU64,
     live_mix_ensure_live_track_count: AtomicU64,
@@ -554,6 +556,7 @@ impl AudioController {
             meter_thread: Mutex::new(None),
             idle_wake_pending: AtomicBool::new(false),
             app_hidden: AtomicBool::new(false),
+            analyzer_track: Mutex::new(None),
             live_mix_realtime_command_count: AtomicU64::new(0),
             live_mix_ensure_live_track_count: AtomicU64::new(0),
             metronome_realtime_toggle_count: AtomicU64::new(0),
@@ -627,6 +630,7 @@ impl AudioController {
             let mut last_track_levels: Option<Vec<AudioMeterLevel>> = None;
             let mut last_region_levels: Option<Vec<RegionMeterLevel>> = None;
             let mut last_rhythm: Option<crate::rhythm::meters::RhythmMeterPayload> = None;
+            let mut eq_spectrum = crate::audio::eq_spectrum::EqSpectrumEmitter::default();
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             let mut last_remote_publish_at: Option<Instant> = None;
             while !stop.load(Ordering::Relaxed) {
@@ -695,6 +699,23 @@ impl AudioController {
                     }
                     last_track_levels = Some(frame.tracks);
                     last_region_levels = Some(frame.regions);
+                }
+                // RTA para invitados y remote (plan track-eq-2, paso 07): con el
+                // analizador puesto, sus bandas a ritmo de medidores.
+                let analyzer = controller.analyzer_track();
+                if let Some(event) =
+                    eq_spectrum.next(analyzer.as_deref(), || controller.read_track_spectrum())
+                {
+                    let _ = app_handle.emit(crate::audio::eq_spectrum::EQ_SPECTRUM_EVENT, &event);
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if let Ok(remote_handle) = controller.remote_handle.lock() {
+                        if let Some(remote_handle) = remote_handle.as_ref() {
+                            remote_handle.publish_eq_spectrum(&event);
+                        }
+                    }
+                }
+                if eq_spectrum.is_active() {
+                    interval = interval.min(ACTIVE_INTERVAL);
                 }
                 if let Some(event) = tick.device_status {
                     let _ = app_handle.emit("audio:device_status", &event);
@@ -1585,11 +1606,19 @@ impl AudioController {
     /// RTA del editor de EQ: qué pista analiza el motor (`None` = apagado; el
     /// mezclador deja de copiar audio).
     pub fn set_track_analyzer(&self, track_id: Option<&str>) -> Result<(), DesktopError> {
+        if let Ok(mut slot) = self.analyzer_track.lock() {
+            *slot = track_id.filter(|id| !id.is_empty()).map(str::to_string);
+        }
         let track_id = track_id.unwrap_or_default().to_string();
         self.with_engine_state("set_track_analyzer", None, |engine, _state| {
             engine.send_command(&EngineCommand::SetTrackAnalyzer { track_id })?;
             Ok(())
         })
+    }
+
+    /// La pista que analiza el RTA ahora (`None` = apagado).
+    pub(crate) fn analyzer_track(&self) -> Option<String> {
+        self.analyzer_track.lock().ok().and_then(|slot| slot.clone())
     }
 
     /// RTA: bandas en dB de la pista analizada. Como los medidores, nunca

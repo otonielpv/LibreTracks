@@ -40,7 +40,8 @@ export type TrackEqHandlerDeps = {
     changes: { trackId: string; eq: TrackEq | null }[];
   }) => Promise<TransportSnapshot>;
   setTrackEqAnalyzer: (trackId: string | null) => Promise<void>;
-  getTrackEqSpectrum: () => Promise<number[]>;
+  /** RTA de `trackId`: el motor propio, o el evento del anfitrión si esto es un invitado. */
+  getTrackEqSpectrum: (trackId: string) => Promise<number[]>;
   /** Presets de esta máquina (plan track-eq-2, paso 01). */
   listEqPresets: () => Promise<EqPreset[]>;
   saveEqPreset: (args: { presetId: string | null; name: string; eq: TrackEq }) => Promise<EqPreset[]>;
@@ -181,7 +182,8 @@ export function createTrackEqHandlers(deps: TrackEqHandlerDeps) {
   };
 
   /** Bandas en dB del RTA (vacío si no hay o si falla la lectura). */
-  const readSpectrum = () => getTrackEqSpectrum().catch(() => [] as number[]);
+  const readSpectrum = (trackId: string) =>
+    getTrackEqSpectrum(trackId).catch(() => [] as number[]);
 
   /** Presets: fábrica primero; vacío si falla la lectura. */
   const listPresets = () => listEqPresets();

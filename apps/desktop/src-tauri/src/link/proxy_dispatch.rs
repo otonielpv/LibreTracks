@@ -61,6 +61,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "set_loop_playing"
         | "set_one_shot_bank"
         | "set_one_shot_config"
+        | "set_track_eq_analyzer"
         | "stop_transport"
         | "toggle_vamp"
         | "video_live_action"
@@ -177,18 +178,19 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
 
 /// Session events the host relays to its guests (mirror mode).
 pub const EVENTS_TO_RELAY: &[&str] = &[
-    "transport:lifecycle",
-    "settings:updated",
-    "waveform:ready",
-    "waveform:progress",
-    "project:load-complete",
-    "project:load-progress",
+    "audio:eq_spectrum",
     "audio:meters",
     "audio:region_meters",
-    "video:thumbnails-ready",
+    "audio:rhythm",
+    "project:load-complete",
+    "project:load-progress",
+    "settings:updated",
+    "transport:lifecycle",
     "video:live-state",
     "video:output-status",
-    "audio:rhythm",
+    "video:thumbnails-ready",
+    "waveform:progress",
+    "waveform:ready",
 ];
 
 pub const PROXIED_COMMANDS: &[&str] = &[
@@ -232,6 +234,7 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "set_loop_playing",
     "set_one_shot_bank",
     "set_one_shot_config",
+    "set_track_eq_analyzer",
     "stop_transport",
     "toggle_vamp",
     "video_live_action",
@@ -649,6 +652,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::rhythm::set_one_shot_config(arg(&args, "output")?, arg(&args, "volume")?, app.clone(), app.state(), app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "set_track_eq_analyzer" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::set_track_eq_analyzer(arg(&args, "trackId")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?

@@ -93,7 +93,6 @@ export const GUEST_COMMAND_ROUTES: Readonly<Record<string, GuestCommandRoute>> =
   set_app_hidden: "local",
   set_decoding_cache_dir: "local",
   set_decoding_cache_max_gb: "local",
-  set_track_eq_analyzer: "local",
   set_ui_language: "local",
   speech_model_status: "local",
   take_audio_idle_wake: "local",
@@ -144,6 +143,7 @@ export const GUEST_COMMAND_ROUTES: Readonly<Record<string, GuestCommandRoute>> =
   set_loop_playing: "control",
   set_one_shot_bank: "control",
   set_one_shot_config: "control",
+  set_track_eq_analyzer: "control",
   stop_transport: "control",
   toggle_vamp: "control",
   video_live_action: "control",
@@ -304,18 +304,19 @@ export const GUEST_COMMAND_ROUTES: Readonly<Record<string, GuestCommandRoute>> =
 /** Session events relayed by the host; a guest listens to them under
  * `link-mirror://<name>`. */
 export const GUEST_MIRRORED_EVENTS: ReadonlySet<string> = new Set([
-  "transport:lifecycle",
-  "settings:updated",
-  "waveform:ready",
-  "waveform:progress",
-  "project:load-complete",
-  "project:load-progress",
+  "audio:eq_spectrum",
   "audio:meters",
   "audio:region_meters",
-  "video:thumbnails-ready",
+  "audio:rhythm",
+  "project:load-complete",
+  "project:load-progress",
+  "settings:updated",
+  "transport:lifecycle",
   "video:live-state",
   "video:output-status",
-  "audio:rhythm",
+  "video:thumbnails-ready",
+  "waveform:progress",
+  "waveform:ready",
 ]);
 
 /** Run on the guest's own device even in guest mode. */
@@ -408,7 +409,6 @@ export const GUEST_LOCAL_COMMANDS: ReadonlySet<string> = new Set([
   "set_app_hidden",
   "set_decoding_cache_dir",
   "set_decoding_cache_max_gb",
-  "set_track_eq_analyzer",
   "set_ui_language",
   "speech_model_status",
   "take_audio_idle_wake",

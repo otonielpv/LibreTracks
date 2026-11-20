@@ -22,7 +22,7 @@ function setup(track: TrackSummary | TrackSummary[] = audio) {
     findTrack: (id: string) => song.tracks.find((t) => t.id === id) ?? null,
     updateTrackEqRealtime: vi.fn(async (_args: { trackId: string; eq: TrackEq | null }) => undefined),
     setTrackEqAnalyzer: vi.fn(async (_trackId: string | null) => undefined),
-    getTrackEqSpectrum: vi.fn(async () => [-20, -30] as number[]),
+    getTrackEqSpectrum: vi.fn(async (_trackId: string) => [-20, -30] as number[]),
     listEqPresets: vi.fn(async () => [] as EqPreset[]),
     saveEqPreset: vi.fn(async (_args: { presetId: string | null; name: string; eq: TrackEq }) => [] as EqPreset[]),
     deleteEqPreset: vi.fn(async (_presetId: string) => [] as EqPreset[]),
@@ -85,9 +85,9 @@ describe("createTrackEqHandlers", () => {
     handlers.startAnalyzer("a");
     handlers.stopAnalyzer();
     expect(deps.setTrackEqAnalyzer.mock.calls).toEqual([["a"], [null]]);
-    expect(await handlers.readSpectrum()).toEqual([-20, -30]);
+    expect(await handlers.readSpectrum("a")).toEqual([-20, -30]);
     deps.getTrackEqSpectrum.mockRejectedValueOnce(new Error("no engine"));
-    expect(await handlers.readSpectrum()).toEqual([]);
+    expect(await handlers.readSpectrum("a")).toEqual([]);
   });
 
   it("saving a preset sends a new one with the curve clamped", async () => {

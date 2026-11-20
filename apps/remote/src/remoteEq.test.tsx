@@ -8,6 +8,7 @@ import {
   RemoteEqButton,
   RemoteTrackEqHost,
   createRemoteEqHandlers,
+  remoteSpectrumFeed,
   useRemoteEqStore,
 } from "./remoteEq";
 
@@ -96,5 +97,19 @@ describe("remote EQ", () => {
     expect(commits).toHaveLength(1);
     expect(commits[0][0].trackId).toBe("voz");
     expect(commits[0][0].eq.bands[2].gainDb).toBeGreaterThan(0);
+  });
+
+  it("the RTA asks the desktop for the track and only reads events of that track", async () => {
+    const send = vi.fn();
+    const handlers = createRemoteEqHandlers(send, vi.fn(), fakeFrames);
+    handlers.startAnalyzer("voz");
+    expect(send).toHaveBeenLastCalledWith({ cmd: "setTrackEqAnalyzer", trackId: "voz" });
+    remoteSpectrumFeed.push({ trackId: "bajo", bands: [-10] });
+    expect(await handlers.readSpectrum("voz")).toEqual([]);
+    remoteSpectrumFeed.push({ trackId: "voz", bands: [-12, -24] });
+    expect(await handlers.readSpectrum("voz")).toEqual([-12, -24]);
+    handlers.stopAnalyzer();
+    expect(send).toHaveBeenLastCalledWith({ cmd: "setTrackEqAnalyzer", trackId: null });
+    expect(await handlers.readSpectrum("voz")).toEqual([]);
   });
 });

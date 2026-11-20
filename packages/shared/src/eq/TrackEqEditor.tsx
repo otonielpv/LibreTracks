@@ -60,7 +60,8 @@ export type TrackEqEditorHandlers = {
   remove: (trackId: string) => Promise<unknown>;
   startAnalyzer: (trackId: string) => void;
   stopAnalyzer: () => void;
-  readSpectrum: () => Promise<number[]>;
+  /** Bandas del RTA de `trackId` (vacío si no hay, o si son de otra pista). */
+  readSpectrum: (trackId: string) => Promise<number[]>;
   listPresets?: () => Promise<EqPreset[]>;
   savePreset?: (name: string, eq: TrackEq) => Promise<EqPreset[]>;
   deletePreset?: (presetId: string) => Promise<EqPreset[]>;
@@ -272,7 +273,7 @@ export function TrackEqEditor({
       if (!inFlight && now - last >= RTA_FRAME_MS) {
         last = now;
         inFlight = true;
-        void handlersRef.current.readSpectrum().then((bands) => {
+        void handlersRef.current.readSpectrum(trackId).then((bands) => {
           inFlight = false;
           if (cancelled) return;
           spectrumPathRef.current?.setAttribute("d", spectrumPath(bands));

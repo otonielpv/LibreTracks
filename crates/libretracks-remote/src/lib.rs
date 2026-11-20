@@ -121,6 +121,12 @@ pub enum RemoteCommand {
         #[serde(default)]
         eq: Option<libretracks_core::TrackEq>,
     },
+    /// RTA del editor de EQ del remote: qué pista analiza el anfitrión
+    /// (`None` = apagado). La última que lo pide gana.
+    SetTrackEqAnalyzer {
+        #[serde(default)]
+        track_id: Option<String>,
+    },
     /// Confirmar el EQ al soltar: modelo + un paso de deshacer + motor.
     CommitTrackEq {
         track_id: String,
@@ -323,6 +329,18 @@ impl RemoteServerHandle {
             }
             let _ = self.events_tx.send(ServerEvent::Redundancy(value));
         }
+    }
+
+    /// RTA del editor de EQ (plan track-eq-2, paso 07): `{ trackId, bands }`.
+    /// Ya llega a ritmo de medidores y solo cuando cambia: sin limitar aquí.
+    pub fn publish_eq_spectrum<T: Serialize>(&self, spectrum: &T) {
+        let Ok(payload) = serde_json::to_vec(&json!({
+            "event": "eqSpectrum",
+            "payload": spectrum
+        })) else {
+            return;
+        };
+        let _ = self.events_tx.send(ServerEvent::Meters(payload));
     }
 
     pub fn publish_meters<T: Serialize>(&self, meters: &T) {
@@ -741,6 +759,14 @@ mod tests {
             }
             other => panic!("expected commitTrackEq, got {other:?}"),
         }
+        match parse(r#"{"cmd":"setTrackEqAnalyzer","trackId":"t9"}"#) {
+            RemoteCommand::SetTrackEqAnalyzer { track_id } => assert_eq!(track_id.as_deref(), Some("t9")),
+            other => panic!("expected setTrackEqAnalyzer, got {other:?}"),
+        }
+        assert!(matches!(
+            parse(r#"{"cmd":"setTrackEqAnalyzer","trackId":null}"#),
+            RemoteCommand::SetTrackEqAnalyzer { track_id: None }
+        ));
         // Sin clave eq = quitarlo, como en el escritorio.
         assert!(matches!(
             parse(r#"{"cmd":"commitTrackEq","trackId":"t3"}"#),

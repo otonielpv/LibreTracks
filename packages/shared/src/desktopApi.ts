@@ -3170,6 +3170,21 @@ export async function getTrackEqSpectrum(): Promise<number[]> {
   return invokeCommand<number[]>("get_track_eq_spectrum");
 }
 
+/**
+ * RTA del anfitrión por evento (plan track-eq-2, paso 07): `{ trackId, bands }`
+ * mientras su analizador está puesto. Lo usa un invitado de red, cuyo motor
+ * no suena.
+ */
+export async function listenToEqSpectrum(
+  handler: (event: { trackId: string; bands: number[] }) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<{ trackId: string; bands: number[] }>(
+    sessionEventName("audio:eq_spectrum"),
+    (event) => handler(event.payload),
+  );
+}
+
 export async function setMetronomeEnabledRealtime(enabled: boolean): Promise<void> {
   await invokeCommand("set_metronome_enabled_realtime", { enabled });
 }

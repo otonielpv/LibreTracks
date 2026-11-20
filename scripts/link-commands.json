@@ -89,7 +89,6 @@
     "set_app_hidden",
     "set_decoding_cache_dir",
     "set_decoding_cache_max_gb",
-    "set_track_eq_analyzer",
     "set_ui_language",
     "speech_model_status",
     "take_audio_idle_wake",
@@ -144,6 +143,7 @@
     "set_loop_playing",
     "set_one_shot_bank",
     "set_one_shot_config",
+    "set_track_eq_analyzer",
     "stop_transport",
     "toggle_vamp",
     "video_live_action",
@@ -307,17 +307,18 @@
     "find_song_cover_images"
   ],
   "events": [
-    "transport:lifecycle",
-    "settings:updated",
-    "waveform:ready",
-    "waveform:progress",
-    "project:load-complete",
-    "project:load-progress",
+    "audio:eq_spectrum",
     "audio:meters",
     "audio:region_meters",
-    "video:thumbnails-ready",
+    "audio:rhythm",
+    "project:load-complete",
+    "project:load-progress",
+    "settings:updated",
+    "transport:lifecycle",
     "video:live-state",
     "video:output-status",
-    "audio:rhythm"
+    "video:thumbnails-ready",
+    "waveform:progress",
+    "waveform:ready"
   ]
 }

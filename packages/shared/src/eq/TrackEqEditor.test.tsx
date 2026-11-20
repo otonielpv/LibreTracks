@@ -46,7 +46,7 @@ function makeHandlers() {
     remove: vi.fn(async (_trackId: string) => undefined),
     startAnalyzer: vi.fn((_trackId: string) => undefined),
     stopAnalyzer: vi.fn(() => undefined),
-    readSpectrum: vi.fn(async () => [-90, -60, -30, -12, -40, -80] as number[]),
+    readSpectrum: vi.fn(async (_trackId: string) => [-90, -60, -30, -12, -40, -80] as number[]),
     listPresets: vi.fn(async () => PRESETS),
     savePreset: vi.fn(async (_name: string, _eq: TrackEq) => PRESETS),
     deletePreset: vi.fn(async (_presetId: string) => PRESETS.filter((p) => p.factory)),
@@ -438,5 +438,32 @@ describe("TrackEqEditor shared props", () => {
   it("shows how many tracks a change goes to", () => {
     render(<TrackEqEditor track={makeTrack()} handlers={makeHandlers()} targetCount={3} />);
     expect(screen.getByRole("status").textContent).toBe("eq.appliesTo");
+  });
+});
+
+describe("TrackEqEditor RTA by event (plan track-eq-2, paso 07)", () => {
+  it("an event for another track paints nothing; one for this track paints", async () => {
+    const { createSpectrumFeed } = await import("./spectrumFeed");
+    const feed = createSpectrumFeed();
+    const handlers = makeHandlers();
+    handlers.readSpectrum.mockImplementation(async (trackId: string) => feed.read(trackId));
+    render(<TrackEqEditor track={makeTrack()} handlers={handlers} />);
+    const spectrum = screen.getByTestId("lt-eq-spectrum");
+
+    feed.push({ trackId: "otra", bands: [-10, -20, -30] });
+    await act(async () => {
+      flushFrames();
+      await Promise.resolve();
+    });
+    expect(handlers.readSpectrum).toHaveBeenCalledWith("t1");
+    expect(spectrum.getAttribute("d")).toBe("");
+
+    feed.push({ trackId: "t1", bands: [-10, -20, -30] });
+    vi.spyOn(performance, "now").mockReturnValue(10_000);
+    await act(async () => {
+      flushFrames();
+      await Promise.resolve();
+    });
+    expect(spectrum.getAttribute("d")).not.toBe("");
   });
 });

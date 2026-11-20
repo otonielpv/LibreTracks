@@ -22,7 +22,8 @@
     "./eq/TrackEqEditor": "./src/eq/TrackEqEditor.tsx",
     "./eq/eqResponse": "./src/eq/eqResponse.ts",
     "./eq/trackEqModel": "./src/eq/trackEqModel.ts",
-    "./eq/eqTexts": "./src/eq/eqTexts.ts"
+    "./eq/eqTexts": "./src/eq/eqTexts.ts",
+    "./eq/spectrumFeed": "./src/eq/spectrumFeed.ts"
   },
   "scripts": {
     "lint": "tsc -p tsconfig.json --noEmit",

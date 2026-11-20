@@ -74,7 +74,7 @@ import {
 } from "./transportIcons";
 import { currentScreenSize, isPhoneShapedScreen } from "./deviceShape";
 import { getRemoteStrings, remoteLanguage } from "./i18n";
-import { RemoteEqButton, RemoteTrackEqHost } from "./remoteEq";
+import { RemoteEqButton, RemoteTrackEqHost, remoteSpectrumFeed } from "./remoteEq";
 import { buildMarkerCards, buildTimelineMarkerChips } from "./markerCards";
 import {
   advanceRemoteClock,
@@ -1004,6 +1004,11 @@ function useRemoteBridge() {
 
         if (message.event === "meters") {
           useRemoteSyncStore.getState().setMeters(message.payload as AudioMeterLevel[]);
+          return;
+        }
+
+        if (message.event === "eqSpectrum") {
+          remoteSpectrumFeed.push(message.payload as { trackId: string; bands: number[] });
         }
       });
 

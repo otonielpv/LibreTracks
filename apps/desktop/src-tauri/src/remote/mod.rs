@@ -279,6 +279,10 @@ async fn run_remote_command_bridge(
                 }
                 session.snapshot_with_sync(&state.audio)
             }
+            RemoteCommand::SetTrackEqAnalyzer { track_id } => {
+                let _ = state.audio.set_track_analyzer(track_id.as_deref());
+                continue;
+            }
             RemoteCommand::CommitTrackEq { track_id, eq } => {
                 session.commit_track_eq_model_and_command(track_id, eq.clone(), &state.audio)
             }

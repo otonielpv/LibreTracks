@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 
 import { eqTranslator, type EqLanguage } from "@libretracks/shared/eq/eqTexts";
+import { createSpectrumFeed } from "@libretracks/shared/eq/spectrumFeed";
 import {
   TrackEqEditor,
   type TrackEqEditorHandlers,
@@ -21,6 +22,12 @@ import type { TrackEq, TrackSummary } from "@libretracks/shared/models";
  */
 
 type Send = (command: Record<string, unknown>) => void;
+
+/**
+ * Último RTA que mandó el escritorio (`eqSpectrum`, plan track-eq-2 paso 07).
+ * El editor lo lee como la lectura directa y solo pinta su pista.
+ */
+export const remoteSpectrumFeed = createSpectrumFeed();
 
 export const useRemoteEqStore = create<{
   openTrackId: string | null;
@@ -82,10 +89,13 @@ export function createRemoteEqHandlers(
       useRemoteEqStore.getState().setOpenTrackId(null);
       return done;
     },
-    // El RTA del remote llega en el paso 07.
-    startAnalyzer: () => undefined,
-    stopAnalyzer: () => undefined,
-    readSpectrum: () => Promise.resolve([]),
+    // RTA: el escritorio analiza la pista y manda `eqSpectrum`.
+    startAnalyzer: (trackId) => send({ cmd: "setTrackEqAnalyzer", trackId }),
+    stopAnalyzer: () => {
+      send({ cmd: "setTrackEqAnalyzer", trackId: null });
+      remoteSpectrumFeed.clear();
+    },
+    readSpectrum: (trackId) => Promise.resolve(remoteSpectrumFeed.read(trackId)),
   };
 }
 
