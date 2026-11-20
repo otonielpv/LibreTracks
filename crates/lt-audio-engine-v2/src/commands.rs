@@ -72,6 +72,10 @@ pub enum EngineCommand {
         track_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         eq: Option<serde_json::Value>,
+        /// Rampa de cue (plan track-eq-2, E4): el cambio se recorre en este
+        /// tiempo en vez de los ~10 ms de siempre. Ausente = el corto.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        smoothing_ms: Option<f64>,
     },
     SetTrackMute {
         track_id: String,

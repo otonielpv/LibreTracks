@@ -28,6 +28,7 @@
 // ---------------------------------------------------------------------------
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 
@@ -41,6 +42,14 @@ namespace lt {
 // evaluada en `freq_hz`. Es la referencia de la curva que pinta la UI.
 double track_eq_response_db(const TrackEqParams& params, double sample_rate, double freq_hz);
 
+// Milisegundos de suavizado (rampa de cue) a frames; 0 = el suavizado por
+// defecto de `TrackEq`. Lo usan el mezclador y el render offline.
+inline std::size_t smoothing_frames_for(double smoothing_ms, double sample_rate) noexcept {
+    if (!(smoothing_ms > 0.0) || !(sample_rate > 0.0))
+        return 0;
+    return static_cast<std::size_t>(std::llround(smoothing_ms * sample_rate / 1000.0));
+}
+
 class TrackEq {
 public:
     static constexpr std::size_t kSubBlockFrames = 32;
@@ -52,7 +61,15 @@ public:
 
     // Nuevos parámetros objetivo (ya recortados o no: se recortan aquí).
     // Idempotente: con los mismos parámetros no hace nada.
-    void set_target(const TrackEqParams& params) noexcept;
+    //
+    // `smoothing_frames` (plan track-eq-2, E4): cuánto dura el recorrido de
+    // frecuencia, ganancia y Q hasta el objetivo; 0 = los ~10 ms de siempre.
+    // Una rampa de cue de 4 s es UNA llamada con 4 s en frames. Encender o
+    // apagar una banda o cambiar su tipo sigue siendo el fundido corto.
+    void set_target(const TrackEqParams& params, std::size_t smoothing_frames = 0) noexcept;
+
+    // Frames del suavizado por defecto (~10 ms a la frecuencia preparada).
+    std::size_t default_smoothing_frames() const noexcept { return ramp_frames_; }
 
     // Salta al objetivo sin suavizado ni fundidos (render offline: el primer
     // bloque ya sale ecualizado).
@@ -99,7 +116,8 @@ private:
 
     void configure_band(Band& band) noexcept;
     void snap_bands() noexcept;
-    void apply_band_target(Band& band, const TrackEqBandParams& params) noexcept;
+    void apply_band_target(Band& band, const TrackEqBandParams& params,
+                           std::size_t ramp_frames) noexcept;
     void advance_ramps(std::size_t frames) noexcept;
     void settle_after_chunk() noexcept;
     void process_chunk(float* left, float* right, std::size_t frames) noexcept;

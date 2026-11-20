@@ -78,6 +78,20 @@ export function describeAutomationCue(
           parts.push(`pan ${Math.round(action.pan * 100)}`);
         return `${trackName(action.trackId)}: ${parts.join(", ") || t("transport.automation.cueMixFallback")}`;
       }
+      case "setTrackEq": {
+        const ramp =
+          (action.rampSeconds ?? 0) > 0
+            ? t("transport.automation.cueEqRamp", { seconds: (action.rampSeconds ?? 0).toFixed(1) })
+            : "";
+        return action.eq
+          ? t("transport.automation.cueEq", { name: trackName(action.trackId), ramp })
+          : t("transport.automation.cueEqRemove", { name: trackName(action.trackId) });
+      }
+      case "setTrackEqEnabled":
+        return t(
+          action.enabled ? "transport.automation.cueEqOn" : "transport.automation.cueEqOff",
+          { name: trackName(action.trackId) },
+        );
       case "applyScene":
         return t("transport.automation.cueScene", {
           name: sceneName(action.sceneId),

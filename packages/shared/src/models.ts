@@ -536,6 +536,16 @@ export type AutomationActionSummary =
       pan?: number | null;
       rampSeconds?: number | null;
     }
+  /** El EQ entero de una pista (plan track-eq-2): `eq: null` lo quita y
+   * `rampSeconds` lo recorre en el motor en ese tiempo. */
+  | {
+      type: "setTrackEq";
+      trackId: string;
+      eq: TrackEq | null;
+      rampSeconds?: number | null;
+    }
+  /** Enciende o apaga el EQ de una pista (bypass). */
+  | { type: "setTrackEqEnabled"; trackId: string; enabled: boolean }
   | {
       type: "applyScene";
       sceneId: string;

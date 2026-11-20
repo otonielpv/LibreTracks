@@ -79,7 +79,7 @@ struct CmdReplaceScheduledJump {
 struct CmdSetTrackGain              { Id track_id; Gain gain; };
 struct CmdSetTrackPan               { Id track_id; float pan; };
 // EQ entero de la pista (plan track-eq, D8). Vacío = quitar el EQ.
-struct CmdSetTrackEq                { Id track_id; std::optional<TrackEqParams> eq; };
+struct CmdSetTrackEq                { Id track_id; std::optional<TrackEqParams> eq; double smoothing_ms = 0.0; };
 // Pista que alimenta el RTA del editor de EQ (vacío = apagado).
 struct CmdSetTrackAnalyzer          { Id track_id; };
 struct CmdSetTrackMute              { Id track_id; bool mute; };

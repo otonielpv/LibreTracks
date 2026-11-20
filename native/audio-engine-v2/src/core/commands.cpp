@@ -2,6 +2,8 @@
 #include <nlohmann/json.hpp>
 
 #include "session/track_eq_json.h"
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <type_traits>
 
@@ -179,6 +181,12 @@ EngineCommand command_from_json(const std::string& raw) {
         cmd.track_id = j.at("track_id").get<Id>();
         if (auto it = j.find("eq"); it != j.end())
             cmd.eq = parse_track_eq_json(*it);
+        // Rampa de cue (plan track-eq-2): opcional; ausente o rara = la corta.
+        if (auto it = j.find("smoothing_ms"); it != j.end() && it->is_number()) {
+            const double ms = it->get<double>();
+            if (std::isfinite(ms) && ms > 0.0)
+                cmd.smoothing_ms = std::min(ms, 600000.0);
+        }
         return cmd;
     }
 

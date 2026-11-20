@@ -1209,15 +1209,8 @@ fn move_track_content(song: &mut Song, from: &str, to: &str) {
         }
         for cue in structure.stored_automation_cues_mut() {
             for action in &mut cue.actions {
-                match action {
-                    AutomationAction::SetTrackMute { track_id, .. }
-                    | AutomationAction::SetTrackSolo { track_id, .. }
-                    | AutomationAction::SetTrackMix { track_id, .. }
-                        if track_id == from =>
-                    {
-                        *track_id = to.to_string();
-                    }
-                    _ => {}
+                if let Some(track_id) = action.track_id_mut().filter(|id| id.as_str() == from) {
+                    *track_id = to.to_string();
                 }
             }
         }

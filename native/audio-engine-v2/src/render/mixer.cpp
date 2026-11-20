@@ -1701,7 +1701,8 @@ void Mixer::publish_eq_table_locked(std::vector<TrackEqEntry> entries) {
     eq_table_.publish(std::move(table));
 }
 
-void Mixer::set_track_eq(const Id& track_id, const std::optional<TrackEqParams>& eq) {
+void Mixer::set_track_eq(const Id& track_id, const std::optional<TrackEqParams>& eq,
+                         double smoothing_ms) {
     std::lock_guard<std::mutex> lock(eq_writer_mutex_);
     std::vector<TrackEqEntry> entries;
     if (const auto* current = eq_table_.current_for_writer())
@@ -1712,12 +1713,13 @@ void Mixer::set_track_eq(const Id& track_id, const std::optional<TrackEqParams>&
     for (auto& entry : entries) {
         if (entry.track_id == track_id) {
             entry.params = clamped;
+            entry.smoothing_ms = smoothing_ms;
             found = true;
             break;
         }
     }
     if (!found)
-        entries.push_back(TrackEqEntry{ track_id, clamped });
+        entries.push_back(TrackEqEntry{ track_id, clamped, smoothing_ms });
     publish_eq_table_locked(std::move(entries));
 }
 
@@ -1816,15 +1818,18 @@ void Mixer::process_track_eq(TrackBusSlot& bus, const Track& track, const TrackE
     if (reread || version != bus.eq_table_version) {
         bus.eq_table_version = version;
         const TrackEqParams* params = nullptr;
+        double smoothing_ms = 0.0;
         if (table) {
             for (const auto& entry : table->entries) {
                 if (entry.track_id == track.id) {
                     if (entry.params) params = &*entry.params;
+                    smoothing_ms = entry.smoothing_ms;
                     break;
                 }
             }
         }
-        bus.eq.set_target(params ? *params : TrackEqParams{});
+        bus.eq.set_target(params ? *params : TrackEqParams{},
+                          smoothing_frames_for(smoothing_ms, sample_rate));
         if (snap) {
             bus.eq.snap_to_target();
             bus.eq_was_silent = false;

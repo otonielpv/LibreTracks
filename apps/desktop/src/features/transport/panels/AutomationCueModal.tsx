@@ -17,7 +17,10 @@ import {
   type MixSceneMode,
   type PadCatalogEntry,
   type SongView,
+  type TrackEq,
 } from "../desktopApi";
+import { defaultTrackEq } from "../eq/trackEqModel";
+import { TrackEqActionEditor } from "./TrackEqActionEditor";
 import { formatClock, formatCompactTime } from "../helpers";
 import { duplicateMarkerNames, groupMarkersBySong } from "./jumpTargetGroups";
 import {
@@ -72,6 +75,8 @@ const ACTION_LABEL_KEYS: Record<AutomationActionSummary["type"], string> = {
   setTrackMute: "transport.automation.actionMute",
   setTrackSolo: "transport.automation.actionSolo",
   setTrackMix: "transport.automation.actionMix",
+  setTrackEq: "transport.automation.actionEq",
+  setTrackEqEnabled: "transport.automation.actionEqEnabled",
   applyScene: "transport.automation.actionScene",
   setPad: "transport.automation.actionPad",
   setMetronome: "transport.automation.actionMetronome",
@@ -131,6 +136,19 @@ function makeAction(
       return { type: "setTrackSolo", trackId: firstTrack, solo: true };
     case "setTrackMix":
       return { type: "setTrackMix", trackId: firstTrack, volume: 1, pan: 0 };
+    case "setTrackEq": {
+      // Parte de la curva que la pista tiene ahora: lo normal es retocarla.
+      const audio =
+        song?.tracks.find((track) => track.id === firstTrack && track.kind === "audio") ??
+        song?.tracks.find((track) => track.kind === "audio");
+      return {
+        type: "setTrackEq",
+        trackId: audio?.id ?? firstTrack,
+        eq: audio?.eq ?? defaultTrackEq(),
+      };
+    }
+    case "setTrackEqEnabled":
+      return { type: "setTrackEqEnabled", trackId: firstTrack, enabled: false };
     case "applyScene":
       return { type: "applyScene", sceneId: firstScene };
     case "setPad":
@@ -353,6 +371,9 @@ export function AutomationCueModal({
                   scenes={scenes}
                   installedPads={installedPads}
                   padRouteOptions={padRouteOptions}
+                  trackEqOf={(trackId) =>
+                    song?.tracks.find((track) => track.id === trackId)?.eq ?? null
+                  }
                   t={t}
                   onChange={(next) => updateAt(index, next)}
                 />
@@ -372,6 +393,8 @@ export function AutomationCueModal({
                   "setTrackMute",
                   "setTrackSolo",
                   "setTrackMix",
+                  "setTrackEq",
+                  "setTrackEqEnabled",
                   "applyScene",
                   "setPad",
                   "setMetronome",
@@ -478,6 +501,14 @@ function validateActions(actions: AutomationActionSummary[]): boolean {
         return action.trackId !== "";
       case "setTrackMix":
         return action.trackId !== "";
+      case "setTrackEq":
+        return (
+          action.trackId !== "" &&
+          (action.rampSeconds == null ||
+            (Number.isFinite(action.rampSeconds) && action.rampSeconds >= 0))
+        );
+      case "setTrackEqEnabled":
+        return action.trackId !== "";
       case "applyScene":
         return action.sceneId !== "";
       case "setPad":
@@ -504,6 +535,8 @@ type EditorProps = {
   scenes: NonNullable<SongView["mixScenes"]>;
   installedPads: PadCatalogEntry[];
   padRouteOptions: Array<{ value: string; label: string }>;
+  /** El EQ que tiene ahora una pista (para «curva actual»). */
+  trackEqOf?: (trackId: string) => TrackEq | null;
   t: (key: string, options?: Record<string, unknown>) => string;
   onChange: (next: AutomationActionSummary) => void;
 };
@@ -516,9 +549,28 @@ function ActionEditor({
   scenes,
   installedPads,
   padRouteOptions,
+  trackEqOf,
   t,
   onChange,
 }: EditorProps) {
+  if (action.type === "setTrackEq" || action.type === "setTrackEqEnabled") {
+    return (
+      <TrackEqActionEditor
+        action={action}
+        trackSelect={
+          <TrackSelect
+            trackGroups={trackGroups}
+            value={action.trackId}
+            t={t}
+            onChange={(trackId) => onChange({ ...action, trackId })}
+          />
+        }
+        trackEqOf={trackEqOf}
+        t={t}
+        onChange={onChange}
+      />
+    );
+  }
   if (action.type === "jump") {
     const value = encodeTarget(action.target);
     const frameSeconds =

@@ -93,7 +93,9 @@ public:
     // EQ de la pista (plan track-eq, D5/D8). Vacío = quitar el EQ. Hilo de
     // comandos: publica una tabla nueva; el hilo de audio la recoge en el
     // siguiente bloque y suaviza hacia ella.
-    void set_track_eq(const Id& track_id, const std::optional<TrackEqParams>& eq);
+    // `smoothing_ms` > 0: el cambio se recorre en ese tiempo (rampa de cue).
+    void set_track_eq(const Id& track_id, const std::optional<TrackEqParams>& eq,
+                      double smoothing_ms = 0.0);
     // Vuelve a tomar de la sesión el EQ de las pistas de `song_id`, por encima
     // del valor en vivo. Lo usa UpsertSongTracks, que es la foto del modelo.
     void sync_track_eqs_from_song(const Id& song_id);
@@ -430,6 +432,9 @@ private:
     struct TrackEqEntry {
         Id track_id;
         std::optional<TrackEqParams> params;
+        // Duración del recorrido hacia `params` (plan track-eq-2, E4); 0 = el
+        // suavizado corto por defecto. Solo cuenta cuando cambian los params.
+        double smoothing_ms = 0.0;
     };
     struct TrackEqTable {
         std::vector<TrackEqEntry> entries;

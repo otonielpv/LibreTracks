@@ -15,6 +15,8 @@
 #include <lt_engine/sources/resampler.h>
 #include <lt_engine/sources/source_manager.h>
 
+#include "session/track_eq_json.h"
+
 #include <nlohmann/json.hpp>
 
 #if defined(__ANDROID__)
@@ -702,15 +704,47 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
     // ganancia y el paneo). Arranca ya en sus parámetros: un render no empieza
     // con un fundido. Es parte de la mezcla, así que sigue a apply_mixer: el
     // análisis de una pista oye la fuente, no el EQ.
+    //
+    // Cambios de EQ de cues y escenas (plan track-eq-2, E4): `set_target` con
+    // la duración de la rampa en el frame de salida exacto, partiendo el
+    // bloque si cae dentro. Con cambios, el EQ existe aunque arranque apagado.
+    const OfflineTrackAutomation* track_keys =
+        (apply_mixer && ctx.automation) ? ctx.automation->find(track.id) : nullptr;
+    const std::vector<OfflineEqChange>* eq_changes =
+        (track_keys && !track_keys->eq.empty()) ? &track_keys->eq : nullptr;
+    std::size_t next_eq_change = 0;
     std::unique_ptr<TrackEq> eq;
-    if (apply_mixer && track.eq) {
+    if (apply_mixer && (track.eq || eq_changes)) {
         eq = std::make_unique<TrackEq>();
         eq->prepare(static_cast<double>(sample_rate));
-        eq->set_target(*track.eq);
+        eq->set_target(track.eq ? *track.eq : TrackEqParams{});
         eq->snap_to_target();
-        if (eq->is_transparent())
+        if (eq->is_transparent() && !eq_changes)
             eq.reset();
     }
+    const auto eq_change_frame = [&](const OfflineEqChange& change) {
+        return static_cast<Frame>(std::llround(change.seconds * static_cast<double>(sample_rate)));
+    };
+    // Procesa [0, n) del bus aplicando cada cambio en su frame de salida.
+    const auto process_eq = [&](float* l, float* r, Frame block_out, int n) {
+        int done = 0;
+        while (eq_changes && next_eq_change < eq_changes->size()) {
+            const OfflineEqChange& change = (*eq_changes)[next_eq_change];
+            const Frame at = eq_change_frame(change);
+            if (at >= block_out + n)
+                break;
+            const int split = static_cast<int>(std::clamp<Frame>(at - block_out, 0, n));
+            if (split > done)
+                eq->process(l + done, r + done, static_cast<std::size_t>(split - done));
+            done = std::max(done, split);
+            eq->set_target(change.eq ? *change.eq : TrackEqParams{},
+                           smoothing_frames_for(change.smoothing_seconds * 1000.0,
+                                                static_cast<double>(sample_rate)));
+            ++next_eq_change;
+        }
+        if (n > done)
+            eq->process(l + done, r + done, static_cast<std::size_t>(n - done));
+    };
 
     Scratch s;
     const Frame total = ctx.total_out;
@@ -775,7 +809,7 @@ Result<void> render_track(RenderContext& ctx, const Song& song, const Track& tra
             // bajada a channels=1 de write_wav llega despues (Left a mono = L,
             // no (L+R)/2). Ganancia, paneo y envolvente siguen tras apply_mixer.
             if (eq)
-                eq->process(s.bus_l.data(), s.bus_r.data(), static_cast<std::size_t>(n));
+                process_eq(s.bus_l.data(), s.bus_r.data(), out_frame, n);
             place_track_source_block(track.channel_mode, s.bus_l.data(), s.bus_r.data(), n);
             float left_gain = pan_left_gain(track_pan);
             float right_gain = pan_right_gain(track_pan);
@@ -1437,6 +1471,20 @@ Result<OfflineRenderRequest> offline_render_request_from_json(const std::string&
                     track.pan = keys_from(jt, "pan");
                     track.mute = keys_from(jt, "mute");
                     track.solo = keys_from(jt, "solo");
+                    if (jt.contains("eq") && jt["eq"].is_array()) {
+                        for (const auto& je : jt["eq"]) {
+                            OfflineEqChange change;
+                            change.seconds = je.value("seconds", 0.0);
+                            if (je.contains("eq"))
+                                change.eq = parse_track_eq_json(je["eq"]);
+                            change.smoothing_seconds = std::max(0.0, je.value("smoothing_seconds", 0.0));
+                            track.eq.push_back(std::move(change));
+                        }
+                        std::stable_sort(track.eq.begin(), track.eq.end(),
+                                         [](const OfflineEqChange& a, const OfflineEqChange& b) {
+                                             return a.seconds < b.seconds;
+                                         });
+                    }
                     automation.tracks.push_back(std::move(track));
                 }
             automation.master_gain = keys_from(a, "master_gain");

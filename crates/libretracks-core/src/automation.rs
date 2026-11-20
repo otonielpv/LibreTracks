@@ -6,6 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::track_eq::TrackEq;
+
 fn default_true() -> bool {
     true
 }
@@ -132,6 +134,27 @@ pub enum AutomationAction {
         )]
         ramp_seconds: Option<f64>,
     },
+    /// Pone el EQ entero de una pista (plan track-eq-2, E4). `eq: None` lo
+    /// quita. Con `rampSeconds` el motor recorre el cambio en ese tiempo (una
+    /// sola orden); si cambia el tipo de una banda, esa banda se funde.
+    SetTrackEq {
+        #[serde(rename = "trackId")]
+        track_id: String,
+        #[serde(default)]
+        eq: Option<TrackEq>,
+        #[serde(
+            rename = "rampSeconds",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        ramp_seconds: Option<f64>,
+    },
+    /// Enciende o apaga el EQ de una pista (bypass), con el fundido corto.
+    SetTrackEqEnabled {
+        #[serde(rename = "trackId")]
+        track_id: String,
+        enabled: bool,
+    },
     ApplyScene {
         #[serde(rename = "sceneId")]
         scene_id: String,
@@ -245,6 +268,20 @@ pub enum AutomationAction {
 }
 
 impl AutomationAction {
+    /// La pista a la que apunta la acción, si apunta a una. Es lo que remapean
+    /// los sitios que cambian ids de pista (paquetes, partir canción,
+    /// plantillas): una variante nueva con pista entra aquí y no se olvida.
+    pub fn track_id_mut(&mut self) -> Option<&mut String> {
+        match self {
+            AutomationAction::SetTrackMute { track_id, .. }
+            | AutomationAction::SetTrackSolo { track_id, .. }
+            | AutomationAction::SetTrackMix { track_id, .. }
+            | AutomationAction::SetTrackEq { track_id, .. }
+            | AutomationAction::SetTrackEqEnabled { track_id, .. } => Some(track_id),
+            _ => None,
+        }
+    }
+
     pub fn is_jump(&self) -> bool {
         matches!(self, AutomationAction::Jump { .. })
     }
@@ -336,4 +373,56 @@ pub enum AutomationTransitionMode {
     #[default]
     Instant,
     FadeOut,
+}
+
+#[cfg(test)]
+mod track_eq_action_tests {
+    //! Plan track-eq-2, paso 04: las acciones de EQ de las cues.
+    use super::*;
+
+    #[test]
+    fn eq_actions_are_camel_case_and_round_trip() {
+        let mut eq = TrackEq::default();
+        eq.bands[2].gain_db = 4.0;
+        let action = AutomationAction::SetTrackEq {
+            track_id: "t1".into(),
+            eq: Some(eq.clone()),
+            ramp_seconds: Some(2.5),
+        };
+        let json = serde_json::to_value(&action).unwrap();
+        assert_eq!(json["type"], "setTrackEq");
+        assert_eq!(json["trackId"], "t1");
+        assert_eq!(json["rampSeconds"], 2.5);
+        assert_eq!(json["eq"]["bands"][2]["gainDb"], 4.0);
+        assert_eq!(serde_json::from_value::<AutomationAction>(json).unwrap(), action);
+
+        let removal: AutomationAction =
+            serde_json::from_str(r#"{"type":"setTrackEq","trackId":"t1","eq":null}"#).unwrap();
+        assert_eq!(
+            removal,
+            AutomationAction::SetTrackEq { track_id: "t1".into(), eq: None, ramp_seconds: None }
+        );
+
+        let toggle = AutomationAction::SetTrackEqEnabled { track_id: "t2".into(), enabled: false };
+        let json = serde_json::to_value(&toggle).unwrap();
+        assert_eq!(json, serde_json::json!({"type": "setTrackEqEnabled", "trackId": "t2", "enabled": false}));
+        assert_eq!(serde_json::from_value::<AutomationAction>(json).unwrap(), toggle);
+    }
+
+    #[test]
+    fn every_action_with_a_track_exposes_it_for_remapping() {
+        let mut actions = vec![
+            AutomationAction::SetTrackMute { track_id: "a".into(), muted: true },
+            AutomationAction::SetTrackSolo { track_id: "a".into(), solo: true },
+            AutomationAction::SetTrackMix { track_id: "a".into(), volume: None, pan: None, ramp_seconds: None },
+            AutomationAction::SetTrackEq { track_id: "a".into(), eq: None, ramp_seconds: None },
+            AutomationAction::SetTrackEqEnabled { track_id: "a".into(), enabled: true },
+        ];
+        for action in &mut actions {
+            *action.track_id_mut().expect("has a track") = "b".into();
+            assert_eq!(action.track_id_mut().map(|id| id.as_str()), Some("b"));
+        }
+        let mut wait = AutomationAction::Wait { duration_seconds: 1.0 };
+        assert!(wait.track_id_mut().is_none());
+    }
 }

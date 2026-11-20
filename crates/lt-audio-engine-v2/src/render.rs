@@ -100,6 +100,20 @@ pub struct RenderTrackAutomation {
     pub mute: Vec<RenderKey>,
     #[serde(default)]
     pub solo: Vec<RenderKey>,
+    /// Cambios de EQ de cues y escenas (plan track-eq-2, E4), en orden.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub eq: Vec<RenderEqChange>,
+}
+
+/// En el segundo de salida `seconds` el EQ pasa a `eq` (`None` = quitarlo)
+/// recorriéndose en `smoothing_seconds` (0 = el suavizado corto del motor).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RenderEqChange {
+    pub seconds: f64,
+    #[serde(default)]
+    pub eq: Option<serde_json::Value>,
+    #[serde(default)]
+    pub smoothing_seconds: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -151,7 +151,8 @@ void TrackEq::configure_band(Band& band) noexcept {
 #endif
 }
 
-void TrackEq::apply_band_target(Band& band, const TrackEqBandParams& params) noexcept {
+void TrackEq::apply_band_target(Band& band, const TrackEqBandParams& params,
+                                std::size_t ramp_frames) noexcept {
     band.target_log2_freq = std::log2(static_cast<double>(params.frequency_hz));
     band.target_gain_db = params.gain_db;
     band.target_log_q = std::log(static_cast<double>(params.q));
@@ -193,20 +194,21 @@ void TrackEq::apply_band_target(Band& band, const TrackEqBandParams& params) noe
     band.mix_target = params.enabled ? 1.0 : 0.0;
     if (band.log2_freq != band.target_log2_freq || band.gain_db != band.target_gain_db
         || band.log_q != band.target_log_q)
-        band.ramp_remaining = ramp_frames_;
+        band.ramp_remaining = ramp_frames;
 }
 
-void TrackEq::set_target(const TrackEqParams& raw) noexcept {
+void TrackEq::set_target(const TrackEqParams& raw, std::size_t smoothing_frames) noexcept {
     const TrackEqParams params = clamp_params(raw);
     if (params == target_)
         return;
+    const std::size_t ramp_frames = smoothing_frames > 0 ? smoothing_frames : ramp_frames_;
     target_ = params;
     global_mix_target_ = params.enabled ? 1.0 : 0.0;
     for (std::size_t i = 0; i < kTrackEqMaxBands; ++i) {
         TrackEqBandParams band_params = params.bands[i];
         if (i >= params.band_count)
             band_params.enabled = false;
-        apply_band_target(bands_[i], band_params);
+        apply_band_target(bands_[i], band_params, ramp_frames);
     }
     // Con el EQ entero callado no hay nada que suavizar: las bandas saltan.
     if (global_mix_ == 0.0)

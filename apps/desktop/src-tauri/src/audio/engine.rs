@@ -1552,6 +1552,19 @@ impl AudioController {
         track_id: &str,
         eq: Option<&libretracks_core::TrackEq>,
     ) -> Result<(), DesktopError> {
+        self.set_track_eq_with_ramp(track_id, eq, 0.0)
+    }
+
+    /// Lo mismo con una rampa (plan track-eq-2, E4): una sola orden y el
+    /// motor recorre el cambio en `ramp_seconds` (0 = el suavizado corto).
+    pub fn set_track_eq_with_ramp(
+        &self,
+        track_id: &str,
+        eq: Option<&libretracks_core::TrackEq>,
+        ramp_seconds: f64,
+    ) -> Result<(), DesktopError> {
+        let smoothing_ms = (ramp_seconds.is_finite() && ramp_seconds > 0.0)
+            .then(|| (ramp_seconds * 1000.0).min(600_000.0));
         let eq_json = eq.and_then(|eq| serde_json::to_value(eq.sanitized()).ok());
         // Espejo de mezcla del respaldo (plan track-eq, paso 08): como el pan,
         // el arrastre y la confirmación pasan por aquí.
@@ -1563,6 +1576,7 @@ impl AudioController {
             engine.send_command(&EngineCommand::SetTrackEq {
                 track_id: track_id.into(),
                 eq: eq_json,
+                smoothing_ms,
             })?;
             Ok(())
         })

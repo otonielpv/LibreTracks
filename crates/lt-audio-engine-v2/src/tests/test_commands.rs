@@ -938,6 +938,7 @@ fn set_track_eq_json_shape_matches_cpp_parser() {
     let cmd = EngineCommand::SetTrackEq {
         track_id: "trk-1".into(),
         eq: Some(sample_eq()),
+        smoothing_ms: None,
     };
     let v = serde_json::to_value(&cmd).unwrap();
     assert_eq!(v["type"], "SetTrackEq");
@@ -948,9 +949,12 @@ fn set_track_eq_json_shape_matches_cpp_parser() {
 
 #[test]
 fn set_track_eq_without_eq_omits_the_key_and_accepts_null() {
-    let cmd = EngineCommand::SetTrackEq { track_id: "t".into(), eq: None };
+    let cmd = EngineCommand::SetTrackEq { track_id: "t".into(), eq: None, smoothing_ms: None };
     let v = serde_json::to_value(&cmd).unwrap();
     assert!(v.get("eq").is_none(), "quitar el EQ = sin clave (el C++ lo lee igual que null)");
+    assert!(v.get("smoothing_ms").is_none(), "sin rampa = sin clave");
+    let ramped = EngineCommand::SetTrackEq { track_id: "t".into(), eq: None, smoothing_ms: Some(4000.0) };
+    assert_eq!(serde_json::to_value(&ramped).unwrap()["smoothing_ms"], 4000.0);
     let from_null: EngineCommand =
         serde_json::from_str(r#"{"type":"SetTrackEq","track_id":"t","eq":null}"#).unwrap();
     assert!(matches!(from_null, EngineCommand::SetTrackEq { eq: None, .. }));

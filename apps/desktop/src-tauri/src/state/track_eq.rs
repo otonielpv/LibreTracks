@@ -93,4 +93,32 @@ impl DesktopSession {
         self.project_revision = self.project_revision.saturating_add(1);
         Ok(self.snapshot())
     }
+
+    /// Una cue cambia el EQ (plan track-eq-2, E4): UNA orden al motor con la
+    /// rampa (el motor la recorre entera, sin escalones) y el valor final en
+    /// el modelo, sin paso de deshacer ni revisión, como el resto de la
+    /// automatización (`mirror_track_mix_into_model`). Pistas sin EQ posible
+    /// o inexistentes se ignoran.
+    pub(super) fn apply_track_eq_from_automation(
+        &mut self,
+        track_id: &str,
+        eq: Option<TrackEq>,
+        ramp_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<(), DesktopError> {
+        let eq = eq.map(|eq| eq.sanitized());
+        let Ok(song) = self.engine.song_mut() else {
+            return Ok(());
+        };
+        let Some(track) = song.tracks.iter_mut().find(|track| track.id == track_id) else {
+            return Ok(());
+        };
+        if !track_kind_takes_eq(track.kind) || track.eq == eq {
+            return Ok(());
+        }
+        track.eq = eq.clone();
+        audio.set_track_eq_with_ramp(track_id, eq.as_ref(), ramp_seconds.max(0.0))?;
+        self.bump_mix_revision();
+        Ok(())
+    }
 }

@@ -34,9 +34,11 @@
 #include <lt_engine/render/loudness_meter.h>
 #include <lt_engine/render/metronome_renderer.h>
 #include <lt_engine/render/pad_renderer.h>
+#include <lt_engine/render/track_eq_params.h>
 #include <lt_engine/render/voice_guide_renderer.h>
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -72,9 +74,19 @@ struct OfflineSegment {
 };
 
 // Gain/pan: piecewise linear. Mute/solo (0/1): steps. Empty = not automated.
+// Un cambio de EQ de una cue o una escena (plan track-eq-2, E4): en el segundo
+// de salida `seconds`, el EQ va a `eq` (vacío = quitarlo) recorriéndose en
+// `smoothing_seconds` (0 = el suavizado corto de siempre), como en directo.
+struct OfflineEqChange {
+    double seconds = 0.0;
+    std::optional<TrackEqParams> eq;
+    double smoothing_seconds = 0.0;
+};
+
 struct OfflineTrackAutomation {
     Id track_id;
     std::vector<OfflineKey> gain, pan, mute, solo;
+    std::vector<OfflineEqChange> eq;   // en orden de `seconds`
 };
 
 struct OfflineMetronomeChange {

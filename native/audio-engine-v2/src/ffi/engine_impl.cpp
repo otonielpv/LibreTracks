@@ -2235,7 +2235,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackEq>) {
-            if (mixer_) mixer_->set_track_eq(c.track_id, c.eq);
+            if (mixer_) mixer_->set_track_eq(c.track_id, c.eq, c.smoothing_ms);
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackAnalyzer>) {

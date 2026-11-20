@@ -346,3 +346,81 @@ fn pre_fired_actions_past_the_cut_continue_after_the_landing() {
         vec![(0.0, 0.0), (5.0, 1.0), (7.0, 0.0)]
     );
 }
+
+// --- Plan track-eq-2, paso 04: cues y escenas de EQ en el render ------------
+
+#[test]
+fn an_eq_cue_reaches_the_render_as_one_change_with_its_ramp() {
+    let plan = plan(
+        serde_json::json!([
+            {"id": "eq", "name": "EQ", "atSeconds": 5.0,
+             "actions": [{"type": "setTrackEq", "trackId": "drums", "rampSeconds": 2.0,
+                          "eq": {"enabled": true, "bands": [
+                              {"enabled": true, "kind": "peak", "frequencyHz": 1000.0,
+                               "gainDb": 30.0, "q": 1.0, "slope": 12}]}}]},
+            {"id": "off", "name": "Off", "atSeconds": 9.0,
+             "actions": [{"type": "setTrackEqEnabled", "trackId": "drums", "enabled": false}]}
+        ]),
+        "a",
+    )
+    .unwrap();
+    let eq = &track(&plan, "drums").eq;
+    assert_eq!(eq.len(), 2);
+    assert_eq!((eq[0].seconds, eq[0].smoothing_seconds), (5.0, 2.0));
+    // Llega recortado, como cualquier EQ que va al motor.
+    assert_eq!(eq[0].eq.as_ref().unwrap()["bands"][0]["gainDb"], 18.0);
+    assert_eq!((eq[1].seconds, eq[1].smoothing_seconds), (9.0, 0.0));
+    assert_eq!(eq[1].eq.as_ref().unwrap()["enabled"], false);
+    // Sin cambios de ganancia: esa pista no gana claves de mezcla.
+    assert!(track(&plan, "drums").gain.is_empty());
+}
+
+#[test]
+fn an_eq_scene_changes_the_render_eq_at_once_and_releasing_restores_it() {
+    let song = song();
+    let automation: AutomationDocument = serde_json::from_value(serde_json::json!({
+        "cues": [
+            {"id": "on", "name": "On", "atSeconds": 4.0,
+             "actions": [{"type": "applyScene", "sceneId": "eq", "mode": "apply"}]},
+            {"id": "off", "name": "Off", "atSeconds": 8.0,
+             "actions": [{"type": "applyScene", "sceneId": "eq", "mode": "restore"}]}
+        ],
+        "mixScenes": [{
+            "id": "eq", "name": "EQ", "rampSeconds": 1.0,
+            "rules": [{"select": {"type": "track", "trackId": "keys"},
+                       "change": {"eq": {"enabled": true}}}]
+        }],
+        "trackPresent": true
+    }))
+    .unwrap();
+    let settings = AppSettings::default();
+    let plan = plan_render_automation(&AutomationPlanInputs {
+        song: &song,
+        automation: &automation,
+        region_id: "a",
+        settings: &settings,
+        pads_dir: "pads".into(),
+    })
+    .unwrap();
+    let eq = &track(&plan, "keys").eq;
+    assert_eq!(eq.len(), 2, "{eq:?}");
+    assert_eq!((eq[0].seconds, eq[0].smoothing_seconds), (4.0, 0.0), "sin rampa de escena");
+    assert_eq!(eq[0].eq.as_ref().unwrap()["enabled"], true);
+    assert_eq!(eq[1].seconds, 8.0);
+    assert_eq!(eq[1].eq, None, "al soltarla vuelve a no tener EQ");
+}
+
+#[test]
+fn renders_without_eq_cues_carry_no_eq_changes() {
+    let plan = plan(
+        serde_json::json!([
+            {"id": "c", "name": "Mute", "atSeconds": 2.0,
+             "actions": [{"type": "setTrackMute", "trackId": "drums", "muted": true}]}
+        ]),
+        "a",
+    )
+    .unwrap();
+    assert!(plan.tracks.iter().all(|track| track.eq.is_empty()));
+    let json = serde_json::to_value(&plan).unwrap();
+    assert!(json["tracks"][0].get("eq").is_none(), "sin cambios, la clave no viaja");
+}

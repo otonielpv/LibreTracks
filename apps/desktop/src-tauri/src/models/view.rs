@@ -262,6 +262,18 @@ pub enum AutomationActionSummary {
         #[serde(rename = "rampSeconds", skip_serializing_if = "Option::is_none")]
         ramp_seconds: Option<f64>,
     },
+    SetTrackEq {
+        #[serde(rename = "trackId")]
+        track_id: String,
+        eq: Option<libretracks_core::TrackEq>,
+        #[serde(rename = "rampSeconds", skip_serializing_if = "Option::is_none")]
+        ramp_seconds: Option<f64>,
+    },
+    SetTrackEqEnabled {
+        #[serde(rename = "trackId")]
+        track_id: String,
+        enabled: bool,
+    },
     ApplyScene {
         #[serde(rename = "sceneId")]
         scene_id: String,
@@ -1017,6 +1029,21 @@ pub(crate) fn automation_action_to_summary(
             pan: *pan,
             ramp_seconds: *ramp_seconds,
         },
+        AutomationAction::SetTrackEq {
+            track_id,
+            eq,
+            ramp_seconds,
+        } => AutomationActionSummary::SetTrackEq {
+            track_id: track_id.clone(),
+            eq: eq.clone(),
+            ramp_seconds: *ramp_seconds,
+        },
+        AutomationAction::SetTrackEqEnabled { track_id, enabled } => {
+            AutomationActionSummary::SetTrackEqEnabled {
+                track_id: track_id.clone(),
+                enabled: *enabled,
+            }
+        }
         AutomationAction::ApplyScene {
             scene_id,
             ramp_seconds,

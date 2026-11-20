@@ -4163,7 +4163,8 @@ pub(super) fn validate_automation_cue(
                 }
             }
             AutomationAction::SetTrackMute { track_id, .. }
-            | AutomationAction::SetTrackSolo { track_id, .. } => {
+            | AutomationAction::SetTrackSolo { track_id, .. }
+            | AutomationAction::SetTrackEqEnabled { track_id, .. } => {
                 if !track_exists(track_id) {
                     return Err(DesktopError::AudioCommand(format!(
                         "track not found: {track_id}"
@@ -4187,6 +4188,22 @@ pub(super) fn validate_automation_cue(
                             "automation {label} must be a finite number"
                         )));
                     }
+                }
+                if ramp_seconds.is_some_and(|r| !r.is_finite() || r < 0.0) {
+                    return Err(DesktopError::AudioCommand(
+                        "automation ramp must be a finite, non-negative number".into(),
+                    ));
+                }
+            }
+            AutomationAction::SetTrackEq {
+                track_id,
+                ramp_seconds,
+                ..
+            } => {
+                if !track_exists(track_id) {
+                    return Err(DesktopError::AudioCommand(format!(
+                        "track not found: {track_id}"
+                    )));
                 }
                 if ramp_seconds.is_some_and(|r| !r.is_finite() || r < 0.0) {
                     return Err(DesktopError::AudioCommand(

@@ -464,3 +464,72 @@ TEST_CASE("track eq: golden response table matches the C++ design") {
     }
 }
 #endif
+
+// ---------------------------------------------------------------------------
+// Plan track-eq-2, paso 04: rampas largas de cue con `set_target(params, frames)`.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// RMS en dB de ventanas consecutivas de `window` frames.
+std::vector<double> window_levels_db(const std::vector<float>& signal, std::size_t window) {
+    std::vector<double> out;
+    for (std::size_t from = 0; from + window <= signal.size(); from += window)
+        out.push_back(20.0 * std::log10(std::max(1e-12, rms(signal, from, from + window))));
+    return out;
+}
+
+std::vector<float> ramp_from_0_to_12_db(std::size_t smoothing_frames) {
+    TrackEq eq;
+    eq.prepare(kRate);
+    auto params = single_band(EqBandKind::Peak, 1000.0f, 0.0f, 1.0f);
+    eq.set_target(params);
+    eq.snap_to_target();
+    // 0,1 s de régimen, 1 s de rampa y 0,4 s de cola.
+    const auto input = sine(kRate * 3 / 2, 1000.0, 0.1);
+    return process_in_blocks(eq, input, [&](std::size_t block) {
+        if (block == 19) {   // 4864 frames (~0,1 s), en un límite de bloque
+            params.bands[0].gain_db = 12.0f;
+            eq.set_target(params, smoothing_frames);
+        }
+    });
+}
+
+} // namespace
+
+TEST_CASE("track eq ramp C1: a 1 s ramp from 0 to +12 dB is continuous and lands on the target") {
+    const std::size_t one_second = smoothing_frames_for(1000.0, kRate);
+    REQUIRE(one_second == static_cast<std::size_t>(kRate));
+    const auto out = ramp_from_0_to_12_db(one_second);
+
+    // Muestra a muestra: no salta más que una rampa ideal muestreada (el seno
+    // a la ganancia final, +12 dB = x3,98), con un 10 % de margen.
+    const auto input = sine(kRate * 3 / 2, 1000.0, 0.1);
+    const float ideal = max_step(input) * std::pow(10.0f, 12.0f / 20.0f) * 1.1f;
+    CHECK(max_step(out) <= ideal);
+
+    // La envolvente sube de forma continua: entre ventanas de 10 ms seguidas
+    // no cambia más de 12 dB / 100 ventanas con margen. Un salto de 10 ms (el
+    // suavizado corto de siempre) lo sube todo en una o dos ventanas.
+    const auto levels = window_levels_db(out, 480);
+    double worst = 0.0;
+    for (std::size_t i = 11; i < levels.size(); ++i)
+        worst = std::max(worst, std::abs(levels[i] - levels[i - 1]));
+    CAPTURE(worst);
+    CHECK(worst <= 0.25);
+
+    // A mitad de la rampa está a ~+6 dB y al acabar en +12 dB.
+    const double base = levels[5];
+    CHECK(levels[10 + 50] - base == doctest::Approx(6.0).epsilon(0.08));
+    CHECK(levels[10 + 100 + 20] - base == doctest::Approx(12.0).epsilon(0.02));
+}
+
+TEST_CASE("track eq ramp C1: the short default smoothing is what the long ramp avoids") {
+    // Sabe fallar: con el suavizado por defecto el mismo cambio salta de golpe.
+    const auto out = ramp_from_0_to_12_db(0);
+    const auto levels = window_levels_db(out, 480);
+    double worst = 0.0;
+    for (std::size_t i = 11; i < levels.size(); ++i)
+        worst = std::max(worst, std::abs(levels[i] - levels[i - 1]));
+    CHECK(worst > 3.0);
+}

@@ -220,3 +220,66 @@ fn a_batch_changes_every_track_with_one_undo_step() {
     assert_eq!(track_of(&session, "bass1").eq, None);
     assert_eq!(session.undo_stack.len(), steps);
 }
+
+// --- Plan track-eq-2, paso 04: cues de EQ en vivo ----------------------------
+
+#[test]
+fn an_eq_cue_copies_to_the_model_without_an_undo_step() {
+    use crate::audio::automation::AutomationAction;
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    let undo = session.undo_stack.len();
+    let revision = session.project_revision;
+    let mix_revision = session.mix_revision;
+
+    session
+        .apply_automation_action(
+            &AutomationAction::SetTrackEq {
+                track_id: "bass1".into(),
+                eq: Some(boosted_eq()),
+                ramp_seconds: Some(4.0),
+            },
+            &audio,
+        )
+        .expect("cue");
+    assert_eq!(track_of(&session, "bass1").eq, Some(boosted_eq()));
+    assert_eq!(session.undo_stack.len(), undo, "la automatización no deshace");
+    assert_eq!(session.project_revision, revision);
+    assert_ne!(session.mix_revision, mix_revision, "la UI se entera");
+    assert_eq!(last_audio_command(&audio), "set_track_eq");
+
+    session
+        .apply_automation_action(
+            &AutomationAction::SetTrackEqEnabled { track_id: "bass1".into(), enabled: false },
+            &audio,
+        )
+        .expect("bypass cue");
+    let stored = track_of(&session, "bass1").eq.unwrap();
+    assert!(!stored.enabled);
+    assert_eq!(stored.bands, boosted_eq().bands);
+    assert_eq!(session.undo_stack.len(), undo);
+}
+
+#[test]
+fn an_eq_cue_on_a_missing_track_is_rejected() {
+    use crate::audio::automation::{AutomationAction, AutomationCue};
+    let session = two_song_session();
+    let song = session.engine.song().unwrap();
+    let check = |action: AutomationAction| {
+        let cue = AutomationCue {
+            lead: None,
+            id: "k".into(),
+            name: "EQ".into(),
+            at_seconds: 1.0,
+            enabled: true,
+            max_runs: None,
+            actions: vec![action],
+        };
+        super::validate_automation_cue(song, &session.automation, &cue)
+    };
+    assert!(check(AutomationAction::SetTrackEq { track_id: "nope".into(), eq: None, ramp_seconds: None }).is_err());
+    assert!(check(AutomationAction::SetTrackEqEnabled { track_id: "nope".into(), enabled: true }).is_err());
+    assert!(check(AutomationAction::SetTrackEq { track_id: "bass1".into(), eq: None, ramp_seconds: Some(-1.0) }).is_err());
+    assert!(check(AutomationAction::SetTrackEq { track_id: "bass1".into(), eq: None, ramp_seconds: Some(1.0) }).is_ok());
+    assert!(check(AutomationAction::SetTrackEqEnabled { track_id: "bass1".into(), enabled: false }).is_ok());
+}

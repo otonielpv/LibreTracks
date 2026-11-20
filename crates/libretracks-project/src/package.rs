@@ -1146,15 +1146,10 @@ fn remap_structure_ids(
     // carry keeps its id (the action then targets nothing, as it would have).
     for cue in structure.stored_automation_cues_mut() {
         for action in &mut cue.actions {
-            match action {
-                AutomationAction::SetTrackMute { track_id, .. }
-                | AutomationAction::SetTrackSolo { track_id, .. }
-                | AutomationAction::SetTrackMix { track_id, .. } => {
-                    if let Some(id) = track_ids.get(track_id.as_str()) {
-                        *track_id = id.clone();
-                    }
+            if let Some(track_id) = action.track_id_mut() {
+                if let Some(id) = track_ids.get(track_id.as_str()) {
+                    *track_id = id.clone();
                 }
-                _ => {}
             }
         }
     }
@@ -2906,6 +2901,46 @@ mod tests {
         assert_eq!(content.clips[0].track_id, "nueva");
         assert_eq!(content.clips[0].id, "c1~2-importado");
         assert_eq!(remapped.original.clips[0].track_id, "nueva");
+    }
+
+    /// Plan track-eq-2, paso 04: las cues de EQ apuntan a la pista importada.
+    #[test]
+    fn importing_remaps_the_track_of_eq_cues() {
+        use libretracks_core::{AutomationAction, AutomationCue, OriginalSnapshot, SongStructure};
+        let cue = AutomationCue {
+            lead: None,
+            id: "k".into(),
+            name: "EQ".into(),
+            at_seconds: 1.0,
+            enabled: true,
+            max_runs: None,
+            actions: vec![
+                AutomationAction::SetTrackEq { track_id: "t1".into(), eq: None, ramp_seconds: Some(2.0) },
+                AutomationAction::SetTrackEqEnabled { track_id: "t1".into(), enabled: false },
+                AutomationAction::SetTrackEq { track_id: "otra".into(), eq: None, ramp_seconds: None },
+            ],
+        };
+        let structure = SongStructure {
+            original: OriginalSnapshot {
+                origin_seconds: 0.0,
+                duration_seconds: 8.0,
+                base_bpm: 120.0,
+                base_time_signature: "4/4".into(),
+                automation_cues: vec![cue],
+                ..Default::default()
+            },
+            sections: vec![],
+            arrangements: vec![],
+            applied_arrangement_id: None,
+        };
+        let tracks = HashMap::from([("t1".to_string(), "nueva".to_string())]);
+        let mut remapped = remap_structure_ids(structure, &tracks, &HashMap::new()).expect("remap");
+        let ids: Vec<String> = remapped.original.automation_cues[0]
+            .actions
+            .iter_mut()
+            .filter_map(|action| action.track_id_mut().cloned())
+            .collect();
+        assert_eq!(ids, vec!["nueva", "nueva", "otra"]);
     }
 
     /// La mezcla con que se exportó una canción (carpetas, mute, salida,

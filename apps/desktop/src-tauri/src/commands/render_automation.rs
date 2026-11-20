@@ -30,8 +30,8 @@ use libretracks_core::lead_time::{has_lead, LeadGrid};
 use libretracks_core::mix_scene::{active_song_track_ids, resolve_scene, SceneLatches, TrackMix};
 use libretracks_core::{warp_timeline_seconds_at, Song, SongRegion};
 use lt_audio_engine_v2::{
-    RenderAutomation, RenderKey, RenderMetronomeChange, RenderPadChange, RenderSegment,
-    RenderTrackAutomation, RenderVoiceGuideChange,
+    RenderAutomation, RenderEqChange, RenderKey, RenderMetronomeChange, RenderPadChange,
+    RenderSegment, RenderTrackAutomation, RenderVoiceGuideChange,
 };
 
 use crate::audio::automation::{
@@ -229,6 +229,7 @@ struct TrackKeys {
     pan: Vec<RenderKey>,
     mute: Vec<RenderKey>,
     solo: Vec<RenderKey>,
+    eq: Vec<RenderEqChange>,
 }
 
 struct Simulation<'a> {
@@ -372,6 +373,26 @@ impl<'a> Simulation<'a> {
         }
     }
 
+    /// Plan track-eq-2, E4: el EQ de la pista cambia en el segundo de salida
+    /// `at`, recorriéndose en `ramp` segundos en el motor (una orden, como en
+    /// directo). Solo pistas que llevan EQ y solo si cambia.
+    fn set_eq(&mut self, track_id: &str, eq: Option<libretracks_core::TrackEq>, ramp: f64, at: f64) {
+        let eq = eq.map(|eq| eq.sanitized());
+        let Some(track) = self.song.tracks.iter_mut().find(|track| track.id == track_id) else {
+            return;
+        };
+        if track.kind != libretracks_core::TrackKind::Audio || track.eq == eq {
+            return;
+        }
+        track.eq = eq.clone();
+        let change = RenderEqChange {
+            seconds: at,
+            eq: eq.and_then(|eq| serde_json::to_value(eq).ok()),
+            smoothing_seconds: if ramp.is_finite() { ramp.max(0.0) } else { 0.0 },
+        };
+        self.track_keys(track_id).eq.push(change);
+    }
+
     /// A track's mix before any cue moved it: the first key of each field, or
     /// the model when there is none yet.
     fn initial_mix(&self, track_id: &str) -> Option<TrackMix> {
@@ -401,6 +422,23 @@ impl<'a> Simulation<'a> {
                 if let Some(mut mix) = self.mix_of(track_id) {
                     mix.solo = *solo;
                     self.set_mix(track_id, mix, 0.0, at, MixFields::SOLO);
+                }
+            }
+            AutomationAction::SetTrackEq { track_id, eq, ramp_seconds } => {
+                self.set_eq(track_id, eq.clone(), ramp_seconds.unwrap_or(0.0), at);
+            }
+            AutomationAction::SetTrackEqEnabled { track_id, enabled } => {
+                let current = self.mix_of(track_id).map(|mix| mix.eq);
+                if let Some(current) = current {
+                    let next = match current {
+                        Some(mut eq) => {
+                            eq.enabled = *enabled;
+                            Some(eq)
+                        }
+                        None if *enabled => Some(libretracks_core::TrackEq::default()),
+                        None => None,
+                    };
+                    self.set_eq(track_id, next, 0.0, at);
                 }
             }
             AutomationAction::SetTrackMix { track_id, volume, pan, ramp_seconds } => {
@@ -557,6 +595,10 @@ impl<'a> Simulation<'a> {
                 muted: current.muted != target.muted,
                 solo: current.solo != target.solo,
             };
+            // El EQ de una escena cambia sin rampa (el suavizado corto).
+            if current.eq != target.eq {
+                self.set_eq(&track_id, target.eq.clone(), 0.0, at);
+            }
             self.set_mix(&track_id, target, ramp, at, fields);
         }
     }
@@ -590,6 +632,7 @@ impl<'a> Simulation<'a> {
                     pan: keys.pan,
                     mute: keys.mute,
                     solo: keys.solo,
+                    eq: keys.eq,
                 })
             })
             .collect();

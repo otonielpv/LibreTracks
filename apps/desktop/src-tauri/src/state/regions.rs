@@ -1512,15 +1512,10 @@ impl DesktopSession {
                 cue.at_seconds >= split_seconds - 1e-9 && cue.at_seconds < region.end_seconds
             }) {
                 for action in &mut cue.actions {
-                    match action {
-                        AutomationAction::SetTrackMute { track_id, .. }
-                        | AutomationAction::SetTrackSolo { track_id, .. }
-                        | AutomationAction::SetTrackMix { track_id, .. } => {
-                            if let Some(id) = new_track_ids.get(track_id.as_str()) {
-                                *track_id = id.clone();
-                            }
+                    if let Some(track_id) = action.track_id_mut() {
+                        if let Some(id) = new_track_ids.get(track_id.as_str()) {
+                            *track_id = id.clone();
                         }
-                        _ => {}
                     }
                 }
             }

@@ -1127,3 +1127,82 @@ TEST_CASE("offline render eq C3: a session without eq renders exactly as before 
     MESSAGE("offline baseline hash = " << hash);
     CHECK(hash == LT_OFFLINE_EQ_BASELINE_HASH);
 }
+
+// ---------------------------------------------------------------------------
+// Plan track-eq-2, paso 04: un cambio de EQ con rampa de una cue suena igual
+// en el render que en directo.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("offline render eq ramp C2: a ramped eq change matches the live mixer sample by sample") {
+    constexpr int kSR = 48000;
+    constexpr int kBlock = 512;
+    constexpr Frame kFrames = kSR;
+    constexpr int kChangeBlock = 24;   // 12288 frames, en un límite de bloque
+    const double change_seconds = static_cast<double>(kChangeBlock * kBlock) / kSR;
+    TempDir dir;
+    const std::string file = dir.file("tone.wav");
+    auto source = stereo_sine_at(kFrames, 1000.0, kSR);
+    for (auto& v : source) v *= 0.2f;
+    write_float_wav(file, source, 2, kSR);
+
+    json track = track_json("t", 0.8, 0.0);
+    track["eq"] = peak_eq_json(1000.0, 0.0, 1.0);
+    const json song = song_json(json::array({track}),
+                                json::array({clip_json("c", "t", file, 0.0, 1.0)}));
+    TrackEqParams boosted;
+    boosted.enabled = true;
+    boosted.band_count = 1;
+    boosted.bands[0] = {true, EqBandKind::Peak, 1000.0f, 12.0f, 1.0f, 12};
+
+    auto req = base_request(song, 0.0, 1.0);
+    req.automation.active = true;
+    req.automation.segments = {{0.0, 1.0}};
+    OfflineTrackAutomation keys;
+    keys.track_id = "t";
+    keys.eq.push_back({change_seconds, boosted, 0.5});
+    req.automation.tracks.push_back(keys);
+    req.outputs.push_back({dir.file("mix.wav"), {"t"}});
+    auto result = render_offline(req);
+    REQUIRE_MESSAGE(result.is_ok(), (result.is_err() ? result.error() : ""));
+    const auto offline = read_wav(dir.file("mix.wav"));
+
+    auto parsed = session_from_project_json(song.dump(), kSR);
+    REQUIRE(parsed.is_ok());
+    auto session = std::make_shared<const Session>(parsed.take());
+    SourceManager sm;
+    const Id source_id = session->songs[0].tracks[0].clips[0].source_id;
+    sm.register_source(source_id, "");
+    REQUIRE(sm.store_decoded_source(source_id, source, 2, kSR, kFrames).is_ok());
+    TransportClock clock(kSR);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sm, &clock, &scheduler);
+    mixer.prepare_render_resources(kBlock);
+    mixer.set_active_output_channels({0, 1});
+    clock.play();
+    clock.clear_pending_start();
+    std::vector<float> l(kBlock), r(kBlock), live;
+    float* out[2] = {l.data(), r.data()};
+    for (int b = 0; b < 90; ++b) {
+        if (b == kChangeBlock)
+            mixer.set_track_eq("t", boosted, 500.0);
+        std::fill(l.begin(), l.end(), 0.0f);
+        std::fill(r.begin(), r.end(), 0.0f);
+        mixer.render(out, 2, kBlock, clock.sample_rate());
+        live.insert(live.end(), l.begin(), l.end());
+    }
+    float worst = 0.0f;
+    for (std::size_t i = kBlock * 8; i < live.size(); ++i)
+        worst = std::max(worst, std::abs(live[i] - offline.at(static_cast<Frame>(i), 0)));
+    CAPTURE(worst);
+    CHECK(worst <= 1e-6f);
+    // Y la rampa ha hecho algo: al final suena ~+12 dB más que antes del cambio.
+    const auto level = [&](std::size_t from) {
+        double sum = 0.0;
+        for (std::size_t i = from; i < from + 4800; ++i) sum += double(live[i]) * live[i];
+        return 10.0 * std::log10(sum / 4800.0);
+    };
+    CHECK(level(80 * kBlock) - level(10 * kBlock) == doctest::Approx(12.0).epsilon(0.03));
+    // A mitad de la rampa (0,25 s tras el cambio) está a medio camino.
+    CHECK(level(kChangeBlock * kBlock + 12000 - 2400) - level(10 * kBlock)
+          == doctest::Approx(6.0).epsilon(0.15));
+}

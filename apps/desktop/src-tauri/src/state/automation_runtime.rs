@@ -772,6 +772,36 @@ impl DesktopSession {
                     self.bump_mix_revision();
                 }
             }
+            AutomationAction::SetTrackEq {
+                track_id,
+                eq,
+                ramp_seconds,
+            } => {
+                self.apply_track_eq_from_automation(
+                    track_id,
+                    eq.clone(),
+                    ramp_seconds.unwrap_or(0.0),
+                    audio,
+                )?;
+            }
+            AutomationAction::SetTrackEqEnabled { track_id, enabled } => {
+                let current = self
+                    .engine
+                    .song()
+                    .and_then(|song| song.tracks.iter().find(|t| &t.id == track_id))
+                    .map(|t| t.eq.clone());
+                if let Some(current) = current {
+                    let next = match current {
+                        Some(mut eq) => Some({
+                            eq.enabled = *enabled;
+                            eq
+                        }),
+                        None if *enabled => Some(libretracks_core::TrackEq::default()),
+                        None => None,
+                    };
+                    self.apply_track_eq_from_automation(track_id, next, 0.0, audio)?;
+                }
+            }
             AutomationAction::ApplyScene {
                 scene_id,
                 ramp_seconds,
