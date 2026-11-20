@@ -23,6 +23,7 @@ import {
 } from "../../../shared/dialog/dialogService";
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
 import { songSettingsSubmenus } from "../songs/songSubmenus";
+import { lyricsSongMenuItems } from "../../lyrics/lyricsSongMenu";
 import { createAutomationMenus } from "./automationMenus";
 import { songStepReorderIndex } from "../timeline/songDropReorder";
 import {
@@ -578,6 +579,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
           label: t("transport.structure.menuItem"),
           onSelect: () => openStructureEditor(region.id),
         },
+        ...lyricsSongMenuItems(region, t),
         {
           label: t("transport.menu.splitSongAtCursor", {
             defaultValue: "Partir canción en el cursor",

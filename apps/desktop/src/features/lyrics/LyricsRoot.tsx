@@ -4,6 +4,9 @@ import { getTransportSnapshot } from "@libretracks/shared/desktopApi";
 import type { TransportSnapshot } from "@libretracks/shared/models";
 
 import { useLyricsStatus } from "./hooks/useLyricsStatus";
+import { LyricsSetlistLinker } from "./LyricsSetlistLinker";
+import { LyricsSongPanel } from "./LyricsSongPanel";
+import { useLyricsStore } from "./lyricsStore";
 import "./lyrics.css";
 
 type Props = {
@@ -13,18 +16,31 @@ type Props = {
 };
 
 /**
- * Everything lyrics the transport mounts: the status feed (and, from step
- * 08, the panels every view opens). The transport only mounts this; no
- * lyrics state or logic lives there.
+ * Everything lyrics the transport mounts: the status feed and the two
+ * panels every view opens (DAW, Setlist, Compact and mobile reach them from
+ * the same song menu). The transport only mounts this; no lyrics state or
+ * logic lives there.
  */
 export function LyricsRoot({ applyPlaybackSnapshot }: Props) {
   const applyRef = useRef(applyPlaybackSnapshot);
   applyRef.current = applyPlaybackSnapshot;
+  const onSnapshot = useCallback((snapshot: unknown) => {
+    if (snapshot) applyRef.current(snapshot as TransportSnapshot);
+  }, []);
   const refreshSong = useCallback(() => {
     void getTransportSnapshot()
       .then((snapshot) => applyRef.current(snapshot))
       .catch(() => {});
   }, []);
   useLyricsStatus(refreshSong);
-  return null;
+  const linkerOpen = useLyricsStore((state) => state.linkerOpen);
+  const songPanelRegionId = useLyricsStore((state) => state.songPanelRegionId);
+  return (
+    <>
+      {linkerOpen ? <LyricsSetlistLinker onSnapshot={onSnapshot} /> : null}
+      {songPanelRegionId ? (
+        <LyricsSongPanel regionId={songPanelRegionId} onSnapshot={onSnapshot} />
+      ) : null}
+    </>
+  );
 }

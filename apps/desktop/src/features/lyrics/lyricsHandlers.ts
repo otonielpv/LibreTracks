@@ -27,10 +27,15 @@ export type LyricsApi = Pick<
   | "markLyricsTutorialDone"
   | "setRegionLyrics"
   | "testSendLyrics"
+  | "getRegionReport"
+  | "getSetlistReport"
+  | "listPresentations"
 >;
 
 export type LyricsHandlerDeps = {
   api?: LyricsApi;
+  /** Folds the snapshot a saved edit returns into the transport. */
+  onSnapshot?: (snapshot: unknown) => void;
   /** The song's current lyrics model, read when the action runs. */
   getRegionLyrics: (regionId: string) => RegionLyrics | null | undefined;
 };
@@ -39,7 +44,11 @@ export type ProbeOutcome =
   | { ok: true; info: ProbeInfo }
   | { ok: false; error: api.LyricsError; port: number | null };
 
-export function createLyricsHandlers({ api: injected, getRegionLyrics }: LyricsHandlerDeps) {
+export function createLyricsHandlers({
+  api: injected,
+  getRegionLyrics,
+  onSnapshot,
+}: LyricsHandlerDeps) {
   const calls: LyricsApi = injected ?? api;
   const store = () => useLyricsStore.getState();
   const remember = (view: LyricsConfigView) => {
@@ -48,8 +57,11 @@ export function createLyricsHandlers({ api: injected, getRegionLyrics }: LyricsH
   };
   const currentSoftware = (): LyricsSoftware | null =>
     store().configView?.config.software ?? null;
-  const saveRegion = (regionId: string, lyrics: RegionLyrics | null) =>
-    calls.setRegionLyrics(regionId, lyrics);
+  const saveRegion = async (regionId: string, lyrics: RegionLyrics | null) => {
+    const snapshot = await calls.setRegionLyrics(regionId, lyrics);
+    onSnapshot?.(snapshot);
+    return snapshot;
+  };
 
   return {
     loadConfig: async () => remember(await calls.getLyricsConfig()),
@@ -137,6 +149,10 @@ export function createLyricsHandlers({ api: injected, getRegionLyrics }: LyricsH
 
     testSend: (regionId: string, markerId: string, k = 0) =>
       calls.testSendLyrics(regionId, markerId, k),
+
+    regionReport: (regionId: string) => calls.getRegionReport(regionId),
+    setlistReport: () => calls.getSetlistReport(),
+    listPresentations: () => calls.listPresentations(),
   };
 }
 

@@ -34,6 +34,11 @@ function makeApi(initial: Partial<LyricsConfig> = {}) {
     }),
     setRegionLyrics: vi.fn(async () => undefined),
     testSendLyrics: vi.fn(async () => undefined),
+    getRegionReport: vi.fn(async () => {
+      throw new Error("not in this test");
+    }),
+    getSetlistReport: vi.fn(async () => []),
+    listPresentations: vi.fn(async () => []),
   } satisfies LyricsApi;
   return api;
 }
