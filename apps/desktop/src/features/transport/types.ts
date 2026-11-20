@@ -177,7 +177,8 @@ export type SettingsTab =
   | "midiLearn"
   | "diagnostics"
   | "video"
-  | "redundancy";
+  | "redundancy"
+  | "lyrics";
 
 export type TrackDropState = {
   targetTrackId: string;

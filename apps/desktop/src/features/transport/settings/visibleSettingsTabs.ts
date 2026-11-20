@@ -21,6 +21,7 @@ export function allSettingsTabs(
     { id: "midi", group: "midi", label: t("transport.settingsModal.tabMidiDevices", { defaultValue: "Devices" }) },
     { id: "midiLearn", group: "midi", label: t("transport.settingsModal.tabMidiLearn", { defaultValue: "MIDI Learn" }) },
     { id: "video", label: t("transport.video.settings.tab") },
+    { id: "lyrics", label: t("lyrics.settings.tab") },
     ...(FEATURE_FLAGS.redundancy
       ? [{ id: "redundancy" as const, label: t("redundancy.settings.tab") }]
       : []),

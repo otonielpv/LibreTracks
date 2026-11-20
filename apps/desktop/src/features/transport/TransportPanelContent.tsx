@@ -215,6 +215,7 @@ import { setMixSceneEditorOpen, useMixSceneEditorStore } from "./panels/mixScene
 import { RemotePanel } from "./panels/RemotePanel";
 import { NetworkSessionRoot } from "../network/NetworkSessionRoot";
 import { RedundancyRoot } from "../redundancy/RedundancyRoot";
+import { LyricsRoot } from "../lyrics/LyricsRoot";
 import { MobileLanding } from "./compact/MobileLanding";
 import { TOUR_TARGETS } from "../tutorial/tourTargets";
 import {
@@ -7671,6 +7672,7 @@ export function TransportPanelContent() {
             />
             <NetworkSessionRoot />
             <RedundancyRoot />
+            <LyricsRoot applyPlaybackSnapshot={applyPlaybackSnapshot} />
 
             {isMobileSessionsModalOpen ? (
               <div

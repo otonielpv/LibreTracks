@@ -43,7 +43,7 @@ fn config_view(app: &AppHandle, service: &LyricsService) -> LyricsConfigView {
     LyricsConfigView { config, has_token }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn lyrics_get_config(app: AppHandle, service: State<'_, LyricsService>) -> LyricsConfigView {
     config_view(&app, &service)
 }
@@ -194,7 +194,7 @@ pub fn lyrics_set_region_lyrics(
 }
 
 /// «Probar»: manda ya esa sección (y su diapositiva `k`).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn lyrics_test_send(
     service: State<'_, LyricsService>,
     region_id: String,
@@ -232,13 +232,13 @@ pub fn lyrics_set_paused(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn lyrics_refresh(app: AppHandle, service: State<'_, LyricsService>) {
     service.send(WorkerInput::Refresh);
     service.apply(&app);
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn lyrics_status(service: State<'_, LyricsService>) -> LyricsStatus {
     service
         .status
@@ -248,7 +248,7 @@ pub fn lyrics_status(service: State<'_, LyricsService>) -> LyricsStatus {
 }
 
 /// Marca el tutorial de configuración de un programa como visto (o saltado).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn lyrics_tutorial_done(
     app: AppHandle,
     service: State<'_, LyricsService>,

@@ -24,6 +24,7 @@ import { AudioDeviceStatusBadge } from "../AudioDeviceStatusBadge";
 import { MidiDeviceStatusBadge } from "../MidiDeviceStatusBadge";
 import { NetworkSessionBadge } from "../../network/NetworkSessionBadge";
 import { RedundancyBadge } from "../../redundancy/RedundancyBadge";
+import { LyricsStatusPill } from "../../lyrics/LyricsStatusPill";
 import { useTransportGuard } from "../../redundancy/useTransportGuard";
 import { requestAppClose } from "../../appClose/appCloseService";
 import { FadeStopButton } from "./FadeStopButton";
@@ -925,6 +926,7 @@ export function TimelineTopbar({
             <MidiDeviceStatusBadge />
             <NetworkSessionBadge />
             <RedundancyBadge />
+            <LyricsStatusPill />
             {isMobileApp ? null : <VideoOutputBadge />}
           </div>
         </div>

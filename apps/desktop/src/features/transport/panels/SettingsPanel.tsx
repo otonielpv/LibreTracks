@@ -21,6 +21,7 @@ import { SystemSettingsTab } from "./SystemSettingsTab";
 import { ShortcutsSettingsTab } from "./ShortcutsSettingsTab";
 import { VideoSettingsTab } from "./VideoSettingsTab";
 import { RedundancySettingsTab } from "../../redundancy/RedundancySettingsTab";
+import { LyricsSettingsTab } from "../../lyrics/LyricsSettingsTab";
 import {
   MidiSettingsTab,
   type MidiOutputSettings,
@@ -676,6 +677,7 @@ export function SettingsPanel({
               {activeTab === "shortcuts" ? <ShortcutsSettingsTab /> : null}
               {activeTab === "video" ? <VideoSettingsTab /> : null}
               {activeTab === "redundancy" ? <RedundancySettingsTab /> : null}
+              {activeTab === "lyrics" ? <LyricsSettingsTab /> : null}
 
               {activeTab === "diagnostics" ? (
                 <section
