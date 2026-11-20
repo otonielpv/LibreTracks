@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
+const confirmDialog = vi.fn<(message: string) => Promise<boolean>>();
+vi.mock("../../../shared/dialog/dialogService", () => ({
+  confirmDialog: (message: string) => confirmDialog(message),
+}));
+
 import {
   DEFAULT_APP_SETTINGS,
   normalizeAppSettings,
@@ -43,6 +48,35 @@ function lastPatch(persist: ReturnType<typeof vi.fn>): AppSettings {
 }
 
 describe("createSettingsHandlers", () => {
+  it("al activar el cambio de tono preparado avisa del disco y respeta un no", async () => {
+    const { handlers, persistAudioSettings } = setup();
+    confirmDialog.mockReset();
+    confirmDialog.mockResolvedValueOnce(false);
+    handlers.handlePrerenderedPitchChange(true);
+    await vi.waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
+    expect(confirmDialog.mock.calls[0][0]).toBe(
+      "transport.settingsModal.prerenderedPitchConfirm",
+    );
+    await Promise.resolve();
+    expect(persistAudioSettings).not.toHaveBeenCalled();
+
+    confirmDialog.mockResolvedValueOnce(true);
+    handlers.handlePrerenderedPitchChange(true);
+    await vi.waitFor(() =>
+      expect(lastPatch(persistAudioSettings).prerenderedPitch).toBe(true),
+    );
+  });
+
+  it("apagar el cambio de tono preparado no pregunta", async () => {
+    const { handlers, persistAudioSettings } = setup();
+    confirmDialog.mockReset();
+    handlers.handlePrerenderedPitchChange(false);
+    await vi.waitFor(() =>
+      expect(lastPatch(persistAudioSettings).prerenderedPitch).toBe(false),
+    );
+    expect(confirmDialog).not.toHaveBeenCalled();
+  });
+
   it("persists the automatic warp preference", () => {
     const { handlers, persistAudioSettings } = setup();
     handlers.handleAutoWarpChange(false);

@@ -1,3 +1,4 @@
+import { confirmDialog } from "../../../shared/dialog/dialogService";
 import {
   normalizeAppSettings,
   type AppSettings,
@@ -390,10 +391,17 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
     },
 
     handlePrerenderedPitchChange(nextValue: boolean) {
-      persistAudioPatch(
-        { prerenderedPitch: nextValue },
-        t("transport.status.prerenderedPitchUpdated"),
-      );
+      void (async () => {
+        // Al activarlo, avisar del disco antes de que se note: cada tono
+        // preparado es un WAV por pista (ver audio::pitch_prerender).
+        if (nextValue && !(await confirmDialog(t("transport.settingsModal.prerenderedPitchConfirm")))) {
+          return;
+        }
+        persistAudioPatch(
+          { prerenderedPitch: nextValue },
+          t("transport.status.prerenderedPitchUpdated"),
+        );
+      })();
     },
 
     handleReferenceImportedAudioChange(nextValue: boolean) {

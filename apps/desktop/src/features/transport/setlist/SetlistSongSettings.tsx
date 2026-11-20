@@ -8,6 +8,8 @@ import {
 } from "@libretracks/shared/models";
 
 import { formatClock, formatMusicalPosition } from "../helpers";
+import { PendingPitchApplyBar } from "../tempo/PendingPitchApplyBar";
+import { usePendingRegionPitch } from "../tempo/pendingPitchStore";
 import type { TimelineMenus } from "../menus/timelineMenus";
 import {
   musicalPositionToSeconds,
@@ -212,6 +214,9 @@ function SetlistSongSettingsComponent({
     globalCountStyle: appSettings.voiceGuideCountStyle,
   });
   const currentBpm = bpmByRegion[region.id] ?? song.bpm;
+  // Cambio de tono preparado: lo elegido y sin aplicar (ver pendingPitchStore).
+  const pendingPitch = usePendingRegionPitch(region.id);
+  const shownTranspose = pendingPitch.transpose ?? region.transposeSemitones;
   const masterGain = optimisticMaster ?? region.master?.gain ?? 1;
   // Only the thumb moves the master; the rest scrolls the drawer (faderGrab).
   const masterRange = useCapOnlyRange({
@@ -297,17 +302,17 @@ function SetlistSongSettingsComponent({
             className="lt-setlist-settings-button"
             aria-label={t("timelineToolbar.regionTransposeDownAria")}
             title={t("timelineToolbar.regionTransposeDownAria")}
-            onClick={() => onSelectedRegionTransposeChange(Math.max(-12, region.transposeSemitones - 1))}
+            onClick={() => onSelectedRegionTransposeChange(Math.max(-12, shownTranspose - 1))}
           >
             −
           </button>
-          <output className="lt-setlist-settings-value">{formatTransposeSemitones(region.transposeSemitones)}</output>
+          <output className="lt-setlist-settings-value">{formatTransposeSemitones(shownTranspose)}</output>
           <button
             type="button"
             className="lt-setlist-settings-button"
             aria-label={t("timelineToolbar.regionTransposeUpAria")}
             title={t("timelineToolbar.regionTransposeUpAria")}
-            onClick={() => onSelectedRegionTransposeChange(Math.min(12, region.transposeSemitones + 1))}
+            onClick={() => onSelectedRegionTransposeChange(Math.min(12, shownTranspose + 1))}
           >
             +
           </button>
@@ -330,11 +335,12 @@ function SetlistSongSettingsComponent({
         </Field> : null}
         <RegionTempoControl
           key={region.id}
-          currentBpm={currentBpm}
+          currentBpm={pendingPitch.bpm ?? currentBpm}
           originalBpm={region.warpEnabled && region.warpSourceBpm ? region.warpSourceBpm : currentBpm}
           disabled={false}
           onChange={(bpm) => onSelectedRegionTempoChange(region, bpm)}
         />
+        <PendingPitchApplyBar regionId={region.id} />
         <div className="lt-setlist-settings-row">
           {/* The top bar's tap tempo: taps set the tempo in force at the
               playhead, which editing keeps inside this song. */}

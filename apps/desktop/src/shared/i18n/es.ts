@@ -683,7 +683,8 @@ const es = {
       autoWarp: "Warp automático",
       autoWarpHint: "Activa warp al cambiar el tono o el tempo para mantenerlos independientes. Desactívalo para controlar warp manualmente y usar varispeed.",
       prerenderedPitch: "Cambio de tono preparado (equipos lentos)",
-      prerenderedPitchHint: "Al cambiar el tono o el tempo con warp, el audio se prepara en segundo plano y mientras tanto sigue sonando el anterior. Gasta mucha menos CPU al reproducir y evita cortes en equipos de gama baja, a cambio de esperar y de espacio en disco.",
+      prerenderedPitchHint: "Al cambiar el tono o el tempo con warp, eliges el valor y pulsas Aplicar; el audio se prepara en segundo plano y mientras tanto sigue sonando el anterior. Gasta mucha menos CPU al reproducir y evita cortes en equipos de gama baja. Usa hasta 8 GB de disco (alrededor de 1 GB por canción transpuesta).",
+      prerenderedPitchConfirm: "El cambio de tono preparado guarda en disco una copia del audio de cada canción con el tono o el tempo cambiados: alrededor de 1 GB por canción de 5 minutos con 20 pistas, y hasta 8 GB en total (lo más antiguo se borra solo). Se libera desde «Borrar caché». ¿Activarlo?",
       autoColorNewTracksHint:
         "Cada pista nueva toma un color de la paleta, recorriéndola en orden, para distinguirlas de un vistazo. Desactívalo si prefieres colorearlas a mano. No repinta las pistas que ya tienes.",
       songTrackLayout: "Pistas de cada canción",
@@ -2856,6 +2857,12 @@ const es = {
     mobileHint: "Se actualiza cada segundo. «CPU» es la carga del motor de audio: el porcentaje del tiempo de cada búfer que se gasta en procesarlo. Por encima del 100 % se producen cortes.",
     ofTotal: "{{used}} de {{total}}",
     hint: "Se actualiza cada segundo. Sirve para saber si una ralentización es de LibreTracks o de toda la máquina. La «carga de audio» es el porcentaje del presupuesto del búfer en uso: por encima del 100 % se producen cortes.",
+  },
+  pendingPitch: {
+    label: "Tono y tempo sin aplicar",
+    pending: "Sin aplicar: {{value}}",
+    apply: "Aplicar",
+    cancel: "Cancelar",
   },
   timelineToolbar: {
     mixerFilterShowAll: "Mostrar todas las pistas en el mezclador",

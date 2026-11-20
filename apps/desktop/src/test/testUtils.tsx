@@ -28,6 +28,7 @@ import {
   useNetworkSessionStore,
 } from "../features/network/networkSessionStore";
 import { useCloudStore } from "../features/transport/cloud/cloudStore";
+import { resetPendingPitchStore } from "../features/transport/tempo/pendingPitchStore";
 import {
   INITIAL_REDUNDANCY_STATE,
   useRedundancyStore,
@@ -451,6 +452,7 @@ beforeEach(async () => {
   useBatchSongAnalysisStore.setState({ open: false });
   useNetworkSessionStore.setState(INITIAL_NETWORK_SESSION_STATE);
   useRedundancyStore.setState(INITIAL_REDUNDANCY_STATE);
+  resetPendingPitchStore();
   // Video selection and library, and the canvas thumbnail/preview registry.
   useVideoStore.setState(INITIAL_VIDEO_STATE);
   resetVideoCanvasState();

@@ -398,6 +398,7 @@ import { useSongStore } from "./songStore";
 import { useMixerFilterStore } from "./mixerFilterStore";
 import { createMidiLearnHandlers } from "./midi/midiLearnHandlers";
 import { createTapTempoHandler } from "./tempo/tapTempoHandler";
+import { usePendingPitchGate } from "./tempo/usePendingPitchGate";
 import { createRegionTempoHandler } from "./tempo/regionTempoHandler";
 import { AndroidBackGuard } from "./mobile/AndroidBackGuard";
 import { MissingMediaModal } from "./panels/MissingMediaModal";
@@ -4927,6 +4928,15 @@ export function TransportPanelContent() {
     [setStatus, runAction, refreshSongView, applyPlaybackSnapshot, t],
   );
 
+  // Cambio de tono preparado: tono y tempo esperan a «Aplicar». Ver
+  // ./tempo/usePendingPitchGate.
+  const pendingPitchGate = usePendingPitchGate({
+    enabled: appSettings.prerenderedPitch,
+    selectedRegion,
+    applyTranspose: handleSelectedRegionTransposeChange,
+    applyTempo: handleSelectedRegionTempoChange,
+  });
+
   // Ruler/lane drag commits + cue editing. `song` and editAutomationCue (which
   // the menu factory rebuilds each render) are read through getters, so this
   // factory stays referentially stable across snapshots.
@@ -6428,9 +6438,9 @@ export function TransportPanelContent() {
     onCommitMarkerPosition: handleMarkerMoveCommit, rulerMarkers, structureHandlers, runShortcutAction,
     onResizeSong: songViewHandlers.resizeSong, onMoveSong: songViewHandlers.moveSong,
     runAction, setStatus,
-    onSelectedRegionTransposeChange: handleSelectedRegionTransposeChange,
+    onSelectedRegionTransposeChange: pendingPitchGate.onTransposeChange,
     onSelectedRegionWarpToggle: handleSelectedRegionWarpToggle,
-    onSelectedRegionTempoChange: handleSelectedRegionTempoChange,
+    onSelectedRegionTempoChange: pendingPitchGate.onTempoChange,
     workspaceEndSeconds: workspaceDurationSeconds,
     onRenameSong: handleCompactRenameSong,
     onSetSongBpm: handleCompactSetSongBpm,
@@ -7057,12 +7067,12 @@ export function TransportPanelContent() {
                       })
                     }
                     onSelectedRegionTransposeChange={
-                      handleSelectedRegionTransposeChange
+                      pendingPitchGate.onTransposeChange
                     }
                     selectedRegionEffectiveBpm={selectedRegionEffectiveBpm}
                     autoWarp={appSettings.autoWarp}
                     onSelectedRegionWarpToggle={handleSelectedRegionWarpToggle}
-                    onSelectedRegionTempoChange={handleSelectedRegionTempoChange}
+                    onSelectedRegionTempoChange={pendingPitchGate.onTempoChange}
                     onSelectedRegionMasterGainChange={
                       handleSelectedRegionMasterGainChange
                     }

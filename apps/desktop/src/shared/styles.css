@@ -7175,6 +7175,49 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
   background: rgb(87 241 219 / 0.12);
 }
 
+.lt-pending-pitch-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.lt-pending-pitch-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #57f1db;
+  font: 700 11px/1.2 "Space Grotesk", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lt-pending-pitch-apply,
+.lt-pending-pitch-cancel {
+  flex: 0 0 auto;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  background: #0e0e0e;
+  color: #e5e2e1;
+  padding: 0 0.75rem;
+  font: 700 11px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.lt-pending-pitch-apply {
+  color: #0e0e0e;
+  background: #57f1db;
+  border-color: #57f1db;
+}
+
+.lt-pending-pitch-cancel:hover {
+  color: #57f1db;
+  background: rgb(87 241 219 / 0.12);
+}
+
 .lt-warp-toggle.is-active {
   color: #57f1db;
   background: rgb(87 241 219 / 0.16);

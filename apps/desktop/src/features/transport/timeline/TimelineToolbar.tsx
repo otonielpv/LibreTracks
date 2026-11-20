@@ -24,6 +24,8 @@ import { ReturnToSetlistChip } from "../setlist/ReturnToSetlistChip";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
 import { SongGapVampToggle } from "../live/SongGapVampToggle";
 import { RegionTempoControl } from "./RegionTempoControl";
+import { PendingPitchApplyBar } from "../tempo/PendingPitchApplyBar";
+import { usePendingRegionPitch } from "../tempo/pendingPitchStore";
 import { SnapIcon } from "./SnapIcon";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { MidiMappable } from "../midi/MidiMappable";
@@ -310,6 +312,9 @@ export function TimelineToolbar({
   onMidiLearnTarget,
 }: TimelineToolbarProps) {
   const { t } = useTranslation();
+  // Cambio de tono preparado: lo elegido y sin aplicar (ver pendingPitchStore).
+  const pendingPitch = usePendingRegionPitch(selectedRegion?.id);
+  const shownTranspose = pendingPitch.transpose ?? selectedRegion?.transposeSemitones ?? 0;
   const learnModeActive = midiLearnMode !== null;
   // Read here rather than threaded through the transport panel: only this
   // button and hooks/useFollowSongTracks use it.
@@ -1106,7 +1111,7 @@ export function TimelineToolbar({
                       disabled={regionControlsDisabled}
                       onClick={() => {
                         onSelectedRegionTransposeChange(
-                          Math.max(-12, selectedRegion.transposeSemitones - 1),
+                          Math.max(-12, shownTranspose - 1),
                         );
                       }}
                     >
@@ -1118,7 +1123,7 @@ export function TimelineToolbar({
                       min={-12}
                       max={12}
                       step={1}
-                      value={selectedRegion.transposeSemitones}
+                      value={shownTranspose}
                       disabled={regionControlsDisabled}
                       onChange={(event) =>
                         onSelectedRegionTransposeChange(
@@ -1132,13 +1137,14 @@ export function TimelineToolbar({
                       disabled={regionControlsDisabled}
                       onClick={() => {
                         onSelectedRegionTransposeChange(
-                          Math.min(12, selectedRegion.transposeSemitones + 1),
+                          Math.min(12, shownTranspose + 1),
                         );
                       }}
                     >
                       +
                     </button>
                   </div>
+                  <PendingPitchApplyBar regionId={selectedRegion.id} />
                 </label>
               ) : (
                 <span>{t("timelineToolbar.regionTransposeNoSelection")}</span>
@@ -1182,7 +1188,7 @@ export function TimelineToolbar({
                   </div> : null}
                   <RegionTempoControl
                     key={selectedRegion.id}
-                    currentBpm={selectedRegionEffectiveBpm}
+                    currentBpm={pendingPitch.bpm ?? selectedRegionEffectiveBpm}
                     originalBpm={
                       warpEnabled && warpSourceBpm
                         ? warpSourceBpm
@@ -1193,6 +1199,7 @@ export function TimelineToolbar({
                       onSelectedRegionTempoChange(selectedRegion, bpm)
                     }
                   />
+                  <PendingPitchApplyBar regionId={selectedRegion.id} />
                 </div>
               ) : (
                 <span>{t("timelineToolbar.regionWarpNoSelection")}</span>

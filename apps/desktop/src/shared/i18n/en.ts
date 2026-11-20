@@ -692,7 +692,8 @@ const en = {
       autoWarp: "Automatic warp",
       autoWarpHint: "Enable warp when changing pitch or tempo to keep them independent. Turn this off to control warp manually and use varispeed.",
       prerenderedPitch: "Prepared pitch changes (slow devices)",
-      prerenderedPitchHint: "When you change pitch or tempo with warp, the audio is prepared in the background while the previous version keeps playing. Playback uses far less CPU and avoids dropouts on low-end devices, at the cost of a wait and disk space.",
+      prerenderedPitchHint: "When you change pitch or tempo with warp, you pick the value and press Apply; the audio is prepared in the background while the previous version keeps playing. Playback uses far less CPU and avoids dropouts on low-end devices. Uses up to 8 GB of disk space (about 1 GB per transposed song).",
+      prerenderedPitchConfirm: "Prepared pitch changes save a copy of the audio of every song whose pitch or tempo you change: about 1 GB for a 5-minute song with 20 tracks, and up to 8 GB in total (the oldest is deleted automatically). You can free it with \"Clear cache\". Turn it on?",
       autoColorNewTracksHint:
         "Each new track takes a colour from the palette, cycling through it in order, so you can tell them apart at a glance. Turn it off if you prefer colouring by hand. It never repaints tracks you already have.",
       songTrackLayout: "Each song's tracks",
@@ -2826,6 +2827,12 @@ const en = {
     mobileHint: "Updated every second. \"CPU\" is the audio engine load: the share of each buffer's time spent processing it. Over 100% causes dropouts.",
     ofTotal: "{{used}} of {{total}}",
     hint: "Updated every second. Use this to tell whether a slowdown is LibreTracks or the whole machine. \"Audio load\" is the share of the audio buffer budget in use — over 100% causes dropouts.",
+  },
+  pendingPitch: {
+    label: "Pitch and tempo not applied yet",
+    pending: "Not applied: {{value}}",
+    apply: "Apply",
+    cancel: "Cancel",
   },
   timelineToolbar: {
     mixerFilterShowAll: "Show all tracks in the mixer",
