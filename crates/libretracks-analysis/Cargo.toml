@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 serde.workspace = true
+libretracks-core = { path = "../libretracks-core" }
 
 [dev-dependencies]
 hound = "3"

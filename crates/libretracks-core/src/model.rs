@@ -1133,7 +1133,7 @@ impl MidiClip {
 /// label shown to the user; `kind` is the closed vocabulary the voice bank and
 /// UI key off. Sessions saved before the voice-guide feature lack this field and
 /// deserialize to [`MarkerKind::Custom`] via `#[serde(default)]`.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum MarkerKind {
     Intro,

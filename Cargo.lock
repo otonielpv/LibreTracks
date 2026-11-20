@@ -2568,6 +2568,7 @@ name = "libretracks-analysis"
 version = "0.0.1"
 dependencies = [
  "hound",
+ "libretracks-core",
  "serde",
  "serde_json",
 ]
