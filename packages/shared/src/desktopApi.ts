@@ -504,6 +504,8 @@ export type MidiControllerTrackMix = {
   pan: number;
   muted: boolean;
   solo: boolean;
+  /** El EQ entero (plan track-eq-2): los controles de EQ lo mueven campo a campo. */
+  eq?: TrackEq | null;
 };
 
 /**
@@ -525,7 +527,7 @@ export async function syncMidiController(args: {
 export type MidiMixChangedPayload = {
   tracks: Record<
     string,
-    { volume?: number; pan?: number; muted?: boolean; solo?: boolean }
+    { volume?: number; pan?: number; muted?: boolean; solo?: boolean; eq?: TrackEq | null }
   >;
   songMaster?: { regionId: string; gain: number };
 };

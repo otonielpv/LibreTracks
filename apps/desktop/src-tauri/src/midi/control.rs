@@ -76,6 +76,10 @@ pub struct TrackMix {
     pub pan: f64,
     pub muted: bool,
     pub solo: bool,
+    /// El EQ entero de la pista (plan track-eq-2, E5): un control de EQ
+    /// cambia un campo y el motor recibe la curva completa.
+    #[serde(default)]
+    pub eq: Option<libretracks_core::TrackEq>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -113,6 +117,9 @@ pub struct TrackMixPatch {
     pub muted: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub solo: Option<bool>,
+    /// `Some(None)` = el EQ se quitó (sale como `null`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eq: Option<Option<libretracks_core::TrackEq>>,
 }
 
 /// The tracks the strips drive right now, for the mixer's bank indicator.
@@ -197,6 +204,8 @@ impl MixMirror {
                         MixControl::Pan => mix.pan = ours.pan,
                         MixControl::Mute => mix.muted = ours.muted,
                         MixControl::Solo => mix.solo = ours.solo,
+                        eq if eq.is_eq() => mix.eq = ours.eq.clone(),
+                        _ => {}
                     }
                 }
             }
@@ -234,6 +243,8 @@ impl MixMirror {
             MixControl::Pan => patch.pan = Some(mix.pan),
             MixControl::Mute => patch.muted = Some(mix.muted),
             MixControl::Solo => patch.solo = Some(mix.solo),
+            eq if eq.is_eq() => patch.eq = Some(mix.eq.clone()),
+            _ => {}
         }
         self.tracks.insert(track_id.to_string(), mix);
     }
@@ -504,15 +515,32 @@ fn commit_mix(app: &AppHandle, keys: Vec<CommitKey>) {
                     .track_commits
                     .fetch_add(1, Ordering::Relaxed);
                 let has = |field| fields.contains(&field);
-                session.commit_track_mix_model_and_command(
-                    &track_id,
-                    has(MixControl::Volume).then_some(values.volume),
-                    has(MixControl::Pan).then_some(values.pan),
-                    has(MixControl::Mute).then_some(values.muted),
-                    has(MixControl::Solo).then_some(values.solo),
-                    None,
-                    &state.audio,
-                )
+                let mix_moved = fields.iter().any(|field| !field.is_eq());
+                let eq_moved = fields.iter().any(|field| field.is_eq());
+                // EQ (plan track-eq-2): un paso de deshacer propio, con la
+                // curva entera que el controlador dejó.
+                let eq_result = eq_moved.then(|| {
+                    session.commit_track_eq_model_and_command(&track_id, values.eq.clone(), &state.audio)
+                });
+                if !mix_moved {
+                    match eq_result {
+                        Some(result) => result,
+                        None => continue,
+                    }
+                } else {
+                    if let Some(Err(error)) = eq_result {
+                        eprintln!("[libretracks-midi] eq commit failed: {error}");
+                    }
+                    session.commit_track_mix_model_and_command(
+                        &track_id,
+                        has(MixControl::Volume).then_some(values.volume),
+                        has(MixControl::Pan).then_some(values.pan),
+                        has(MixControl::Mute).then_some(values.muted),
+                        has(MixControl::Solo).then_some(values.solo),
+                        None,
+                        &state.audio,
+                    )
+                }
             }
             (None, Some(master)) => {
                 session.update_song_region_master_gain(&master.region_id, master.gain, &state.audio)
@@ -596,6 +624,7 @@ mod tests {
                 pan: 0.0,
                 muted: false,
                 solo: false,
+                eq: None,
             },
         }
     }
@@ -651,5 +680,30 @@ mod tests {
         assert_eq!(mirror.song_master, Some(master("r1", 0.5)));
         mirror.sync(vec![], vec![], Some(master("r2", 1.0)));
         assert_eq!(mirror.song_master, Some(master("r2", 1.0)), "the playhead moved on");
+    }
+
+    #[test]
+    fn a_burst_of_eq_moves_leaves_one_pending_commit_with_the_last_curve() {
+        // Plan track-eq-2, C3: el worker hace un commit por pista al pararse
+        // (Debounce de QUIET_DELAY); aquí, que la ráfaga deja UNA entrada con
+        // la curva final y que la UI no la pisa mientras tanto.
+        let mut mirror = MixMirror::default();
+        mirror.sync(vec![track("a", 1.0)], vec![], None);
+        let mut mix = mirror.tracks["a"].clone();
+        for step in 0..20 {
+            let mut eq = mix.eq.clone().unwrap_or_default();
+            eq.bands[2].gain_db = f64::from(step) * 0.5;
+            mix.eq = Some(eq);
+            mirror.set_track("a", MixControl::EqGain(2), mix.clone());
+            // Un sync de la UI a mitad de ráfaga trae el EQ viejo.
+            mirror.sync(vec![track("a", 1.0)], vec![], None);
+        }
+        assert_eq!(mirror.tracks["a"].eq.as_ref().unwrap().bands[2].gain_db, 9.5);
+        let patch = mirror.take_patch();
+        assert_eq!(patch.tracks["a"].eq.as_ref().unwrap().as_ref().unwrap().bands[2].gain_db, 9.5);
+        let (fields, values) = mirror.take_pending("a").expect("pending");
+        assert_eq!(fields, [MixControl::EqGain(2)]);
+        assert_eq!(values.eq.unwrap().bands[2].gain_db, 9.5);
+        assert!(mirror.take_pending("a").is_none(), "una sola entrada");
     }
 }

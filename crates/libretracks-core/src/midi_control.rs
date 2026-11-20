@@ -563,6 +563,15 @@ pub enum MixControl {
     Pan,
     Mute,
     Solo,
+    /// Plan track-eq-2, E5: ganancia, frecuencia, Q y encendido de una banda
+    /// del EQ (índice 0-based; en la clave va 1-based: `eq3gain`) y el
+    /// encendido del EQ entero (`eqon`). Sin `:` interno: las claves `track:`
+    /// se parten por el último `:`. Solo por pista, no en las tiras.
+    EqGain(u8),
+    EqFreq(u8),
+    EqQ(u8),
+    EqBandOn(u8),
+    EqOn,
 }
 
 impl MixControl {
@@ -572,21 +581,47 @@ impl MixControl {
             "pan" => Self::Pan,
             "mute" => Self::Mute,
             "solo" => Self::Solo,
-            _ => return None,
+            "eqon" => Self::EqOn,
+            _ => {
+                let rest = value.strip_prefix("eq")?;
+                let digits = rest.chars().take_while(char::is_ascii_digit).count();
+                let band = one_based(&rest[..digits], crate::track_eq::TRACK_EQ_MAX_BANDS as u8)?;
+                match &rest[digits..] {
+                    "gain" => Self::EqGain(band),
+                    "freq" => Self::EqFreq(band),
+                    "q" => Self::EqQ(band),
+                    "on" => Self::EqBandOn(band),
+                    _ => return None,
+                }
+            }
         })
     }
 
-    pub fn as_str(self) -> &'static str {
+    /// El nombre del control en la clave del destino.
+    pub fn key(self) -> String {
         match self {
-            Self::Volume => "volume",
-            Self::Pan => "pan",
-            Self::Mute => "mute",
-            Self::Solo => "solo",
+            Self::Volume => "volume".into(),
+            Self::Pan => "pan".into(),
+            Self::Mute => "mute".into(),
+            Self::Solo => "solo".into(),
+            Self::EqGain(band) => format!("eq{}gain", band + 1),
+            Self::EqFreq(band) => format!("eq{}freq", band + 1),
+            Self::EqQ(band) => format!("eq{}q", band + 1),
+            Self::EqBandOn(band) => format!("eq{}on", band + 1),
+            Self::EqOn => "eqon".into(),
         }
     }
 
     pub fn is_switch(self) -> bool {
-        matches!(self, Self::Mute | Self::Solo)
+        matches!(self, Self::Mute | Self::Solo | Self::EqBandOn(_) | Self::EqOn)
+    }
+
+    /// Un control del EQ de la pista (no de su mezcla).
+    pub fn is_eq(self) -> bool {
+        matches!(
+            self,
+            Self::EqGain(_) | Self::EqFreq(_) | Self::EqQ(_) | Self::EqBandOn(_) | Self::EqOn
+        )
     }
 }
 
@@ -775,9 +810,10 @@ impl MidiTarget {
         if let Some(rest) = key.strip_prefix("strip:") {
             let (strip, control) = rest.split_once(':')?;
             let strip = strip.parse::<u16>().ok().filter(|strip| *strip > 0)?;
+            // Sin EQ en las tiras (E5): una tira cambia de pista con el banco.
             return Some(Self::Strip {
                 strip,
-                control: MixControl::parse(control)?,
+                control: MixControl::parse(control).filter(|control| !control.is_eq())?,
             });
         }
         if let Some(rest) = key.strip_prefix("mixer:") {
@@ -821,8 +857,8 @@ impl MidiTarget {
         match self {
             Self::Action(name) => format!("action:{name}"),
             Self::Param(name) => format!("param:{name}"),
-            Self::Track { track_id, control } => format!("track:{track_id}:{}", control.as_str()),
-            Self::Strip { strip, control } => format!("strip:{strip}:{}", control.as_str()),
+            Self::Track { track_id, control } => format!("track:{track_id}:{}", control.key()),
+            Self::Strip { strip, control } => format!("strip:{strip}:{}", control.key()),
             Self::Mixer(target) => format!("mixer:{}:volume", target.as_str()),
             Self::Bank(step) if *step < 0 => "bank:prev".to_string(),
             Self::Bank(_) => "bank:next".to_string(),

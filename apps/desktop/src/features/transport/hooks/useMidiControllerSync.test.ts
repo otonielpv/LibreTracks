@@ -47,6 +47,16 @@ describe("useMidiControllerSync", () => {
     expect(regions.map((region) => region.master.gain)).toEqual([1, 0.5]);
   });
 
+  it("an eq moved by MIDI patches the song, not the optimistic mix", () => {
+    setSong({ regions: [], tracks: [track("t1"), track("t2")] } as unknown as SongView);
+    const eq = { enabled: false, bands: [] };
+    applyMidiMixChanged({ tracks: { t1: { eq }, t2: { volume: 0.3 } } });
+    expect(getSong()?.tracks.map((item) => item.eq ?? null)).toEqual([eq, null]);
+    const mix = useTransportStore.getState().optimisticMix;
+    expect(mix.t1).toBeUndefined();
+    expect(mix.t2).toEqual({ volume: 0.3 });
+  });
+
   it("leaves video tracks out of the controller", () => {
     const song = {
       tracks: [track("a"), track("v", "video"), track("f", "folder")],

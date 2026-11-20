@@ -33,17 +33,37 @@ function parseScene(key: string): [string, (typeof SCENE_MODES)[number]] | null 
   return [rest.slice(0, split), mode as (typeof SCENE_MODES)[number]];
 }
 
-export const trackTarget = (trackId: string, control: MixControl) =>
+export const trackTarget = (trackId: string, control: MixControl | EqControl) =>
   `track:${trackId}:${control}`;
+
+/**
+ * Controles del EQ de una pista (plan track-eq-2, E5): `eq<banda><campo>` con
+ * la banda 1-6, o `eqon` para el EQ entero. Sin `:` interno. Solo por pista.
+ */
+export type EqField = "gain" | "freq" | "q" | "on";
+export type EqControl = `eq${number}${EqField}` | "eqon";
+const EQ_CONTROL = /^eq([1-6])(gain|freq|q|on)$/;
+
+export function eqControl(band: number, field: EqField): EqControl {
+  return `eq${band + 1}${field}` as EqControl;
+}
+
+/** `[banda 0-based, campo]`, `"all"` para `eqon`, o null si no es de EQ. */
+export function parseEqControl(control: string): [number, EqField] | "all" | null {
+  if (control === "eqon") return "all";
+  const match = EQ_CONTROL.exec(control);
+  return match ? [Number(match[1]) - 1, match[2] as EqField] : null;
+}
 
 type T = (key: string, options?: Record<string, unknown>) => string;
 
-function parseMix(rest: string): [string, MixControl] | null {
+function parseMix(rest: string): [string, MixControl | EqControl] | null {
   const split = rest.lastIndexOf(":");
   if (split <= 0) return null;
   const control = rest.slice(split + 1);
-  if (!(MIX_CONTROLS as readonly string[]).includes(control)) return null;
-  return [rest.slice(0, split), control as MixControl];
+  if (!(MIX_CONTROLS as readonly string[]).includes(control) && parseEqControl(control) === null)
+    return null;
+  return [rest.slice(0, split), control as MixControl | EqControl];
 }
 
 /** The track id of a `track:<id>:<control>` key. */
@@ -66,7 +86,14 @@ export function describeMidiTarget(
     if (!parsed) return null;
     const [trackId, control] = parsed;
     const track = song?.tracks.find((item) => item.id === trackId);
-    return `${track?.name ?? t("midiMap.otherSession")} · ${t(`midiMap.${control}`)}`;
+    const eq = parseEqControl(control);
+    const label =
+      eq === "all"
+        ? t("midiMap.eqOn")
+        : eq
+          ? t(`midiMap.eqBand_${eq[1]}`, { band: eq[0] + 1 })
+          : t(`midiMap.${control}`);
+    return `${track?.name ?? t("midiMap.otherSession")} · ${label}`;
   }
   if (key.startsWith("strip:")) {
     const [index, control] = key.slice("strip:".length).split(":");

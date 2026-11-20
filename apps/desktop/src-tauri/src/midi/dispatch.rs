@@ -632,17 +632,25 @@ pub(crate) fn dispatch_track(
     };
 
     let audio = &app.state::<DesktopState>().audio;
-    let pick = |field: MixControl| (field == mix_control).then_some(());
-    audio
-        .update_live_track_mix(
-            track_id,
-            pick(MixControl::Volume).map(|()| next.volume),
-            pick(MixControl::Pan).map(|()| next.pan),
-            pick(MixControl::Mute).map(|()| next.muted),
-            pick(MixControl::Solo).map(|()| next.solo),
-            None,
-        )
-        .map_err(|error| error.to_string())?;
+    if mix_control.is_eq() {
+        // EQ (plan track-eq-2): la curva entera al motor, solo en vivo; el
+        // commit con su paso de deshacer llega al parar el control.
+        audio
+            .update_live_track_eq(track_id, next.eq.as_ref())
+            .map_err(|error| error.to_string())?;
+    } else {
+        let pick = |field: MixControl| (field == mix_control).then_some(());
+        audio
+            .update_live_track_mix(
+                track_id,
+                pick(MixControl::Volume).map(|()| next.volume),
+                pick(MixControl::Pan).map(|()| next.pan),
+                pick(MixControl::Mute).map(|()| next.muted),
+                pick(MixControl::Solo).map(|()| next.solo),
+                None,
+            )
+            .map_err(|error| error.to_string())?;
+    }
     control.with_mix(|mix| mix.set_track(track_id, mix_control, next));
     control.track_dirty(app, track_id);
     if mix_control.is_switch() {
@@ -687,6 +695,25 @@ pub(crate) fn next_track_mix(
                 ButtonEvent::Fire => *value = !*value,
                 _ => return None,
             }
+        }
+        MixControl::EqGain(_) | MixControl::EqFreq(_) | MixControl::EqQ(_) => {
+            let position = super::eq_control::eq_position(current.eq.as_ref(), mix_control)?;
+            let position =
+                continuous_position(binding, mode, target_key, message, normalized, position)?;
+            next.eq = Some(super::eq_control::with_eq_position(
+                current.eq.as_ref(),
+                mix_control,
+                position,
+            )?);
+        }
+        MixControl::EqBandOn(_) | MixControl::EqOn => {
+            let value = super::eq_control::eq_switch(current.eq.as_ref(), mix_control)?;
+            let on = match ButtonState::decide(mode, normalized, value) {
+                ButtonEvent::Set(on) if on != value => on,
+                ButtonEvent::Fire => !value,
+                _ => return None,
+            };
+            next.eq = Some(super::eq_control::with_eq_switch(current.eq.as_ref(), mix_control, on)?);
         }
     }
     (next != *current).then_some(next)
@@ -1085,8 +1112,39 @@ mod tests {
         TrackMix,
     };
 
+    #[test]
+    fn a_cc_at_the_middle_puts_the_band_at_632_hz_and_0_db() {
+        // Plan track-eq-2, C2: frecuencia logarítmica (centro de 20 Hz-20 kHz)
+        // y ganancia lineal en dB (la mitad = 0 dB).
+        let mut binding = MidiBinding::new(0xB0, 20);
+        binding.takeover = Some(false);
+        let freq = MidiTarget::parse("track:t1:eq3freq").unwrap();
+        let next = next_track_mix(&binding, &freq, "test:eqf", MixControl::EqFreq(2), cc(64), 0.5, &unity())
+            .expect("moves");
+        let band = &next.eq.as_ref().expect("creates an eq").bands[2];
+        assert!((band.frequency_hz - 632.46).abs() < 0.5, "{}", band.frequency_hz);
+
+        let mut boosted = unity();
+        let mut eq = libretracks_core::TrackEq::default();
+        eq.bands[2].gain_db = 9.0;
+        boosted.eq = Some(eq);
+        let gain = MidiTarget::parse("track:t1:eq3gain").unwrap();
+        let next = next_track_mix(&binding, &gain, "test:eqg", MixControl::EqGain(2), cc(64), 0.5, &boosted)
+            .expect("moves");
+        assert!(next.eq.as_ref().unwrap().bands[2].gain_db.abs() < 1e-9);
+        // El resto de la mezcla no se toca.
+        assert_eq!((next.volume, next.pan, next.muted), (1.0, 0.0, false));
+
+        // El bypass alterna con cada pulsación.
+        let note = MidiBinding::new(0x90, 41);
+        let on = MidiTarget::parse("track:t1:eqon").unwrap();
+        let press = MidiMessage { status: 0x90, data1: 41, data2: 127 };
+        let off = next_track_mix(&note, &on, "test:eqon", MixControl::EqOn, press, 1.0, &boosted).unwrap();
+        assert!(!off.eq.as_ref().unwrap().enabled);
+    }
+
     fn unity() -> TrackMix {
-        TrackMix { volume: 1.0, pan: 0.0, muted: false, solo: false }
+        TrackMix { volume: 1.0, pan: 0.0, muted: false, solo: false, eq: None }
     }
 
     #[test]

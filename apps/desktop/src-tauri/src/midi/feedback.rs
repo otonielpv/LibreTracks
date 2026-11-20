@@ -121,6 +121,17 @@ pub(crate) fn refresh(app: &AppHandle) {
                 MixControl::Pan => FeedbackValue::Position(
                     track.map_or(0.5, |track| fader::pan_to_position(track.pan)),
                 ),
+                // EQ (plan track-eq-2): anillos y LEDs con el valor actual.
+                MixControl::EqBandOn(_) | MixControl::EqOn => FeedbackValue::Switch(
+                    super::eq_control::eq_switch(track.and_then(|t| t.eq.as_ref()), mix_control)
+                        .unwrap_or(false),
+                ),
+                MixControl::EqGain(_) | MixControl::EqFreq(_) | MixControl::EqQ(_) => {
+                    FeedbackValue::Position(
+                        super::eq_control::eq_position(track.and_then(|t| t.eq.as_ref()), mix_control)
+                            .unwrap_or(0.5),
+                    )
+                }
             })
         };
         desired_feedback(&mappings, &|target| match target {
@@ -133,6 +144,8 @@ pub(crate) fn refresh(app: &AppHandle) {
                         MixControl::Mute | MixControl::Solo => FeedbackValue::Switch(false),
                         MixControl::Volume => FeedbackValue::Position(0.0),
                         MixControl::Pan => FeedbackValue::Position(0.5),
+                        // Las tiras no llevan EQ (E5): no llega aquí.
+                        _ => FeedbackValue::Position(0.5),
                     }),
                 }
             }

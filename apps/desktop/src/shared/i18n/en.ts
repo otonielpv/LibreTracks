@@ -352,6 +352,11 @@ const en = {
     },
   },
   midiMap: {
+    eqOn: "EQ on",
+    eqBand_gain: "EQ band {{band}}: gain",
+    eqBand_freq: "EQ band {{band}}: frequency",
+    eqBand_q: "EQ band {{band}}: Q",
+    eqBand_on: "EQ band {{band}}: on",
     banner: "MIDI Map mode: tap a control, then move the hardware control.",
     bannerTarget: "Move the hardware control for {{target}}.",
     bannerShort: "MIDI Map: tap a control",

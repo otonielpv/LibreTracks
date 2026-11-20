@@ -538,3 +538,35 @@ fn drum_loop_and_one_shot_targets_parse_and_serialize() {
     assert_eq!(MidiTarget::parse("loop:pattern:next").unwrap().value_kind(), TargetValueKind::Trigger);
     assert_eq!(MidiTarget::parse("mixer:loops:volume").unwrap().value_kind(), TargetValueKind::Continuous);
 }
+
+// --- Plan track-eq-2, paso 05: controles del EQ --------------------------------
+
+#[test]
+fn eq_controls_round_trip_including_a_track_id_with_colons() {
+    use crate::midi_control::{MidiTarget, MixControl};
+    let controls = [
+        MixControl::EqGain(0),
+        MixControl::EqFreq(2),
+        MixControl::EqQ(5),
+        MixControl::EqBandOn(3),
+        MixControl::EqOn,
+    ];
+    for track_id in ["voz", "song:a:voz"] {
+        for control in controls {
+            let target = MidiTarget::Track { track_id: track_id.into(), control };
+            let key = target.key();
+            assert_eq!(MidiTarget::parse(&key), Some(target), "{key}");
+        }
+    }
+    assert_eq!(
+        MidiTarget::Track { track_id: "t".into(), control: MixControl::EqGain(2) }.key(),
+        "track:t:eq3gain"
+    );
+    assert_eq!(MidiTarget::Track { track_id: "t".into(), control: MixControl::EqOn }.key(), "track:t:eqon");
+    // Bandas fuera de 1-6, nombres raros y EQ en una tira: no son destinos.
+    for bad in ["track:t:eq0gain", "track:t:eq7gain", "track:t:eqgain", "track:t:eq3vol", "strip:1:eq3gain", "strip:1:eqon"] {
+        assert_eq!(MidiTarget::parse(bad), None, "{bad}");
+    }
+    assert!(MixControl::EqOn.is_switch() && MixControl::EqBandOn(0).is_switch());
+    assert!(!MixControl::EqGain(0).is_switch());
+}

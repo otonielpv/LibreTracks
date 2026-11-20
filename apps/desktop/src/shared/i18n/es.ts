@@ -352,6 +352,11 @@ const es = {
     },
   },
   midiMap: {
+    eqOn: "EQ encendido",
+    eqBand_gain: "EQ banda {{band}}: ganancia",
+    eqBand_freq: "EQ banda {{band}}: frecuencia",
+    eqBand_q: "EQ banda {{band}}: Q",
+    eqBand_on: "EQ banda {{band}}: encendida",
     banner: "Modo Mapeo MIDI: toca un control y mueve el control físico.",
     bannerTarget: "Mueve el control físico para {{target}}.",
     bannerShort: "Mapeo MIDI: toca un control",

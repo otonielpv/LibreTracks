@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-import type { AppSettings, MidiBinding, SongView } from "@libretracks/shared/models";
+import type { AppSettings, MidiBinding, SongView, TrackEq } from "@libretracks/shared/models";
 
 import {
   getMidiBank,
@@ -124,6 +124,7 @@ export function useMidiControllerSync({
       pan: track.pan,
       muted: track.muted,
       solo: track.solo,
+      eq: track.eq ?? null,
     }));
     const region = song?.regions.find((item) => item.id === activeSongRegionId);
     // Strips follow the active song: its tracks only, back to the first
@@ -174,11 +175,28 @@ export function useMidiControllerSync({
 /** Exported for tests: what one `midi:mix-changed` does to the UI state. */
 export function applyMidiMixChanged(payload: MidiMixChangedPayload) {
   const store = useTransportStore.getState();
-  for (const [trackId, patch] of Object.entries(payload.tracks)) {
+  const eqs = new Map<string, TrackEq | null>();
+  for (const [trackId, { eq, ...patch }] of Object.entries(payload.tracks)) {
+    // El EQ (plan track-eq-2) va a la canción: el editor y el botón lo leen
+    // de ahí. El commit de Rust llega después con el mismo valor.
+    if (eq !== undefined) eqs.set(trackId, eq);
+    if (Object.keys(patch).length === 0) continue;
     store.setOptimisticMix(trackId, {
       ...(store.optimisticMix[trackId] ?? {}),
       ...patch,
     });
+  }
+  if (eqs.size > 0) {
+    setSong((song) =>
+      song
+        ? {
+            ...song,
+            tracks: song.tracks.map((track) =>
+              eqs.has(track.id) ? { ...track, eq: eqs.get(track.id) ?? null } : track,
+            ),
+          }
+        : song,
+    );
   }
   const master = payload.songMaster;
   if (master) {

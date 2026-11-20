@@ -12,6 +12,8 @@ import type { EqBand, EqBandKind, TrackEq, TrackSummary } from "@libretracks/sha
 
 import { useDismissOnBack } from "../mobile/backNavigation";
 import type { TrackEqHandlers } from "../tracks/trackEqHandlers";
+import { MidiMappable } from "../midi/MidiMappable";
+import { eqControl, trackTarget } from "../midi/controllerTargets";
 import { EqPresetMenu } from "./EqPresetMenu";
 import { useTrackEqStore } from "./trackEqStore";
 import { bandResponseDb, trackEqResponseDb } from "./eqResponse";
@@ -531,19 +533,21 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
             >
               {t("eq.rta")}
             </button>
-            <button
-              type="button"
-              className="lt-eq-button"
-              aria-pressed={!eq.enabled}
-              onClick={() => {
-                // Desde el borrador: lleva la Q de la rueda aunque aún no
-                // haya hecho commit (el modelo podría no tenerla todavía).
-                absorbPendingWheel();
-                commit({ ...draftRef.current, enabled: !draftRef.current.enabled });
-              }}
-            >
-              {t("eq.bypass")}
-            </button>
+            <MidiMappable target={trackTarget(track.id, "eqon")} label={t("eq.bypass")}>
+              <button
+                type="button"
+                className="lt-eq-button"
+                aria-pressed={!eq.enabled}
+                onClick={() => {
+                  // Desde el borrador: lleva la Q de la rueda aunque aún no
+                  // haya hecho commit (el modelo podría no tenerla todavía).
+                  absorbPendingWheel();
+                  commit({ ...draftRef.current, enabled: !draftRef.current.enabled });
+                }}
+              >
+                {t("eq.bypass")}
+              </button>
+            </MidiMappable>
             <button
               type="button"
               className="lt-eq-button"
@@ -685,6 +689,7 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
           {eq.bands.map((band, index) => (
             <BandStrip
               key={index}
+              trackId={track.id}
               index={index}
               band={band}
               active={activeBand === index}
@@ -699,12 +704,14 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
 }
 
 function BandStrip({
+  trackId,
   index,
   band,
   active,
   onSelect,
   onPatch,
 }: {
+  trackId: string;
   index: number;
   band: EqBand;
   active: boolean;
@@ -723,15 +730,20 @@ function BandStrip({
       onClick={onSelect}
     >
       <div className="lt-eq-band-head">
-        <label className="lt-eq-band-toggle">
-          <input
-            type="checkbox"
-            checked={band.enabled}
-            aria-label={t("eq.enableBand", { number: index + 1 })}
-            onChange={(event) => onPatch({ enabled: event.target.checked })}
-          />
-          <span className="lt-eq-band-number">{index + 1}</span>
-        </label>
+        <MidiMappable
+          target={trackTarget(trackId, eqControl(index, "on"))}
+          label={t("eq.enableBand", { number: index + 1 })}
+        >
+          <label className="lt-eq-band-toggle">
+            <input
+              type="checkbox"
+              checked={band.enabled}
+              aria-label={t("eq.enableBand", { number: index + 1 })}
+              onChange={(event) => onPatch({ enabled: event.target.checked })}
+            />
+            <span className="lt-eq-band-number">{index + 1}</span>
+          </label>
+        </MidiMappable>
         <svg className="lt-eq-kind-icon" viewBox="0 0 24 18" aria-hidden="true">
           <path d={KIND_ICONS[band.kind]} />
         </svg>
@@ -749,6 +761,7 @@ function BandStrip({
         ))}
       </select>
       <NumberField
+        midiTarget={trackTarget(trackId, eqControl(index, "freq"))}
         label={t("eq.frequencyOf", { number: index + 1 })}
         value={band.frequencyHz}
         decimals={band.frequencyHz >= 1000 ? 0 : 1}
@@ -757,6 +770,7 @@ function BandStrip({
       />
       {hasGain(band.kind) ? (
         <NumberField
+          midiTarget={trackTarget(trackId, eqControl(index, "gain"))}
           label={t("eq.gainOf", { number: index + 1 })}
           value={band.gainDb}
           decimals={1}
@@ -765,6 +779,7 @@ function BandStrip({
         />
       ) : null}
       <NumberField
+        midiTarget={trackTarget(trackId, eqControl(index, "q"))}
         label={t("eq.qOf", { number: index + 1 })}
         value={band.q}
         decimals={2}
@@ -788,12 +803,15 @@ function BandStrip({
 
 /** Campo numérico que confirma una vez por edición (Enter o al salir). */
 function NumberField({
+  midiTarget,
   label,
   value,
   decimals,
   suffix,
   onCommit,
 }: {
+  /** Destino MIDI learn del campo (plan track-eq-2, paso 05). */
+  midiTarget: string;
   label: string;
   value: number;
   decimals: number;
@@ -813,21 +831,23 @@ function NumberField({
     onCommit(parsed);
   };
   return (
-    <label className="lt-eq-field">
-      <input
-        type="text"
-        inputMode="decimal"
-        aria-label={label}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") commit();
-          if (event.key === "Escape") setDraft(shown);
-        }}
-      />
-      <span className="lt-eq-field-suffix">{suffix}</span>
-    </label>
+    <MidiMappable target={midiTarget} label={label}>
+      <label className="lt-eq-field">
+        <input
+          type="text"
+          inputMode="decimal"
+          aria-label={label}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") commit();
+            if (event.key === "Escape") setDraft(shown);
+          }}
+        />
+        <span className="lt-eq-field-suffix">{suffix}</span>
+      </label>
+    </MidiMappable>
   );
 }
 
