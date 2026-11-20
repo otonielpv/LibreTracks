@@ -7,6 +7,7 @@ pub mod lead_plan;
 pub mod lead_time;
 pub mod lyrics_config;
 pub mod lyrics_match;
+pub mod lyrics_schedule;
 pub mod midi_control;
 pub mod midi_port_names;
 pub mod midi_schedule;

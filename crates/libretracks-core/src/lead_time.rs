@@ -290,6 +290,43 @@ impl LeadGrid {
         }
     }
 
+    /// The instant `units` `unit`s AFTER `from`: the forward sibling of
+    /// [`Self::fire_seconds`], for points measured from a section's start (a
+    /// slide change "4 bars into the verse"). Follows tempo changes, ramps,
+    /// signatures and warp the same way.
+    pub fn seconds_after(&self, from: f64, units: f64, unit: LeadUnit) -> f64 {
+        if !from.is_finite() || !units.is_finite() || units <= 0.0 {
+            return from;
+        }
+        if unit == LeadUnit::Seconds {
+            return from + units;
+        }
+        let mut remaining = units;
+        let mut position = from;
+        let mut index = self
+            .segments
+            .iter()
+            .rposition(|segment| segment.start <= position)
+            .unwrap_or(0);
+        loop {
+            let segment = &self.segments[index];
+            let last = index + 1 >= self.segments.len() || !segment.end.is_finite();
+            let available = if last {
+                f64::INFINITY
+            } else {
+                segment.units_between(position, segment.end, unit)
+            };
+            if available >= remaining - LEAD_EPSILON {
+                return segment
+                    .tempo
+                    .seconds_after(position, remaining * segment.quarters_per_unit(unit));
+            }
+            remaining -= available;
+            position = segment.end;
+            index += 1;
+        }
+    }
+
     /// How many `unit`s of the grid lie between `from` and `to` (0 when `to` is
     /// not after `from`).
     pub fn musical_span(&self, from: f64, to: f64, unit: LeadUnit) -> f64 {
