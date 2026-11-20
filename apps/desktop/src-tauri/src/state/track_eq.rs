@@ -14,6 +14,11 @@ use crate::models::TransportSnapshot;
 
 use super::DesktopSession;
 
+/// Qué pistas llevan EQ. Hoy solo las de audio.
+pub(crate) fn track_kind_takes_eq(kind: TrackKind) -> bool {
+    kind == TrackKind::Audio
+}
+
 impl DesktopSession {
     /// Guarda el EQ (recortado) en la pista, apila un paso de deshacer y lo
     /// manda al motor. `None` quita el EQ. Solo pistas de audio.
@@ -23,38 +28,61 @@ impl DesktopSession {
         eq: Option<TrackEq>,
         audio: &AudioController,
     ) -> Result<TransportSnapshot, DesktopError> {
-        let eq = eq.map(|eq| eq.sanitized());
-        {
+        self.commit_track_eqs_model_and_command(vec![(track_id.to_string(), eq)], audio)
+    }
+
+    /// El mismo commit para varias pistas a la vez (plan track-eq-2, paso 02):
+    /// **un** paso de deshacer y una orden al motor por pista que cambia. Si
+    /// una pista no existe o no lleva EQ, no se cambia ninguna. Si ninguna
+    /// cambia, no apila nada.
+    pub fn commit_track_eqs_model_and_command(
+        &mut self,
+        changes: Vec<(String, Option<TrackEq>)>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let changes: Vec<(String, Option<TrackEq>)> = changes
+            .into_iter()
+            .map(|(track_id, eq)| (track_id, eq.map(|eq| eq.sanitized())))
+            .collect();
+        let pending: Vec<(String, Option<TrackEq>)> = {
             let song = self.engine.song().ok_or(DesktopError::NoSongLoaded)?;
-            let track = song
-                .tracks
-                .iter()
-                .find(|track| track.id == track_id)
-                .ok_or_else(|| DesktopError::TrackNotFound(track_id.to_string()))?;
-            if track.kind != TrackKind::Audio {
-                return Err(DesktopError::AudioCommand(format!(
-                    "el ecualizador solo existe en pistas de audio ({track_id})"
-                )));
+            let mut pending = Vec::new();
+            for (track_id, eq) in &changes {
+                let track = song
+                    .tracks
+                    .iter()
+                    .find(|track| &track.id == track_id)
+                    .ok_or_else(|| DesktopError::TrackNotFound(track_id.clone()))?;
+                if !track_kind_takes_eq(track.kind) {
+                    return Err(DesktopError::AudioCommand(format!(
+                        "el ecualizador solo existe en pistas de audio ({track_id})"
+                    )));
+                }
+                if &track.eq != eq {
+                    pending.push((track_id.clone(), eq.clone()));
+                }
             }
-            if track.eq == eq {
-                return Ok(self.snapshot());
-            }
+            pending
+        };
+        if pending.is_empty() {
+            return Ok(self.snapshot());
         }
 
         self.sync_position(audio)?;
         self.push_history_entry();
         self.redo_stack.clear();
         self.transpose_history_group = None;
-        if let Some(track) = self
-            .engine
-            .song_mut()?
-            .tracks
-            .iter_mut()
-            .find(|track| track.id == track_id)
         {
-            track.eq = eq.clone();
+            let song = self.engine.song_mut()?;
+            for (track_id, eq) in &pending {
+                if let Some(track) = song.tracks.iter_mut().find(|track| &track.id == track_id) {
+                    track.eq = eq.clone();
+                }
+            }
         }
-        audio.set_track_eq(track_id, eq.as_ref())?;
+        for (track_id, eq) in &pending {
+            audio.set_track_eq(track_id, eq.as_ref())?;
+        }
         audio.record_commit_mix();
 
         self.perf_metrics.song_save_millis = 0;

@@ -81,6 +81,16 @@
   color: #ffb454;
 }
 
+.lt-eq-targets {
+  margin-left: 0.6rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 2px;
+  background: rgb(255 180 84 / 0.16);
+  color: #ffb454;
+  font: 600 0.72rem/1 "Inter", sans-serif;
+  vertical-align: middle;
+}
+
 .lt-eq-presets {
   position: relative;
 }

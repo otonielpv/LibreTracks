@@ -18,6 +18,8 @@ const en = {
     reset: "Reset",
     remove: "Remove EQ",
     close: "Close the equalizer",
+    appliesTo: "Applies to {{count}} tracks",
+    copyToSelected: "Copy EQ from {{name}} to the selected tracks",
     presets: {
       title: "Presets",
       factory: "Factory",

@@ -13,6 +13,7 @@ import type { EqBand, EqBandKind, TrackEq, TrackSummary } from "@libretracks/sha
 import { useDismissOnBack } from "../mobile/backNavigation";
 import type { TrackEqHandlers } from "../tracks/trackEqHandlers";
 import { EqPresetMenu } from "./EqPresetMenu";
+import { useTrackEqStore } from "./trackEqStore";
 import { bandResponseDb, trackEqResponseDb } from "./eqResponse";
 import {
   EQ_BAND_KINDS,
@@ -208,6 +209,9 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
   activeBandRef.current = activeBand;
   const spectrumPathRef = useRef<SVGPathElement | null>(null);
   const [rtaOn, setRtaOn] = useState(readRtaPreference);
+  const targetCount = useTrackEqStore((state) =>
+    state.openTrackId === track.id ? state.targetTrackIds.length : 1,
+  );
 
   // RTA: mientras el editor está abierto y encendido, el motor analiza esta
   // pista y aquí se repinta el área a ~30 fps a mano (sin estado de React).
@@ -500,6 +504,11 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
         <header className="lt-eq-header">
           <h2 id="lt-eq-editor-title">
             {t("eq.title")} <span className="lt-eq-track-name">{track.name}</span>
+            {targetCount > 1 ? (
+              <span className="lt-eq-targets" role="status">
+                {t("eq.appliesTo", { count: targetCount })}
+              </span>
+            ) : null}
           </h2>
           <div className="lt-eq-header-actions">
             <EqPresetMenu

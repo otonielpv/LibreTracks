@@ -6,6 +6,7 @@ import {
   type MultiTrackMixActions,
 } from "../tracks/MultiTrackMixControls";
 import { TrackEqButton } from "../eq/TrackEqButton";
+import { trackTakesEq } from "../tracks/trackEqHandlers";
 import { useRhythmStore } from "../rhythm/rhythmStore";
 import { useTimelineUIStore } from "../uiStore";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
@@ -158,6 +159,7 @@ export function MobileSelectionActionBar({
         ? [target.track]
         : [];
   const showMix = mixOpen && mixTracks.length > 0;
+  const eqTracks = mixTracks.filter(trackTakesEq);
   // Seleccion por area: un recuadro con el dedo coge varias pistas o clips de
   // una vez, y los toques sueltos suman o quitan. Se ofrece SIEMPRE, tambien
   // sin nada seleccionado: es justo por donde se empieza a juntar un grupo.
@@ -259,12 +261,13 @@ export function MobileSelectionActionBar({
           </span>
         </button>
       ) : null}
-      {mixTracks.length > 0 ? (
-        // Con varias pistas, deshabilitado en v1: el EQ es por pista.
+      {eqTracks.length > 0 ? (
+        // Con varias pistas abre el editor de la primera y cada cambio va a
+        // todas (plan track-eq-2, paso 02).
         <TrackEqButton
-          trackId={mixTracks[0].id}
+          trackId={eqTracks[0].id}
           className="lt-mobile-selection-action"
-          disabled={mixTracks.length > 1}
+          targetTrackIds={eqTracks.map((track) => track.id)}
         />
       ) : null}
       <button

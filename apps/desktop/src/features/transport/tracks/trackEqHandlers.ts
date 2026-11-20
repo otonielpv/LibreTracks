@@ -35,6 +35,10 @@ export type TrackEqHandlerDeps = {
     trackId: string;
     eq: TrackEq | null;
   }) => Promise<TransportSnapshot>;
+  /** Lote con un solo paso de deshacer (plan track-eq-2, paso 02). */
+  commitTrackEqsChange: (args: {
+    changes: { trackId: string; eq: TrackEq | null }[];
+  }) => Promise<TransportSnapshot>;
   setTrackEqAnalyzer: (trackId: string | null) => Promise<void>;
   getTrackEqSpectrum: () => Promise<number[]>;
   /** Presets de esta máquina (plan track-eq-2, paso 01). */
@@ -45,25 +49,77 @@ export type TrackEqHandlerDeps = {
 
 export type TrackEqHandlers = ReturnType<typeof createTrackEqHandlers>;
 
+/** Qué pistas pueden llevar EQ. */
+export function trackTakesEq(track: Pick<TrackSummary, "kind"> | null | undefined): boolean {
+  return track?.kind === "audio";
+}
+
 /**
  * Abrir el editor de una pista. Es lo único que necesitan los botones de las
  * vistas, y no depende de nada del monolito: vive aquí para que todas llamen
- * a la misma acción. Solo pistas de audio.
+ * a la misma acción. Solo pistas de audio. Con `targets` (varias pistas
+ * seleccionadas), cada cambio del editor va a todas las que llevan EQ.
  */
-export function openTrackEq(track: Pick<TrackSummary, "id" | "kind"> | null) {
-  if (!track || track.kind !== "audio") return;
-  useTrackEqStore.getState().setOpenTrackId(track.id);
+export function openTrackEq(
+  track: Pick<TrackSummary, "id" | "kind"> | null,
+  targets: Pick<TrackSummary, "id" | "kind">[] = [],
+) {
+  if (!track || !trackTakesEq(track)) return;
+  useTrackEqStore.getState().setOpenTrackId(
+    track.id,
+    targets.filter(trackTakesEq).map((target) => target.id),
+  );
+}
+
+/**
+ * Confirma un EQ en varias pistas: una sola llamada (un paso de deshacer) y
+ * la canción parcheada en el acto. Con una pista usa el comando de siempre.
+ * La usan el editor y la entrada «Copiar EQ» del menú contextual.
+ */
+export async function commitTrackEqs(
+  deps: Pick<
+    TrackEqHandlerDeps,
+    | "runAction"
+    | "setSong"
+    | "applyPlaybackSnapshot"
+    | "optimisticallyAppliedRevisionsRef"
+    | "commitTrackEqChange"
+    | "commitTrackEqsChange"
+  >,
+  trackIds: string[],
+  eq: TrackEq | null,
+) {
+  const clean = eq ? sanitizeTrackEq(eq) : null;
+  const ids = [...new Set(trackIds)];
+  if (ids.length === 0) return;
+  await deps.runAction(async () => {
+    const snapshot =
+      ids.length === 1
+        ? await deps.commitTrackEqChange({ trackId: ids[0], eq: clean })
+        : await deps.commitTrackEqsChange({
+            changes: ids.map((trackId) => ({ trackId, eq: clean })),
+          });
+    deps.optimisticallyAppliedRevisionsRef.current.add(snapshot.projectRevision);
+    const targets = new Set(ids);
+    deps.setSong((previous) =>
+      previous
+        ? {
+            ...previous,
+            projectRevision: snapshot.projectRevision,
+            tracks: previous.tracks.map((candidate) =>
+              targets.has(candidate.id) ? { ...candidate, eq: clean } : candidate,
+            ),
+          }
+        : previous,
+    );
+    deps.applyPlaybackSnapshot(snapshot);
+  });
 }
 
 export function createTrackEqHandlers(deps: TrackEqHandlerDeps) {
   const {
-    runAction,
-    setSong,
-    applyPlaybackSnapshot,
-    optimisticallyAppliedRevisionsRef,
     findTrack,
     updateTrackEqRealtime,
-    commitTrackEqChange,
     setTrackEqAnalyzer,
     getTrackEqSpectrum,
     listEqPresets,
@@ -75,30 +131,31 @@ export function createTrackEqHandlers(deps: TrackEqHandlerDeps) {
 
   const close = () => useTrackEqStore.getState().setOpenTrackId(null);
 
-  const applyLive = (trackId: string, eq: TrackEq | null) => {
-    void updateTrackEqRealtime({ trackId, eq: eq ? sanitizeTrackEq(eq) : null }).catch(
-      () => undefined,
-    );
+  /**
+   * Pistas a las que va un cambio de `trackId`: las del editor abierto si es
+   * esa pista (varias seleccionadas), o solo ella.
+   */
+  const targetsFor = (trackId: string) => {
+    const { openTrackId, targetTrackIds } = useTrackEqStore.getState();
+    if (openTrackId !== trackId || targetTrackIds.length < 2) return [trackId];
+    return targetTrackIds.filter((id) => trackTakesEq(findTrack(id)));
   };
 
-  const commit = async (trackId: string, eq: TrackEq | null) => {
+  const applyLive = (trackId: string, eq: TrackEq | null) => {
     const clean = eq ? sanitizeTrackEq(eq) : null;
-    await runAction(async () => {
-      const snapshot = await commitTrackEqChange({ trackId, eq: clean });
-      optimisticallyAppliedRevisionsRef.current.add(snapshot.projectRevision);
-      setSong((previous) =>
-        previous
-          ? {
-              ...previous,
-              projectRevision: snapshot.projectRevision,
-              tracks: previous.tracks.map((candidate) =>
-                candidate.id === trackId ? { ...candidate, eq: clean } : candidate,
-              ),
-            }
-          : previous,
-      );
-      applyPlaybackSnapshot(snapshot);
-    });
+    for (const target of targetsFor(trackId)) {
+      void updateTrackEqRealtime({ trackId: target, eq: clean }).catch(() => undefined);
+    }
+  };
+
+  const commit = (trackId: string, eq: TrackEq | null) => commitTrackEqs(deps, targetsFor(trackId), eq);
+
+  /** Copia el EQ de una pista a otras (menú contextual), un deshacer. */
+  const copyTo = (sourceTrackId: string, targetTrackIds: string[]) => {
+    const source = findTrack(sourceTrackId);
+    if (!trackTakesEq(source)) return Promise.resolve();
+    const targets = targetTrackIds.filter((id) => id !== sourceTrackId && trackTakesEq(findTrack(id)));
+    return commitTrackEqs(deps, targets, source?.eq ?? null);
   };
 
   /** Bypass global: apaga/enciende el EQ entero; sin EQ, crea uno apagado. */
@@ -140,6 +197,8 @@ export function createTrackEqHandlers(deps: TrackEqHandlerDeps) {
     close,
     applyLive,
     commit,
+    copyTo,
+    targetsFor,
     toggleBypass,
     reset,
     remove,

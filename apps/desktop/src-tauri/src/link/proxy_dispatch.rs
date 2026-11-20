@@ -72,6 +72,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "capture_song_structure"
         | "clear_song_loop"
         | "commit_track_eq_change"
+        | "commit_track_eqs_change"
         | "commit_track_mix_change"
         | "create_section_marker"
         | "create_song_region"
@@ -157,9 +158,9 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "update_track_channel_mode"
         | "update_track_collapsed"
         | "update_track_color"
+        | "update_track_eq_realtime"
         | "update_track_height_offset"
         | "update_track_match_aliases"
-        | "update_track_eq_realtime"
         | "update_track_mix_realtime"
         | "update_track_mono_downmix"
         | "update_track_transpose_enabled"
@@ -242,6 +243,7 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "capture_song_structure",
     "clear_song_loop",
     "commit_track_eq_change",
+    "commit_track_eqs_change",
     "commit_track_mix_change",
     "create_section_marker",
     "create_song_region",
@@ -327,9 +329,9 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "update_track_channel_mode",
     "update_track_collapsed",
     "update_track_color",
+    "update_track_eq_realtime",
     "update_track_height_offset",
     "update_track_match_aliases",
-    "update_track_eq_realtime",
     "update_track_mix_realtime",
     "update_track_mono_downmix",
     "update_track_transpose_enabled",
@@ -735,6 +737,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::timeline::commit_track_eq_change(arg(&args, "trackId")?, arg(&args, "eq")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "commit_track_eqs_change" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::commit_track_eqs_change(arg(&args, "changes")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?
@@ -1414,6 +1424,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             .await
             .map_err(|error| error.to_string())?
         }
+        "update_track_eq_realtime" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::update_track_eq_realtime(arg(&args, "trackId")?, arg(&args, "eq")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
         "update_track_height_offset" => {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
@@ -1426,14 +1444,6 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::timeline::update_track_match_aliases(arg(&args, "trackId")?, arg(&args, "aliases")?, app.state()))
-            })
-            .await
-            .map_err(|error| error.to_string())?
-        }
-        "update_track_eq_realtime" => {
-            let app = app.clone();
-            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
-                into_value_result(crate::commands::timeline::update_track_eq_realtime(arg(&args, "trackId")?, arg(&args, "eq")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?

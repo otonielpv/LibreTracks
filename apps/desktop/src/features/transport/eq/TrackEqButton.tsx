@@ -16,10 +16,13 @@ export function TrackEqButton({
   trackId,
   className = "",
   disabled = false,
+  targetTrackIds,
 }: {
   trackId: string;
   className?: string;
   disabled?: boolean;
+  /** Varias pistas seleccionadas: el editor aplica cada cambio a todas. */
+  targetTrackIds?: string[];
 }) {
   const { t } = useTranslation();
   const track = useSongStore(
@@ -38,7 +41,11 @@ export function TrackEqButton({
       data-eq-active={active ? "true" : "false"}
       onClick={(event) => {
         event.stopPropagation();
-        openTrackEq(track);
+        const song = useSongStore.getState().song;
+        const targets = (targetTrackIds ?? [])
+          .map((id) => song?.tracks.find((candidate) => candidate.id === id))
+          .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
+        openTrackEq(track, targets);
       }}
     >
       {t("eq.open")}

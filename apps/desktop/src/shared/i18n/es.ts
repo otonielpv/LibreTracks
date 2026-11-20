@@ -18,6 +18,8 @@ const es = {
     reset: "Reiniciar",
     remove: "Quitar EQ",
     close: "Cerrar el ecualizador",
+    appliesTo: "Se aplica a {{count}} pistas",
+    copyToSelected: "Copiar EQ de {{name}} a las seleccionadas",
     presets: {
       title: "Presets",
       factory: "De fábrica",

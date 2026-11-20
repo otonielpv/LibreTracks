@@ -4,6 +4,7 @@ import type { TransportSnapshot } from "@libretracks/shared/models";
 
 import {
   commitTrackEqChange,
+  commitTrackEqsChange,
   deleteEqPreset,
   getTrackEqSpectrum,
   listEqPresets,
@@ -41,6 +42,7 @@ export function TrackEqEditorHost({
         findTrack: (trackId) => getSong()?.tracks.find((track) => track.id === trackId) ?? null,
         updateTrackEqRealtime,
         commitTrackEqChange,
+        commitTrackEqsChange,
         setTrackEqAnalyzer,
         getTrackEqSpectrum,
         listEqPresets,

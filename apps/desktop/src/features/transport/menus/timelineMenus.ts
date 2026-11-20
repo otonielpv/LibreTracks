@@ -103,7 +103,9 @@ import type { ShortcutActionId } from "../keyboard/actions";
 import { createVideoMenus } from "./videoMenus";
 import { matchAliasesAction } from "../templates/matchAliases";
 import { normalizeCoverImage, pickCoverFile } from "../songs/songCover";
-import { setSongRegionCover } from "../desktopApi";
+import { commitTrackEqChange, commitTrackEqsChange, setSongRegionCover } from "../desktopApi";
+import { setSong } from "../songStore";
+import { commitTrackEqs, trackTakesEq } from "../tracks/trackEqHandlers";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -1128,10 +1130,39 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
     ];
   }
 
-  function multiTrackContextMenu(tracks: TrackSummary[]): ContextMenuAction[] {
+  function multiTrackContextMenu(
+    tracks: TrackSummary[],
+    sourceTrack: TrackSummary | null = null,
+  ): ContextMenuAction[] {
     const d = getDeps();
     const { t } = d;
     const currentColor = resolveSharedTimelineColor(tracks);
+    // Copiar el EQ de la pista del clic derecho a las demás seleccionadas
+    // (plan track-eq-2, paso 02): una llamada y un paso de deshacer.
+    const eqTargets = sourceTrack && trackTakesEq(sourceTrack)
+      ? tracks.filter((track) => track.id !== sourceTrack.id && trackTakesEq(track))
+      : [];
+    const eqActions: ContextMenuAction[] =
+      sourceTrack && eqTargets.length > 0
+        ? [
+            {
+              label: t("eq.copyToSelected", { name: sourceTrack.name }),
+              onSelect: () =>
+                commitTrackEqs(
+                  {
+                    runAction: d.runAction,
+                    setSong,
+                    applyPlaybackSnapshot: d.applyPlaybackSnapshot,
+                    optimisticallyAppliedRevisionsRef: d.optimisticallyAppliedRevisionsRef,
+                    commitTrackEqChange,
+                    commitTrackEqsChange,
+                  },
+                  eqTargets.map((track) => track.id),
+                  findTrack(d.songRef.current, sourceTrack.id)?.eq ?? sourceTrack.eq ?? null,
+                ),
+            },
+          ]
+        : [];
     return [
       ...menuSection(t("transport.menu.groups.track"), [
         {
@@ -1144,6 +1175,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
               (color) => d.handleSetTrackColors(tracks, color).then(() => undefined),
             ),
         },
+        ...eqActions,
       ]),
       // Meter varias pistas en una carpeta de una vez. Arrastrando habia que
       // repetir el gesto una por una, y acertar el 40% central de la fila de
@@ -1259,7 +1291,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
       openMenu(
         event,
         `${selectedTracks.length} tracks`,
-        multiTrackContextMenu(selectedTracks),
+        multiTrackContextMenu(selectedTracks, track),
       );
       return;
     }

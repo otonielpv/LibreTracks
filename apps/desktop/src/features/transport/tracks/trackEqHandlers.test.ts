@@ -4,13 +4,14 @@ import type { EqPreset, SongView, TrackEq, TrackSummary, TransportSnapshot } fro
 
 import { useTrackEqStore } from "../eq/trackEqStore";
 import { defaultTrackEq } from "../eq/trackEqModel";
-import { createTrackEqHandlers } from "./trackEqHandlers";
+import { createTrackEqHandlers, openTrackEq } from "./trackEqHandlers";
 
 const audio = { id: "a", kind: "audio", eq: null } as unknown as TrackSummary;
 const folder = { id: "f", kind: "folder", eq: null } as unknown as TrackSummary;
 
-function setup(track: TrackSummary = audio) {
-  let song = { projectRevision: 1, tracks: [track] } as unknown as SongView;
+function setup(track: TrackSummary | TrackSummary[] = audio) {
+  const tracks = Array.isArray(track) ? track : [track];
+  let song = { projectRevision: 1, tracks } as unknown as SongView;
   const deps = {
     runAction: async (action: () => Promise<void>) => action(),
     setSong: (update: (previous: SongView | null) => SongView | null) => {
@@ -28,11 +29,15 @@ function setup(track: TrackSummary = audio) {
     commitTrackEqChange: vi.fn(
       async (_args: { trackId: string; eq: TrackEq | null }) => ({ projectRevision: 7 }) as TransportSnapshot,
     ),
+    commitTrackEqsChange: vi.fn(
+      async (_args: { changes: { trackId: string; eq: TrackEq | null }[] }) =>
+        ({ projectRevision: 8 }) as TransportSnapshot,
+    ),
   };
   return { handlers: createTrackEqHandlers(deps), deps, song: () => song };
 }
 
-beforeEach(() => useTrackEqStore.setState({ openTrackId: null }));
+beforeEach(() => useTrackEqStore.setState({ openTrackId: null, targetTrackIds: [] }));
 
 describe("createTrackEqHandlers", () => {
   it("opens the editor only for audio tracks", () => {
@@ -95,5 +100,39 @@ describe("createTrackEqHandlers", () => {
     expect(args.presetId).toBeNull();
     expect(args.name).toBe("Voz");
     expect(args.eq.bands[2].gainDb).toBe(18);
+  });
+
+  it("with several tracks selected every change goes to all of them in one batch", async () => {
+    const other = { id: "b", kind: "audio", eq: null } as unknown as TrackSummary;
+    const { handlers, deps, song } = setup([audio, other, folder]);
+    openTrackEq(audio, [audio, other, folder]);
+    expect(useTrackEqStore.getState().targetTrackIds).toEqual(["a", "b"]);
+
+    handlers.applyLive("a", defaultTrackEq());
+    expect(deps.updateTrackEqRealtime.mock.calls.map((c) => c[0].trackId)).toEqual(["a", "b"]);
+
+    const eq = defaultTrackEq();
+    eq.bands[2].gainDb = 3;
+    await handlers.commit("a", eq);
+    expect(deps.commitTrackEqChange).not.toHaveBeenCalled();
+    expect(deps.commitTrackEqsChange).toHaveBeenCalledTimes(1);
+    const { changes } = deps.commitTrackEqsChange.mock.calls[0][0];
+    expect(changes.map((c) => c.trackId)).toEqual(["a", "b"]);
+    expect(song().tracks.filter((t) => t.eq?.bands[2].gainDb === 3).map((t) => t.id)).toEqual(["a", "b"]);
+    expect(song().projectRevision).toBe(8);
+  });
+
+  it("copyTo sends the source curve to the other audio tracks in one call", async () => {
+    const eq = defaultTrackEq();
+    eq.bands[3].gainDb = -4;
+    const source = { id: "a", kind: "audio", eq } as unknown as TrackSummary;
+    const other = { id: "b", kind: "audio", eq: null } as unknown as TrackSummary;
+    const third = { id: "c", kind: "audio", eq: null } as unknown as TrackSummary;
+    const { handlers, deps } = setup([source, other, third, folder]);
+    await handlers.copyTo("a", ["a", "b", "c", "f"]);
+    expect(deps.commitTrackEqsChange).toHaveBeenCalledTimes(1);
+    const { changes } = deps.commitTrackEqsChange.mock.calls[0][0];
+    expect(changes.map((c) => c.trackId)).toEqual(["b", "c"]);
+    expect(changes[0].eq?.bands[3].gainDb).toBe(-4);
   });
 });

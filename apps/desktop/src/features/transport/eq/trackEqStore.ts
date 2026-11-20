@@ -8,10 +8,23 @@ import { create } from "zustand";
  */
 type TrackEqStore = {
   openTrackId: string | null;
-  setOpenTrackId: (trackId: string | null) => void;
+  /**
+   * Pistas a las que va cada cambio del editor abierto (plan track-eq-2,
+   * paso 02). Con una sola pista es `[openTrackId]`; con varias seleccionadas
+   * en el móvil, todas (la abierta primero).
+   */
+  targetTrackIds: string[];
+  setOpenTrackId: (trackId: string | null, targetTrackIds?: string[]) => void;
 };
 
 export const useTrackEqStore = create<TrackEqStore>()((set) => ({
   openTrackId: null,
-  setOpenTrackId: (openTrackId) => set({ openTrackId }),
+  targetTrackIds: [],
+  setOpenTrackId: (openTrackId, targetTrackIds) =>
+    set({
+      openTrackId,
+      targetTrackIds: openTrackId
+        ? [openTrackId, ...(targetTrackIds ?? []).filter((id) => id !== openTrackId)]
+        : [],
+    }),
 }));

@@ -3119,6 +3119,16 @@ export async function commitTrackEqChange(args: {
   return invokeCommand<TransportSnapshot>("commit_track_eq_change", args);
 }
 
+/**
+ * El mismo EQ en varias pistas (plan track-eq-2, paso 02): modelo, **un** paso
+ * de deshacer y una orden al motor por pista. Solo pistas que llevan EQ.
+ */
+export async function commitTrackEqsChange(args: {
+  changes: { trackId: string; eq: TrackEq | null }[];
+}): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("commit_track_eqs_change", args);
+}
+
 /** Presets de EQ de esta máquina: fábrica primero, después los del usuario. */
 export async function listEqPresets(): Promise<EqPreset[]> {
   return invokeCommand<EqPreset[]>("list_eq_presets");

@@ -184,3 +184,39 @@ fn splitting_channels_keeps_the_eq_on_both_sides() {
     // El tipo de las bandas no se pierde por el camino.
     assert_eq!(with_eq[0].as_ref().unwrap().bands[0].kind, EqBandKind::LowCut);
 }
+
+#[test]
+fn a_batch_changes_every_track_with_one_undo_step() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    let undo = session.undo_stack.len();
+    let before_voz = track_of(&session, "voz1").eq;
+
+    session
+        .commit_track_eqs_model_and_command(
+            vec![
+                ("bass1".into(), Some(boosted_eq())),
+                ("voz1".into(), Some(boosted_eq())),
+            ],
+            &audio,
+        )
+        .expect("batch");
+    assert_eq!(track_of(&session, "bass1").eq, Some(boosted_eq()));
+    assert_eq!(track_of(&session, "voz1").eq, Some(boosted_eq()));
+    assert_eq!(session.undo_stack.len(), undo + 1, "un solo paso de deshacer");
+
+    session.undo_action(&audio).expect("undo");
+    assert_eq!(track_of(&session, "bass1").eq, None);
+    assert_eq!(track_of(&session, "voz1").eq, before_voz);
+
+    // Una pista inexistente en el lote: no cambia ninguna.
+    let steps = session.undo_stack.len();
+    assert!(session
+        .commit_track_eqs_model_and_command(
+            vec![("bass1".into(), Some(boosted_eq())), ("nope".into(), Some(boosted_eq()))],
+            &audio,
+        )
+        .is_err());
+    assert_eq!(track_of(&session, "bass1").eq, None);
+    assert_eq!(session.undo_stack.len(), steps);
+}

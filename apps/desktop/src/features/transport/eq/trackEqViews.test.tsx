@@ -10,6 +10,9 @@ const platform = vi.hoisted(() => ({ mobile: false }));
 const api = vi.hoisted(() => ({
   commitTrackEqChange: vi.fn(async (_args: { trackId: string; eq: unknown }) => ({ projectRevision: 9 })),
   updateTrackEqRealtime: vi.fn(async (_args: { trackId: string; eq: unknown }) => undefined),
+  commitTrackEqsChange: vi.fn(async (_args: { changes: { trackId: string; eq: unknown }[] }) => ({
+    projectRevision: 10,
+  })),
 }));
 
 vi.mock("../desktopApi", async (original) => ({
@@ -19,6 +22,7 @@ vi.mock("../desktopApi", async (original) => ({
   },
   commitTrackEqChange: api.commitTrackEqChange,
   updateTrackEqRealtime: api.updateTrackEqRealtime,
+  commitTrackEqsChange: api.commitTrackEqsChange,
   getPadsCatalog: vi.fn(async () => ({ offline: false, pads: [] })),
 }));
 
@@ -202,7 +206,7 @@ beforeEach(async () => {
     configurable: true,
     value: () => {},
   });
-  useTrackEqStore.setState({ openTrackId: null });
+  useTrackEqStore.setState({ openTrackId: null, targetTrackIds: [] });
   useTimelineUIStore.getState().clearSelection();
   useTimelineUIStore.setState({ expandedTrackId: null, areaSelectMode: false });
   loadSong();
@@ -286,11 +290,35 @@ describe("EQ button in the mobile selection bar", () => {
     expect(useTrackEqStore.getState().openTrackId).toBe("bajo");
   });
 
-  it("several tracks: disabled in v1; a folder: no button", () => {
+  it("several tracks: enabled, the editor warns and a commit reaches all of them", async () => {
     platform.mobile = true;
     renderMobileBar(["voz", "bajo"]);
-    expect(eqButton("Voz")!.hasAttribute("disabled")).toBe(true);
-    cleanup();
+    render(
+      <TrackEqEditorHost
+        runAction={async (action) => action()}
+        applyPlaybackSnapshot={vi.fn()}
+        optimisticallyAppliedRevisionsRef={{ current: new Set() }}
+      />,
+    );
+    const button = eqButton("Voz")!;
+    expect(button.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(button);
+    expect(useTrackEqStore.getState().targetTrackIds).toEqual(["voz", "bajo"]);
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Se aplica a 2 pistas")).toBeTruthy();
+    const gain = within(dialog).getByLabelText("Ganancia de la banda 3");
+    await act(async () => {
+      fireEvent.change(gain, { target: { value: "5" } });
+      fireEvent.keyDown(gain, { key: "Enter" });
+    });
+    expect(api.commitTrackEqChange).not.toHaveBeenCalled();
+    expect(api.commitTrackEqsChange).toHaveBeenCalledTimes(1);
+    const { changes } = api.commitTrackEqsChange.mock.calls[0][0];
+    expect(changes.map((change) => change.trackId)).toEqual(["voz", "bajo"]);
+  });
+
+  it("a folder: no button", () => {
+    platform.mobile = true;
     renderMobileBar(["banda"]);
     expect(eqButton("Banda")).toBeNull();
   });

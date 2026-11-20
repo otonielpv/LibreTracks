@@ -1552,6 +1552,33 @@ pub fn commit_track_eq_change(
         .map_err(|error| error.to_string())
 }
 
+/// Un cambio del lote de `commit_track_eqs_change`.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackEqChange {
+    pub track_id: String,
+    pub eq: Option<libretracks_core::TrackEq>,
+}
+
+/// El EQ de varias pistas a la vez (plan track-eq-2, paso 02): un paso de
+/// deshacer, una orden al motor por pista.
+#[tauri::command(async)]
+pub fn commit_track_eqs_change(
+    changes: Vec<TrackEqChange>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .commit_track_eqs_model_and_command(
+            changes.into_iter().map(|c| (c.track_id, c.eq)).collect(),
+            &state.audio,
+        )
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command(async)]
 pub fn delete_track(
     track_id: String,

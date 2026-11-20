@@ -43,6 +43,8 @@ function makeHandlers() {
     close: vi.fn(() => undefined),
     applyLive: vi.fn((_trackId: string, _eq: TrackEq | null) => undefined),
     commit: vi.fn(async (_trackId: string, _eq: TrackEq | null) => undefined),
+    copyTo: vi.fn(async (_source: string, _targets: string[]) => undefined),
+    targetsFor: vi.fn((trackId: string) => [trackId]),
     toggleBypass: vi.fn(async (_trackId: string) => undefined),
     reset: vi.fn(async (_trackId: string) => undefined),
     remove: vi.fn(async (_trackId: string) => undefined),
