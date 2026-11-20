@@ -25,10 +25,10 @@
   letter-spacing: 0;
 }
 
-/* En el panel de pista del móvil sería una fila más: allí el EQ se abre
-   desde la barra de selección. */
-.lt-mobile .lt-mobile-track-row-panel .lt-track-toggle-group button.lt-track-toggle-eq {
-  display: none;
+/* En el panel de pista del móvil va al lado de la T: dos columnas en vez de
+   una, para no añadir una fila (y alto) al panel. */
+.lt-mobile .lt-mobile-track-row-panel .lt-track-toggle-group:has(.lt-track-toggle-eq) {
+  grid-template-columns: repeat(2, 2.4rem);
 }
 
 .lt-compact-mixer-toggle.is-eq.is-active {

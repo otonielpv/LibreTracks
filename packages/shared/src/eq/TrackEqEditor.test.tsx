@@ -89,6 +89,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("TrackEqEditor drag", () => {
@@ -341,6 +342,33 @@ describe("TrackEqEditor RTA", () => {
     expect(handlers.stopAnalyzer).toHaveBeenCalled();
   });
 
+  it("an empty read (engine busy) keeps the last spectrum; only a long gap clears it", async () => {
+    let now = 1000;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    const handlers = makeHandlers();
+    const good = [-90, -60, -30, -12, -40, -80];
+    const reads: number[][] = [good, [], [], good, [], [], [], []];
+    handlers.readSpectrum.mockImplementation(async () => reads.shift() ?? []);
+    render(<TrackEqEditor track={makeTrack()} handlers={handlers} />);
+    const area = screen.getByTestId("lt-eq-spectrum");
+    const step = async (ms: number) => {
+      now += ms;
+      flushFrames();
+      await act(async () => undefined);
+    };
+    await step(40);
+    const painted = area.getAttribute("d");
+    expect(painted).toMatch(/^M0 .*Z$/);
+    // Dos lecturas vacías seguidas no borran el área (antes parpadeaba).
+    await step(40);
+    await step(40);
+    expect(area.getAttribute("d")).toBe(painted);
+    await step(40);
+    // Sin datos más de medio segundo: se vacía.
+    for (let i = 0; i < 4; i += 1) await step(200);
+    expect(area.getAttribute("d")).toBe("");
+  });
+
   it("the RTA button turns the analyzer off and remembers it", async () => {
     const handlers = makeHandlers();
     render(<TrackEqEditor track={makeTrack()} handlers={handlers} />);
@@ -465,5 +493,22 @@ describe("TrackEqEditor RTA by event (plan track-eq-2, paso 07)", () => {
       await Promise.resolve();
     });
     expect(spectrum.getAttribute("d")).not.toBe("");
+  });
+});
+
+describe("TrackEqEditor on a phone", () => {
+  it("keeps the graph and shows band tabs with a single strip", () => {
+    platform.isMobileApp = true;
+    const handlers = makeHandlers();
+    render(<TrackEqEditor track={makeTrack()} handlers={handlers} />);
+    expect(screen.getByTestId("lt-eq-graph")).toBeTruthy();
+    expect(screen.getAllByRole("tab")).toHaveLength(6);
+    // Una sola tira: la de la banda 3 por defecto.
+    expect(screen.getByLabelText("eq.frequencyOf:3")).toBeTruthy();
+    expect(screen.queryByLabelText("eq.frequencyOf:5")).toBeNull();
+    fireEvent.click(screen.getAllByRole("tab")[4]);
+    expect(screen.getByLabelText("eq.frequencyOf:5")).toBeTruthy();
+    expect(screen.queryByLabelText("eq.frequencyOf:3")).toBeNull();
+    expect(screen.getAllByRole("tab")[4].getAttribute("aria-selected")).toBe("true");
   });
 });

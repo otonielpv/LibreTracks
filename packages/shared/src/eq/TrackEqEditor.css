@@ -199,6 +199,9 @@
 }
 
 .lt-eq-graph {
+  /* Sin esto, con poco alto el editor (flex en columna) encogía la gráfica
+     hasta 0: Safari deja encoger un SVG por debajo de su alto. */
+  flex: none;
   width: 100%;
   height: clamp(10rem, 34vh, 16rem);
   background: rgb(0 0 0 / 0.35);
@@ -293,8 +296,81 @@
   background: rgb(255 255 255 / 0.08);
 }
 
-.lt-eq-editor.is-mobile .lt-eq-bands {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+/* Móvil (siempre en horizontal): la gráfica se queda con todo el alto que
+   sobra y debajo van las pestañas de banda y una sola tira en fila. */
+.lt-eq-editor.is-mobile {
+  gap: 0.4rem;
+  overflow: hidden;
+}
+
+.lt-eq-editor.is-mobile .lt-eq-header h2 {
+  font-size: 1rem;
+}
+
+.lt-eq-editor.is-mobile .lt-eq-header-actions {
+  flex-wrap: nowrap;
+}
+
+.lt-eq-editor.is-mobile .lt-eq-button {
+  min-height: 1.8rem;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+}
+
+.lt-eq-editor.is-mobile .lt-eq-graph {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 7rem;
+}
+
+.lt-eq-band-tabs {
+  flex: none;
+  display: flex;
+  gap: 0.3rem;
+}
+
+.lt-eq-band-tab {
+  flex: 1;
+  min-height: 1.8rem;
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-top: 2px solid var(--lt-eq-color);
+  background: #121516;
+  color: var(--lt-eq-color);
+  font: 800 0.8rem/1 "Inter", sans-serif;
+  cursor: pointer;
+}
+
+.lt-eq-band-tab.is-off {
+  border-top-color: #5b5f61;
+  color: #8a8f91;
+}
+
+.lt-eq-band-tab.is-active {
+  background: #1f2425;
+  border-color: var(--lt-eq-color);
+}
+
+.lt-eq-bands.is-single {
+  flex: none;
+  display: block;
+  background: none;
+}
+
+.lt-eq-bands.is-single .lt-eq-band {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.lt-eq-bands.is-single .lt-eq-band > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.lt-eq-bands.is-single .lt-eq-band > .lt-eq-band-head {
+  flex: none;
 }
 
 .lt-eq-band {

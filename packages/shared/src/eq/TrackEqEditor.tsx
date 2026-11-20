@@ -92,6 +92,8 @@ const FINE_FACTOR = 0.2;
 export const RTA_MIN_DB = -90;
 const RTA_FRAME_MS = 33;
 const RTA_STORAGE_KEY = "lt.eq.rta";
+/** Sin lecturas buenas durante este tiempo, el área del RTA se vacía. */
+const RTA_STALE_MS = 500;
 
 function readRtaPreference(): boolean {
   try {
@@ -266,6 +268,7 @@ export function TrackEqEditor({
     let cancelled = false;
     let inFlight = false;
     let last = 0;
+    let lastGood = -Infinity;
     let handle: number | null = null;
     const tick = (now: number) => {
       handle = null;
@@ -276,7 +279,16 @@ export function TrackEqEditor({
         void handlersRef.current.readSpectrum(trackId).then((bands) => {
           inFlight = false;
           if (cancelled) return;
-          spectrumPathRef.current?.setAttribute("d", spectrumPath(bands));
+          // Una lectura vacía suelta (el motor estaba ocupado y no se pudo
+          // leer) no borra el área: borrarla en ese frame era el parpadeo.
+          // Solo se vacía si sigue sin datos un rato (analizador parado,
+          // invitado sin eventos).
+          if (bands.length > 0) {
+            lastGood = now;
+            spectrumPathRef.current?.setAttribute("d", spectrumPath(bands));
+          } else if (now - lastGood > RTA_STALE_MS) {
+            spectrumPathRef.current?.setAttribute("d", "");
+          }
         });
       }
       handle = requestFrame(() => tick(performanceNow()));
@@ -535,6 +547,8 @@ export function TrackEqEditor({
   const labelledFrequencies = new Set([100, 1000, 10000]);
   const gridGains = [-12, -6, 0, 6, 12];
   const active = activeBand !== null ? eq.bands[activeBand] : null;
+  /** Banda de la tira única del móvil: la elegida, o la 3 (la primera campana). */
+  const shownBand = activeBand ?? 2;
 
   return (
     <div className="lt-modal-backdrop" onClick={close}>
@@ -736,20 +750,55 @@ export function TrackEqEditor({
           ))}
         </svg>
 
-        <div className="lt-eq-bands">
-          {eq.bands.map((band, index) => (
-            <BandStrip
-              key={index}
-              t={t}
-              mappable={mappable}
-              index={index}
-              band={band}
-              active={activeBand === index}
-              onSelect={() => setActiveBand(index)}
-              onPatch={(patch) => patchBand(index, patch)}
-            />
-          ))}
-        </div>
+        {isMobile ? (
+          // En un teléfono en horizontal no caben las 6 tiras sin echar la
+          // gráfica fuera: pestañas por banda y solo la tira de la elegida.
+          <>
+            <div className="lt-eq-band-tabs" role="tablist" aria-label={t("eq.graph")}>
+              {eq.bands.map((band, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  role="tab"
+                  aria-selected={shownBand === index}
+                  aria-label={t("eq.band", { number: index + 1 })}
+                  className={`lt-eq-band-tab lt-eq-color-${index + 1} ${band.enabled ? "" : "is-off"} ${
+                    shownBand === index ? "is-active" : ""
+                  }`}
+                  onClick={() => setActiveBand(index)}
+                >
+                  {index + 1}
+                </button>
+              ))}
+            </div>
+            <div className="lt-eq-bands is-single">
+              <BandStrip
+                t={t}
+                mappable={mappable}
+                index={shownBand}
+                band={eq.bands[shownBand]}
+                active
+                onSelect={() => setActiveBand(shownBand)}
+                onPatch={(patch) => patchBand(shownBand, patch)}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="lt-eq-bands">
+            {eq.bands.map((band, index) => (
+              <BandStrip
+                key={index}
+                t={t}
+                mappable={mappable}
+                index={index}
+                band={band}
+                active={activeBand === index}
+                onSelect={() => setActiveBand(index)}
+                onPatch={(patch) => patchBand(index, patch)}
+              />
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );
