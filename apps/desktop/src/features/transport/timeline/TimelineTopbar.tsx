@@ -750,6 +750,7 @@ export function TimelineTopbar({
                 type="button"
                 ref={metronomeButtonRef}
                 aria-label={t("timelineTopbar.metronome")}
+                title={t("timelineTopbar.metronome")}
                 className={
                   metronomeEnabled
                     ? "is-active is-toggle lt-split-main"
@@ -796,6 +797,7 @@ export function TimelineTopbar({
                 type="button"
                 ref={voiceGuideButtonRef}
                 aria-label={t("timelineTopbar.voiceGuide")}
+                title={t("timelineTopbar.voiceGuide")}
                 className={
                   voiceGuideEnabled
                     ? "is-active is-toggle lt-split-main"
@@ -842,6 +844,7 @@ export function TimelineTopbar({
                 type="button"
                 ref={padButtonRef}
                 aria-label={t("timelineTopbar.pads")}
+                title={t("timelineTopbar.pads")}
                 className={
                   padEnabled
                     ? "is-active is-toggle lt-split-main"
@@ -903,11 +906,11 @@ export function TimelineTopbar({
 
           </NetworkControls>
           <div className="lt-transport-readout">
-            <div className="lt-readout-block">
+            <div className="lt-readout-block is-tempo">
               <span>{t("timelineTopbar.tempoReadout")}</span>
               <strong ref={transportReadoutTempoRef}>{`${(Number.isFinite(displayedBpm) ? displayedBpm : fallbackBpm).toFixed(2)} BPM`}</strong>
             </div>
-            <div className="lt-readout-block">
+            <div className="lt-readout-block is-signature">
               <span>{t("timelineTopbar.timeSignatureLabel")}</span>
               <strong>{displayedTimeSignature}</strong>
             </div>
