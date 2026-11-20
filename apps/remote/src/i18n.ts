@@ -527,3 +527,8 @@ const STRINGS = {
 export function getRemoteStrings() {
   return STRINGS[detectLanguage()];
 }
+
+/** El idioma del remote (para los textos compartidos, como los del EQ). */
+export function remoteLanguage(): RemoteLanguage {
+  return detectLanguage();
+}

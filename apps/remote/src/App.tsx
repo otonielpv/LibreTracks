@@ -31,6 +31,7 @@ import {
   type PadsCatalog,
   type SongRegionSummary,
   type SongView,
+  type TrackEq,
   type TrackSummary,
   type TransportSnapshot,
 } from "@libretracks/shared/models";
@@ -72,7 +73,8 @@ import {
   VoiceIcon,
 } from "./transportIcons";
 import { currentScreenSize, isPhoneShapedScreen } from "./deviceShape";
-import { getRemoteStrings } from "./i18n";
+import { getRemoteStrings, remoteLanguage } from "./i18n";
+import { RemoteEqButton, RemoteTrackEqHost } from "./remoteEq";
 import { buildMarkerCards, buildTimelineMarkerChips } from "./markerCards";
 import {
   advanceRemoteClock,
@@ -300,6 +302,7 @@ const TIMELINE_MANUAL_HOLD_MS = 6000;
 const TIMELINE_MANUAL_RETURN_PER_SECOND = 4;
 const READOUT_MIN_UPDATE_INTERVAL_MS = 1000 / 30;
 const STRINGS = getRemoteStrings();
+const LANGUAGE = remoteLanguage();
 const REDUNDANCY_NOTICE_STRINGS = {
   handover: STRINGS.redundancyHandover,
   lost: STRINGS.redundancyLost,
@@ -591,6 +594,34 @@ function sendCommand(command: Record<string, unknown>) {
   }
   socket.send(JSON.stringify(command));
 }
+
+/**
+ * El EQ confirmado en el remote, en su canción en el acto (plan track-eq-2):
+ * el songView del escritorio llega después con el mismo valor.
+ */
+function patchLocalTrackEq(trackId: string, eq: TrackEq | null) {
+  const { songView, setSongView } = useRemoteSyncStore.getState();
+  if (!songView) return;
+  setSongView({
+    ...songView,
+    tracks: songView.tracks.map((track) => (track.id === trackId ? { ...track, eq } : track)),
+  });
+}
+
+/** El editor de EQ abierto desde una tira, con las pistas de la canción. */
+function RemoteEqEditorMount() {
+  const tracks = useRemoteSyncStore((state) => state.songView?.tracks ?? EMPTY_TRACKS);
+  return (
+    <RemoteTrackEqHost
+      tracks={tracks}
+      send={sendCommand}
+      onLocalCommit={patchLocalTrackEq}
+      language={LANGUAGE}
+    />
+  );
+}
+
+const EMPTY_TRACKS: TrackSummary[] = [];
 
 function sendMetronomePatch(patch: { enabled?: boolean; volume?: number }) {
   sendCommand({
@@ -3211,6 +3242,7 @@ function MixerStrip({
         >
           T
         </button>
+        <RemoteEqButton track={track} language={LANGUAGE} />
       </div>
     </article>
   );
@@ -5743,6 +5775,7 @@ export function App() {
   return (
     <>
     <RedundancyNoticeBanner strings={REDUNDANCY_NOTICE_STRINGS} />
+    <RemoteEqEditorMount />
     <main
       className={`remote-shell remote-profile-${presetProfile} remote-size-${sizeLevel} ${sizeLevel > 0 ? "is-large-controls" : ""} ${editing ? "is-editing-layout" : ""} ${showRotateGuard ? "is-rotate-locked" : ""} ${chromeHidden ? "is-immersive" : ""}`}
     >

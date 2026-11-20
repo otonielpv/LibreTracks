@@ -6781,3 +6781,38 @@ button {
   border: 1px solid #fff;
   padding: 6px 12px;
 }
+
+/* ── EQ (plan track-eq-2, paso 06) ─────────────────────────────────────────
+   El editor compartido (packages/shared/src/eq) trae su CSS; aquí solo lo
+   que en el escritorio pone la app: el fondo del modal y el icono de cerrar
+   (el remote no carga Material Symbols). */
+.lt-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(4 7 8 / 0.78);
+  backdrop-filter: blur(10px);
+}
+
+.lt-eq-close .material-symbols-outlined {
+  font-size: 0;
+}
+
+.lt-eq-close .material-symbols-outlined::after {
+  content: "✕";
+  font-size: 1rem;
+}
+
+.remote-shell .toggle-row button.is-eq {
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+}
+
+.remote-shell .toggle-row button.is-eq.is-active {
+  border-color: rgb(255 180 84 / 0.6);
+  background: rgb(255 180 84 / 0.16);
+  color: #ffb454;
+}

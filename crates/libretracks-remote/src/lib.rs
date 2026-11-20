@@ -114,6 +114,19 @@ pub enum RemoteCommand {
         muted: Option<bool>,
         solo: Option<bool>,
     },
+    /// Arrastre del EQ en el remote (plan track-eq-2, E7): solo motor, sin
+    /// modelo ni deshacer. `eq: null` lo quita.
+    UpdateTrackEqLive {
+        track_id: String,
+        #[serde(default)]
+        eq: Option<libretracks_core::TrackEq>,
+    },
+    /// Confirmar el EQ al soltar: modelo + un paso de deshacer + motor.
+    CommitTrackEq {
+        track_id: String,
+        #[serde(default)]
+        eq: Option<libretracks_core::TrackEq>,
+    },
     UpdateRegionTranspose {
         region_id: String,
         transpose_semitones: i32,
@@ -709,6 +722,39 @@ mod tests {
             }
             other => panic!("expected updateRegionMasterGain, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parses_the_eq_commands_of_the_remote() {
+        let eq = r#"{"enabled":true,"bands":[{"enabled":true,"kind":"peak","frequencyHz":800.0,"gainDb":4.0,"q":1.0,"slope":12}]}"#;
+        match parse(&format!(r#"{{"cmd":"updateTrackEqLive","trackId":"t1","eq":{eq}}}"#)) {
+            RemoteCommand::UpdateTrackEqLive { track_id, eq } => {
+                assert_eq!(track_id, "t1");
+                assert_eq!(eq.unwrap().bands[0].gain_db, 4.0);
+            }
+            other => panic!("expected updateTrackEqLive, got {other:?}"),
+        }
+        match parse(r#"{"cmd":"commitTrackEq","trackId":"t2","eq":null}"#) {
+            RemoteCommand::CommitTrackEq { track_id, eq } => {
+                assert_eq!(track_id, "t2");
+                assert!(eq.is_none());
+            }
+            other => panic!("expected commitTrackEq, got {other:?}"),
+        }
+        // Sin clave eq = quitarlo, como en el escritorio.
+        assert!(matches!(
+            parse(r#"{"cmd":"commitTrackEq","trackId":"t3"}"#),
+            RemoteCommand::CommitTrackEq { eq: None, .. }
+        ));
+        // Y la vuelta: lo que manda el remote (camelCase) es lo que se lee.
+        let json = serde_json::to_value(RemoteCommand::CommitTrackEq {
+            track_id: "t".into(),
+            eq: Some(libretracks_core::TrackEq::default()),
+        })
+        .unwrap();
+        assert_eq!(json["cmd"], "commitTrackEq");
+        assert_eq!(json["trackId"], "t");
+        assert_eq!(json["eq"]["bands"][1]["frequencyHz"], 100.0);
     }
 
     #[test]

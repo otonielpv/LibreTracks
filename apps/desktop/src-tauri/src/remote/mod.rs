@@ -272,6 +272,16 @@ async fn run_remote_command_bridge(
                 }
                 session.snapshot_with_sync(&state.audio)
             }
+            RemoteCommand::UpdateTrackEqLive { track_id, eq } => {
+                // Como el fader en vivo: directo al motor, sin modelo.
+                if state.audio.update_live_track_eq(track_id, eq.as_ref()).is_err() {
+                    continue;
+                }
+                session.snapshot_with_sync(&state.audio)
+            }
+            RemoteCommand::CommitTrackEq { track_id, eq } => {
+                session.commit_track_eq_model_and_command(track_id, eq.clone(), &state.audio)
+            }
             RemoteCommand::UpdateTrack {
                 track_id,
                 volume,
