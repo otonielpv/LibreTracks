@@ -4,7 +4,10 @@ import type { TransportSnapshot } from "@libretracks/shared/models";
 
 import {
   commitTrackEqChange,
+  deleteEqPreset,
   getTrackEqSpectrum,
+  listEqPresets,
+  saveEqPreset,
   setTrackEqAnalyzer,
   updateTrackEqRealtime,
 } from "../desktopApi";
@@ -40,6 +43,9 @@ export function TrackEqEditorHost({
         commitTrackEqChange,
         setTrackEqAnalyzer,
         getTrackEqSpectrum,
+        listEqPresets,
+        saveEqPreset,
+        deleteEqPreset,
       }),
     [runAction, applyPlaybackSnapshot, optimisticallyAppliedRevisionsRef],
   );

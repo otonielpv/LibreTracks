@@ -30,6 +30,17 @@ export type TrackEq = {
   bands: EqBand[];
 };
 
+/**
+ * Preset de EQ (plan track-eq-2, paso 01). Los de fábrica (`factory: true`,
+ * id `factory-*`) son de solo lectura y la UI traduce su nombre por id.
+ */
+export type EqPreset = {
+  id: string;
+  name: string;
+  eq: TrackEq;
+  factory?: boolean;
+};
+
 export type PlaybackState = "empty" | "stopped" | "playing" | "paused";
 export type TrackKind = "audio" | "folder" | "midi" | "video";
 export type JumpTriggerLabel =

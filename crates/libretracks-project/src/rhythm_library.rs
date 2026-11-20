@@ -151,7 +151,7 @@ fn entry_path(dir: &Path, id: &str) -> Result<PathBuf, ProjectError> {
     Ok(dir.join(format!("{id}.json")))
 }
 
-fn write_entry<T: Serialize>(dir: &Path, id: &str, value: &T) -> Result<(), ProjectError> {
+pub(crate) fn write_entry<T: Serialize>(dir: &Path, id: &str, value: &T) -> Result<(), ProjectError> {
     let path = entry_path(dir, id)?;
     write_json(dir, &path, value)
 }
@@ -164,7 +164,7 @@ fn write_json<T: Serialize>(dir: &Path, path: &Path, value: &T) -> Result<(), Pr
     Ok(())
 }
 
-fn delete_entry(dir: &Path, id: &str) -> Result<(), ProjectError> {
+pub(crate) fn delete_entry(dir: &Path, id: &str) -> Result<(), ProjectError> {
     let path = entry_path(dir, id)?;
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
@@ -173,7 +173,7 @@ fn delete_entry(dir: &Path, id: &str) -> Result<(), ProjectError> {
     }
 }
 
-fn read_entries<T: DeserializeOwned>(dir: &Path) -> Result<Vec<T>, ProjectError> {
+pub(crate) fn read_entries<T: DeserializeOwned>(dir: &Path) -> Result<Vec<T>, ProjectError> {
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),

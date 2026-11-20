@@ -12,6 +12,7 @@ import type { EqBand, EqBandKind, TrackEq, TrackSummary } from "@libretracks/sha
 
 import { useDismissOnBack } from "../mobile/backNavigation";
 import type { TrackEqHandlers } from "../tracks/trackEqHandlers";
+import { EqPresetMenu } from "./EqPresetMenu";
 import { bandResponseDb, trackEqResponseDb } from "./eqResponse";
 import {
   EQ_BAND_KINDS,
@@ -501,6 +502,14 @@ export function TrackEqEditor({ track, handlers, sampleRate = 48000 }: Props) {
             {t("eq.title")} <span className="lt-eq-track-name">{track.name}</span>
           </h2>
           <div className="lt-eq-header-actions">
+            <EqPresetMenu
+              handlers={handlers}
+              getCurrent={() => draftRef.current}
+              onLoad={(next) => {
+                absorbPendingWheel();
+                commit(next);
+              }}
+            />
             <button
               type="button"
               className="lt-eq-button"

@@ -77,6 +77,7 @@ import type {
   WaveformSummaryDto,
   WaveformWindowDto,
   TrackEq,
+  EqPreset,
 } from "./models";
 
 export * from "./models";
@@ -3116,6 +3117,28 @@ export async function commitTrackEqChange(args: {
   eq: TrackEq | null;
 }): Promise<TransportSnapshot> {
   return invokeCommand<TransportSnapshot>("commit_track_eq_change", args);
+}
+
+/** Presets de EQ de esta máquina: fábrica primero, después los del usuario. */
+export async function listEqPresets(): Promise<EqPreset[]> {
+  return invokeCommand<EqPreset[]>("list_eq_presets");
+}
+
+/**
+ * Guarda un preset de usuario: sin `presetId` crea uno nuevo, con él lo
+ * sustituye (renombrar). Devuelve la lista completa.
+ */
+export async function saveEqPreset(args: {
+  presetId: string | null;
+  name: string;
+  eq: TrackEq;
+}): Promise<EqPreset[]> {
+  return invokeCommand<EqPreset[]>("save_eq_preset", args);
+}
+
+/** Borra un preset de usuario. Devuelve la lista completa. */
+export async function deleteEqPreset(presetId: string): Promise<EqPreset[]> {
+  return invokeCommand<EqPreset[]>("delete_eq_preset", { presetId });
 }
 
 /**

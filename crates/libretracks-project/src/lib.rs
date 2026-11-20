@@ -1,6 +1,7 @@
 //! Persistencia y operaciones de proyecto.
 
 pub mod cover;
+pub mod eq_presets;
 pub mod rhythm_library;
 pub mod rhythm_package;
 mod asset_path;

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { SongView, TrackEq, TrackSummary, TransportSnapshot } from "@libretracks/shared/models";
+import type { EqPreset, SongView, TrackEq, TrackSummary, TransportSnapshot } from "@libretracks/shared/models";
 
 import { useTrackEqStore } from "../eq/trackEqStore";
 import { defaultTrackEq } from "../eq/trackEqModel";
@@ -22,6 +22,9 @@ function setup(track: TrackSummary = audio) {
     updateTrackEqRealtime: vi.fn(async (_args: { trackId: string; eq: TrackEq | null }) => undefined),
     setTrackEqAnalyzer: vi.fn(async (_trackId: string | null) => undefined),
     getTrackEqSpectrum: vi.fn(async () => [-20, -30] as number[]),
+    listEqPresets: vi.fn(async () => [] as EqPreset[]),
+    saveEqPreset: vi.fn(async (_args: { presetId: string | null; name: string; eq: TrackEq }) => [] as EqPreset[]),
+    deleteEqPreset: vi.fn(async (_presetId: string) => [] as EqPreset[]),
     commitTrackEqChange: vi.fn(
       async (_args: { trackId: string; eq: TrackEq | null }) => ({ projectRevision: 7 }) as TransportSnapshot,
     ),
@@ -80,5 +83,17 @@ describe("createTrackEqHandlers", () => {
     expect(await handlers.readSpectrum()).toEqual([-20, -30]);
     deps.getTrackEqSpectrum.mockRejectedValueOnce(new Error("no engine"));
     expect(await handlers.readSpectrum()).toEqual([]);
+  });
+
+  it("saving a preset sends a new one with the curve clamped", async () => {
+    const { handlers, deps } = setup();
+    const eq = defaultTrackEq();
+    eq.bands[2].gainDb = 99;
+    await handlers.savePreset("Voz", eq);
+    expect(deps.saveEqPreset).toHaveBeenCalledTimes(1);
+    const args = deps.saveEqPreset.mock.calls[0][0];
+    expect(args.presetId).toBeNull();
+    expect(args.name).toBe("Voz");
+    expect(args.eq.bands[2].gainDb).toBe(18);
   });
 });

@@ -1,4 +1,5 @@
 import type {
+  EqPreset,
   SongView,
   TrackEq,
   TrackSummary,
@@ -36,6 +37,10 @@ export type TrackEqHandlerDeps = {
   }) => Promise<TransportSnapshot>;
   setTrackEqAnalyzer: (trackId: string | null) => Promise<void>;
   getTrackEqSpectrum: () => Promise<number[]>;
+  /** Presets de esta máquina (plan track-eq-2, paso 01). */
+  listEqPresets: () => Promise<EqPreset[]>;
+  saveEqPreset: (args: { presetId: string | null; name: string; eq: TrackEq }) => Promise<EqPreset[]>;
+  deleteEqPreset: (presetId: string) => Promise<EqPreset[]>;
 };
 
 export type TrackEqHandlers = ReturnType<typeof createTrackEqHandlers>;
@@ -61,6 +66,9 @@ export function createTrackEqHandlers(deps: TrackEqHandlerDeps) {
     commitTrackEqChange,
     setTrackEqAnalyzer,
     getTrackEqSpectrum,
+    listEqPresets,
+    saveEqPreset,
+    deleteEqPreset,
   } = deps;
 
   const open = (trackId: string) => openTrackEq(findTrack(trackId));
@@ -118,6 +126,15 @@ export function createTrackEqHandlers(deps: TrackEqHandlerDeps) {
   /** Bandas en dB del RTA (vacío si no hay o si falla la lectura). */
   const readSpectrum = () => getTrackEqSpectrum().catch(() => [] as number[]);
 
+  /** Presets: fábrica primero; vacío si falla la lectura. */
+  const listPresets = () => listEqPresets();
+
+  /** Guarda la curva con nombre (un preset nuevo). Devuelve la lista. */
+  const savePreset = (name: string, eq: TrackEq) =>
+    saveEqPreset({ presetId: null, name, eq: sanitizeTrackEq(eq) });
+
+  const deletePreset = (presetId: string) => deleteEqPreset(presetId);
+
   return {
     open,
     close,
@@ -129,5 +146,8 @@ export function createTrackEqHandlers(deps: TrackEqHandlerDeps) {
     startAnalyzer,
     stopAnalyzer,
     readSpectrum,
+    listPresets,
+    savePreset,
+    deletePreset,
   };
 }

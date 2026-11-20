@@ -3,7 +3,7 @@ import { Profiler } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { TrackEq, TrackSummary } from "@libretracks/shared/models";
+import type { EqPreset, TrackEq, TrackSummary } from "@libretracks/shared/models";
 
 const platform = { isMobileApp: false };
 
@@ -26,6 +26,17 @@ import { trackEqResponseDb } from "./eqResponse";
 import { defaultTrackEq } from "./trackEqModel";
 import type { TrackEqHandlers } from "../tracks/trackEqHandlers";
 
+const PRESET_EQ: TrackEq = (() => {
+  const eq = defaultTrackEq();
+  eq.bands[0].enabled = true;
+  eq.bands[0].frequencyHz = 80;
+  return eq;
+})();
+const PRESETS: EqPreset[] = [
+  { id: "factory-hpf-80", name: "Remove lows (HPF 80)", eq: PRESET_EQ, factory: true },
+  { id: "user-1", name: "Mi voz", eq: defaultTrackEq() },
+];
+
 function makeHandlers() {
   return {
     open: vi.fn((_trackId: string) => undefined),
@@ -38,6 +49,9 @@ function makeHandlers() {
     startAnalyzer: vi.fn((_trackId: string) => undefined),
     stopAnalyzer: vi.fn(() => undefined),
     readSpectrum: vi.fn(async () => [-90, -60, -30, -12, -40, -80] as number[]),
+    listPresets: vi.fn(async () => PRESETS),
+    savePreset: vi.fn(async (_name: string, _eq: TrackEq) => PRESETS),
+    deletePreset: vi.fn(async (_presetId: string) => PRESETS.filter((p) => p.factory)),
   } satisfies TrackEqHandlers;
 }
 
@@ -359,5 +373,53 @@ describe("TrackEqEditor RTA", () => {
     const again = makeHandlers();
     render(<TrackEqEditor track={makeTrack()} handlers={again} />);
     expect(again.startAnalyzer).not.toHaveBeenCalled();
+  });
+});
+
+describe("TrackEqEditor presets", () => {
+  it("loading a preset makes one commit with its curve", async () => {
+    const handlers = makeHandlers();
+    render(<TrackEqEditor track={makeTrack()} handlers={handlers} />);
+    fireEvent.click(screen.getByRole("button", { name: "eq.presets.title" }));
+    const item = await screen.findByRole("menuitem", { name: "eq.presets.names.factory-hpf-80" });
+    fireEvent.click(item);
+    expect(handlers.commit).toHaveBeenCalledTimes(1);
+    expect(handlers.commit.mock.calls[0]).toEqual(["t1", PRESET_EQ]);
+    // El menú se cierra.
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("save as sends the current curve, including a wheel Q not yet committed", async () => {
+    const handlers = makeHandlers();
+    render(<TrackEqEditor track={makeTrack()} handlers={handlers} />);
+    const node = screen.getByTestId("lt-eq-node-3");
+    fireEvent.focus(node);
+    const graph = screen.getByTestId("lt-eq-graph");
+    for (let i = 0; i < 10; i += 1) fireEvent.wheel(graph, { deltaY: -100 });
+    expect(handlers.commit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "eq.presets.title" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "eq.presets.saveAs" }));
+    fireEvent.change(screen.getByLabelText("eq.presets.namePlaceholder"), {
+      target: { value: "  Voz lead " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "eq.presets.save" }));
+    expect(handlers.savePreset).toHaveBeenCalledTimes(1);
+    const [name, eq] = handlers.savePreset.mock.calls[0];
+    expect(name).toBe("Voz lead");
+    expect(eq.bands[2].q).toBeGreaterThan(2);
+    // Al volver la lista, el formulario se cierra.
+    expect(await screen.findByRole("menuitem", { name: "eq.presets.saveAs" })).toBeTruthy();
+  });
+
+  it("user presets can be deleted, factory ones cannot", async () => {
+    const handlers = makeHandlers();
+    render(<TrackEqEditor track={makeTrack()} handlers={handlers} />);
+    fireEvent.click(screen.getByRole("button", { name: "eq.presets.title" }));
+    await screen.findByRole("menuitem", { name: "Mi voz" });
+    expect(screen.getAllByRole("button", { name: "eq.presets.delete" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "eq.presets.delete" }));
+    expect(handlers.deletePreset).toHaveBeenCalledWith("user-1");
+    expect(await screen.findByText("eq.presets.empty")).toBeTruthy();
   });
 });
