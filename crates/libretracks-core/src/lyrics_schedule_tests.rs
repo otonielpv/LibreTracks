@@ -431,3 +431,47 @@ fn ten_millisecond_windows_and_one_window_give_the_same_events() {
     assert_eq!(ticked_events, events);
     let _ = whole.song;
 }
+
+#[test]
+fn taps_become_half_beat_offsets_from_their_section() {
+    let mut song = song();
+    song.section_markers = vec![marker("v", MarkerKind::Verse, None, 0.0)];
+    song.regions[0].end_seconds = 16.0;
+    let steps = steps_from_taps(&song, "r1", &[1.98, 4.02, 20.0]);
+    let beats: Vec<f64> = steps.iter().map(|step| step.offset_beats).collect();
+    assert_eq!(beats, vec![4.0, 8.0], "the tap past the song is ignored");
+}
+
+#[test]
+fn a_tap_in_a_repeat_is_stored_on_the_base_marker_and_plays_in_every_repeat() {
+    let mut song = song();
+    let steps = steps_from_taps(&song, "r1", &[38.0]);
+    assert_eq!(steps.len(), 1);
+    assert_eq!(steps[0].marker_id, "c");
+    assert_eq!(steps[0].offset_beats, 4.0);
+    {
+        let lyrics = song.regions[0].lyrics.as_mut().unwrap();
+        lyrics.step_mode = StepMode::Manual;
+        lyrics.steps = steps;
+    }
+    let items = lyrics_items(&song, &LeadGrid::new(&song), &ONE_BEAT, None);
+    for id in ["c#1", "c~1#1", "c~2#1"] {
+        assert!(items.iter().any(|item| item.id == id), "{id}");
+    }
+}
+
+#[test]
+fn recorded_beats_land_on_the_same_musical_point_under_warp() {
+    // Same source material at 120: warped into a 60 bpm timeline the tap's
+    // beats are counted at the source tempo.
+    let mut plain = song();
+    plain.section_markers = vec![marker("v", MarkerKind::Verse, None, 0.0)];
+    let mut warped = plain.clone();
+    warped.bpm = 60.0;
+    warped.regions[0].warp_enabled = true;
+    warped.regions[0].warp_source_bpm = Some(120.0);
+    assert_eq!(
+        steps_from_taps(&plain, "r1", &[2.0]),
+        steps_from_taps(&warped, "r1", &[2.0])
+    );
+}

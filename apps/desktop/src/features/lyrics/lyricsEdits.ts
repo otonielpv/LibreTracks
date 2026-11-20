@@ -9,6 +9,8 @@ import type {
   LyricsLink,
   LyricsOverrideTarget,
   LyricsSoftware,
+  LyricsStep,
+  LyricsStepMode,
   RegionLyrics,
 } from "@libretracks/shared/models";
 
@@ -107,4 +109,20 @@ export function withLead(lyrics: RegionLyrics | null | undefined, lead: LeadTime
 /** Whether a marker id is a repeat written by an arrangement (`"c~2"`). */
 export function isRepeat(markerId: string): boolean {
   return markerId.includes("~");
+}
+
+export function withStepMode(lyrics: RegionLyrics | null | undefined, stepMode: LyricsStepMode): RegionLyrics {
+  return { ...(lyrics ?? emptyRegionLyrics()), stepMode };
+}
+
+/** Recorded steps replace the old ones of the sections they touch and turn
+ * the song to recorded mode. */
+export function withRecordedSteps(lyrics: RegionLyrics | null | undefined, steps: LyricsStep[]): RegionLyrics {
+  const base = lyrics ?? emptyRegionLyrics();
+  const touched = new Set(steps.map((step) => step.markerId));
+  return {
+    ...base,
+    stepMode: "manual",
+    steps: [...(base.steps ?? []).filter((step) => !touched.has(step.markerId)), ...steps],
+  };
 }

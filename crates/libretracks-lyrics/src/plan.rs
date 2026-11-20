@@ -82,6 +82,9 @@ pub struct MarkerReport {
     #[serde(flatten)]
     pub status: MarkerStatus,
     pub slide_count: u32,
+    /// Automatic slide changes: the bar of the section each falls on
+    /// (1-based: "changes on bar 5"). Filled by the report.
+    pub auto_change_bars: Vec<u32>,
 }
 
 impl SongLyricsPlan {
@@ -103,6 +106,7 @@ impl SongLyricsPlan {
                     start_seconds: marker.start_seconds,
                     status: plan.status.clone(),
                     slide_count: plan.slide_count,
+                    auto_change_bars: Vec::new(),
                 })
             })
             .collect()

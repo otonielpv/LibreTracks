@@ -676,6 +676,8 @@ pub fn run() {
             commands::lyrics::lyrics_refresh,
             commands::lyrics::lyrics_status,
             commands::lyrics::lyrics_tutorial_done,
+            commands::lyrics::lyrics_steps_from_taps,
+            commands::lyrics::lyrics_tap_position,
             commands::timeline::upsert_song_tempo_marker,
             commands::timeline::delete_song_tempo_marker,
             commands::timeline::set_song_tempo_marker_ramp,

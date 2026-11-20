@@ -15,6 +15,7 @@ import {
 import { isRepeat, linkFor } from "./lyricsEdits";
 import type { LyricsApi } from "./lyricsHandlers";
 import { LyricsModal } from "./LyricsModal";
+import { LyricsSlidesBlock } from "./LyricsSlidesBlock";
 import { lyricsErrorText } from "./LyricsSettingsTab";
 import { useLyricsStore } from "./lyricsStore";
 import { useLyricsHandlers } from "./useLyricsHandlers";
@@ -270,6 +271,17 @@ export function LyricsSongPanel({
       ) : null}
       {report && report.linkState.state === "linked" && report.markers.length === 0 ? (
         <p>{t("lyrics.song.noMarkers")}</p>
+      ) : null}
+
+      {report && report.linkState.state === "linked" && report.markers.length > 0 ? (
+        <LyricsSlidesBlock
+          regionId={regionId}
+          report={report}
+          regionEndSeconds={region?.endSeconds ?? 0}
+          stepMode={region?.lyrics?.stepMode ?? "auto"}
+          handlers={handlers}
+          onSaved={load}
+        />
       ) : null}
 
       <LeadTimeField

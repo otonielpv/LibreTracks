@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use crate::lead_plan::{LeadItem, LeadPlanner};
 use crate::lead_time::{LeadGrid, LeadTime, LeadUnit};
 use crate::lyrics_match::section_occurrences;
-use crate::model::{Marker, MarkerCategory, Song, SongRegion, StepMode};
+use crate::model::{chart_link_marker_id, LyricsStep, Marker, MarkerCategory, Song, SongRegion, StepMode};
 
 const EPSILON: f64 = 1.0e-6;
 
@@ -375,6 +375,56 @@ pub fn land_lyrics(song: &Song, items: &[LyricsItem], position: f64) -> Option<L
         occurrence,
         k_passed,
     })
+}
+
+/// Slide changes recorded by tapping along (step 09): each tap, in source
+/// seconds, becomes beats from the start of the section that holds it,
+/// rounded to half a beat, stored against the section's base marker id (so
+/// it applies to every repeat). Taps outside every section, or on its very
+/// start, are ignored.
+pub fn steps_from_taps(song: &Song, region_id: &str, taps: &[f64]) -> Vec<LyricsStep> {
+    let Some(region) = song.regions.iter().find(|region| region.id == region_id) else {
+        return Vec::new();
+    };
+    let grid = LeadGrid::new(song);
+    let markers = region_section_markers(song, region);
+    let mut steps: Vec<LyricsStep> = Vec::new();
+    for &tap in taps {
+        let Some(index) = markers
+            .iter()
+            .rposition(|marker| marker.start_seconds <= tap + EPSILON)
+        else {
+            continue;
+        };
+        let end = markers
+            .get(index + 1)
+            .map_or(region.end_seconds, |next| next.start_seconds);
+        if tap >= end - EPSILON {
+            continue;
+        }
+        let marker = markers[index];
+        let beats = (grid.musical_span(marker.start_seconds, tap, LeadUnit::Beats) * 2.0).round() / 2.0;
+        if beats <= 0.0 {
+            continue;
+        }
+        let marker_id = chart_link_marker_id(&marker.id).to_string();
+        if steps
+            .iter()
+            .any(|step| step.marker_id == marker_id && (step.offset_beats - beats).abs() < EPSILON)
+        {
+            continue;
+        }
+        steps.push(LyricsStep {
+            marker_id,
+            offset_beats: beats,
+        });
+    }
+    steps.sort_by(|a, b| {
+        a.marker_id
+            .cmp(&b.marker_id)
+            .then(a.offset_beats.total_cmp(&b.offset_beats))
+    });
+    steps
 }
 
 #[cfg(test)]

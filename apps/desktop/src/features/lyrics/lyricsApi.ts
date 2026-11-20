@@ -8,6 +8,7 @@ import type {
   LyricsConfig,
   LyricsLink,
   LyricsSoftware,
+  LyricsStep,
   RegionLyrics,
 } from "@libretracks/shared/models";
 
@@ -66,6 +67,8 @@ export type MarkerReport = MarkerStatus & {
   occurrence: number;
   startSeconds: number;
   slideCount: number;
+  /** Automatic slide changes: the bar of the section each falls on. */
+  autoChangeBars: number[];
 };
 
 export type RegionReport = {
@@ -152,6 +155,14 @@ export function getLyricsStatus() {
 
 export function markLyricsTutorialDone(software: LyricsSoftware) {
   return invokeCommand<LyricsConfigView>("lyrics_tutorial_done", { software });
+}
+
+export function stepsFromTaps(regionId: string, taps: number[]) {
+  return invokeCommand<LyricsStep[]>("lyrics_steps_from_taps", { regionId, taps });
+}
+
+export function getTapPosition() {
+  return invokeCommand<number>("lyrics_tap_position");
 }
 
 export async function listenToLyricsStatus(handler: (status: LyricsStatus) => void) {

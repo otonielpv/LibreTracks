@@ -49,9 +49,9 @@ function report(partial: Partial<RegionReport>): RegionReport {
       { label: "Coro 2", slideCount: 1 },
     ],
     markers: [
-      { markerId: "v1", markerName: "Verso 1", occurrence: 0, startSeconds: 4, status: "matched", groupLabel: "Verso 1", automatic: true, slideCount: 2 },
-      { markerId: "c", markerName: "Coro", occurrence: 0, startSeconds: 20, status: "matched", groupLabel: "Coro", automatic: true, slideCount: 2 },
-      { markerId: "c~1", markerName: "Coro", occurrence: 1, startSeconds: 36, status: "matched", groupLabel: "Coro", automatic: true, slideCount: 2 },
+      { markerId: "v1", markerName: "Verso 1", occurrence: 0, startSeconds: 4, status: "matched", groupLabel: "Verso 1", automatic: true, slideCount: 2, autoChangeBars: [5] },
+      { markerId: "c", markerName: "Coro", occurrence: 0, startSeconds: 20, status: "matched", groupLabel: "Coro", automatic: true, slideCount: 2, autoChangeBars: [5] },
+      { markerId: "c~1", markerName: "Coro", occurrence: 1, startSeconds: 36, status: "matched", groupLabel: "Coro", automatic: true, slideCount: 2, autoChangeBars: [5] },
     ],
     suggestions: [],
     unmatchedSections: 0,
@@ -75,6 +75,8 @@ function makeApi(overrides: Partial<LyricsApi> = {}) {
     testSendLyrics: vi.fn(async () => undefined),
     getRegionReport: vi.fn(async () => report({})),
     getSetlistReport: vi.fn(async () => [] as RegionReport[]),
+    stepsFromTaps: vi.fn(async () => []),
+    getTapPosition: vi.fn(async () => 0),
     listPresentations: vi.fn(async () => [{ id: "812", name: "Way Maker" }]),
   } satisfies LyricsApi;
   return { ...base, ...overrides } as typeof base;

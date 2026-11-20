@@ -6,6 +6,7 @@
  */
 import type {
   LeadTime,
+  LyricsStepMode,
   LyricsConfig,
   LyricsOverrideTarget,
   LyricsSoftware,
@@ -14,7 +15,14 @@ import type {
 
 import * as api from "./lyricsApi";
 import type { LyricsConfigView, ProbeInfo, RegionReport } from "./lyricsApi";
-import { withEnabled, withLead, withOverride, withPresentation } from "./lyricsEdits";
+import {
+  withEnabled,
+  withLead,
+  withOverride,
+  withPresentation,
+  withRecordedSteps,
+  withStepMode,
+} from "./lyricsEdits";
 import { useLyricsStore } from "./lyricsStore";
 
 export type LyricsApi = Pick<
@@ -30,6 +38,8 @@ export type LyricsApi = Pick<
   | "getRegionReport"
   | "getSetlistReport"
   | "listPresentations"
+  | "stepsFromTaps"
+  | "getTapPosition"
 >;
 
 export type LyricsHandlerDeps = {
@@ -149,6 +159,18 @@ export function createLyricsHandlers({
 
     testSend: (regionId: string, markerId: string, k = 0) =>
       calls.testSendLyrics(regionId, markerId, k),
+
+    setStepMode: (regionId: string, mode: LyricsStepMode) =>
+      saveRegion(regionId, withStepMode(getRegionLyrics(regionId), mode)),
+
+    tapPosition: () => calls.getTapPosition(),
+
+    /** Save a recording: one commit, one undo step. */
+    saveRecording: async (regionId: string, taps: number[]) => {
+      const steps = await calls.stepsFromTaps(regionId, taps);
+      if (steps.length === 0) return null;
+      return saveRegion(regionId, withRecordedSteps(getRegionLyrics(regionId), steps));
+    },
 
     regionReport: (regionId: string) => calls.getRegionReport(regionId),
     setlistReport: () => calls.getSetlistReport(),

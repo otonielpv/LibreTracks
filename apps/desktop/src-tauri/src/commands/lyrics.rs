@@ -247,6 +247,33 @@ pub fn lyrics_status(service: State<'_, LyricsService>) -> LyricsStatus {
         .unwrap_or_default()
 }
 
+/// Los toques grabados de una canción (paso 09) en pulsos desde su sección,
+/// contra el id base de la marca. No guarda nada: el panel decide.
+#[tauri::command(async)]
+pub fn lyrics_steps_from_taps(
+    state: State<'_, DesktopState>,
+    region_id: String,
+    taps: Vec<f64>,
+) -> Result<Vec<libretracks_core::LyricsStep>, String> {
+    let session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    let song = session.engine.song().ok_or("no hay sesión abierta")?;
+    Ok(libretracks_core::lyrics_schedule::steps_from_taps(song, &region_id, &taps))
+}
+
+/// Dónde está el cursor ahora, en segundos de fuente (los de las marcas),
+/// para un toque del grabador de cambios.
+#[tauri::command(async)]
+pub fn lyrics_tap_position(state: State<'_, DesktopState>) -> Result<f64, String> {
+    let session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    Ok(session.lyrics_tap_position())
+}
+
 /// Marca el tutorial de configuración de un programa como visto (o saltado).
 #[tauri::command(async)]
 pub fn lyrics_tutorial_done(

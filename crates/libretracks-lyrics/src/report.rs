@@ -3,7 +3,8 @@
 //! and what each section marker sends.
 
 use libretracks_core::lyrics_match::{match_presentation, PresentationCandidate, PresentationMatch};
-use libretracks_core::lyrics_schedule::region_section_markers;
+use libretracks_core::lead_time::{LeadGrid, LeadUnit};
+use libretracks_core::lyrics_schedule::{auto_step_positions, region_section_markers};
 use libretracks_core::section_vocab::normalize_title;
 use libretracks_core::{LyricsLink, LyricsSoftware, Song};
 use serde::Serialize;
@@ -158,6 +159,22 @@ pub async fn region_report(
         }
     }
     report.markers = plan.report(&markers);
+    let grid = LeadGrid::new(song);
+    for (index, marker) in markers.iter().enumerate() {
+        let Some(entry) = report.markers.iter_mut().find(|entry| entry.marker_id == marker.id) else {
+            continue;
+        };
+        if entry.slide_count <= 1 {
+            continue;
+        }
+        let end = markers
+            .get(index + 1)
+            .map_or(region.end_seconds, |next| next.start_seconds);
+        entry.auto_change_bars = auto_step_positions(&grid, marker.start_seconds, end, entry.slide_count)
+            .into_iter()
+            .map(|at| grid.musical_span(marker.start_seconds, at, LeadUnit::Bars).floor() as u32 + 1)
+            .collect();
+    }
     report.unmatched_sections = plan.unmatched_count();
     report.link_state = LinkState::Linked;
     report.stored = stored;

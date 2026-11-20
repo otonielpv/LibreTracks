@@ -215,3 +215,39 @@
 .lt-lyrics-state-suggested { color: #f6ad55; }
 .lt-lyrics-state-notFound { color: #fc8181; }
 .lt-lyrics-unmatched { color: #f6ad55; }
+
+.lt-lyrics-slides h3 {
+  margin: 12px 0 4px;
+  font-size: 14px;
+}
+.lt-lyrics-slides-list {
+  margin: 4px 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.lt-lyrics-recorder {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: rgba(43, 108, 176, 0.1);
+}
+.lt-lyrics-recorder p {
+  margin: 0;
+}
+.lt-lyrics-tap {
+  min-height: 72px;
+  font-size: 18px;
+  font-weight: 700;
+}
+.lt-lyrics-search {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+  max-height: 220px;
+  overflow: auto;
+}
+.lt-lyrics-search button {
+  width: 100%;
+  text-align: left;
+}

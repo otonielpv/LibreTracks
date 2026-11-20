@@ -199,6 +199,12 @@ impl DesktopSession {
         self.land_lyrics(position);
     }
 
+    /// The transport position in source seconds (the clock the MIDI thread
+    /// uses), for the slide-change recorder.
+    pub(crate) fn lyrics_tap_position(&self) -> f64 {
+        self.current_position()
+    }
+
     pub(crate) fn lyrics_push(&self, input: WorkerInput) {
         self.lyrics.push(input);
     }

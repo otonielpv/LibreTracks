@@ -38,6 +38,8 @@ function makeApi(initial: Partial<LyricsConfig> = {}) {
       throw new Error("not in this test");
     }),
     getSetlistReport: vi.fn(async () => []),
+    stepsFromTaps: vi.fn(async () => []),
+    getTapPosition: vi.fn(async () => 0),
     listPresentations: vi.fn(async () => []),
   } satisfies LyricsApi;
   return api;
