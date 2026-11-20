@@ -353,7 +353,7 @@ pub fn land_lyrics(song: &Song, items: &[LyricsItem], position: f64) -> Option<L
             } => Some((marker_id, *occurrence)),
             _ => None,
         })
-        .last();
+        .next_back();
     let Some((marker_id, occurrence)) = section else {
         return Some(LyricsEvent::Land {
             region_id: region.id.clone(),

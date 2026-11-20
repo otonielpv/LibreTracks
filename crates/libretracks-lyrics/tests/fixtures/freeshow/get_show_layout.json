@@ -1,0 +1,14 @@
+{"action":"get_show_layout","id":"show-waymaker","data":[
+ {"type":"parent","id":"s-intro","index":1,"layoutIndex":0},
+ {"type":"parent","id":"s-v1","index":2,"layoutIndex":1},
+ {"type":"child","id":"s-v1b","index":3,"layoutIndex":1},
+ {"type":"parent","id":"s-ch","index":4,"layoutIndex":2},
+ {"type":"child","id":"s-chb","index":5,"layoutIndex":2},
+ {"type":"parent","id":"s-v2","index":6,"layoutIndex":3},
+ {"type":"parent","id":"s-ch","index":7,"layoutIndex":4},
+ {"type":"child","id":"s-chb","index":8,"layoutIndex":4},
+ {"type":"parent","id":"s-br","index":9,"layoutIndex":5},
+ {"type":"parent","id":"s-ch","index":10,"layoutIndex":6},
+ {"type":"child","id":"s-chb","index":11,"layoutIndex":6},
+ {"type":"parent","id":"s-out","index":12,"layoutIndex":7}
+]}

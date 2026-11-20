@@ -1,0 +1,12 @@
+[package]
+name = "libretracks-test-http"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# Development-only: a tiny HTTP/1.1 server for tests of crates that talk HTTP
+# (cloud uploads, lyrics programs). Never a normal dependency.
+
+[dependencies]
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "time"] }

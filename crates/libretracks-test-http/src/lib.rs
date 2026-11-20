@@ -1,4 +1,5 @@
-//! A minimal HTTP/1.1 server for exercising the upload protocols offline.
+//! A minimal HTTP/1.1 server for exercising HTTP clients offline (cloud
+//! uploads, lyrics programs).
 //!
 //! Enough of HTTP to answer reqwest: request line, headers, a body sized by
 //! `Content-Length`, keep-alive. The handler may return `None` to drop the
@@ -23,6 +24,8 @@ pub struct Request {
 pub struct Response {
     pub status: u16,
     pub body: String,
+    /// Wait this long before answering (a program that hangs).
+    pub delay: Option<std::time::Duration>,
 }
 
 impl Response {
@@ -30,6 +33,16 @@ impl Response {
         Some(Self {
             status,
             body: body.into(),
+            delay: None,
+        })
+    }
+
+    /// Answer `status` after `delay`.
+    pub fn delayed(status: u16, body: impl Into<String>, delay: std::time::Duration) -> Option<Self> {
+        Some(Self {
+            status,
+            body: body.into(),
+            delay: Some(delay),
         })
     }
 }
@@ -61,6 +74,9 @@ where
                         // Dropping both halves closes the socket mid-exchange.
                         return;
                     };
+                    if let Some(delay) = response.delay {
+                        tokio::time::sleep(delay).await;
+                    }
                     let reply = format!(
                         "HTTP/1.1 {} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
                         response.status,
@@ -142,7 +158,7 @@ pub mod tempdir {
             static COUNTER: AtomicUsize = AtomicUsize::new(0);
             let n = COUNTER.fetch_add(1, Ordering::SeqCst);
             Self(std::env::temp_dir().join(format!(
-                "libretracks-cloud-test-{}-{n}.{extension}",
+                "libretracks-test-http-{}-{n}.{extension}",
                 std::process::id()
             )))
         }

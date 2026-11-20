@@ -35,7 +35,7 @@ pub mod provider;
 pub mod redirect;
 pub mod token;
 #[cfg(test)]
-mod test_server;
+use libretracks_test_http as test_server;
 pub(crate) mod transfer;
 
 use std::path::Path;

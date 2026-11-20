@@ -1,0 +1,13 @@
+{"action":"get_show","id":"show-waymaker","data":{
+ "name":"Way Maker","category":"song",
+ "slides":{
+  "s-intro":{"group":"Intro","globalGroup":"intro","children":[]},
+  "s-v1":{"group":"Estrofa 1","globalGroup":"verse","children":["s-v1b"]},
+  "s-v1b":{"group":"","children":[]},
+  "s-ch":{"group":"Estribillo","globalGroup":"chorus","children":["s-chb"]},
+  "s-chb":{"group":"","children":[]},
+  "s-v2":{"group":"Estrofa 2","globalGroup":"verse","children":[]},
+  "s-br":{"group":"Puente","globalGroup":"bridge","children":[]},
+  "s-out":{"group":"Final","globalGroup":"outro","children":[]}
+ }
+}}

@@ -1,0 +1,12 @@
+{"presentation":{
+ "id":{"uuid":"PRES-WAYMAKER","name":"Way Maker","index":0},
+ "groups":[
+  {"name":"Intro","color":null,"slides":[{"enabled":true,"text":"","label":""}]},
+  {"name":"Verse 1","color":null,"slides":[{"enabled":true,"text":"a"},{"enabled":true,"text":"b"}]},
+  {"name":"Chorus","color":null,"slides":[{"enabled":true,"text":"c"},{"enabled":true,"text":"d"}]},
+  {"name":"Verse 2","color":null,"slides":[{"enabled":true,"text":"e"}]},
+  {"name":"Bridge","color":null,"slides":[{"enabled":true,"text":"f"}]},
+  {"name":"Ending","color":null,"slides":[{"enabled":true,"text":"g"}]}
+ ],
+ "has_timeline":false,"presentation_path":"","destination":"presentation"
+}}

@@ -9,6 +9,8 @@ members = [
     "crates/libretracks-cloud",
     "crates/libretracks-video",
     "crates/libretracks-analysis",
+    "crates/libretracks-lyrics",
+    "crates/libretracks-test-http",
     "crates/lt-audio-engine-v2",
 ]
 resolver = "2"

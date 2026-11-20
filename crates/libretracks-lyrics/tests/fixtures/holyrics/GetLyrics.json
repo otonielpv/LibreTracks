@@ -1,0 +1,15 @@
+{"status":"ok","data":{
+ "id":"812","title":"Way Maker","artist":"Sinach",
+ "slides":[
+  {"text":"","slide_description":"Intro"},
+  {"text":"a","slide_description":"Verso 1"},
+  {"text":"b","slide_description":"Verso 1"},
+  {"text":"c","slide_description":"Coro"},
+  {"text":"d","slide_description":"Coro"},
+  {"text":"e","slide_description":"Verso 2"},
+  {"text":"f","slide_description":"Puente"},
+  {"text":"g","slide_description":"Final"}
+ ],
+ "order":"1,2,3,4,5,6,4,5,7,4,5,8",
+ "arrangements":[{"name":"Corto","sequence":"1,2,3,4,5,8"}]
+}}

@@ -1,0 +1,22 @@
+[package]
+name = "libretracks-lyrics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Lyrics sync with ProPresenter, FreeShow and Holyrics over their local HTTP
+# APIs (plan lyrics-sync). Pure parts (structure, plan, send gate) plus the
+# network clients; no Tauri, so its tests run in CI.
+
+[dependencies]
+async-trait = "0.1"
+libretracks-core = { path = "../libretracks-core" }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
+
+[dev-dependencies]
+libretracks-test-http = { path = "../libretracks-test-http" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }

@@ -73,7 +73,7 @@ pub fn match_group(section: SectionId, groups: &[GroupCandidate]) -> Option<Grou
             .map(|candidate| score(section, candidate))
             .max()
             .unwrap_or(0);
-        if group_score > 0 && best.map_or(true, |best| group_score > best.score) {
+        if group_score > 0 && best.is_none_or(|best| group_score > best.score) {
             best = Some(GroupMatch {
                 index,
                 score: group_score,
