@@ -1373,6 +1373,7 @@ const es = {
       silence: "Silencio",
       loud: "Fuerte",
       here_we_go: "Empezamos",
+      horns: "Metales",
     },
     prompt: {
       timelineBpm: "Nuevo BPM del timeline",

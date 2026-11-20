@@ -1209,6 +1209,9 @@ pub enum MarkerKind {
     Silence,
     Loud,
     HereWeGo,
+    // Horns (ES "Metales"): an instrument cue like Drums or Keys, appended per
+    // the ABI rule.
+    Horns,
     /// User-defined section with no pre-recorded voice clip; the announcement
     /// falls back to silence (or TTS, if added later).
     #[default]
@@ -1284,6 +1287,7 @@ impl MarkerKind {
             MarkerKind::Silence => "silence",
             MarkerKind::Loud => "loud",
             MarkerKind::HereWeGo => "here_we_go",
+            MarkerKind::Horns => "horns",
             MarkerKind::Custom => "custom",
         }
     }
@@ -1320,7 +1324,8 @@ impl MarkerKind {
             | MarkerKind::CountIt
             | MarkerKind::Silence
             | MarkerKind::Loud
-            | MarkerKind::HereWeGo => MarkerCategory::Cue,
+            | MarkerKind::HereWeGo
+            | MarkerKind::Horns => MarkerCategory::Cue,
             // NextSong falls through: it is announced with a count-in like a
             // section, not fired as a one-shot.
             _ => MarkerCategory::Section,

@@ -109,6 +109,7 @@ const MARKER_KIND_LABELS: Record<MarkerKind, string> = {
   silence: "Silence",
   loud: "Loud",
   here_we_go: "Here We Go",
+  horns: "Horns",
 };
 
 

@@ -113,6 +113,7 @@ export type MarkerKind =
   | "silence"
   | "loud"
   | "here_we_go"
+  | "horns"
   | "custom";
 
 /** Whether a marker behaves as a song section (Verse, Chorus — name + count-in)
@@ -150,6 +151,7 @@ export const CUE_KINDS: readonly MarkerKind[] = [
   "bass",
   "guitar",
   "keys",
+  "horns",
   "ad_lib",
   "worship_freely",
   "count",
@@ -248,6 +250,8 @@ const MARKER_KIND_COLORS: Record<MarkerKind, string> = {
   loud: "#e8665a",
   // Here we go is a start signal, the same gold family as Get ready.
   here_we_go: "#e6bd6a",
+  // Horns sits with the other instrument cues, a brassier shade of their tan.
+  horns: "#d4a85a",
 };
 
 /** Resting-state colour for a kind. Falls back to the custom grey for unknown

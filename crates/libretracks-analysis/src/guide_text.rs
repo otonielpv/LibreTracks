@@ -131,6 +131,10 @@ const PHRASES: &[(&[&str], &str)] = &[
     (&["teclados"], "keys"),
     (&["piano"], "keys"),
     (&["keys"], "keys"),
+    (&["metales"], "horns"),
+    (&["vientos"], "horns"),
+    (&["horns"], "horns"),
+    (&["brass"], "horns"),
     (&["ad", "lib"], "ad_lib"),
     (&["espontaneo"], "worship_freely"),
     (&["worship", "freely"], "worship_freely"),
@@ -272,6 +276,8 @@ mod marker_label_tests {
             ("Marcar", "count_it", None),
             ("Here we go", "here_we_go", None),
             ("silencio", "silence", None),
+            ("Metales", "horns", None),
+            ("Horns", "horns", None),
         ] {
             assert_eq!(
                 parse_marker_label(label),

@@ -316,6 +316,7 @@ const char* cue_filename(int kind_index) noexcept {
         case MarkerKind::Silence: return "silence";
         case MarkerKind::Loud: return "loud";
         case MarkerKind::HereWeGo: return "here_we_go";
+        case MarkerKind::Horns: return "horns";
         default: return nullptr;
     }
 }

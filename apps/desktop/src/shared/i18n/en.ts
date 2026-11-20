@@ -1356,6 +1356,7 @@ const en = {
       silence: "Silence",
       loud: "Loud",
       here_we_go: "Here We Go",
+      horns: "Horns",
     },
     prompt: {
       timelineBpm: "New timeline BPM",

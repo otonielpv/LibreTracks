@@ -945,6 +945,7 @@ TEST_CASE("shipped voice pack covers every announced kind") {
         {MarkerKind::Silence,       "silence",        true},
         {MarkerKind::Loud,          "loud",           true},
         {MarkerKind::HereWeGo,      "here_we_go",     true},
+        {MarkerKind::Horns,         "horns",          true},
     };
 
     for (const char* lang_cstr : {"es", "en"}) {
@@ -1012,6 +1013,10 @@ TEST_CASE("new marker kinds report the right category") {
     CHECK(marker_kind_from_string("silence") == MarkerKind::Silence);
     CHECK(marker_kind_from_string("loud") == MarkerKind::Loud);
     CHECK(marker_kind_from_string("here_we_go") == MarkerKind::HereWeGo);
+
+    // Horns is an instrument cue, a one-shot like Drums or Keys.
+    CHECK(marker_kind_is_cue(MarkerKind::Horns));
+    CHECK(marker_kind_from_string("horns") == MarkerKind::Horns);
 }
 
 // Dragging a marker between the two ruler rows stores a category override. The

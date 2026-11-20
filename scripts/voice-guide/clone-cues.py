@@ -16,8 +16,7 @@ newer transformers/datasets need newer torch/huggingface_hub.
 
     HF_HUB_OFFLINE=1 f5env/Scripts/python.exe -I clone-cues.py <voices dir> <out dir>
 
-Edit `jobs` below for the cues to generate (here: Count it, Silence, Loud and
-Here we go).
+Edit `jobs` below for the cues to generate (here: Horns, ES "Metales").
 """
 import glob
 import os
@@ -51,10 +50,7 @@ jobs = {
         "ref": ["key_change_up", "key_change_down", "build", "ease_down"],
         "ref_text": "Sube tono. Baja tono. Subir intensidad. Bajar intensidad.",
         "texts": {
-            "count_it": "Marcar.",
-            "silence": "Silencio.",
-            "loud": "Fuerte.",
-            "here_we_go": "Empezamos.",
+            "horns": "Metales.",
         },
         "model": dict(
             model="F5TTS_Base",
@@ -66,10 +62,7 @@ jobs = {
         "ref": ["key_change_up", "key_change_down", "slowly_build", "get_ready"],
         "ref_text": "Key change up. Key change down. Slowly build. Get ready.",
         "texts": {
-            "count_it": "Count it.",
-            "silence": "Silence.",
-            "loud": "Loud.",
-            "here_we_go": "Here we go.",
+            "horns": "Horns.",
         },
         "model": dict(model="F5TTS_v1_Base"),
     },

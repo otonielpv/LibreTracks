@@ -187,7 +187,9 @@ enum class MarkerKind : int {
     Silence = 49,
     Loud = 50,
     HereWeGo = 51,
-    Custom = 52,
+    // Horns (ES "Metales"): instrument cue like Drums or Keys.
+    Horns = 52,
+    Custom = 53,
 };
 
 // Map a serialized snake_case kind token (as sent by Rust/TS) to the enum.
