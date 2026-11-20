@@ -812,6 +812,7 @@ fn clip_on(id: &str, track_id: &str, start: f64) -> Clip {
 fn region_at(id: &str, name: &str, start: f64, end: f64) -> SongRegion {
     SongRegion {
         drum_loop: None,
+        lyrics: None,
         key_changes: Vec::new(),
         id: id.into(),
         name: name.into(),

@@ -248,6 +248,7 @@ mod tests {
     fn region(enabled: bool, source_bpm: Option<f64>) -> SongRegion {
         SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "r".into(),
             name: "r".into(),
@@ -404,6 +405,7 @@ mod tests {
         // Region starting at 5.0 inherits 140 BPM from the marker.
         let r = SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "r1".into(),
             name: "r1".into(),
@@ -433,6 +435,7 @@ mod tests {
         let mut s = song(120.0, vec![]);
         s.regions.push(SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "r1".into(),
             name: "r1".into(),
@@ -463,6 +466,7 @@ mod tests {
         let mut s = song(120.0, vec![]);
         s.regions.push(SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "r1".into(),
             name: "r1".into(),
@@ -535,6 +539,7 @@ mod tests {
         let mut s = song(120.0, vec![]);
         s.regions.push(SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "r1".into(),
             name: "r1".into(),
@@ -569,6 +574,7 @@ mod tests {
         let mut s = song(120.0, vec![]);
         s.regions.push(SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "r1".into(),
             name: "r1".into(),
@@ -601,6 +607,7 @@ mod tests {
         let mut s = song(120.0, vec![]);
         s.regions.push(SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "r1".into(),
             name: "r1".into(),
@@ -627,6 +634,7 @@ mod tests {
         let mut s = song(90.0, vec![]);
         s.regions.push(SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "r1".into(),
             name: "r1".into(),

@@ -395,6 +395,9 @@ pub struct SongRegionSummary {
     /// tiene.
     #[serde(rename = "loop", skip_serializing_if = "Option::is_none")]
     pub drum_loop: Option<libretracks_core::drum_loops::RegionLoop>,
+    /// Letra en proyección (plan lyrics-sync); se omite si no tiene.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lyrics: Option<libretracks_core::RegionLyrics>,
     /// Lo que pinta el editor de arreglos. No lleva la instantánea del
     /// original, que puede ser grande: sólo secciones y arreglos.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1396,6 +1399,7 @@ pub(crate) fn region_to_summary(song: &Song, region: &SongRegion) -> SongRegionS
         compact_column_width_rem: region.compact_column_width_rem,
         chart: region.chart.clone(),
         drum_loop: region.drum_loop.clone(),
+        lyrics: region.lyrics.clone(),
         voice_guide_count_style: region.voice_guide_count_style,
         key_changes: region
             .key_changes
@@ -1807,6 +1811,7 @@ mod tests {
     fn region(id: &str, start: f64, end: f64) -> SongRegion {
         SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: id.into(),
             name: id.into(),

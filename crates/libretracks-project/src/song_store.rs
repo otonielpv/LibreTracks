@@ -315,6 +315,7 @@ fn migrate_v2_song(document: LegacySongDocumentV2) -> Result<Song, ProjectError>
         time_signature_markers: vec![],
         regions: vec![SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_1".into(),
             name: "Song 1".into(),
@@ -356,6 +357,7 @@ fn migrate_v3_song(document: LegacySongDocumentV3) -> Result<Song, ProjectError>
         time_signature_markers: vec![],
         regions: vec![SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_1".into(),
             name: region_name,
@@ -522,6 +524,7 @@ fn fit_regions_to_clips(song: &mut Song) {
             (None, None) => {
                 song.regions.push(SongRegion {
                     drum_loop: None,
+                    lyrics: None,
                     key_changes: Vec::new(),
                     id: format!("region_v5_migrated_{}", song.regions.len()),
                     name: "Cancion".into(),
@@ -571,6 +574,7 @@ fn fit_regions_to_clips(song: &mut Song) {
         if max_end > min_start {
             song.regions.push(SongRegion {
                 drum_loop: None,
+                lyrics: None,
                 key_changes: Vec::new(),
                 id: "region_v5_migrated_default".into(),
                 name: "Cancion".into(),
@@ -754,6 +758,7 @@ mod tests {
     fn region(id: &str, start: f64, end: f64) -> SongRegion {
         SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: id.into(),
             name: id.into(),

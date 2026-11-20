@@ -348,6 +348,9 @@ export type SongRegionSummary = {
   /** Loop de batería propio de la canción (plan drum-loops). Ausente si no
    * tiene o si el host es anterior. */
   loop?: RegionLoop | null;
+  /** Letra en proyección (plan lyrics-sync). Ausente si no tiene o si el host
+   * es anterior. */
+  lyrics?: RegionLyrics | null;
   /** When true, the region's audio is time-stretched so its `warpSourceBpm`
    * aligns with the effective timeline tempo. Applies to ALL tracks in the
    * region, independent of `transposeSemitones`. */
@@ -630,6 +633,63 @@ export type LeadTime =
   | { unit: "beats"; count: number }
   | { unit: "bars"; count: number }
   | { unit: "seconds"; seconds: number };
+
+/** Programa de proyección de letras. Espejo de Rust `LyricsSoftware`;
+ * `unknown` es un programa que esta versión no conoce. */
+export type LyricsSoftware = "proPresenter" | "freeShow" | "holyrics" | "unknown";
+
+/** Cómo avanzan las diapositivas dentro de una sección. Espejo de `StepMode`. */
+export type LyricsStepMode = "auto" | "manual" | "off";
+
+export type LyricsOverrideTarget =
+  | { type: "group"; label: string }
+  | { type: "clear" }
+  | { type: "skip" };
+
+/** Corrección manual del emparejado: `markerId` base (todas las repeticiones)
+ * o con `~n` (solo esa). Espejo de `SectionOverride`. */
+export type LyricsSectionOverride = {
+  markerId: string;
+  target: LyricsOverrideTarget;
+};
+
+/** La presentación de una canción en un programa. Espejo de `LyricsLink`. */
+export type LyricsLink = {
+  software: LyricsSoftware;
+  presentationId?: string | null;
+  presentationName: string;
+  overrides?: LyricsSectionOverride[];
+};
+
+/** Cambio de diapositiva dentro de una sección, en pulsos desde su inicio. */
+export type LyricsStep = {
+  markerId: string;
+  offsetBeats: number;
+};
+
+/** Letra en proyección de una canción. Espejo de Rust `RegionLyrics`. */
+export type RegionLyrics = {
+  enabled: boolean;
+  links: LyricsLink[];
+  steps?: LyricsStep[];
+  stepMode: LyricsStepMode;
+  lead?: LeadTime | null;
+};
+
+/** Ajustes globales de la letra en proyección (`lyrics.json`). Espejo de
+ * Rust `LyricsConfig`. El token va aparte, al llavero. */
+export type LyricsConfig = {
+  enabled: boolean;
+  software: LyricsSoftware | null;
+  host: string;
+  port: number | null;
+  lead: LeadTime;
+  clearOnSongEnd: boolean;
+  clearOnStop: boolean;
+  paused: boolean;
+  /** Programas cuyo tutorial de configuración ya se vio o se saltó. */
+  tutorialDone: LyricsSoftware[];
+};
 
 export type MixSceneMode = "apply" | "toggle" | "restore";
 

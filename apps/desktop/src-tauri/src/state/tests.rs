@@ -72,6 +72,7 @@ fn demo_song() -> Song {
         time_signature_markers: vec![],
         regions: vec![SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_1".into(),
             name: "Move Demo".into(),
@@ -151,6 +152,7 @@ fn demo_song_with_varispeed_region() -> Song {
     song.duration_seconds = 24.0;
     song.regions = vec![SongRegion {
         drum_loop: None,
+        lyrics: None,
         key_changes: Vec::new(),
         id: "region_varispeed".into(),
         name: "Varispeed".into(),
@@ -280,6 +282,7 @@ pub(crate) fn demo_song_with_region_changes_and_sections() -> Song {
     song.regions = vec![
         SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_1".into(),
             name: "Intro".into(),
@@ -298,6 +301,7 @@ pub(crate) fn demo_song_with_region_changes_and_sections() -> Song {
         },
         SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_2".into(),
             name: "Bridge".into(),
@@ -316,6 +320,7 @@ pub(crate) fn demo_song_with_region_changes_and_sections() -> Song {
         },
         SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_3".into(),
             name: "Outro".into(),
@@ -448,6 +453,7 @@ fn hierarchy_song() -> Song {
         time_signature_markers: vec![],
         regions: vec![SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_1".into(),
             name: "Hierarchy Demo".into(),
@@ -1084,6 +1090,7 @@ fn song_to_view_preserves_track_ids_and_parent_ids_verbatim() {
         time_signature_markers: vec![],
         regions: vec![SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_1".into(),
             name: "ID Audit".into(),
@@ -1673,6 +1680,7 @@ fn varispeed_expansion_next_to_another_song_returns_descriptive_overlap_error() 
     song.regions[0].name = "Pueblos todos".into();
     song.regions.push(SongRegion {
         drum_loop: None,
+        lyrics: None,
         key_changes: Vec::new(),
         id: "region_2".into(),
         name: "Santo por siempre".into(),
@@ -4115,6 +4123,7 @@ fn reconcile_regions_and_clips_keeps_a_clip_from_crossing_into_the_next_song() {
     song.regions = vec![
         SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "a".into(),
             name: "A".into(),
@@ -4133,6 +4142,7 @@ fn reconcile_regions_and_clips_keeps_a_clip_from_crossing_into_the_next_song() {
         },
         SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "b".into(),
             name: "B".into(),
@@ -4338,6 +4348,7 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
     song.regions = vec![
         SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_intro".into(),
             name: "Intro".into(),
@@ -4356,6 +4367,7 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
         },
         SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_middle".into(),
             name: "Warped".into(),
@@ -4374,6 +4386,7 @@ fn changing_warped_region_tempo_keeps_following_song_on_downbeat() {
         },
         SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_following".into(),
             name: "Following".into(),

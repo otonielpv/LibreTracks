@@ -5,6 +5,7 @@ pub mod drum_loops;
 pub mod key_changes;
 pub mod lead_plan;
 pub mod lead_time;
+pub mod lyrics_config;
 pub mod lyrics_match;
 pub mod midi_control;
 pub mod midi_port_names;
@@ -29,7 +30,7 @@ pub use automation::{
     AutomationTransitionMode, SceneMode,
 };
 pub use model::{
-    default_audio_to, implicit_start_section_id, Arrangement, ArrangementBlock, BlockContent, ChannelMode, OriginalSection,
+    default_audio_to, LyricsLink, LyricsSoftware, LyricsStep, OverrideTarget, RegionLyrics, SectionOverride, StepMode, implicit_start_section_id, Arrangement, ArrangementBlock, BlockContent, ChannelMode, OriginalSection,
     OriginalSnapshot, SongStructure, SongChart, ChartLink, chart_link_marker_id, parse_audio_output_route, Clip, FadeCurve, Marker, MarkerCategory, MarkerKind, MidiClip,
     KeyChange, KeyMap, MidiEvent, MidiEventKind, Project, Song, SongMaster, SongRegion, TempoMarker, TempoMetadata,
     is_video_file_path, TempoSource, TimeSignatureMarker, Track, TrackKind, VideoAssetInfo, VideoClip,
@@ -68,6 +69,7 @@ mod tests {
             time_signature_markers: vec![],
             regions: vec![SongRegion {
                 drum_loop: None,
+                lyrics: None,
                 key_changes: Vec::new(),
                 id: "region_intro".into(),
                 name: "Cancion".into(),
@@ -172,6 +174,7 @@ mod tests {
         let mut song = valid_song();
         song.regions.push(SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_outro".into(),
             name: "Outro".into(),
@@ -232,6 +235,7 @@ mod tests {
         let mut song = valid_song();
         song.regions.push(SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_outro".into(),
             name: "Outro".into(),
@@ -265,6 +269,7 @@ mod tests {
         song.regions[0].end_seconds = 10.0;
         song.regions.push(SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: "region_outro".into(),
             name: "Outro".into(),
@@ -575,3 +580,7 @@ mod mix_scene_tests;
 
 #[cfg(test)]
 mod track_eq_tests;
+
+#[cfg(test)]
+#[path = "lyrics_model_tests.rs"]
+mod lyrics_model_tests;

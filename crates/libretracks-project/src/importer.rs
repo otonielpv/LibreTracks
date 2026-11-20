@@ -251,6 +251,7 @@ pub fn import_wav_song(
         time_signature_markers: vec![],
         regions: vec![SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: format!("region_{}", slugify(&request.title)),
             name: request.title.clone(),

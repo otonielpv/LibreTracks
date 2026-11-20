@@ -188,6 +188,11 @@ struct SongPackageManifest {
     /// vieja lo ignora.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     region_loop: Option<libretracks_core::drum_loops::RegionLoop>,
+    /// Letra en proyección de la canción (plan lyrics-sync): nombre de la
+    /// presentación, correcciones y pasos. Aditivo: una versión vieja lo
+    /// ignora.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    region_lyrics: Option<libretracks_core::RegionLyrics>,
 }
 
 #[derive(Debug, Clone)]
@@ -592,6 +597,7 @@ fn write_region_package(
         region_chart: region.chart.clone(),
         region_cover_image: region.cover_image.clone(),
         region_loop: region.drum_loop.clone(),
+        region_lyrics: region.lyrics.clone(),
     };
 
     // Check the space BEFORE creating the file, with the same estimate as a
@@ -1416,6 +1422,7 @@ pub fn merge_extracted_song_package(
         .max(furthest_video_end_offset);
     next_song.regions.push(SongRegion {
         drum_loop: manifest.region_loop.clone(),
+        lyrics: manifest.region_lyrics.clone(),
         id: region_id,
         name: manifest.song_title.clone(),
         start_seconds: insert_at_seconds,
@@ -1644,6 +1651,7 @@ mod tests {
     fn region(id: &str, name: &str, start: f64, end: f64) -> SongRegion {
         SongRegion {
             drum_loop: None,
+            lyrics: None,
             key_changes: Vec::new(),
             id: id.into(),
             name: name.into(),
@@ -1860,6 +1868,41 @@ mod tests {
         let result =
             import_song_package(song_dir, &empty, &package_path, 0.0, SongImportTrackMode::default()).expect("import");
         assert_eq!(result.song.regions[0].drum_loop, Some(region_loop));
+    }
+
+    /// Plan lyrics-sync, paso 03: el vínculo de letra viaja entero en el
+    /// `.ltpkg` (nombre, id, correcciones y pasos).
+    #[test]
+    fn a_song_package_round_trip_keeps_the_lyrics_link() {
+        use libretracks_core::{
+            LyricsLink, LyricsSoftware, LyricsStep, OverrideTarget, RegionLyrics, SectionOverride,
+            StepMode,
+        };
+        let dir = tempdir().expect("tempdir");
+        let song_dir = dir.path();
+        let mut source = song();
+        let lyrics = RegionLyrics {
+            enabled: true,
+            links: vec![LyricsLink {
+                software: LyricsSoftware::Holyrics,
+                presentation_id: Some("812".into()),
+                presentation_name: "Way Maker".into(),
+                overrides: vec![SectionOverride {
+                    marker_id: "m1".into(),
+                    target: OverrideTarget::Group { label: "Coro 1".into() },
+                }],
+            }],
+            steps: vec![LyricsStep { marker_id: "m1".into(), offset_beats: 8.0 }],
+            step_mode: StepMode::Manual,
+            lead: None,
+        };
+        source.regions[0].lyrics = Some(lyrics.clone());
+        let package_path = song_dir.join("lyrics.ltpkg");
+        export_region_as_package(song_dir, song_dir, &source, "r1", &package_path, false).expect("export region");
+        let empty = Song { tracks: vec![], clips: vec![], regions: vec![], section_markers: vec![], ..song() };
+        let result =
+            import_song_package(song_dir, &empty, &package_path, 0.0, SongImportTrackMode::default()).expect("import");
+        assert_eq!(result.song.regions[0].lyrics, Some(lyrics));
     }
 
     /// Un bloque editado que usa una pista que solo está en él: exportar la

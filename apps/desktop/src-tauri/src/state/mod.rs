@@ -5022,6 +5022,8 @@ mod video_tests;
 #[cfg(test)]
 mod charts_tests;
 #[cfg(test)]
+mod lyrics_tests;
+#[cfg(test)]
 mod midi_song_ops_tests;
 #[cfg(test)]
 mod song_template_tests;

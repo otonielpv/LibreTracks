@@ -454,6 +454,7 @@ impl DesktopSession {
         if project.regions.is_empty() {
             next_song.regions.push(SongRegion {
                 drum_loop: None,
+                lyrics: None,
                 key_changes: Vec::new(),
                 id: format!("region_import_{}", timestamp_suffix()),
                 name: project.title.clone(),
@@ -474,6 +475,7 @@ impl DesktopSession {
             for imported_region in &project.regions {
                 next_song.regions.push(SongRegion {
                     drum_loop: None,
+                    lyrics: None,
                     key_changes: Vec::new(),
                     id: format!("region_import_{}", timestamp_suffix()),
                     name: imported_region.name.clone(),

@@ -142,6 +142,151 @@ pub struct SongRegion {
     /// rechaza campos desconocidos, lo ignora.
     #[serde(rename = "loop", default, skip_serializing_if = "Option::is_none")]
     pub drum_loop: Option<crate::drum_loops::RegionLoop>,
+    /// Vínculo con la presentación de esta canción en el programa de letras
+    /// (plan `lyrics-sync`). `None` —y lo que deserializan las sesiones de
+    /// antes— es una canción sin vincular. Se omite al guardar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lyrics: Option<RegionLyrics>,
+}
+
+/// Programa de proyección de letras. Acepta valores desconocidos para que una
+/// versión vieja no rompa con programas añadidos después.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum LyricsSoftware {
+    #[default]
+    ProPresenter,
+    FreeShow,
+    Holyrics,
+    #[serde(other)]
+    Unknown,
+}
+
+/// Cómo avanzan las diapositivas dentro de una sección.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum StepMode {
+    /// Repartidas en compases enteros sobre la duración de la sección.
+    #[default]
+    Auto,
+    /// Los pasos grabados por el usuario (`RegionLyrics.steps`).
+    Manual,
+    /// Solo la primera diapositiva.
+    Off,
+}
+
+/// Letra en proyección de una canción.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RegionLyrics {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Uno por programa: cambiar de programa no borra el vínculo del otro.
+    #[serde(default)]
+    pub links: Vec<LyricsLink>,
+    /// Cambios de diapositiva grabados, independientes del programa.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<LyricsStep>,
+    #[serde(default)]
+    pub step_mode: StepMode,
+    /// Adelanto propio de la canción; `None` = el global.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead: Option<crate::lead_time::LeadTime>,
+}
+
+impl Default for RegionLyrics {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            links: Vec::new(),
+            steps: Vec::new(),
+            step_mode: StepMode::Auto,
+            lead: None,
+        }
+    }
+}
+
+/// La presentación de una canción en un programa.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsLink {
+    pub software: LyricsSoftware,
+    /// Id del programa: caché válida solo en ese equipo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation_id: Option<String>,
+    /// Nombre de la presentación: la fuente de verdad portátil.
+    #[serde(default)]
+    pub presentation_name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overrides: Vec<SectionOverride>,
+}
+
+/// Corrección manual del emparejado de una marca. `marker_id` es el id base
+/// (vale para todas las repeticiones) o uno con `~n` (solo esa vez).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionOverride {
+    pub marker_id: String,
+    pub target: OverrideTarget,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum OverrideTarget {
+    /// Mostrar este grupo de la presentación.
+    Group { label: String },
+    /// Dejar la pantalla en blanco.
+    Clear,
+    /// No mandar nada (lo que haya puesto el operador se queda).
+    Skip,
+}
+
+/// Cambio de diapositiva dentro de una sección, en pulsos desde su inicio.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsStep {
+    pub marker_id: String,
+    pub offset_beats: f64,
+}
+
+impl RegionLyrics {
+    pub fn link_for(&self, software: LyricsSoftware) -> Option<&LyricsLink> {
+        self.links.iter().find(|link| link.software == software)
+    }
+
+    pub fn link_for_mut(&mut self, software: LyricsSoftware) -> Option<&mut LyricsLink> {
+        self.links.iter_mut().find(|link| link.software == software)
+    }
+
+    /// Pasos grabados de una marca (los de su id base), en orden.
+    pub fn steps_for(&self, marker_id: &str) -> Vec<f64> {
+        let base = chart_link_marker_id(marker_id);
+        let mut beats: Vec<f64> = self
+            .steps
+            .iter()
+            .filter(|step| step.marker_id == base && step.offset_beats.is_finite())
+            .map(|step| step.offset_beats.max(0.0))
+            .collect();
+        beats.sort_by(|a, b| a.total_cmp(b));
+        beats
+    }
+}
+
+impl LyricsLink {
+    /// La corrección de una marca: la de su `~n` exacto si existe; si no, la
+    /// de su id base.
+    pub fn override_for(&self, marker_id: &str) -> Option<&OverrideTarget> {
+        let exact = self
+            .overrides
+            .iter()
+            .find(|entry| entry.marker_id == marker_id);
+        exact
+            .or_else(|| {
+                let base = chart_link_marker_id(marker_id);
+                self.overrides.iter().find(|entry| entry.marker_id == base)
+            })
+            .map(|entry| &entry.target)
+    }
 }
 
 /// Un cambio de nota dentro de una canción. Igual que `SongRegion.key`, es la

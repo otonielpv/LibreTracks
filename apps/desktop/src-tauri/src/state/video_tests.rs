@@ -17,6 +17,7 @@ use super::{DesktopSession, VideoClipProps};
 fn region(id: &str, start: f64, end: f64) -> SongRegion {
     SongRegion {
         drum_loop: None,
+        lyrics: None,
         key_changes: Vec::new(),
         id: id.into(),
         name: id.into(),

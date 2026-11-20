@@ -10,6 +10,7 @@ mod commands;
 mod external_project;
 mod infra;
 mod link;
+mod lyrics;
 mod models;
 mod platform;
 mod redundancy;
