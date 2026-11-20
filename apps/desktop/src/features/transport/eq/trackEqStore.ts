@@ -15,11 +15,16 @@ type TrackEqStore = {
    */
   targetTrackIds: string[];
   setOpenTrackId: (trackId: string | null, targetTrackIds?: string[]) => void;
+  /** Región cuyo EQ de máster está abierto (plan track-eq-2, paso 09). */
+  openMasterRegionId: string | null;
+  setOpenMasterRegionId: (regionId: string | null) => void;
 };
 
 export const useTrackEqStore = create<TrackEqStore>()((set) => ({
   openTrackId: null,
   targetTrackIds: [],
+  openMasterRegionId: null,
+  setOpenMasterRegionId: (openMasterRegionId) => set({ openMasterRegionId }),
   setOpenTrackId: (openTrackId, targetTrackIds) =>
     set({
       openTrackId,

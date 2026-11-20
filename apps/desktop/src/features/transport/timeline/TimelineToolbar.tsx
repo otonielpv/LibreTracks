@@ -18,6 +18,7 @@ import type {
 } from "../uiStore";
 import { ViewModeSwitcher } from "./ViewModeSwitcher";
 import { SongMasterMeter } from "../tracks/TrackMeter";
+import { SongMasterEqButton } from "../eq/SongMasterEqButton";
 import { isMobileApp } from "../desktopApi";
 import { ReturnToSetlistChip } from "../setlist/ReturnToSetlistChip";
 import { TOUR_TARGETS } from "../../tutorial/tourTargets";
@@ -1071,6 +1072,10 @@ export function TimelineToolbar({
                   >
                     0 dB
                   </button>
+                  <SongMasterEqButton
+                    regionId={selectedRegion.id}
+                    disabled={masterControlsDisabled}
+                  />
                 </div>
               ) : (
                 <span>{t("timelineToolbar.regionMasterNoSelection")}</span>

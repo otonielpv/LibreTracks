@@ -2666,6 +2666,12 @@ mod tests {
             gain: 0.5,
             fade_in_seconds: 1.0,
             fade_out_seconds: 2.0,
+            // Plan track-eq-2, paso 09: el EQ de máster viaja con la canción.
+            eq: Some({
+                let mut eq = libretracks_core::TrackEq::default();
+                eq.bands[2].gain_db = 3.5;
+                eq
+            }),
         };
         source.regions[0].voice_guide_count_style = Some(libretracks_core::VoiceGuideCountStyle::default());
         let package_path = song_dir.join("warped.ltpkg");

@@ -263,6 +263,10 @@ struct Region {
     // Per-song master fader. The mixer multiplies the post-mix bus by this
     // value while the playhead lies inside the region. Defaults to unity.
     float master_gain = 1.0f;
+    // EQ de máster de la canción (plan track-eq-2, E10): sobre la mezcla de
+    // pistas que sale por `master`, tras la ganancia y los fundidos de la
+    // canción. Vacío = sin EQ (coste cero).
+    std::optional<TrackEqParams> master_eq;
 
     // Song fade in / fade out, in timeline frames from the region's start and
     // up to its end. 0 = no fade. Applied with the master gain, so they touch

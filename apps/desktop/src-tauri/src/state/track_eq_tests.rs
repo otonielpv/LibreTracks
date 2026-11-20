@@ -288,3 +288,67 @@ fn an_eq_cue_on_a_missing_track_is_rejected() {
     assert!(check(AutomationAction::SetTrackEq { track_id: "bass1".into(), eq: None, ramp_seconds: Some(1.0) }).is_ok());
     assert!(check(AutomationAction::SetTrackEqEnabled { track_id: "bass1".into(), enabled: false }).is_ok());
 }
+
+// --- Plan track-eq-2, paso 09: EQ de máster por canción ----------------------
+
+fn region_master_eq(session: &super::DesktopSession, region_id: &str) -> Option<TrackEq> {
+    session
+        .engine
+        .song()
+        .unwrap()
+        .regions
+        .iter()
+        .find(|region| region.id == region_id)
+        .unwrap()
+        .master
+        .eq
+        .clone()
+}
+
+#[test]
+fn the_song_master_eq_is_stored_sent_and_undone() {
+    let mut session = two_song_session();
+    let audio = AudioController::default();
+    let undo = session.undo_stack.len();
+
+    let mut wild = boosted_eq();
+    wild.bands[2].gain_db = 99.0;
+    session
+        .commit_song_master_eq("r1", Some(wild.clone()), &audio)
+        .expect("commit master eq");
+    assert_eq!(region_master_eq(&session, "r1"), Some(wild.sanitized()));
+    assert_eq!(region_master_eq(&session, "r2"), None);
+    assert_eq!(session.undo_stack.len(), undo + 1);
+
+    // Lo mismo otra vez no apila nada.
+    session
+        .commit_song_master_eq("r1", Some(wild.clone()), &audio)
+        .expect("same");
+    assert_eq!(session.undo_stack.len(), undo + 1);
+
+    session.undo_action(&audio).expect("undo");
+    assert_eq!(region_master_eq(&session, "r1"), None);
+    session.redo_action(&audio).expect("redo");
+    assert_eq!(region_master_eq(&session, "r1"), Some(wild.sanitized()));
+
+    assert!(session.commit_song_master_eq("nope", None, &audio).is_err());
+
+    // En disco va dentro de `master`, y se omite sin EQ.
+    let song = serde_json::to_value(session.engine.song().unwrap()).unwrap();
+    assert!(song["regions"][0]["master"]["eq"]["bands"].is_array());
+    assert!(song["regions"][1]["master"].get("eq").is_none());
+}
+
+#[test]
+fn the_engine_command_for_the_song_master_eq_has_the_cpp_shape() {
+    let command = lt_audio_engine_v2::EngineCommand::SetSongMasterEq {
+        region_id: "r1".into(),
+        eq: Some(serde_json::to_value(boosted_eq()).unwrap()),
+    };
+    let json = serde_json::to_value(&command).unwrap();
+    assert_eq!(json["type"], "SetSongMasterEq");
+    assert_eq!(json["region_id"], "r1");
+    assert_eq!(json["eq"]["bands"][2]["gainDb"], 4.5);
+    let removal = lt_audio_engine_v2::EngineCommand::SetSongMasterEq { region_id: "r1".into(), eq: None };
+    assert!(serde_json::to_value(&removal).unwrap().get("eq").is_none());
+}

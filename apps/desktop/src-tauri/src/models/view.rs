@@ -513,6 +513,8 @@ pub struct SongMasterSummary {
     pub gain: f64,
     pub fade_in_seconds: f64,
     pub fade_out_seconds: f64,
+    /// EQ de máster de la canción (plan track-eq-2, E10).
+    pub eq: Option<libretracks_core::TrackEq>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1389,6 +1391,7 @@ pub(crate) fn region_to_summary(song: &Song, region: &SongRegion) -> SongRegionS
             gain: region.master.gain,
             fade_in_seconds: region.master.fade_in_seconds,
             fade_out_seconds: region.master.fade_out_seconds,
+            eq: region.master.eq.clone(),
         },
         compact_column_width_rem: region.compact_column_width_rem,
         chart: region.chart.clone(),

@@ -72,6 +72,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "assign_section_marker_digit"
         | "capture_song_structure"
         | "clear_song_loop"
+        | "commit_song_master_eq_change"
         | "commit_track_eq_change"
         | "commit_track_eqs_change"
         | "commit_track_mix_change"
@@ -145,6 +146,7 @@ pub fn access(command: &str) -> Option<ProxyAccess> {
         | "update_clip_window"
         | "update_live_region_master_gain"
         | "update_section_marker"
+        | "update_song_master_eq_realtime"
         | "update_song_region"
         | "update_song_region_fades"
         | "update_song_region_key"
@@ -245,6 +247,7 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "assign_section_marker_digit",
     "capture_song_structure",
     "clear_song_loop",
+    "commit_song_master_eq_change",
     "commit_track_eq_change",
     "commit_track_eqs_change",
     "commit_track_mix_change",
@@ -318,6 +321,7 @@ pub const PROXIED_COMMANDS: &[&str] = &[
     "update_clip_window",
     "update_live_region_master_gain",
     "update_section_marker",
+    "update_song_master_eq_realtime",
     "update_song_region",
     "update_song_region_fades",
     "update_song_region_key",
@@ -740,6 +744,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
                 into_value_result(crate::commands::rhythm::clear_song_loop(arg(&args, "regionId")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "commit_song_master_eq_change" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::commit_song_master_eq_change(arg(&args, "regionId")?, arg(&args, "eq")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?
@@ -1319,6 +1331,14 @@ pub async fn dispatch(app: &AppHandle, command: &str, args: Value) -> Result<Val
                 into_value_result(crate::commands::timeline::update_section_marker(arg(&args, "sectionId")?, arg(&args, "name")?, arg(&args, "startSeconds")?, arg(&args, "// Set only when the drag crossed into the other ruler lane; `None` leaves
     // the marker's existing category untouched.
     categoryOverride")?, app.state()))
+            })
+            .await
+            .map_err(|error| error.to_string())?
+        }
+        "update_song_master_eq_realtime" => {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || -> Result<Value, String> {
+                into_value_result(crate::commands::timeline::update_song_master_eq_realtime(arg(&args, "regionId")?, arg(&args, "eq")?, app.state()))
             })
             .await
             .map_err(|error| error.to_string())?

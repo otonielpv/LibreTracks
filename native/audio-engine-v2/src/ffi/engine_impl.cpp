@@ -2234,6 +2234,10 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
             if (mixer_) mixer_->set_track_pan(c.track_id, c.pan);
             return Result<void>::ok();
         }
+        else if constexpr (std::is_same_v<T, CmdSetSongMasterEq>) {
+            if (mixer_) mixer_->set_song_master_eq(c.region_id, c.eq);
+            return Result<void>::ok();
+        }
         else if constexpr (std::is_same_v<T, CmdSetTrackEq>) {
             if (mixer_) mixer_->set_track_eq(c.track_id, c.eq, c.smoothing_ms);
             return Result<void>::ok();

@@ -5,6 +5,7 @@ import { createSpectrumFeed } from "@libretracks/shared/eq/spectrumFeed";
 import type { TransportSnapshot } from "@libretracks/shared/models";
 
 import {
+  commitSongMasterEqChange,
   commitTrackEqChange,
   commitTrackEqsChange,
   deleteEqPreset,
@@ -14,11 +15,13 @@ import {
   listenToEqSpectrum,
   saveEqPreset,
   setTrackEqAnalyzer,
+  updateSongMasterEqRealtime,
   updateTrackEqRealtime,
 } from "../desktopApi";
 import { getSong, setSong, useSongStore } from "../songStore";
 import { createTrackEqHandlers, trackTakesEq } from "../tracks/trackEqHandlers";
 import { TrackEqEditor } from "./TrackEqEditor";
+import { createSongMasterEqHandlers } from "./songMasterEqHandlers";
 import { useTrackEqStore } from "./trackEqStore";
 
 /** Último RTA del anfitrión (solo en modo invitado). */
@@ -61,6 +64,24 @@ export function TrackEqEditorHost({
       }),
     [runAction, applyPlaybackSnapshot, optimisticallyAppliedRevisionsRef],
   );
+  const masterHandlers = useMemo(
+    () =>
+      createSongMasterEqHandlers({
+        runAction,
+        setSong,
+        applyPlaybackSnapshot,
+        optimisticallyAppliedRevisionsRef,
+        updateSongMasterEqRealtime,
+        commitSongMasterEqChange,
+      }),
+    [runAction, applyPlaybackSnapshot, optimisticallyAppliedRevisionsRef],
+  );
+  const openMasterRegionId = useTrackEqStore((state) => state.openMasterRegionId);
+  const masterRegion = useSongStore((state) =>
+    openMasterRegionId
+      ? (state.song?.regions.find((region) => region.id === openMasterRegionId) ?? null)
+      : null,
+  );
   const openTrackId = useTrackEqStore((state) => state.openTrackId);
   useEffect(() => {
     if (!openTrackId || !isGuestMirrorMode()) return;
@@ -81,6 +102,17 @@ export function TrackEqEditorHost({
   const track = useSongStore((state) =>
     openTrackId ? (state.song?.tracks.find((candidate) => candidate.id === openTrackId) ?? null) : null,
   );
+  // EQ de máster de una canción (plan track-eq-2, paso 09): el mismo editor.
+  if (masterRegion) {
+    return (
+      <TrackEqEditor
+        key={`master-${masterRegion.id}`}
+        track={{ id: masterRegion.id, name: masterRegion.name, eq: masterRegion.master?.eq ?? null }}
+        handlers={masterHandlers}
+        midiLearn={false}
+      />
+    );
+  }
   if (!track || !trackTakesEq(track)) return null;
   return <TrackEqEditor key={track.id} track={track} handlers={handlers} />;
 }

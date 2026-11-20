@@ -294,6 +294,9 @@ export type SongMasterSummary = {
    * snapshots from before song fades existed. */
   fadeInSeconds?: number;
   fadeOutSeconds?: number;
+  /** EQ de máster de la canción (plan track-eq-2): sobre las pistas que
+   * salen por el máster, tras su ganancia y sus fundidos. */
+  eq?: TrackEq | null;
 };
 
 /** Fallback width (rem) for a compact-view song column, used only when the

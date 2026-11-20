@@ -3131,6 +3131,22 @@ export async function commitTrackEqsChange(args: {
   return invokeCommand<TransportSnapshot>("commit_track_eqs_change", args);
 }
 
+/** Arrastre del EQ de máster de una canción (plan track-eq-2): solo motor. */
+export async function updateSongMasterEqRealtime(args: {
+  regionId: string;
+  eq: TrackEq | null;
+}): Promise<void> {
+  await invokeCommand("update_song_master_eq_realtime", args);
+}
+
+/** Confirma el EQ de máster de una canción: modelo + un paso de deshacer. */
+export async function commitSongMasterEqChange(args: {
+  regionId: string;
+  eq: TrackEq | null;
+}): Promise<TransportSnapshot> {
+  return invokeCommand<TransportSnapshot>("commit_song_master_eq_change", args);
+}
+
 /** Presets de EQ de esta máquina: fábrica primero, después los del usuario. */
 export async function listEqPresets(): Promise<EqPreset[]> {
   return invokeCommand<EqPreset[]>("list_eq_presets");

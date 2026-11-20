@@ -1552,6 +1552,36 @@ pub fn commit_track_eq_change(
         .map_err(|error| error.to_string())
 }
 
+/// Arrastre del EQ de máster de una canción (plan track-eq-2, E10): solo
+/// motor, sin modelo ni deshacer.
+#[tauri::command(async)]
+pub fn update_song_master_eq_realtime(
+    region_id: String,
+    eq: Option<libretracks_core::TrackEq>,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    state
+        .audio
+        .set_song_master_eq(&region_id, eq.as_ref())
+        .map_err(|error| error.to_string())
+}
+
+/// Confirmar el EQ de máster de una canción: modelo + un paso de deshacer.
+#[tauri::command(async)]
+pub fn commit_song_master_eq_change(
+    region_id: String,
+    eq: Option<libretracks_core::TrackEq>,
+    state: State<'_, DesktopState>,
+) -> Result<TransportSnapshot, String> {
+    let mut session = state
+        .session
+        .lock()
+        .map_err(|_| DesktopError::StatePoisoned.to_string())?;
+    session
+        .commit_song_master_eq(&region_id, eq, &state.audio)
+        .map_err(|error| error.to_string())
+}
+
 /// Un cambio del lote de `commit_track_eqs_change`.
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

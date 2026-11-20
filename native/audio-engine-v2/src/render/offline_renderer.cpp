@@ -1136,6 +1136,54 @@ bool inherits_route(const Track& track) {
     return route.empty() || route == "inherit";
 }
 
+// Salida efectiva de una pista: la suya o la heredada de sus carpetas.
+// `true` si es el máster (lo que ecualiza el EQ de máster de la canción).
+bool route_is_master(const Song& song, const Track& track) {
+    const Track* current = &track;
+    for (int depth = 0; current && depth < 8; ++depth) {
+        std::string route = current->audio_to;
+        std::transform(route.begin(), route.end(), route.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        route.erase(0, route.find_first_not_of(" \t"));
+        route.erase(route.find_last_not_of(" \t") + 1);
+        if (!route.empty() && route != "inherit")
+            return route == "master";
+        if (current->parent_track_id.empty())
+            break;
+        current = find_in_song(song, current->parent_track_id);
+        if (current && current->kind != TrackKind::Folder)
+            break;
+    }
+    return true;
+}
+
+// EQ de máster de cada canción (plan track-eq-2, E10) sobre la mezcla de las
+// pistas que salen por el máster, tras su ganancia y sus fundidos (que el
+// render ya aplica por pista: es lo mismo que aplicarlos a la suma). Cambia de
+// objetivo en los límites de canción con el suavizado del motor, como en
+// directo.
+void apply_song_master_eq(const Session& session, const std::vector<FrameSegment>& segments,
+                          int sample_rate, float* acc_l, float* acc_r) {
+    TrackEq eq;
+    eq.prepare(static_cast<double>(sample_rate));
+    bool first = true;
+    for (const FrameSegment& segment : segments) {
+        for (Frame timeline = segment.start; timeline < segment.end; timeline += kBlockFrames) {
+            const Frame n = std::min<Frame>(kBlockFrames, segment.end - timeline);
+            const Region* region = region_at_frame(session, timeline);
+            const TrackEqParams params =
+                region && region->master_eq ? *region->master_eq : TrackEqParams{};
+            eq.set_target(params);
+            if (first) {
+                eq.snap_to_target();
+                first = false;
+            }
+            const Frame out = segment.out + (timeline - segment.start);
+            eq.process(acc_l + out, acc_r + out, static_cast<std::size_t>(n));
+        }
+    }
+}
+
 struct FolderEqBus {
     const Song* song = nullptr;
     const Track* folder = nullptr;
@@ -1168,7 +1216,7 @@ public:
 
     // Ecualiza cada carpeta que recibió algo, de la más profunda a la más
     // externa, y la suma donde toca.
-    void finish(float* acc_l, float* acc_r) {
+    void finish(float* acc_l, float* acc_r, float* bypass_l = nullptr, float* bypass_r = nullptr) {
         std::vector<FolderEqBus*> order;
         for (auto& bus : buses_) order.push_back(bus.get());
         std::stable_sort(order.begin(), order.end(),
@@ -1184,8 +1232,11 @@ public:
                 eq.process(bus->left.data() + at, bus->right.data() + at, n);
             }
             FolderEqBus* up = destination(*bus->song, *bus->folder);
-            float* out_l = up ? up->left.data() : acc_l;
-            float* out_r = up ? up->right.data() : acc_r;
+            // Sin carpeta padre con EQ: al máster o, con EQ de máster en la
+            // sesión y otra salida, al búfer que se salta ese EQ.
+            const bool bypass = !up && bypass_l && !route_is_master(*bus->song, *bus->folder);
+            float* out_l = up ? up->left.data() : (bypass ? bypass_l : acc_l);
+            float* out_r = up ? up->right.data() : (bypass ? bypass_r : acc_r);
             if (up) up->used = true;
             for (Frame f = 0; f < total_; ++f) {
                 out_l[f] += bus->left[static_cast<std::size_t>(f)];
@@ -1355,18 +1406,42 @@ Result<OfflineRenderReport> render_offline(const OfflineRenderRequest& request,
         std::vector<float> acc_l(static_cast<std::size_t>(total), 0.0f);
         std::vector<float> acc_r(static_cast<std::size_t>(total), 0.0f);
 
+        // EQ de máster (E10): solo si alguna canción lo tiene; si no, todo
+        // va a la mezcla como siempre (bit-idéntico).
+        bool any_master_eq = false;
+        if (request.apply_mixer)
+            for (const auto& song : session.songs)
+                for (const auto& region : song.regions)
+                    any_master_eq = any_master_eq || region.master_eq.has_value();
+        std::vector<float> bypass_l;
+        std::vector<float> bypass_r;
+        if (any_master_eq) {
+            bypass_l.assign(static_cast<std::size_t>(total), 0.0f);
+            bypass_r.assign(static_cast<std::size_t>(total), 0.0f);
+        }
+
         FolderEqPlan folders(request, output, total);
         for (const auto& ref : output_tracks[oi]) {
             FolderEqBus* folder = folders.destination(*ref.song, *ref.track);
             if (folder) folder->used = true;
-            auto rendered = render_track(run, *ref.song, *ref.track,
-                                         folder ? folder->left.data() : acc_l.data(),
-                                         folder ? folder->right.data() : acc_r.data());
+            const bool bypass = !folder && any_master_eq && !route_is_master(*ref.song, *ref.track);
+            float* dest_l = folder ? folder->left.data() : (bypass ? bypass_l.data() : acc_l.data());
+            float* dest_r = folder ? folder->right.data() : (bypass ? bypass_r.data() : acc_r.data());
+            auto rendered = render_track(run, *ref.song, *ref.track, dest_l, dest_r);
             if (rendered.is_err())
                 return fail(rendered.error());
             run.units_done += 1.0;
         }
-        folders.finish(acc_l.data(), acc_r.data());
+        folders.finish(acc_l.data(), acc_r.data(),
+                       any_master_eq ? bypass_l.data() : nullptr,
+                       any_master_eq ? bypass_r.data() : nullptr);
+        if (any_master_eq) {
+            apply_song_master_eq(session, segments, request.sample_rate, acc_l.data(), acc_r.data());
+            for (std::size_t f = 0; f < acc_l.size(); ++f) {
+                acc_l[f] += bypass_l[f];
+                acc_r[f] += bypass_r[f];
+            }
+        }
 
         const double sr = static_cast<double>(request.sample_rate);
 

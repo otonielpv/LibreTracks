@@ -1102,6 +1102,7 @@ impl AudioController {
                 song_id: song.id.clone(),
                 regions,
             })?;
+            send_song_master_eqs(engine, song)?;
             state.last_sync = Some(AudioOperationSummary {
                 reason: Some("set_song_regions".into()),
                 elapsed_ms: 0.0,
@@ -1436,6 +1437,7 @@ impl AudioController {
                 tempo_markers,
                 time_signature_markers,
             })?;
+            send_song_master_eqs(engine, song)?;
 
             if state.loaded_session_signature.is_some() {
                 state.loaded_session_signature = Some(session_signature(&resolved_song));
@@ -1633,6 +1635,27 @@ impl AudioController {
             .as_ref()
             .map(|engine| engine.read_track_spectrum())
             .unwrap_or_default()
+    }
+
+    /// EQ de máster de una canción al motor (plan track-eq-2, E10): solo
+    /// motor, para el arrastre y para la confirmación.
+    pub fn set_song_master_eq(
+        &self,
+        region_id: &str,
+        eq: Option<&libretracks_core::TrackEq>,
+    ) -> Result<(), DesktopError> {
+        let eq_json = eq.and_then(|eq| serde_json::to_value(eq.sanitized()).ok());
+        crate::redundancy::mix::emit(libretracks_link::redundancy::MixControl::SongMasterEq {
+            region_id: region_id.to_string(),
+            eq: eq.map(|eq| eq.sanitized()),
+        });
+        self.with_engine_state("set_song_master_eq", None, |engine, _state| {
+            engine.send_command(&EngineCommand::SetSongMasterEq {
+                region_id: region_id.into(),
+                eq: eq_json,
+            })?;
+            Ok(())
+        })
     }
 
     /// Arrastre en vivo del EQ: cuenta como mando en tiempo real, como el pan.
@@ -3522,6 +3545,7 @@ fn load_resolved_song(
             }
             DesktopError::AudioCommand(error.to_string())
         })?;
+    send_song_master_eqs(engine, song)?;
     state.loaded_session_signature = Some(signature);
     Ok(())
 }
@@ -3596,6 +3620,28 @@ fn song_with_resolved_audio_paths(song_dir: Option<&Path>, song: &Song) -> Song 
 /// audio, recortado con la misma función que los comandos. El motor lo lee
 /// tolerante y el upsert manda sobre el valor en vivo, así que deshacer y
 /// rehacer devuelven el EQ también al motor.
+/// El EQ de máster de cada canción al motor (plan track-eq-2, E10). Tras
+/// cada envío de regiones, de pistas o de la sesión: la tabla de EQ del motor
+/// guarda el valor en vivo y deshacer/rehacer tiene que pisarlo.
+pub(crate) fn send_song_master_eqs(
+    engine: &Engine,
+    song: &Song,
+) -> Result<(), DesktopError> {
+    for region in &song.regions {
+        engine
+            .send_command(&EngineCommand::SetSongMasterEq {
+                region_id: region.id.clone(),
+                eq: region
+                    .master
+                    .eq
+                    .as_ref()
+                    .and_then(|eq| serde_json::to_value(eq.sanitized()).ok()),
+            })
+            .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+    }
+    Ok(())
+}
+
 pub(crate) fn track_eq_for_engine(track: &libretracks_core::Track) -> Option<serde_json::Value> {
     // Audio y carpetas (plan track-eq-2, E9).
     if !libretracks_core::track_eq::track_kind_takes_eq(track.kind) {

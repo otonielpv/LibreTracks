@@ -1216,6 +1216,34 @@ impl DesktopSession {
         Ok(self.snapshot())
     }
 
+    /// EQ de máster de una canción (plan track-eq-2, E10): modelo, un paso
+    /// de deshacer y motor. `None` lo quita. Recortado como el de pista.
+    pub fn commit_song_master_eq(
+        &mut self,
+        region_id: &str,
+        eq: Option<libretracks_core::TrackEq>,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let eq = eq.map(|eq| eq.sanitized());
+        let mut song = self
+            .engine
+            .song()
+            .cloned()
+            .ok_or(DesktopError::NoSongLoaded)?;
+        let region = song
+            .regions
+            .iter_mut()
+            .find(|region| region.id == region_id)
+            .ok_or_else(|| DesktopError::RegionNotFound(region_id.to_string()))?;
+        if region.master.eq == eq {
+            return Ok(self.snapshot());
+        }
+        region.master.eq = eq.clone();
+        audio.set_song_master_eq(region_id, eq.as_ref())?;
+        self.persist_song_update(song, audio, AudioChangeImpact::MixerOnly, true)?;
+        Ok(self.snapshot())
+    }
+
     /// Set several song masters at once ("Nivelar canciones"): one edit, so a
     /// single undo puts every song back. Validated up front, all or nothing.
     pub fn update_song_region_master_gains(

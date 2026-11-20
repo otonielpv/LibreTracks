@@ -77,6 +77,13 @@ pub enum EngineCommand {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         smoothing_ms: Option<f64>,
     },
+    /// EQ de máster de una canción (plan track-eq-2, E10), por región.
+    /// `None` = quitarlo. El motor lo lee tolerante.
+    SetSongMasterEq {
+        region_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        eq: Option<serde_json::Value>,
+    },
     SetTrackMute {
         track_id: String,
         mute: bool,

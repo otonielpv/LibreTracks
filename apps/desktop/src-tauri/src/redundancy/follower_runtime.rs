@@ -501,7 +501,13 @@ fn apply_mix(
         let mut settings_changed = false;
         for control in &controls {
             match control {
-                MixControl::Track { .. } | MixControl::SongMaster { .. } => {
+                // Las de sesión: mezcla, EQ de pista y de máster (sin el EQ,
+                // caían en los ajustes, que no lo conocen, y el respaldo no lo
+                // recibía).
+                MixControl::Track { .. }
+                | MixControl::TrackEq { .. }
+                | MixControl::SongMaster { .. }
+                | MixControl::SongMasterEq { .. } => {
                     let _ = mix::apply_to_session(&mut session, &state.audio, control, full);
                 }
                 MixControl::Metronome { enabled, volume } if !full => {

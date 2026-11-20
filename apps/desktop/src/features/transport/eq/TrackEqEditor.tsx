@@ -5,13 +5,13 @@ import { isMobileApp } from "@libretracks/shared/desktopApi";
 import {
   TrackEqEditor as SharedTrackEqEditor,
   type EqMappable,
+  type TrackEqEditorHandlers,
   type TrackEqEditorTrack,
 } from "@libretracks/shared/eq/TrackEqEditor";
 
 import { MidiMappable } from "../midi/MidiMappable";
 import { trackTarget, type EqControl } from "../midi/controllerTargets";
 import { useDismissOnBack } from "../mobile/backNavigation";
-import type { TrackEqHandlers } from "../tracks/trackEqHandlers";
 import { useTrackEqStore } from "./trackEqStore";
 
 /**
@@ -23,10 +23,13 @@ export function TrackEqEditor({
   track,
   handlers,
   sampleRate,
+  midiLearn = true,
 }: {
   track: TrackEqEditorTrack;
-  handlers: TrackEqHandlers;
+  handlers: TrackEqEditorHandlers;
   sampleRate?: number;
+  /** El EQ de máster no tiene destinos MIDI: los de pista llevan su id. */
+  midiLearn?: boolean;
 }) {
   const { t } = useTranslation();
   const close = useCallback(() => handlers.close(), [handlers]);
@@ -50,7 +53,7 @@ export function TrackEqEditor({
       isMobile={isMobileApp}
       sampleRate={sampleRate}
       targetCount={targetCount}
-      mappable={mappable}
+      mappable={midiLearn ? mappable : undefined}
     />
   );
 }

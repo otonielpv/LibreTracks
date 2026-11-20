@@ -96,6 +96,9 @@ public:
     // `smoothing_ms` > 0: el cambio se recorre en ese tiempo (rampa de cue).
     void set_track_eq(const Id& track_id, const std::optional<TrackEqParams>& eq,
                       double smoothing_ms = 0.0);
+    // EQ de máster de una canción (plan track-eq-2, E10), por id de región.
+    // Hilo de comandos, como set_track_eq: publica una tabla nueva.
+    void set_song_master_eq(const Id& region_id, const std::optional<TrackEqParams>& eq);
     // Vuelve a tomar de la sesión el EQ de las pistas de `song_id`, por encima
     // del valor en vivo. Lo usa UpsertSongTracks, que es la foto del modelo.
     void sync_track_eqs_from_song(const Id& song_id);
@@ -448,6 +451,12 @@ private:
         std::uint64_t version = 0;
     };
     RtPublisher<TrackEqTable> eq_table_;
+    // Estado del EQ de máster (solo el hilo de audio).
+    TrackEq       master_eq_;
+    double        master_eq_sample_rate_ = 0.0;
+    std::uint64_t master_eq_table_version_ = 0;
+    const Region* master_eq_region_ = nullptr;
+    bool          master_eq_read_ = false;
     // RTA: hash del id de la pista analizada (0 = apagado) y su toma.
     std::atomic<std::size_t> analyzer_track_hash_{0};
     AnalyzerTap analyzer_tap_;
@@ -473,6 +482,13 @@ private:
     // con EQ no hace nada: la salida es bit-idéntica a sin EQ en carpetas.
     void mix_folder_eq_buses(const Song& song, float** output_channels, int num_channels,
                              int num_frames, int output_offset, std::size_t slots) noexcept;
+    // EQ de máster (E10): sobre el par `master`, tras la ganancia y los
+    // fundidos de canción y el fundido de salto. Un solo TrackEq que cambia de
+    // objetivo al cambiar de canción (sin reiniciar filtros). Sin EQ de máster
+    // no toca nada.
+    void apply_song_master_eq(float** output_channels, int num_channels, int num_frames,
+                              int output_offset, const Session* session,
+                              Frame timeline_frame) noexcept;
     void process_track_eq(TrackBusSlot& bus, const Track& track, const TrackEqTable* table,
                           float* left, float* right, int frames, bool settled_silent) noexcept;
 

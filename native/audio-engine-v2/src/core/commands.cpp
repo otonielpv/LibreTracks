@@ -174,6 +174,14 @@ EngineCommand command_from_json(const std::string& raw) {
             cmd.track_id = it->get<Id>();
         return cmd;
     }
+    if (type == "SetSongMasterEq") {
+        // Tolerante como SetTrackEq: sin `eq` o rara = quitarlo.
+        CmdSetSongMasterEq cmd;
+        cmd.region_id = j.at("region_id").get<Id>();
+        if (auto it = j.find("eq"); it != j.end())
+            cmd.eq = parse_track_eq_json(*it);
+        return cmd;
+    }
     if (type == "SetTrackEq") {
         // Lectura tolerante: sin `eq`, `null` o algo que no es un objeto =
         // quitar el EQ; campos desconocidos se ignoran.

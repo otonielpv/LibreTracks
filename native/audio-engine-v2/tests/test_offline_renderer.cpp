@@ -1311,3 +1311,71 @@ TEST_CASE("offline render folder eq C5: a folder with eq matches the live mixer 
     CHECK(stem_diff == 0.0f);
     CHECK(folder_diff <= 1e-6f);
 }
+
+// ---------------------------------------------------------------------------
+// Plan track-eq-2, paso 09: EQ de máster por canción, render vs directo.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("offline render master eq C4: song master eq with a song fade matches the live mixer") {
+    constexpr int kSR = 48000;
+    constexpr int kBlock = 512;
+    constexpr Frame kFrames = kSR;
+    TempDir dir;
+    const std::string file = dir.file("tone.wav");
+    auto source = stereo_sine_at(kFrames, 700.0, kSR);
+    for (auto& v : source) v *= 0.4f;
+    write_float_wav(file, source, 2, kSR);
+
+    auto compare = [&](bool master_eq) {
+        json master = {{"gain", 0.8}, {"fadeInSeconds", 0.25}};
+        if (master_eq) master["eq"] = peak_eq_json(700.0, 6.0, 1.0);
+        const json regions = json::array({{{"id", "r1"}, {"name", "Song"}, {"startSeconds", 0.0},
+                                           {"endSeconds", 1.0}, {"master", master}}});
+        const json song = song_json(json::array({track_json("t", 0.9, 0.2)}),
+                                    json::array({clip_json("c", "t", file, 0.0, 1.0)}), regions);
+        auto req = base_request(song, 0.0, 1.0);
+        req.outputs.push_back({dir.file("mix.wav"), {"t"}});
+        auto rendered = render_offline(req);
+        REQUIRE_MESSAGE(rendered.is_ok(), (rendered.is_err() ? rendered.error() : ""));
+        const auto offline = read_wav(dir.file("mix.wav"));
+
+        auto parsed = session_from_project_json(song.dump(), kSR);
+        REQUIRE(parsed.is_ok());
+        auto session = std::make_shared<const Session>(parsed.take());
+        REQUIRE(session->songs[0].regions.size() == 1);
+        REQUIRE(session->songs[0].regions[0].master_eq.has_value() == master_eq);
+        SourceManager sm;
+        const Id source_id = session->songs[0].tracks[0].clips[0].source_id;
+        sm.register_source(source_id, "");
+        REQUIRE(sm.store_decoded_source(source_id, source, 2, kSR, kFrames).is_ok());
+        TransportClock clock(kSR);
+        JumpScheduler scheduler;
+        Mixer mixer(session, &sm, &clock, &scheduler);
+        mixer.prepare_render_resources(kBlock);
+        mixer.set_active_output_channels({0, 1});
+        clock.play();
+        clock.clear_pending_start();
+        std::vector<float> l(kBlock), r(kBlock), live;
+        float* out[2] = {l.data(), r.data()};
+        for (int b = 0; b < 80; ++b) {
+            std::fill(l.begin(), l.end(), 0.0f);
+            std::fill(r.begin(), r.end(), 0.0f);
+            mixer.render(out, 2, kBlock, clock.sample_rate());
+            live.insert(live.end(), l.begin(), l.end());
+        }
+        float worst = 0.0f;
+        for (std::size_t i = kBlock * 8; i < live.size(); ++i)
+            worst = std::max(worst, std::abs(live[i] - offline.at(static_cast<Frame>(i), 0)));
+        return std::make_pair(worst, offline);
+    };
+    const auto [without_eq, plain] = compare(false);
+    const auto [with_eq, equalised] = compare(true);
+    CAPTURE(without_eq);
+    CAPTURE(with_eq);
+    CHECK(without_eq <= 1e-6f);
+    CHECK(with_eq <= 1e-5f);
+    float differs = 0.0f;
+    for (Frame f = kBlock * 8; f < kFrames; ++f)
+        differs = std::max(differs, std::abs(plain.at(f, 0) - equalised.at(f, 0)));
+    CHECK(differs > 0.01f);
+}

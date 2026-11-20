@@ -1044,6 +1044,8 @@ void Mixer::render_timeline_span(float** output_channels,
                                        output_offset, session.get(), timeline_frame);
     // Same for the jump transition fade: the song fades, the cues do not.
     apply_master_fade_to_tracks(output_channels, num_channels, num_frames, output_offset);
+    apply_song_master_eq(output_channels, num_channels, num_frames, output_offset, session.get(),
+                         timeline_frame);
     capture_region_track_peaks(output_channels, num_channels, num_frames, output_offset);
 
     std::array<float*, 64> shifted_channels{};
@@ -1582,6 +1584,8 @@ void Mixer::render(float** output_channels,
         // Same for the jump transition fade: the song fades, the cues do not.
         apply_master_fade_to_tracks(output_channels, num_channels, num_frames,
                                     /*output_offset=*/0);
+        apply_song_master_eq(output_channels, num_channels, num_frames, /*output_offset=*/0,
+                             session.get(), timeline_frame);
         capture_region_track_peaks(output_channels, num_channels, num_frames,
                                    /*output_offset=*/0);
 
@@ -1779,6 +1783,87 @@ void Mixer::set_track_eq(const Id& track_id, const std::optional<TrackEqParams>&
     publish_eq_table_locked(std::move(entries));
 }
 
+namespace {
+
+// Clave del EQ de máster de una región en la tabla de EQ: un prefijo que
+// ningún id de pista puede llevar (separador de unidad ASCII).
+constexpr std::string_view kMasterEqKeyPrefix = "\x1fmaster:";
+
+bool is_master_eq_key(const Id& key, const Id& region_id) noexcept {
+    return key.size() == kMasterEqKeyPrefix.size() + region_id.size()
+        && std::string_view(key).substr(0, kMasterEqKeyPrefix.size()) == kMasterEqKeyPrefix
+        && std::string_view(key).substr(kMasterEqKeyPrefix.size()) == region_id;
+}
+
+Id master_eq_key(const Id& region_id) {
+    Id key(kMasterEqKeyPrefix);
+    key += region_id;
+    return key;
+}
+
+} // namespace
+
+void Mixer::set_song_master_eq(const Id& region_id, const std::optional<TrackEqParams>& eq) {
+    set_track_eq(master_eq_key(region_id), eq);
+}
+
+void Mixer::apply_song_master_eq(float** output_channels, int num_channels, int num_frames,
+                                 int output_offset, const Session* session,
+                                 Frame timeline_frame) noexcept {
+    if (!session || num_channels <= 0 || num_frames <= 0)
+        return;
+    const double sample_rate = static_cast<double>(clock_->sample_rate());
+    bool snap = false;
+    if (master_eq_sample_rate_ != sample_rate) {
+        master_eq_.prepare(sample_rate);
+        master_eq_sample_rate_ = sample_rate;
+        master_eq_read_ = false;
+        snap = true;
+    }
+    const Region* region = region_at_frame(*session, timeline_frame);
+    const TrackEqTable* table = eq_table_.acquire();
+    const std::uint64_t version = table ? table->version : 0;
+    if (!master_eq_read_ || region != master_eq_region_ || version != master_eq_table_version_) {
+        const TrackEqParams* params = nullptr;
+        if (table && region) {
+            for (const auto& entry : table->entries) {
+                if (is_master_eq_key(entry.track_id, region->id)) {
+                    if (entry.params) params = &*entry.params;
+                    break;
+                }
+            }
+        }
+        master_eq_.set_target(params ? *params : TrackEqParams{});
+        if (snap) master_eq_.snap_to_target();
+        master_eq_region_ = region;
+        master_eq_table_version_ = version;
+        master_eq_read_ = true;
+    }
+    eq_table_.end_block();
+    if (master_eq_.is_transparent())
+        return;
+    int left_channel = 0;
+    int right_channel = -1;
+    route_channels("master", num_channels, render_output_channels_.data(),
+                   render_output_channel_count_, left_channel, right_channel);
+    if (left_channel < 0 || left_channel >= num_channels || !output_channels[left_channel])
+        return;
+    float* left = output_channels[left_channel] + output_offset;
+    if (right_channel >= 0 && right_channel < num_channels && right_channel != left_channel
+        && output_channels[right_channel]) {
+        master_eq_.process(left, output_channels[right_channel] + output_offset,
+                           static_cast<std::size_t>(num_frames));
+        return;
+    }
+    // Máster mono: el mismo canal por los dos lados del EQ, a trozos.
+    std::array<float, 256> twin{};
+    for (int offset = 0; offset < num_frames; offset += static_cast<int>(twin.size())) {
+        const int n = std::min(static_cast<int>(twin.size()), num_frames - offset);
+        std::copy(left + offset, left + offset + n, twin.begin());
+        master_eq_.process(left + offset, twin.data(), static_cast<std::size_t>(n));
+    }
+}
+
 void Mixer::rebuild_eq_table(const std::shared_ptr<const Session>& session, bool preserve_realtime_state) {
     std::lock_guard<std::mutex> lock(eq_writer_mutex_);
     const auto* previous = eq_table_.current_for_writer();
@@ -1801,6 +1886,23 @@ void Mixer::rebuild_eq_table(const std::shared_ptr<const Session>& session, bool
                     }
                 }
                 entries.push_back(kept ? *kept : TrackEqEntry{ track.id, track.eq });
+            }
+            // EQ de máster de cada canción (plan track-eq-2, E10).
+            for (const auto& region : song.regions) {
+                const Id key = master_eq_key(region.id);
+                const TrackEqEntry* kept = nullptr;
+                if (preserve_realtime_state && previous) {
+                    for (const auto& entry : previous->entries) {
+                        if (entry.track_id == key) {
+                            kept = &entry;
+                            break;
+                        }
+                    }
+                }
+                if (kept)
+                    entries.push_back(*kept);
+                else if (region.master_eq)
+                    entries.push_back(TrackEqEntry{ key, region.master_eq });
             }
         }
     }

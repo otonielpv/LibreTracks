@@ -230,6 +230,12 @@ pub enum MixControl {
         region_id: String,
         gain: f64,
     },
+    /// EQ de máster de una canción (plan track-eq-2). `None` = sin EQ.
+    SongMasterEq {
+        region_id: String,
+        #[serde(default)]
+        eq: Option<libretracks_core::TrackEq>,
+    },
     Metronome {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         enabled: Option<bool>,

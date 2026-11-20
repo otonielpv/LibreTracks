@@ -65,6 +65,8 @@ pub struct MixSnapshot {
     /// EQ de cada pista de audio (`None` = sin EQ).
     pub eqs: BTreeMap<String, Option<TrackEq>>,
     pub song_masters: BTreeMap<String, f64>,
+    /// EQ de máster de cada canción (plan track-eq-2).
+    pub master_eqs: BTreeMap<String, Option<TrackEq>>,
     pub metronome_enabled: bool,
     pub metronome_volume: f64,
     pub voice_guide_enabled: bool,
@@ -108,6 +110,11 @@ impl MixSnapshot {
                 .iter()
                 .map(|region| (region.id.clone(), region.master.gain))
                 .collect(),
+            master_eqs: song
+                .regions
+                .iter()
+                .map(|region| (region.id.clone(), region.master.eq.clone()))
+                .collect(),
             ..Self::default()
         }
         .with_settings(settings)
@@ -141,6 +148,11 @@ impl MixSnapshot {
                 .iter()
                 .map(|region| (region.id.clone(), region.master.gain))
                 .collect(),
+            master_eqs: song
+                .regions
+                .iter()
+                .map(|region| (region.id.clone(), region.master.eq.clone()))
+                .collect(),
             ..Self::default()
         }
         .with_settings(settings)
@@ -173,6 +185,9 @@ impl MixSnapshot {
                 }
                 MixControl::SongMaster { region_id, gain } => {
                     mix.song_masters.insert(region_id.clone(), *gain);
+                }
+                MixControl::SongMasterEq { region_id, eq } => {
+                    mix.master_eqs.insert(region_id.clone(), eq.clone());
                 }
                 MixControl::Metronome { enabled, volume } => {
                     mix.metronome_enabled = enabled.unwrap_or(mix.metronome_enabled);
@@ -208,6 +223,10 @@ impl MixSnapshot {
             region_id: id.clone(),
             gain: *gain,
         }));
+        controls.extend(self.master_eqs.iter().map(|(id, eq)| MixControl::SongMasterEq {
+            region_id: id.clone(),
+            eq: eq.clone(),
+        }));
         controls.push(MixControl::Metronome {
             enabled: Some(self.metronome_enabled),
             volume: Some(self.metronome_volume),
@@ -233,6 +252,7 @@ impl MixSnapshot {
                 })
             })
             && self.eqs == other.eqs
+            && self.master_eqs == other.master_eqs
             && self.song_masters.len() == other.song_masters.len()
             && self.song_masters.iter().all(|(id, gain)| {
                 other
@@ -252,6 +272,7 @@ fn control_key(control: &MixControl) -> String {
         MixControl::Track { track_id, .. } => format!("track:{track_id}"),
         MixControl::TrackEq { track_id, .. } => format!("eq:{track_id}"),
         MixControl::SongMaster { region_id, .. } => format!("master:{region_id}"),
+        MixControl::SongMasterEq { region_id, .. } => format!("mastereq:{region_id}"),
         MixControl::Metronome { .. } => "metronome".into(),
         MixControl::VoiceGuide { .. } => "voiceGuide".into(),
     }
@@ -384,7 +405,10 @@ pub fn apply_to_settings(settings: &mut AppSettings, control: &MixControl) -> bo
                 settings.voice_guide_volume = volume.clamp(0.0, 10.0);
             }
         }
-        MixControl::Track { .. } | MixControl::TrackEq { .. } | MixControl::SongMaster { .. } => {}
+        MixControl::Track { .. }
+        | MixControl::TrackEq { .. }
+        | MixControl::SongMaster { .. }
+        | MixControl::SongMasterEq { .. } => {}
     }
     before
         != (
@@ -471,6 +495,26 @@ pub fn apply_to_session(
             if wanted != current {
                 session
                     .commit_track_eq_model_and_command(track_id, wanted, audio)
+                    .map_err(error)?;
+            }
+            Ok(())
+        }
+        MixControl::SongMasterEq { region_id, eq } => {
+            if !full {
+                return audio.set_song_master_eq(region_id, eq.as_ref()).map_err(error);
+            }
+            let Some(current) = session.engine.song().and_then(|song| {
+                song.regions
+                    .iter()
+                    .find(|region| &region.id == region_id)
+                    .map(|region| region.master.eq.clone())
+            }) else {
+                return Ok(()); // canción que el respaldo no tiene
+            };
+            let wanted = eq.as_ref().map(TrackEq::sanitized);
+            if wanted != current {
+                session
+                    .commit_song_master_eq(region_id, wanted, audio)
                     .map_err(error)?;
             }
             Ok(())

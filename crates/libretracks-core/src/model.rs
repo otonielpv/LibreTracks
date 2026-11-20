@@ -553,6 +553,11 @@ pub struct SongMaster {
     /// Song fade out up to the region's end, in seconds. 0 = none.
     #[serde(default, skip_serializing_if = "is_zero_seconds")]
     pub fade_out_seconds: f64,
+    /// EQ de máster de la canción (plan track-eq-2, E10): sobre la mezcla de
+    /// pistas que sale por el máster, nunca el click, la guía ni los pads.
+    /// Fuera del fichero cuando no hay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eq: Option<crate::track_eq::TrackEq>,
 }
 
 fn is_zero_seconds(value: &f64) -> bool {
@@ -565,6 +570,7 @@ impl Default for SongMaster {
             gain: 1.0,
             fade_in_seconds: 0.0,
             fade_out_seconds: 0.0,
+            eq: None,
         }
     }
 }

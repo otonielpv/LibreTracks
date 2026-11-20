@@ -650,6 +650,8 @@ pub fn run() {
             commands::timeline::update_track_eq_realtime,
             commands::timeline::commit_track_eq_change,
             commands::timeline::commit_track_eqs_change,
+            commands::timeline::update_song_master_eq_realtime,
+            commands::timeline::commit_song_master_eq_change,
             commands::timeline::set_track_eq_analyzer,
             commands::timeline::get_track_eq_spectrum,
             commands::eq_presets::list_eq_presets,

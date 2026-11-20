@@ -387,6 +387,9 @@ Result<Session> session_from_project_json(const std::string& project_json,
                     if (jr.contains("master") && jr.at("master").is_object()) {
                         const auto& master = jr.at("master");
                         region.master_gain = master.value("gain", 1.0f);
+                        // EQ de máster (plan track-eq-2): el mismo lector tolerante.
+                        if (auto eq_it = master.find("eq"); eq_it != master.end())
+                            region.master_eq = parse_track_eq_json(*eq_it);
                         // Song fades live next to the gain (SongMaster). Absent
                         // in projects that predate them: no fade.
                         region.fade_in_frames = seconds_to_frames(
