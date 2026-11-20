@@ -136,10 +136,11 @@ pub fn parse_freeshow(
     let mut entries: Vec<StructureEntry> = Vec::new();
     for (position, row) in rows.iter().enumerate() {
         let kind = row.get("type").and_then(Value::as_str).unwrap_or("parent");
-        let index = row
-            .get("index")
-            .and_then(Value::as_u64)
-            .map_or(position as u32 + 1, |index| index as u32);
+        // `index_select_slide` counts the expanded layout from 1 (FreeShow
+        // subtracts 1). The row's own `index` field is NOT that: a real
+        // FreeShow sends it 0-based, and sending it as is made the first
+        // slide "-1" (seen 2026-11-20). The position in the list is.
+        let index = position as u32 + 1;
         if kind == "child" {
             if let Some(last) = entries.last_mut() {
                 last.slide_count += 1;

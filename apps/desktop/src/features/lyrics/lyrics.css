@@ -12,18 +12,27 @@
   font-weight: 600;
 }
 .lt-lyrics-programs button.is-selected {
-  background: var(--lt-accent, #2b6cb0);
+  background: #57f1db;
   color: #fff;
 }
 
 .lt-lyrics-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-end;
+  gap: 1px;
+  align-items: center;
 }
-.lt-lyrics-row > .lt-settings-field {
-  flex: 1 1 160px;
+/* Equipo y Puerto: dos cajas iguales, pegadas, de la misma altura. */
+.lt-lyrics-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 1px;
+  align-items: stretch;
+}
+@media (max-width: 520px) {
+  .lt-lyrics-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .lt-lyrics-howto {
@@ -42,15 +51,15 @@
   background: none;
   border: none;
   padding: 0;
-  color: var(--lt-accent, #63b3ed);
+  color: #57f1db;
   text-decoration: underline;
   cursor: pointer;
 }
 
 /* Tutorial de configuración */
 .lt-lyrics-tutorial {
-  border: 1px solid var(--lt-accent, #2b6cb0);
-  background: rgba(43, 108, 176, 0.08);
+  border: 1px solid #57f1db;
+  background: rgb(87 241 219 / 0.06);
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
@@ -79,7 +88,7 @@
 }
 .lt-lyrics-tutorial-dots li.is-done,
 .lt-lyrics-tutorial-dots li.is-current {
-  background: var(--lt-accent, #2b6cb0);
+  background: #57f1db;
 }
 .lt-lyrics-tutorial-title {
   margin: 4px 0 0;
@@ -111,7 +120,7 @@
   opacity: 0.8;
 }
 .lt-lyrics-tutorial-actions button.is-primary {
-  background: var(--lt-accent, #2b6cb0);
+  background: #57f1db;
   color: #fff;
   font-weight: 600;
   padding: 6px 14px;
@@ -230,7 +239,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  background: rgba(43, 108, 176, 0.1);
+  background: rgb(87 241 219 / 0.06);
 }
 .lt-lyrics-recorder p {
   margin: 0;
@@ -250,4 +259,85 @@
 .lt-lyrics-search button {
   width: 100%;
   text-align: left;
+}
+
+/* Botones con el aspecto de la app (sin preflight el navegador pone el suyo). */
+.lt-lyrics-settings button,
+.lt-lyrics-modal-body button,
+.lt-lyrics-popover button {
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.05);
+  color: #f3f0ef;
+  padding: 0.55rem 0.85rem;
+  font: 700 0.75rem/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.lt-lyrics-settings button:hover:not(:disabled),
+.lt-lyrics-modal-body button:hover:not(:disabled),
+.lt-lyrics-popover button:hover:not(:disabled) {
+  border-color: rgb(87 241 219 / 0.28);
+  color: #57f1db;
+}
+.lt-lyrics-settings button:disabled,
+.lt-lyrics-modal-body button:disabled,
+.lt-lyrics-popover button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Selector de programa: control segmentado. */
+.lt-lyrics-settings .lt-lyrics-programs button {
+  flex: 1 1 0;
+  min-width: 110px;
+  height: 38px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 11px;
+  background: #0e0e0e;
+}
+.lt-lyrics-settings .lt-lyrics-programs button.is-selected {
+  background: rgb(87 241 219 / 0.14);
+  border-color: #57f1db;
+  color: #57f1db;
+}
+
+.lt-lyrics-settings button.is-primary,
+.lt-lyrics-modal-body button.is-primary {
+  background: #57f1db;
+  border-color: #57f1db;
+  color: #0e0e0e;
+}
+.lt-lyrics-settings button.is-primary:hover:not(:disabled),
+.lt-lyrics-modal-body button.is-primary:hover:not(:disabled) {
+  color: #0e0e0e;
+  filter: brightness(1.08);
+}
+
+/* Enlaces con forma de texto: «Ver el tutorial», «Saltar tutorial». */
+.lt-lyrics-settings .lt-lyrics-link-button,
+.lt-lyrics-modal-body .lt-lyrics-link-button,
+.lt-lyrics-settings .lt-lyrics-tutorial-skip {
+  border: 0;
+  background: none;
+  padding: 0.25rem 0;
+  color: #57f1db;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+.lt-lyrics-settings .lt-lyrics-tutorial-skip {
+  color: #b9b4b2;
+}
+
+.lt-lyrics-howto {
+  padding: 0.6rem 0.95rem;
+  background: rgb(15 18 19 / 0.92);
+  border: 1px solid rgb(255 255 255 / 0.06);
+}
+.lt-lyrics-tutorial-title,
+.lt-lyrics-tutorial-header strong {
+  font-family: "Space Grotesk", sans-serif;
 }

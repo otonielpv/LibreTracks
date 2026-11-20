@@ -136,7 +136,7 @@ export function LyricsSettingsTab({ api }: { api?: LyricsApi } = {}) {
 
           {software ? (
             <>
-              <div className="lt-lyrics-row">
+              <div className="lt-lyrics-fields">
                 <label className="lt-settings-field">
                   <span>{t("lyrics.settings.host")}</span>
                   <input
