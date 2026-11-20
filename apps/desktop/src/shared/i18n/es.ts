@@ -682,6 +682,8 @@ const es = {
       autoColorNewTracks: "Colorear las pistas nuevas automáticamente",
       autoWarp: "Warp automático",
       autoWarpHint: "Activa warp al cambiar el tono o el tempo para mantenerlos independientes. Desactívalo para controlar warp manualmente y usar varispeed.",
+      prerenderedPitch: "Cambio de tono preparado (equipos lentos)",
+      prerenderedPitchHint: "Al cambiar el tono o el tempo con warp, el audio se prepara en segundo plano y mientras tanto sigue sonando el anterior. Gasta mucha menos CPU al reproducir y evita cortes en equipos de gama baja, a cambio de esperar y de espacio en disco.",
       autoColorNewTracksHint:
         "Cada pista nueva toma un color de la paleta, recorriéndola en orden, para distinguirlas de un vistazo. Desactívalo si prefieres colorearlas a mano. No repinta las pistas que ya tienes.",
       songTrackLayout: "Pistas de cada canción",
@@ -1700,6 +1702,7 @@ const es = {
         "Comportamiento al importar audio actualizado.",
       autoColorNewTracksUpdated: "Colores automáticos de pista actualizados.",
       autoWarpUpdated: "Warp automático actualizado.",
+      prerenderedPitchUpdated: "Cambio de tono preparado actualizado.",
       autoSaveUpdated: "Autoguardado actualizado.",
       projectAutoSaved: "Proyecto guardado automáticamente.",
       trackRoutingUpdated: "Ruteo de pista actualizado.",

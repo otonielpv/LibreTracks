@@ -103,6 +103,7 @@ fn upsert_song_tracks_json_shape_matches_cpp_parser() {
                 fade_out_curve_x: 0.5,
                 fade_out_curve_y: 0.5,
                 semitones: 0,
+                prerendered: false,
             }],
         }],
         sources: vec![SourceRef {
@@ -276,6 +277,7 @@ fn set_song_clips_round_trip() {
             fade_out_curve_x: 0.5,
             fade_out_curve_y: 0.5,
             semitones: 0,
+            prerendered: false,
         }],
     };
     let json = serde_json::to_string(&cmd).unwrap();
@@ -353,6 +355,7 @@ fn set_song_timeline_window_round_trip() {
             fade_out_curve_x: 0.5,
             fade_out_curve_y: 0.5,
             semitones: 0,
+            prerendered: false,
         }],
         regions: vec![RegionUpdate {
             id: "region_a".into(),

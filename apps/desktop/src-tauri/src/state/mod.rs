@@ -1990,7 +1990,36 @@ impl DesktopSession {
         audio: &AudioController,
     ) -> Result<AppSettings, DesktopError> {
         let previous_settings = audio.current_settings()?;
-        let plan = plan_audio_settings_change(&previous_settings, &next_settings);
+        let result = self.update_audio_settings_inner(&previous_settings, next_settings, audio);
+        if let Ok(next) = &result {
+            if previous_settings.prerendered_pitch != next.prerendered_pitch {
+                self.on_prerendered_pitch_toggled(audio);
+            }
+        }
+        result
+    }
+
+    /// Cambio de tono preparado encendido o apagado: el motor recibe las
+    /// pistas otra vez (con el audio preparado o con el original) y, al
+    /// apagarlo, se cancela lo que se estuviera preparando.
+    fn on_prerendered_pitch_toggled(&mut self, audio: &AudioController) {
+        if !crate::audio::pitch_prerender::is_enabled() {
+            crate::audio::pitch_prerender::worker().cancel_all();
+        }
+        if let Some(song) = self.engine.song().cloned() {
+            if let Err(error) = audio.refresh_prerendered_clips(&song) {
+                eprintln!("[pitch-prerender] refresh after toggle failed: {error}");
+            }
+        }
+    }
+
+    fn update_audio_settings_inner(
+        &mut self,
+        previous_settings: &AppSettings,
+        next_settings: AppSettings,
+        audio: &AudioController,
+    ) -> Result<AppSettings, DesktopError> {
+        let plan = plan_audio_settings_change(previous_settings, &next_settings);
         if !plan.apply {
             // Nothing for the engine to do, but its copy of the settings must
             // still follow: `update_audio_settings` (the command) diffs the
@@ -2731,6 +2760,7 @@ impl DesktopSession {
                     .ok_or(DesktopError::NoSongLoaded)?;
                 self.reschedule_pending_jump_after_song_update(audio, &loaded_song, pending_jump)?;
             }
+            self.refresh_prerendered_after_update(audio, phase);
             return Ok(());
         }
 
@@ -2869,7 +2899,24 @@ impl DesktopSession {
             }
         }
 
+        self.refresh_prerendered_after_update(audio, phase);
         Ok(())
+    }
+
+    /// Cambio de tono preparado: tras una edición confirmada, el motor pasa
+    /// al audio preparado que ya esté en disco y se encola el que falte. Un
+    /// cambio de tono con warp ya activo solo manda `SetRegionTranspose`, que
+    /// los clips preparados ignoran: sin esto seguirían en el tono anterior.
+    /// Un fallo aquí no tumba la edición: lo peor es que suene en directo.
+    fn refresh_prerendered_after_update(&mut self, audio: &AudioController, phase: UpdatePhase) {
+        if !crate::audio::pitch_prerender::is_enabled() || phase == UpdatePhase::Preview {
+            return;
+        }
+        if let Some(song) = self.engine.song().cloned() {
+            if let Err(error) = audio.refresh_prerendered_clips(&song) {
+                eprintln!("[pitch-prerender] refresh after edit failed: {error}");
+            }
+        }
     }
 
     pub fn transport_position_seconds(&self) -> f64 {

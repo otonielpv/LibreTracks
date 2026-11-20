@@ -353,6 +353,7 @@ EngineCommand command_from_json(const std::string& raw) {
             clip.fade_out_curve_x = item.value("fade_out_curve_x", 0.5f);
             clip.fade_out_curve_y = item.value("fade_out_curve_y", 0.5f);
             clip.semitones = item.value("semitones", static_cast<Semitones>(0));
+            clip.prerendered = item.value("prerendered", false);
             cmd.clips.push_back(std::move(clip));
         }
         return cmd;
@@ -422,6 +423,7 @@ EngineCommand command_from_json(const std::string& raw) {
             clip.fade_out_curve_x = item.value("fade_out_curve_x", 0.5f);
             clip.fade_out_curve_y = item.value("fade_out_curve_y", 0.5f);
             clip.semitones = item.value("semitones", static_cast<Semitones>(0));
+            clip.prerendered = item.value("prerendered", false);
             cmd.clips.push_back(std::move(clip));
         }
         for (const auto& item : j.at("regions")) {
@@ -511,6 +513,7 @@ EngineCommand command_from_json(const std::string& raw) {
                     clip.fade_out_curve_x = item.value("fade_out_curve_x", 0.5f);
                     clip.fade_out_curve_y = item.value("fade_out_curve_y", 0.5f);
                     clip.semitones = item.value("semitones", static_cast<Semitones>(0));
+                    clip.prerendered = item.value("prerendered", false);
                     track.clips.push_back(std::move(clip));
                 }
             }

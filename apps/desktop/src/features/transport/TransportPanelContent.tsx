@@ -1863,6 +1863,7 @@ export function TransportPanelContent() {
     handleDefaultSongTemplateChange,
     handleAutoColorNewTracksChange,
     handleAutoWarpChange,
+    handlePrerenderedPitchChange,
     handleReferenceImportedAudioChange,
     handleAutoSaveEnabledChange,
     handleAutoSaveIntervalMinutesChange,
@@ -2012,7 +2013,10 @@ export function TransportPanelContent() {
       if (pitch.pitchPrepareActive) {
         setPitchPrepareUiState({
           active: true,
-          message: t("transport.status.preparingTransposedAudio"),
+          message:
+            pitch.pitchPrepareProgress > 0
+              ? `${t("transport.status.preparingTransposedAudio")} ${Math.round(pitch.pitchPrepareProgress)}%`
+              : t("transport.status.preparingTransposedAudio"),
           startedAt: Date.now(),
         });
         return;
@@ -7625,6 +7629,7 @@ export function TransportPanelContent() {
               onDefaultSongTemplateChange={handleDefaultSongTemplateChange}
               onAutoColorNewTracksChange={handleAutoColorNewTracksChange}
               onAutoWarpChange={handleAutoWarpChange}
+              onPrerenderedPitchChange={handlePrerenderedPitchChange}
               onReferenceImportedAudioChange={handleReferenceImportedAudioChange}
               onAutoSaveEnabledChange={handleAutoSaveEnabledChange}
               onAutoSaveIntervalMinutesChange={

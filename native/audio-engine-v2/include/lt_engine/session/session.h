@@ -58,6 +58,12 @@ struct Clip {
     float fade_out_curve_x = 0.5f;
     float fade_out_curve_y = 0.5f;
     Semitones semitones = 0;
+    // Audio con tono/warp preparado (ajuste «cambio de tono preparado»): la
+    // fuente ya trae la transposición y el ratio de warp de su región
+    // renderizados, a 1:1 con la línea de tiempo. resolve_pitch_render_decision
+    // lo manda por Direct y Bungee no le crea voz. Lo pone Rust solo en clips
+    // que caben enteros en una región con warp.
+    bool prerendered = false;
 };
 
 // ---------------------------------------------------------------------------

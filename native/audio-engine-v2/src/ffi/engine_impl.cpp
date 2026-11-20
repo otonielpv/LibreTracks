@@ -3372,6 +3372,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         clip.fade_out_curve_x = update.fade_out_curve_x;
                         clip.fade_out_curve_y = update.fade_out_curve_y;
                         clip.semitones = update.semitones;
+                        clip.prerendered = update.prerendered;
                         by_track[update.track_id].push_back(std::move(clip));
                     }
 
@@ -3556,6 +3557,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         clip.fade_out_curve_x = update.fade_out_curve_x;
                         clip.fade_out_curve_y = update.fade_out_curve_y;
                         clip.semitones = update.semitones;
+                        clip.prerendered = update.prerendered;
                         by_track[update.track_id].push_back(std::move(clip));
                     }
                     for (auto& track : song.tracks) {
@@ -3733,6 +3735,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                         clip.fade_out_curve_x = cu.fade_out_curve_x;
                         clip.fade_out_curve_y = cu.fade_out_curve_y;
                         clip.semitones = cu.semitones;
+                        clip.prerendered = cu.prerendered;
                         track.clips.push_back(std::move(clip));
                     }
                     std::sort(track.clips.begin(), track.clips.end(),

@@ -446,6 +446,13 @@ pub struct AppSettings {
     pub auto_color_new_tracks: bool,
     #[serde(default = "default_auto_warp")]
     pub auto_warp: bool,
+    /// «Cambio de tono preparado» (equipos de gama baja): al cambiar de tono
+    /// o de tempo con warp, el audio se prepara en segundo plano y se
+    /// reproduce sin Bungee en el hilo de audio; mientras tanto sigue sonando
+    /// el tono anterior. Apagado = tono al instante con Bungee, como siempre.
+    /// Ver `audio::pitch_prerender`.
+    #[serde(default)]
+    pub prerendered_pitch: bool,
     /// When true (default) the frontend saves the loaded session on its own
     /// every `auto_save_interval_minutes`, so a crash or power cut costs at most
     /// one interval of work. The timer lives in the UI (it needs the project
@@ -598,6 +605,7 @@ impl Default for AppSettings {
             default_song_template: None,
             auto_color_new_tracks: default_auto_color_new_tracks(),
             auto_warp: default_auto_warp(),
+            prerendered_pitch: false,
             auto_save_enabled: default_auto_save_enabled(),
             auto_save_interval_minutes: default_auto_save_interval_minutes(),
             midi_mappings: HashMap::new(),

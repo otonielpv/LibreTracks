@@ -1723,6 +1723,12 @@ export type AppSettings = {
   autoColorNewTracks: boolean;
   autoWarp: boolean;
   /**
+   * «Cambio de tono preparado» (equipos de gama baja): el tono/tempo con warp
+   * se prepara en segundo plano y suena sin Bungee en directo; mientras tanto
+   * sigue sonando el anterior. `false` = tono al instante, como siempre.
+   */
+  prerenderedPitch: boolean;
+  /**
    * Android only: absolute path of the app-specific external directory new
    * sessions are created in, as `getExternalFilesDirs` reports it. `null` = the
    * primary volume, which is what every install had before this existed.
@@ -1851,6 +1857,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   defaultSongTemplate: null,
   autoColorNewTracks: true,
   autoWarp: true,
+  prerenderedPitch: false,
   sessionStorageVolume: null,
   referenceImportedAudio: true,
   autoSaveEnabled: true,
@@ -2204,6 +2211,7 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     // default to on, matching DEFAULT_APP_SETTINGS and the Rust side.
     autoColorNewTracks: settings.autoColorNewTracks ?? true,
     autoWarp: settings.autoWarp ?? true,
+    prerenderedPitch: settings.prerenderedPitch ?? false,
     sessionStorageVolume: settings.sessionStorageVolume ?? null,
     referenceImportedAudio: settings.referenceImportedAudio ?? true,
     // Absent in settings files written before autosave shipped: default to on,

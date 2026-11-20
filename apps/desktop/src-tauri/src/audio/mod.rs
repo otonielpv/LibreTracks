@@ -5,4 +5,5 @@ pub mod automation;
 pub mod engine;
 pub(crate) mod eq_spectrum;
 pub mod idle_suspend;
+pub mod pitch_prerender;
 pub mod wake_prompt;

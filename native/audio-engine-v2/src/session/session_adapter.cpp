@@ -247,6 +247,7 @@ Result<Session> session_from_project_json(const std::string& project_json,
                         read_fade_curve(jclip, "fade_in_curve", "fadeInCurve", clip.fade_in_curve_x, clip.fade_in_curve_y);
                         read_fade_curve(jclip, "fade_out_curve", "fadeOutCurve", clip.fade_out_curve_x, clip.fade_out_curve_y);
                         clip.semitones = value_any<Semitones>(jclip, "semitones", "transposeSemitones", 0);
+                        clip.prerendered = value_any<bool>(jclip, "prerendered", "prerendered", false);
 
                         if (!clip.id.empty() && !clip.source_id.empty()) {
                             ensure_source(session, clip.source_id, file_path.empty() ? clip.source_id : file_path);

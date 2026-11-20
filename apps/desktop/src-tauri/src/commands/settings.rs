@@ -397,6 +397,9 @@ pub fn get_decoding_cache_info(
         // user is shown "0 B" over gigabytes they have no way to reach.
         size_bytes: lt_audio_engine_v2::decoding_cache_size_bytes()
             + waveform_cache_size_bytes()
+            + crate::audio::pitch_prerender::cache_dir()
+                .map(|dir| files_size_bytes(&dir))
+                .unwrap_or(0)
             + cache_roots_size_bytes(&legacy_decoding_cache_dirs(&app, &dir)),
         max_gb: settings.decoding_cache_max_gb,
     })
@@ -564,13 +567,18 @@ pub fn purge_decoding_cache(
 
     let (pcm_freed, pcm_failed) = lt_audio_engine_v2::purge_decoding_cache_detailed();
     let (wave_freed, wave_failed) = purge_waveform_cache();
+    // Audio de «cambio de tono preparado»: el que esté sonando sigue abierto
+    // y cuenta como en uso, como la caché PCM.
+    let (pitch_freed, pitch_failed) = crate::audio::pitch_prerender::cache_dir()
+        .map(|dir| purge_files_in(&dir))
+        .unwrap_or((0, 0));
     // Nothing holds the legacy files open (we stopped writing there), so this
     // is the one route by which they can ever be reclaimed.
     let (legacy_freed, legacy_failed) =
         purge_cache_roots(&legacy_decoding_cache_dirs(&app, &effective));
     Ok(PurgeCacheResult {
-        freed_bytes: pcm_freed + wave_freed + legacy_freed,
-        files_in_use: pcm_failed + wave_failed + legacy_failed,
+        freed_bytes: pcm_freed + wave_freed + pitch_freed + legacy_freed,
+        files_in_use: pcm_failed + wave_failed + pitch_failed + legacy_failed,
     })
 }
 

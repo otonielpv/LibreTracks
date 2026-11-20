@@ -105,6 +105,7 @@ type SettingsPanelProps = {
   onReferenceImportedAudioChange: (value: boolean) => void;
   onAutoColorNewTracksChange: (value: boolean) => void;
   onAutoWarpChange: (value: boolean) => void;
+  onPrerenderedPitchChange: (value: boolean) => void;
   onAutoSaveEnabledChange: (value: boolean) => void;
   onAutoSaveIntervalMinutesChange: (value: number) => void;
 
@@ -184,6 +185,7 @@ export function SettingsPanel({
   onReferenceImportedAudioChange,
   onAutoColorNewTracksChange,
   onAutoWarpChange,
+  onPrerenderedPitchChange,
   onAutoSaveEnabledChange,
   onAutoSaveIntervalMinutesChange,
   midiLearnMode,
@@ -661,6 +663,7 @@ export function SettingsPanel({
                   onReferenceImportedAudioChange={onReferenceImportedAudioChange}
                   onAutoColorNewTracksChange={onAutoColorNewTracksChange}
                   onAutoWarpChange={onAutoWarpChange}
+                  onPrerenderedPitchChange={onPrerenderedPitchChange}
                   onAutoSaveEnabledChange={onAutoSaveEnabledChange}
                   onAutoSaveIntervalMinutesChange={onAutoSaveIntervalMinutesChange}
                 />

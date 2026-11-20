@@ -497,6 +497,7 @@ function buildInitialState(): DesktopApiMockState {
       defaultSongTemplate: null,
       autoColorNewTracks: true,
       autoWarp: true,
+      prerenderedPitch: false,
       sessionStorageVolume: null,
       referenceImportedAudio: true,
       // Off in the mock: tests drive saving explicitly and must not race a

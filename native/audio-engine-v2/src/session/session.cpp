@@ -267,6 +267,7 @@ std::string session_to_json(const Session& session) {
                     {"fade_in_curve_y",      clip.fade_in_curve_y},
                     {"fade_out_curve_x",     clip.fade_out_curve_x},
                     {"fade_out_curve_y",     clip.fade_out_curve_y},
+                    {"prerendered",          clip.prerendered},
                 });
             }
             jtrack["clips"] = clips;

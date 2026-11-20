@@ -389,6 +389,13 @@ export function createSettingsHandlers(deps: SettingsHandlerDeps) {
       );
     },
 
+    handlePrerenderedPitchChange(nextValue: boolean) {
+      persistAudioPatch(
+        { prerenderedPitch: nextValue },
+        t("transport.status.prerenderedPitchUpdated"),
+      );
+    },
+
     handleReferenceImportedAudioChange(nextValue: boolean) {
       persistAudioPatch(
         { referenceImportedAudio: nextValue },

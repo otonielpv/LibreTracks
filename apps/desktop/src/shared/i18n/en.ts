@@ -691,6 +691,8 @@ const en = {
       autoColorNewTracks: "Colour new tracks automatically",
       autoWarp: "Automatic warp",
       autoWarpHint: "Enable warp when changing pitch or tempo to keep them independent. Turn this off to control warp manually and use varispeed.",
+      prerenderedPitch: "Prepared pitch changes (slow devices)",
+      prerenderedPitchHint: "When you change pitch or tempo with warp, the audio is prepared in the background while the previous version keeps playing. Playback uses far less CPU and avoids dropouts on low-end devices, at the cost of a wait and disk space.",
       autoColorNewTracksHint:
         "Each new track takes a colour from the palette, cycling through it in order, so you can tell them apart at a glance. Turn it off if you prefer colouring by hand. It never repaints tracks you already have.",
       songTrackLayout: "Each song's tracks",
@@ -1674,6 +1676,7 @@ const en = {
       referenceImportedAudioUpdated: "Audio import behaviour updated.",
       autoColorNewTracksUpdated: "Automatic track colours updated.",
       autoWarpUpdated: "Automatic warp updated.",
+      prerenderedPitchUpdated: "Prepared pitch changes updated.",
       autoSaveUpdated: "Autosave updated.",
       projectAutoSaved: "Project autosaved.",
       trackRoutingUpdated: "Track routing updated.",

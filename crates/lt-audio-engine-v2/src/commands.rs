@@ -447,6 +447,10 @@ fn default_region_voice_guide_count_style() -> i32 {
     -1
 }
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 fn default_region_master_gain() -> f32 {
     1.0
 }
@@ -473,6 +477,11 @@ pub struct ClipUpdate {
     pub fade_out_curve_y: f32,
     #[serde(default)]
     pub semitones: i32,
+    /// Audio con tono/warp ya preparado (ajuste «cambio de tono preparado»):
+    /// el motor lo copia por Direct, sin voz Bungee. Ver `Clip::prerendered`
+    /// en session.h.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub prerendered: bool,
 }
 
 /// A track in a `CmdUpsertSongTracks` command — full metadata plus its clips.
@@ -540,6 +549,11 @@ pub struct TrackClipUpdate {
     pub fade_out_curve_y: f32,
     #[serde(default)]
     pub semitones: i32,
+    /// Audio con tono/warp ya preparado (ajuste «cambio de tono preparado»):
+    /// el motor lo copia por Direct, sin voz Bungee. Ver `Clip::prerendered`
+    /// en session.h.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub prerendered: bool,
 }
 
 /// A source file referenced by an upsert. The engine registers + enqueues it

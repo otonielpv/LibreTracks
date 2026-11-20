@@ -66,6 +66,17 @@ PitchRenderDecision resolve_pitch_render_decision(
     const Track& track, const Clip& clip, const Song& song, Frame timeline_frame) noexcept {
     PitchRenderDecision d;
 
+    // Audio preparado: la fuente ya trae el tono y el warp de la región, a
+    // 1:1 con la línea de tiempo. Copia directa, sin Bungee ni varispeed.
+    // is_neutral_warp() devuelve true para estos clips por la misma razón,
+    // y así enumerate_voices tampoco les crea voz.
+    if (clip.prerendered) {
+        d.is_never_transpose =
+            track.transpose_behavior == TransposeBehavior::NeverTranspose;
+        d.path = ClipPathKind::Direct;
+        return d;
+    }
+
     const Region* region = region_at_frame(song, timeline_frame);
     const bool warp_mode_active =
         region && region->warp_enabled && region->warp_source_bpm > 0.0;
@@ -128,6 +139,10 @@ bool is_neutral_warp(const Track& track,
     const Region* region = region_at_frame(song, timeline_frame);
     if (!region || !region->warp_enabled || !(region->warp_source_bpm > 0.0))
         return false;   // sin warp no hay nada que evitar; ya va por Direct
+
+    // Audio preparado: Bungee ya no tiene nada que hacer (ver Clip::prerendered).
+    if (clip.prerendered)
+        return true;
 
     const double ratio = resolve_warp_time_ratio(song, timeline_frame);
     if (!std::isfinite(ratio) || ratio != kNeutralWarpRatio)

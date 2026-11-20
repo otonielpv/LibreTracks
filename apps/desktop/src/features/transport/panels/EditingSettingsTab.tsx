@@ -15,6 +15,7 @@ type Props = {
   onReferenceImportedAudioChange: (value: boolean) => void;
   onAutoColorNewTracksChange: (value: boolean) => void;
   onAutoWarpChange: (value: boolean) => void;
+  onPrerenderedPitchChange: (value: boolean) => void;
   onAutoSaveEnabledChange: (value: boolean) => void;
   onAutoSaveIntervalMinutesChange: (value: number) => void;
 };
@@ -32,6 +33,7 @@ export function EditingSettingsTab({
   onReferenceImportedAudioChange,
   onAutoColorNewTracksChange,
   onAutoWarpChange,
+  onPrerenderedPitchChange,
   onAutoSaveEnabledChange,
   onAutoSaveIntervalMinutesChange,
 }: Props) {
@@ -146,6 +148,19 @@ export function EditingSettingsTab({
         <span className="lt-settings-toggle-copy">
           <span>{t("transport.settingsModal.autoWarp")}</span>
           <small>{t("transport.settingsModal.autoWarpHint")}</small>
+        </span>
+      </label>
+
+      <label className="lt-settings-toggle">
+        <input
+          type="checkbox"
+          checked={appSettings.prerenderedPitch}
+          disabled={disabled}
+          onChange={(event) => onPrerenderedPitchChange(event.target.checked)}
+        />
+        <span className="lt-settings-toggle-copy">
+          <span>{t("transport.settingsModal.prerenderedPitch")}</span>
+          <small>{t("transport.settingsModal.prerenderedPitchHint")}</small>
         </span>
       </label>
 

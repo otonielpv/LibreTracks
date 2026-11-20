@@ -300,6 +300,7 @@ struct CmdSetSongClips {
         float fade_out_curve_x = 0.5f;
         float fade_out_curve_y = 0.5f;
         Semitones semitones = 0;
+        bool prerendered = false;   // ver Clip::prerendered
     };
     Id song_id;
     std::vector<ClipUpdate> clips;
@@ -389,6 +390,7 @@ struct CmdUpsertSongTracks {
         float fade_out_curve_x = 0.5f;
         float fade_out_curve_y = 0.5f;
         Semitones semitones = 0;
+        bool prerendered = false;   // ver Clip::prerendered
     };
     struct TrackUpdate {
         Id          id;

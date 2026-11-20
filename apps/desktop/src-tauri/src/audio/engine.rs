@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::audio::idle_suspend::{IdleSuspendPolicy, SuspendAction};
+use crate::audio::pitch_prerender;
 use crate::audio::wake_prompt::WakePromptPolicy;
 use crate::models::{PitchPrepareSummary, SourceReadinessSummary};
 
@@ -385,6 +386,12 @@ struct ControllerState {
     /// run — the "Preparing audio…" indicator must count only the current
     /// song's sources or the total grows with each session opened (2→4→13).
     current_song_source_ids: HashSet<String>,
+    /// Cambio de tono preparado: lo último que recibió el motor por clip, la
+    /// reserva que sigue sonando mientras se prepara el audio nuevo.
+    prerender_sent: crate::audio::pitch_prerender::SentClips,
+    /// Clips con audio preparado tal como se enviaron la última vez (ver
+    /// `prerender_signature`): sirve para saber si hay que reenviar la sesión.
+    prerender_signature: String,
     /// Installed-pads base directory learned from the normal/manual load path.
     /// Automation reuses it so pack/key changes follow the exact same decoder.
     pads_dir: Option<String>,
@@ -413,6 +420,8 @@ impl ControllerState {
             song_dir: None,
             loaded_session_signature: None,
             current_song_source_ids: HashSet::new(),
+            prerender_sent: Default::default(),
+            prerender_signature: String::new(),
             pads_dir: None,
             last_device_recovery_attempt: None,
         }
@@ -1158,7 +1167,31 @@ impl AudioController {
         self.with_engine_state("set_song_timeline_window", None, |engine, state| {
             let frame_rate = engine_frame_rate(engine);
             let resolved_song = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
-            let runtime_song = song_with_warped_timeline(&resolved_song);
+            let mut runtime_song = song_with_warped_timeline(&resolved_song);
+            let (prerendered, missing_prerenders) = pitch_prerender::substitute(
+                &resolved_song,
+                &mut runtime_song,
+                frame_rate as u32,
+                &mut state.prerender_sent,
+            );
+            state.prerender_signature = prerender_signature(&runtime_song, &prerendered);
+            // SetSongTimelineWindow no registra fuentes: el audio preparado
+            // se registra antes (idempotente; ya suele estar listo).
+            let prerendered_sources: Vec<SourceRef> = runtime_song
+                .clips
+                .iter()
+                .filter(|clip| prerendered.contains(&clip.id))
+                .map(|clip| SourceRef {
+                    id: clip.file_path.clone(),
+                    file_path: clip.file_path.clone(),
+                })
+                .collect();
+            if !prerendered_sources.is_empty() {
+                engine.send_command(&EngineCommand::PrepareSources {
+                    sources: prerendered_sources,
+                })?;
+            }
+            queue_prerenders(&resolved_song, missing_prerenders);
             let clips = runtime_song
                 .clips
                 .iter()
@@ -1177,6 +1210,7 @@ impl AudioController {
                     fade_out_curve_x: FadeCurve::x_or_linear(clip.fade_out_curve) as f32,
                     fade_out_curve_y: FadeCurve::y_or_linear(clip.fade_out_curve) as f32,
                     semitones: 0,
+                    prerendered: prerendered.contains(&clip.id),
                 })
                 .collect();
             let regions = song
@@ -1285,7 +1319,15 @@ impl AudioController {
         self.with_engine_state("upsert_song_tracks", None, |engine, state| {
             let frame_rate = engine_frame_rate(engine);
             let resolved_song = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
-            let runtime_song = song_with_warped_timeline(&resolved_song);
+            let mut runtime_song = song_with_warped_timeline(&resolved_song);
+            let (prerendered, missing_prerenders) = pitch_prerender::substitute(
+                &resolved_song,
+                &mut runtime_song,
+                frame_rate as u32,
+                &mut state.prerender_sent,
+            );
+            state.prerender_signature = prerender_signature(&runtime_song, &prerendered);
+            queue_prerenders(&resolved_song, missing_prerenders);
 
             // Group the warped clips by their owning track so each TrackUpsert
             // carries its own clips (the engine command nests clips per track).
@@ -1319,6 +1361,7 @@ impl AudioController {
                         fade_out_curve_x: FadeCurve::x_or_linear(clip.fade_out_curve) as f32,
                         fade_out_curve_y: FadeCurve::y_or_linear(clip.fade_out_curve) as f32,
                         semitones: 0,
+                        prerendered: prerendered.contains(&clip.id),
                     });
             }
 
@@ -2079,7 +2122,10 @@ impl AudioController {
     pub fn replace_settings(&self, settings: AppSettings) -> Result<(), DesktopError> {
         self.state
             .lock()
-            .map(|mut state| state.settings = settings)
+            .map(|mut state| {
+                pitch_prerender::set_enabled(settings.prerendered_pitch);
+                state.settings = settings
+            })
             .map_err(|_| DesktopError::AudioCommand("audio v2 state lock poisoned".into()))
     }
 
@@ -2393,6 +2439,7 @@ impl AudioController {
             engine.send_command(&EngineCommand::SetTrackMeterMode {
                 mode: settings.track_meter_mode,
             })?;
+            pitch_prerender::set_enabled(settings.prerendered_pitch);
             state.settings = settings;
             Ok(())
         })
@@ -2690,7 +2737,124 @@ impl AudioController {
         })
     }
 
+    /// Cambio de tono preparado: si lo que el motor debería sonar ahora
+    /// (audio preparado que ya está en disco, o la reserva del tono anterior)
+    /// no es lo que tiene, le reenvía las pistas con un upsert. Encola además
+    /// lo que falte. Antes del upsert deja cargadas las fuentes nuevas, para
+    /// que el cambio no tenga un hueco de silencio.
+    ///
+    /// Se llama tras cada edición confirmada y cuando la cola termina.
+    pub fn refresh_prerendered_clips(&self, song: &Song) -> Result<(), DesktopError> {
+        self.refresh_prerendered_clips_inner(song, true)
+    }
+
+    /// Solo la primera mitad de [`Self::refresh_prerendered_clips`]: deja
+    /// cargado en el motor el audio preparado nuevo, sin tocar la sesión. Se
+    /// llama sin el lock de la sesión, para que la espera no bloquee la app;
+    /// después, con el lock y la canción al día, el refresco ya no espera.
+    pub fn preload_prerendered_sources(&self, song: &Song) -> Result<(), DesktopError> {
+        self.refresh_prerendered_clips_inner(song, false)
+    }
+
+    fn refresh_prerendered_clips_inner(&self, song: &Song, upsert: bool) -> Result<(), DesktopError> {
+        if !self.has_loaded_session() {
+            return Ok(());
+        }
+        let mut new_sources: Vec<String> = Vec::new();
+        let mut differs = false;
+        self.with_engine_state("prerender_plan", None, |engine, state| {
+            let resolved = song_with_resolved_audio_paths(state.song_dir.as_deref(), song);
+            let mut runtime = song_with_warped_timeline(&resolved);
+            // Sobre una copia: la reserva real solo cambia con lo que se envíe.
+            let mut sent = state.prerender_sent.clone();
+            let (prerendered, missing) = pitch_prerender::substitute(
+                &resolved,
+                &mut runtime,
+                engine_frame_rate(engine) as u32,
+                &mut sent,
+            );
+            if upsert {
+                queue_prerenders(&resolved, missing);
+            }
+            let signature = prerender_signature(&runtime, &prerendered);
+            differs = signature != state.prerender_signature;
+            if differs {
+                new_sources = runtime
+                    .clips
+                    .iter()
+                    .filter(|clip| prerendered.contains(&clip.id))
+                    .map(|clip| clip.file_path.clone())
+                    .filter(|path| !state.prerender_signature.contains(path.as_str()))
+                    .collect();
+            }
+            Ok(())
+        })?;
+        if !differs {
+            return Ok(());
+        }
+        if !new_sources.is_empty() {
+            self.prepare_sources(&new_sources)?;
+            self.wait_for_sources(&new_sources, Duration::from_secs(10));
+        }
+        if !upsert {
+            return Ok(());
+        }
+        self.upsert_song_tracks(song)
+    }
+
+    /// Espera a que el motor tenga listas (o fallidas) estas fuentes.
+    fn wait_for_sources(&self, ids: &[String], timeout: Duration) {
+        let wanted: HashSet<String> = ids.iter().map(|id| normalize_engine_audio_path(id)).collect();
+        let started_at = Instant::now();
+        while started_at.elapsed() < timeout {
+            let ready = {
+                let Ok(state) = self.state.lock() else {
+                    return;
+                };
+                let Some(engine) = state.engine.as_ref() else {
+                    return;
+                };
+                match engine.get_snapshot() {
+                    Ok(snapshot) => {
+                        let done = snapshot
+                            .source_states
+                            .iter()
+                            .filter(|source| {
+                                wanted.contains(&normalize_engine_audio_path(&source.source_id))
+                                    && matches!(
+                                        source.status.as_str(),
+                                        "ready" | "cache_ready" | "failed" | "cancelled"
+                                    )
+                            })
+                            .count();
+                        done >= wanted.len()
+                    }
+                    Err(_) => return,
+                }
+            };
+            if ready {
+                return;
+            }
+            thread::sleep(Duration::from_millis(30));
+        }
+    }
+
     pub fn pitch_prepare_summary(&self) -> PitchPrepareSummary {
+        // Cambio de tono preparado en curso: es lo que el usuario espera ver.
+        let prerender = pitch_prerender::worker().progress();
+        if prerender.active {
+            return PitchPrepareSummary {
+                pitch_prepare_active: true,
+                pitch_prepare_pending: true,
+                pitch_prepare_progress: prerender.percent(),
+                pitch_jobs_pending: prerender.total.saturating_sub(prerender.done),
+                pitch_jobs_completed: prerender.done,
+                pitch_jobs_failed: prerender.failed,
+                pitch_prepare_status: "preparing".into(),
+                last_pitch_prepare_reason: "prerender".into(),
+                ..PitchPrepareSummary::default()
+            };
+        }
         let mut state = match self.state.lock() {
             Ok(state) => state,
             Err(_) => return PitchPrepareSummary::default(),
@@ -3516,9 +3680,18 @@ fn load_resolved_song(
     // Every load path (full or forced) must refresh the set the "Preparing
     // audio…" summary filters by, or new sources are invisible to it.
     state.current_song_source_ids = current_song_source_ids(song);
-    let runtime_song = song_with_warped_timeline(song);
-    let project_json = serde_json::to_string(&runtime_song)
+    let mut runtime_song = song_with_warped_timeline(song);
+    let (prerendered, missing_prerenders) = pitch_prerender::substitute(
+        song,
+        &mut runtime_song,
+        engine_frame_rate(engine) as u32,
+        &mut state.prerender_sent,
+    );
+    state.prerender_signature = prerender_signature(&runtime_song, &prerendered);
+    let mut project_value = serde_json::to_value(&runtime_song)
         .map_err(|error| DesktopError::AudioCommand(error.to_string()))?;
+    pitch_prerender::mark_prerendered_in_session_json(&mut project_value, &prerendered);
+    let project_json = project_value.to_string();
     if audio_debug_logging_enabled() {
         eprintln!(
             "[engine] load_resolved_song: id={} bpm={} duration={:.3}s tracks={} regions={} clips={} markers={{tempo:{}, section:{}, time_sig:{}}} json_bytes={}",
@@ -3547,7 +3720,29 @@ fn load_resolved_song(
         })?;
     send_song_master_eqs(engine, song)?;
     state.loaded_session_signature = Some(signature);
+    queue_prerenders(song, missing_prerenders);
     Ok(())
+}
+
+/// Qué clips van con audio preparado y desde qué fichero. Si cambia, el motor
+/// necesita la sesión otra vez.
+fn prerender_signature(runtime_song: &Song, prerendered: &HashSet<String>) -> String {
+    let mut entries: Vec<String> = runtime_song
+        .clips
+        .iter()
+        .filter(|clip| prerendered.contains(&clip.id))
+        .map(|clip| format!("{}={}@{}", clip.id, clip.file_path, clip.source_start_seconds))
+        .collect();
+    entries.sort();
+    entries.join("|")
+}
+
+/// Encola en segundo plano el audio preparado que le falta a la sesión que
+/// se acaba de enviar al motor (nada con el ajuste apagado).
+fn queue_prerenders(resolved_song: &Song, missing: Vec<pitch_prerender::ClipBake>) {
+    if pitch_prerender::is_enabled() {
+        pitch_prerender::worker().sync(resolved_song, missing);
+    }
 }
 
 /// The session as the engine plays it: audio paths resolved against the song

@@ -268,6 +268,34 @@ pub fn run() {
 
             let state = app.state::<DesktopState>();
             state.audio.attach_app_handle(app.handle().clone());
+            {
+                // Cambio de tono preparado: cuando la cola termina, el motor
+                // recibe las pistas con el audio recién preparado. La canción
+                // se lee al momento (no se guarda una copia vieja) y el lock de
+                // la sesión se suelta antes de esperar a las fuentes.
+                let handle = app.handle().clone();
+                audio::pitch_prerender::set_refresh_hook(Box::new(move || {
+                    let state = handle.state::<DesktopState>();
+                    let song = match state.session.lock() {
+                        Ok(session) => session.engine.song().cloned(),
+                        Err(_) => None,
+                    };
+                    let Some(song) = song else {
+                        return;
+                    };
+                    let _ = state.audio.preload_prerendered_sources(&song);
+                    // Con el lock: si hubo una edición mientras se esperaba,
+                    // el upsert lleva la canción de ahora, no la copia.
+                    let Ok(session) = state.session.lock() else {
+                        return;
+                    };
+                    if let Some(song) = session.engine.song() {
+                        if let Err(error) = state.audio.refresh_prerendered_clips(song) {
+                            eprintln!("[pitch-prerender] refresh failed: {error}");
+                        }
+                    }
+                }));
+            }
             video_setup::start(app.handle(), &state);
             // The worker parks while the song has no MIDI clips, so starting
             // it on every platform costs nothing when unused.
