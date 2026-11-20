@@ -43,6 +43,7 @@ export type LyricsApi = Pick<
   | "playTransport"
   | "pauseTransport"
   | "seekTransport"
+  | "setLyricsRecording"
 >;
 
 export type LyricsHandlerDeps = {
@@ -174,6 +175,8 @@ export function createLyricsHandlers({
       saveRegion(regionId, withStepMode(getRegionLyrics(regionId), mode)),
 
     tapPosition: () => calls.getTapPosition(),
+
+    setRecording: (regionId: string | null) => calls.setLyricsRecording(regionId),
 
     /** Transport for the recorder (no keyboard on a phone). Returns whether
      * it is playing now. */

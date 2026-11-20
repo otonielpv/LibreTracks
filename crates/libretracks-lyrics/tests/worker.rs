@@ -304,3 +304,54 @@ async fn leaving_the_song_clears_only_when_something_of_ours_is_on_screen() {
         .iter()
         .any(|body| body["action"] == "clear_slide"));
 }
+
+#[tokio::test]
+async fn turning_it_on_checks_the_program_even_without_a_session() {
+    let (connection, _) = freeshow(SHOWS, Arc::default()).await;
+    let host = Arc::new(Recorder::default());
+    let mut worker = LyricsWorker::new(host.clone());
+    worker
+        .handle(vec![WorkerInput::Configure(Some(config(connection)))])
+        .await;
+    assert_eq!(worker.status().connection, ConnectionState::Ok);
+
+    // Nothing listening there: unreachable, not stuck on "connecting".
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let mut worker = LyricsWorker::new(Arc::new(Recorder::default()));
+    worker
+        .handle(vec![WorkerInput::Configure(Some(config(Connection {
+            host: "127.0.0.1".into(),
+            port,
+            token: None,
+        })))])
+        .await;
+    assert_eq!(worker.status().connection, ConnectionState::Unreachable);
+}
+
+#[tokio::test]
+async fn while_recording_a_song_its_slide_changes_are_not_sent_by_playback() {
+    let (connection, sent) = freeshow(SHOWS, Arc::default()).await;
+    let (mut worker, _) = ready_worker(connection).await;
+    worker.handle(vec![section("v1")]).await;
+    worker
+        .handle(vec![WorkerInput::Recording(Some("r1".into()))])
+        .await;
+    sent.lock().unwrap().clear();
+    worker.handle(vec![step("v1", 1)]).await;
+    assert!(slide_orders(&sent).is_empty(), "playback steps held back");
+    // The recorder's own taps still go out.
+    worker
+        .handle(vec![WorkerInput::TestSend {
+            region_id: "r1".into(),
+            marker_id: "v1".into(),
+            k: 1,
+        }])
+        .await;
+    assert_eq!(slide_orders(&sent), vec![2, 3]);
+    worker.handle(vec![WorkerInput::Recording(None)]).await;
+    sent.lock().unwrap().clear();
+    worker.handle(vec![step("v1", 1)]).await;
+    assert_eq!(slide_orders(&sent), vec![3]);
+}

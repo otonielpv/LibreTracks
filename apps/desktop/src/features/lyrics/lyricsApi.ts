@@ -168,6 +168,10 @@ export function stepsFromTaps(regionId: string, taps: number[]) {
   return invokeCommand<LyricsStep[]>("lyrics_steps_from_taps", { regionId, taps });
 }
 
+export function setLyricsRecording(regionId: string | null) {
+  return invokeCommand<void>("lyrics_set_recording", { regionId });
+}
+
 export function getTapPosition() {
   return invokeCommand<number>("lyrics_tap_position");
 }

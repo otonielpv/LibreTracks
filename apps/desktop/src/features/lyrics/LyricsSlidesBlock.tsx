@@ -50,17 +50,16 @@ export function LyricsSlidesBlock({
 
   const sections: SectionSpan[] = useMemo(() => {
     const sorted = [...report.markers].sort((a, b) => a.startSeconds - b.startSeconds);
-    // Only sections with several slides take taps: a tap elsewhere has no
-    // slide to move to.
-    return sorted
-      .map((marker, index) => ({
-        markerId: marker.markerId,
-        markerName: marker.markerName,
-        startSeconds: marker.startSeconds,
-        endSeconds: sorted[index + 1]?.startSeconds ?? regionEndSeconds,
-        slides: marker.slideCount,
-      }))
-      .filter((section) => section.slides > 1);
+    // Every section takes taps: the slide count comes from the program and
+    // may be read wrong. A change on a section the program shows as one
+    // slide is kept but moves nothing until the presentation has more.
+    return sorted.map((marker, index) => ({
+      markerId: marker.markerId,
+      markerName: marker.markerName,
+      startSeconds: marker.startSeconds,
+      endSeconds: sorted[index + 1]?.startSeconds ?? regionEndSeconds,
+      slides: marker.slideCount,
+    }));
   }, [report.markers, regionEndSeconds]);
 
   const tap = () => {
@@ -77,6 +76,13 @@ export function LyricsSlidesBlock({
   }, [recording, keyTarget]);
 
   const multi = report.markers.filter((marker) => marker.slideCount > 1);
+
+  // While open, playback does not send this song's slide changes.
+  useEffect(() => {
+    if (!recording) return () => {};
+    void handlers.setRecording(regionId);
+    return () => void handlers.setRecording(null);
+  }, [recording, handlers, regionId]);
 
   const start = () => {
     recorder.current = createStepRecorder({
@@ -115,7 +121,7 @@ export function LyricsSlidesBlock({
     <section className="lt-lyrics-slides" aria-label={t("lyrics.slides.title")}>
       <h3>{t("lyrics.slides.title")}</h3>
       {multi.length === 0 ? <small>{t("lyrics.slides.noneMulti")}</small> : null}
-      {multi.length === 0 ? null : (
+      {(
       <label className="lt-settings-field">
         <span>{t("lyrics.slides.mode")}</span>
         <select className="lt-lyrics-select"
@@ -143,7 +149,7 @@ export function LyricsSlidesBlock({
           ))}
         </ul>
       ) : null}
-      {multi.length === 0 ? null : recording ? (
+      {recording ? (
         <div className="lt-lyrics-recorder" role="group" aria-label={t("lyrics.slides.recording")}>
           <p>{t("lyrics.slides.recordingHelp")}</p>
           <div className="lt-lyrics-recorder-transport">

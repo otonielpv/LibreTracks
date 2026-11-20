@@ -263,6 +263,13 @@ pub fn lyrics_steps_from_taps(
     Ok(libretracks_core::lyrics_schedule::steps_from_taps(song, &region_id, &taps))
 }
 
+/// El grabador de cambios está abierto en esta canción (`None`: cerrado):
+/// mientras tanto la reproducción no manda sus cambios de diapositiva.
+#[tauri::command(async)]
+pub fn lyrics_set_recording(service: State<'_, LyricsService>, region_id: Option<String>) {
+    service.send(WorkerInput::Recording(region_id));
+}
+
 /// Dónde está el cursor ahora, en segundos de fuente (los de las marcas),
 /// para un toque del grabador de cambios.
 #[tauri::command(async)]

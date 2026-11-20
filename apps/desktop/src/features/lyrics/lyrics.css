@@ -295,6 +295,7 @@ button.lt-lyrics-pill.is-ok { background: #2f855a; }
 button.lt-lyrics-pill.is-warning { background: #b7791f; }
 button.lt-lyrics-pill.is-error { background: #c53030; }
 button.lt-lyrics-pill.is-paused { background: #5b5f66; }
+button.lt-lyrics-pill.is-connecting { background: #3a3f46; }
 
 .lt-lyrics-popover {
   position: absolute;

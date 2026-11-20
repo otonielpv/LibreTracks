@@ -66,6 +66,10 @@ pub enum WorkerInput {
     },
     /// Read the catalogue and every presentation again.
     Refresh,
+    /// The slide-change recorder is open on this song (`None`: closed).
+    /// Meanwhile its slide changes are not sent by playback: only the
+    /// user's taps move the slides, so nothing mixes with them.
+    Recording(Option<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -144,6 +148,8 @@ pub struct LyricsWorker {
     /// An event for a song whose plan was not ready: sent once it is.
     pending_land: Option<LyricsEvent>,
     retry_after: Option<Instant>,
+    /// Region whose recorder is open.
+    recording: Option<String>,
     status: LyricsStatus,
     last_emit: Option<Instant>,
     dirty: bool,
@@ -213,6 +219,7 @@ impl LyricsWorker {
             entered: None,
             pending_land: None,
             retry_after: None,
+            recording: None,
             status: LyricsStatus::default(),
             last_emit: None,
             dirty: false,
@@ -226,6 +233,8 @@ impl LyricsWorker {
                 STATUS_INTERVAL
             } else if self.has_stale_plans() {
                 RESOLVE_STEP
+            } else if self.needs_connection_check() {
+                RETRY_CONNECTION
             } else {
                 Duration::from_secs(3600)
             };
@@ -258,14 +267,50 @@ impl LyricsWorker {
         }
     }
 
-    /// Nothing queued: resolve the next stale song, one per call.
+    /// Nothing queued: check the connection if it is not known to work,
+    /// then resolve the next stale song, one per call.
     pub async fn idle(&mut self) {
         if self.retry_after.is_some_and(|at| Instant::now() < at) {
+            return;
+        }
+        if self.needs_connection_check() {
+            self.check_connection().await;
             return;
         }
         let next = self.stale_region();
         if let Some(region_id) = next {
             let _ = self.ensure_plan(&region_id).await;
+        }
+    }
+
+    /// Lyrics are on but nobody has confirmed the program answers (just
+    /// configured, or it stopped answering). Without a session there are no
+    /// songs to resolve, so this is what tells the pill.
+    fn needs_connection_check(&self) -> bool {
+        self.client.is_some()
+            && !self.paused
+            && matches!(
+                self.status.connection,
+                ConnectionState::Connecting | ConnectionState::Unreachable
+            )
+    }
+
+    /// Ask the program whether it is there (and, in Holyrics, allowed).
+    pub async fn check_connection(&mut self) {
+        let Some(client) = self.client.as_ref() else {
+            return;
+        };
+        match client.probe().await {
+            Ok(_) => {
+                self.retry_after = None;
+                self.status.last_error = None;
+                self.set_connection(ConnectionState::Ok);
+            }
+            Err(error) => {
+                self.fail(error);
+                // Not reachable: try again later, not on every loop.
+                self.retry_after = Some(Instant::now() + RETRY_CONNECTION);
+            }
         }
     }
 
@@ -292,7 +337,13 @@ impl LyricsWorker {
 
     async fn apply(&mut self, input: WorkerInput) {
         match input {
-            WorkerInput::Configure(config) => self.configure(config),
+            WorkerInput::Configure(config) => {
+                self.configure(config);
+                if self.needs_connection_check() {
+                    self.check_connection().await;
+                }
+            }
+            WorkerInput::Recording(region_id) => self.recording = region_id,
             WorkerInput::Paused(paused) => {
                 self.paused = paused;
                 self.set_connection(if paused {
@@ -302,6 +353,10 @@ impl LyricsWorker {
                 } else {
                     ConnectionState::Disabled
                 });
+                if self.needs_connection_check() {
+                    self.retry_after = None;
+                    self.check_connection().await;
+                }
             }
             WorkerInput::Song(song) => {
                 self.song = Some(song);
@@ -422,6 +477,9 @@ impl LyricsWorker {
                 marker_id,
                 k,
             } => {
+                if self.recording.as_deref() == Some(region_id.as_str()) {
+                    return;
+                }
                 let current = self
                     .showing
                     .as_ref()

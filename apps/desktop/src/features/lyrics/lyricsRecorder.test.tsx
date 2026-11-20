@@ -42,6 +42,7 @@ function makeApi(positions: number[]) {
     getTapPosition: vi.fn(async () => positions[index++] ?? 0),
     playTransport: vi.fn(async () => ({ playbackState: "playing" })),
     pauseTransport: vi.fn(async () => ({ playbackState: "paused" })),
+    setLyricsRecording: vi.fn(async () => undefined),
     seekTransport: vi.fn(async () => ({ playbackState: "paused" })),
   } as unknown as LyricsApi & {
     setRegionLyrics: ReturnType<typeof vi.fn>;
@@ -50,6 +51,7 @@ function makeApi(positions: number[]) {
     playTransport: ReturnType<typeof vi.fn>;
     pauseTransport: ReturnType<typeof vi.fn>;
     seekTransport: ReturnType<typeof vi.fn>;
+    setLyricsRecording: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -139,7 +141,7 @@ describe("LyricsSlidesBlock", () => {
     await waitFor(() => expect(api.seekTransport).toHaveBeenCalledWith(0));
   });
 
-  it("hides the recorder when no section has several slides", () => {
+  it("still offers the recorder when the program shows no extra slides, with a note", () => {
     const handlers = createLyricsHandlers({ api: makeApi([]), getRegionLyrics: () => null });
     const single = {
       ...REPORT,
@@ -156,8 +158,17 @@ describe("LyricsSlidesBlock", () => {
         onSaved={vi.fn()}
       />,
     );
-    expect(screen.queryByRole("button", { name: "Grabar cambios…" })).toBeNull();
-    expect(screen.getByText("Ninguna sección tiene más de una diapositiva.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Grabar cambios…" })).toBeTruthy();
+    expect(screen.getByText(/no ve ninguna sección con varias diapositivas/)).toBeTruthy();
+  });
+
+  it("tells the worker the recorder is open and closed", async () => {
+    const api = makeApi([]);
+    renderBlock(api);
+    fireEvent.click(screen.getByRole("button", { name: "Grabar cambios…" }));
+    await waitFor(() => expect(api.setLyricsRecording).toHaveBeenCalledWith("r1"));
+    fireEvent.click(screen.getByRole("button", { name: "Terminar" }));
+    await waitFor(() => expect(api.setLyricsRecording).toHaveBeenLastCalledWith(null));
   });
 
   it("shows where the automatic changes fall", () => {

@@ -79,6 +79,7 @@ function makeApi(overrides: Partial<LyricsApi> = {}) {
     getTapPosition: vi.fn(async () => 0),
     playTransport: vi.fn(async () => ({ playbackState: "playing" }) as never),
     pauseTransport: vi.fn(async () => ({ playbackState: "paused" }) as never),
+    setLyricsRecording: vi.fn(async () => undefined),
     seekTransport: vi.fn(async () => ({ playbackState: "paused" }) as never),
     listPresentations: vi.fn(async () => [{ id: "812", name: "Way Maker" }]),
   } satisfies LyricsApi;

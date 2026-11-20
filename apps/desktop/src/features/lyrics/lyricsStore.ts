@@ -44,7 +44,7 @@ export const useLyricsStore = create<LyricsStoreState>((set) => ({
   bumpLinks: () => set((state) => ({ linksVersion: state.linksVersion + 1 })),
 }));
 
-export type PillTone = "ok" | "warning" | "error" | "paused";
+export type PillTone = "ok" | "warning" | "error" | "paused" | "connecting";
 
 /** The pill's colour: green connected, amber songs unlinked, red no
  * connection or permissions, grey paused. `null` = not shown. */
@@ -62,6 +62,7 @@ export function selectPillTone(state: LyricsStoreState): PillTone | null {
     case "ok":
       return (state.status?.unlinkedSongs ?? 0) > 0 ? "warning" : "ok";
     default:
-      return "warning";
+      // Still finding out whether the program answers: neutral, not amber.
+      return "connecting";
   }
 }

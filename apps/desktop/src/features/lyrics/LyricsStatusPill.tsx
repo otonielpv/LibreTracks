@@ -5,7 +5,13 @@ import type { LyricsApi } from "./lyricsHandlers";
 import { selectPillTone, useLyricsStore } from "./lyricsStore";
 import { useLyricsHandlers } from "./useLyricsHandlers";
 
-const ICONS = { ok: "lyrics", warning: "lyrics", error: "error", paused: "pause_circle" } as const;
+const ICONS = {
+  ok: "lyrics",
+  warning: "lyrics",
+  error: "error",
+  paused: "pause_circle",
+  connecting: "sync",
+} as const;
 
 /**
  * Top-bar pill, only with lyrics on: green connected, amber songs without a
