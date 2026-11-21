@@ -15,7 +15,7 @@ export function LyricsModal({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="lt-modal-backdrop" onClick={onClose}>
+    <div className="lt-modal-backdrop lt-lyrics-backdrop" onClick={onClose}>
       <DismissOnBack close={onClose} />
       <section
         className="lt-settings-modal lt-lyrics-modal"

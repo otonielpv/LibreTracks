@@ -29,6 +29,8 @@ fn session() -> DesktopSession {
                     presentation_id: Some("show-1".into()),
                     presentation_name: "Song".into(),
                     overrides: vec![],
+                    slides: vec![],
+                    start: None,
                 }],
                 ..RegionLyrics::default()
             }),
@@ -92,6 +94,8 @@ fn link_named(name: &str) -> LyricsLink {
         presentation_id: Some("812".into()),
         presentation_name: name.into(),
         overrides: vec![],
+        slides: vec![],
+        start: None,
     }
 }
 

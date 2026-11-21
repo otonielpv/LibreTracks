@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { LyricsOverrideTarget } from "@libretracks/shared/models";
+import type { LyricsOverrideTarget, LyricsStartTarget } from "@libretracks/shared/models";
 
 import { useSongStore } from "../transport/songStore";
 import { LeadTimeField } from "../transport/panels/LeadTimeField";
@@ -15,7 +15,7 @@ import {
 import { isRepeat, linkFor } from "./lyricsEdits";
 import type { LyricsApi } from "./lyricsHandlers";
 import { LyricsModal } from "./LyricsModal";
-import { LyricsSlidesBlock } from "./LyricsSlidesBlock";
+import { LyricsSectionEditor, slideLabel } from "./LyricsSectionEditor";
 import { lyricsErrorText } from "./LyricsSettingsTab";
 import { useLyricsStore } from "./lyricsStore";
 import { useLyricsHandlers } from "./useLyricsHandlers";
@@ -46,6 +46,21 @@ function targetOf(value: string): LyricsOverrideTarget | null {
 
 type PendingRepeat = { markerId: string; target: LyricsOverrideTarget | null };
 
+const START_AUTO = "auto";
+const START_CLEAR = "clear";
+
+function startValue(report: RegionReport): string {
+  const start = report.link?.start;
+  if (!start) return START_AUTO;
+  return start.type === "clear" ? START_CLEAR : `slide:${start.index}`;
+}
+
+function startOf(value: string): LyricsStartTarget | null {
+  if (value === START_AUTO) return null;
+  if (value === START_CLEAR) return { type: "clear" };
+  return { type: "slide", index: Number(value.slice("slide:".length)) };
+}
+
 /**
  * One song's lyrics: its presentation, each section marker and the group it
  * shows (corrections, "Test"), and its own lead. Opened from the song menu
@@ -71,6 +86,7 @@ export function LyricsSongPanel({
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState<PendingRepeat | null>(null);
   const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
+  const [editing, setEditing] = useState<string | null>(null);
 
   const region = useSongStore(
     (state) => state.song?.regions.find((candidate) => candidate.id === regionId) ?? null,
@@ -129,8 +145,52 @@ export function LyricsSongPanel({
     presentation.name.toLowerCase().includes(search.trim().toLowerCase()),
   );
 
+  const editingMarker = editing ? report?.markers.find((marker) => marker.markerId === editing) : null;
+  const linked = report?.linkState.state === "linked";
+  const slides = report?.slides ?? [];
+  const autoStartSlide =
+    report?.start?.automatic && report.start.slide !== null
+      ? slides.find((slide) => slide.index === report.start?.slide)
+      : null;
+
+  const footer = (
+    <footer className="lt-lyrics-modal-footer">
+      <span className={`lt-lyrics-save-state is-${saving}`} role="status">
+        {saving === "saving"
+          ? t("lyrics.song.saving")
+          : saving === "saved"
+            ? t("lyrics.song.saved")
+            : t("lyrics.song.autoSave")}
+      </span>
+      <button type="button" className="lt-lyrics-btn is-primary" onClick={close}>
+        {t("lyrics.song.done")}
+      </button>
+    </footer>
+  );
+
+  if (report && editingMarker) {
+    // Its own key: the editor opens at the top, not at the table's scroll.
+    return (
+      <LyricsModal
+        key={`edit-${editingMarker.markerId}`}
+        title={t("lyrics.song.title", { name: region?.name ?? "" })}
+        onClose={close}
+      >
+        <LyricsSectionEditor
+          regionId={regionId}
+          report={report}
+          marker={editingMarker}
+          handlers={handlers}
+          onSave={after}
+          onBack={() => setEditing(null)}
+        />
+        {footer}
+      </LyricsModal>
+    );
+  }
+
   return (
-    <LyricsModal title={t("lyrics.song.title", { name: region?.name ?? "" })} onClose={close}>
+    <LyricsModal key="table" title={t("lyrics.song.title", { name: region?.name ?? "" })} onClose={close}>
       {error ? (
         <div className="lt-lyrics-probe is-error" role="alert">
           <p>{lyricsErrorText(error, t)}</p>
@@ -207,6 +267,31 @@ export function LyricsSongPanel({
         </span>
       </label>
 
+      {report && linked && slides.length > 0 ? (
+        <label className="lt-settings-field">
+          <span>{t("lyrics.song.start")}</span>
+          <select
+            className="lt-lyrics-select"
+            aria-label={t("lyrics.song.start")}
+            value={startValue(report)}
+            onChange={(event) => after(handlers.setStart(regionId, startOf(event.target.value)))}
+          >
+            <option value={START_AUTO}>
+              {t("lyrics.song.startAuto", {
+                what: autoStartSlide ? slideLabel(autoStartSlide, t) : t("lyrics.song.cleared"),
+              })}
+            </option>
+            <option value={START_CLEAR}>{t("lyrics.song.startClear")}</option>
+            {slides.map((slide) => (
+              <option key={slide.index} value={`slide:${slide.index}`}>
+                {slideLabel(slide, t)}
+              </option>
+            ))}
+          </select>
+          <small>{t("lyrics.song.startHelp")}</small>
+        </label>
+      ) : null}
+
       {pending ? (
         <div className="lt-lyrics-probe" role="group" aria-label={t("lyrics.song.repeatQuestion")}>
           <p>{t("lyrics.song.repeatQuestion")}</p>
@@ -273,11 +358,30 @@ export function LyricsSongPanel({
                     <option value={SKIP}>{t("lyrics.song.skip")}</option>
                   </select>
                 </td>
-                <td>{marker.slideCount > 0 ? marker.slideCount : ""}</td>
+                <td>
+                  <span className="lt-lyrics-slide-count">
+                    {marker.slideCount > 0 ? marker.slideCount : ""}
+                    {linked && marker.status !== "clear" && marker.status !== "skip" ? (
+                      <button
+                        className="lt-lyrics-btn lt-lyrics-edit"
+                        type="button"
+                        aria-label={t("lyrics.section.editFor", {
+                          name:
+                            marker.occurrence > 0
+                              ? `${marker.markerName} ${t("lyrics.song.occurrence", { n: marker.occurrence + 1 })}`
+                              : marker.markerName,
+                        })}
+                        onClick={() => setEditing(marker.markerId)}
+                      >
+                        {t("lyrics.section.edit")}
+                      </button>
+                    ) : null}
+                  </span>
+                </td>
                 <td>
                   <button className="lt-lyrics-btn"
                     type="button"
-                    disabled={marker.status === "unmatched" || marker.status === "skip"}
+                    disabled={(marker.status === "unmatched" && !marker.customSlides) || marker.status === "skip"}
                     onClick={() => void handlers.testSend(regionId, marker.markerId, 0)}
                   >
                     {t("lyrics.song.test")}
@@ -292,17 +396,6 @@ export function LyricsSongPanel({
         <p>{t("lyrics.song.noMarkers")}</p>
       ) : null}
 
-      {report && report.linkState.state === "linked" && report.markers.length > 0 ? (
-        <LyricsSlidesBlock
-          regionId={regionId}
-          report={report}
-          regionStartSeconds={region?.startSeconds ?? 0}
-          regionEndSeconds={region?.endSeconds ?? 0}
-          stepMode={region?.lyrics?.stepMode ?? "auto"}
-          handlers={handlers}
-          onSaved={() => after(Promise.resolve())}
-        />
-      ) : null}
 
       <label className="lt-settings-toggle">
         <input
@@ -331,18 +424,7 @@ export function LyricsSongPanel({
         />
       ) : null}
 
-      <footer className="lt-lyrics-modal-footer">
-        <span className={`lt-lyrics-save-state is-${saving}`} role="status">
-          {saving === "saving"
-            ? t("lyrics.song.saving")
-            : saving === "saved"
-              ? t("lyrics.song.saved")
-              : t("lyrics.song.autoSave")}
-        </span>
-        <button type="button" className="lt-lyrics-btn is-primary" onClick={close}>
-          {t("lyrics.song.done")}
-        </button>
-      </footer>
+      {footer}
     </LyricsModal>
   );
 }

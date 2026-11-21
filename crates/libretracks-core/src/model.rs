@@ -187,8 +187,14 @@ pub struct RegionLyrics {
     /// Cambios de diapositiva grabados, independientes del programa.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub steps: Vec<LyricsStep>,
+    /// Modo de la canción de antes: solo vale para las secciones sin uno
+    /// propio en `sections`.
     #[serde(default)]
     pub step_mode: StepMode,
+    /// Cómo avanza cada sección, por id de marca exacto (`~n` incluido: cada
+    /// repetición se edita por separado).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sections: Vec<SectionTiming>,
     /// Adelanto propio de la canción; `None` = el global.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lead: Option<crate::lead_time::LeadTime>,
@@ -201,6 +207,7 @@ impl Default for RegionLyrics {
             links: Vec::new(),
             steps: Vec::new(),
             step_mode: StepMode::Auto,
+            sections: Vec::new(),
             lead: None,
         }
     }
@@ -219,6 +226,55 @@ pub struct LyricsLink {
     pub presentation_name: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overrides: Vec<SectionOverride>,
+    /// Diapositivas elegidas a mano para una marca (id exacto), en la
+    /// numeración del programa: sustituyen a las de su grupo.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub slides: Vec<SlideSelection>,
+    /// Qué se muestra al empezar la canción, antes de su primera marca.
+    /// `None` = automático (la diapositiva de título si la hay; si no, limpiar).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<StartTarget>,
+}
+
+/// Las diapositivas de una marca, elegidas en el editor de la sección.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SlideSelection {
+    pub marker_id: String,
+    /// Índices del programa (los de `StructureEntry.first_index`), en orden.
+    pub indexes: Vec<u32>,
+}
+
+/// Lo que se muestra al empezar una canción.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum StartTarget {
+    /// Pantalla en blanco.
+    Clear,
+    /// Esta diapositiva de la presentación (índice del programa).
+    Slide { index: u32 },
+}
+
+/// Cómo pasan las diapositivas de una sección.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum SlideTiming {
+    /// Repartidas en compases enteros sobre la duración de la sección.
+    Auto,
+    /// Una cada `bars` compases desde el inicio de la sección.
+    EveryBars { bars: u32 },
+    /// Los cambios grabados (`RegionLyrics.steps`).
+    Recorded,
+    /// Solo la primera.
+    FirstOnly,
+}
+
+/// El modo de una sección.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionTiming {
+    pub marker_id: String,
+    pub timing: SlideTiming,
 }
 
 /// Corrección manual del emparejado de una marca. `marker_id` es el id base
@@ -258,21 +314,47 @@ impl RegionLyrics {
         self.links.iter_mut().find(|link| link.software == software)
     }
 
-    /// Pasos grabados de una marca (los de su id base), en orden.
+    /// Pasos grabados de una marca, en orden: los de su id exacto si los
+    /// tiene (grabados en el editor de esa repetición); si no, los de su id
+    /// base (el grabador de antes valía para todas las repeticiones).
     pub fn steps_for(&self, marker_id: &str) -> Vec<f64> {
         let base = chart_link_marker_id(marker_id);
+        let own = self.steps.iter().any(|step| step.marker_id == marker_id);
+        let wanted = if own { marker_id } else { base };
         let mut beats: Vec<f64> = self
             .steps
             .iter()
-            .filter(|step| step.marker_id == base && step.offset_beats.is_finite())
+            .filter(|step| step.marker_id == wanted && step.offset_beats.is_finite())
             .map(|step| step.offset_beats.max(0.0))
             .collect();
         beats.sort_by(|a, b| a.total_cmp(b));
         beats
     }
+
+    /// Cómo avanza una marca: lo elegido para ese id exacto; si no, lo que
+    /// dice el modo de la canción.
+    pub fn timing_for(&self, marker_id: &str) -> SlideTiming {
+        self.sections
+            .iter()
+            .find(|entry| entry.marker_id == marker_id)
+            .map(|entry| entry.timing)
+            .unwrap_or(match self.step_mode {
+                StepMode::Auto => SlideTiming::Auto,
+                StepMode::Manual => SlideTiming::Recorded,
+                StepMode::Off => SlideTiming::FirstOnly,
+            })
+    }
 }
 
 impl LyricsLink {
+    /// Las diapositivas elegidas a mano para esta marca (id exacto).
+    pub fn slides_for(&self, marker_id: &str) -> Option<&[u32]> {
+        self.slides
+            .iter()
+            .find(|entry| entry.marker_id == marker_id && !entry.indexes.is_empty())
+            .map(|entry| entry.indexes.as_slice())
+    }
+
     /// La corrección de una marca: la de su `~n` exacto si existe; si no, la
     /// de su id base.
     pub fn override_for(&self, marker_id: &str) -> Option<&OverrideTarget> {

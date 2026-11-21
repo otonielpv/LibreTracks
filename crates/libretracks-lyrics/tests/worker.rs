@@ -252,6 +252,8 @@ async fn a_stale_id_is_relinked_by_unique_name_and_an_ambiguous_one_stays_unlink
         presentation_id: Some("id-from-another-church".into()),
         presentation_name: "Way Maker".into(),
         overrides: vec![],
+        slides: vec![],
+        start: None,
     };
     worker
         .handle(vec![
@@ -354,4 +356,24 @@ async fn while_recording_a_song_its_slide_changes_are_not_sent_by_playback() {
     sent.lock().unwrap().clear();
     worker.handle(vec![step("v1", 1)]).await;
     assert_eq!(slide_orders(&sent), vec![3]);
+}
+
+#[tokio::test]
+async fn a_song_starting_before_its_first_section_blanks_what_the_last_song_left() {
+    let (connection, sent) = freeshow(SHOWS, Arc::default()).await;
+    let (mut worker, _) = ready_worker(connection).await;
+    worker.handle(vec![section("v1")]).await;
+    sent.lock().unwrap().clear();
+    // The fixture opens on "Intro" (no title slide): automatic start = blank.
+    worker
+        .handle(vec![WorkerInput::Event(LyricsEvent::EnterSong {
+            region_id: "r1".into(),
+            show_start: true,
+        })])
+        .await;
+    assert!(sent
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|body| body["action"] == "clear_slide"));
 }

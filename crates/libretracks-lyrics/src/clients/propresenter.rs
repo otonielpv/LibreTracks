@@ -108,7 +108,11 @@ impl LyricsClient for ProPresenterClient {
                 encode_segment(presentation_id),
                 encode_segment(group_label)
             ),
-            LyricsCommand::Step {
+            LyricsCommand::Slide {
+                presentation_id,
+                index,
+            }
+            | LyricsCommand::Step {
                 presentation_id,
                 index: Some(index),
             } => format!(
@@ -125,6 +129,29 @@ impl LyricsClient for ProPresenterClient {
             LyricsCommand::Clear => "/v1/clear/layer/slide".to_string(),
         };
         Ok(self.get(&path).await?.elapsed)
+    }
+
+    async fn thumbnails(
+        &self,
+        presentation_id: &str,
+        indexes: &[u32],
+    ) -> Result<Vec<Option<String>>, LyricsError> {
+        let mut pictures = Vec::with_capacity(indexes.len());
+        for index in indexes {
+            let path = format!(
+                "/v1/presentation/{}/thumbnail/{index}?quality=320",
+                encode_segment(presentation_id)
+            );
+            let picture = match self.http.execute_bytes(self.http.get(&path)).await {
+                Ok((200..=299, mime, bytes)) if !bytes.is_empty() => Some(super::data_url(
+                    mime.as_deref().unwrap_or("image/jpeg"),
+                    &bytes,
+                )),
+                _ => None,
+            };
+            pictures.push(picture);
+        }
+        Ok(pictures)
     }
 
     async fn current(&self) -> Result<Option<CurrentSlide>, LyricsError> {

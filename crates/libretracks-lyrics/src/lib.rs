@@ -14,6 +14,7 @@ pub mod gate;
 pub mod plan;
 pub mod report;
 pub mod structure;
+pub mod thumbs;
 pub mod worker;
 
 use serde::Serialize;

@@ -7,6 +7,7 @@ use libretracks_core::lyrics_config::{uses_token, LyricsConfig};
 use libretracks_core::{LyricsSoftware, RegionLyrics};
 use libretracks_lyrics::clients::{client_for, Connection, LyricsClient, Presentation, ProbeInfo};
 use libretracks_lyrics::report::{region_report, RegionReport};
+use libretracks_lyrics::thumbs::ThumbCache;
 use libretracks_lyrics::worker::{LyricsStatus, WorkerInput};
 use libretracks_lyrics::LyricsError;
 use serde::Serialize;
@@ -160,6 +161,58 @@ pub async fn lyrics_region_report(
     region_report(client.as_ref(), software, &song, &region_id, &catalog).await
 }
 
+/// Miniaturas de diapositivas para el editor de sección (`data:` URL, o
+/// `None` si el programa no las da). Las de FreeShow cuestan ~6 s cada una
+/// (las renderiza con esperas fijas), así que se guardan en disco por versión
+/// de la presentación. `cached_only`: solo las ya guardadas, al momento.
+#[tauri::command(async)]
+pub async fn lyrics_slide_thumbnails(
+    app: AppHandle,
+    service: State<'_, LyricsService>,
+    presentation_id: String,
+    indexes: Vec<u32>,
+    cached_only: Option<bool>,
+) -> Result<Vec<Option<String>>, LyricsError> {
+    let (software, client) = configured_client(&app, &service)?;
+    let cache = match (client.thumbnail_version(&presentation_id).await, app.path().app_cache_dir()) {
+        (Some(version), Ok(base)) => Some(ThumbCache::open(
+            &base.join("lyrics-thumbnails"),
+            software,
+            &presentation_id,
+            &version,
+        )),
+        _ => None,
+    };
+    let mut pictures: Vec<Option<String>> = indexes
+        .iter()
+        .map(|index| cache.as_ref().and_then(|cache| cache.get(*index)))
+        .collect();
+    if cached_only.unwrap_or(false) {
+        return Ok(pictures);
+    }
+    let missing: Vec<u32> = indexes
+        .iter()
+        .zip(&pictures)
+        .filter(|(_, picture)| picture.is_none())
+        .map(|(index, _)| *index)
+        .collect();
+    if missing.is_empty() {
+        return Ok(pictures);
+    }
+    let made = client.thumbnails(&presentation_id, &missing).await?;
+    for (index, picture) in missing.iter().zip(made) {
+        if let Some(url) = picture {
+            if let Some(cache) = &cache {
+                cache.put(*index, &url);
+            }
+            if let Some(slot) = indexes.iter().position(|wanted| wanted == index) {
+                pictures[slot] = Some(url);
+            }
+        }
+    }
+    Ok(pictures)
+}
+
 /// Lo que muestra «Vincular canciones»: un informe por canción.
 #[tauri::command(async)]
 pub async fn lyrics_setlist_report(
@@ -247,12 +300,13 @@ pub fn lyrics_status(service: State<'_, LyricsService>) -> LyricsStatus {
         .unwrap_or_default()
 }
 
-/// Los toques grabados de una canción (paso 09) en pulsos desde su sección,
-/// contra el id base de la marca. No guarda nada: el panel decide.
+/// Los toques grabados en el editor de una sección, como pulsos desde el
+/// inicio de esa marca y guardados contra su id exacto (solo esa repetición).
 #[tauri::command(async)]
-pub fn lyrics_steps_from_taps(
+pub fn lyrics_section_steps_from_taps(
     state: State<'_, DesktopState>,
     region_id: String,
+    marker_id: String,
     taps: Vec<f64>,
 ) -> Result<Vec<libretracks_core::LyricsStep>, String> {
     let session = state
@@ -260,7 +314,9 @@ pub fn lyrics_steps_from_taps(
         .lock()
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
     let song = session.engine.song().ok_or("no hay sesión abierta")?;
-    Ok(libretracks_core::lyrics_schedule::steps_from_taps(song, &region_id, &taps))
+    Ok(libretracks_core::lyrics_schedule::section_steps_from_taps(
+        song, &region_id, &marker_id, &taps,
+    ))
 }
 
 /// El grabador de cambios está abierto en esta canción (`None`: cerrado):

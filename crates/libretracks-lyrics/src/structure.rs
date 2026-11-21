@@ -4,7 +4,7 @@
 //! read here; the plan only sees [`LyricsStructure`].
 
 use libretracks_core::lyrics_match::GroupCandidate;
-use libretracks_core::section_vocab::{canonical_section, SectionId};
+use libretracks_core::section_vocab::{canonical_section, normalize_title, SectionId};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -31,6 +31,21 @@ pub struct StructureEntry {
     pub first_index: u32,
 }
 
+/// One slide as the program numbers it, for the section editor.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SlideInfo {
+    /// The program's own index (same numbering as `first_index`).
+    pub index: u32,
+    /// The group it belongs to, without part numbers.
+    pub group_label: String,
+    /// Its text, lines joined with a newline ("" when it has none).
+    pub text: String,
+    /// The slide the program adds with the song's title (Holyrics).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub title: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LyricsStructure {
@@ -38,6 +53,8 @@ pub struct LyricsStructure {
     pub title: String,
     /// One per appearance of a group, in presentation order.
     pub entries: Vec<StructureEntry>,
+    /// Every slide in presentation order, unmerged.
+    pub slides: Vec<SlideInfo>,
 }
 
 impl LyricsStructure {
@@ -57,6 +74,24 @@ impl LyricsStructure {
             });
         }
         candidates
+    }
+
+    pub fn has_slide(&self, index: u32) -> bool {
+        self.slides.iter().any(|slide| slide.index == index)
+    }
+
+    /// The first slide when it is a title slide, not a song section: what an
+    /// automatic song start shows. A title slide is the program's own
+    /// (Holyrics), one named like "Título", or one with no group whose text
+    /// is the song's name (or nothing): what people put first by hand.
+    pub fn title_slide(&self) -> Option<&SlideInfo> {
+        self.slides.first().filter(|slide| {
+            slide.title
+                || is_title_label(&slide.group_label)
+                || (slide.group_label.trim().is_empty()
+                    && (slide.text.trim().is_empty()
+                        || normalize_title(&slide.text) == normalize_title(&self.title)))
+        })
     }
 
     /// The `occurrence`-th appearance of a group (0 = first); the first one
@@ -79,6 +114,55 @@ fn text(value: &Value) -> Option<String> {
     }
 }
 
+/// A slide's text, line by line, without blank lines or HTML-ish breaks.
+fn slide_text(text: &str) -> String {
+    text.replace("<br>", "\n")
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// A group that names the song rather than a part of it.
+pub fn is_title_label(label: &str) -> bool {
+    let folded: String = label
+        .trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'á' | 'à' | 'ä' | 'â' => 'a',
+            'é' | 'è' | 'ë' | 'ê' => 'e',
+            'í' | 'ì' | 'ï' | 'î' => 'i',
+            'ó' | 'ò' | 'ö' | 'ô' => 'o',
+            'ú' | 'ù' | 'ü' | 'û' => 'u',
+            other => other,
+        })
+        .collect();
+    matches!(
+        folded.as_str(),
+        "title" | "titulo" | "titre" | "titel" | "titolo" | "portada" | "cover" | "nombre" | "song title"
+    )
+}
+
+/// FreeShow slide text: `items[].lines[].text[].value`, one line each.
+fn freeshow_text(slide: &Value) -> String {
+    let mut lines = Vec::new();
+    for item in slide.get("items").and_then(Value::as_array).into_iter().flatten() {
+        for line in item.get("lines").and_then(Value::as_array).into_iter().flatten() {
+            let joined: String = line
+                .get("text")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|part| part.get("value").and_then(Value::as_str))
+                .collect();
+            lines.push(joined);
+        }
+    }
+    slide_text(&lines.join("\n"))
+}
+
 fn unexpected(what: &str) -> LyricsError {
     LyricsError::unexpected(format!("respuesta inesperada: {what}"))
 }
@@ -99,13 +183,25 @@ pub fn parse_propresenter(json: &Value) -> Result<LyricsStructure, LyricsError> 
         .and_then(Value::as_array)
         .ok_or_else(|| unexpected("presentación sin grupos"))?;
     let mut entries = Vec::new();
+    let mut slide_list = Vec::new();
     let mut index = 0u32;
     for group in groups {
         let label = group.get("name").and_then(text).unwrap_or_default();
-        let slides = group
-            .get("slides")
-            .and_then(Value::as_array)
-            .map_or(0, |slides| slides.len() as u32);
+        let group_slides = group.get("slides").and_then(Value::as_array);
+        let slides = group_slides.map_or(0, |slides| slides.len() as u32);
+        for k in 0..slides.max(1) {
+            let body = group_slides
+                .and_then(|slides| slides.get(k as usize))
+                .and_then(|slide| slide.get("text"))
+                .and_then(text)
+                .unwrap_or_default();
+            slide_list.push(SlideInfo {
+                index: index + k,
+                group_label: base_label(&label).to_string(),
+                text: slide_text(&body),
+                title: false,
+            });
+        }
         entries.push(StructureEntry {
             canonical: canonical_section(base_label(&label)),
             group_label: label,
@@ -120,6 +216,7 @@ pub fn parse_propresenter(json: &Value) -> Result<LyricsStructure, LyricsError> 
         presentation_id,
         title,
         entries: merge_consecutive(entries),
+        slides: slide_list,
     })
 }
 
@@ -140,6 +237,7 @@ pub fn parse_freeshow(
         .as_array()
         .ok_or_else(|| unexpected("disposición de FreeShow sin filas"))?;
     let mut entries: Vec<StructureEntry> = Vec::new();
+    let mut slide_list: Vec<SlideInfo> = Vec::new();
     for (position, row) in rows.iter().enumerate() {
         let kind = row.get("type").and_then(Value::as_str).unwrap_or("parent");
         // `index_select_slide` counts the expanded layout from 1 (FreeShow
@@ -147,14 +245,20 @@ pub fn parse_freeshow(
         // FreeShow sends it 0-based, and sending it as is made the first
         // slide "-1" (seen 2026-11-20). The position in the list is.
         let index = position as u32 + 1;
+        let slide_id = row.get("id").and_then(text).unwrap_or_default();
+        let slide = slides.get(&slide_id).unwrap_or(&Value::Null);
         if kind == "child" {
             if let Some(last) = entries.last_mut() {
                 last.slide_count += 1;
+                slide_list.push(SlideInfo {
+                    index,
+                    group_label: base_label(&last.group_label).to_string(),
+                    text: freeshow_text(slide),
+                    title: false,
+                });
                 continue;
             }
         }
-        let slide_id = row.get("id").and_then(text).unwrap_or_default();
-        let slide = slides.get(&slide_id).unwrap_or(&Value::Null);
         let data = row.get("data").unwrap_or(&Value::Null);
         let label = slide
             .get("group")
@@ -169,6 +273,12 @@ pub fn parse_freeshow(
             .as_deref()
             .and_then(canonical_section)
             .or_else(|| canonical_section(base_label(&label)));
+        slide_list.push(SlideInfo {
+            index,
+            group_label: base_label(&label).to_string(),
+            text: freeshow_text(slide),
+            title: false,
+        });
         entries.push(StructureEntry {
             group_label: label,
             aliases: global.into_iter().collect(),
@@ -182,7 +292,30 @@ pub fn parse_freeshow(
         presentation_id: show_id.to_string(),
         title,
         entries: merge_consecutive(entries),
+        slides: slide_list,
     })
+}
+
+/// LibreTracks' own numbering of a Holyrics song: the title slide is 0 and
+/// the lyrics start at 1, whether or not Holyrics shows a title slide. The
+/// client turns it into Holyrics' real index when sending, so plans never
+/// depend on that setting.
+pub const HOLYRICS_TITLE_INDEX: u32 = 0;
+pub const HOLYRICS_FIRST_LYRIC: u32 = 1;
+
+/// A Holyrics slide's text without chords: `styled_text` is the text as
+/// projected; `text` carries chord lines (`//   F`).
+fn holyrics_text(slide: &Value) -> String {
+    let styled = slide.get("styled_text").and_then(text).unwrap_or_default();
+    if !styled.trim().is_empty() {
+        return slide_text(&styled);
+    }
+    let raw = slide.get("text").and_then(text).unwrap_or_default();
+    let without_chords: Vec<&str> = raw
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect();
+    slide_text(&without_chords.join("\n"))
 }
 
 /// Holyrics `GetLyrics` (+ `GetSlideDescriptions` for the user's names and
@@ -236,12 +369,20 @@ pub fn parse_holyrics(
             .unwrap_or_default()
     };
     let mut entries: Vec<StructureEntry> = Vec::new();
+    let mut slide_list: Vec<SlideInfo> = Vec::new();
     let mut previous_slide: Option<usize> = None;
     for (position, slide_index) in order.iter().enumerate() {
         let label = slides[*slide_index]
             .get("slide_description")
             .and_then(text)
             .unwrap_or_default();
+        let index = position as u32 + HOLYRICS_FIRST_LYRIC;
+        slide_list.push(SlideInfo {
+            index,
+            group_label: base_label(&label).to_string(),
+            text: holyrics_text(&slides[*slide_index]),
+            title: false,
+        });
         let continues = entries.last().is_some_and(|last| {
             last.group_label == label
                 && !label.is_empty()
@@ -261,13 +402,26 @@ pub fn parse_holyrics(
             canonical,
             source: Some(slide_index.to_string()),
             slide_count: 1,
-            first_index: position as u32,
+            first_index: index,
         });
     }
+    // The title slide Holyrics shows before the lyrics. Whether it is there
+    // depends on a Holyrics setting no API reads; the client drops it from
+    // the list once it has seen it is not (see `clients::holyrics`).
+    slide_list.insert(
+        0,
+        SlideInfo {
+            index: HOLYRICS_TITLE_INDEX,
+            group_label: String::new(),
+            text: title.clone(),
+            title: true,
+        },
+    );
     Ok(LyricsStructure {
         presentation_id,
         title,
         entries: merge_consecutive(entries),
+        slides: slide_list,
     })
 }
 

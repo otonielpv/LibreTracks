@@ -2690,6 +2690,7 @@ name = "libretracks-lyrics"
 version = "0.0.1"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "libretracks-core",
  "libretracks-test-http",
  "reqwest 0.12.28",

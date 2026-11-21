@@ -659,7 +659,25 @@ export type LyricsLink = {
   presentationId?: string | null;
   presentationName: string;
   overrides?: LyricsSectionOverride[];
+  /** Diapositivas elegidas a mano por marca (id exacto), en la numeración
+   * del programa. Espejo de `SlideSelection`. */
+  slides?: LyricsSlideSelection[];
+  /** Qué se muestra al empezar la canción; ausente = automático. */
+  start?: LyricsStartTarget | null;
 };
+
+export type LyricsSlideSelection = { markerId: string; indexes: number[] };
+
+export type LyricsStartTarget = { type: "clear" } | { type: "slide"; index: number };
+
+/** Cómo pasan las diapositivas de una sección. Espejo de `SlideTiming`. */
+export type LyricsSlideTiming =
+  | { type: "auto" }
+  | { type: "everyBars"; bars: number }
+  | { type: "recorded" }
+  | { type: "firstOnly" };
+
+export type LyricsSectionTiming = { markerId: string; timing: LyricsSlideTiming };
 
 /** Cambio de diapositiva dentro de una sección, en pulsos desde su inicio. */
 export type LyricsStep = {
@@ -672,7 +690,10 @@ export type RegionLyrics = {
   enabled: boolean;
   links: LyricsLink[];
   steps?: LyricsStep[];
+  /** Modo de antes: solo para las secciones sin uno propio en `sections`. */
   stepMode: LyricsStepMode;
+  /** Cómo avanza cada sección, por id de marca exacto. */
+  sections?: LyricsSectionTiming[];
   lead?: LeadTime | null;
 };
 

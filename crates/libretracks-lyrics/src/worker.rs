@@ -37,6 +37,8 @@ const RESOLVE_STEP: Duration = Duration::from_millis(50);
 /// After the program could not be reached, wait this long before resolving
 /// again.
 const RETRY_CONNECTION: Duration = Duration::from_secs(3);
+/// What `showing` holds while a song's start slide is up.
+const START_MARKER: &str = "#start";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkerConfig {
@@ -431,12 +433,18 @@ impl LyricsWorker {
 
     async fn on_event(&mut self, event: LyricsEvent) {
         match &event {
-            LyricsEvent::EnterSong { region_id } => {
+            LyricsEvent::EnterSong {
+                region_id,
+                show_start,
+            } => {
                 let region_id = region_id.clone();
                 self.entered = Some(region_id.clone());
                 if let Ok(Some(plan)) = self.ensure_plan(&region_id).await {
                     let prepare = plan.prepare.clone();
                     self.send(&prepare, &region_id, None, None).await;
+                }
+                if *show_start {
+                    self.show_start(&region_id).await;
                 }
             }
             LyricsEvent::Section {
@@ -461,16 +469,10 @@ impl LyricsWorker {
                 marker_id: None,
                 ..
             } => {
-                // Inside a song, before its first section: leave whatever
-                // another song left on screen.
-                let other = self
-                    .showing
-                    .as_ref()
-                    .is_some_and(|(showing, _)| showing != region_id);
-                self.entered = Some(region_id.clone());
-                if other {
-                    self.leave_song(None).await;
-                }
+                // Inside a song, before its first section: its start slide
+                // (or a blank screen), not what another song left up.
+                let region_id = region_id.clone();
+                self.show_start(&region_id).await;
             }
             LyricsEvent::Step {
                 region_id,
@@ -543,9 +545,15 @@ impl LyricsWorker {
             // Unmatched or "send nothing": the screen is left alone.
             return;
         };
+        let absolute = marker
+            .steps
+            .first()
+            .is_some_and(|step| matches!(step, LyricsCommand::Step { index: Some(_), .. }));
         let steps: Vec<LyricsCommand> = match plan.software {
             // Relative steps: one "next" per slide passed.
-            LyricsSoftware::ProPresenter => marker.steps.iter().take(k as usize).cloned().collect(),
+            LyricsSoftware::ProPresenter if !absolute => {
+                marker.steps.iter().take(k as usize).cloned().collect()
+            }
             _ => marker
                 .steps
                 .get((k as usize).wrapping_sub(1))
@@ -564,6 +572,24 @@ impl LyricsWorker {
             self.send(&step, &region_id, Some(&marker_id), label.as_deref())
                 .await;
         }
+    }
+
+    /// The song starts before its first section: its start slide goes up, or
+    /// the screen is blanked if something else is on it.
+    async fn show_start(&mut self, region_id: &str) {
+        self.entered = Some(region_id.to_string());
+        let start = match self.ensure_plan(region_id).await {
+            Ok(Some(plan)) => plan.start.clone(),
+            _ => LyricsCommand::Clear,
+        };
+        if start == LyricsCommand::Clear {
+            if self.showing.is_some() {
+                self.send_clear(Some(region_id)).await;
+            }
+            return;
+        }
+        self.showing = Some((region_id.to_string(), START_MARKER.to_string()));
+        self.send(&start, region_id, None, None).await;
     }
 
     async fn leave_song(&mut self, region_id: Option<String>) {
@@ -743,6 +769,8 @@ impl LyricsWorker {
                 presentation_id: None,
                 presentation_name: String::new(),
                 overrides: Vec::new(),
+                slides: Vec::new(),
+                start: None,
             },
         };
         let client = self.client.as_ref().ok_or(LyricsError::Timeout)?;

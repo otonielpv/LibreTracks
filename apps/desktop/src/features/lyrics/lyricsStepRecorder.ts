@@ -1,61 +1,44 @@
 /**
- * Recording slide changes by tapping along (plan lyrics-sync, step 09). The
- * user plays the song and taps (space bar, or the big button on a phone) on
- * each slide change. Each tap is sent at once (the user sees it work) and
- * kept; on Save, Rust turns the taps into beats from each section's start
- * (`lyrics_steps_from_taps`), so they follow the tempo.
+ * Recording one section's slide changes by tapping along (section editor).
+ * The editor plays from a bar before the marker; the user taps (space bar,
+ * or the big button on a phone) on each slide change. Each tap inside the
+ * section is sent at once (the user sees it work) and kept; on Save, Rust
+ * turns the taps into beats from the marker (`lyrics_section_steps_from_taps`),
+ * so they follow the tempo.
  */
 
 export type SectionSpan = {
   markerId: string;
-  markerName: string;
   startSeconds: number;
   endSeconds: number;
-  slides?: number;
 };
 
 export type RecorderDeps = {
-  sections: SectionSpan[];
+  section: SectionSpan;
   /** The transport position now, in source seconds. */
   getPosition: () => Promise<number>;
-  /** Send slide `k` of that section right away. */
+  /** Send slide `k` of the section right away. */
   sendStep: (markerId: string, k: number) => void;
 };
 
-export type RecorderSummary = Array<{ markerName: string; changes: number }>;
-
-export function sectionAt(sections: SectionSpan[], position: number): SectionSpan | null {
-  return (
-    sections.find((section) => position >= section.startSeconds && position < section.endSeconds) ??
-    null
-  );
+export function insideSection(section: SectionSpan, position: number): boolean {
+  return position > section.startSeconds && position < section.endSeconds;
 }
 
-export function createStepRecorder({ sections, getPosition, sendStep }: RecorderDeps) {
-  const taps: Array<{ seconds: number; markerId: string }> = [];
+export function createStepRecorder({ section, getPosition, sendStep }: RecorderDeps) {
+  const taps: number[] = [];
   return {
-    /** One tap: kept and sent if it falls inside a section. */
+    /** One tap: kept and sent if it falls inside the section. Returns
+     * whether it counted. */
     async tap() {
       const seconds = await getPosition();
-      const section = sectionAt(sections, seconds);
-      if (!section) return null;
-      taps.push({ seconds, markerId: section.markerId });
-      const k = taps.filter((tap) => tap.markerId === section.markerId).length;
-      sendStep(section.markerId, k);
-      return section;
+      if (!insideSection(section, seconds)) return false;
+      taps.push(seconds);
+      sendStep(section.markerId, taps.length);
+      return true;
     },
-    taps: () => taps.map((tap) => tap.seconds),
-    /** "Verso 1: 1 change, Coro: 1 change", by section name in song order. */
-    summary(): RecorderSummary {
-      const counts = new Map<string, number>();
-      for (const section of sections) {
-        const changes = taps.filter((tap) => tap.markerId === section.markerId).length;
-        if (changes > 0) {
-          counts.set(section.markerName, (counts.get(section.markerName) ?? 0) + changes);
-        }
-      }
-      return [...counts.entries()].map(([markerName, changes]) => ({ markerName, changes }));
-    },
+    taps: () => [...taps],
+    count: () => taps.length,
   };
 }
 

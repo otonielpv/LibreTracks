@@ -38,7 +38,8 @@ function makeApi(initial: Partial<LyricsConfig> = {}) {
       throw new Error("not in this test");
     }),
     getSetlistReport: vi.fn(async () => []),
-    stepsFromTaps: vi.fn(async () => []),
+    sectionStepsFromTaps: vi.fn(async () => []),
+    getSlideThumbnails: vi.fn(async (_id: string, indexes: number[]) => indexes.map(() => null as string | null)),
     getTapPosition: vi.fn(async () => 0),
     playTransport: vi.fn(async () => ({ playbackState: "playing" }) as never),
     pauseTransport: vi.fn(async () => ({ playbackState: "paused" }) as never),

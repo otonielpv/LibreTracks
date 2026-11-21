@@ -6,10 +6,11 @@
  */
 import type {
   LeadTime,
-  LyricsStepMode,
   LyricsConfig,
   LyricsOverrideTarget,
+  LyricsSlideTiming,
   LyricsSoftware,
+  LyricsStartTarget,
   RegionLyrics,
 } from "@libretracks/shared/models";
 
@@ -20,8 +21,10 @@ import {
   withLead,
   withOverride,
   withPresentation,
-  withRecordedSteps,
-  withStepMode,
+  withSectionRecording,
+  withSlides,
+  withStart,
+  withTiming,
 } from "./lyricsEdits";
 import { useLyricsStore } from "./lyricsStore";
 
@@ -38,7 +41,8 @@ export type LyricsApi = Pick<
   | "getRegionReport"
   | "getSetlistReport"
   | "listPresentations"
-  | "stepsFromTaps"
+  | "sectionStepsFromTaps"
+  | "getSlideThumbnails"
   | "getTapPosition"
   | "playTransport"
   | "pauseTransport"
@@ -171,10 +175,28 @@ export function createLyricsHandlers({
     testSend: (regionId: string, markerId: string, k = 0) =>
       calls.testSendLyrics(regionId, markerId, k),
 
-    setStepMode: (regionId: string, mode: LyricsStepMode) =>
-      saveRegion(regionId, withStepMode(getRegionLyrics(regionId), mode)),
+    /** Slides chosen in the section editor (exact marker ids); an empty
+     * list gives the marker back to its group. One undo step. */
+    setSlides: async (regionId: string, chosen: Array<{ markerId: string; indexes: number[] }>) => {
+      const software = currentSoftware();
+      if (!software) return;
+      await saveRegion(regionId, withSlides(getRegionLyrics(regionId), software, chosen));
+    },
+
+    /** What shows when the song starts; `null` = automatic. */
+    setStart: async (regionId: string, start: LyricsStartTarget | null) => {
+      const software = currentSoftware();
+      if (!software) return;
+      await saveRegion(regionId, withStart(getRegionLyrics(regionId), software, start));
+    },
+
+    setTiming: (regionId: string, markerId: string, timing: LyricsSlideTiming) =>
+      saveRegion(regionId, withTiming(getRegionLyrics(regionId), markerId, timing)),
 
     tapPosition: () => calls.getTapPosition(),
+
+    slideThumbnails: (presentationId: string, indexes: number[], cachedOnly = false) =>
+      calls.getSlideThumbnails(presentationId, indexes, cachedOnly),
 
     setRecording: (regionId: string | null) => calls.setLyricsRecording(regionId),
 
@@ -196,11 +218,10 @@ export function createLyricsHandlers({
       return snapshot.playbackState === "playing";
     },
 
-    /** Save a recording: one commit, one undo step. */
-    saveRecording: async (regionId: string, taps: number[]) => {
-      const steps = await calls.stepsFromTaps(regionId, taps);
-      if (steps.length === 0) return null;
-      return saveRegion(regionId, withRecordedSteps(getRegionLyrics(regionId), steps));
+    /** Save one section's recording: one commit, one undo step. */
+    saveSectionRecording: async (regionId: string, markerId: string, taps: number[]) => {
+      const steps = await calls.sectionStepsFromTaps(regionId, markerId, taps);
+      return saveRegion(regionId, withSectionRecording(getRegionLyrics(regionId), markerId, steps));
     },
 
     regionReport: (regionId: string) => calls.getRegionReport(regionId),

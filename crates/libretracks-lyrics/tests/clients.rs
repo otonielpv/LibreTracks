@@ -274,10 +274,70 @@ async fn holyrics_requests_carry_the_token_and_lift_the_blank() {
         after_clear[2],
         &("ShowLyrics".to_string(), json(r#"{"id":"812","initial_index":6}"#))
     );
+    // Right after showing, it checks what Holyrics really put on screen.
+    assert_eq!(after_clear[3].0, "GetCurrentPresentation");
     assert_eq!(
-        after_clear[3],
+        after_clear[4],
         &("ActionGoToIndex".to_string(), json(r#"{"index":7}"#))
     );
+}
+
+#[tokio::test]
+async fn holyrics_without_a_title_slide_is_learned_and_corrected_at_once() {
+    // This Holyrics shows the lyrics straight away: its slide 0 is Verso 1.
+    let (connection, log) = server(|request| match holyrics_action(&request.target).as_str() {
+        "GetCurrentPresentation" => Response::json(
+            200,
+            r#"{"status":"ok","data":{"id":"x","name":"Way Maker","song_id":"812","slide_number":1,
+                "slides":[{"number":1,"text":"a","slide_description":"Verso 1"},
+                          {"number":2,"text":"b","slide_description":"Verso 1"}]}}"#,
+        ),
+        "GetLyrics" => Response::json(200, fixture("holyrics/GetLyrics.json")),
+        _ => Response::json(200, r#"{"status":"ok","data":null}"#),
+    })
+    .await;
+    let holyrics = client(LyricsSoftware::Holyrics, connection);
+    // Before seeing it, the title slide is assumed and listed.
+    assert!(holyrics.structure("812").await.unwrap().slides[0].title);
+    // "Verso 1" is our 1: sent as 1 assuming a title slide, then corrected.
+    holyrics
+        .send(&LyricsCommand::Section {
+            presentation_id: "812".into(),
+            group_label: "Verso 1".into(),
+            index: 1,
+        })
+        .await
+        .unwrap();
+    holyrics
+        .send(&LyricsCommand::Step {
+            presentation_id: "812".into(),
+            index: Some(2),
+        })
+        .await
+        .unwrap();
+    // The title slide, now known to be absent, blanks instead of showing
+    // another slide.
+    holyrics
+        .send(&LyricsCommand::Slide {
+            presentation_id: "812".into(),
+            index: 0,
+        })
+        .await
+        .unwrap();
+    let sent: Vec<(String, serde_json::Value)> = log
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|request| (holyrics_action(&request.target), json(&request.body)))
+        .filter(|(action, _)| action != "GetLyrics" && action != "GetSlideDescriptions")
+        .collect();
+    assert_eq!(sent[0], ("ShowLyrics".to_string(), json(r#"{"id":"812","initial_index":1}"#)));
+    assert_eq!(sent[1].0, "GetCurrentPresentation");
+    assert_eq!(sent[2], ("ActionGoToIndex".to_string(), json(r#"{"index":0}"#)));
+    assert_eq!(sent[3], ("ActionGoToIndex".to_string(), json(r#"{"index":1}"#)));
+    assert_eq!(sent[4], ("SetF8".to_string(), json(r#"{"enable":true}"#)));
+    // And the editor no longer lists a title slide.
+    assert!(!holyrics.structure("812").await.unwrap().slides.iter().any(|slide| slide.title));
 }
 
 #[tokio::test]

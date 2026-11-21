@@ -14,6 +14,7 @@ export { pauseTransport, playTransport, seekTransport };
 import type {
   LyricsConfig,
   LyricsLink,
+  LyricsSlideTiming,
   LyricsSoftware,
   LyricsStep,
   RegionLyrics,
@@ -74,8 +75,26 @@ export type MarkerReport = MarkerStatus & {
   occurrence: number;
   startSeconds: number;
   slideCount: number;
-  /** Automatic slide changes: the bar of the section each falls on. */
-  autoChangeBars: number[];
+  /** The program's indexes of the slides this marker shows. */
+  slides: number[];
+  /** Chosen by hand in the section editor. */
+  customSlides: boolean;
+  /** Where the next section (or the song) starts, source seconds. */
+  endSeconds: number;
+  /** One bar before the marker: where the section recorder starts playing. */
+  countInSeconds: number;
+  timing: LyricsSlideTiming;
+  /** The bar of the section each slide change falls on, by its timing. */
+  changePoints: Array<{ bar: number; beat: number }>;
+};
+
+/** One slide of the presentation as the program numbers it. */
+export type SlideInfo = {
+  index: number;
+  groupLabel: string;
+  text: string;
+  /** The slide the program adds with the song's title (Holyrics). */
+  title?: boolean;
 };
 
 export type RegionReport = {
@@ -88,6 +107,11 @@ export type RegionReport = {
   markers: MarkerReport[];
   suggestions: Array<{ id: string; name: string; score: number }>;
   unmatchedSections: number;
+  /** Every slide of the presentation (linked songs only). */
+  slides?: SlideInfo[];
+  /** What shows when the song starts before its first section; `slide`
+   * null = blank screen. */
+  start?: { automatic: boolean; slide: number | null } | null;
 };
 
 export const LYRICS_STATUS_EVENT = "lyrics:status";
@@ -164,8 +188,19 @@ export function markLyricsTutorialDone(software: LyricsSoftware) {
   return invokeCommand<LyricsConfigView>("lyrics_tutorial_done", { software });
 }
 
-export function stepsFromTaps(regionId: string, taps: number[]) {
-  return invokeCommand<LyricsStep[]>("lyrics_steps_from_taps", { regionId, taps });
+/** Pictures of slides (program indexes) as `data:` URLs; `null` where the
+ * program gives none (Holyrics) or could not render one. */
+export function getSlideThumbnails(presentationId: string, indexes: number[], cachedOnly = false) {
+  return invokeCommand<Array<string | null>>("lyrics_slide_thumbnails", {
+    presentationId,
+    indexes,
+    cachedOnly,
+  });
+}
+
+/** Taps recorded in one section's editor, as steps of that exact marker. */
+export function sectionStepsFromTaps(regionId: string, markerId: string, taps: number[]) {
+  return invokeCommand<LyricsStep[]>("lyrics_section_steps_from_taps", { regionId, markerId, taps });
 }
 
 export function setLyricsRecording(regionId: string | null) {

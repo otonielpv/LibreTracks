@@ -8,7 +8,7 @@ use super::*;
 use crate::lead_plan::{Discontinuity, LeadPlanner};
 use crate::lead_time::{LeadGrid, LeadTime};
 use crate::model::{
-    LyricsStep, Marker, MarkerKind, RegionLyrics, Song, SongMaster, SongRegion, StepMode,
+    LyricsStep, Marker, MarkerKind, RegionLyrics, SectionTiming, Song, SongMaster, SongRegion, StepMode,
     TempoMarker,
 };
 
@@ -192,7 +192,8 @@ fn linear_playback_fires_each_section_one_beat_early_once() {
     assert_eq!(
         runner.log.first().map(|(_, event)| event.clone()),
         Some(LyricsEvent::EnterSong {
-            region_id: "r1".into()
+            region_id: "r1".into(),
+            show_start: false,
         })
     );
     assert_eq!(
@@ -399,7 +400,8 @@ fn back_to_back_songs_enter_the_next_without_leaving_the_first() {
     runner.run_to(66.0, None);
     assert!(runner.log.iter().any(|(_, event)| *event
         == LyricsEvent::EnterSong {
-            region_id: "r2".into()
+            region_id: "r2".into(),
+            show_start: false,
         }));
     assert!(!runner.log.iter().any(|(_, event)| matches!(event, LyricsEvent::ExitSong { region_id } if region_id == "r1")));
 }
@@ -474,4 +476,55 @@ fn recorded_beats_land_on_the_same_musical_point_under_warp() {
         steps_from_taps(&plain, "r1", &[2.0]),
         steps_from_taps(&warped, "r1", &[2.0])
     );
+}
+
+#[test]
+fn a_song_that_does_not_open_on_a_section_shows_its_start() {
+    let mut late = song();
+    late.section_markers.retain(|marker| marker.id != "intro");
+    let mut runner = Runner::new(late);
+    runner.run_to(2.0, None);
+    assert_eq!(
+        runner.log.first().map(|(_, event)| event.clone()),
+        Some(LyricsEvent::EnterSong {
+            region_id: "r1".into(),
+            show_start: true,
+        })
+    );
+}
+
+#[test]
+fn every_bars_changes_one_slide_each_n_bars_and_drops_the_ones_past_the_end() {
+    let song = song();
+    let grid = LeadGrid::new(&song);
+    // 120 BPM 4/4: a bar is 2 s. Section 0..10 s (5 bars), 4 slides every 2 bars.
+    let at = every_bars_positions(&grid, 0.0, 10.0, 4, 2);
+    assert_eq!(at.len(), 2);
+    assert!((at[0] - 4.0).abs() < 1e-6 && (at[1] - 8.0).abs() < 1e-6, "{at:?}");
+}
+
+#[test]
+fn each_repeat_keeps_its_own_timing_and_recorded_steps() {
+    let mut lyrics = RegionLyrics::default();
+    lyrics.sections.push(SectionTiming {
+        marker_id: "c~1".into(),
+        timing: SlideTiming::Recorded,
+    });
+    lyrics.steps.push(LyricsStep { marker_id: "c".into(), offset_beats: 4.0 });
+    lyrics.steps.push(LyricsStep { marker_id: "c~1".into(), offset_beats: 2.0 });
+    assert_eq!(lyrics.timing_for("c~1"), SlideTiming::Recorded);
+    // Not inherited by the base id: the first chorus keeps the song's mode.
+    assert_eq!(lyrics.timing_for("c"), SlideTiming::Auto);
+    assert_eq!(lyrics.steps_for("c~1"), vec![2.0]);
+    assert_eq!(lyrics.steps_for("c~2"), vec![4.0]);
+}
+
+#[test]
+fn section_taps_count_only_inside_that_marker_and_keep_its_exact_id() {
+    let song = song();
+    // "c" runs 20..28 s at 120 BPM: 21 s = 2 beats, 24.02 s = 8 beats.
+    let steps = section_steps_from_taps(&song, "r1", "c", &[5.0, 21.0, 24.02, 30.0]);
+    let beats: Vec<f64> = steps.iter().map(|step| step.offset_beats).collect();
+    assert_eq!(beats, vec![2.0, 8.0]);
+    assert!(steps.iter().all(|step| step.marker_id == "c"));
 }

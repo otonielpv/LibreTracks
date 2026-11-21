@@ -28,6 +28,9 @@ pub const REQUEST_TIMEOUT: Duration = Duration::from_millis(800);
 /// Connecting gives up a little earlier, so "nothing answers there" is told
 /// apart from "it answered too slowly".
 pub const CONNECT_TIMEOUT: Duration = Duration::from_millis(700);
+/// A slide picture is rendered by the program: it may take longer than an
+/// order, and nothing live waits for it (only the section editor).
+pub const THUMBNAIL_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,6 +66,31 @@ pub trait LyricsClient: Send + Sync {
     /// Send one order; returns how long the program took.
     async fn send(&self, command: &LyricsCommand) -> Result<Duration, LyricsError>;
     async fn current(&self) -> Result<Option<CurrentSlide>, LyricsError>;
+    /// What identifies this state of a presentation for its kept pictures:
+    /// it changes when the presentation is edited. `None` = do not keep them
+    /// (the program makes them fast, or cannot tell).
+    async fn thumbnail_version(&self, _presentation_id: &str) -> Option<String> {
+        None
+    }
+
+    /// A picture of each slide (program indexes) as a `data:` URL, for the
+    /// section editor; `None` where the program gives none (Holyrics).
+    async fn thumbnails(
+        &self,
+        _presentation_id: &str,
+        indexes: &[u32],
+    ) -> Result<Vec<Option<String>>, LyricsError> {
+        Ok(vec![None; indexes.len()])
+    }
+}
+
+/// Raw bytes as a `data:` URL.
+pub(crate) fn data_url(mime: &str, bytes: &[u8]) -> String {
+    use base64::Engine;
+    format!(
+        "data:{mime};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    )
 }
 
 /// Where the program is and how to authenticate.
@@ -155,6 +183,27 @@ impl Http {
             body,
             elapsed: started.elapsed(),
         })
+    }
+
+    /// The raw answer (an image), with the thumbnail timeout.
+    pub(crate) async fn execute_bytes(
+        &self,
+        request: reqwest::RequestBuilder,
+    ) -> Result<(u16, Option<String>, Vec<u8>), LyricsError> {
+        let exchange = async {
+            let response = request.send().await.map_err(map_error)?;
+            let status = response.status().as_u16();
+            let mime = response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_string);
+            let bytes = response.bytes().await.map_err(map_error)?;
+            Ok::<_, LyricsError>((status, mime, bytes.to_vec()))
+        };
+        tokio::time::timeout(THUMBNAIL_TIMEOUT, exchange)
+            .await
+            .map_err(|_| LyricsError::Timeout)?
     }
 
     pub(crate) fn get(&self, path: &str) -> reqwest::RequestBuilder {

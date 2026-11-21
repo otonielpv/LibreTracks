@@ -435,19 +435,158 @@ td.lt-lyrics-unmatched { color: #f6ad55; }
   background: rgb(87 241 219 / 0.1);
 }
 
-/* Diapositivas dentro de la sección */
-.lt-lyrics-slides {
+/* Columna «Diap.»: número + «Editar». */
+.lt-lyrics-slide-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+button.lt-lyrics-btn.lt-lyrics-edit {
+  min-height: 28px;
+  padding: 0.35rem 0.6rem;
+}
+
+/* Editor de una sección: diapositivas, cuándo pasan y grabador. */
+.lt-lyrics-section-editor {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
-.lt-lyrics-slides > button.lt-lyrics-btn {
+.lt-lyrics-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.lt-lyrics-section-header h3 {
+  flex: 1 1 auto;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lt-lyrics-section-editor h4 {
+  margin: 0.6rem 0 0;
+  color: rgb(229 226 225 / 0.6);
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.lt-lyrics-section-editor > button.lt-lyrics-btn {
   align-self: flex-start;
 }
-.lt-lyrics-slides-list {
+/* Sin alto máximo: el desplazamiento es el del panel, no uno pequeño
+   anidado dentro. */
+.lt-lyrics-slide-picker {
+  list-style: none;
   margin: 0;
-  padding-left: 18px;
-  font-size: 0.84rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 1px;
+  border: 1px solid rgb(255 255 255 / 0.06);
+  background: rgb(255 255 255 / 0.06);
+}
+button.lt-lyrics-slide {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem;
+  border: 2px solid transparent;
+  border-radius: 0;
+  background: rgb(15 18 19 / 0.96);
+  color: #e5e2e1;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button.lt-lyrics-slide:hover {
+  background: rgb(87 241 219 / 0.06);
+}
+button.lt-lyrics-slide:focus-visible {
+  outline: 2px solid #57f1db;
+  outline-offset: -2px;
+}
+button.lt-lyrics-slide.is-selected {
+  border-color: #57f1db;
+  background: rgb(87 241 219 / 0.12);
+}
+.lt-lyrics-slide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  min-height: 1.2rem;
+}
+.lt-lyrics-slide-group {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f3f0ef;
+  font: 700 0.75rem/1.2 "Space Grotesk", sans-serif;
+}
+.lt-lyrics-slide-order {
+  flex: 0 0 auto;
+  min-width: 1.2rem;
+  padding: 0.1rem 0.3rem;
+  box-sizing: border-box;
+  background: #57f1db;
+  color: #0e0e0e;
+  text-align: center;
+  font: 700 0.72rem/1 "Space Grotesk", sans-serif;
+}
+/* La «pantalla»: 16:9, la miniatura del programa o su texto centrado. */
+.lt-lyrics-slide-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #000;
+}
+.lt-lyrics-slide-screen img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.lt-lyrics-slide-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+  padding: 0.3rem;
+  color: #fff;
+  font: 600 0.66rem/1.3 "Space Grotesk", sans-serif;
+  text-align: center;
+  white-space: pre-line;
+}
+.lt-lyrics-timing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.lt-lyrics-timing label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+}
+.lt-lyrics-timing input[type="radio"] {
+  accent-color: #57f1db;
+}
+input.lt-lyrics-input.lt-lyrics-bars {
+  width: 4.2rem;
+  padding: 0.35rem 0.5rem;
+}
+button.lt-lyrics-btn.lt-lyrics-record .material-symbols-outlined {
+  color: #fc8181;
+  font-size: 18px;
 }
 .lt-lyrics-recorder {
   display: flex;
@@ -461,23 +600,10 @@ td.lt-lyrics-unmatched { color: #f6ad55; }
 .lt-lyrics-recorder ul {
   margin: 0;
 }
-.lt-lyrics-recorder-transport {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1px;
-}
-.lt-lyrics-recorder-transport button.lt-lyrics-btn {
-  flex: 1 1 0;
-  min-height: 48px;
-  font-size: 0.85rem;
-}
-.lt-lyrics-recorder-transport .material-symbols-outlined {
-  font-size: 22px;
-}
 .lt-lyrics-recorder > button.lt-lyrics-btn {
   align-self: flex-start;
 }
-.lt-lyrics-recorder > button.lt-lyrics-tap {
+.lt-lyrics-recorder-row > button.lt-lyrics-tap {
   align-self: stretch;
   min-height: 88px;
   font-size: 1.15rem;
@@ -488,7 +614,7 @@ td.lt-lyrics-unmatched { color: #f6ad55; }
   color: #57f1db;
   touch-action: manipulation;
 }
-.lt-lyrics-recorder > button.lt-lyrics-tap:active {
+.lt-lyrics-recorder-row > button.lt-lyrics-tap:active {
   background: rgb(87 241 219 / 0.3);
 }
 
@@ -514,4 +640,69 @@ td.lt-lyrics-unmatched { color: #f6ad55; }
 }
 .lt-lyrics-save-state.is-saved {
   color: #68d391;
+}
+
+/* Un móvil en horizontal: el panel ocupa toda la pantalla, sin márgenes, con
+   cabecera y pie compactos, para que el único desplazamiento sea el del
+   cuerpo y tenga altura útil. */
+@media (max-height: 520px) {
+  .lt-modal-backdrop.lt-lyrics-backdrop {
+    padding: 0;
+  }
+  .lt-settings-modal.lt-lyrics-modal {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    gap: 0.4rem;
+    border: 0;
+    padding: 0.5rem max(0.9rem, env(safe-area-inset-right)) 0.4rem
+      max(0.9rem, env(safe-area-inset-left));
+  }
+  .lt-lyrics-modal .lt-settings-modal-header {
+    align-items: center;
+  }
+  .lt-lyrics-modal .lt-settings-modal-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+  .lt-lyrics-modal .lt-settings-modal-close {
+    padding: 0.45rem 0.7rem;
+  }
+  .lt-lyrics-modal-footer {
+    margin-top: 0.2rem;
+    padding: 0.4rem 0 0;
+  }
+  .lt-lyrics-slide-picker {
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  }
+  .lt-lyrics-recorder-row > button.lt-lyrics-tap {
+    min-height: 64px;
+  }
+}
+
+.lt-lyrics-recorder-status {
+  margin: 0;
+  color: #f6ad55;
+  font-weight: 700;
+}
+.lt-lyrics-recorder-status.is-live {
+  color: #57f1db;
+}
+
+/* «Cambio» y «Parar» en una fila: los dos a la vista mientras se graba. El
+   margen inferior deja el recuadro por encima del pie fijo al desplazarse. */
+.lt-lyrics-recorder {
+  scroll-margin-bottom: 5rem;
+}
+.lt-lyrics-recorder-row {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+}
+.lt-lyrics-recorder-row > button.lt-lyrics-tap {
+  flex: 1 1 auto;
+}
+.lt-lyrics-recorder-row > button.lt-lyrics-stop {
+  flex: 0 0 auto;
+  min-width: 7rem;
 }

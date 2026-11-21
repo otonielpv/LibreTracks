@@ -1891,9 +1891,15 @@ mod tests {
                     marker_id: "m1".into(),
                     target: OverrideTarget::Group { label: "Coro 1".into() },
                 }],
+                slides: vec![libretracks_core::SlideSelection { marker_id: "m1".into(), indexes: vec![3, 4] }],
+                start: Some(libretracks_core::StartTarget::Clear),
             }],
             steps: vec![LyricsStep { marker_id: "m1".into(), offset_beats: 8.0 }],
             step_mode: StepMode::Manual,
+            sections: vec![libretracks_core::SectionTiming {
+                marker_id: "m1".into(),
+                timing: libretracks_core::SlideTiming::EveryBars { bars: 2 },
+            }],
             lead: None,
         };
         source.regions[0].lyrics = Some(lyrics.clone());

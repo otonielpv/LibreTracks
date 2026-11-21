@@ -41,6 +41,11 @@ fn full_lyrics() -> RegionLyrics {
                 target: OverrideTarget::Skip,
             },
         ],
+        slides: vec![crate::SlideSelection {
+            marker_id: "b~1".into(),
+            indexes: vec![7],
+        }],
+        start: Some(crate::StartTarget::Slide { index: 0 }),
     };
     RegionLyrics {
         enabled: false,
@@ -54,6 +59,10 @@ fn full_lyrics() -> RegionLyrics {
             offset_beats: 16.0,
         }],
         step_mode: StepMode::Manual,
+        sections: vec![crate::SectionTiming {
+            marker_id: "b~1".into(),
+            timing: crate::SlideTiming::EveryBars { bars: 2 },
+        }],
         lead: Some(LeadTime::Beats { count: 2.0 }),
     }
 }

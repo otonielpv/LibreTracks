@@ -31,7 +31,7 @@ pub use automation::{
     AutomationTransitionMode, SceneMode,
 };
 pub use model::{
-    default_audio_to, LyricsLink, LyricsSoftware, LyricsStep, OverrideTarget, RegionLyrics, SectionOverride, StepMode, implicit_start_section_id, Arrangement, ArrangementBlock, BlockContent, ChannelMode, OriginalSection,
+    default_audio_to, LyricsLink, LyricsSoftware, LyricsStep, OverrideTarget, RegionLyrics, SectionOverride, SectionTiming, SlideSelection, SlideTiming, StartTarget, StepMode, implicit_start_section_id, Arrangement, ArrangementBlock, BlockContent, ChannelMode, OriginalSection,
     OriginalSnapshot, SongStructure, SongChart, ChartLink, chart_link_marker_id, parse_audio_output_route, Clip, FadeCurve, Marker, MarkerCategory, MarkerKind, MidiClip,
     KeyChange, KeyMap, MidiEvent, MidiEventKind, Project, Song, SongMaster, SongRegion, TempoMarker, TempoMetadata,
     is_video_file_path, TempoSource, TimeSignatureMarker, Track, TrackKind, VideoAssetInfo, VideoClip,

@@ -3,7 +3,9 @@
 //! `{"status":"ok","data":…}` or `{"status":"error","error":"…"}`. Each
 //! action needs its permission ticked for the token.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -12,7 +14,8 @@ use serde_json::{json, Value};
 
 use super::{encode_segment, text, CurrentSlide, Http, LyricsClient, Presentation, ProbeInfo};
 use crate::plan::LyricsCommand;
-use crate::structure::{parse_holyrics, LyricsStructure};
+use crate::structure::{parse_holyrics, LyricsStructure, HOLYRICS_FIRST_LYRIC};
+use libretracks_core::section_vocab::normalize_title;
 use crate::LyricsError;
 
 /// Every action LibreTracks uses, for `CheckPermissions`.
@@ -26,6 +29,35 @@ pub const REQUIRED_ACTIONS: &[&str] = &[
     "GetCurrentPresentation",
     "GetSlideDescriptions",
 ];
+
+/// Whether each Holyrics (by address) shows a title slide before the lyrics.
+/// It is a Holyrics setting no API reads: learned from what it actually
+/// shows after each `ShowLyrics`, and kept for the session (clients are
+/// short-lived). Unknown = assume it does (Holyrics' default).
+fn title_slides() -> &'static Mutex<HashMap<String, bool>> {
+    static SEEN: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
+    SEEN.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// LibreTracks' index (title = 0, lyrics from 1) as Holyrics' own:
+/// `None` = the title slide was asked for but Holyrics shows none.
+pub fn holyrics_index(ours: u32, title_slide: bool) -> Option<u32> {
+    if title_slide {
+        Some(ours)
+    } else {
+        ours.checked_sub(HOLYRICS_FIRST_LYRIC)
+    }
+}
+
+/// Whether what Holyrics shows (`GetCurrentPresentation` with slides) opens
+/// with a title slide: no description and the song's name as its text.
+pub fn shows_title_slide(current: &Value) -> Option<bool> {
+    let first = current.get("slides")?.as_array()?.first()?;
+    let name = text(current.get("name")).unwrap_or_default();
+    let description = text(first.get("slide_description")).unwrap_or_default();
+    let body = text(first.get("text")).unwrap_or_default();
+    Some(description.trim().is_empty() && !name.is_empty() && normalize_title(&body) == normalize_title(&name))
+}
 
 pub struct HolyricsClient {
     http: Http,
@@ -70,6 +102,50 @@ impl HolyricsClient {
                 "Holyrics: respuesta inesperada a {action}"
             ))),
         }
+    }
+
+    fn title_slide(&self) -> bool {
+        title_slides()
+            .lock()
+            .ok()
+            .and_then(|seen| seen.get(&self.http.connection.base_url()).copied())
+            .unwrap_or(true)
+    }
+
+    fn learn_title_slide(&self, shown: bool) {
+        if let Ok(mut seen) = title_slides().lock() {
+            seen.insert(self.http.connection.base_url(), shown);
+        }
+    }
+
+    /// After `ShowLyrics`: see whether Holyrics put a title slide first and,
+    /// if that is not what the index assumed, go to the slide meant.
+    async fn verify_show(&self, presentation_id: &str, ours: u32, assumed: bool) -> Result<Duration, LyricsError> {
+        let Ok((current, elapsed)) = self
+            .call("GetCurrentPresentation", json!({ "include_slides": true }))
+            .await
+        else {
+            return Ok(Duration::ZERO);
+        };
+        let same_song = [current.get("song_id"), current.get("reference_id")]
+            .into_iter()
+            .any(|id| text(id).as_deref() == Some(presentation_id));
+        let Some(shown) = shows_title_slide(&current).filter(|_| same_song) else {
+            return Ok(elapsed);
+        };
+        if shown == assumed {
+            return Ok(elapsed);
+        }
+        self.learn_title_slide(shown);
+        let fix = match holyrics_index(ours, shown) {
+            Some(index) => self.call("ActionGoToIndex", json!({ "index": index })).await?.1,
+            None => {
+                let took = self.call("SetF8", json!({ "enable": true })).await?.1;
+                self.blanked.store(true, Ordering::Relaxed);
+                took
+            }
+        };
+        Ok(elapsed + fix)
     }
 
     /// The actions the token may not use.
@@ -169,40 +245,61 @@ impl LyricsClient for HolyricsClient {
             .await
             .ok()
             .map(|(data, _)| data);
-        parse_holyrics(&lyrics, descriptions.as_ref())
+        let mut structure = parse_holyrics(&lyrics, descriptions.as_ref())?;
+        if !self.title_slide() {
+            structure.slides.retain(|slide| !slide.title);
+        }
+        Ok(structure)
     }
 
     async fn send(&self, command: &LyricsCommand) -> Result<Duration, LyricsError> {
         let mut total = Duration::ZERO;
         let showing = matches!(
             command,
-            LyricsCommand::Section { .. } | LyricsCommand::Step { .. }
+            LyricsCommand::Section { .. } | LyricsCommand::Slide { .. } | LyricsCommand::Step { .. }
         );
         if showing && self.blanked.load(Ordering::Relaxed) {
             total += self.call("SetF8", json!({ "enable": false })).await?.1;
             self.blanked.store(false, Ordering::Relaxed);
         }
+        let title = self.title_slide();
+        let blank = || ("SetF8", json!({ "enable": true }));
+        let mut shown_song: Option<(&str, u32)> = None;
         let (action, body) = match command {
             // Holyrics has no "prepare without showing": nothing to do.
             LyricsCommand::Prepare { .. } => return Ok(total),
             // Absolute (D7): the song and the slide, whatever is on screen.
+            // Indexes are LibreTracks' (title = 0): made Holyrics' here.
             LyricsCommand::Section {
                 presentation_id,
                 index,
                 ..
-            } => (
-                "ShowLyrics",
-                json!({ "id": presentation_id, "initial_index": index }),
-            ),
+            }
+            | LyricsCommand::Slide {
+                presentation_id,
+                index,
+            } => match holyrics_index(*index, title) {
+                Some(real) => {
+                    shown_song = Some((presentation_id.as_str(), *index));
+                    ("ShowLyrics", json!({ "id": presentation_id, "initial_index": real }))
+                }
+                None => blank(),
+            },
             LyricsCommand::Step {
                 index: Some(index), ..
-            } => ("ActionGoToIndex", json!({ "index": index })),
+            } => match holyrics_index(*index, title) {
+                Some(real) => ("ActionGoToIndex", json!({ "index": real })),
+                None => blank(),
+            },
             LyricsCommand::Step { index: None, .. } => ("ActionNext", json!({})),
-            LyricsCommand::Clear => ("SetF8", json!({ "enable": true })),
+            LyricsCommand::Clear => blank(),
         };
-        total += self.call(action, body).await?.1;
-        if matches!(command, LyricsCommand::Clear) {
+        total += self.call(action, body.clone()).await?.1;
+        if action == "SetF8" {
             self.blanked.store(true, Ordering::Relaxed);
+        }
+        if let Some((presentation_id, ours)) = shown_song {
+            total += self.verify_show(presentation_id, ours, title).await?;
         }
         Ok(total)
     }

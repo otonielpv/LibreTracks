@@ -49,9 +49,9 @@ function report(partial: Partial<RegionReport>): RegionReport {
       { label: "Coro 2", slideCount: 1 },
     ],
     markers: [
-      { markerId: "v1", markerName: "Verso 1", occurrence: 0, startSeconds: 4, status: "matched", groupLabel: "Verso 1", automatic: true, slideCount: 2, autoChangeBars: [5] },
-      { markerId: "c", markerName: "Coro", occurrence: 0, startSeconds: 20, status: "matched", groupLabel: "Coro", automatic: true, slideCount: 2, autoChangeBars: [5] },
-      { markerId: "c~1", markerName: "Coro", occurrence: 1, startSeconds: 36, status: "matched", groupLabel: "Coro", automatic: true, slideCount: 2, autoChangeBars: [5] },
+      { markerId: "v1", markerName: "Verso 1", occurrence: 0, startSeconds: 4, status: "matched", groupLabel: "Verso 1", automatic: true, slideCount: 2, slides: [1, 2], customSlides: false, endSeconds: 20, countInSeconds: 2, timing: { type: "auto" }, changePoints: [{ bar: 5, beat: 1 }] },
+      { markerId: "c", markerName: "Coro", occurrence: 0, startSeconds: 20, status: "matched", groupLabel: "Coro", automatic: true, slideCount: 2, slides: [1, 2], customSlides: false, endSeconds: 20, countInSeconds: 2, timing: { type: "auto" }, changePoints: [{ bar: 5, beat: 1 }] },
+      { markerId: "c~1", markerName: "Coro", occurrence: 1, startSeconds: 36, status: "matched", groupLabel: "Coro", automatic: true, slideCount: 2, slides: [1, 2], customSlides: false, endSeconds: 20, countInSeconds: 2, timing: { type: "auto" }, changePoints: [{ bar: 5, beat: 1 }] },
     ],
     suggestions: [],
     unmatchedSections: 0,
@@ -75,7 +75,8 @@ function makeApi(overrides: Partial<LyricsApi> = {}) {
     testSendLyrics: vi.fn(async () => undefined),
     getRegionReport: vi.fn(async () => report({})),
     getSetlistReport: vi.fn(async () => [] as RegionReport[]),
-    stepsFromTaps: vi.fn(async () => []),
+    sectionStepsFromTaps: vi.fn(async () => []),
+    getSlideThumbnails: vi.fn(async (_id: string, indexes: number[]) => indexes.map(() => null as string | null)),
     getTapPosition: vi.fn(async () => 0),
     playTransport: vi.fn(async () => ({ playbackState: "playing" }) as never),
     pauseTransport: vi.fn(async () => ({ playbackState: "paused" }) as never),
@@ -172,6 +173,41 @@ describe("LyricsSongPanel", () => {
     const buttons = await screen.findAllByRole("button", { name: "Probar" });
     fireEvent.click(buttons[1]);
     expect(api.testSendLyrics).toHaveBeenCalledWith("r1", "c", 0);
+  });
+
+  it("Editar opens that repeat's section editor and Volver goes back to the table", async () => {
+    setSong({ r1: LINKED });
+    const api = makeApi({
+      getRegionReport: vi.fn(async () =>
+        report({ slides: [{ index: 1, groupLabel: "Coro", text: "Line" }] }),
+      ),
+    });
+    render(<LyricsSongPanel regionId="r1" api={api} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar diapositivas de Coro (2ª vez)" }));
+    expect(screen.getByRole("region", { name: "Coro (2ª vez): diapositivas" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Volver" }));
+    expect(await screen.findByLabelText("Grupo para Coro (vez 2)")).toBeTruthy();
+  });
+
+  it("the song start can be forced to a slide or to a blank screen", async () => {
+    setSong({ r1: LINKED });
+    const api = makeApi({
+      getRegionReport: vi.fn(async () =>
+        report({
+          slides: [
+            { index: 0, groupLabel: "Título", text: "Way Maker" },
+            { index: 1, groupLabel: "Verso 1", text: "a" },
+          ],
+          start: { automatic: true, slide: 0 },
+        }),
+      ),
+    });
+    render(<LyricsSongPanel regionId="r1" api={api} />);
+    const select = await screen.findByLabelText("Al empezar la canción");
+    expect(screen.getByRole("option", { name: "Automático: Título · Way Maker" })).toBeTruthy();
+    fireEvent.change(select, { target: { value: "clear" } });
+    await waitFor(() => expect(api.setRegionLyrics).toHaveBeenCalledTimes(1));
+    expect((api.setRegionLyrics.mock.calls[0][1] as RegionLyrics).links[0].start).toEqual({ type: "clear" });
   });
 
   it("offline it shows the saved link read-only and saves nothing on open", async () => {

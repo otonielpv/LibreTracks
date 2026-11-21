@@ -13,14 +13,21 @@ use std::collections::HashMap;
 use crate::lead_plan::{LeadItem, LeadPlanner};
 use crate::lead_time::{LeadGrid, LeadTime, LeadUnit};
 use crate::lyrics_match::section_occurrences;
-use crate::model::{chart_link_marker_id, LyricsStep, Marker, MarkerCategory, Song, SongRegion, StepMode};
+use crate::model::{
+    chart_link_marker_id, LyricsStep, Marker, MarkerCategory, RegionLyrics, SlideTiming, Song, SongRegion,
+};
 
 const EPSILON: f64 = 1.0e-6;
+/// A first marker this close to the start of its song opens it: no start
+/// slide flashes before it.
+const START_SLACK_SECONDS: f64 = 0.05;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LyricsEvent {
-    /// The song is about to start: prepare its presentation.
-    EnterSong { region_id: String },
+    /// The song is about to start: prepare its presentation. `show_start`:
+    /// the song does not open on a section, so its start slide (or a blank
+    /// screen) goes up until the first one.
+    EnterSong { region_id: String, show_start: bool },
     /// A section starts: show its group. `occurrence` is which time this
     /// section comes round in the song (the third chorus is 2).
     Section {
@@ -50,7 +57,7 @@ pub enum LyricsEvent {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LyricsItemKind {
-    EnterSong,
+    EnterSong { show_start: bool },
     Section { marker_id: String, occurrence: u32 },
     Step { marker_id: String, k: u32 },
     ExitSong,
@@ -79,7 +86,10 @@ impl LyricsItem {
     fn event(&self) -> LyricsEvent {
         let region_id = self.region_id.clone();
         match &self.kind {
-            LyricsItemKind::EnterSong => LyricsEvent::EnterSong { region_id },
+            LyricsItemKind::EnterSong { show_start } => LyricsEvent::EnterSong {
+                region_id,
+                show_start: *show_start,
+            },
             LyricsItemKind::Section {
                 marker_id,
                 occurrence,
@@ -149,6 +159,45 @@ pub fn auto_step_positions(grid: &LeadGrid, start: f64, end: f64, slides: u32) -
         .collect()
 }
 
+/// One slide change every `bars` bars from the start of the section, for
+/// `slides` slides; the ones past the end are dropped.
+pub fn every_bars_positions(grid: &LeadGrid, start: f64, end: f64, slides: u32, bars: u32) -> Vec<f64> {
+    if slides <= 1 || bars == 0 || end <= start {
+        return Vec::new();
+    }
+    (1..slides)
+        .map(|i| grid.seconds_after(start, f64::from(bars * i), LeadUnit::Bars))
+        .filter(|at| *at < end - EPSILON)
+        .collect()
+}
+
+/// Where the slide changes of one section fall, in seconds, by its timing.
+pub fn section_step_positions(
+    lyrics: &RegionLyrics,
+    marker_id: &str,
+    grid: &LeadGrid,
+    start: f64,
+    end: f64,
+    slides: Option<u32>,
+) -> Vec<f64> {
+    match lyrics.timing_for(marker_id) {
+        SlideTiming::FirstOnly => Vec::new(),
+        SlideTiming::Recorded => lyrics
+            .steps_for(marker_id)
+            .into_iter()
+            .filter(|beats| *beats > EPSILON)
+            .map(|beats| grid.seconds_after(start, beats, LeadUnit::Beats))
+            .filter(|at| *at < end - EPSILON)
+            .collect(),
+        SlideTiming::Auto => slides
+            .map(|slides| auto_step_positions(grid, start, end, slides))
+            .unwrap_or_default(),
+        SlideTiming::EveryBars { bars } => slides
+            .map(|slides| every_bars_positions(grid, start, end, slides, bars))
+            .unwrap_or_default(),
+    }
+}
+
 /// Every lyrics item of the song. `slide_counts` (marker id → slides of its
 /// group, from the resolved plan) feeds the automatic slide changes; without
 /// it, sections only.
@@ -165,14 +214,19 @@ pub fn lyrics_items(
         };
         let lead = lyrics.lead.unwrap_or(*global_lead);
         let region_id = region.id.clone();
+        let markers = region_section_markers(song, region);
+        let opens_on_section = markers
+            .first()
+            .is_some_and(|first| first.start_seconds <= region.start_seconds + START_SLACK_SECONDS);
         items.push(LyricsItem {
             id: format!("{region_id}#enter"),
             region_id: region_id.clone(),
-            kind: LyricsItemKind::EnterSong,
+            kind: LyricsItemKind::EnterSong {
+                show_start: !opens_on_section,
+            },
             anchor: region.start_seconds,
             lead: Some(lead),
         });
-        let markers = region_section_markers(song, region);
         let occurrences: HashMap<String, u32> = section_occurrences(markers.iter().copied())
             .into_iter()
             .map(|entry| (entry.marker_id, entry.occurrence))
@@ -192,20 +246,8 @@ pub fn lyrics_items(
                 anchor: start,
                 lead: Some(lead),
             });
-            let steps: Vec<f64> = match lyrics.step_mode {
-                StepMode::Off => Vec::new(),
-                StepMode::Manual => lyrics
-                    .steps_for(&marker.id)
-                    .into_iter()
-                    .filter(|beats| *beats > EPSILON)
-                    .map(|beats| grid.seconds_after(start, beats, LeadUnit::Beats))
-                    .filter(|at| *at < end - EPSILON)
-                    .collect(),
-                StepMode::Auto => slide_counts
-                    .and_then(|counts| counts.get(&marker.id))
-                    .map(|slides| auto_step_positions(grid, start, end, *slides))
-                    .unwrap_or_default(),
-            };
+            let slides = slide_counts.and_then(|counts| counts.get(&marker.id)).copied();
+            let steps = section_step_positions(lyrics, &marker.id, grid, start, end, slides);
             for (step, at) in steps.into_iter().enumerate() {
                 let k = step as u32 + 1;
                 items.push(LyricsItem {
@@ -257,7 +299,7 @@ impl LyricsScheduleState {
     /// Record an event and say whether it changes what is on screen.
     fn admit(&mut self, event: &LyricsEvent) -> bool {
         match event {
-            LyricsEvent::EnterSong { region_id } => {
+            LyricsEvent::EnterSong { region_id, .. } => {
                 if self.entered.as_deref() == Some(region_id) {
                     return false;
                 }
@@ -425,6 +467,40 @@ pub fn steps_from_taps(song: &Song, region_id: &str, taps: &[f64]) -> Vec<Lyrics
             .then(a.offset_beats.total_cmp(&b.offset_beats))
     });
     steps
+}
+
+/// Slide changes recorded in one section's editor: each tap inside that
+/// marker's span, in beats from its start rounded to half a beat, stored
+/// against the exact marker id (only this repeat). Taps elsewhere are
+/// ignored.
+pub fn section_steps_from_taps(song: &Song, region_id: &str, marker_id: &str, taps: &[f64]) -> Vec<LyricsStep> {
+    let Some(region) = song.regions.iter().find(|region| region.id == region_id) else {
+        return Vec::new();
+    };
+    let grid = LeadGrid::new(song);
+    let markers = region_section_markers(song, region);
+    let Some(index) = markers.iter().position(|marker| marker.id == marker_id) else {
+        return Vec::new();
+    };
+    let start = markers[index].start_seconds;
+    let end = markers
+        .get(index + 1)
+        .map_or(region.end_seconds, |next| next.start_seconds);
+    let mut beats: Vec<f64> = taps
+        .iter()
+        .filter(|tap| **tap > start + EPSILON && **tap < end - EPSILON)
+        .map(|tap| (grid.musical_span(start, *tap, LeadUnit::Beats) * 2.0).round() / 2.0)
+        .filter(|beats| *beats > 0.0)
+        .collect();
+    beats.sort_by(|a, b| a.total_cmp(b));
+    beats.dedup_by(|a, b| (*a - *b).abs() < EPSILON);
+    beats
+        .into_iter()
+        .map(|offset_beats| LyricsStep {
+            marker_id: marker_id.to_string(),
+            offset_beats,
+        })
+        .collect()
 }
 
 #[cfg(test)]
