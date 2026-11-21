@@ -377,3 +377,38 @@ async fn a_song_starting_before_its_first_section_blanks_what_the_last_song_left
         .iter()
         .any(|body| body["action"] == "clear_slide"));
 }
+
+#[tokio::test]
+async fn a_song_whose_first_marker_sends_nothing_still_shows_its_start() {
+    // The first marker ("intro") has no slide (here: "send nothing"), so the
+    // song "opens on a section" but that section shows nothing: the screen
+    // was blank and stayed blank. Its start slide must go up instead.
+    let (connection, sent) = freeshow(SHOWS, Arc::default()).await;
+    let host = Arc::new(Recorder::default());
+    let mut worker = LyricsWorker::new(host.clone());
+    let link = LyricsLink {
+        software: LyricsSoftware::FreeShow,
+        presentation_id: Some("show-waymaker".into()),
+        presentation_name: "Way Maker".into(),
+        overrides: vec![libretracks_core::SectionOverride {
+            marker_id: "intro".into(),
+            target: libretracks_core::OverrideTarget::Skip,
+        }],
+        slides: vec![],
+        start: Some(libretracks_core::StartTarget::Slide { index: 3 }),
+    };
+    worker
+        .handle(vec![
+            WorkerInput::Configure(Some(config(connection))),
+            WorkerInput::Song(Arc::new(song(Some(link)))),
+        ])
+        .await;
+    worker.ensure_plan("r1").await.unwrap().expect("plan");
+    sent.lock().unwrap().clear();
+    worker.handle(vec![section("intro")]).await;
+    assert_eq!(slide_orders(&sent), vec![3]);
+    // Further markers with nothing to show leave the start slide alone.
+    sent.lock().unwrap().clear();
+    worker.handle(vec![section("intro")]).await;
+    assert!(slide_orders(&sent).is_empty());
+}

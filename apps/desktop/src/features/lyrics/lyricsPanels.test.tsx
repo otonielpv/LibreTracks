@@ -49,9 +49,9 @@ function report(partial: Partial<RegionReport>): RegionReport {
       { label: "Coro 2", slideCount: 1 },
     ],
     markers: [
-      { markerId: "v1", markerName: "Verso 1", occurrence: 0, startSeconds: 4, status: "matched", groupLabel: "Verso 1", automatic: true, slideCount: 2, slides: [1, 2], customSlides: false, endSeconds: 20, countInSeconds: 2, timing: { type: "auto" }, changePoints: [{ bar: 5, beat: 1 }] },
-      { markerId: "c", markerName: "Coro", occurrence: 0, startSeconds: 20, status: "matched", groupLabel: "Coro", automatic: true, slideCount: 2, slides: [1, 2], customSlides: false, endSeconds: 20, countInSeconds: 2, timing: { type: "auto" }, changePoints: [{ bar: 5, beat: 1 }] },
-      { markerId: "c~1", markerName: "Coro", occurrence: 1, startSeconds: 36, status: "matched", groupLabel: "Coro", automatic: true, slideCount: 2, slides: [1, 2], customSlides: false, endSeconds: 20, countInSeconds: 2, timing: { type: "auto" }, changePoints: [{ bar: 5, beat: 1 }] },
+      { markerId: "v1", markerName: "Verso 1", occurrence: 0, startSeconds: 4, status: "matched", groupLabel: "Verso 1", automatic: true, slideCount: 2, slides: [1, 2], customSlides: false, endSeconds: 20, countInSeconds: 2, timing: { type: "auto" }, lead: null, changePoints: [{ bar: 5, beat: 1 }] },
+      { markerId: "c", markerName: "Coro", occurrence: 0, startSeconds: 20, status: "matched", groupLabel: "Coro", automatic: true, slideCount: 2, slides: [1, 2], customSlides: false, endSeconds: 20, countInSeconds: 2, timing: { type: "auto" }, lead: null, changePoints: [{ bar: 5, beat: 1 }] },
+      { markerId: "c~1", markerName: "Coro", occurrence: 1, startSeconds: 36, status: "matched", groupLabel: "Coro", automatic: true, slideCount: 2, slides: [1, 2], customSlides: false, endSeconds: 20, countInSeconds: 2, timing: { type: "auto" }, lead: null, changePoints: [{ bar: 5, beat: 1 }] },
     ],
     suggestions: [],
     unmatchedSections: 0,
@@ -183,10 +183,54 @@ describe("LyricsSongPanel", () => {
       ),
     });
     render(<LyricsSongPanel regionId="r1" api={api} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Editar diapositivas de Coro (2ª vez)" }));
+    const edit = await screen.findByRole("button", { name: "Editar diapositivas de Coro (2ª vez)" });
+    // The table was scrolled down to that marker.
+    const tableBody = () => document.querySelector(".lt-lyrics-modal-body") as HTMLElement;
+    tableBody().scrollTop = 240;
+    fireEvent.click(edit);
     expect(screen.getByRole("region", { name: "Coro (2ª vez): diapositivas" })).toBeTruthy();
+    // The editor opens at the top...
+    expect(tableBody().scrollTop).toBe(0);
     fireEvent.click(screen.getByRole("button", { name: "Volver" }));
     expect(await screen.findByLabelText("Grupo para Coro (vez 2)")).toBeTruthy();
+    // ...and Back returns to where the table was.
+    expect(tableBody().scrollTop).toBe(240);
+  });
+
+  it("clear the text keeps the background: offered per marker and saved as its correction", async () => {
+    setSong({ r1: LINKED });
+    const api = makeApi();
+    render(<LyricsSongPanel regionId="r1" api={api} />);
+    const select = await screen.findByLabelText("Grupo para Verso 1 (vez 1)");
+    fireEvent.change(select, { target: { value: "__clearText" } });
+    await waitFor(() => expect(api.setRegionLyrics).toHaveBeenCalledTimes(1));
+    const saved = api.setRegionLyrics.mock.calls[0][1] as RegionLyrics;
+    expect(saved.links[0].overrides).toEqual([{ markerId: "v1", target: { type: "clearText" } }]);
+    expect(screen.getAllByRole("option", { name: "Limpiar texto (deja el fondo)" }).length).toBeGreaterThan(0);
+  });
+
+  it("a marker's own lead is set in its editor and shown in the table", async () => {
+    setSong({ r1: LINKED });
+    let withLead = false;
+    const api = makeApi({
+      getRegionReport: vi.fn(async () =>
+        report({
+          markers: report({}).markers.map((marker) =>
+            withLead && marker.markerId === "c" ? { ...marker, lead: { unit: "bars", count: 1 } } : marker,
+          ),
+        }),
+      ),
+    });
+    render(<LyricsSongPanel regionId="r1" api={api} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Editar diapositivas de Coro" }));
+    withLead = true;
+    fireEvent.click(screen.getByRole("checkbox", { name: /Adelanto propio para esta marca/ }));
+    await waitFor(() => expect(api.setRegionLyrics).toHaveBeenCalledTimes(1));
+    const saved = api.setRegionLyrics.mock.calls[0][1] as RegionLyrics;
+    // The song's lead (one beat by default) is the starting point.
+    expect(saved.leads).toEqual([{ markerId: "c", lead: { unit: "beats", count: 1 } }]);
+    fireEvent.click(screen.getByRole("button", { name: "Volver" }));
+    expect(await screen.findByText("Adelanto 1 compás")).toBeTruthy();
   });
 
   it("the song start can be forced to a slide or to a blank screen", async () => {

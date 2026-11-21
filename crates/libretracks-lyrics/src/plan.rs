@@ -36,8 +36,10 @@ pub enum LyricsCommand {
         presentation_id: String,
         index: Option<u32>,
     },
-    /// Blank the lyrics.
+    /// Blank the screen: no text and no background.
     Clear,
+    /// Take only the text away: the background stays (interludes).
+    ClearText,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -47,6 +49,8 @@ pub enum MarkerStatus {
     Matched { group_label: String, automatic: bool },
     /// The user said: blank the screen here.
     Clear,
+    /// The user said: take the text away here, keep the background.
+    ClearText,
     /// The user said: send nothing here.
     Skip,
     /// No group matches: nothing is sent (amber in the UI).
@@ -103,6 +107,8 @@ pub struct MarkerReport {
     pub count_in_seconds: f64,
     /// How its slides change, as stored (or from the song's mode).
     pub timing: libretracks_core::SlideTiming,
+    /// Its own lead, if it has one (else the song's or the global one).
+    pub lead: Option<libretracks_core::lead_time::LeadTime>,
     /// Where each slide change falls in the section, by its timing.
     /// Filled by the report.
     pub change_points: Vec<ChangePoint>,
@@ -140,6 +146,7 @@ impl SongLyricsPlan {
                     end_seconds: marker.start_seconds,
                     count_in_seconds: marker.start_seconds,
                     timing: libretracks_core::SlideTiming::Auto,
+                    lead: None,
                     change_points: Vec::new(),
                 })
             })
@@ -191,6 +198,7 @@ pub fn build_plan(
         order.push(marker.id.clone());
         let chosen: Result<(String, bool), MarkerStatus> = match link.override_for(&marker.id) {
             Some(OverrideTarget::Clear) => Err(MarkerStatus::Clear),
+            Some(OverrideTarget::ClearText) => Err(MarkerStatus::ClearText),
             Some(OverrideTarget::Skip) => Err(MarkerStatus::Skip),
             Some(OverrideTarget::Group { label }) => {
                 if structure.appearance(label, 0).is_some() {
@@ -217,6 +225,14 @@ pub fn build_plan(
             })
             .filter(|indexes| !indexes.is_empty());
         let plan = match chosen {
+            Err(MarkerStatus::ClearText) => MarkerPlan {
+                status: MarkerStatus::ClearText,
+                section: Some(LyricsCommand::ClearText),
+                slide_count: 0,
+                steps: Vec::new(),
+                indexes: Vec::new(),
+                custom_slides: false,
+            },
             Err(MarkerStatus::Clear) => MarkerPlan {
                 status: MarkerStatus::Clear,
                 section: Some(LyricsCommand::Clear),
@@ -293,6 +309,7 @@ pub fn build_plan(
     };
     let (start, start_automatic) = match &link.start {
         Some(StartTarget::Clear) => (LyricsCommand::Clear, false),
+        Some(StartTarget::ClearText) => (LyricsCommand::ClearText, false),
         Some(StartTarget::Slide { index }) if structure.has_slide(*index) => (
             LyricsCommand::Slide {
                 presentation_id: presentation_id.clone(),

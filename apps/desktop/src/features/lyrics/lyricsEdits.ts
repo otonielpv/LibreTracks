@@ -172,6 +172,18 @@ export function withTiming(
   };
 }
 
+/** A marker's own lead (exact id: only that repeat); `null` = the song's. */
+export function withMarkerLead(
+  lyrics: RegionLyrics | null | undefined,
+  markerId: string,
+  lead: LeadTime | null,
+): RegionLyrics {
+  const base = lyrics ?? emptyRegionLyrics();
+  const leads = (base.leads ?? []).filter((entry) => entry.markerId !== markerId);
+  if (lead) leads.push({ markerId, lead });
+  return { ...base, leads };
+}
+
 /** A section's recording replaces that marker's own steps and turns it to
  * recorded. */
 export function withSectionRecording(

@@ -126,7 +126,13 @@ impl LyricsClient for ProPresenterClient {
                 "/v1/presentation/{}/next/trigger",
                 encode_segment(presentation_id)
             ),
-            LyricsCommand::Clear => "/v1/clear/layer/slide".to_string(),
+            // The text only: the media layer (the background) stays.
+            LyricsCommand::ClearText => "/v1/clear/layer/slide".to_string(),
+            // The whole screen: the slide layer, then the media layer.
+            LyricsCommand::Clear => {
+                let text = self.get("/v1/clear/layer/slide").await?.elapsed;
+                return Ok(text + self.get("/v1/clear/layer/media").await?.elapsed);
+            }
         };
         Ok(self.get(&path).await?.elapsed)
     }

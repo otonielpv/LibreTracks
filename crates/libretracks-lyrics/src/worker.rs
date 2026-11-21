@@ -542,7 +542,19 @@ impl LyricsWorker {
             _ => None,
         };
         let Some(section) = marker.section.clone() else {
-            // Unmatched or "send nothing": the screen is left alone.
+            // Unmatched or "send nothing": the screen is left alone, except
+            // when this song has shown nothing yet. Then what is up is the
+            // previous song's screen (or a blank one): its start slide goes
+            // up instead. A song opening on an intro with no slide used to
+            // stay blank (its start was skipped because it "opens on a
+            // section").
+            let fresh = !self
+                .showing
+                .as_ref()
+                .is_some_and(|(showing, _)| showing == &region_id);
+            if fresh {
+                self.show_start(&region_id).await;
+            }
             return;
         };
         let absolute = marker

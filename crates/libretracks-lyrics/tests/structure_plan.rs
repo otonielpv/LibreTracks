@@ -556,3 +556,22 @@ fn an_unnamed_first_slide_with_lyrics_is_not_taken_for_the_title() {
     let layout = serde_json::json!({ "data": [{ "type": "parent", "id": "a" }] });
     assert!(parse_freeshow("s1", &show, &layout).unwrap().title_slide().is_none());
 }
+
+#[test]
+fn clear_text_keeps_the_background_on_a_marker_and_as_the_song_start() {
+    let markers = song_markers();
+    let refs: Vec<&Marker> = markers.iter().collect();
+    let mut chosen = link(
+        LyricsSoftware::FreeShow,
+        vec![SectionOverride {
+            marker_id: "p".into(),
+            target: OverrideTarget::ClearText,
+        }],
+    );
+    chosen.start = Some(StartTarget::ClearText);
+    let plan = build_plan(LyricsSoftware::FreeShow, &refs, &freeshow(), &chosen);
+    assert_eq!(plan.markers["p"].status, MarkerStatus::ClearText);
+    assert_eq!(section_of(&plan, "p"), Some(LyricsCommand::ClearText));
+    assert_eq!(plan.start, LyricsCommand::ClearText);
+    assert!(!plan.start_automatic);
+}

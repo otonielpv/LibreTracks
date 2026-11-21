@@ -154,7 +154,13 @@ impl LyricsClient for FreeShowClient {
                 "index": index,
             }),
             LyricsCommand::Step { index: None, .. } => json!({ "action": "next_slide" }),
-            LyricsCommand::Clear => json!({ "action": "clear_slide" }),
+            // The text only; the background layer stays.
+            LyricsCommand::ClearText => json!({ "action": "clear_slide" }),
+            // The whole screen: the text, then the background.
+            LyricsCommand::Clear => {
+                let text = self.action(json!({ "action": "clear_slide" })).await?.elapsed;
+                return Ok(text + self.action(json!({ "action": "clear_background" })).await?.elapsed);
+            }
         };
         Ok(self.action(body).await?.elapsed)
     }

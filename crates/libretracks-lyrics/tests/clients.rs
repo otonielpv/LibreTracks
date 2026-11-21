@@ -391,3 +391,67 @@ async fn a_silent_program_times_out_within_a_second_and_a_closed_port_is_unreach
     .unwrap_err();
     assert!(matches!(error, LyricsError::Unreachable { .. }), "{error:?}");
 }
+
+#[tokio::test]
+async fn freeshow_clear_takes_text_and_background_and_clear_text_only_the_text() {
+    let (connection, log) = server(|_| Response::json(204, "")).await;
+    let fs = client(LyricsSoftware::FreeShow, connection);
+    fs.send(&LyricsCommand::ClearText).await.unwrap();
+    fs.send(&LyricsCommand::Clear).await.unwrap();
+    let actions: Vec<String> = log
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|request| json(&request.body)["action"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(actions, vec!["clear_slide", "clear_slide", "clear_background"]);
+}
+
+#[tokio::test]
+async fn propresenter_clear_takes_the_media_layer_too_and_clear_text_does_not() {
+    let (connection, log) = server(|_| Response::json(200, "{}")).await;
+    let pp = client(LyricsSoftware::ProPresenter, connection);
+    pp.send(&LyricsCommand::ClearText).await.unwrap();
+    pp.send(&LyricsCommand::Clear).await.unwrap();
+    let targets: Vec<String> = log.lock().unwrap().iter().map(|request| request.target.clone()).collect();
+    assert_eq!(
+        targets,
+        vec!["/v1/clear/layer/slide", "/v1/clear/layer/slide", "/v1/clear/layer/media"]
+    );
+}
+
+#[tokio::test]
+async fn holyrics_clear_text_is_f9_lifted_before_the_next_lyrics_and_f8_without_permission() {
+    // Allowed: F9 on, then lifted before showing the next section.
+    let (connection, log) = server(|_| Response::json(200, r#"{"status":"ok","data":null}"#)).await;
+    let holyrics = client(LyricsSoftware::Holyrics, connection);
+    holyrics.send(&LyricsCommand::ClearText).await.unwrap();
+    holyrics
+        .send(&LyricsCommand::Section {
+            presentation_id: "812".into(),
+            group_label: "Coro".into(),
+            index: 4,
+        })
+        .await
+        .unwrap();
+    let sent: Vec<(String, serde_json::Value)> = log
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|request| (holyrics_action(&request.target), json(&request.body)))
+        .collect();
+    assert_eq!(sent[0], ("SetF9".to_string(), json(r#"{"enable":true}"#)));
+    assert_eq!(sent[1], ("SetF9".to_string(), json(r#"{"enable":false}"#)));
+    assert_eq!(sent[2].0, "ShowLyrics");
+
+    // A token without SetF9: the screen is blanked with F8 instead.
+    let (connection, log) = server(|request| match holyrics_action(&request.target).as_str() {
+        "SetF9" => Response::json(200, r#"{"status":"error","error":"unauthorized action"}"#),
+        _ => Response::json(200, r#"{"status":"ok","data":null}"#),
+    })
+    .await;
+    let holyrics = client(LyricsSoftware::Holyrics, connection);
+    holyrics.send(&LyricsCommand::ClearText).await.unwrap();
+    let actions: Vec<String> = log.lock().unwrap().iter().map(|request| holyrics_action(&request.target)).collect();
+    assert_eq!(actions, vec!["SetF9", "SetF8"]);
+}

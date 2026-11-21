@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { LyricsSlideTiming } from "@libretracks/shared/models";
+import type { LeadTime, LyricsSlideTiming } from "@libretracks/shared/models";
+
+import { describeLead } from "../transport/panels/leadTime";
+import { LeadTimeField } from "../transport/panels/LeadTimeField";
 
 import type { MarkerReport, RegionReport, SlideInfo } from "./lyricsApi";
 import { spreadSlides } from "./lyricsEdits";
@@ -22,6 +25,8 @@ type Props = {
   onBack: () => void;
   /** Where the space bar is caught while recording (tests pass their own). */
   keyTarget?: Window;
+  /** The lead this marker uses without one of its own (song or global). */
+  inheritedLead?: LeadTime | null;
 };
 
 /** What a slide is called: its group, or "Title" for the title slide. */
@@ -55,6 +60,7 @@ export function LyricsSectionEditor({
   onSave,
   onBack,
   keyTarget,
+  inheritedLead = null,
 }: Props) {
   const { t } = useTranslation();
   const slides = report.slides ?? [];
@@ -269,6 +275,41 @@ export function LyricsSectionEditor({
           </button>
         ) : null}
       </div>
+
+      <h4>{t("lyrics.section.leadHeading")}</h4>
+      <label className="lt-settings-toggle">
+        <input
+          type="checkbox"
+          checked={Boolean(marker.lead)}
+          onChange={(event) =>
+            onSave(
+              handlers.setMarkerLead(
+                regionId,
+                marker.markerId,
+                event.target.checked ? (inheritedLead ?? { unit: "beats", count: 1 }) : null,
+              ),
+            )
+          }
+        />
+        <span className="lt-settings-toggle-copy">
+          <strong>{t("lyrics.section.ownLead")}</strong>
+          <small>
+            {marker.lead
+              ? t("lyrics.section.ownLeadHelp")
+              : inheritedLead
+                ? t("lyrics.section.usesLead", { lead: describeLead(inheritedLead, t) })
+                : t("lyrics.section.usesNoLead")}
+          </small>
+        </span>
+      </label>
+      {marker.lead ? (
+        <LeadTimeField
+          value={marker.lead}
+          onChange={(lead) =>
+            onSave(handlers.setMarkerLead(regionId, marker.markerId, lead ?? { unit: "beats", count: 0 }))
+          }
+        />
+      ) : null}
 
       <h4>{t("lyrics.section.timingHeading")}</h4>
       {!multi ? (

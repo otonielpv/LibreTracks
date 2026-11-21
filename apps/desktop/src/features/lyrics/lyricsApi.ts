@@ -12,6 +12,7 @@ import {
 
 export { pauseTransport, playTransport, seekTransport };
 import type {
+  LeadTime,
   LyricsConfig,
   LyricsLink,
   LyricsSlideTiming,
@@ -66,6 +67,7 @@ export type Presentation = { id: string; name: string };
 export type MarkerStatus =
   | { status: "matched"; groupLabel: string; automatic: boolean }
   | { status: "clear" }
+  | { status: "clearText" }
   | { status: "skip" }
   | { status: "unmatched" };
 
@@ -84,6 +86,8 @@ export type MarkerReport = MarkerStatus & {
   /** One bar before the marker: where the section recorder starts playing. */
   countInSeconds: number;
   timing: LyricsSlideTiming;
+  /** Its own lead; null = the song's (or the global one). */
+  lead: LeadTime | null;
   /** The bar of the section each slide change falls on, by its timing. */
   changePoints: Array<{ bar: number; beat: number }>;
 };
@@ -111,7 +115,7 @@ export type RegionReport = {
   slides?: SlideInfo[];
   /** What shows when the song starts before its first section; `slide`
    * null = blank screen. */
-  start?: { automatic: boolean; slide: number | null } | null;
+  start?: { automatic: boolean; slide: number | null; clearText?: boolean } | null;
 };
 
 export const LYRICS_STATUS_EVENT = "lyrics:status";

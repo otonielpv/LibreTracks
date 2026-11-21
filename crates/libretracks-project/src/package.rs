@@ -1900,6 +1900,7 @@ mod tests {
                 marker_id: "m1".into(),
                 timing: libretracks_core::SlideTiming::EveryBars { bars: 2 },
             }],
+            leads: vec![],
             lead: None,
         };
         source.regions[0].lyrics = Some(lyrics.clone());

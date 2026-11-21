@@ -195,6 +195,10 @@ pub struct RegionLyrics {
     /// repetición se edita por separado).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sections: Vec<SectionTiming>,
+    /// Adelanto propio de una marca (id exacto): manda sobre el de la
+    /// canción para esa sección y sus cambios calculados.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub leads: Vec<SectionLead>,
     /// Adelanto propio de la canción; `None` = el global.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lead: Option<crate::lead_time::LeadTime>,
@@ -208,6 +212,7 @@ impl Default for RegionLyrics {
             steps: Vec::new(),
             step_mode: StepMode::Auto,
             sections: Vec::new(),
+            leads: Vec::new(),
             lead: None,
         }
     }
@@ -251,6 +256,8 @@ pub struct SlideSelection {
 pub enum StartTarget {
     /// Pantalla en blanco.
     Clear,
+    /// Sin texto, con el fondo.
+    ClearText,
     /// Esta diapositiva de la presentación (índice del programa).
     Slide { index: u32 },
 }
@@ -267,6 +274,14 @@ pub enum SlideTiming {
     Recorded,
     /// Solo la primera.
     FirstOnly,
+}
+
+/// El adelanto propio de una marca.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionLead {
+    pub marker_id: String,
+    pub lead: crate::lead_time::LeadTime,
 }
 
 /// El modo de una sección.
@@ -291,8 +306,10 @@ pub struct SectionOverride {
 pub enum OverrideTarget {
     /// Mostrar este grupo de la presentación.
     Group { label: String },
-    /// Dejar la pantalla en blanco.
+    /// Dejar la pantalla en blanco (sin texto ni fondo).
     Clear,
+    /// Quitar solo el texto: el fondo se queda (interludios, instrumentales).
+    ClearText,
     /// No mandar nada (lo que haya puesto el operador se queda).
     Skip,
 }
@@ -329,6 +346,14 @@ impl RegionLyrics {
             .collect();
         beats.sort_by(|a, b| a.total_cmp(b));
         beats
+    }
+
+    /// El adelanto propio de una marca (id exacto), si lo tiene.
+    pub fn lead_for(&self, marker_id: &str) -> Option<crate::lead_time::LeadTime> {
+        self.leads
+            .iter()
+            .find(|entry| entry.marker_id == marker_id)
+            .map(|entry| entry.lead)
     }
 
     /// Cómo avanza una marca: lo elegido para ese id exacto; si no, lo que

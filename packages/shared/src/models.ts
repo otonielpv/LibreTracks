@@ -644,6 +644,7 @@ export type LyricsStepMode = "auto" | "manual" | "off";
 export type LyricsOverrideTarget =
   | { type: "group"; label: string }
   | { type: "clear" }
+  | { type: "clearText" }
   | { type: "skip" };
 
 /** Corrección manual del emparejado: `markerId` base (todas las repeticiones)
@@ -668,7 +669,10 @@ export type LyricsLink = {
 
 export type LyricsSlideSelection = { markerId: string; indexes: number[] };
 
-export type LyricsStartTarget = { type: "clear" } | { type: "slide"; index: number };
+export type LyricsStartTarget =
+  | { type: "clear" }
+  | { type: "clearText" }
+  | { type: "slide"; index: number };
 
 /** Cómo pasan las diapositivas de una sección. Espejo de `SlideTiming`. */
 export type LyricsSlideTiming =
@@ -694,6 +698,8 @@ export type RegionLyrics = {
   stepMode: LyricsStepMode;
   /** Cómo avanza cada sección, por id de marca exacto. */
   sections?: LyricsSectionTiming[];
+  /** Adelanto propio de una marca (id exacto). */
+  leads?: Array<{ markerId: string; lead: LeadTime }>;
   lead?: LeadTime | null;
 };
 

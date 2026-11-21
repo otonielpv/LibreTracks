@@ -318,8 +318,9 @@ fn automatic_slide_changes_fall_on_whole_bars_or_beats() {
     let grid = LeadGrid::new(&song);
     // Verso 1: 8 bars, 2 slides → bar 5 (4 + 4 bars = 12 s).
     assert_eq!(auto_step_positions(&grid, 4.0, 20.0, 2), vec![12.0]);
-    // Final: 2 bars, 3 slides → beats (8 beats: 2 and 5).
-    assert_eq!(auto_step_positions(&grid, 60.0, 64.0, 3), vec![61.0, 62.5]);
+    // Final: 2 bars, 3 slides → beats (8 beats: 2 and 6, on the half bar
+    // rather than the odd beat 5).
+    assert_eq!(auto_step_positions(&grid, 60.0, 64.0, 3), vec![61.0, 63.0]);
     assert!(auto_step_positions(&grid, 4.0, 20.0, 1).is_empty());
 
     let counts = HashMap::from([("v1".to_string(), 2)]);
@@ -527,4 +528,69 @@ fn section_taps_count_only_inside_that_marker_and_keep_its_exact_id() {
     let beats: Vec<f64> = steps.iter().map(|step| step.offset_beats).collect();
     assert_eq!(beats, vec![2.0, 8.0]);
     assert!(steps.iter().all(|step| step.marker_id == "c"));
+}
+
+#[test]
+fn recorded_changes_fire_on_their_exact_point_and_computed_ones_keep_the_lead() {
+    let mut recorded = song();
+    {
+        let lyrics = recorded.regions[0].lyrics.as_mut().unwrap();
+        lyrics.sections.push(SectionTiming { marker_id: "c".into(), timing: SlideTiming::Recorded });
+        lyrics.steps.push(LyricsStep { marker_id: "c".into(), offset_beats: 4.0 });
+    }
+    let grid = LeadGrid::new(&recorded);
+    let counts: HashMap<String, u32> = [("v1".to_string(), 2), ("c".to_string(), 2)].into_iter().collect();
+    let items = lyrics_items(&recorded, &grid, &ONE_BEAT, Some(&counts));
+    let step_of = |marker: &str| {
+        items
+            .iter()
+            .find(|item| matches!(&item.kind, LyricsItemKind::Step { marker_id, .. } if marker_id == marker))
+            .expect("step")
+    };
+    // "c" recorded at beat 4 (22 s at 120 BPM): exact, no lead.
+    assert!((step_of("c").anchor - 22.0).abs() < 1e-6);
+    assert_eq!(step_of("c").lead, None);
+    // "v1" automatic: keeps the song's lead.
+    assert_eq!(step_of("v1").lead, Some(ONE_BEAT));
+    // Sections keep it too.
+    let section = items.iter().find(|item| item.id == "c").unwrap();
+    assert_eq!(section.lead, Some(ONE_BEAT));
+}
+
+#[test]
+fn an_uneven_automatic_split_follows_the_phrase() {
+    let song = song();
+    let grid = LeadGrid::new(&song);
+    // 120 BPM 4/4: a bar is 2 s.
+    let bar = |at: f64| at / 2.0;
+    // A 7-bar chorus (8 minus a one-bar vamp), 2 slides: after 4 bars, not 3.
+    let seven = auto_step_positions(&grid, 0.0, 14.0, 2);
+    assert_eq!(seven.iter().map(|at| bar(*at)).collect::<Vec<_>>(), vec![4.0]);
+    // Even splits stay exact.
+    assert_eq!(auto_step_positions(&grid, 0.0, 16.0, 2).iter().map(|at| bar(*at)).collect::<Vec<_>>(), vec![4.0]);
+    assert_eq!(auto_step_positions(&grid, 0.0, 20.0, 2).iter().map(|at| bar(*at)).collect::<Vec<_>>(), vec![5.0]);
+    // 9 bars: 4, not 5.
+    assert_eq!(auto_step_positions(&grid, 0.0, 18.0, 2).iter().map(|at| bar(*at)).collect::<Vec<_>>(), vec![4.0]);
+    // 7 bars, 3 slides: after 2 and after 4.
+    assert_eq!(
+        auto_step_positions(&grid, 0.0, 14.0, 3).iter().map(|at| bar(*at)).collect::<Vec<_>>(),
+        vec![2.0, 4.0]
+    );
+}
+
+#[test]
+fn a_marker_with_its_own_lead_fires_by_it_and_the_rest_keep_the_song_lead() {
+    let mut own = song();
+    own.regions[0].lyrics.as_mut().unwrap().leads.push(crate::model::SectionLead {
+        marker_id: "c".into(),
+        lead: LeadTime::Bars { count: 1.0 },
+    });
+    let grid = LeadGrid::new(&own);
+    let counts: HashMap<String, u32> = [("c".to_string(), 2)].into_iter().collect();
+    let items = lyrics_items(&own, &grid, &ONE_BEAT, Some(&counts));
+    let lead_of = |id: &str| items.iter().find(|item| item.id == id).unwrap().lead;
+    assert_eq!(lead_of("c"), Some(LeadTime::Bars { count: 1.0 }));
+    // Its automatic slide change uses it too.
+    assert_eq!(lead_of("c#1"), Some(LeadTime::Bars { count: 1.0 }));
+    assert_eq!(lead_of("v1"), Some(ONE_BEAT));
 }

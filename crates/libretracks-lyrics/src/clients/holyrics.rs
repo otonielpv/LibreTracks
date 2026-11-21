@@ -29,6 +29,9 @@ pub const REQUIRED_ACTIONS: &[&str] = &[
     "GetCurrentPresentation",
     "GetSlideDescriptions",
 ];
+// «Clear the text» uses SetF9 when the token allows it; it is not in the
+// list above on purpose: without it that order falls back to F8, so tokens
+// made before keep working.
 
 /// Whether each Holyrics (by address) shows a title slide before the lyrics.
 /// It is a Holyrics setting no API reads: learned from what it actually
@@ -64,6 +67,8 @@ pub struct HolyricsClient {
     /// Whether we blanked the screen with F8 (it has to be lifted before
     /// showing lyrics again).
     blanked: AtomicBool,
+    /// Whether we hid the text with F9 (lifted before showing lyrics again).
+    text_hidden: AtomicBool,
 }
 
 impl HolyricsClient {
@@ -71,6 +76,7 @@ impl HolyricsClient {
         Self {
             http,
             blanked: AtomicBool::new(false),
+            text_hidden: AtomicBool::new(false),
         }
     }
 
@@ -178,7 +184,13 @@ fn classify_error(action: &str, message: &str) -> LyricsError {
     let lower = message.to_lowercase();
     if lower.contains("token") {
         LyricsError::Unauthorized { missing: vec![] }
-    } else if lower.contains("permission") || lower.contains("permiss") || lower.contains("not allowed") {
+    } else if lower.contains("unauthorized")
+        || lower.contains("permission")
+        || lower.contains("permiss")
+        || lower.contains("not allowed")
+    {
+        // Holyrics answers «unauthorized action» to an action the token
+        // may not use (seen on 2.30).
         LyricsError::Unauthorized {
             missing: vec![action.to_string()],
         }
@@ -258,9 +270,30 @@ impl LyricsClient for HolyricsClient {
             command,
             LyricsCommand::Section { .. } | LyricsCommand::Slide { .. } | LyricsCommand::Step { .. }
         );
-        if showing && self.blanked.load(Ordering::Relaxed) {
+        // «Clear the text» also needs the song's background, so it lifts F8.
+        if (showing || matches!(command, LyricsCommand::ClearText)) && self.blanked.load(Ordering::Relaxed) {
             total += self.call("SetF8", json!({ "enable": false })).await?.1;
             self.blanked.store(false, Ordering::Relaxed);
+        }
+        if showing && self.text_hidden.load(Ordering::Relaxed) {
+            total += self.call("SetF9", json!({ "enable": false })).await?.1;
+            self.text_hidden.store(false, Ordering::Relaxed);
+        }
+        if matches!(command, LyricsCommand::ClearText) {
+            return match self.call("SetF9", json!({ "enable": true })).await {
+                Ok((_, took)) => {
+                    self.text_hidden.store(true, Ordering::Relaxed);
+                    Ok(total + took)
+                }
+                // The token may not use F9: blank the screen as before rather
+                // than leave the lyrics up.
+                Err(LyricsError::Unauthorized { .. }) => {
+                    let took = self.call("SetF8", json!({ "enable": true })).await?.1;
+                    self.blanked.store(true, Ordering::Relaxed);
+                    Ok(total + took)
+                }
+                Err(error) => Err(error),
+            };
         }
         let title = self.title_slide();
         let blank = || ("SetF8", json!({ "enable": true }));
@@ -292,7 +325,7 @@ impl LyricsClient for HolyricsClient {
                 None => blank(),
             },
             LyricsCommand::Step { index: None, .. } => ("ActionNext", json!({})),
-            LyricsCommand::Clear => blank(),
+            LyricsCommand::Clear | LyricsCommand::ClearText => blank(),
         };
         total += self.call(action, body.clone()).await?.1;
         if action == "SetF8" {

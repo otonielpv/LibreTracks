@@ -706,3 +706,9 @@ button.lt-lyrics-btn.lt-lyrics-record .material-symbols-outlined {
   flex: 0 0 auto;
   min-width: 7rem;
 }
+
+/* Adelanto propio de una marca, bajo su nombre en la tabla. */
+.lt-lyrics-marker-lead {
+  display: block;
+  color: #57f1db !important;
+}

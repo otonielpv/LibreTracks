@@ -63,6 +63,10 @@ fn full_lyrics() -> RegionLyrics {
             marker_id: "b~1".into(),
             timing: crate::SlideTiming::EveryBars { bars: 2 },
         }],
+        leads: vec![crate::SectionLead {
+            marker_id: "b~1".into(),
+            lead: LeadTime::Bars { count: 1.0 },
+        }],
         lead: Some(LeadTime::Beats { count: 2.0 }),
     }
 }

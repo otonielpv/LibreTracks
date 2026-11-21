@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { useTranslation } from "react-i18next";
 
 import { DismissOnBack } from "../transport/mobile/DismissOnBack";
@@ -8,10 +8,13 @@ export function LyricsModal({
   title,
   onClose,
   children,
+  bodyRef,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** The scrolling body (the song panel keeps the table's scroll). */
+  bodyRef?: Ref<HTMLDivElement>;
 }) {
   const { t } = useTranslation();
   return (
@@ -35,7 +38,9 @@ export function LyricsModal({
             {t("common.close")}
           </button>
         </header>
-        <div className="lt-lyrics-modal-body">{children}</div>
+        <div className="lt-lyrics-modal-body" ref={bodyRef}>
+          {children}
+        </div>
       </section>
     </div>
   );

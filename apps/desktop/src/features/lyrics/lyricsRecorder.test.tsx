@@ -27,6 +27,7 @@ function bridge(n: number, overrides: Partial<MarkerReport> = {}): MarkerReport 
     endSeconds: 24 + n * 8,
     countInSeconds: 14 + n * 8,
     timing: { type: "auto" },
+    lead: null,
     changePoints: [{ bar: 2, beat: 1 }, { bar: 3, beat: 1 }, { bar: 4, beat: 1 }],
     ...overrides,
   };

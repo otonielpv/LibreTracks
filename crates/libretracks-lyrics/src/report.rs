@@ -46,8 +46,10 @@ pub enum LinkState {
 pub struct StartReport {
     /// Chosen automatically (no `LyricsLink.start`).
     pub automatic: bool,
-    /// The slide it shows; `None` = blank screen.
+    /// The slide it shows; `None` = blank screen (or no text, below).
     pub slide: Option<u32>,
+    /// Only the text goes: the background stays.
+    pub clear_text: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -196,6 +198,7 @@ pub async fn region_report(
             Some(&libretracks_core::lead_time::LeadTime::Bars { count: 1.0 }),
         );
         entry.timing = lyrics.timing_for(&marker.id);
+        entry.lead = lyrics.lead_for(&marker.id);
         if entry.slide_count <= 1 {
             continue;
         }
@@ -226,6 +229,7 @@ pub async fn region_report(
             LyricsCommand::Slide { index, .. } => Some(index),
             _ => None,
         },
+        clear_text: plan.start == LyricsCommand::ClearText,
     });
     report.unmatched_sections = plan.unmatched_count();
     report.link_state = LinkState::Linked;

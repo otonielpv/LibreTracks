@@ -19,6 +19,7 @@ import type { LyricsConfigView, ProbeInfo, RegionReport } from "./lyricsApi";
 import {
   withEnabled,
   withLead,
+  withMarkerLead,
   withOverride,
   withPresentation,
   withSectionRecording,
@@ -189,6 +190,10 @@ export function createLyricsHandlers({
       if (!software) return;
       await saveRegion(regionId, withStart(getRegionLyrics(regionId), software, start));
     },
+
+    /** A marker's own lead; `null` gives it back the song's. */
+    setMarkerLead: (regionId: string, markerId: string, lead: LeadTime | null) =>
+      saveRegion(regionId, withMarkerLead(getRegionLyrics(regionId), markerId, lead)),
 
     setTiming: (regionId: string, markerId: string, timing: LyricsSlideTiming) =>
       saveRegion(regionId, withTiming(getRegionLyrics(regionId), markerId, timing)),

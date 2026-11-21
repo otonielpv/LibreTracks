@@ -129,7 +129,9 @@ pub fn region_section_markers<'a>(song: &'a Song, region: &SongRegion) -> Vec<&'
 
 /// Where the slide changes of a section fall, in seconds, for `slides`
 /// slides between `start` and `end`: whole bars when they fit (8 bars and 2
-/// slides → bar 5), whole beats otherwise.
+/// slides → bar 5), whole beats otherwise. A split that does not fall on a
+/// whole bar follows the phrase: 7 bars and 2 slides (a chorus shortened by
+/// a one-bar vamp) change after 4, not 3.
 pub fn auto_step_positions(grid: &LeadGrid, start: f64, end: f64, slides: u32) -> Vec<f64> {
     if slides <= 1 || end <= start {
         return Vec::new();
@@ -147,16 +149,48 @@ pub fn auto_step_positions(grid: &LeadGrid, start: f64, end: f64, slides: u32) -
             (LeadUnit::Seconds, end - start)
         }
     };
+    let mut previous = 0.0;
     (1..=changes)
         .map(|i| {
+            let ideal = total * f64::from(i) / n;
             let offset = if unit == LeadUnit::Seconds {
-                total * f64::from(i) / n
+                ideal
             } else {
-                (total * f64::from(i) / n).floor()
+                phrase_offset(ideal, previous, total)
             };
+            previous = offset;
             grid.seconds_after(start, offset, unit)
         })
         .collect()
+}
+
+/// A whole number of bars (or beats) for a split that ideally falls at
+/// `ideal`: exact when it is whole; otherwise the neighbour that keeps the
+/// phrase (a multiple of 4, then of 2), then the nearer one. Always after
+/// `previous` and before `total`.
+fn phrase_offset(ideal: f64, previous: f64, total: f64) -> f64 {
+    if (ideal - ideal.round()).abs() < EPSILON {
+        return ideal.round();
+    }
+    let weight = |count: f64| -> u8 {
+        let whole = count as u64;
+        if whole % 4 == 0 {
+            2
+        } else if whole % 2 == 0 {
+            1
+        } else {
+            0
+        }
+    };
+    [ideal.floor(), ideal.ceil()]
+        .into_iter()
+        .filter(|candidate| *candidate > previous && *candidate < total)
+        .max_by(|a, b| {
+            weight(*a)
+                .cmp(&weight(*b))
+                .then((b - ideal).abs().total_cmp(&(a - ideal).abs()))
+        })
+        .unwrap_or_else(|| (previous + 1.0).min(total - 1.0).max(ideal.floor()))
 }
 
 /// One slide change every `bars` bars from the start of the section, for
@@ -233,6 +267,8 @@ pub fn lyrics_items(
             .collect();
         for (position, marker) in markers.iter().enumerate() {
             let start = marker.start_seconds;
+            // A marker's own lead wins over the song's (or the global one).
+            let lead = lyrics.lead_for(&marker.id).unwrap_or(lead);
             let end = markers
                 .get(position + 1)
                 .map_or(region.end_seconds, |next| next.start_seconds);
@@ -248,6 +284,15 @@ pub fn lyrics_items(
             });
             let slides = slide_counts.and_then(|counts| counts.get(&marker.id)).copied();
             let steps = section_step_positions(lyrics, &marker.id, grid, start, end, slides);
+            // Recorded changes are already where the user wants them seen:
+            // each tap was sent as it was made, so they fire on their exact
+            // point, without the lead. Computed ones (auto, every N bars)
+            // keep it, like the sections.
+            let step_lead = if lyrics.timing_for(&marker.id) == SlideTiming::Recorded {
+                None
+            } else {
+                Some(lead)
+            };
             for (step, at) in steps.into_iter().enumerate() {
                 let k = step as u32 + 1;
                 items.push(LyricsItem {
@@ -258,7 +303,7 @@ pub fn lyrics_items(
                         k,
                     },
                     anchor: at,
-                    lead: Some(lead),
+                    lead: step_lead,
                 });
             }
         }
