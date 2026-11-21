@@ -4115,7 +4115,7 @@ const es = {
         step2Title: "Activa el servidor local",
         step2: "Marca «API server - Local». El puerto por defecto es 8091. Es gratis: el plan de pago solo hace falta para la API por internet.",
         step3Title: "Crea un token con permisos",
-        step3: "Pulsa «Manage Permissions», crea un token y marca en la columna Local:\nGetSongs, GetLyrics, ShowLyrics, ActionGoToIndex, ActionNext, SetF8, GetCurrentPresentation y GetSlideDescriptions. Si quieres «Limpiar texto» (dejar el fondo), marca también SetF9.",
+        step3: "Pulsa «Manage Permissions», crea un token y marca en la columna Local:\nGetSongs, GetLyrics, ShowLyrics, ActionGoToIndex, ActionNext, SetF8, GetCurrentPresentation y GetSlideDescriptions. Marca también SetF10 (limpiar pantalla en negro) y SetF9 (limpiar texto dejando el fondo); sin ellos se usa F8.",
         step4Title: "Pega el token",
         step4: "Copia el token en el campo Token de aquí debajo. Si Holyrics va en otro equipo, escribe también su IP en Equipo.",
       },

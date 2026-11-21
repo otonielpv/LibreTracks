@@ -62,11 +62,17 @@ pub fn shows_title_slide(current: &Value) -> Option<bool> {
     Some(description.trim().is_empty() && !name.is_empty() && normalize_title(&body) == normalize_title(&name))
 }
 
+/// Stands for «clear the screen» in `send`: it is F10 or F8 depending on
+/// what the token may use, so it is not a single Holyrics action.
+const BLANK: &str = "<blank>";
+
 pub struct HolyricsClient {
     http: Http,
-    /// Whether we blanked the screen with F8 (it has to be lifted before
-    /// showing lyrics again).
+    /// Whether we put up the wallpaper with F8 (only when F10 is not
+    /// allowed); lifted before showing lyrics again.
     blanked: AtomicBool,
+    /// Whether we blacked the screen with F10 (lifted before showing again).
+    black: AtomicBool,
     /// Whether we hid the text with F9 (lifted before showing lyrics again).
     text_hidden: AtomicBool,
 }
@@ -76,6 +82,7 @@ impl HolyricsClient {
         Self {
             http,
             blanked: AtomicBool::new(false),
+            black: AtomicBool::new(false),
             text_hidden: AtomicBool::new(false),
         }
     }
@@ -145,13 +152,27 @@ impl HolyricsClient {
         self.learn_title_slide(shown);
         let fix = match holyrics_index(ours, shown) {
             Some(index) => self.call("ActionGoToIndex", json!({ "index": index })).await?.1,
-            None => {
-                let took = self.call("SetF8", json!({ "enable": true })).await?.1;
-                self.blanked.store(true, Ordering::Relaxed);
-                took
-            }
+            None => self.blank_screen().await?,
         };
         Ok(elapsed + fix)
+    }
+
+    /// «Clear the screen»: no text and no background, F10 (black screen).
+    /// A token without SetF10 falls back to F8 (Holyrics' wallpaper), as
+    /// LibreTracks did before.
+    async fn blank_screen(&self) -> Result<Duration, LyricsError> {
+        match self.call("SetF10", json!({ "enable": true })).await {
+            Ok((_, took)) => {
+                self.black.store(true, Ordering::Relaxed);
+                Ok(took)
+            }
+            Err(LyricsError::Unauthorized { .. }) => {
+                let took = self.call("SetF8", json!({ "enable": true })).await?.1;
+                self.blanked.store(true, Ordering::Relaxed);
+                Ok(took)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     /// The actions the token may not use.
@@ -270,8 +291,14 @@ impl LyricsClient for HolyricsClient {
             command,
             LyricsCommand::Section { .. } | LyricsCommand::Slide { .. } | LyricsCommand::Step { .. }
         );
-        // «Clear the text» also needs the song's background, so it lifts F8.
-        if (showing || matches!(command, LyricsCommand::ClearText)) && self.blanked.load(Ordering::Relaxed) {
+        // «Clear the text» also needs the song's background, so it lifts a
+        // black screen or the wallpaper too.
+        let lifts_blank = showing || matches!(command, LyricsCommand::ClearText);
+        if lifts_blank && self.black.load(Ordering::Relaxed) {
+            total += self.call("SetF10", json!({ "enable": false })).await?.1;
+            self.black.store(false, Ordering::Relaxed);
+        }
+        if lifts_blank && self.blanked.load(Ordering::Relaxed) {
             total += self.call("SetF8", json!({ "enable": false })).await?.1;
             self.blanked.store(false, Ordering::Relaxed);
         }
@@ -285,18 +312,14 @@ impl LyricsClient for HolyricsClient {
                     self.text_hidden.store(true, Ordering::Relaxed);
                     Ok(total + took)
                 }
-                // The token may not use F9: blank the screen as before rather
+                // The token may not use F9: clear the whole screen rather
                 // than leave the lyrics up.
-                Err(LyricsError::Unauthorized { .. }) => {
-                    let took = self.call("SetF8", json!({ "enable": true })).await?.1;
-                    self.blanked.store(true, Ordering::Relaxed);
-                    Ok(total + took)
-                }
+                Err(LyricsError::Unauthorized { .. }) => Ok(total + self.blank_screen().await?),
                 Err(error) => Err(error),
             };
         }
         let title = self.title_slide();
-        let blank = || ("SetF8", json!({ "enable": true }));
+        let blank = || (BLANK, Value::Null);
         let mut shown_song: Option<(&str, u32)> = None;
         let (action, body) = match command {
             // Holyrics has no "prepare without showing": nothing to do.
@@ -327,10 +350,11 @@ impl LyricsClient for HolyricsClient {
             LyricsCommand::Step { index: None, .. } => ("ActionNext", json!({})),
             LyricsCommand::Clear | LyricsCommand::ClearText => blank(),
         };
-        total += self.call(action, body.clone()).await?.1;
-        if action == "SetF8" {
-            self.blanked.store(true, Ordering::Relaxed);
-        }
+        total += if action == BLANK {
+            self.blank_screen().await?
+        } else {
+            self.call(action, body).await?.1
+        };
         if let Some((presentation_id, ours)) = shown_song {
             total += self.verify_show(presentation_id, ours, title).await?;
         }

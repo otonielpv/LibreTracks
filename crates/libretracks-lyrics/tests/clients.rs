@@ -267,9 +267,10 @@ async fn holyrics_requests_carry_the_token_and_lift_the_blank() {
         .collect();
     let after_clear: Vec<&(String, serde_json::Value)> = sent
         .iter()
-        .skip_while(|(action, body)| !(action == "SetF8" && body["enable"] == true))
+        .skip_while(|(action, body)| !(action == "SetF10" && body["enable"] == true))
         .collect();
-    assert_eq!(after_clear[1], &("SetF8".to_string(), json(r#"{"enable":false}"#)));
+    // «Clear the screen» is F10 (black), lifted before the next lyrics.
+    assert_eq!(after_clear[1], &("SetF10".to_string(), json(r#"{"enable":false}"#)));
     assert_eq!(
         after_clear[2],
         &("ShowLyrics".to_string(), json(r#"{"id":"812","initial_index":6}"#))
@@ -335,7 +336,7 @@ async fn holyrics_without_a_title_slide_is_learned_and_corrected_at_once() {
     assert_eq!(sent[1].0, "GetCurrentPresentation");
     assert_eq!(sent[2], ("ActionGoToIndex".to_string(), json(r#"{"index":0}"#)));
     assert_eq!(sent[3], ("ActionGoToIndex".to_string(), json(r#"{"index":1}"#)));
-    assert_eq!(sent[4], ("SetF8".to_string(), json(r#"{"enable":true}"#)));
+    assert_eq!(sent[4], ("SetF10".to_string(), json(r#"{"enable":true}"#)));
     // And the editor no longer lists a title slide.
     assert!(!holyrics.structure("812").await.unwrap().slides.iter().any(|slide| slide.title));
 }
@@ -444,7 +445,7 @@ async fn holyrics_clear_text_is_f9_lifted_before_the_next_lyrics_and_f8_without_
     assert_eq!(sent[1], ("SetF9".to_string(), json(r#"{"enable":false}"#)));
     assert_eq!(sent[2].0, "ShowLyrics");
 
-    // A token without SetF9: the screen is blanked with F8 instead.
+    // A token without SetF9: the whole screen is cleared (F10, black).
     let (connection, log) = server(|request| match holyrics_action(&request.target).as_str() {
         "SetF9" => Response::json(200, r#"{"status":"error","error":"unauthorized action"}"#),
         _ => Response::json(200, r#"{"status":"ok","data":null}"#),
@@ -453,5 +454,26 @@ async fn holyrics_clear_text_is_f9_lifted_before_the_next_lyrics_and_f8_without_
     let holyrics = client(LyricsSoftware::Holyrics, connection);
     holyrics.send(&LyricsCommand::ClearText).await.unwrap();
     let actions: Vec<String> = log.lock().unwrap().iter().map(|request| holyrics_action(&request.target)).collect();
-    assert_eq!(actions, vec!["SetF9", "SetF8"]);
+    assert_eq!(actions, vec!["SetF9", "SetF10"]);
+
+    // A token made before (no SetF9, no SetF10): F8 as LibreTracks did, and
+    // it is lifted before the next lyrics.
+    let (connection, log) = server(|request| match holyrics_action(&request.target).as_str() {
+        "SetF9" | "SetF10" => Response::json(200, r#"{"status":"error","error":"unauthorized action"}"#),
+        _ => Response::json(200, r#"{"status":"ok","data":null}"#),
+    })
+    .await;
+    let holyrics = client(LyricsSoftware::Holyrics, connection);
+    holyrics.send(&LyricsCommand::Clear).await.unwrap();
+    holyrics.send(&LyricsCommand::Step { presentation_id: "812".into(), index: Some(2) }).await.unwrap();
+    let actions: Vec<(String, serde_json::Value)> = log
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|request| (holyrics_action(&request.target), json(&request.body)))
+        .collect();
+    assert_eq!(actions[0].0, "SetF10");
+    assert_eq!(actions[1], ("SetF8".to_string(), json(r#"{"enable":true}"#)));
+    assert_eq!(actions[2], ("SetF8".to_string(), json(r#"{"enable":false}"#)));
+    assert_eq!(actions[3].0, "ActionGoToIndex");
 }

@@ -4083,7 +4083,7 @@ const en = {
         step2Title: "Enable the local server",
         step2: "Tick «API server - Local». The default port is 8091. It is free: the paid plan is only for the API over the internet.",
         step3Title: "Create a token with permissions",
-        step3: "Press «Manage Permissions», create a token and tick in the Local column:\nGetSongs, GetLyrics, ShowLyrics, ActionGoToIndex, ActionNext, SetF8, GetCurrentPresentation and GetSlideDescriptions. For «Clear the text» (keep the background), tick SetF9 too.",
+        step3: "Press «Manage Permissions», create a token and tick in the Local column:\nGetSongs, GetLyrics, ShowLyrics, ActionGoToIndex, ActionNext, SetF8, GetCurrentPresentation and GetSlideDescriptions. Tick SetF10 too (clear the screen to black) and SetF9 (clear the text, keep the background); without them F8 is used.",
         step4Title: "Paste the token",
         step4: "Copy the token into the Token field below. If Holyrics runs on another computer, also type its IP in Computer.",
       },
