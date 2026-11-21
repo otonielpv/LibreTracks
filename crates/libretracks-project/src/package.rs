@@ -60,6 +60,18 @@ fn normalize_package_file_path(file_path: &str) -> String {
     file_path.replace('\\', "/")
 }
 
+/// A stored asset path as an absolute one, for a package that references the
+/// file instead of carrying it. Relative paths are relative to the exporting
+/// session and mean nothing in the destination. URIs (`content://` on Android)
+/// and absolute paths are left as they are.
+fn absolute_reference(song_dir: &Path, stored_path: &str) -> String {
+    if stored_path.is_empty() || stored_path.contains("://") || Path::new(stored_path).is_absolute()
+    {
+        return stored_path.to_string();
+    }
+    normalize_package_file_path(&song_dir.join(stored_path).to_string_lossy())
+}
+
 fn read_library_meta(song_dir: &Path) -> Result<Vec<PackageLibraryAssetEntry>, ProjectError> {
     let manifest_path = song_dir.join("library.json");
     if !manifest_path.exists() {
@@ -568,7 +580,7 @@ fn write_region_package(
         .iter()
         .any(|entry| entry.bundled_entry.is_some());
 
-    let manifest = SongPackageManifest {
+    let mut manifest = SongPackageManifest {
         song_title: region.name.clone(),
         // Tempo y compás vigentes al INICIO de la canción, no los de la
         // sesión: si la canción no es la primera, el de la sesión es otro.
@@ -599,6 +611,42 @@ fn write_region_package(
         region_loop: region.drum_loop.clone(),
         region_lyrics: region.lyrics.clone(),
     };
+
+    // What does not travel inside the package is referenced by path, and a
+    // path relative to THIS session (`audio/Bass.wav`) would be read against
+    // the destination session on import: a light package imported into another
+    // session found every file missing. Point those at the absolute source.
+    if !include_audio {
+        for clip in manifest.clips.iter_mut().chain(
+            manifest
+                .structure
+                .iter_mut()
+                .flat_map(|structure| structure.stored_clips_mut()),
+        ) {
+            clip.file_path = absolute_reference(song_dir, &clip.file_path);
+        }
+        for entry in &mut manifest.library_meta {
+            entry.file_path = absolute_reference(song_dir, &entry.file_path);
+        }
+    }
+    for clip in manifest.video_clips.iter_mut().chain(
+        manifest
+            .structure
+            .iter_mut()
+            .flat_map(|structure| structure.stored_video_clips_mut()),
+    ) {
+        let bundled = manifest.video_library_meta.iter().any(|entry| {
+            entry.bundled_entry.is_some() && entry.file_path == clip.file_path
+        });
+        if !bundled {
+            clip.file_path = absolute_reference(song_dir, &clip.file_path);
+        }
+    }
+    for entry in &mut manifest.video_library_meta {
+        if entry.bundled_entry.is_none() {
+            entry.file_path = absolute_reference(song_dir, &entry.file_path);
+        }
+    }
 
     // Check the space BEFORE creating the file, with the same estimate as a
     // session export: a 3 GB song used to hit the OS's raw "No space left on
@@ -1786,6 +1834,61 @@ mod tests {
         assert_eq!(result.song.regions.len(), 1);
         // The imported region must span the clip so the song stays valid.
         assert!(validate_song(&result.song).is_ok());
+    }
+
+    /// Caso real: canción exportada en ligero desde una sesión cuyos clips
+    /// apuntan a `audio/loop.wav` (relativo a ESA sesión) e importada en otra
+    /// sesión: la ruta se leía contra la carpeta destino y todo salía como
+    /// archivo que falta. El paquete ligero debe llevar la ruta absoluta.
+    #[test]
+    fn a_light_package_points_at_the_source_session_audio() {
+        let source_dir = tempdir().expect("source");
+        let destination_dir = tempdir().expect("destination");
+        let source = song();
+        let package_path = source_dir.path().join("verse.ltpkg");
+        fs::create_dir_all(source_dir.path().join("audio")).expect("audio dir");
+        fs::write(
+            source_dir.path().join("library.json"),
+            r#"{"assets":[{"filePath":"audio/loop.wav","folderPath":"Verse"}]}"#,
+        )
+        .expect("library");
+
+        export_region_as_package(
+            source_dir.path(),
+            source_dir.path(),
+            &source,
+            "r1",
+            &package_path,
+            false,
+        )
+        .expect("export light");
+        let result = import_song_package(
+            destination_dir.path(),
+            &empty_destination(),
+            &package_path,
+            0.0,
+            SongImportTrackMode::default(),
+        )
+        .expect("import");
+
+        let expected = normalize_package_file_path(
+            &source_dir.path().join("audio/loop.wav").to_string_lossy(),
+        );
+        assert_eq!(result.song.clips.len(), 1);
+        assert_eq!(result.song.clips[0].file_path, expected);
+        assert!(result
+            .library_meta
+            .iter()
+            .all(|entry| entry.file_path == expected));
+    }
+
+    #[test]
+    fn absolute_reference_leaves_absolute_paths_and_uris_alone() {
+        let dir = Path::new(if cfg!(windows) { "C:/s" } else { "/s" });
+        assert_eq!(absolute_reference(dir, "content://x/1"), "content://x/1");
+        let absolute = if cfg!(windows) { "D:/m/a.wav" } else { "/m/a.wav" };
+        assert_eq!(absolute_reference(dir, absolute), absolute);
+        assert!(absolute_reference(dir, "audio/a.wav").ends_with("s/audio/a.wav"));
     }
 
     /// Un cambio de tempo a mitad de canción sobrevive a exportar e importar
