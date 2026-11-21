@@ -31,7 +31,7 @@ function selectValue(marker: MarkerReport): string {
     case "clear":
       return CLEAR;
     case "clearText":
-      return CLEAR_TEXT;
+      return marker.automatic ? AUTO : CLEAR_TEXT;
     case "skip":
       return SKIP;
     case "matched":
@@ -384,7 +384,9 @@ export function LyricsSongPanel({
                     <option value={AUTO}>
                       {marker.status === "matched" && marker.automatic
                         ? t("lyrics.song.auto", { group: marker.groupLabel })
-                        : marker.status === "unmatched"
+                        : marker.status === "clearText" && marker.automatic
+                          ? t("lyrics.song.auto", { group: t("lyrics.song.clearTextShort") })
+                          : marker.status === "unmatched"
                           ? t("lyrics.song.unmatched")
                           : t("lyrics.song.autoPlain")}
                     </option>
@@ -401,7 +403,10 @@ export function LyricsSongPanel({
                 <td>
                   <span className="lt-lyrics-slide-count">
                     {marker.slideCount > 0 ? marker.slideCount : ""}
-                    {linked && marker.status !== "clear" && marker.status !== "clearText" && marker.status !== "skip" ? (
+                    {linked &&
+                    marker.status !== "clear" &&
+                    !(marker.status === "clearText" && !marker.automatic) &&
+                    marker.status !== "skip" ? (
                       <button
                         className="lt-lyrics-btn lt-lyrics-edit"
                         type="button"

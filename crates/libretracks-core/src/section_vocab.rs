@@ -313,6 +313,27 @@ pub fn canonical_section(text: &str) -> Option<SectionId> {
 /// The section a marker stands for: its `kind` and `variant` (the label is
 /// the translated name it was created with, not reliable). A `Custom` marker
 /// is read from its name; a cue → `None`.
+/// Sections that are usually played, not sung: with no group for them in the
+/// presentation, the lyrics program clears the text (the background stays).
+/// Intro and outro are here too: when they do have words, the presentation
+/// has a group for them and it wins.
+pub fn is_lyricless(kind: MarkerKind) -> bool {
+    matches!(
+        kind,
+        MarkerKind::Intro
+            | MarkerKind::Instrumental
+            | MarkerKind::Interlude
+            | MarkerKind::Vamp
+            | MarkerKind::Solo
+            | MarkerKind::Breakdown
+            | MarkerKind::Drop
+            | MarkerKind::Turnaround
+            | MarkerKind::Exhortation
+            | MarkerKind::Outro
+            | MarkerKind::Ending
+    )
+}
+
 pub fn marker_section_id(marker: &Marker) -> Option<SectionId> {
     if marker.category() != MarkerCategory::Section {
         return None;

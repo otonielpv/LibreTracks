@@ -4144,6 +4144,7 @@ const en = {
       startClear: "Clear the screen",
       markerLead: "Lead {{lead}}",
       clearText: "Clear the text (keep the background)",
+      clearTextShort: "clear the text",
       textCleared: "no text, background kept",
       cleared: "blank screen",
       done: "Done",

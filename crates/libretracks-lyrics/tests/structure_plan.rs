@@ -570,8 +570,45 @@ fn clear_text_keeps_the_background_on_a_marker_and_as_the_song_start() {
     );
     chosen.start = Some(StartTarget::ClearText);
     let plan = build_plan(LyricsSoftware::FreeShow, &refs, &freeshow(), &chosen);
-    assert_eq!(plan.markers["p"].status, MarkerStatus::ClearText);
+    assert_eq!(plan.markers["p"].status, MarkerStatus::ClearText { automatic: false });
     assert_eq!(section_of(&plan, "p"), Some(LyricsCommand::ClearText));
     assert_eq!(plan.start, LyricsCommand::ClearText);
     assert!(!plan.start_automatic);
+}
+
+#[test]
+fn played_sections_without_a_group_clear_the_text_by_themselves() {
+    let mut markers = vec![
+        marker("intro", MarkerKind::Intro, None, 0.0),
+        marker("inst", MarkerKind::Instrumental, None, 10.0),
+        marker("vamp", MarkerKind::Vamp, None, 20.0),
+        marker("solo", MarkerKind::Solo, None, 30.0),
+        marker("odd", MarkerKind::Custom, None, 40.0),
+        marker("v1", MarkerKind::Verse, Some(1), 50.0),
+    ];
+    markers[4].name = "Algo raro".into();
+    let refs: Vec<&Marker> = markers.iter().collect();
+    let mut chosen = link(
+        LyricsSoftware::FreeShow,
+        vec![SectionOverride {
+            marker_id: "vamp".into(),
+            target: OverrideTarget::Clear,
+        }],
+    );
+    chosen.slides = vec![SlideSelection {
+        marker_id: "solo".into(),
+        indexes: vec![9],
+    }];
+    let plan = build_plan(LyricsSoftware::FreeShow, &refs, &freeshow(), &chosen);
+    // The show has an «Intro» group: it is shown.
+    assert!(matches!(plan.markers["intro"].status, MarkerStatus::Matched { .. }));
+    // No group for the instrumental: text cleared, background kept.
+    assert_eq!(plan.markers["inst"].status, MarkerStatus::ClearText { automatic: true });
+    assert_eq!(section_of(&plan, "inst"), Some(LyricsCommand::ClearText));
+    // A correction and slides chosen by hand win.
+    assert_eq!(plan.markers["vamp"].status, MarkerStatus::Clear);
+    assert!(plan.markers["solo"].custom_slides);
+    // An unknown name stays for the user to decide.
+    assert_eq!(plan.markers["odd"].status, MarkerStatus::Unmatched);
+    assert_eq!(plan.unmatched_count(), 1);
 }

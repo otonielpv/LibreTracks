@@ -4176,6 +4176,7 @@ const es = {
       startClear: "Limpiar pantalla",
       markerLead: "Adelanto {{lead}}",
       clearText: "Limpiar texto (deja el fondo)",
+      clearTextShort: "limpiar texto",
       textCleared: "sin texto, con el fondo",
       cleared: "pantalla limpia",
       done: "Listo",

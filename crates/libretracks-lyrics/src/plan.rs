@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use libretracks_core::lyrics_match::{match_group, section_occurrences};
-use libretracks_core::section_vocab::marker_section_id;
+use libretracks_core::section_vocab::{is_lyricless, marker_section_id};
 use libretracks_core::{LyricsLink, LyricsSoftware, Marker, OverrideTarget, StartTarget};
 use serde::Serialize;
 
@@ -49,8 +49,9 @@ pub enum MarkerStatus {
     Matched { group_label: String, automatic: bool },
     /// The user said: blank the screen here.
     Clear,
-    /// The user said: take the text away here, keep the background.
-    ClearText,
+    /// Take the text away here, keep the background: chosen by the user, or
+    /// (`automatic`) a played section (instrumental, vamp…) with no group.
+    ClearText { automatic: bool },
     /// The user said: send nothing here.
     Skip,
     /// No group matches: nothing is sent (amber in the UI).
@@ -198,7 +199,7 @@ pub fn build_plan(
         order.push(marker.id.clone());
         let chosen: Result<(String, bool), MarkerStatus> = match link.override_for(&marker.id) {
             Some(OverrideTarget::Clear) => Err(MarkerStatus::Clear),
-            Some(OverrideTarget::ClearText) => Err(MarkerStatus::ClearText),
+            Some(OverrideTarget::ClearText) => Err(MarkerStatus::ClearText { automatic: false }),
             Some(OverrideTarget::Skip) => Err(MarkerStatus::Skip),
             Some(OverrideTarget::Group { label }) => {
                 if structure.appearance(label, 0).is_some() {
@@ -224,9 +225,19 @@ pub fn build_plan(
                     .collect::<Vec<u32>>()
             })
             .filter(|indexes| !indexes.is_empty());
+        // A played section (instrumental, vamp, interlude…) with no group and
+        // no slides chosen: clear the text, keep the background.
+        let lyricless = link.override_for(&marker.id).is_none()
+            && marker_section_id(marker).is_some_and(|section| is_lyricless(section.kind));
+        let chosen = match chosen {
+            Err(MarkerStatus::Unmatched) if chosen_slides.is_none() && lyricless => {
+                Err(MarkerStatus::ClearText { automatic: true })
+            }
+            other => other,
+        };
         let plan = match chosen {
-            Err(MarkerStatus::ClearText) => MarkerPlan {
-                status: MarkerStatus::ClearText,
+            Err(MarkerStatus::ClearText { automatic }) => MarkerPlan {
+                status: MarkerStatus::ClearText { automatic },
                 section: Some(LyricsCommand::ClearText),
                 slide_count: 0,
                 steps: Vec::new(),

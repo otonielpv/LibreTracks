@@ -67,7 +67,7 @@ export type Presentation = { id: string; name: string };
 export type MarkerStatus =
   | { status: "matched"; groupLabel: string; automatic: boolean }
   | { status: "clear" }
-  | { status: "clearText" }
+  | { status: "clearText"; automatic: boolean }
   | { status: "skip" }
   | { status: "unmatched" };
 

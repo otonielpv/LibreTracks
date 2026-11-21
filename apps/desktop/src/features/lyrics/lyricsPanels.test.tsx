@@ -233,6 +233,29 @@ describe("LyricsSongPanel", () => {
     expect(await screen.findByText("Adelanto 1 compás")).toBeTruthy();
   });
 
+  it("a played section with no group shows «Automático: limpiar texto» and can still be edited", async () => {
+    setSong({ r1: LINKED });
+    const api = makeApi({
+      getRegionReport: vi.fn(async () => {
+        const base = report({});
+        const { groupLabel: _g, automatic: _a, ...rest } = base.markers[0] as typeof base.markers[0] & {
+          groupLabel: string;
+          automatic: boolean;
+        };
+        return report({
+          markers: [
+            { ...rest, markerId: "inst", markerName: "Instrumental", status: "clearText", automatic: true, slideCount: 0, slides: [] },
+            ...base.markers.slice(1),
+          ],
+        });
+      }),
+    });
+    render(<LyricsSongPanel regionId="r1" api={api} />);
+    const select = (await screen.findByLabelText("Grupo para Instrumental (vez 1)")) as HTMLSelectElement;
+    expect(select.selectedOptions[0].textContent).toBe("Automático: limpiar texto");
+    expect(screen.getByRole("button", { name: "Editar diapositivas de Instrumental" })).toBeTruthy();
+  });
+
   it("the song start can be forced to a slide or to a blank screen", async () => {
     setSong({ r1: LINKED });
     const api = makeApi({
