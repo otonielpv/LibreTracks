@@ -64,7 +64,7 @@ fn normalize_package_file_path(file_path: &str) -> String {
 /// file instead of carrying it. Relative paths are relative to the exporting
 /// session and mean nothing in the destination. URIs (`content://` on Android)
 /// and absolute paths are left as they are.
-fn absolute_reference(song_dir: &Path, stored_path: &str) -> String {
+pub(crate) fn absolute_reference(song_dir: &Path, stored_path: &str) -> String {
     if stored_path.is_empty() || stored_path.contains("://") || Path::new(stored_path).is_absolute()
     {
         return stored_path.to_string();

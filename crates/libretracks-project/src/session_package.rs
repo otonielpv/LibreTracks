@@ -741,9 +741,11 @@ fn rewrite_library_for_package(
     if let Some(videos) = obj.get_mut("videoAssets").and_then(|a| a.as_array_mut()) {
         for video in videos {
             if let Some(file_path) = video.get("filePath").and_then(|v| v.as_str()) {
-                if let Some(bundled) = bundled_video_by_stored_path.get(&stored_path_key(file_path)) {
-                    video["filePath"] = serde_json::Value::String(bundled.clone());
-                }
+                let target = bundled_video_by_stored_path
+                    .get(&stored_path_key(file_path))
+                    .cloned()
+                    .unwrap_or_else(|| crate::package::absolute_reference(song_dir, file_path));
+                video["filePath"] = serde_json::Value::String(target);
             }
         }
     }
@@ -755,6 +757,9 @@ fn rewrite_library_for_package(
         bundled_by_source_abs
             .get(&normalize_source_key(&source_abs))
             .cloned()
+            // Not bundled: the path is all the destination gets, and one
+            // relative to the exporting session points nowhere there.
+            .or_else(|| Some(crate::package::absolute_reference(song_dir, file_path)))
     };
 
     // New-style: `assets: [{ filePath, folderPath }]`.
@@ -1014,8 +1019,22 @@ fn write_session_package(
     // Audio and waveforms pick their own method by extension — see
     // `payload_entry_options`.
 
-    let session_json = if include_audio || !planned_videos.is_empty() {
+    // A light package references audio by path; a path relative to THIS
+    // session (`audio/Bass.wav`) would be read against the destination folder
+    // and every file would show as missing there. Point it at the source.
+    let light_reference = |path: &str| crate::package::absolute_reference(song_dir, path);
+    let session_json = {
         let mut portable = song.clone();
+        if !include_audio {
+            for clip in &mut portable.clips {
+                clip.file_path = light_reference(&clip.file_path);
+            }
+            for structure in portable.structures_mut() {
+                for clip in structure.stored_clips_mut() {
+                    clip.file_path = light_reference(&clip.file_path);
+                }
+            }
+        }
         if include_audio {
             for clip in &mut portable.clips {
                 if let Some(relative_path) = relative_by_clip_path.get(&clip.file_path) {
@@ -1035,6 +1054,8 @@ fn write_session_package(
                 bundled_video_by_stored_path.get(&stored_path_key(&clip.file_path))
             {
                 clip.file_path = relative_path.clone();
+            } else {
+                clip.file_path = light_reference(&clip.file_path);
             }
         }
         for structure in portable.structures_mut() {
@@ -1043,12 +1064,12 @@ fn write_session_package(
                     bundled_video_by_stored_path.get(&stored_path_key(&clip.file_path))
                 {
                     clip.file_path = relative_path.clone();
+                } else {
+                    clip.file_path = light_reference(&clip.file_path);
                 }
             }
         }
         crate::song_store::serialize_song_document(&portable)?
-    } else {
-        crate::song_store::serialize_song_document(song)?
     };
     zip.start_file(SONG_FILE_NAME, deflated)
         .map_err(crate::song_store::zip_error)?;
@@ -1077,8 +1098,7 @@ fn write_session_package(
         let Ok(bytes) = fs::read(&source) else {
             continue;
         };
-        let rewrites_library = include_audio || !planned_videos.is_empty();
-        let bytes = if rewrites_library && sidecar.file_name == "library.json" {
+        let bytes = if sidecar.file_name == "library.json" {
             let audio_map = if include_audio {
                 bundled_by_source_abs.clone()
             } else {
@@ -1182,11 +1202,11 @@ fn write_session_package(
         // extension (e.g. `Guide.mp3` and `Guide.wav`) would both map to
         // `Guide.waveform.ltpeaks` and collide. The guard is belt-and-braces.
         let final_path = if include_audio {
-            relative_path
+            relative_path.clone()
         } else {
-            clip_path
+            light_reference(clip_path)
         };
-        let waveform_stem = crate::waveform::waveform_cache_file_stem(Path::new(final_path));
+        let waveform_stem = crate::waveform::waveform_cache_file_stem(Path::new(&final_path));
         let waveform_entry = format!("cache/waveforms/{waveform_stem}.waveform.ltpeaks");
         if !written_waveform_entries.insert(waveform_entry.clone()) {
             continue;
@@ -2635,6 +2655,50 @@ mod tests {
         assert!(!dest_dir.join("audio").join("one.wav").exists());
         // Sidecars still travel in a light package.
         assert!(dest_dir.join("library.json").exists());
+    }
+
+    /// Caso real (.ltpkg, mismo fallo aquí): la sesión guarda `audio/one.wav`
+    /// relativo a SU carpeta; extraído en otra, ese relativo apunta a la
+    /// carpeta destino, vacía, y todo sale como archivo que falta. Un paquete
+    /// ligero tiene que apuntar al audio de la sesión de origen.
+    #[test]
+    fn light_export_points_relative_paths_at_the_source_session() {
+        let src = tempfile::tempdir().expect("src");
+        let song_dir = src.path();
+        write_session_dir(song_dir);
+        fs::write(
+            song_dir.join("library.json"),
+            br#"{"assets":[{"filePath":"audio/one.wav","folderPath":"Cancion 1"}],"filePaths":["audio/one.wav"]}"#,
+        )
+        .expect("library");
+        let package_path = song_dir.join("set.ltset");
+        export_session_as_package(
+            song_dir,
+            song_dir,
+            &session(),
+            &sidecars(),
+            &package_path,
+            false,
+            |_, _| {},
+        )
+        .expect("export light");
+
+        let target = tempfile::tempdir().expect("target");
+        let dest_dir = target.path().join("Mi Set");
+        let extracted =
+            extract_session_package(&dest_dir, &package_path, |_, _| {}).expect("extract");
+
+        let loaded = crate::load_song_from_file(&extracted.song_file).expect("load session");
+        for clip in &loaded.clips {
+            assert!(Path::new(&clip.file_path).is_absolute(), "{}", clip.file_path);
+            assert!(Path::new(&clip.file_path).exists(), "{}", clip.file_path);
+        }
+        let library: serde_json::Value =
+            serde_json::from_slice(&fs::read(dest_dir.join("library.json")).expect("library"))
+                .expect("library json");
+        let expected = crate::package::absolute_reference(song_dir, "audio/one.wav");
+        assert_eq!(library["assets"][0]["filePath"].as_str(), Some(expected.as_str()));
+        assert_eq!(library["filePaths"][0].as_str(), Some(expected.as_str()));
     }
 
     #[test]
