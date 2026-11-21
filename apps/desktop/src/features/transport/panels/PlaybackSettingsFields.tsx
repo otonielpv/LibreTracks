@@ -1,5 +1,6 @@
 import type { AppSettings } from "@libretracks/shared/models";
 import { useTranslation } from "react-i18next";
+import { NumberInput } from "../../../shared/NumberInput";
 
 type PlaybackSettingsFieldsProps = {
   settings: Pick<AppSettings, "pauseAtSongEnd" | "vampBetweenSongs" | "fadeOutStopSeconds">;
@@ -56,17 +57,13 @@ export function PlaybackSettingsFields({
         <span className="lt-settings-field-label">
           {t("transport.settingsModal.fadeOutStopSeconds")}
         </span>
-        <input
-          type="number"
+        <NumberInput
           min={0.1}
           max={30}
           step={0.5}
           value={settings.fadeOutStopSeconds}
           disabled={disabled}
-          onChange={(event) => {
-            const seconds = Number(event.target.value);
-            if (Number.isFinite(seconds) && seconds > 0) onFadeOutStopSecondsChange(seconds);
-          }}
+          onChange={onFadeOutStopSecondsChange}
         />
         <small>{t("transport.settingsModal.fadeOutStopSecondsHint")}</small>
       </label>

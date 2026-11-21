@@ -29,6 +29,7 @@ import { usePendingRegionPitch } from "../tempo/pendingPitchStore";
 import { SnapIcon } from "./SnapIcon";
 import { useNetworkPermissions } from "../../network/useNetworkPermissions";
 import { MidiMappable } from "../midi/MidiMappable";
+import { NumberInput } from "../../../shared/NumberInput";
 
 type RegionMasterFaderProps = {
   regionId: string;
@@ -613,9 +614,9 @@ export function TimelineToolbar({
                         -
                       </button>
                       </MidiMappable>
-                      <input
+                      <NumberInput
                         aria-label={t("timelineToolbar.vampBarsAria")}
-                        type="number"
+                        integer
                         min={1}
                         step={1}
                         value={vampBars}
@@ -628,9 +629,7 @@ export function TimelineToolbar({
                           event.stopPropagation();
                           onMidiLearnTarget("param:vamp_bars");
                         }}
-                        onChange={(event) =>
-                          onVampBarsChange(Number(event.target.value) || 1)
-                        }
+                        onChange={onVampBarsChange}
                       />
                       <MidiMappable target="action:increase_vamp_bars">
                       <button
@@ -744,9 +743,9 @@ export function TimelineToolbar({
                       >
                         -
                       </button>
-                      <input
+                      <NumberInput
                         aria-label={t("timelineToolbar.markerJumpBarsAria")}
-                        type="number"
+                        integer
                         min={1}
                         step={1}
                         value={globalJumpBars}
@@ -759,11 +758,7 @@ export function TimelineToolbar({
                           event.stopPropagation();
                           onMidiLearnTarget("param:global_jump_bars");
                         }}
-                        onChange={(event) =>
-                          onGlobalJumpBarsChange(
-                            Number(event.target.value) || 1,
-                          )
-                        }
+                        onChange={onGlobalJumpBarsChange}
                       />
                       <button
                         type="button"
@@ -888,9 +883,9 @@ export function TimelineToolbar({
                         -
                       </button>
                       </MidiMappable>
-                      <input
+                      <NumberInput
                         aria-label={t("timelineToolbar.songJumpBarsAria")}
-                        type="number"
+                        integer
                         min={1}
                         step={1}
                         value={songJumpBars}
@@ -903,9 +898,7 @@ export function TimelineToolbar({
                           event.stopPropagation();
                           onMidiLearnTarget("param:song_jump_bars");
                         }}
-                        onChange={(event) =>
-                          onSongJumpBarsChange(Number(event.target.value) || 1)
-                        }
+                        onChange={onSongJumpBarsChange}
                       />
                       <MidiMappable target="action:increase_song_jump_bars">
                       <button
@@ -1117,19 +1110,15 @@ export function TimelineToolbar({
                     >
                       -
                     </button>
-                    <input
+                    <NumberInput
                       aria-label={t("timelineToolbar.regionTransposeAria")}
-                      type="number"
+                      integer
                       min={-12}
                       max={12}
                       step={1}
                       value={shownTranspose}
                       disabled={regionControlsDisabled}
-                      onChange={(event) =>
-                        onSelectedRegionTransposeChange(
-                          Number(event.target.value) || 0,
-                        )
-                      }
+                      onChange={onSelectedRegionTransposeChange}
                     />
                     <button
                       type="button"

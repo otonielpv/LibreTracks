@@ -22,6 +22,7 @@ import { VideoAudioOnImportField } from "../video/VideoAudioOnImportField";
 import { VideoCalibrationPanel } from "../video/VideoCalibrationPanel";
 import { MAX_OFFSET_MS, MIN_OFFSET_MS } from "../video/videoCalibration";
 import { useVideoStore } from "../video/videoStore";
+import { NumberInput } from "../../../shared/NumberInput";
 
 /** "\\.\DISPLAY2" → "DISPLAY2". */
 function displayName(name: string) {
@@ -322,18 +323,13 @@ export function VideoSettingsTab() {
             value={settings.latencyOffsetMs}
             onChange={(event) => apply({ latencyOffsetMs: Number(event.target.value) })}
           />
-          <input
-            type="number"
+          <NumberInput
             aria-label={t("transport.video.settings.latencyMs")}
             min={MIN_OFFSET_MS}
             max={MAX_OFFSET_MS}
             disabled={disabled}
             value={settings.latencyOffsetMs}
-            onChange={(event) =>
-              apply({
-                latencyOffsetMs: Math.max(MIN_OFFSET_MS, Math.min(MAX_OFFSET_MS, Number(event.target.value) || 0)),
-              })
-            }
+            onChange={(latencyOffsetMs) => apply({ latencyOffsetMs })}
           />
           <span>ms</span>
         </div>

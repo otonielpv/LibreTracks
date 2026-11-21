@@ -10,6 +10,7 @@ import {
   normalizeLead,
   presetKeyOf,
 } from "./leadTime";
+import { NumberInput } from "../../../shared/NumberInput";
 
 const NONE = "none";
 const CUSTOM = "custom";
@@ -74,15 +75,11 @@ export function LeadTimeField({ value, onChange, hasJump = false }: LeadTimeFiel
         <div className="lt-lead-field-custom">
           <label className="lt-settings-field">
             <span className="lt-settings-field-label">{t("transport.lead.amount")}</span>
-            <input
-              type="number"
+            <NumberInput
               min={0}
               step={customUnit === "seconds" ? 0.05 : 0.25}
               value={customAmount}
-              onChange={(event) => {
-                const amount = Number(event.target.value);
-                onChange(makeLead(customUnit, Number.isFinite(amount) ? Math.max(0, amount) : 0));
-              }}
+              onChange={(amount) => onChange(makeLead(customUnit, amount))}
             />
           </label>
           <label className="lt-settings-field">

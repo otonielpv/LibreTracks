@@ -8,6 +8,7 @@ import type { LoopPattern } from "@libretracks/shared/models";
 
 import { VARIATION_LETTERS } from "./LoopRows";
 import { clearRow, copyVariation, normalizePattern, resizeBars, setStepsPerBeat } from "./patternOps";
+import { NumberInput } from "../../../shared/NumberInput";
 
 const SIGNATURES: Array<[number, number]> = [
   [4, 4],
@@ -88,15 +89,11 @@ export function LoopPatternSettings({ pattern, variation, onChange }: LoopPatter
       </label>
       <label className="lt-rhythm-field">
         <span className="lt-rhythm-field__label">{t("rhythm.editor.freeBpm")}</span>
-        <input
-          type="number"
+        <NumberInput
           min={30}
           max={300}
           value={pattern.bpm}
-          onChange={(event) => {
-            const bpm = Number(event.target.value);
-            if (Number.isFinite(bpm)) onChange(normalizePattern({ ...pattern, bpm }));
-          }}
+          onChange={(bpm) => onChange(normalizePattern({ ...pattern, bpm }))}
         />
       </label>
       <span className="lt-rhythm-field">

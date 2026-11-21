@@ -53,6 +53,7 @@ import { markerCategory } from "../markerKinds";
 import { MidiMappable } from "../midi/MidiMappable";
 import { SceneButtons } from "../scenes/SceneButtons";
 import { SceneMenuButton, usePhoneScreen } from "../scenes/SceneMenuButton";
+import { NumberInput } from "../../../shared/NumberInput";
 
 export type { LiveViewSettings };
 
@@ -140,14 +141,14 @@ function SettingCard({
         </span>
       </span>
       {typeof bars === "number" && onBarsChange ? (
-        <input
+        <NumberInput
           className="lt-live-setting-bars"
-          type="number"
+          integer
           min={1}
           max={64}
           value={bars}
           aria-label={`${label}: ${barsLabel}`}
-          onChange={(event) => onBarsChange(Number(event.target.value))}
+          onChange={onBarsChange}
         />
       ) : null}
       {action}

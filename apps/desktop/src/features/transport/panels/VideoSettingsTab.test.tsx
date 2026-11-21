@@ -108,9 +108,11 @@ describe("VideoSettingsTab", () => {
     });
     expect(lastApplied()).toMatchObject({ hwdec: "off" });
 
-    fireEvent.change(screen.getByLabelText("transport.video.settings.latencyMs"), {
-      target: { value: "9999" },
-    });
+    const latency = screen.getByLabelText("transport.video.settings.latencyMs");
+    fireEvent.focus(latency);
+    fireEvent.change(latency, { target: { value: "9999" } });
+    // Out of range is clamped when leaving the field, not while typing.
+    fireEvent.blur(latency);
     expect(lastApplied()).toMatchObject({ latencyOffsetMs: 500 });
 
     fireEvent.change(screen.getByLabelText("transport.video.settings.idle"), {

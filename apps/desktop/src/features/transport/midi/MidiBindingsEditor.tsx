@@ -9,6 +9,7 @@ import {
 import { formatMidiBinding } from "../helpers";
 import { useSongStore } from "../songStore";
 import { describeMidiTarget, isOtherSessionTarget } from "./controllerTargets";
+import { NumberInput } from "../../../shared/NumberInput";
 
 /**
  * Every binding with its behaviour (plan midi-controllers, paso 05, D1): mode,
@@ -84,28 +85,26 @@ export function MidiBindingsEditor({
               </label>
               <label>
                 <span>{t("midiMap.min")}</span>
-                <input
-                  type="number"
+                <NumberInput
+                  integer
                   min={0}
                   max={100}
                   step={1}
-                  inputMode="numeric"
                   value={percent(binding.min, 0)}
                   disabled={disabled}
-                  onChange={(event) => update({ min: Number(event.target.value) / 100 })}
+                  onChange={(next) => update({ min: next / 100 })}
                 />
               </label>
               <label>
                 <span>{t("midiMap.max")}</span>
-                <input
-                  type="number"
+                <NumberInput
+                  integer
                   min={0}
                   max={100}
                   step={1}
-                  inputMode="numeric"
                   value={percent(binding.max, 1)}
                   disabled={disabled}
-                  onChange={(event) => update({ max: Number(event.target.value) / 100 })}
+                  onChange={(next) => update({ max: next / 100 })}
                 />
               </label>
               <label className="lt-midi-bindings-check">

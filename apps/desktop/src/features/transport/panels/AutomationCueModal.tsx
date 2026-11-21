@@ -39,6 +39,7 @@ import {
   isValidMetronomeAction,
   isValidVoiceGuideAction,
 } from "./ClickGuideActionEditors";
+import { NumberInput } from "../../../shared/NumberInput";
 
 /**
  * What the modal is operating on. `cueId`/`name` are present when editing an
@@ -434,14 +435,12 @@ export function AutomationCueModal({
                 <span className="lt-settings-field-label">
                   {t("transport.automation.runsCount")}
                 </span>
-                <input
-                  type="number"
+                <NumberInput
+                  integer
                   min={1}
                   step={1}
                   value={maxRuns}
-                  onChange={(event) =>
-                    setMaxRuns(Math.max(1, Math.floor(Number(event.target.value)) || 1))
-                  }
+                  onChange={setMaxRuns}
                 />
               </label>
             ) : (
@@ -632,15 +631,14 @@ function ActionEditor({
             <span className="lt-settings-field-label">
               {t("transport.automation.seconds")}
             </span>
-            <input
-              type="number"
+            <NumberInput
               min={0}
               step={0.1}
               value={frameSeconds}
-              onChange={(event) =>
+              onChange={(seconds) =>
                 onChange({
                   ...action,
-                  target: { kind: "frame", seconds: Number(event.target.value) },
+                  target: { kind: "frame", seconds },
                 })
               }
             />
@@ -653,13 +651,11 @@ function ActionEditor({
           <small className="lt-settings-field-hint">
             {t("transport.automation.instantHint")}
           </small>
-          <input
-            type="number"
+          <NumberInput
             min={0}
             step={0.1}
             value={action.transition.durationSeconds ?? 0}
-            onChange={(event) => {
-              const seconds = Number(event.target.value);
+            onChange={(seconds) => {
               onChange({
                 ...action,
                 transition:
@@ -728,32 +724,26 @@ function ActionEditor({
           <span className="lt-settings-field-label">
             {t("transport.automation.volumeLabel")}
           </span>
-          <input
-            type="number"
+          <NumberInput
             min={0}
             max={100}
             step={1}
             // Stored 0–1; shown as 0–100.
             value={Math.round((action.volume ?? 1) * 100)}
-            onChange={(event) =>
-              onChange({ ...action, volume: Number(event.target.value) / 100 })
-            }
+            onChange={(next) => onChange({ ...action, volume: next / 100 })}
           />
         </label>
         <label className="lt-settings-field">
           <span className="lt-settings-field-label">
             {t("transport.automation.panLabel")}
           </span>
-          <input
-            type="number"
+          <NumberInput
             min={-100}
             max={100}
             step={1}
             // Stored −1..1; shown as −100 (L) .. 100 (R).
             value={Math.round((action.pan ?? 0) * 100)}
-            onChange={(event) =>
-              onChange({ ...action, pan: Number(event.target.value) / 100 })
-            }
+            onChange={(next) => onChange({ ...action, pan: next / 100 })}
           />
         </label>
         <label className="lt-settings-field">
@@ -763,13 +753,11 @@ function ActionEditor({
           <small className="lt-settings-field-hint">
             {t("transport.automation.immediateHint")}
           </small>
-          <input
-            type="number"
+          <NumberInput
             min={0}
             step={0.1}
             value={action.rampSeconds ?? 0}
-            onChange={(event) => {
-              const seconds = Math.max(0, Number(event.target.value));
+            onChange={(seconds) => {
               onChange({
                 ...action,
                 rampSeconds: seconds > 0 ? seconds : null,
@@ -833,13 +821,11 @@ function ActionEditor({
           <small className="lt-settings-field-hint">
             {t("transport.automation.immediateHint")}
           </small>
-          <input
-            type="number"
+          <NumberInput
             min={0}
             step={0.1}
             value={action.rampSeconds ?? 0}
-            onChange={(event) => {
-              const seconds = Math.max(0, Number(event.target.value));
+            onChange={(seconds) => {
               onChange({
                 ...action,
                 rampSeconds: seconds > 0 ? seconds : null,
@@ -965,14 +951,11 @@ function ActionEditor({
         <span className="lt-settings-field-label">
           {t("transport.automation.waitSeconds")}
         </span>
-        <input
-          type="number"
+        <NumberInput
           min={0}
           step={0.1}
           value={action.durationSeconds}
-          onChange={(event) =>
-            onChange({ ...action, durationSeconds: Number(event.target.value) })
-          }
+          onChange={(durationSeconds) => onChange({ ...action, durationSeconds })}
         />
       </label>
     </div>
@@ -1016,18 +999,12 @@ function PadCueFadeField({
         {label}
       </span>
       {enabled ? (
-        <input
-          type="number"
+        <NumberInput
           min={0.1}
           max={30}
           step={0.1}
           value={seconds}
-          onChange={(event) =>
-            onChange({
-              ...action,
-              [field]: Math.min(30, Math.max(0, Number(event.target.value))),
-            })
-          }
+          onChange={(next) => onChange({ ...action, [field]: next })}
         />
       ) : null}
     </label>

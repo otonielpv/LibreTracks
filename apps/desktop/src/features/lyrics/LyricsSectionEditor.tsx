@@ -11,6 +11,7 @@ import { spreadSlides } from "./lyricsEdits";
 import type { LyricsHandlers } from "./lyricsHandlers";
 import { captureSpaceBar, createStepRecorder, type StepRecorder } from "./lyricsStepRecorder";
 import { useSlideThumbnails } from "./useSlideThumbnails";
+import { NumberInput } from "../../shared/NumberInput";
 
 /** How often the recorder checks whether the section is over. */
 const END_POLL_MS = 100;
@@ -328,16 +329,16 @@ export function LyricsSectionEditor({
                 onChange={() => setTiming({ type: "everyBars", bars })}
               />
               {t("lyrics.section.everyBars")}
-              <input
+              <NumberInput
                 className="lt-lyrics-input lt-lyrics-bars"
-                type="number"
+                integer
                 min={1}
                 max={64}
                 aria-label={t("lyrics.section.everyBarsFor")}
                 value={bars}
-                onChange={(event) => setBars(Math.max(1, Math.round(Number(event.target.value) || 1)))}
-                onBlur={() => {
-                  if (timing.type === "everyBars" && timing.bars !== bars) setTiming({ type: "everyBars", bars });
+                onChange={(next) => {
+                  setBars(next);
+                  if (timing.type === "everyBars" && timing.bars !== next) setTiming({ type: "everyBars", bars: next });
                 }}
               />
               {t("lyrics.section.everyBarsUnit")}

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { AutomationActionSummary, TrackEq } from "../desktopApi";
 import { defaultTrackEq } from "@libretracks/shared/eq/trackEqModel";
 import { eqPresetLabel, useEqPresets } from "../eq/useEqPresets";
+import { NumberInput } from "../../../shared/NumberInput";
 
 type T = (key: string, options?: Record<string, unknown>) => string;
 
@@ -112,14 +113,12 @@ function TrackEqCurveFields({
       <label className="lt-settings-field">
         <span className="lt-settings-field-label">{rampLabel}</span>
         <small className="lt-settings-field-hint">{t("transport.automation.immediateHint")}</small>
-        <input
-          type="number"
+        <NumberInput
           min={0}
           step={0.1}
           aria-label={rampLabel}
           value={action.rampSeconds ?? 0}
-          onChange={(event) => {
-            const seconds = Math.max(0, Number(event.target.value));
+          onChange={(seconds) => {
             onChange({ ...action, rampSeconds: seconds > 0 ? seconds : null });
           }}
         />
