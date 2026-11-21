@@ -13,6 +13,7 @@ pub mod clients;
 pub mod gate;
 pub mod plan;
 pub mod report;
+pub mod scan;
 pub mod structure;
 pub mod thumbs;
 pub mod worker;

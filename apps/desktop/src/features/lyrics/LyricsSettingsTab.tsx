@@ -4,9 +4,10 @@ import { useTranslation } from "react-i18next";
 import type { LyricsConfig, LyricsSoftware } from "@libretracks/shared/models";
 
 import { LeadTimeField } from "../transport/panels/LeadTimeField";
-import { LYRICS_PROGRAMS, usesToken, type LyricsError } from "./lyricsApi";
+import { DEFAULT_PORTS, LYRICS_PROGRAMS, usesToken, type FoundProgram, type LyricsError } from "./lyricsApi";
 import { DEFAULT_LYRICS_CONFIG, withSoftware } from "./lyricsEdits";
 import type { LyricsApi, ProbeOutcome } from "./lyricsHandlers";
+import { LyricsNetworkScan } from "./LyricsNetworkScan";
 import { LyricsSetupTutorial } from "./LyricsSetupTutorial";
 import { useLyricsStore } from "./lyricsStore";
 import { useLyricsHandlers } from "./useLyricsHandlers";
@@ -64,17 +65,25 @@ export function LyricsSettingsTab({ api }: { api?: LyricsApi } = {}) {
   const tutorialPending =
     config.enabled && software !== null && (showTutorial || !config.tutorialDone.includes(software));
 
-  const runProbe = async () => {
+  const runProbe = async (host = config.host, port = config.port) => {
     if (!software) return;
     setProbing(true);
     const outcome = await handlers.probe(
       software,
-      config.host,
-      config.port,
+      host,
+      port,
       token.trim() ? token.trim() : undefined,
     );
     setProbe(outcome);
     setProbing(false);
+  };
+
+  /** A program picked from «Buscar en la red»: fill it in and try it. */
+  const pickFound = (found: FoundProgram) => {
+    if (!software) return;
+    if (found.port !== DEFAULT_PORTS[software]) setPortTouched(true);
+    save({ ...config, host: found.host, port: found.port });
+    void runProbe(found.host, found.port);
   };
 
   return (
@@ -172,6 +181,14 @@ export function LyricsSettingsTab({ api }: { api?: LyricsApi } = {}) {
                   {software === "proPresenter" ? <small>{t("lyrics.settings.portHelpProPresenter")}</small> : null}
                 </label>
               </div>
+
+              <LyricsNetworkScan
+                key={software}
+                programName={t(`lyrics.programs.${software}`)}
+                tokenWord={software === "holyrics" ? "token" : "key"}
+                scan={() => handlers.scan(software, config.port)}
+                onPick={pickFound}
+              />
 
               {usesToken(software) ? (
                 <label className="lt-settings-field">

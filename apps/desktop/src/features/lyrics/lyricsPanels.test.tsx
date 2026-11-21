@@ -5,7 +5,7 @@ import type { LyricsConfig, RegionLyrics, SongView } from "@libretracks/shared/m
 
 import i18n from "../../shared/i18n";
 import { useSongStore } from "../transport/songStore";
-import type { LyricsConfigView, RegionReport } from "./lyricsApi";
+import type { FoundProgram, LyricsConfigView, RegionReport } from "./lyricsApi";
 import { DEFAULT_LYRICS_CONFIG } from "./lyricsEdits";
 import type { LyricsApi } from "./lyricsHandlers";
 import { LyricsSetlistLinker } from "./LyricsSetlistLinker";
@@ -83,6 +83,7 @@ function makeApi(overrides: Partial<LyricsApi> = {}) {
     setLyricsRecording: vi.fn(async () => undefined),
     seekTransport: vi.fn(async () => ({ playbackState: "paused" }) as never),
     listPresentations: vi.fn(async () => [{ id: "812", name: "Way Maker" }]),
+    scanLyrics: vi.fn(async () => [] as FoundProgram[]),
   } satisfies LyricsApi;
   return { ...base, ...overrides } as typeof base;
 }

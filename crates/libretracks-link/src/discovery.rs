@@ -211,7 +211,7 @@ impl HostRegistry {
 }
 
 #[cfg(feature = "mdns")]
-pub use mdns_backend::MdnsDiscovery;
+pub use mdns_backend::{browse_once, MdnsDiscovery};
 
 #[cfg(feature = "mdns")]
 mod mdns_backend {
@@ -416,6 +416,40 @@ mod mdns_backend {
                 _ => {}
             }
         }
+    }
+
+    /// Every instance of a foreign service type seen within `wait`, as
+    /// `(address, port)`. A throwaway daemon, so it never touches the
+    /// session's own browsing. Blocking: call it off the async runtime.
+    /// Used by the lyrics scan to find programs with no fixed port.
+    pub fn browse_once(
+        service_type: &str,
+        wait: std::time::Duration,
+    ) -> Vec<(std::net::IpAddr, u16)> {
+        let Ok(daemon) = ServiceDaemon::new() else {
+            return Vec::new();
+        };
+        let mut found = Vec::new();
+        if let Ok(receiver) = daemon.browse(service_type) {
+            let deadline = std::time::Instant::now() + wait;
+            while let Some(left) = deadline.checked_duration_since(std::time::Instant::now()) {
+                match receiver.recv_timeout(left) {
+                    Ok(ServiceEvent::ServiceResolved(resolved)) => {
+                        for scoped in resolved.addresses.iter() {
+                            let entry = (scoped.to_ip_addr(), resolved.port);
+                            if !found.contains(&entry) {
+                                found.push(entry);
+                            }
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+            }
+            let _ = daemon.stop_browse(service_type);
+        }
+        let _ = daemon.shutdown();
+        found
     }
 
     impl Drop for MdnsDiscovery {

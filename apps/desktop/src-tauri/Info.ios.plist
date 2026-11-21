@@ -44,6 +44,7 @@
   <key>NSBonjourServices</key>
   <array>
     <string>_libretracks-link._tcp</string>
+    <string>_pro7proremote._tcp</string>
   </array>
   <key>UISupportedInterfaceOrientations</key>
   <array>

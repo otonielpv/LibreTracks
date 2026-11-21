@@ -4073,6 +4073,17 @@ const es = {
       clearOnStop: "Limpiar la pantalla al parar",
       clearOnStopHelp: "Pausar nunca limpia.",
     },
+    scan: {
+      button: "Buscar en la red",
+      scanning: "Buscando en la red…",
+      none: "No se encontró {{program}}. Comprueba que está abierto con su API de red activada y que los dos equipos están en la misma red, o escribe la IP a mano.",
+      noneIos: "En iPhone o iPad, comprueba en Ajustes › LibreTracks que «Red local» está activado y vuelve a buscar.",
+      results: "Encontrados en la red",
+      thisDevice: "Este equipo",
+      port: "puerto {{port}}",
+      needsToken: "Necesita el token",
+      needsKey: "Necesita la clave",
+    },
     howTo: {
       proPresenter: "En ProPresenter › Ajustes › Red, activa la red y copia aquí el puerto.",
       freeShow: "En FreeShow › Ajustes › Conexiones, activa la API (puerto 5506).",

@@ -197,6 +197,51 @@ select.lt-lyrics-select.lt-lyrics-unmatched {
   background: rgb(197 48 48 / 0.18);
   border-color: rgb(252 129 129 / 0.3);
 }
+.lt-lyrics-scan {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lt-lyrics-found {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+button.lt-lyrics-found-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid rgb(255 255 255 / 0.06);
+  border-radius: 0;
+  background: #0e0e0e;
+  color: #f3f0ef;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.lt-lyrics-found-item:hover,
+button.lt-lyrics-found-item:focus-visible {
+  border-color: rgb(87 241 219 / 0.45);
+  background: rgb(87 241 219 / 0.08);
+}
+.lt-lyrics-found-item span {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  color: rgb(243 240 239 / 0.7);
+}
+.lt-lyrics-found-item small {
+  margin-left: auto;
+  font-size: 11px;
+  color: #f6c177;
+}
 .lt-lyrics-missing {
   margin: 6px 0 0;
   padding-left: 18px;

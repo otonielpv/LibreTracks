@@ -34,6 +34,7 @@ export type LyricsApi = Pick<
   | "getLyricsConfig"
   | "saveLyricsConfig"
   | "probeLyrics"
+  | "scanLyrics"
   | "setLyricsPaused"
   | "refreshLyrics"
   | "markLyricsTutorialDone"
@@ -109,6 +110,15 @@ export function createLyricsHandlers({
         return { ok: true, info: await calls.probeLyrics(software, host, port, token) };
       } catch (error) {
         return { ok: false, error: api.asLyricsError(error), port };
+      }
+    },
+
+    /** «Buscar en la red»: never throws; nothing found is an empty list. */
+    scan: async (software: LyricsSoftware, port: number | null): Promise<api.FoundProgram[]> => {
+      try {
+        return await calls.scanLyrics(software, port);
+      } catch {
+        return [];
       }
     },
 

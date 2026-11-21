@@ -4041,6 +4041,17 @@ const en = {
       clearOnStop: "Clear the screen on stop",
       clearOnStopHelp: "Pausing never clears.",
     },
+    scan: {
+      button: "Search the network",
+      scanning: "Searching the network…",
+      none: "{{program}} was not found. Check that it is open with its network API enabled and that both computers are on the same network, or type the IP by hand.",
+      noneIos: "On iPhone or iPad, check in Settings › LibreTracks that Local Network is on, and search again.",
+      results: "Found on the network",
+      thisDevice: "This computer",
+      port: "port {{port}}",
+      needsToken: "Needs the token",
+      needsKey: "Needs the key",
+    },
     howTo: {
       proPresenter: "In ProPresenter › Settings › Network, enable the network and copy the port here.",
       freeShow: "In FreeShow › Settings › Connections, enable the API (port 5506).",

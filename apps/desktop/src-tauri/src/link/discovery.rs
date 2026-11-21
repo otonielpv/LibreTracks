@@ -25,6 +25,8 @@ struct State {
     registry: HostRegistry,
     browsing: bool,
     advertising: bool,
+    /// The lyrics «Buscar en la red» is browsing a foreign mDNS type.
+    foreign_scans: u32,
     #[cfg(not(target_os = "ios"))]
     mdns: Option<libretracks_link::discovery::MdnsDiscovery>,
     /// Unicast sweep of the /24 (every platform; the only way that works on
@@ -42,6 +44,7 @@ fn state() -> &'static Mutex<State> {
             registry: HostRegistry::new(None),
             browsing: false,
             advertising: false,
+            foreign_scans: 0,
             #[cfg(not(target_os = "ios"))]
             mdns: None,
             probe_responder: None,
@@ -74,9 +77,26 @@ fn mdns(state: &mut State) -> Option<&libretracks_link::discovery::MdnsDiscovery
 
 fn update_multicast_lock(state: &State) {
     #[cfg(target_os = "android")]
-    crate::platform::android_multicast::set_multicast_lock(state.browsing || state.advertising);
+    crate::platform::android_multicast::set_multicast_lock(
+        state.browsing || state.advertising || state.foreign_scans > 0,
+    );
     #[cfg(not(target_os = "android"))]
     let _ = state;
+}
+
+/// Hold the Android multicast lock around a one-off mDNS browse that is not
+/// the session's own (the lyrics scan), without releasing it under a
+/// session that is browsing or advertising. A no-op elsewhere.
+pub fn hold_multicast_for_scan(on: bool) {
+    let Ok(mut state) = state().lock() else {
+        return;
+    };
+    state.foreign_scans = if on {
+        state.foreign_scans.saturating_add(1)
+    } else {
+        state.foreign_scans.saturating_sub(1)
+    };
+    update_multicast_lock(&state);
 }
 
 pub fn advertise(ad: &Advertisement) {

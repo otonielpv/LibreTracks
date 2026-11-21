@@ -4,9 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LyricsConfig } from "@libretracks/shared/models";
 
 import i18n from "../../shared/i18n";
-import type { LyricsConfigView, LyricsStatus } from "./lyricsApi";
+import type { FoundProgram, LyricsConfigView, LyricsStatus } from "./lyricsApi";
 import { DEFAULT_LYRICS_CONFIG, withSoftware } from "./lyricsEdits";
 import type { LyricsApi } from "./lyricsHandlers";
+import { LyricsNetworkScan } from "./LyricsNetworkScan";
 import { LyricsSettingsTab } from "./LyricsSettingsTab";
 import { LyricsStatusPill } from "./LyricsStatusPill";
 import { INITIAL_LYRICS_STATE, selectPillTone, useLyricsStore } from "./lyricsStore";
@@ -46,6 +47,7 @@ function makeApi(initial: Partial<LyricsConfig> = {}) {
     setLyricsRecording: vi.fn(async () => undefined),
     seekTransport: vi.fn(async () => ({ playbackState: "paused" }) as never),
     listPresentations: vi.fn(async () => []),
+    scanLyrics: vi.fn(async (): Promise<FoundProgram[]> => []),
   } satisfies LyricsApi;
   return api;
 }
@@ -118,6 +120,40 @@ describe("LyricsSettingsTab", () => {
     render(<LyricsSettingsTab api={api} />);
     fireEvent.click(await screen.findByRole("button", { name: "Probar conexión" }));
     expect((await screen.findByRole("status")).textContent).toContain("Holyrics 2.30.0");
+  });
+  it("searching the network lists what answered and picking one fills it in and tries it", async () => {
+    const api = makeApi({ enabled: true, software: "freeShow", port: 5506, tutorialDone: ["freeShow"] });
+    api.scanLyrics.mockResolvedValueOnce([
+      { software: "freeShow", host: "127.0.0.1", port: 5506, label: "FreeShow", needsToken: false, thisDevice: true },
+      { software: "freeShow", host: "192.168.1.40", port: 5506, label: "FreeShow", needsToken: true, thisDevice: false },
+    ]);
+    render(<LyricsSettingsTab api={api} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Buscar en la red" }));
+    const list = await screen.findByRole("list", { name: "Encontrados en la red" });
+    expect(api.scanLyrics).toHaveBeenCalledWith("freeShow", 5506);
+    expect(list.textContent).toContain("Este equipo");
+    expect(list.textContent).toContain("Necesita la clave");
+    fireEvent.click(screen.getByRole("button", { name: /192\.168\.1\.40/ }));
+    await waitFor(() => expect(api.saveLyricsConfig.mock.calls.at(-1)?.[0].host).toBe("192.168.1.40"));
+    await waitFor(() => expect(api.probeLyrics).toHaveBeenCalledWith("freeShow", "192.168.1.40", 5506, undefined));
+  });
+
+  it("nothing found says what to check", async () => {
+    const api = makeApi({ enabled: true, software: "holyrics", port: 8091, tutorialDone: ["holyrics"] });
+    render(<LyricsSettingsTab api={api} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Buscar en la red" }));
+    expect((await screen.findByRole("status")).textContent).toContain("No se encontró Holyrics");
+  });
+  it("on iOS an empty search also points at the Local Network permission", async () => {
+    const view = (ios: boolean) =>
+      render(<LyricsNetworkScan ios={ios} programName="Holyrics" tokenWord="token" scan={async () => []} onPick={() => {}} />);
+    view(true);
+    fireEvent.click(screen.getByRole("button", { name: "Buscar en la red" }));
+    expect((await screen.findByRole("status")).textContent).toContain("Red local");
+    cleanup();
+    view(false);
+    fireEvent.click(screen.getByRole("button", { name: "Buscar en la red" }));
+    expect((await screen.findByRole("status")).textContent).not.toContain("Red local");
   });
 });
 

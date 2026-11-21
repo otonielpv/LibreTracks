@@ -156,6 +156,25 @@ export function probeLyrics(software: LyricsSoftware, host: string, port: number
   return invokeCommand<ProbeInfo>("lyrics_probe", { software, host, port, token: token ?? null });
 }
 
+/** A program found by «Buscar en la red». */
+export type FoundProgram = {
+  software: LyricsSoftware;
+  host: string;
+  port: number;
+  /** What it says it is ("ProPresenter 7.16"). */
+  label: string;
+  /** Answered, but wants the token (Holyrics) or key (FreeShow). */
+  needsToken: boolean;
+  /** Running on this computer. */
+  thisDevice: boolean;
+};
+
+/** Sweep this computer and the local network for the program (a few
+ * seconds). `port`: the one in the form, tried besides the default. */
+export function scanLyrics(software: LyricsSoftware, port: number | null) {
+  return invokeCommand<FoundProgram[]>("lyrics_scan", { software, port });
+}
+
 export function listPresentations() {
   return invokeCommand<Presentation[]>("lyrics_list_presentations");
 }

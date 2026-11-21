@@ -7,6 +7,7 @@ use libretracks_core::lyrics_config::{uses_token, LyricsConfig};
 use libretracks_core::{LyricsSoftware, RegionLyrics};
 use libretracks_lyrics::clients::{client_for, Connection, LyricsClient, Presentation, ProbeInfo};
 use libretracks_lyrics::report::{region_report, RegionReport};
+use libretracks_lyrics::scan::{self, FoundProgram};
 use libretracks_lyrics::thumbs::ThumbCache;
 use libretracks_lyrics::worker::{LyricsStatus, WorkerInput};
 use libretracks_lyrics::LyricsError;
@@ -111,6 +112,59 @@ pub async fn lyrics_probe(
         },
     )?;
     client.probe().await
+}
+
+/// Bonjour type ProPresenter advertises for ProPresenter Remote; the network
+/// API answers on the same port. Not verified on a real install: whatever it
+/// finds is checked with `GET /version` before it is listed. iOS only browses
+/// types listed in `NSBonjourServices` (Info.ios.plist): keep both in step.
+const PROPRESENTER_SERVICE: &str = "_pro7proremote._tcp";
+/// Long enough for a LAN mDNS answer and its resolve; runs alongside nothing
+/// else the user waits for, the sweep comes right after.
+const MDNS_WAIT: std::time::Duration = std::time::Duration::from_millis(1_500);
+
+/// ProPresenter instances seen over mDNS: mdns-sd on desktop and Android
+/// (Android holding the multicast lock meanwhile), the system's Bonjour on
+/// iOS, where raw multicast needs an entitlement.
+fn propresenter_by_mdns() -> Vec<(std::net::IpAddr, u16)> {
+    #[cfg(target_os = "ios")]
+    {
+        crate::platform::ios_link::lyrics_browse_once(PROPRESENTER_SERVICE, MDNS_WAIT)
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        crate::link::discovery::hold_multicast_for_scan(true);
+        let found = libretracks_link::discovery::browse_once(
+            &format!("{PROPRESENTER_SERVICE}.local."),
+            MDNS_WAIT,
+        );
+        crate::link::discovery::hold_multicast_for_scan(false);
+        found
+    }
+}
+
+/// «Buscar en la red»: the program on this device or the local /24 (same
+/// idea as the network sessions' probe sweep, over TCP on the program's
+/// port). `port`: the one in the form, swept as well as the default. The
+/// same on desktop, Android and iOS (plain unicast; iOS asks for the Local
+/// Network permission the first time).
+#[tauri::command(async)]
+pub async fn lyrics_scan(software: LyricsSoftware, port: Option<u16>) -> Vec<FoundProgram> {
+    let own = libretracks_link::net::local_ip();
+    let own_v4 = match own {
+        Some(std::net::IpAddr::V4(v4)) => Some(v4),
+        _ => None,
+    };
+    let hosts = scan::sweep_hosts(own_v4);
+    let ports = scan::sweep_ports(software, port);
+    let extra = if software == LyricsSoftware::ProPresenter {
+        tauri::async_runtime::spawn_blocking(propresenter_by_mdns)
+            .await
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    scan::scan(software, hosts, ports, extra, own).await
 }
 
 fn configured_client(

@@ -180,6 +180,71 @@ public func ltLinkBonjourStopBrowse() {
   DispatchQueue.main.async { LinkBonjour.shared.stopBrowsing() }
 }
 
+// MARK: - Lyrics «Buscar en la red»
+
+@_silgen_name("lt_lyrics_ios_found")
+private func ltLyricsFound(_ json: UnsafePointer<CChar>?)
+
+/// One-off Bonjour browse for a lyrics program's service type (ProPresenter
+/// has no fixed port). Its own browser, so it never disturbs a network
+/// session's. Each resolved instance goes to Rust as `{"ips": [...],
+/// "port": n}`; Rust stops it after a moment. The type must be listed in
+/// `NSBonjourServices` or iOS returns nothing.
+final class LyricsBonjour: NSObject, NetServiceDelegate, NetServiceBrowserDelegate {
+  static let shared = LyricsBonjour()
+  private var browser: NetServiceBrowser?
+  private var found: [String: NetService] = [:]
+
+  func browse(type: String) {
+    stop()
+    let browser = NetServiceBrowser()
+    browser.delegate = self
+    browser.searchForServices(ofType: type + ".", inDomain: "local.")
+    self.browser = browser
+  }
+
+  func stop() {
+    browser?.stop()
+    browser = nil
+    for service in found.values {
+      service.stop()
+    }
+    found.removeAll()
+  }
+
+  func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
+    found[service.name] = service
+    service.delegate = self
+    service.resolve(withTimeout: 3)
+  }
+
+  func netServiceDidResolveAddress(_ sender: NetService) {
+    var ips: [String] = []
+    for data in sender.addresses ?? [] {
+      if let ip = LinkBonjour.ipString(data), !ips.contains(ip) {
+        ips.append(ip)
+      }
+    }
+    let payload: [String: Any] = ["ips": ips, "port": sender.port]
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload),
+      let json = String(data: data, encoding: .utf8)
+    else { return }
+    json.withCString { text in ltLyricsFound(text) }
+  }
+}
+
+@_cdecl("lt_lyrics_bonjour_browse")
+public func ltLyricsBonjourBrowse(_ type: UnsafePointer<CChar>?) {
+  guard let type = optionalString(type) else { return }
+  DispatchQueue.main.async { LyricsBonjour.shared.browse(type: type) }
+}
+
+@_cdecl("lt_lyrics_bonjour_stop")
+public func ltLyricsBonjourStop() {
+  DispatchQueue.main.async { LyricsBonjour.shared.stop() }
+}
+
 /// The device's name for network sessions. Since iOS 16 `UIDevice.name` is
 /// the generic "iPhone" / "iPad" unless the app holds Apple's
 /// `com.apple.developer.device-information.user-assigned-device-name`

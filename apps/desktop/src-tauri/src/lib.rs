@@ -667,6 +667,7 @@ pub fn run() {
             commands::lyrics::lyrics_get_config,
             commands::lyrics::lyrics_save_config,
             commands::lyrics::lyrics_probe,
+            commands::lyrics::lyrics_scan,
             commands::lyrics::lyrics_list_presentations,
             commands::lyrics::lyrics_region_report,
             commands::lyrics::lyrics_setlist_report,
