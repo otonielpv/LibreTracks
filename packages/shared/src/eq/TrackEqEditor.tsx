@@ -561,7 +561,9 @@ export function TrackEqEditor({
       >
         <header className="lt-eq-header">
           <h2 id="lt-eq-editor-title">
-            {t("eq.title")} <span className="lt-eq-track-name">{track.name}</span>
+            {t("eq.title")} <span className="lt-eq-track-name" title={track.name}>
+              {track.name}
+            </span>
             {targetCount > 1 ? (
               <span className="lt-eq-targets" role="status">
                 {t("eq.appliesTo", { count: targetCount })}
