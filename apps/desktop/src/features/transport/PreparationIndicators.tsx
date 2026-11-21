@@ -5,6 +5,7 @@ import {
   selectAudioPreparationUiState,
   usePreparationStatusStore,
 } from "./preparationStatusStore";
+import { usePendingPitchStore } from "./tempo/pendingPitchStore";
 
 /**
  * «Preparando audio…» y la línea de estado (aviso de audio transpuesto o
@@ -21,6 +22,16 @@ export const PreparationIndicators = memo(function PreparationIndicators({
     selectAudioPreparationUiState,
   );
   const pitchPrepareUiState = usePreparationStatusStore((state) => state.pitch);
+  const canRevertPitch = usePendingPitchStore(
+    (state) => state.undo !== null && state.revert !== null,
+  );
+  // Con porcentaje (y sin error) el aviso de tono es una tarjeta con barra,
+  // como «Preparando audio…»; sin él sigue siendo la línea de estado.
+  const pitchCard =
+    pitchPrepareUiState.active &&
+    !pitchPrepareUiState.error &&
+    pitchPrepareUiState.percent !== undefined;
+  const pitchPercent = Math.max(0, Math.min(100, pitchPrepareUiState.percent ?? 0));
 
   return (
     <>
@@ -62,10 +73,46 @@ export const PreparationIndicators = memo(function PreparationIndicators({
         </div>
       ) : null}
 
-      {pitchPrepareUiState.active || status !== "" ? (
+      {pitchCard ? (
+        <div
+          className={`lt-source-prep-indicator lt-pitch-prep-indicator${
+            audioPreparationUiState.active ? " is-stacked" : ""
+          }`}
+          aria-live="polite"
+        >
+          <div className="lt-source-prep-line">
+            <span className="lt-source-prep-label">
+              {t("transport.status.preparingTransposedAudio")}
+            </span>
+            <span className="lt-source-prep-detail">{Math.round(pitchPercent)}%</span>
+          </div>
+          <div
+            className="lt-source-prep-bar"
+            role="progressbar"
+            aria-label={t("transport.status.preparingTransposedAudio")}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(pitchPercent)}
+          >
+            <span style={{ width: `${pitchPercent}%` }} />
+          </div>
+          {pitchPrepareUiState.prerender && canRevertPitch ? (
+            <button
+              type="button"
+              className="lt-pitch-prep-cancel"
+              title={t("transport.status.cancelTransposedAudioHint")}
+              onClick={() => usePendingPitchStore.getState().revert?.()}
+            >
+              {t("transport.status.cancelTransposedAudio")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {(pitchPrepareUiState.active && !pitchCard) || status !== "" ? (
         <div className="lt-status-overlay" aria-live="polite">
           <span>
-            {pitchPrepareUiState.active
+            {pitchPrepareUiState.active && !pitchCard
               ? `${pitchPrepareUiState.message}${
                   pitchPrepareUiState.error
                     ? `: ${pitchPrepareUiState.error}`

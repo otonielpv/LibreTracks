@@ -2020,6 +2020,8 @@ export function TransportPanelContent() {
               ? `${t("transport.status.preparingTransposedAudio")} ${Math.round(pitch.pitchPrepareProgress)}%`
               : t("transport.status.preparingTransposedAudio"),
           startedAt: Date.now(),
+          percent: Math.round(pitch.pitchPrepareProgress),
+          prerender: pitch.lastPitchPrepareReason === "prerender",
         });
         return;
       }
@@ -4936,6 +4938,7 @@ export function TransportPanelContent() {
     selectedRegion,
     applyTranspose: handleSelectedRegionTransposeChange,
     applyTempo: handleSelectedRegionTempoChange,
+    bpmByRegion,
   });
 
   // Ruler/lane drag commits + cue editing. `song` and editAutomationCue (which

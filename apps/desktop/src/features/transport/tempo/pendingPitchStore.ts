@@ -11,11 +11,25 @@ import { create } from "zustand";
  * un solo modelo. `apply` lo registra usePendingPitchGate con los handlers de
  * verdad.
  */
+/** Tono y tempo que tenía la región antes del último «Aplicar». */
+export type AppliedPitchUndo = {
+  regionId: string;
+  transpose: number | null;
+  bpm: number | null;
+};
+
 export type PendingPitchState = {
   regionId: string | null;
   transpose: number | null;
   bpm: number | null;
   apply: (() => void) | null;
+  /**
+   * Lo que «Cancelar» del aviso de preparación restaura. Se borra al
+   * terminar la preparación o al cambiar de canción.
+   */
+  undo: AppliedPitchUndo | null;
+  /** Vuelve a `undo` (registrado por usePendingPitchGate). */
+  revert: (() => void) | null;
   setTranspose: (regionId: string, transpose: number | null) => void;
   setBpm: (regionId: string, bpm: number | null) => void;
   clear: () => void;
@@ -26,6 +40,8 @@ const EMPTY = { regionId: null, transpose: null, bpm: null } as const;
 export const usePendingPitchStore = create<PendingPitchState>((set, get) => ({
   ...EMPTY,
   apply: null,
+  undo: null,
+  revert: null,
   setTranspose: (regionId, transpose) => {
     const current = get();
     const bpm = current.regionId === regionId ? current.bpm : null;
@@ -60,5 +76,5 @@ export function usePendingRegionPitch(regionId: string | null | undefined) {
 
 /** Para el `beforeEach` de los tests: un store sobrevive al desmontaje. */
 export function resetPendingPitchStore() {
-  usePendingPitchStore.setState({ ...EMPTY, apply: null });
+  usePendingPitchStore.setState({ ...EMPTY, apply: null, undo: null, revert: null });
 }

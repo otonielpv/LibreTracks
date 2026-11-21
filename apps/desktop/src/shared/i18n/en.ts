@@ -1538,6 +1538,8 @@ const en = {
       applyingPitchChange: "Applying pitch change...",
       preparingTransposedAudio: "Preparing transposed audio...",
       transposedAudioPrepareFailed: "Could not prepare transposed audio",
+      cancelTransposedAudio: "Cancel",
+      cancelTransposedAudioHint: "Go back to the previous key and tempo",
       unpackingPackage: "Unpacking package...",
       tracksReady: "{{ready}}/{{total}} tracks ready",
       sourcesFailed: "{{count}} track(s) failed to load",

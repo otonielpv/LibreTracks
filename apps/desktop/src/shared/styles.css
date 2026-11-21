@@ -7684,6 +7684,32 @@ body.lt-daw-song-reordering .lt-region-hotspot .lt-region-hotspot-name {
   color: rgb(255 180 120 / 0.92);
 }
 
+/* Audio transpuesto: misma tarjeta, encima de «Preparando audio…» si coinciden.
+ * Admite clics por el botón Cancelar. */
+.lt-pitch-prep-indicator {
+  pointer-events: auto;
+}
+
+.lt-pitch-prep-indicator.is-stacked {
+  bottom: 7rem;
+}
+
+.lt-pitch-prep-cancel {
+  align-self: flex-end;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.06);
+  color: inherit;
+  font: 600 0.72rem/1.2 "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.lt-pitch-prep-cancel:hover {
+  border-color: rgb(255 120 100 / 0.6);
+  background: rgb(255 120 100 / 0.14);
+}
+
 .lt-missing-files-indicator {
   position: absolute;
   right: 1rem;

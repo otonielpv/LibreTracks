@@ -23,6 +23,10 @@ export type PitchPrepareUiState = {
   message: string;
   error?: string;
   startedAt?: number;
+  /** 0-100 mientras se prepara; sin él no se pinta la barra. */
+  percent?: number;
+  /** Lo prepara el «Cambio de tono preparado» (cancelable desde el aviso). */
+  prerender?: boolean;
 };
 
 export const PITCH_PREPARE_INITIAL: PitchPrepareUiState = {
@@ -79,7 +83,9 @@ export function samePitchPrepareUiState(
   return (
     a.active === b.active &&
     a.message === b.message &&
-    (a.error ?? "") === (b.error ?? "")
+    (a.error ?? "") === (b.error ?? "") &&
+    a.percent === b.percent &&
+    (a.prerender ?? false) === (b.prerender ?? false)
   );
 }
 

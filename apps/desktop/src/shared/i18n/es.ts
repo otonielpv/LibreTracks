@@ -1556,6 +1556,8 @@ const es = {
       applyingPitchChange: "Aplicando cambio de tono...",
       preparingTransposedAudio: "Preparando audio transpuesto...",
       transposedAudioPrepareFailed: "No se pudo preparar el audio transpuesto",
+      cancelTransposedAudio: "Cancelar",
+      cancelTransposedAudioHint: "Volver al tono y tempo de antes",
       unpackingPackage: "Descomprimiendo paquete...",
       tracksReady: "{{ready}}/{{total}} pistas listas",
       sourcesFailed: "{{count}} pista(s) no se pudieron cargar",
