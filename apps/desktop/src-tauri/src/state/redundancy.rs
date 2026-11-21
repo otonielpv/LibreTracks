@@ -317,6 +317,43 @@ impl DesktopSession {
         )
     }
 
+    /// «Fade in y reproducir». Goes out as a plain `Play`: a backup starts at
+    /// full level, but at the same position, and an older backup still
+    /// understands it. Forwarded as `FadeOutStop`, which the main toggles.
+    pub fn fade_in_and_play(
+        &mut self,
+        duration_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let was_playing = self.engine.playback_state() == libretracks_audio::PlaybackState::Playing;
+        self.published(
+            || LinkCommand::FadeOutStop,
+            |session| session.apply_fade_in_and_play(duration_seconds, audio),
+            move |_, snapshot| {
+                (!was_playing).then(|| TransportIntent::Play {
+                    from_seconds: snapshot.position_seconds,
+                })
+            },
+        )
+    }
+
+    /// The fade button (UI, MIDI, shortcut, remote, link): fade out and stop
+    /// while playing, fade in and play from the cursor otherwise. The
+    /// redundancy follower calls `fade_out_and_stop` directly instead, so a
+    /// backup that is not playing never turns a main's fade out into a fade in.
+    pub fn toggle_fade(
+        &mut self,
+        duration_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        let playing = self.engine.playback_state() == libretracks_audio::PlaybackState::Playing;
+        if playing || self.fade_stop.is_some() {
+            self.fade_out_and_stop(duration_seconds, audio)
+        } else {
+            self.fade_in_and_play(duration_seconds, audio)
+        }
+    }
+
     /// `position_seconds` in view time, as the UI passes it; the backup calls
     /// this same method with the same value.
     pub fn seek(

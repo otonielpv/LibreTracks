@@ -1114,6 +1114,44 @@ TEST_CASE("master fade ramps output gain in the audio callback") {
     CHECK(rms(right_head) > rms(right_tail));
 }
 
+// «Fade in y reproducir»: the backend mutes and then asks for a ramp up from
+// silence. Only the latest request per block is applied, so a separate "go to
+// 0" request sent right before the ramp is coalesced away and the song would
+// start at full level. `from_gain` makes the ramp start at 0 on its own.
+TEST_CASE("master fade with from_gain ramps up from silence even when coalesced") {
+    SourceManager sources;
+    add_source(sources, "source", 0.5f, 48000 * 4);
+    auto session = std::make_shared<Session>(one_track_session(0, 48000 * 4));
+
+    TransportClock clock(test::kFixtureSampleRate);
+    JumpScheduler scheduler;
+    Mixer mixer(session, &sources, &clock, &scheduler);
+
+    clock.play();
+    // Gain sits at 1. Both requests land before the next block.
+    mixer.start_master_fade(0.0f, 0.0);
+    mixer.start_master_fade(1.0f, static_cast<double>(kBlock) / clock.sample_rate(), 0.0f);
+
+    std::vector<float> left(kBlock, 0.0f), right(kBlock, 0.0f);
+    float* out[2] = {left.data(), right.data()};
+    mixer.render(out, 2, kBlock, clock.sample_rate());
+
+    const std::vector<float> left_head(left.begin(), left.begin() + kBlock / 8);
+    const std::vector<float> left_tail(left.end() - kBlock / 4, left.end());
+    CHECK(rms(left_head) < 0.25f * rms(left_tail));
+    CHECK(std::abs(left.front()) < 1.0e-3f);
+
+    // Without from_gain the same pair ramps from the current gain (1): flat.
+    Mixer plain(session, &sources, &clock, &scheduler);
+    plain.start_master_fade(0.0f, 0.0);
+    plain.start_master_fade(1.0f, static_cast<double>(kBlock) / clock.sample_rate());
+    std::fill(left.begin(), left.end(), 0.0f);
+    std::fill(right.begin(), right.end(), 0.0f);
+    plain.render(out, 2, kBlock, clock.sample_rate());
+    const std::vector<float> plain_head(left.begin(), left.begin() + kBlock / 8);
+    CHECK(rms(plain_head) > 0.1f);
+}
+
 // Repro: an automation cue that jumps to another song with a 2 s fade faded
 // EVERYTHING out — the metronome, the voice guide and the ambient pad went
 // down with the song. Those are cues for the player, not part of the song: the

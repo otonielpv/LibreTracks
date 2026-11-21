@@ -487,6 +487,9 @@ pub struct DesktopSession {
     pub(super) mix_revision: u64,
     /// «Fade out y parar» in progress (see `fade_stop`).
     pub(super) fade_stop: Option<fade_stop::FadeStop>,
+    /// «Fade in y reproducir» left the tracks ramping up from silence: every
+    /// way out of playback puts the gain back at 1 (see `fade_stop`).
+    pub(super) fade_in: bool,
     /// Lo que organizó la plantilla en el último drop de stems, para el
     /// toast. El comando lo recoge (`take`) y lo emite como evento.
     pub(crate) last_template_drop: Option<song_templates::TemplateDropSummary>,
@@ -641,6 +644,7 @@ impl Default for DesktopSession {
             project_revision: 0,
             mix_revision: 0,
             fade_stop: None,
+            fade_in: false,
             last_template_drop: None,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),

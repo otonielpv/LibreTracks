@@ -103,6 +103,11 @@ pub enum EngineCommand {
     StartMasterFade {
         target_gain: f32,
         duration_seconds: f64,
+        /// Where the ramp starts; `None` = the current gain. Fade in from
+        /// silence needs it: the mixer applies only the latest request per
+        /// block, so a separate "go to 0" request can be coalesced away.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from_gain: Option<f32>,
     },
 
     /// Redundancy pilot tone (step 08): a sine on one physical output,

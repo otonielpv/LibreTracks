@@ -5123,6 +5123,45 @@ fn fade_out_and_stop_fades_then_stops() {
     assert!(!paused.fading_to_stop);
 }
 
+/// «Fade in y reproducir»: the same button with the transport stopped or
+/// paused starts playback with the tracks ramping up. A press while it ramps
+/// fades out; pause or stop while ramping clear it so the next Play is at
+/// full level.
+#[test]
+fn toggle_fade_fades_in_when_stopped_and_out_when_playing() {
+    let mut session = session_with_song_dir("fade-in-demo", demo_song());
+    let audio = crate::audio::engine::AudioController::default();
+
+    // Stopped: the press plays, fading in.
+    let started = session.toggle_fade(3.0, &audio).expect("fade in should start");
+    assert_eq!(started.playback_state, "playing");
+    assert!(!started.fading_to_stop);
+    assert!(session.is_fading_in());
+
+    // Pressed again while ramping up: fade out from there.
+    let fading = session.toggle_fade(3.0, &audio).expect("fade out should start");
+    assert!(fading.fading_to_stop);
+    assert!(!session.is_fading_in(), "the fade out owns the gain now");
+
+    // Third press: stop at once, as before.
+    let stopped = session.toggle_fade(3.0, &audio).expect("stop");
+    assert_eq!(stopped.playback_state, "stopped");
+
+    // Paused: fades in from the cursor; pausing mid-ramp clears it.
+    session.toggle_fade(3.0, &audio).expect("fade in");
+    session.pause(&audio).expect("pause");
+    assert!(!session.is_fading_in());
+    let resumed = session.toggle_fade(3.0, &audio).expect("fade in after pause");
+    assert_eq!(resumed.playback_state, "playing");
+    assert!(session.is_fading_in());
+    session.stop(&audio).expect("stop");
+    assert!(!session.is_fading_in());
+
+    // The redundancy follower's own entry point never fades in.
+    let idle = session.fade_out_and_stop(3.0, &audio).expect("idle");
+    assert_eq!(idle.playback_state, "stopped");
+}
+
 /// Commit path (pointer-up): must bump revision and send exactly one realtime command.
 #[test]
 fn commit_track_mix_bumps_revision_and_sends_one_realtime_command() {

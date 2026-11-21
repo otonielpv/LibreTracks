@@ -579,7 +579,7 @@ fn apply(app: &AppHandle, incoming: &IncomingCommand) -> Result<(), CommandRejec
                 .current()
                 .map(|settings| settings.fade_out_stop_seconds)
                 .unwrap_or(crate::infra::settings::DEFAULT_FADE_OUT_STOP_SECONDS);
-            session.fade_out_and_stop(seconds, audio).map_err(invalid)?
+            session.toggle_fade(seconds, audio).map_err(invalid)?
         }
         LinkCommand::Seek { position_seconds } => {
             session.seek(*position_seconds, audio).map_err(invalid)?

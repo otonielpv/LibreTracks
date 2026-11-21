@@ -66,6 +66,7 @@ import { PanelTitle, WidgetInstanceContext, useCollapsedWidgets } from "./collap
 import {
   BlackScreenIcon,
   FadeStopIcon,
+  FadeInIcon,
   MetronomeIcon,
   PauseIcon,
   PlayIcon,
@@ -1818,13 +1819,16 @@ function StopPill() {
 }
 
 /** «Fade out y parar»: the desktop fades the song out and stops; pressing it
- * again during the fade stops at once. Lit while the fade runs. */
+ * again during the fade stops at once. Lit while the fade runs. Stopped or
+ * paused, the same command is «Fade in y reproducir» (the desktop picks). */
 function FadeStopPill() {
   const fading = useRemoteSyncStore((state) => state.snapshot?.fadingToStop === true);
+  const playing = useRemoteSyncStore((state) => state.snapshot?.playbackState === "playing");
+  const fadesIn = !playing && !fading;
   return (
     <TransportButton
-      icon={<FadeStopIcon />}
-      label={STRINGS.fadeStop}
+      icon={fadesIn ? <FadeInIcon /> : <FadeStopIcon />}
+      label={fadesIn ? STRINGS.fadeIn : STRINGS.fadeStop}
       tone="toggle"
       toggle
       active={fading}

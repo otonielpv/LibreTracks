@@ -8,14 +8,20 @@ type FadeStopButtonProps = {
   /** MIDI-learn mode: a click picks this action as the learn target instead. */
   learnModeActive?: boolean;
   onMidiLearnTarget?: (controlKey: string) => void;
+  /** No song loaded: nothing to fade in. */
+  isProjectEmpty?: boolean;
   className?: string;
 };
 
 /**
  * «Fade out y parar»: cut the playing song with a fade instead of a hard stop.
- * Lit while the fade runs; pressing it again then stops at once. The backend
- * owns the timing (it reads the duration from settings), so this only fires
- * the command — the next transport poll brings the new state in.
+ * Lit while the fade runs; pressing it again then stops at once.
+ *
+ * Stopped or paused it is «Fade in y reproducir»: plays from the cursor with
+ * the tracks rising over the same time (going back to a chorus without it all
+ * coming in at once). The backend owns the timing and picks the direction from
+ * its own state, so this only fires the command; the next transport poll
+ * brings the new state in.
  *
  * Self-contained on purpose: it reads the store and calls the API itself, so
  * the topbar and the live view can drop it in without new props through the
@@ -24,6 +30,7 @@ type FadeStopButtonProps = {
 export function FadeStopButton({
   learnModeActive = false,
   onMidiLearnTarget,
+  isProjectEmpty = false,
   className = "",
 }: FadeStopButtonProps) {
   const { t } = useTranslation();
@@ -34,7 +41,12 @@ export function FadeStopButton({
     (state) => state.playback?.fadingToStop === true,
   );
 
-  const label = fading ? t("timelineTopbar.fadeOutStopActive") : t("timelineTopbar.fadeOutStop");
+  const fadesIn = !isPlaying && !fading;
+  const label = fading
+    ? t("timelineTopbar.fadeOutStopActive")
+    : fadesIn
+      ? t("timelineTopbar.fadeInPlay")
+      : t("timelineTopbar.fadeOutStop");
 
   return (
     <MidiMappable target="action:fade_out_stop">
@@ -44,7 +56,7 @@ export function FadeStopButton({
       aria-label={label}
       title={label}
       aria-pressed={fading}
-      disabled={!isPlaying && !fading && !learnModeActive}
+      disabled={fadesIn && isProjectEmpty && !learnModeActive}
       onClick={() => {
         if (learnModeActive) {
           onMidiLearnTarget?.("action:fade_out_stop");
@@ -54,7 +66,7 @@ export function FadeStopButton({
       }}
     >
       <span className="material-symbols-outlined" aria-hidden="true">
-        trending_down
+        {fadesIn ? "trending_up" : "trending_down"}
       </span>
     </button>
     </MidiMappable>

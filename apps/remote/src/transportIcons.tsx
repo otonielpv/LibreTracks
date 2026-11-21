@@ -44,6 +44,16 @@ export const FadeStopIcon = ({ className }: IconProps) =>
     className,
   );
 
+/** A volume ramp up into play: «Fade in y reproducir». */
+export const FadeInIcon = ({ className }: IconProps) =>
+  svg(
+    <>
+      <path d="M2.5 17.5 14 6.5v11z" opacity="0.55" />
+      <path d="M16 6.5v11l6.5-5.5z" />
+    </>,
+    className,
+  );
+
 export const MetronomeIcon = ({ className }: IconProps) =>
   svg(
     <path d="M10 2.5h4l4.6 18.5H5.4zm.9 2L8.8 13h6.4L13.1 4.5zM8.3 15l-.8 4h9l-.8-4zm4.4-1.6 5.6-7.6 1.4 1-5.4 7.3z" />,

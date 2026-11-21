@@ -12,6 +12,12 @@
 //!   suene a volumen normal.
 //! - Segunda pulsación durante el fade: parada inmediata (salida de emergencia).
 //! - Pausa o Stop manual durante el fade: lo cancelan y devuelven la ganancia.
+//!
+//! «Fade in y reproducir» es el mismo botón con el transporte parado o en
+//! pausa: arranca desde el cursor con las pistas en silencio y las sube
+//! durante la misma duración. Pensado para volver a un coro espontáneo sin
+//! que todo entre de golpe. Pulsar otra vez mientras sube hace el fade out
+//! desde donde esté la ganancia.
 
 use std::time::{Duration, Instant};
 
@@ -61,12 +67,47 @@ impl DesktopSession {
         }
 
         let seconds = sanitize_fade_stop_seconds(duration_seconds);
+        // From wherever a fade in left the gain; fade_stop now owns the reset.
         audio.start_master_fade(0.0, seconds)?;
+        self.fade_in = false;
         self.fade_stop = Some(FadeStop {
             started_at: Instant::now(),
             duration: Duration::from_secs_f64(seconds),
         });
         Ok(self.snapshot())
+    }
+
+    /// «Fade in y reproducir». Does nothing while playing.
+    /// Applies the change without telling redundancy; the public wrapper in
+    /// `state/redundancy.rs` calls this and emits the intent.
+    pub(super) fn apply_fade_in_and_play(
+        &mut self,
+        duration_seconds: f64,
+        audio: &AudioController,
+    ) -> Result<TransportSnapshot, DesktopError> {
+        if self.engine.playback_state() == PlaybackState::Playing {
+            return Ok(self.snapshot());
+        }
+        let seconds = sanitize_fade_stop_seconds(duration_seconds);
+        // Silent before Play, so the first block never sounds at full level.
+        audio.start_master_fade(0.0, 0.0)?;
+        let snapshot = match self.apply_play(audio) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                audio.start_master_fade(1.0, 0.0)?;
+                return Err(error);
+            }
+        };
+        // One request carrying its start: the mixer keeps only the latest
+        // request per block, so the mute above may be coalesced into this.
+        audio.start_master_fade_from(Some(0.0), 1.0, seconds)?;
+        self.fade_in = true;
+        Ok(snapshot)
+    }
+
+    #[cfg(test)]
+    pub(super) fn is_fading_in(&self) -> bool {
+        self.fade_in
     }
 
     /// Called from the transport sync tick: stop once the fade has run out.
@@ -85,10 +126,11 @@ impl DesktopSession {
         Ok(true)
     }
 
-    /// Drop a running fade-to-stop and give the tracks their level back.
+    /// Drop a running fade (out or in) and give the tracks their level back.
     /// Every way out of playback calls this (stop, pause, play).
     pub(super) fn cancel_fade_stop(&mut self, audio: &AudioController) -> Result<(), DesktopError> {
-        if self.fade_stop.take().is_some() {
+        let was_fading_in = std::mem::take(&mut self.fade_in);
+        if self.fade_stop.take().is_some() || was_fading_in {
             audio.start_master_fade(1.0, 0.0)?;
         }
         Ok(())

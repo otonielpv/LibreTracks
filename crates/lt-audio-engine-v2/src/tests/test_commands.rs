@@ -485,16 +485,35 @@ fn start_master_fade_round_trip() {
     let cmd = EngineCommand::StartMasterFade {
         target_gain: 0.0,
         duration_seconds: 0.35,
+        from_gain: None,
     };
     let json = serde_json::to_string(&cmd).unwrap();
     assert!(json.contains("\"StartMasterFade\""));
+    // Left out when unset: an older engine reads the same JSON as before.
+    assert!(!json.contains("from_gain"));
     let rt = round_trip(&cmd);
     assert!(matches!(
         rt,
         EngineCommand::StartMasterFade {
             target_gain,
             duration_seconds,
+            from_gain: None,
         } if (target_gain - 0.0).abs() < 1e-6 && (duration_seconds - 0.35).abs() < 1e-9
+    ));
+}
+
+#[test]
+fn start_master_fade_from_gain_round_trip() {
+    let cmd = EngineCommand::StartMasterFade {
+        target_gain: 1.0,
+        duration_seconds: 2.0,
+        from_gain: Some(0.0),
+    };
+    let json = serde_json::to_string(&cmd).unwrap();
+    assert!(json.contains("\"from_gain\":0.0"));
+    assert!(matches!(
+        round_trip(&cmd),
+        EngineCommand::StartMasterFade { from_gain: Some(gain), .. } if gain.abs() < 1e-6
     ));
 }
 

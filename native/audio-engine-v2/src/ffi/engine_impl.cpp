@@ -2268,7 +2268,7 @@ Result<void> EngineImpl::dispatch_command(const EngineCommand& cmd) {
                     static_cast<double>(c.target_gain),
                     c.duration_seconds);
             }
-            if (mixer_) mixer_->start_master_fade(c.target_gain, c.duration_seconds);
+            if (mixer_) mixer_->start_master_fade(c.target_gain, c.duration_seconds, c.from_gain);
             return Result<void>::ok();
         }
         else if constexpr (std::is_same_v<T, CmdSetTrackAudioRoute>) {

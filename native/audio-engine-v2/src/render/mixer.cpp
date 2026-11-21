@@ -2154,7 +2154,10 @@ void Mixer::set_track_solo(const Id& track_id, bool solo) {
         control->solo.store(solo, std::memory_order_relaxed);
 }
 
-void Mixer::start_master_fade(float target_gain, double duration_seconds) noexcept {
+void Mixer::start_master_fade(float target_gain, double duration_seconds,
+                              float from_gain) noexcept {
+    master_fade_from_gain_.store(from_gain < 0.0f ? -1.0f : std::min(from_gain, 1.0f),
+                                 std::memory_order_relaxed);
     master_fade_target_gain_.store(std::clamp(target_gain, 0.0f, 1.0f),
                                    std::memory_order_relaxed);
     master_fade_duration_seconds_.store(std::max(0.0, duration_seconds),
@@ -2497,6 +2500,9 @@ void Mixer::begin_master_fade_block() noexcept {
     const auto seq = master_fade_request_seq_.load(std::memory_order_acquire);
     if (seq != master_fade_applied_seq_) {
         master_fade_applied_seq_ = seq;
+        const float from_gain = master_fade_from_gain_.load(std::memory_order_relaxed);
+        if (from_gain >= 0.0f)
+            master_gain_current_ = from_gain;
         master_gain_start_ = master_gain_current_;
         master_gain_target_ = master_fade_target_gain_.load(std::memory_order_relaxed);
         const double duration = master_fade_duration_seconds_.load(std::memory_order_relaxed);

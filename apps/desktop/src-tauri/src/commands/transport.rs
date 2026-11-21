@@ -86,8 +86,19 @@ pub fn stop_transport(
     Ok(snapshot)
 }
 
-/// «Fade out y parar»: fade the playing song out over the configured time and
-/// stop. A second call during the fade stops at once. See `state::fade_stop`.
+/// Lifecycle event for a fade-button press: "play" when a fade in started.
+pub(crate) fn fade_toggle_lifecycle_kind(snapshot: &TransportSnapshot) -> &'static str {
+    if snapshot.playback_state == "playing" && !snapshot.fading_to_stop {
+        "play"
+    } else {
+        "sync"
+    }
+}
+
+/// «Fade out y parar» / «Fade in y reproducir»: while playing, fade the song
+/// out over the configured time and stop (a second call during the fade stops
+/// at once); stopped or paused, play from the cursor fading the tracks in.
+/// See `state::fade_stop`.
 #[tauri::command(async)]
 pub fn fade_out_and_stop(
     app: AppHandle,
@@ -104,9 +115,9 @@ pub fn fade_out_and_stop(
         .map_err(|_| DesktopError::StatePoisoned.to_string())?;
 
     let snapshot = session
-        .fade_out_and_stop(seconds, &state.audio)
+        .toggle_fade(seconds, &state.audio)
         .map_err(|error| error.to_string())?;
-    emit_transport_lifecycle_event(&app, "sync", &snapshot);
+    emit_transport_lifecycle_event(&app, fade_toggle_lifecycle_kind(&snapshot), &snapshot);
     Ok(snapshot)
 }
 

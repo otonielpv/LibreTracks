@@ -248,7 +248,7 @@ const en = {
     action: {
       playPause: "Play / Pause",
       stop: "Stop",
-      fadeOutStop: "Fade out and stop",
+      fadeOutStop: "Fade out and stop / fade in and play",
       gotoStart: "Go to start",
       splitClip: "Split clip at cursor",
       splitSong: "Split song at cursor",
@@ -709,7 +709,7 @@ const en = {
         "The library shows only the audio imported into the session, with its own folders, instead of the folders of your disk.",
       fadeOutStopSeconds: "“Fade out and stop” length (s)",
       fadeOutStopSecondsHint:
-        "How long the song takes to fade when you press “Fade out and stop”. Pressing it again during the fade stops at once.",
+        "How long the song takes to fade when you press “Fade out and stop”. Pressing it again during the fade stops at once. With playback stopped or paused, the same button plays from the cursor, bringing the volume up over this time.",
       pauseAtSongEndHint:
         "Playback stops when a song ends instead of rolling straight into the next one. Press Play to start the next song. A song jump you queued still happens.",
       songTrackLayoutHint_shared:
@@ -2565,6 +2565,7 @@ const en = {
     stop: "Stop",
     fadeOutStop: "Fade out and stop",
     fadeOutStopActive: "Fading out: press again to stop now",
+    fadeInPlay: "Fade in and play",
     undo: "Undo",
     redo: "Redo",
     play: "Play",

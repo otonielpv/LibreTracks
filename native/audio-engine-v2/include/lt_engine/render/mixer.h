@@ -108,7 +108,11 @@ public:
     // entonces no se copia nada). La toma la lee cualquier hilo no de audio.
     void set_analyzer_track(const Id& track_id) noexcept;
     const AnalyzerTap& analyzer_tap() const noexcept { return analyzer_tap_; }
-    void start_master_fade(float target_gain, double duration_seconds) noexcept;
+    // from_gain < 0: ramp from the current gain. >= 0: start the ramp there
+    // (only the latest request per block is applied, so "jump to 0, then ramp
+    // up" has to travel as one request).
+    void start_master_fade(float target_gain, double duration_seconds,
+                           float from_gain = -1.0f) noexcept;
     // Pause the transport by itself on the frame where a song (region) ends.
     // Command thread; read by the audio thread at the top of each block.
     void set_pause_at_song_end(bool enabled) noexcept;
@@ -592,6 +596,7 @@ private:
     std::atomic<std::uint64_t> master_fade_request_seq_{0};
     std::atomic<float> master_fade_target_gain_{1.0f};
     std::atomic<double> master_fade_duration_seconds_{0.0};
+    std::atomic<float> master_fade_from_gain_{-1.0f};
     std::uint64_t master_fade_applied_seq_ = 0;
     float master_gain_current_ = 1.0f;
     float master_gain_start_ = 1.0f;

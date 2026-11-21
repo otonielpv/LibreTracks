@@ -221,7 +221,7 @@ async fn run_remote_command_bridge(
                     .current()
                     .map(|settings| settings.fade_out_stop_seconds)
                     .unwrap_or(crate::infra::settings::DEFAULT_FADE_OUT_STOP_SECONDS);
-                session.fade_out_and_stop(seconds, &state.audio)
+                session.toggle_fade(seconds, &state.audio)
             }
             RemoteCommand::Seek { position_seconds } => {
                 session.seek(*position_seconds, &state.audio)
@@ -449,7 +449,11 @@ async fn run_remote_command_bridge(
             RemoteCommand::Play => emit_transport_lifecycle_event(&app, "play", &snapshot),
             RemoteCommand::Pause => emit_transport_lifecycle_event(&app, "pause", &snapshot),
             RemoteCommand::Stop => emit_transport_lifecycle_event(&app, "stop", &snapshot),
-            RemoteCommand::FadeOutStop => emit_transport_lifecycle_event(&app, "sync", &snapshot),
+            RemoteCommand::FadeOutStop => emit_transport_lifecycle_event(
+                &app,
+                crate::commands::transport::fade_toggle_lifecycle_kind(&snapshot),
+                &snapshot,
+            ),
             RemoteCommand::Seek { .. } => emit_transport_lifecycle_event(&app, "seek", &snapshot),
             RemoteCommand::ToggleVamp { .. } => {
                 emit_transport_lifecycle_event(&app, "vamp", &snapshot)

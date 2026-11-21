@@ -88,7 +88,9 @@ struct CmdSetTrackMute              { Id track_id; bool mute; };
 struct CmdSetTrackSolo              { Id track_id; bool solo; };
 struct CmdSetTrackAudioRoute        { Id track_id; std::string audio_to; };
 struct CmdSetTrackTransposeEnabled  { Id track_id; bool enabled; };
-struct CmdStartMasterFade           { float target_gain; double duration_seconds; };
+// `from_gain` < 0 ramps from wherever the gain is now; >= 0 jumps there first
+// (fade in from silence: a separate "to 0" request could be coalesced away).
+struct CmdStartMasterFade           { float target_gain; double duration_seconds; float from_gain = -1.0f; };
 // Redundancy pilot tone (step 08). `channel` is the 1-based physical output.
 struct CmdSetPilotTone              { bool enabled; int channel; double frequency_hz; float level_db; };
 

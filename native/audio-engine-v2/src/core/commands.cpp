@@ -221,7 +221,8 @@ EngineCommand command_from_json(const std::string& raw) {
     if (type == "StartMasterFade")
         return CmdStartMasterFade{
             j.at("target_gain").get<float>(),
-            j.at("duration_seconds").get<double>()
+            j.at("duration_seconds").get<double>(),
+            j.value("from_gain", -1.0f)
         };
 
     if (type == "SetMetronomeEnabled")

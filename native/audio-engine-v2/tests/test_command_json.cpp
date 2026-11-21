@@ -414,6 +414,15 @@ TEST_CASE("parse StartMasterFade") {
     CHECK(c.duration_seconds == doctest::Approx(0.35));
 }
 
+TEST_CASE("parse StartMasterFade with from_gain") {
+    auto plain = std::get<CmdStartMasterFade>(
+        command_from_json(R"({"type":"StartMasterFade","target_gain":1.0,"duration_seconds":2.0})"));
+    CHECK(plain.from_gain < 0.0f);
+    auto from = std::get<CmdStartMasterFade>(command_from_json(
+        R"({"type":"StartMasterFade","target_gain":1.0,"duration_seconds":2.0,"from_gain":0.0})"));
+    CHECK(from.from_gain == doctest::Approx(0.0f));
+}
+
 TEST_CASE("parse SetTrackAudioRoute") {
     auto cmd = command_from_json(R"({"type":"SetTrackAudioRoute","track_id":"t1","audio_to":"ext:2-3"})");
     REQUIRE(std::holds_alternative<CmdSetTrackAudioRoute>(cmd));

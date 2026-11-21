@@ -248,7 +248,7 @@ const es = {
     action: {
       playPause: "Reproducir / Pausar",
       stop: "Detener",
-      fadeOutStop: "Fade out y parar",
+      fadeOutStop: "Fade out y parar / fade in y reproducir",
       gotoStart: "Ir al inicio",
       splitClip: "Dividir clip en el cursor",
       splitSong: "Dividir canción en el cursor",
@@ -700,7 +700,7 @@ const es = {
         "La biblioteca muestra solo el audio importado a la sesión, con carpetas propias, en lugar de las carpetas de tu disco.",
       fadeOutStopSeconds: "Duración de «Fade out y parar» (s)",
       fadeOutStopSecondsHint:
-        "Lo que tarda en apagarse la canción al pulsar «Fade out y parar». Pulsarlo otra vez durante el fade para en seco.",
+        "Lo que tarda en apagarse la canción al pulsar «Fade out y parar». Pulsarlo otra vez durante el fade para en seco. Con la reproducción parada o en pausa, el mismo botón arranca desde el cursor subiendo el volumen en este tiempo.",
       pauseAtSongEndHint:
         "La reproducción se detiene cuando termina una canción en lugar de pasar directamente a la siguiente. Pulsa Play para empezar la siguiente. Un salto de canción que hayas programado se sigue haciendo.",
       songTrackLayoutHint_shared:
@@ -2594,6 +2594,7 @@ const es = {
     stop: "Detener",
     fadeOutStop: "Fade out y parar",
     fadeOutStopActive: "Fade out en curso: pulsa otra vez para parar ya",
+    fadeInPlay: "Fade in y reproducir",
     undo: "Deshacer",
     redo: "Rehacer",
     play: "Reproducir",

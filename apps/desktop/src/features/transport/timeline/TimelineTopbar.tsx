@@ -698,6 +698,7 @@ export function TimelineTopbar({
             </MidiMappable>
             <FadeStopButton
               className="lt-fade-stop"
+              isProjectEmpty={isProjectEmpty}
               learnModeActive={learnModeActive}
               onMidiLearnTarget={onMidiLearnTarget}
             />

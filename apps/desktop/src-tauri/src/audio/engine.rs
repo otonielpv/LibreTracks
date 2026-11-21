@@ -2504,15 +2504,28 @@ impl AudioController {
         target_gain: f32,
         duration_seconds: f64,
     ) -> Result<(), DesktopError> {
+        self.start_master_fade_from(None, target_gain, duration_seconds)
+    }
+
+    /// Like `start_master_fade`, but the ramp starts at `from_gain` instead
+    /// of the current gain. The mixer applies only the latest fade request
+    /// per block, so "mute, then ramp up" must travel as one request.
+    pub fn start_master_fade_from(
+        &self,
+        from_gain: Option<f32>,
+        target_gain: f32,
+        duration_seconds: f64,
+    ) -> Result<(), DesktopError> {
         self.with_engine_state("start_master_fade", None, |engine, _state| {
             if jump_debug_logging_enabled() {
                 eprintln!(
-                    "[LT_JUMP_DEBUG][rust-command] start_master_fade target_gain={target_gain:.6} duration_seconds={duration_seconds:.9}"
+                    "[LT_JUMP_DEBUG][rust-command] start_master_fade from_gain={from_gain:?} target_gain={target_gain:.6} duration_seconds={duration_seconds:.9}"
                 );
             }
             engine.send_command(&EngineCommand::StartMasterFade {
                 target_gain: target_gain.clamp(0.0, 1.0),
                 duration_seconds: duration_seconds.max(0.0),
+                from_gain: from_gain.map(|gain| gain.clamp(0.0, 1.0)),
             })?;
             Ok(())
         })

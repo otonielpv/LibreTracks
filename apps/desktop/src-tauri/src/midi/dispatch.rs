@@ -329,9 +329,13 @@ fn dispatch_midi_action(
         }
         "action:fade_out_stop" => {
             let snapshot = session
-                .fade_out_and_stop(settings.fade_out_stop_seconds, &state.audio)
+                .toggle_fade(settings.fade_out_stop_seconds, &state.audio)
                 .map_err(|error| error.to_string())?;
-            emit_transport_lifecycle_event(app, "sync", &snapshot);
+            emit_transport_lifecycle_event(
+                app,
+                crate::commands::transport::fade_toggle_lifecycle_kind(&snapshot),
+                &snapshot,
+            );
             snapshot
         }
         "action:create_song" => {
