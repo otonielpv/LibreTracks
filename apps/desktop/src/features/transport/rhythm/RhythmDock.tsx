@@ -31,10 +31,12 @@ export function useRhythmSettings(): [AppSettings | null, (settings: AppSettings
     let unlisten: (() => void) | null = null;
     void listenToSettingsUpdated((s) => {
       if (alive) setSettings(s);
-    }).then((stop) => {
-      if (alive) unlisten = stop;
-      else stop();
-    });
+    })
+      .then((stop) => {
+        if (alive) unlisten = stop;
+        else stop();
+      })
+      .catch(() => {});
     return () => {
       alive = false;
       unlisten?.();

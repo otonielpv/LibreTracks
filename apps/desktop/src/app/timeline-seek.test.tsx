@@ -46,7 +46,7 @@ describe("App / timeline-seek", () => {
     await act(async () => {
       fireEvent.click(
         screen.getByRole("button", {
-          name: textMatcher(en.timelineTopbar.play),
+          name: en.timelineTopbar.play,
         }),
       );
     });
@@ -79,7 +79,7 @@ describe("App / timeline-seek", () => {
     await act(async () => {
       fireEvent.click(
         screen.getByRole("button", {
-          name: textMatcher(en.timelineTopbar.play),
+          name: en.timelineTopbar.play,
         }),
       );
     });

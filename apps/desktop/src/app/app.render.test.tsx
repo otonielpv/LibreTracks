@@ -49,7 +49,7 @@ describe("App / app.render", () => {
     const { container } = await renderApp();
 
     expect(screen.getByText("LIBRETRACKS")).toBeTruthy();
-    expect(screen.getByRole("button", { name: textMatcher(en.timelineTopbar.play) })).toBeTruthy();
+    expect(screen.getByRole("button", { name: en.timelineTopbar.play })).toBeTruthy();
     expect(screen.getByRole("button", { name: textMatcher(en.timelineTopbar.pause) })).toBeTruthy();
     // Exact name: "Fade out and stop" sits next to it and also contains "stop".
     expect(screen.getByRole("button", { name: en.timelineTopbar.stop })).toBeTruthy();
