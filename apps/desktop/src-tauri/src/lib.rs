@@ -335,6 +335,15 @@ pub fn run() {
             #[cfg(target_os = "ios")]
             if let Some(window) = app.get_webview_window("main") {
                 platform::ios_webview::stretch_under_safe_area(&window);
+                // El plist admite vertical en iPhone para los menús de texto
+                // (plan portrait-text-modals); la app arranca y sigue en
+                // horizontal hasta que uno de ellos lo pida.
+                if let Err(error) = platform::ios_orientation::set_screen_orientation(
+                    &window,
+                    platform::screen_orientation::ScreenOrientation::Landscape,
+                ) {
+                    eprintln!("[libretracks] could not lock landscape: {error}");
+                }
             }
 
             Ok(())
@@ -342,6 +351,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::system::healthcheck,
             commands::system::is_debug_build,
+            commands::system::set_screen_orientation,
             commands::app_close::exit_app,
             commands::app_close::cancel_app_close,
             commands::system::get_telemetry_platform,

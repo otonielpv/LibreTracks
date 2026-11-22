@@ -54,6 +54,7 @@ import { MidiMappable } from "../midi/MidiMappable";
 import { SceneButtons } from "../scenes/SceneButtons";
 import { SceneMenuButton, usePhoneScreen } from "../scenes/SceneMenuButton";
 import { NumberInput } from "../../../shared/NumberInput";
+import { useFreeRotationWhile } from "../mobile/usePortraitWhileOpen";
 
 export type { LiveViewSettings };
 
@@ -249,6 +250,8 @@ function LivePerformanceViewComponent({
     setChartExpanded(false);
   };
   const toggleChartExpanded = useCallback(() => setChartExpanded((current) => !current), []);
+  // Teléfono: con la letra a pantalla completa se puede girar a vertical.
+  useFreeRotationWhile(chartOpen && chartExpanded);
   const markerProgressFillRef = useRef<HTMLSpanElement | null>(null);
   const songProgressFillRef = useRef<HTMLSpanElement | null>(null);
   const lastPlaybackRegionIdRef = useRef<string | null>(null);

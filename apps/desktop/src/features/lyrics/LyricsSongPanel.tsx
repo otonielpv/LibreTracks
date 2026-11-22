@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import type { LyricsOverrideTarget, LyricsStartTarget } from "@libretracks/shared/models";
 
+import { usePortraitWhileOpen } from "../transport/mobile/usePortraitWhileOpen";
 import { useSongStore } from "../transport/songStore";
 import { LeadTimeField } from "../transport/panels/LeadTimeField";
 import { describeLead } from "../transport/panels/leadTime";
@@ -85,7 +86,8 @@ export function LyricsSongPanel({
   onSnapshot?: (snapshot: unknown) => void;
 }) {
   const { t } = useTranslation();
-  const close = useLyricsStore((state) => state.closeSongPanel);
+  // Teléfono: escribir en vertical (plan portrait-text-modals).
+  const close = usePortraitWhileOpen(useLyricsStore((state) => state.closeSongPanel));
   const linksVersion = useLyricsStore((state) => state.linksVersion);
   const software = useLyricsStore((state) => state.configView?.config.software ?? null);
   const globalLead = useLyricsStore((state) => state.configView?.config.lead ?? null);

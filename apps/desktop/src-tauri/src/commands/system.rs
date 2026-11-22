@@ -43,6 +43,24 @@ pub fn is_debug_build() -> bool {
     cfg!(debug_assertions)
 }
 
+/// Gira el teléfono a `"portrait"` o `"landscape"`, o lo deja girar con el
+/// sensor (`"free"`), ver `platform::screen_orientation`. En escritorio no
+/// hace nada.
+#[tauri::command(async)]
+#[allow(unused_variables)]
+pub fn set_screen_orientation(window: tauri::WebviewWindow, mode: String) -> Result<(), String> {
+    let orientation: crate::platform::screen_orientation::ScreenOrientation = mode.parse()?;
+    #[cfg(target_os = "android")]
+    return crate::platform::android_orientation::set_screen_orientation(orientation);
+    #[cfg(target_os = "ios")]
+    return crate::platform::ios_orientation::set_screen_orientation(&window, orientation);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let _ = orientation;
+        Ok(())
+    }
+}
+
 /// Broad, non-identifying build platform used only after analytics opt-in.
 /// Compile-time values avoid unreliable User-Agent architecture detection and
 /// deliberately expose no model, hostname, OS version or hardware details.

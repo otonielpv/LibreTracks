@@ -762,3 +762,101 @@ button.lt-lyrics-btn.lt-lyrics-record .material-symbols-outlined {
   display: block;
   color: #57f1db !important;
 }
+
+/* Teléfono en vertical (plan portrait-text-modals): Letra en proyección,
+   el editor de diapositivas y Vincular canciones se abren en vertical para
+   escribir cómodo. El panel ocupa toda la pantalla, en una columna, y sus
+   rellenos apartan el contenido del notch (arriba en vertical) y de la barra
+   de inicio. */
+@media (orientation: portrait) and (max-width: 500px) {
+  .lt-modal-backdrop.lt-lyrics-backdrop,
+  .lt-mobile .lt-modal-backdrop.lt-lyrics-backdrop {
+    padding: 0;
+  }
+  .lt-settings-modal.lt-lyrics-modal {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    gap: 0.5rem;
+    border: 0;
+    padding: max(0.6rem, var(--lt-safe-area-top)) max(0.75rem, var(--lt-safe-area-right))
+      max(0.5rem, var(--lt-safe-area-bottom)) max(0.75rem, var(--lt-safe-area-left));
+  }
+  .lt-lyrics-modal .lt-settings-modal-header {
+    flex-direction: row;
+    align-items: center;
+  }
+  .lt-lyrics-modal .lt-settings-modal-header > div {
+    min-width: 0;
+  }
+  .lt-lyrics-modal .lt-settings-modal-header h2 {
+    margin: 0;
+    overflow: hidden;
+    font-size: 1.05rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Presentación + «Cambiar…»: el botón baja de línea si no cabe. */
+  .lt-lyrics-modal-body > .lt-lyrics-row {
+    flex-wrap: wrap;
+  }
+  .lt-lyrics-modal-body > .lt-lyrics-row > button.lt-lyrics-btn {
+    margin-left: 0;
+  }
+
+  /* Tablas de marcas y del vinculador: filas apiladas, sin scroll lateral.
+     Las dos primeras celdas (marca/canción y grupo/presentación) a todo el
+     ancho; el resto (diapositivas, botones) en la línea de abajo. */
+  .lt-lyrics-table,
+  .lt-lyrics-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .lt-lyrics-table thead {
+    display: none;
+  }
+  .lt-lyrics-table tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.5rem;
+    padding: 0.6rem 0.7rem;
+    border-bottom: 1px solid rgb(255 255 255 / 0.05);
+  }
+  .lt-lyrics-table tr:last-child {
+    border-bottom: 0;
+  }
+  .lt-lyrics-table td,
+  .lt-lyrics-table td:last-child {
+    display: block;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+  .lt-lyrics-table td:nth-child(-n + 2) {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .lt-lyrics-table select.lt-lyrics-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Editor de diapositivas: una columna a todo el ancho. */
+  .lt-lyrics-section-header {
+    flex-wrap: wrap;
+  }
+  .lt-lyrics-slide-picker {
+    grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  }
+  .lt-lyrics-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lt-lyrics-recorder-row > button.lt-lyrics-tap {
+    min-height: 64px;
+  }
+  .lt-lyrics-modal-footer {
+    padding-bottom: 0;
+  }
+}

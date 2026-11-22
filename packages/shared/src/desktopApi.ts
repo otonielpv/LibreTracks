@@ -273,6 +273,15 @@ export async function exitApp(): Promise<void> {
   return invokeCommand<void>("exit_app");
 }
 
+/**
+ * Gira el teléfono a vertical u horizontal (menús de escribir texto, plan
+ * portrait-text-modals) o lo deja girar con el sensor (`free`, letra y acordes
+ * a pantalla completa). En escritorio el backend no hace nada.
+ */
+export async function setScreenOrientation(mode: "portrait" | "landscape" | "free"): Promise<void> {
+  return invokeCommand<void>("set_screen_orientation", { mode });
+}
+
 /** Abort a close the backend was holding for the UI. */
 export async function cancelAppClose(): Promise<void> {
   return invokeCommand<void>("cancel_app_close");

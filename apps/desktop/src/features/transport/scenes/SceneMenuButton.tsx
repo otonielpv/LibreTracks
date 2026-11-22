@@ -2,12 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { isMobileApp } from "../desktopApi";
+import { isPhoneScreenNow, PHONE_QUERY } from "../mobile/phoneScreen";
 import { PopoverShell } from "../panels/PopoverShell";
 import { useTransportStore } from "../store";
 import { SceneButtons } from "./SceneButtons";
-
-/** The phone screens the Live view already lays out for (LivePerformanceView.css). */
-const PHONE_QUERY = "(max-width: 820px), (max-height: 500px)";
 
 /**
  * A phone in the app: there a row of scene buttons takes a quarter of the
@@ -15,9 +13,7 @@ const PHONE_QUERY = "(max-width: 820px), (max-height: 500px)";
  * Tablets and desktop keep the row.
  */
 export function usePhoneScreen(): boolean {
-  const [phone, setPhone] = useState(
-    () => isMobileApp && typeof window !== "undefined" && window.matchMedia?.(PHONE_QUERY).matches === true,
-  );
+  const [phone, setPhone] = useState(isPhoneScreenNow);
   useEffect(() => {
     if (!isMobileApp || !window.matchMedia) return;
     const query = window.matchMedia(PHONE_QUERY);

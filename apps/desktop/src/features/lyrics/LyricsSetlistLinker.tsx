@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { usePortraitWhileOpen } from "../transport/mobile/usePortraitWhileOpen";
 import { asLyricsError, type LyricsError, type Presentation, type RegionReport } from "./lyricsApi";
 import type { LyricsApi } from "./lyricsHandlers";
 import { LyricsModal } from "./LyricsModal";
@@ -21,7 +22,8 @@ export function LyricsSetlistLinker({
   onSnapshot?: (snapshot: unknown) => void;
 }) {
   const { t } = useTranslation();
-  const close = useLyricsStore((state) => state.closeLinker);
+  // Teléfono: escribir en vertical (plan portrait-text-modals).
+  const close = usePortraitWhileOpen(useLyricsStore((state) => state.closeLinker));
   const linksVersion = useLyricsStore((state) => state.linksVersion);
   const handlers = useLyricsHandlers(api, onSnapshot);
   const [reports, setReports] = useState<RegionReport[] | null>(null);

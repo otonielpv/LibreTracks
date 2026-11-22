@@ -50,12 +50,18 @@ pub mod web_content_guard;
 // `cargo check` de macOS/Linux mira su logica. Ver la cabecera del modulo.
 pub mod windows_firewall;
 
+// El modo del comando `set_screen_orientation`; lo nativo va en
+// `android_orientation` e `ios_orientation`.
+pub mod screen_orientation;
+
 #[cfg(target_os = "ios")]
 pub mod ios_link;
 #[cfg(target_os = "ios")]
 pub mod ios_token_store;
 #[cfg(target_os = "ios")]
 pub mod ios_video;
+#[cfg(target_os = "ios")]
+pub mod ios_orientation;
 #[cfg(target_os = "ios")]
 pub mod ios_webview;
 
@@ -75,6 +81,8 @@ pub mod android_device_name;
 pub mod android_multicast;
 #[cfg(target_os = "android")]
 pub mod android_wifi_latency;
+#[cfg(target_os = "android")]
+pub mod android_orientation;
 #[cfg(target_os = "android")]
 pub mod android_persistable_pick;
 #[cfg(target_os = "android")]

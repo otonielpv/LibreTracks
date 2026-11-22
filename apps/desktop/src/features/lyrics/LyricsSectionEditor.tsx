@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import type { LeadTime, LyricsSlideTiming } from "@libretracks/shared/models";
 
+import { usePortraitWhileOpen } from "../transport/mobile/usePortraitWhileOpen";
 import { describeLead } from "../transport/panels/leadTime";
 import { LeadTimeField } from "../transport/panels/LeadTimeField";
 
@@ -64,6 +65,9 @@ export function LyricsSectionEditor({
   inheritedLead = null,
 }: Props) {
   const { t } = useTranslation();
+  // Teléfono: vertical también si se abre suelto; anidado en Letra en
+  // proyección, el contador del hook evita un giro de vuelta al salir.
+  usePortraitWhileOpen();
   const slides = report.slides ?? [];
   const order = new Map(slides.map((slide, position) => [slide.index, position]));
   const [draft, setDraft] = useState<number[]>(marker.slides);

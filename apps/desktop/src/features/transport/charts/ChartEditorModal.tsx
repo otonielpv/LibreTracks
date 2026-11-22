@@ -9,6 +9,7 @@ import type {
 } from "@libretracks/shared/models";
 
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { usePortraitWhileOpen } from "../mobile/usePortraitWhileOpen";
 import { parseChordPro } from "@libretracks/shared/charts/chordChart";
 import { autoLinkChart, chartLinkFor, remapChartLinks } from "@libretracks/shared/charts/chartSync";
 import {
@@ -67,7 +68,9 @@ export function ChartEditorModal({
   const [links, setLinks] = useState<ChartLink[]>(chart?.links ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useDismissOnBack(onClose);
+  // Teléfono: escribir en vertical (plan portrait-text-modals).
+  const close = usePortraitWhileOpen(onClose);
+  useDismissOnBack(close);
 
   const taken = useMemo(() => takeChartTimes(text), [text]);
   const doc = useMemo(() => parseChordPro(taken.text), [taken.text]);
@@ -173,7 +176,7 @@ export function ChartEditorModal({
   };
 
   return (
-    <div className="lt-modal-backdrop" onClick={saving ? undefined : onClose}>
+    <div className="lt-modal-backdrop" onClick={saving ? undefined : close}>
       <section
         className="lt-settings-modal lt-chart-editor"
         role="dialog"
@@ -284,7 +287,7 @@ export function ChartEditorModal({
               {t("liveChart.remove")}
             </button>
           ) : null}
-          <button type="button" className="lt-secondary-button" disabled={saving} onClick={onClose}>
+          <button type="button" className="lt-secondary-button" disabled={saving} onClick={close}>
             {t("liveChart.cancel")}
           </button>
           <button

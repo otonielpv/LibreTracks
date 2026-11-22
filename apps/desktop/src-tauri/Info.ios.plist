@@ -46,10 +46,15 @@
     <string>_libretracks-link._tcp</string>
     <string>_pro7proremote._tcp</string>
   </array>
+  <!-- Vertical solo para los menús de escribir texto en iPhone (plan
+       portrait-text-modals). La app arranca bloqueada en horizontal desde
+       Rust (platform/ios_orientation.rs) y solo gira cuando uno de esos
+       menús lo pide. Las horizontales van primero: son las de arranque. -->
   <key>UISupportedInterfaceOrientations</key>
   <array>
     <string>UIInterfaceOrientationLandscapeLeft</string>
     <string>UIInterfaceOrientationLandscapeRight</string>
+    <string>UIInterfaceOrientationPortrait</string>
   </array>
   <!-- En iPHONE la lista de arriba basta. En iPAD no: mientras la app admita
        multitarea (Split View / Slide Over), iPadOS EXIGE que soporte las

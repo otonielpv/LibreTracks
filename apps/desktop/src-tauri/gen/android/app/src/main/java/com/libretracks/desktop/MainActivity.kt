@@ -260,6 +260,13 @@ class MainActivity : TauriActivity() {
     }
   }
 
+  // Orientación pedida por el frontend (OrientationBridge: 0 horizontal,
+  // 1 vertical, 2 libre). Lo llama Rust (platform/android_orientation.rs) como
+  // método de instancia para no cargar OrientationBridge desde un hilo nativo.
+  fun setScreenOrientation(mode: Int) {
+    OrientationBridge.set(this, mode)
+  }
+
   // "Guardar como" del sistema con el tipo MIME del fichero.
   //
   // tauri-plugin-dialog crea el documento siempre como "*/*". Con eso el

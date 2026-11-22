@@ -324,6 +324,23 @@
   font: italic 500 0.85em/1.3 Inter, sans-serif;
 }
 
+/* Rhythm lines ("[Ab] / / / | [Fm] / / / |"): one even cell per beat, the
+   chord over the beat it starts on, bar lines between measures. */
+.lt-chart-rhythm-beat {
+  min-width: 1.6em;
+}
+
+.lt-chart-rhythm-beat .lt-chart-lyric {
+  color: #8fa29c;
+}
+
+.lt-chart-rhythm-bar {
+  align-self: flex-end;
+  padding: 0 0.7em 0 0.1em;
+  color: #5d6b67;
+  font: 700 1.05em/1.3 Inter, sans-serif;
+}
+
 /* Melody notes ("DC#-A-DC#//B"): drawn like the row of chords above them,
    one group per beat, a double bar where the sheet ends a phrase. */
 .lt-chart-notes {
@@ -550,5 +567,44 @@
     min-height: 12rem;
     /* No sideways scroll inside the box on a phone: long lines wrap. */
     white-space: pre-wrap;
+  }
+}
+
+/* Teléfono en vertical (plan portrait-text-modals): el editor se abre en
+   vertical para escribir cómodo. Una columna (texto arriba, enlaces de marcas
+   debajo), el cuadro de texto a todo el ancho y los botones partiéndose en
+   líneas si no caben. Las zonas seguras las reserva `.lt-mobile
+   .lt-modal-backdrop`; aquí solo se aprovecha el alto que queda. */
+@media (orientation: portrait) and (max-width: 500px) {
+  .lt-settings-modal.lt-chart-editor {
+    width: 100%;
+    max-height: calc(100dvh - var(--lt-safe-area-top) - var(--lt-safe-area-bottom) - 1rem);
+    gap: 0.6rem;
+    padding: 0.75rem;
+  }
+
+  .lt-chart-editor-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lt-chart-editor-text textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 40dvh;
+    white-space: pre-wrap;
+  }
+
+  /* Marca en su propia línea; desplegable y tiempos debajo. */
+  .lt-chart-editor-links li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 0.25rem;
+  }
+  .lt-chart-editor-links li .lt-chart-editor-marker {
+    grid-column: 1 / -1;
+  }
+
+  .lt-chart-editor-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }

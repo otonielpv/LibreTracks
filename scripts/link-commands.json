@@ -89,6 +89,7 @@
     "set_app_hidden",
     "set_decoding_cache_dir",
     "set_decoding_cache_max_gb",
+    "set_screen_orientation",
     "set_ui_language",
     "speech_model_status",
     "take_audio_idle_wake",
