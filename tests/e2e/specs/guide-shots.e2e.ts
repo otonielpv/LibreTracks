@@ -804,7 +804,7 @@ describe("user guide screenshots", function () {
     // groups (folded) and the standalone tabs.
     const topRows = [
       "#lt-settings-group-general", "#lt-settings-tab-audio", "#lt-settings-group-midi",
-      "#lt-settings-tab-video", "#lt-settings-tab-redundancy", "#lt-settings-tab-shortcuts",
+      "#lt-settings-tab-video", "#lt-settings-tab-lyrics", "#lt-settings-tab-redundancy", "#lt-settings-tab-shortcuts",
       "#lt-settings-tab-diagnostics",
     ];
     await annotatedShot(

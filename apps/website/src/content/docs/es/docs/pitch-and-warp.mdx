@@ -55,6 +55,28 @@ Se cambia en **Configuración › General › Edición**:
 Desactívalo si quieres controlar el warp a mano y usar varispeed al cambiar el
 tono. Cambiar este ajuste no modifica las canciones que ya tienes.
 
+## Cambio de tono preparado
+
+Con warp, cada pista transpuesta se calcula mientras suena, y en una tablet o
+un ordenador modesto muchas pistas a la vez pueden dar cortes. El **cambio de
+tono preparado** lo evita: el audio con el tono o el tempo nuevos se prepara
+antes, en segundo plano, y al reproducir apenas gasta CPU.
+
+Se activa en **Configuración › General › Edición › Cambio de tono preparado
+(equipos lentos)**. Con el ajuste encendido:
+
+1. Elige el tono o el tempo en la barra de herramientas, en la Compacta o en el
+   Setlist. Todavía no cambia nada.
+2. Pulsa **Aplicar**. Una barra muestra cómo va la preparación y puedes
+   **Cancelar**.
+3. Mientras se prepara, la canción sigue sonando como antes; al terminar pasa
+   al tono nuevo sola.
+
+Los atajos de teclado y el MIDI aplican el cambio directamente. El audio
+preparado ocupa disco (alrededor de 1 GB por canción de 5 minutos con 20
+pistas, hasta 8 GB en total; lo más antiguo se borra solo) y se libera con
+**Borrar caché**.
+
 ## Encender el warp a mano
 
 Con el warp automático desactivado, selecciona la canción, abre **Warp y

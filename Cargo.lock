@@ -2614,7 +2614,7 @@ dependencies = [
 
 [[package]]
 name = "libretracks-desktop"
-version = "1.17.2"
+version = "1.18.0"
 dependencies = [
  "base64 0.22.1",
  "flate2",

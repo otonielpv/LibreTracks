@@ -56,6 +56,27 @@ Turn it off if you want to control warp by hand and use varispeed when you
 change the pitch. Changing this setting doesn't modify the songs you already
 have.
 
+## Prepared pitch changes
+
+With warp, every transposed track is worked out while it plays, and on a
+modest tablet or computer many tracks at once can cause dropouts. **Prepared
+pitch changes** avoid that: the audio at the new key or tempo is prepared in
+advance, in the background, and playback barely uses any CPU.
+
+Turn it on in **Settings › General › Editing › Prepared pitch changes (slow
+devices)**. With the setting on:
+
+1. Pick the key or tempo in the toolbar, the Compact view or the Setlist.
+   Nothing changes yet.
+2. Press **Apply**. A bar shows how the preparation is going, and you can
+   **Cancel**.
+3. While it is being prepared the song keeps playing as before; when it is
+   ready it switches to the new key by itself.
+
+Keyboard shortcuts and MIDI apply the change straight away. The prepared audio
+takes disk space (about 1 GB per 5-minute song with 20 tracks, up to 8 GB in
+total; the oldest is deleted on its own) and is freed with **Clear cache**.
+
 ## Turning warp on by hand
 
 With automatic warp turned off, select the song, open **Warp & tempo** in the
