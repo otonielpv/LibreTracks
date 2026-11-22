@@ -21,6 +21,7 @@ import {
 
 import { ChartEditorModal } from "./ChartEditorModal";
 import { usePerformanceHistory } from "./usePerformanceHistory";
+import { parseRhythmLine } from "./rhythmLine";
 import { parseChordPro, spellChart, type ChartLine } from "@libretracks/shared/charts/chordChart";
 import { keyPrefersFlats, parseNoteRun } from "@libretracks/shared/charts/chordNotation";
 import {
@@ -135,6 +136,23 @@ function ChartLineView({
       <pre className={`lt-chart-tab is-${state}`} data-line-key={lineKey}>
         {line.text}
       </pre>
+    );
+  }
+  const rhythm = showChords ? parseRhythmLine(line.segments) : null;
+  if (rhythm) {
+    return (
+      <p className={`lt-chart-line lt-chart-rhythm is-${state}`} data-line-key={lineKey}>
+        {rhythm.map((cell, index) =>
+          cell.kind === "bar" ? (
+            <span key={index} className="lt-chart-rhythm-bar" aria-hidden="true">{cell.mark}</span>
+          ) : (
+            <span key={index} className="lt-chart-segment lt-chart-rhythm-beat">
+              <span className="lt-chart-chord">{cell.chord ?? " "}</span>
+              <span className="lt-chart-lyric">{cell.mark || " "}</span>
+            </span>
+          ),
+        )}
+      </p>
     );
   }
   const hasChords = showChords && line.segments.some((segment) => segment.chord);
