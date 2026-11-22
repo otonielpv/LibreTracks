@@ -58,8 +58,9 @@ describe("RhythmDock in the four views", () => {
     render(<RhythmDock view="daw" layoutClass="short" />);
     act(() => useRhythmStore.getState().setOpen("daw", true));
     await screen.findByTestId("rhythm-panel");
+    // The sheet registers with the back guard in an effect, a tick after it shows.
+    await waitFor(() => expect(useBackDismissStore.getState().stack.length).toBe(2));
     const stack = useBackDismissStore.getState().stack;
-    expect(stack.length).toBe(2);
     // El guardián de atrás cierra lo último abierto: la hoja.
     act(() => stack[stack.length - 1].close());
     expect(screen.queryByTestId("rhythm-panel")).toBeNull();
