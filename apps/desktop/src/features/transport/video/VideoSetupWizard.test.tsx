@@ -119,7 +119,7 @@ describe("VideoSetupWizard", () => {
     openWizard(1);
     render(<VideoSetupWizard />);
     expect(await screen.findByText("transport.video.wizard.display.oneMonitor")).toBeTruthy();
-    fireEvent.click(screen.getByText("transport.video.wizard.display.useWindow"));
+    fireEvent.click(await screen.findByText("transport.video.wizard.display.useWindow"));
 
     // The projector is plugged in: the next poll lists it.
     api.listVideoDisplays.mockResolvedValue([DISPLAY1, DISPLAY2]);
