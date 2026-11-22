@@ -1,6 +1,6 @@
 import type { ChartSegment } from "@libretracks/shared/charts/chordChart";
 
-/** One cell of a rhythm line: a beat (with the chord that starts on it) or a bar line. */
+/** One cell of a rhythm line: a chord, a slash beat or a bar line. */
 export type RhythmCell =
   | { kind: "beat"; chord: string | null; mark: string }
   | { kind: "bar"; mark: string };
@@ -20,23 +20,14 @@ export function parseRhythmLine(segments: readonly ChartSegment[]): RhythmCell[]
   if (!segments.every((segment) => RHYTHM_TEXT.test(segment.text))) return null;
   if (!segments.some((segment) => segment.text.includes("/"))) return null;
 
+  // Chart notation: the chord is the first beat and each slash one more
+  // ("Fm / / /" is four beats), so the chord never takes a slash's place.
   const cells: RhythmCell[] = [];
-  let pending: string | null = null;
   for (const segment of segments) {
-    if (segment.chord) {
-      // Two chords with no beat between them: the first still gets its cell.
-      if (pending) cells.push({ kind: "beat", chord: pending, mark: "" });
-      pending = segment.chord;
-    }
+    if (segment.chord) cells.push({ kind: "beat", chord: segment.chord, mark: "" });
     for (const token of segment.text.match(TOKEN) ?? []) {
-      if (BAR.test(token)) {
-        cells.push({ kind: "bar", mark: token });
-      } else {
-        cells.push({ kind: "beat", chord: pending, mark: token });
-        pending = null;
-      }
+      cells.push(BAR.test(token) ? { kind: "bar", mark: token } : { kind: "beat", chord: null, mark: token });
     }
   }
-  if (pending) cells.push({ kind: "beat", chord: pending, mark: "" });
   return cells;
 }
