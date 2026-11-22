@@ -19,7 +19,7 @@ import {
   type SongView,
 } from "@libretracks/shared/models";
 
-import { ChartEditorModal } from "./ChartEditorModal";
+import { useChartEditorStore } from "./chartEditorStore";
 import { usePerformanceHistory } from "./usePerformanceHistory";
 import { parseRhythmLine } from "./rhythmLine";
 import { parseChordPro, spellChart, type ChartLine } from "@libretracks/shared/charts/chordChart";
@@ -209,13 +209,15 @@ export const LiveChartPanel = memo(function LiveChartPanel({
   const [showChords, setShowChords] = useState(() =>
     readStored(SHOW_CHORDS_KEY, true, (value) => value === "true"),
   );
-  const [editorOpen, setEditorOpen] = useState(startEditing && canEdit);
+  // El editor vive en chartEditorStore/ChartEditorHost, no aquí: al girar a
+  // vertical en el teléfono este panel se vuelve a montar y lo cerraba.
+  const closeEditor = useChartEditorStore((state) => state.close);
   useEffect(() => {
     if (!canEdit) {
-      setEditorOpen(false);
+      closeEditor();
       setRecording(null);
     }
-  }, [canEdit]);
+  }, [canEdit, closeEditor]);
   const [recording, setRecording] = useState<LineRecording | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -436,16 +438,16 @@ export const LiveChartPanel = memo(function LiveChartPanel({
     [song],
   );
 
-  // Stable: useDismissOnBack re-registers on every new callback and that
-  // reorders the back stack.
-  const closeEditor = useCallback(() => setEditorOpen(false), []);
-  const saveFromEditor = useCallback(
-    async (next: SongChart | null) => {
-      await save(next);
-      setEditorOpen(false);
-    },
-    [save],
-  );
+  const openEditor = () => {
+    if (!region || !canEdit) return;
+    useChartEditorStore.getState().open({ region, markers, chart, secondsPerBeatAt, onSave: save });
+  };
+  // Editar › Letra: abrir con el editor a la vista.
+  const openEditorRef = useRef(openEditor);
+  openEditorRef.current = openEditor;
+  useEffect(() => {
+    if (startEditing) openEditorRef.current();
+  }, [startEditing]);
 
   const errorMessage = (cause: unknown) => {
     const message = cause instanceof Error ? cause.message : String(cause);
@@ -561,7 +563,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
             <button
               type="button"
               className="lt-icon-button"
-              onClick={() => setEditorOpen(true)}
+              onClick={openEditor}
               aria-label={t("liveChart.edit")}
               title={t("liveChart.edit")}
             >
@@ -633,7 +635,7 @@ export const LiveChartPanel = memo(function LiveChartPanel({
               <span className="material-symbols-outlined" aria-hidden="true">upload_file</span>
               {t("liveChart.importFile")}
             </button>
-            <button type="button" className="lt-live-chart-action" disabled={busy} onClick={() => setEditorOpen(true)}>
+            <button type="button" className="lt-live-chart-action" disabled={busy} onClick={openEditor}>
               <span className="material-symbols-outlined" aria-hidden="true">edit_note</span>
               {t("liveChart.pasteText")}
             </button>
@@ -707,16 +709,6 @@ export const LiveChartPanel = memo(function LiveChartPanel({
         data-testid="live-chart-file-input"
       />
 
-      {editorOpen && region && canEdit ? (
-        <ChartEditorModal
-          region={region}
-          markers={markers}
-          chart={chart}
-          secondsPerBeatAt={secondsPerBeatAt}
-          onSave={saveFromEditor}
-          onClose={closeEditor}
-        />
-      ) : null}
     </section>
   );
 });

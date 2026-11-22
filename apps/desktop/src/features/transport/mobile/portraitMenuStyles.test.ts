@@ -90,6 +90,17 @@ describe("Letra en proyección, diapositivas y Vincular canciones en vertical", 
     expect(select).toContain("min-width: 0");
   });
 
+  // Vistos en el emulador con tamaño de iPhone 13: Cerrar a media cabecera
+  // cortando el título, el pie a media pantalla y cada casilla en su fila.
+  it("cabecera, pie y casillas aprovechan el ancho y el alto", () => {
+    const close = rule(block, ".lt-lyrics-modal .lt-settings-modal-close");
+    expect(close).toContain("width: auto");
+    expect(close).toContain("flex: 0 0 auto");
+    expect(rule(block, ".lt-lyrics-modal .lt-lyrics-modal-body")).toContain("flex: 1 1 auto");
+    expect(rule(block, ".lt-lyrics-modal .lt-lyrics-modal-footer")).toContain("margin-top: auto");
+    expect(rule(block, ".lt-lyrics-modal .lt-settings-toggle")).toContain("grid-template-columns: auto minmax(0, 1fr)");
+  });
+
   it("presentación y «Cambiar…» bajan de línea si no caben", () => {
     expect(rule(block, ".lt-lyrics-modal-body > .lt-lyrics-row")).toContain("flex-wrap: wrap");
   });

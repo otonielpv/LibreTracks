@@ -13,6 +13,7 @@ import i18n from "../shared/i18n";
 import enMessages from "../shared/i18n/en";
 import { useTransportStore as transportStore } from "../features/transport/store";
 import { useSongStore } from "../features/transport/songStore";
+import { useChartEditorStore } from "../features/transport/charts/chartEditorStore";
 import {
   DEFAULT_VIEW_MODE,
   TIMELINE_DEFAULT_FOLLOW_PLAYHEAD_ENABLED,
@@ -387,6 +388,7 @@ beforeEach(async () => {
   resetTestDesktopApiMock();
   useMeterStore.setState(INITIAL_METER_STATE);
   useMixerFilterStore.setState({ filterActiveSong: true });
+  useChartEditorStore.setState({ session: null });
   useTransportStore.setState({
     playback: null,
     optimisticMix: {},

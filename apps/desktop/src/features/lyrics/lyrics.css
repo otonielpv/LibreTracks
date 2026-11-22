@@ -674,7 +674,9 @@ button.lt-lyrics-btn.lt-lyrics-record .material-symbols-outlined {
   margin-top: 0.4rem;
   padding: 0.7rem 0 0.1rem;
   border-top: 1px solid rgb(255 255 255 / 0.08);
-  background: rgb(13 15 16 / 0.98);
+  /* Opaco: con un 2 % de transparencia el texto que pasaba por debajo al
+     desplazarse se leía a través del pie (visto en el emulador). */
+  background: rgb(13 15 16);
 }
 .lt-lyrics-save-state {
   font-size: 0.8rem;
@@ -787,7 +789,29 @@ button.lt-lyrics-btn.lt-lyrics-record .material-symbols-outlined {
     align-items: center;
   }
   .lt-lyrics-modal .lt-settings-modal-header > div {
+    flex: 1 1 auto;
     min-width: 0;
+  }
+  /* La regla genérica de <720px pone Cerrar a todo el ancho: aquí se comía
+     la mitad de la cabecera y cortaba el título. */
+  .lt-lyrics-modal .lt-settings-modal-close {
+    flex: 0 0 auto;
+    width: auto;
+  }
+  /* Cuerpo hasta abajo y pie pegado al borde, no a media pantalla cuando
+     el contenido es corto. */
+  .lt-lyrics-modal .lt-lyrics-modal-body {
+    flex: 1 1 auto;
+  }
+  .lt-lyrics-modal .lt-lyrics-modal-footer {
+    margin-top: auto;
+  }
+  /* Casilla a la izquierda de su texto, no en una fila propia encima. */
+  .lt-lyrics-modal .lt-settings-toggle {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 0.6rem;
   }
   .lt-lyrics-modal .lt-settings-modal-header h2 {
     margin: 0;

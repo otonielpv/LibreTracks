@@ -10,6 +10,8 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+import { ChartEditorHost } from "./ChartEditorHost";
+import { useChartEditorStore } from "./chartEditorStore";
 import { LiveChartPanel } from "./LiveChartPanel";
 
 const TEXT = [
@@ -72,17 +74,21 @@ function renderPanel(
   pendingMarkerId: string | null = null,
 ) {
   const onChartChange = vi.fn(async () => {});
+  // The editor mounts in ChartEditorHost (LyricsRoot in the app), not in the panel.
   const utils = render(
-    <LiveChartPanel
-      song={songView(target)}
-      region={target}
-      positionSecondsRef={position}
-      pendingMarkerId={pendingMarkerId}
-      expanded={false}
-      onToggleExpanded={vi.fn()}
-      onClose={vi.fn()}
-      onChartChange={onChartChange}
-    />,
+    <>
+      <ChartEditorHost />
+      <LiveChartPanel
+        song={songView(target)}
+        region={target}
+        positionSecondsRef={position}
+        pendingMarkerId={pendingMarkerId}
+        expanded={false}
+        onToggleExpanded={vi.fn()}
+        onClose={vi.fn()}
+        onChartChange={onChartChange}
+      />
+    </>,
   );
   return { ...utils, onChartChange };
 }
@@ -96,6 +102,7 @@ describe("LiveChartPanel", () => {
   beforeEach(() => {
     vi.mocked(recordProductEvent).mockClear();
     window.localStorage.clear();
+    useChartEditorStore.setState({ session: null });
     HTMLElement.prototype.scrollTo = vi.fn() as never;
   });
 
@@ -378,17 +385,20 @@ describe("LiveChartPanel", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     unmount();
     render(
-      <LiveChartPanel
-        song={songView(region(null))}
-        region={region(null)}
-        positionSecondsRef={{ current: 0 }}
-        pendingMarkerId={null}
-        expanded={false}
-        onToggleExpanded={vi.fn()}
-        onClose={vi.fn()}
-        onChartChange={vi.fn(async () => {})}
-        startEditing
-      />,
+      <>
+        <ChartEditorHost />
+        <LiveChartPanel
+          song={songView(region(null))}
+          region={region(null)}
+          positionSecondsRef={{ current: 0 }}
+          pendingMarkerId={null}
+          expanded={false}
+          onToggleExpanded={vi.fn()}
+          onClose={vi.fn()}
+          onChartChange={vi.fn(async () => {})}
+          startEditing
+        />
+      </>,
     );
     expect(screen.getByRole("dialog", { name: "liveChart.editorTitle" })).toBeTruthy();
   });
@@ -398,6 +408,33 @@ describe("LiveChartPanel", () => {
     expect(screen.getByRole("button", { name: "liveChart.importFile" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "liveChart.pasteText" }));
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  // On a phone the editor turns the app to portrait and the view behind
+  // changes layout and remounts the panel (Setlist: short -> medium). The
+  // editor used to live in the panel and closed right after opening.
+  it("keeps the editor open, with what was typed, when the panel remounts", () => {
+    render(<ChartEditorHost />);
+    const panel = (key: string) => (
+      <LiveChartPanel
+        key={key}
+        song={songView(region(null))}
+        region={region(null)}
+        positionSecondsRef={{ current: 0 }}
+        pendingMarkerId={null}
+        expanded={false}
+        onToggleExpanded={vi.fn()}
+        onClose={vi.fn()}
+        onChartChange={vi.fn(async () => {})}
+      />
+    );
+    const view = render(panel("short"));
+    fireEvent.click(screen.getByRole("button", { name: "liveChart.pasteText" }));
+    const textarea = screen.getByRole("textbox", { name: "liveChart.textLabel" });
+    fireEvent.change(textarea, { target: { value: "[G]Hola" } });
+    view.rerender(panel("medium"));
+    expect(screen.getByRole("dialog", { name: "liveChart.editorTitle" })).toBeTruthy();
+    expect((screen.getByRole("textbox", { name: "liveChart.textLabel" }) as HTMLTextAreaElement).value).toBe("[G]Hola");
   });
 
   it("spells each part in the key it sounds in when the song modulates", () => {

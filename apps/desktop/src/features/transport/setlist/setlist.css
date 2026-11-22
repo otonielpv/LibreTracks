@@ -4861,8 +4861,9 @@ html.lt-mobile .lt-setlist-video-item .lt-setlist-song-button {
   position: fixed;
   inset: 0;
   z-index: 80;
-  padding: var(--lt-safe-area-top, 0px) var(--lt-safe-area-right, 0px)
-    var(--lt-safe-area-bottom, 0px) var(--lt-safe-area-left, 0px);
+  /* Sin relleno: las zonas seguras las aparta el propio panel por dentro
+     (.lt-live-chart.is-expanded en LiveChartPanel.css), así su fondo llega a
+     los bordes del iPhone. */
   background: var(--lt-setlist-bg, #0e1112);
 }
 

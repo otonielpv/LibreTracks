@@ -13,6 +13,33 @@
   background: linear-gradient(145deg, rgb(255 255 255 / 0.025), transparent), var(--lt-live-surface, #151817);
 }
 
+/* Pantalla completa, igual en Live y en Setlist: el panel cubre toda la
+   ventana (también la barra de transporte y la cabecera de Live) y su fondo
+   llega a los bordes. Solo el contenido se aparta del notch y de la barra de
+   inicio: con el relleno en el contenedor, el iPhone perdía 47 pt a cada
+   lado y 21 abajo y la letra quedaba en un recuadro con franjas negras. */
+:is(.lt-live-view, .lt-setlist-lyrics) .lt-live-chart.is-expanded,
+.lt-live-chart.is-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.lt-live-chart.is-expanded > .lt-live-chart-toolbar {
+  padding-top: max(0.3rem, var(--lt-safe-area-top, 0px));
+  padding-right: max(0.4rem, var(--lt-safe-area-right, 0px));
+  padding-left: max(0.65rem, var(--lt-safe-area-left, 0px));
+}
+
+.lt-live-chart.is-expanded > .lt-live-chart-scroller {
+  padding-right: max(0.8rem, var(--lt-safe-area-right, 0px));
+  padding-bottom: max(0.6rem, var(--lt-safe-area-bottom, 0px));
+  padding-left: max(0.8rem, var(--lt-safe-area-left, 0px));
+}
+
 .lt-live-chart-toolbar {
   flex: 0 0 auto;
   min-width: 0;
