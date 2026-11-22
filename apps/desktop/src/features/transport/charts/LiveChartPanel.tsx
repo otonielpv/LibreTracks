@@ -146,9 +146,12 @@ function ChartLineView({
           cell.kind === "bar" ? (
             <span key={index} className="lt-chart-rhythm-bar" aria-hidden="true">{cell.mark}</span>
           ) : (
-            <span key={index} className="lt-chart-segment lt-chart-rhythm-beat">
-              <span className="lt-chart-chord">{cell.chord ?? " "}</span>
-              <span className="lt-chart-lyric">{cell.mark || " "}</span>
+            <span key={index} className="lt-chart-rhythm-beat">
+              {cell.chord ? (
+                <span className="lt-chart-chord">{cell.chord}</span>
+              ) : (
+                <span className="lt-chart-rhythm-slash">{cell.mark}</span>
+              )}
             </span>
           ),
         )}

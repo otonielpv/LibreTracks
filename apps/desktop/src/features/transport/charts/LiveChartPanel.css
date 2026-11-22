@@ -324,21 +324,32 @@
   font: italic 500 0.85em/1.3 Inter, sans-serif;
 }
 
-/* Rhythm lines ("[Ab] / / / | [Fm] / / / |"): one even cell per beat, the
-   chord over the beat it starts on, bar lines between measures. */
-.lt-chart-rhythm-beat {
-  min-width: 1.6em;
+/* Rhythm lines ("[Ab] / / / | [Fm] / / / |"): one row, one cell per beat.
+   A beat that starts a chord shows the chord; the rest show their slash. */
+.lt-chart-rhythm {
+  align-items: baseline;
+  gap: 0.2em 0.85em;
 }
 
-.lt-chart-rhythm-beat .lt-chart-lyric {
+.lt-chart-rhythm-beat {
+  min-width: 0.8em;
+}
+
+.lt-chart-rhythm .lt-chart-chord {
+  min-height: 0;
+  padding-right: 0;
+  font-size: 1.05em;
+  line-height: 1.4;
+}
+
+.lt-chart-rhythm-slash {
   color: #8fa29c;
+  font: 500 1.05em/1.4 Inter, sans-serif;
 }
 
 .lt-chart-rhythm-bar {
-  align-self: flex-end;
-  padding: 0 0.7em 0 0.1em;
   color: #5d6b67;
-  font: 700 1.05em/1.3 Inter, sans-serif;
+  font: 700 1.05em/1.4 Inter, sans-serif;
 }
 
 /* Melody notes ("DC#-A-DC#//B"): drawn like the row of chords above them,
