@@ -1,6 +1,6 @@
 import { browser, $ } from "@wdio/globals";
-import { execFileSync } from "node:child_process";
-import { cpSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { cpSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import AppPage from "../pageobjects/app.page.js";
@@ -12,50 +12,51 @@ import { L } from "../utils/uiText.js";
 /**
  * Not a test — records the DESKTOP scenes of the release video
  * (docs/RELEASE_PROCESS.md step 11a). Rewritten every release for that
- * release's feature; git history keeps the previous ones. This one is 1.17.0:
- * redundancy, arrangements edited block by block, the revamped Remote and
- * «Analizar todas las canciones».
+ * release's features; git history keeps the previous ones. This one is
+ * 1.18.0: track EQ, the Rhythm panel, lyrics sent to FreeShow, prepared pitch
+ * changes, clip fades, Alt+drag copies, clear solos and «Fade in y reproducir».
  *
- *   LT_RELEASEVIDEO=1 LT_TUTORIAL_DIR=marketing/video-1.17.0 LT_SHOTS_SESSION=<COPY of a real session> \
- *     npx wdio run tests/e2e/wdio.conf.ts --spec tests/e2e/specs/release-video.e2e.ts --mochaOpts.timeout 1800000
+ *   LT_RELEASEVIDEO=1 LT_TUTORIAL_DIR=marketing/video-1.18.0 LT_SHOTS_SESSION=<COPY of a real session> \
+ *     npx wdio run tests/e2e/wdio.conf.ts --spec tests/e2e/specs/release-video.e2e.ts --mochaOpts.timeout 2400000
  *
- * The session is copied to a temp folder first (the scenes apply an
- * arrangement, delete a clip and write analysis markers); it is
- * «Test [70bpm 4-4]». Script: scripts/tutorial-video/novedades-1.17.0.es.json.
- * The Remote is shown inside the app, in two iframes (phone and tablet sized)
- * pointing at its own Remote server; they are another origin, so the taps in
- * them go by coordinates measured on the Remote at those sizes. The mobile
- * scene is THIS app with the WebView reporting an Android phone, recorded
- * last so the desktop scenes never see the phone emulation.
+ * Session: «TestLetras2» (one song, «Digno», linked to the FreeShow show
+ * «Digno (Worthy)»). FreeShow must be open on this machine with its API on;
+ * its Output page (port 5513) is shown in a frame inside the app while the
+ * song plays, since the recorder only sees LibreTracks' own page.
  *
- * The machine's own settings are touched only to be read: the redundancy
- * PINs, addresses and trusted machines are blurred.
+ * The app runs with the machine's real settings: the scene that turns on
+ * prepared pitch changes turns them off again at the end. Scenes with sound
+ * record the app's audio through scripts/tutorial-video/loopback.py.
  *
- * Optional LT_TUTORIAL_SCENES=05-arreglo-bloque,09-analizar re-encodes only
- * those scenes (the rest still run, so the app reaches the right state).
+ * The mobile scene is THIS app with the WebView reporting an Android phone,
+ * recorded last so the desktop scenes never see the phone emulation.
+ *
+ * Optional LT_TUTORIAL_SCENES=02-eq,10-fades re-encodes only those scenes
+ * (the rest still run, so the app reaches the right state).
  */
 
 const repoRoot = path.resolve(__dirname, "..", "..", "..");
-const tutorialDir = path.resolve(process.env.LT_TUTORIAL_DIR ?? "marketing/video-1.17.0");
+const tutorialDir = path.resolve(process.env.LT_TUTORIAL_DIR ?? "marketing/video-1.18.0");
 const golden = process.env.LT_SHOTS_SESSION ?? "";
 const workDir = path.join(os.tmpdir(), "lt-release-video-session");
 const session = golden ? path.join(workDir, path.basename(golden)) : "";
 const only = (process.env.LT_TUTORIAL_SCENES ?? "").split(",").filter(Boolean);
 const loopback = path.join(repoRoot, "scripts", "tutorial-video", "loopback.py");
+const FREESHOW_OUTPUT = process.env.LT_FREESHOW_OUTPUT ?? "http://127.0.0.1:5513/";
 const TITLES = {
-  intro: ["Novedades de LibreTracks 1.17.0", "Redundancia, arreglos por bloques, Remote renovado y analizar todas las canciones"],
-  end: ["LibreTracks 1.17.0", "Gratis en libretracks.com"],
+  intro: ["Novedades de LibreTracks 1.18.0", "Ecualizador por pista, loops de batería, letra en proyección y tono preparado"],
+  end: ["LibreTracks 1.18.0", "Gratis en libretracks.com"],
   fixes: "Y además",
 };
 /** The «and also» card: improvements and fixes, shown, not narrated one by one. */
 const FIXES = [
-  "El audio a otra frecuencia que la de tu tarjeta se prepara mucho más rápido",
-  "Aviso si no queda espacio en el disco para preparar el audio",
-  "«Preparando audio» ya no se queda congelado en sesiones grandes",
-  "Un paquete .ltpkg que no cabe en el cursor va al final del setlist",
-  "La app vuelve a abrirse aunque otro programa use el puerto del Remote",
-  "En Android, abrir archivos de la nube o de un USB ya no congela la app",
-  "Los controles de las pistas ya no se ven a través de la pantalla de carga",
+  "Aviso de voz guía nuevo: «Metales»",
+  "Los paquetes .ltpkg conservan la mezcla, las carpetas y los cambios de tempo",
+  "Mover o copiar secciones ya no pone el tempo a 0",
+  "Añadir canciones a un setlist grande ya no cierra la app",
+  "Se comprueba el espacio libre antes de escribir en disco",
+  "En iPhone la pantalla ya no se queda en blanco",
+  "Un coro copiado con sus tiempos en el editor de letra ya no pasa de golpe",
 ];
 
 const tour = (id: string) => `[data-lt-tour="${id}"]`;
@@ -274,6 +275,71 @@ async function removeTitleCard() {
   await runInPage(() => document.getElementById("lt-tutorial-title")?.remove());
 }
 
+
+/** FreeShow's Output page in a frame over the bottom right corner of the app. */
+async function showFreeShowOutput() {
+  await runInPage((url: string) => {
+    document.getElementById("lt-rv-freeshow")?.remove();
+    const el = document.createElement("div");
+    el.id = "lt-rv-freeshow";
+    el.style.cssText =
+      "position:fixed;right:28px;bottom:28px;width:640px;height:396px;z-index:2147483645;background:#000;" +
+      "border-radius:10px;box-shadow:0 0 0 6px #2a2f36,0 12px 40px rgba(0,0,0,.6);overflow:hidden;font-family:Inter,Segoe UI,sans-serif";
+    el.innerHTML =
+      `<div style="height:36px;line-height:36px;padding:0 14px;background:#1b1f24;color:#57f1db;font-size:16px;font-weight:700">FreeShow · salida</div>` +
+      `<iframe src="${url}" style="border:0;width:640px;height:360px;display:block;background:#000"></iframe>`;
+    document.body.appendChild(el);
+  }, FREESHOW_OUTPUT);
+  await browser.pause(2500);
+}
+
+async function hideFreeShowOutput() {
+  await runInPage(() => document.getElementById("lt-rv-freeshow")?.remove());
+}
+
+/** The prepared pitch setting, on or off, through Settings › General › Edición. */
+async function setPreparedPitch(rec: Recorder | null, on: boolean) {
+  await AppPage.openSettings();
+  await browser.pause(800);
+  await AppPage.settingsTab("editing");
+  await browser.pause(600);
+  // Opening the General group lands on Interfaz: Edición still needs its click.
+  await runInPage(() => (document.getElementById("lt-settings-tab-editing") as HTMLElement | null)?.click());
+  await browser.pause(800);
+  const label = await tagByText("label.lt-settings-toggle", L("Cambio de tono preparado (equipos lentos)"), "rv-prep");
+  await runInPage((sel: string) => document.querySelector(sel)?.scrollIntoView({ block: "center" }), label);
+  await browser.pause(600);
+  const checked = await runInPage(
+    (sel: string) => (document.querySelector(`${sel} input`) as HTMLInputElement | null)?.checked ?? false,
+    label,
+  );
+  if (rec) {
+    await rec.zoomTo(label, { margin: 60, maxZoom: 1.6 });
+    await rec.hold(1.2);
+  }
+  if (checked !== on) {
+    if (rec) await rec.click(`${label} input`, 900);
+    else await $(`${label} input`).click();
+    await browser.pause(800);
+    if (await rectOf(".lt-dialog-card")) {
+      if (rec) {
+        await rec.hold(2);
+        await rec.click(".lt-dialog-card .lt-dialog-button--primary", 900);
+      } else {
+        await $(".lt-dialog-card .lt-dialog-button--primary").click();
+      }
+    }
+  }
+  if (rec) {
+    await rec.hold(1.2);
+    await rec.zoomOut(500);
+    await rec.key("Escape", 600);
+  } else {
+    await browser.keys("Escape");
+  }
+  await AppPage.resetShell();
+}
+
 describe("release video (desktop scenes)", function () {
   before(async function () {
     if (process.env.LT_RELEASEVIDEO !== "1") this.skip();
@@ -283,9 +349,6 @@ describe("release video (desktop scenes)", function () {
     mkdirSync(scenesDir, { recursive: true });
     rmSync(workDir, { recursive: true, force: true });
     cpSync(path.dirname(golden), workDir, { recursive: true });
-    // The golden session's songs carry an original saved before their markers
-    // were re-analysed: opening the arrangement editor saves it again (1.17.0
-    // fix), which this video goes through for real.
     await AppPage.waitUntilBooted();
     await AppPage.reopenSessionUntil(session, (s) => s.tracks.length >= 5, 180_000);
     await AppPage.resetShell();
@@ -314,6 +377,24 @@ describe("release video (desktop scenes)", function () {
     }
   });
 
+  after(async function () {
+    // The machine's own settings: prepared pitch goes back off.
+    if (process.env.LT_RELEASEVIDEO !== "1") return;
+    try {
+      await cdp("Emulation.clearDeviceMetricsOverride");
+      await cdp("Emulation.setUserAgentOverride", { userAgent: "" });
+      await cdp("Emulation.setTouchEmulationEnabled", { enabled: false });
+      await runInPage(() => window.location.reload());
+      await browser.pause(5000);
+      await AppPage.waitUntilBooted();
+      await AppPage.reopenSessionUntil(session, (s) => s.tracks.length >= 5, 180_000);
+      await browser.pause(3000);
+      await setPreparedPitch(null, false);
+    } catch (error) {
+      console.log(`[release-video] WARNING: could not turn prepared pitch back off: ${String(error)}`);
+    }
+  });
+
   it("records the scenes", async function () {
     const regions = async () =>
       [...((await AppPage.songView())?.regions ?? [])].sort((a, b) => a.startSeconds - b.startSeconds);
@@ -327,33 +408,50 @@ describe("release video (desktop scenes)", function () {
       const zoom = 1500 / ((song.endSeconds - song.startSeconds) * 18);
       await setTimelineView({ zoomLevel: zoom, cameraX: Math.max(0, song.startSeconds * zoom * 18 - 120) });
     };
-    /** The song band with most of its width on the page. */
     const songBand = async () => {
-      await runInPage(() => {
-        document.querySelectorAll('[data-guide="rv-song"]').forEach((el) => el.removeAttribute("data-guide"));
-        const best = Array.from(document.querySelectorAll(".lt-region-hotspot"))
-          .map((e) => {
-            const r = e.getBoundingClientRect();
-            return { e, seen: r.height > 0 ? Math.min(r.right, window.innerWidth) - Math.max(r.left, 0) : 0 };
-          })
-          .filter(({ seen }) => seen > 0)
-          .sort((a, b) => b.seen - a.seen)[0];
-        best?.e.setAttribute("data-guide", "rv-song");
-      });
-      const box = await rectOf('[data-guide="rv-song"]');
+      const song = await firstSong();
+      const box = await rectOf(`.lt-region-hotspot[data-region-id="${song.id}"]`);
       if (!box) throw new Error("no song band");
       return box;
     };
-    const fileMenu = `${tour("topbar-file-menu")} .lt-top-menu-trigger`;
-    const openArrangement = async (rec: Recorder) => {
+    /** x on the page of a song time, through the song's band. */
+    const xAt = async (seconds: number) => {
+      const song = await firstSong();
       const band = await songBand();
-      await rec.rightClick({ x: Math.max(band.x, 0) + 160, y: band.y + band.h / 2 });
-      await rec.hold(0.8);
-      await rec.click(await tagByText(".lt-context-menu button", L("Arreglo"), "rv-arr", true), 1200);
+      return band.x + ((seconds - song.startSeconds) / (song.endSeconds - song.startSeconds)) * band.w;
+    };
+    const trackHeader = (name: string) =>
+      runInPage((needle: string) => {
+        document.querySelectorAll('[data-guide="rv-header"]').forEach((el) => el.removeAttribute("data-guide"));
+        const el = Array.from(document.querySelectorAll(".lt-track-header")).find((e) => {
+          const text = (e.querySelector(".lt-track-title-row strong")?.textContent ?? "").trim();
+          return text.toLowerCase().startsWith(needle.toLowerCase()) && e.getBoundingClientRect().height > 0;
+        });
+        if (!el) return false;
+        el.setAttribute("data-guide", "rv-header");
+        return true;
+      }, name);
+    const laneRow = async (trackId: string) => {
+      const box = await rectOf(`.lt-track-lane-row[data-track-id="${trackId}"]`);
+      if (!box) throw new Error(`no lane for ${trackId}`);
+      return box;
+    };
+    const markersInSong = async () => {
+      const song = await firstSong();
+      const view = await AppPage.songView();
+      return (view?.sectionMarkers ?? [])
+        .filter((m) => m.startSeconds >= song.startSeconds && m.startSeconds < song.endSeconds)
+        .sort((a, b) => a.startSeconds - b.startSeconds);
+    };
+    const markerNamed = async (re: RegExp, nth = 0) => {
+      const found = (await markersInSong()).filter((m) => re.test(m.name))[nth];
+      if (!found) throw new Error(`no marker ${re}`);
+      return found;
     };
 
     await fitSong();
-    await invoke("seek_transport", { positionSeconds: (await firstSong()).startSeconds + 8 });
+    const chorus = await markerNamed(/coro/i);
+    await invoke("seek_transport", { positionSeconds: chorus.startSeconds });
     await browser.pause(800);
 
     // 01 — title over the timeline.
@@ -366,332 +464,415 @@ describe("release video (desktop scenes)", function () {
       await done();
     }
 
-    // 02 — Settings › Redundancy: the role, the main's PIN, the backup's address.
+    // 02 — the EQ button of the drums, drag a node, the wheel for its width.
     {
-      const { rec, done } = scene("02-redundancia");
-      const blur = () =>
-        runInPage(() => {
-          document
-            .querySelectorAll<HTMLElement>(
-              ".lt-redundancy-settings input:not([type]), .lt-redundancy-settings input[type='text'], .lt-redundancy-settings input[inputmode], .lt-redundancy-trusted li",
-            )
-            .forEach((el) => {
-              el.style.filter = "blur(6px)";
-            });
-        });
-      await AppPage.openSettings();
-      await browser.pause(800);
-      await rec.click("#lt-settings-tab-redundancy", 300);
-      for (let i = 0; i < 4; i++) {
-        await blur();
-        await browser.pause(200);
+      const { rec, done } = scene("02-eq");
+      if (!(await trackHeader("Drums"))) throw new Error("02: no drums header");
+      const eqButton = '[data-guide="rv-header"] .lt-track-eq-button';
+      await rec.zoomTo('[data-guide="rv-header"]', { margin: 80, maxZoom: 1.8 });
+      await rec.moveTo(eqButton, 700);
+      await rec.hold(1.2);
+      await rec.zoomOut(400);
+      await rec.click(eqButton, 1200);
+      await rec.zoomTo(".lt-eq-editor", { margin: 30, maxZoom: 1.5 });
+      await rec.hold(1);
+      const node = '[data-testid="lt-eq-node-2"]';
+      const box = await rectOf(node);
+      if (box) {
+        const from = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
+        await rec.dragToCdp({ x: from.x + 40, y: from.y - 70 }, 1200, { from });
+        await rec.hold(0.8);
+        const to = { x: from.x + 40, y: from.y - 70 };
+        for (let i = 0; i < 5; i++) {
+          await cdp("Input.dispatchMouseEvent", { type: "mouseWheel", x: to.x, y: to.y, deltaX: 0, deltaY: -120 });
+          await rec.hold(0.25);
+        }
+      } else {
+        console.log("[release-video] 02: no EQ node 2");
       }
-      await rec.zoomTo(".lt-redundancy-settings", { margin: 20, maxZoom: 1.4 });
-      await rec.moveTo(".lt-redundancy-roles", 700);
-      await rec.hold(4);
+      await rec.hold(1.5);
       await done();
     }
 
-    // 03 — further down: the pilot tone, then «Como respaldo» (the main's
-    // address and PIN, Connect). The top-bar pill only shows with a backup
-    // connected, which one machine cannot show: it is only narrated.
+    // 03 — playing: the analyser, the presets, then the master's EQ.
     {
-      const { rec, done } = scene("03-redundancia-estado");
-      const blur = () =>
-        runInPage(() => {
-          document
-            .querySelectorAll<HTMLElement>(
-              ".lt-redundancy-settings input:not([type]), .lt-redundancy-settings input[type='text'], .lt-redundancy-settings input[inputmode], .lt-redundancy-trusted li",
-            )
-            .forEach((el) => {
-              el.style.filter = "blur(6px)";
-            });
-        });
-      const scrollBy = async (fraction: number) => {
-        await runInPage((f: number) => {
-          const scroller = document.querySelector(".lt-settings-tab-panels");
-          if (scroller) scroller.scrollTo({ top: (scroller.scrollHeight - scroller.clientHeight) * f, behavior: "smooth" });
-        }, fraction);
-        for (let i = 0; i < 24; i++) {
-          await blur();
-          await rec.frame(1 / 20);
+      const { rec, done } = scene("03-eq-mas");
+      await invoke("play_transport");
+      const rta = await tagByText(".lt-eq-editor .lt-eq-button", "RTA", "rv-rta", true).catch(() => "");
+      if (rta) {
+        const pressed = await runInPage((s: string) => document.querySelector(s)?.getAttribute("aria-pressed") === "true", rta);
+        if (!pressed) await rec.click(rta, 300);
+      }
+      await rec.realtimeWithAudio(5000, loopback);
+      await rec.click(".lt-eq-presets > button.lt-eq-button", 700);
+      await rec.realtimeWithAudio(3500, loopback);
+      await rec.key("Escape", 400);
+      if (await rectOf(".lt-eq-presets-menu")) await rec.key("Escape", 400);
+      await rec.zoomOut(400);
+      if (await rectOf(".lt-eq-close")) await rec.click(".lt-eq-close", 700);
+      await invoke("stop_transport");
+      await rec.click(`${tour("toolbar-master")} .lt-control-popover-trigger`, 900);
+      if (await rectOf(".lt-song-master-eq-button")) {
+        await rec.zoomTo(".lt-song-master-eq-button", { margin: 160, maxZoom: 1.6 });
+        await rec.moveTo(".lt-song-master-eq-button", 700);
+        await rec.hold(2);
+        await rec.zoomOut(400);
+      }
+      await rec.key("Escape", 600);
+      await AppPage.resetShell();
+      await done();
+    }
+
+    // 04 — the Rhythm panel: a pattern, play, variation B.
+    {
+      const { rec, done } = scene("04-ritmo");
+      await rec.click("button.lt-rhythm-button", 1500);
+      const panel = '[data-testid="rhythm-panel"]';
+      if (!(await rectOf(panel))) throw new Error("04: the Rhythm panel did not open");
+      await rec.zoomTo(panel, { margin: 30, maxZoom: 1.6 });
+      await rec.hold(1);
+      const select = await $("select.lt-rhythm-pattern-select");
+      if (await select.isExisting()) {
+        await rec.moveTo("select.lt-rhythm-pattern-select", 600);
+        for (const index of [1, 2, 3]) {
+          await select.selectByIndex(index);
+          await rec.hold(0.6);
         }
-      };
-      await scrollBy(1);
-      await rec.hold(5);
-      await scrollBy(0.55);
-      await rec.hold(4);
+      }
+      await rec.click("button.lt-rhythm-play", 300);
+      await rec.realtimeWithAudio(4500, loopback);
+      const variationB = `.lt-rhythm-row .lt-rhythm-row__variations button[aria-label="${L("Variación")} B"]`;
+      if (await rectOf(variationB)) {
+        await rec.click(variationB, 200);
+        await rec.realtimeWithAudio(4000, loopback);
+      } else {
+        await rec.realtimeWithAudio(3000, loopback);
+      }
+      await done();
+    }
+
+    // 05 — one shot pads over the loop, then stop and close.
+    {
+      const { rec, done } = scene("05-ritmo-pads");
+      const pads = (await runInPage(() =>
+        Array.from(document.querySelectorAll('[data-testid="rhythm-one-shots"] button.lt-rhythm-pad:not(.is-empty)'))
+          .slice(0, 4)
+          .map((e) => {
+            const r = e.getBoundingClientRect();
+            return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+          }),
+      )) as Array<{ x: number; y: number }>;
+      for (const pad of pads) {
+        await rec.clickAt(pad, 100);
+        await rec.realtimeWithAudio(1300, loopback);
+      }
+      await rec.realtimeWithAudio(1500, loopback);
+      if (await rectOf("button.lt-rhythm-play.is-playing")) await rec.click("button.lt-rhythm-play", 600);
+      await rec.zoomOut(400);
+      await rec.click("button.lt-rhythm-button", 900);
+      await done();
+    }
+
+    // 06 — Settings › Letras: on, FreeShow, search the network, test.
+    {
+      const { rec, done } = scene("06-letra-ajustes");
+      await AppPage.openSettings();
+      await browser.pause(800);
+      await rec.click("#lt-settings-tab-lyrics", 900);
+      if (await rectOf(".lt-lyrics-tutorial-skip")) await rec.click(".lt-lyrics-tutorial-skip", 700);
+      await rec.zoomTo(".lt-lyrics-settings", { margin: 20, maxZoom: 1.4 });
+      const enable = ".lt-lyrics-settings > label.lt-settings-toggle input[type=checkbox]";
+      const enabled = await runInPage((s: string) => (document.querySelector(s) as HTMLInputElement | null)?.checked ?? false, enable);
+      if (enabled) await rec.moveTo(enable, 600);
+      else await rec.click(enable, 800);
+      await rec.hold(0.8);
+      await rec.click(await tagByText(".lt-lyrics-programs button.lt-lyrics-btn", "FreeShow", "rv-freeshow"), 900);
+      if (await rectOf(".lt-lyrics-tutorial-skip")) {
+        await rec.hold(1.5);
+        await rec.click(".lt-lyrics-tutorial-skip", 700);
+      }
+      await rec.click(".lt-lyrics-scan button.lt-lyrics-btn", 400);
+      for (let i = 0; i < 40 && !(await rectOf("button.lt-lyrics-found-item")); i++) await rec.hold(0.5);
+      if (await rectOf("button.lt-lyrics-found-item")) {
+        await rec.hold(0.8);
+        await rec.click("button.lt-lyrics-found-item", 900);
+      } else {
+        console.log("[release-video] 06: the scan found nothing");
+      }
+      const probe = await tagByText(".lt-lyrics-row button.lt-lyrics-btn", L("Probar conexión"), "rv-probe").catch(() => "");
+      if (probe) {
+        await rec.click(probe, 400);
+        for (let i = 0; i < 20 && !(await rectOf(".lt-lyrics-probe")); i++) await rec.hold(0.5);
+      }
+      await rec.hold(2.5);
       await rec.zoomOut(500);
       await rec.key("Escape", 600);
       await AppPage.resetShell();
       await done();
     }
 
-    // 04 — right-click the song › Arreglo, save the original if needed, New,
-    // one more chorus at the end, Apply.
+    // 07 — right-click the song › «Letra en proyección…».
     {
-      const { rec, done } = scene("04-arreglo");
-      await openArrangement(rec);
-      await rec.zoomTo(".lt-structure-panel", { margin: 40, maxZoom: 1.5 });
-      await rec.hold(1);
-      if (await rectOf(".lt-structure-capture-button")) {
-        await runInPage(() =>
-          document.querySelector(".lt-structure-capture-button")?.scrollIntoView({ block: "center", behavior: "smooth" }),
-        );
-        for (let i = 0; i < 12; i++) await rec.frame(1 / 15);
-        await rec.click(".lt-structure-capture-button", 1200);
+      const { rec, done } = scene("07-letra-cancion");
+      await fitSong();
+      const band = await songBand();
+      await rec.rightClick({ x: Math.max(band.x, 0) + 260, y: band.y + band.h / 2 });
+      await rec.hold(0.8);
+      await rec.click(await tagByText(".lt-context-menu button", L("Letra en proyección…"), "rv-lyrics-panel"), 1500);
+      if (await rectOf(".lt-lyrics-modal")) {
+        await rec.zoomTo(".lt-lyrics-modal", { margin: 30, maxZoom: 1.4 });
+        await rec.hold(2);
+        const row = ".lt-lyrics-modal table.lt-lyrics-table tbody tr:nth-child(4)";
+        if (await rectOf(row)) await rec.moveTo(row, 800);
+        await rec.hold(3);
+        await rec.zoomOut(500);
+        // Escape does not close it: its own «Listo» button does.
+        const doneButton = await tagByText(".lt-lyrics-modal button", L("Listo"), "rv-lyrics-done", true).catch(() => "");
+        if (doneButton) await rec.click(doneButton, 800);
+      } else {
+        console.log("[release-video] 07: no lyrics panel");
       }
-      await rec.click(await tagByText(".lt-structure-toolbar button", L("Nuevo"), "rv-arr-new", true), 1000);
-      const chorus = await tagByText(".lt-structure-palette .lt-structure-chip", "Coro", "rv-chorus");
-      await rec.click(chorus, 1200);
-      await rec.click(".lt-structure-footer .is-primary", 1800);
-      await rec.zoomOut(600);
-      await rec.click(".lt-structure-close", 1200);
+      await AppPage.resetShell();
       await done();
     }
 
-    // 05 — delete the drums' clip in the LAST chorus only (right-click › Borrar).
+    // 08 — play across two sections. Pass A records LibreTracks; pass B puts
+    // FreeShow's own window in front and grabs it (gdigrab) while the same
+    // stretch plays again, since LibreTracks sends the lyrics from its engine
+    // whether its window shows or not. scripts/tutorial-video/overlay-freeshow.mjs
+    // lays B over A, lined up on the moment playback starts in each.
     {
-      const { rec, done } = scene("05-arreglo-bloque");
-      await fitSong();
-      const song = await firstSong();
-      const view = await AppPage.songView();
-      if (!view) throw new Error("05: no song view");
-      const choruses = view.sectionMarkers
-        .filter((m) => /coro/i.test(m.name) && m.startSeconds >= song.startSeconds && m.startSeconds < song.endSeconds)
-        .sort((a, b) => a.startSeconds - b.startSeconds);
-      const last = choruses[choruses.length - 1];
-      if (!last) throw new Error("05: no chorus marker in the first song");
-      const drums = view.tracks.find((t) => /drum|bater/i.test(t.name));
-      if (!drums) throw new Error("05: no drums track");
-      const at = last.startSeconds + 4;
-      const clip = view.clips.find(
-        (c) => c.trackId === drums.id && c.timelineStartSeconds <= at && at < c.timelineStartSeconds + c.durationSeconds,
-      );
-      if (!clip) throw new Error("05: no drums clip in the last chorus");
-      // Close in on the last chorus (about 150 s on the page), in the middle.
-      {
-        const zoom = 1500 / (150 * 18);
-        await setTimelineView({ zoomLevel: zoom, cameraX: Math.max(0, last.startSeconds * zoom * 18 - 700) });
+      const { rec, done } = scene("08-letra-directo");
+      const verse = await markerNamed(/verso/i);
+      const from = Math.max(0, verse.startSeconds - 4);
+      const playMs = Math.max(13000, (durations["08-letra-directo"] ?? 11) * 1000 + 1500);
+      await invoke("seek_transport", { positionSeconds: from });
+      await browser.pause(600);
+      await rec.hold(0.8);
+      const playAt = rec.seconds;
+      await invoke("play_transport");
+      await rec.realtimeWithAudio(playMs, loopback);
+      await invoke("stop_transport");
+      await done();
+      if (only.length === 0 || only.includes("08-letra-directo")) {
+        const extra = path.join(tutorialDir, "extra");
+        mkdirSync(extra, { recursive: true });
+        const out = path.join(extra, "08-freeshow.mp4");
+        // FreeShow must be maximized right behind this window (the user leaves
+        // it so, with its show list closed): minimizing LibreTracks shows it.
+        // ddagrab, not gdigrab: FreeShow paints with the GPU and gdigrab gets black.
+        await browser.minimizeWindow();
+        // The driver's console windows (msedgewebview2, tauri-driver) sit on
+        // top of everything: minimized too, so only FreeShow is on screen.
+        execFileSync("powershell", ["-NoProfile", "-Command",
+          `Add-Type -Name W -Namespace U -MemberDefinition '[DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr h, int c);'; ` +
+          `Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -match 'msedgewebview2|msedgedriver|tauri-driver' } | ` +
+          `ForEach-Object { [U.W]::ShowWindow($_.MainWindowHandle, 6) | Out-Null }`,
+        ]);
+        await browser.pause(1500);
+        await invoke("seek_transport", { positionSeconds: from });
+        await browser.pause(600);
+        const avail = { w: 1920, h: 1032 };
+        const grab = spawn("ffmpeg", [
+          "-y", "-loglevel", "error", "-f", "lavfi",
+          "-i", `ddagrab=framerate=30:draw_mouse=0:video_size=${avail.w}x${avail.h}:offset_x=0:offset_y=0,hwdownload,format=bgra`,
+          "-t", String(playMs / 1000 + 3),
+          "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", out,
+        ], { stdio: "inherit" });
+        const grabStart = Date.now();
+        await browser.pause(1500);
+        const lead = (Date.now() - grabStart) / 1000;
+        await invoke("play_transport");
+        await new Promise((resolve) => grab.on("exit", resolve));
+        await invoke("stop_transport");
+        writeFileSync(path.join(extra, "08-freeshow.json"), JSON.stringify({ sceneAt: playAt, grabAt: lead }, null, 2));
+        const vp = await emulate169();
+        viewportW = vp.w;
+        viewportH = vp.h;
       }
-      // This song's band, by id: at this zoom the next song may show more.
-      const band = await rectOf(`.lt-region-hotspot[data-region-id="${song.id}"]`);
-      if (!band) throw new Error("05: no band for the first song");
-      const x = band.x + ((at - song.startSeconds) / (song.endSeconds - song.startSeconds)) * band.w;
-      const header = await runInPage((name: string) => {
-        const el = Array.from(document.querySelectorAll(".lt-track-header")).find(
-          (e) => (e.textContent ?? "").includes(name) && e.getBoundingClientRect().height > 0,
+    }
+
+    // 09 — prepared pitch: the setting, +2, Aplicar, the preparation.
+    {
+      const { rec, done } = scene("09-tono");
+      await setPreparedPitch(rec, true);
+      const band = await songBand();
+      await rec.clickAt({ x: Math.max(band.x, 0) + 260, y: band.y + band.h / 2 }, 600);
+      await rec.click(`${tour("toolbar-transpose")} .lt-control-popover-trigger`, 900);
+      const up = `button[aria-label*="${L("Subir un semitono")}"]`;
+      if (await rectOf(up)) {
+        await rec.zoomTo(up, { margin: 200, maxZoom: 1.6 });
+        await rec.click(up, 500);
+        await rec.click(up, 900);
+      }
+      await rec.zoomOut(400);
+      if (await rectOf("button.lt-pending-pitch-apply")) {
+        await rec.moveTo("button.lt-pending-pitch-apply", 600);
+        await rec.hold(0.8);
+        await rec.click("button.lt-pending-pitch-apply", 600);
+      } else {
+        console.log("[release-video] 09: no Aplicar button");
+      }
+      await rec.key("Escape", 400);
+      // The whole preparation is recorded; the middle is cut by hand before compose.
+      const indicator = ".lt-pitch-prep-indicator";
+      for (let i = 0; i < 8 && !(await rectOf(indicator)); i++) await rec.hold(0.5);
+      if (await rectOf(indicator)) await rec.zoomTo(indicator, { margin: 200, maxZoom: 1.6 });
+      for (let i = 0; i < 900 && (await rectOf(indicator)); i++) await rec.hold(1);
+      await rec.zoomOut(400);
+      await invoke("seek_transport", { positionSeconds: chorus.startSeconds });
+      await invoke("play_transport");
+      await rec.realtimeWithAudio(4000, loopback);
+      await invoke("stop_transport");
+      await done();
+    }
+
+    // 10 — select a clip, drag its fade in, its curve, then the fade out.
+    {
+      const { rec, done } = scene("10-fades");
+      const song = await firstSong();
+      // About 40 s of the song's start on the page, so the fades are wide.
+      const zoom = 1500 / (40 * 18);
+      await setTimelineView({ zoomLevel: zoom, cameraX: Math.max(0, song.startSeconds * zoom * 18 - 200) });
+      const view = await AppPage.songView();
+      const piano = view?.tracks.find((t) => /piano/i.test(t.name));
+      const clip = piano && view?.clips.find((c) => c.trackId === piano.id);
+      if (!piano || !clip) throw new Error("10: no piano clip");
+      const row = await laneRow(piano.id);
+      const left = await xAt(clip.timelineStartSeconds);
+      const mid = { x: left + 300, y: row.y + row.h / 2 };
+      await rec.zoomTo({ x: left - 60, y: row.y - 120, w: 900, h: row.h + 240 }, { margin: 0, maxZoom: 1.8 });
+      await rec.clickAt(mid, 700);
+      const corner = { x: left + 3, y: row.y + 5 };
+      await rec.dragToCdp({ x: left + 260, y: row.y + 5 }, 1300, { from: corner });
+      await rec.hold(0.8);
+      const dot = { x: left + 130, y: row.y + row.h / 2 };
+      await rec.dragToCdp({ x: left + 90, y: row.y + row.h * 0.2 }, 1100, { from: dot });
+      await rec.hold(1.2);
+      await rec.zoomOut(500);
+      // The fade out: the clip's end.
+      const end = clip.timelineStartSeconds + clip.durationSeconds;
+      await setTimelineView({ zoomLevel: zoom, cameraX: Math.max(0, end * zoom * 18 - 1300) });
+      const row2 = await laneRow(piano.id);
+      const right = await xAt(end);
+      await rec.zoomTo({ x: right - 840, y: row2.y - 120, w: 900, h: row2.h + 240 }, { margin: 0, maxZoom: 1.8 });
+      await rec.dragToCdp({ x: right - 260, y: row2.y + 5 }, 1300, { from: { x: right - 3, y: row2.y + 5 } });
+      await rec.hold(1.5);
+      await rec.zoomOut(500);
+      await done();
+    }
+
+    // 11 — Alt+drag a marker: a copy stays where it lands.
+    {
+      const { rec, done } = scene("11-copiar");
+      await fitSong();
+      const bridge = await markerNamed(/puente/i);
+      const hotspot = await runInPage((name: string) => {
+        document.querySelectorAll('[data-guide="rv-marker"]').forEach((el) => el.removeAttribute("data-guide"));
+        const el = Array.from(document.querySelectorAll(".lt-marker-hotspot")).find(
+          (e) => (e.textContent ?? "").trim().startsWith(name) && e.getBoundingClientRect().width > 0,
         );
         if (!el) return null;
+        el.setAttribute("data-guide", "rv-marker");
         const r = el.getBoundingClientRect();
-        return { y: r.top + r.height / 2 };
-      }, drums.name);
-      if (!header) throw new Error("05: drums header not visible");
-      await rec.zoomTo({ x: x - 420, y: header.y - 230, w: 840, h: 460 }, { margin: 0, maxZoom: 1.8 });
-      await rec.hold(1.2);
-      await rec.rightClick({ x, y: header.y });
-      await rec.hold(0.8);
-      await rec.click(await tagByText(".lt-context-menu button", L("Borrar"), "rv-del-clip"), 1500);
-      await rec.hold(2.5);
-      await rec.zoomOut(600);
-      const after = await AppPage.songView();
-      if (after?.clips.some((c) => c.id === clip.id)) console.log("[release-video] 05: the clip is still there");
-      await done();
-    }
-
-    // 06 — the editor shows the block as edited; select it, «Restablecer como el original».
-    {
-      const { rec, done } = scene("06-arreglo-editado");
-      await fitSong();
-      await openArrangement(rec);
-      await rec.zoomTo(".lt-structure-panel", { margin: 40, maxZoom: 1.5 });
-      const edited = ".lt-structure-block:has(.lt-structure-block-edited)";
-      if (await rectOf(edited)) {
-        await rec.moveTo(edited, 700);
-        await rec.hold(2);
-        await rec.click(edited, 900);
-        await rec.click(await tagByText(".lt-structure-toolbar button", L("Restablecer como el original"), "rv-reset"), 1500);
-        await rec.hold(1.5);
-      } else {
-        console.log("[release-video] 06: no edited block");
-      }
-      await rec.zoomOut(600);
-      await rec.click(".lt-structure-close", 1000);
-      await done();
-    }
-
-    // 07/08 — the Remote, phone and tablet, inside the app.
-    {
-      const info = await invoke<{ url?: string; urls?: string[] }>("get_remote_server_info");
-      const remoteUrl = (info && (info.url ?? info.urls?.[0])) || "http://127.0.0.1:3030/";
-      console.log(`[release-video] remote ${remoteUrl} ${JSON.stringify(info)}`);
-      // Touch, so the tablet frame gets the tablet layout (the Remote picks it
-      // from the short side plus touch).
-      await cdp("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
-      const TABLET = { w: 1180, h: 820, s: 0.8 };
-      const PHONE_R = { w: 390, h: 844, s: 0.8 };
-      const tabW = TABLET.w * TABLET.s;
-      const phW = PHONE_R.w * PHONE_R.s;
-      const gap = 70;
-      const left = Math.round((viewportW - tabW - gap - phW) / 2);
-      const tablet = { x: left, y: Math.round((viewportH - TABLET.h * TABLET.s) / 2) };
-      const phone = { x: left + tabW + gap, y: Math.round((viewportH - PHONE_R.h * PHONE_R.s) / 2) };
-      await runInPage(
-        (url: string, t: { x: number; y: number }, p: { x: number; y: number }, T: typeof TABLET, P: typeof PHONE_R) => {
-          const el = document.createElement("div");
-          el.id = "lt-tutorial-title";
-          el.style.cssText = "position:fixed;inset:0;z-index:2147483646;background:#0b0d10";
-          const frame = (x: number, y: number, w: number, h: number, s: number) =>
-            `<iframe src="${url}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;` +
-            `transform:scale(${s});transform-origin:0 0;border:0;border-radius:${18 / s}px;` +
-            `box-shadow:0 0 0 ${10 / s}px #2a2f36"></iframe>`;
-          el.innerHTML = frame(t.x, t.y, T.w, T.h, T.s) + frame(p.x, p.y, P.w, P.h, P.s);
-          document.body.appendChild(el);
-        },
-        remoteUrl,
-        tablet,
-        phone,
-        TABLET,
-        PHONE_R,
-      );
-      await browser.pause(4000);
-      const inPhone = (x: number, y: number) => ({ x: phone.x + x * PHONE_R.s, y: phone.y + y * PHONE_R.s });
-      const inTablet = (x: number, y: number) => ({ x: tablet.x + x * TABLET.s, y: tablet.y + y * TABLET.s });
-      await invoke("seek_transport", { positionSeconds: (await firstSong()).startSeconds + 20 });
-      await invoke("play_transport");
-      {
-        const { rec, done } = scene("07-remote");
-        rec.cursor = inPhone(200, 500);
-        await rec.realtime(Math.max(9000, (durations["07-remote"] ?? 10) * 1000));
-        await done();
-      }
-      {
-        const { rec, done } = scene("08-remote-mezcla");
-        rec.cursor = inPhone(200, 500);
-        // Positions measured on the Remote at these sizes (default presets).
-        await rec.clickAt(inPhone(120, 22), 300);
-        await rec.realtime(2200);
-        await rec.clickAt(inPhone(204, 22), 300);
-        await rec.realtime(900);
-        await rec.clickAt(inPhone(47, 77), 300);
-        await rec.realtime(1600);
-        await rec.clickAt(inTablet(938, 27), 300);
-        await rec.realtime(2200);
-        await done();
-      }
-      await invoke("stop_transport");
-      await removeTitleCard();
-      await cdp("Emulation.setTouchEmulationEnabled", { enabled: false });
-      await browser.pause(800);
-    }
-
-    // 09 — File › Analizar todas las canciones: two songs, Analyze, the wait.
-    {
-      const { rec, done } = scene("09-analizar");
-      await rec.click(fileMenu, 700);
-      await rec.click(
-        await tagByText(".lt-top-menu-dropdown button", L("Analizar todas las canciones"), "rv-analyze-all"),
-        1500,
-      );
-      const modal = ".lt-batch-analysis-modal";
-      if (!(await rectOf(modal))) throw new Error("09: the batch window did not open");
-      await rec.zoomTo(modal, { margin: 30, maxZoom: 1.4 });
-      await rec.hold(2);
-      // The last two songs: short (each one is listened to) and without the
-      // arrangement applied in 04, which turns down tempo and marker changes.
-      await rec.click(`${modal} .lt-batch-analysis-all input`, 600);
-      const rows = `${modal} .lt-batch-analysis-row input`;
-      const boxes = (await runInPage(
-        (sel: string) =>
-          Array.from(document.querySelectorAll(sel))
-            .slice(-2)
-            .map((e) => {
-              const r = e.getBoundingClientRect();
-              return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-            }),
-        rows,
-      )) as Array<{ x: number; y: number }>;
-      for (const b of boxes) await rec.clickAt(b, 500);
-      await rec.hold(1);
-      await rec.click(`${modal} .lt-export-modal-actions .is-primary`, 400);
-      // The whole wait is recorded; it is cut by hand before compose.
-      // Done = the results list, with a «Revisar» button per song.
-      const review = L("Revisar");
-      for (let i = 0; i < 1200; i++) {
+        return { x: r.left + Math.min(14, r.width / 2), y: r.top + r.height / 2 };
+      }, bridge.name);
+      if (hotspot) {
+        await rec.zoomTo({ x: hotspot.x - 300, y: hotspot.y - 60, w: 900, h: 320 }, { margin: 0, maxZoom: 1.8 });
         await rec.hold(1);
-        const finished = await runInPage(
-          (sel: string, label: string) =>
-            Array.from(document.querySelectorAll(`${sel} button`)).some((b) => (b.textContent ?? "").trim() === label),
-          modal,
-          review,
-        );
-        if (finished) break;
+        // CDP modifier bit 1 = Alt.
+        await rec.dragToCdp({ x: hotspot.x + 220, y: hotspot.y }, 1400, { from: hotspot, modifiers: 1 });
+        await rec.hold(2.5);
+        await rec.zoomOut(500);
+      } else {
+        console.log("[release-video] 11: no bridge marker hotspot");
       }
-      await rec.hold(2);
       await done();
     }
 
-    // 10 — Apply all, then the markers on the timeline.
+    // 12 — solo two tracks, clear them at once, then «Fade in y reproducir».
     {
-      const { rec, done } = scene("10-analizar-aplicar");
-      const modal = ".lt-batch-analysis-modal";
-      await rec.click(`${modal} .lt-export-modal-actions .is-primary`, 2500);
-      await rec.hold(2.5);
+      const { rec, done } = scene("12-mezclador");
+      for (const name of ["Drums", "Bass"]) {
+        if (await trackHeader(name)) await rec.click('[data-guide="rv-header"] .lt-track-toggle-solo', 500);
+      }
+      await rec.zoomTo("button.lt-clear-solo", { margin: 220, maxZoom: 1.7 });
+      await rec.moveTo("button.lt-clear-solo", 600);
+      await rec.hold(1);
+      await rec.click("button.lt-clear-solo", 900);
       await rec.zoomOut(500);
-      if (await rectOf(modal)) await rec.key("Escape", 800);
-      await fitSong();
-      const ruler = await rectOf(tour("timeline-ruler"));
-      if (ruler) await rec.zoomTo({ x: ruler.x, y: ruler.y - 20, w: 1300, h: 300 }, { margin: 30 });
-      await rec.hold(2.5);
+      await invoke("seek_transport", { positionSeconds: chorus.startSeconds });
+      await rec.zoomTo("button.lt-fade-stop", { margin: 260, maxZoom: 1.7 });
+      await rec.moveTo("button.lt-fade-stop", 600);
+      await rec.hold(1.2);
+      await rec.click("button.lt-fade-stop", 100);
+      await rec.realtimeWithAudio(6000, loopback);
       await rec.zoomOut(500);
+      await invoke("stop_transport");
       await done();
     }
 
-    // 12 — improvements and fixes, shown on a card (narrated only as a whole).
+    // 14 — fixes card (narrated only as a whole).
     {
-      const { rec, done } = scene("12-correcciones");
+      const { rec, done } = scene("14-correcciones");
       await removeTitleCard();
       await listCard(TITLES.fixes, FIXES);
-      await rec.hold(Math.max(7, durations["12-correcciones"] ?? 7));
+      await rec.hold(Math.max(8, durations["14-correcciones"] ?? 8));
       await done();
     }
 
-    // 13 — end card.
+    // 15 — end card.
     {
-      const { rec, done } = scene("13-final");
+      const { rec, done } = scene("15-final");
       await removeTitleCard();
       await titleCard(TITLES.end[0], TITLES.end[1]);
-      await rec.hold(durations["13-final"]);
+      await rec.hold(durations["15-final"]);
       await done();
       await removeTitleCard();
     }
 
-    // 11 — on a phone, recorded LAST (see the header): the side rail's
-    // Import / Export sheet with «Analizar todas las canciones».
+    // 13 — on a phone, recorded LAST (see the header): select a track › EQ,
+    // then the Rhythm panel.
     {
       await toPhone();
       await browser.pause(1500);
-      const rec = new Recorder(cdp, "11-movil", { x: 0, y: 0, w: PHONE.w, h: PHONE.h }, scenesDir,
+      const rec = new Recorder(cdp, "13-movil", { x: 0, y: 0, w: PHONE.w, h: PHONE.h }, scenesDir,
         { x: PHONE.w * 0.7, y: PHONE.h * 0.6 },
         { width: 1920, height: Math.round((1920 * PHONE.h) / PHONE.w / 2) * 2, dpr: PHONE.dpr, viewport: { w: PHONE.w, h: PHONE.h } });
-      const record = only.length === 0 || only.includes("11-movil");
-      console.log("[release-video] scene 11-movil");
-      await rec.hold(1.2);
-      const fileButton = `button[aria-label="${L("Importar / Exportar")}"]`;
-      if (await rectOf(fileButton)) {
-        await rec.click(fileButton, 900);
-        const item = await tagByText(".lt-mobile-file-menu button", L("Analizar todas las canciones"), "rv-m-analyze").catch(() => "");
-        if (item) {
-          await rec.moveTo(item, 700);
-          await rec.hold(2.5);
+      const record = only.length === 0 || only.includes("13-movil");
+      console.log("[release-video] scene 13-movil");
+      await rec.hold(1);
+      if (await trackHeader("Drums")) {
+        // A real touch: in the phone layout a mouse click does not select the track.
+        const name = await rectOf('[data-guide="rv-header"] .lt-track-title-row strong');
+        if (name) {
+          const at = { x: name.x + name.w / 2, y: name.y + name.h / 2 };
+          rec.cursor = at;
+          await rec.hold(0.4);
+          await cdp("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [at] });
+          await browser.pause(80);
+          await cdp("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+          await rec.hold(1);
         }
-      } else {
-        console.log("[release-video] 11-movil: no Import / Export button");
+        const eq = "button.lt-track-eq-button.lt-mobile-selection-action";
+        if (await rectOf(eq)) {
+          await rec.click(eq, 1500);
+          await rec.hold(2.2);
+          if (await rectOf(".lt-eq-close")) await rec.click(".lt-eq-close", 800);
+        } else {
+          console.log("[release-video] 13: no EQ in the selection bar");
+        }
       }
-      await rec.holdUntil((durations["11-movil"] ?? 6) + 0.7);
+      if (await rectOf("button.lt-rhythm-button")) {
+        await rec.click("button.lt-rhythm-button", 1500);
+        await rec.hold(2.5);
+      } else {
+        console.log("[release-video] 13: no Rhythm button on the phone");
+      }
+      await rec.holdUntil((durations["13-movil"] ?? 7) + 0.7);
       if (record) {
         await rec.encode();
-        letterbox("11-movil");
+        letterbox("13-movil");
       }
     }
   });

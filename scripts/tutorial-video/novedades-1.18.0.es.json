@@ -1,0 +1,76 @@
+{
+  "title": "Novedades de LibreTracks 1.18.0",
+  "voice": "es-ES-AlvaroNeural",
+  "rate": "+5%",
+  "display": {
+    "Libre Tracks": "LibreTracks",
+    "uno punto dieciocho punto cero": "1.18.0",
+    "libretracks punto com": "libretracks.com",
+    "Free Show": "FreeShow",
+    "Pro Presenter": "ProPresenter",
+    "Holi rics": "Holyrics"
+  },
+  "scenes": [
+    {
+      "id": "01-intro",
+      "text": "Libre Tracks uno punto dieciocho punto cero llega con un ecualizador en cada pista, loops de batería, la letra que cambia sola en tu programa de proyección y un cambio de tono pensado para equipos modestos."
+    },
+    {
+      "id": "02-eq",
+      "text": "Cada pista tiene ahora su ecualizador. Pulsa el botón EQ, junto a la T, y arrastra los puntos de la curva: en horizontal la frecuencia, en vertical la ganancia. Con la rueda cambias la anchura."
+    },
+    {
+      "id": "03-eq-mas",
+      "text": "Mientras suena, el analizador te enseña qué frecuencias tiene la pista. Hay presets de fábrica, puedes guardar los tuyos, y el ecualizador también está en las carpetas y en el máster de cada canción. Las escenas y las automatizaciones lo pueden cambiar durante la canción."
+    },
+    {
+      "id": "04-ritmo",
+      "text": "El nuevo panel Ritmo, en la barra de arriba, trae loops de batería que siguen el tempo y el compás de la canción. Elige uno de los doce patrones de serie y cambia entre sus cuatro variaciones."
+    },
+    {
+      "id": "05-ritmo-pads",
+      "text": "Al lado tienes pads para disparar sonidos sueltos en directo. Puedes editar los patrones, montar kits con tus propios sonidos o descargar packs gratuitos."
+    },
+    {
+      "id": "06-letra-ajustes",
+      "text": "La letra puede cambiar sola en Pro Presenter, Free Show u Holi rics. En Configuración, pestaña Letras, actívalo, elige tu programa y pulsa Buscar en la red: Libre Tracks lo encuentra y rellena la dirección."
+    },
+    {
+      "id": "07-letra-cancion",
+      "text": "Las canciones se vinculan solas por el nombre. Con clic derecho sobre la canción, Letra en proyección, ves qué parte de la letra sale en cada marca y puedes corregirla."
+    },
+    {
+      "id": "08-letra-directo",
+      "text": "Y al reproducir, cada sección cambia la letra en el programa un poco antes de que empiece, siguiendo también los saltos y los vamps. Sin MIDI y sin programar canción a canción."
+    },
+    {
+      "id": "09-tono",
+      "text": "Para tablets y ordenadores modestos llega el cambio de tono preparado. Actívalo en Configuración, General, Edición. Al transponer, eliges el tono y pulsas Aplicar: el audio se prepara en segundo plano mientras sigue sonando el anterior, y después apenas gasta procesador."
+    },
+    {
+      "id": "10-fades",
+      "text": "Los clips de audio tienen fades. Arrastra los cuadritos de las esquinas del clip para la duración, y el punto del fade para su curva."
+    },
+    {
+      "id": "11-copiar",
+      "text": "Con Alt pulsado al arrastrar, dejas una copia en vez de mover, en clips, marcas y cambios de nota. Y los clips MIDI y los cues de automatización pueden salir con adelanto y se pueden duplicar."
+    },
+    {
+      "id": "12-mezclador",
+      "text": "En el mezclador, un botón quita todos los solos de una vez. Y con la canción parada, el botón de fade out pasa a Fade in y reproducir, para volver a un coro sin que todo entre de golpe."
+    },
+    {
+      "id": "13-movil",
+      "text": "En el móvil, selecciona una pista y pulsa EQ en su panel. El panel Ritmo se abre desde su botón de la barra.",
+      "subtitles": "mobile"
+    },
+    {
+      "id": "14-correcciones",
+      "text": "Y además, un buen montón de correcciones."
+    },
+    {
+      "id": "15-final",
+      "text": "Descarga Libre Tracks gratis en libretracks punto com."
+    }
+  ]
+}

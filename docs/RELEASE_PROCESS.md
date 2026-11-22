@@ -865,6 +865,20 @@ recorders, which already solve every hard part: `scene()`, `titleCard()` and
 on desktop; `--dry` and scene ids on mobile): get each scene right with them
 before recording the lot.
 
+**Showing another program (FreeShow, ProPresenter…).** The recorder only sees
+LibreTracks' own page. 1.18.0 recorded the lyrics scene twice: pass A is
+LibreTracks playing; pass B minimizes the LibreTracks window
+(`browser.minimizeWindow()`, the only window WebDriver may move: Windows
+refuses to bring another process to the front) so the program left maximized
+right behind it is on screen, grabs the screen with ffmpeg `ddagrab` (not
+`gdigrab`: Electron paints with the GPU and gdigrab records black) while the
+same stretch plays again, and `scripts/tutorial-video/overlay-freeshow.mjs`
+lays B over A, lined up on the moment playback starts in each. LibreTracks
+sends the lyrics from its engine, so a minimized window still drives the
+program. Minimize the driver's console windows too (msedgewebview2), they sit
+on top of everything. FreeShow only paints its output once the projection is
+started in FreeShow.
+
 Mobile traps already paid for (details in the headers of those files):
 
 - The app runs **landscape** on the phone; record it that way.
