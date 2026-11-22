@@ -1,0 +1,91 @@
+/* Menús de revisar en vertical en el teléfono (plan portrait-text-modals):
+   Renderizar audio, Nivelar canciones, Analizar canción y Analizar varias.
+   Los cuatro comparten .lt-render-modal y fuerzan vertical al abrirse
+   (usePortraitWhileOpen). Revisados en el emulador con tamaño de iPhone 13. */
+@media (orientation: portrait) and (max-width: 500px) {
+  /* Todo el ancho y el alto que dejan las zonas seguras (las aparta
+     `.lt-mobile .lt-modal-backdrop`), con un marco más compacto. */
+  .lt-settings-modal.lt-render-modal {
+    width: 100%;
+    max-height: calc(100dvh - var(--lt-safe-area-top) - var(--lt-safe-area-bottom) - 1rem);
+    gap: 0.6rem;
+    padding: 0.85rem 0.75rem 0.75rem;
+  }
+
+  /* La descripción fija de la cabecera se comía un cuarto del alto y la zona
+     que se desplaza empezaba a media pantalla. */
+  .lt-render-modal .lt-settings-modal-header p {
+    margin: 0.2rem 0 0;
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  /* Nivelar canciones: seis columnas no caben en ~330 px (había scroll
+     lateral y «Propuesto» salía cortado). Cada canción en una tarjeta:
+     casilla y nombre arriba, las cuatro cifras debajo con su etiqueta. */
+  .lt-level-songs-modal .lt-level-songs-table,
+  .lt-level-songs-modal .lt-level-songs-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .lt-level-songs-modal .lt-level-songs-table thead {
+    display: none;
+  }
+  .lt-level-songs-modal .lt-level-songs-table tr {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.35rem 0.5rem;
+    align-items: start;
+    padding: 0.55rem 0.6rem;
+    border-top: 1px solid rgb(255 255 255 / 0.05);
+  }
+  .lt-level-songs-modal .lt-level-songs-table tr:first-child {
+    border-top: 0;
+  }
+  .lt-level-songs-modal .lt-level-songs-table td {
+    padding: 0;
+    border-top: 0;
+  }
+  /* Casilla y nombre comparten la primera fila; el nombre se aparta de la
+     casilla con relleno para que las cifras de abajo usen todo el ancho. */
+  .lt-level-songs-modal .lt-level-songs-table td:nth-child(1) {
+    grid-row: 1;
+    grid-column: 1;
+    z-index: 1;
+  }
+  .lt-level-songs-modal .lt-level-songs-table td:nth-child(2) {
+    grid-row: 1;
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-left: 2rem;
+  }
+  /* Columnas explícitas: con colocación automática «Master» caía en la
+     primera y el orden se perdía. */
+  .lt-level-songs-modal .lt-level-songs-table td:nth-child(3) {
+    grid-column: 1;
+  }
+  .lt-level-songs-modal .lt-level-songs-table td:nth-child(4) {
+    grid-column: 2;
+  }
+  .lt-level-songs-modal .lt-level-songs-table td:nth-child(5) {
+    grid-column: 3;
+  }
+  .lt-level-songs-modal .lt-level-songs-table td:nth-child(6) {
+    grid-column: 4;
+  }
+  .lt-level-songs-modal .lt-level-songs-table td.is-number {
+    grid-row: 2;
+    text-align: left;
+    white-space: normal;
+    font-size: 0.8rem;
+  }
+  .lt-level-songs-modal .lt-level-songs-table td.is-number::before {
+    content: attr(data-label);
+    display: block;
+    color: rgb(214 226 224 / 0.5);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+}

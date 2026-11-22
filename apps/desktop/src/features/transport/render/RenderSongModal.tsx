@@ -10,6 +10,8 @@ import {
   type RenderSongAudioResult,
 } from "../desktopApi";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { usePortraitWhileOpen } from "../mobile/usePortraitWhileOpen";
+import "../render/reviewModalsPortrait.css";
 import { useSongStore } from "../songStore";
 import {
   defaultRenderFileName,
@@ -148,8 +150,10 @@ type DialogProps = {
   onClose: () => void;
 };
 
-function RenderSongDialog({ regionId, regionName, tracks: songTracks, sessionTracks, sessionName, hasSongs, song, onClose }: DialogProps) {
+function RenderSongDialog({ regionId, regionName, tracks: songTracks, sessionTracks, sessionName, hasSongs, song, onClose: closeDialog }: DialogProps) {
   const { t } = useTranslation();
+  // Teléfono: en vertical para revisar mejor (plan portrait-text-modals).
+  const onClose = usePortraitWhileOpen(closeDialog);
   const [scope, setScope] = useState<"song" | "session" | "songs">(regionId ? "song" : "session");
   const tracks = scope === "song" ? songTracks : sessionTracks;
   const [preferences, setPreferences] = useState<RenderPreferences>(loadRenderPreferences);

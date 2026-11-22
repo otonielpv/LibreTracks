@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 const here = dirname(fileURLToPath(import.meta.url));
 const chartCss = readFileSync(resolve(here, "../charts/LiveChartPanel.css"), "utf8");
 const lyricsCss = readFileSync(resolve(here, "../../lyrics/lyrics.css"), "utf8");
+const reviewCss = readFileSync(resolve(here, "../render/reviewModalsPortrait.css"), "utf8");
 
 const PORTRAIT = "@media (orientation: portrait) and (max-width: 500px) {";
 
@@ -108,5 +109,34 @@ describe("Letra en proyección, diapositivas y Vincular canciones en vertical", 
   it("el editor de diapositivas va en una columna", () => {
     expect(rule(block, ".lt-lyrics-fields")).toContain("grid-template-columns: minmax(0, 1fr)");
     expect(rule(block, ".lt-lyrics-section-header")).toContain("flex-wrap: wrap");
+  });
+});
+
+describe("Renderizar, Nivelar y Analizar en vertical", () => {
+  const block = portraitBlock(reviewCss);
+
+  it("el marco usa el alto que dejan las zonas seguras y la cabecera ocupa menos", () => {
+    const frame = rule(block, ".lt-settings-modal.lt-render-modal");
+    expect(frame).toContain("width: 100%");
+    expect(frame).toContain("var(--lt-safe-area-top)");
+    expect(frame).toContain("var(--lt-safe-area-bottom)");
+    expect(rule(block, ".lt-render-modal .lt-settings-modal-header p")).toContain("font-size: 0.8rem");
+  });
+
+  // Visto en el emulador: seis columnas en ~330 px daban scroll lateral y
+  // «Propuesto» cortado; y con colocación automática «Master» caía primero.
+  it("la tabla de Nivelar canciones pasa a tarjetas con cifras etiquetadas y en orden", () => {
+    expect(rule(block, ".lt-level-songs-modal .lt-level-songs-table thead")).toContain("display: none");
+    expect(rule(block, ".lt-level-songs-modal .lt-level-songs-table tr")).toContain(
+      "grid-template-columns: repeat(4, minmax(0, 1fr))",
+    );
+    ["3", "4", "5", "6"].forEach((child, index) =>
+      expect(rule(block, `.lt-level-songs-modal .lt-level-songs-table td:nth-child(${child})`)).toContain(
+        `grid-column: ${index + 1}`,
+      ),
+    );
+    expect(rule(block, ".lt-level-songs-modal .lt-level-songs-table td.is-number::before")).toContain(
+      "content: attr(data-label)",
+    );
   });
 });

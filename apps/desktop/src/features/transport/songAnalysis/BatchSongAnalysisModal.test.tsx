@@ -44,8 +44,16 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+// Teléfono simulado para el giro a vertical (plan portrait-text-modals).
+const phone = { on: false };
+const setScreenOrientation = vi.fn(async (_mode: string) => {});
+
 vi.mock("@libretracks/shared/desktopApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@libretracks/shared/desktopApi")>()),
+  get isMobileApp() {
+    return phone.on;
+  },
+  setScreenOrientation: (mode: string) => setScreenOrientation(mode),
   analyzeSong: (request: AnalyzeSongRequest) => analyzeSong(request),
   cancelAnalyzeSong: () => cancelAnalyzeSong(),
   getSongView: () => getSongView(),
@@ -380,5 +388,30 @@ describe("BatchSongAnalysisModal", () => {
     await analyzeAll();
     expect(within(row("Uno")).getByText("transport.songAnalysis.nothingToAnalyze")).toBeTruthy();
     expect(within(row("Dos")).getByText(/batch\.tempo .*"bpm":"140"/)).toBeTruthy();
+  });
+});
+
+describe("Analizar varias canciones en un teléfono", () => {
+  it("se abre en vertical y Cancelar vuelve a horizontal antes de cerrar", async () => {
+    const { resetPortraitWhileOpenForTests } = await import("../mobile/usePortraitWhileOpen");
+    const originalMatchMedia = window.matchMedia;
+    resetPortraitWhileOpenForTests();
+    phone.on = true;
+    // Un teléfono, ya en horizontal: el cierre no espera al giro.
+    window.matchMedia = ((query: string) =>
+      ({ matches: true, media: query, addEventListener: () => {}, removeEventListener: () => {} }) as unknown as MediaQueryList) as typeof window.matchMedia;
+    try {
+      render(<BatchSongAnalysisModal onApplied={() => {}} />);
+      await waitFor(() => expect(setScreenOrientation.mock.calls.map(([mode]) => mode)).toEqual(["portrait"]));
+      fireEvent.click(await screen.findByText("transport.songAnalysis.cancel"));
+      await waitFor(() =>
+        expect(setScreenOrientation.mock.calls.map(([mode]) => mode)).toEqual(["portrait", "landscape"]),
+      );
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    } finally {
+      phone.on = false;
+      window.matchMedia = originalMatchMedia;
+      resetPortraitWhileOpenForTests();
+    }
   });
 });

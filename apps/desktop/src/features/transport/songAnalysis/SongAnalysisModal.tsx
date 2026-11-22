@@ -25,6 +25,8 @@ import {
   markerKindVariants,
 } from "../markerKinds";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { usePortraitWhileOpen } from "../mobile/usePortraitWhileOpen";
+import "../render/reviewModalsPortrait.css";
 import { formatTransportError } from "../errors/formatTransportError";
 import { useSongStore } from "../songStore";
 import { useTransportStore } from "../store";
@@ -128,12 +130,14 @@ export function SongAnalysisDialog({
   song,
   regionId,
   regionName,
-  onClose,
+  onClose: closeDialog,
   onApplied,
   initial,
   onLeaveReview,
 }: DialogProps) {
   const { t } = useTranslation();
+  // Teléfono: en vertical para revisar mejor (plan portrait-text-modals).
+  const onClose = usePortraitWhileOpen(closeDialog);
   // Captured once: the lists must not reshuffle under the user.
   const [{ options: clickOptions, preselected }] = useState(() =>
     clickTrackOptions(song, regionId),

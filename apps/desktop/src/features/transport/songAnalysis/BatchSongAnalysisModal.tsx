@@ -17,6 +17,8 @@ import {
   type TransportSnapshot,
 } from "../desktopApi";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { usePortraitWhileOpen } from "../mobile/usePortraitWhileOpen";
+import "../render/reviewModalsPortrait.css";
 import { useSongStore } from "../songStore";
 import { useTransportStore } from "../store";
 import { recordProductEvent } from "../../telemetry/telemetry";
@@ -84,7 +86,7 @@ export function BatchSongAnalysisModal({ onApplied }: Props) {
 
 function BatchDialog({
   song,
-  onClose,
+  onClose: closeDialog,
   onApplied,
 }: {
   song: SongView;
@@ -92,6 +94,8 @@ function BatchDialog({
   onApplied: (snapshot: TransportSnapshot) => void;
 }) {
   const { t } = useTranslation();
+  // Teléfono: en vertical para revisar mejor (plan portrait-text-modals).
+  const onClose = usePortraitWhileOpen(closeDialog);
   const [items, setItems] = useState<Item[]>(() =>
     song.regions.map((region) => ({
       regionId: region.id,

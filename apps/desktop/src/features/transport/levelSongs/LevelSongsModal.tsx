@@ -15,6 +15,8 @@ import {
   type TransportSnapshot,
 } from "../desktopApi";
 import { useDismissOnBack } from "../mobile/backNavigation";
+import { usePortraitWhileOpen } from "../mobile/usePortraitWhileOpen";
+import "../render/reviewModalsPortrait.css";
 import { useSongStore } from "../songStore";
 import {
   defaultSongsToApply,
@@ -105,8 +107,10 @@ function formatLufs(lufs: number): string {
   return `${lufs < 0 ? "−" : ""}${Math.abs(lufs).toFixed(1)}`;
 }
 
-function LevelSongsDialog({ song, cueRoutes, onClose, onApplied }: DialogProps) {
+function LevelSongsDialog({ song, cueRoutes, onClose: closeDialog, onApplied }: DialogProps) {
   const { t } = useTranslation();
+  // Teléfono: en vertical para revisar mejor (plan portrait-text-modals).
+  const onClose = usePortraitWhileOpen(closeDialog);
   // Captured once: the list must not reshuffle while the user ticks boxes.
   const [groups] = useState<LevelTrackGroup[]>(() =>
     groupLevelTracks(song, levelableTracks(song, cueRoutes)),
@@ -401,16 +405,18 @@ function LevelSongsDialog({ song, cueRoutes, onClose, onApplied }: DialogProps) 
                             <small className="lt-level-songs-note">{notes.join(" · ")}</small>
                           ) : null}
                         </td>
-                        <td className="is-number">
+                        <td className="is-number" data-label={t("transport.levelSongs.colLoudness")}>
                           {entry.measurement?.hasSignal
                             ? `${formatLufs(entry.measurement.loudLufs)} LUFS`
                             : t("transport.levelSongs.noSignal")}
                         </td>
-                        <td className="is-number">{formatDb(gainToDb(entry.currentGain))}</td>
-                        <td className="is-number">
+                        <td className="is-number" data-label={t("transport.levelSongs.colCurrent")}>
+                          {formatDb(gainToDb(entry.currentGain))}
+                        </td>
+                        <td className="is-number" data-label={t("transport.levelSongs.colProposed")}>
                           {hasProposal ? formatDb(gainToDb(entry.proposedGain as number)) : "—"}
                         </td>
-                        <td className="is-number lt-level-songs-change">
+                        <td className="is-number lt-level-songs-change" data-label={t("transport.levelSongs.colChange")}>
                           {hasProposal ? formatDb(entry.changeDb) : "—"}
                         </td>
                       </tr>
