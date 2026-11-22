@@ -131,12 +131,37 @@ function fillStarts(known: Array<number | null>, sectionSeconds: number): number
   return starts as number[];
 }
 
+/** Tolerance for a time typed or shown with one decimal. */
+const TIME_SLACK = 0.05;
+
+/**
+ * The typed offsets (seconds from the section's first marker) worth keeping.
+ * A time outside the section means the lines came from somewhere else, such
+ * as a chorus copied with its times: the whole section goes back to the even
+ * spread. Inside it, a time that does not move forward is dropped and its
+ * line is spread between its neighbours.
+ */
+function usableOffsets(offsets: Array<number | null>, sectionSeconds: number): Array<number | null> {
+  const outside = offsets.some(
+    (value) => value !== null && (value < -TIME_SLACK || value > sectionSeconds + TIME_SLACK),
+  );
+  if (outside) return offsets.map(() => null);
+  let last = 0;
+  return offsets.map((value, line) => {
+    if (value === null) return null;
+    if (line > 0 && value <= last + TIME_SLACK) return null;
+    last = Math.max(last, value);
+    return value;
+  });
+}
+
 /**
  * The links after the times typed in the editor text. A section whose times
  * are what the editor showed is left exactly as it was (recordings per marker
  * included). One that changed takes the new times, as offsets from the start
  * of the section, for every marker that plays it. No times at all for a
- * section means the even spread again.
+ * section means the even spread again, and so do times that fall outside the
+ * section (see usableOffsets).
  */
 export function applyChartTimes(
   doc: ChartDoc,
@@ -157,10 +182,12 @@ export function applyChartTimes(
     });
     if (unchanged) continue;
     const first = occurrences[0];
-    const anyTyped = typed.some((value, line) => line > 0 && value !== null);
-    const starts = anyTyped
-      ? fillStarts(typed.map((value) => (value === null ? null : value - first.offset)), first.sectionSeconds)
-      : null;
+    const offsets = usableOffsets(
+      typed.map((value) => (value === null ? null : value - first.offset)),
+      first.sectionSeconds,
+    );
+    const anyTyped = offsets.some((value, line) => line > 0 && value !== null);
+    const starts = anyTyped ? fillStarts(offsets, first.sectionSeconds) : null;
     for (const occurrence of occurrences) {
       const { lineBeats: _previous, ...rest } = occurrence.link;
       replaced.set(

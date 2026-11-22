@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -10,7 +10,7 @@ import type {
 
 import { useDismissOnBack } from "../mobile/backNavigation";
 import { parseChordPro } from "@libretracks/shared/charts/chordChart";
-import { autoLinkChart, chartLinkFor } from "@libretracks/shared/charts/chartSync";
+import { autoLinkChart, chartLinkFor, remapChartLinks } from "@libretracks/shared/charts/chartSync";
 import {
   addChartTimes,
   applyChartTimes,
@@ -72,6 +72,25 @@ export function ChartEditorModal({
   const taken = useMemo(() => takeChartTimes(text), [text]);
   const doc = useMemo(() => parseChordPro(taken.text), [taken.text]);
   const originals = useMemo(() => markers.filter((marker) => !marker.id.includes("~")), [markers]);
+
+  /** Typing or pasting: links follow their section when sections are added
+   * or removed (they point at sections by position). */
+  const updateText = (next: string) => {
+    const after = parseChordPro(takeChartTimes(next).text);
+    setLinks((current) => remapChartLinks(doc, after, current));
+    setText(next);
+  };
+
+  /** The textarea grows with its text instead of scrolling inside the body:
+   * one scroller per surface. Two nested ones made iOS throw the text to the
+   * top while dragging a selection handle. */
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useLayoutEffect(() => {
+    const element = textareaRef.current;
+    if (!element) return;
+    element.style.height = "auto";
+    element.style.height = `${element.scrollHeight + 2}px`;
+  }, [text]);
 
   const setLink = (markerId: string, value: string) => {
     setLinks((current) => {
@@ -145,6 +164,14 @@ export function ChartEditorModal({
     return applyChartTimes(doc, base, timing, taken.times);
   };
 
+  /** The times that do not fit their section (a chorus copied with its
+   * times) back to the spread; the ones that fit stay. */
+  const recalcTimes = () => {
+    const next = linksToSave();
+    setLinks(next);
+    setText(addChartTimes(taken.text, chartLineTimeFor(doc, next, timing)));
+  };
+
   return (
     <div className="lt-modal-backdrop" onClick={saving ? undefined : onClose}>
       <section
@@ -166,15 +193,28 @@ export function ChartEditorModal({
           <div className="lt-chart-editor-text">
             <div className="lt-chart-editor-row">
               <span className="lt-settings-field-label">{t("liveChart.textLabel")}</span>
-              <button type="button" className="lt-chart-editor-button" onClick={() => fileInputRef.current?.click()}>
-                <span className="material-symbols-outlined" aria-hidden="true">upload_file</span>
-                {t("liveChart.importFile")}
-              </button>
+              <div className="lt-chart-editor-row-actions">
+                <button
+                  type="button"
+                  className="lt-chart-editor-button"
+                  disabled={doc.sections.length === 0 || originals.length === 0}
+                  onClick={recalcTimes}
+                  title={t("liveChart.recalcTimesHint")}
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">schedule</span>
+                  {t("liveChart.recalcTimes")}
+                </button>
+                <button type="button" className="lt-chart-editor-button" onClick={() => fileInputRef.current?.click()}>
+                  <span className="material-symbols-outlined" aria-hidden="true">upload_file</span>
+                  {t("liveChart.importFile")}
+                </button>
+              </div>
             </div>
             <textarea
+              ref={textareaRef}
               value={text}
               spellCheck={false}
-              onChange={(event) => setText(event.target.value)}
+              onChange={(event) => updateText(event.target.value)}
               placeholder={t("liveChart.textPlaceholder")}
               aria-label={t("liveChart.textLabel")}
             />

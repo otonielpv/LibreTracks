@@ -120,3 +120,57 @@ describe("ChartEditorModal line times in the text", () => {
     ]);
   });
 });
+
+describe("ChartEditorModal copied sections", () => {
+  // The chorus replaced by a copy of the verse, times included: they belong
+  // to 0-10 s, the chorus plays from 20 s.
+  const pasted = [
+    "{section: Verso 1}",
+    "[0:00.0] uno",
+    "[0:05.0] dos",
+    "[0:10.0] tres",
+    "[0:15.0] cuatro",
+    "{section: Coro 1}",
+    "[0:00.0] uno",
+    "[0:05.0] dos",
+  ].join("\n");
+
+  it("recalculates the times that do not fit their section and keeps the rest", () => {
+    const { textarea } = renderEditor();
+    fireEvent.change(textarea, { target: { value: pasted } });
+    fireEvent.click(screen.getByRole("button", { name: "liveChart.recalcTimes" }));
+    expect(textarea.value.split("\n")).toEqual([
+      "{section: Verso 1}",
+      "[0:00.0] uno",
+      "[0:05.0] dos",
+      "[0:10.0] tres",
+      "[0:15.0] cuatro",
+      "{section: Coro 1}",
+      // 20 s of chorus, two lines: one every 10 s.
+      "[0:20.0] uno",
+      "[0:30.0] dos",
+    ]);
+  });
+
+  it("saves a pasted section's foreign times as the even spread", async () => {
+    const { onSave, textarea } = renderEditor();
+    fireEvent.change(textarea, { target: { value: pasted } });
+    const saved = await saveAndRead(onSave);
+    expect(saved.links).toEqual([
+      { markerId: "verse", section: 0 },
+      { markerId: "chorus", section: 1 },
+    ]);
+  });
+
+  it("keeps each marker on its section when a section is pasted before it", async () => {
+    const { onSave, textarea } = renderEditor();
+    const lines = textarea.value.split("\n");
+    lines.splice(5, 0, "{section: Puente}", "y la la la");
+    fireEvent.change(textarea, { target: { value: lines.join("\n") } });
+    const saved = await saveAndRead(onSave);
+    expect(saved.links).toEqual([
+      { markerId: "verse", section: 0 },
+      { markerId: "chorus", section: 2 },
+    ]);
+  });
+});

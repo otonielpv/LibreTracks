@@ -10,6 +10,7 @@ import {
   formatLineTime,
   moveLineStart,
   parseLineTime,
+  remapChartLinks,
   PLAY_HISTORY_LIMIT,
   type PlayHistory,
   chartLinkFor,
@@ -273,5 +274,39 @@ describe("line change times in the editor", () => {
     expect(moveLineStart(starts, 2, 2, 16)[2]).toBeCloseTo(4.1);
     expect(moveLineStart(starts, 3, 99, 16)[3]).toBeCloseTo(15.9);
     expect(moveLineStart(starts, 0, 3, 16)).toEqual(starts);
+  });
+});
+
+describe("remapChartLinks", () => {
+  const before = parseChordPro("{section: Verso 1}\nuno\n{section: Coro}\na\n{section: Puente}\nb");
+  const links = [
+    { markerId: "v", section: 0 },
+    { markerId: "c", section: 1, lineBeats: [0, 4] },
+    { markerId: "p", section: 2 },
+  ];
+
+  it("leaves the links alone when the sections did not change", () => {
+    const after = parseChordPro("{section: Verso 1}\nuno cambiado\n{section: Coro}\na\n{section: Puente}\nb");
+    expect(remapChartLinks(before, after, links)).toEqual(links);
+  });
+
+  it("keeps each marker on its section when a copied chorus is pasted in the middle", () => {
+    const after = parseChordPro(
+      "{section: Verso 1}\nuno\n{section: Coro}\na\n{section: Coro}\na\n{section: Puente}\nb",
+    );
+    expect(remapChartLinks(before, after, links)).toEqual([
+      { markerId: "v", section: 0 },
+      // Still the first chorus, with its recorded times.
+      { markerId: "c", section: 1, lineBeats: [0, 4] },
+      { markerId: "p", section: 3 },
+    ]);
+  });
+
+  it("keeps the position of a renamed section and drops links past the end", () => {
+    const after = parseChordPro("{section: Verso 1}\nuno\n{section: Estribillo}\na");
+    expect(remapChartLinks(before, after, links)).toEqual([
+      { markerId: "v", section: 0 },
+      { markerId: "c", section: 1, lineBeats: [0, 4] },
+    ]);
   });
 });

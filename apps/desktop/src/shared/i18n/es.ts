@@ -3457,6 +3457,8 @@ const es = {
     autoTimes: "Reparto automático",
     recordedTimes: "Tiempos personalizados",
     resetTimes: "Volver al reparto automático",
+    recalcTimes: "Recalcular tiempos",
+    recalcTimesHint: "Rehace los tiempos que no encajan en su sección (por ejemplo, los de un coro copiado) y deja los que sí.",
     remove: "Quitar letra",
     cancel: "Cancelar",
     save: "Guardar",

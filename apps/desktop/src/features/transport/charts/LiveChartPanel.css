@@ -392,9 +392,16 @@
 
 .lt-chart-editor-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+}
+
+.lt-chart-editor-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 
 .lt-chart-editor-button {
@@ -422,9 +429,11 @@
   opacity: 0.4;
 }
 
+/* Grows with its text (ChartEditorModal): the body is the only scroller. */
 .lt-chart-editor-text textarea {
   min-height: 22rem;
-  resize: vertical;
+  resize: none;
+  overflow-y: hidden;
   padding: 0.75rem 0.85rem;
   border: 1px solid rgb(87 241 219 / 0.18);
   border-radius: 2px;
@@ -539,5 +548,7 @@
 
   .lt-chart-editor-text textarea {
     min-height: 12rem;
+    /* No sideways scroll inside the box on a phone: long lines wrap. */
+    white-space: pre-wrap;
   }
 }

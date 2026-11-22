@@ -121,4 +121,23 @@ describe("times typed in the text become marker links", () => {
     const chorus = applyChartTimes(doc, links, timing, times).filter((link) => link.section === 1);
     expect(chorus.every((link) => link.lineBeats === undefined)).toBe(true);
   });
+
+  it("spreads a section whose times fall outside it, like a chorus pasted with the verse's times", () => {
+    const times = shownTimes();
+    // The chorus (20 s to 40 s of song time) now carries the verse's times.
+    times.set(lineTimeKey(1, 0), 0);
+    times.set(lineTimeKey(1, 1), 5);
+    const chorus = applyChartTimes(doc, links, timing, times).filter((link) => link.section === 1);
+    expect(chorus.map((link) => link.lineBeats)).toEqual([undefined, undefined]);
+  });
+
+  it("drops a time that goes backwards and spreads that line between its neighbours", () => {
+    const times = shownTimes();
+    times.set(lineTimeKey(0, 1), 8);
+    times.set(lineTimeKey(0, 2), 3); // before the line above: dropped
+    times.set(lineTimeKey(0, 3), 16);
+    const verse = applyChartTimes(doc, links, timing, times).find((link) => link.markerId === "v");
+    // 0 s, 8 s, then halfway to 16 s, then 16 s (in beats of 0.5 s).
+    expect(verse?.lineBeats).toEqual([0, 16, 24, 32]);
+  });
 });

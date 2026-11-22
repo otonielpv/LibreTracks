@@ -3425,6 +3425,8 @@ const en = {
     autoTimes: "Spread evenly",
     recordedTimes: "Custom times",
     resetTimes: "Back to spreading evenly",
+    recalcTimes: "Recalculate times",
+    recalcTimesHint: "Redoes the times that do not fit their section (for example, those of a copied chorus) and keeps the ones that do.",
     remove: "Remove lyrics",
     cancel: "Cancel",
     save: "Save",

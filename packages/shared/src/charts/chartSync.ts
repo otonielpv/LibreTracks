@@ -384,3 +384,41 @@ export function moveLineStart(
   next[index] = Math.min(Math.max(seconds, low), Math.max(low, high));
   return next;
 }
+
+/**
+ * Marker links after the sections of the text changed, so each marker keeps
+ * showing the section it showed. Links point at sections by position, and
+ * pasting a copied chorus in the middle moves every section after it.
+ *
+ * A section is followed by its label and which repeat of that label it is
+ * (the second "Coro" stays the second "Coro"). A label that is gone keeps its
+ * position (it was most likely renamed), and a link past the end is dropped.
+ */
+export function remapChartLinks(before: ChartDoc, after: ChartDoc, links: readonly ChartLink[]): ChartLink[] {
+  const sameShape =
+    before.sections.length === after.sections.length &&
+    before.sections.every((section, index) => section.label === after.sections[index].label);
+  if (sameShape) return [...links];
+  const repeatOf = (doc: ChartDoc, index: number) =>
+    doc.sections.slice(0, index).filter((section) => section.label === doc.sections[index].label).length;
+  const result: ChartLink[] = [];
+  for (const link of links) {
+    const old = before.sections[link.section];
+    if (!old) continue;
+    const repeat = repeatOf(before, link.section);
+    const candidates = after.sections
+      .map((section, index) => (section.label === old.label ? index : -1))
+      .filter((index) => index >= 0);
+    let section: number;
+    if (candidates.length > 0) {
+      section = candidates[Math.min(repeat, candidates.length - 1)];
+    } else if (link.section < after.sections.length) {
+      section = link.section;
+    } else {
+      continue;
+    }
+    // Same section, same lines: recorded times travel with it.
+    result.push({ ...link, section });
+  }
+  return result;
+}
