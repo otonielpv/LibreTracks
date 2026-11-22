@@ -18,12 +18,19 @@
 #include <string>
 #include <vector>
 
-// Grabado con el motor de 20bebb47 (antes del paso 03).
+// Grabado con el motor de 20bebb47 (antes del paso 03), en x86_64. Solo vale
+// ahí: en arm64 (macOS) la senoidal de la fixture y la coma flotante dan otros
+// bits, así que allí cuenta la comprobación que no depende de la arquitectura
+// (EQ apagado == sin EQ, bit a bit).
 #define LT_EQ_BASELINE_HASH 4629536658748450973ull
 
 using namespace lt;
 
-TEST_CASE("mixer eq C2: a session without eq renders exactly as before the eq existed") {
+namespace {
+
+/** FNV-1a of the rendered mix. `disabled_eq` gives every track an EQ that is
+ * present but off, which must cost nothing and change no bit. */
+std::uint64_t render_baseline_hash(bool disabled_eq) {
     constexpr int kSR = test::kFixtureSampleRate;
     constexpr int kBlock = 512;
     constexpr int kBlocks = 80;
@@ -58,6 +65,9 @@ TEST_CASE("mixer eq C2: a session without eq renders exactly as before the eq ex
         t.parent_track_id = (i % 2 == 0) ? "folder" : "";
         t.clips.push_back(Clip{ "c" + std::to_string(i), src, 0, 0, kFrames });
         song.tracks.push_back(std::move(t));
+    }
+    if (disabled_eq) {
+        for (Track& track : song.tracks) track.eq = TrackEqParams{};
     }
     session.songs.push_back(std::move(song));
 
@@ -94,6 +104,18 @@ TEST_CASE("mixer eq C2: a session without eq renders exactly as before the eq ex
         mix_in(left);
         mix_in(right);
     }
-    MESSAGE("baseline hash = " << hash);
-    CHECK(hash == LT_EQ_BASELINE_HASH);
+    return hash;
+}
+
+}  // namespace
+
+TEST_CASE("mixer eq C2: a session without eq renders exactly as before the eq existed") {
+    const std::uint64_t without_eq = render_baseline_hash(false);
+    MESSAGE("baseline hash = " << without_eq);
+    // On every platform: an EQ that is there but off is the same as none.
+    CHECK(render_baseline_hash(true) == without_eq);
+#if defined(__x86_64__) || defined(_M_X64)
+    // Where the golden hash was recorded: bit for bit as before the EQ existed.
+    CHECK(without_eq == LT_EQ_BASELINE_HASH);
+#endif
 }
