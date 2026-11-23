@@ -125,4 +125,20 @@ describe("saving to Planning Center", () => {
     });
     expect(screen.getByRole("alert").textContent).toBe("chartSources.errors.noEditPermission");
   });
+
+  it("can save the repeats with slashes in the sheet instead of in the sequence", async () => {
+    open();
+    await act(async () => {});
+    await act(async () => {
+      fireEvent.click(screen.getByRole("radio", { name: "chartSources.save.repeatsInSheet" }));
+    });
+    expect(screen.getByTestId("pco-save-sequence").textContent).toBe("Verso 1 · Coro");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "chartSources.save.save" }));
+    });
+    const write = api.createPcoArrangement.mock.calls[0][1];
+    expect(write.sequence).toEqual(["Verso 1", "Coro"]);
+    expect(write.chordChart).toContain("// [G]Luz //");
+  });
 });
+

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { compareCharts } from "@libretracks/shared/charts/chartRefresh";
 import { parseChordPro } from "@libretracks/shared/charts/chordChart";
 import { chartTextHash, planningCenterToImported } from "@libretracks/shared/charts/importedChart";
-import { planningCenterSequence, toPlanningCenterChart } from "@libretracks/shared/charts/planningCenterExport";
+import { planningCenterExport, type RepeatStyle } from "@libretracks/shared/charts/planningCenterExport";
 import type { ChartLink, ChartSource, SectionMarkerSummary, SongRegionSummary } from "@libretracks/shared/models";
 
 import type { PcoArrangement } from "../transport/desktopApi";
@@ -41,6 +41,8 @@ export function SaveToPlanningCenterDialog({ region, markers, text, links, sourc
   // song's or the source's only for a sheet that does not say.
   const [key, setKey] = useState(() => parseChordPro(text).key ?? region.key ?? source.key ?? "");
   const [confirmed, setConfirmed] = useState(false);
+  const [repeatStyle, setRepeatStyle] = useState<RepeatStyle>("sequence");
+  const anyRepeat = links.some((link) => (link.repeat ?? 1) > 1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -52,7 +54,11 @@ export function SaveToPlanningCenterDialog({ region, markers, text, links, sourc
       .catch((cause) => setError(pcoErrorMessage(t, toPcoError(cause))));
   }, [source.songId, source.arrangementId, t]);
 
-  const sequence = useMemo(() => planningCenterSequence(text, links, markers), [text, links, markers]);
+  const exported = useMemo(
+    () => planningCenterExport(text, links, markers, repeatStyle),
+    [text, links, markers, repeatStyle],
+  );
+  const sequence = exported.sequence;
   const changedThere = Boolean(current?.updatedAt && source.updatedAt && current.updatedAt !== source.updatedAt);
   const changes = useMemo(() => {
     if (!current) return [];
@@ -69,7 +75,7 @@ export function SaveToPlanningCenterDialog({ region, markers, text, links, sourc
     setBusy(true);
     setError(null);
     try {
-      const write = { chordChart: toPlanningCenterChart(text), chordChartKey: key.trim(), sequence };
+      const write = { chordChart: exported.chordChart, chordChartKey: key.trim(), sequence };
       const result = await chartSourceHandlers.saveToPlanningCenter(
         kind === "new"
           ? { kind: "new", songId: source.songId, name: name.trim() }
@@ -165,6 +171,29 @@ export function SaveToPlanningCenterDialog({ region, markers, text, links, sourc
             {t("chartSources.save.key")}
             <input className="lt-pco-save-input" value={key} onChange={(event) => setKey(event.target.value)} />
           </label>
+          {anyRepeat ? (
+            <fieldset className="lt-pco-save-repeats">
+              <legend>{t("chartSources.save.repeats")}</legend>
+              <label className="lt-chart-import-key">
+                <input
+                  type="radio"
+                  name="pco-save-repeats"
+                  checked={repeatStyle === "sequence"}
+                  onChange={() => setRepeatStyle("sequence")}
+                />
+                {t("chartSources.save.repeatsInSequence")}
+              </label>
+              <label className="lt-chart-import-key">
+                <input
+                  type="radio"
+                  name="pco-save-repeats"
+                  checked={repeatStyle === "marks"}
+                  onChange={() => setRepeatStyle("marks")}
+                />
+                {t("chartSources.save.repeatsInSheet")}
+              </label>
+            </fieldset>
+          ) : null}
           <section className="lt-chart-import-changes" aria-label={t("chartSources.save.sequence")}>
             <h3>{t("chartSources.save.sequence")}</h3>
             {sequence.length === 0 ? (

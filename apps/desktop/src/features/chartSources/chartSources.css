@@ -275,3 +275,19 @@
   border: 1px solid currentColor;
   border-radius: 2px;
 }
+
+.lt-pco-save-repeats {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lt-pco-save-repeats legend {
+  padding: 0;
+  margin-bottom: 4px;
+  color: rgb(229 226 225 / 0.7);
+  font: 600 0.75rem/1.2 "Space Grotesk", sans-serif;
+}
