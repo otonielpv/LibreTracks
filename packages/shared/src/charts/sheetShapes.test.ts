@@ -127,11 +127,13 @@ describe("a sheet saved with slashes, imported again", () => {
       planningCenterToImported({
         id: "a",
         songId: "s",
-        chordChart: ["INTRO // Bm D G A //", "", "VAMP", "[Bm] [D] [G] [A]", "", "CORO", "Digno de [G]alabar"].join("\n"),
+        chordChart: ["INTRO // Bm D G A //", "", "VAMP Bm D G A", "", "CORO", "Digno de [G]alabar", "", "FINAL A G"].join("\n"),
       }),
     );
     const doc = parseChordPro(imported.text);
-    expect(doc.sections.map((section) => section.label)).toEqual(["Intro", "Vamp", "Coro"]);
+    expect(doc.sections.map((section) => section.label)).toEqual(["Intro", "Vamp", "Coro", "Final"]);
+    expect(imported.text).toContain("{section: Vamp}\n[Bm] [D] [G] [A]");
+    expect(imported.text).toContain("{section: Final}\n[A] [G]");
     expect(imported.text).not.toContain("/");
     expect(imported.repeats?.[0]).toBe(2);
   });

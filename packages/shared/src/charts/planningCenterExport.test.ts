@@ -79,14 +79,14 @@ describe("markers of another kind on a section's chords", () => {
   it("with slashes, a Vamp and an Interludio on the intro are their own sections, where they sound", () => {
     const { chordChart } = planningCenterExport(text, links, markers, "marks");
     expect(chordChart).toBe(
-      ["INTRO", "[Bm] [D] [G] [A]", "", "CORO", "Digno de [G]alabar", "", "VAMP", "[Bm] [D] [G] [A]", "", "INTERLUDIO // Bm D G A //", ""].join("\n"),
+      ["INTRO Bm D G A", "", "CORO", "Digno de [G]alabar", "", "VAMP Bm D G A", "", "INTERLUDIO // Bm D G A //", ""].join("\n"),
     );
   });
 
   it("in the sequence, each one by its own name", () => {
     const result = planningCenterExport(text, links, markers, "sequence");
     expect(result.sequence).toEqual(["Intro", "Coro", "Vamp", "Interludio", "Interludio"]);
-    expect(result.chordChart).toContain("VAMP\n[Bm] [D] [G] [A]");
+    expect(result.chordChart).toContain("VAMP Bm D G A");
     expect(result.chordChart).not.toContain("//");
   });
 });

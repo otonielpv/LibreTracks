@@ -81,13 +81,14 @@ function writeSection(section: ChartSection, label: string | null | undefined, t
       );
   const first = marked[0];
   const last = marked[marked.length - 1];
-  // One line of chords and nothing else: the marks and the chords go on the
-  // header, as plain text ("INTRO // Bm D G A //"); in brackets between
-  // slashes Planning Center draws them over the slashes.
+  // One line of chords and nothing else: the chords go beside the header, as
+  // plain text, with the marks if it repeats ("INTERLUDIO Bm D G A",
+  // "INTRO // Bm D G A //"); in brackets Planning Center draws them over the
+  // slashes.
   const content = section.lines.filter((line) => line.kind !== "lyrics" || serializeLyricLine(line.segments).trim());
-  if (slashes && label && !lyricIndexes.length && content.length === 1 && content[0].kind === "lyrics") {
+  if (label && !lyricIndexes.length && content.length === 1 && content[0].kind === "lyrics") {
     const chords = serializeLyricLine(content[0].segments).replace(/\[([^\]]+)\]/g, " $1 ").replace(/\s+/g, " ").trim();
-    return `${label.toUpperCase()} ${slashes} ${chords} ${slashes}`;
+    return slashes ? `${label.toUpperCase()} ${slashes} ${chords} ${slashes}` : `${label.toUpperCase()} ${chords}`;
   }
   const lines: string[] = [];
   if (label) lines.push(label.toUpperCase());
