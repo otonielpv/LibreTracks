@@ -1,0 +1,130 @@
+---
+title: Lyrics and chords from Planning Center
+description: "Bring the lyrics and chords of your Planning Center account into the songs of your session: LibreTracks fits them to each song's markers, understands different names for the same section and lets you check before saving."
+sidebar:
+  order: 10
+# Draft until the feature ships (FEATURE_FLAGS.chartSources, plan
+# smart-chart-import step 11): when it does, remove `draft` and add the page to
+# the sidebar in astro.config.mjs.
+draft: true
+---
+
+If your church keeps its songs in **Planning Center Services**, LibreTracks can
+bring their lyrics and chords into each song's
+[lyrics and chords](/docs/live-view/#lyrics-and-chords). Nothing to export and
+no text to copy: search the song, pick the arrangement, check and done.
+
+What matters is that **the lyrics follow your song, not the sheet**. Planning
+Center may write Intro, Verse, Chorus; if your song goes Intro, Verse, Verse,
+Chorus, Live shows Intro, Verse, Verse, Chorus.
+
+## 1. Connect the account
+
+Open the **Cloud** panel (the Drive, OneDrive and Dropbox accounts).
+**Planning Center** is at the bottom: press **Connect with Planning Center**,
+sign in in the browser and come back to the app. You will see your name and
+your organization.
+
+- The account is yours: LibreTracks only **reads** songs, arrangements and
+  plans. It never writes to Planning Center.
+- The access is kept in the system credential store, not in the session or
+  any file.
+- If your user has no access to **Services** in the organization, the app says
+  so: ask whoever runs Planning Center.
+- **Disconnect** removes the access from this device.
+
+## 2. Import the lyrics of a song
+
+1. Open the song's lyrics editor (song menu, **Lyrics and chords**).
+2. Press **From Planning Center…**. The search already has the song's name.
+3. Pick the song, then the arrangement. An arrangement with only a PDF shows
+   as **PDF only** and cannot be picked: there is no text to bring.
+4. Check (see below) and press **Import**. If the song already had lyrics, the
+   button says **Replace**.
+
+### The review
+
+Before saving you see **the song marker by marker**, in playing order, with the
+sheet section each one will show and its first line.
+
+- The repeats of an [arrangement](/docs/arrangements/) show with their
+  original marker and follow it.
+- Doubtful markers say **Check** or **Unsure**; hover to see why that section
+  was chosen.
+- When you change a marker's section it stays as you left it and the rest is
+  fitted again around it.
+- The **sections not used** are listed at the bottom, and a warning on top
+  tells you if a sung marker was left without a section.
+- If Planning Center has the song in another key, the **transpose** box
+  (checked) moves the chords to your song's key.
+- If the song has no section markers yet, **Import without linking**, or
+  create them first with [Analyse song](/docs/song-analysis/).
+
+## 3. How sections are matched
+
+The song's markers lead: they sit on the audio. For each marker LibreTracks
+looks for the sheet section that belongs there:
+
+- **Different names for the same part**: Chorus, Coro, Estribillo, Refrão and
+  Refrain are the same part; so are Interlude, Instrumental and Turnaround; and
+  Ending, Outro and Coda. It reads English, Spanish and Portuguese, Roman
+  numerals ("Verse II") and decorations like "Chorus (x2)" or "Final chorus".
+- **Numbers**: a **Verse 2** marker prefers the **Verse 2** section. A marker
+  without a number reads the sheet in order.
+- **Repeats**: if the sheet writes the chorus once and the song sings it three
+  times, all three markers show that chorus.
+- **The Planning Center sequence** tells which of two verses is which when your
+  markers only say "Verse".
+- **Parts without words**: an intro or an instrumental with no section in the
+  sheet stay without lyrics, silently. A sung marker without a section warns.
+- Planning Center's short forms (V1, C, PC, B) are read in its sequence, never
+  in a marker's name: a marker called "C" is not a chorus.
+
+| Your marker | Matches in the sheet |
+| --- | --- |
+| Chorus, Refrain, Estribillo | Chorus, Coro, Refrão |
+| Interlude, Instrumental | Interlude, Instrumental, Turnaround |
+| Ending, Outro | Ending, Outro, Coda |
+| Pre-Chorus | Pre-Chorus, Pre-Coro |
+| Bridge | Bridge, Puente, Ponte |
+
+The same matching is used when importing a PDF or text.
+
+## 4. Update from Planning Center
+
+On an imported song, the lyrics editor offers **Update from Planning Center**.
+If the arrangement has not changed, it says so. If it has, you see which
+sections were **added**, **removed** or **changed**, and the same review, with
+the markers that already had a section keeping it.
+
+If you edited the lyrics in LibreTracks after importing them, a warning tells
+you those changes will be lost. It never updates on its own.
+
+## 5. Import a whole plan
+
+To get Sunday's service ready at once: in the Planning Center row of the Cloud
+panel, **Import a plan…**.
+
+1. Pick the service type and one of the upcoming plans.
+2. Each song of the plan is paired with a song of the session by title ("(Live)"
+   or a key in the name do not matter). Fix a pair in its menu, or leave it as
+   **Not in the session**.
+3. **Prepare** reads each arrangement, with the sequence and key the plan says.
+   You can **Stop** at any time.
+4. **Apply the clear ones and review the rest** saves the songs where
+   everything fits for sure and opens the review of the others, one by one. Or
+   **Review one by one** all of them.
+
+Each song is saved whole or not at all: stopping half way leaves no half
+lyrics.
+
+## Common problems
+
+- **Planning Center does not show**: this version of the app does not include
+  it yet.
+- **"Your user has no access to Services"**: ask for Services access in your
+  Planning Center organization.
+- **A verse lands in the wrong place**: change it in the review. If your
+  markers say "Verse 1" and "Verse 2", the matching is surer.
+- **"PDF only"**: that arrangement has no lyrics as text in Planning Center.
+  Import the PDF with **Import file…** in the editor.

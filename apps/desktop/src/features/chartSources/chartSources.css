@@ -112,3 +112,40 @@
   margin: 0 16px 12px;
   opacity: 0.8;
 }
+
+/* Phone and small tablet (always landscape): the review row puts the line
+   of words under the marker and the section, keeping 44 px targets. */
+@media (max-width: 760px), (pointer: coarse) and (max-height: 520px) {
+  .lt-chart-import {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
+  .lt-chart-import-rows li {
+    grid-template-columns: minmax(80px, 1fr) minmax(120px, 1.4fr) 64px;
+    padding: 4px 0;
+  }
+
+  .lt-chart-import-line {
+    grid-column: 1 / -1;
+  }
+
+  .lt-chart-import-rows select,
+  .lt-plan-import-field select {
+    min-height: 44px;
+  }
+}
+
+.lt-plan-import-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lt-plan-import-field select {
+  min-height: 40px;
+}
+
+.lt-chart-import-rows li.lt-plan-import-pair {
+  grid-template-columns: minmax(120px, 1fr) minmax(140px, 1.2fr) auto;
+}

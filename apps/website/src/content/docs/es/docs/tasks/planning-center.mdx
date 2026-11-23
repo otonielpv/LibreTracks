@@ -1,0 +1,132 @@
+---
+title: Letra y acordes desde Planning Center
+description: "Trae la letra y los acordes de tu cuenta de Planning Center a las canciones de la sesión: LibreTracks las ajusta a las marcas de cada canción, entiende nombres distintos para la misma sección y te deja revisarlo antes de guardar."
+sidebar:
+  order: 10
+# Borrador hasta que salga la función (FEATURE_FLAGS.chartSources, plan
+# smart-chart-import paso 11): al publicarla, quitar `draft` y añadir la página
+# al sidebar de astro.config.mjs.
+draft: true
+---
+
+Si tu iglesia guarda las canciones en **Planning Center Services**, LibreTracks
+puede traer su letra y sus acordes a la [letra y acordes](/es/docs/live-view/#letra-y-acordes)
+de cada canción. No hace falta exportar nada ni copiar texto: buscas la canción,
+eliges el arreglo, revisas y listo.
+
+Lo importante es que **la letra sigue a tu canción, no a la hoja**. Planning
+Center puede escribir Intro, Verso, Coro; si tu canción va Intro, Verso, Verso,
+Coro, en Live verás Intro, Verso, Verso, Coro.
+
+## 1. Conectar la cuenta
+
+Abre el panel de **Nube** (las cuentas de Drive, OneDrive y Dropbox). Abajo
+aparece **Planning Center**: pulsa **Conectar con Planning Center**, entra con
+tu usuario en el navegador y vuelve a la app. Verás tu nombre y tu
+organización.
+
+- La cuenta es tuya: LibreTracks solo **lee** canciones, arreglos y planes.
+  Nunca escribe en Planning Center.
+- El acceso se guarda en el almacén de credenciales del sistema, no en la
+  sesión ni en ningún archivo.
+- Si tu usuario no tiene acceso a **Services** en la organización, la app te
+  lo dice: pídeselo a quien administre Planning Center.
+- **Desconectar** borra el acceso de este dispositivo.
+
+## 2. Importar la letra de una canción
+
+1. Abre el editor de letra de la canción (menú de la canción, **Letra y
+   acordes**).
+2. Pulsa **Desde Planning Center…**. El buscador ya trae el nombre de la
+   canción.
+3. Elige la canción y luego el arreglo. Un arreglo que solo tiene un PDF
+   aparece como **Solo PDF** y no se puede elegir: no hay texto que traer.
+4. Revisa (ver abajo) y pulsa **Importar**. Si la canción ya tenía letra, el
+   botón dice **Reemplazar**.
+
+### La revisión
+
+Antes de guardar ves **la canción marca a marca**, en el orden en que suena,
+con la sección de la hoja que se mostrará en cada una y su primera línea.
+
+- Las repeticiones de un [arreglo](/es/docs/arrangements/) aparecen con su
+  marca original y la siguen.
+- Las marcas dudosas llevan **Revisar** o **Dudoso**; pasa el ratón para ver
+  por qué se eligió esa sección.
+- Si cambias la sección de una marca, se queda como la dejaste y el resto se
+  vuelve a ajustar alrededor.
+- Abajo salen las **secciones sin usar** y, arriba, un aviso si alguna marca
+  que se canta se quedó sin sección.
+- Si Planning Center tiene la canción en otro tono, la casilla
+  **transponer** (marcada) pasa los acordes al tono de tu canción.
+- Si la canción no tiene marcas de sección todavía, puedes **Importar sin
+  enlazar** o crearlas antes con [Analizar canción](/es/docs/song-analysis/).
+
+## 3. Cómo se emparejan las secciones
+
+Las marcas de la canción mandan: están pegadas al audio. LibreTracks busca para
+cada marca la sección de la hoja que le toca:
+
+- **Nombres distintos para lo mismo**: Coro, Estribillo, Chorus, Refrão y
+  Refrán son la misma parte; también Interludio, Instrumental y Turnaround; y
+  Final, Outro y Coda. Entiende español, inglés y portugués, números
+  romanos ("Estrofa II") y adornos como "Coro (x2)" o "Coro final".
+- **Números**: una marca **Verso 2** prefiere la sección **Verse 2**. Una marca
+  sin número va leyendo la hoja en orden.
+- **Repeticiones**: si la hoja escribe el coro una vez y la canción lo canta
+  tres, las tres marcas muestran ese coro.
+- **La secuencia de Planning Center** ayuda a saber cuál de dos versos es cada
+  uno cuando tus marcas solo dicen "Verso".
+- **Partes sin letra**: una intro o un instrumental sin sección en la hoja se
+  quedan sin letra, sin aviso. Una marca que se canta sin sección sí avisa.
+- Las abreviaturas de Planning Center (V1, C, PC, B) se entienden en su
+  secuencia, nunca en el nombre de una marca: una marca llamada "C" no es un
+  coro.
+
+| Tu marca | Casa con la hoja |
+| --- | --- |
+| Estribillo, Coro, Refrán | Chorus, Coro, Refrão, Estribillo |
+| Interludio, Instrumental | Interlude, Instrumental, Turnaround |
+| Final, Outro | Ending, Outro, Coda |
+| Precoro, Pre-estribillo | Pre-Chorus, Pre-Coro |
+| Puente | Bridge, Ponte |
+
+Este emparejado también se usa al importar un PDF o un texto.
+
+## 4. Actualizar desde Planning Center
+
+En una canción importada, el editor de letra ofrece **Actualizar desde
+Planning Center**. Si el arreglo no ha cambiado, te lo dice. Si cambió, ves
+qué secciones se **añadieron**, **quitaron** o **cambiaron**, y la misma
+revisión, con las marcas que ya tenían sección manteniéndola.
+
+Si editaste la letra en LibreTracks después de importarla, verás un aviso: al
+actualizar se pierden esos cambios. Nunca se actualiza solo.
+
+## 5. Importar un plan entero
+
+Para preparar el culto del domingo de una vez: en la fila de Planning Center
+del panel de Nube, **Importar un plan…**.
+
+1. Elige el tipo de servicio y uno de los próximos planes.
+2. Cada canción del plan se empareja con una canción de la sesión por título
+   (da igual "(En vivo)" o el tono en el nombre). Corrige la pareja en su
+   desplegable o déjala en **No está en la sesión**.
+3. **Preparar** lee cada arreglo, con la secuencia y el tono que dice el plan.
+   Puedes **Parar** cuando quieras.
+4. **Aplicar las claras y revisar el resto** guarda las canciones en las que
+   todo encaja con seguridad y abre la revisión de las demás, una a una. O
+   **Revisar una a una** todas.
+
+Cada canción se guarda entera o no se guarda: parar a mitad no deja letras a
+medias.
+
+## Problemas frecuentes
+
+- **No aparece Planning Center**: la versión de la app no lo incluye todavía.
+- **"Tu usuario no tiene acceso a Services"**: pide acceso a Services en tu
+  organización de Planning Center.
+- **Un verso sale en el sitio equivocado**: cámbialo en la revisión. Si tus
+  marcas dicen "Verso 1" y "Verso 2", el emparejado es más seguro.
+- **"Solo PDF"**: ese arreglo no tiene la letra como texto en Planning Center.
+  Puedes importar el PDF desde **Importar archivo…** en el editor.
