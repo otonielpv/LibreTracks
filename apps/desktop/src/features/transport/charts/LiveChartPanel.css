@@ -523,7 +523,7 @@
    lyrics (no times badge) got a wider, shifted select than the rest. */
 .lt-chart-editor-links li {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) 11rem;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) 12.5rem;
   align-items: center;
   gap: 0.45rem;
 }
@@ -830,7 +830,17 @@
   min-width: 0;
 }
 
-.lt-chart-editor-passes {
+.lt-chart-editor-extra .lt-chart-editor-times {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lt-chart-editor-links select.lt-chart-editor-passes {
+  flex: none;
+  width: auto;
+  min-width: 3.6rem;
   border-radius: 2px;
   border: 1px solid rgb(87 241 219 / 0.18);
   background: rgb(28 31 32 / 0.98);
