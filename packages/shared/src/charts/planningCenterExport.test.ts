@@ -90,3 +90,22 @@ describe("markers of another kind on a section's chords", () => {
     expect(result.chordChart).not.toContain("//");
   });
 });
+
+describe("with slashes, a part that comes back later", () => {
+  const named = (id: string, name: string, start: number): SectionMarkerSummary => ({ id, name, startSeconds: start, kind: "custom" });
+  const text = ["{section: Coro 2}", "Digno de [G]alabar", "{section: Instrumental}", "[G] [Em]", "{section: Puente}", "Sé [G]exaltado"].join("\n");
+  const markers = [named("c", "Coro", 0), named("i1", "Instrumental", 10), named("p", "Puente", 20), named("i2", "Instrumental", 30), named("i3", "Instrumental", 40)];
+  const links = [
+    { markerId: "c", section: 0 },
+    { markerId: "i1", section: 1 },
+    { markerId: "p", section: 2 },
+    { markerId: "i2", section: 1 },
+    { markerId: "i3", section: 1 },
+  ];
+
+  it("is written again where it sounds, with the times of that run", () => {
+    expect(planningCenterExport(text, links, markers, "marks").chordChart).toBe(
+      ["CORO 2", "Digno de [G]alabar", "", "INSTRUMENTAL G Em", "", "PUENTE", "Sé [G]exaltado", "", "INSTRUMENTAL // G Em //", ""].join("\n"),
+    );
+  });
+});

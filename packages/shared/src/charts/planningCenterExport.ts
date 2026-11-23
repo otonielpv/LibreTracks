@@ -183,19 +183,58 @@ export function planningCenterExport(
     const after = anchor ?? entry.section;
     copies.set(after, [...(copies.get(after) ?? []), copy]);
   }
-  if (style === "marks") {
-    const totals = new Map<number, number>();
-    for (const entry of played) {
-      if (!entry.copy) totals.set(entry.section, Math.min(16, (totals.get(entry.section) ?? 0) + entry.passes));
-    }
-    return { chordChart: toPlanningCenterChart(text, totals, true, copies) };
-  }
+  if (style === "marks") return { chordChart: marksChart(doc, played, kindOf) };
   const named = new Map(all.map((copy) => [kindOf(copy.label), copy.label] as const));
   const sequence = played.flatMap((entry) =>
     Array.from({ length: entry.passes }, () => (entry.copy ? named.get(kindOf(entry.label)) ?? entry.label : entry.label)),
   );
   const once = new Map([...copies].map(([section, list]) => [section, list.map((copy) => ({ ...copy, times: 1 }))]));
   return { chordChart: toPlanningCenterChart(text, new Map(), false, once), sequence };
+}
+
+/**
+ * With slashes there is no sequence: the sheet is read top to bottom, so a
+ * part is written where it sounds, once per run of markers in a row, with
+ * the times of that run. An Instrumental after the second chorus and two
+ * more after the bridges are "INSTRUMENTAL" there and "INSTRUMENTAL //"
+ * after the bridge, not one "///". The first run of a section of the sheet
+ * is the section itself; later runs, and markers of another kind (a Vamp on
+ * the intro's chords), are written again after the part played before them.
+ */
+function marksChart(
+  doc: ReturnType<typeof parseChordPro>,
+  played: ReadonlyArray<{ section: number; label: string; copy: boolean; passes: number }>,
+  kindOf: (label: string) => string,
+): string {
+  type Item = { source: number; label: string | null | undefined; times: number };
+  // The sheet's own sections; `items` is the order they are written in, with
+  // the copies spliced in (indexes there move, so never look up by section).
+  const originals: Item[] = doc.sections.map((section, index) => ({ source: index, label: section.label, times: 1 }));
+  const items = [...originals];
+  const started = new Set<string>();
+  let previousKey: string | null = null;
+  let current: Item | null = null;
+  for (const entry of played) {
+    const key = `${entry.section}|${entry.copy ? kindOf(entry.label) : ""}`;
+    if (key === previousKey && current) {
+      current.times = Math.min(16, current.times + entry.passes);
+      continue;
+    }
+    let next: Item;
+    if (!entry.copy && !started.has(key)) {
+      next = originals[entry.section];
+      next.times = entry.passes;
+    } else {
+      next = { source: entry.section, label: entry.label, times: entry.passes };
+      const at = items.indexOf(current ?? originals[entry.section]) + 1;
+      items.splice(at, 0, next);
+    }
+    started.add(key);
+    previousKey = key;
+    current = next;
+  }
+  const blocks = items.map((item) => writeSection(doc.sections[item.source], item.label, item.times, true));
+  return `${blocks.filter((block) => block.trim()).join("\n\n")}\n`;
 }
 
 /** "Interludio 2" -> "Interludio": the copy is one section for all of them. */
