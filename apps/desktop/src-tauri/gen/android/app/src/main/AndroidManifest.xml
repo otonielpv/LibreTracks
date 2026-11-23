@@ -12,6 +12,13 @@
     <!-- MIDI (MidiBridge.kt). required="false" so Play still lists the app on
          devices without android.media.midi; MidiBridge.isAvailable checks. -->
     <uses-feature android:name="android.software.midi" android:required="false" />
+    <!-- Play turns screenOrientation="sensorLandscape" into a REQUIRED
+         screen.landscape, and CHANGE_WIFI_MULTICAST_STATE into a REQUIRED
+         wifi, and since 1.18.0 refuses to send the release to review while
+         they restrict who can install it. Neither is essential: the
+         orientation lock and the LAN features work where they exist. -->
+    <uses-feature android:name="android.hardware.screen.landscape" android:required="false" />
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
     <!-- Bluetooth LE MIDI pedals (plan mobile-midi, paso 06). Asked at run time
          only when the user presses "Search Bluetooth devices" in Settings > MIDI.
          Android 12+: SCAN (neverForLocation: we only look for the MIDI service
