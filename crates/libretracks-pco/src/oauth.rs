@@ -19,13 +19,18 @@ pub const REDIRECT_PATH: &str = "/oauth/planning-center";
 /// The mobile redirect, registered in the same application.
 pub const MOBILE_REDIRECT_URI: &str = "com.libretracks.app:/oauth/planning-center";
 
-/// The client id this build presents, from `LT_PCO_CLIENT_ID` at compile
-/// time. Not in the source: the registered application belongs to a test
-/// organization until the real one exists. Without it the app does not offer
-/// Planning Center at all.
+/// Client id of this project's Planning Center application (registered
+/// 2026-11-23, type Public). Public by nature (PKCE, no secret), so it lives in
+/// the source like Dropbox's app key. A fork sets `LT_PCO_CLIENT_ID` at build
+/// time to use its own.
+pub const REGISTERED_CLIENT_ID: &str =
+    "20088cd22c57f3ac939ce478e5c51f820dd8fe2f803b62aae22a0a5745971988";
+
+/// The client id this build presents: the build-time override when set and
+/// non-empty, the registered one otherwise.
 pub const BUILD_CLIENT_ID: Option<&str> = match option_env!("LT_PCO_CLIENT_ID") {
     Some(id) if !id.is_empty() => Some(id),
-    _ => None,
+    _ => Some(REGISTERED_CLIENT_ID),
 };
 
 /// Whether this build can sign in to Planning Center.
@@ -162,14 +167,16 @@ mod tests {
         assert!(!refresh.contains_key("client_secret"));
     }
 
-    /// Built without `LT_PCO_CLIENT_ID` (CI, forks), the app hides the source.
+    /// Every build can sign in: the registered id, or a fork's override.
     #[test]
-    fn configured_only_with_a_build_client_id() {
-        assert_eq!(
-            is_configured(),
-            option_env!("LT_PCO_CLIENT_ID").is_some_and(|id| !id.is_empty())
-        );
-        assert_eq!(PlanningCenterOAuth::from_build().is_some(), is_configured());
+    fn every_build_has_a_client_id() {
+        assert!(is_configured());
+        let expected = match option_env!("LT_PCO_CLIENT_ID") {
+            Some(id) if !id.is_empty() => id,
+            _ => REGISTERED_CLIENT_ID,
+        };
+        assert_eq!(BUILD_CLIENT_ID, Some(expected));
+        assert!(PlanningCenterOAuth::from_build().is_some());
     }
 
     #[test]

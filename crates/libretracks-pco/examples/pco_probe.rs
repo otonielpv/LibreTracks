@@ -3,10 +3,10 @@
 //! answers of the calls the chart import needs.
 //!
 //! ```text
-//! PCO_CLIENT_ID=... cargo run -p libretracks-pco --example pco_probe -- dump <folder> [song title]
+//! cargo run -p libretracks-pco --example pco_probe -- dump <folder> [song title]
 //! ```
 //!
-//! The client id comes only from the environment. The dump holds real data:
+//! The registered client id by default (`PCO_CLIENT_ID` overrides it). The dump holds real data:
 //! sanitize it (names, ids, copyrighted lyrics) before anything goes in the
 //! repo. Tokens are never printed or written; only their lifetime is.
 
@@ -16,7 +16,7 @@ use std::time::Duration;
 use libretracks_cloud::loopback::LoopbackListener;
 use libretracks_cloud::oauth::{OAuthProvider, TokenResponse};
 use libretracks_cloud::token::exchange_code;
-use libretracks_pco::oauth::{begin, LOOPBACK_PORTS, TOKEN_ENDPOINT};
+use libretracks_pco::oauth::{begin, LOOPBACK_PORTS, REGISTERED_CLIENT_ID, TOKEN_ENDPOINT};
 use libretracks_pco::PlanningCenterOAuth;
 
 const API: &str = "https://api.planningcenteronline.com/services/v2";
@@ -29,7 +29,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let folder = PathBuf::from(args.next().ok_or("missing <folder>")?);
     let title = args.next().unwrap_or_else(|| "LT test".to_string());
-    let client_id = std::env::var("PCO_CLIENT_ID").map_err(|_| "set PCO_CLIENT_ID")?;
+    // The registered app by default; PCO_CLIENT_ID tries another one.
+    let client_id = std::env::var("PCO_CLIENT_ID").unwrap_or_else(|_| REGISTERED_CLIENT_ID.to_string());
     std::fs::create_dir_all(&folder)?;
 
     let provider = PlanningCenterOAuth::new(client_id);
