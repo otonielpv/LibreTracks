@@ -15,6 +15,7 @@
     "./charts/chordChart": "./src/charts/chordChart.ts",
     "./charts/chartSync": "./src/charts/chartSync.ts",
     "./charts/personalChords": "./src/charts/personalChords.ts",
+    "./charts/sectionVocab": "./src/charts/sectionVocab.ts",
     "./featureFlags": "./src/featureFlags.ts",
     "./networkApi": "./src/networkApi.ts",
     "./networkRoles": "./src/networkRoles.ts",

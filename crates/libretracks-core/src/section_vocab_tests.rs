@@ -111,3 +111,60 @@ fn titles_normalize_for_matching() {
         assert_eq!(normalize_title(text), expected, "{text:?}");
     }
 }
+
+/// The cases TS reads too (`packages/shared/src/charts/sectionLabels.cases.json`):
+/// both languages must answer the same.
+#[test]
+fn written_labels_match_the_shared_cases() {
+    let cases: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+        "../../../packages/shared/src/charts/sectionLabels.cases.json"
+    ))
+    .expect("the cases file is JSON");
+    assert!(cases.len() >= 50);
+    for case in &cases {
+        let text = case["text"].as_str().unwrap();
+        let context = LabelContext::from_token(case["context"].as_str().unwrap()).unwrap();
+        let expected = case["kind"].as_str().map(|kind| {
+            (
+                kind.to_string(),
+                case["number"].as_u64().map(|number| number as u8),
+            )
+        });
+        let actual =
+            canonical_label(text, context).map(|(kind, number)| (kind.to_string(), number));
+        assert_eq!(actual, expected, "{text:?} ({context:?})");
+    }
+}
+
+#[test]
+fn families_join_the_names_of_the_same_part() {
+    assert_eq!(section_family("refrain"), section_family("chorus"));
+    assert_eq!(section_family("interlude"), section_family("instrumental"));
+    assert_eq!(section_family("turnaround"), section_family("instrumental"));
+    assert_eq!(section_family("ending"), section_family("outro"));
+    assert_ne!(section_family("vamp"), section_family("chorus"));
+    assert_ne!(section_family("tag"), section_family("chorus"));
+    assert_ne!(section_family("bridge"), section_family("pre_chorus"));
+}
+
+/// TS reads the vocabulary from a generated JSON: it must be this module's.
+/// Regenerate with `UPDATE_SECTION_VOCAB=1 cargo test -p libretracks-core
+/// section_vocab_json`.
+#[test]
+fn section_vocab_json() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../packages/shared/src/charts/sectionVocab.json");
+    let expected = vocabulary_json();
+    if std::env::var_os("UPDATE_SECTION_VOCAB").is_some() {
+        std::fs::write(&path, &expected).expect("write sectionVocab.json");
+        return;
+    }
+    let actual = std::fs::read_to_string(&path)
+        .unwrap_or_default()
+        .replace("\r\n", "\n");
+    assert!(
+        actual == expected,
+        "packages/shared/src/charts/sectionVocab.json is not section_vocab.rs. \
+         Regenerate it with: UPDATE_SECTION_VOCAB=1 cargo test -p libretracks-core section_vocab_json"
+    );
+}

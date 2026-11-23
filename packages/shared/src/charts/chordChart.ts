@@ -1,6 +1,7 @@
 import type { MarkerKind } from "../models";
 
 import { transposeChord, transposeNoteRun } from "./chordNotation";
+import { canonicalLabel, chartKind } from "./sectionVocab";
 
 /**
  * A song's lyrics and chords, as LibreTracks understands them.
@@ -35,34 +36,6 @@ export type ChartDoc = {
   sections: ChartSection[];
 };
 
-/**
- * Section names in Spanish and English, with the marker kind each one means.
- * Longest first: "pre coro" must win over "coro".
- */
-const SECTION_WORDS: Array<[RegExp, MarkerKind]> = [
-  [/^pre[\s-]?(?:coro|chorus|estribillo)/i, "pre_chorus"],
-  [/^post[\s-]?(?:coro|chorus|estribillo)/i, "post_chorus"],
-  [/^acorde\s+final|^final\s+chord/i, "ending"],
-  [/^(?:intro(?:ducci[oó]n)?)/i, "intro"],
-  [/^(?:verso|verse|estrofa|stanza)/i, "verse"],
-  [/^(?:coro|chorus|estribillo)/i, "chorus"],
-  [/^(?:refr[aá]n|refrain)/i, "refrain"],
-  [/^(?:puente|bridge)/i, "bridge"],
-  [/^(?:instrumental)/i, "instrumental"],
-  [/^(?:interludio|interlude|inter)\b/i, "interlude"],
-  [/^(?:solo)/i, "solo"],
-  [/^(?:outro|coda|ending|final|fin)\b/i, "outro"],
-  [/^(?:tag)\b/i, "tag"],
-  [/^(?:vamp)\b/i, "vamp"],
-  [/^(?:rap)\b/i, "rap"],
-  [/^(?:breakdown|break)\b/i, "breakdown"],
-  [/^(?:turnaround)\b/i, "turnaround"],
-  [/^(?:exhortaci[oó]n)/i, "exhortation"],
-  [/^(?:a\s?capp?ella)/i, "acapella"],
-];
-
-const ROMAN: Record<string, number> = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6 };
-
 export type SectionHeader = { label: string; kind: MarkerKind | null; number: number | null };
 
 /**
@@ -79,28 +52,11 @@ export function parseSectionHeader(raw: string): SectionHeader | null {
     .replace(/\s*[:;.]$/, "")
     .trim();
   if (!text || text.length > 32) return null;
-  for (const [pattern, kind] of SECTION_WORDS) {
-    const match = pattern.exec(text);
-    if (!match) continue;
-    const rest = text
-      .slice(match[0].length)
-      .replace(/^[a-záéíóúñ]*/i, "") // "Verses", "Coros", "Introducción"
-      .trim();
-    const number = /^#?\s*(\d{1,2})\b/.exec(rest) ?? /^([ivx]{1,3})\b/i.exec(rest);
-    const tail = rest
-      .slice(number ? number[0].length : 0)
-      .replace(/^[\s.:-]*/, "")
-      .replace(/^\(?x\s?\d+\)?$|^\(?\d+x\)?$/i, "")
-      .trim();
-    if (tail) return null;
-    const parsedNumber = number
-      ? /\d/.test(number[1])
-        ? Number(number[1])
-        : (ROMAN[number[1].toLowerCase()] ?? null)
-      : null;
-    return { label: tidyLabel(text), kind, number: parsedNumber };
-  }
-  return null;
+  // The words come from the one vocabulary (Rust `section_vocab.rs`); only the
+  // decoration ("[...]", "Coro:", "(x2)") is a chart thing.
+  const meaning = canonicalLabel(text, "header");
+  if (!meaning) return null;
+  return { label: tidyLabel(text), kind: chartKind(meaning.kind), number: meaning.number };
 }
 
 /** "VERSO 1" → "Verso 1"; mixed case is left as the author wrote it. */

@@ -7,6 +7,7 @@ import {
 } from "../models";
 
 import { parseSectionHeader, type ChartDoc } from "./chordChart";
+import { sectionFamily } from "./sectionVocab";
 
 /** The stored id of a link: arrangements give repeats `"{id}~{n}"`, and a
  * repeat uses the link of its original marker. Mirrors Rust
@@ -38,19 +39,8 @@ export function chartMarkersForRegion(
     .sort((left, right) => left.startSeconds - right.startSeconds);
 }
 
-/** Kinds that name the same part of a song in different sheets. */
-const KIND_FAMILY: Partial<Record<MarkerKind, string>> = {
-  chorus: "chorus",
-  refrain: "chorus",
-  outro: "end",
-  ending: "end",
-  instrumental: "instrumental",
-  interlude: "instrumental",
-};
-
 function family(kind: MarkerKind | null | undefined): string | null {
-  if (!kind || kind === "custom") return null;
-  return KIND_FAMILY[kind] ?? kind;
+  return sectionFamily(kind);
 }
 
 /** What a marker names: its kind, or — for a custom marker called "Coro 2" —
