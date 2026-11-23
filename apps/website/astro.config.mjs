@@ -175,6 +175,7 @@ export default defineConfig({
             { slug: "docs/audio-routing-metronome" },
             { slug: "docs/tasks/video" },
             { slug: "docs/tasks/lyrics" },
+            { slug: "docs/tasks/planning-center" },
           ],
         },
         {

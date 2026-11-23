@@ -25,7 +25,7 @@ describe("feature flags", () => {
     expect(FEATURE_FLAGS.redundancy).toBe(true);
   });
 
-  it("chart sources stay hidden until validated with a real Planning Center account", () => {
-    expect(FEATURE_FLAGS.chartSources).toBe(false);
+  it("chart sources (Planning Center) ship in 1.18.0", () => {
+    expect(FEATURE_FLAGS.chartSources).toBe(true);
   });
 });

@@ -26,7 +26,7 @@ export const FEATURE_FLAGS = {
   redundancy: true,
   /** Lyrics and chords from Planning Center (connect the account, import a
    * song or a plan, update from the source). Plan in
-   * docs/plans/smart-chart-import. Off until validated with a real account
-   * (step 11). The matcher and the sheet cleanup are not behind it. */
-  chartSources: false,
+   * docs/plans/smart-chart-import. Ships in 1.18.0. The matcher and the
+   * sheet cleanup are not behind it. */
+  chartSources: true,
 } as const;
