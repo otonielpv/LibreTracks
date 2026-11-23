@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   getPcoStatus: vi.fn(),
   signInPco: vi.fn(),
   signOutPco: vi.fn(),
+  isGuestMirrorMode: vi.fn(() => false),
 }));
 vi.mock("../transport/desktopApi", () => api);
 
@@ -46,6 +47,7 @@ beforeEach(() => {
   api.getPcoStatus.mockReset();
   api.signInPco.mockReset();
   api.signOutPco.mockReset();
+  api.isGuestMirrorMode.mockReturnValue(false);
 });
 afterEach(cleanup);
 

@@ -31,6 +31,7 @@ import {
 import { useCloudStore } from "../features/transport/cloud/cloudStore";
 import { INITIAL_CHART_SOURCE_STATE, useChartSourceStore } from "../features/chartSources/chartSourceStore";
 import { useChartImportStore } from "../features/chartSources/chartImportStore";
+import { usePlanImportStore } from "../features/chartSources/planImportStore";
 import { resetPendingPitchStore } from "../features/transport/tempo/pendingPitchStore";
 import {
   INITIAL_REDUNDANCY_STATE,
@@ -391,6 +392,7 @@ beforeEach(async () => {
   useMeterStore.setState(INITIAL_METER_STATE);
   useChartSourceStore.setState({ ...INITIAL_CHART_SOURCE_STATE });
   useChartImportStore.setState({ session: null });
+  usePlanImportStore.setState({ open: false });
   useMixerFilterStore.setState({ filterActiveSong: true });
   useChartEditorStore.setState({ session: null });
   useTransportStore.setState({

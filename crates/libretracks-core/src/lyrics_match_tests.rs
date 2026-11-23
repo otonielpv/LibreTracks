@@ -162,3 +162,37 @@ fn arrangement_repeats_count_as_later_occurrences() {
         ]
     );
 }
+
+/// Plan smart-chart-import, paso 09 (C1): the items of the recorded plan
+/// against a session where one title has a live suffix and a key.
+#[test]
+fn plan_items_match_session_songs_by_title() {
+    let plan: serde_json::Value = serde_json::from_str(include_str!(
+        "../../libretracks-pco/tests/fixtures/plan_items.json"
+    ))
+    .unwrap();
+    let items: Vec<PresentationCandidate> = plan["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .take(4)
+        .map(|item| PresentationCandidate {
+            id: item["id"].as_str().unwrap().into(),
+            name: item["attributes"]["title"].as_str().unwrap().into(),
+        })
+        .collect();
+    let songs = [
+        ("r1", "Cancion de Prueba Uno (En vivo) - E"),
+        ("r2", "01 Test Song Two"),
+        ("r3", "Amazing Grace"),
+        ("r4", "Otra canción"),
+    ]
+    .map(|(id, name)| PresentationCandidate {
+        id: id.into(),
+        name: name.into(),
+    });
+    let matches = match_titles(&items, &songs);
+    let exact: Vec<Option<&str>> = matches.iter().map(|found| found.exact.as_deref()).collect();
+    assert_eq!(exact, [Some("r1"), Some("r2"), Some("r3"), None]);
+    assert!(matches[3].suggestions.is_empty());
+}

@@ -1,6 +1,12 @@
 import { buildRefreshReview, type RefreshResult } from "@libretracks/shared/charts/chartRefresh";
 import { planningCenterToImported } from "@libretracks/shared/charts/importedChart";
-import type { SectionMarkerSummary, SongChart } from "@libretracks/shared/models";
+import {
+  buildImportReview,
+  finalizeImport,
+  isClearReview,
+  type ImportReview,
+} from "@libretracks/shared/charts/chartImportReview";
+import type { SectionMarkerSummary, SongChart, SongRegionSummary } from "@libretracks/shared/models";
 
 import * as desktopApi from "../transport/desktopApi";
 
@@ -13,8 +19,31 @@ import { toPcoError } from "./pcoErrors";
  */
 export type ChartSourceApi = Pick<
   typeof desktopApi,
-  "getPcoStatus" | "signInPco" | "signOutPco" | "searchPcoSongs" | "getPcoArrangements" | "getPcoArrangement"
+  | "getPcoStatus"
+  | "signInPco"
+  | "signOutPco"
+  | "searchPcoSongs"
+  | "getPcoArrangements"
+  | "getPcoArrangement"
+  | "getPcoServiceTypes"
+  | "getPcoUpcomingPlans"
+  | "getPcoPlanItems"
+  | "matchPcoTitles"
 >;
+
+/** One song of a plan paired with a song of the session. */
+export type PlanPair = { item: desktopApi.PcoPlanItem; regionId: string };
+
+/** A pair once its arrangement is read and matched: ready to review. */
+export type PlanEntry = PlanPair & {
+  review: ImportReview | null;
+  clear: boolean;
+  /** Why it could not be prepared (no text, not found…). */
+  error: unknown;
+};
+
+/** What the batch needs to know about a song of the session. */
+export type PlanSong = { region: SongRegionSummary; markers: SectionMarkerSummary[] };
 
 export type ChartSourceStoreApi = {
   getState: () => ChartSourceState;
@@ -101,7 +130,75 @@ export function createChartSourceHandlers({ api, store }: ChartSourceHandlerDeps
     return buildRefreshReview(chart, imported, markers, songKey);
   }
 
+  const loadServiceTypes = () => api.getPcoServiceTypes();
+  const loadPlans = (serviceTypeId: string) => api.getPcoUpcomingPlans(serviceTypeId);
+  const loadPlanItems = (serviceTypeId: string, planId: string) => api.getPcoPlanItems(serviceTypeId, planId);
+
+  /** The plan's songs against the session's, by title (Rust `lyrics_match`). */
+  function matchPlanTitles(items: readonly desktopApi.PcoPlanItem[], regions: readonly SongRegionSummary[]) {
+    return api.matchPcoTitles(
+      items.map((item) => ({ id: item.id, title: item.title ?? "" })),
+      regions.map((region) => ({ id: region.id, title: region.name })),
+    );
+  }
+
+  /**
+   * Read each pair's arrangement, one request at a time (D17), and match it
+   * with the item's own sequence and key. Stops between songs when cancelled.
+   */
+  async function preparePlan(
+    pairs: readonly PlanPair[],
+    songFor: (regionId: string) => PlanSong | null,
+    options: { isCancelled?: () => boolean; onProgress?: (done: number, total: number) => void } = {},
+  ): Promise<PlanEntry[]> {
+    const entries: PlanEntry[] = [];
+    for (const pair of pairs) {
+      if (options.isCancelled?.()) break;
+      const song = songFor(pair.regionId);
+      try {
+        if (!song || !pair.item.songId || !pair.item.arrangementId) throw new Error("plan-item-incomplete");
+        const arrangement = await api.getPcoArrangement(pair.item.songId, pair.item.arrangementId);
+        const imported = planningCenterToImported({ ...arrangement, songTitle: pair.item.title ?? null }, pair.item);
+        const review = buildImportReview(imported, song.markers, song.region.key);
+        entries.push({ ...pair, review, clear: isClearReview(review), error: null });
+      } catch (error) {
+        entries.push({ ...pair, review: null, clear: false, error });
+      }
+      options.onProgress?.(entries.length, pairs.length);
+    }
+    return entries;
+  }
+
+  /**
+   * "Apply the clear ones and review the rest" (D13): saves each clear song
+   * whole (one chart action each), in order, and returns what is left to
+   * review. Cancelling stops between songs, never inside one.
+   */
+  async function applyClearEntries(
+    entries: readonly PlanEntry[],
+    save: (regionId: string, chart: SongChart) => Promise<void>,
+    options: { isCancelled?: () => boolean } = {},
+  ): Promise<{ applied: string[]; remaining: PlanEntry[] }> {
+    const applied: string[] = [];
+    const remaining: PlanEntry[] = [];
+    for (const entry of entries) {
+      if (!entry.clear || !entry.review || options.isCancelled?.()) {
+        remaining.push(entry);
+        continue;
+      }
+      await save(entry.regionId, finalizeImport(entry.review, { transpose: true, linked: true }));
+      applied.push(entry.regionId);
+    }
+    return { applied, remaining };
+  }
+
   return {
+    loadServiceTypes,
+    loadPlans,
+    loadPlanItems,
+    matchPlanTitles,
+    preparePlan,
+    applyClearEntries,
     refreshStatus,
     connect,
     disconnect,

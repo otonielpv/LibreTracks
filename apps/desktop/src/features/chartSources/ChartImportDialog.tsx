@@ -277,7 +277,7 @@ export function ChartImportDialog({ session, onClose }: Props) {
   );
 }
 
-function ReviewView({
+export function ReviewView({
   review,
   transpose,
   onTranspose,

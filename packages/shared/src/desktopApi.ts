@@ -3650,6 +3650,16 @@ export async function getPcoPlanItems(serviceTypeId: string, planId: string): Pr
   return invokeCommand<PcoPlanItem[]>("pco_plan_items", { serviceTypeId, planId });
 }
 
+/** A plan item matched to the session's songs by title (Rust `lyrics_match`). */
+export type PcoTitleMatch = { id: string; exact: string | null; suggestions: string[] };
+
+export async function matchPcoTitles(
+  items: Array<{ id: string; title: string }>,
+  songs: Array<{ id: string; title: string }>,
+): Promise<PcoTitleMatch[]> {
+  return invokeCommand<PcoTitleMatch[]>("pco_match_titles", { items, songs });
+}
+
 /**
  * Quota of the whole account, not of LibreTracks.
  *

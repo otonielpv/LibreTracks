@@ -138,6 +138,40 @@ pub fn match_presentation(
     }
 }
 
+/// Songs of a Planning Center plan (or any list of titles) against the
+/// session's songs, with the same rules as a presentation: `exact` only when
+/// one song has the same normalized title, look-alikes otherwise.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TitleMatch {
+    /// The item (`items[i].id`).
+    pub id: String,
+    /// The one song with the same title.
+    pub exact: Option<String>,
+    /// Look-alike songs, best first.
+    pub suggestions: Vec<String>,
+}
+
+pub fn match_titles(items: &[PresentationCandidate], songs: &[PresentationCandidate]) -> Vec<TitleMatch> {
+    items
+        .iter()
+        .map(|item| {
+            let (exact, suggestions) = match match_presentation(&item.name, songs) {
+                PresentationMatch::Exact(id) => (Some(id), Vec::new()),
+                PresentationMatch::Suggestions(found) => {
+                    (None, found.into_iter().map(|(id, _)| id).collect())
+                }
+                PresentationMatch::None => (None, Vec::new()),
+            };
+            TitleMatch {
+                id: item.id.clone(),
+                exact,
+                suggestions,
+            }
+        })
+        .collect()
+}
+
 /// How alike two normalized titles are, 0..=1: the best of Jaro-Winkler on
 /// the whole title (typos) and the share of words in common (extra words,
 /// "Way Maker" vs "Way Maker Live Version").

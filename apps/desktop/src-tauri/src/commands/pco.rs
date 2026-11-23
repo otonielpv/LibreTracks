@@ -189,3 +189,25 @@ pub async fn pco_plan_items(
 ) -> Result<Vec<PcoPlanItem>, PcoError> {
     client(&app)?.plan_items(&service_type_id, &plan_id).await
 }
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct TitleIn {
+    pub id: String,
+    pub title: String,
+}
+
+/// The plan's song items against the session's songs, by title, with the
+/// same rules the lyrics programs use (`libretracks_core::lyrics_match`).
+#[tauri::command(async)]
+pub fn pco_match_titles(items: Vec<TitleIn>, songs: Vec<TitleIn>) -> Vec<libretracks_core::lyrics_match::TitleMatch> {
+    use libretracks_core::lyrics_match::{match_titles, PresentationCandidate};
+    let candidates = |list: Vec<TitleIn>| -> Vec<PresentationCandidate> {
+        list.into_iter()
+            .map(|entry| PresentationCandidate {
+                id: entry.id,
+                name: entry.title,
+            })
+            .collect()
+    };
+    match_titles(&candidates(items), &candidates(songs))
+}

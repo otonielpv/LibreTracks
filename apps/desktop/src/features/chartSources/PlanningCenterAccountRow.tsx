@@ -6,6 +6,8 @@ import { FEATURE_FLAGS } from "@libretracks/shared/featureFlags";
 import { chartSourceHandlers } from "./chartSourceHandlers";
 import { useChartSourceStore } from "./chartSourceStore";
 import { pcoErrorMessage } from "./pcoErrors";
+import { usePlanImportStore } from "./planImportStore";
+import { useChartSourcesAvailable } from "./useChartSourcesAvailable";
 
 /**
  * The Planning Center account, as one more row of the cloud panel's accounts
@@ -22,6 +24,7 @@ function AccountRow() {
   const status = useChartSourceStore((state) => state.status);
   const connecting = useChartSourceStore((state) => state.connecting);
   const error = useChartSourceStore((state) => state.error);
+  const available = useChartSourcesAvailable();
 
   useEffect(() => {
     void chartSourceHandlers.refreshStatus();
@@ -56,6 +59,14 @@ function AccountRow() {
         </span>
       </span>
       <span className="lt-cloud-account-actions">
+        {state === "connected" && available ? (
+          <button type="button" className="lt-ghost-button" onClick={() => usePlanImportStore.getState().show()}>
+            <span className="material-symbols-outlined" aria-hidden="true">
+              event_note
+            </span>
+            {t("chartSources.plan.open")}
+          </button>
+        ) : null}
         {state === "connected" ? (
           <button type="button" className="lt-ghost-button" onClick={() => void chartSourceHandlers.disconnect()}>
             <span className="material-symbols-outlined" aria-hidden="true">

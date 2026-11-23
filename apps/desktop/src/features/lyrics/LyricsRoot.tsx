@@ -4,6 +4,7 @@ import { getTransportSnapshot } from "@libretracks/shared/desktopApi";
 import type { TransportSnapshot } from "@libretracks/shared/models";
 
 import { ChartImportHost } from "../chartSources/ChartImportHost";
+import { PlanImportHost } from "../chartSources/PlanImportHost";
 import { ChartEditorHost } from "../transport/charts/ChartEditorHost";
 import { useLyricsStatus } from "./hooks/useLyricsStatus";
 import { LyricsSetlistLinker } from "./LyricsSetlistLinker";
@@ -42,6 +43,7 @@ export function LyricsRoot({ applyPlaybackSnapshot }: Props) {
     <>
       <ChartEditorHost />
       <ChartImportHost />
+      <PlanImportHost onSnapshot={onSnapshot} />
       {linkerOpen ? <LyricsSetlistLinker onSnapshot={onSnapshot} /> : null}
       {songPanelRegionId ? (
         <LyricsSongPanel regionId={songPanelRegionId} onSnapshot={onSnapshot} />

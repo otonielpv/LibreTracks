@@ -136,3 +136,12 @@ export function finalizeImport(review: ImportReview, options: { transpose: boole
     ...(source ? { source: { ...source, importedHash: chartTextHash(text) } } : {}),
   };
 }
+
+/**
+ * A review clear enough to apply without looking (D13): every sung marker has
+ * a section with high confidence. Played markers may stay without one.
+ */
+export function isClearReview(review: ImportReview): boolean {
+  if (review.noMarkers || review.hasMissing) return false;
+  return review.match.items.every((item) => item.confidence === "high" && item.reason !== "missing");
+}
