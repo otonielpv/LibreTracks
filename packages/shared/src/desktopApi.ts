@@ -2,6 +2,9 @@ import { GUEST_MIRRORED_EVENTS } from "./guestCommandTable";
 import { guestCanInvoke, guestRouteFor } from "./guestRouting";
 import { createGuestSettingsBridge } from "./guestSettings";
 import type { NetworkRole } from "./networkRoles";
+import type { PcoArrangement, PcoPlanItem } from "./charts/importedChart";
+
+export type { PcoArrangement, PcoPlanItem };
 import type {
   DrumKit as RhythmDrumKit,
   LoopPattern as RhythmLoopPattern,
@@ -3569,6 +3572,82 @@ export async function connectCloud(provider: CloudProviderId): Promise<void> {
  */
 export async function disconnectCloud(provider: CloudProviderId): Promise<void> {
   return invokeCommand<void>("cloud_disconnect", { provider });
+}
+
+// Planning Center (plan smart-chart-import): the account and read-only calls.
+// All the HTTP is in Rust (`libretracks-pco`); these only invoke it.
+
+export type PcoAccount = { name: string; organization: string };
+
+/** A failed Planning Center call, as `libretracks-pco` serializes `PcoError`. */
+export type PcoErrorInfo =
+  | { code: "notConfigured" | "signedOut" | "noServicesAccess" | "notFound" }
+  | { code: "rateLimited"; retryAfterSecs: number }
+  | { code: "network" | "unexpected"; message: string }
+  | { code: "provider"; status: number; detail: string };
+
+export type PcoStatus = {
+  configured: boolean;
+  state: "disconnected" | "connected" | "expired";
+  account: PcoAccount | null;
+  error: PcoErrorInfo | null;
+};
+
+export type PcoPage<T> = { items: T[]; page: number; hasMore: boolean; total: number | null };
+
+export type PcoSong = {
+  id: string;
+  title: string;
+  author: string | null;
+  ccliNumber: string | null;
+  lastScheduledAt: string | null;
+};
+
+export type PcoServiceType = { id: string; name: string };
+
+export type PcoPlan = {
+  id: string;
+  title: string | null;
+  dates: string | null;
+  sortDate: string | null;
+  seriesTitle: string | null;
+};
+
+export async function getPcoStatus(): Promise<PcoStatus> {
+  return invokeCommand<PcoStatus>("pco_status");
+}
+
+/** Opens the system browser; resolves once the token is stored. */
+export async function signInPco(): Promise<void> {
+  return invokeCommand<void>("pco_sign_in");
+}
+
+export async function signOutPco(): Promise<void> {
+  return invokeCommand<void>("pco_sign_out");
+}
+
+export async function searchPcoSongs(query: string, page = 0): Promise<PcoPage<PcoSong>> {
+  return invokeCommand<PcoPage<PcoSong>>("pco_search_songs", { query, page });
+}
+
+export async function getPcoArrangements(songId: string): Promise<PcoArrangement[]> {
+  return invokeCommand<PcoArrangement[]>("pco_arrangements", { songId });
+}
+
+export async function getPcoArrangement(songId: string, arrangementId: string): Promise<PcoArrangement> {
+  return invokeCommand<PcoArrangement>("pco_arrangement", { songId, arrangementId });
+}
+
+export async function getPcoServiceTypes(): Promise<PcoServiceType[]> {
+  return invokeCommand<PcoServiceType[]>("pco_service_types");
+}
+
+export async function getPcoUpcomingPlans(serviceTypeId: string): Promise<PcoPlan[]> {
+  return invokeCommand<PcoPlan[]>("pco_upcoming_plans", { serviceTypeId });
+}
+
+export async function getPcoPlanItems(serviceTypeId: string, planId: string): Promise<PcoPlanItem[]> {
+  return invokeCommand<PcoPlanItem[]>("pco_plan_items", { serviceTypeId, planId });
 }
 
 /**

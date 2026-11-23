@@ -29,6 +29,7 @@ import {
   useNetworkSessionStore,
 } from "../features/network/networkSessionStore";
 import { useCloudStore } from "../features/transport/cloud/cloudStore";
+import { INITIAL_CHART_SOURCE_STATE, useChartSourceStore } from "../features/chartSources/chartSourceStore";
 import { resetPendingPitchStore } from "../features/transport/tempo/pendingPitchStore";
 import {
   INITIAL_REDUNDANCY_STATE,
@@ -387,6 +388,7 @@ beforeEach(async () => {
   });
   resetTestDesktopApiMock();
   useMeterStore.setState(INITIAL_METER_STATE);
+  useChartSourceStore.setState({ ...INITIAL_CHART_SOURCE_STATE });
   useMixerFilterStore.setState({ filterActiveSong: true });
   useChartEditorStore.setState({ session: null });
   useTransportStore.setState({

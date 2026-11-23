@@ -78,7 +78,7 @@ impl Drop for TransferGuard {
 ///
 /// Someone who closes the consent tab never comes back, and without a bound the
 /// loopback listener would hold a task and a port for the life of the process.
-const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(300);
+pub(crate) const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(300);
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -150,26 +150,35 @@ fn provider_from(key: &str) -> Result<CloudProvider, String> {
 /// One entry per provider, named by its key, so disconnecting one account
 /// never touches another's credentials.
 fn token_store(app: &AppHandle, provider: CloudProvider) -> Result<Box<dyn TokenStore>, String> {
+    token_store_for_key(app, provider.key())
+}
+
+/// The credential store entry `key` ("google-drive", "planning-center"), on
+/// whatever store this platform has. Also used by the Planning Center account
+/// (`commands::pco`), which is not a cloud provider but signs in the same way.
+pub(crate) fn token_store_for_key(
+    app: &AppHandle,
+    key: &'static str,
+) -> Result<Box<dyn TokenStore>, String> {
     // Only the iOS branch needs it; the others reach their store without one.
     let _ = app;
     #[cfg(target_os = "android")]
     {
         Ok(Box::new(
-            crate::platform::android_token_store::AndroidTokenStore::new(provider.key()),
+            crate::platform::android_token_store::AndroidTokenStore::new(key),
         ))
     }
     #[cfg(target_os = "ios")]
     {
         Ok(Box::new(crate::platform::ios_token_store::IosTokenStore::new(
             app.clone(),
-            provider.key(),
+            key,
         )))
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         Ok(Box::new(
-            libretracks_cloud::keychain::KeychainTokenStore::new(provider.key())
-                .map_err(describe)?,
+            libretracks_cloud::keychain::KeychainTokenStore::new(key).map_err(describe)?,
         ))
     }
 }
@@ -359,7 +368,7 @@ static PENDING_REDIRECT: std::sync::OnceLock<
 > = std::sync::OnceLock::new();
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
-fn pending_redirect() -> &'static std::sync::Mutex<Option<tokio::sync::oneshot::Sender<String>>> {
+pub(crate) fn pending_redirect() -> &'static std::sync::Mutex<Option<tokio::sync::oneshot::Sender<String>>> {
     PENDING_REDIRECT.get_or_init(|| std::sync::Mutex::new(None))
 }
 

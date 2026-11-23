@@ -1,6 +1,8 @@
 import { EQ_TEXTS } from "@libretracks/shared/eq/eqTexts";
+import { CHART_SOURCE_TEXTS } from "../../features/chartSources/chartSourceTexts";
 const en = {
   eq: EQ_TEXTS.en,
+  chartSources: CHART_SOURCE_TEXTS.en,
   networkSession: {
     eyebrow: "Network session",
     title: "Network session",

@@ -7,6 +7,7 @@ import { CloudFileFilters } from "./CloudFileFilters";
 import { filterCloudFiles, NO_FILTERS, withMeta } from "./cloudFileFilter";
 import { describePackageMeta } from "./packageNaming";
 import { GoogleMark, ProviderMark } from "./ProviderMark";
+import { PlanningCenterAccountRow } from "../../chartSources/PlanningCenterAccountRow";
 import { statusOf, useCloudStore } from "./cloudStore";
 
 /**
@@ -293,6 +294,7 @@ export function CloudPanel() {
                       onShow={setProvider}
                     />
                   ))}
+                  <PlanningCenterAccountRow />
                 </ul>
               </section>
             </>

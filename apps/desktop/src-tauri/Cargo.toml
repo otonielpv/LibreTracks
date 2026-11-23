@@ -26,6 +26,7 @@ libretracks-analysis = { path = "../../../crates/libretracks-analysis" }
 libretracks-audio = { path = "../../../crates/libretracks-audio" }
 libretracks-cloud = { path = "../../../crates/libretracks-cloud" }
 libretracks-lyrics = { path = "../../../crates/libretracks-lyrics" }
+libretracks-pco = { path = "../../../crates/libretracks-pco" }
 lt-audio-engine-v2 = { path = "../../../crates/lt-audio-engine-v2" }
 libretracks-project = { path = "../../../crates/libretracks-project" }
 libretracks-video = { path = "../../../crates/libretracks-video" }

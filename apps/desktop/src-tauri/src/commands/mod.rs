@@ -12,6 +12,7 @@ pub mod library_places;
 pub mod lyrics;
 pub mod open_with;
 pub mod pads;
+pub mod pco;
 pub mod rhythm;
 pub mod project;
 pub mod render;
