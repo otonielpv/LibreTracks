@@ -12,3 +12,9 @@ export function useChartSourcesAvailable(): boolean {
   const backup = useRedundancyStore((state) => state.status?.role === "backup");
   return FEATURE_FLAGS.chartSources && !isGuestMirrorMode() && !backup;
 }
+
+/** The same answer outside React (menus built on demand). */
+export function chartSourcesAvailableNow(): boolean {
+  const backup = useRedundancyStore.getState().status?.role === "backup";
+  return FEATURE_FLAGS.chartSources && !isGuestMirrorMode() && !backup;
+}

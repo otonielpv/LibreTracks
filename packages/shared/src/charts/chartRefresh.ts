@@ -81,9 +81,21 @@ export function buildRefreshReview(
     const section = key === undefined ? undefined : afterKeys.get(key);
     return section === undefined ? [] : [{ markerId: link.markerId, section }];
   });
+  // Recorded line times travel when the section kept the same lines: they
+  // are per line, so a section with lines added or changed starts even again.
+  const keepLineBeats: Record<string, { section: number; lineBeats: number[] }> = {};
+  for (const link of current.links) {
+    const section = locked.find((entry) => entry.markerId === link.markerId)?.section;
+    if (section === undefined || !link.lineBeats?.length) continue;
+    const old = before.sections[link.section];
+    const fresh = after.sections[section];
+    if (old && fresh && old.lines.length === fresh.lines.length && words(old) === words(fresh)) {
+      keepLineBeats[link.markerId] = { section, lineBeats: [...link.lineBeats] };
+    }
+  }
   return {
     upToDate: false,
-    review: buildImportReview(imported, markers, songKey, locked),
+    review: { ...buildImportReview(imported, markers, songKey, locked), keepLineBeats },
     changes: compareCharts(before, after),
     editedLocally: Boolean(current.source) && current.source!.importedHash !== chartTextHash(current.text),
   };

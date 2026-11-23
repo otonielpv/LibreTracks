@@ -45,6 +45,7 @@ import { useSetlistKeyboardBridge } from "./setlistKeyboard";
 import { useSetlistLayout, type SetlistLayoutClass } from "./useSetlistLayout";
 import { SetlistShortRhythmDock, useSetlistRhythm } from "./SetlistRhythm";
 import { Zone } from "./SetlistZone";
+import { PlanImportButton } from "../../chartSources/PlanImportButton";
 import "./setlist.css";
 
 export type { SetlistZone } from "./SetlistZone";
@@ -564,7 +565,10 @@ function SetlistViewComponent({
   const songs = (
     <Zone name="songs" zoneRef={songsZoneRef}>
       {layout !== "short" ? (
-        <div className="lt-setlist-song-toolbar">{paneButtons}</div>
+        <div className="lt-setlist-song-toolbar">
+          {paneButtons}
+          <PlanImportButton className="lt-setlist-pane-toggle" />
+        </div>
       ) : null}
       {layout === "wide" ? (
         <div

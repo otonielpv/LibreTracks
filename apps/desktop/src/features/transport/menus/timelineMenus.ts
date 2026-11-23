@@ -24,6 +24,7 @@ import {
 import { clientToZoomedCoords } from "../../../shared/uiZoom";
 import { songSettingsSubmenus } from "../songs/songSubmenus";
 import { lyricsSongMenuItems } from "../../lyrics/lyricsSongMenu";
+import { chartSourceSongMenuItems } from "../../chartSources/chartSourceSongMenu";
 import { createAutomationMenus } from "./automationMenus";
 import { songStepReorderIndex } from "../timeline/songDropReorder";
 import {
@@ -580,6 +581,7 @@ export function createTimelineMenus(getDeps: () => TimelineMenuDeps) {
           onSelect: () => openStructureEditor(region.id),
         },
         ...lyricsSongMenuItems(region, t),
+        ...chartSourceSongMenuItems(region, t),
         {
           label: t("transport.menu.splitSongAtCursor", {
             defaultValue: "Partir canción en el cursor",

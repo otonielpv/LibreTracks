@@ -37,6 +37,10 @@ export type ImportReview = {
   hasMissing: boolean;
   noMarkers: boolean;
   key: { source: string | null; song: string | null; semitones: number | null };
+  /** Recorded line times to keep, by marker: set by an update (08) for the
+   * links whose section has the same lines as before. Used only while the
+   * marker still shows that section. */
+  keepLineBeats?: Readonly<Record<string, { section: number; lineBeats: number[] }>>;
 };
 
 function firstLine(section: ChartSection | undefined): string | null {
@@ -132,7 +136,12 @@ export function finalizeImport(review: ImportReview, options: { transpose: boole
   const source = review.imported.source;
   return {
     text,
-    links: options.linked ? review.match.links : [],
+    links: options.linked
+      ? review.match.links.map((link) => {
+          const kept = review.keepLineBeats?.[link.markerId];
+          return kept && kept.section === link.section ? { ...link, lineBeats: kept.lineBeats } : link;
+        })
+      : [],
     ...(source ? { source: { ...source, importedHash: chartTextHash(text) } } : {}),
   };
 }

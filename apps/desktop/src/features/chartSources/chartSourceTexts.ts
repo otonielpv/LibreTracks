@@ -95,6 +95,10 @@ const en = {
     done: "Done: {{count}} songs updated.",
     close: "Close",
   },
+  menu: {
+    import: "Lyrics from Planning Center…",
+    refresh: "Update lyrics from Planning Center",
+  },
   errors: {
     notConfigured: "This build cannot connect to Planning Center.",
     signedOut: "Your Planning Center session ended. Connect again.",
@@ -201,6 +205,10 @@ const es: Texts<typeof en> = {
     skip: "Saltar",
     done: "Hecho: {{count}} canciones actualizadas.",
     close: "Cerrar",
+  },
+  menu: {
+    import: "Letra desde Planning Center…",
+    refresh: "Actualizar letra desde Planning Center",
   },
   errors: {
     notConfigured: "Esta versión no puede conectarse a Planning Center.",

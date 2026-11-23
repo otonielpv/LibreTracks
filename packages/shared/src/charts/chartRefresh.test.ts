@@ -51,4 +51,15 @@ describe("updating from the source", () => {
     expect(!untouched.upToDate && untouched.editedLocally).toBe(false);
     expect(!edited.upToDate && edited.editedLocally).toBe(true);
   });
+
+  it("keeps recorded line times of a section with the same lines, not of a changed one", () => {
+    const current = saved();
+    const timed = { ...current, links: current.links.map((link) => ({ ...link, lineBeats: [0, 4] })) };
+    const fresh = imported(["VERSE 1", "[G]Uno", "CHORUS", "[C]Coro cambiado", "VERSE 2", "[G]Dos"].join("\n"), "2026-11-22T09:00:00Z");
+    const result = buildRefreshReview(timed, fresh, SONG, "G");
+    if (result.upToDate) throw new Error("expected changes");
+    const links = finalizeImport(result.review, { transpose: false, linked: true }).links;
+    expect(links.find((link) => link.markerId === "v1")?.lineBeats).toEqual([0, 4]);
+    expect(links.find((link) => link.markerId === "c1")?.lineBeats).toBeUndefined();
+  });
 });

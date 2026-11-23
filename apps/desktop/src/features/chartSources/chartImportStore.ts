@@ -12,8 +12,9 @@ export type ChartImportSession = {
   /** The song's section markers in timeline order, repeats included. */
   markers: SectionMarkerSummary[];
   chart: SongChart | null;
-  /** The song's existing chart action. */
-  onSave: (chart: SongChart) => Promise<void>;
+  /** The song's existing chart action. Absent when opened from the song
+   * menu: the host then saves with `set_song_region_chart`, as the editor. */
+  onSave?: (chart: SongChart) => Promise<void>;
   /** "refresh": update the imported `chart` from its source (08). */
   mode?: "import" | "refresh";
 };

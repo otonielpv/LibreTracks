@@ -42,7 +42,7 @@ export function LyricsRoot({ applyPlaybackSnapshot }: Props) {
   return (
     <>
       <ChartEditorHost />
-      <ChartImportHost />
+      <ChartImportHost onSnapshot={onSnapshot} />
       <PlanImportHost onSnapshot={onSnapshot} />
       {linkerOpen ? <LyricsSetlistLinker onSnapshot={onSnapshot} /> : null}
       {songPanelRegionId ? (

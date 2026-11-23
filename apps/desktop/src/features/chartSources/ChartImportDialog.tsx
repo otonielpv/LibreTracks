@@ -10,6 +10,8 @@ import {
 import { ChartImportError, planningCenterToImported } from "@libretracks/shared/charts/importedChart";
 import type { RefreshResult } from "@libretracks/shared/charts/chartRefresh";
 
+import type { SongChart } from "@libretracks/shared/models";
+
 import type { PcoArrangement, PcoSong } from "../transport/desktopApi";
 import { chartSourceHandlers } from "./chartSourceHandlers";
 import { useChartSourceStore } from "./chartSourceStore";
@@ -17,7 +19,10 @@ import type { ChartImportSession } from "./chartImportStore";
 import { pcoErrorMessage, toPcoError } from "./pcoErrors";
 import "./chartSources.css";
 
-type Props = { session: ChartImportSession; onClose: () => void };
+type Props = {
+  session: ChartImportSession & { onSave: (chart: SongChart) => Promise<void> };
+  onClose: () => void;
+};
 
 const hasText = (arrangement: PcoArrangement) => Boolean(arrangement.chordChart?.trim() || arrangement.lyrics?.trim());
 
