@@ -113,6 +113,14 @@ async function regions(): Promise<ChartRegion[]> {
       input.files = transfer.files;
       input.dispatchEvent(new Event("change", { bubbles: true }));
     }, pdfBase64);
+    // Since 1.18.0 a file opens in the editor with «Ajustar a la secuencia»,
+    // like Planning Center, instead of being linked blind: apply, then save.
+    const adjustApply = await $(".lt-chart-import-backdrop .lt-inline-actions .is-primary");
+    await adjustApply.waitForClickable({ timeout: 30_000, timeoutMsg: "pdf.js did not turn the PDF into a sheet to adjust" });
+    await adjustApply.click();
+    const editorSave = await $(".lt-chart-editor-actions .is-primary");
+    await editorSave.waitForClickable({ timeout: 10_000 });
+    await editorSave.click();
     await browser.waitUntil(async () => Boolean((await regions())[0]?.chart), {
       timeout: 30_000,
       timeoutMsg: "pdf.js did not turn the PDF into a chart",

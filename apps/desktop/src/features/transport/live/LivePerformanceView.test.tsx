@@ -11,6 +11,7 @@ const flags = vi.hoisted(() => ({ lyrics: true }));
 vi.mock("@libretracks/shared/featureFlags", () => ({ FEATURE_FLAGS: flags }));
 
 import { LivePerformanceView } from "./LivePerformanceView";
+import { useChartEditorStore } from "../charts/chartEditorStore";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -259,7 +260,13 @@ describe("LivePerformanceView", () => {
     await act(async () => {
       fireEvent.change(screen.getByTestId("live-chart-file-input"), { target: { files: [file] } });
     });
-    expect(onChartChange).toHaveBeenCalledWith("first", expect.objectContaining({ text: expect.stringContaining("Una linea") }));
+    // Like Planning Center: the sheet opens in the editor to adjust it to the
+    // sequence, nothing is saved blind.
+    expect(onChartChange).not.toHaveBeenCalled();
+    const session = useChartEditorStore.getState().session;
+    expect(session?.region.id).toBe("first");
+    expect(session?.initialImport?.imported.text).toContain("Una linea");
+    useChartEditorStore.setState({ session: null });
   });
 
   it("with the lyrics flag off, the live view is the markers alone", () => {
