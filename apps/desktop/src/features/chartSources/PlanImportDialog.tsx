@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { finalizeImport, relinkImportReview } from "@libretracks/shared/charts/chartImportReview";
+import { finalizeImport, relinkImportReview, reviewTimingForSong } from "@libretracks/shared/charts/chartImportReview";
 import { chartMarkersForRegion } from "@libretracks/shared/charts/chartSync";
 import type { SongChart, SongView } from "@libretracks/shared/models";
 
@@ -49,7 +49,9 @@ export function PlanImportDialog({ song, save, onClose }: Props) {
   const regions = song.regions;
   const songFor = (regionId: string): PlanSong | null => {
     const region = regions.find((candidate) => candidate.id === regionId) ?? null;
-    return region ? { region, markers: chartMarkersForRegion(song.sectionMarkers, region) } : null;
+    return region
+      ? { region, markers: chartMarkersForRegion(song.sectionMarkers, region), timing: reviewTimingForSong(song, region) }
+      : null;
   };
 
   const run = async (work: () => Promise<void>) => {

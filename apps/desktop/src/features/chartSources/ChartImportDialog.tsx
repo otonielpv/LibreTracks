@@ -5,6 +5,7 @@ import {
   buildImportReview,
   finalizeImport,
   relinkImportReview,
+  reviewTimingForSong,
   type ImportReview,
 } from "@libretracks/shared/charts/chartImportReview";
 import { ChartImportError, planningCenterToImported } from "@libretracks/shared/charts/importedChart";
@@ -13,6 +14,7 @@ import type { RefreshResult } from "@libretracks/shared/charts/chartRefresh";
 import type { SongChart } from "@libretracks/shared/models";
 
 import type { PcoArrangement, PcoSong } from "../transport/desktopApi";
+import { useSongStore } from "../transport/songStore";
 import { chartSourceHandlers } from "./chartSourceHandlers";
 import { useChartSourceStore } from "./chartSourceStore";
 import type { ChartImportSession } from "./chartImportStore";
@@ -37,10 +39,9 @@ export function ChartImportDialog({ session, onClose }: Props) {
   const status = useChartSourceStore((state) => state.status);
   const connecting = useChartSourceStore((state) => state.connecting);
   const { region, markers, chart } = session;
-  const timing = useMemo(
-    () => ({ regionEndSeconds: region.endSeconds, secondsPerBeatAt: session.secondsPerBeatAt }),
-    [region.endSeconds, session.secondsPerBeatAt],
-  );
+  // Tempo and meter of the song, to count each marker's bars.
+  const sessionSong = useSongStore((state) => state.song);
+  const timing = useMemo(() => reviewTimingForSong(sessionSong, region), [sessionSong, region]);
 
   const [query, setQuery] = useState(region.name);
   const [songs, setSongs] = useState<PcoSong[] | null>(null);

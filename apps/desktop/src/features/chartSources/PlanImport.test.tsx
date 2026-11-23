@@ -43,7 +43,14 @@ const MARKERS = [
   marker("x", "Verso", "verse", 100),
   marker("y", "Coro", "chorus", 110),
 ];
-const SONG = { regions: REGIONS, sectionMarkers: MARKERS } as unknown as SongView;
+const SONG = {
+  regions: REGIONS,
+  sectionMarkers: MARKERS,
+  bpm: 120,
+  timeSignature: "4/4",
+  tempoMarkers: [],
+  timeSignatureMarkers: [],
+} as unknown as SongView;
 const songFor = (regionId: string): PlanSong | null => {
   const found = REGIONS.find((candidate) => candidate.id === regionId);
   return found ? { region: found, markers: MARKERS.filter((m) => m.startSeconds >= found.startSeconds && m.startSeconds < found.endSeconds) } : null;

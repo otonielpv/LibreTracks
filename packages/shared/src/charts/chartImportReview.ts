@@ -1,4 +1,11 @@
-import type { SectionMarkerSummary, SongChart } from "../models";
+import {
+  getEffectiveBpmAt,
+  getSongBaseTimeSignature,
+  type SectionMarkerSummary,
+  type SongChart,
+  type SongView,
+} from "../models";
+import { parseTimeSignature } from "../timelineMath";
 
 import { matchChartToMarkers, type ChartMatch, type MatchConfidence, type MatchReason } from "./chartMatch";
 import { chartLinkFor, chartLinkMarkerId } from "./chartSync";
@@ -58,52 +65,101 @@ export type ReviewTiming = {
   /** Seconds per beat at a song position; without it, plain seconds (fine
    * while the tempo does not change). */
   secondsPerBeatAt?: (seconds: number) => number;
+  /** Beats per bar at a song position (the meter), to count bars. */
+  beatsPerBarAt?: (seconds: number) => number;
 };
 
 /**
- * How many times each marker's section plays inside it, from the markers'
- * lengths (in beats) and, when the source says so, how many times the sheet
- * repeats the section in all ("// … //"). A section's markers share its
- * passes by length: a 4x chorus split in two equal markers is 2 + 2; a long
- * chorus marker next to a short one of the same section is 2 against 1.
+ * How many times each marker's section plays inside it.
+ *
+ * With the song's tempo and meter (bars), a pass of a section lasts about one
+ * bar per line of words: a 4-line chorus between Planning Center's "// … //"
+ * in an 8-bar marker plays twice, in a 4-bar marker once, and never more
+ * times than the sheet says. Without bars, the sheet's count is shared by the
+ * section's markers by length (a 4x chorus split in two equal markers is
+ * 2 + 2). Without a count in the sheet, only a marker clearly twice as long
+ * as the shortest of its section plays twice.
  */
 export function estimatePasses(
   markers: readonly SectionMarkerSummary[],
   links: readonly { markerId: string; section: number }[],
   timing: ReviewTiming | null,
   repeats: readonly number[] | undefined,
+  lyricLines: readonly number[] = [],
 ): Record<string, number> {
   const passes: Record<string, number> = {};
   if (!timing) return passes;
-  const length = new Map<string, number>();
+  const beats = new Map<string, number>();
+  const bars = new Map<string, number>();
   markers.forEach((marker, index) => {
     if (marker.id.includes("~")) return;
     const end = markers[index + 1]?.startSeconds ?? timing.regionEndSeconds;
     const seconds = Math.max(0, end - marker.startSeconds);
     const perBeat = timing.secondsPerBeatAt?.(marker.startSeconds) ?? 1;
-    length.set(marker.id, perBeat > 0 ? seconds / perBeat : seconds);
+    const length = perBeat > 0 ? seconds / perBeat : seconds;
+    beats.set(marker.id, length);
+    const perBar = timing.secondsPerBeatAt ? timing.beatsPerBarAt?.(marker.startSeconds) : undefined;
+    if (perBar && perBar > 0) bars.set(marker.id, length / perBar);
   });
   const bySection = new Map<number, Array<{ markerId: string; length: number }>>();
   for (const link of links) {
-    const value = length.get(link.markerId);
+    const value = beats.get(link.markerId);
     if (!value) continue;
     bySection.set(link.section, [...(bySection.get(link.section) ?? []), { markerId: link.markerId, length: value }]);
   }
   for (const [section, entries] of bySection) {
-    const total = entries.reduce((sum, entry) => sum + entry.length, 0);
     const sheet = repeats?.[section] ?? 1;
-    // One pass: the sheet's count spread over all its markers; without one,
-    // the shortest marker of the section.
+    const lines = lyricLines[section] ?? 0;
+    const measured = sheet > 1 && lines > 0 && entries.every((entry) => bars.has(entry.markerId));
+    if (measured) {
+      // One bar per line of words: the marker's bars say how many passes fit.
+      for (const entry of entries) {
+        const times = Math.min(sheet, Math.max(1, Math.round(bars.get(entry.markerId)! / lines)));
+        if (times >= 2) passes[entry.markerId] = times;
+      }
+      continue;
+    }
+    const total = entries.reduce((sum, entry) => sum + entry.length, 0);
     const pass = sheet > 1 ? total / sheet : Math.min(...entries.map((entry) => entry.length));
     if (!(pass > 0)) continue;
     for (const entry of entries) {
       const ratio = entry.length / pass;
-      // Without the sheet's count, only a clear double (or more) counts.
       const times = sheet > 1 ? Math.round(ratio) : ratio >= 1.8 ? Math.round(ratio) : 1;
       if (times >= 2) passes[entry.markerId] = Math.min(8, times);
     }
   }
   return passes;
+}
+
+/** Lines with words of each section (chord-only lines do not count). */
+function lyricLineCounts(doc: ChartDoc): number[] {
+  return doc.sections.map(
+    (section) =>
+      section.lines.filter(
+        (line) => line.kind === "lyrics" && line.segments.some((segment) => /\p{L}{2}/u.test(segment.text)),
+      ).length,
+  );
+}
+
+/** The timing of a song, for `estimatePasses`: its tempo and meter at each
+ * position (time-signature markers included). */
+export function reviewTimingForSong(
+  song: SongView | null | undefined,
+  region: { endSeconds: number },
+): ReviewTiming {
+  const signatures = [...(song?.timeSignatureMarkers ?? [])].sort((left, right) => left.startSeconds - right.startSeconds);
+  return {
+    regionEndSeconds: region.endSeconds,
+    secondsPerBeatAt: (seconds) => 60 / Math.max(1, getEffectiveBpmAt(song, seconds)),
+    beatsPerBarAt: (seconds) => {
+      let signature = getSongBaseTimeSignature(song);
+      for (const marker of signatures) {
+        if (marker.startSeconds <= seconds + 0.001) signature = marker.signature;
+        else break;
+      }
+      return parseTimeSignature(signature).beatsPerBar;
+    },
+  };
 }
 
 function firstLine(section: ChartSection | undefined): string | null {
@@ -157,7 +213,10 @@ export function relinkImportReview(
     locked,
     sectionRepeats: review.repeats,
   });
-  const passes = { ...estimatePasses(markers, match.links, review.timing, review.repeats), ...passOverrides };
+  const passes = {
+    ...estimatePasses(markers, match.links, review.timing, review.repeats, lyricLineCounts(review.doc)),
+    ...passOverrides,
+  };
   const rows = rowsFor(review.doc, match, markers, passes);
   const byId = new Map(markers.map((marker) => [marker.id, marker]));
   return {

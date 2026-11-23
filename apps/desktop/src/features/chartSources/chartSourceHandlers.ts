@@ -44,7 +44,7 @@ export type PlanEntry = PlanPair & {
 };
 
 /** What the batch needs to know about a song of the session. */
-export type PlanSong = { region: SongRegionSummary; markers: SectionMarkerSummary[] };
+export type PlanSong = { region: SongRegionSummary; markers: SectionMarkerSummary[]; timing?: ReviewTiming };
 
 export type ChartSourceStoreApi = {
   getState: () => ChartSourceState;
@@ -161,7 +161,7 @@ export function createChartSourceHandlers({ api, store }: ChartSourceHandlerDeps
         if (!song || !pair.item.songId || !pair.item.arrangementId) throw new Error("plan-item-incomplete");
         const arrangement = await api.getPcoArrangement(pair.item.songId, pair.item.arrangementId);
         const imported = planningCenterToImported({ ...arrangement, songTitle: pair.item.title ?? null }, pair.item);
-        const review = buildImportReview(imported, song.markers, song.region.key, [], {
+        const review = buildImportReview(imported, song.markers, song.region.key, [], song.timing ?? {
           regionEndSeconds: song.region.endSeconds,
         });
         entries.push({ ...pair, review, clear: isClearReview(review), error: null });
